@@ -187,7 +187,9 @@ export async function updateVideoEditTransition(projectId: string, sequenceId: s
   const patch = typeof changes === 'number' ? { durationFrames: changes } : changes
   await editComposite(projectId, sequenceId, videoEditTransitionClipIds(transition), sequence => {
     const list = sequence.transitions!; const index = list.findIndex(value => value.id === transitionId)
-    const next = videoEditTransitionSchema.parse({ ...list[index], ...patch })
+    const next = videoEditTransitionSchema.parse({ ...list[index], ...patch, ...(patch.kind && patch.kind !== list[index].kind ? { parameters: undefined } : {}) })
+    // 换了种类：旧种类的参数不再适用，按新种类的默认值
+    if (!next.parameters) delete next.parameters
     if (next.alignment === 'center') delete next.alignment
     if (next.alignment !== 'custom') delete next.framesBeforeCut
     list[index] = next

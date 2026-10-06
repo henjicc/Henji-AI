@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createVideoEditDocument, changeVideoEditSequenceSettings, videoEditDocumentSchema, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
-import { applyVideoEditTransitionPairs, dragVideoEditTransition, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount } from './transitions'
+import { applyVideoEditTransitionPairs, dragVideoEditTransition, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount, videoEditTransitionRender, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS } from './transitions'
+import { WHITE_HEX } from '../theme/colorTokens'
+import { VIDEO_EDIT_BUILTIN_TRANSITION_KINDS, VIDEO_EDIT_TRANSITION_PARAMS, validateVideoEditTransitionParams } from './transitionParams'
 import { reconcileVideoEditTimedContent } from './timedContent'
 import { assertVideoEditLockedTracks } from './lockedTracks'
 import { compileCodeMaterial } from './codeMaterial/compiler'
@@ -214,6 +216,37 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     expect(videoEditAudioTransitionClipGain(power, 'right', 1)).toBeCloseTo(1)
     expect(videoEditAudioTransitionClipGain({ ...tail, transition: { ...tail.transition, kind: 'constant_gain' as const } }, 'left', .25)).toBeCloseTo(.75)
     expect(videoEditAudioTransitionClipGain({ ...both, transition: { ...both.transition, kind: 'constant_gain' as const } }, 'right', .25)).toBeCloseTo(.25)
+  })
+  it('第一批带参数的视频过渡（4.7）：登记完整、参数可选并校验、编辑保留参数、渲染走内置着色器且单侧另一侧为空', () => {
+    for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {
+      expect(VIDEO_EDIT_TRANSITION_PRESETS.find(preset => preset.kind === kind)?.medium).toBe('video')
+      for (const param of VIDEO_EDIT_TRANSITION_PARAMS[kind]) {
+        expect(param.tooltip.length, `${kind}.${param.key}`).toBeGreaterThan(4); expect(param.description.length, `${kind}.${param.key}`).toBeGreaterThan(8)
+        if (param.type === 'number') expect(param.default).toBeGreaterThanOrEqual(param.min)
+      }
+    }
+    const { document, sequence } = fixture()
+    // 旧文件没有 parameters；新文件可只写一部分
+    sequence.transitions = [{ id: 'wipe', kind: 'wipe', leftClipId: 'left', rightClipId: 'right', durationFrames: 30, parameters: { direction: 'from_top' } }]
+    expect(() => videoEditDocumentSchema.parse(document)).not.toThrow()
+    expect(() => videoEditTransitionSchema.parse({ ...sequence.transitions![0], parameters: { feather: 300 } })).toThrow('超出范围')
+    expect(() => videoEditTransitionSchema.parse({ ...sequence.transitions![0], parameters: { angle: 3 } })).toThrow('可用参数')
+    expect(() => videoEditTransitionSchema.parse({ id: 'x', kind: 'cross_dissolve', leftClipId: 'left', rightClipId: 'right', durationFrames: 4, parameters: { feather: 1 } })).toThrow('没有可调参数')
+    expect(validateVideoEditTransitionParams('wipe', '擦除', { border: 20 })).toEqual({ border: 20 })
+    // 拖动改时长、再次放同种过渡都保留参数；换种类回到默认
+    expect(dragVideoEditTransition(sequence, 'wipe', 'out', 4).parameters).toEqual({ direction: 'from_top' })
+    const same = applyVideoEditTransitionPairs(sequence, [{ leftClipId: 'left', rightClipId: 'right', medium: 'video' }], { kind: () => 'wipe', durationFrames: 20 })
+    expect(same.sequence.transitions![0].parameters).toEqual({ direction: 'from_top' })
+    const other = applyVideoEditTransitionPairs(sequence, [{ leftClipId: 'left', rightClipId: 'right', medium: 'video' }], { kind: () => 'push', durationFrames: 20 })
+    expect(other.sequence.transitions![0].parameters).toBeUndefined()
+    // 渲染：补齐默认参数；单侧入点前一段为空、出点后一段为空；交叉溶解仍走混合
+    const window = videoEditTransitionWindow(sequence, sequence.transitions[0])
+    expect(videoEditTransitionRender(window, window.start)).toEqual({ kind: 'builtin', input: { kind: 'wipe', params: { direction: 'from_top', feather: 10, border: 0, border_color: WHITE_HEX }, progress: 0 } })
+    const head = videoEditTransitionWindow(sequence, { id: 'head', kind: 'flash', rightClipId: 'right', durationFrames: 11 })
+    expect(videoEditTransitionRender(head, head.end - 1)).toMatchObject({ kind: 'builtin', input: { progress: 1, emptyOutgoing: true } })
+    const tail = videoEditTransitionWindow(sequence, { id: 'tail', kind: 'slide', leftClipId: 'left', durationFrames: 11 })
+    expect(videoEditTransitionRender(tail, tail.start)).toMatchObject({ kind: 'builtin', input: { progress: 0, emptyIncoming: true } })
+    expect(videoEditTransitionRender(videoEditTransitionWindow(sequence, { id: 'd', kind: 'cross_dissolve', leftClipId: 'left', rightClipId: 'right', durationFrames: 10 }), 85)).toMatchObject({ kind: 'mix' })
   })
   it('编辑点含片段空白一端：Ctrl+D、Shift+D 放单侧过渡，再放普通过渡时替换同一切点的单侧过渡（4.4）', () => {
     const { sequence } = fixture(); sequence.transitions = []

@@ -7,6 +7,7 @@ import type { CodeColor, CodeDrawCommand, CodeMaterialContext, CodeMaterialProgr
 import { emitCodeMaterialFilter } from './codeGpuFilter'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import { measureVideoEditGlyph } from '../videoEditGlyphMetrics'
 import { videoEditGpuBytesPerPixel, VIDEO_EDIT_PRECISE_FORMAT, type VideoEditGpuColorFormat } from './videoEditGpuFrame'
 
@@ -389,13 +390,30 @@ struct Mix { amount:vec4f, color:vec4f }
   async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '内置效果输入必须属于当前GPU设备。')
-    const runtime = this.builtinRuntime ??= new VideoEditBuiltinEffectsGpu(this.device, this.sampler, {
-      allocate: (width, height, format) => this.texture(width, height, format as VideoEditGpuColorFormat),
-      release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes; if (this.preciseTextures.has(texture)) this.preciseBytes -= bytes },
-    })
+    const runtime = this.builtins()
     const target = this.surface(key, input.width, input.height, input.textureFormat)
     if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
     await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format: input.textureFormat }, target.picture.texture, frame)
+    this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
+    return target.picture
+  }
+  private builtins(): VideoEditBuiltinEffectsGpu {
+    return this.builtinRuntime ??= new VideoEditBuiltinEffectsGpu(this.device, this.sampler, {
+      allocate: (width, height, format) => this.texture(width, height, format as VideoEditGpuColorFormat),
+      release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes; if (this.preciseTextures.has(texture)) this.preciseBytes -= bytes },
+    })
+  }
+  /**
+   * 带参数的视频过渡（4.7：擦除、推动、滑动、缩放、模糊、闪光、圆形划像）：与内置效果同一套着色器与显存预算。
+   * 单侧过渡两侧传同一张画面，空着的一侧由 `transition` 标记为透明；任一侧是高精度时输出高精度。
+   */
+  async transition(key: string, transition: VideoEditBuiltinTransitionInput, outgoing: VideoEditCodePicture, incoming: VideoEditCodePicture): Promise<VideoEditCodePicture> {
+    if (outgoing.owner !== this.device || incoming.owner !== this.device || outgoing.width !== incoming.width || outgoing.height !== incoming.height) throw new CodeMaterialError('CONTEXT', '过渡需要同设备同尺寸的两段画面。')
+    await this.ready; this.assertLive(); this.assertInput(outgoing.texture); this.assertInput(incoming.texture)
+    const format = outgoing.highPrecision || incoming.highPrecision ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
+    const target = this.surface(key, outgoing.width, outgoing.height, format)
+    if (target.picture.texture === outgoing.texture || target.picture.texture === incoming.texture) throw new CodeMaterialError('CONTEXT', '过渡输入输出不能引用同一纹理。')
+    await this.builtins().renderTransition(transition, outgoing.texture, incoming.texture, target.picture.texture, { width: outgoing.width, height: outgoing.height, format })
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }

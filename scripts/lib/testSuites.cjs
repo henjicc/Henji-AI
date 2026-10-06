@@ -11,6 +11,7 @@ const GPU_TEST_FILES = [
   'src/core/imageEdit/testing/vgpuImpulseProbe.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditGpuPrecision.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts',
+  'src/features/videoEdit/engine/videoEditBuiltinTransitions.gpu.test.ts',
 ]
 const IMAGE_EXPORT_TEST_FILES = [
   'src/features/imageEdit/v3/export/renderExportSourceGeometryV3.test.ts',

@@ -39,7 +39,8 @@ import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
 import { videoEditTransitionEditPoints, videoEditTransitionFit, videoEditTransitionPairCut, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionPair, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { placeVideoEditTransition, selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, videoEditDefaultTransitionFrames, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
 import { readVideoEditTransitionDrag } from '../panels/videoEditTransitionDrag'
-import { handleVideoEditEffectDragOver, handleVideoEditEffectDrop } from '../panels/videoEditEffectDrag'
+import { clearVideoEditEffectDropTarget, handleVideoEditEffectDragOver, handleVideoEditEffectDrop } from '../panels/videoEditEffectDrag'
+import { VideoEditEffectDropTargets, VideoEditTransitionDropBlock } from './VideoEditTimelineDropFeedback'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean }
 /** 片段底色与描边（设计稿素材片段令牌）：画面、声音、文字/代码/图形/调整各一组；选中改强调描边。 */
@@ -369,7 +370,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       }}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); pointer.cancel() } }}
       onDragOver={event => {
-        if (handleVideoEditEffectDragOver(event, projectId)) return
+        if (handleVideoEditEffectDragOver(event, projectId, { sequence, selectedClipIds: instance.selectedClipIds })) return
         const transitionKind = readVideoEditTransitionDrag(event.dataTransfer, projectId)
         if (transitionKind) {
           event.preventDefault()
@@ -382,7 +383,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         event.preventDefault(); event.dataTransfer.dropEffect = 'copy'
         setHint(current => current && current.frame === at.frame && current.track === at.track && current.newTrack === at.newTrack && current.mode === at.mode ? current : { ...at, ...previewGhosts(at) })
       }}
-      onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) { setHint(null); setTransitionHint(null) } }}
+      onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) { setHint(null); setTransitionHint(null); clearVideoEditEffectDropTarget() } }}
       onDrop={event => {
         if (handleVideoEditEffectDrop(event, projectId, sequence.id, instance.selectedClipIds, onError)) return
         const transitionKind = readVideoEditTransitionDrag(event.dataTransfer, projectId)
@@ -429,7 +430,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             </div>)}
             {visibleClips.filter(clip => rows.find(row => row.track.index === clip.track)?.region === kind).map(clip => renderClip(clip, region))}
             {transitionWindows.filter(window => rows.find(row => row.track.index === window.left.track)?.region === kind).map(window => renderTransition(window, region))}
-            {transitionHint && rows.find(row => row.track.index === transitionHint.track)?.region === kind && (() => { const row = rows.find(value => value.track.index === transitionHint.track)!; return <div aria-hidden="true" data-video-edit-transition-drop={transitionHint.alignment} className="pointer-events-none absolute z-raised rounded-md border-2 border-dashed border-accent-ring bg-accent-tint" style={{ top: row.top - region.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + transitionHint.start * pixels, width: Math.max(4, transitionHint.duration * pixels) }} /> })()}
+            {transitionHint && rows.find(row => row.track.index === transitionHint.track)?.region === kind && <VideoEditTransitionDropBlock hint={transitionHint} row={rows.find(value => value.track.index === transitionHint.track)!} region={region} pixels={pixels} />}
+            <VideoEditEffectDropTargets projectId={projectId} clips={visibleClips} rows={rows.filter(row => row.region === kind)} region={region} pixels={pixels} />
           </div>
         })}
         <div role="separator" aria-label="画面与声音轨道分界" aria-orientation="horizontal" aria-valuemin={10} aria-valuemax={90} aria-valuenow={Math.round(split * 100)} tabIndex={0} data-video-edit-track-divider data-video-edit-timeline-chrome

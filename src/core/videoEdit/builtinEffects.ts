@@ -35,6 +35,8 @@ const strength = (key: string, name: string, fallback: number, tooltip: string, 
 const signed = (key: string, name: string, tooltip: string, description: string, fallback = 0): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: fallback, tooltip, description })
 const angle = (key: string, name: string, fallback: number, min: number, max: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'degrees', min, max, step: 1, default: fallback, tooltip, description })
 const percent = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'percent', min: 0, max: 100, step: 1, default: fallback, tooltip, description })
+/** 参数构造（过渡参数登记复用，量纲与内置效果一致）。 */
+export { strength as videoEditStrengthParam, percent as videoEditPercentParam }
 const repeatEdges: VideoEditBuiltinParam = { key: 'repeat_edges', name: '重复边缘像素', type: 'boolean', default: true, tooltip: '开启时画面边缘不会变透明', description: 'true 时取画面外的颜色用最近的边缘像素（边缘不发虚、不透出下层）；false 时边缘向外渐隐成透明。' }
 
 export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
@@ -170,11 +172,23 @@ export function videoEditBuiltinParamValue(param: VideoEditBuiltinParam, raw: un
  */
 export function normalizeVideoEditBuiltinParams(id: string, changes: Readonly<Record<string, unknown>> = {}, base?: Readonly<Record<string, unknown>>, clamp = false): VideoEditBuiltinParams {
   const definition = requireVideoEditBuiltinEffect(id)
-  const unknown = Object.keys(changes).filter(key => !definition.params.some(param => param.key === key))
-  if (unknown.length) throw new Error(`内置效果“${definition.name}”没有参数 ${unknown.join('、')}；${definition.params.length ? `可用参数：${definition.params.map(param => param.key).join('、')}` : '它没有可调参数'}。`)
-  return Object.fromEntries(definition.params.map(param => {
+  return normalizeVideoEditParamSet(`内置效果“${definition.name}”`, definition.params, changes, base, clamp)
+}
+/** 按一组参数登记合并并校验（内置效果与过渡共用）；`owner` 只用于报错文字。 */
+export function normalizeVideoEditParamSet(owner: string, params: readonly VideoEditBuiltinParam[], changes: Readonly<Record<string, unknown>> = {}, base?: Readonly<Record<string, unknown>>, clamp = false): VideoEditBuiltinParams {
+  const unknown = Object.keys(changes).filter(key => !params.some(param => param.key === key))
+  if (unknown.length) throw new Error(`${owner}没有参数 ${unknown.join('、')}；${params.length ? `可用参数：${params.map(param => param.key).join('、')}` : '它没有可调参数'}。`)
+  return Object.fromEntries(params.map(param => {
     const raw = param.key in changes ? changes[param.key] : base && param.key in base ? base[param.key] : param.default
     return [param.key, videoEditBuiltinParamValue(param, raw, clamp && param.key in changes)]
+  }))
+}
+/** 给助手的参数说明（内置效果与过渡共用）。 */
+export function describeVideoEditParams(params: readonly VideoEditBuiltinParam[]): Array<Record<string, string | number | boolean | string[]>> {
+  return params.map(param => ({
+    key: param.key, name: param.name, type: param.type, default: param.default, description: param.description,
+    ...(param.type === 'number' ? { min: param.min, max: param.max, unit: param.unit } : {}),
+    ...(param.type === 'enum' ? { options: param.options.map(option => option.value) } : {}),
   }))
 }
 /**
@@ -198,10 +212,6 @@ export function isVideoEditBuiltinParamDefault(param: VideoEditBuiltinParam, val
 export function describeVideoEditBuiltinEffect(definition: VideoEditBuiltinEffectDefinition): Record<string, string | Array<Record<string, string | number | boolean | string[]>>> {
   return {
     id: videoEditBuiltinRefId(definition.id), name: definition.name, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], description: definition.description,
-    params: definition.params.map(param => ({
-      key: param.key, name: param.name, type: param.type, default: param.default, description: param.description,
-      ...(param.type === 'number' ? { min: param.min, max: param.max, unit: param.unit } : {}),
-      ...(param.type === 'enum' ? { options: param.options.map(option => option.value) } : {}),
-    })),
+    params: describeVideoEditParams(definition.params),
   }
 }

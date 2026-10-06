@@ -1,6 +1,7 @@
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
-import { planVideoEditBuiltinEffect, type VideoEditBuiltinTexture } from './videoEditBuiltinEffectPasses'
+import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
+import { planVideoEditBuiltinEffect, planVideoEditBuiltinTransition, type VideoEditBuiltinPlan, type VideoEditBuiltinTexture } from './videoEditBuiltinEffectPasses'
 import { VIDEO_EDIT_BUILTIN_EFFECT_SHADER, type VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 
 interface LayoutDevice { createBindGroupLayout(descriptor: unknown): unknown; createPipelineLayout(descriptor: unknown): unknown }
@@ -65,11 +66,20 @@ export class VideoEditBuiltinEffectsGpu {
   }
   /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
   async render(instance: VideoEditBuiltinEffectInstance, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number): Promise<void> {
-    const plan = planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame })
-    const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, input.format)))
+    await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame }), input.format, input.texture, output)
+  }
+  /**
+   * 带参数的视频过渡（4.7）：`outgoing` 前一段、`incoming` 后一段（单侧过渡两者可以是同一纹理，空着的一侧由参数标记），
+   * 三者尺寸相同；`format` 是输出格式（任一侧是高精度时为高精度）。
+   */
+  async renderTransition(transition: VideoEditBuiltinTransitionInput, outgoing: GpuTexture, incoming: GpuTexture, output: GpuTexture, size: { width: number; height: number; format: string }): Promise<void> {
+    await this.execute(planVideoEditBuiltinTransition(transition, size), size.format, outgoing, output, incoming)
+  }
+  private async execute(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture): Promise<void> {
+    const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, format)))
     const taken = new Set<Scratch>()
-    const scratch = plan.scratch.map(value => this.take(value.width, value.height, input.format, taken))
-    const texture = (ref: VideoEditBuiltinTexture): GpuTexture => ref === 'input' ? input.texture : ref === 'output' ? output : scratch[ref]
+    const scratch = plan.scratch.map(value => this.take(value.width, value.height, format, taken))
+    const texture = (ref: VideoEditBuiltinTexture): GpuTexture => ref === 'input' ? input : ref === 'second' ? second ?? input : ref === 'output' ? output : scratch[ref]
     const encoder = this.device.createCommandEncoder()
     plan.passes.forEach((pass, index) => {
       const buffer = this.uniforms[index] ??= this.device.createBuffer({ size: 64, usage: 0x08 | 0x40 })

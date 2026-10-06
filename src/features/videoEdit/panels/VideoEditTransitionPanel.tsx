@@ -8,13 +8,17 @@ import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document
 import { videoEditFps } from '@/core/videoEdit/time'
 import { videoEditTransitionAlignmentFields, videoEditTransitionAlignmentOf, videoEditTransitionFramesBeforeCut, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment } from '@/core/videoEdit/transitions'
 import { deleteVideoEditTransition, updateVideoEditTransition } from '../application/videoEditCompositing'
-import { selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
+import { selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, updateVideoEditTransitionParams, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
+import { resolveVideoEditTransitionParams, videoEditTransitionParamDefinitions } from '@/core/videoEdit/transitionParams'
+import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
+import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 import type { VideoEditInstance } from '../application/videoEditService'
 import { timelineTimecode } from '../timeline/timelineGeometry'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
 
 /**
- * 效果控件里的过渡属性（PR）：在时间线上点选过渡块后显示——持续时间、对齐（中心切点／起点切点／终点切点／自定义起点）与删除。
+ * 效果控件里的过渡属性（PR）：在时间线上点选过渡块后显示——持续时间、对齐（中心切点／起点切点／终点切点／自定义起点）、
+ * 带参数过渡（擦除、推动……4.7）的各项参数（拖动实时预览、松手一步撤销）与删除。
  * 没有选中过渡时不渲染；效果控件始终挂载本组件（`clip` 为当前片段，可空），选中过渡时它自己出现。
  */
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; clip?: VideoEditClip; onError: (reason: unknown) => void }
@@ -27,7 +31,9 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
   const transitionId = selectedVideoEditTransitionId(instance)
   const transition = sequence.transitions?.find(value => value.id === transitionId)
   const action = useVideoEditCompositeAction(instance, JSON.stringify([projectId, sequence.id, transitionId ?? null]), onError)
+  const gesture = useVideoEditBuiltinParamGesture(projectId, JSON.stringify([sequence.id, transitionId ?? null]), (changes, handle) => { if (transitionId && changes.params) updateVideoEditTransitionParams(projectId, sequence.id, transitionId, changes.params, handle) }, onError)
   if (!transition) return null
+  const params = videoEditTransitionParamDefinitions(transition.kind)
   let window: ReturnType<typeof videoEditTransitionWindow> | undefined
   try { window = videoEditTransitionWindow(sequence, transition) } catch { window = undefined }
   const preset = videoEditTransitionPreset(transition.kind)
@@ -55,6 +61,9 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
           update({ alignment: videoEditTransitionAlignmentFields(transition.durationFrames, framesBeforeCut).alignment ?? 'center' })
         }} />
     </UiFormRow>}
+    {params.length > 0 && <div className="flex flex-col" data-video-edit-transition-params={transition.kind}>
+      <VideoEditBuiltinParamRows params={params} values={resolveVideoEditTransitionParams(transition.kind, transition.parameters)} gesture={gesture} />
+    </div>}
     <div className="flex items-center gap-2">
       <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null)) }}><Trash2 size={14} aria-hidden="true" />删除过渡</UiButton>
       {action.busy && <><UiLoading size="xs" message="正在检查过渡画面" /><UiButton size="sm" onClick={action.cancel}>取消</UiButton></>}

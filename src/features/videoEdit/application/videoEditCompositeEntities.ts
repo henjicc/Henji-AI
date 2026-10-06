@@ -2,7 +2,8 @@ import type { JsonValue } from '@/core/application-control'
 import { videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
 import { orderVideoEditEffects, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
-import { videoEditTransitionClipIds, videoEditTransitionPreset, videoEditTransitionSchema } from '@/core/videoEdit/transitions'
+import { videoEditTransitionClipIds, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
+import { validateVideoEditTransitionParams } from '@/core/videoEdit/transitionParams'
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { makeVideoEditBuiltinEffect, makeVideoEditEffect } from './videoEditCompositing'
@@ -64,7 +65,8 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
     if (builtin) return JSON.parse(JSON.stringify({ ...common, ...effect, definitionId: videoEditBuiltinRefId(builtin.id), versionId: '', parameters: builtin.params, curves: {} })) as Data
     return JSON.parse(JSON.stringify({ ...common, ...effect, definitionId: code!.definitionId, versionId: code!.versionId, parameters: code!.parameters, curves: code!.curves ?? {} })) as Data
   }
-  return { ...common, ...owner.transition }
+  // 过渡参数：没有存参数时读出空对象（全部按默认值）；种类与参数见 video_edit.builtin_effect 的 transition:<种类>。
+  return JSON.parse(JSON.stringify({ ...common, ...owner.transition, parameters: owner.transition.parameters ?? {} })) as Data
 }
 /** Draft operations use the same factories and full domain validator as manual
  * creation. No publication or history occurs until the caller proves the draft. */
@@ -85,7 +87,15 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       Object.assign(owner.effect, next)
     }
   } else {
-    const next = videoEditTransitionSchema.parse({ ...owner.transition, durationFrames: data.durationFrames, alignment: data.alignment ?? undefined, framesBeforeCut: data.framesBeforeCut ?? undefined })
+    const kind = (data.kind ?? owner.transition.kind) as VideoEditTransitionKind
+    if (!VIDEO_EDIT_TRANSITION_PRESETS.some(preset => preset.kind === kind)) throw new Error(`没有过渡种类 ${String(kind)}，可用：${VIDEO_EDIT_TRANSITION_PRESETS.map(preset => preset.kind).join('、')}。`)
+    if (videoEditTransitionMedium(kind) !== videoEditTransitionMedium(owner.transition.kind)) throw new Error('过渡种类只能换成同一媒介的：视频过渡换视频过渡，音频过渡换音频过渡。')
+    // 参数整体写入（写什么存什么）；只换种类、参数没动时旧参数不再适用，按新种类的默认值
+    const raw = (data.parameters ?? {}) as Record<string, unknown>
+    const untouched = JSON.stringify(raw) === JSON.stringify(owner.transition.parameters ?? {})
+    const parameters = kind !== owner.transition.kind && untouched ? {} : validateVideoEditTransitionParams(kind, videoEditTransitionPreset(kind).name, raw)
+    const next = videoEditTransitionSchema.parse({ ...owner.transition, kind, durationFrames: data.durationFrames, alignment: data.alignment ?? undefined, framesBeforeCut: data.framesBeforeCut ?? undefined, parameters: Object.keys(parameters).length ? parameters : undefined })
+    if (!next.parameters) delete next.parameters
     if (next.alignment === 'center') delete next.alignment
     if (next.alignment !== 'custom') delete next.framesBeforeCut
     Object.keys(owner.transition).forEach(key => { delete (owner.transition as Record<string, unknown>)[key] }); Object.assign(owner.transition, next)
@@ -97,6 +107,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     const sequence = document.sequences.find(sequence => sequence.id === parentId)
     if (!sequence) throw new Error('NOT_FOUND：所属序列已移除。')
     const transition = videoEditTransitionSchema.parse({ id: crypto.randomUUID(), kind: 'cross_dissolve', ...values })
+    if (transition.parameters && !Object.keys(transition.parameters).length) delete transition.parameters
     ;(sequence.transitions ??= []).push(transition); return transition.id
   }
   const { clip } = clipOwner(document, parentId)

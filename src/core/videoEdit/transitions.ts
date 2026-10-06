@@ -2,15 +2,25 @@ import { z } from 'zod'
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { offsetVideoEditSource, videoEditSourceSeconds } from './time'
+import { describeVideoEditTransitionParams, isVideoEditBuiltinTransitionKind, resolveVideoEditTransitionParams, videoEditTransitionParamsIssue, type VideoEditBuiltinTransitionKind } from './transitionParams'
+import type { VideoEditBuiltinParams } from './builtinEffects'
 
 /**
  * 过渡预设（PR“效果”面板的视频过渡／音频过渡）：只列引擎能真实渲染的种类。
- * 视频：交叉溶解、黑场过渡、白场过渡；音频：恒定功率、恒定增益（交叉淡化）。
+ * 视频：交叉溶解、黑场过渡、白场过渡，以及走内置效果着色器、带参数的擦除、推动、滑动、缩放过渡、模糊过渡、闪光、圆形划像
+ * （参数登记在 `transitionParams.ts`）；音频：恒定功率、恒定增益（交叉淡化）。
  */
 export const VIDEO_EDIT_TRANSITION_PRESETS = [
   { kind: 'cross_dissolve', medium: 'video', name: '交叉溶解', tooltip: '前一段画面逐渐溶入后一段', description: '交叉溶解：两段画面按时长线性互溶，最常用的柔和转场。' },
   { kind: 'dip_to_black', medium: 'video', name: '黑场过渡', tooltip: '前一段淡出到黑色，再从黑色淡入后一段', description: '黑场过渡：前半段淡出到黑色、后半段从黑色淡入，表示时间流逝或段落结束。' },
   { kind: 'dip_to_white', medium: 'video', name: '白场过渡', tooltip: '前一段淡出到白色，再从白色淡入后一段', description: '白场过渡：前半段淡到白色、后半段从白色淡入，常用于回忆、闪回或明亮的段落切换。' },
+  { kind: 'wipe', medium: 'video', name: '擦除', tooltip: '后一段画面像擦黑板一样从一边擦过来，可选方向、羽化和边框', description: '擦除：一条分界线从画面一边（或一角）扫到另一边，线后露出后一段。适合并列、对比、地点切换。参数：direction 起点方向，feather 羽化，border 边框宽度，border_color 边框颜色。' },
+  { kind: 'push', medium: 'video', name: '推动', tooltip: '后一段画面从一侧进入，把前一段推出画面', description: '推动：两段画面连在一起整体平移，后一段把前一段推出去。适合时间顺延、翻页、空间上的连续移动。参数：direction 后一段进入的一侧，smooth 缓入缓出。' },
+  { kind: 'slide', medium: 'video', name: '滑动', tooltip: '后一段画面从一侧滑入，盖在不动的前一段上', description: '滑动：前一段画面不动，后一段从一侧滑入盖住它。适合插入补充信息、画中画式切换。参数：direction 后一段进入的一侧，smooth 缓入缓出。' },
+  { kind: 'cross_zoom', medium: 'video', name: '缩放过渡', tooltip: '前一段放大冲出、后一段从放大收回，带放射模糊', description: '缩放过渡：前一段画面向中心放大冲出，后一段从放大状态收回到正常大小，中点交叉溶解并带放射拖影。适合节奏快的剪辑、冲刺、转场强调。参数：zoom 缩放幅度，blur 动感模糊，center_x / center_y 缩放中心。' },
+  { kind: 'blur_dissolve', medium: 'video', name: '模糊过渡', tooltip: '前一段逐渐虚化，在模糊中换成后一段再变清晰', description: '模糊过渡：前一段逐渐失焦，在最模糊时溶成后一段，再重新清晰。适合梦境、回忆、柔和的段落切换。参数：blur 中点最大模糊度。' },
+  { kind: 'flash', medium: 'video', name: '闪光', tooltip: '切换瞬间画面一闪（默认白色闪光）', description: '闪光（闪白）：在切点附近画面快速闪成纯色再切到后一段，比白场过渡更短促。适合拍照感、冲击、节拍点、回忆闪回。参数：color 闪光颜色，intensity 闪光强度。' },
+  { kind: 'iris_round', medium: 'video', name: '圆形划像', tooltip: '后一段从一个圆里展开（或前一段收进圆里）', description: '圆形划像：后一段画面从圆形里由小到大展开；方式选 close 时前一段收缩成圆消失。适合聚焦某处、复古片尾、卡通感。参数：mode 展开或收拢，center_x / center_y 圆心，feather 羽化，border 边框宽度，border_color 边框颜色。' },
   { kind: 'constant_power', medium: 'audio', name: '恒定功率', tooltip: '两段声音交叉淡化，中间音量不塌陷', description: '恒定功率交叉淡化：两段声音按正弦／余弦曲线交叉，过渡中段响度保持平稳，是默认音频过渡。' },
   { kind: 'constant_gain', medium: 'audio', name: '恒定增益', tooltip: '两段声音按直线交叉淡化', description: '恒定增益交叉淡化：两段声音按直线交叉，中段会略微变轻，适合需要明显切换感的地方。' },
 ] as const
@@ -34,7 +44,12 @@ export const videoEditTransitionSchema = z.object({
   alignment: z.enum(VIDEO_EDIT_TRANSITION_ALIGNMENTS).optional(),
   /** 只在自定义起点时使用：过渡在切点之前的帧数。 */
   framesBeforeCut: z.number().int().min(0).max(108_000).optional(),
-}).strict()
+  /** 带参数的视频过渡（擦除、推动等，见 `transitionParams.ts`）的参数；可只写一部分，缺的键按默认值。 */
+  parameters: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(64)])).optional(),
+}).strict().superRefine((transition, ctx) => {
+  const issue = videoEditTransitionParamsIssue(transition.kind, videoEditTransitionPreset(transition.kind).name, transition.parameters)
+  if (issue) ctx.addIssue({ code: 'custom', message: issue, path: ['parameters'] })
+})
 export type VideoEditTransition = z.infer<typeof videoEditTransitionSchema>
 /**
  * 过渡在时间线上的窗口。单侧过渡的 `left` 与 `right` 是同一个片段，`side` 说明它在片段的哪一端：
@@ -53,6 +68,17 @@ export function videoEditTransitionClipIds(transition: Pick<VideoEditTransition,
 
 export function videoEditTransitionPreset(kind: VideoEditTransitionKind): typeof VIDEO_EDIT_TRANSITION_PRESETS[number] { return VIDEO_EDIT_TRANSITION_PRESETS.find(preset => preset.kind === kind)! }
 export function videoEditTransitionMedium(kind: VideoEditTransitionKind): VideoEditTransitionMedium { return videoEditTransitionPreset(kind).medium }
+/** 助手目录（与内置效果同一个只读目录）里过渡条目的 ID：`transition:<种类>`。 */
+export const VIDEO_EDIT_TRANSITION_REF_PREFIX = 'transition:'
+export function parseVideoEditTransitionRefId(value: string): VideoEditTransitionKind | undefined {
+  const kind = value.startsWith(VIDEO_EDIT_TRANSITION_REF_PREFIX) ? value.slice(VIDEO_EDIT_TRANSITION_REF_PREFIX.length) : undefined
+  return VIDEO_EDIT_TRANSITION_PRESETS.find(preset => preset.kind === kind)?.kind
+}
+/** 给助手的过渡说明：用途与参数语义（没有参数的种类 params 为空）。 */
+export function describeVideoEditTransitionKind(kind: VideoEditTransitionKind): { name: string; group: string; description: string; params: ReturnType<typeof describeVideoEditTransitionParams> } {
+  const preset = videoEditTransitionPreset(kind)
+  return { name: preset.name, group: preset.medium === 'audio' ? '音频过渡' : '视频过渡', description: `${preset.description}创建或修改 video_edit.transition 时 kind 写 ${kind}。`, params: describeVideoEditTransitionParams(kind) }
+}
 /** 片段能不能挂这种媒介的过渡：画面过渡挂画面片段（调整图层除外），音频过渡挂声音片段。 */
 export function videoEditTransitionAccepts(medium: VideoEditTransitionMedium, clip: Pick<VideoEditClip, 'kind'>): boolean {
   return medium === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' && clip.kind !== 'adjustment'
@@ -116,6 +142,17 @@ export function videoEditTransitionMix(window: Pick<VideoEditTransitionWindow, '
   const through = videoEditTransitionDipColor(window.transition.kind) ?? [0, 0, 0, 0]
   return { amount: window.side === 'in' ? .5 + progress / 2 : progress / 2, through }
 }
+/**
+ * 带参数的视频过渡交给内置效果着色器的输入：`progress` 0→1；单侧过渡另一侧是空白（透明），入点时前一段为空、出点时后一段为空。
+ */
+export interface VideoEditBuiltinTransitionInput { kind: VideoEditBuiltinTransitionKind; params: VideoEditBuiltinParams; progress: number; emptyOutgoing?: boolean; emptyIncoming?: boolean }
+/** 这一帧画面过渡怎么画：交叉溶解、黑场、白场走混合（`videoEditTransitionMix`），其余走内置效果着色器。 */
+export function videoEditTransitionRender(window: Pick<VideoEditTransitionWindow, 'start' | 'end' | 'side' | 'transition'>, frame: number): { kind: 'mix'; amount: number; through?: [number, number, number, number] } | { kind: 'builtin'; input: VideoEditBuiltinTransitionInput } {
+  const kind = window.transition.kind
+  if (!isVideoEditBuiltinTransitionKind(kind)) return { kind: 'mix', ...videoEditTransitionMix(window, frame) }
+  const progress = videoEditTransitionAmount(window, frame)
+  return { kind: 'builtin', input: { kind, params: resolveVideoEditTransitionParams(kind, window.transition.parameters), progress, ...(window.side === 'in' ? { emptyOutgoing: true } : window.side === 'out' ? { emptyIncoming: true } : {}) } }
+}
 /** 黑场／白场过渡经过的纯色（预乘 RGBA）；交叉溶解没有。 */
 export function videoEditTransitionDipColor(kind: VideoEditTransitionKind): [number, number, number, number] | undefined {
   return kind === 'dip_to_black' ? [0, 0, 0, 1] : kind === 'dip_to_white' ? [1, 1, 1, 1] : undefined
@@ -178,8 +215,8 @@ export function validateVideoEditTransitions(document: VideoEditDocument, read?:
 /** 只带存在的片段字段（单侧过渡不写另一侧，旧文件不受影响）。 */
 function withClips(transition: VideoEditTransition, leftClipId: string | undefined, rightClipId: string | undefined): VideoEditTransition {
   // 字段顺序固定（与持久化一致），未改动的拖动不会因键序不同被当成一次编辑。
-  const { id, kind, durationFrames, alignment, framesBeforeCut } = transition
-  return { id, kind, ...(leftClipId ? { leftClipId } : {}), ...(rightClipId ? { rightClipId } : {}), durationFrames, ...(alignment ? { alignment } : {}), ...(framesBeforeCut !== undefined ? { framesBeforeCut } : {}) }
+  const { id, kind, durationFrames, alignment, framesBeforeCut, parameters } = transition
+  return { id, kind, ...(leftClipId ? { leftClipId } : {}), ...(rightClipId ? { rightClipId } : {}), durationFrames, ...(alignment ? { alignment } : {}), ...(framesBeforeCut !== undefined ? { framesBeforeCut } : {}), ...(parameters ? { parameters } : {}) }
 }
 /** 单侧过渡：去掉对齐字段（整段在片段内，对齐不起作用）。 */
 function singleSided(transition: VideoEditTransition, clipId: string, side: VideoEditTransitionSide): VideoEditTransition {
@@ -323,7 +360,9 @@ export function applyVideoEditTransitionPairs(sequence: VideoEditSequence, pairs
     const fit = videoEditTransitionFit({ clips: sequence.clips, transitions }, pair, options.durationFrames, options.alignment)
     if (!fit) continue
     const replaced = transitions.filter(value => atEditPoint(value, pair)); const previous = replaced[0]
-    const base: VideoEditTransition = { id: previous?.id ?? crypto.randomUUID(), kind: options.kind?.(pair.medium) ?? VIDEO_EDIT_DEFAULT_TRANSITIONS[pair.medium], durationFrames: fit.durationFrames, ...(pair.leftClipId && pair.rightClipId ? videoEditTransitionAlignmentFields(fit.durationFrames, fit.framesBeforeCut) : {}) }
+    const kind = options.kind?.(pair.medium) ?? VIDEO_EDIT_DEFAULT_TRANSITIONS[pair.medium]
+    // 同种过渡再次放上去时保留已调好的参数；换了种类按新种类的默认值。
+    const base: VideoEditTransition = { id: previous?.id ?? crypto.randomUUID(), kind, durationFrames: fit.durationFrames, ...(pair.leftClipId && pair.rightClipId ? videoEditTransitionAlignmentFields(fit.durationFrames, fit.framesBeforeCut) : {}), ...(previous?.kind === kind && previous.parameters ? { parameters: previous.parameters } : {}) }
     const transition = withClips(base, pair.leftClipId, pair.rightClipId)
     transitions = previous ? transitions.flatMap(value => value === previous ? [transition] : replaced.includes(value) ? [] : [value]) : [...transitions, transition]
     ids.push(transition.id)
@@ -358,7 +397,7 @@ export function dragVideoEditTransition(sequence: Pick<VideoEditSequence, 'clips
     start += bounded; end += bounded
   }
   const durationFrames = end - start
-  return withClips({ id: transition.id, kind: transition.kind, durationFrames, ...videoEditTransitionAlignmentFields(durationFrames, window.cut - start) }, transition.leftClipId, transition.rightClipId)
+  return withClips({ id: transition.id, kind: transition.kind, durationFrames, ...videoEditTransitionAlignmentFields(durationFrames, window.cut - start), ...(transition.parameters ? { parameters: transition.parameters } : {}) }, transition.leftClipId, transition.rightClipId)
 }
 
 const videoKinds = VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === 'video').map(preset => preset.kind) as [VideoEditTransitionKind, ...VideoEditTransitionKind[]]

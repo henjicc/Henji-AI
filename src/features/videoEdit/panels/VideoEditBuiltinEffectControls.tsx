@@ -4,39 +4,10 @@ import { Dropdown, UiColorInput, UiIconButton, UiSwitch, UiTooltipText } from '@
 import NumberInput from '@/components/ui/NumberInput'
 import { requireVideoEditBuiltinEffect, resolveVideoEditBuiltinParams, VIDEO_EDIT_BUILTIN_UNIT_LABELS, type VideoEditBuiltinParam } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
-import { updateVideoEditBuiltinEffect, type VideoEditBuiltinEffectChanges, type VideoEditCompositeTarget } from '../application/videoEditCompositing'
-import { beginVideoEditGesture, finishVideoEditGesture, type VideoEditGesture } from '../application/videoEditService'
+import { updateVideoEditBuiltinEffect, type VideoEditCompositeTarget } from '../application/videoEditCompositing'
+import { useVideoEditBuiltinParamGesture, type VideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 
-/**
- * 内置效果的一次编辑会话：拖动数值、拖动取色时实时预览，结束时只记一步撤销；Esc / 指针被取消时回到开始前。
- * 没有进行中的会话时，`commit` 就是一次独立的编辑（输入回车、步进、选项、开关、重置）。
- */
-function useBuiltinEffectGesture(target: VideoEditCompositeTarget, effectId: string, onError: (reason: unknown) => void) {
-  const handle = useRef<VideoEditGesture>()
-  const errorHandler = useRef(onError); errorHandler.current = onError
-  const { projectId, sequenceId, clipId } = target
-  useEffect(() => () => {
-    const previous = handle.current; handle.current = undefined
-    if (previous) finishVideoEditGesture(previous, false)
-  }, [projectId, sequenceId, clipId, effectId])
-  const end = (commit: boolean): void => {
-    const previous = handle.current; handle.current = undefined
-    if (!previous) return
-    try { finishVideoEditGesture(previous, commit) } catch (error) { finishVideoEditGesture(previous, false); errorHandler.current(error) }
-  }
-  const begin = (): void => {
-    if (handle.current) return
-    try { handle.current = beginVideoEditGesture(projectId) } catch (error) { errorHandler.current(error) }
-  }
-  const commit = (changes: VideoEditBuiltinEffectChanges): void => {
-    try { updateVideoEditBuiltinEffect({ projectId, sequenceId, clipId }, effectId, changes, handle.current) } catch (error) {
-      if (handle.current) end(false)
-      errorHandler.current(error)
-    }
-  }
-  return { begin, commit, finish: () => end(true), cancel: () => end(false), active: () => handle.current !== undefined }
-}
-type Gesture = ReturnType<typeof useBuiltinEffectGesture>
+type Gesture = VideoEditBuiltinParamGesture
 
 function Row({ label, tooltip, children, resetLabel, resetDisabled, onReset, param }: { label: string; tooltip: string; children: ReactNode; resetLabel: string; resetDisabled: boolean; onReset: () => void; param?: string }): React.ReactElement {
   return <div className="flex min-h-8 items-center gap-1.5" data-video-edit-builtin-param={param}>
@@ -87,7 +58,7 @@ function ColorControl({ label, value, gesture, onChange }: { label: string; valu
  * 名称悬停说明作用，行尾重置为默认值。数值拖动一步撤销，其余每次修改一步撤销。
  */
 export function VideoEditBuiltinEffectControls({ target, effect, onError }: { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; onError: (reason: unknown) => void }): React.ReactElement {
-  const gesture = useBuiltinEffectGesture(target, effect.id, onError)
+  const gesture = useVideoEditBuiltinParamGesture(target.projectId, JSON.stringify([target.sequenceId, target.clipId, effect.id]), (changes, handle) => updateVideoEditBuiltinEffect(target, effect.id, changes, handle), onError)
   let definition
   try { definition = requireVideoEditBuiltinEffect(effect.builtin.id) } catch { return <span className="text-2xs text-text3">此版本不认识这个效果，保留原样不渲染修改。</span> }
   const values = resolveVideoEditBuiltinParams(effect.builtin)
@@ -95,8 +66,12 @@ export function VideoEditBuiltinEffectControls({ target, effect, onError }: { ta
     <Row label="效果强度" tooltip="与原画面混合的比例，100% 为完全应用" resetLabel="重置效果强度" resetDisabled={effect.amount === 1} onReset={() => gesture.commit({ amount: 1 })} param="amount">
       <ScrubNumber label="效果强度" value={effect.amount * 100} min={0} max={100} step={1} precision={0} unit="%" gesture={gesture} onChange={next => gesture.commit({ amount: next / 100 })} />
     </Row>
-    {definition.params.map(param => <Row key={param.key} param={param.key} label={param.name} tooltip={param.tooltip} resetLabel={`重置${param.name}`} resetDisabled={values[param.key] === param.default} onReset={() => gesture.commit({ params: { [param.key]: param.default } })}>
-      <ParamControl param={param} value={values[param.key]} gesture={gesture} />
-    </Row>)}
+    <VideoEditBuiltinParamRows params={definition.params} values={values} gesture={gesture} />
   </div>
+}
+/** 一组登记参数的各行（名称悬停说明作用，行尾重置为默认值）；内置效果与带参数的过渡共用。 */
+export function VideoEditBuiltinParamRows({ params, values, gesture }: { params: readonly VideoEditBuiltinParam[]; values: Readonly<Record<string, unknown>>; gesture: VideoEditBuiltinParamGesture }): React.ReactElement {
+  return <>{params.map(param => <Row key={param.key} param={param.key} label={param.name} tooltip={param.tooltip} resetLabel={`重置${param.name}`} resetDisabled={values[param.key] === param.default} onReset={() => gesture.commit({ params: { [param.key]: param.default } })}>
+    <ParamControl param={param} value={values[param.key]} gesture={gesture} />
+  </Row>)}</>
 }

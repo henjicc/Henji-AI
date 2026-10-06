@@ -11,6 +11,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import type { VideoEditInstance } from '../application/videoEditService'
 import { endVideoEditTransitionDrag, startVideoEditTransitionDrag } from './videoEditTransitionDrag'
 import { endVideoEditEffectDrag, startVideoEditEffectDrag } from './videoEditEffectDrag'
+import { applyVideoEditTransitionToSelection } from '../application/videoEditTransitions'
 import { applyVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 
 /**
@@ -52,11 +53,11 @@ export function VideoEditEffectsLibraryPanel({ instance, onError }: { instance: 
           {open && <div role="group" className="flex flex-col pl-5">
             {folder.entries.length ? folder.entries.map((entry, index) => <Fragment key={entry.id}>
               {entry.group && entry.group !== folder.entries[index - 1]?.group && <span className="px-2 pb-0.5 pt-1.5 text-2xs text-text3" aria-hidden="true">{entry.group}</span>}
-              <Tooltip content={`${entry.tooltip}。${entry.kind === 'transition' ? '拖到时间线上两个片段相接的地方应用。' : '拖到片段上，或选中片段后双击应用。'}`} placement="left">
+              <Tooltip content={`${entry.tooltip}。${entry.kind === 'transition' ? '拖到时间线上两个片段相接处或片段一端，或选中片段后双击应用。' : '拖到片段上，或选中片段后双击应用。'}`} placement="left">
               <UiOptionButton variant="menu" size="sm" className="w-full min-w-0 justify-start gap-2" role="treeitem" aria-selected={false} draggable={entry.kind === 'transition' || Boolean(entry.builtinId)} data-video-edit-effects-entry={entry.id}
                 onDragStart={event => { if (entry.transitionKind) startVideoEditTransitionDrag(event.dataTransfer, instance.document.id, entry.transitionKind); else if (entry.builtinId) startVideoEditEffectDrag(event.dataTransfer, instance.document.id, entry.builtinId) }}
                 onDragEnd={() => { endVideoEditTransitionDrag(); endVideoEditEffectDrag() }}
-                onDoubleClick={() => { if (entry.builtinId) applyToSelection(entry.builtinId) }}
+                onDoubleClick={() => { if (entry.builtinId) applyToSelection(entry.builtinId); else if (entry.transitionKind) void applyVideoEditTransitionToSelection(instance.document.id, entry.transitionKind).catch(onError) }}
                 onContextMenu={event => { const kind = entry.transitionKind; if (kind) menu.showMenu(event, [{ id: 'default', label: '设为默认过渡', icon: <Star size={14} />, disabled: isDefault(entry), onClick: () => setDefault(videoEditTransitionMedium(kind), kind) }]) }}>
                 {entry.kind === 'transition' ? <TransitionIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : <Sparkles size={14} aria-hidden="true" className="shrink-0 text-text3" />}
                 <span className="min-w-0 flex-1 truncate text-left">{entry.name}</span>

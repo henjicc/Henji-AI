@@ -1,7 +1,7 @@
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditCompositeNode } from '@/core/videoEdit/compositing'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
-import { videoEditTransitionMix } from '@/core/videoEdit/transitions'
+import { videoEditTransitionRender } from '@/core/videoEdit/transitions'
 import type { PreparedVideoEditEffect } from './videoEditCodeSources'
 import type { VideoEditCodePicture, VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditGpuCompositor, VideoEditPicture } from './videoEditGpuCompositor'
@@ -78,10 +78,15 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       current()
       if (node.kind === 'clip') layers.push(await resolveClip(node.clip))
       else if (node.kind === 'transition') {
-        // 单侧过渡（4.4）两边是同一个片段，只准备一次画面；混合参数由 videoEditTransitionMix 统一给出。
+        // 单侧过渡（4.4）两边是同一个片段，只准备一次画面；怎么画由 videoEditTransitionRender 统一给出：
+        // 交叉溶解、黑场、白场走混合，带参数的过渡（4.7）走内置效果着色器。预览与导出都经过这里。
         const left = await resolveClip(node.window.left, true); const right = node.window.side ? left : await resolveClip(node.window.right, true)
-        const mix = videoEditTransitionMix(node.window, frame)
-        const picture = await (await gpu()).mix(`composite:transition:${node.window.transition.id}`, left.picture as VideoEditCodePicture, right.picture as VideoEditCodePicture, mix.amount, mix.through); current()
+        const render = videoEditTransitionRender(node.window, frame); const key = `composite:transition:${node.window.transition.id}`
+        const runtime = await gpu()
+        const picture = render.kind === 'mix'
+          ? await runtime.mix(key, left.picture as VideoEditCodePicture, right.picture as VideoEditCodePicture, render.amount, render.through)
+          : await runtime.transition(key, render.input, left.picture as VideoEditCodePicture, right.picture as VideoEditCodePicture)
+        current()
         layers.push({ clip: identity(node.window.left), picture })
       } else {
         const children = await resolve(node.children)

@@ -1,12 +1,14 @@
 import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
+import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 
 /**
  * 把一个内置效果实例翻译成 GPU 工序（纯函数，可单测）：每道工序是一个着色器入口、输入、输出和 16 个 float 的参数。
  * 空间量一律按“输入画面高度”换算成像素，再按需降采样：同一个效果在任何渲染尺寸下看起来一样，大半径模糊的代价也有上限。
  */
-export type VideoEditBuiltinTexture = 'input' | 'output' | number
+/** `second` 只在过渡里出现：后一段画面（`input` 是前一段）。 */
+export type VideoEditBuiltinTexture = 'input' | 'second' | 'output' | number
 export interface VideoEditBuiltinPass {
   entry: VideoEditBuiltinEffectEntry
   source: VideoEditBuiltinTexture
@@ -33,10 +35,10 @@ class Planner {
     return [this.width, this.height]
   }
   alloc(width = this.width, height = this.height): number { this.scratch.push({ width, height }); return this.scratch.length - 1 }
-  pass(entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a: Vec4 = ZERO, b: Vec4 = ZERO, original?: VideoEditBuiltinTexture): void {
+  pass(entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a: Vec4 = ZERO, b: Vec4 = ZERO, original?: VideoEditBuiltinTexture, c: Vec4 = ZERO): void {
     const [targetWidth, targetHeight] = this.size(target); const [sourceWidth, sourceHeight] = this.size(source)
     const uniforms = new Float32Array(16)
-    uniforms.set([targetWidth, targetHeight, sourceWidth, sourceHeight, ...a, ...b])
+    uniforms.set([targetWidth, targetHeight, sourceWidth, sourceHeight, ...a, ...b, ...c])
     this.passes.push({ entry, source, target, uniforms, ...(original !== undefined ? { original } : {}) })
   }
   /**
@@ -171,6 +173,73 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
       break
     }
     default: throw new Error(`内置效果“${instance.id}”没有渲染实现。`)
+  }
+  return { width, height, scratch: plan.scratch, passes: plan.passes }
+}
+
+const DIAGONAL = Math.SQRT1_2
+/** 方向选项 → 运动方向（像素空间单位向量，y 向下）：`from_left` 从左侧开始、向右运动。 */
+const DIRECTIONS: Record<string, readonly [number, number]> = {
+  from_left: [1, 0], from_right: [-1, 0], from_top: [0, 1], from_bottom: [0, -1],
+  from_top_left: [DIAGONAL, DIAGONAL], from_top_right: [-DIAGONAL, DIAGONAL], from_bottom_left: [DIAGONAL, -DIAGONAL], from_bottom_right: [-DIAGONAL, -DIAGONAL],
+}
+const ease = (t: number): number => { const x = Math.min(1, Math.max(0, t)); return x * x * (3 - 2 * x) }
+/** 在 [from, to] 区间内平滑地从 0 升到 1。 */
+const window01 = (t: number, from: number, to: number): number => ease((t - from) / (to - from))
+
+/**
+ * 带参数的视频过渡（任务 4.7）翻译成工序：`input` 是前一段、`second` 是后一段，单侧过渡空着的一侧在着色器里按透明处理。
+ * 空间量（羽化、边框、模糊）与内置效果一样按画面高度换算；进度、缓动与中点权重都在这里算好，着色器只做取样与混合。
+ */
+export function planVideoEditBuiltinTransition(input: VideoEditBuiltinTransitionInput, frame: { width: number; height: number }): VideoEditBuiltinPlan {
+  const { width, height } = frame
+  if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('过渡需要有效的画面尺寸。')
+  if (!Number.isFinite(input.progress) || input.progress < 0 || input.progress > 1) throw new Error('过渡进度必须在 0 到 1 之间。')
+  const plan = new Planner(width, height); const params = input.params; const H = height; const t = input.progress
+  const empty = (mode = 0): Vec4 => [t, input.emptyOutgoing ? 1 : 0, input.emptyIncoming ? 1 : 0, mode]
+  const direction = (): readonly [number, number] => DIRECTIONS[String(params.direction)] ?? DIRECTIONS.from_left
+  const edge = (): [number, number] => [number(params, 'feather') / 100 * 0.2 * H, number(params, 'border') / 100 * 0.03 * H]
+  switch (input.kind) {
+    case 'wipe': {
+      const [dx, dy] = direction(); const [feather, border] = edge()
+      plan.pass('tr_wipe', 'input', 'output', [dx, dy, feather, border], [...hexColor(String(params.border_color)), 0], 'second', empty())
+      break
+    }
+    case 'iris_round': {
+      const [feather, border] = edge()
+      plan.pass('tr_iris', 'input', 'output', [number(params, 'center_x') / 100, number(params, 'center_y') / 100, feather, border], [...hexColor(String(params.border_color)), 0], 'second', empty(params.mode === 'close' ? 1 : 0))
+      break
+    }
+    case 'push': case 'slide': {
+      const [dx, dy] = direction()
+      // 单侧滑动的出点：后面是空白，前一段自己滑出画面（否则它一直盖着不动，看不出过渡）。
+      const carry = input.kind === 'push' || input.emptyIncoming
+      plan.pass('tr_move', 'input', 'output', [dx, dy, params.smooth === false ? t : ease(t), carry ? 1 : 0], ZERO, 'second', empty())
+      break
+    }
+    case 'cross_zoom': {
+      const zoom = number(params, 'zoom') / 100 * 2; const e = ease(t)
+      const spread = number(params, 'blur') / 100 * 0.6 * zoom * 4 * e * (1 - e)
+      plan.pass('tr_zoom', 'input', 'output', [number(params, 'center_x') / 100, number(params, 'center_y') / 100, 1 + zoom * e, 1 + zoom * (1 - e)], [spread, window01(t, 0.35, 0.65), 0, 0], 'second', empty())
+      break
+    }
+    case 'blur_dissolve': {
+      // 两段各自按当前模糊度做高斯（与“高斯模糊”同一换算），中点最模糊，再在中段溶过去。
+      const sigma = number(params, 'blur') / 100 * 0.06 * H / 2 * Math.sin(Math.PI * t)
+      const outgoing = input.emptyOutgoing ? 'input' : plan.alloc(); const incoming = input.emptyIncoming ? 'second' : plan.alloc()
+      if (!input.emptyOutgoing) plan.gaussian('input', outgoing, sigma, sigma, true)
+      if (!input.emptyIncoming) plan.gaussian('second', incoming, sigma, sigma, true)
+      plan.pass('tr_mix', outgoing, 'output', [window01(t, 0.3, 0.7), 0, 0, 0], ZERO, incoming, empty())
+      break
+    }
+    case 'flash': {
+      // 闪光集中在切点附近（高斯形），进度 0 与 1 时为零；画面在闪光最亮时换过去。
+      const bell = (x: number): number => Math.exp(-(((x - 0.5) / 0.15) ** 2)); const floor = bell(0)
+      const amount = number(params, 'intensity') / 100 * Math.max(0, (bell(t) - floor) / (1 - floor))
+      plan.pass('tr_flash', 'input', 'output', [...hexColor(String(params.color)), amount], [window01(t, 0.4, 0.6), 0, 0, 0], 'second', empty())
+      break
+    }
+    default: throw new Error(`过渡“${String(input.kind)}”没有渲染实现。`)
   }
   return { width, height, scratch: plan.scratch, passes: plan.passes }
 }

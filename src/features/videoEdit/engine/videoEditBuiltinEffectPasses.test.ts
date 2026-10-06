@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '@/core/theme/colorTokens'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
-import { planVideoEditBuiltinEffect, videoEditGrainSeed, type VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
+import { planVideoEditBuiltinEffect, planVideoEditBuiltinTransition, videoEditGrainSeed, type VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
+import { resolveVideoEditTransitionParams, VIDEO_EDIT_BUILTIN_TRANSITION_KINDS } from '@/core/videoEdit/transitionParams'
 import { VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES, VIDEO_EDIT_BUILTIN_EFFECT_SHADER } from './videoEditBuiltinEffectShaders'
 
 const plan = (id: string, params: Record<string, unknown>, width = 1920, height = 1080, frame = 0): VideoEditBuiltinPlan => planVideoEditBuiltinEffect({ id, params: params as Record<string, number> }, { width, height, frame })
@@ -20,7 +21,7 @@ describe('内置效果工序与参数打包', () => {
         expect(VIDEO_EDIT_BUILTIN_EFFECT_SHADER).toContain(`@fragment fn ${pass.entry}(`)
         expect(pass.uniforms).toHaveLength(16)
         expect(pass.uniforms.every(Number.isFinite)).toBe(true)
-        const target = pass.target === 'output' || pass.target === 'input' ? result : result.scratch[pass.target]
+        const target = typeof pass.target === 'number' ? result.scratch[pass.target] : result
         expect([pass.uniforms[0], pass.uniforms[1]]).toEqual([target.width, target.height])
         // 工序只读已经写过的中间纹理
         if (typeof pass.source === 'number') expect(result.passes.indexOf(pass)).toBeGreaterThan(result.passes.findIndex(value => value.target === pass.source))
@@ -60,5 +61,22 @@ describe('内置效果工序与参数打包', () => {
   it('胶片颗粒的种子只由帧号决定：同一帧预览与导出相同，相邻帧不同', () => {
     expect(plan('film_grain', {}, 1920, 1080, 42).passes[0].uniforms[6]).toBe(videoEditGrainSeed(42))
     expect(videoEditGrainSeed(42)).toBe(videoEditGrainSeed(42)); expect(videoEditGrainSeed(42)).not.toBe(videoEditGrainSeed(43))
+  })
+  it('视频过渡（4.7）：每种过渡在任意进度都能规划，入口都在着色器里；羽化按画面高度换算；单侧标记写进参数', () => {
+    for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {
+      for (const progress of [0, 0.3, 1]) {
+        const result = planVideoEditBuiltinTransition({ kind, params: resolveVideoEditTransitionParams(kind, {}), progress }, { width: 1920, height: 1080 })
+        expect(result.passes.at(-1)!.target, kind).toBe('output')
+        for (const pass of result.passes) {
+          expect(VIDEO_EDIT_BUILTIN_EFFECT_SHADER).toContain(`@fragment fn ${pass.entry}(`)
+          expect(pass.uniforms.every(Number.isFinite)).toBe(true)
+        }
+      }
+    }
+    const wipe = (height: number) => planVideoEditBuiltinTransition({ kind: 'wipe', params: resolveVideoEditTransitionParams('wipe', { feather: 50 }), progress: 0.5, emptyIncoming: true }, { width: height * 2, height }).passes[0].uniforms
+    expect(wipe(1080)[6] / 1080).toBeCloseTo(wipe(540)[6] / 540)
+    expect(wipe(1080)[6]).toBeCloseTo(0.1 * 1080)
+    expect([...wipe(1080).slice(12, 15)]).toEqual([0.5, 0, 1])
+    expect(() => planVideoEditBuiltinTransition({ kind: 'wipe', params: {}, progress: 2 }, { width: 4, height: 4 })).toThrow('进度')
   })
 })
