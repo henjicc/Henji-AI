@@ -421,10 +421,11 @@ export function ProjectLibraryPage({
       {railActions.length ? (
         <div className="mt-2 flex flex-col gap-0.5">
           {railActions.map((action) => (
-            <UiButton key={action.label} className="w-full justify-start" onClick={action.onClick} disabled={busy || action.disabled}>
+            // 与下方分类同一种行：左对齐，图标落在同一列（UiButton 固定居中，会让长短不一的文案参差不齐）
+            <UiNavButton key={action.label} size="md" onClick={action.onClick} disabled={busy || action.disabled} title={action.label}>
               <action.icon className="h-4 w-4 shrink-0" />
               <span className="truncate">{action.label}</span>
-            </UiButton>
+            </UiNavButton>
           ))}
         </div>
       ) : null}

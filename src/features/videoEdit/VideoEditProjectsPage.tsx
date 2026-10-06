@@ -17,6 +17,7 @@ import { createLogger } from '@/core/logging/logger'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { getDocumentCover } from '@/commands/documents'
 import { subscribeVideoEditCoverChanged } from './application/videoEditProjectCover'
+import { ensureVideoEditProjectCover } from './application/videoEditService'
 
 /*
  * 剪辑页 = 项目列表（实施方案 2.10，3.1 剪辑接入）：每个项目是一个文件夹，剪辑是它的主文档。
@@ -36,6 +37,8 @@ interface VideoEditProjectsPageProps {
   registry?: DocumentSessionRegistry
   /** 测试替换：读主剪辑的通用封面。 */
   readCover?: (docId: string) => Promise<string | null>
+  /** 没有封面时从剪辑内容补生成（测试可替换） */
+  ensureCover?: (docId: string) => Promise<void>
 }
 
 const logger = createLogger('features.videoEdit.projects')
@@ -45,7 +48,7 @@ function asProjectItem(item: ProjectCardGridItem): ProjectCardItem {
 }
 
 /** 项目卡片封面 = 主剪辑的通用封面；列表变化或剪辑封面更新后重读，读不到时保持占位图。 */
-function useProjectCovers(items: readonly ProjectCardItem[], readCover: (docId: string) => Promise<string | null>): ProjectCardItem[] {
+function useProjectCovers(items: readonly ProjectCardItem[], readCover: (docId: string) => Promise<string | null>, ensureCover: (docId: string) => Promise<void>): ProjectCardItem[] {
   const [covers, setCovers] = useState<ReadonlyMap<string, string>>(new Map())
   const [version, setVersion] = useState(0)
   useEffect(() => subscribeVideoEditCoverChanged(() => setVersion(value => value + 1)), [])
@@ -55,22 +58,24 @@ function useProjectCovers(items: readonly ProjectCardItem[], readCover: (docId: 
     void Promise.all(mainIds.map(async (id) => [id, await readCover(id).catch(() => null)] as const)).then((entries) => {
       if (disposed) return
       setCovers(new Map(entries.filter((entry): entry is readonly [string, string] => Boolean(entry[1]))))
+      // 没有封面的（含草稿）从剪辑内容补生成；写好后经封面更新通知重读
+      for (const [id, cover] of entries) if (!cover) void ensureCover(id)
     })
     return () => { disposed = true }
-  }, [mainIds, readCover, version])
+  }, [mainIds, readCover, ensureCover, version])
   return useMemo(() => items.map((item) => {
     const cover = item.project.mainVideoEditId ? covers.get(item.project.mainVideoEditId) : undefined
     return cover ? { ...item, coverPath: cover } : item
   }), [items, covers])
 }
 
-export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, onOpen, operations: providedOperations, registry, readCover = getDocumentCover }: VideoEditProjectsPageProps): JSX.Element {
+export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, onOpen, operations: providedOperations, registry, readCover = getDocumentCover, ensureCover = ensureVideoEditProjectCover }: VideoEditProjectsPageProps): JSX.Element {
   const { t } = useTranslation('ui')
   const operations = providedOperations ?? getDocumentOperations()
   const library = useProjectLibrary({ operations })
-  const items = useProjectCovers(library.items, readCover)
+  const items = useProjectCovers(library.items, readCover, ensureCover)
   const leftover = useLeftoverDraftProjects(registry)
-  const draftItems = useMemo(() => toProjectCardItems(leftover.drafts, t), [leftover.drafts, t])
+  const draftItems = useProjectCovers(useMemo(() => toProjectCardItems(leftover.drafts, t), [leftover.drafts, t]), readCover, ensureCover)
   // 工作区切走后页面仍保留（不卸载）：回到剪辑页时重新扫描并重读，资源管理器里的增删、别处新建的项目随之出现
   const active = useNavigationStore(state => state.activeWorkspace === 'videoEdit')
   const wasActive = useRef(active)

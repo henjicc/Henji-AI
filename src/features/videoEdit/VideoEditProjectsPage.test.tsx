@@ -46,6 +46,18 @@ describe('剪辑项目页', () => {
     expect(document.querySelector(`[data-project-id="${plain.id}"] img`)).toBeNull()
   })
 
+  it('没有封面的项目与草稿从剪辑内容补生成封面', async () => {
+    const { kit, operations, actions } = setup()
+    const saved = kit.commands.seedProject({ name: '旅行 Vlog' })
+    kit.commands.projects.set(saved.id, { ...saved, mainVideoEditId: 'saved-edit' })
+    const draft = kit.commands.seedProject({ name: '未命名项目 1', draft: true })
+    kit.commands.projects.set(draft.id, { ...draft, mainVideoEditId: 'draft-edit' })
+    const ensureCover = vi.fn(async () => undefined)
+    render(<VideoEditProjectsPage operations={operations} registry={kit.registry} readCover={async () => null} ensureCover={ensureCover} {...actions} />)
+    await waitFor(() => expect(ensureCover).toHaveBeenCalledWith('draft-edit'))
+    expect(ensureCover).toHaveBeenCalledWith('saved-edit')
+  })
+
   it('已保存项目点开交回项目；草稿项目带标记排在最前，可继续编辑或经确认整个移到回收站', async () => {
     const { kit, actions, view } = setup()
     const saved = kit.commands.seedProject({ name: '旅行 Vlog' })

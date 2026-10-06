@@ -293,6 +293,12 @@ export class DocumentOperations {
     return await this.commands.listDocuments(query)
   }
 
+  /** 记录文档（及所在项目）的最近打开时间；成功后通知列表重读，开着的项目页“最近打开”随之更新。 */
+  async markDocumentOpened(docId: string): Promise<void> {
+    await this.commands.markDocumentOpened(docId)
+    this.changed()
+  }
+
   /** 从文件读一份文档（内容为内存形态）；不打开会话。用于写入后的回读核实。 */
   async readDocument(target: DocumentTarget): Promise<DocumentReadResult> {
     return await this.commands.readDocument(target)
