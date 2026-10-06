@@ -14,20 +14,20 @@ const target = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('generate_shot'),
     startSeconds: seconds.describe('镜头在序列上的起点（秒）。'),
-    durationSeconds: length.optional().describe('镜头长度（秒）。省略时填满起点所在的空隙；后面没有片段时按生成结果的实际长度。'),
+    durationSeconds: length.optional().describe('镜头长度（秒）。省略时：指定 trackRef 且后面有片段，填满该轨道起点所在的空隙；自动选轨或后面没有片段，用 5 秒规划与选择模型时长，落位采用生成结果的实际长度。要精确限定长度请显式传入。'),
     trackRef: ref('video_edit.track').optional().describe('放到哪条视频轨；省略时用目标轨道或第一条空着的视频轨，都被占用时新建一条。'),
   }).strict(),
   z.object({ action: z.literal('replace_shot'), clipRef: ref('video_edit.clip').describe('要换掉的视频或图片片段；新镜头同位置同长度，原镜头保留为可切回的版本。') }).strict(),
   z.object({
     action: z.literal('extend_shot'),
     clipRef: ref('video_edit.clip').describe('要延长的视频或图片片段；以它的最后一帧为首帧生成后续镜头，接在它后面。'),
-    durationSeconds: length.optional().describe('续接镜头的长度（秒）；省略时按生成结果的实际长度。'),
+    durationSeconds: length.optional().describe('续接镜头的长度（秒）；省略时用 5 秒规划与选择模型时长，落位采用生成结果的实际长度。'),
     mode: z.enum(['insert', 'overwrite']).optional().describe('insert（默认）后面的片段后移让位；overwrite 覆盖后面的内容。'),
   }).strict(),
   z.object({
     action: z.literal('generate_audio'),
     startSeconds: seconds.optional().describe('配音或配乐的起点（秒）；与 clipRef 二选一。'),
-    durationSeconds: length.optional().describe('长度（秒）；省略时填满起点所在的空隙。'),
+    durationSeconds: length.optional().describe('新放声音的长度（秒）；省略时：指定 trackRef 且后面有片段，填满该轨道起点所在的空隙；自动选轨或后面没有片段，用 5 秒规划与选择模型时长，落位采用生成结果的实际长度。替换 clipRef 时沿用原片段长度，此字段不生效。'),
     trackRef: ref('video_edit.track').optional().describe('放到哪条音频轨；省略时自动选空着的音频轨或新建。'),
     clipRef: ref('video_edit.clip').optional().describe('要换掉的声音片段（同位置同长度，原声音保留为可切回的版本）。'),
   }).strict().superRefine((value, context) => {

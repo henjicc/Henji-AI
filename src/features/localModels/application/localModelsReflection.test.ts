@@ -12,6 +12,7 @@ const fake = vi.hoisted(() => ({
   downloadSource: 'auto' as LocalModelDownloadSource,
   ready: new Set<string>(),
   calls: [] as string[],
+  modelDetails: {} as Partial<LocalModelInfo>,
 }))
 
 function model(id: LocalModelInfo['id'], status: LocalModelInfo['status']): LocalModelInfo {
@@ -23,7 +24,7 @@ function state(): LocalModelsState {
     revision: fake.revision,
     downloadSource: fake.downloadSource,
     models: [
-      model('face_detection_yunet', fake.ready.has('face_detection_yunet') ? 'ready' : 'not_downloaded'),
+      { ...model('face_detection_yunet', fake.ready.has('face_detection_yunet') ? 'ready' : 'not_downloaded'), ...fake.modelDetails },
       model('object_tracking_efficienttam', 'unavailable'),
     ],
   }
@@ -42,6 +43,7 @@ beforeEach(() => {
   fake.downloadSource = 'auto'
   fake.ready.clear()
   fake.calls = []
+  fake.modelDetails = {}
 })
 
 const context = () => ({
@@ -74,5 +76,24 @@ it('通过通用 change 把下载源改为国内，读回一致', async () => {
 
 it('暂不可下载的模型拒绝写入并说明原因，不调用下载', async () => {
   await expect(change({ kind: 'local_model.item', id: 'object_tracking_efficienttam' }, { 'local_model.item.downloaded': true })).rejects.toThrow()
+  expect(fake.calls).toEqual([])
+})
+
+it('通用 read 返回已知下载进度与失败事实；100% 仍在下载，未知进度与清空原因不冒充成功', async () => {
+  const read = async () => (await applicationReflectionHandlers.readEntity({ ref: yunet, propertyIds: ['local_model.item.status', 'local_model.item.progress_percent', 'local_model.item.last_failure'] }, context())).properties
+  fake.modelDetails = { status: 'downloading', progress: { receivedBytes: 123, totalBytes: 500 }, lastFailure: null }
+  expect(await read()).toEqual({ 'local_model.item.status': 'downloading', 'local_model.item.progress_percent': 25, 'local_model.item.last_failure': null })
+  fake.modelDetails.progress = { receivedBytes: 550, totalBytes: 500 }
+  expect(await read()).toMatchObject({ 'local_model.item.status': 'downloading', 'local_model.item.progress_percent': 100 })
+  fake.modelDetails.progress = { receivedBytes: 10, totalBytes: 0 }
+  expect(await read()).toMatchObject({ 'local_model.item.progress_percent': null })
+  for (const lastFailure of ['network', 'checksum', 'disk', 'cancelled', 'unavailable'] as const) {
+    fake.modelDetails = { status: 'not_downloaded', progress: null, lastFailure }
+    expect(await read()).toMatchObject({ 'local_model.item.progress_percent': null, 'local_model.item.last_failure': lastFailure })
+  }
+  fake.modelDetails = { status: 'ready', progress: null, lastFailure: null }
+  expect(await read()).toMatchObject({ 'local_model.item.progress_percent': null, 'local_model.item.last_failure': null })
+  await expect(change(yunet, { 'local_model.item.last_failure': 'network' })).rejects.toThrow()
+  await expect(change(yunet, { 'local_model.item.progress_percent': 100 })).rejects.toThrow()
   expect(fake.calls).toEqual([])
 })

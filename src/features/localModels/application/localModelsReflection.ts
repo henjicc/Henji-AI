@@ -82,6 +82,13 @@ function descriptor(
 }
 
 const READ_ONLY = '由本地模型清单与下载服务维护。'
+const FAILURE_LABELS = {
+  network: '连接下载源失败，可重试或更换下载源',
+  checksum: '文件校验失败，需要重新下载',
+  disk: '本地文件读写失败，请检查作品目录与可用空间',
+  cancelled: '下载已取消，下次下载可继续',
+  unavailable: '暂时没有可下载的模型文件',
+} as const
 
 interface ModelDraft { downloaded?: boolean }
 
@@ -103,6 +110,23 @@ const modelFields: ApplicationFieldDefinition<LocalModelInfo, ModelDraft>[] = [
       { kind: 'enum', values: Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })) },
       { readOnlyReason: '由下载服务按本地文件校验结果给出；要下载或删除请写 downloaded。', verificationStrategy: 'execution' }),
     read: (model) => model.status, storeActions: [],
+  },
+  {
+    propertyId: `${LOCAL_MODEL_ENTITY_TYPE}.progress_percent`,
+    descriptor: descriptor(LOCAL_MODEL_ENTITY_TYPE, 'progress_percent', '下载进度',
+      '当前下载进度百分比，0–100；没有下载进度或总大小未知时为 null。下载完成以 status=ready 为准，100% 不代表已经校验通过。',
+      { kind: 'number', hardRange: { min: 0, max: 100 } }, { nullable: true, unit: '%', readOnlyReason: READ_ONLY, verificationStrategy: 'execution' }),
+    read: (model) => model.status === 'downloading' && model.progress && model.progress.totalBytes > 0
+      ? Math.max(0, Math.min(100, Math.round(model.progress.receivedBytes / model.progress.totalBytes * 100))) : null,
+    storeActions: [],
+  },
+  {
+    propertyId: `${LOCAL_MODEL_ENTITY_TYPE}.last_failure`,
+    descriptor: descriptor(LOCAL_MODEL_ENTITY_TYPE, 'last_failure', '最近下载失败原因',
+      '本次运行中最近一次下载失败或取消的原因；无失败、重新开始或成功后为 null。network 连接下载源失败；checksum 文件校验失败；disk 本地文件读写失败；cancelled 已取消；unavailable 暂无可下载文件。',
+      { kind: 'enum', values: Object.entries(FAILURE_LABELS).map(([value, label]) => ({ value, label })) },
+      { nullable: true, readOnlyReason: READ_ONLY, verificationStrategy: 'execution' }),
+    read: (model) => model.lastFailure, storeActions: [],
   },
   {
     propertyId: `${LOCAL_MODEL_ENTITY_TYPE}.size_mb`,
