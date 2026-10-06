@@ -96,6 +96,7 @@ export class VideoEditCodeGpu {
   private imageReady?: Promise<void>
   private readonly mixPipelines = new Map<VideoEditGpuColorFormat, GpuRenderPipeline>()
   private readonly mixReady = new Map<VideoEditGpuColorFormat, Promise<void>>()
+  private readonly maskedMixPipelines = new Map<VideoEditGpuColorFormat, Promise<GpuRenderPipeline>>()
   private sampler: unknown
   private builtinRuntime?: VideoEditBuiltinEffectsGpu
   private bytes = 0
@@ -388,6 +389,72 @@ struct Mix { amount:vec4f, color:vec4f }
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }
+  /**
+   * 智能区域蒙版（4.7d）：把 0–255 的单通道蒙版写进一张 rgba8 画面（四个通道都是蒙版值，即预乘的白色），
+   * 之后由合成器按片段的位置、缩放、旋转画到序列尺寸上，与片段画面逐像素对齐。
+   */
+  async uploadMask(key: string, width: number, height: number, data: Uint8Array): Promise<VideoEditCodePicture> {
+    if (data.length !== width * height) throw new CodeMaterialError('CONTEXT', '智能区域蒙版尺寸不符。')
+    await this.ready; this.assertLive()
+    const target = this.surface(key, width, height, 'rgba8unorm')
+    const rgba = new Uint8Array(width * height * 4)
+    for (let index = 0; index < data.length; index++) { const value = data[index]; rgba[index * 4] = value; rgba[index * 4 + 1] = value; rgba[index * 4 + 2] = value; rgba[index * 4 + 3] = value }
+    const queue = this.device.queue as GpuDevice['queue'] & { writeTexture(destination: unknown, data: ArrayBufferView, layout: unknown, size: unknown): void }
+    queue.writeTexture({ texture: target.picture.texture }, rgba, { bytesPerRow: width * 4, rowsPerImage: height }, [width, height])
+    return target.picture
+  }
+  private async prepareMaskedMix(format: VideoEditGpuColorFormat): Promise<GpuRenderPipeline> {
+    let pending = this.maskedMixPipelines.get(format)
+    if (!pending) {
+      pending = (async () => {
+        this.device.pushErrorScope('validation')
+        let pipeline: GpuRenderPipeline
+        try {
+          const module = this.device.createShaderModule({ code: `
+struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
+@vertex fn vs(@builtin(vertex_index) i:u32)->Vertex {
+ let uv=array<vec2f,3>(vec2f(0,0),vec2f(0,2),vec2f(2,0))[i];
+ return Vertex(vec4f(uv.x*2-1,1-uv.y*2,0,1),uv);
+}
+@group(0) @binding(0) var base:texture_2d<f32>;
+@group(0) @binding(1) var effected:texture_2d<f32>;
+@group(0) @binding(2) var s:sampler;
+@group(0) @binding(3) var<uniform> m:vec4f;
+@group(0) @binding(4) var region:texture_2d<f32>;
+@fragment fn fs(v:Vertex)->@location(0) vec4f {
+ // 区域内按效果强度混入处理后的画面，区域外保持原样；蒙版经线性采样放大，边缘自然过渡。
+ return mix(textureSample(base,s,v.uv),textureSample(effected,s,v.uv),textureSample(region,s,v.uv).a*m.x);
+}` })
+          pipeline = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+        } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
+        const error = await this.device.popErrorScope()
+        if (error) throw new Error(`智能区域混合管线编译失败：${error.message}`)
+        this.assertLive(); this.counts.pipelineCompiles++
+        return pipeline
+      })()
+      this.maskedMixPipelines.set(format, pending)
+      pending.catch(() => { if (this.maskedMixPipelines.get(format) === pending) this.maskedMixPipelines.delete(format) })
+    }
+    return pending
+  }
+  /** 只在区域内混入效果（4.7d）：`region` 是序列尺寸的蒙版画面（取 alpha），`amount` 是效果强度。 */
+  async maskedMix(key: string, base: VideoEditCodePicture, effected: VideoEditCodePicture, region: VideoEditCodePicture, amount: number): Promise<VideoEditCodePicture> {
+    if ([effected, region].some(picture => picture.owner !== this.device || picture.width !== base.width || picture.height !== base.height) || base.owner !== this.device || !Number.isFinite(amount) || amount < 0 || amount > 1) throw new CodeMaterialError('CONTEXT', '区域混合需要同设备同尺寸画面和0到1的强度。')
+    const format = base.highPrecision || effected.highPrecision ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
+    await this.ready; this.assertLive()
+    const pipeline = await this.prepareMaskedMix(format); this.assertLive()
+    for (const picture of [base, effected, region]) this.assertInput(picture.texture)
+    const target = this.surface(key, base.width, base.height, format)
+    if ([base, effected, region].some(picture => picture.texture === target.picture.texture)) throw new CodeMaterialError('CONTEXT', '区域混合输入输出不能引用同一纹理。')
+    target.mixBuffer ??= this.device.createBuffer({ size: 32, usage: 0x08 | 0x40 })
+    this.device.queue.writeBuffer(target.mixBuffer, 0, new Float32Array([amount, 0, 0, 0]))
+    const encoder = this.device.createCommandEncoder()
+    const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
+    pass.setPipeline(pipeline)
+    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: base.texture.createView() }, { binding: 1, resource: effected.texture.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: target.mixBuffer } }, { binding: 4, resource: region.texture.createView() }] }))
+    pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
+    return target.picture
+  }
   /** 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame` 只用作胶片颗粒的确定种子。 */
   async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
@@ -433,9 +500,9 @@ struct Mix { amount:vec4f, color:vec4f }
   }
   diagnostics(): { residentBytes: number; surfaces: number; glyphs: number; pipelines: number; pipelineCompiles: number; textureAllocations: number; externalCopies: number; generatorFrames: number; filterFrames: number; mixFrames: number; builtinFrames: number } { return { ...this.counts, residentBytes: this.bytes, surfaces: this.surfaces.size, glyphs: this.glyphs.size, pipelines: this.disposed ? 0 : [...this.filters.values()].reduce((sum, filter) => sum + filter.pipelines.size, 0) + 2 + Number(!!this.image) + this.mixPipelines.size } }
   async dispose(): Promise<void> {
-    this.disposed = true; await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled(this.mixReady.values())
+    this.disposed = true; await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled([...this.mixReady.values(), ...this.maskedMixPipelines.values()])
     await Promise.allSettled([...this.filterCompiles.values()].map(value => value.pending)); await this.pending.catch(() => {})
     this.releaseUnused(new Set()); this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
-    this.glyphs.clear(); this.filters.clear(); this.filterLayout = undefined; this.image = undefined; this.mixPipelines.clear()
+    this.glyphs.clear(); this.filters.clear(); this.filterLayout = undefined; this.image = undefined; this.mixPipelines.clear(); this.maskedMixPipelines.clear()
   }
 }

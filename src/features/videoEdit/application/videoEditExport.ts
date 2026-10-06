@@ -5,6 +5,7 @@ import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
+import { videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
 
 const logger = createLogger('features.videoEdit.export')
 /**
@@ -50,7 +51,10 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   const started = performance.now()
   logger.info('开始导出剪辑', { event: 'video_edit.export.start', context: { projectId, taskId: task.id, ...range } })
   try {
+    // 智能区域（4.7d）：导出用到的区域先全部分析完成，导出画面与预览同一份蒙版。
+    await waitVideoEditSmartRegions(document, document, task.controller.signal)
     renderer = new VideoEditRenderSession(document)
+    renderer.setSmartRegions(videoEditSmartRegionSegments())
     output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
     await platform.system.fs.writeFile(path, new Uint8Array(), { exclusive: true }); created = true
     const video = new CanvasSource(renderer.canvas, { codec: 'avc', bitrate: 8_000_000 })

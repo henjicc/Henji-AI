@@ -9,6 +9,7 @@ import { registerDocumentCoverProvider, registerDocumentHoverPreview } from '@/f
 import { getDocumentOperations, registerDocumentBusyCheck, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { startVideoEditImageDocumentLinks } from './videoEditImageLinks'
+import { startVideoEditSmartRegions } from './videoEditSmartRegions'
 import { openVideoEditClipSource, videoEditClipSource, videoEditEmbedHost } from './videoEditComposition'
 import { undoVideoEdit, videoEditBusyReason } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
@@ -29,6 +30,7 @@ import { observeVideoEditFrame } from './videoEditFrameObservation'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 let stopImageDocumentLinks: (() => void) | null = null
+let stopSmartRegions: (() => void) | null = null
 
 export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
@@ -53,6 +55,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     registerDocumentBusyCheck('video_edit', videoEditBusyReason)
     // 图片文档放进剪辑保持链接（4.1）：图片文档写回后，打开着的剪辑里链接它的片段自动重新渲染
     stopImageDocumentLinks ??= startVideoEditImageDocumentLinks()
+    // 智能区域（4.7d）：打开着的剪辑里挂了作用区域的效果，后台自动开始分析（不依赖页面是否打开）
+    stopSmartRegions ??= startVideoEditSmartRegions()
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {

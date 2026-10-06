@@ -13,6 +13,7 @@ const GPU_TEST_FILES = [
   'src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinTransitions.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditPlaybackResolution.gpu.test.ts',
+  'src/features/videoEdit/engine/videoEditSmartRegionMask.gpu.test.ts',
 ]
 const IMAGE_EXPORT_TEST_FILES = [
   'src/features/imageEdit/v3/export/renderExportSourceGeometryV3.test.ts',

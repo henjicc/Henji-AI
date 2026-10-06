@@ -36,13 +36,17 @@ describe('内置效果登记', () => {
     expect(normalizeVideoEditBuiltinParams('vignette', { amount: -20 }, { amount: 40, midpoint: 70, feather: 10 })).toEqual({ amount: -20, midpoint: 70, feather: 10 })
     expect(resolveVideoEditBuiltinParams({ id: 'vignette', params: { amount: 40 } })).toEqual({ amount: 40, midpoint: 50, feather: 50 })
   })
-  it('效果链一项必须是代码滤镜或内置效果之一；智能区域槽位已预留但暂不接受', () => {
+  it('效果链一项必须是代码滤镜或内置效果之一；智能区域只用于内置画面效果，参数有范围', () => {
     const base = { id: 'e', name: '模糊', enabled: true, amount: 1 }
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: { strength: 30 } } }).success).toBe(true)
     expect(videoEditEffectSchema.safeParse(base).success).toBe(false)
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, code: { definitionId: 'd', versionId: 'v', parameters: {} } }).success).toBe(false)
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: { strength: 300 } } }).error?.issues[0].message).toContain('超出范围')
-    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'face' } }).error?.issues[0].message).toContain('智能区域')
+    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'face' } }).success).toBe(true)
+    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'mosaic', params: {} }, mask: { regionId: 'background', invert: true, feather: 20, expand: -10 } }).success).toBe(true)
+    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'sky' } }).success).toBe(false)
+    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'face', feather: 120 } }).success).toBe(false)
+    expect(videoEditEffectSchema.safeParse({ ...base, code: { definitionId: 'd', versionId: 'v', parameters: {} }, mask: { regionId: 'face' } }).error?.issues[0].message).toContain('智能区域只能用在内置画面效果上')
     // 旧文件的代码滤镜效果不受影响
     expect(videoEditEffectSchema.safeParse({ ...base, code: { definitionId: 'd', versionId: 'v', parameters: {} } }).success).toBe(true)
   })

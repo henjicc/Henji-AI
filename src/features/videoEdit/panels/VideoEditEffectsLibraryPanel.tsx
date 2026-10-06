@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react'
-import { ChevronDown, ChevronRight, Folder, Sparkles, Star } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, ScanFace, Sparkles, Star } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { UiOptionButton, UiSearchInput } from '@/components/ui'
 import Tooltip from '@/components/ui/Tooltip'
@@ -34,10 +34,10 @@ export function VideoEditEffectsLibraryPanel({ instance, onError }: { instance: 
   const TransitionIcon = ICON_VIDEO_EDIT_TRANSITION
   const AudioIcon = ICON_MEDIA_AUDIO
   // PR：选中片段后双击效果，加到所有选中的同媒介片段（画面效果加画面片段、音频效果加声音片段；一步撤销）。
-  const applyToSelection = (builtinId: string): void => {
+  const applyToSelection = (templateRef: string): void => {
     try {
       if (!instance.selectedClipIds.length) throw new Error('先在时间线上选中片段，再双击效果；也可以把效果直接拖到片段上。')
-      applyVideoEditBuiltinEffect(instance.document.id, instance.activeSequenceId, instance.selectedClipIds, builtinId)
+      applyVideoEditBuiltinEffect(instance.document.id, instance.activeSequenceId, instance.selectedClipIds, templateRef)
     } catch (error) { onError(error) }
   }
   return <div className="flex h-full min-h-0 flex-col gap-2 px-3 py-2.5" aria-label="效果" data-video-edit-effects-library>
@@ -55,12 +55,12 @@ export function VideoEditEffectsLibraryPanel({ instance, onError }: { instance: 
             {folder.entries.length ? folder.entries.map((entry, index) => <Fragment key={entry.id}>
               {entry.group && entry.group !== folder.entries[index - 1]?.group && <span className="px-2 pb-0.5 pt-1.5 text-2xs text-text3" aria-hidden="true">{entry.group}</span>}
               <Tooltip content={`${entry.tooltip}。${entry.kind === 'transition' ? '拖到时间线上两个片段相接处或片段一端，或选中片段后双击应用。' : '拖到片段上，或选中片段后双击应用。'}`} placement="left">
-              <UiOptionButton variant="menu" size="sm" className="w-full min-w-0 justify-start gap-2" role="treeitem" aria-selected={false} draggable={entry.kind === 'transition' || Boolean(entry.builtinId)} data-video-edit-effects-entry={entry.id}
-                onDragStart={event => { if (entry.transitionKind) startVideoEditTransitionDrag(event.dataTransfer, instance.document.id, entry.transitionKind); else if (entry.builtinId) startVideoEditEffectDrag(event.dataTransfer, instance.document.id, entry.builtinId) }}
+              <UiOptionButton variant="menu" size="sm" className="w-full min-w-0 justify-start gap-2" role="treeitem" aria-selected={false} draggable={entry.kind === 'transition' || Boolean(entry.templateRef)} data-video-edit-effects-entry={entry.id}
+                onDragStart={event => { if (entry.transitionKind) startVideoEditTransitionDrag(event.dataTransfer, instance.document.id, entry.transitionKind); else if (entry.templateRef) startVideoEditEffectDrag(event.dataTransfer, instance.document.id, entry.templateRef) }}
                 onDragEnd={() => { endVideoEditTransitionDrag(); endVideoEditEffectDrag() }}
-                onDoubleClick={() => { if (entry.builtinId) applyToSelection(entry.builtinId); else if (entry.transitionKind) void applyVideoEditTransitionToSelection(instance.document.id, entry.transitionKind).catch(onError) }}
+                onDoubleClick={() => { if (entry.templateRef) applyToSelection(entry.templateRef); else if (entry.transitionKind) void applyVideoEditTransitionToSelection(instance.document.id, entry.transitionKind).catch(onError) }}
                 onContextMenu={event => { const kind = entry.transitionKind; if (kind) menu.showMenu(event, [{ id: 'default', label: '设为默认过渡', icon: <Star size={14} />, disabled: isDefault(entry), onClick: () => setDefault(videoEditTransitionMedium(kind), kind) }]) }}>
-                {entry.kind === 'transition' ? <TransitionIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : entry.media === 'audio' ? <AudioIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : <Sparkles size={14} aria-hidden="true" className="shrink-0 text-text3" />}
+                {entry.kind === 'transition' ? <TransitionIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : entry.media === 'audio' ? <AudioIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : entry.category === 'smart' ? <ScanFace size={14} aria-hidden="true" className="shrink-0 text-text3" /> : <Sparkles size={14} aria-hidden="true" className="shrink-0 text-text3" />}
                 <span className="min-w-0 flex-1 truncate text-left">{entry.name}</span>
                 {isDefault(entry) && <span className="shrink-0 text-2xs text-text3">默认</span>}
               </UiOptionButton>

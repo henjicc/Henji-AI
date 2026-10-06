@@ -1,4 +1,5 @@
-import { parseVideoEditBuiltinRefId, videoEditBuiltinEffectMedia } from '@/core/videoEdit/builtinEffects'
+import { videoEditBuiltinEffectMedia } from '@/core/videoEdit/builtinEffects'
+import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPresets'
 import { videoEditEffectAccepts } from '@/core/videoEdit/compositing'
 import { applyVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
@@ -37,12 +38,15 @@ export function clearVideoEditEffectDropTarget(): void { setDropTarget(null) }
 export function videoEditEffectDropClips(sequence: Pick<VideoEditSequence, 'clips' | 'tracks'>, hitClipId: string, selectedClipIds: readonly string[], builtinId?: string): string[] {
   const candidates = selectedClipIds.includes(hitClipId) ? selectedClipIds : [hitClipId]
   const locked = new Set(sequence.tracks.filter(track => track.locked).map(track => track.index))
-  const media = builtinId ? videoEditBuiltinEffectMedia(builtinId) : 'video'
-  return sequence.clips.filter(clip => candidates.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track)).map(clip => clip.id)
+  const template = builtinId ? resolveVideoEditEffectTemplate(builtinId) : undefined
+  const media = template ? videoEditBuiltinEffectMedia(template.builtinId) : 'video'
+  // 智能效果（带作用区域）只加到视频、图片片段（与松手时同一规则）。
+  return sequence.clips.filter(clip => candidates.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track) && (!template?.mask || clip.kind === 'video' || clip.kind === 'image')).map(clip => clip.id)
 }
 export function readVideoEditEffectDrag(dataTransfer: DataTransfer | null, projectId: string): string | undefined {
   if (!dataTransfer || !Array.from(dataTransfer.types).includes(VIDEO_EDIT_EFFECT_DRAG_TYPE)) return undefined
-  return parseVideoEditBuiltinRefId(dataTransfer.getData(VIDEO_EDIT_EFFECT_DRAG_TYPE)) ?? (active?.projectId === projectId ? active.builtinId : undefined)
+  const data = dataTransfer.getData(VIDEO_EDIT_EFFECT_DRAG_TYPE)
+  return data && resolveVideoEditEffectTemplate(data) ? data : active?.projectId === projectId ? active.builtinId : undefined
 }
 interface DropEvent { dataTransfer: DataTransfer | null; target: EventTarget | null; clientX: number; clientY: number; preventDefault(): void; stopPropagation(): void }
 function clipUnder(event: DropEvent): string | undefined {

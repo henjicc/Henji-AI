@@ -1,5 +1,6 @@
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
-import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect } from '@/core/videoEdit/compositing'
+import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
+import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPresets'
 import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults, videoEditBuiltinEffectMedia } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
@@ -119,8 +120,13 @@ export function addVideoEditBuiltinEffect(target: VideoEditCompositeTarget, buil
  * 把同一个内置效果加到多个片段（PR：选中多个片段后双击效果），整体一步撤销。画面效果跳过声音片段、音频效果只加声音片段，
  * 锁定轨道上的片段跳过；一个都加不上时报错并说明原因。返回新效果 ID（与加上的片段一一对应）。
  */
-export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: string, clipIds: readonly string[], builtinId: string, params?: Readonly<Record<string, unknown>>): string[] {
-  const template = makeVideoEditBuiltinEffect(builtinId, params)
+export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: string, clipIds: readonly string[], templateRef: string, params?: Readonly<Record<string, unknown>>): string[] {
+  // 模板引用：内置效果 ID，或智能预设 `smart:<预设>`（内置效果 + 作用区域，4.7d）。
+  const resolved = resolveVideoEditEffectTemplate(templateRef)
+  // 不认识的 ID 交给登记表报错（会列出可用的内置效果）。
+  if (!resolved) { requireVideoEditBuiltinEffect(templateRef); throw new Error(`没有这个效果：${templateRef}。`) }
+  const builtinId = resolved.builtinId
+  const template = { ...makeVideoEditBuiltinEffect(builtinId, params ?? resolved.params, resolved.name), ...(resolved.mask ? { mask: { ...resolved.mask } } : {}) }
   const created: string[] = []
   editVideoProject(projectId, document => {
     created.length = 0
@@ -128,7 +134,9 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     if (!sequence) throw new Error('原序列已移除。')
     const locked = new Set(sequence.tracks.filter(track => track.locked).map(track => track.index))
     const media = videoEditBuiltinEffectMedia(builtinId)
-    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track)).map(clip => clip.id))
+    // 作用区域要逐帧分析素材画面：只加到视频、图片片段上。
+    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track) && (!resolved.mask || clip.kind === 'video' || clip.kind === 'image')).map(clip => clip.id))
+    if (!targets.size && resolved.mask) throw new Error('请选择视频或图片片段：智能效果要分析素材画面，文字、图形、调整图层与声音片段不能使用；锁定轨道上的片段不能修改。')
     if (!targets.size) throw new Error(media === 'audio' ? '请选择声音片段：音频效果只能加到声音片段，锁定轨道上的片段不能修改。' : '请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。')
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
@@ -140,7 +148,8 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
   })
   return [...created]
 }
-export interface VideoEditBuiltinEffectChanges { name?: string; enabled?: boolean; amount?: number; params?: Readonly<Record<string, unknown>> }
+/** `mask`：作用区域（4.7d），null 回到整个画面。 */
+export interface VideoEditBuiltinEffectChanges { name?: string; enabled?: boolean; amount?: number; params?: Readonly<Record<string, unknown>>; mask?: VideoEditEffectMask | null }
 /**
  * 改内置效果的参数、强度或开关。带手势时只预览（拖动中实时出画面），由 `finishVideoEditGesture` 提交成一步撤销。
  * 数值先夹进登记的范围（界面拖动、步进产生不了非法值）；未知参数与错类型仍报错。
@@ -153,6 +162,11 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
     if (changes.enabled !== undefined) effect.enabled = changes.enabled
     if (changes.amount !== undefined) effect.amount = Math.min(1, Math.max(0, changes.amount))
     if (changes.params) effect.builtin = { id: effect.builtin.id, params: normalizeVideoEditBuiltinParams(effect.builtin.id, changes.params, effect.builtin.params, true) }
+    if (changes.mask === null) delete effect.mask
+    else if (changes.mask) {
+      if (clip.kind !== 'video' && clip.kind !== 'image') throw new Error('作用区域只能用在视频、图片片段上。')
+      effect.mask = changes.mask
+    }
   }, gesture)
 }
 export async function reorderVideoEditEffects(target: VideoEditCompositeTarget, ids: string[], signal?: AbortSignal): Promise<void> {

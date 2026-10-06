@@ -1,5 +1,5 @@
 import type { JsonValue } from '@/core/application-control'
-import { videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
+import { videoEditClipMedia, videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
 import { orderVideoEditEffects, videoEditEffectAccepts, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
 import { videoEditTransitionClipIds, videoEditTransitionEditPoints, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, videoEditTransitionWindow, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
@@ -9,6 +9,7 @@ import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersist
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { makeVideoEditBuiltinEffect, makeVideoEditEffect } from './videoEditCompositing'
 import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
+import { videoEditSmartRegionStatusText } from './videoEditSmartRegions'
 
 export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition'] as const
 export type VideoEditCompositeEntityType = typeof VIDEO_EDIT_COMPOSITE_TYPES[number]
@@ -63,8 +64,10 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
   if (owner.kind === 'effect') {
     const { code, builtin, ...effect } = owner.effect
     // 内置效果：definition_id 读出 `effect:<ID>`，parameters 是存下的意图量纲参数（缺的键按默认值渲染）；没有源码版本与关键帧。
-    if (builtin) return JSON.parse(JSON.stringify({ ...common, ...effect, definitionId: videoEditBuiltinRefId(builtin.id), versionId: '', parameters: builtin.params, curves: {} })) as Data
-    return JSON.parse(JSON.stringify({ ...common, ...effect, definitionId: code!.definitionId, versionId: code!.versionId, parameters: code!.parameters, curves: code!.curves ?? {} })) as Data
+    // 作用区域（4.7d）：mask 为空表示整个画面；region_status 是后台分析的当前状态。
+    const region = { mask: owner.effect.mask ?? null, regionStatus: videoEditSmartRegionStatusText(document, owner.sequence.frameRate, owner.clip, owner.effect) }
+    if (builtin) return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: videoEditBuiltinRefId(builtin.id), versionId: '', parameters: builtin.params, curves: {} })) as Data
+    return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: code!.definitionId, versionId: code!.versionId, parameters: code!.parameters, curves: code!.curves ?? {} })) as Data
   }
   // 过渡参数：没有存参数时读出空对象（全部按默认值）；种类与参数见 video_edit.builtin_effect 的 transition:<种类>。
   return JSON.parse(JSON.stringify({ ...common, ...owner.transition, parameters: owner.transition.parameters ?? {} })) as Data
@@ -82,9 +85,12 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       if (data.curves && typeof data.curves === 'object' && Object.keys(data.curves).length) throw new Error('内置效果暂不支持关键帧，请直接写 parameters。')
       // 整体写入：写什么存什么（读回与写入一致），没写的键回到默认值
       const params = validateVideoEditBuiltinParams(builtin.id, (data.parameters ?? {}) as Record<string, unknown>)
-      Object.assign(owner.effect, videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params } }))
+      const mask = data.mask ?? undefined
+      if (mask) assertSmartRegionClip(document, owner.clip)
+      const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params }, ...(mask ? { mask } : {}) })
+      delete owner.effect.mask; Object.assign(owner.effect, next)
     } else {
-      const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, code: { definitionId: owner.effect.code!.definitionId, versionId: data.versionId, parameters: data.parameters, curves: data.curves } })
+      const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, code: { definitionId: owner.effect.code!.definitionId, versionId: data.versionId, parameters: data.parameters, curves: data.curves }, ...(data.mask ? { mask: data.mask } : {}) })
       Object.assign(owner.effect, next)
     }
   } else {
@@ -135,13 +141,22 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     const effect = makeVideoEditBuiltinEffect(builtinId, (values.parameters ?? {}) as Record<string, unknown>, values.name !== undefined ? String(values.name) : undefined, true)
     if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
     if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)
-    ;(clip.effects ??= []).push(effect); return effect.id
+    if (values.mask) {
+      assertSmartRegionClip(document, clip)
+      Object.assign(effect, videoEditEffectSchema.parse({ ...effect, mask: values.mask }))
+    }
+    (clip.effects ??= []).push(effect); return effect.id
   }
   const effect = makeVideoEditEffect(document, { definitionId: values.definitionId, ...(values.versionId !== undefined ? { versionId: String(values.versionId) } : {}), ...(values.name !== undefined ? { name: String(values.name) } : {}), ...(values.parameters !== undefined ? { parameters: codeMaterialInstanceSchema.shape.parameters.parse(values.parameters) } : {}) }, read)
   if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
   if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)
   if (values.curves !== undefined) effect.code!.curves = codeMaterialInstanceSchema.shape.curves.parse(values.curves)
   ;(clip.effects ??= []).push(effect); return effect.id
+}
+/** 作用区域只能用在视频、图片片段上：要逐帧分析素材画面（4.7d）。 */
+function assertSmartRegionClip(document: VideoEditDocument, clip: VideoEditClip): void {
+  const media = videoEditClipMedia(document, clip)
+  if (!media || (media.kind !== 'video' && media.kind !== 'image')) throw new Error(`片段“${clip.name}”不是视频或图片片段，作用区域只能用在视频、图片片段上；文字、图形、代码与调整图层上的效果请作用于整个画面（mask 写 null）。`)
 }
 export function removeVideoEditCompositeEntities(document: VideoEditDocument, type: VideoEditCompositeEntityType, parentId: string, ids: string[]): void {
   for (const id of ids) {

@@ -5,6 +5,7 @@ import {
   type SmartRegionSegmentHeader,
 } from './smartRegions'
 import { normalizeSmartRegionRange } from '../../platform/contracts/smartRegions'
+import { resolveVideoEditEffectTemplate, validateVideoEditSmartPresets, VIDEO_EDIT_SMART_PRESETS } from './smartRegionPresets'
 
 const header = (overrides: Partial<SmartRegionSegmentHeader> = {}): SmartRegionSegmentHeader => ({
   version: SMART_REGION_FORMAT_VERSION, kind: 'face', model: 'yunet', startUs: 2_000_000, endUs: 3_000_000, fps: 10, frameCount: 10, still: false,
@@ -72,5 +73,12 @@ describe('智能区域：缓存格式与蒙版', () => {
     expect(soft[20 * width + 20]).toBe(255)
     const inverted = processSmartRegionMatte(matte, width, height, { feather: 0, expand: 0, invert: true })
     expect(inverted[0]).toBe(255); expect(matte[0]).toBe(0)
+  })
+  it('智能预设：引用的内置效果与参数都已登记；模板引用解析内置效果与预设', () => {
+    expect(() => validateVideoEditSmartPresets()).not.toThrow()
+    expect(VIDEO_EDIT_SMART_PRESETS.map(preset => preset.mask.regionId)).toEqual(expect.arrayContaining(['face', 'background', 'text']))
+    expect(resolveVideoEditEffectTemplate('smart:face_mosaic')).toMatchObject({ builtinId: 'mosaic', mask: { regionId: 'face' } })
+    expect(resolveVideoEditEffectTemplate('effect:gaussian_blur')).toEqual({ builtinId: 'gaussian_blur' })
+    expect(resolveVideoEditEffectTemplate('smart:nope')).toBeUndefined()
   })
 })

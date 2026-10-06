@@ -6,6 +6,7 @@ import { requireVideoEditBuiltinEffect, resolveVideoEditBuiltinParams, VIDEO_EDI
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import { updateVideoEditBuiltinEffect, type VideoEditCompositeTarget } from '../application/videoEditCompositing'
 import { useVideoEditBuiltinParamGesture, type VideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
+import { VideoEditSmartRegionControls } from './VideoEditSmartRegionControls'
 
 type Gesture = VideoEditBuiltinParamGesture
 
@@ -67,6 +68,7 @@ export function VideoEditBuiltinEffectControls({ target, effect, onError }: { ta
       <ScrubNumber label="效果强度" value={effect.amount * 100} min={0} max={100} step={1} precision={0} unit="%" gesture={gesture} onChange={next => gesture.commit({ amount: next / 100 })} />
     </Row>
     <VideoEditBuiltinParamRows params={definition.params} values={values} gesture={gesture} />
+    {definition.media !== 'audio' && <VideoEditSmartRegionControls target={target} effect={effect} gesture={gesture} />}
   </div>
 }
 /** 一组登记参数的各行（名称悬停说明作用，行尾重置为默认值）；内置效果与带参数的过渡共用。 */

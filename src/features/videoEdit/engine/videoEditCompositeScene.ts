@@ -11,13 +11,19 @@ interface Layer { clip: VideoEditClip; picture: VideoEditPicture }
 const effective = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).length > 0
 const slot = (clip: VideoEditClip, index: number): string => `composite:clip:${clip.id}:${index}`
 const slots = (clip: VideoEditClip): string[] => Array.from({ length: effective(clip) ? clip.kind === 'adjustment' && clip.opacity < 1 ? 4 : 3 : 1 }, (_, index) => slot(clip, index))
+/**
+ * 智能区域（4.7d）共用的两张画面：上传的低分辨率蒙版、按片段位置画到序列尺寸的蒙版。每个带区域的效果依次使用，
+ * 用完即提交，所以全场景只需要这两张。
+ */
+const MASK_SOURCE = 'composite:mask:source'; const MASK_DOCUMENT = 'composite:mask:document'
+const masked = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).some(effect => effect.mask)
 /** Reserve the entire frame together with generated pictures before releasing old targets. */
 export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditCompositeNode[]): Set<string> {
   const keys = new Set<string>()
   const visit = (node: VideoEditCompositeNode): void => {
-    if (node.kind === 'clip') { if (effective(node.clip)) slots(node.clip).forEach(key => keys.add(key)) }
+    if (node.kind === 'clip') { if (effective(node.clip)) slots(node.clip).forEach(key => keys.add(key)); if (masked(node.clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT) }
     else if (node.kind === 'transition') {
-      for (const clip of [node.window.left, node.window.right]) slots(clip).forEach(key => keys.add(key))
+      for (const clip of [node.window.left, node.window.right]) { slots(clip).forEach(key => keys.add(key)); if (masked(clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT) }
       keys.add(`composite:transition:${node.window.transition.id}`)
     } else {
       node.children.forEach(visit)
@@ -62,7 +68,14 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
         ? await runtime.builtin(free[0], plan.builtin, result, frame, renderScale)
         : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: logical.width, height: logical.height }, plan.parameters, result, plan.transitionHandles)
       current()
-      if (plan.effect.amount === 1) { result = filtered; key = free[0] }
+      if (plan.builtin && plan.mask) {
+        // 区域蒙版按片段自己的位置、缩放、旋转画到序列尺寸，与片段画面逐像素对齐；只在区域内混入效果。
+        const source = await runtime.uploadMask(MASK_SOURCE, plan.mask.width, plan.mask.height, plan.mask.data)
+        const region = await runtime.target(MASK_DOCUMENT, document.width, document.height); current()
+        const drawn = await compositor.draw(document, [{ ...clip, brightness: 1, opacity: 1 }], [source], shouldPresent, undefined, region)
+        watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
+        result = await runtime.maskedMix(free[1], result, filtered, region, plan.effect.amount); key = free[1]; current()
+      } else if (plan.effect.amount === 1) { result = filtered; key = free[0] }
       else { result = await runtime.mix(free[1], result, filtered, plan.effect.amount); key = free[1]; current() }
     }
     if (preserve && result !== input) {

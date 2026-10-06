@@ -10,6 +10,7 @@ import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/video
 import { isDomNode } from '@/utils/crossRealmDom'
 import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
+import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
@@ -154,6 +155,15 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     const stopAudio = (): void => audioScheduler.stop()
     const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(instance.playing && instance.playbackDirection === 1 ? meter.read() : Array.from({ length: appliedDocument.channels }, () => ({ peak: 0, rms: 0 }))) }, 50)
     let lastPresentation = -Infinity
+    // 智能区域（4.7d）：分析完成的段落交给渲染 Worker，并重画当前帧（之前跳过了未就绪区域的效果）。
+    let appliedRegions = ''
+    const pushRegions = (): void => {
+      const regions = videoEditSmartRegionSegments(); const key = JSON.stringify(regions)
+      if (key === appliedRegions) return
+      appliedRegions = key; renderer.setSmartRegions(regions); lastRequested = -1
+    }
+    pushRegions()
+    const unsubscribeRegions = subscribeVideoEditSmartRegions(() => { if (!stopped) pushRegions() })
     // A failure is retried once the sequence changes (relink, removal, undo) or the user moves the playhead, and by
     // itself after a growing pause (2s up to 10s), so a recovered decoder shows the picture again (task 3.1).
     let failedDocument: VideoEditComposition | undefined
@@ -303,7 +313,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     let retired = false
     stopCurrent = (): void => {
       if (retired) return
-      retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
+      retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeRegions(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
       programReleases.set(instance, Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()]))
       surface.remove(); if (canvas.current === surface) canvas.current = null
     }
