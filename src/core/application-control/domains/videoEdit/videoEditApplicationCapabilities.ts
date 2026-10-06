@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { applicationRefSchema, type ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
+import { VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES } from './videoEditInPlaceGenerationCapabilities'
 
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 const input = z.object({ documentRef, clipRef: applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict().optional(), frame: z.number().int().nonnegative().optional(), assetRef: applicationRefSchema.extend({ kind: z.literal('asset') }).strict().optional() }).strict()
@@ -133,4 +134,4 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability]
+})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability, ...VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES]

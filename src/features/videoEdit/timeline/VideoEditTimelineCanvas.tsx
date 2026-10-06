@@ -43,6 +43,8 @@ import { placeVideoEditTransition, selectVideoEditTransition, selectedVideoEditT
 import { readVideoEditTransitionDrag } from '../panels/videoEditTransitionDrag'
 import { clearVideoEditEffectDropTarget, handleVideoEditEffectDragOver, handleVideoEditEffectDrop } from '../panels/videoEditEffectDrag'
 import { VideoEditEffectDropTargets, VideoEditTransitionDropBlock } from './VideoEditTimelineDropFeedback'
+import { useVideoEditInPlaceMenu } from './useVideoEditInPlaceMenu'
+import { VideoEditInPlacePlaceholders } from './VideoEditInPlacePlaceholders'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean }
 /** 片段底色与描边（设计稿素材片段令牌）：画面、声音、文字/代码/图形/调整各一组；选中改强调描边。 */
@@ -99,7 +101,10 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const snapFrame = useTimelineSnapIndicator(sequence.id)
   const [audioChannels, setAudioChannels] = useState<VideoEditAudioChannelsTarget | null>(null)
   const clipSource = useVideoEditClipSource(onError)
-  const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId))
+  // 原地生成（4.12）：右键菜单项、生成面板与占位片段都在独立模块，这里只接线
+  const inPlace = useVideoEditInPlaceMenu(instance, sequence, onError)
+  const inPlaceFrameAt = (clientX: number): number | null => { const host = pointer.viewport.current; if (!host) return null; const x = clientX - host.getBoundingClientRect().left + host.scrollLeft - TIMELINE_HEADER_WIDTH; return x < 0 ? null : Math.floor(x / pixels) }
+  const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId), { items: inPlace.items, frameAt: inPlaceFrameAt })
   const displayed = pointer.preview ?? sequence
   // 拖动预览里新建的轨道也要显示出来（PR：拖到轨道外即出现新轨道）。
   const layout = timelineLayout(heightsOf(displayed), layoutInput, pointer.resized)
@@ -450,6 +455,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {transitionWindows.filter(window => rows.find(row => row.track.index === window.left.track)?.region === kind).map(window => renderTransition(window, region))}
             {transitionHint && rows.find(row => row.track.index === transitionHint.track)?.region === kind && <VideoEditTransitionDropBlock hint={transitionHint} row={rows.find(value => value.track.index === transitionHint.track)!} region={region} pixels={pixels} />}
             <VideoEditEffectDropTargets projectId={projectId} clips={visibleClips} rows={rows.filter(row => row.region === kind)} region={region} pixels={pixels} />
+            <VideoEditInPlacePlaceholders projectId={projectId} sequence={displayed} rows={rows.filter(row => row.region === kind)} region={region} pixels={pixels} onReopen={inPlace.reopen} onError={onError} />
           </div>
         })}
         <div role="separator" aria-label="画面与声音轨道分界" aria-orientation="horizontal" aria-valuemin={10} aria-valuemax={90} aria-valuenow={Math.round(split * 100)} tabIndex={0} data-video-edit-track-divider data-video-edit-timeline-chrome
@@ -487,6 +493,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
     {trackMenu.elements}
     {clipSource.dialog}
+    {inPlace.dialog}
     {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {pendingSequence && <VideoEditSequenceDialog title="按素材新建序列" requireFrameRate initial={pendingSequence.settings} bins={pendingSequence.owner.document.bins} onClose={() => setPendingSequence(null)} onSubmit={async settings => {
       const { owner, input, placement: at, sequenceId } = pendingSequence

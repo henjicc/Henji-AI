@@ -77,7 +77,11 @@ export async function videoEditResultOutputFolder(target: VideoEditResultTarget)
 }
 
 export async function placeVideoEditResultInProject(target: VideoEditResultTarget, filePath: string): Promise<string> {
-  const container = stateOf(target).owner.session.documentMeta.container
+  return await placeVideoEditFileInProject(stateOf(target).owner, filePath)
+}
+/** 同上，按剪辑实例放置（原地生成在生成完成时才确定落点，没有预先固定的结果目标）。 */
+export async function placeVideoEditFileInProject(owner: VideoEditInstance, filePath: string): Promise<string> {
+  const container = owner.session.documentMeta.container
   if (container.kind !== 'project') return filePath
   const placed = await getDocumentOperations().importFile({ container, sourcePath: filePath, folder: 'generated' })
   if (placed.copied) logger.info('创作结果已复制进项目生成结果', { event: 'video_edit.result.copied_to_project', context: { projectId: container.projectId } })

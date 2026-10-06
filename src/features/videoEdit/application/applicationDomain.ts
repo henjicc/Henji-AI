@@ -27,6 +27,7 @@ import { collectVideoEditCodeAsset, importVideoEditCodeAsset, type VideoEditCode
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { placeVideoEditCreativeResultFromCapability } from './videoEditResultCapability'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
+import { handleVideoEditInPlaceCapability } from './videoEditInPlaceCapability'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 let stopImageDocumentLinks: (() => void) | null = null
@@ -60,6 +61,9 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      // 原地生成（4.12）：与时间线右键同一个服务
+      const inPlace = await handleVideoEditInPlaceCapability(definition.id, raw, context)
+      if (inPlace) return inPlace
       if (definition.id === observeVideoEditFrameCapability.id) {
         const input = observeVideoEditFrameCapability.inputSchema.parse(raw); const id = input.documentRef.id
         const child = (ref: { kind: string; id: string }): string => { const value = splitVideoEditRef(ref); if (value.projectId !== id || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑。`); return value.childId }

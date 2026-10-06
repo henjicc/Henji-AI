@@ -26,6 +26,15 @@ export const videoEditBinSchema = z.object({ id: identifier, name, parentId: ide
 export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional() }).strict()
 export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(31), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional() }).strict()
 export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './creativeResult'
+/**
+ * 被替换下来的镜头版本（4.12 原地生成的“替换镜头”，PR 的替换素材）：片段换成新画面后仍记着原来用的素材与入点，
+ * 可以随时切回。只记引用，不校验素材项是否还在（素材从项目移除后切回时如实拒绝），不参与渲染。
+ */
+export const videoEditClipTakeSchema = z.object({
+  itemId: identifier, name, kind: z.enum(['video', 'audio', 'image']), duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
+  sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(),
+}).strict()
+export const VIDEO_EDIT_MAX_CLIP_TAKES = 8
 export const videoEditClipSchema = z.object({
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), track: z.number().int().min(0).max(31), code: codeMaterialInstanceSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).max(VIDEO_EDIT_MAX_EFFECTS).optional(), adjustment: videoEditAdjustmentSchema.optional(),
@@ -36,6 +45,8 @@ export const videoEditClipSchema = z.object({
   opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), brightness: z.number().min(0).max(2), text: z.string().max(2000),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
   fadeInFrames: z.number().int().min(1).max(108_000).optional(), fadeOutFrames: z.number().int().min(1).max(108_000).optional(),
+  /** 可切回的镜头版本（新的在前）。 */
+  takes: z.array(videoEditClipTakeSchema).max(VIDEO_EDIT_MAX_CLIP_TAKES).optional(),
 }).strict()
 export const videoEditAnnotationSchema = z.object({
   id: identifier, clipId: identifier, frame, space: z.literal('composition-normalized'), kind: z.enum(['point', 'region']),
@@ -138,6 +149,7 @@ export const videoEditDocumentSchema = z.object({
 export type VideoEditDocument = z.infer<typeof videoEditDocumentSchema>
 export type VideoEditSequence = z.infer<typeof videoEditSequenceSchema>
 export type VideoEditClip = z.infer<typeof videoEditClipSchema>
+export type VideoEditClipTake = z.infer<typeof videoEditClipTakeSchema>
 export type VideoEditMedia = z.infer<typeof videoEditMediaSchema>
 export type VideoEditItem = z.infer<typeof videoEditItemSchema>
 export type VideoEditBin = z.infer<typeof videoEditBinSchema>

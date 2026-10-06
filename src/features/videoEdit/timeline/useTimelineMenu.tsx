@@ -9,11 +9,14 @@ import { timelineCommandPresentation } from './timelineCommandPresentation'
 import { videoEditClipMedia } from '@/core/videoEdit/document'
 import type { VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChannelsDialog'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
+import type { VideoEditInPlaceMenuTarget } from './useVideoEditInPlaceMenu'
 
 const actionIcons = { copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
 type MenuCommand = keyof typeof actionIcons
 
-export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void, onOpenSource?: (clipId: string) => void) {
+/** 原地生成（4.12）：按右键落点（轨道、帧、片段）给出菜单最前面的生成项。 */
+export interface TimelineInPlaceMenu { items(target: VideoEditInPlaceMenuTarget): MenuItem[]; frameAt(clientX: number): number | null }
+export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void, onOpenSource?: (clipId: string) => void, inPlace?: TimelineInPlaceMenu) {
   const menu = useContextMenu()
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const show = (event: React.MouseEvent): void => {
@@ -23,6 +26,7 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
     cancelPointer()
     try {
       const clipId = target.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
+      const trackId = target.closest('[data-video-edit-track]')?.getAttribute('data-video-edit-track')
       const sequence = instance.document.sequences.find(value => value.id === instance.activeSequenceId)!
       // Right-clicking an unselected clip picks it like a left click (Linked Selection and groups; Alt singles it out).
       const ids = clipId ? instance.selectedClipIds.includes(clipId) ? [clipId, ...instance.selectedClipIds.filter(id => id !== clipId)] : [clipId, ...expandVideoEditSelection(sequence, [clipId], videoEditPickRelations(instance.linkedSelection !== false, event.altKey)).filter(id => id !== clipId)] : []
@@ -44,6 +48,7 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
         items.push({ id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: locked, onClick: () => onAudioChannels({ kind: 'clip', sequenceId: sequence.id, clipIds: [clip.id], mediaId: media.id, ...(clip.audioMapping ? { mapping: clip.audioMapping } : {}) }) })
       }
       // 回到来源继续编辑（4.1）：片段记着来源时打开来源文档并定位，或打开生成记录
+      if (inPlace) items.unshift(...inPlace.items({ ...(clipId ? { clipId } : {}), ...(trackId ? { trackId } : {}), frame: inPlace.frameAt(event.clientX) }))
       if (clip?.creativeSource && onOpenSource) items.unshift({ id: 'open_source', label: '回到来源继续编辑', icon: <Undo2 size={16} />, divider: true, onClick: () => onOpenSource(clip.id) })
       menu.showMenu(event, items)
     } catch (error) { onError(error) }
