@@ -38,6 +38,7 @@ vi.mock('../engine/videoEditCodeCompiler', async () => {
   } }
 })
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   constructor(private document: VideoEditComposition) { boundary.activeRenderers++; boundary.dimensions.push([document.width, document.height]) }
   async updateDocument(document: VideoEditComposition) { this.document = document }
   async present(frame: number) {

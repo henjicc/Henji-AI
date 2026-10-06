@@ -4,6 +4,7 @@ import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, RenderRequest, RenderResponse } from './videoEditWorker'
 import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
+import type { VideoEditTrackResults } from './videoEditTrackResults'
 import type { VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
 
 const logger = createLogger('features.videoEdit.render')
@@ -73,6 +74,7 @@ export class VideoEditRenderSession {
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** 智能区域（4.7d）：已分析好的段落交给 Worker，下一次渲染即使用。 */
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
+  setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void): Promise<RenderResponse> {
     await this.ready

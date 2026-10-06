@@ -8,6 +8,7 @@ import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, creat
 
 // 任务 4.13 片段速度：助手经通用实体属性读写速度、倒放与保持音调，与“速度/持续时间”同一领域入口。
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   async updateDocument() {}
   async present() { return { presented: true, bitmap: { close() {} } } }
   async dispose() {}

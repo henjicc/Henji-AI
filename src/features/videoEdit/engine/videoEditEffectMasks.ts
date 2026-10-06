@@ -1,4 +1,6 @@
-import { isShapesMask, isSmartRegionMask, rasterizeVideoEditMaskShapes, videoEditShapeMaskSize, type VideoEditEffectMask, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
+import { isShapesMask, isSmartRegionMask, rasterizeVideoEditMaskShapes, videoEditShapeMaskSize, transformVideoEditMaskShape, VIDEO_EDIT_TRACKER_MASK_DEFAULTS, type VideoEditEffectMask, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
+import { videoEditFollowShapeMap } from '@/core/videoEdit/tracking'
+import { videoEditTrackerBox, videoEditTrackerMask } from './videoEditTrackResults'
 import type { VideoEditSize } from '@/core/videoEdit/clipGeometry'
 import { videoEditSmartRegionMask, type VideoEditSmartRegionMask } from './videoEditSmartRegionMasks'
 
@@ -29,10 +31,25 @@ export interface VideoEditEffectMaskContext {
   picture: VideoEditSize
   /** 片段在这一帧的素材时间（素材绝对时钟，微秒；静态图片为 0）。 */
   timeUs: number
+  trackerKeys?: Readonly<Record<string, string>>
 }
 
 export async function videoEditEffectMask(mask: VideoEditEffectMask, context: VideoEditEffectMaskContext): Promise<VideoEditSmartRegionMask | undefined> {
-  if (isShapesMask(mask)) return videoEditShapeMask(mask.shapes, context.picture)
+  if (mask.regionId === 'tracker') {
+    const key = context.trackerKeys?.[mask.trackerId]
+    return key ? videoEditTrackerMask(key, { ...VIDEO_EDIT_TRACKER_MASK_DEFAULTS, ...mask, invert: Boolean(mask.invert) }, context.timeUs) : undefined
+  }
+  if (isShapesMask(mask)) {
+    const shapes: VideoEditMaskShape[] = []
+    for (const shape of mask.shapes) {
+      if (!shape.follow) { shapes.push(shape); continue }
+      const key = context.trackerKeys?.[shape.follow.trackerId]
+      const box = key ? await videoEditTrackerBox(key, context.timeUs) : undefined
+      if (!box) return undefined
+      shapes.push(transformVideoEditMaskShape(shape, videoEditFollowShapeMap(shape.follow.reference, box)))
+    }
+    return videoEditShapeMask(shapes, context.picture)
+  }
   if (isSmartRegionMask(mask)) return context.mediaUrl ? videoEditSmartRegionMask(context.mediaUrl, mask, context.timeUs) : undefined
   return undefined
 }

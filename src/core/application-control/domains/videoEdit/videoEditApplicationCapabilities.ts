@@ -1,11 +1,15 @@
 import { z } from 'zod'
+import { VIDEO_EDIT_SUBTITLE_CAPABILITIES } from './videoEditSubtitleCapabilities'
+import { analyzeVideoEditLumetriCapability } from './videoEditLumetriCapability'
 import { applicationRefSchema, type ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
 import { VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES } from './videoEditInPlaceGenerationCapabilities'
+import { VIDEO_EDIT_LOUDNESS_CAPABILITIES } from './videoEditLoudnessCapabilities'
+import { videoEditLoudnessSettingsSchema, videoEditLoudnessMeasurementSchema } from '../../../videoEdit/loudness'
 
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 const input = z.object({ documentRef, clipRef: applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict().optional(), frame: z.number().int().nonnegative().optional(), assetRef: applicationRefSchema.extend({ kind: z.literal('asset') }).strict().optional() }).strict()
-const output = z.object({ resultRef: documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: documentRef }), task: z.object({ id: z.string(), state: z.enum(['running', 'completed', 'cancelled', 'failed']), progress: z.number(), revision: z.number(), startFrame: z.number().int().nonnegative().optional(), endFrame: z.number().int().positive().optional() }).optional() }).strict()
+const output = z.object({ resultRef: documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: documentRef }), task: z.object({ id: z.string(), state: z.enum(['running', 'completed', 'cancelled', 'failed']), progress: z.number(), revision: z.number(), startFrame: z.number().int().nonnegative().optional(), endFrame: z.number().int().positive().optional(), loudness: videoEditLoudnessSettingsSchema.optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional() }).optional() }).strict()
 const libraryRef = applicationRefSchema.extend({ kind: z.literal('asset.library') }).strict()
 const assetRef = applicationRefSchema.extend({ kind: z.literal('asset') }).strict()
 const collectInput = z.object({ documentRef, libraryRef: libraryRef.optional(), kind: z.enum(['export', 'frame']), taskId: z.string().min(1).optional(), frame: z.number().int().nonnegative().optional() }).strict().superRefine((value, context) => {
@@ -105,7 +109,7 @@ const trimInput = z.object({
 /** PR 修剪工具（4.6）：波纹、滚动、外滑、内滑要按素材余量与相邻片段联动计算，不能用单个属性写入表达。 */
 export const trimVideoEditClipCapability = defineApplicationCapability({
   id: 'trim_video_edit_clip', title: '修剪剪辑片段（波纹、滚动、外滑、内滑）',
-  description: '按 Premiere 修剪工具修剪片段，链接的音画按链接选择一起修剪，一步撤销。mode：ripple 波纹编辑——改片段一端（edge in 入点／out 出点）的长度，后面同步锁定轨道上的片段跟着前移或后移、不留空隙（frames 正数=该端向右：出点变长，入点剪掉开头）；roll 滚动编辑——移动片段与相邻片段之间的编辑点（edge 指这一片段的哪一端），两段一长一短、总长不变；slip 外滑——位置和长度不变，换用素材里更晚（frames 正数）或更早的一段；slide 内滑——内容不变，片段整体右移（正数）或左移，前一段出点与后一段入点跟着让位。超出素材余量或相邻片段时自动收紧到能做到的最大值，回执给出实际帧数。',
+  description: '按 Premiere 修剪工具修剪片段，链接的音画按链接选择一起修剪，一步撤销。mode：ripple 波纹编辑——改片段一端（edge in 入点／out 出点）的长度，后面同步锁定轨道上的片段跟着前移或后移、不留空隙（frames 正数=该端向右：出点变长，入点剪掉开头）；roll 滚动编辑——移动片段与相邻片段之间的编辑点（edge 指这一片段的哪一端），两段一长一短、总长不变；slip 外滑——位置和长度不变，frames 正数换用播放顺序上更晚的一段（正放是素材里更晚，倒放是素材里更早），负数相反；slide 内滑——内容不变，片段整体右移（正数）或左移，前一段出点与后一段入点跟着让位。超出素材余量或相邻片段时自动收紧到能做到的最大值，回执给出实际帧数。',
   version: 1, domain: 'video_edit', aliases: ['波纹编辑', '滚动编辑', '外滑', '内滑', 'ripple edit', 'roll edit', 'slip', 'slide', '修剪片段'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.document'],
   successEvidence: ['剪辑文件回读与内存一致，回执给出实际修剪的帧数。'],
@@ -123,15 +127,15 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   ['redo_video_edit', '重做剪辑修改', '恢复目标剪辑刚撤销的一步修改。'],
   ['split_video_edit', '拆分剪辑片段', '在指定剪辑帧拆分片段，正确换算源时间并迁移后半段标注。'],
   ['import_video_edit_asset', '引用素材库素材', '从现有素材库引用原媒体或可编辑代码到剪辑，不复制原文件。代码生成器保留参数、关键帧和原图片依赖；代码滤镜需要明确目标clipRef并应用到该原片段。'],
-  ['export_video_edit', '导出剪辑成片或字幕', '将当前序列快照导出到用户通过本地对话框选择的新MP4（含音轨与烧录字幕），或SRT/WebVTT字幕文件。设置了序列入出点时只导出该半开范围，成片与字幕从入点计时；未设置则导出整条序列。字幕文件写完即核实，视频须查询导出任务。'],
-  ['query_video_edit_export', '查询剪辑导出', '查询目标剪辑导出进度和最终状态。'],
+  ['export_video_edit', '导出剪辑成片或字幕', '将当前序列快照导出到用户通过本地对话框选择的新MP4（含音轨与烧录字幕），或SRT/WebVTT字幕文件。设置了序列入出点时只导出该半开范围，成片从入点计时；字幕文件默认与成片一致从入点计时（range），要保留序列时间写 subtitleClock=sequence。未设置入出点则导出整条序列。字幕文件写完即核实，视频须查询导出任务。'],
+  ['query_video_edit_export', '查询剪辑导出', '查询目标剪辑导出进度和最终状态；启用响度标准化时返回目标设置及编码前整片 PCM 的实际响度、真峰值摘要。'],
   ['cancel_video_edit_export', '取消剪辑导出', '取消目标剪辑正在进行的导出，清理未完成输出。'],
 ].map(([id, title, description]) => defineApplicationCapability({
-  id, title, description, version: 1, domain: 'video_edit', aliases: [title], readOnly: id === 'query_video_edit_export', risk: id === 'query_video_edit_export' ? 'R0' : 'R1', dataClasses: ['C1'], permission: id === 'query_video_edit_export' ? 'video_edit:read' : 'video_edit:write', idempotent: id === 'save_video_edit' || id.includes('query'), destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', ...(id === 'import_video_edit_asset' ? ['asset'] : [])], producesRefs: ['video_edit.document'], concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`, resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: parsed => id === 'query_video_edit_export' ? [] : [parsed.documentRef], control: capabilityControl(id === 'query_video_edit_export' ? 'observe' : 'execute', ['video_edit.document'], { cancelable: true, revisionScopes: ['video_edit'] }), inputSchema: id === 'export_video_edit' ? input.extend({ format: z.enum(['mp4', 'srt', 'vtt']).optional() }) : input, outputSchema: output, summarize: result => result.message,
+  id, title, description, version: 1, domain: 'video_edit', aliases: [title], readOnly: id === 'query_video_edit_export', risk: id === 'query_video_edit_export' ? 'R0' : 'R1', dataClasses: ['C1'], permission: id === 'query_video_edit_export' ? 'video_edit:read' : 'video_edit:write', idempotent: id === 'save_video_edit' || id.includes('query'), destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', ...(id === 'import_video_edit_asset' ? ['asset'] : [])], producesRefs: ['video_edit.document'], concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`, resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: parsed => id === 'query_video_edit_export' ? [] : [parsed.documentRef], control: capabilityControl(id === 'query_video_edit_export' ? 'observe' : 'execute', ['video_edit.document'], { cancelable: true, revisionScopes: ['video_edit'] }), inputSchema: id === 'export_video_edit' ? input.extend({ format: z.enum(['mp4', 'srt', 'vtt']).optional(), subtitleClock: z.enum(['sequence', 'range']).optional(), loudness: videoEditLoudnessSettingsSchema.optional() }) : input, outputSchema: output, summarize: result => result.message,
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input: z.infer<typeof input>, result: z.infer<typeof output>) => [{
     effect: id === 'query_video_edit_export' ? 'observe' as const : 'execute' as const,
     entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability, ...VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES]
+})), analyzeVideoEditLumetriCapability, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability, ...VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES, ...VIDEO_EDIT_SUBTITLE_CAPABILITIES, ...VIDEO_EDIT_LOUDNESS_CAPABILITIES]

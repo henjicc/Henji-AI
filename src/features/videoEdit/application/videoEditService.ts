@@ -55,11 +55,19 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   playbackDirection: 1 | -1
   scrubbing?: boolean
   busy: boolean
-  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content'
+  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content' | 'tracking' | 'lumetri'
   panelFocusVersion?: number
   version: number
 }
 const instances = new Map<string, VideoEditInstance>()
+const activities = new WeakMap<VideoEditInstance, Set<string>>()
+/** Long-running local preparation/ASR keeps its original document alive without blocking timeline edits. */
+export function holdVideoEditActivity(id: string, label: string): () => void {
+  const owner = requireVideoEditInstance(id); assertVideoEditWritable(owner)
+  const values = activities.get(owner) ?? new Set<string>(); const token = `${label}:${crypto.randomUUID()}`
+  values.add(token); activities.set(owner, values)
+  return () => { values.delete(token) }
+}
 const listeners = new Set<() => void>()
 const domainListeners = new Set<() => void>()
 const viewListeners = new Set<() => void>()
@@ -391,7 +399,7 @@ export function setVideoEditTimelineView(id: string, values: Partial<VideoEditTi
 }
 export function focusVideoEditPanel(id: string, panel: VideoEditInstance['activePanel']): void {
   const instance = requireVideoEditInstance(id)
-  if (!['project', 'source', 'program', 'timeline', 'effects', 'content'].includes(panel)) throw new Error('剪辑面板不存在。')
+  if (!['project', 'source', 'program', 'timeline', 'effects', 'content', 'tracking', 'lumetri'].includes(panel)) throw new Error('剪辑面板不存在。')
   instance.activePanel = panel; instance.panelFocusVersion = (instance.panelFocusVersion ?? 0) + 1; publishView()
 }
 export type VideoEditProjectView = Pick<VideoEditInstance, 'selectedItemIds' | 'selectedBinId' | 'openSequenceIds'>
@@ -635,7 +643,7 @@ export async function leaveVideoEditProject(id: string): Promise<DocumentLeaveOu
   const instance = requireVideoEditInstance(id)
   const previous = leaving.get(id)
   if (previous) return await previous
-  if (instance.busy) throw new Error('请等待导出完成或取消导出。')
+  if (instance.busy || activities.get(instance)?.size) throw new Error(videoEditBusyReason(id) ?? '请等待处理完成。')
   const operation = (async (): Promise<DocumentLeaveOutcome> => {
     cancelVideoEditGesture(instance); instance.playing = false; publishVideoEdit()
     const registry = documentRegistry()
@@ -681,7 +689,7 @@ export function closeVideoEditProject(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
   const previous = closing.get(instance)
   if (previous) return previous
-  if (instance.busy) return Promise.reject(new Error('请等待导出完成或取消导出。'))
+  if (instance.busy || activities.get(instance)?.size) return Promise.reject(new Error(videoEditBusyReason(id) ?? '请等待处理完成。'))
   // 关闭期间拒绝新的修改与参数调整（assertVideoEditWritable）；并发关闭合并为一次；失败时留在原处、修改保留
   const operation = Promise.resolve().then(async () => {
     cancelVideoEditGesture(instance); instance.playing = false
@@ -699,7 +707,7 @@ export function closeVideoEditProject(id: string): Promise<void> {
 export async function releaseVideoEditDocument(id: string): Promise<boolean> {
   const instance = instances.get(id)
   if (!instance || instance.session.isEnded) return true
-  if (instance.busy || leaving.has(id) || activeId === id) return false
+  if (instance.busy || activities.get(instance)?.size || leaving.has(id) || activeId === id) return false
   await closeVideoEditProject(id)
   return true
 }
@@ -709,6 +717,7 @@ export function videoEditBusyReason(id: string): string | null {
   const instance = instances.get(id)
   if (!instance) return null
   if (instance.busy) return '请等待导出完成或取消导出。'
+  if (activities.get(instance)?.size) return '请等待字幕处理完成或在字幕面板取消。'
   if (gestures.has(instance)) return '请先完成当前参数调整。'
   return null
 }
@@ -756,5 +765,5 @@ export function appendVideoEditClip(id: string, mediaId?: string, placement?: { 
 }
 // 剪辑内容由文档会话登记表在退出屏障里写完；这里只拦住进行中的导出并收起参数调整与播放
 registerApplicationCloseGuard(async () => {
-  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false }
+  for (const instance of instances.values()) { if (instance.busy || activities.get(instance)?.size) throw new Error(videoEditBusyReason(instance.document.id) ?? '请等待处理完成。'); cancelVideoEditGesture(instance); instance.playing = false }
 })

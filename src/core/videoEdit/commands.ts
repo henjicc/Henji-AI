@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export type VideoEditCommandScope = 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content'
+export type VideoEditCommandScope = 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'lumetri'
 export interface VideoEditShortcut { code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
 const key = (code: string, ctrl = false, shift = false, alt = false): VideoEditShortcut => ({ code, ctrl, shift, alt, meta: false })
 const editScopes: VideoEditCommandScope[] = ['timeline', 'program']
@@ -114,6 +114,8 @@ export const VIDEO_EDIT_COMMANDS = [
   command('locate_effects', '编辑片段属性', editScopes),
   // PR 剪辑 > 速度/持续时间（cmd.clip.speed，Ctrl+R，4.13）。
   command('clip_speed', '速度/持续时间…', editScopes, key('KeyR', true)),
+  // 本机 PR cmd.clip.audiooptions.gain / virtualkey 2147483719 = G。
+  command('audio_gain', '音频增益…', editScopes, key('KeyG')),
   command('new_bin', '新建素材箱', ['project'], key('KeyB', true)),
   command('open_in_source', '在源监视器中打开', ['project'], key('KeyO', false, true)),
   command('project_list_view', '素材列表视图', ['project'], key('PageUp', true)),

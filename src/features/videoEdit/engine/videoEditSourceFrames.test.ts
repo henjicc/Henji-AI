@@ -11,6 +11,7 @@ const boundary = vi.hoisted(() => ({
   dispose: vi.fn<[], Promise<void>>(),
 }))
 vi.mock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   constructor(document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, budget?: number) { boundary.created.push({ document, previewWidth, surface, budget }) }
   updateDocument(document: VideoEditComposition): Promise<void> { boundary.documents.push(document); return boundary.update(document) }
   invalidateDocument(revision: number): void { boundary.invalidations.push(revision) }

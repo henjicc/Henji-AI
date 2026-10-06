@@ -1,4 +1,5 @@
 import type { VideoEditCompositeTarget } from './videoEditCompositing'
+import { setVideoEditTrackingEditing } from './videoEditTrackingEditing'
 
 /*
  * 节目监视器上正在编辑哪个效果的遮罩（任务 4.10，视图状态，不进剪辑文件与撤销）：
@@ -21,6 +22,7 @@ export function getVideoEditMaskEditing(): VideoEditMaskEditingTarget | null { r
 export function videoEditMaskEditingRevision(): number { return revision }
 export function subscribeVideoEditMaskEditing(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function setVideoEditMaskEditing(target: VideoEditMaskEditingTarget | null): void {
+  if (target) setVideoEditTrackingEditing(null)
   if (JSON.stringify(target) === JSON.stringify(current)) return
   current = target; revision++
   for (const listener of listeners) listener()

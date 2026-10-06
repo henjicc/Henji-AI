@@ -10,6 +10,7 @@ import { toFetchableMediaUrl } from '@/services/imageSource'
 import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegionMasks'
 import { listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
+import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
 
 /*
  * 智能区域协调（任务 4.7d，渲染层）：打开着的剪辑里，凡是挂了“作用区域”的内置画面效果，就按片段用到的素材范围
@@ -113,6 +114,23 @@ export function videoEditSmartRegionStatus(document: Pick<VideoEditDocument, 'me
 /** 给助手读的状态文字：'' 没有作用区域；ready；analyzing:45%；failed:<给用户的说明>。 */
 export function videoEditSmartRegionStatusText(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask'>): string {
   if (!effect.mask) return ''
+  if (effect.mask.regionId === 'tracker') {
+    const trackerId = effect.mask.trackerId
+    const tracker = clip.trackers?.find(tracker => tracker.id === trackerId)
+    if (!tracker) return 'failed:所引用的跟踪器已移除，请选择本片段已有的跟踪器。'
+    const request = tracker && videoEditTrackingRequest(document, frameRate, clip, tracker)
+    return videoEditTrackingStatusText(videoEditTrackingStatus(request?.definition), request?.range)
+  }
+  if (effect.mask.regionId === 'shapes') {
+    const following = effect.mask.shapes.flatMap(shape => shape.follow ? [shape.follow.trackerId] : [])
+    for (const id of following) {
+      const tracker = clip.trackers?.find(tracker => tracker.id === id)
+      if (!tracker) return 'failed:遮罩引用的跟踪器已移除，请重新绑定。'
+      const request = videoEditTrackingRequest(document, frameRate, clip, tracker)
+      const text = videoEditTrackingStatusText(videoEditTrackingStatus(request?.definition), request?.range)
+      if (!text.startsWith('ready:')) return text
+    }
+  }
   if (!isSmartRegionMask(effect.mask)) return 'ready'
   const status = videoEditSmartRegionStatus(document, frameRate, clip, effect)
   if (!status) return 'failed:片段不是视频或图片，作用区域不会生效。'

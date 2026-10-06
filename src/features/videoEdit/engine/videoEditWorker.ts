@@ -5,6 +5,7 @@ import { NativeFrameDiagnostics, type NativeFrameDiagnosticsRequest, type Native
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { VideoEditNativeFrames } from './videoEditNativeFrameSource'
 import { VideoEditFrameRouter, type VideoEditDecodeSettings } from './videoEditFrameRouter'
+import { setVideoEditTrackResults, type VideoEditTrackResults } from './videoEditTrackResults'
 import { setVideoEditSmartRegionSegments, type VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
 
 /**
@@ -18,6 +19,7 @@ export type RenderRequest = { id: number } & (
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
   | { kind: 'scale'; divisor: number }
   /** 已分析好的智能区域段落（4.7d），按素材地址与分析种类；不进渲染队列，下一次渲染即生效。 */
+  | { kind: 'tracks'; tracks: VideoEditTrackResults }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
   | { kind: 'dispose' }
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
@@ -71,6 +73,7 @@ function handleNativeFrames(request: NativeFramesRequest): void {
 self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
+  if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
   if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }

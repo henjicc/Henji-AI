@@ -41,7 +41,7 @@ export function setVideoEditSmartRegionSegments(value: VideoEditSmartRegionSegme
   for (const cache of [layouts, mattes, masks] as Array<Map<string, unknown>>) for (const key of [...cache.keys()]) if (!live.has(key.split('\u0000')[0])) cache.delete(key)
 }
 
-async function fetchRange(url: string, start: number, end: number): Promise<Uint8Array> {
+export async function fetchRange(url: string, start: number, end: number): Promise<Uint8Array> {
   const response = await fetch(url, { headers: { Range: `bytes=${start}-${end - 1}` } })
   if (!response.ok) throw new Error(`智能区域缓存读取失败（${response.status}）。`)
   const bytes = new Uint8Array(await response.arrayBuffer())
@@ -62,7 +62,7 @@ function layoutOf(url: string): Promise<SmartRegionSegmentLayout> {
   return remember(layouts, url, pending, MAX_LAYOUTS)
 }
 
-async function inflate(bytes: Uint8Array): Promise<Uint8Array> {
+export async function inflate(bytes: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }

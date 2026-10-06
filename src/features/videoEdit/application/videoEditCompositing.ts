@@ -1,8 +1,9 @@
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
-import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPresets'
+import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
+import { assertVideoEditMaskTrackers } from './videoEditTrackingEdits'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
-import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults, videoEditBuiltinEffectMedia } from '@/core/videoEdit/builtinEffects'
+import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
@@ -123,27 +124,27 @@ export function addVideoEditBuiltinEffect(target: VideoEditCompositeTarget, buil
  */
 export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: string, clipIds: readonly string[], templateRef: string, params?: Readonly<Record<string, unknown>>): string[] {
   // 模板引用：内置效果 ID，或智能预设 `smart:<预设>`（内置效果 + 作用区域，4.7d）。
-  const resolved = resolveVideoEditEffectTemplate(templateRef)
+  const resolved = resolveVideoEditLibraryEffects(templateRef)
   // 不认识的 ID 交给登记表报错（会列出可用的内置效果）。
   if (!resolved) { requireVideoEditBuiltinEffect(templateRef); throw new Error(`没有这个效果：${templateRef}。`) }
-  const builtinId = resolved.builtinId
-  const template = { ...makeVideoEditBuiltinEffect(builtinId, params ?? resolved.params, resolved.name), ...(resolved.mask ? { mask: { ...resolved.mask } } : {}) }
+  const templates = resolved.effects.map(effect => params ? { ...effect, builtin: { id: effect.builtin!.id, params: normalizeVideoEditBuiltinParams(effect.builtin!.id, params) } } : effect)
   const created: string[] = []
   editVideoProject(projectId, document => {
     created.length = 0
     const sequence = document.sequences.find(sequence => sequence.id === sequenceId)
     if (!sequence) throw new Error('原序列已移除。')
     const locked = new Set(sequence.tracks.filter(track => track.locked).map(track => track.index))
-    const media = videoEditBuiltinEffectMedia(builtinId)
+    const media = resolved.media
     // 作用区域要逐帧分析素材画面：只加到视频、图片片段上。
-    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track) && (!resolved.mask || clip.kind === 'video' || clip.kind === 'image')).map(clip => clip.id))
-    if (!targets.size && resolved.mask) throw new Error('请选择视频或图片片段：智能效果要分析素材画面，文字、图形、调整图层与声音片段不能使用；锁定轨道上的片段不能修改。')
+    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track) && (!resolved.needsSource || clip.kind === 'video' || clip.kind === 'image')).map(clip => clip.id))
+    if (!targets.size && resolved.needsSource) throw new Error('请选择视频或图片片段：智能效果要分析素材画面，文字、图形、调整图层与声音片段不能使用；锁定轨道上的片段不能修改。')
     if (!targets.size) throw new Error(media === 'audio' ? '请选择声音片段：音频效果只能加到声音片段，锁定轨道上的片段不能修改。' : '请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。')
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
-      if ((clip.effects?.length ?? 0) >= VIDEO_EDIT_MAX_EFFECTS) throw new Error(`片段“${clip.name}”已有${VIDEO_EDIT_MAX_EFFECTS}项效果，请先删除不用的效果。`)
-      const effect = { ...structuredClone(template), id: crypto.randomUUID() }; created.push(effect.id)
-      return { ...clip, effects: [...(clip.effects ?? []), effect] }
+      if ((clip.effects?.length ?? 0) + templates.length > VIDEO_EDIT_MAX_EFFECTS) throw new Error(`片段“${clip.name}”最多只能放${VIDEO_EDIT_MAX_EFFECTS}项效果，请先删除不用的效果。`)
+      const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID() }))
+      created.push(...effects.map(effect => effect.id))
+      return { ...clip, effects: [...(clip.effects ?? []), ...effects] }
     })
     return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips } : value) }
   })
@@ -165,6 +166,7 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
     if (changes.params) effect.builtin = { id: effect.builtin.id, params: normalizeVideoEditBuiltinParams(effect.builtin.id, changes.params, effect.builtin.params, true) }
     if (changes.mask === null) delete effect.mask
     else if (changes.mask) {
+      assertVideoEditMaskTrackers(clip, changes.mask)
       if (isSmartRegionMask(changes.mask) && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('智能区域只能用在视频、图片片段上。')
       effect.mask = changes.mask
     }

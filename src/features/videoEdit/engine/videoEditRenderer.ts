@@ -14,6 +14,7 @@ import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { videoEditAudioTransitionClipGain, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { videoEditClipFades, videoEditFadeGain, videoEditFadeOpacity } from '@/core/videoEdit/fades'
+import { applyVideoEditClipFollow } from './videoEditTrackResults'
 import { activeVideoEditAudioEffects, activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
@@ -299,7 +300,7 @@ export class VideoEditRenderer {
     } else { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
     const transitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
     // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
-    const active = activeVideoEditClips(document, frame).map(clip => videoEditClipFades(clip) && clip.kind !== 'audio' ? { ...clip, opacity: clip.opacity * videoEditFadeOpacity(clip, frame) } : clip).filter(clip => clip.kind !== 'audio' && (!['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length))
+    const active = await applyVideoEditClipFollow(document, activeVideoEditClips(document, frame).map(clip => videoEditClipFades(clip) && clip.kind !== 'audio' ? { ...clip, opacity: clip.opacity * videoEditFadeOpacity(clip, frame) } : clip).filter(clip => clip.kind !== 'audio' && (!['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length)), frame)
     const ids = new Set(active.map(clip => clip.id))
     for (const window of transitions) for (const clip of [window.left, window.right]) if (!ids.has(clip.id)) { active.push(clip); ids.add(clip.id) }
     active.push(...videoEditCaptionClips(document, frame))

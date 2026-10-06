@@ -8,6 +8,7 @@ import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, crea
 
 // 试渲染只替换像素边界；领域校验、事务、注册与读回都是正式实现。
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   async updateDocument() {}
   async present() { return { presented: true, bitmap: { close() {} } } }
   async dispose() {}

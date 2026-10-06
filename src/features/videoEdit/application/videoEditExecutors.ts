@@ -14,6 +14,7 @@ import { createVideoEditCodeMaterials, createVideoEditCodeVersions } from './vid
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { assertVideoEditClipFollow } from './videoEditTrackingEdits'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, updateVideoEditCompositeEntity, createVideoEditCompositeEntity, removeVideoEditCompositeEntities, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
 import { makeVideoEditGraphicItem } from './videoEditProjectItems'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
@@ -182,7 +183,11 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
           return { ...next, name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
         }
         // 速度属性（4.13）与其余属性一起写：速度改动交给速度编辑换算时长与内容。
-        if (this.entityType === 'video_edit.clip') return sequence.clips.some(clip => clip.id === childId) ? updateVideoEditClipInSequence(document, sequence, childId, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1)))) : sequence
+        if (this.entityType === 'video_edit.clip' && sequence.clips.some(clip => clip.id === childId)) {
+          const next = updateVideoEditClipInSequence(document, sequence, childId, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1))))
+          if (keys.includes('video_edit.clip.follow')) assertVideoEditClipFollow(next, next.clips.find(clip => clip.id === childId)!)
+          return next
+        }
         if (this.entityType === 'video_edit.annotation') return { ...sequence, annotations: sequence.annotations.map(mark => mark.id === childId ? videoEditAnnotationSchema.parse(data) : mark) }
         if (this.entityType === 'video_edit.marker') return { ...sequence, markers: sequence.markers?.map(mark => mark.id === childId ? videoEditMarkerSchema.parse(data) : mark) }
         if (this.entityType === 'video_edit.caption') return { ...sequence, captions: sequence.captions?.map(caption => caption.id === childId ? videoEditCaptionSchema.parse(data) : caption) }
@@ -241,7 +246,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
     this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, ...VIDEO_EDIT_COMPOSITE_CASCADES, ...(entityType === 'video_edit.track' ? [{ declarationId: 'video_edit.track_clips_delete', effect: 'delete' as const, entityType: 'video_edit.clip', propertyIds: [], revisionScopes: ['video_edit'] }] : [])] }
   }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
-    const clipChild = ['video_edit.graphic_object', 'video_edit.effect'].includes(this.entityType)
+    const clipChild = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.tracker'].includes(this.entityType)
     const nested = ['video_edit.clip', 'video_edit.annotation', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition', 'video_edit.track'].includes(this.entityType)
     if (step.parent.kind !== (clipChild ? 'video_edit.clip' : nested ? 'video_edit.sequence' : 'video_edit.document')) throw new Error('请使用目录声明的所属父实体。')
     const parsed = splitVideoEditRef(step.parent)

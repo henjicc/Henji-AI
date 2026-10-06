@@ -47,6 +47,7 @@ export const videoEditMaskShapeSchema = z.object({
   feather: feather.optional(), expand: expand.optional(),
   opacity: z.number().finite().min(VIDEO_EDIT_MASK_OPACITY_RANGE.min).max(VIDEO_EDIT_MASK_OPACITY_RANGE.max).optional(),
   invert: z.boolean().optional(),
+  follow: z.object({ trackerId: z.string().min(1).max(100), reference: videoEditMaskBoxSchema }).strict().optional(),
 }).strict().superRefine((shape, ctx) => {
   if (shape.kind === 'path' ? !shape.points || shape.box : !shape.box || shape.points) ctx.addIssue({ code: 'custom', message: '矩形、椭圆遮罩写 box（左上角 x、y 与宽、高），钢笔遮罩写 points（至少 3 个顶点）。' })
 })
@@ -61,7 +62,11 @@ export const videoEditShapesMaskSchema = z.object({
 }).strict().superRefine((mask, ctx) => {
   if (new Set(mask.shapes.map(shape => shape.id)).size !== mask.shapes.length) ctx.addIssue({ code: 'custom', message: '遮罩 ID 重复。' })
 })
-export const videoEditEffectMaskSchema = z.discriminatedUnion('regionId', [videoEditSmartMaskSchema, videoEditShapesMaskSchema])
+export const videoEditTrackerMaskSchema = z.object({
+  regionId: z.literal('tracker'), trackerId: z.string().min(1).max(100), feather: feather.optional(), expand: expand.optional(), invert: z.boolean().optional(),
+}).strict()
+export const VIDEO_EDIT_TRACKER_MASK_DEFAULTS = { feather: 5, expand: 0 } as const
+export const videoEditEffectMaskSchema = z.discriminatedUnion('regionId', [videoEditSmartMaskSchema, videoEditShapesMaskSchema, videoEditTrackerMaskSchema])
 export type VideoEditEffectMask = z.infer<typeof videoEditEffectMaskSchema>
 export type VideoEditShapesMask = z.infer<typeof videoEditShapesMaskSchema>
 

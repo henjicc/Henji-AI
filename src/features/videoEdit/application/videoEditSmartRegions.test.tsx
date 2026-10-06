@@ -12,6 +12,7 @@ import { VideoEditSmartRegionControls } from '../panels/VideoEditSmartRegionCont
 import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions, videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   async updateDocument() {}
   async present() { return { presented: true, bitmap: { close() {} } } }
   async dispose() {}

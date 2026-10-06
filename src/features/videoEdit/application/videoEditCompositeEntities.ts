@@ -10,14 +10,17 @@ import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDo
 import { makeVideoEditBuiltinEffect, makeVideoEditEffect } from './videoEditCompositing'
 import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { videoEditSmartRegionStatusText } from './videoEditSmartRegions'
+import { assertVideoEditMaskTrackers, putVideoEditTracker } from './videoEditTrackingEdits'
+import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
 import { isSmartRegionMask, type VideoEditEffectMask } from '@/core/videoEdit/effectMasks'
 
-export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition'] as const
+export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition', 'video_edit.tracker'] as const
 export type VideoEditCompositeEntityType = typeof VIDEO_EDIT_COMPOSITE_TYPES[number]
 type Data = Record<string, JsonValue>
 export function videoEditGraphicObjectId(clipId: string, objectId: string): string {
   return `graphic:${clipId.length}:${clipId}${objectId}`
 }
+export function videoEditTrackerEntityId(clipId: string, trackerId: string): string { return `tracker:${clipId.length}:${clipId}${trackerId}` }
 function splitObjectId(id: string): [string, string] {
   try {
     if (!id.startsWith('graphic:')) throw new Error()
@@ -36,6 +39,12 @@ function clipOwner(document: VideoEditDocument, clipId: string) {
   return { sequence, clip }
 }
 export function videoEditCompositeOwner(document: VideoEditDocument, type: VideoEditCompositeEntityType, childId: string) {
+  if (type === 'video_edit.tracker') {
+    const [clipId, trackerId] = splitObjectId(childId.replace(/^tracker:/, 'graphic:')); const owner = clipOwner(document, clipId)
+    const tracker = owner.clip.trackers?.find(tracker => tracker.id === trackerId)
+    if (!tracker) throw new Error('NOT_FOUND：跟踪器已移除。')
+    return { kind: 'tracker' as const, ...owner, tracker, clipIds: [clipId] }
+  }
   if (type === 'video_edit.graphic_object') {
     const [clipId, objectId] = splitObjectId(childId); const owner = clipOwner(document, clipId)
     const object = owner.clip.graphic?.objects.find(object => object.id === objectId)
@@ -54,6 +63,7 @@ export function videoEditCompositeOwner(document: VideoEditDocument, type: Video
   return { kind: 'transition' as const, sequence, transition, clipIds: videoEditTransitionClipIds(transition) }
 }
 export function videoEditCompositeItems(document: VideoEditDocument, type: VideoEditCompositeEntityType): Array<{ id: string; name: string }> {
+  if (type === 'video_edit.tracker') return document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => (clip.trackers ?? []).map(tracker => ({ id: videoEditTrackerEntityId(clip.id, tracker.id), name: tracker.name }))))
   if (type === 'video_edit.graphic_object') return document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => (clip.graphic?.objects ?? []).map(object => ({ id: videoEditGraphicObjectId(clip.id, object.id), name: object.name }))))
   if (type === 'video_edit.effect') return document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => (clip.effects ?? []).map(effect => ({ id: effect.id, name: effect.name }))))
   return document.sequences.flatMap(sequence => (sequence.transitions ?? []).map(transition => ({ id: transition.id, name: videoEditTransitionPreset(transition.kind).name })))
@@ -61,6 +71,10 @@ export function videoEditCompositeItems(document: VideoEditDocument, type: Video
 export function videoEditCompositeData(document: VideoEditDocument, type: VideoEditCompositeEntityType, childId: string): Data {
   const owner = videoEditCompositeOwner(document, type, childId)
   const common = { sequenceId: owner.sequence.id, ...(owner.kind !== 'transition' ? { clipId: owner.clip.id } : {}) }
+  if (owner.kind === 'tracker') {
+    const request = videoEditTrackingRequest(document, owner.sequence.frameRate, owner.clip, owner.tracker)
+    return JSON.parse(JSON.stringify({ ...common, ...owner.tracker, status: videoEditTrackingStatusText(videoEditTrackingStatus(request?.definition), request?.range) })) as Data
+  }
   if (owner.kind === 'graphic') return JSON.parse(JSON.stringify({ ...common, ...owner.object, curves: owner.object.curves ?? {} })) as Data
   if (owner.kind === 'effect') {
     const { code, builtin, ...effect } = owner.effect
@@ -77,7 +91,9 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
  * creation. No publication or history occurs until the caller proves the draft. */
 export function updateVideoEditCompositeEntity(document: VideoEditDocument, type: VideoEditCompositeEntityType, childId: string, data: Data): VideoEditDocument {
   const owner = videoEditCompositeOwner(document, type, childId)
-  if (owner.kind === 'graphic') {
+  if (owner.kind === 'tracker') {
+    putVideoEditTracker(document, owner.clip, { id: owner.tracker.id, name: data.name, method: data.method, prompts: data.prompts })
+  } else if (owner.kind === 'graphic') {
     Object.assign(owner.object, { name: data.name, parameters: data.parameters, curves: data.curves })
   } else if (owner.kind === 'effect') {
     const builtin = owner.effect.builtin
@@ -87,7 +103,8 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       // 整体写入：写什么存什么（读回与写入一致），没写的键回到默认值
       const params = validateVideoEditBuiltinParams(builtin.id, (data.parameters ?? {}) as Record<string, unknown>)
       const mask = data.mask ?? undefined
-      assertMaskClip(document, owner.clip, mask as VideoEditEffectMask | undefined)
+      // 删除跟踪器后引用可落空；只在实际写入作用区域时校验，改名称等属性仍可进行。
+      if (JSON.stringify(mask) !== JSON.stringify(owner.effect.mask)) assertMaskClip(document, owner.clip, mask as VideoEditEffectMask | undefined)
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params }, ...(mask ? { mask } : {}) })
       delete owner.effect.mask; Object.assign(owner.effect, next)
     } else {
@@ -97,7 +114,7 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
   } else {
     const kind = (data.kind ?? owner.transition.kind) as VideoEditTransitionKind
     if (!VIDEO_EDIT_TRANSITION_PRESETS.some(preset => preset.kind === kind)) throw new Error(`没有过渡种类 ${String(kind)}，可用：${VIDEO_EDIT_TRANSITION_PRESETS.map(preset => preset.kind).join('、')}。`)
-    if (videoEditTransitionMedium(kind) !== videoEditTransitionMedium(owner.transition.kind)) throw new Error('过渡种类只能换成同一媒介的：视频过渡换视频过渡，音频过渡换音频过渡。')
+    if (videoEditTransitionMedium(kind) !== videoEditTransitionMedium(owner.transition.kind)) throw new Error(`过渡种类只能换成同一媒介的；当前是${videoEditTransitionMedium(owner.transition.kind) === 'audio' ? '音频' : '视频'}过渡，可用种类：${VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === videoEditTransitionMedium(owner.transition.kind)).map(preset => preset.kind).join('、')}。`)
     // 参数整体写入（写什么存什么）；只换种类、参数没动时旧参数不再适用，按新种类的默认值
     const raw = (data.parameters ?? {}) as Record<string, unknown>
     const untouched = JSON.stringify(raw) === JSON.stringify(owner.transition.parameters ?? {})
@@ -123,6 +140,10 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     ;(sequence.transitions ??= []).push(transition); return transition.id
   }
   const { clip } = clipOwner(document, parentId)
+  if (type === 'video_edit.tracker') {
+    const tracker = putVideoEditTracker(document, clip, { id: crypto.randomUUID(), ...values })
+    return videoEditTrackerEntityId(clip.id, tracker.id)
+  }
   if (type === 'video_edit.graphic_object') {
     if (!clip.graphic) throw new Error('请选择结构化图形片段。')
     if (!['rect', 'ellipse', 'text'].includes(String(values.kind))) throw new Error('图形对象需要矩形、椭圆或文字类型。')
@@ -156,6 +177,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
 }
 /** 智能区域只能用在视频、图片片段上：要逐帧分析素材画面（4.7d）；手绘遮罩（4.10）是几何，任何画面片段都能用。 */
 function assertMaskClip(document: VideoEditDocument, clip: VideoEditClip, mask: VideoEditEffectMask | undefined): void {
+  assertVideoEditMaskTrackers(clip, mask)
   if (!isSmartRegionMask(mask)) return
   const media = videoEditClipMedia(document, clip)
   if (!media || (media.kind !== 'video' && media.kind !== 'image')) throw new Error(`片段“${clip.name}”不是视频或图片片段，智能区域只能用在视频、图片片段上；文字、图形、代码与调整图层上的效果请作用于整个画面（mask 写 null），或用手绘遮罩（region_id: shapes）。`)
@@ -170,7 +192,8 @@ export function removeVideoEditCompositeEntities(document: VideoEditDocument, ty
     sequence.transitions = sequence.transitions!.filter(transition => !ids.includes(transition.id))
   } else {
     const { clip } = clipOwner(document, parentId)
-    if (type === 'video_edit.graphic_object') clip.graphic!.objects = clip.graphic!.objects.filter(object => !ids.includes(videoEditGraphicObjectId(clip.id, object.id)))
+    if (type === 'video_edit.tracker') clip.trackers = clip.trackers?.filter(tracker => !ids.includes(videoEditTrackerEntityId(clip.id, tracker.id)))
+    else if (type === 'video_edit.graphic_object') clip.graphic!.objects = clip.graphic!.objects.filter(object => !ids.includes(videoEditGraphicObjectId(clip.id, object.id)))
     else clip.effects = clip.effects!.filter(effect => !ids.includes(effect.id))
   }
 }

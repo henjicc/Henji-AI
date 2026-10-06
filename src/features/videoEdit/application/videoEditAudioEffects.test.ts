@@ -13,6 +13,7 @@ import { videoEditEffectDropClips } from '../panels/videoEditEffectDrag'
 
 // 任务 4.7c 音频效果与音频过渡、过渡种类切换与助手单侧过渡：试渲染只替换像素边界，其余都是正式领域实现。
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   async updateDocument() {}
   async present() { return { presented: true, bitmap: { close() {} } } }
   async dispose() {}

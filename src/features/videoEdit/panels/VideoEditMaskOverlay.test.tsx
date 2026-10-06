@@ -9,6 +9,7 @@ import { setVideoEditMaskEditing } from '../application/videoEditMaskEditing'
 import { VideoEditMaskOverlay } from './VideoEditMaskOverlay'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   async updateDocument() {}
   async present() { return { presented: true, bitmap: { close() {} } } }
   async dispose() {}

@@ -10,10 +10,12 @@ import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/video
 import { isDomNode } from '@/utils/crossRealmDom'
 import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
+import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
+import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
 import { VideoEditMaskOverlay } from './panels/VideoEditMaskOverlay'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
 import { VideoEditInOutDuration, VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
@@ -165,6 +167,10 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     }
     pushRegions()
     const unsubscribeRegions = subscribeVideoEditSmartRegions(() => { if (!stopped) pushRegions() })
+    let appliedTracks = ''
+    const pushTracks = (): void => { const tracks = videoEditTrackResults(); const key = JSON.stringify(tracks); if (key === appliedTracks) return; appliedTracks = key; renderer.setTracks(tracks); lastRequested = -1 }
+    pushTracks()
+    const unsubscribeTracks = subscribeVideoEditTracking(() => { if (!stopped) pushTracks() })
     // A failure is retried once the sequence changes (relink, removal, undo) or the user moves the playhead, and by
     // itself after a growing pause (2s up to 10s), so a recovered decoder shows the picture again (task 3.1).
     let failedDocument: VideoEditComposition | undefined
@@ -314,7 +320,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     let retired = false
     stopCurrent = (): void => {
       if (retired) return
-      retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeRegions(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
+      retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
       programReleases.set(instance, Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()]))
       surface.remove(); if (canvas.current === surface) canvas.current = null
     }
@@ -410,6 +416,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           }} />
         {document.annotations.filter(mark => mark.frame === instance.frame).map(mark => <div key={mark.id} className={`pointer-events-none absolute border border-on-media text-xs text-on-media ${mark.kind === 'point' ? 'h-2 w-2' : ''}`} style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%`, ...(mark.kind === 'point' ? {} : { width: `${mark.width * 100}%`, height: `${mark.height * 100}%` }) }}><span className="absolute bottom-full whitespace-nowrap bg-media-scrim px-1">{mark.text}</span></div>)}
         <VideoEditMaskOverlay instance={instance} onError={onError} />
+        <VideoEditTrackingOverlay instance={instance} onError={onError} />
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
       {(mode === 'point' || mode === 'region' || preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">

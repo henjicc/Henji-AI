@@ -11,6 +11,7 @@ import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
 vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   constructor() { pixel.sessions++ }
   updateDocument = pixel.update
   invalidateDocument = vi.fn()

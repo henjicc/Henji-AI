@@ -47,6 +47,16 @@ beforeEach(() => {
   platform.disconnect.mockReset()
 })
 
+it('跟踪结果带版本原样发送 Worker，关闭后不再发送', async () => {
+  const session = new VideoEditRenderSession(composition())
+  const tracks = { key: { url: 'henji-media://local/track.htrk', version: '2' } }
+  session.setTracks(tracks)
+  expect(workers[0].messages[0].message).toEqual({ kind: 'tracks', tracks, id: 0 })
+  await session.present(0); await session.dispose()
+  const count = workers[0].messages.length
+  session.setTracks({}); expect(workers[0].messages.length).toBe(count)
+})
+
 it('原生可用时先把帧通道端口交给 Worker 再初始化，并附上本地源文件路径；关闭后断开通道', async () => {
   const session = new VideoEditRenderSession(composition())
   await session.present(0)

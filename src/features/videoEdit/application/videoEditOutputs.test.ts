@@ -27,6 +27,7 @@ vi.mock('mediabunny', () => ({
   CanvasSource: class { async add(timestamp: number) { encoder.videoTimestamps.push(timestamp) } }, AudioBufferSource: class { async add() {} },
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
   canvas = {}; constructor() { if (encoder.failConstructor) throw new Error('GPU unavailable') }
   render = encoder.render; dispose = encoder.dispose; mixAudio = encoder.mix; setSmartRegions = vi.fn()
 } }))

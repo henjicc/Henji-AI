@@ -4,7 +4,8 @@ import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { VideoEditSourceSoundPlayer, videoEditSourceSoundComposition } from './videoEditSourceSound'
 import type { VideoEditRenderSession } from './videoEditRenderSession'
 
-vi.mock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {} }))
+vi.mock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}} }))
 
 const video: VideoEditMedia = { id: 'm', name: 'ProRes', path: 'D:/a.mov', kind: 'video', width: 3840, height: 2160, durationSeconds: 7.25, frameRate: { numerator: 30000, denominator: 1001 } }
 
