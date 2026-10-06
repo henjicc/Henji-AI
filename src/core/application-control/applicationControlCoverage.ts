@@ -35,6 +35,7 @@ const domainPlans: Readonly<Record<string, DomainPlan>> = {
   application: domainPlan('application', '2.2', 'src/core/application-control/', ['application.context'], ['src/core/application-control/reflection.ts'], 'src/core/application-control/builtinApplicationCapabilities.ts', 'application.observe', ['application.observe'], 'query'),
   navigation: domainPlan('navigation', '5.1', 'src/features/navigation/application/', ['application.surface'], ['surfaceCatalog.ts'], 'src/core/application-control/builtinApplicationCapabilities.ts', 'surface.observe', ['surface.open', 'surface.close', 'surface.focus'], 'operation'),
   settings: domainPlan('settings', '5.1', 'src/features/settings/application-control/', ['settings.entry'], ['generalSettingDefinitions.ts', 'interfaceSettingDefinitions.ts'], 'src/core/application-control/builtinApplicationCapabilities.ts', 'application.observe', ['application.plan', 'application.commit'], 'property'),
+  local_models: domainPlan('local_models', '4.11', 'electron/main/services/local-models/service.ts', ['local_model.item', 'local_model.settings'], ['src/features/localModels/application/localModelsReflection.ts'], 'src/core/application-control/domains/localModels/localModelCapabilities.ts', 'read_application_entity', ['change_application_entities', 'cancel_local_model_download'], 'operation'),
   generation: domainPlan('generation', '5.4', 'src/features/generation/application/', ['generation.task', 'generation.result', 'generation.record'], ['packages/ai-sdk/src/catalog/**.model.ts', 'src/models/presentation/**.presentation.ts'], 'generationApplicationService.ts 与 generationApplicationCapabilities.ts', 'application.observe', ['generation.prepare', 'generation.submit', 'generation.cancel'], 'operation'),
   models: domainPlan('models', '5.4', 'src/features/generation/application/generationPreparationService.ts', ['generation.model'], ['packages/ai-sdk/src/catalog/**.model.ts', 'src/models/presentation/**.presentation.ts'], 'generationApplicationCapabilities.ts', 'application.describe', ['model.select'], 'query'),
   image_edit: domainPlan('image_edit', '5.3', 'src/features/imageEdit/application/', ['image_edit.preview', 'image_edit.document', 'image_edit.layer', 'image_edit.group', 'image_edit.mask', 'image_edit.resource'], ['src/features/imageEdit/tools/registry.ts'], 'toolboxApplicationCapabilities.ts 与 builtinApplicationCapabilities.ts', 'application.observe', ['image_edit.preview', 'image_edit.commit'], 'operation'),
@@ -81,6 +82,7 @@ function surfacesForDomain(domain: string): string[] {
   const mappings: Readonly<Record<string, string[]>> = {
     navigation: [...APPLICATION_SURFACE_IDS],
     settings: APPLICATION_SURFACE_IDS.filter((id) => id.startsWith('settings.')),
+    local_models: ['settings.files.models'],
     generation: ['workspace.generation'],
     models: ['workspace.generation', 'settings.providers_models'],
     image_edit: ['tool.image_edit'],

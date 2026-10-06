@@ -1,4 +1,6 @@
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
+import { cancelLocalModelDownloadCapability } from '@/core/application-control/domains/localModels/localModelCapabilities'
+import { cancelLocalModelDownloadFromCapability } from './localModelCapabilities'
 import {
   createLocalModelRegistrations,
   LocalModelMutationExecutor,
@@ -12,5 +14,7 @@ export const localModelsApplicationDomain: ApplicationDomainModule = {
     engine.registerMutationExecutor(new LocalModelMutationExecutor())
     engine.registerMutationExecutor(new LocalModelSettingsMutationExecutor())
   },
-  registerCapabilities() {},
+  registerCapabilities(registrar) {
+    registrar.registerHandler(cancelLocalModelDownloadCapability.id, cancelLocalModelDownloadFromCapability)
+  },
 }

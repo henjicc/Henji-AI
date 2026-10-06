@@ -25,7 +25,7 @@ const generation = vi.hoisted(() => ({
   getTask: vi.fn(() => { if (state.liveMissing) throw new Error('TASK_NOT_FOUND'); return { ...state.task } }),
   cancelTask: vi.fn(async () => ({})),
 }))
-const observe = vi.hoisted(() => vi.fn(async (_projectId: string, target: { itemId: string; timeUs: number }) => ({ asset: { filePath: `D:/frames/${target.itemId}-${target.timeUs}.png` } })))
+const observe = vi.hoisted(() => vi.fn(async (_projectId: string, target: { kind: 'source'; itemId: string; timeUs: number } | { kind: 'program'; sequenceId?: string; frame: number }) => ({ asset: { filePath: target.kind === 'source' ? `/frames/${target.itemId}-${target.timeUs}.png` : `/frames/program-${target.frame}.png` } })))
 const imports = vi.hoisted(() => vi.fn())
 const saves = vi.hoisted(() => vi.fn(async () => { if (state.saveError) throw new Error('保存失败') }))
 vi.mock('@/services/database', () => ({ databaseService: { getHistoryById: vi.fn(async () => state.history) } }))
@@ -81,6 +81,28 @@ beforeEach(() => {
 })
 
 describe('原地生成执行', () => {
+  it('只选后一片段首帧及指定节目帧，准备和提交一致；选择与取消均不移动播放头', async () => {
+    const selected = { ...request(), referenceRoles: ['next_head' as const], referenceFrame: 45 }
+    const prepared = await service.prepareVideoEditInPlace(selected)
+    expect(prepared.references.map(reference => reference.role)).toEqual(['next_head', 'specified_time'])
+    expect(observe).not.toHaveBeenCalled()
+    await service.startVideoEditInPlaceGeneration(selected, { taskId: 'selected-frames' })
+    expect(observe.mock.calls.map(call => call[1])).toEqual([{ kind: 'source', itemId: 'item', timeUs: Math.round(.5 / 30 * 1e6) }, { kind: 'program', sequenceId: selected.sequenceId, frame: 45 }])
+    expect(state.document.inPlaceGenerations?.[0].request).toMatchObject({ referenceRoles: ['next_head'], referenceFrame: 45 })
+    observe.mockClear()
+    await service.startVideoEditInPlaceGeneration({ ...request(), referenceRoles: [] }, { taskId: 'without-frames' })
+    expect(observe).not.toHaveBeenCalled()
+  })
+  it('被替换首帧可取消，超限按同一模型规则截取；不存在的来源、越界节目帧与声音参考提交前拒绝', async () => {
+    const replace = { ...request(), intent: { action: 'replace_shot' as const, clipId: 'a' }, referenceRoles: ['replaced_head' as const] }
+    expect((await service.prepareVideoEditInPlace(replace)).references.map(value => value.role)).toEqual(['replaced_head'])
+    expect((await service.prepareVideoEditInPlace({ ...replace, referenceRoles: [] })).references).toEqual([])
+    expect((await service.prepareVideoEditInPlace({ ...request(), referenceFrame: 0 })).references.map(value => value.role)).toEqual(['previous_tail', 'next_head'])
+    await expect(service.startVideoEditInPlaceGeneration({ ...request(), referenceRoles: ['replaced_head'] })).rejects.toThrow('可用来源：previous_tail、next_head')
+    await expect(service.startVideoEditInPlaceGeneration({ ...request(), referenceFrame: 54000 })).rejects.toThrow('0 到 53999')
+    await expect(service.startVideoEditInPlaceGeneration({ ...request(), modelId: 'test-audio', intent: { action: 'generate_audio', frame: 0 }, referenceFrame: 0 })).rejects.toThrow('声音生成不接受参考画面')
+    expect(observe).not.toHaveBeenCalled(); expect(generation.submit).not.toHaveBeenCalled(); expect(service.listVideoEditInPlaceJobs()).toEqual([])
+  })
   it('占位存入项目，重启后按原任务恢复等待，完成只落位一次', async () => {
     const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'resume-task' })
     expect(state.document.inPlaceGenerations).toEqual([expect.objectContaining({ taskId: 'resume-task', request: expect.objectContaining({ prompt: '黄昏海边空镜' }), plan: expect.objectContaining({ frame: 60 }) })])

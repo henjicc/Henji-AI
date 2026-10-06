@@ -168,9 +168,13 @@ describe('本地模型服务', () => {
     const running = models.ensure('face_detection_yunet')
     await vi.waitFor(() => expect(events.some((event) => (event.progress?.receivedBytes ?? 0) > 0)).toBe(true))
     expect(models.hasActiveDownloads()).toBe(true)
-    expect(models.cancel('face_detection_yunet')).toBe(true)
-    await expect(running).rejects.toThrow(/^cancelled:/)
+    const stopped = expect(running).rejects.toThrow(/^cancelled:/)
+    expect(await models.cancel('face_detection_yunet')).toBe(true)
+    await stopped
     expect(models.hasActiveDownloads()).toBe(false)
+    expect((await models.info('face_detection_yunet')).lastFailure).toBe('cancelled')
+    expect(fs.readFileSync(`${modelPath()}.part`)).toEqual(bytes.subarray(0, 100))
+    expect(await models.cancel('face_detection_yunet')).toBe(false)
 
     responses['https://ms/own/yunet.onnx'] = ok
     await models.ensure('face_detection_yunet')

@@ -68,7 +68,7 @@ export function useVideoEditInPlaceMenu(instance: VideoEditInstance, sequence: V
     return result
   }
   const reopen = useCallback((job: VideoEditInPlaceJob): void => {
-    setOpen({ intent: job.request.intent, initial: { prompt: job.request.prompt, modelId: job.modelId, params: job.request.params, referenceRoles: job.request.referenceRoles }, replacesJobId: job.id })
+    setOpen({ intent: job.request.intent, initial: { prompt: job.request.prompt, modelId: job.modelId, params: job.request.params, referenceRoles: job.request.referenceRoles, referenceFrame: job.request.referenceFrame }, replacesJobId: job.id })
   }, [])
   const dialog = open ? <VideoEditInPlaceDialog projectId={projectId} sequenceId={sequence.id} intent={open.intent} initial={open.initial} replacesJobId={open.replacesJobId} onClose={() => setOpen(null)} /> : null
   return { items, reopen, dialog }

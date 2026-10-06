@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { UiButton, UiCheckbox, UiError, UiFieldLayoutContext, UiFieldTrigger, UiFormRow, UiLoading, UiModal, UiOptionButton } from '@/components/ui'
+import { UiButton, UiCheckbox, UiError, UiFieldLayoutContext, UiFieldTrigger, UiFormRow, UiInput, UiLoading, UiModal, UiOptionButton } from '@/components/ui'
 import { UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -8,7 +8,7 @@ import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSele
 import ParameterPanel from '@/components/MediaGenerator/components/ParameterPanel'
 import { parseLegacyPromptString, toPromptPlainText, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { videoEditReferenceLabel, type VideoEditInPlaceIntent, type VideoEditInPlaceMode, type VideoEditInPlacePlan, type VideoEditReferenceRole } from '@/core/videoEdit/inPlaceGeneration'
-import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
+import { parseVideoEditTimecodeInput, videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import type { GenerationModelFilterType } from '@/features/generation/domain/generationDraft'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
@@ -18,9 +18,10 @@ import { registry } from '@/core/ModelRegistry'
 import { requireVideoEditInstance } from '../application/videoEditService'
 import {
   planVideoEditInPlace, startVideoEditInPlaceGeneration, videoEditInPlaceActionLabel, videoEditInPlaceDefaultParams, videoEditInPlaceModelMismatch, videoEditInPlaceReferenceLimit,
+  selectVideoEditInPlaceReferences,
 } from '../application/videoEditInPlaceGeneration'
 
-export interface VideoEditInPlaceDialogInitial { prompt?: string; modelId?: string; params?: Record<string, unknown>; referenceRoles?: VideoEditReferenceRole[] }
+export interface VideoEditInPlaceDialogInitial { prompt?: string; modelId?: string; params?: Record<string, unknown>; referenceRoles?: VideoEditReferenceRole[]; referenceFrame?: number }
 interface Props { projectId: string; sequenceId: string; intent: VideoEditInPlaceIntent; initial?: VideoEditInPlaceDialogInitial; replacesJobId?: string; onClose: () => void }
 
 const PLACEHOLDERS: Record<VideoEditInPlaceIntent['action'], string> = {
@@ -59,6 +60,8 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
   const [modelId, setModelId] = useState<string | null>(initial?.modelId ?? null)
   const [params, setParams] = useState<Record<string, unknown>>({})
   const [roles, setRoles] = useState<VideoEditReferenceRole[] | null>(initial?.referenceRoles ?? null)
+  const [useSpecifiedFrame, setUseSpecifiedFrame] = useState(initial?.referenceFrame !== undefined)
+  const [referenceTimecode, setReferenceTimecode] = useState(() => videoEditFrameTimecode(initial?.referenceFrame ?? requireVideoEditInstance(projectId).frame, plan?.fps ?? 30))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // 模型面板的筛选是这个面板自己的；收藏与生成页共用
@@ -85,7 +88,16 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
   }, [modelId, plan, paramsModel, initial])
 
   const references = plan?.references ?? []
-  const wanted = references.filter(reference => roles === null || roles.includes(reference.role))
+  const referenceFrame = useSpecifiedFrame && plan ? parseVideoEditTimecodeInput(referenceTimecode, plan.fps, 0) : undefined
+  const selected = (() => {
+    try {
+      if (referenceFrame === null) throw new Error('请输入有效的参考帧时间码。')
+      // 失败后重开或切换放置方式时，原候选可能已消失；面板只提交当前仍可勾选的来源。
+      const availableRoles = roles?.filter(role => references.some(reference => reference.role === role))
+      return { references: plan ? selectVideoEditInPlaceReferences(plan, { ...(availableRoles !== undefined ? { referenceRoles: availableRoles } : {}), ...(referenceFrame !== undefined ? { referenceFrame } : {}) }) : [], error: '' }
+    } catch (reason) { return { references: [], error: reason instanceof Error ? reason.message : String(reason) } }
+  })()
+  const wanted = selected.references
   const referenceLimit = modelId ? videoEditInPlaceReferenceLimit(modelId, params, wanted.length) : wanted.length
   const usedImages = wanted.slice(0, referenceLimit).map((_, index) => `reference-${index + 1}`)
   const mismatch = plan && modelId ? videoEditInPlaceModelMismatch(plan, modelId) : null
@@ -98,7 +110,10 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
     if (!plan || !modelId) return
     setBusy(true); setError('')
     try {
-      await startVideoEditInPlaceGeneration({ projectId, sequenceId, intent: effectiveIntent, prompt: text, modelId, params, referenceRoles: wanted.map(reference => reference.role) }, replacesJobId ? { replacesJobId } : {})
+      await startVideoEditInPlaceGeneration({ projectId, sequenceId, intent: effectiveIntent, prompt: text, modelId, params,
+        referenceRoles: wanted.flatMap(reference => reference.role === 'specified_time' ? [] : [reference.role]),
+        ...(referenceFrame !== null && referenceFrame !== undefined ? { referenceFrame } : {}),
+      }, replacesJobId ? { replacesJobId } : {})
       onClose()
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } finally { setBusy(false) }
   }
@@ -121,7 +136,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
   return <UiModal isOpen title={title} size="form" onClose={onClose} footer={<>
     {modelId && !mismatch && <span className="mr-auto flex items-center"><PriceEstimate providerId={providerId} modelId={modelId} params={{ ...params, prompt: text, images: usedImages, uploadedImages: usedImages }} /></span>}
     <UiButton onClick={onClose}>取消</UiButton>
-    <UiButton variant="primary" disabled={!plan || !modelId || Boolean(mismatch) || !text || busy} onClick={() => { void submit() }}>{busy ? '正在提交…' : '生成'}</UiButton>
+    <UiButton variant="primary" disabled={!plan || !modelId || Boolean(mismatch) || Boolean(selected.error) || !text || busy} onClick={() => { void submit() }}>{busy ? '正在提交…' : '生成'}</UiButton>
   </>}>
     <div className="space-y-4" data-video-edit-in-place={intent.action}>
       {'error' in planned ? <UiError message={planned.error} /> : <>
@@ -132,12 +147,18 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
             {([['insert', '插入（后面的片段后移）'], ['overwrite', '覆盖']] as const).map(([value, label]) => <UiOptionButton key={value} variant="segment" size="sm" active={mode === value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)}>{label}</UiOptionButton>)}
           </div>
         </UiFormRow>}
-        {references.length > 0 && <UiFormRow label="参考画面" hint={modelId && referenceLimit < wanted.length ? referenceLimit === 0 ? '所选模型不使用参考画面，将只按提示词生成。' : `所选模型只用前 ${referenceLimit} 张参考画面。` : undefined}>
+        {plan?.mediaType === 'video' && <UiFormRow label="参考画面" hint={modelId && referenceLimit < wanted.length ? referenceLimit === 0 ? '所选模型不使用参考画面，将只按提示词生成。' : `所选模型只用前 ${referenceLimit} 张参考画面。` : undefined}>
           <div className="flex flex-col gap-1.5">
             {references.map(reference => <label key={reference.role} className="flex items-center gap-2 text-xs text-text2">
               <UiCheckbox checked={roles === null || roles.includes(reference.role)} onCheckedChange={on => toggleRole(reference.role, on)} aria-label={videoEditReferenceLabel(reference)} />
               <span className="truncate">{videoEditReferenceLabel(reference)}</span>
             </label>)}
+            <label className="flex items-center gap-2 text-xs text-text2">
+              <UiCheckbox checked={useSpecifiedFrame} onCheckedChange={setUseSpecifiedFrame} aria-label="指定时间帧" />
+              <span>指定时间的节目画面</span>
+            </label>
+            {useSpecifiedFrame && <UiInput aria-label="参考帧时间码" className="w-32" value={referenceTimecode} onChange={event => setReferenceTimecode(event.target.value)} />}
+            {selected.error && <UiError message={selected.error} />}
           </div>
         </UiFormRow>}
         <UiFieldLayoutContext.Provider value="toolbar">

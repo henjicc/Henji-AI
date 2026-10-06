@@ -3,13 +3,13 @@ import {
   generateVideoEditInPlaceCapability, getVideoEditInPlaceGenerationCapability, prepareVideoEditInPlaceGenerationCapability, switchVideoEditClipTakeCapability,
   type VideoEditInPlaceCapabilityInput,
 } from '@/core/application-control/domains/videoEdit/videoEditInPlaceGenerationCapabilities'
-import { videoEditReferenceLabel, type VideoEditInPlaceIntent, type VideoEditInPlacePlan } from '@/core/videoEdit/inPlaceGeneration'
+import { type VideoEditInPlaceIntent, type VideoEditInPlacePlan } from '@/core/videoEdit/inPlaceGeneration'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { splitVideoEditRef } from './videoEditReflection'
 import { requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved } from './videoEditService'
-import { findVideoEditInPlaceJobByTask, prepareVideoEditInPlace, startVideoEditInPlaceGeneration, switchVideoEditClipTakeInProject, videoEditInPlaceActionLabel, type VideoEditInPlaceRequest } from './videoEditInPlaceGeneration'
+import { findVideoEditInPlaceJobByTask, prepareVideoEditInPlace, startVideoEditInPlaceGeneration, switchVideoEditClipTakeInProject, videoEditInPlaceActionLabel, videoEditInPlaceReferenceLabel, selectedVideoEditInPlaceReferences, videoEditInPlaceDefaultParams, type VideoEditInPlaceRequest } from './videoEditInPlaceGeneration'
 
 /** 助手入口只把引用与秒换成界面同一份请求（时间线帧、轨道编号、片段 ID），之后与时间线右键走同一个服务。 */
 function childOf(projectId: string, ref: { kind: string; id: string }): string {
@@ -40,7 +40,10 @@ function toRequest(input: VideoEditInPlaceCapabilityInput): VideoEditInPlaceRequ
     case 'generate_audio': intent = target.clipRef ? { action: 'generate_audio', clipId: childOf(projectId, target.clipRef) } : { action: 'generate_audio', frame: Math.round(target.startSeconds! * fps), duration: frames(target.durationSeconds), trackIndex: trackIndex(target.trackRef, 'audio') }; break
   }
   for (const key of Object.keys(intent) as Array<keyof VideoEditInPlaceIntent>) if (intent[key] === undefined) delete intent[key]
-  return { projectId, sequenceId, intent, prompt: input.prompt, ...(input.modelId ? { modelId: input.modelId } : {}), ...(input.params ? { params: input.params } : {}), ...(input.useReferenceFrames === false ? { referenceRoles: [] } : {}) }
+  return { projectId, sequenceId, intent, prompt: input.prompt, ...(input.modelId ? { modelId: input.modelId } : {}), ...(input.params ? { params: input.params } : {}),
+    ...(input.useReferenceFrames === false ? { referenceRoles: [] } : input.referenceRoles !== undefined ? { referenceRoles: input.referenceRoles } : {}),
+    ...(input.referenceTimeSeconds !== undefined ? { referenceFrame: Math.round(input.referenceTimeSeconds * fps) } : {}),
+  }
 }
 function planSummary(projectId: string, plan: VideoEditInPlacePlan, references: string[]) {
   const owner = requireVideoEditInstance(projectId)
@@ -55,7 +58,7 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
   if (id === prepareVideoEditInPlaceGenerationCapability.id) {
     const input = prepareVideoEditInPlaceGenerationCapability.inputSchema.parse(raw)
     const prepared = await prepareVideoEditInPlace(toRequest(input))
-    const references = prepared.references.map(videoEditReferenceLabel)
+    const references = prepared.references.map(reference => videoEditInPlaceReferenceLabel(reference, prepared.plan.fps))
     return { documentRef: input.documentRef, plan: planSummary(input.documentRef.id, prepared.plan, references), preparation: prepared.preparation,
       message: `${videoEditInPlaceActionLabel(prepared.plan.action)}：${(prepared.plan.frame / prepared.plan.fps).toFixed(2)} 秒起约 ${(prepared.plan.duration / prepared.plan.fps).toFixed(1)} 秒，模型 ${prepared.modelId}${references.length ? `，参考 ${references.join('、')}` : '，不带参考帧'}。` }
   }
@@ -66,7 +69,9 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
     const existing = findVideoEditInPlaceJobByTask(taskId)
     const request = toRequest(input)
     const started = existing ? { job: existing, taskId } : await startVideoEditInPlaceGeneration(request, { taskId })
-    const references = started.job.plan.references.map(videoEditReferenceLabel)
+    const references = selectedVideoEditInPlaceReferences(started.job.plan, started.job.request, started.job.modelId,
+      { ...videoEditInPlaceDefaultParams(started.job.modelId, started.job.plan), ...started.job.request.params })
+      .map(reference => videoEditInPlaceReferenceLabel(reference, started.job.plan.fps))
     return { documentRef: input.documentRef, taskRef: { kind: 'generation.task', id: started.taskId }, plan: planSummary(input.documentRef.id, started.job.plan, references), status: 'submitted',
       message: `已提交${videoEditInPlaceActionLabel(started.job.plan.action)}，时间线上已放占位。用 wait_generation_task 等待，再用 get_video_edit_in_place_generation 确认落位。` }
   }

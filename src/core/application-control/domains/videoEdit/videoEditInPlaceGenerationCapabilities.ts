@@ -42,7 +42,13 @@ export const videoEditInPlaceInputSchema = z.object({
   modelId: z.string().trim().min(1).max(200).optional().describe('生成模型；省略时用默认模型里已配置且能接受这次输入的。镜头用视频模型（图片模型生成静帧），配音配乐用声音模型。'),
   params: z.record(z.string(), z.unknown()).optional().describe('模型参数（取自 get_model_schema）；时长与画面比例已按落点和序列自动换算，一般不用传。'),
   useReferenceFrames: z.boolean().optional().describe('是否带入参考帧（默认 true）：生成镜头带前一镜头尾帧与后一镜头首帧，替换带原镜头首帧，延长带原镜头尾帧；超过模型可接受的图片数量时只带前面的。'),
-}).strict()
+  referenceRoles: z.array(z.enum(['previous_tail', 'next_head', 'replaced_head', 'extended_tail'])).max(4).optional().describe('逐项选择参考来源，省略沿用落点自动参考；[] 取消全部自动参考。previous_tail 前一片段尾帧；next_head 后一片段首帧；replaced_head 被替换片段首帧；extended_tail 被延长片段尾帧。仅可选本次规划提供的来源，prepare 返回实际使用项。'),
+  referenceTimeSeconds: seconds.optional().describe('额外使用目标序列指定时间的节目画面（秒，按序列帧率取最近一帧，含合成效果）。省略取消这张参考；只用指定时间帧时同时传 referenceRoles=[]。自动参考排在前面，指定帧排在后面，受模型图片数量限制；声音生成不接受参考帧。'),
+}).strict().superRefine((input, context) => {
+  if (input.useReferenceFrames === false && ((input.referenceRoles?.length ?? 0) > 0 || input.referenceTimeSeconds !== undefined)) {
+    context.addIssue({ code: 'custom', path: ['useReferenceFrames'], message: 'useReferenceFrames=false 取消所有参考，不能同时指定 referenceRoles 或 referenceTimeSeconds。' })
+  }
+})
 export type VideoEditInPlaceCapabilityInput = z.infer<typeof videoEditInPlaceInputSchema>
 
 const taskRef = ref('generation.task')

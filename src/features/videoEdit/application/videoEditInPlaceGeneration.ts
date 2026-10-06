@@ -4,7 +4,8 @@ import type { ParamDef } from '@/core/types'
 import { transferModelParamOverrides } from '@/core/params/modelParamTransfer'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { isGenerationTerminalStatus, normalizeGenerationTaskStatus } from '@/core/application-control/domains/generation/taskStatus'
-import { landVideoEditInPlaceResult, planVideoEditInPlaceGeneration, switchVideoEditClipTake, type VideoEditInPlaceIntent, type VideoEditInPlacePlan, type VideoEditInPlaceReference, type VideoEditReferenceRole } from '@/core/videoEdit/inPlaceGeneration'
+import { landVideoEditInPlaceResult, planVideoEditInPlaceGeneration, switchVideoEditClipTake, videoEditReferenceLabel, type VideoEditInPlaceIntent, type VideoEditInPlacePlan, type VideoEditInPlaceReference, type VideoEditReferenceRole } from '@/core/videoEdit/inPlaceGeneration'
+import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { databaseService } from '@/services/database'
 import { videoEditInPlaceRecordSchema } from '@/core/videoEdit/inPlacePersistence'
@@ -37,6 +38,8 @@ export interface VideoEditInPlaceRequest {
   params?: Record<string, unknown>
   /** 要带入的参考帧；省略时带入规划给出的全部参考（受模型能接受的图片数量限制）。 */
   referenceRoles?: VideoEditReferenceRole[]
+  /** 指定目标序列的节目帧；省略时不带入，和自动参考来源独立选择。 */
+  referenceFrame?: number
 }
 export type VideoEditInPlaceStatus = 'preparing' | 'generating' | 'placing' | 'failed' | 'placed' | 'cancelled'
 export interface VideoEditInPlaceJob {
@@ -58,7 +61,7 @@ export interface VideoEditInPlacePreparation {
   providerId: string
   mediaType: 'image' | 'video' | 'audio'
   /** 实际带入的参考帧（按模型可接受的图片数量截取）。 */
-  references: VideoEditInPlaceReference[]
+  references: VideoEditInPlaceSelectedReference[]
   params: Record<string, unknown>
   preparation: Record<string, unknown>
 }
@@ -212,8 +215,26 @@ export function videoEditInPlaceModelMismatch(plan: VideoEditInPlacePlan, modelI
 }
 
 const placeholder = (index: number): string => `video-edit-reference-${index + 1}.png`
-function selectedReferences(plan: VideoEditInPlacePlan, request: VideoEditInPlaceRequest, modelId: string, params: Record<string, unknown>): VideoEditInPlaceReference[] {
-  const wanted = plan.references.filter(reference => !request.referenceRoles || request.referenceRoles.includes(reference.role))
+export type VideoEditInPlaceSelectedReference = VideoEditInPlaceReference | { role: 'specified_time'; sequenceId: string; frame: number }
+export function videoEditInPlaceReferenceLabel(reference: VideoEditInPlaceSelectedReference, fps: number): string {
+  return reference.role === 'specified_time' ? `指定时间 ${videoEditFrameTimecode(reference.frame, fps)} 的节目画面` : videoEditReferenceLabel(reference)
+}
+/** 界面、准备和提交的唯一参考选择入口；不取帧，不改变播放头。 */
+export function selectVideoEditInPlaceReferences(plan: VideoEditInPlacePlan, selection: Pick<VideoEditInPlaceRequest, 'referenceRoles' | 'referenceFrame'>): VideoEditInPlaceSelectedReference[] {
+  const available = plan.references.map(reference => reference.role)
+  const invalid = selection.referenceRoles?.filter(role => !available.includes(role)) ?? []
+  if (invalid.length) throw new Error(`本次落点没有参考来源 ${invalid.join('、')}；可用来源：${available.join('、') || '无'}，可用 referenceRoles=[] 取消自动参考。`)
+  const wanted: VideoEditInPlaceSelectedReference[] = plan.references.filter(reference => selection.referenceRoles === undefined || selection.referenceRoles.includes(reference.role))
+  if (selection.referenceFrame !== undefined) {
+    if (plan.mediaType === 'audio') throw new Error('声音生成不接受参考画面，请取消指定时间帧。')
+    const limit = Math.floor(plan.fps * 1800)
+    if (!Number.isSafeInteger(selection.referenceFrame) || selection.referenceFrame < 0 || selection.referenceFrame >= limit) throw new Error(`参考帧须为目标序列 0 到 ${limit - 1} 范围内的整数帧。`)
+    wanted.push({ role: 'specified_time', sequenceId: plan.sequenceId, frame: selection.referenceFrame })
+  }
+  return wanted
+}
+export function selectedVideoEditInPlaceReferences(plan: VideoEditInPlacePlan, request: VideoEditInPlaceRequest, modelId: string, params: Record<string, unknown>): VideoEditInPlaceSelectedReference[] {
+  const wanted = selectVideoEditInPlaceReferences(plan, request)
   return wanted.slice(0, videoEditInPlaceReferenceLimit(modelId, params, wanted.length))
 }
 
@@ -226,7 +247,7 @@ export async function prepareVideoEditInPlace(request: VideoEditInPlaceRequest):
   const model = registry.getModel(modelId)!
   const mediaType = model.meta.type as VideoEditInPlacePreparation['mediaType']
   const params = { ...videoEditInPlaceDefaultParams(modelId, plan), ...(request.params ?? {}) }
-  const references = selectedReferences(plan, request, modelId, params)
+  const references = selectedVideoEditInPlaceReferences(plan, request, modelId, params)
   const images = references.map((_, index) => placeholder(index))
   const preparation = generationApplicationService.prepare({ modelId, prompt: request.prompt, mediaType, options: { ...params, ...(images.length ? { images, uploadedFilePaths: images } : {}) } })
   return { plan, modelId, providerId: model.meta.provider, mediaType, references, params, preparation }
@@ -279,10 +300,11 @@ async function waitTask(taskId: string, signal: AbortSignal, recovering = false)
   })
 }
 
-async function referenceFiles(job: VideoEditInPlaceJob, references: VideoEditInPlaceReference[], signal: AbortSignal): Promise<string[]> {
+async function referenceFiles(job: VideoEditInPlaceJob, references: VideoEditInPlaceSelectedReference[], signal: AbortSignal): Promise<string[]> {
   const paths: string[] = []
   for (const reference of references) {
-    const observed = await observeVideoEditFrame(job.projectId, { kind: 'source', itemId: reference.itemId, timeUs: reference.sourceTimeUs }, 1920, signal)
+    const target = reference.role === 'specified_time' ? { kind: 'program' as const, sequenceId: reference.sequenceId, frame: reference.frame } : { kind: 'source' as const, itemId: reference.itemId, timeUs: reference.sourceTimeUs }
+    const observed = await observeVideoEditFrame(job.projectId, target, 1920, signal)
     paths.push(observed.asset.filePath)
   }
   return paths

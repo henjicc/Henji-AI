@@ -14,6 +14,7 @@ import {
   observeApplicationSurfaceCapability,
 } from './builtinApplicationCapabilities'
 import { SETTINGS_APPLICATION_CAPABILITIES } from './domains/settings/settingsApplicationCapabilities'
+import { cancelLocalModelDownloadCapability } from './domains/localModels/localModelCapabilities'
 import { ASSET_APPLICATION_CAPABILITIES } from './domains/asset/assetApplicationCapabilities'
 import { CAMERA_STAGE_APPLICATION_CAPABILITIES } from './domains/cameraStage/cameraStageApplicationCapabilities'
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from './domains/shared/applicationReflectionApplicationCapabilities'
@@ -37,6 +38,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   closeApplicationSurfaceCapability,
   focusApplicationEntityCapability,
   ...SETTINGS_APPLICATION_CAPABILITIES,
+  cancelLocalModelDownloadCapability,
   listGenerationHistoryCapability,
   openImageEditorWithSourceCapability,
   ...GENERATION_APPLICATION_CAPABILITIES,

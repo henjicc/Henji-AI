@@ -336,10 +336,12 @@ export class LocalModelService {
   }
 
   /** 取消进行中的下载；已下载部分保留。返回是否有可取消的下载。 */
-  cancel(id: LocalModelId): boolean {
+  async cancel(id: LocalModelId): Promise<boolean> {
     const active = this.active.get(id)
     if (!active) return false
     active.controller.abort()
+    // 与删除的取消屏障一致：等原下载释放文件并发布最终状态，再让 UI/助手回读。
+    await active.promise.catch(() => undefined)
     return true
   }
 

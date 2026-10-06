@@ -7,7 +7,7 @@ import { updateVideoEditClipStructure } from './videoEditCompositeEntities'
 /**
  * 片段速度的助手属性（4.13）：`speed_percent`、`reverse`、`preserve_pitch` 三个通用属性，写入时与“速度/持续时间”
  * 对话框走同一个领域入口（`applyVideoEditSpeedChange`，不波纹：变长只用到后面片段之前的空白）。
- * 波纹调整后续片段可在同一事务里先移动后面的片段、再写速度，不另开专用能力。
+ * 原子波纹变速走 ripple_video_edit_clip_speed，复用时间线 speed 编辑，不让助手手算后移量。
  */
 export const VIDEO_EDIT_SPEED_DATA_KEYS = ['speedPercent', 'reverse', 'preservePitch'] as const
 type Data = Record<string, JsonValue>

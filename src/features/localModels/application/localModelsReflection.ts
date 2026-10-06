@@ -194,7 +194,7 @@ export function createLocalModelRegistrations(): ApplicationEntityRegistration[]
       entity: {
         id: LOCAL_MODEL_ENTITY_TYPE, domain: DOMAIN, version: 1, title: '本地模型',
         description: '在本机运行的小模型（人脸检测、人物抠像、人像分割、文字检测、物体跟踪），第一次用到时自动下载，'
-          + '也可以提前下载或删除。读 status 看是否可用，写 downloaded 下载或删除。',
+          + '也可以提前下载或删除。读 status 看是否可用，写 downloaded 下载或删除；cancel_local_model_download 停止下载并保留部分文件。打开模型文件夹由设置页调用系统资源管理器，只供用户导航，不向助手开放。',
         refKind: LOCAL_MODEL_ENTITY_TYPE, dataClass: 'C0', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [],
         revisionScopes: [REVISION_SCOPE], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', LOCAL_MODEL_ENTITY_TYPE),
       },

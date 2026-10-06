@@ -7,12 +7,14 @@ import { videoEditInPlaceInputSchema } from '@/core/application-control/domains/
 
 /** 助手入口：秒与引用换成时间线同一份请求；同一操作重放不重复生成；切回版本经同一编辑入口并回读保存。 */
 const state = vi.hoisted(() => ({ document: null as unknown as VideoEditDocument }))
-const start = vi.hoisted(() => vi.fn(async (request: unknown, options: { taskId: string }) => ({ job: { id: 'job', projectId: 'p', plan: { action: 'generate_shot', sequenceId: 's', frame: 90, duration: 120, fps: 30, trackIndex: 1, placement: 'add', references: [] } }, taskId: options.taskId, request })))
+const start = vi.hoisted(() => vi.fn(async (request: unknown, options: { taskId: string }) => ({ job: { id: 'job', projectId: 'p', modelId: 'test-model', request, plan: { action: 'generate_shot', sequenceId: 's', frame: 90, duration: 120, fps: 30, trackIndex: 1, placement: 'add', references: [] } }, taskId: options.taskId, request })))
 const jobs = vi.hoisted(() => new Map<string, unknown>())
 vi.mock('./videoEditInPlaceGeneration', async () => {
   const { switchVideoEditClipTake } = await import('@/core/videoEdit/inPlaceGeneration')
+  const original = await vi.importActual<typeof import('./videoEditInPlaceGeneration')>('./videoEditInPlaceGeneration')
   return {
     startVideoEditInPlaceGeneration: start, prepareVideoEditInPlace: vi.fn(), videoEditInPlaceActionLabel: () => '生成镜头',
+    selectedVideoEditInPlaceReferences: original.selectedVideoEditInPlaceReferences, videoEditInPlaceDefaultParams: () => ({}), videoEditInPlaceReferenceLabel: original.videoEditInPlaceReferenceLabel,
     findVideoEditInPlaceJobByTask: (taskId: string) => jobs.get(taskId),
     switchVideoEditClipTakeInProject: (_projectId: string, sequenceId: string, clipId: string, index: number) => { state.document = switchVideoEditClipTake(state.document, sequenceId, clipId, index) },
   }
@@ -53,7 +55,7 @@ describe('原地生成助手能力', () => {
     expect(start.mock.calls[0][0]).toMatchObject({ projectId: document.id, sequenceId: sequence.id, intent: { action: 'generate_shot', frame: 90, duration: 120, trackIndex: track.index }, prompt: '日落空镜' })
     expect(output).toMatchObject({ status: 'submitted', taskRef: { kind: 'generation.task' } })
     const taskId = (output as { taskRef: { id: string } }).taskRef.id
-    jobs.set(taskId, { id: 'job', projectId: document.id, status: 'generating', taskId, plan: start.mock.calls[0] && (await start.mock.results[0].value).job.plan, request: {} })
+    jobs.set(taskId, { id: 'job', projectId: document.id, modelId: 'test-model', status: 'generating', taskId, plan: start.mock.calls[0] && (await start.mock.results[0].value).job.plan, request: {} })
     await handleVideoEditInPlaceCapability('generate_video_edit_in_place', raw, context)
     expect(start).toHaveBeenCalledTimes(1)
     expect(await handleVideoEditInPlaceCapability('get_video_edit_in_place_generation', { documentRef: raw.documentRef, taskRef: { kind: 'generation.task', id: taskId } }, context)).toMatchObject({ status: 'generating', progress: 40 })
@@ -68,5 +70,16 @@ describe('原地生成助手能力', () => {
   })
   it('不是原地生成的能力交回原处理', async () => {
     expect(await handleVideoEditInPlaceCapability('save_video_edit', {}, context)).toBeUndefined()
+  })
+  it('逐项参考和指定时间帧传到同一服务；取消参考不取帧，冲突与非法来源由契约拒绝', async () => {
+    const documentRef = { kind: 'video_edit.document', id: state.document.id }
+    const base = { documentRef, target: { action: 'generate_shot', startSeconds: 3 }, prompt: '日落' }
+    await handleVideoEditInPlaceCapability('generate_video_edit_in_place', { ...base, referenceRoles: [], referenceTimeSeconds: 1.25 }, context)
+    expect(start.mock.calls.at(-1)?.[0]).toMatchObject({ referenceRoles: [], referenceFrame: 38 })
+    await handleVideoEditInPlaceCapability('generate_video_edit_in_place', { ...base, useReferenceFrames: false }, context)
+    expect(start.mock.calls.at(-1)?.[0]).toMatchObject({ referenceRoles: [] })
+    expect(start.mock.calls.at(-1)?.[0]).not.toHaveProperty('referenceFrame')
+    expect(videoEditInPlaceInputSchema.safeParse({ ...base, useReferenceFrames: false, referenceTimeSeconds: 1 }).success).toBe(false)
+    expect(videoEditInPlaceInputSchema.safeParse({ ...base, referenceRoles: ['missing'] }).success).toBe(false)
   })
 })

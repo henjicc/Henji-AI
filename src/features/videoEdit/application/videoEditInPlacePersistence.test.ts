@@ -20,7 +20,7 @@ it('真实文档会话保存占位、旧文件兼容，重开恢复失败占位�
   const owner = await createVideoEditProject(); const id = owner.document.id
   const plan = planVideoEditInPlaceGeneration(owner.document, owner.activeSequenceId, { action: 'generate_shot', frame: 0, duration: 30 })
   const record: VideoEditInPlaceRecord = { id: 'job-persist', taskId: 'task-persist', modelId: 'model', plan,
-    request: { sequenceId: owner.activeSequenceId, intent: { action: 'generate_shot', frame: 0, duration: 30 }, prompt: '日落', params: { duration: 1 } }, status: 'failed', error: '审核未通过',
+    request: { sequenceId: owner.activeSequenceId, intent: { action: 'generate_shot', frame: 0, duration: 30 }, prompt: '日落', params: { duration: 1 }, referenceRoles: [], referenceFrame: 15 }, status: 'failed', error: '审核未通过',
   }
   const empty = videoEditContentSchema.parse(videoEditDocumentKind.createEmptyContent())
   expect(empty.inPlaceGenerations).toBeUndefined()
@@ -31,7 +31,7 @@ it('真实文档会话保存占位、旧文件兼容，重开恢复失败占位�
   expect(savedVideoEdit(id).inPlaceGenerations).toEqual([record])
   const reopened = await reopenVideoEdit(id)
   expect(reopened.document.inPlaceGenerations).toEqual([record])
-  expect(readVideoEditInPlaceJob(record.id)).toMatchObject({ taskId: 'task-persist', status: 'failed', error: '审核未通过', request: { projectId: id, params: { duration: 1 } } })
+  expect(readVideoEditInPlaceJob(record.id)).toMatchObject({ taskId: 'task-persist', status: 'failed', error: '审核未通过', request: { projectId: id, params: { duration: 1 }, referenceRoles: [], referenceFrame: 15 } })
 })
 
 it('编辑、撤销/重做、参数草稿取消保留最新占位；移除占位不清重做且撤销不会复活', async () => {

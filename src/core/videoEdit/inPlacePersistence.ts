@@ -18,7 +18,7 @@ export const videoEditInPlacePlanSchema = z.object({
 export const videoEditInPlaceRecordSchema = z.object({
   id, taskId: id, modelId: id, plan: videoEditInPlacePlanSchema,
   request: z.object({ sequenceId: id, intent: videoEditInPlaceIntentSchema, prompt: z.string().max(100_000), modelId: id.optional(),
-    params: z.record(z.string(), z.json()).optional(), referenceRoles: z.array(role).max(4).optional(),
+    params: z.record(z.string(), z.json()).optional(), referenceRoles: z.array(role).max(4).optional(), referenceFrame: frame.optional(),
   }).strict(),
   status: z.enum(['preparing', 'generating', 'placing', 'failed']), error: z.string().max(10_000).optional(),
   /** 已落位但保存失败时仅重试保存，不再导入、生成或放置。 */
