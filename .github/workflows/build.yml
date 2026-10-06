@@ -27,6 +27,8 @@ concurrency:
 
 env:
   NODE_VERSION: '22'
+  # onnxruntime-node 在 Linux 上安装时会去 NuGet 下载 CUDA 包（体积大、常超时）；本地推理只用 DirectML / CoreML / CPU，不需要 CUDA
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
 
 jobs:
   # ---------------------------------------------------------------------------
