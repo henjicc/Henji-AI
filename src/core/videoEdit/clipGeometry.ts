@@ -14,7 +14,12 @@ export type VideoEditClipPlacement = Pick<VideoEditClip, 'x' | 'y' | 'scale' | '
  * 片段画面的尺寸（遮罩、跟踪结果的宽高比以它为准）：视频与图片按素材显示尺寸，图形片段按图形画布，
  * 文字、代码与调整图层的画面就是整个序列。
  */
-export function videoEditClipPictureSize(document: Pick<VideoEditComposition, 'media' | 'items' | 'width' | 'height'>, clip: Pick<VideoEditClip, 'itemId' | 'kind' | 'graphic'>): VideoEditSize {
+export function videoEditClipPictureSize(document: Pick<VideoEditComposition, 'media' | 'items' | 'width' | 'height' | 'sequences'>, clip: Pick<VideoEditClip, 'itemId' | 'kind' | 'graphic'>): VideoEditSize {
+  if (clip.kind === 'sequence') {
+    const item = document.items.find(entry => entry.id === clip.itemId)
+    const sequence = document.sequences?.find(entry => entry.id === item?.sequenceId)
+    if (sequence) return { width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), height: sequence.height }
+  }
   if (clip.kind === 'video' || clip.kind === 'image') {
     const item = document.items.find(entry => entry.id === clip.itemId)
     const media = document.media.find(entry => entry.id === item?.mediaId)

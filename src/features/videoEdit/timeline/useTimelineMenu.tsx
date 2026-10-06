@@ -1,4 +1,6 @@
-import { Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight, Undo2, Gauge } from 'lucide-react'
+import { videoEditMulticamSource } from '@/core/videoEdit/multicam'
+import { switchVideoEditMulticam, autoSwitchVideoEditMulticam } from '../application/videoEditMulticam'
+import { Crop, Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight, Undo2, Gauge } from 'lucide-react'
 import { expandVideoEditSelection, videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -11,14 +13,19 @@ import type { VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChann
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import type { VideoEditInPlaceMenuTarget } from './useVideoEditInPlaceMenu'
 import type { VideoEditSceneTarget } from '../application/videoEditSceneDetection'
+import { useState } from 'react'
+import { ICON_WORKSPACE_CANVAS } from '@/core/theme/icons'
+import { VideoEditCanvasSendDialog, type VideoEditCanvasSendRequest } from '../panels/VideoEditCanvasSendDialog'
+import type { VideoEditNestTarget } from '../application/videoEditNesting'
 
 const actionIcons = { audio_gain: AudioLines, clip_speed: Gauge, copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
 type MenuCommand = keyof typeof actionIcons
 
 /** 原地生成（4.12）：按右键落点（轨道、帧、片段）给出菜单最前面的生成项。 */
 export interface TimelineInPlaceMenu { items(target: VideoEditInPlaceMenuTarget): MenuItem[]; frameAt(clientX: number): number | null }
-export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void, onOpenSource?: (clipId: string) => void, inPlace?: TimelineInPlaceMenu, onScenes?: (target: VideoEditSceneTarget) => void) {
+export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void, onOpenSource?: (clipId: string) => void, inPlace?: TimelineInPlaceMenu, onScenes?: (target: VideoEditSceneTarget) => void, onReframe?: (target: VideoEditSceneTarget) => void, onNest?: (target: VideoEditNestTarget) => void) {
   const menu = useContextMenu()
+  const [canvasSend, setCanvasSend] = useState<VideoEditCanvasSendRequest | null>(null)
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const show = (event: React.MouseEvent): void => {
     // 浮窗中的目标属于子窗口 realm，不能用 instanceof Element 判定。
@@ -43,7 +50,16 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       })
       // Premiere's "Audio Channels" on a sequence clip: reassign the source channels of the clicked clip (task 2.6).
       const clip = clipId ? sequence.clips.find(value => value.id === clipId) : undefined
+      if (clip && onNest) items.push({ id: 'nest_sequence', label: '嵌套…', icon: <Group size={16} />, disabled: sequence.clips.some(clip => ids.includes(clip.id) && sequence.tracks.find(track => track.index === clip.track)?.locked), onClick: () => onNest({ projectId: instance.document.id, sequenceId: sequence.id, clipIds: ids }) })
+      const multicam = clip && videoEditMulticamSource(instance.document, clip)
+      if (clip && multicam?.multicam) {
+        const target = { projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }
+        for (const [index, camera] of multicam.multicam.cameras.entries()) items.push({ id: `camera_${camera.id}`, label: `机位 ${index + 1} · ${camera.name}`, icon: <Play size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { try { switchVideoEditMulticam(target, camera.id) } catch (error) { onError(error) } } })
+        items.push({ id: 'auto_multicam', label: '建议机位切换', icon: <Play size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { void autoSwitchVideoEditMulticam(target).catch(onError) } })
+      }
       const media = clip && videoEditClipMedia(instance.document, clip)
+      if (clip && clip.kind !== 'adjustment' && clip.kind !== 'sequence') items.push({ id: 'send_canvas', label: '发送片段到画布…', icon: <ICON_WORKSPACE_CANVAS size={16} />, onClick: () => setCanvasSend({ projectId: instance.document.id, sequenceId: sequence.id, source: { kind: 'clip', clipId: clip.id } }) })
+      if (clip?.kind === 'video' && clip.sourceComponent !== 'audio' && media?.kind === 'video' && onReframe) items.push({ id: 'auto_reframe', label: '自动重构…', icon: <Crop size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onReframe({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
       if (clip?.kind === 'video' && media?.kind === 'video' && onScenes) items.push({ id: 'scene_detection', label: '场景编辑检测…', icon: <Scissors size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onScenes({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
       if (clip && media && onAudioChannels && (clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) {
         const locked = sequence.tracks.find(track => track.index === clip.track)?.locked === true
@@ -55,5 +71,5 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       menu.showMenu(event, items)
     } catch (error) { onError(error) }
   }
-  return { ...menu, show }
+  return { ...menu, show, canvasDialog: canvasSend ? <VideoEditCanvasSendDialog request={canvasSend} onClose={() => setCanvasSend(null)} /> : null }
 }

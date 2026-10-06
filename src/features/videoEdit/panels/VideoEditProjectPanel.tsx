@@ -1,7 +1,10 @@
+import { VideoEditMulticamDialog } from './VideoEditMulticamDialog'
+import { cancelVideoEditProxy, getVideoEditProxyPreference, readVideoEditProxyState, refreshVideoEditProxies, setVideoEditProxyPreference } from '../application/videoEditProxy'
+import { VideoEditProxyDialog } from './VideoEditProxyDialog'
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } from 'react-virtuoso'
-import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag } from 'lucide-react'
+import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag, Film } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { PanelTrigger, UiButton, UiEmpty, UiIconButton, UiSearchInput, UiOptionButton, UiToast } from '@/components/ui'
@@ -43,12 +46,12 @@ GridItem.displayName = 'VideoEditProjectGridItem'
 const gridComponents = { List: GridList, Item: GridItem }
 const SORT_OPTIONS = [{ value: 'name', label: '名称' }, { value: 'kind', label: '类型' }, { value: 'duration', label: '时长' }] as const
 /** 列表视图的列（PR 素材面板：名称、帧速率、媒体开始、媒体结束、媒体持续时间），点表头排序。 */
-const LIST_COLUMNS: Array<{ key: Exclude<VideoEditProjectSortKey, 'kind' | 'name'>; label: string }> = [
-  { key: 'frameRate', label: '帧速率' }, { key: 'mediaStart', label: '媒体开始' }, { key: 'mediaEnd', label: '媒体结束' }, { key: 'duration', label: '持续时间' },
+const LIST_COLUMNS: Array<{ key: Exclude<VideoEditProjectSortKey, 'kind' | 'name'> | 'proxy'; label: string }> = [
+  { key: 'frameRate', label: '帧速率' }, { key: 'mediaStart', label: '媒体开始' }, { key: 'mediaEnd', label: '媒体结束' }, { key: 'duration', label: '持续时间' }, { key: 'proxy', label: '代理' },
 ]
 /** 列宽（PR：拖表头之间的分隔线调整），本机记住；列宽总和超过面板宽时左右滚动。 */
 type ListColumnKey = 'name' | (typeof LIST_COLUMNS)[number]['key']
-const DEFAULT_COLUMN_WIDTHS: Record<ListColumnKey, number> = { name: 220, frameRate: 72, mediaStart: 96, mediaEnd: 96, duration: 96 }
+const DEFAULT_COLUMN_WIDTHS: Record<ListColumnKey, number> = { name: 220, frameRate: 72, mediaStart: 96, mediaEnd: 96, duration: 96, proxy: 88 }
 const COLUMN_WIDTHS_KEY = 'henji.videoEdit.projectColumns'
 const MIN_COLUMN_WIDTH = 48
 function readColumnWidths(): Record<ListColumnKey, number> {
@@ -105,10 +108,18 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const [sequenceDialog, setSequenceDialog] = useState<SequenceDialog | null>(null)
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null)
   const [creatingCode, setCreatingCode] = useState(false)
+  const projectId = instance.document.id
+  const [multicamItemIds, setMulticamItemIds] = useState<string[] | null>(null)
+  const proxyError = useRef(onError); proxyError.current = onError
+  const [proxyMediaIds, setProxyMediaIds] = useState<string[] | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    void refreshVideoEditProxies(projectId, controller.signal).catch(error => { if (!controller.signal.aborted) proxyError.current(error) })
+    return () => controller.abort()
+  }, [projectId, instance.document.media])
   const [audioChannels, setAudioChannels] = useState<VideoEditAudioChannelsTarget | null>(null)
   const anchor = useRef<string | null>(null)
   const menu = useContextMenu()
-  const projectId = instance.document.id
   const binId = instance.selectedBinId
   const activeSequence = instance.document.sequences.find(sequence => sequence.id === instance.activeSequenceId)
   const fallbackFps = activeSequence ? videoEditFps(activeSequence.frameRate) : 30
@@ -182,11 +193,15 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     ]
     const item = entry.value
     const ids = instance.selectedItemIds.includes(item.id) ? instance.selectedItemIds : [item.id]
+    const proxyIds = [...new Set(instance.document.items.filter(value => ids.includes(value.id) && value.kind === 'video').flatMap(value => value.mediaId ? [value.mediaId] : []))]
     const items = instance.document.items.filter(value => ids.includes(value.id))
     // Premiere "Modify > Audio Channels": several items at once only when their files have the same sound streams.
     const sounding = items.map(value => media.get(value.mediaId ?? '')).filter(value => value && (value.kind === 'audio' || value.kind === 'video' && value.hasAudio !== false))
     const audioTarget: VideoEditAudioChannelsTarget | undefined = sounding.length === items.length && sounding[0] && (items.length === 1 || sounding.every(value => value!.audioStreams && JSON.stringify(value!.audioStreams) === JSON.stringify(sounding[0]!.audioStreams))) ? { kind: 'items', itemIds: items.map(value => value.id), mediaId: sounding[0].id, ...(items[0].audioChannels ? { layout: items[0].audioChannels } : {}) } : undefined
     return [
+      { id: 'create_multicam', label: '创建多机位源序列…', icon: <SequenceIcon size={16} />, disabled: items.length < 2 || items.length > 9 || items.some(item => item.kind !== 'video'), onClick: () => setMulticamItemIds(ids) },
+      { id: 'create_proxy', label: '创建代理…', icon: <Film size={16} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => setProxyMediaIds(proxyIds) },
+      { id: 'cancel_proxy', label: '取消创建代理', icon: <RefreshCw size={16} />, disabled: !proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => proxyIds.forEach(id => cancelVideoEditProxy(projectId, id)) },
       { id: 'preview', label: '打开源素材', icon: <Play size={16} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
       { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, icon: <Plus size={16} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
       { id: 'sequence', label: item.kind === 'adjustment' ? '调整图层请添加到现有序列' : '按此素材新建序列', icon: <SequenceIcon size={16} />, disabled: ids.length !== 1 || item.kind === 'adjustment', onClick: () => createFromItem(item.id) },
@@ -207,7 +222,13 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       run(async () => {
         let skipped = 0
         const ids = await dropVideoEditInput(projectId, input, undefined, targetBin || undefined, { onSkipped: count => { skipped = count } })
-        if (input.kind === 'items') { updateVideoEditItems(projectId, ids, { binId: targetBin || null }); setVideoEditProjectView(projectId, { selectedBinId: targetBin, selectedItemIds: ids }) }
+        if (input.kind === 'items') {
+          const sequenceIds = ids.filter(id => instance.document.sequences.some(sequence => sequence.id === id))
+          for (const id of sequenceIds) updateVideoEditSequenceSettings(projectId, id, { binId: targetBin || null })
+          const itemIds = ids.filter(id => !sequenceIds.includes(id))
+          if (itemIds.length) updateVideoEditItems(projectId, itemIds, { binId: targetBin || null })
+          setVideoEditProjectView(projectId, { selectedBinId: targetBin, selectedItemIds: itemIds })
+        }
         else selectImported(targetBin, ids)
         reportSkipped(skipped)
       })
@@ -223,7 +244,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   }
   /** 一项的选择、双击、右键与拖动（列表行与图标格共用）。素材箱双击进入，素材拖到素材箱上即移入。 */
   const entryHandlers = (entry: VideoEditProjectEntry, selected: boolean) => ({
-    'data-video-edit-project-entry': entry.value.id, 'aria-label': entry.value.name, 'aria-pressed': selected, draggable: entry.kind === 'item',
+    'data-video-edit-project-entry': entry.value.id, 'aria-label': entry.value.name, 'aria-pressed': selected, draggable: entry.kind !== 'bin',
     onClick: (event: React.MouseEvent) => {
       if (entry.kind === 'bin') { setSelectedSequence(null); setSelectedBinRow(entry.value.id); run(() => setVideoEditProjectView(projectId, { selectedItemIds: [] })); return }
       setSelectedBinRow(null)
@@ -242,8 +263,8 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     },
     // 不显示浏览器自带的拖拽缩略图：它遮住落点、和实际位置对不上；拖到时间线上由时间线画出片段虚影（所见即所得）
     onDragStart: (event: React.DragEvent) => {
-      if (entry.kind !== 'item') return
-      const ids = selected ? instance.selectedItemIds : [entry.value.id]
+      if (entry.kind === 'bin') return
+      const ids = entry.kind === 'sequence' ? [entry.value.id] : selected ? instance.selectedItemIds : [entry.value.id]
       writeVideoEditItemDrag(event.dataTransfer, projectId, ids); event.dataTransfer.effectAllowed = 'copyMove'; event.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0)
       setDragFollow({ count: ids.length, x: event.clientX, y: event.clientY, hidden: false })
     },
@@ -265,7 +286,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const renderRow = (_index: number, row: VideoEditProjectRow): React.ReactElement => {
     const { entry } = row; const selected = isSelected(entry); const kind = kindOf(entry); const Icon = videoEditKindIcon(kind)
     const columns = videoEditProjectColumns(instance.document, entry, fallbackFps)
-    const cells: Record<(typeof LIST_COLUMNS)[number]['key'], string> = { frameRate: columns.frameRateText, mediaStart: columns.mediaStart, mediaEnd: columns.mediaEnd, duration: columns.durationText }
+    const cells: Record<(typeof LIST_COLUMNS)[number]['key'], string> = { frameRate: columns.frameRateText, mediaStart: columns.mediaStart, mediaEnd: columns.mediaEnd, duration: columns.durationText, proxy: entry.kind === 'item' && entry.value.kind === 'video' && entry.value.mediaId ? (() => { const state = readVideoEditProxyState(projectId, entry.value.mediaId!); return state.status === 'generating' ? `生成中 ${Math.round(state.progress * 100)}%` : state.status === 'ready' ? '已有' : state.error ? '无（创建失败）' : '无' })() : '' }
     return <div className="flex min-w-0 items-center" role="treeitem" aria-level={row.depth + 1} aria-expanded={row.expandable ? row.expanded : undefined} aria-selected={selected} style={{ paddingLeft: Math.min(row.depth, 8) * INDENT_PX }}>
       {row.expandable ? <UiIconButton size="xs" className="shrink-0" aria-label={`${row.expanded ? '折叠' : '展开'}素材箱 ${entry.value.name}`} onClick={() => toggleBin(entry.value.id)}>{row.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
       <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="min-h-7 min-w-0 flex-1 gap-2 !px-1.5" data-entry-kind={kind} {...entryHandlers(entry, selected)}>
@@ -346,6 +367,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       <PanelTrigger panelWidth={168} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={14} />导入文件</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={14} />导入文件夹</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" active={getVideoEditProxyPreference(projectId).autoCreate} onClick={() => setVideoEditProxyPreference(projectId, { autoCreate: !getVideoEditProxyPreference(projectId).autoCreate })}>导入高于 1080p 素材时自动创建代理</UiOptionButton>
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="导入" title="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import size={15} /></UiIconButton>}
       </PanelTrigger>
@@ -358,7 +380,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
           : <div className="flex h-full flex-col" style={{ minWidth: tableWidth }}>
             <div className="flex h-7 shrink-0 items-center border-b border-gap pl-5 pr-1.5" role="row" aria-label="列表列">
               {([{ key: 'name' as const, label: '名称' }, ...LIST_COLUMNS]).map(column => <div key={column.key} className="relative flex shrink-0 items-center" style={{ width: columnWidths[column.key] }}>
-                <UiButton size="sm" className="min-w-0 flex-1 !justify-start !px-1.5" aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => sortBy(column.key)}>{column.label}<SortMark sort={sort} column={column.key} /></UiButton>
+                <UiButton size="sm" className="min-w-0 flex-1 !justify-start !px-1.5" disabled={column.key === 'proxy'} aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => { if (column.key !== 'proxy') sortBy(column.key) }}>{column.label}{column.key !== 'proxy' && <SortMark sort={sort} column={column.key} />}</UiButton>
                 {/* 列分隔线：按住左右拖动调整列宽 */}
                 <span role="separator" aria-orientation="vertical" aria-label={`调整“${column.label}”列宽`} title="拖动调整列宽" className="absolute -right-1 bottom-1 top-1 z-raised w-2 cursor-col-resize border-r border-line hover:border-accent-ring" onPointerDown={resizeColumn(column.key)} onClick={event => event.stopPropagation()} />
               </div>)}
@@ -375,6 +397,8 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         </div>
         <UiButton size="sm" onClick={() => run(() => setVideoEditLabels(projectId, labelPicker.targets, null))}>按类型默认</UiButton>
       </div>} />}
+    {multicamItemIds && <VideoEditMulticamDialog projectId={projectId} sequenceId={instance.activeSequenceId} itemIds={multicamItemIds} onClose={() => setMulticamItemIds(null)} />}
+    {proxyMediaIds && <VideoEditProxyDialog projectId={projectId} mediaIds={proxyMediaIds} onClose={() => setProxyMediaIds(null)} onError={onError} />}
     {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {creatingCode && <VideoEditCodeCreateDialog projectId={projectId} binId={binId || undefined} onClose={() => setCreatingCode(false)} onCreated={ids => setVideoEditProjectView(projectId, { selectedItemIds: ids })} />}
     {edit && <VideoEditProjectEditDialog value={edit} bins={instance.document.bins} onClose={() => setEdit(null)} onSubmit={values => {

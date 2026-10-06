@@ -2,6 +2,7 @@ import type { VideoEditBin, VideoEditDocument, VideoEditItem, VideoEditSequence 
 import { videoEditLabelOf, type VideoEditLabel } from '@/core/videoEdit/labels'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
+import { videoEditDuration } from '@/core/videoEdit/document'
 
 export type VideoEditProjectEntry = { kind: 'item'; value: VideoEditItem } | { kind: 'sequence'; value: VideoEditSequence } | { kind: 'bin'; value: VideoEditBin }
 /** 列表视图可排序的列（PR 素材面板列表：名称、帧速率、媒体开始、媒体结束、媒体持续时间），另有图标视图沿用的“类型”。 */
@@ -25,7 +26,7 @@ export function videoEditProjectColumns(document: VideoEditDocument, entry: Vide
   const rateText = (fps: number): string => `${Number(fps.toFixed(3))} fps`
   if (entry.kind === 'sequence') {
     const fps = videoEditFps(entry.value.frameRate)
-    return timed(fps, Math.max(0, ...entry.value.clips.map(clip => clip.start + clip.duration)), rateText(fps), fps, videoEditLabelOf('sequence', entry.value.label))
+    return timed(fps, entry.value.clips.length || entry.value.captions?.length || entry.value.markers?.length ? videoEditDuration(entry.value) : 0, rateText(fps), fps, videoEditLabelOf('sequence', entry.value.label))
   }
   const item = entry.value
   const label = videoEditLabelOf(item.kind, item.label)
@@ -67,14 +68,14 @@ export function videoEditProjectRows(document: VideoEditDocument, binId: string,
   const query = keyword.trim().toLocaleLowerCase()
   const order = compare(document, sort, fallbackFps)
   if (query) {
-    const entries: VideoEditProjectEntry[] = [...document.items.map(value => ({ kind: 'item' as const, value })), ...document.sequences.map(value => ({ kind: 'sequence' as const, value }))]
+    const entries: VideoEditProjectEntry[] = [...document.items.filter(value => value.kind !== 'sequence').map(value => ({ kind: 'item' as const, value })), ...document.sequences.map(value => ({ kind: 'sequence' as const, value }))]
     return entries.filter(entry => `${entry.value.name} ${entry.kind === 'item' ? entry.value.tags?.join(' ') ?? '' : '序列'}`.toLocaleLowerCase().includes(query)).sort(order).map(entry => ({ entry, depth: 0, expandable: false, expanded: false }))
   }
   const rows: VideoEditProjectRow[] = []
   const walk = (parent: string, depth: number): void => {
     const children: VideoEditProjectEntry[] = [
       ...document.bins.filter(bin => (bin.parentId ?? '') === parent).map(value => ({ kind: 'bin' as const, value })),
-      ...document.items.filter(item => (item.binId ?? '') === parent).map(value => ({ kind: 'item' as const, value })),
+      ...document.items.filter(item => item.kind !== 'sequence' && (item.binId ?? '') === parent).map(value => ({ kind: 'item' as const, value })),
       ...document.sequences.filter(sequence => (sequence.binId ?? '') === parent).map(value => ({ kind: 'sequence' as const, value })),
     ].sort(order)
     for (const entry of children) {

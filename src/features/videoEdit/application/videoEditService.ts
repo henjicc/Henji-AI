@@ -1,3 +1,4 @@
+import { copyVideoEditSequence } from '@/core/videoEdit/sequenceCopy'
 import { createLogger } from '@/core/logging'
 import { reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
@@ -254,16 +255,7 @@ export function appendVideoEditSequence(projectId: string, settings: Partial<Omi
 export function duplicateVideoEditSequence(projectId: string, sequenceId: string): string {
   const source = requireVideoEditInstance(projectId).document.sequences.find(sequence => sequence.id === sequenceId)
   if (!source) throw new Error('目标序列不存在。')
-  const sequence = structuredClone(source); sequence.id = crypto.randomUUID(); sequence.name = `${source.name} 副本`
-  const clips = new Map(source.clips.map(clip => [clip.id, crypto.randomUUID()]))
-  const links = new Map(source.clips.filter(clip => clip.linkId).map(clip => [clip.linkId!, crypto.randomUUID()]))
-  const groups = new Map(source.clips.filter(clip => clip.groupId).map(clip => [clip.groupId!, crypto.randomUUID()]))
-  sequence.tracks = sequence.tracks.map(track => ({ ...track, id: crypto.randomUUID() }))
-  sequence.clips = sequence.clips.map(clip => ({ ...clip, id: clips.get(clip.id)!, ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...effect, id: crypto.randomUUID() })) } : {}), ...(clip.linkId ? { linkId: links.get(clip.linkId) } : {}), ...(clip.groupId ? { groupId: groups.get(clip.groupId) } : {}) }))
-  sequence.annotations = sequence.annotations.map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: clips.get(mark.clipId)! }))
-  if (sequence.markers) sequence.markers = sequence.markers.map(mark => ({ ...mark, id: crypto.randomUUID(), ...(mark.clipId ? { clipId: clips.get(mark.clipId)! } : {}) }))
-  if (sequence.captions) sequence.captions = sequence.captions.map(caption => ({ ...caption, id: crypto.randomUUID(), ...(caption.clipId ? { clipId: clips.get(caption.clipId)! } : {}) }))
-  if (sequence.transitions) sequence.transitions = sequence.transitions.map(transition => ({ ...transition, id: crypto.randomUUID(), ...(transition.leftClipId ? { leftClipId: clips.get(transition.leftClipId)! } : {}), ...(transition.rightClipId ? { rightClipId: clips.get(transition.rightClipId)! } : {}) }))
+  const sequence = copyVideoEditSequence(source)
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] })); return sequence.id
 }
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {

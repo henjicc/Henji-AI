@@ -1,5 +1,6 @@
+import { VideoEditReframeDialog } from './VideoEditReframeDialog'
 import { useState } from 'react'
-import { Settings2, Copy, Trash2, X } from 'lucide-react'
+import { Settings2, Crop, Copy, Trash2, X } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { UiChipButton, UiIconButton } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -9,6 +10,7 @@ import { VideoEditSequenceDialog } from './VideoEditSequenceDialog'
 
 export function VideoEditSequenceTabs({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement {
   const [settings, setSettings] = useState<VideoEditSequence | null>(null)
+  const [reframe, setReframe] = useState<string | null>(null)
   const menu = useContextMenu()
   const id = instance.document.id
   const run = (operation: () => void): void => { try { operation() } catch (error) { onError(error) } }
@@ -22,6 +24,7 @@ export function VideoEditSequenceTabs({ instance, onError }: { instance: VideoEd
         const active = sequence.id === instance.activeSequenceId
         return <div key={sequence.id} className="group/sequence-tab flex min-w-0 items-center" onContextMenu={event => menu.showMenu(event, [
           { id: 'settings', label: '序列设置', icon: <Settings2 size={16} />, onClick: () => setSettings(sequence) },
+          { id: 'auto_reframe', label: '自动重构序列…', icon: <Crop size={16} />, onClick: () => setReframe(sequence.id) },
           { id: 'duplicate', label: '复制序列', icon: <Copy size={16} />, onClick: () => run(() => switchVideoEditSequence(id, duplicateVideoEditSequence(id, sequence.id))) },
           { id: 'delete', label: '移除空序列', icon: <Trash2 size={16} />, disabled: instance.document.sequences.length <= 1 || !!sequence.clips.length || !!sequence.annotations.length, onClick: () => run(() => deleteVideoEditSequence(id, sequence.id)) },
         ])}>
@@ -32,6 +35,7 @@ export function VideoEditSequenceTabs({ instance, onError }: { instance: VideoEd
     </div>
     <UiIconButton size="sm" aria-label="序列设置" title="序列设置" onClick={() => setSettings(instance.document.sequences.find(item => item.id === instance.activeSequenceId)!)}><Settings2 size={14} /></UiIconButton>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
+    {reframe && <VideoEditReframeDialog target={{ projectId: id, sequenceId: reframe }} onClose={() => setReframe(null)} />}
     {settings && <VideoEditSequenceDialog title="序列设置" initial={settings} bins={instance.document.bins} onClose={() => setSettings(null)} onSubmit={values => updateVideoEditSequenceSettings(id, settings.id, values)} />}
   </div>
 }

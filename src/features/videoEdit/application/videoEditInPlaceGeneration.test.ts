@@ -40,6 +40,7 @@ vi.mock('./videoEditCreativeSources', () => ({ prepareVideoEditCreativeResult: a
 vi.mock('./videoEditResultTarget', () => ({ placeVideoEditFileInProject: async (_owner: unknown, path: string) => path }))
 vi.mock('./videoEditMedia', () => ({ importVideoEditSources: imports }))
 vi.mock('./videoEditService', () => ({
+  subscribeVideoEditDomain: () => () => undefined,
   requireVideoEditInstance: () => { if (!state.opened) throw new Error('已关闭'); return owner },
   subscribeVideoEdit: (listener: () => void) => { state.ownerListeners.add(listener); return () => state.ownerListeners.delete(listener) },
   updateVideoEditInPlaceMetadata: (_id: string, records: VideoEditDocument['inPlaceGenerations']) => { state.document = { ...state.document }; if (records?.length) state.document.inPlaceGenerations = structuredClone(records); else delete state.document.inPlaceGenerations },

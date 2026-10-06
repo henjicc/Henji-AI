@@ -3,6 +3,14 @@ import { createVideoEditDocument } from '@/core/videoEdit/document'
 import { selectVideoEditProjectItems, videoEditBinPath, videoEditProjectColumns, videoEditProjectRows } from './videoEditProjectModel'
 
 const byName = { key: 'name', direction: 'asc' } as const
+it('序列素材只显示一行；时长包括子序列字幕，隐藏持久化引用项', () => {
+  const document = createVideoEditDocument('嵌套素材'); const sequence = document.sequences[0]
+  sequence.captions = [{ id: 'caption', start: 0, duration: 90, text: '字幕' }]
+  document.items = [{ id: 'sequence-item', name: sequence.name, kind: 'sequence', sequenceId: sequence.id }]
+  const rows = videoEditProjectRows(document, '', '', byName, new Set())
+  expect(rows.map(row => row.entry.kind)).toEqual(['sequence'])
+  expect(videoEditProjectColumns(document, rows[0].entry, 30).duration).toBe(3)
+})
 function project() {
   const document = createVideoEditDocument('项目')
   document.bins = [{ id: 'b', name: 'B' }, { id: 'a', name: 'A', label: 'rose' }, { id: 'nested', name: '子箱', parentId: 'a' }]

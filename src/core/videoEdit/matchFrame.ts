@@ -1,6 +1,7 @@
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './document'
 import { videoEditFps } from './time'
 import { videoEditClipFrameAtSource, videoEditClipSourceRange, videoEditClipSourceSecondsAt } from './clipSpeed'
+import { videoEditNestedFrame } from './nestedSequences'
 
 /**
  * 匹配帧（Premiere F）与反向匹配帧（Shift+R）的落点计算，界面命令与测试共用。
@@ -9,10 +10,10 @@ import { videoEditClipFrameAtSource, videoEditClipSourceRange, videoEditClipSour
  * 在源监视器打开它的素材，定位到播放头对应的源帧，并把源入出点设成片段用到的那一段（PR 同样带出入出点）。
  * 反向匹配帧：源监视器当前打开的素材在当前序列里哪一段用到了当前源帧，播放头就移到那一帧。
  */
-export interface VideoEditMatchFrameTarget { clipId: string; itemId: string; timeUs: number; inUs: number | null; outUs: number | null }
+export interface VideoEditMatchFrameTarget { clipId: string; itemId: string; timeUs: number; inUs: number | null; outUs: number | null; sequenceId?: string; frame?: number }
 export interface VideoEditReverseMatchTarget { clipId: string; frame: number }
 type Clip = Pick<VideoEditClip, 'id' | 'itemId' | 'kind' | 'track' | 'start' | 'duration' | 'sourceInUs' | 'sourceRemainder' | 'speed' | 'reverse'>
-type MatchDocument = Pick<VideoEditDocument, 'items' | 'media'>
+type MatchDocument = Pick<VideoEditDocument, 'items' | 'media'> & Partial<Pick<VideoEditDocument, 'sequences'>>
 type MatchSequence = Pick<VideoEditSequence, 'clips' | 'tracks' | 'frameRate'>
 
 function mediaOf(document: MatchDocument, clip: Pick<Clip, 'itemId'>) {
@@ -26,11 +27,18 @@ function topmost(sequence: MatchSequence, clips: readonly Clip[]): Clip | undefi
 }
 
 export function videoEditMatchFrameTarget(document: MatchDocument, sequence: MatchSequence, input: { clipIds: readonly string[]; frame: number; targetTracks: readonly number[] }): VideoEditMatchFrameTarget | { reason: string } {
-  const covering = (clip: Clip): boolean => clip.start <= input.frame && input.frame < clip.start + clip.duration && Boolean(mediaOf(document, clip))
+  const nestedOf = (clip: Clip): VideoEditSequence | undefined => clip.kind === 'sequence' ? document.sequences?.find(sequence => sequence.id === document.items.find(item => item.id === clip.itemId)?.sequenceId) : undefined
+  const covering = (clip: Clip): boolean => clip.start <= input.frame && input.frame < clip.start + clip.duration && Boolean(mediaOf(document, clip) || nestedOf(clip))
   const selected = sequence.clips.filter(clip => input.clipIds.includes(clip.id) && covering(clip))
   const tracks = input.targetTracks.length ? input.targetTracks : sequence.tracks.map(track => track.index)
   const clip = topmost(sequence, selected.length ? selected : sequence.clips.filter(clip => tracks.includes(clip.track) && covering(clip)))
   if (!clip) return { reason: '播放头处没有来自素材文件的片段。' }
+  const nested = nestedOf(clip)
+  if (nested) {
+    const fps = videoEditFps(sequence.frameRate); const childFps = videoEditFps(nested.frameRate)
+    const frame = videoEditNestedFrame({ fps }, sequence.clips.find(value => value.id === clip.id)!, { ...nested, fps: childFps }, input.frame)
+    return { clipId: clip.id, itemId: clip.itemId, timeUs: Math.round(frame / childFps * 1e6), inUs: null, outUs: null, sequenceId: nested.id, frame }
+  }
   const media = mediaOf(document, clip)!
   const fps = videoEditFps(sequence.frameRate)
   const durationUs = Math.round(media.durationSeconds * 1e6)

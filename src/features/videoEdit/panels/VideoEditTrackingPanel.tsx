@@ -20,6 +20,7 @@ export function VideoEditTrackingPanel({ instance, onError }: { instance: VideoE
   const [pointCount, setPointCount] = useState('1')
   const sequence = getActiveVideoEditSequence(instance)
   const clip = sequence.clips.find(clip => clip.id === instance.selection)
+  if (clip?.kind === 'sequence') return <UiEmpty title="在子序列中建立跟踪" description="双击嵌套片段进入子序列，在其中的视频或图片片段上点选或框住要跟踪的物体。" />
   if (!clip || (clip.kind !== 'video' && clip.kind !== 'image')) return <UiEmpty title="选择视频或图片片段" description="在节目画面上点选或框住要跟踪的物体。" />
   const projectId = instance.document.id; const sequenceId = sequence.id
   const editing = getVideoEditTrackingEditing()
@@ -35,7 +36,7 @@ export function VideoEditTrackingPanel({ instance, onError }: { instance: VideoE
     ...(clip.effects ?? []).filter(effect => effect.builtin && effect.enabled).map(effect => ({ value: `effect:${effect.id}`, label: `作用区域 · ${effect.name}` })),
     ...(clip.effects ?? []).flatMap(effect => isShapesMask(effect.mask) ? effect.mask.shapes.map(shape => ({ value: `mask:${effect.id}:${shape.id}`, label: `${effect.name} · ${videoEditMaskShapeName(effect.mask!.regionId === 'shapes' ? effect.mask!.shapes : [], shape)}` })) : []),
     ...sequence.clips.filter(entry => entry.id !== clip.id && entry.kind !== 'audio' && entry.kind !== 'adjustment').map(entry => ({ value: `clip:${entry.id}`, label: `片段跟随 · ${entry.name}` })),
-    ...(tracker?.method === 'planar' ? sequence.clips.filter(entry => entry.id !== clip.id && (entry.kind === 'image' || entry.kind === 'video')).map(entry => ({value:`pin:${entry.id}`,label:`角点贴合 · ${entry.name}`})) : []),
+    ...(tracker?.method === 'planar' ? sequence.clips.filter(entry => entry.id !== clip.id && (entry.kind === 'image' || entry.kind === 'video' || entry.kind === 'sequence')).map(entry => ({value:`pin:${entry.id}`,label:`角点贴合 · ${entry.name}`})) : []),
   ]
   const apply = (): void => {
     if (!tracker) return

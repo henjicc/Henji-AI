@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { VideoEditSubtitleActions } from './VideoEditSubtitleActions'
+import { VideoEditTextPanel } from './VideoEditTextPanel'
 import { splitVideoEditSubtitle, mergeVideoEditSubtitles } from '../application/videoEditAutoSubtitles'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
@@ -35,6 +36,7 @@ function ContentAnchor({ clips, value, disabled, onChange }: { clips: VideoEditC
 function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEditInstance; sequence: VideoEditSequence; onError: (reason: unknown) => void }): React.ReactElement {
   const projectId = instance.document.id
   const [kind, setKind] = useState<Kind>('caption')
+  const [showText, setShowText] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [selectedId, setSelectedId] = useState('')
@@ -132,10 +134,11 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
         标签用面板标签外观，动作是图标按钮，二者不再长得一样，窄面板下也不换行。 */}
     <div className="flex shrink-0 items-center gap-1 px-2 pt-1">
       <div role="tablist" aria-label="字幕或标记" className="flex min-w-0 items-center">
-        {(['caption', 'marker'] as const).map(value => <UiChipButton key={value} role="tab" selectionRole="navigation" selectionAppearance="subtle" active={kind === value} aria-selected={kind === value} disabled={busy}
-          onClick={() => { setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
+        {(['caption', 'marker'] as const).map(value => <UiChipButton key={value} role="tab" selectionRole="navigation" selectionAppearance="subtle" active={!showText && kind === value} aria-selected={!showText && kind === value} disabled={busy}
+          onClick={() => { setShowText(false); setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
+        <UiChipButton role="tab" selectionRole="navigation" selectionAppearance="subtle" active={showText} aria-selected={showText} disabled={busy} onClick={() => { setShowText(true); setDraft(null) }}>文本</UiChipButton>
       </div>
-      <div className="ml-auto flex shrink-0 items-center gap-0.5">
+      {!showText && <div className="ml-auto flex shrink-0 items-center gap-0.5">
         {kind === 'caption' && <VideoEditSubtitleActions instance={instance} sequence={sequence} selectedCaptionId={selectedCaptionId} onError={report} />}
         <UiIconButton aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} title={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus size={16} /></UiIconButton>
         {kind === 'caption' && <PanelTrigger panelWidth={176} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
@@ -145,8 +148,9 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
         </div>}>
           {({ open, togglePanel }) => <UiIconButton aria-label="导入或导出字幕" title="导入或导出字幕" on={open} aria-haspopup="menu" aria-expanded={open} disabled={busy} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
         </PanelTrigger>}
-      </div>
+      </div>}
     </div>
+    {showText ? <VideoEditTextPanel instance={instance} sequence={sequence} onError={report} /> : <>
     <div className="shrink-0 px-2 py-1.5">
       <UiSearchInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" size="sm" className="w-full" value={keyword} onChange={event => setKeyword(event.target.value)} />
     </div>
@@ -186,6 +190,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
       </div>
     </UiGroup>}
     {busy && !draft && <UiButton className="mx-2 mb-2" onClick={cancel}>取消文件操作</UiButton>}
+    </>}
   </div>
 }
 

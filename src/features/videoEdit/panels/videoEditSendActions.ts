@@ -8,7 +8,7 @@ export type VideoEditSendSourceResolver = () => VideoEditCreativeSourceRequest |
 /** A target frozen by the workspace that started the round trip (e.g. an edited program frame). */
 export interface VideoEditBoundTarget { target: VideoEditResultTarget; label: string }
 
-export const VIDEO_EDIT_SEND_MODES: Array<{ mode: VideoEditSendMode; title: string }> = [{ mode: 'add', title: '加入播放头' }, { mode: 'replace', title: '替换所选片段' }]
+export const VIDEO_EDIT_SEND_MODES: Array<{ mode: VideoEditSendMode; title: string }> = [{ mode: 'library', title: '加入素材面板' }, { mode: 'overwrite', title: '播放头处覆盖' }, { mode: 'insert', title: '播放头处插入' }, { mode: 'add', title: '加入播放头' }, { mode: 'replace', title: '替换所选片段' }]
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error)
 function isAbort(error: unknown): boolean { return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError' }
 
@@ -18,11 +18,11 @@ export async function runVideoEditSend(run: () => Promise<VideoEditResultReceipt
 }
 
 /** Context-menu entries for hosts that already own a right-click menu (generation results). */
-export function videoEditSendMenuItems(mediaKind: VideoEditSendMediaKind, resolveSource: VideoEditSendSourceResolver, notify: VideoEditSendNotify, icon: React.ReactNode): MenuItem[] {
-  return VIDEO_EDIT_SEND_MODES.map(({ mode, title }) => {
+export function videoEditSendMenuItems(mediaKind: VideoEditSendMediaKind, resolveSource: VideoEditSendSourceResolver, notify: VideoEditSendNotify, icon: React.ReactNode, chooseDestination?: () => void): MenuItem[] {
+  return [...(chooseDestination ? [{ id: 'video-edit-choose', label: '发送到剪辑…', icon, onClick: chooseDestination }] : []), ...VIDEO_EDIT_SEND_MODES.map(({ mode, title }) => {
     const plan = planVideoEditSend({ mediaKind, mode })
     return { id: `video-edit-${mode}`, label: `剪辑：${title}`, icon, disabled: !plan.available,
-      onClick: () => { void runVideoEditSend(async () => sendCreativeResultToVideoEdit(await resolveSource(), { mediaKind, mode }), notify) } }
-  })
+      onClick: () => { void runVideoEditSend(async () => sendCreativeResultToVideoEdit(resolveSource, { mediaKind, mode }), notify) } }
+  })]
 }
 

@@ -1,4 +1,4 @@
-import { adjustVideoEditClip, videoEditClipMedia, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from './document'
+import { adjustVideoEditClip, videoEditClipSourceDuration, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { videoEditFps } from './time'
@@ -20,7 +20,7 @@ export type VideoEditTrimMode = 'ripple' | 'roll' | 'slip' | 'slide'
 export interface VideoEditTrim { mode: VideoEditTrimMode; clipIds: readonly string[]; edge?: 'in' | 'out'; delta: number }
 export interface VideoEditTrimResult { sequence: VideoEditSequence; delta: number }
 
-const TIMED_KINDS = new Set<VideoEditClip['kind']>(['video', 'audio', 'code', 'graphic', 'adjustment'])
+const TIMED_KINDS = new Set<VideoEditClip['kind']>(['video', 'audio', 'code', 'graphic', 'adjustment', 'sequence'])
 /** 与 adjustVideoEditClip 同一口径：有源时间的片段修剪入点时要平移源入点。 */
 function timed(clip: VideoEditClip): boolean { return TIMED_KINDS.has(clip.kind) || Boolean(clip.effects?.length) }
 const end = (clip: Pick<VideoEditClip, 'start' | 'duration'>): number => clip.start + clip.duration
@@ -38,7 +38,7 @@ class TrimContext {
   head(clip: VideoEditClip): number {
     if (!timed(clip)) return Infinity
     const program = clip.code ? this.metadata?.(clip.code) : undefined
-    return videoEditClipHeadRoom(clip, this.fps, program?.mode === 'dynamic' ? program.durationSeconds : videoEditClipMedia(this.composition, clip)?.durationSeconds)
+    return videoEditClipHeadRoom(clip, this.fps, program?.mode === 'dynamic' ? program.durationSeconds : videoEditClipSourceDuration(this.composition, clip))
   }
   /** 结尾还能往后延长多少帧（素材余量与序列上限）。 */
   tail(clip: VideoEditClip): number { return adjustVideoEditClip(this.composition, clip, { mode: 'out', delta: this.limit, track: clip.track }, this.metadata).duration - clip.duration }

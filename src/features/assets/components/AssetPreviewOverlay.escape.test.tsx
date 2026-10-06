@@ -22,7 +22,7 @@ vi.mock('@/components/mediaViewer/ImageViewerModal', () => ({ ImageViewerModal: 
 vi.mock('@/components/mediaViewer/VideoViewerModal', () => ({ VideoViewerModal: () => null }))
 vi.mock('@/components/mediaViewer/AudioViewerModal', () => ({ AudioViewerModal: () => null }))
 vi.mock('@/features/videoEdit/application/videoEditCodeAssets', () => ({ readVideoEditCodeAsset: vi.fn(), importVideoEditCodeAsset: vi.fn() }))
-vi.mock('@/features/videoEdit/application/videoEditService', () => ({ activeVideoEditInstance: () => undefined, subscribeVideoEdit: () => () => undefined }))
+vi.mock('@/features/videoEdit/application/videoEditService', () => ({ activeVideoEditInstance: () => undefined, subscribeVideoEdit: () => () => undefined, subscribeVideoEditDomain: () => () => undefined }))
 
 const image: AssetRecord = {
   id: 'img', mediaType: 'image', displayName: '图片', filePath: 'C:/a.png', displayUrl: 'henji-media://local/a.png', source: 'imported',

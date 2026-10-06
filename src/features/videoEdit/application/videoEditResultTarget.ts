@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { videoEditClipSchema, videoEditCreativeSourceSchema, type VideoEditCreativeSource, type VideoEditDocument } from '@/core/videoEdit/document'
-import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { makeVideoEditItemClip, placeVideoEditItem } from '@/core/videoEdit/projectItems'
+import { applyVideoEditTimelineEditResult } from '@/core/videoEdit/timelineEdits'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { importVideoEditCaptions } from '@/core/videoEdit/timedContent'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -16,8 +17,9 @@ const logger = createLogger('features.videoEdit.results')
 export type { VideoEditResultPlacement } from '@/core/videoEdit/creativeResult'
 export interface VideoEditResultTarget { readonly projectId: string; readonly sequenceId: string; readonly id: string }
 /** Only formal source adapters may produce a ready asset and fixed completion identity. */
-export interface VideoEditCreativeResult { asset: AssetRecord; origin: VideoEditCreativeSource; captions?: string }
-export interface VideoEditResultReceipt { projectId: string; sequenceId: string; clipId: string; assetId: string; verified: boolean }
+export interface VideoEditCreativeResult { asset: AssetRecord; origin?: VideoEditCreativeSource; captions?: string }
+/** library has itemId and an empty clipId; public callers receive the typed item ref. */
+export interface VideoEditResultReceipt { projectId: string; sequenceId: string; clipId: string; itemId?: string; assetId: string; verified: boolean }
 interface TargetState {
   owner: VideoEditInstance
   baseline: VideoEditDocument
@@ -37,6 +39,10 @@ export function assertVideoEditResultTarget(target: VideoEditResultTarget, signa
   const state = stateOf(target, signal)
   if (state.owner.document !== (state.committed?.document ?? state.baseline)) throw new Error('原剪辑已有修改，请重新选择结果位置；已完成文件仍保留。')
 }
+export function readVideoEditResultPlacement(target: VideoEditResultTarget): VideoEditResultPlacement {
+  assertVideoEditResultTarget(target)
+  return { ...stateOf(target).placement }
+}
 /** Called before any producer/read/export awaits. UI focus is never a destination. */
 export function captureVideoEditResultTarget(projectId: string, sequenceId: string, placement: VideoEditResultPlacement): VideoEditResultTarget {
   placement = videoEditResultPlacementSchema.parse(placement)
@@ -46,11 +52,11 @@ export function captureVideoEditResultTarget(projectId: string, sequenceId: stri
   const clip = placement.mode === 'replace' ? sequence.clips.find(value => value.id === placement.clipId) : undefined
   if (placement.mode === 'replace' && (!clip || clip.kind === 'adjustment')) throw new Error('请选择可替换的原画面或声音片段。')
   if (placement.mode === 'add' && placement.newTrack) videoEditEdgeTracks(sequence, placement.newTrack, 1)
-  else {
-    const track = placement.mode === 'add' ? sequence.tracks.find(value => value.id === placement.trackId) : sequence.tracks.find(value => value.index === clip?.track)
+  else if (placement.mode !== 'library') {
+    const track = placement.mode !== 'replace' ? sequence.tracks.find(value => value.id === placement.trackId) : sequence.tracks.find(value => value.index === clip?.track)
     if (!track || track.locked) throw new Error('原目标轨道不存在或已锁定。')
   }
-  if (placement.mode === 'add' && (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame >= Math.floor(videoEditFps(sequence.frameRate) * 1800) || placement.duration !== undefined && (!Number.isSafeInteger(placement.duration) || placement.duration < 1))) throw new Error('请选择序列范围内的落点与正整数帧时长。')
+  if (placement.mode !== 'replace' && placement.mode !== 'library' && (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame >= Math.floor(videoEditFps(sequence.frameRate) * 1800) || placement.duration !== undefined && (!Number.isSafeInteger(placement.duration) || placement.duration < 1))) throw new Error('请选择序列范围内的落点与正整数帧时长。')
   const target = Object.freeze({ projectId, sequenceId, id: crypto.randomUUID() })
   targets.set(target, { owner, baseline: owner.document, placement: { ...placement }, busy: false })
   return target
@@ -104,7 +110,7 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
   const started = performance.now()
   try {
     assertVideoEditResultTarget(target, signal)
-    const origin = videoEditCreativeSourceSchema.parse(result.origin)
+    const origin = result.origin === undefined ? undefined : videoEditCreativeSourceSchema.parse(result.origin)
     const asset = { ...result.asset }
     if (asset.mediaType === 'code' || asset.inspectionStatus !== 'ready' || !asset.contentIdentity || asset.sizeBytes === null || asset.fileModifiedAt === null) throw new Error('创作结果尚未完成本地媒体检查。')
     if (result.captions !== undefined && (asset.mediaType !== 'audio' || result.captions.length > 2 * 1024 * 1024)) throw new Error('口播字幕必须绑定已完成声音且不超过读取预算。')
@@ -113,12 +119,27 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       if (state.committed.result !== resultKey) throw new Error('原位置已接收另一份结果，请重新选择。')
       return await verifySaved(target, state)
     }
-    let clipId = ''; let expectedClip = ''
+    let clipId: string | undefined; let itemId = ''; let expectedClip = ''; let expectedItem = ''
     await importVideoEditSources(target.projectId, [{ assetId: asset.id }], undefined, signal, (document, itemIds) => {
       assertVideoEditResultTarget(target, signal)
       const item = document.items.find(item => itemIds.includes(item.id) && document.media.some(media => item.mediaId === media.id && sameAsset(media, asset)))
       if (!item) throw new Error('创作结果在引用期间已改变，请重新选择原结果。')
       const placement = state.placement
+      itemId = item.id; expectedItem = JSON.stringify(item)
+      if (placement.mode === 'library') return document
+      if (placement.mode === 'insert' || placement.mode === 'overwrite') {
+        const track = document.sequences.find(value => value.id === target.sequenceId)!.tracks.find(value => value.id === placement.trackId)!
+        const placed = placeVideoEditItem(document, item.id, target.sequenceId, { frame: placement.frame, track: track.index, duration: placement.duration })
+        const incoming = placed.clips.map(clip => ({ ...clip, ...(origin ? { creativeSource: origin } : {}) }))
+        const edited = applyVideoEditTimelineEditResult(document, target.sequenceId, {
+          kind: 'place', mode: placement.mode, frame: placement.frame, newTracks: placed.addedTracks,
+          clipboard: { projectId: document.id, frameRate: document.sequences.find(value => value.id === target.sequenceId)!.frameRate, clips: incoming, annotations: [] },
+        })
+        const clip = edited.sequence.clips.find(value => value.id === edited.selectedClipIds?.[0])!
+        clipId = clip.id; expectedClip = JSON.stringify(videoEditClipSchema.parse(clip))
+        const captions = result.captions === undefined ? edited.sequence.captions : [...(edited.sequence.captions ?? []), ...importVideoEditCaptions(result.captions, edited.sequence.frameRate, { offset: clip.start, clip })]
+        return { ...document, sequences: document.sequences.map(value => value.id === target.sequenceId ? { ...edited.sequence, ...(captions ? { captions } : {}) } : value) }
+      }
       // 没有空余轨道时新建的轨道与片段同一步编辑（一次撤销）。
       const added = placement.mode === 'add' && placement.newTrack ? videoEditEdgeTracks(document.sequences.find(value => value.id === target.sequenceId)!, placement.newTrack, 1) : []
       if (added.length) document = { ...document, sequences: document.sequences.map(value => value.id === target.sequenceId ? { ...value, tracks: [...value.tracks, ...added] } : value) }
@@ -131,7 +152,7 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       const natural = prior && asset.mediaType !== 'image' ? makeVideoEditItemClip(document, item.id, sequence.id, { frame, track, ...component }).duration : undefined
       const duration = placement.mode === 'add' ? placement.duration : Math.min(prior!.duration, natural ?? prior!.duration)
       const made = makeVideoEditItemClip(document, item.id, sequence.id, { frame, track, duration, ...component })
-      const clip = prior ? { ...made, id: prior.id, x: prior.x, y: prior.y, scale: prior.scale, rotation: prior.rotation, opacity: prior.opacity, volume: prior.volume, brightness: prior.brightness, ...(prior.linkId ? { linkId: prior.linkId } : {}), ...(prior.groupId ? { groupId: prior.groupId } : {}), ...(prior.effects ? { effects: prior.effects } : {}), creativeSource: origin } : { ...made, creativeSource: origin }
+      const clip = prior ? { ...made, id: prior.id, x: prior.x, y: prior.y, scale: prior.scale, rotation: prior.rotation, opacity: prior.opacity, volume: prior.volume, brightness: prior.brightness, ...(prior.linkId ? { linkId: prior.linkId } : {}), ...(prior.groupId ? { groupId: prior.groupId } : {}), ...(prior.effects ? { effects: prior.effects } : {}), ...(origin ? { creativeSource: origin } : {}) } : { ...made, ...(origin ? { creativeSource: origin } : {}) }
       if (!prior && sequence.clips.some(value => value.track === track && value.start < clip.start + clip.duration && value.start + value.duration > clip.start)) throw new Error('原落点已有片段，请选择空余轨道或明确替换原片段。')
       const captions = result.captions === undefined ? sequence.captions : [...(sequence.captions ?? []).filter(caption => caption.clipId !== clip.id), ...importVideoEditCaptions(result.captions, sequence.frameRate, { offset: clip.start, clip })]
       clipId = clip.id
@@ -141,10 +162,11 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
     }, state.placement.mode === 'replace' ? [state.placement.clipId] : [])
     stateOf(target)
     const committed = state.owner.document
-    if (committed.revision > state.baseline.revision + 1 || !publishedClip(committed, target.sequenceId, clipId, expectedClip)) throw new Error('结果发布后原剪辑已有后续修改，请回读原片段；不会重复回填。')
-    const receipt = { projectId: target.projectId, sequenceId: target.sequenceId, clipId, assetId: asset.id, verified: false }
+    const published = clipId ? publishedClip(committed, target.sequenceId, clipId, expectedClip) : JSON.stringify(committed.items.find(value => value.id === itemId)) === expectedItem
+    if (committed.revision > state.baseline.revision + 1 || !published) throw new Error('结果发布后原剪辑已有后续修改，请回读原素材或片段；不会重复回填。')
+    const receipt = { projectId: target.projectId, sequenceId: target.sequenceId, clipId: clipId ?? '', ...(!clipId ? { itemId } : {}), assetId: asset.id, verified: false }
     // 片段引用了来源文档：来源草稿哪怕只导入了素材，离开时也不能当空草稿删掉
-    if (origin.type === 'document') getDocumentSessionRegistry().get(origin.docRef.docId)?.markInUse()
+    if (origin?.type === 'document') getDocumentSessionRegistry().get(origin.docRef.docId)?.markInUse()
     state.committed = { document: committed, result: resultKey, receipt }
     // After the atomic edit, late cancellation cannot turn a committed result into a retry.
     const saved = await verifySaved(target, state)

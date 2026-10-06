@@ -10,6 +10,7 @@ import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, creat
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './videoEditCompositing'
 import { VideoEditSmartRegionControls } from '../panels/VideoEditSmartRegionControls'
 import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions, videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
+import { nestVideoEditSelection } from './videoEditNesting'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
@@ -48,6 +49,17 @@ async function project() {
   return { owner, id, video, other }
 }
 const flush = async (): Promise<void> => { for (let index = 0; index < 20; index++) await Promise.resolve() }
+it('嵌套导出等待子序列智能区域，不因父片段没有文件而略过子遮罩', async () => {
+  const { owner, id, video } = await project(); const sequenceId = owner.activeSequenceId
+  applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic'); await flush()
+  nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '带区域的子序列')
+  const snapshot = getActiveVideoEditSequence(owner)
+  let completed = false; const waiting = waitVideoEditSmartRegions(snapshot, snapshot).then(() => { completed = true })
+  await flush(); expect(completed).toBe(false)
+  const issued = ensure.mock.calls.at(-1)![0] as SmartRegionRequest
+  progress!({ request: issued, status: { state: 'ready', segment: { path: '/fixture/cache/face.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'yunet', summary: { value: 1, peak: 1 } } } })
+  await waiting; expect(completed).toBe(true)
+})
 
 it('助手：给视频片段加“人脸打码”（马赛克 + 人脸区域）即开始后台分析，读 region_status 看进度；改背景、清空区域；非画面素材片段被拒绝', async () => {
   const { owner, id, video, other } = await project()

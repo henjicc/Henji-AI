@@ -103,11 +103,14 @@ export function applyAudioEditSuggestion(project: AudioEditProjectDocument, id: 
   return { ...next, suggestions: next.suggestions.map((item) => item.id === id ? { ...item, status: 'applied' } : item) }
 }
 
-export function cleanAudioEditFillers(project: AudioEditProjectDocument, words: readonly string[], range?: AudioEditRange): AudioEditProjectDocument {
+export function audioEditFillerBlockIds(blocks: readonly AudioEditTranscriptBlock[], words: readonly string[], range?: AudioEditRange): string[] {
   const fillers = new Set(words.map(normalizeAudioEditFiller))
-  const ids = project.transcript.filter((block) => block.granularity === 'word' && block.included && !block.locked
+  return blocks.filter((block) => block.granularity === 'word' && block.included && !block.locked
     && (!range || (block.startFrame >= range.startFrame && block.endFrame <= range.endFrame))
     && fillers.has(normalizeAudioEditFiller(block.text))).map((block) => block.id)
+}
+export function cleanAudioEditFillers(project: AudioEditProjectDocument, words: readonly string[], range?: AudioEditRange): AudioEditProjectDocument {
+  const ids = audioEditFillerBlockIds(project.transcript, words, range)
   return ids.length ? setAudioEditBlocks(project, ids, false) : project
 }
 

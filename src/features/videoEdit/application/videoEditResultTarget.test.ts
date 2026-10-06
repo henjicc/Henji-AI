@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
+import path from 'node:path'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditSequence } from '@/core/videoEdit/document'
 import { createVideoEditProject, listVideoEditInstances, closeVideoEditProject, editVideoProject, switchVideoEditSequence, undoVideoEdit, saveVideoEdit, subscribeVideoEditDomain } from './videoEditService'
@@ -163,4 +164,36 @@ it('损坏或字段缺失的剪辑文件给出可理解的拒绝，不向界面�
   replaceSavedVideoEdit(id, { media: [], bins: [], items: [], sequences: [{ id: 's' }] })
   const partial = reopenVideoEdit(id)
   await expect(partial).rejects.toThrow('内容不完整或已损坏'); await expect(partial).rejects.not.toThrow('sequences')
+})
+
+it('素材面板只新增素材，回执可读回；重复发送与撤销不产生片段或多余历史', async () => {
+  const { owner, result, sequence } = await setup()
+  const target = captureVideoEditResultTarget(owner.document.id, sequence.id, { mode: 'library' })
+  const receipt = await commitVideoEditCreativeResult(target, { asset: result.asset })
+  expect(receipt).toMatchObject({ itemId: owner.document.items[0].id, verified: true })
+  expect(owner.document.media[0]).toMatchObject({ assetId: result.asset.id, assetContent: { contentIdentity: result.asset.contentIdentity } })
+  expect(owner.document.sequences[0].clips).toHaveLength(0)
+  expect(await commitVideoEditCreativeResult(target, { asset: result.asset })).toEqual(receipt)
+  expect(owner.past).toHaveLength(1)
+  undoVideoEdit(owner.document.id)
+  expect(owner.document.items).toHaveLength(0); expect(owner.document.media).toHaveLength(0)
+})
+
+it.each(['overwrite', 'insert'] as const)('%s 复用时间线裁切/插入，并在同一次撤销恢复媒体和原片段', async mode => {
+  const { owner, target, result, sequence } = await setup()
+  const first = await commitVideoEditCreativeResult(target, result)
+  const before = structuredClone(owner.document)
+  const nextAsset = asset({ id: 'new-image', filePath: path.resolve(path.sep, 'results', 'new.png'), contentIdentity: 'b'.repeat(64) })
+  vi.mocked(getPlatform().assetLibrary.inspectAsset).mockResolvedValue(nextAsset)
+  const incoming = captureVideoEditResultTarget(owner.document.id, sequence.id, { mode, frame: 40, duration: 10, trackId: sequence.tracks.find(track => track.kind === 'video')!.id })
+  const past = owner.past.length
+  const receipt = await commitVideoEditCreativeResult(incoming, { asset: nextAsset, origin: { ...origin, outputIndex: 2 } })
+  const clips = owner.document.sequences[0].clips
+  expect(clips.find(clip => clip.id === receipt.clipId)).toMatchObject({ start: 40, duration: 10, creativeSource: { outputIndex: 2 } })
+  expect(clips.filter(clip => clip.id !== receipt.clipId).map(clip => [clip.start, clip.duration]).sort((a, b) => a[0] - b[0])).toEqual(mode === 'overwrite' ? [[30, 10], [50, 40]] : [[30, 10], [50, 50]])
+  expect(clips.some(clip => clip.id === first.clipId)).toBe(true)
+  expect(owner.past).toHaveLength(past + 1)
+  undoVideoEdit(owner.document.id)
+  expect(owner.document.media).toEqual(before.media); expect(owner.document.items).toEqual(before.items)
+  expect(owner.document.sequences[0]).toEqual(before.sequences[0])
 })

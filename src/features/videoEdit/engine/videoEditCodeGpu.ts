@@ -487,6 +487,8 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     return target.picture
   }
   releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key); this.builtinRuntime?.releaseIdle() }
+  /** Only evict prior nested output frames; generated/effect surfaces have their own existing owner. */
+  releaseNestedFrames(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (key.startsWith('nested:frame:') && !keys.has(key)) this.releaseSurface(key) }
   /** CodeSources owns IR identity. Retired IR cannot leave an older pipeline identity behind. */
   retainProgramVersions(versions: ReadonlySet<string>): void {
     for (const version of this.filters.keys()) if (!versions.has(version)) this.filters.delete(version)

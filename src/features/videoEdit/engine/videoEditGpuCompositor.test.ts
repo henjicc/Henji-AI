@@ -8,7 +8,7 @@ import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 
-const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm' }))
+const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0 }))
 it('预览及离屏导出写同一透视矩阵，普通片段清空矩阵且不受上帧绑定污染',async()=> {
   const {compositor,device}=copyFixture(async()=>{})
   const project=createVideoEditDocument('贴屏');project.items.push({id:'image',kind:'image',name:'输入'})
@@ -27,9 +27,21 @@ it('预览及离屏导出写同一透视矩阵，普通片段清空矩阵且不�
 afterEach(() => { vi.unstubAllGlobals(); state.format = 'rgba8unorm' })
 vi.mock('@/core/imageEdit/webgpu/deviceManager', () => ({ ImageEditWebGpuDeviceManager: class {
   onDeviceLost() {}
-  async acquire() { return { device: state.device!, provider: { getPreferredCanvasFormat: () => state.format } } }
-  destroy() {}
+  async acquire() { state.acquisitions++; return { device: state.device!, provider: { getPreferredCanvasFormat: () => state.format } } }
+  destroy() { state.destroyedManagers++ }
 } }))
+it('嵌套合成共享父 GPU 设备，子合成器销毁不销毁父设备，保留半浮点图层', async () => {
+  const acquired = state.acquisitions; const destroyed = state.destroyedManagers
+  const { compositor, device } = copyFixture(async () => {})
+  const canvas = { width: 64, height: 64, getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) }) } as unknown as OffscreenCanvas
+  const child = compositor.fork(canvas)
+  const picture = await (await child.code()).target('nested:frame:0', 64, 64, 'rgba16float')
+  expect(picture.owner).toBe(device); expect(device.createTexture).toHaveBeenCalledWith(expect.objectContaining({ format: 'rgba16float' }))
+  expect(state.acquisitions).toBe(acquired + 1)
+  await child.dispose(); expect(state.destroyedManagers).toBe(destroyed)
+  await compositor.blank(64, 64, 0, 1 / 30)
+  await compositor.dispose(); expect(state.destroyedManagers).toBe(destroyed + 1)
+})
 function copyFixture(fence: () => Promise<void>) {
   const closed = vi.fn(); const destroyed = vi.fn()
   const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }

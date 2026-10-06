@@ -11,6 +11,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
 import { editVideoEditTracker } from './videoEditTrackingEdits'
+import { nestVideoEditSelection } from './videoEditNesting'
 import * as trackingEdits from './videoEditTrackingEdits'
 import { videoEditTrackerEntityId } from './videoEditCompositeEntities'
 import { resetVideoEditTrackingForTests, runVideoEditTracking, startVideoEditTracking, videoEditTrackResults, videoEditTrackingRequest, videoEditTrackingStatus, waitVideoEditTracking } from './videoEditTracking'
@@ -47,6 +48,17 @@ afterEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage()
 })
 const tracker = { id: 'track1', name: '杯子', method: 'box' as const, prompts: [{ timeUs: 0, box: [0.2, 0.2, 0.2, 0.3] as [number, number, number, number] }] }
+it('嵌套导出等待子序列跟踪，按完整快照提供子跟踪结果', async () => {
+  const { owner, id, sequenceId, video } = await project()
+  editVideoEditTracker(id, sequenceId, video.id, tracker); await flush()
+  editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === video.id)!.effects = [{ id: 'nested-effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
+  nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '含跟踪的子序列')
+  const snapshot = getActiveVideoEditSequence(owner); const definition = status.mock.calls.at(-1)![0]
+  let completed = false; const waiting = waitVideoEditTracking(snapshot, snapshot).then(() => { completed = true })
+  await flush(); expect(completed).toBe(false)
+  progress({ definition, status: { state: 'ready', result: result() } }); await waiting
+  expect(Object.keys(videoEditTrackResults(snapshot))).toHaveLength(1)
+})
 
 it.each(['point','planar'] as const)('面板建立 %s；中途拖点/拖角、AE 内外框及纠错可撤销',async method=> {
   const {owner,id,video}=await project();setVideoEditView(id,{frame:0,selection:video.id})

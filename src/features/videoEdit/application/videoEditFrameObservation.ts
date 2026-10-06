@@ -46,15 +46,17 @@ function sourceComposition(document: VideoEditDocument, itemId: string, timeUs: 
  * Renders one fixed-revision Program frame or Source time offscreen and publishes it as a library image.
  * The user's playhead, selection and Program surface are untouched; the bounded production trial queue is reused.
  */
-export async function observeVideoEditFrame(projectId: string, target: VideoEditFrameObservationTarget, maxWidth = VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH, signal: AbortSignal = new AbortController().signal): Promise<VideoEditFrameObservation> {
-  if (!Number.isSafeInteger(maxWidth) || maxWidth < 256 || maxWidth > 3840) throw new Error('观察宽度须为256到3840之间的整数像素。')
+export async function observeVideoEditFrame(projectId: string, target: VideoEditFrameObservationTarget, maxWidth: number | null = VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH, signal: AbortSignal = new AbortController().signal, snapshot?: VideoEditComposition): Promise<VideoEditFrameObservation> {
+  // null 仅供工作区流转保存完整画幅；助手观察仍由公开 schema 限制尺寸预算。
+  if (maxWidth !== null && (!Number.isSafeInteger(maxWidth) || maxWidth < 256 || maxWidth > 3840)) throw new Error('观察宽度须为256到3840之间的整数像素。')
   const owner = requireVideoEditInstance(projectId); const document = owner.document
   const started = performance.now()
   let composition: VideoEditComposition; let frame = 0
   if (target.kind === 'program') {
     const sequenceId = target.sequenceId ?? owner.activeSequenceId
     if (!document.sequences.some(sequence => sequence.id === sequenceId)) throw new Error('目标序列不存在。')
-    composition = videoEditComposition(document, sequenceId)
+    composition = snapshot ?? videoEditComposition(document, sequenceId)
+    if (composition.id !== sequenceId || composition.revision !== document.revision) throw new Error('原片段版本已改变，请重新发送。')
     if (!Number.isSafeInteger(target.frame) || target.frame < 0 || target.frame >= Math.floor(composition.fps * 1800)) throw new Error('请指定序列范围内的整数帧。')
     frame = target.frame
   } else composition = sourceComposition(document, target.itemId, target.timeUs)
@@ -63,7 +65,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   if (!bitmap) throw new Error('指定画面没有渲染结果，请重试。')
   let bytes: Uint8Array; let width: number; let height: number; const sourceWidth = bitmap.width; const sourceHeight = bitmap.height
   try {
-    width = Math.min(maxWidth, bitmap.width); height = Math.max(1, Math.round(bitmap.height * width / bitmap.width))
+    width = maxWidth === null ? bitmap.width : Math.min(maxWidth, bitmap.width); height = Math.max(1, Math.round(bitmap.height * width / bitmap.width))
     const canvas = new OffscreenCanvas(width, height); const context = canvas.getContext('2d')
     if (!context) throw new Error('无法生成观察图片。')
     context.imageSmoothingQuality = 'high'; context.drawImage(bitmap, 0, 0, width, height)

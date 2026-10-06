@@ -67,7 +67,7 @@ async function refreshOnce(projectId: string, documentId: string): Promise<numbe
       : path,
   })
   const origin = prepared.origin
-  if (origin.type !== 'document') return 0
+  if (origin?.type !== 'document') return 0
   let changed = 0
   await importVideoEditSources(projectId, [{ assetId: prepared.asset.id }], undefined, undefined, (document, itemIds) => {
     assertOwner()

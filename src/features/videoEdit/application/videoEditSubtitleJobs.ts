@@ -43,7 +43,7 @@ export async function runVideoEditSubtitleJob(owner: VideoEditInstance, sequence
 }
 
 /** Reopen recovers only this module's saved project-local mixes, never unrelated voiceover documents. */
-export async function findRecoverableSubtitleAudio(owner: VideoEditInstance, sequenceId: string): Promise<string | undefined> {
+export async function findRecoverableSubtitleAudio(owner: VideoEditInstance, sequenceId: string, includeCommitted = false): Promise<string | undefined> {
   const operations = videoEditDocumentOperations()
   const documents = await operations.listDocuments({ kind: 'audio_edit', container: owner.session.documentMeta.container, includeDrafts: true, includeMissing: false })
   for (const document of documents.sort((a, b) => b.updatedAt - a.updatedAt)) {
@@ -53,7 +53,7 @@ export async function findRecoverableSubtitleAudio(owner: VideoEditInstance, seq
       const path = `${source}.subtitle.json`
       if (!await getPlatform().system.fs.exists(path)) continue
       const manifest: unknown = JSON.parse(await getPlatform().system.fs.readTextFile(path))
-      if (typeof manifest === 'object' && manifest !== null && 'projectId' in manifest && 'sequenceId' in manifest && !('committed' in manifest && manifest.committed === true) && manifest.projectId === owner.document.id && manifest.sequenceId === sequenceId) return document.id
+      if (typeof manifest === 'object' && manifest !== null && 'projectId' in manifest && 'sequenceId' in manifest && (includeCommitted || !('committed' in manifest && manifest.committed === true)) && manifest.projectId === owner.document.id && manifest.sequenceId === sequenceId) return document.id
     } catch (error) { logger.warn('字幕恢复记录无法读取', { event: 'video_edit.subtitle.recovery.failed', error, context: { audioDocumentId: document.id } }) }
   }
   return undefined

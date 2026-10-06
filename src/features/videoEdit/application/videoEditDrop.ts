@@ -14,6 +14,8 @@ import { importVideoEditPathsAndFolders } from './videoEditFolderImport'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { rescaleVideoEditFrame, type VideoEditRatio } from '@/core/videoEdit/time'
 import { resolveVideoEditDropMode, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
+import { ensureVideoEditSequenceItem } from '@/core/videoEdit/nestedSequences'
+import { assertVideoEditSequenceGraph } from '@/core/videoEdit/sequenceGraph'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
 export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
@@ -59,6 +61,10 @@ export function videoEditDropPaths(transfer: DataTransfer): string[] {
  * 不另建序列；落点帧按新帧率换算，保持同一时刻。
  */
 export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly string[], sequenceId: string, placement: VideoEditDropPlacement, options: { targetTrackIds: readonly string[]; matchEmptySequence?: boolean; sequenceSettings?: VideoEditSequenceSettings; codeMetadata?: CodeMaterialMetadataReader }): { document: VideoEditDocument; selectedClip?: string; placedClips: VideoEditClip[]; resultSequence: VideoEditSequence; frameRate: VideoEditRatio } {
+  ids = ids.map(id => {
+    if (!source.sequences.some(sequence => sequence.id === id)) return id
+    const resolved = ensureVideoEditSequenceItem(source, id); source = resolved.document; return resolved.itemId
+  })
   const original = source.sequences.find(sequence => sequence.id === sequenceId)
   if (!original) throw new Error('原落点序列已移除，请重新拖入。')
   let document = source; let sequence = original; let frame = placement.frame
@@ -87,6 +93,7 @@ export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly stri
   }, options.codeMetadata)
   const selectedIndex = placed.primaryIds.length ? resolved.clips.findIndex(clip => clip.id === placed.primaryIds.at(-1)) : -1
   const selectedClip = selectedIndex >= 0 ? result.selectedClipIds?.[selectedIndex] : undefined
+  assertVideoEditSequenceGraph({ ...document, sequences: document.sequences.map(item => item.id === sequenceId ? result.sequence : item) })
   return {
     document: { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? result.sequence : item) },
     ...(selectedClip ? { selectedClip } : {}),

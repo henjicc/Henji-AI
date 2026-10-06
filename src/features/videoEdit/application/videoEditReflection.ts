@@ -1,6 +1,9 @@
+import { ensureVideoEditProxyState, getVideoEditProxyPreference, readVideoEditProxyState } from './videoEditProxy'
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
 import { videoEditClipMedia, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditClipSpeedData } from './videoEditClipSpeed'
+import { videoEditComposition } from '@/core/videoEdit/document'
+import { videoEditTranscriptWords, resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
 import { VIDEO_EDIT_MAX_EFFECTS } from '@/core/videoEdit/compositing'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEditTransitionClipIds, VIDEO_EDIT_TRANSITION_PRESETS, VIDEO_EDIT_TRANSITION_REF_PREFIX } from '@/core/videoEdit/transitions'
@@ -40,7 +43,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
 }
 export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
-  if (ref.kind === 'video_edit.document') return { lumetriLuts: (instance.document.lumetriLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
+  if (ref.kind === 'video_edit.document') return { proxyPreference: { ...getVideoEditProxyPreference(projectId) }, lumetriLuts: (instance.document.lumetriLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === ref.kind)) return videoEditCompositeData(instance.document, ref.kind as VideoEditCompositeEntityType, childId)
   if (ref.kind === 'video_edit.builtin_effect') {
@@ -67,8 +70,17 @@ export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const found = videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).find(item => item.id === childId)
   if (!found) throw new Error('NOT_FOUND：目标不属于此剪辑或已删除。')
   const data = JSON.parse(JSON.stringify(found)) as VideoEditFieldData
+  if (ref.kind === 'video_edit.media') data.proxyState = { ...readVideoEditProxyState(projectId, childId) }
+  if (ref.kind === 'video_edit.sequence') {
+    data.multicam ??= null
+    const composition = videoEditComposition(instance.document, childId)
+    data.transcript = videoEditTranscriptWords(composition).map(word => ({ index: word.index, text: word.text, from: word.from, to: word.to, editable: !word.locked && word.granularity === 'word', granularity: word.granularity }))
+    data.textSilences = resolveVideoEditTextRanges(composition, { kind: 'silence' }).map(range => ({ ...range }))
+  }
   if (ref.kind === 'video_edit.clip') {
     const clip = instance.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === childId)!
+    const source = instance.document.sequences.find(sequence => sequence.id === instance.document.items.find(item => item.id === clip.itemId)?.sequenceId)
+    if (source?.multicam) data.multicamCameraId = clip.multicamCameraId ?? source.multicam.cameras[0].id
     Object.assign(data, { graphicObjectIds: clip.graphic?.objects.map(object => object.id) ?? [], effectIds: clip.effects?.map(effect => effect.id) ?? [], adjustmentFromTrack: clip.adjustment?.fromTrack ?? null }, videoEditClipSpeedData(clip))
   }
   if (ref.kind === 'video_edit.item') {
@@ -85,6 +97,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
     return { refs: all.slice(offset, offset + request.limit), nextCursor: offset + request.limit < all.length ? String(offset + request.limit) : null, revisions: { video_edit: videoEditRevision() } }
   }
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
+    if (this.entityType === 'video_edit.media' && (!request.propertyIds?.length || request.propertyIds.includes('video_edit.media.proxy_state'))) { const target = splitVideoEditRef(ref); await ensureVideoEditProxyState(target.projectId, target.childId) }
     const data = fieldReadValues(VIDEO_EDIT_FIELDS[this.entityType], readVideoEditData(ref))
     return { ref, entityType: this.entityType, revisions: { video_edit: videoEditRevision() }, properties: request.propertyIds?.length ? Object.fromEntries(Object.entries(data).filter(([key]) => request.propertyIds!.includes(key))) : data, capturedAt: new Date().toISOString() }
   }
@@ -96,6 +109,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
       const absent = ['video_edit.clip.code_parameters', 'video_edit.clip.code_curves', 'video_edit.clip.code_version_id'].includes(propertyId) && !data.code
       const wrongKind = propertyId === 'video_edit.clip.graphic_object_ids' && data.kind !== 'graphic' || propertyId === 'video_edit.clip.adjustment_from_track' && data.kind !== 'adjustment'
       const { projectId, childId } = splitVideoEditRef(ref); const document = requireVideoEditInstance(projectId).document
+      const multicamUnsupported = propertyId === 'video_edit.sequence.multicam' && !data.multicam || propertyId === 'video_edit.clip.multicam_camera_id' && !document.sequences.some(sequence => sequence.multicam && sequence.id === document.items.find(item => item.id === data.itemId)?.sequenceId)
       const roleOwner = propertyId === 'video_edit.clip.audio_role' ? document.sequences.flatMap(sequence => sequence.clips.map(clip => ({ clip, sequence }))).find(value => value.clip.id === childId) : undefined
       const roleUnsupported = roleOwner && (!(roleOwner.clip.kind === 'audio' || roleOwner.clip.kind === 'video' && roleOwner.clip.sourceComponent !== 'video') || !videoEditClipMedia({ ...document, ...roleOwner.sequence }, roleOwner.clip) || videoEditClipMedia({ ...document, ...roleOwner.sequence }, roleOwner.clip)?.hasAudio === false)
       const childOwner = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) ? videoEditCompositeOwner(document, this.entityType as VideoEditCompositeEntityType, childId) : undefined
@@ -104,8 +118,8 @@ class VideoEditProvider implements ApplicationEntityProvider {
       const builtin = childOwner?.kind === 'effect' ? childOwner.effect.builtin : undefined
       const curveReason = curveKey && this.entityType === 'video_edit.effect' && (!builtin || !requireVideoEditBuiltinEffect(builtin.id).params.some(param => param.key === curveKey)) ? '此内置效果没有该参数；代码滤镜请用 curves 源时间曲线。' : curveKey && this.entityType === 'video_edit.clip' && (data.kind === 'adjustment' && curveKey !== 'opacity' || data.kind === 'audio' && curveKey !== 'volume') ? '此片段类型不支持该动画参数。' : undefined
       const locked = childOwner ? childOwner.clipIds.some(id => childOwner.sequence.tracks.find(track => track.index === childOwner.sequence.clips.find(clip => clip.id === id)?.track)?.locked) : false
-      const reasons = roleUnsupported ? ['只有带声音的音视频片段可以标注声音类型。'] : curveReason ? [curveReason] : absent ? ['此片段没有代码实例参数。'] : wrongKind ? ['此片段类型不支持该操作。'] : locked ? ['所属轨道已锁定。'] : field.writer ? [] : [field.descriptor.readOnlyReason!]
-      return { propertyId, readable: true, writable: Boolean(field.writer) && !absent && !wrongKind && !locked && !curveReason && !roleUnsupported, reasons, requiredPermissions: ['video_edit:read'], revisions: { video_edit: videoEditRevision() } }
+      const reasons = multicamUnsupported ? ['请选择多机位源序列或多机位片段。'] : roleUnsupported ? ['只有带声音的音视频片段可以标注声音类型。'] : curveReason ? [curveReason] : absent ? ['此片段没有代码实例参数。'] : wrongKind ? ['此片段类型不支持该操作。'] : locked ? ['所属轨道已锁定。'] : field.writer ? [] : [field.descriptor.readOnlyReason!]
+      return { propertyId, readable: true, writable: Boolean(field.writer) && !absent && !wrongKind && !locked && !curveReason && !roleUnsupported && !multicamUnsupported, reasons, requiredPermissions: ['video_edit:read'], revisions: { video_edit: videoEditRevision() } }
     })
   }
   async getCollectionAvailability(parent: ApplicationRef) {

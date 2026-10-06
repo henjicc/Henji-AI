@@ -1,3 +1,4 @@
+import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from '../application/videoEditProxy'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, AudioLines, BetweenVerticalStart, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Film, Link2, Pause, Play, Replace, Rewind, Square, X, type LucideIcon } from 'lucide-react'
@@ -73,7 +74,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       const document = requireVideoEditInstance(projectId).document
       const item = document.items.find(item => item.id === itemId)
       return item ? videoEditItemAudioLayout(item, document.media.find(media => media.id === item.mediaId)) : undefined
-    })
+    }, projectId)
     presenterRef.current = presenter
     const unregister = registerVideoEditSourcePresenter(projectId, presenter.present, presenter.release)
     return () => { presenterRef.current = null; presenter.dispose(); unregister() }
@@ -84,7 +85,16 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const buttonIds = useVideoEditMonitorButtonIds('source')
   const dragComponents = media?.kind === 'audio' ? ['audio'] as const : media?.hasAudio ? ['video', 'audio', 'linked'] as const : ['video'] as const
+  const proxySignature = videoEditProxySignature(projectId)
+  const previousProxy = useRef(proxySignature)
+  useEffect(() => {
+    if (previousProxy.current === proxySignature) return
+    previousProxy.current = proxySignature
+    const current = readVideoEditSource(projectId)
+    if (current.itemId && visible) void updateVideoEditSource(projectId, { timeUs: current.timeUs, playing: false }).catch(onError)
+  }, [proxySignature, projectId, visible, onError])
   const sourceButtons: VideoEditMonitorButtonSpec[] = [
+    { id: 'toggle_proxies', title: '切换代理', Icon: Film, on: getVideoEditProxyPreference(projectId).enabled, tooltip: '切换代理：看片使用已有代理；导出与分析始终使用原片', onClick: () => { try { setVideoEditProxyPreference(projectId, { enabled: !getVideoEditProxyPreference(projectId).enabled }) } catch (error) { onError(error) } } },
     ...SOURCE_COMMAND_BUTTONS.map(({ id, Icon, title }): VideoEditMonitorButtonSpec => {
       const presentation = timelineCommandPresentation(availability, id, shortcuts)
       return { id, title: title ?? presentation.title, tooltip: presentation.tooltip, Icon, enabled: presentation.enabled, hidden: media?.kind === 'image' && SOURCE_PLAYBACK_BUTTONS.has(id), onClick: () => command(id) }

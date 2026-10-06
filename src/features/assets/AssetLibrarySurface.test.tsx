@@ -20,7 +20,7 @@ vi.mock('@/components/mediaViewer/ImageViewerModal', () => ({ ImageViewerModal: 
 vi.mock('@/components/mediaViewer/VideoViewerModal', () => ({ VideoViewerModal: () => null }))
 vi.mock('@/components/mediaViewer/AudioViewerModal', () => ({ AudioViewerModal: () => null }))
 vi.mock('@/components/ui/useDialogTransition', () => ({ useDialogTransition: (open: boolean) => ({ shouldRender: open, isVisible: open }) }))
-vi.mock('@/features/videoEdit/application/videoEditService', () => ({ activeVideoEditInstance: () => undefined, subscribeVideoEdit: () => () => undefined }))
+vi.mock('@/features/videoEdit/application/videoEditService', () => ({ activeVideoEditInstance: () => undefined, subscribeVideoEdit: () => () => undefined, subscribeVideoEditDomain: () => () => undefined }))
 vi.mock('@/features/videoEdit/application/videoEditCodeAssets', () => ({ readVideoEditCodeAsset: mocks.readCode, importVideoEditCodeAsset: vi.fn() }))
 vi.mock('@/commands/assetLibrary', () => ({
   queryAssets: mocks.query, listAssetLibraries: mocks.libraries, listAssetTags: mocks.tags, touchAsset: mocks.touch,

@@ -5,12 +5,13 @@ import type { AssetDragPayload } from '@/features/assets/drag/assetDragPayload'
 import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
 
 import { assetApplicationService } from './assetApplicationService'
+import type { CanvasCommitOptions } from '@/features/canvas/application/canvasPersistenceService'
 
 export async function addAssetToCanvas(input: {
   projectId: string
   assetId: string
   placement: CanvasNodePlacement
-}, signal?: AbortSignal): Promise<Record<string, unknown>> {
+}, signal?: AbortSignal, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   signal?.throwIfAborted()
   const asset = await assetApplicationService.inspect(input.assetId)
   signal?.throwIfAborted()
@@ -33,7 +34,7 @@ export async function addAssetToCanvas(input: {
     nodeType,
     placement: input.placement,
     data,
-  })
+  }, options)
   const persisted = await readPersistedCanvasProjectSnapshot(input.projectId)
   const node = persisted.nodes.find(node => node.id === result.nodeId)
   const verified = node?.type === nodeType && Object.entries(data).every(([key, value]) => JSON.stringify(node.data[key as keyof typeof node.data]) === JSON.stringify(value))

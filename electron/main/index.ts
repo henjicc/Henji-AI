@@ -17,6 +17,7 @@ import { registerDocumentsIpc } from './ipc/documents'
 import { registerWorkRootIpc } from './ipc/work-root'
 import { registerLocalModelsIpc } from './ipc/local-models'
 import { registerSmartRegionsIpc } from './ipc/smart-regions'
+import { registerVideoProxyHandlers } from './ipc/video-proxy'
 import { registerSceneDetectionHandlers } from './ipc/scene-detection'
 import { registerTrackingIpc } from './ipc/tracking'
 import { disposeLocalModels } from './services/local-models/runtime'
@@ -113,6 +114,7 @@ app.whenReady().then(() => {
   registerWorkRootIpc()
   registerLocalModelsIpc()
   registerSmartRegionsIpc()
+  registerVideoProxyHandlers()
   registerSceneDetectionHandlers()
   registerTrackingIpc()
   registerDragIpc()

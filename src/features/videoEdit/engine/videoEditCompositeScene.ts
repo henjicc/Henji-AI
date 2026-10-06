@@ -41,7 +41,7 @@ function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditT
  * playback resolution (task 4.9): code filters then still read the sequence size (a `1/width` offset stays the same
  * fraction of the picture) and built-in effects learn the scale for the few amounts that cannot shrink below a pixel.
  */
-export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document): Promise<{ presented: boolean; completion: Promise<void> }> {
+export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document, target?: VideoEditCodePicture): Promise<{ presented: boolean; completion: Promise<void> }> {
   const renderScale = document.height / logical.height
   let runtime: VideoEditCodeGpu | undefined
   const submissions: Array<Promise<PromiseSettledResult<void>>> = []
@@ -120,7 +120,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     return layers
   }
   const layers = await resolve(nodes); current()
-  const result = await compositor.draw(document, layers.map(layer => layer.clip), layers.map(layer => layer.picture), shouldPresent, deadline)
+  const result = await compositor.draw(document, layers.map(layer => layer.clip), layers.map(layer => layer.picture), shouldPresent, deadline, target)
   watch(result.completion)
   return { presented: result.presented, completion: Promise.all(submissions).then(results => { const failed = results.find(value => value.status === 'rejected'); if (failed?.status === 'rejected') throw failed.reason }) }
 }

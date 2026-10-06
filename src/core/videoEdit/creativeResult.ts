@@ -37,11 +37,14 @@ export type VideoEditDocumentSource = z.infer<typeof documentSource>
 export const videoEditCreativeSourceRequestSchema = z.discriminatedUnion('type', [
   documentSource.extend({ includeProcessing: z.boolean().optional() }).strict(),
   generationSource,
+  z.object({ type: z.literal('asset'), assetId: id }).strict(),
 ])
 export type VideoEditCreativeSourceRequest = z.infer<typeof videoEditCreativeSourceRequestSchema>
 
 /** 请求里只影响产出的选项不进片段记录。 */
-export function videoEditCreativeOrigin(request: VideoEditCreativeSourceRequest): VideoEditCreativeSource {
+export function videoEditCreativeOrigin(request: VideoEditCreativeSourceRequest): VideoEditCreativeSource | undefined {
+  // 资产来源已由 media.assetId/contentIdentity 记录，不伪装成生成记录或文档。
+  if (request.type === 'asset') return undefined
   if (request.type === 'generation') return { type: 'generation', recordId: request.recordId, outputIndex: request.outputIndex }
   return {
     type: 'document',
@@ -63,6 +66,8 @@ export function sameVideoEditCreativeSource(left: VideoEditCreativeSource, right
 /** `add` 落到 `trackId`，或在没有空余轨道时 `newTrack`：最上面的视频轨之上／最下面的音频轨之下新建一条（与 PR 拖到轨道外一样）。 */
 export const videoEditResultPlacementSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('add'), frame: z.number().int().nonnegative().max(108000), trackId: id.optional(), newTrack: z.enum(['video', 'audio']).optional(), duration: z.number().int().positive().max(108000).optional() }).strict(),
+  z.object({ mode: z.literal('library') }).strict(),
+  z.object({ mode: z.enum(['insert', 'overwrite']), frame: z.number().int().nonnegative().max(108000), trackId: id, duration: z.number().int().positive().max(108000).optional() }).strict(),
   z.object({ mode: z.literal('replace'), clipId: id }).strict(),
 ]).superRefine((value, context) => { if (value.mode === 'add' && (value.trackId === undefined) === (value.newTrack === undefined)) context.addIssue({ code: z.ZodIssueCode.custom, message: '请指定目标轨道或新建轨道之一。' }) })
 export type VideoEditResultPlacement = z.infer<typeof videoEditResultPlacementSchema>

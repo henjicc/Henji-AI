@@ -1,3 +1,5 @@
+import { VideoEditProxyFrames } from './videoEditProxyFrames'
+import type { VideoProxyResult } from '@/core/videoEdit/proxy'
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
@@ -12,9 +14,9 @@ import { setVideoEditSmartRegionSegments, type VideoEditSmartRegionSegments } fr
  * Decoding settings of one render session. `localPaths` maps each media item's fetchable URL (its path in the worker)
  * to the local file the native decoder reads.
  */
-export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string> }
+export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
 export type RenderRequest = { id: number } & (
-  { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; localPaths?: Record<string, string> }
+  { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'invalidate'; revision: number }
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
   | { kind: 'scale'; divisor: number }
@@ -42,17 +44,20 @@ let nativeFrames: VideoEditNativeFrameReceiver | undefined
 let nativeDiagnostics: NativeFrameDiagnostics | undefined
 let nativeBackend: VideoEditNativeFrames | undefined
 let router: VideoEditFrameRouter | undefined
+const proxies = new Map<string, VideoProxyResult>()
+function setProxies(values: Record<string, VideoProxyResult> | undefined): void { proxies.clear(); for (const [id, result] of Object.entries(values ?? {})) proxies.set(id, result) }
 const localPaths = new Map<string, string>()
 function setLocalPaths(paths: Record<string, string> | undefined): void { if (!paths) return; localPaths.clear(); for (const [url, path] of Object.entries(paths)) localPaths.set(url, path) }
 const log = (level: RenderLogMessage['level'], message: string, event: string, context: Record<string, unknown>): void => { self.postMessage({ kind: 'log', level, message, event, context } satisfies RenderLogMessage) }
 /** The renderer's decoding: the browser backend, plus native decoding when the frame channel is attached. */
-function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditFrameRouter {
+function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFrames {
+  setProxies(decode?.proxies)
   setLocalPaths(decode?.localPaths)
   const channel = decode?.nativeAvailable && decode.forced !== 'browser' ? nativeFrames : undefined
   // Runtime native failures are recovered per read by the router (task 3.1).
   nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path) }) : undefined
   router = new VideoEditFrameRouter(new VideoEditBrowserFrames(), nativeBackend, { nativeAvailable: !!nativeBackend, ...(decode?.forced ? { forced: decode.forced } : {}) }, log)
-  return router
+  return new VideoEditProxyFrames(router, proxies)
 }
 /** Releases the renderer, then the native sessions it closed, then the frame channel (frames return before it closes). */
 async function disposeRenderer(): Promise<void> {
@@ -91,6 +96,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'update') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        setProxies(request.proxies)
         setLocalPaths(request.localPaths)
         await renderer.updateDocument(request.document); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'render') {

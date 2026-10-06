@@ -43,7 +43,7 @@ export class VideoEditSourceFrames {
   /** Set while playing forward through the renderer's scheduled path (a document spanning the whole source). */
   private playback?: number
 
-  constructor(media: VideoEditMedia, surface: HTMLCanvasElement) {
+  constructor(media: VideoEditMedia, surface: HTMLCanvasElement, proxyProjectId?: string) {
     const durationUs = Math.round(media.durationSeconds * 1e6)
     const frameRate = media.frameRate ? { ...media.frameRate } : { numerator: 30, denominator: 1 }
     if (media.kind !== 'video' || !Number.isFinite(media.durationSeconds) || media.durationSeconds <= 0 || !Number.isSafeInteger(durationUs) || durationUs < 1) throw new Error('源画面需要具有有效时长的视频素材。')
@@ -62,7 +62,7 @@ export class VideoEditSourceFrames {
       annotations: [],
     }
     surface.width = media.width; surface.height = media.height
-    this.session = new VideoEditRenderSession(this.document, media.width, undefined, surface.transferControlToOffscreen(), SOURCE_CACHE_BYTES)
+    this.session = new VideoEditRenderSession(this.document, media.width, undefined, surface.transferControlToOffscreen(), SOURCE_CACHE_BYTES, proxyProjectId)
   }
 
   invalidate(): void {

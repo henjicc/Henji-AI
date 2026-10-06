@@ -12,6 +12,21 @@ export interface VideoEditSceneTarget { projectId: string; sequenceId: string; c
 export interface VideoEditSceneAnalysis { analysisId: string; cutsSeconds: number[]; cutFrames: number[] }
 interface Entry { target: VideoEditSceneTarget; baseline: VideoEditDocument; request: SceneDetectionRequest; result: SceneDetectionResult }
 const analyses = new WeakMap<VideoEditInstance, Map<string, Entry>>()
+/** Reframe reuses only current, content-validated scene results; otherwise clip boundaries suffice. */
+export async function cachedVideoEditSceneCuts(target: VideoEditSceneTarget, signal?: AbortSignal): Promise<number[]> {
+  const owner = requireVideoEditInstance(target.projectId)
+  const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)
+  const clip = sequence?.clips.find(clip => clip.id === target.clipId); const media = clip && videoEditClipMedia(owner.document, clip)
+  if (!sequence || !clip || !media) return []
+  const range = videoEditClipSourceRange(clip, videoEditFps(sequence.frameRate))
+  // Unrelated edits and a previous reframe copy do not invalidate a source-content analysis.
+  const entry = [...(analyses.get(owner)?.values() ?? [])].reverse().find(entry => entry.target.sequenceId === target.sequenceId && entry.target.clipId === target.clipId && entry.request.source === media.path && range.from >= entry.request.startSeconds - 1e-7 && range.to <= entry.request.endSeconds + 1e-7)
+  if (!entry) return []
+  signal?.throwIfAborted()
+  if (!await getPlatform().sceneDetection.validate(entry.request.source, entry.result.contentIdentity)) throw new Error('原视频已改变，请重新检测镜头后重构。')
+  signal?.throwIfAborted()
+  return videoEditSceneCutFrames(clip, sequence, entry.result.cutsSeconds).map(frame => frame - clip.start)
+}
 export async function detectVideoEditScenes(target: VideoEditSceneTarget, sensitivity = 50, signal?: AbortSignal, onProgress?: (progress: number) => void): Promise<VideoEditSceneAnalysis> {
   const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
   const sequence = baseline.sequences.find(sequence => sequence.id === target.sequenceId)

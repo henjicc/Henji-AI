@@ -19,7 +19,7 @@ export const VIDEO_EDIT_SPEED_MAX = 100
 /** 速度精度：0.01%（PR 的速度框同样到小数点后两位）。 */
 const SPEED_RESOLUTION = 10_000
 /** 能改速度的片段：有连续源时间的音视频与代码素材（图片、文字、图形、调整图层没有可变速的源时间）。 */
-export const VIDEO_EDIT_SPEED_KINDS = ['video', 'audio', 'code'] as const
+export const VIDEO_EDIT_SPEED_KINDS = ['video', 'audio', 'code', 'sequence'] as const
 export function videoEditClipSpeedSupported(kind: string): boolean { return (VIDEO_EDIT_SPEED_KINDS as readonly string[]).includes(kind) }
 export const videoEditClipSpeedSchema = videoEditRatioSchema.refine(ratio => ratio.numerator / ratio.denominator >= VIDEO_EDIT_SPEED_MIN - 1e-12 && ratio.numerator / ratio.denominator <= VIDEO_EDIT_SPEED_MAX + 1e-12, '速度须在 1% 到 10000% 之间。')
 
@@ -131,6 +131,11 @@ export function videoEditClipFrameAtSource(clip: VideoEditClipTiming, seconds: n
   // 半开区间：用到的范围末端那一刻不属于片段。
   if (seconds < range.from - 1e-6 || seconds >= range.to - 1e-9) return undefined
   return clip.start + Math.max(0, Math.min(clip.duration - 1, offset))
+}
+/** Continuous boundary mapping for source intervals (text editing); unlike frame sampling this has no reverse-frame offset. */
+export function videoEditClipFrameBoundaryAtSource(clip: VideoEditClipTiming, seconds: number, fps: number): number {
+  const elapsed = (seconds - videoEditSourceSeconds(clip)) * fps / videoEditClipSpeedValue(clip)
+  return clip.start + (clip.reverse ? -elapsed : elapsed)
 }
 /** 拆分：左段保持源入点，右段从拆分处沿播放方向前进 `left` 帧。 */
 export function splitVideoEditClipSource(clip: VideoEditClipTiming, left: number, rate: VideoEditRatio): VideoEditSourceTime { return advanceVideoEditClipSource(clip, left, rate) }

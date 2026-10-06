@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 const logger = createLogger('features.canvas.ui.NodeActionToolbar')
 
 import {
+  CANVAS_NODE_TYPES,
   isExportImageNode,
   isCameraStageNode,
   isGroupNode,
@@ -53,8 +54,7 @@ import ContextMenu from '@/components/ContextMenu';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService';
 import { checkAssetPaths } from '@/commands/assetLibrary';
-import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons';
-import { sendCreativeResultToVideoEdit } from '@/features/videoEdit/application/videoEditResultSend';
+import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu';
 import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs';
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload';
 import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
@@ -167,22 +167,10 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   // Only persisted completions enter an edit. 来源 = 这份画布 + 这个节点（4.1，三维渲染结果也是画布节点）。
   const videoEditSource = useMemo((): { canvasId: string; mediaKind: 'image' | 'video' | 'audio' } | null => {
     const descriptor = node.data.generationOutputDescriptor;
-    if (!projectId || !assetMedia || !node.data.generationOutputCommitId || descriptor?.version !== 1 || node.data.isGenerating) return null;
-    return { canvasId: projectId, mediaKind: descriptor.mediaType };
-  }, [assetMedia, node.data.generationOutputCommitId, node.data.generationOutputDescriptor, node.data.isGenerating, projectId]);
-  const [sendingToVideoEdit, setSendingToVideoEdit] = useState(false);
-  const handleSendToVideoEdit = useCallback(async (): Promise<void> => {
-    if (!videoEditSource || sendingToVideoEdit) return;
-    setSendingToVideoEdit(true);
-    try {
-      const docRef = await videoEditDocumentRef(videoEditSource.canvasId);
-      await sendCreativeResultToVideoEdit({ type: 'document', docRef, part: node.id }, { mediaKind: videoEditSource.mediaKind, mode: 'add' });
-      canvasEventBus.publish('canvas/toast', { message: t('ui:videoEditSend.added'), type: 'success' });
-    } catch (error) {
-      canvasEventBus.publish('canvas/toast', { message: error instanceof Error ? error.message : t('ui:videoEditSend.failed') });
-      logger.warn('画布结果加入剪辑失败', { event: 'canvas.video_edit_send.failed', error, context: { nodeId: node.id } });
-    } finally { setSendingToVideoEdit(false); }
-  }, [node.id, sendingToVideoEdit, t, videoEditSource]);
+    const input = node.type === CANVAS_NODE_TYPES.upload || node.type === CANVAS_NODE_TYPES.videoUpload || node.type === CANVAS_NODE_TYPES.audioUpload;
+    if (!projectId || !assetMedia || !input && (!node.data.generationOutputCommitId || descriptor?.version !== 1) || node.data.isGenerating || node.data.generationError || node.data.generationCancelled) return null;
+    return { canvasId: projectId, mediaKind: assetMedia.mediaType };
+  }, [assetMedia, node.type, node.data.generationOutputCommitId, node.data.generationOutputDescriptor, node.data.isGenerating, node.data.generationError, node.data.generationCancelled, projectId]);
 
   useEffect(() => {
     return () => {
@@ -402,18 +390,9 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           </UiButton>
         )}
         {videoEditSource && (
-          <UiButton
-            key="video-edit-send"
-            disabled={sendingToVideoEdit}
-            title={t('ui:videoEditSend.addToPlayhead')}
-            onClick={(event) => {
-              event.stopPropagation();
-              void handleSendToVideoEdit();
-            }}
-          >
-            <ICON_WORKSPACE_VIDEO_EDIT className="h-3.5 w-3.5" />
-            {t('ui:videoEditSend.short')}
-          </UiButton>
+          <VideoEditSendMenu key="video-edit-send" mediaKind={videoEditSource.mediaKind}
+            resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(videoEditSource.canvasId), part: node.id })}
+            notify={(message, type) => canvasEventBus.publish('canvas/toast', { message, type })} />
         )}
         {!isImageEdit && canCopyStoryboardText && (
           <UiButton

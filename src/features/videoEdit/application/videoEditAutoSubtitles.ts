@@ -3,8 +3,11 @@ import { AudioBufferSource, Output, StreamTarget, WavOutputFormat } from 'mediab
 import { createLogger } from '@/core/logging'
 import { buildAutoSubtitles, autoSubtitleOptionsSchema, type AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
 import { videoEditComposition, videoEditDuration, audibleVideoEditClips, type VideoEditComposition } from '@/core/videoEdit/document'
+import { videoEditAudioContent } from '@/core/videoEdit/audioContent'
 import { videoEditCaptionSchema, captionDisplayText, type VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/core/videoEdit/subtitleStyle'
+import { videoEditClipSchema } from '@/core/videoEdit/document'
+import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, videoEditTextMediaIdentity, type VideoEditTextTranscription } from '@/core/videoEdit/textTranscript'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
@@ -14,15 +17,16 @@ import { editVideoSequence, requireVideoEditInstance, videoEditDocumentOperation
 const logger = createLogger('features.videoEdit.autoSubtitles')
 export type SubtitleScope = 'sequence' | 'in-out' | 'selection'
 export type SubtitleTranscriptionOptions = AutoSubtitleOptions & { language?: 'zh' | 'en' }
-const manifestSchema = z.object({ projectId: z.string(), sequenceId: z.string(), signature: z.string(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), captions: z.array(videoEditCaptionSchema).optional(), committed: z.boolean().optional() }).strict()
+export const videoEditSubtitleManifestSchema = z.object({ projectId: z.string(), sequenceId: z.string(), signature: z.string(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), soundClips: z.array(videoEditClipSchema).optional(), soundIdentities: z.record(z.string(), z.string()).optional(), captions: z.array(videoEditCaptionSchema).optional(), committed: z.boolean().optional() }).strict()
+const manifestSchema = videoEditSubtitleManifestSchema
 type Manifest = z.infer<typeof manifestSchema>
 const active = new WeakSet<VideoEditInstance>()
 
-async function sequenceSignature(snapshot: VideoEditComposition): Promise<string> {
-  const { captions: _captions, markers: _markers, annotations: _annotations, revision: _revision, ...content } = snapshot
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(content)))
+export async function videoEditSubtitleSequenceSignature(snapshot: VideoEditComposition): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(videoEditAudioContent(snapshot)))
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
+const sequenceSignature = videoEditSubtitleSequenceSignature
 function current(projectId: string, sequenceId: string): VideoEditComposition { return videoEditComposition(requireVideoEditInstance(projectId).document, sequenceId) }
 export function subtitleRange(owner: VideoEditInstance, sequenceId: string, scope: SubtitleScope): { startFrame: number; endFrame: number } {
   const sequence = videoEditComposition(owner.document, sequenceId)
@@ -84,7 +88,7 @@ export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceI
     if (requireVideoEditInstance(projectId) !== owner || await sequenceSignature(current(projectId, sequenceId)) !== signature) throw new Error('剪辑声音在准备期间已改变，请重新准备。')
     const source = await platform.audioEdit.probeSource(path)
     // Save the source identity before registering its document; a failed first write leaves no orphan draft.
-    await platform.system.fs.writeTextFile(`${path}.subtitle.json`, JSON.stringify({ projectId, sequenceId, signature, ...range } satisfies Manifest))
+    await platform.system.fs.writeTextFile(`${path}.subtitle.json`, JSON.stringify({ projectId, sequenceId, signature, soundClips: audibleVideoEditClips(sound), soundIdentities: Object.fromEntries(audibleVideoEditClips(sound).map(clip => [clip.itemId, videoEditTextMediaIdentity(snapshot, clip.itemId)])), ...range } satisfies Manifest))
     const draft = await createAudioEditDraft(source, container)
     retained = true; draft.session.markInUse(); await flushAudioEditProject(draft.document.id)
     logger.info('字幕混音准备完成', { event: 'video_edit.subtitle.prepare.completed', context: { projectId, sequenceId, audioDocumentId: draft.document.id } })
@@ -102,10 +106,10 @@ export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceI
   }
 }
 
-export function appendAutoSubtitles(projectId: string, sequenceId: string, captions: readonly VideoEditCaption[]): string[] {
+export function appendAutoSubtitles(projectId: string, sequenceId: string, captions: readonly VideoEditCaption[], textTranscription?: VideoEditTextTranscription): string[] {
   const parsed = captions.map(caption => videoEditCaptionSchema.parse(caption))
   if (!parsed.length) throw new Error('没有可用字幕，请检查识别结果。')
-  editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, captions: [...(sequence.captions ?? []), ...parsed] }))
+  editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...(textTranscription ? { textTranscription: mergeVideoEditTextTranscription(sequence.textTranscription, textTranscription) } : {}), captions: [...(sequence.captions ?? []), ...parsed] }))
   return parsed.map(caption => caption.id)
 }
 
@@ -144,7 +148,9 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     // Record planned IDs before committing, so a lost save acknowledgement cannot create a duplicate batch.
     await platform.system.fs.writeTextFile(path, JSON.stringify({ ...manifest, captions }))
     await assertTarget()
-    const result = appendAutoSubtitles(projectId, sequenceId, captions)
+    const composition = current(projectId, sequenceId)
+    const textTranscription = buildVideoEditTextTranscription(composition, manifest.soundClips ?? audibleVideoEditClips(composition), audio.document, manifest.startFrame)
+    const result = appendAutoSubtitles(projectId, sequenceId, captions, textTranscription)
     await saveVideoEdit(projectId)
     await platform.system.fs.writeTextFile(path, JSON.stringify({ ...manifest, captions, committed: true }))
     logger.info('字幕生成完成', { event: 'video_edit.subtitle.transcribe.completed', requestId, context: { projectId, sequenceId, count: result.length } })

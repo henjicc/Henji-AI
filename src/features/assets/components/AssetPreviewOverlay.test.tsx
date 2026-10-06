@@ -25,6 +25,7 @@ vi.mock('@/components/mediaViewer/AudioViewerModal', () => ({ AudioViewerModal: 
 vi.mock('@/features/videoEdit/application/videoEditCodeAssets', () => ({ readVideoEditCodeAsset: mocks.read, importVideoEditCodeAsset: mocks.import }))
 vi.mock('@/features/videoEdit/application/videoEditService', () => ({
   activeVideoEditInstance: () => mocks.owner,
+  subscribeVideoEditDomain: () => () => undefined,
   subscribeVideoEdit: (listener: () => void) => { mocks.listeners.add(listener); return () => mocks.listeners.delete(listener) },
 }))
 

@@ -1,3 +1,4 @@
+import { autoCreateVideoEditProxies } from './videoEditProxy'
 import { ALL_FORMATS, Input, UrlSource } from 'mediabunny'
 import { getPlatform } from '@/platform/runtime'
 import { toFetchableMediaUrl } from '@/services/imageSource'
@@ -167,6 +168,7 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
   signal?.throwIfAborted()
   if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('导入检查期间原剪辑已改变，请重新导入。')
   editVideoProject(projectId, () => next, preserveProgramAnchors)
+  void autoCreateVideoEditProxies(projectId, ids.flatMap(id => { const item = next.items.find(value => value.id === id); return item?.mediaId ? [item.mediaId] : [] })).catch(error => logger.warn('导入后代理创建未完成', { event: 'video_edit.proxy.import_failed', error }))
   logger.info('导入剪辑素材完成', { event: 'video_edit.media.import.completed', context: { projectId, count: ids.length } })
   return ids
   } catch (error) {

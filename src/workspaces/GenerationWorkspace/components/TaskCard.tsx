@@ -29,6 +29,7 @@ import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/open
 import { TaskListRetentionContext } from '../hooks/useTaskListRetention'
 import { videoEditSendMenuItems } from '@/features/videoEdit/panels/videoEditSendActions'
 import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
+import { VideoEditSendDialog } from '@/features/videoEdit/panels/VideoEditSendMenu'
 export interface TaskCardProps {
   task: GenerationTask
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
@@ -98,8 +99,9 @@ const TaskCard = React.memo(function TaskCard({
     }
   }
   // Only saved local outputs can enter an edit; each output keeps its own index.
+  const [videoEditSend, setVideoEditSend] = React.useState<{ mediaKind: 'image' | 'video' | 'audio'; outputIndex: number } | null>(null)
   const videoEditItems = (mediaKind: 'image' | 'video' | 'audio', outputIndex: number, filePath: string | undefined): MenuItem[] => filePath
-    ? videoEditSendMenuItems(mediaKind, () => ({ type: 'generation', recordId: task.id, outputIndex }), notify, <ICON_WORKSPACE_VIDEO_EDIT className="w-4 h-4" />)
+    ? videoEditSendMenuItems(mediaKind, () => ({ type: 'generation', recordId: task.id, outputIndex }), notify, <ICON_WORKSPACE_VIDEO_EDIT className="w-4 h-4" />, () => setVideoEditSend({ mediaKind, outputIndex }))
     : []
   const {
     startImageDrag,
@@ -477,6 +479,7 @@ const TaskCard = React.memo(function TaskCard({
         />
       </div>
       {result}
+      {videoEditSend && <VideoEditSendDialog mediaKind={videoEditSend.mediaKind} resolveSource={() => ({ type: 'generation', recordId: task.id, outputIndex: videoEditSend.outputIndex })} notify={notify} onClose={() => setVideoEditSend(null)} />}
     </article>
   )
 }, (prev, next) => {

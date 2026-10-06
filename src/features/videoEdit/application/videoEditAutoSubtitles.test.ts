@@ -13,6 +13,9 @@ import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import { generateVideoEditSubtitleCapability } from '@/core/application-control/domains/videoEdit/videoEditSubtitleCapabilities'
 import { applicationObservedEffectSchema } from '@/core/application-control/observedEffect'
 import { reopenVideoEdit } from './videoEditDocumentTestKit'
+import { editVideoEditText, restoreVideoEditText } from './videoEditTextEditing'
+import { videoEditComposition } from '@/core/videoEdit/document'
+import { resolveVideoEditTextRanges, videoEditTranscriptWords } from '@/core/videoEdit/textTranscript'
 
 const boundary = vi.hoisted(() => ({ mixes: [] as Array<{ start: number; duration: number }>, disposed: vi.fn() }))
 // Pixel/encoder boundaries only; ASR, document instances, edits, history and persistence remain real.
@@ -55,6 +58,47 @@ beforeEach(async () => {
 })
 afterEach(async () => { useAlertDialogStore.setState({ queue: [] }); await resetAudioEditProjectInstancesForTests(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const sequence = () => owner.document.sequences[0]
+it('saved word recognition maps through later speed/trim edits and restores from the original mix without paid ASR replay', async () => {
+  vi.mocked(getPlatform().audioEdit.transcribe).mockImplementation(async request => {
+    const audio = await loadAudioEditProject(request.projectId)
+    return { project: { ...audio.document, transcript: [{ id: 'price', text: '价格', startFrame: 1000, endFrame: 1500, included: true, locked: false, granularity: 'word' }] }, modelId: 'test-asr', granularity: 'word' }
+  })
+  const audioId = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')
+  const history = owner.past.length
+  await generateVideoEditSubtitles(owner.document.id, sequence().id, audioId)
+  expect(owner.past.length).toBe(history + 1)
+  expect(videoEditTranscriptWords(videoEditComposition(owner.document, sequence().id))).toMatchObject([{ text: '价格', from: 30, to: 45 }])
+  const excerpt = editVideoEditText(owner.document.id, sequence().id, { kind: 'text', text: '价格' }, 'extract')
+  await restoreVideoEditText(owner.document.id, excerpt.sequenceId, audioId)
+  expect(videoEditTranscriptWords(videoEditComposition(owner.document, excerpt.sequenceId))).toMatchObject([{ text: '价格', from: 0, to: 15 }])
+  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0] = { ...document.sequences[0].clips[0], sourceInUs: 1000000, duration: 120, speed: { numerator: 2, denominator: 1 } }; return document })
+  expect(videoEditTranscriptWords(videoEditComposition(owner.document, sequence().id))).toMatchObject([{ from: 0, to: 8 }])
+  await restoreVideoEditText(owner.document.id, sequence().id, audioId)
+  expect(videoEditTranscriptWords(videoEditComposition(owner.document, sequence().id))).toMatchObject([{ from: 0, to: 8 }])
+  expect(getPlatform().audioEdit.transcribe).toHaveBeenCalledTimes(1)
+  editVideoProject(owner.document.id, document => { document.media[0].path = 'D:/replaced.wav'; return document })
+  await restoreVideoEditText(owner.document.id, sequence().id, audioId)
+  expect(videoEditTranscriptWords(videoEditComposition(owner.document, sequence().id))).toEqual([])
+})
+it('silence detection restores every saved selection batch and commits once without ASR replay', async () => {
+  setVideoEditTimelineView(owner.document.id, { inFrame: 0, outFrame: 90 })
+  const first = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'in-out')
+  await generateVideoEditSubtitles(owner.document.id, sequence().id, first)
+  setVideoEditTimelineView(owner.document.id, { inFrame: 120, outFrame: 180 })
+  const second = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'in-out')
+  await generateVideoEditSubtitles(owner.document.id, sequence().id, second)
+  expect(sequence().textTranscription?.audioDocumentIds).toEqual([first, second])
+  const detect = vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async request => {
+    const audio = await loadAudioEditProject(request.projectId)
+    return { revision: audio.persistedRevision, suggestions: [{ id: 'pause', kind: 'long_silence', evidence: 'audio', title: '停顿', detail: '', startFrame: 1000, endFrame: 1900, blockIds: [], confidence: 'high', status: 'pending' }] }
+  })
+  const history = owner.past.length
+  await restoreVideoEditText(owner.document.id, sequence().id, second, true)
+  expect(detect).toHaveBeenCalledTimes(2); expect(detect.mock.calls.map(([request]) => request.projectId)).toEqual([first, second])
+  expect(new Set(detect.mock.calls.map(([request]) => request.requestId)).size).toBe(2)
+  expect(resolveVideoEditTextRanges(videoEditComposition(owner.document, sequence().id), { kind: 'silence' })).toEqual([{ from: 35, to: 52 }, { from: 155, to: 172 }])
+  expect(owner.past.length).toBe(history + 1); expect(getPlatform().audioEdit.transcribe).toHaveBeenCalledTimes(2)
+})
 it('分块混音复用渲染器，指定入出点换算后生成一笔历史，恢复不重复付费或重复落位', async () => {
   setVideoEditTimelineView(owner.document.id, { inFrame: 60, outFrame: 150 })
   const history = owner.past.length

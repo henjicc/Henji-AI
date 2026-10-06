@@ -64,15 +64,16 @@ export class VideoEditGpuCompositor {
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   private blankTexture?: GpuTexture
-  constructor(readonly canvas: OffscreenCanvas) {
+  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
     this.ready = this.initialize()
   }
   private async initialize(): Promise<void> {
-    const managed = await this.manager.acquire()
-    this.device = managed.device as VideoGpuDevice
-    const format = managed.provider.getPreferredCanvasFormat()
+    const managed = this.shared ? undefined : await this.manager.acquire()
+    if (this.shared) await this.shared.ready
+    this.device = this.shared?.device ?? managed!.device as VideoGpuDevice
+    const format = this.shared?.canvasFormat ?? managed!.provider.getPreferredCanvasFormat()
     this.canvasFormat = format
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' })
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
@@ -86,6 +87,8 @@ export class VideoEditGpuCompositor {
     const error = await this.device.popErrorScope()
     if (error) throw new Error(`无法初始化剪辑 GPU 合成：${error.message}`)
   }
+  /** Nested layers must belong to this device so the parent can sample them without readback or 8-bit quantization. */
+  fork(canvas: OffscreenCanvas): VideoEditGpuCompositor { return new VideoEditGpuCompositor(canvas, this) }
   private layerPipelines(format: string): LayerPipelines {
     const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
     const pipeline = (code: string): GpuRenderPipeline => {
@@ -377,7 +380,7 @@ export class VideoEditGpuCompositor {
     for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }
     this.pool.length = 0; this.blankTexture?.destroy(); this.blankTexture = undefined
     this.precise?.texture.destroy(); this.precise = undefined
-    this.textures.clear(); this.uniforms.clear(); this.manager.destroy()
+    this.textures.clear(); this.uniforms.clear(); if (!this.shared) this.manager.destroy()
   }
   cancelPresentation(): void { for (const finish of this.waits) finish() }
 }

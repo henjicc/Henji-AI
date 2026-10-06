@@ -28,7 +28,7 @@ export function assertVideoEditClipFollow(sequence: VideoEditSequence, clip: Vid
   if (clip.kind === 'audio' || clip.kind === 'adjustment') throw new Error('片段跟随只用于画面、文字或图形片段。')
   const target = sequence.clips.find(entry => entry.id === clip.follow!.clipId)
   if (!target?.trackers?.some(tracker => tracker.id === clip.follow!.trackerId)) throw new Error('follow 需要同一序列内已有跟踪器的片段，请先创建 video_edit.tracker。')
-  if (clip.follow.mode === 'corner_pin' && ((clip.kind !== 'video' && clip.kind !== 'image') || target.trackers.find(t=>t.id===clip.follow!.trackerId)?.method !== 'planar')) throw new Error('角点贴合需要图片或视频片段，以及平面跟踪器。')
+  if (clip.follow.mode === 'corner_pin' && ((clip.kind !== 'video' && clip.kind !== 'image' && clip.kind !== 'sequence') || target.trackers.find(t=>t.id===clip.follow!.trackerId)?.method !== 'planar')) throw new Error('角点贴合需要图片、视频或嵌套序列片段，以及平面跟踪器。')
   const seen = new Set([clip.id]); let current: VideoEditClip | undefined = target
   while (current) {
     if (seen.has(current.id)) throw new Error('片段不能跟随自己或形成循环跟随。')

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createVideoEditDocument, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
+import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
@@ -59,7 +59,8 @@ vi.mock('./videoEditGpuCompositor', async () => {
   const { VideoEditCodePicture } = await import('./videoEditCodeGpu')
   const owner = {} as import('@/core/imageEdit/worker/webgpuRuntimeSupport').GpuDevice
   const target = (width: number, height: number) => new VideoEditCodePicture({ createView: () => ({}), destroy: vi.fn() }, width, height, owner)
-  return { VideoEditGpuCompositor: class {
+  class MockCompositor {
+  fork(): MockCompositor { return new MockCompositor() }
   async blank(width: number, height: number, timestamp: number, duration: number) {
     return new VideoEditGpuFrame({ timestamp, duration, displayWidth: width, displayHeight: height, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 4, () => {})
   }
@@ -68,18 +69,20 @@ vi.mock('./videoEditGpuCompositor', async () => {
     return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { boundary.normalizedReleased++ })
   }
   async code() { return { generator: async (_key: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) },
-    target: async (_key: string, width: number, height: number) => target(width, height),
+    target: async (_key: string, width: number, height: number) => target(width, height), releaseNestedFrames: vi.fn(),
     builtin: async (_key: string, instance: { params: Record<string, unknown> }, input: InstanceType<typeof VideoEditCodePicture>) => { boundary.builtinParams.push({ ...instance.params }); return target(input.width, input.height) },
     mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
   } }
   async prepareImages() { return new Map() }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
-  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number }>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture.timestamp!); boundary.opacities = clips.map(clip => clip.opacity); if (destination) boundary.evaluatedClips = clips; boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); return { presented: true, completion: Promise.resolve() } }
+  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) boundary.evaluatedClips = clips; boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); return { presented: true, completion: Promise.resolve() } }
   setPictureDivisor(divisor: number): void { boundary.divisors.push(divisor) }
   async dispose(): Promise<void> {}
   cancelPresentation(): void {}
-} } })
+  }
+  return { VideoEditGpuCompositor: MockCompositor }
+})
 vi.mock('./videoEditSeekDecoder', () => ({ VideoEditSeekDecoder: class {
   constructor(private readonly path: string, private readonly cache: import('./videoEditFrameCache').VideoEditFrameCache) {}
   async sample(time: number) { const frame = this.cache.get(this.path, time) as import('./videoEditGpuFrame').VideoEditGpuFrame | undefined; return { sample: frame?.clone(), hit: !!frame } }
@@ -233,6 +236,95 @@ function fixture(): ReturnType<typeof videoEditComposition> {
   document.sequences[0].clips = [clip]
   return videoEditComposition(document, document.sequences[0].id)
 }
+function nestedFixture(): ReturnType<typeof videoEditComposition> {
+  const child = fixture(); const parent = createVideoEditSequence('父序列'); addLegacyVideoEditTracks(parent)
+  parent.width = child.width; parent.height = child.height
+  parent.clips = [{ ...child.clips[0], id: 'nested', kind: 'sequence', itemId: 'nested-item', volume: .5 }]
+  return { ...child, ...parent, items: [...child.items, { id: 'nested-item', name: '子序列', kind: 'sequence', sequenceId: child.id }], sequences: [...child.sequences!, parent] }
+}
+it('多机位预览与导出按机位段选择画面，返回原机位且固定主音频，同一帧不同机位缓存隔离', async () => {
+  const document = nestedFixture(); const child = document.sequences![0]
+  const base = child.clips[0]
+  child.clips.push({ ...base, id: 'camera-b', itemId: 'item-B', track: 2 })
+  child.multicam = { cameras: [{ id: 'camera-a', name: '机位1', clipId: base.id }, { id: 'camera-b', name: '机位2', clipId: 'camera-b' }], audioCameraId: 'camera-a' }
+  const parent = document.clips[0]
+  document.clips = [{ ...parent, duration: 15, multicamCameraId: 'camera-a' }, { ...parent, id: 'cut-b', start: 15, duration: 15, sourceInUs: 500000, multicamCameraId: 'camera-b' }, { ...parent, id: 'return-a', start: 30, duration: 30, sourceInUs: 1000000, multicamCameraId: 'camera-a' }]
+  const preview = new VideoEditRenderer(document, 960); const exporter = new VideoEditRenderer(document)
+  try {
+    for (const [frame, expected] of [[1, base.id], [15, 'camera-b'], [30, base.id]] as const) {
+      boundary.draws = []; const a = await preview.render(frame, true); const b = await exporter.render(frame, true)
+      expect(a.sourceTimestamps).toEqual(b.sourceTimestamps)
+      expect(boundary.draws.filter(draw => draw.offscreen).map(draw => draw.ids)).toEqual([[expected], [expected]])
+    }
+    const samples = await exporter.mixAudio(0, 1.5)
+    for (const at of [0, 24000, 48000]) { expect(samples[0][at]).toBeCloseTo(.125); expect(samples[1][at]).toBeCloseTo(.25) }
+    await exporter.updateDocument({ ...document, revision: 1, clips: [{ ...parent, multicamCameraId: 'camera-a' }, { ...parent, id: 'overlay-b', track: 2, multicamCameraId: 'camera-b' }] })
+    boundary.draws = []; await exporter.render(15)
+    expect(boundary.draws.filter(draw => draw.offscreen).map(draw => draw.ids)).toEqual([[base.id], ['camera-b']])
+  } finally { await preview.dispose(); await exporter.dispose() }
+})
+it('嵌套逐帧渲染：同一子序列同一帧只合成一次，父片段变速倒放沿共享源时钟', async () => {
+  const document = nestedFixture(); document.clips.push({ ...document.clips[0], id: 'duplicate', track: 2 })
+  const renderer = new VideoEditRenderer(document)
+  try {
+    const result = await renderer.render(15, true)
+    expect(us(result.sourceTimestamps)).toEqual([500000]); expect(result.cacheHits).toBeGreaterThanOrEqual(1)
+    expect(boundary.draws.map(draw => draw.ids)).toEqual([['clip'], ['nested', 'duplicate']])
+    document.clips = [{ ...document.clips[0], sourceInUs: 2_000_000, duration: 30, speed: { numerator: 2, denominator: 1 }, reverse: true }]
+    await renderer.updateDocument({ ...document, revision: 1 })
+    expect(us((await renderer.render(5, true)).sourceTimestamps)).toEqual([1600000])
+  } finally { await renderer.dispose() }
+})
+it('嵌套画面作为普通一层参与父效果与运动/不透明度关键帧', async () => {
+  const document = nestedFixture()
+  document.clips[0].effects = [{ id: 'nested-blur', name: '模糊', enabled: true, amount: .5, builtin: { id: 'gaussian_blur', params: {} } }]
+  document.clips[0].curves = { x: [{ time: 0, value: .2, interpolation: 'linear' }], opacity: [{ time: 0, value: .5, interpolation: 'linear' }] }
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(15, true)
+    expect(boundary.builtinParams).toHaveLength(1); expect(boundary.mixes).toContain(.5)
+    expect(boundary.evaluatedClips).toMatchObject([{ id: 'nested', x: .2, opacity: .5 }])
+  } finally { await renderer.dispose() }
+})
+it('子序列缩短后的父片段尾部渲染透明画面和静音，不冻结子序列最后一帧', async () => {
+  const document = nestedFixture(); document.sequences![0].clips[0].duration = 30
+  const renderer = new VideoEditRenderer(document)
+  try {
+    const result = await renderer.render(45, true)
+    expect(result.sourceTimestamps).toEqual([])
+    expect(boundary.draws.map(draw => draw.ids)).toEqual([[], ['nested']])
+    expect((await renderer.mixAudio(1.5, .01)).every(plane => plane.every(sample => sample === 0))).toBe(true)
+  } finally { await renderer.dispose() }
+})
+it('嵌套预览与导出使用相同帧；回放分辨率递归应用，字幕和过渡在子序列内合成', async () => {
+  const document = nestedFixture(); const child = document.sequences![0]; const base = child.clips[0]
+  child.clips = [{ ...base, duration: 30 }, { ...base, id: 'right-nested', itemId: 'item-B', start: 30, duration: 30 }]
+  child.transitions = [{ id: 'nested-transition', kind: 'cross_dissolve', leftClipId: base.id, rightClipId: 'right-nested', durationFrames: 10 }]
+  child.captions = [{ id: 'nested-caption', start: 0, duration: 60, text: '字幕' }]
+  const preview = new VideoEditRenderer(document, 960); const exporter = new VideoEditRenderer(document)
+  try {
+    preview.setRenderDivisor(2)
+    const a = await preview.render(30, true); const b = await exporter.render(30, true)
+    expect(us(a.sourceTimestamps)).toEqual(us(b.sourceTimestamps))
+    expect(boundary.mixes).toHaveLength(2)
+    expect(boundary.draws.some(draw => draw.size?.[0] === document.width / 2 && draw.offscreen)).toBe(true)
+    expect(boundary.draws.some(draw => draw.ids.some(id => id.includes('nested-caption')))).toBe(true)
+    expect(() => exporter.setRenderDivisor(2)).toThrow('完整分辨率')
+  } finally { await preview.dispose(); await exporter.dispose() }
+})
+it('递归声音按子采样率与声道重采样，父音量/变速/倒放与导出一致，修改子素材使缓存失效', async () => {
+  const document = nestedFixture(); const child = document.sequences![0]
+  child.sampleRate = 44100; child.channels = 1
+  const preview = new VideoEditRenderer(document, 960); const exporter = new VideoEditRenderer(document)
+  try {
+    const a = await preview.mixAudio(.5, .01); const b = await exporter.mixAudio(.5, .01)
+    expect(a).toEqual(b); expect(a[0][0]).toBeCloseTo(.1875); expect(a[1][0]).toBeCloseTo(.1875)
+    const next: ReturnType<typeof videoEditComposition> = { ...document, revision: 1, clips: [{ ...document.clips[0], sourceInUs: 2_000_000, duration: 30, speed: { numerator: 2, denominator: 1 }, reverse: true }], sequences: document.sequences!.map(sequence => sequence.id === child.id ? { ...sequence, clips: sequence.clips.map(clip => ({ ...clip, itemId: 'item-B' })) } : sequence) }
+    await preview.updateDocument(next); await exporter.updateDocument(next)
+    const reversed = await preview.mixAudio(.5, .01)
+    expect(reversed).toEqual(await exporter.mixAudio(.5, .01)); expect(reversed[0][0]).toBeCloseTo(.375)
+  } finally { await preview.dispose(); await exporter.dispose() }
+})
 it('修改素材项引用后画面与声音共同使用新素材，关闭旧解码输入', async () => {
   const document = fixture(); const renderer = new VideoEditRenderer(document)
   try {

@@ -1,3 +1,8 @@
+import { handleVideoEditMulticamCapability } from './videoEditMulticamCapability'
+import { handleVideoEditProxyCapability } from './videoEditProxyCapability'
+import { reframeVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditReframeCapability'
+import { handleVideoEditTextCapability } from './videoEditTextCapability'
+import { executeVideoEditReframeCapability } from './videoEditReframeCapability'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { analyzeVideoEditLumetriCapability } from '@/core/application-control/domains/videoEdit/videoEditLumetriCapability'
 import { analyzeVideoEditLumetri } from './videoEditLumetri'
@@ -5,6 +10,7 @@ import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability
 import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
 import { createVideoEditRegistrations } from './videoEditReflection'
 import { handleVideoEditSceneCapability } from './videoEditSceneCapability'
+import { handleVideoEditWorkspaceTransfer } from './videoEditWorkspaceTransfer'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
 import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, videoEditDocumentFromContent, type VideoEditInstance } from './videoEditService'
@@ -36,6 +42,8 @@ import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { handleVideoEditInPlaceCapability } from './videoEditInPlaceCapability'
 import { rippleVideoEditClipSpeedCapability } from '@/core/application-control/domains/videoEdit/videoEditSpeedCapability'
 import { rippleVideoEditClipSpeed } from './videoEditSpeedCapability'
+import { nestVideoEditClipsCapability } from '@/core/application-control/domains/videoEdit/videoEditNestCapability'
+import { nestVideoEditClipsFromCapability } from './videoEditNestCapability'
 import { measureVideoEditLoudnessCapability, normalizeVideoEditLoudnessCapability } from '@/core/application-control/domains/videoEdit/videoEditLoudnessCapabilities'
 import { executeVideoEditLoudnessCapability } from './videoEditLoudnessCapability'
 import { generateVideoEditAudioDuckingCapability } from '@/core/application-control/domains/videoEdit/videoEditAudioDuckingCapability'
@@ -76,8 +84,17 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      const multicam = await handleVideoEditMulticamCapability(definition.id, raw, context.signal)
+      if (multicam !== undefined) return multicam
+      const textEdit = await handleVideoEditTextCapability(definition.id, raw, context.signal)
+      if (textEdit) return textEdit
+      const transfer = await handleVideoEditWorkspaceTransfer(definition.id, raw, context.signal)
+      if (transfer) return transfer
+      const proxy = await handleVideoEditProxyCapability(definition.id, raw, context)
+      if (proxy) return proxy
       const scenes = await handleVideoEditSceneCapability(definition.id, raw, context)
       if (scenes) return scenes
+      if (definition.id === reframeVideoEditCapability.id) return executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === generateVideoEditAudioDuckingCapability.id) return executeVideoEditAudioDuckingCapability(generateVideoEditAudioDuckingCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === analyzeVideoEditLumetriCapability.id) {
         const input = analyzeVideoEditLumetriCapability.inputSchema.parse(raw)
@@ -96,6 +113,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (subtitles) return subtitles
       // 原地生成（4.12）：与时间线右键同一个服务
       if (definition.id === rippleVideoEditClipSpeedCapability.id) return rippleVideoEditClipSpeed(raw, context)
+      if (definition.id === nestVideoEditClipsCapability.id) return nestVideoEditClipsFromCapability(raw, context)
       const inPlace = await handleVideoEditInPlaceCapability(definition.id, raw, context)
       if (inPlace) return inPlace
       if (definition.id === observeVideoEditFrameCapability.id) {

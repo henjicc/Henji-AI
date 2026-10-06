@@ -35,6 +35,7 @@ const NATIVE_TEST_FILES = [
 // 真实 FFmpeg CLI 兼容层（任务 3.7）：用已就绪的随包 ffmpeg/ffprobe 实跑与核对全仓参数，不进普通单测。
 // CI 在已获取固定版本 FFmpeg 的 Windows job 执行（同时覆盖 9.0 随包与 ffmpeg-ffprobe-static 6.1.2）。
 const FFMPEG_CLI_TEST_FILES = [
+  'electron/main/services/video/proxy.ffmpeg.test.ts',
   'electron/main/services/video/scene-detection.ffmpeg.test.ts',
   'electron/main/services/audio/loudness.ffmpeg.test.ts',
   'electron/main/services/audio/audioActivity.ffmpeg.test.ts',

@@ -3,6 +3,7 @@ import { videoEditClipMedia, type VideoEditClip, type VideoEditDocument } from '
 import { videoEditTrackerKey, type VideoEditTracker } from '@/core/videoEdit/tracking'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
+import { videoEditReachableSequences } from '@/core/videoEdit/sequenceGraph'
 import { getPlatform } from '@/platform/runtime'
 import { trackingDefinitionKey, type TrackingDefinition, type TrackingFailureReason, type TrackingRange, type TrackingRunOptions, type TrackingStatus } from '@/platform/contracts/tracking'
 import { toFetchableMediaUrl } from '@/services/imageSource'
@@ -163,9 +164,9 @@ export function videoEditTrackingStatusText(status: TrackingStatus | undefined, 
 }
 
 /** 发给渲染 Worker 的跟踪结果：键与 Worker 按文档算出的一致（素材 ID + 方式 + 提示）。 */
-export function videoEditTrackResults(snapshot?: Pick<VideoEditDocument, 'media' | 'items'> & { clips: readonly VideoEditClip[]; frameRate: { numerator: number; denominator: number } }): Record<string, { url: string; version: string }> {
+export function videoEditTrackResults(snapshot?: Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences'>> & { clips: readonly VideoEditClip[]; frameRate: { numerator: number; denominator: number } }): Record<string, { url: string; version: string }> {
   const result: Record<string, { url: string; version: string }> = {}
-  const sources = snapshot ? [{ document: snapshot, sequences: [snapshot] }] : listVideoEditInstances().map(instance => ({ document: instance.document, sequences: instance.document.sequences }))
+  const sources = snapshot ? [{ document: snapshot, sequences: videoEditReachableSequences<{ clips: readonly VideoEditClip[]; frameRate: { numerator: number; denominator: number } }>(snapshot, snapshot) }] : listVideoEditInstances().map(instance => ({ document: instance.document, sequences: instance.document.sequences }))
   for (const source of sources) for (const sequence of source.sequences) for (const clip of sequence.clips) for (const tracker of clip.trackers ?? []) {
     const media = videoEditClipMedia(source.document, clip)
     const request = videoEditTrackingRequest(source.document, sequence.frameRate, clip, tracker)
@@ -178,10 +179,12 @@ export function videoEditTrackResults(snapshot?: Pick<VideoEditDocument, 'media'
 }
 
 /** 导出前：这条序列用到的跟踪（效果作用区域、遮罩跟随、片段跟随）都跟满片段范围；有失败时以用户语言报错。 */
-export async function waitVideoEditTracking(document: Pick<VideoEditDocument, 'media' | 'items'>, sequence: { frameRate: { numerator: number; denominator: number }; clips: readonly VideoEditClip[] }, signal?: AbortSignal): Promise<void> {
+export async function waitVideoEditTracking(document: Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences'>>, sequence: { frameRate: { numerator: number; denominator: number }; clips: readonly VideoEditClip[] }, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
+  const requests = new Map<string, { definition: TrackingDefinition; range: TrackingRange }>()
+  for (const reachable of videoEditReachableSequences(document, sequence)) {
   const used = new Set<string>()
-  for (const clip of sequence.clips) {
+  for (const clip of reachable.clips) {
     for (const effect of clip.effects ?? []) {
       if (!effect.enabled || effect.amount <= 0 || !effect.mask) continue
       if (effect.mask.regionId === 'tracker') used.add(`${clip.id}\u0000${effect.mask.trackerId}`)
@@ -189,12 +192,12 @@ export async function waitVideoEditTracking(document: Pick<VideoEditDocument, 'm
     }
     if (clip.follow) used.add(`${clip.follow.clipId}\u0000${clip.follow.trackerId}`)
   }
-  const requests = new Map<string, { definition: TrackingDefinition; range: TrackingRange }>()
   for (const reference of used) {
     const [clipId, trackerId] = reference.split('\u0000')
-    const clip = sequence.clips.find(entry => entry.id === clipId); const tracker = clip?.trackers?.find(entry => entry.id === trackerId)
-    const request = clip && tracker ? videoEditTrackingRequest(document, sequence.frameRate, clip, tracker) : undefined
+    const clip = reachable.clips.find(entry => entry.id === clipId); const tracker = clip?.trackers?.find(entry => entry.id === trackerId)
+    const request = clip && tracker ? videoEditTrackingRequest(document, reachable.frameRate, clip, tracker) : undefined
     if (request) mergeRequest(requests, request)
+  }
   }
   if (!requests.size) return
   const lease = {}; exportRequests.set(lease, requests)

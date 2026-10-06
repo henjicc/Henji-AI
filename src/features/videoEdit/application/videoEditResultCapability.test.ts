@@ -5,11 +5,12 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { Blob as NativeBlob } from 'node:buffer'
+import path from 'node:path'
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore'
-import { appendVideoEditClip, closeVideoEditProject, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
-import { registerVideoEditProgramCapture } from './videoEditProgramCapture'
+import { appendVideoEditClip, closeVideoEditProject, editVideoProject, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
 import { editVideoEditProgramFrame, readVideoEditImageReturn } from './videoEditFrameEdit'
 import { commitVideoEditCreativeResult } from './videoEditResultTarget'
+vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), trialVideoEditCodeFrames: vi.fn(async () => ({ width: 1920, height: 1080, close: vi.fn() })) }))
 vi.mock('@/features/navigation/application/surfaceNavigationService', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), openApplicationSurface: vi.fn(() => ({ status: 'opened' })) }))
 import { planVideoEditSend, sendCreativeResultToVideoEdit } from './videoEditResultSend'
 import { createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
@@ -23,8 +24,13 @@ vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: clas
 } }))
 const files = new Map<string, string>(); const assets = new Map<string, AssetRecord>()
 const content = { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'c'.repeat(64) }
+const framePath = path.resolve(path.sep, 'managed', 'frame-30.png')
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear(); assets.clear()
+  vi.stubGlobal('OffscreenCanvas', class {
+    getContext() { return { drawImage() {} } }
+    async convertToBlob() { return new NativeBlob(['png'], { type: 'image/png' }) }
+  })
   generation.read.mockReset().mockResolvedValue({ mediaType: 'image', source: 'D:/generated/poster.png', name: '海报' })
   const platform = getPlatform()
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/place.henji-video')
@@ -33,15 +39,16 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/generated')
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
+  vi.spyOn(platform.image, 'persistImageBinary').mockResolvedValue(framePath)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue(content)
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
     const existing = [...assets.values()].find(asset => asset.filePath === input.filePath); if (existing) return existing
-    const value: AssetRecord = { id: `asset-${assets.size + 1}`, filePath: input.filePath, mediaType: input.mediaType, displayName: input.displayName ?? '结果', displayUrl: '', source: input.source, mimeType: 'image/png', ...content, width: 3840, height: 2160, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: input.libraryIds ?? [] }
+    const value: AssetRecord = { id: `asset-${assets.size + 1}`, filePath: input.filePath, mediaType: input.mediaType, displayName: input.displayName ?? '结果', displayUrl: '', source: input.source, mimeType: 'image/png', ...content, width: input.source === 'video-edit' ? 1920 : 3840, height: input.source === 'video-edit' ? 1080 : 2160, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: input.libraryIds ?? [] }
     assets.set(value.id, value); return value
   })
   vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => structuredClone(assets.get(id)!))
 })
-afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
 it('公共能力与界面发送走同一固定目标事务：落点、来源、资产与一次撤销一致', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequence = owner.document.sequences[0]
@@ -85,20 +92,51 @@ it('编辑当前帧先固定上方空画面轨道，再出帧交给图片编辑�
   const lowest = sequence.tracks.filter(track => track.kind === 'video').sort((a, b) => a.index - b.index)[0]
   appendVideoEditClip(id, undefined, { frame: 0, track: lowest.index })
   setVideoEditView(id, { frame: 30, playing: false })
-  const unregister = registerVideoEditProgramCapture(owner, sequence.id, async () => new NativeBlob(['png'], { type: 'image/png' }) as unknown as Blob)
-  vi.mocked(getPlatform().system.dialog.save).mockResolvedValue('D:/frames/frame-30.png')
-  vi.mocked(getPlatform().system.fs.exists).mockResolvedValue(false)
-  vi.spyOn(getPlatform().system.fs, 'writeFile').mockResolvedValue(undefined)
-  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue(content)
+  const app = createApplicationHarness()
   try {
+    const opened = await app.requireResult('edit_video_edit_program_frame', { documentRef: { kind: 'video_edit.document', id } })
+    expect(opened).toMatchObject({ surfaceRef: { kind: 'application.surface', id: 'tool.image_edit' }, returnPlacement: { mode: 'add', frame: 30, durationFrames: 1 }, verification: { verified: true } })
     const sessionRef = (await editVideoEditProgramFrame(id))!
-    expect(useImageEditorHandoffStore.getState().pending).toMatchObject({ sessionRef, sourceUrl: 'D:/frames/frame-30.png' })
+    expect(useImageEditorHandoffStore.getState().pending).toMatchObject({ sessionRef, sourceUrl: framePath })
     const bound = readVideoEditImageReturn(sessionRef)!
     expect(bound.label).toContain('00:00:01:00')
     setVideoEditView(id, { frame: 0 })
     const asset = await getPlatform().assetLibrary.createAsset({ filePath: 'D:/managed/edited.png', mediaType: 'image', source: 'canvas' })
+    const past = owner.past.length
     const receipt = await commitVideoEditCreativeResult(bound.target, { asset, origin: { type: 'document', docRef: { docId: 'doc', path: 'D:/作品/图片文档/doc.henjiimg' }, revision: 1 } })
     const placed = owner.document.sequences[0].clips.find(clip => clip.id === receipt.clipId)!
-    expect(placed.start).toBe(30); expect(placed.track).toBeGreaterThan(lowest.index)
-  } finally { unregister() }
+    expect(placed.start).toBe(30); expect(placed.duration).toBe(1); expect(placed.track).toBeGreaterThan(lowest.index)
+    expect(owner.past).toHaveLength(past + 1)
+    undoVideoEdit(id); expect(owner.document.sequences[0].clips.find(clip => clip.id === receipt.clipId)).toBeUndefined()
+    // 助手跨调用回填也必须使用最初的会话，不能把旧帧放进已改变的剪辑。
+    const next = await app.requireResult('edit_video_edit_program_frame', { documentRef: { kind: 'video_edit.document', id } })
+    const input = { documentRef: next.documentRef, sequenceRef: next.sequenceRef, placement: next.returnPlacement, frameEditSessionRef: next.frameEditSessionRef, result: { type: 'asset', assetRef: { kind: 'asset', id: asset.id } } }
+    const sent = await app.requireResult('place_video_edit_creative_result', input)
+    expect(sent).toMatchObject({ resultRef: { kind: 'video_edit.clip' }, verification: { verified: true } })
+    expect(owner.document.sequences[0].clips.find(clip => `${id}:${clip.id}` === (sent.resultRef as { id: string }).id)).toMatchObject({ start: 0, duration: 1 })
+    const changed = await app.requireResult('edit_video_edit_program_frame', { documentRef: { kind: 'video_edit.document', id } })
+    editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, name: '后来改动' })) }))
+    const failed = await app.call('place_video_edit_creative_result', { ...input, placement: changed.returnPlacement, frameEditSessionRef: changed.frameEditSessionRef })
+    expect(JSON.stringify(failed)).toContain('已有修改')
+  } finally { app.dispose() }
+})
+
+it('正式资产引用可选择其他剪辑素材面板；来源异步解析期间切换播放头仍落到点击时的位置', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  const asset = await getPlatform().assetLibrary.createAsset({ filePath: path.resolve(path.sep, 'managed', 'asset.png'), mediaType: 'image', source: 'imported' })
+  const app = createApplicationHarness()
+  try {
+    const result = await app.requireResult('place_video_edit_creative_result', { documentRef: { kind: 'video_edit.document', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${owner.activeSequenceId}` }, placement: { mode: 'library' }, result: { type: 'asset', assetRef: { kind: 'asset', id: asset.id } } })
+    expect(result).toMatchObject({ resultRef: { kind: 'video_edit.item' }, assetRef: { kind: 'asset' }, verification: { verified: true } })
+    const importedAssetId = (result.assetRef as { id: string }).id
+    expect(owner.document.sequences[0].clips).toHaveLength(0)
+    setVideoEditView(id, { frame: 42 })
+    let resolve!: () => void; const pending = new Promise<void>(done => { resolve = done })
+    const sent = sendCreativeResultToVideoEdit(async () => { await pending; return { type: 'asset', assetId: asset.id } }, { mediaKind: 'image', mode: 'overwrite', projectId: id, duration: 1 })
+    await createLegacyTrackVideoEditProject(); setVideoEditView(id, { frame: 99 }); resolve()
+    const receipt = await sent
+    expect(owner.document.sequences[0].clips.find(clip => clip.id === receipt.clipId)).toMatchObject({ start: 42, duration: 1 })
+    expect(owner.document.sequences[0].clips[0].creativeSource).toBeUndefined()
+    expect(owner.document.media[0].assetId).toBe(importedAssetId)
+  } finally { app.dispose() }
 })

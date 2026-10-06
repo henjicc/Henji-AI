@@ -138,7 +138,7 @@ it('参数修改更新同一渲染会话，旧文档结果不覆盖新内容且�
   await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0], presented: false }) })
   expect(canvas.dataset.presentedFrame).toBeUndefined()
   await act(async () => { await vi.advanceTimersByTimeAsync(1) })
-  expect(pixel.sessions).toBe(1); expect(pixel.update).toHaveBeenCalledWith(getActiveVideoEditSequence(instance))
+  expect(pixel.sessions).toBe(1); expect(pixel.update).toHaveBeenCalledWith(getActiveVideoEditSequence(instance), false)
   await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [0] }) })
   expect(canvas.dataset.presentedFrame).toBe('0')
 })

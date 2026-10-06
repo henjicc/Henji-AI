@@ -3,6 +3,7 @@ import {
   smartRegionBoxesAt, smartRegionFrameAt, smartRegionLayoutBytes, smartRegionMaskSize, smartRegionSegmentCovers,
   type SmartRegionAnalysisKind, type SmartRegionMaskSetting, type SmartRegionSegmentLayout,
 } from '@/core/videoEdit/smartRegions'
+import type { VideoEditAttentionBox } from '@/core/videoEdit/reframe'
 
 /*
  * 剪辑渲染 Worker 读取智能区域缓存（任务 4.7d）：主线程把已分析好的段落（可 fetch 的地址）发过来，
@@ -27,6 +28,7 @@ let segments: VideoEditSmartRegionSegments = {}
 const layouts = new Map<string, Promise<SmartRegionSegmentLayout>>()
 const mattes = new Map<string, Promise<Uint8Array>>()
 const masks = new Map<string, VideoEditSmartRegionMask>()
+const attentionBoxes = new Map<string, VideoEditAttentionBox | null>()
 
 function remember<T>(cache: Map<string, T>, key: string, value: T, limit: number): T {
   cache.delete(key); cache.set(key, value)
@@ -38,7 +40,7 @@ export function setVideoEditSmartRegionSegments(value: VideoEditSmartRegionSegme
   segments = value
   // 不再引用的文件可能已被清理或重写，缓存跟着清掉。
   const live = new Set(Object.values(value).flatMap(kinds => Object.values(kinds).flatMap(list => (list ?? []).map(segment => segment.url))))
-  for (const cache of [layouts, mattes, masks] as Array<Map<string, unknown>>) for (const key of [...cache.keys()]) if (!live.has(key.split('\u0000')[0])) cache.delete(key)
+  for (const cache of [layouts, mattes, masks, attentionBoxes] as Array<Map<string, unknown>>) for (const key of [...cache.keys()]) if (!live.has(key.split('\u0000')[0])) cache.delete(key)
 }
 
 export async function fetchRange(url: string, start: number, end: number): Promise<Uint8Array> {
@@ -86,6 +88,26 @@ function matteOf(url: string, layout: SmartRegionSegmentLayout, frame: number): 
     else if (!mattes.has(`${url}\u0000${index}`)) remember(mattes, `${url}\u0000${index}`, pending, MAX_MATTES)
   }
   return remember(mattes, key, result!, MAX_MATTES)
+}
+
+/** Reframe consumes the same analyzed container; scan a matte only once per analyzed frame. */
+export async function videoEditSmartRegionAttentionBox(mediaUrl: string, kind: 'face' | 'person', timeUs: number): Promise<VideoEditAttentionBox | null> {
+  const segment = segments[mediaUrl]?.[kind]?.find(entry => smartRegionSegmentCovers(entry, timeUs, timeUs))
+  if (!segment) throw new Error('关注区域分析未覆盖完整片段，请重新分析。')
+  const layout = await layoutOf(segment.url); const { header } = layout
+  if (header.kind !== kind) throw new Error('关注区域分析种类不一致，请重新分析。')
+  if (!header.matte) {
+    const boxes = smartRegionBoxesAt(header, timeUs)
+    const largest = boxes.reduce<typeof boxes[number] | undefined>((best, box) => !best || box[2] * box[3] > best[2] * best[3] ? box : best, undefined)
+    return largest ? { x: largest[0], y: largest[1], width: largest[2], height: largest[3] } : null
+  }
+  const frame = smartRegionFrameAt(header, timeUs); const key = `${segment.url}\u0000${frame}`
+  if (attentionBoxes.has(key)) return remember(attentionBoxes, key, attentionBoxes.get(key)!, MAX_MATTES)
+  const data = await matteOf(segment.url, layout, frame); const { width, height } = header.matte
+  if (data.length !== width * height) throw new Error('人物分析帧不完整，请重新分析。')
+  let left = width; let top = height; let right = -1; let bottom = -1
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (data[y * width + x] >= 128) { left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, x); bottom = Math.max(bottom, y) }
+  return remember(attentionBoxes, key, right < 0 ? null : { x: left / width, y: top / height, width: (right + 1 - left) / width, height: (bottom + 1 - top) / height }, MAX_MATTES)
 }
 
 /**

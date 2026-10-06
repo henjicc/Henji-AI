@@ -3,6 +3,8 @@ import { resolve, sep } from 'node:path'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest } from './videoEditWorker'
 
+const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
+vi.mock('../application/videoEditProxy', () => ({ verifiedVideoEditProxySources: async () => proxyState.sources }))
 const platform = vi.hoisted(() => ({
   status: vi.fn(async () => ({ available: true, forcedBackend: null as 'native' | 'browser' | null })),
   connect: vi.fn(async () => ({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })),
@@ -44,11 +46,24 @@ function composition(): VideoEditComposition {
   } as unknown as VideoEditComposition
 }
 beforeEach(() => {
-  workers.length = 0; platform.logs = []
+  workers.length = 0; platform.logs = []; proxyState.sources = {}
   platform.status.mockReset().mockResolvedValue({ available: true, forcedBackend: null })
   platform.connect.mockReset().mockResolvedValue({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })
   platform.disconnect.mockReset()
   platform.allowRoot.mockClear(); platform.dirname.mockClear()
+})
+
+it('预览与导出 Worker 接收完整嵌套图，子序列保持原始尺寸/PAR，媒体仅在共同入口转换', async () => {
+  const root = composition(); const child = { ...root, id: 'child', name: '子序列', pixelAspectRatio: { numerator: 2, denominator: 1 } }
+  const document = { ...root, sequences: [root, child], items: [{ id: 'nested-item', name: '嵌套', kind: 'sequence' as const, sequenceId: 'child' }] }
+  for (const previewWidth of [960, undefined]) {
+    const session = new VideoEditRenderSession(document, previewWidth); await session.present(0)
+    const init = workers.at(-1)!.messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
+    expect(init.document.sequences).toEqual(document.sequences)
+    expect(init.document.items).toEqual(document.items)
+    expect(init.document.media[0].path).toBe(`url:${root.media[0].path}`)
+    await session.dispose()
+  }
 })
 
 it('LUT 在预览/导出共用会话边界授权并转换，新引用更新后也转换；项目路径保持原样', async () => {
@@ -104,4 +119,25 @@ it('Worker 的结构化日志经会话写入应用日志，不当作请求回执
   workers[0].onmessage?.({ data: { kind: 'log', level: 'info', message: '剪辑素材解码方式已确定', event: 'video_edit.decode.backend.selected', context: { backend: 'native' } } } as MessageEvent)
   expect(platform.logs.at(-1)).toEqual({ level: 'info', message: '剪辑素材解码方式已确定', meta: { event: 'video_edit.decode.backend.selected', context: { backend: 'native' } } })
   await session.dispose()
+})
+
+it('代理只进入明确预览会话，切换或抓原片淘汰旧帧，导出不接收代理；声音保留原路径', async () => {
+  const document = composition()
+  const proxy = { path: 'D:/cache/proxy.mp4', key: 'a'.repeat(64), contentIdentity: 'b'.repeat(64), preset: '720p' as const, width: 1280, height: 720, bytes: 1024 }
+  proxyState.sources = { pro: proxy }
+  const preview = new VideoEditRenderSession(document, 1920, undefined, undefined, undefined, 'project')
+  await preview.present(0)
+  const init = workers[0].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
+  expect(init.decode?.proxies?.pro.path).toBe('url:D:/cache/proxy.mp4')
+  expect(init.decode?.localPaths?.['url:D:/cache/proxy.mp4']).toBe(proxy.path)
+  expect(init.document.media[0]).toMatchObject({ path: 'url:D:/prores.mov', sourceRevision: `:proxy:${proxy.key}` })
+  await preview.updateDocument(document, true)
+  expect(workers[0].messages.at(-1)!.message).toMatchObject({ kind: 'update', proxies: {}, document: { media: [expect.objectContaining({ path: 'url:D:/prores.mov' }), expect.anything(), expect.anything()] } })
+  proxyState.sources = {}; await preview.updateDocument(document)
+  expect(workers[0].messages.at(-1)!.message).toMatchObject({ proxies: {} })
+  proxyState.sources = { pro: proxy }
+  const exported = new VideoEditRenderSession(document); await exported.present(0)
+  const exportInit = workers[1].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
+  expect(exportInit.decode?.proxies).toEqual({}); expect(exportInit.document.media[0].sourceRevision).toBeUndefined()
+  await Promise.all([preview.dispose(), exported.dispose()])
 })

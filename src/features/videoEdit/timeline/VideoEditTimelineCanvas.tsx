@@ -1,3 +1,4 @@
+import { VideoEditReframeDialog } from '../panels/VideoEditReframeDialog'
 import { VideoEditTimelineKeyframes } from './VideoEditTimelineKeyframes'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { VideoEditDropPlacement } from '../application/videoEditDrop'
@@ -53,6 +54,8 @@ import { clearVideoEditEffectDropTarget, handleVideoEditEffectDragOver, handleVi
 import { VideoEditEffectDropTargets, VideoEditTransitionDropBlock } from './VideoEditTimelineDropFeedback'
 import { useVideoEditInPlaceMenu } from './useVideoEditInPlaceMenu'
 import { VideoEditInPlacePlaceholders } from './VideoEditInPlacePlaceholders'
+import { VideoEditNestDialog } from '../panels/VideoEditNestDialog'
+import { openVideoEditNestedClip, type VideoEditNestTarget } from '../application/videoEditNesting'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean }
 /** 片段底色与描边（设计稿素材片段令牌）：画面、声音、文字/代码/图形/调整各一组；选中改强调描边。 */
@@ -76,6 +79,7 @@ const FADE_HANDLE_MIN_WIDTH = 28
 interface TransitionDropHint { kind: VideoEditTransitionKind; pair: VideoEditTransitionPair; alignment: VideoEditTransitionAlignment; track: number; start: number; duration: number }
 export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true }: Props): React.ReactElement {
   const projectId = instance.document.id
+  const [nestTarget, setNestTarget] = useState<VideoEditNestTarget | null>(null)
   const fps = videoEditFps(sequence.frameRate)
   const [view, setView] = useState<TimelineViewport>({ left: 0, top: 0, width: 900, height: 300 })
   const [hint, setHint] = useState<(VideoEditDropPlacement & { ghosts?: VideoEditClip[]; shifted?: VideoEditClip[] }) | null>(null)
@@ -110,13 +114,14 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   // 吸附提示线（PR）：拖动吸上的那一帧在轨道上画一条竖线，各种拖动共用 timelineSnap 的同一份状态
   const snapFrame = useTimelineSnapIndicator(sequence.id)
   const [audioChannels, setAudioChannels] = useState<VideoEditAudioChannelsTarget | null>(null)
+  const [reframeTarget, setReframeTarget] = useState<VideoEditSceneTarget | null>(null)
   const [sceneTarget, setSceneTarget] = useState<VideoEditSceneTarget | null>(null)
   const speedDialog = useVideoEditSpeedDialogRequest(instance.document.id)
   const clipSource = useVideoEditClipSource(onError)
   // 原地生成（4.12）：右键菜单项、生成面板与占位片段都在独立模块，这里只接线
   const inPlace = useVideoEditInPlaceMenu(instance, sequence, onError)
   const inPlaceFrameAt = (clientX: number): number | null => { const host = pointer.viewport.current; if (!host) return null; const x = clientX - host.getBoundingClientRect().left + host.scrollLeft - TIMELINE_HEADER_WIDTH; return x < 0 ? null : Math.floor(x / pixels) }
-  const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId), { items: inPlace.items, frameAt: inPlaceFrameAt }, setSceneTarget)
+  const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId), { items: inPlace.items, frameAt: inPlaceFrameAt }, setSceneTarget, setReframeTarget, setNestTarget)
   const displayed = pointer.preview ?? sequence
   // 拖动预览里新建的轨道也要显示出来（PR：拖到轨道外即出现新轨道）。
   const layout = timelineLayout(heightsOf(displayed), layoutInput, pointer.resized)
@@ -393,6 +398,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     return (rows.find(row => row.track.index === at.track)?.top ?? 0) + 2
   }
   return <>
+    {nestTarget && <VideoEditNestDialog target={nestTarget} onClose={() => setNestTarget(null)} />}
     <div ref={pointer.viewport} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport data-video-edit-tool={instance.tool} className={`video-edit-timeline-viewport relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent ${pointer.failure ? 'cursor-not-allowed' : ''}`}
       onScroll={readViewport}
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
@@ -402,6 +408,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const hit = elementOfEventTarget(event.target)?.closest('[data-video-edit-clip]') ?? document.elementFromPoint?.(event.clientX, event.clientY)?.closest('[data-video-edit-clip]')
         const clipId = hit?.getAttribute('data-video-edit-clip')
         if (!clipId) return
+        if (sequence.clips.find(clip => clip.id === clipId)?.kind === 'sequence') { event.preventDefault(); try { openVideoEditNestedClip(projectId, clipId) } catch (error) { onError(error) } return }
         if (sequence.clips.find(clip => clip.id === clipId)?.creativeSource) { event.preventDefault(); clipSource.open(projectId, clipId); return }
         const context = captureVideoEditCommandContext(projectId, 'timeline', { clipIds: [clipId] })
         if (videoEditCommandState(context, 'locate_source').enabled) { event.preventDefault(); void executeVideoEditCommand(context, 'locate_source').catch(onError) }
@@ -506,11 +513,13 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       onRange={(from, to) => videoEditTimelineViewport(projectId, sequence.id)?.showRange(from, to)}
       onZoom={(frame, factor) => videoEditTimelineViewport(projectId, sequence.id)?.zoomAt(frame, factor)} />
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
+    {menu.canvasDialog}
     {trackMenu.elements}
     {clipSource.dialog}
     {inPlace.dialog}
     {speedDialog && <VideoEditSpeedDialog request={speedDialog} onClose={closeVideoEditSpeedDialog} />}
     {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
+    {reframeTarget && <VideoEditReframeDialog target={reframeTarget} onClose={() => setReframeTarget(null)} />}
     {sceneTarget && <VideoEditSceneDetectionDialog target={sceneTarget} onClose={() => setSceneTarget(null)} />}
     {pendingSequence && <VideoEditSequenceDialog title="按素材新建序列" requireFrameRate initial={pendingSequence.settings} bins={pendingSequence.owner.document.bins} onClose={() => setPendingSequence(null)} onSubmit={async settings => {
       const { owner, input, placement: at, sequenceId } = pendingSequence

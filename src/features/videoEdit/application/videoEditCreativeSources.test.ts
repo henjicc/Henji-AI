@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
+import path from 'node:path'
+import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { prepareVideoEditCreativeResult, type VideoEditCreativeSourceRequest } from './videoEditCreativeSources'
 
 // Producer services and native I/O are the only replaced boundaries; adapter pinning,
@@ -161,4 +163,21 @@ it('目标失效时不再收录资产：原结果保留在生产方', async () =
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => { valid = false; return content })
   await expect(prepareVideoEditCreativeResult({ type: 'generation', recordId: 'h', outputIndex: 0 }, options(assertTarget))).rejects.toThrow('已有修改')
   expect(producers.addAsset).not.toHaveBeenCalled()
+})
+
+it('资产来源保留正式媒体身份，不伪造文档来源；检查过程中被替换则拒绝', async () => {
+  const asset = record({ filePath: path.resolve(path.sep, 'media', 'library.png'), mediaType: 'image', source: 'imported' })
+  library.set(asset.id, asset)
+  const prepared = await prepareVideoEditCreativeResult({ type: 'asset', assetId: asset.id }, options())
+  expect(prepared.asset).toMatchObject({ filePath: asset.filePath, contentIdentity: asset.contentIdentity, mediaType: 'image' }); expect(prepared.origin).toBeUndefined()
+  expect(producers.addAsset).toHaveBeenCalledWith(expect.objectContaining({ filePath: asset.filePath, mediaType: 'image' }))
+  producers.inspect.mockResolvedValueOnce(asset).mockResolvedValue({ ...asset, contentIdentity: 'b'.repeat(64) })
+  await expect(prepareVideoEditCreativeResult({ type: 'asset', assetId: asset.id }, options())).rejects.toThrow('已改变')
+})
+
+it('画布已持久化上传输入也可作为剪辑来源，不要求生成任务完成标记', async () => {
+  const node = { id: 'uploaded', type: CANVAS_NODE_TYPES.upload, position: { x: 0, y: 0 }, data: { imageUrl: path.resolve(path.sep, 'media', 'upload.png'), testOutput: { kind: 'image', url: path.resolve(path.sep, 'media', 'upload.png') } } }
+  producers.canvas.mockResolvedValue({ nodes: [node] })
+  const prepared = await prepareVideoEditCreativeResult({ type: 'document', docRef: ref('canvas'), part: node.id }, options())
+  expect(prepared).toMatchObject({ asset: { filePath: node.data.imageUrl }, origin: { type: 'document', part: node.id } })
 })

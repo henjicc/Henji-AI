@@ -6,7 +6,7 @@ import type { VideoEditClip } from './document'
 import type { VideoEditEffect } from './compositing'
 
 /** Same value/interpolation contract as source curves; clip-relative integer frames replace source microseconds. */
-export const videoEditKeyframeSchema = codeMaterialKeyframeSchema.omit({ id: true, sourceInUs: true, sourceRemainder: true }).extend({ time: z.number().int().min(0).max(108_000), source: z.literal('ducking').optional(), duckingOrigin: z.object({ time: z.number().int().min(0).max(108_000), value: z.number().finite().min(0).max(2) }).strict().optional(), easeRange: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]).refine(([a, b]) => b > a, '缓动区间终点须大于起点。').optional() })
+export const videoEditKeyframeSchema = codeMaterialKeyframeSchema.omit({ id: true, sourceInUs: true, sourceRemainder: true }).extend({ time: z.number().int().min(0).max(108_000), source: z.enum(['ducking', 'reframe']).optional(), reframeOrigin: z.object({ time: z.number().int().min(0).max(108_000), value: z.number().finite(), interpolation: z.enum(['linear', 'hold']) }).strict().optional(), duckingOrigin: z.object({ time: z.number().int().min(0).max(108_000), value: z.number().finite().min(0).max(2) }).strict().optional(), easeRange: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]).refine(([a, b]) => b > a, '缓动区间终点须大于起点。').optional() })
 export const videoEditKeyframesSchema = z.array(videoEditKeyframeSchema).max(256).superRefine((points, ctx) => {
   if (points.some((point, i) => i > 0 && point.time <= points[i - 1].time)) ctx.addIssue({ code: 'custom', message: '关键帧 time 必须按片段内帧升序排列，不能重复。' })
 })
@@ -38,14 +38,27 @@ export function putVideoEditKeyframe(points: readonly VideoEditKeyframe[] | unde
 export function isVideoEditDuckingKeyframe(point: VideoEditKeyframe): boolean {
   return point.source === 'ducking' && (!point.duckingOrigin || point.time === point.duckingOrigin.time && point.value === point.duckingOrigin.value && point.interpolation === 'linear' && !point.easeRange)
 }
+export function isVideoEditReframeKeyframe(point: VideoEditKeyframe): boolean {
+  return point.source === 'reframe' && Boolean(point.reframeOrigin && point.time === point.reframeOrigin.time && point.value === point.reframeOrigin.value && point.interpolation === point.reframeOrigin.interpolation && !point.easeRange)
+}
+function remapVideoEditReframeOrigin(point: VideoEditKeyframe, time: number, value: VideoEditKeyframe['value'] = point.value): Partial<VideoEditKeyframe> {
+  return isVideoEditReframeKeyframe(point) ? { source: 'reframe', reframeOrigin: { time, value: value as number, interpolation: point.interpolation as 'linear' | 'hold' } } : {}
+}
 /** Once a generated point is hand edited it belongs to the user, including interpolation edits. */
 export function claimVideoEditManualKeyframes(points: VideoEditKeyframes, previous: VideoEditKeyframes | undefined): VideoEditKeyframes {
   return points.map(point => {
     const old = previous?.find(value => value.time === point.time)
     if (!point.source || old && JSON.stringify(old) === JSON.stringify(point)) return point
-    const { source: _source, duckingOrigin: _origin, ...manual } = point
+    const { source: _source, duckingOrigin: _origin, reframeOrigin: _reframeOrigin, ...manual } = point
     return manual
   })
+}
+/** Shared motion/curve write contract for UI and generated algorithms. */
+export function writeVideoEditClipKeyframes(clip: VideoEditClip, key: VideoEditAnimatableKey, points: VideoEditKeyframes, manual = true): VideoEditClip {
+  const parsed = videoEditKeyframesSchema.parse(points)
+  const curves = { ...clip.curves, [key]: manual ? claimVideoEditManualKeyframes(parsed, clip.curves?.[key]) : parsed }
+  if (!points.length) delete curves[key]
+  return { ...clip, curves }
 }
 export function videoEditClipValue(clip: VideoEditClip, key: VideoEditAnimatableKey, timelineFrame: number): number {
   return evaluateVideoEditKeyframes(clip.curves?.[key], timelineFrame - clip.start, clip[key] ?? 0.5)
@@ -91,10 +104,10 @@ export function sliceVideoEditCurves(curves: VideoEditCurves | undefined, offset
     const at = (time: number): VideoEditKeyframe => {
       const left = [...points].reverse().find(point => point.time <= time) ?? points[0]
       const value = evaluateVideoEditKeyframes(points, time, points[0].value)
-      return { time: time - offset, value, interpolation: left.interpolation, ...(isVideoEditDuckingKeyframe(left) ? { source: 'ducking' as const, duckingOrigin: { time: time - offset, value: value as number } } : {}) }
+      return { time: time - offset, value, interpolation: left.interpolation, ...remapVideoEditReframeOrigin(left, time - offset, value), ...(isVideoEditDuckingKeyframe(left) ? { source: 'ducking' as const, duckingOrigin: { time: time - offset, value: value as number } } : {}) }
     }
     const end = offset + duration - 1
-    const sliced = points.filter(point => point.time >= offset && point.time <= end).map(point => ({ ...point, time: point.time - offset, ...(isVideoEditDuckingKeyframe(point) ? { duckingOrigin: { time: point.time - offset, value: point.value as number } } : {}) }))
+    const sliced = points.filter(point => point.time >= offset && point.time <= end).map(point => ({ ...point, time: point.time - offset, ...remapVideoEditReframeOrigin(point, point.time - offset), ...(isVideoEditDuckingKeyframe(point) ? { duckingOrigin: { time: point.time - offset, value: point.value as number } } : {}) }))
     if (points[0].time < offset && !sliced.some(point => point.time === 0)) sliced.unshift(at(offset))
     if (points[points.length - 1].time > end && !sliced.some(point => point.time === duration - 1)) sliced.push(at(end))
     if (!sliced.length) sliced.push(at(offset))
@@ -117,7 +130,7 @@ export function sliceVideoEditClipKeyframes(clip: VideoEditClip, offset: number,
 }
 export function rescaleVideoEditClipKeyframes(clip: VideoEditClip, convert: (time: number) => number, duration: number): VideoEditClip {
   const map = (curves: VideoEditCurves | undefined): VideoEditCurves | undefined => curves && Object.fromEntries(Object.entries(curves).map(([key, points]) => {
-    const unique = new Map(points.map(point => { const time = Math.max(0, Math.min(duration - 1, convert(point.time))); return [time, { ...point, time, ...(isVideoEditDuckingKeyframe(point) ? { duckingOrigin: { time, value: point.value as number } } : {}) }] }))
+    const unique = new Map(points.map(point => { const time = Math.max(0, Math.min(duration - 1, convert(point.time))); return [time, { ...point, time, ...remapVideoEditReframeOrigin(point, time), ...(isVideoEditDuckingKeyframe(point) ? { duckingOrigin: { time, value: point.value as number } } : {}) }] }))
     return [key, [...unique.values()].sort((a, b) => a.time - b.time)]
   }))
   return { ...clip, ...(clip.curves ? { curves: map(clip.curves) } : {}), ...(clip.effects ? { effects: clip.effects.map(effect => effect.builtin?.curves ? { ...effect, builtin: { ...effect.builtin, curves: map(effect.builtin.curves) } } : effect) } : {}) }

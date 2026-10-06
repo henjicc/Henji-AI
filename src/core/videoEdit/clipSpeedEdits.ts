@@ -1,4 +1,4 @@
-import { videoEditClipMedia, videoEditComposition, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
+import { videoEditClipSourceDuration, videoEditComposition, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import type { VideoEditRatio } from './time'
@@ -31,8 +31,7 @@ export function assertVideoEditSpeedClips(clips: readonly VideoEditClip[]): void
 function sourceDuration(document: VideoEditDocument, sequence: VideoEditSequence, clip: VideoEditClip, metadata?: CodeMaterialMetadataReader): number | undefined {
   const program = clip.code ? metadata?.(clip.code) : undefined
   if (program?.mode === 'dynamic') return program.durationSeconds
-  const media = videoEditClipMedia(document, clip)
-  return media && media.kind !== 'image' ? media.durationSeconds : undefined
+  return videoEditClipSourceDuration(videoEditComposition(document, sequence.id), clip)
 }
 /** 同轨道上 `clip` 之后最近的、不在 `excluded` 里的片段起点（没有时为序列上限）。 */
 function nextStart(sequence: VideoEditSequence, clip: VideoEditClip, excluded: ReadonlySet<string>, limit: number): number {

@@ -2,6 +2,7 @@ import type { VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { videoEditMatchFrameTarget, videoEditReverseMatchFrame, type VideoEditReverseMatchTarget } from '@/core/videoEdit/matchFrame'
 import { focusVideoEditPanel, getActiveVideoEditSequence, requireVideoEditInstance, setVideoEditView, type VideoEditInstance } from './videoEditService'
 import { readVideoEditSource, updateVideoEditSource } from './videoEditSource'
+import { openVideoEditNestedClip } from './videoEditNesting'
 
 /** 匹配帧（F）与反向匹配帧（Shift+R）：落点由 core/videoEdit/matchFrame 计算，这里接到源监视器与节目播放头。 */
 function targetTracks(owner: VideoEditInstance): number[] {
@@ -30,6 +31,7 @@ export async function matchVideoEditFrame(projectId: string, clipIds: readonly s
   const owner = requireVideoEditInstance(projectId)
   const target = videoEditMatchFrameTarget(owner.document, getActiveVideoEditSequence(owner), { clipIds, frame, targetTracks: targetTracks(owner) })
   if ('reason' in target) throw new Error(target.reason)
+  if (target.sequenceId) { openVideoEditNestedClip(projectId, target.clipId, frame); return }
   await updateVideoEditSource(projectId, { itemId: target.itemId, timeUs: target.timeUs, inUs: target.inUs, outUs: target.outUs, playing: false })
   focusVideoEditPanel(projectId, 'source')
 }

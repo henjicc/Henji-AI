@@ -1,3 +1,4 @@
+import { getVideoEditProxySources } from '../application/videoEditProxy'
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
 import type { VideoEditSourceObservation, VideoEditSourcePresenter } from '../application/videoEditSource'
@@ -48,7 +49,7 @@ const NATIVE_SOUND_CLOCK_MS = 50
 /** Native forward playback and cached reverse frames share one source owner. */
 export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: (itemId: string) => VideoEditMedia,
   observe: (itemId: string, observation: VideoEditSourceObservation) => void, observeLevel?: (levels: VideoEditAudioLevel[]) => void,
-  resolveAudioLayout?: (itemId: string) => VideoEditAudioMapping[] | undefined): { present: VideoEditSourcePresenter; release: () => Promise<void>; dispose: () => Promise<void> } {
+  resolveAudioLayout?: (itemId: string) => VideoEditAudioMapping[] | undefined, proxyProjectId?: string): { present: VideoEditSourcePresenter; release: () => Promise<void>; dispose: () => Promise<void> } {
   let element: HTMLVideoElement | HTMLAudioElement | HTMLImageElement | undefined
   let currentItem = ''
   let currentPath = ''
@@ -288,7 +289,9 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     signal.addEventListener('abort', abort, { once: true })
     try {
       if (!request.itemId) { release(); return { timeUs: 0, presentedTimeUs: 0, playing: false, volume: request.volume } }
-      const media = resolveMedia(request.itemId)
+      const originalMedia = resolveMedia(request.itemId)
+      const proxy = proxyProjectId ? getVideoEditProxySources(proxyProjectId)[originalMedia.id] : undefined
+      const media = proxy ? { ...originalMedia, sourceRevision: `${originalMedia.sourceRevision ?? ''}:proxy:${proxy.key}` } : originalMedia
       currentFps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : 30
       constantFrameRate = media.frameRateMode === 'sampled-constant'
       // The item's audio layout (task 2.6) decides which sound streams the source monitor plays.
@@ -296,7 +299,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
       if (currentItem !== request.itemId || currentPath !== media.path || currentRevision !== media.sourceRevision || currentLayout !== layoutKey || !(element || nativeView)) {
         release(); currentItem = request.itemId; currentPath = media.path; currentRevision = media.sourceRevision; currentLayout = layoutKey
         // Decided while the media element loads (cached per file), so browser-decoded items open as fast as before.
-        backendChoice = media.kind !== 'image' ? videoEditSourceBackend(media).catch(() => undefined) : undefined
+        backendChoice = media.kind !== 'image' ? (proxy ? Promise.resolve('native' as const) : videoEditSourceBackend(media)).catch(() => undefined) : undefined
       }
       if (!element && !nativeView) {
         element = document.createElement(media.kind === 'image' ? 'img' : media.kind === 'audio' ? 'audio' : 'video')
@@ -311,7 +314,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
           element.addEventListener('ended', () => { if (generation === expected) publish() })
           element.addEventListener('volumechange', () => { if (generation === expected) publish() })
           const loaded = waitEvent(element, 'loadedmetadata', operation.signal)
-          element.src = resolveImageDisplayUrl(media.path); host.replaceChildren(element)
+          element.src = resolveImageDisplayUrl(proxy?.path ?? media.path); host.replaceChildren(element)
           const deciding = backendChoice; backendChoice = undefined
           const [choice, failure] = deciding ? await Promise.all([abortable(deciding, operation.signal), loaded.then(() => undefined, (error: unknown) => error)]) : [undefined, await loaded]
           if (choice === 'native') {
@@ -322,7 +325,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
             if (media.kind === 'video') {
               const canvas = document.createElement('canvas'); canvas.className = 'h-full w-full object-contain'
               canvas.setAttribute('aria-label', '源素材画面'); canvas.setAttribute('data-video-edit-source-media', 'video'); canvas.setAttribute('data-video-edit-source-canvas', '')
-              nativeView = { owner: new VideoEditSourceFrames(media, canvas), node: canvas, canvas, ...(sound ? { sound } : {}), media, clockUs: 0, presentedTimeUs: 0, playing: false, direction: 1 }
+              nativeView = { owner: new VideoEditSourceFrames(originalMedia, canvas, proxyProjectId), node: canvas, canvas, ...(sound ? { sound } : {}), media, clockUs: 0, presentedTimeUs: 0, playing: false, direction: 1 }
               host.replaceChildren(canvas)
             } else {
               // Sound only: like the hidden audio element, nothing visible; the node carries the confirmed clock.
@@ -381,7 +384,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
         if (element !== target || generation !== expected) throw new Error('源预览请求已被更新。')
         const canvas = document.createElement('canvas'); canvas.width = media.width; canvas.height = media.height; canvas.className = 'h-full w-full object-contain'
         canvas.setAttribute('aria-label', '源素材反向画面'); canvas.setAttribute('data-video-edit-source-canvas', '')
-        const owner = new VideoEditSourceFrames(media, canvas); frames = owner; frameCanvas = canvas
+        const owner = new VideoEditSourceFrames(originalMedia, canvas, proxyProjectId); frames = owner; frameCanvas = canvas
         const inside = (timeUs: number): number => Math.min(Math.max(0, Math.round(media.durationSeconds * 1e6) - 1), Math.max(0, timeUs))
         if (anchorTimeUs > 0) await abortable(owner.present(inside(Math.round(anchorTimeUs - 500_000 / currentFps))), operation.signal)
         // Preserve the exact confirmed PTS, including VFR frames. A nominal

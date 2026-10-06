@@ -1,6 +1,6 @@
 import { videoEditClipSchema, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, type VideoEditGesture } from './videoEditService'
-import { claimVideoEditManualKeyframes, putVideoEditKeyframe, videoEditKeyframesSchema, type VideoEditAnimatableKey, type VideoEditKeyframes } from '@/core/videoEdit/keyframes'
+import { writeVideoEditClipKeyframes, putVideoEditKeyframe, type VideoEditAnimatableKey, type VideoEditKeyframes } from '@/core/videoEdit/keyframes'
 
 /** 效果控件里可直接调的片段固有属性（PR 的“运动 / 不透明度 / 音量”等固定效果）。 */
 export type VideoEditClipPropertyKey = VideoEditAnimatableKey
@@ -75,9 +75,7 @@ export function updateVideoEditClipKeyframes(projectId: string, sequenceId: stri
     const clip = sequence?.clips.find(value => value.id === clipId)
     if (!sequence || !clip) throw new Error('原片段已移除。')
     if (sequence.tracks.find(track => track.index === clip.track)?.locked) throw new Error('所属轨道已锁定，请先解锁。')
-    const curves = { ...clip.curves, [key]: claimVideoEditManualKeyframes(videoEditKeyframesSchema.parse(points), clip.curves?.[key]) }
-    if (!points.length) delete curves[key]
-    const next = { ...clip, curves }
+    const next = writeVideoEditClipKeyframes(clip, key, points)
     return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips: sequence.clips.map(value => value === clip ? next : value) } : value) }
   }
   if (gesture) {

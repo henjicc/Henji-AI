@@ -9,6 +9,7 @@ import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, li
 import { createVideoEditBin, updateVideoEditItems } from '../application/videoEditProjectItems'
 import { readVideoEditSource, registerVideoEditSourcePresenter } from '../application/videoEditSource'
 import { VideoEditProjectPanel } from './VideoEditProjectPanel'
+import type { VideoProxyResult } from '@/core/videoEdit/proxy'
 
 // This component test covers UI-to-domain commands; the real viewport is covered by Electron acceptance.
 vi.mock('react-virtuoso', () => {
@@ -24,6 +25,7 @@ let onError: ReturnType<typeof vi.fn>
 function View(): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditProjectPanel instance={instance} onError={onError} /> }
 beforeEach(async () => {
   installHarnessNativeStorage(); files.clear(); onError = vi.fn()
+  vi.spyOn(getPlatform().videoProxy, 'lookup').mockResolvedValue(null)
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/project-ui.henji-video')
   vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue(null)
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
@@ -139,5 +141,29 @@ it('列表视图按 PR：素材箱三角展开显示缩进的内容，表头点�
   await waitFor(() => expect(instance.document.items[0].label).toBe('yellow'))
   expect(instance.past).toHaveLength(history + 1)
   expect(view.getByRole('button', { name: 'A原视频' }).querySelector('[data-video-edit-label]')!.getAttribute('data-video-edit-label')).toBe('yellow')
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it('素材右键创建代理进入后台，列表显示进度与已有，保留原片和内容历史', async () => {
+  const result: VideoProxyResult = { path: 'D:/cache/a.mp4', key: 'a'.repeat(64), contentIdentity: 'b'.repeat(64), preset: '720p', width: 1280, height: 720, bytes: 1024 }
+  let finish: (value: VideoProxyResult) => void = () => undefined
+  vi.spyOn(getPlatform().videoProxy, 'create').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  const progress = vi.spyOn(getPlatform().videoProxy, 'onProgress').mockReturnValue(() => undefined)
+  const view = render(<View />)
+  await waitFor(() => expect(getPlatform().videoProxy.lookup).toHaveBeenCalled())
+  const column = (): Element => view.getByRole('button', { name: 'A原视频' }).querySelector('[data-video-edit-project-column="proxy"]')!
+  expect(column().textContent).toBe('无')
+  const before = instance.document; const history = instance.past.length
+  fireEvent.contextMenu(view.getByRole('button', { name: 'A原视频' }))
+  fireEvent.click(await view.findByText('创建代理…'))
+  fireEvent.click(await view.findByRole('button', { name: '创建' }))
+  await waitFor(() => expect(column().textContent).toBe('生成中 0%'))
+  const request = vi.mocked(getPlatform().videoProxy.create).mock.calls[0][0]
+  act(() => progress.mock.calls[0][0]({ requestId: request.requestId, progress: .5 }))
+  expect(column().textContent).toBe('生成中 50%')
+  await act(async () => finish(result))
+  await waitFor(() => expect(column().textContent).toBe('已有'))
+  expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history)
+  expect(request).toMatchObject({ source: 'D:/sourceA.mp4', preset: '720p' })
   expect(onError).not.toHaveBeenCalled()
 })

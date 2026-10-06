@@ -10,6 +10,7 @@ import { toFetchableMediaUrl } from '@/services/imageSource'
 import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegionMasks'
 import { listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
+import { videoEditReachableSequences } from '@/core/videoEdit/sequenceGraph'
 import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
 
 /*
@@ -166,11 +167,11 @@ export function videoEditSmartRegionFailureText(reason: SmartRegionFailureReason
 }
 
 /** 导出前：等这份剪辑序列需要的区域全部分析完成；有失败时以用户语言报错。 */
-export async function waitVideoEditSmartRegions(document: Pick<VideoEditDocument, 'media' | 'items'>, sequence: { frameRate: { numerator: number; denominator: number }; clips: readonly VideoEditClip[] }, signal?: AbortSignal): Promise<void> {
+export async function waitVideoEditSmartRegions(document: Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences'>>, sequence: { frameRate: { numerator: number; denominator: number }; clips: readonly VideoEditClip[] }, signal?: AbortSignal): Promise<void> {
   const requests = new Map<string, SmartRegionRequest>()
-  for (const clip of sequence.clips) for (const effect of clip.effects ?? []) {
+  for (const reachable of videoEditReachableSequences(document, sequence)) for (const clip of reachable.clips) for (const effect of clip.effects ?? []) {
     if (!effect.enabled || effect.amount <= 0) continue
-    const request = videoEditSmartRegionRequest(document, sequence.frameRate, clip, effect)
+    const request = videoEditSmartRegionRequest(document, reachable.frameRate, clip, effect)
     if (request) requests.set(smartRegionRequestKey(request), request)
   }
   if (!requests.size) return

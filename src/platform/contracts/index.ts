@@ -25,6 +25,7 @@ import type { WorkRootPlatform } from './workRoot'
 import type { LocalModelsPlatform } from './localModels'
 import type { SmartRegionsPlatform } from './smartRegions'
 import type { TrackingPlatform } from './tracking'
+import type { VideoProxyPlatform } from './videoProxy'
 import type { SceneDetectionPlatform } from './sceneDetection'
 
 export interface PlatformRuntime {
@@ -58,6 +59,7 @@ export interface PlatformRuntime {
   localModels: LocalModelsPlatform
   smartRegions: SmartRegionsPlatform
   tracking: TrackingPlatform
+  videoProxy: VideoProxyPlatform
   sceneDetection: SceneDetectionPlatform
 }
 

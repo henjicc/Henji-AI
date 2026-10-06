@@ -4,7 +4,7 @@ import type { DocumentMeta } from '@/core/documents/types'
 import { readGenerationResultMedia } from '@/features/generation/application/generationResultSource'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { getGraphNodeMediaOutputs } from '@/features/canvas/application/graphOutputResolver'
-import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
+import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { addMediaReferenceToLibrary, resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { exportAudioEdit } from '@/features/audioEdit/application/audioEditApplicationService'
@@ -46,7 +46,7 @@ interface PublishedSource {
   name: string
   librarySource: AssetSource
   /** 写进片段的来源（位置按找到的文档更新，图片文档带上渲染所用的版本）。 */
-  origin: VideoEditCreativeSource
+  origin?: VideoEditCreativeSource
   captions?: string
   dimensions?: { width: number; height: number }
   /** Managed files created by this preparation; released only if no library record references them. */
@@ -101,16 +101,29 @@ async function generationSource(source: Extract<VideoEditCreativeSourceRequest, 
   }
 }
 
+async function assetSource(source: Extract<VideoEditCreativeSourceRequest, { type: 'asset' }>, options: VideoEditCreativeSourceOptions): Promise<PublishedSource> {
+  const asset = await guarded(options, () => assetApplicationService.inspect(source.assetId))
+  if (asset.mediaType === 'code') throw new Error('代码素材请使用剪辑的“引用素材库素材”入口；此流转接受图片、视频和声音。')
+  contentOf(asset)
+  return { path: localPath(asset.filePath), mediaType: asset.mediaType, name: asset.displayName, librarySource: asset.source,
+    async recheck() {
+      const latest = await assetApplicationService.inspect(source.assetId)
+      if (latest.inspectionStatus !== 'ready' || !sameVideoEditAssetContent(asset, latest)) conflict()
+    },
+  }
+}
+
 interface CanvasOutput { path: string; mediaType: MediaKind; name: string; completion: string; node: CanvasNode }
 /** Persisted canvas completions are the durable truth; live task state is released after acknowledgement. */
 async function readCanvasOutput(canvasId: string, nodeId: string): Promise<CanvasOutput> {
   const project = await readPersistedCanvasProjectSnapshot(canvasId)
   const node = project.nodes.find(candidate => candidate.id === nodeId)
   const descriptor = node?.data.generationOutputDescriptor
-  if (!node || node.data.isGenerating || node.data.generationError || node.data.generationCancelled || !node.data.generationOutputCommitId || descriptor?.version !== 1) throw new Error('请选择原画布中已保存的正式完成结果。')
+  const inputNode = node && [CANVAS_NODE_TYPES.upload, CANVAS_NODE_TYPES.videoUpload, CANVAS_NODE_TYPES.audioUpload].some(type => type === node.type)
+  if (!node || node.data.isGenerating || node.data.generationError || node.data.generationCancelled || !inputNode && (!node.data.generationOutputCommitId || descriptor?.version !== 1)) throw new Error('请选择原画布中已保存的媒体输入或正式完成结果。')
   const outputs = getGraphNodeMediaOutputs(node, new Map(project.nodes.map(node => [node.id, node])))
-  if (outputs.length !== 1 || !['image', 'video', 'audio'].includes(outputs[0].kind) || outputs[0].kind !== descriptor.mediaType) throw new Error('此结果没有唯一已发布的图片、视频或音频，请选择具体完成项。')
-  return { path: localPath(outputs[0].url), mediaType: outputs[0].kind as MediaKind, name: node.data.displayName || '画布结果', completion: JSON.stringify([node.data.generationOutputCommitId, descriptor]), node }
+  if (outputs.length !== 1 || !['image', 'video', 'audio'].includes(outputs[0].kind) || !inputNode && outputs[0].kind !== descriptor?.mediaType) throw new Error('此结果没有唯一已发布的图片、视频或音频，请选择具体完成项。')
+  return { path: localPath(outputs[0].url), mediaType: outputs[0].kind as MediaKind, name: node.data.displayName || '画布结果', completion: JSON.stringify([node.type, node.data.generationOutputCommitId, descriptor, outputs]), node }
 }
 
 async function canvasSource(meta: DocumentMeta, part: string | undefined, options: VideoEditCreativeSourceOptions): Promise<PublishedSource> {
@@ -227,7 +240,7 @@ export async function prepareVideoEditCreativeResult(input: VideoEditCreativeSou
   const started = performance.now(); const timings: Record<string, number> = {}
   const mark = (stage: string): void => { timings[stage] = Math.round(performance.now() - started) }
   try {
-    published = await guarded(options, () => source.type === 'generation' ? generationSource(source, options) : documentSource(source, options))
+    published = await guarded(options, () => source.type === 'generation' ? generationSource(source, options) : source.type === 'asset' ? assetSource(source, options) : documentSource(source, options))
     const platform = getPlatform()
     mark('produced')
     const output = published

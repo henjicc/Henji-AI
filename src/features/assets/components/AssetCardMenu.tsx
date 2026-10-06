@@ -7,6 +7,7 @@ import { useI18n } from '@/hooks/useI18n'
 import { createLogger } from '@/core/logging'
 import { isElementNode } from '@/utils/crossRealmDom'
 import type { AssetMenuAnchor } from './AssetCard'
+import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
 
 const logger = createLogger('features.assets')
 
@@ -26,6 +27,7 @@ interface Props {
 
 export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, availableTags, onToggleLibrary, onSetTags, onRename, onDelete, onOpenBatchManagement, onClose }) => {
   const { t } = useI18n('ui')
+  const [sendMessage, setSendMessage] = useState('')
   const pendingActionRef = useRef(false)
   // 浮层外壳是共享 PanelTrigger 的锚点模式（任务 5.9）：定位、玻璃表面、点外与 Escape（只关最上层）、
   // 子浮层归属与收起动画都由它处理；收起动画结束后回调 onClose。
@@ -138,10 +140,12 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       <div className="max-h-32 overflow-y-auto"><div className="flex flex-wrap gap-1.5">{filteredLibraries.map((library) => <UiChipButton key={library.id} active={libraryIds.includes(library.id)} disabled={pendingAction !== null} size="sm" onClick={() => void toggleLibrary(library.id)}>{library.name}</UiChipButton>)}</div></div>
       {actionError ? <UiError size="xs" align="start" className="pb-0" title={actionError} message="" /> : null}
       {/* 菜单里的动作同为辅助档：批量管理是进入一种模式，删除是危险档（静息中性、悬停显红） */}
-      <div className="mt-4 flex justify-between gap-2">
+      <div className="mt-4 flex flex-wrap justify-between gap-2">
+        {asset.mediaType !== 'code' && <VideoEditSendMenu mediaKind={asset.mediaType} disabled={pendingAction !== null || asset.inspectionStatus !== 'ready'} resolveSource={() => ({ type: 'asset', assetId: asset.id })} notify={(message, type) => { if (type === 'error') setActionError(message); else setSendMessage(message) }} />}
         <UiButton disabled={pendingAction !== null} onClick={() => { requestClose(); onOpenBatchManagement() }}><ICON_MULTI_SELECT className="h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
         <UiButton variant="danger" disabled={pendingAction !== null} onClick={() => void deleteCurrentAsset()}><Trash2 className="h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>
       </div>
+      {sendMessage && <p role="status" className={UI_TEXT_META_CLASS}>{sendMessage}</p>}
     </div>
       )}
     />

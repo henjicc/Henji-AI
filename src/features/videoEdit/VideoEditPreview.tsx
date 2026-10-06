@@ -1,3 +1,6 @@
+import { VideoEditMulticamView } from './panels/VideoEditMulticamView'
+import { autoSwitchVideoEditMulticam, switchVideoEditMulticam, videoEditProgramMulticam } from './application/videoEditMulticam'
+import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from './application/videoEditProxy'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
@@ -30,6 +33,8 @@ import type { VideoEditProgramButtonId } from '@/core/videoEdit/monitorButtons'
 import { captureVideoEditProgramFrame, clearVideoEditPosterFrame, registerVideoEditProgramCapture, setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { editVideoEditProgramFrame } from './application/videoEditFrameEdit'
+import { VideoEditCanvasSendDialog, type VideoEditCanvasSendRequest } from './panels/VideoEditCanvasSendDialog'
+import { ICON_WORKSPACE_CANVAS } from '@/core/theme/icons'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 import { createLogger } from '@/core/logging'
@@ -79,6 +84,9 @@ function programDropZoneAt(event: React.DragEvent<HTMLElement>): VideoEditDropMo
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 export function VideoEditPreview({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
+  const [multicamView, setMulticamView] = useState(false)
+  const multicam = videoEditProgramMulticam(instance)
+  const [canvasSend, setCanvasSend] = useState<VideoEditCanvasSendRequest | null>(null)
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
@@ -133,7 +141,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     surface.width = initialDocument.width; surface.height = initialDocument.height
     surface.setAttribute('aria-label', '剪辑画面'); surface.className = 'h-full w-full object-contain'
     host.current?.replaceChildren(surface); canvas.current = surface
-    const renderer = new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen()); session.current = renderer
+    const renderer = new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen(), undefined, instance.document.id); session.current = renderer
     const unsubscribe = subscribeVideoEditDomain(() => {
       if (stopped) return
       if (getActiveVideoEditSequence(instance) !== appliedDocument) { stopAudio(); setLevels([]) }
@@ -144,6 +152,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
     })
     let audioRenderer: VideoEditRenderSession | undefined
+    let appliedProxy = videoEditProxySignature(instance.document.id)
     let appliedDocument = initialDocument
     let timer: ReturnType<typeof setTimeout>
     let audio: AudioContext | undefined
@@ -204,7 +213,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
       captureFull++
       try {
-        while (appliedDocument !== request.document || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(request.document.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
+        while (appliedProxy !== 'original' || appliedDocument !== request.document || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(request.document.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
           current()
           if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
           await new Promise(resolve => setTimeout(resolve, 5))
@@ -231,7 +240,12 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         if (appliedDocument !== document) {
           stopAudio(); wasPlaying = false
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
-          await renderer.updateDocument(document); await audioRenderer?.updateDocument(document); appliedDocument = document; lastFrame = -1; lastRequested = -1
+          await renderer.updateDocument(document, captureFull > 0); await audioRenderer?.updateDocument(document); appliedDocument = document; lastFrame = -1; lastRequested = -1
+          if (stopped) return
+        }
+        const proxySignature = captureFull > 0 ? 'original' : videoEditProxySignature(instance.document.id)
+        if (appliedProxy !== proxySignature) {
+          stopAudio(); wasPlaying = false; await renderer.updateDocument(document, captureFull > 0); appliedProxy = proxySignature; lastFrame = -1; lastRequested = -1
           if (stopped) return
         }
         const divisor = captureFull > 0 ? 1 : videoEditPreviewDivisor(getVideoEditPlaybackResolution(instance.document.id), current.playing)
@@ -371,6 +385,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   }, [projectId, projectDocument, activeSequenceId, inFrame, outFrame, targetTracks, shortcuts])
   const commandContext = captureVideoEditCommandContext(projectId, 'program', { includeClipboard: false })
   const programButtons: VideoEditMonitorButtonSpec[] = [
+    { id: 'toggle_proxies', title: '切换代理', Icon: Gauge, on: getVideoEditProxyPreference(instance.document.id).enabled, tooltip: '切换代理：看片使用已有代理；导出与分析始终使用原片', onClick: () => { try { setVideoEditProxyPreference(instance.document.id, { enabled: !getVideoEditProxyPreference(instance.document.id).enabled }) } catch (error) { onError(error) } } },
     ...PROGRAM_COMMAND_BUTTONS.map((id): VideoEditMonitorButtonSpec => {
       const command = id === 'lift' || id === 'extract' ? rangeEdits[id] : timelineCommandPresentation(commandContext, id, shortcuts)
       if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, size: 'lg', enabled: command.enabled, onClick: () => runCommand(id) }
@@ -386,7 +401,13 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   // 节目监视器（界面重设计 3.5，设计稿 VideoEdit；剪辑对齐 PR 2.5）：画面区（媒体底 + 右侧纵向电平）+ 唯一一条控制带：
   // 时间码 ｜ 自定义按钮栏（默认同 PR 节目监视器）+“+”按钮编辑器、适应 ｜ 更多（放不下的按钮、不在栏里的工具模式、重新加载、选帧加入资产库、编辑当前帧）。
   // 压在画面上的状态与标注输入用玻璃 / 媒体叠层令牌。
-  return <div className="flex min-h-0 flex-1 flex-col bg-panel">
+  return <div className="flex min-h-0 flex-1 flex-col bg-panel" onKeyDown={event => {
+    if (!multicamView || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || !/^[1-9]$/.test(event.key) || (event.target as HTMLElement).closest('input,textarea,[contenteditable="true"],[role="textbox"]')) return
+    const target = videoEditProgramMulticam(instance); const camera = target?.source.multicam?.cameras[Number(event.key) - 1]
+    if (!target || !camera) return
+    event.preventDefault(); event.stopPropagation()
+    try { switchVideoEditMulticam({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: target.clip.id }, camera.id, instance.playing ? instance.frame : undefined) } catch (error) { onError(error) }
+  }}>
     <div ref={zoom.containerRef} {...zoom.containerProps} className={`relative flex min-h-0 flex-1 bg-media py-3 pl-3 pr-6 ${zoom.containerClass}`}
       onDragOver={event => {
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
@@ -408,7 +429,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         const mode = programDropZoneAt(event)
         try { void dropVideoEditInput(instance.document.id, readVideoEditDrop(event.dataTransfer), { frame: instance.frame, mode }).catch(onError) } catch (error) { onError(error) }
       }}>
-      <div className={`relative ${zoom.boxClass}`} style={zoom.boxStyle} data-monitor-zoom-box data-video-edit-program-display={display === 'fit' ? 'fit' : 'zoom'}>
+      {visible && multicamView && <div className="flex w-1/2 min-w-0 shrink-0 flex-col pr-3"><VideoEditMulticamView instance={instance} onError={onError} /></div>}
+      <div className={`relative ${zoom.boxClass} ${multicamView ? 'min-w-0 flex-1' : ''}`} style={zoom.boxStyle} data-monitor-zoom-box data-video-edit-program-display={display === 'fit' ? 'fit' : 'zoom'}>
         <div ref={host} className="h-full w-full"
           onPointerDown={event => { if (mode === 'move') { picture.down(event); return } if (mode === 'select' || !instance.selection) return; const rect = event.currentTarget.getBoundingClientRect(); pointer.current = { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height, document: instance.document, sequenceId: instance.activeSequenceId, clipId: instance.selection, frame: instance.frame, command: videoEditProgramCommandIdentity(instance.document.id), selection: instance.selectedClipIds }; event.currentTarget.setPointerCapture(event.pointerId) }}
           onPointerMove={picture.move}
@@ -473,16 +495,20 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         {hiddenIds.includes('resolution') && <div className="flex flex-col gap-1" role="group" aria-label="回放分辨率">
           {PLAYBACK_RESOLUTION_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={playbackResolution.resolution === option.value} title={PLAYBACK_RESOLUTION_TIP} onClick={() => changePlaybackResolution({ resolution: option.value })}>回放 {option.label}</UiOptionButton>)}
         </div>}
+        <UiOptionButton variant="menu" size="sm" active={multicamView} onClick={() => setMulticamView(value => !value)}>多机位视图（1–9 切换）</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" disabled={!multicam || instance.playing} onClick={() => { if (multicam) void autoSwitchVideoEditMulticam({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: multicam.clip.id }).catch(onError) }}>建议机位切换</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={!playbackResolution.fullWhenPaused} disabled={playbackResolution.resolution === 'full'} title="默认暂停时回到完整分辨率以便看清细节；打开后暂停时也保持所选回放分辨率" onClick={() => changePlaybackResolution({ fullWhenPaused: !playbackResolution.fullWhenPaused })}><Gauge size={14} />暂停时也用此分辨率</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={14} />重新加载预览</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={14} />选帧加入资产库</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={() => setCanvasSend({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, source: { kind: 'frame', frame: instance.frame } })}><ICON_WORKSPACE_CANVAS size={14} />发送当前帧到画布</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="把当前画面作为项目列表里的封面" onClick={setPosterFrame}><ImageUp size={14} />设为项目封面</UiOptionButton>
         {instance.document.posterFrame && <UiOptionButton variant="menu" size="sm" className="gap-2" title="不再固定封面，保存时按剪辑内容自动更新" onClick={() => { try { clearVideoEditPosterFrame(instance.document.id) } catch (error) { onError(error) } }}><RotateCcw size={14} />恢复自动封面</UiOptionButton>}
-        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="在图片编辑中修改当前帧，完成后可回填到此帧上方的空画面轨道" onClick={editFrame}><PenLine size={14} />编辑当前帧</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="在图片编辑中修改当前帧，完成后可替换回原时刻的一帧" onClick={editFrame}><PenLine size={14} />编辑当前帧</UiOptionButton>
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="更多节目操作" title="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
       </PanelTrigger>}
       />
     </div>
+    {canvasSend && <VideoEditCanvasSendDialog request={canvasSend} onClose={() => setCanvasSend(null)} />}
   </div>
 }

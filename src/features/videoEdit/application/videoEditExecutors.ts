@@ -1,3 +1,6 @@
+import { videoEditSequenceSchema } from '@/core/videoEdit/document'
+import { getVideoEditProxyPreference, setVideoEditProxyPreference } from './videoEditProxy'
+import type { VideoEditProxyPreference } from '@/core/videoEdit/proxy'
 import { fieldEffectContract, fieldWriterTable, type ApplicationEffectContract, type ApplicationCollectionExecutor, type ApplicationCompletedStepResult, type ApplicationEffectReceipt, type ApplicationEvidence, type ApplicationExecutionContext, type ApplicationMutationExecutor, type ApplicationPlannedStep, type ApplicationRef } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { videoEditAnnotationSchema, videoEditClipSchema, videoEditDocumentSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, createVideoEditSequence, changeVideoEditSequenceSettings, type VideoEditDocument } from '@/core/videoEdit/document'
@@ -22,13 +25,13 @@ import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tra
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
 import { updateVideoEditClipInSequence } from './videoEditClipSpeed'
 
-interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting }
+interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting; proxyPreference: VideoEditProxyPreference }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
   const owner = requireVideoEditInstance(projectId)
-  return { view: getVideoEditProjectView(projectId), activeSequenceId: owner.activeSequenceId, timeline: getVideoEditTimelineView(projectId), primary: owner.selection, program: { frame: owner.frame, playing: owner.playing, playbackDirection: owner.playbackDirection }, programCommand: videoEditProgramCommandIdentity(projectId), playbackResolution: getVideoEditPlaybackResolution(projectId) }
+  return { view: getVideoEditProjectView(projectId), activeSequenceId: owner.activeSequenceId, timeline: getVideoEditTimelineView(projectId), primary: owner.selection, program: { frame: owner.frame, playing: owner.playing, playbackDirection: owner.playbackDirection }, programCommand: videoEditProgramCommandIdentity(projectId), playbackResolution: getVideoEditPlaybackResolution(projectId), proxyPreference: getVideoEditProxyPreference(projectId) }
 }
 function sameProjectView(current: ProjectViewSnapshot, expected: ProjectViewSnapshot): boolean {
-  const comparable = (value: ProjectViewSnapshot): unknown => ({ view: value.view, activeSequenceId: value.activeSequenceId, timeline: value.timeline, primary: value.primary, playbackResolution: value.playbackResolution })
+  const comparable = (value: ProjectViewSnapshot): unknown => ({ view: value.view, activeSequenceId: value.activeSequenceId, timeline: value.timeline, primary: value.primary, playbackResolution: value.playbackResolution, proxyPreference: value.proxyPreference })
   return current.programCommand === expected.programCommand && JSON.stringify(comparable(current)) === JSON.stringify(comparable(expected))
 }
 const undo = new Map<string, { owner: object; before: VideoEditDocument; after: VideoEditDocument; refs: ApplicationRef[]; viewBefore?: ProjectViewSnapshot; viewAfter?: ProjectViewSnapshot; sourcePause?: VideoEditSourcePause }>()
@@ -138,6 +141,7 @@ async function restore(token: string): Promise<ApplicationCompletedStepResult> {
     setVideoEditProjectView(record.before.id, record.viewBefore.view); switchVideoEditSequence(record.before.id, record.viewBefore.activeSequenceId)
     setVideoEditTimelineView(record.before.id, record.viewBefore.timeline, record.viewBefore.primary ?? undefined)
     setVideoEditPlaybackResolution(record.before.id, record.viewBefore.playbackResolution)
+    setVideoEditProxyPreference(record.before.id, record.viewBefore.proxyPreference)
     const restoredCommand = setVideoEditView(record.before.id, record.viewBefore.program)
     restoreVideoEditProgramCommandIdentity(record.before.id, restoredCommand, record.viewBefore.programCommand)
   }
@@ -152,7 +156,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const { projectId, childId } = splitVideoEditRef(step.target)
     const owner = requireVideoEditInstance(projectId); const before = owner.document
     const keys = step.mutations.map(mutation => mutation.propertyId)
-    const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback', 'video_edit.document.playback_resolution'].includes(key))
+    const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback', 'video_edit.document.playback_resolution', 'video_edit.document.proxy_preference'].includes(key))
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
     const data = readVideoEditData(step.target)
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
@@ -183,8 +187,12 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       if (this.entityType === 'video_edit.code_material') return { ...document, codeMaterials: document.codeMaterials?.map(definition => definition.id === childId ? { ...definition, name: String(data.name) } : definition) }
       return { ...document, sequences: document.sequences.map(sequence => {
         if (this.entityType === 'video_edit.sequence' && sequence.id === childId) {
+          if (keys.includes('video_edit.sequence.multicam')) {
+            const value = videoEditSequenceSchema.shape.multicam.unwrap().parse(data.multicam)
+            if (!sequence.multicam || value.cameras.length !== sequence.multicam.cameras.length || value.cameras.some((camera, index) => camera.id !== sequence.multicam!.cameras[index].id || camera.clipId !== sequence.multicam!.cameras[index].clipId)) throw new Error('只能修改现有机位名称、说话人和主音频，请保留机位引用和顺序。')
+          }
           const next = changeVideoEditSequenceSettings(sequence, { width: Number(data.width), height: Number(data.height), frameRate: data.frameRate as typeof sequence.frameRate, pixelAspectRatio: data.pixelAspectRatio as typeof sequence.pixelAspectRatio, sampleRate: data.sampleRate as typeof sequence.sampleRate, channels: data.channels as typeof sequence.channels })
-          return { ...next, name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
+          return { ...next, ...(keys.includes('video_edit.sequence.multicam') ? { multicam: videoEditSequenceSchema.shape.multicam.unwrap().parse(data.multicam) } : {}), name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
         }
         // 速度属性（4.13）与其余属性一起写：速度改动交给速度编辑换算时长与内容。
         if (this.entityType === 'video_edit.clip' && sequence.clips.some(clip => clip.id === childId)) {
@@ -236,6 +244,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const after = editVideoProject(projectId, update)
     if (writesView) setVideoEditProjectView(projectId, { selectedItemIds: data.selectedItemIds as string[], selectedBinId: String(data.selectedBinId), openSequenceIds: data.openSequenceIds as string[] })
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.timeline_view')) setVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
+    if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.proxy_preference')) setVideoEditProxyPreference(projectId, data.proxyPreference as unknown as VideoEditProxyPreference)
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.playback_resolution')) setVideoEditPlaybackResolution(projectId, data.playbackResolution as unknown as VideoEditPlaybackResolutionSetting)
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback')) setVideoEditView(projectId, data.programPlayback as ProjectViewSnapshot['program'])
     return completed(before, after, [step.target], viewBefore, sourcePause)
