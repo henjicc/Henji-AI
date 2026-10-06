@@ -5,11 +5,12 @@ import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { Diamond } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton } from '@/components/ui'
-import { UI_DIVIDER_CLASS } from '@/components/ui/styleTokens'
+import { UI_DIVIDER_CLASS, UI_TEXT_NUMERIC_CLASS } from '@/components/ui/styleTokens'
 import { VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import { videoEditDuration, videoEditClipMedia, type VideoEditClip, type VideoEditSequence } from '@/core/videoEdit/document'
 import { rescaleVideoEditFrame, videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditSyncOffsets } from '@/core/videoEdit/linkSync'
+import { videoEditClipSpeedLabel } from '@/core/videoEdit/clipSpeedDisplay'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import type { WaveformSourceRef } from '@/hooks/useWaveformData'
 import { VideoEditClipWaveform } from './VideoEditClipWaveform'
@@ -316,6 +317,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const channelType = videoEditClipAudioFormat(clip, media)
         const offset = syncOffsets.get(clip.id)
         const offsetLabel = offset === undefined ? undefined : `${offset > 0 ? '+' : ''}${offset}`
+        const speedLabel = videoEditClipSpeedLabel(clip)
         const selected = instance.selectedClipIds.includes(clip.id)
         // Picture clips show a filmstrip of their media (task 2.4); sound clips their waveform (task 2.3).
         const sound = clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent === 'audio'
@@ -339,8 +341,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {/* ui-surface-allow 片段入点裁剪柄：命中区不是按钮档位，外观由片段容器的 clip 令牌给出 */}
             <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
             {/* ui-surface-allow 片段体：整块是选择命中区，名称条压在缩略图/波形之上（设计稿 VideoEdit 片段名称条） */}
-            <UiButton aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 !items-start !justify-start !rounded-none !bg-transparent !p-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.shiftKey || event.ctrlKey || event.metaKey, false, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
-              <span data-user-content className={`max-w-full truncate rounded-br-sm px-1.5 text-2xs leading-4 ${picture || sound ? 'bg-media-scrim text-on-media' : 'text-text1'}`}>{clip.name}</span>
+            <UiButton aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${speedLabel ? ` ${speedLabel}` : ''}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 !items-start !justify-start !rounded-none !bg-transparent !p-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.shiftKey || event.ctrlKey || event.metaKey, false, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
+              <span data-user-content className={`max-w-full truncate rounded-br-sm px-1.5 text-2xs leading-4 ${picture || sound ? 'bg-media-scrim text-on-media' : 'text-text1'}`}>{clip.name}{speedLabel && <span className={UI_TEXT_NUMERIC_CLASS}> {speedLabel}</span>}</span>
             </UiButton>
             {/* ui-surface-allow 出点裁剪柄，同入点 */}
             <UiButton data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />

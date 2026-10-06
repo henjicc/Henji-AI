@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { UiEmpty, UiGroup, UiIconButton, UiInput } from '@/components/ui'
+import { UI_TEXT_NUMERIC_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui/styleTokens'
 import type { VideoEditClip } from '@/core/videoEdit/document'
+import { videoEditClipSpeedReadout } from '@/core/videoEdit/clipSpeedDisplay'
 import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
 import { editVideoSequence, getActiveVideoEditSequence, type VideoEditInstance } from '../application/videoEditService'
 import { CodeParameterPanel } from './CodeParameterPanel'
@@ -35,12 +37,14 @@ export function VideoEditEffectsPanel({ instance, onError, visible = true }: { i
   const sequence = getActiveVideoEditSequence(instance)
   const selection = instance.selection
   const selected = useMemo(() => sequence.clips.find(clip => clip.id === selection), [sequence, selection])
+  const speedReadout = selected ? videoEditClipSpeedReadout(selected) : ''
   const projectId = instance.document.id
   const gesture = useVideoEditClipPropertyGesture(projectId, sequence.id, selected?.id ?? '', reportError)
   const run = (operation: () => unknown): void => { try { operation() } catch (error) { onError(error) } }
   return <div className="flex h-full min-h-0 flex-col gap-3 overflow-auto px-3 py-2.5" aria-label="效果控件">
     {selected ? <div className="flex flex-col">
       <ClipNameHeader key={selected.id} clip={selected} onRename={name => run(() => updateVideoEditClipProperties(projectId, sequence.id, selected.id, { name }))} />
+      {speedReadout && <div className={`pb-2 ${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_NUMERIC_CLASS}`} data-video-edit-effects-clip-speed>{speedReadout}</div>}
       <VideoEditClipPropertySections clip={selected} frame={sequence} gesture={gesture} />
     </div> : selectedVideoEditTransitionId(instance) ? null : <UiEmpty size="sm" title="选择片段以编辑" />}
     {visible && selected?.kind === 'code' && selected.code && <CodeParameterPanel key={JSON.stringify(['source-code', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
