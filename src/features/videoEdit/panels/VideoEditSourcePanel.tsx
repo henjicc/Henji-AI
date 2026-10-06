@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Dropdown, UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
+import { UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, AudioLines, BetweenVerticalStart, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Film, Link2, Pause, Play, Replace, Rewind, Square, X, type LucideIcon } from 'lucide-react'
 import AudioPlayer from '@/components/AudioPlayer'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
@@ -19,6 +19,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { timelineCommandPresentation } from '../timeline/timelineCommandPresentation'
 import { VideoEditMonitorButton, VideoEditMonitorButtonEditor, useVideoEditMonitorButtonIds, type VideoEditMonitorButtonSpec } from './VideoEditMonitorButtons'
 import { useWaveformData } from '@/hooks/useWaveformData'
+import { useMonitorZoom } from './useMonitorZoom'
 
 /** 源按钮栏里走剪辑命令的按钮；入出点与 J/K/L 沿用原有名称（自动化场景按名称点击）。 */
 const SOURCE_COMMAND_BUTTONS: Array<{ id: 'mark_in' | 'mark_out' | 'clear_in_out' | 'step_back_five' | 'step_back' | 'play_reverse' | 'play_stop' | 'play_forward' | 'step_forward' | 'step_forward_five' | 'insert' | 'overwrite'; Icon: LucideIcon; title?: string }> = [
@@ -38,8 +39,12 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   const item = instance.document.items.find(item => item.id === state.itemId)
   const media = instance.document.media.find(media => media.id === item?.mediaId)
   const [draftTime, setDraftTime] = useState('0')
-  const [display, setDisplay] = useState<'fit' | 'actual'>('fit')
   const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
+  const pictured = !!media && media.kind !== 'audio'
+  // 显示比例与节目监视器同一套（滚轮无极缩放、中键平移、下拉等级）；换素材回到“适合”
+  const zoom = useMonitorZoom({ width: media?.width || 1920, height: media?.height || 1080, label: '源显示比例' })
+  const { setDisplay: setZoomDisplay } = zoom
+  useEffect(() => { setZoomDisplay('fit') }, [state.itemId, setZoomDisplay])
   const sourceDurationUs = Math.round((media?.durationSeconds ?? 0) * 1e6)
   // 多级波形覆盖整段素材：显示入出点之间，未设时显示整段（不再按 30 分钟分块解码）。
   const waveStartUs = state.inUs ?? 0
@@ -99,7 +104,9 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   // 唯一一条控制带：自定义按钮栏（默认入出点、逐帧、J/K/L、插入、覆盖、拖入）+“+”按钮编辑器 ｜ 适应、关闭（窄面板时整组换行，不横向滚动）。压在画面上的状态用媒体叠层令牌。
   return <div className="flex h-full min-h-0 flex-col overflow-hidden bg-panel" aria-label="源监视器" data-video-edit-panel="source" data-video-edit-source-status={state.status} tabIndex={0}>
     {/* 媒体底只给画面（视频/图片）；音频源是随主题的迷你播放器，压在固定深色媒体底上纸白下读不清（4.1） */}
-    <div className={`relative min-h-0 flex-1 ${state.itemId && media?.kind !== 'audio' ? 'bg-media' : ''}`}><div ref={host} className={display === 'fit' ? 'absolute bottom-3 left-3 right-6 top-3' : 'absolute bottom-3 left-3 right-6 top-3 overflow-auto [&>video]:!h-auto [&>video]:!w-auto [&>img]:!h-auto [&>img]:!w-auto [&>canvas]:!h-auto [&>canvas]:!w-auto'} data-video-edit-source-host data-video-edit-source-display={display} />
+    <div className={`relative min-h-0 flex-1 ${state.itemId && media?.kind !== 'audio' ? 'bg-media' : ''}`}><div ref={pictured ? zoom.containerRef : undefined} {...(pictured ? zoom.containerProps : {})} className={`absolute bottom-3 left-3 right-6 top-3 flex ${zoom.containerClass}`}>
+        <div className={`relative ${zoom.boxClass}`} style={zoom.boxStyle} data-monitor-zoom-box><div ref={host} className="absolute inset-0" data-video-edit-source-host data-video-edit-source-display={zoom.display === 'fit' ? 'fit' : 'zoom'} /></div>
+      </div>
       {media?.kind === 'audio' && <div className="relative flex h-full items-center px-3 pr-6"><AudioPlayer src={resolveImageDisplayUrl(media.path)} filePath={media.path} compact surface="plain" active={visible} controlledPlayback={{ currentTime: state.timeUs / 1e6, duration: media.durationSeconds, playing: state.playing, volume: state.volume, disabled: state.status !== 'ready', onTogglePlay: () => command('play_pause'), onSeek: seconds => run({ timeUs: Math.round(seconds * 1e6), playing: false }), onVolume: volume => run({ volume }) }} /></div>}
       {!state.itemId && <UiEmpty size="sm" className="h-full" title="选择源素材" description="在素材面板中双击视频、图片或音频，独立预览原文件。" />}
       {state.itemId && sounding && <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={meterLevels} title="源播放电平" />}
@@ -124,7 +131,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
         {barButtons.map(spec => <VideoEditMonitorButton key={spec.id} spec={spec} />)}
         <VideoEditMonitorButtonEditor kind="source" specs={sourceButtons} />
       </div>
-      {media?.kind !== 'audio' && <Dropdown<'fit' | 'actual'> ariaLabel="源显示比例" appearance="text" size="sm" value={display} options={[{ value: 'fit', label: '适应' }, { value: 'actual', label: '100%' }]} onSelect={setDisplay} />}
+      {pictured && zoom.dropdown}
       <UiIconButton aria-label="关闭源素材" title="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X size={15} /></UiIconButton>
     </div>}
     {state.error && <UiError size="sm" title={state.error} message="" />}
