@@ -35,6 +35,11 @@ export type VideoEditTimelineEdit =
    * Ripple Trim Previous/Next Edit to Playhead (Q/W) is the same edit over the clip's part before/after the playhead.
    */
   | { kind: 'range'; from: number; to: number; tracks: number[]; ripple: boolean }
+  /**
+   * Premiere modifier drags of the selection by `delta` frames (and `trackMap`): Alt = duplicate (overwrite at the drop),
+   * Ctrl+Alt = duplicate and insert, Ctrl = rearrange (extract from the source closing the gap, then insert at the drop).
+   */
+  | { kind: 'rearrange'; clipIds: string[]; delta: number; trackMap?: Record<number, number>; mode: 'copy' | 'copy_insert' | 'insert' }
   /** Premiere "Move into sync" / "Slip into sync" for the selected out-of-sync portions only. */
   | { kind: 'sync'; clipIds: string[]; mode: 'move' | 'slip' }
   /** `newTracks`: audio tracks appended before placing (a multi-track item needs more audio tracks than the sequence has). */
@@ -157,7 +162,7 @@ export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequence
   return applyVideoEditTimelineEditResult(document, sequenceId, edit, metadata).sequence
 }
 export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
-  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
+  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
   if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || (result.sequence.markers?.length ?? 0) > 500 || (result.sequence.captions?.length ?? 0) > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
   if ((result.sequence.transitions?.length ?? 0) > 500) throw new Error('序列最多500项转场。')
   validateVideoEditAdjustmentRanges(result.sequence)
@@ -189,7 +194,20 @@ function removeRange(sequence: VideoEditSequence, edit: Extract<VideoEditTimelin
   const origins = new Map(kept.map(clip => [clip.id, { originalId: clip.id, shift: clip.start - next.clips.find(value => value.id === clip.id)!.start }]))
   return retimeVideoEditContent(next, { ...next, clips: kept, annotations: shiftAnnotations(next, kept) }, origins)
 }
-function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' | 'range' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
+function rearrangeClips(document: VideoEditDocument, sequenceId: string, edit: Extract<VideoEditTimelineEdit, { kind: 'rearrange' }>, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds: string[] } {
+  integer(edit.delta)
+  const sequence = sequenceOf(document, sequenceId)
+  const clipboard = copyVideoEditClips(document, sequenceId, edit.clipIds, false)
+  const from = Math.min(...clipboard.clips.map(clip => clip.start))
+  const frame = Math.max(0, from + edit.delta)
+  const tracks = [...new Set(clipboard.clips.map(clip => edit.trackMap?.[clip.track] ?? clip.track))]
+  if (edit.mode !== 'insert') return placeClips(document, sequence, { kind: 'place', clipboard, frame, mode: edit.mode === 'copy' ? 'overwrite' : 'insert', ...(edit.trackMap ? { trackMap: edit.trackMap } : {}), targetTracks: tracks })
+  // Extract first; the drop frame moves left by the extracted ranges before it (a drop inside a range lands at its start).
+  const extracted = applyClipEdit(document, sequenceId, { kind: 'delete', clipIds: edit.clipIds, linked: false, ripple: true }, metadata)
+  const shift = intervals(clipboard.clips).reduce((sum, range) => sum + Math.max(0, Math.min(frame, range.to) - range.from), 0)
+  return placeClips({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? extracted : value) }, extracted, { kind: 'place', clipboard, frame: frame - shift, mode: 'insert', ...(edit.trackMap ? { trackMap: edit.trackMap } : {}), targetTracks: tracks })
+}
+function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' | 'range' | 'rearrange' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const sequence = sequenceOf(document, sequenceId)
   const ids = expandVideoEditSelection(sequence, edit.clipIds, edit.kind === 'sync' ? false : edit.linked ?? true); const selected = new Set(ids)
   if (!ids.length) throw new Error('请先选择片段。')

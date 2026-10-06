@@ -86,6 +86,19 @@ export function finishVideoEditTimelineDrag(handle: VideoEditTimelineDrag, adjus
   drags.delete(handle)
   executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds, linked: false })
 }
+/** Premiere 修饰键拖动（Alt 复制、Ctrl+Alt 复制并插入、Ctrl 重排插入）：与普通拖动同一把手，预览与释放共用一份编辑。 */
+export type VideoEditTimelineRearrange = Omit<Extract<VideoEditTimelineEdit, { kind: 'rearrange' }>, 'kind' | 'clipIds'>
+export function previewVideoEditTimelineRearrange(handle: VideoEditTimelineDrag, rearrange: VideoEditTimelineRearrange): VideoEditSequence {
+  const state = requireDrag(handle)
+  return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, { ...rearrange, kind: 'rearrange', clipIds: state.clipIds }, readVideoEditCodeMetadata(state.owner, state.baseline))
+}
+export function finishVideoEditTimelineRearrange(handle: VideoEditTimelineDrag, rearrange: VideoEditTimelineRearrange): void {
+  const state = requireDrag(handle)
+  const sequence = previewVideoEditTimelineRearrange(handle, rearrange)
+  videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
+  drags.delete(handle)
+  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...rearrange, kind: 'rearrange', clipIds: state.clipIds })
+}
 /**
  * 一次改多条轨道的高度，作为一步编辑；没有高度变化时不写历史。返回是否改变。
  * Shift+滚轮纵向缩放在滚动停下后用它一次写入。

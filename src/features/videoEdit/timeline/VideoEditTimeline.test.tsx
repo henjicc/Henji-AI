@@ -74,7 +74,7 @@ it('普通视频与代码多选，连续拖动仅本地预览，释放一次历�
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
   fireEvent.pointerUp(host, event(header + 20))
-  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 代码' }), event(header + 140, trackClientY(), { ctrlKey: true }))
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 代码' }), event(header + 140, trackClientY(), { shiftKey: true }))
   expect(owner.selectedClipIds).toEqual(ids)
   const baseline = owner.document; const history = owner.past.length
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
@@ -86,16 +86,43 @@ it('普通视频与代码多选，连续拖动仅本地预览，释放一次历�
   act(() => undoVideoEdit(owner.document.id)); expect(current().clips.map(clip => clip.start)).toEqual([0, 60]); expect(onError).not.toHaveBeenCalled()
 })
 
-it('框选与关联选择不误定位播放头；Ctrl 点击关联集合整体取消', () => {
+it('框选与关联选择不误定位播放头；Shift 点击关联集合整体取消', () => {
   executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'link', clipIds: ids })
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const frame = owner.frame
   const y = trackClientY()
   fireEvent.pointerDown(host, event(header + 150, y + 20)); fireEvent.pointerMove(host, event(header + 10, y - 20)); fireEvent.pointerUp(host, event(header + 10, y - 20))
   expect(new Set(owner.selectedClipIds)).toEqual(new Set(ids)); expect(owner.frame).toBe(frame)
-  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20, trackClientY(), { ctrlKey: true }))
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20, trackClientY(), { shiftKey: true }))
   expect(owner.selectedClipIds).toEqual([])
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 代码' }), event(header + 140)); fireEvent.pointerUp(host, event(header + 140))
   expect(new Set(owner.selectedClipIds)).toEqual(new Set(ids)); expect(owner.selection).toBe(ids[1]); expect(onError).not.toHaveBeenCalled()
+})
+
+it('Premiere 修饰键拖动：Alt 复制、Ctrl 重排插入、Ctrl+Alt 复制插入，各一步历史；双击片段在源监视器打开', async () => {
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  const spans = () => current().clips.filter(clip => clip.track === 1).map(clip => [clip.start, clip.duration]).sort((a, b) => a[0] - b[0])
+  // 片段：视频 [0,30)，代码 [60,90)；每帧 2px
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20, trackClientY(), { altKey: true }))
+  fireEvent.pointerMove(host, event(header + 100, trackClientY(), { altKey: true }))
+  expect(view.container.querySelectorAll('[data-video-edit-clip]')).toHaveLength(3)
+  let history = owner.past.length
+  fireEvent.pointerUp(host, event(header + 100, trackClientY(), { altKey: true }))
+  expect(spans()).toEqual([[0, 30], [40, 30], [70, 20]]); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(owner.document.id)); expect(spans()).toEqual([[0, 30], [60, 30]])
+  act(() => setVideoEditTimelineView(owner.document.id, { selectedClipIds: [] }))
+  history = owner.past.length
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20, trackClientY(), { ctrlKey: true }))
+  fireEvent.pointerMove(host, event(header + 160, trackClientY(), { ctrlKey: true })); fireEvent.pointerUp(host, event(header + 160, trackClientY(), { ctrlKey: true }))
+  // 抽出 [0,30) 后代码移到 30，落点 70 前移 30 到 40：插入后代码被拆成 [30,40) 与 [70,90)
+  expect(spans()).toEqual([[30, 10], [40, 30], [70, 20]]); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(owner.document.id)); act(() => setVideoEditTimelineView(owner.document.id, { selectedClipIds: [] }))
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20, trackClientY(), { ctrlKey: true, altKey: true }))
+  fireEvent.pointerMove(host, event(header + 140, trackClientY(), { ctrlKey: true, altKey: true })); fireEvent.pointerUp(host, event(header + 140, trackClientY(), { ctrlKey: true, altKey: true }))
+  expect(spans()).toEqual([[0, 30], [60, 30], [90, 30]])
+  const source = vi.spyOn(await import('../application/videoEditSource'), 'updateVideoEditSource').mockResolvedValue(undefined as never)
+  fireEvent.doubleClick(view.getAllByRole('button', { name: '选择片段 视频' })[0])
+  await waitFor(() => expect(source).toHaveBeenCalledWith(owner.document.id, expect.objectContaining({ itemId: 'video-item' })))
+  expect(onError).not.toHaveBeenCalled()
 })
 
 it('锁定轨道阻止指针编辑；目标/静音/独奏/输出/同步使用同一领域轨道', () => {
@@ -484,14 +511,16 @@ function linkedPair(): { picture: string; sound: string } {
 const clipButton = (view: ReturnType<typeof render>, id: string): HTMLElement => view.container.querySelector<HTMLElement>(`[data-video-edit-clip="${id}"] [aria-label^="选择片段"]`)!
 const syncBadges = (view: ReturnType<typeof render>) => Object.fromEntries([...view.container.querySelectorAll('[data-video-edit-sync-offset]')].map(badge => [badge.closest('[data-video-edit-clip]')!.getAttribute('data-video-edit-clip'), badge.textContent]))
 
-it('按住 Alt 单独选中并拖动链接中的声音，片段显示失步帧数，右键移入同步恢复且链接保留', async () => {
+it('Alt 点击单独选中链接中的声音，松开 Alt 拖动后显示失步帧数，右键移入同步恢复且链接保留', async () => {
   const { picture, sound } = linkedPair()
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   fireEvent.pointerDown(clipButton(view, sound), event(header + 20, trackClientY(0))); fireEvent.pointerUp(host, event(header + 20, trackClientY(0)))
   expect(new Set(owner.selectedClipIds)).toEqual(new Set([picture, sound]))
-  fireEvent.pointerDown(clipButton(view, sound), event(header + 20, trackClientY(0), { altKey: true }))
+  fireEvent.pointerDown(clipButton(view, sound), event(header + 20, trackClientY(0), { altKey: true })); fireEvent.pointerUp(host, event(header + 20, trackClientY(0)))
   expect(owner.selectedClipIds).toEqual([sound])
-  fireEvent.pointerMove(host, event(header + 30, trackClientY(0), { altKey: true }))
+  // Premiere：Alt 只在按下时决定单选；拖动时按住 Alt 是复制，所以移动单侧要松开 Alt 再拖。
+  fireEvent.pointerDown(clipButton(view, sound), event(header + 20, trackClientY(0)))
+  fireEvent.pointerMove(host, event(header + 30, trackClientY(0)))
   expect(syncBadges(view)).toEqual({ [picture]: '-5', [sound]: '+5' })
   fireEvent.pointerUp(host, event(header + 30, trackClientY(0)))
   expect(current().clips.find(clip => clip.id === sound)!.start).toBe(5); expect(current().clips.find(clip => clip.id === picture)!.start).toBe(0)

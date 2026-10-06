@@ -4,7 +4,7 @@ import { videoEditFps } from '@/core/videoEdit/time'
 import { expandVideoEditSelection, selectVideoEditRegion, selectVideoEditTrackFrom, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
 import { videoEditEditPoints, videoEditSnapFrame } from '@/core/videoEdit/timelineNavigation'
-import { beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, previewVideoEditTimelineDrag, updateVideoEditTrack, type VideoEditTimelineAdjustment, type VideoEditTimelineDrag } from '../application/videoEditTimeline'
+import { beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, finishVideoEditTimelineRearrange, previewVideoEditTimelineDrag, previewVideoEditTimelineRearrange, updateVideoEditTrack, type VideoEditTimelineAdjustment, type VideoEditTimelineDrag, type VideoEditTimelineRearrange } from '../application/videoEditTimeline'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
@@ -14,7 +14,8 @@ interface Point { x: number; y: number }
 export interface TimelineBox { from: Point; to: Point }
 interface BaseGesture { owner: VideoEditInstance; baseline: VideoEditInstance['document']; sequenceId: string; pointerId: number; origin: Point; client: Point; edge: { x: TimelineEdgeAxis; y: TimelineEdgeAxis }; tool: VideoEditInstance['tool']; zoom: number; pixels: number }
 type PointerGesture = BaseGesture & (
-  | { kind: 'clip'; handle: VideoEditTimelineDrag; ids: string[]; primary: string; mode: VideoEditTimelineAdjustment['mode']; moved: boolean; adjustment?: VideoEditTimelineAdjustment; error?: Error }
+  /** `variant`: Premiere modifier drag of a clip body, read from the keys held on every move (Alt copy, Ctrl insert, both: copy and insert). */
+  | { kind: 'clip'; handle: VideoEditTimelineDrag; ids: string[]; primary: string; mode: VideoEditTimelineAdjustment['mode']; variant: ClipDragVariant; moved: boolean; adjustment?: VideoEditTimelineAdjustment; rearrange?: VideoEditTimelineRearrange; error?: Error }
   | { kind: 'box'; initial: string[]; additive: boolean; linked: VideoEditRelations }
   | { kind: 'hand'; left: number; top: number }
   /** `snap`: Shift held — the playhead snaps to edit points, markers and the sequence in/out (Premiere). */
@@ -22,6 +23,10 @@ type PointerGesture = BaseGesture & (
   | { kind: 'height'; trackId: string; height: number; next: number }
   | { kind: 'razor'; clipId: string; linked: VideoEditRelations }
 )
+type ClipDragVariant = 'move' | VideoEditTimelineRearrange['mode']
+function clipDragVariant(event: { ctrlKey: boolean; metaKey: boolean; altKey: boolean }): ClipDragVariant {
+  return event.ctrlKey || event.metaKey ? event.altKey ? 'copy_insert' : 'insert' : event.altKey ? 'copy' : 'move'
+}
 interface Options { instance: VideoEditInstance; sequence: VideoEditSequence; rows: TimelineTrackRow[]; pixels: number; onError: (error: unknown) => void }
 
 /** Pointer drafts are local and bounded; only release enters the shared edit history. */
@@ -68,11 +73,19 @@ export function useTimelinePointer(options: Options) {
       try {
         const row = timelineTrackAt(rows, at.y)
         if (!row) throw new Error('请将片段放在可用轨道内。')
-        const adjustment: VideoEditTimelineAdjustment = { mode: gesture.mode, delta: Math.round((at.x - gesture.origin.x) / pixels), ...(gesture.mode === 'move' ? { trackMap: videoEditMoveTrackMap(sequence, gesture.ids, gesture.primary, row.track.index) } : {}), ...(instance.snapping ? { snapThreshold: 8 / pixels, snapFrames: [instance.frame] } : {}) }
+        const delta = Math.round((at.x - gesture.origin.x) / pixels)
+        const trackMap = gesture.mode === 'move' ? videoEditMoveTrackMap(sequence, gesture.ids, gesture.primary, row.track.index) : undefined
+        if (gesture.mode === 'move' && gesture.variant !== 'move') {
+          const rearrange: VideoEditTimelineRearrange = { mode: gesture.variant, delta, ...(trackMap ? { trackMap } : {}) }
+          const next = previewVideoEditTimelineRearrange(gesture.handle, rearrange)
+          gesture.rearrange = rearrange; gesture.adjustment = undefined; gesture.error = undefined; setFailure(null); setPreview(next)
+          return
+        }
+        const adjustment: VideoEditTimelineAdjustment = { mode: gesture.mode, delta, ...(trackMap ? { trackMap } : {}), ...(instance.snapping ? { snapThreshold: 8 / pixels, snapFrames: [instance.frame] } : {}) }
         const next = previewVideoEditTimelineDrag(gesture.handle, adjustment)
-        gesture.adjustment = adjustment; gesture.error = undefined; setFailure(null); setPreview(next)
+        gesture.adjustment = adjustment; gesture.rearrange = undefined; gesture.error = undefined; setFailure(null); setPreview(next)
       } catch (error) {
-        gesture.adjustment = undefined; gesture.error = error instanceof Error ? error : new Error(String(error)); setFailure(gesture.error.message); setPreview(null)
+        gesture.adjustment = undefined; gesture.rearrange = undefined; gesture.error = error instanceof Error ? error : new Error(String(error)); setFailure(gesture.error.message); setPreview(null)
       }
     } else if (gesture.kind === 'box') setBox({ from: gesture.origin, to: at })
     else if (gesture.kind === 'height') {
@@ -154,7 +167,8 @@ export function useTimelinePointer(options: Options) {
         return
       }
       if (!clip) { capture({ ...base(event), kind: 'box', initial: [...instance.selectedClipIds], additive: event.ctrlKey || event.metaKey || event.shiftKey, linked }); setBox({ from: at, to: at }); return }
-      if (event.ctrlKey || event.metaKey || event.shiftKey) { select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, linked); return }
+      // Shift+click adds or removes the clip (Premiere); Ctrl and Alt press on to modifier drags below.
+      if (event.shiftKey) { select([clip.id], true, false, linked); return }
       // Alt on an already selected linked clip narrows the selection to that single portion.
       if (event.altKey || !instance.selectedClipIds.includes(clip.id)) select([clip.id], false, false, linked)
       else setVideoEditTimelineView(instance.document.id, { selectedClipIds: [...instance.selectedClipIds] }, clip.id)
@@ -163,7 +177,7 @@ export function useTimelinePointer(options: Options) {
       // Validate even a stationary gesture so locked related clips cannot enter edit preview.
       const handle = beginVideoEditTimelineDrag(instance.document.id, sequence.id, ids)
       try { previewVideoEditTimelineDrag(handle, { mode, delta: 0 }) } catch (error) { finishVideoEditTimelineDrag(handle); throw error }
-      capture({ ...base(event), kind: 'clip', handle, ids, primary: clip.id, mode, moved: false })
+      capture({ ...base(event), kind: 'clip', handle, ids, primary: clip.id, mode, variant: clipDragVariant(event), moved: false })
       setVideoEditView(instance.document.id, { playing: false })
     } catch (error) { onError(error) }
   }
@@ -172,6 +186,7 @@ export function useTimelinePointer(options: Options) {
     if (!gesture || gesture.pointerId !== event.pointerId) return
     gesture.client = { x: event.clientX, y: event.clientY }
     if (gesture.kind === 'seek') gesture.snap = event.shiftKey
+    if (gesture.kind === 'clip') gesture.variant = clipDragVariant(event)
     applyPointer(gesture); animateEdge()
   }
   const up = (event: React.PointerEvent): void => {
@@ -186,7 +201,10 @@ export function useTimelinePointer(options: Options) {
     try {
       if (previous.kind === 'clip') {
         if (previous.error) { finishVideoEditTimelineDrag(previous.handle); throw previous.error }
-        if (previous.adjustment && (previous.adjustment.delta || Object.entries(previous.adjustment.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineDrag(previous.handle, previous.adjustment)
+        const rearrange = previous.rearrange
+        if (rearrange && (rearrange.delta || Object.entries(rearrange.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineRearrange(previous.handle, rearrange)
+        else if (rearrange) finishVideoEditTimelineDrag(previous.handle)
+        else if (previous.adjustment && (previous.adjustment.delta || Object.entries(previous.adjustment.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineDrag(previous.handle, previous.adjustment)
         else finishVideoEditTimelineDrag(previous.handle)
       } else if (previous.kind === 'box') {
         const at = point(previous.client); const fromY = Math.min(previous.origin.y, at.y); const toY = Math.max(previous.origin.y, at.y)

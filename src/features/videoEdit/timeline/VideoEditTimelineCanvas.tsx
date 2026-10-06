@@ -16,6 +16,7 @@ import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, type Video
 import { listVideoEditInstances, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, focusVideoEditPanel, type VideoEditInstance } from '../application/videoEditService'
 import { setVideoEditTrackHeights, updateVideoEditTrack } from '../application/videoEditTimeline'
 import { registerVideoEditTimelineViewport } from '../application/videoEditTimelineViewport'
+import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
 import { clampVideoEditTrackHeight, clampVideoEditZoom, videoEditZoomToFit } from '@/core/videoEdit/timelineNavigation'
 import { isDomNode, ownerWindowOf } from '@/utils/crossRealmDom'
 import { VideoEditSequenceDialog } from '../panels/VideoEditSequenceDialog'
@@ -248,11 +249,14 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       onScroll={onScroll} onPointerDownCapture={stopInitialPosition} onKeyDownCapture={stopInitialPosition} onContextMenuCapture={stopInitialPosition}
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
       onDoubleClick={event => {
-        // 双击记着来源的片段：回到来源继续编辑（图片文档片段打开图片编辑，4.1）
+        // 双击记着来源的片段：回到来源继续编辑（图片文档片段打开图片编辑，4.1）；其余有源文件的片段按 Premiere 在源监视器打开。
         // 按下时视口捕获了指针，双击事件的目标是视口本身：按落点找片段
         const hit = elementOfEventTarget(event.target)?.closest('[data-video-edit-clip]') ?? document.elementFromPoint?.(event.clientX, event.clientY)?.closest('[data-video-edit-clip]')
         const clipId = hit?.getAttribute('data-video-edit-clip')
-        if (clipId && sequence.clips.find(clip => clip.id === clipId)?.creativeSource) { event.preventDefault(); clipSource.open(projectId, clipId) }
+        if (!clipId) return
+        if (sequence.clips.find(clip => clip.id === clipId)?.creativeSource) { event.preventDefault(); clipSource.open(projectId, clipId); return }
+        const context = captureVideoEditCommandContext(projectId, 'timeline', { clipIds: [clipId] })
+        if (videoEditCommandState(context, 'locate_source').enabled) { event.preventDefault(); void executeVideoEditCommand(context, 'locate_source').catch(onError) }
       }}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); pointer.cancel() } }}
       onDragOver={event => { stopInitialPosition(); if (!acceptsVideoEditDrop(event.dataTransfer)) return; const at = placement(event); if (!at) { setHint(null); return } event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setHint(at) }}
@@ -314,7 +318,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
               {/* ui-surface-allow 片段入点裁剪柄：命中区不是按钮档位，外观由片段容器的 clip 令牌给出 */}
               <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
               {/* ui-surface-allow 片段体：整块是选择命中区，名称条压在缩略图/波形之上（设计稿 VideoEdit 片段名称条） */}
-              <UiButton aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 !items-start !justify-start !rounded-none !bg-transparent !p-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
+              <UiButton aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 !items-start !justify-start !rounded-none !bg-transparent !p-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.shiftKey || event.ctrlKey || event.metaKey, false, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
                 <span data-user-content className={`max-w-full truncate rounded-br-sm px-1.5 text-2xs leading-4 ${picture || sound ? 'bg-media-scrim text-on-media' : 'text-text1'}`}>{clip.name}</span>
               </UiButton>
               {/* ui-surface-allow 出点裁剪柄，同入点 */}
