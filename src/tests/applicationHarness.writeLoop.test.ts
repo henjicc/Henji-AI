@@ -86,10 +86,12 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     const description = registry.describe({}, { exposure: 'local_adapter',
       permissions: new Set(registry.listDeclaredPropertyPermissions()), acceptedDataClasses: new Set(['C0', 'C1']) })
     const domains = [...new Set(description.entities.filter(entity => writable.has(entity.id)).map(entity => entity.domain))]
-    // 共享记忆位于主进程；其写入/读回由 sharedMemoryReflection.test 与原生 memory-store.test 覆盖。
+    // 共享记忆与本地模型位于主进程（本地模型写入会真实下载或删除文件）；其写入/读回分别由
+    // sharedMemoryReflection.test + 原生 memory-store.test、localModelsReflection.test + local-models/service.test 覆盖。
+    const mainProcessDomains = new Set(['memory', 'local_models'])
     expect(domains).toContain('memory')
     expect(domains.length).toBeGreaterThanOrEqual(5)
-    expect(domains.filter(domain => domain !== 'memory' && !loops.some(loop => loop.domain === domain))).toEqual([])
+    expect(domains.filter(domain => !mainProcessDomains.has(domain) && !loops.some(loop => loop.domain === domain))).toEqual([])
     for (const loop of loops) {
       const result = await app.change(loop.ref, { [loop.property]: loop.value })
       expect(result.ok, `${loop.domain}: ${JSON.stringify(result)}`).toBe(true)
