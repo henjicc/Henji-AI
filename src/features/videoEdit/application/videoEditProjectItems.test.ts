@@ -202,3 +202,19 @@ it('重新定位只更新原剪辑引用并关闭旧源；关闭重开不会接�
   finish({ width: 1280, height: 720, close: closeBitmap })
   expect(await stale).toBeInstanceOf(Error); expect(reopened.document.media.at(-1)?.width).toBe(640)
 })
+it('拖到已有片段上：默认覆盖不叠放，按住 Ctrl（插入）时落点之后的片段整体后移', async () => {
+  const instance = await fixture(); const id = instance.document.id; const sequenceId = instance.activeSequenceId
+  const videoTrack = getActiveVideoEditSequence(instance).tracks.find(track => track.kind === 'video')!.index
+  const item = instance.document.items[0].id
+  await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: [item] }, { frame: 0, track: videoTrack }, undefined, { sequenceId, createSequenceWhenEmpty: true })
+  const first = getActiveVideoEditSequence(instance).clips.find(clip => clip.track === videoTrack)!
+  const overlaps = (): boolean => { const clips = getActiveVideoEditSequence(instance).clips.filter(clip => clip.track === videoTrack).sort((a, b) => a.start - b.start); return clips.some((clip, index) => index > 0 && clips[index - 1].start + clips[index - 1].duration > clip.start) }
+  await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: [item] }, { frame: 30, track: videoTrack, mode: 'overwrite' }, undefined, { sequenceId })
+  expect(overlaps()).toBe(false)
+  undoVideoEdit(id)
+  await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: [item] }, { frame: 30, track: videoTrack, mode: 'insert' }, undefined, { sequenceId })
+  expect(overlaps()).toBe(false)
+  const pictures = getActiveVideoEditSequence(instance).clips.filter(clip => clip.track === videoTrack).sort((a, b) => a.start - b.start)
+  // 原片段在 30 帧处被切开，后半段推到插入片段之后
+  expect(pictures.map(clip => clip.start)).toEqual([0, 30, 30 + first.duration])
+})

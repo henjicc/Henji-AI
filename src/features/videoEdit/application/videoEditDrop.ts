@@ -3,7 +3,8 @@ import { getPlatform } from '@/platform/runtime'
 import { importVideoEditSources, type VideoEditImportSource } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, setVideoEditView } from './videoEditService'
 import { placeVideoEditItems, videoEditSequenceFromItem, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
-import type { VideoEditClip, VideoEditDocument } from '@/core/videoEdit/document'
+import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from '@/core/videoEdit/document'
+import { applyVideoEditTimelineEditResult } from '@/core/videoEdit/timelineEdits'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { VIDEO_EDIT_SOURCE_DRAG_MIME, videoEditSourceRangeSchema, placeVideoEditSourceRange, type VideoEditSourceRange } from './videoEditSourceRange'
@@ -56,7 +57,7 @@ export function videoEditDropPaths(transfer: DataTransfer): string[] {
  * 拖进空序列（Premiere“更改序列设置”）：仍放进这条序列、落在松手的位置，序列的画面尺寸与帧率改成第一个素材的，
  * 不另建序列；落点帧按新帧率换算，保持同一时刻。
  */
-export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly string[], sequenceId: string, placement: VideoEditDropPlacement, options: { targetTrackIds: readonly string[]; matchEmptySequence?: boolean; sequenceSettings?: VideoEditSequenceSettings; codeMetadata?: CodeMaterialMetadataReader }): { document: VideoEditDocument; selectedClip?: string; placedClips: VideoEditClip[]; frameRate: VideoEditRatio } {
+export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly string[], sequenceId: string, placement: VideoEditDropPlacement, options: { targetTrackIds: readonly string[]; matchEmptySequence?: boolean; sequenceSettings?: VideoEditSequenceSettings; codeMetadata?: CodeMaterialMetadataReader }): { document: VideoEditDocument; selectedClip?: string; placedClips: VideoEditClip[]; resultSequence: VideoEditSequence; frameRate: VideoEditRatio } {
   const original = source.sequences.find(sequence => sequence.id === sequenceId)
   if (!original) throw new Error('原落点序列已移除，请重新拖入。')
   let document = source; let sequence = original; let frame = placement.frame
@@ -74,16 +75,27 @@ export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly stri
   // Multi-track sound spreads over consecutive audio tracks from the targeted one (task 2.6).
   const placed = placeVideoEditItems(base, ids, sequenceId, { frame, ...(placement.track !== undefined ? { track: placement.track } : {}), ...(video !== undefined ? { videoTrack: video } : {}), ...(audio !== undefined ? { audioTrack: audio } : {}) }, options.codeMetadata)
   const created = edge && placed.clips.some(clip => clip.track === edge.index) ? [edge] : []
+  // 落到已有片段上：默认覆盖（盖住的部分被裁掉），按住 Ctrl 为插入（落点之后的片段整体后移），与 Premiere 相同。
+  // 与粘贴共用时间线放置规则，拖动中的虚影由同一结果给出。
+  const result = applyVideoEditTimelineEditResult(document, sequenceId, {
+    kind: 'place', mode: placement.mode ?? 'overwrite', frame: Math.min(...placed.clips.map(clip => clip.start)),
+    clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips: placed.clips, annotations: [] },
+    newTracks: [...created, ...placed.addedTracks],
+    ...(placement.mode === 'insert' ? { targetTracks: [...new Set(placed.clips.map(clip => clip.track))] } : {}),
+  }, options.codeMetadata)
+  const selectedIndex = placed.primaryIds.length ? placed.clips.findIndex(clip => clip.id === placed.primaryIds.at(-1)) : -1
+  const selectedClip = selectedIndex >= 0 ? result.selectedClipIds?.[selectedIndex] : undefined
   return {
-    document: { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, tracks: [...item.tracks, ...created, ...placed.addedTracks], clips: [...item.clips, ...placed.clips] } : item) },
-    ...(placed.primaryIds.length ? { selectedClip: placed.primaryIds.at(-1)! } : {}),
+    document: { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? result.sequence : item) },
+    ...(selectedClip ? { selectedClip } : {}),
     placedClips: placed.clips,
+    resultSequence: result.sequence,
     frameRate: sequence.frameRate,
   }
 }
 /** Placement is captured before metadata I/O; switching projects cannot redirect a drop. */
 /** `newTrack`: dropped above the top video track / below the bottom audio track — a new track of that kind is created (PR). */
-export interface VideoEditDropPlacement { frame: number; track?: number; newTrack?: 'video' | 'audio' }
+export interface VideoEditDropPlacement { frame: number; track?: number; newTrack?: 'video' | 'audio'; mode?: 'overwrite' | 'insert' }
 export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: VideoEditDropPlacement, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void } = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()

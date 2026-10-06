@@ -52,7 +52,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const projectId = instance.document.id
   const fps = videoEditFps(sequence.frameRate)
   const [view, setView] = useState<TimelineViewport>({ left: 0, top: 0, width: 900, height: 300 })
-  const [hint, setHint] = useState<(VideoEditDropPlacement & { ghosts?: VideoEditClip[] }) | null>(null)
+  const [hint, setHint] = useState<(VideoEditDropPlacement & { ghosts?: VideoEditClip[]; shifted?: VideoEditClip[] }) | null>(null)
   const [pendingSequence, setPendingSequence] = useState<{ owner: VideoEditInstance; input: VideoEditDropInput; placement: VideoEditDropPlacement; sequenceId: string; settings: VideoEditSequenceSettings } | null>(null)
   // PR：视频区与音频区各自纵向滚动，中间的分隔条可拖动调整两区比例（只是视图状态，不进文档）。
   const [split, setSplit] = useState(TIMELINE_DEFAULT_SPLIT)
@@ -208,9 +208,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const threshold = 8 / pixels
     const frame = !instance.snapping ? raw : Math.abs(instance.frame - raw) <= threshold ? instance.frame : snapVideoEditFrame(sequence, raw, '', threshold)
     const row = timelineTrackAt(rows, y)
-    if (row) return { frame, track: row.track.index }
+    // 按住 Ctrl 拖入为插入（后面的片段后移），否则覆盖
+    const mode = event.ctrlKey || event.metaKey ? 'insert' as const : 'overwrite' as const
+    if (row) return { frame, track: row.track.index, mode }
     const zone = timelineNewTrackZone(layout, y)
-    return zone && { frame, newTrack: zone }
+    return zone && { frame, newTrack: zone, mode }
   }
   const run = (operation: () => void): void => { try { operation() } catch (error) { onError(error) } }
   const renderClip = (clip: VideoEditSequence['clips'][number], region: TimelineRegion): React.ReactElement => {
@@ -251,15 +253,19 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         </div>
   }
   /** 从素材面板拖来的素材项：按松手时同一套规则预演，得到将要落下的片段（虚影）；预演不了时只显示落点提示。 */
-  const previewGhosts = (at: VideoEditDropPlacement): VideoEditClip[] | undefined => {
+  const previewGhosts = (at: VideoEditDropPlacement): { ghosts?: VideoEditClip[]; shifted?: VideoEditClip[] } => {
     const drag = readActiveVideoEditItemDrag()
-    if (!drag || drag.projectId !== projectId) return undefined
+    if (!drag || drag.projectId !== projectId) return {}
     try {
       const result = placeVideoEditDrop(instance.document, drag.itemIds, sequence.id, at, { targetTrackIds: instance.targetTrackIds, matchEmptySequence: !sequence.clips.length, codeMetadata: readVideoEditCodeMetadata(instance, instance.document) })
       // 空序列会改成素材的帧率：虚影按当前时间线的帧率换算回来显示，位置与时长看上去和松手后一致
       const toView = (frame: number): number => rescaleVideoEditFrame(frame, result.frameRate, sequence.frameRate)
-      return result.placedClips.map(clip => ({ ...clip, start: toView(clip.start), duration: Math.max(1, toView(clip.start + clip.duration) - toView(clip.start)) }))
-    } catch { return undefined }
+      const view = (clip: VideoEditClip): VideoEditClip => ({ ...clip, start: toView(clip.start), duration: Math.max(1, toView(clip.start + clip.duration) - toView(clip.start)) })
+      // 插入时被推后的已有片段：在新位置画虚线框
+      const before = new Map(sequence.clips.map(clip => [clip.id, clip.start]))
+      const shifted = at.mode === 'insert' ? result.resultSequence.clips.filter(clip => before.has(clip.id) && before.get(clip.id) !== clip.start).map(view) : []
+      return { ghosts: result.placedClips.map(view), shifted }
+    } catch { return {} }
   }
   /** 落点提示的纵向位置：命中轨道上，或新建轨道的空白里贴着最外侧轨道。 */
   const hintTop = (at: VideoEditDropPlacement): number => {
@@ -287,7 +293,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
         const at = placement(event); if (!at) { setHint(null); return }
         event.preventDefault(); event.dataTransfer.dropEffect = 'copy'
-        setHint(current => current && current.frame === at.frame && current.track === at.track && current.newTrack === at.newTrack ? current : { ...at, ghosts: previewGhosts(at) })
+        setHint(current => current && current.frame === at.frame && current.track === at.track && current.newTrack === at.newTrack && current.mode === at.mode ? current : { ...at, ...previewGhosts(at) })
       }}
       onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) setHint(null) }}
       onDrop={event => {
@@ -343,7 +349,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         {(['video', 'audio'] as const).map(kind => <TimelineRegionScrollbar key={kind} region={layout.regions[kind]} left={view.left + view.width - 8} onScroll={dy => scrollRegion(kind, dy)} />)}
         {pointer.box && <div className="pointer-events-none absolute z-raised border border-accent-ring bg-accent-tint" style={{ left: TIMELINE_HEADER_WIDTH + Math.min(pointer.box.from.x, pointer.box.to.x), top: Math.min(pointer.box.from.y, pointer.box.to.y), width: Math.abs(pointer.box.to.x - pointer.box.from.x), height: Math.abs(pointer.box.to.y - pointer.box.from.y) }} data-video-edit-selection-box />}
         {hint?.ghosts?.length && hint.ghosts.every(ghost => rows.some(row => row.track.index === ghost.track))
-          ? hint.ghosts.map(ghost => { const row = rows.find(item => item.track.index === ghost.track)!; return <div key={ghost.id} aria-hidden="true" data-video-edit-drop-ghost className="pointer-events-none absolute z-raised overflow-hidden rounded-md border-2 border-accent-ring bg-accent-tint px-1.5 text-2xs leading-4 text-text1" style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + ghost.start * pixels, width: Math.max(3, ghost.duration * pixels) }}><span className="truncate">{ghost.name}</span></div> })
+          ? [...(hint.shifted ?? []).map(moved => { const row = rows.find(item => item.track.index === moved.track); return row ? <div key={`shift-${moved.id}`} aria-hidden="true" data-video-edit-drop-shifted className="pointer-events-none absolute z-raised rounded-md border border-dashed border-accent-ring" style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + moved.start * pixels, width: Math.max(3, moved.duration * pixels) }} /> : null }), ...hint.ghosts.map(ghost => { const row = rows.find(item => item.track.index === ghost.track)!; return <div key={ghost.id} aria-hidden="true" data-video-edit-drop-ghost className="pointer-events-none absolute z-raised overflow-hidden rounded-md border-2 border-accent-ring bg-accent-tint px-1.5 text-2xs leading-4 text-text1" style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + ghost.start * pixels, width: Math.max(3, ghost.duration * pixels) }}><span className="truncate">{ghost.name}</span></div> })]
           : hint && (hint.newTrack || rows.some(row => row.track.index === hint.track)) && <div className="pointer-events-none absolute z-raised flex h-6 w-40 items-center border-l-2 border-accent-ring bg-accent-tint px-2 text-2xs text-text1" style={{ top: hintTop(hint), left: TIMELINE_HEADER_WIDTH + hint.frame * pixels }}>{hint.newTrack ? '释放以新建轨道并添加' : '释放以添加素材'}</div>}
         <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
       </div>
