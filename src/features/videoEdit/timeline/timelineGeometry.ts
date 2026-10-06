@@ -61,6 +61,25 @@ export function timelineArmedEdgeVelocity(axis: TimelineEdgeAxis, position: numb
   const velocity = timelineEdgeVelocity(position, from, to)
   return (velocity < 0 && axis.start) || (velocity > 0 && axis.end) ? velocity : 0
 }
+export interface TimelineWheelInput { deltaX: number; deltaY: number; deltaMode: number; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }
+export type TimelineWheelAction = { kind: 'scroll'; left: number; top: number } | { kind: 'zoom'; factor: number } | { kind: 'track-height'; delta: number }
+/** 一格滚轮（Windows 100px）改变的轨道高度。 */
+export const TIMELINE_WHEEL_TRACK_STEP = 8
+/**
+ * Premiere（Windows 默认，用户实机确认）的时间线滚轮：滚轮横向滚动；Alt+滚轮以光标为中心横向缩放；
+ * Shift+滚轮调整光标所在区域（画面轨或声音轨）的轨道高度，即纵向缩放；Ctrl+滚轮纵向滚动。
+ * 向上滚放大／变高，与 `=` 同一倍率（每格 1.25 倍）。Windows 下 Shift+滚轮由系统转成横向增量，两个方向都读。
+ */
+export function timelineWheelAction(input: TimelineWheelInput): TimelineWheelAction | undefined {
+  const unit = input.deltaMode === 1 ? 16 : input.deltaMode === 2 ? 400 : 1
+  const x = input.deltaX * unit; const y = input.deltaY * unit
+  const delta = y || x
+  if (input.altKey) return delta ? { kind: 'zoom', factor: Math.pow(1.25, -delta / 100) } : undefined
+  if (input.shiftKey) return delta ? { kind: 'track-height', delta: -Math.sign(delta) * TIMELINE_WHEEL_TRACK_STEP * Math.max(1, Math.round(Math.abs(delta) / 100)) } : undefined
+  if (input.ctrlKey || input.metaKey) return delta ? { kind: 'scroll', left: 0, top: delta } : undefined
+  if (!x && !y) return undefined
+  return { kind: 'scroll', left: y + x, top: 0 }
+}
 /** Non-drop frame numbering; the underlying frame remains the authoritative integer. */
 export function timelineTimecode(frame: number, fps: number): string {
   return videoEditFrameTimecode(frame, fps)

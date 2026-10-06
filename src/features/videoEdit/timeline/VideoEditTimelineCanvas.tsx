@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Diamond } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton, UiError } from '@/components/ui'
@@ -14,7 +14,9 @@ import { VideoEditClipFilmstrip } from './VideoEditClipFilmstrip'
 import { videoEditAudioFormatLabel, videoEditClipAudioFormat } from '@/core/videoEdit/audioChannels'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, type VideoEditDropInput } from '../application/videoEditDrop'
 import { listVideoEditInstances, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, focusVideoEditPanel, type VideoEditInstance } from '../application/videoEditService'
-import { updateVideoEditTrack } from '../application/videoEditTimeline'
+import { setVideoEditTrackHeights, updateVideoEditTrack } from '../application/videoEditTimeline'
+import { registerVideoEditTimelineViewport } from '../application/videoEditTimelineViewport'
+import { clampVideoEditTrackHeight, clampVideoEditZoom, videoEditZoomToFit } from '@/core/videoEdit/timelineNavigation'
 import { isDomNode, ownerWindowOf } from '@/utils/crossRealmDom'
 import { VideoEditSequenceDialog } from '../panels/VideoEditSequenceDialog'
 import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChannelsDialog'
@@ -24,7 +26,7 @@ import { useTimelinePointer } from './useTimelinePointer'
 import { useTimelineMenu } from './useTimelineMenu'
 import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, timelineInitialScrollTop, timelineTrackAt, timelineTrackDivider, timelineTrackRows, timelineVisibleClips, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, timelineInitialScrollTop, timelineTrackAt, timelineTrackDivider, timelineTrackRows, timelineVisibleClips, timelineWheelAction, type TimelineViewport } from './timelineGeometry'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean }
 /** 片段底色与描边（设计稿素材片段令牌）：画面、声音、文字/代码/图形/调整各一组；选中改强调描边。 */
@@ -36,6 +38,10 @@ const CLIP_SELECTED_LINE = 'border-accent-ring ring-1 ring-accent-ring'
  */
 const STRIP_EDGE_STEP = 64
 const stripEdge = (value: number, clipWidth: number, round: (value: number) => number): number => Math.max(-STRIP_EDGE_STEP, Math.min(clipWidth + STRIP_EDGE_STEP, round(value / STRIP_EDGE_STEP) * STRIP_EDGE_STEP))
+/** Shift+滚轮改轨道高度：滚动停下这么久后才写入一步编辑，连续滚动不刷撤销历史。 */
+const WHEEL_HEIGHT_COMMIT_MS = 300
+/** 缩放到整个序列时右侧留白，序列末尾不贴边。 */
+const FIT_MARGIN = 16
 export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true }: Props): React.ReactElement {
   const projectId = instance.document.id
   const fps = videoEditFps(sequence.frameRate)
@@ -46,7 +52,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const [audioChannels, setAudioChannels] = useState<VideoEditAudioChannelsTarget | null>(null)
   const clipSource = useVideoEditClipSource(onError)
   const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId))
-  const rows = timelineTrackRows(sequence, pointer.resized)
+  const [wheelHeights, setWheelHeights] = useState<ReadonlyMap<string, number> | null>(null)
+  const rows = timelineTrackRows(wheelHeights ? { ...sequence, tracks: sequence.tracks.map(track => wheelHeights.has(track.id) ? { ...track, height: wheelHeights.get(track.id)! } : track) } : sequence, pointer.resized)
   const divider = timelineTrackDivider(rows)
   const initialViewport = useRef({ owner: instance, sequenceId: sequence.id, measured: false, settled: false, stableFrames: 0, frameCount: 0, width: 0, height: 0, visible, rows })
   const settlementFrame = useRef<number>()
@@ -159,6 +166,75 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     measureViewport()
     return cancelInitialFrame
   }, [instance, sequence.id, visible, measureViewport, cancelInitialFrame])
+  // 缩放保持一个时间点不动（Premiere）：Alt+滚轮保持光标处，其余缩放（=／-、滑块、助手）保持可见的播放头，否则保持左缘。
+  const zoomAnchor = useRef<{ frame: number; x: number } | null>(null)
+  const previousPixels = useRef(pixels)
+  useLayoutEffect(() => {
+    const host = pointer.viewport.current; const before = previousPixels.current; previousPixels.current = pixels
+    const requested = zoomAnchor.current; zoomAnchor.current = null
+    if (!host || before === pixels) return
+    const playhead = instance.frame * before - host.scrollLeft
+    const anchor = requested ?? (playhead >= 0 && playhead <= host.clientWidth - TIMELINE_HEADER_WIDTH ? { frame: instance.frame, x: playhead } : { frame: host.scrollLeft / before, x: 0 })
+    host.scrollLeft = Math.max(0, anchor.frame * pixels - anchor.x)
+    readViewport()
+  }, [pixels, instance, pointer.viewport, readViewport])
+  const latest = useRef({ instance, sequence, pixels, fps, duration, rows }); latest.current = { instance, sequence, pixels, fps, duration, rows }
+  const pendingHeights = useRef<{ heights: Map<string, number>; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const commitHeights = useCallback((): void => {
+    const pending = pendingHeights.current; pendingHeights.current = null
+    if (!pending) return
+    clearTimeout(pending.timer); setWheelHeights(null)
+    const { instance: owner, sequence: current } = latest.current
+    try { setVideoEditTrackHeights(owner.document.id, current.id, pending.heights) } catch (error) { onError(error) }
+  }, [onError])
+  useEffect(() => () => commitHeights(), [commitHeights])
+  useLayoutEffect(() => {
+    const host = pointer.viewport.current
+    if (!host) return
+    // 非被动监听：阻止浏览器默认的纵向滚动与 Ctrl+滚轮页面缩放。
+    const onWheel = (event: WheelEvent): void => {
+      const action = timelineWheelAction(event)
+      if (!action) return
+      event.preventDefault()
+      stopInitialPosition()
+      const { instance: owner, pixels: scale, rows: currentRows } = latest.current
+      if (action.kind === 'scroll') { host.scrollLeft += action.left; host.scrollTop += action.top; return }
+      if (action.kind === 'zoom') {
+        const zoom = clampVideoEditZoom(owner.zoom * action.factor)
+        if (zoom === owner.zoom) return
+        const x = Math.max(0, event.clientX - host.getBoundingClientRect().left - TIMELINE_HEADER_WIDTH)
+        zoomAnchor.current = { frame: (host.scrollLeft + x) / scale, x }
+        try { setVideoEditTimelineView(owner.document.id, { zoom }) } catch (error) { zoomAnchor.current = null; onError(error) }
+        return
+      }
+      // 纵向缩放光标所在的画面轨区或声音轨区（分界线以上为画面轨）。
+      const y = event.clientY - host.getBoundingClientRect().top + host.scrollTop
+      const divider = timelineTrackDivider(currentRows)
+      const kind = divider !== undefined ? y < divider ? 'video' : 'audio' : currentRows[0]?.track.kind
+      const heights = pendingHeights.current?.heights ?? new Map<string, number>()
+      for (const row of currentRows) if (row.track.kind === kind) heights.set(row.track.id, clampVideoEditTrackHeight((heights.get(row.track.id) ?? row.height) + action.delta))
+      if (pendingHeights.current) clearTimeout(pendingHeights.current.timer)
+      pendingHeights.current = { heights, timer: setTimeout(commitHeights, WHEEL_HEIGHT_COMMIT_MS) }
+      setWheelHeights(new Map(heights))
+    }
+    host.addEventListener('wheel', onWheel, { passive: false })
+    return () => host.removeEventListener('wheel', onWheel)
+  }, [pointer.viewport, stopInitialPosition, commitHeights, onError])
+  useEffect(() => registerVideoEditTimelineViewport(projectId, {
+    sequenceId: sequence.id,
+    zoomToSequence: () => {
+      const host = pointer.viewport.current; const { instance: owner, fps: rate, duration: frames } = latest.current
+      if (!host) return
+      const zoom = videoEditZoomToFit(frames, rate, host.clientWidth - TIMELINE_HEADER_WIDTH - FIT_MARGIN)
+      if (zoom === owner.zoom) { host.scrollLeft = 0; return }
+      zoomAnchor.current = { frame: 0, x: 0 }
+      setVideoEditTimelineView(owner.document.id, { zoom })
+    },
+    showScreen: direction => {
+      const host = pointer.viewport.current
+      if (host) host.scrollLeft = Math.max(0, host.scrollLeft + direction * Math.max(1, host.clientWidth - TIMELINE_HEADER_WIDTH))
+    },
+  }), [projectId, sequence.id, pointer.viewport])
   const placement = (event: React.DragEvent<HTMLDivElement>): { frame: number; track: number } | undefined => {
     const host = pointer.viewport.current!; const rect = host.getBoundingClientRect()
     const x = event.clientX - rect.left + host.scrollLeft - TIMELINE_HEADER_WIDTH
@@ -169,7 +245,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const run = (operation: () => void): void => { try { operation() } catch (error) { onError(error) } }
   return <>
     <div ref={pointer.viewport} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport className="relative min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
-      onScroll={onScroll} onWheelCapture={stopInitialPosition} onPointerDownCapture={stopInitialPosition} onKeyDownCapture={stopInitialPosition} onContextMenuCapture={stopInitialPosition}
+      onScroll={onScroll} onPointerDownCapture={stopInitialPosition} onKeyDownCapture={stopInitialPosition} onContextMenuCapture={stopInitialPosition}
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
       onDoubleClick={event => {
         // 双击记着来源的片段：回到来源继续编辑（图片文档片段打开图片编辑，4.1）

@@ -10,8 +10,18 @@ import { chooseVideoEditMedia } from './videoEditMedia'
 import { exportVideoEdit } from './videoEditExport'
 import { readVideoEditSource, updateVideoEditSource, pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, type VideoEditSourceCommandIdentity, type VideoEditSourceState } from './videoEditSource'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
-import { copyVideoEditTimeline, executeVideoEditTimelineEdit, readVideoEditClipboard, separateVideoEditAudio } from './videoEditTimeline'
+import { copyVideoEditTimeline, executeVideoEditTimelineEdit, readVideoEditClipboard, resizeVideoEditTracks, separateVideoEditAudio } from './videoEditTimeline'
+import { videoEditTimelineViewport } from './videoEditTimelineViewport'
+import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT, VIDEO_EDIT_TRACK_HEIGHT_MAX, VIDEO_EDIT_TRACK_HEIGHT_MIN } from '@/core/videoEdit/timelineNavigation'
 
+/** Premiere 轨道高度键：每次 8px；展开所有轨道到 96px，最小化到最小高度。 */
+const TRACK_HEIGHT_STEP = 8
+const trackResizes = {
+  increase_video_tracks: ['video', (height: number) => height + TRACK_HEIGHT_STEP], decrease_video_tracks: ['video', (height: number) => height - TRACK_HEIGHT_STEP],
+  increase_audio_tracks: ['audio', (height: number) => height + TRACK_HEIGHT_STEP], decrease_audio_tracks: ['audio', (height: number) => height - TRACK_HEIGHT_STEP],
+  expand_all_tracks: ['all', () => 96], minimize_all_tracks: ['all', () => VIDEO_EDIT_TRACK_HEIGHT_MIN],
+} as const satisfies Partial<Record<VideoEditCommandId, readonly ['video' | 'audio' | 'all', (height: number) => number]>>
+const STEP_DISTANCE = { step_back: -1, step_forward: 1, step_back_five: -5, step_forward_five: 5 } as const
 export interface VideoEditCommandContext { readonly projectId?: string; readonly sequenceId?: string; readonly scope: VideoEditCommandScope; readonly clipIds: readonly string[]; readonly itemIds: readonly string[]; readonly frame: number }
 interface ContextState { owner?: VideoEditInstance; document?: VideoEditInstance['document']; source?: VideoEditSourceState; sourceCommand?: VideoEditSourceCommandIdentity; targetTrackIds: string[]; clipboard?: VideoEditClipboard }
 const contexts = new WeakMap<VideoEditCommandContext, ContextState>()
@@ -102,7 +112,12 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
     if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
     if (id === 'export') return { enabled: sequence.clips.length > 0 && !owner.busy, reason: '序列没有可导出的片段或正在导出。' }
-    if (['play_pause', 'play_forward', 'play_reverse', 'play_stop', 'step_back', 'step_forward', 'mark_in', 'mark_out'].includes(id) && context.scope === 'source') {
+    if (id in trackResizes) {
+      const [kind, resize] = trackResizes[id as keyof typeof trackResizes]
+      return { enabled: sequence.tracks.some(track => (kind === 'all' || track.kind === kind) && Math.max(VIDEO_EDIT_TRACK_HEIGHT_MIN, Math.min(VIDEO_EDIT_TRACK_HEIGHT_MAX, Math.round(resize(track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)))) !== (track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)), reason: '轨道高度已到上限或下限。' }
+    }
+    if (id === 'zoom_to_sequence' || id === 'previous_screen' || id === 'next_screen') return { enabled: Boolean(videoEditTimelineViewport(owner.document.id, sequence.id)), reason: '请先显示时间线面板。' }
+    if (['play_pause', 'play_forward', 'play_reverse', 'play_stop', 'step_back', 'step_forward', 'step_back_five', 'step_forward_five', 'mark_in', 'mark_out'].includes(id) && context.scope === 'source') {
       const item = owner.document.items.find(item => item.id === source?.itemId); const media = owner.document.media.find(media => media.id === item?.mediaId)
       return { enabled: Boolean(media && media.kind !== 'image' && (source?.status === 'ready' || id === 'play_stop' && source?.status === 'loading')), reason: '请先打开可以播放的源素材。' }
     }
@@ -152,6 +167,9 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'select_tool': case 'razor_tool': case 'hand_tool': case 'track_tool': setVideoEditTimelineView(projectId, { tool: ({ select_tool: 'select', razor_tool: 'razor', hand_tool: 'hand', track_tool: 'track' } as const)[id] }); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
     case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
+    case 'zoom_to_sequence': videoEditTimelineViewport(projectId, sequenceId)!.zoomToSequence(); return
+    case 'previous_screen': case 'next_screen': videoEditTimelineViewport(projectId, sequenceId)!.showScreen(id === 'next_screen' ? 1 : -1); return
+    case 'increase_video_tracks': case 'decrease_video_tracks': case 'increase_audio_tracks': case 'decrease_audio_tracks': case 'expand_all_tracks': case 'minimize_all_tracks': { const [kind, resize] = trackResizes[id]; resizeVideoEditTracks(projectId, sequenceId, kind, resize); return }
     case 'zoom_in': case 'zoom_out': setVideoEditTimelineView(projectId, { zoom: Math.max(.1, Math.min(20, owner!.zoom * (id === 'zoom_in' ? 1.25 : .8))) }); return
     case 'select_all': if (context.scope === 'project') setVideoEditProjectView(projectId, { selectedItemIds: owner!.document.items.map(item => item.id) }); else setVideoEditTimelineView(projectId, { selectedClipIds: sequence.clips.map(clip => clip.id) }); return
     case 'copy': copyVideoEditTimeline(projectId, sequenceId, [...context.clipIds], false); return
@@ -189,8 +207,8 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
       }
       return
     }
-    case 'step_back': case 'step_forward': {
-      const direction = id === 'step_back' ? -1 : 1
+    case 'step_back': case 'step_forward': case 'step_back_five': case 'step_forward_five': {
+      const direction = STEP_DISTANCE[id]
       if (context.scope === 'source') {
         const media = owner!.document.media.find(media => media.id === owner!.document.items.find(item => item.id === source!.itemId)?.mediaId)!
         const fps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : sequence.fps

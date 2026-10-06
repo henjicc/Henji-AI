@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import { videoEditDocumentSchema, type VideoEditSequence } from '@/core/videoEdit/document'
 import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult, copyVideoEditClips, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
+import { clampVideoEditTrackHeight, VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/core/videoEdit/timelineNavigation'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { inspectVideoEditMedia } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, setVideoEditTimelineView, type VideoEditInstance } from './videoEditService'
@@ -84,6 +85,24 @@ export function finishVideoEditTimelineDrag(handle: VideoEditTimelineDrag, adjus
   videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
   drags.delete(handle)
   executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds, linked: false })
+}
+/**
+ * 一次改多条轨道的高度，作为一步编辑；没有高度变化时不写历史。返回是否改变。
+ * Shift+滚轮纵向缩放在滚动停下后用它一次写入。
+ */
+export function setVideoEditTrackHeights(projectId: string, sequenceId: string, heights: ReadonlyMap<string, number>): boolean {
+  const sequence = requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)
+  if (!sequence) throw new Error('目标序列不存在。')
+  const next = new Map([...heights].filter(([id]) => sequence.tracks.some(track => track.id === id)).map(([id, height]) => [id, clampVideoEditTrackHeight(height)]))
+  if (![...next].some(([id, height]) => (sequence.tracks.find(track => track.id === id)!.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT) !== height)) return false
+  editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, tracks: value.tracks.map(track => next.has(track.id) ? { ...track, height: next.get(track.id)! } : track) } : value) }))
+  return true
+}
+/** 一类轨道整体改高（Premiere Ctrl+=/- 视频轨、Alt+=/- 音频轨、Shift+=/- 展开／最小化全部轨道）。 */
+export function resizeVideoEditTracks(projectId: string, sequenceId: string, kind: 'video' | 'audio' | 'all', resize: (height: number) => number): boolean {
+  const sequence = requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)
+  if (!sequence) throw new Error('目标序列不存在。')
+  return setVideoEditTrackHeights(projectId, sequenceId, new Map(sequence.tracks.filter(track => kind === 'all' || track.kind === kind).map(track => [track.id, resize(track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)])))
 }
 export function updateVideoEditTrack(projectId: string, sequenceId: string, trackId: string, patch: Partial<Pick<VideoEditSequence['tracks'][number], 'name' | 'locked' | 'enabled' | 'muted' | 'solo' | 'height' | 'syncLocked'>>): void {
   editVideoProject(projectId, document => {

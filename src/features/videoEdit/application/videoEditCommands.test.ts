@@ -5,6 +5,7 @@ import { getPlatform } from '@/platform/runtime'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './videoEditCommands'
 import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence } from './videoEditService'
 import { copyVideoEditTimeline, updateVideoEditTrack } from './videoEditTimeline'
+import { registerVideoEditTimelineViewport } from './videoEditTimelineViewport'
 import { registerVideoEditSourcePresenter, readVideoEditSource, updateVideoEditSource, observeVideoEditSource } from './videoEditSource'
 
 beforeEach(() => {
@@ -126,5 +127,28 @@ it('手动节目穿梭与公共入口相同，等待源暂停确认后才开始�
     await vi.waitFor(() => expect(readVideoEditSource(id).status).toBe('loading'))
     setVideoEditView(id, { frame: 70, playing: false }); pause(); await rejected
     expect(owner).toMatchObject({ frame: 70, playing: false })
+  } finally { off() }
+})
+it('Premiere 时间线视图键：五帧步进、轨道高度一步编辑、缩放到序列与翻屏只在时间线显示时可用', async () => {
+  const { owner, id, sequence } = await fixture()
+  setVideoEditView(id, { frame: 20 })
+  await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'step_forward_five')
+  expect(owner.frame).toBe(25)
+  await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'step_back_five')
+  expect(owner.frame).toBe(20)
+  const history = owner.past.length
+  await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'increase_video_tracks')
+  const heights = () => getActiveVideoEditSequence(owner).tracks.map(track => [track.kind, track.height ?? 32])
+  expect(heights()).toEqual(sequence.tracks.map(track => [track.kind, (track.height ?? 32) + (track.kind === 'video' ? 8 : 0)]))
+  expect(owner.past.length).toBe(history + 1)
+  await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'minimize_all_tracks')
+  expect(heights().every(([, height]) => height === 24)).toBe(true)
+  expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'decrease_audio_tracks')).toMatchObject({ enabled: false })
+  expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'zoom_to_sequence')).toMatchObject({ enabled: false })
+  const calls: string[] = []
+  const off = registerVideoEditTimelineViewport(id, { sequenceId: sequence.id, zoomToSequence: () => calls.push('fit'), showScreen: direction => calls.push(`screen:${direction}`) })
+  try {
+    for (const command of ['zoom_to_sequence', 'next_screen', 'previous_screen'] as const) await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), command)
+    expect(calls).toEqual(['fit', 'screen:1', 'screen:-1'])
   } finally { off() }
 })

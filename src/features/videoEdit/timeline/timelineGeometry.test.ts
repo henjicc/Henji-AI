@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { createVideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineInitialScrollTop, timelineTrackAt, timelineTrackDivider, timelineTrackRows, timelineVisibleClips } from './timelineGeometry'
+import { TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineInitialScrollTop, timelineTrackAt, timelineTrackDivider, timelineTrackRows, timelineVisibleClips, timelineWheelAction } from './timelineGeometry'
 
 function fixture(): VideoEditSequence {
   const document = createVideoEditDocument('轨道几何')
@@ -96,4 +96,17 @@ it('边缘自动滚动只在指针朝该边移动后生效，曾离开边缘区�
   const outside = timelineEdgeAxis(150)
   expect(timelineArmedEdgeVelocity(outside, 150, 28, 300)).toBe(0)
   expect(timelineArmedEdgeVelocity(outside, 30, 28, 300)).toBeLessThan(0)
+})
+
+it('滚轮按 Premiere 默认：横向滚动，Alt 横向缩放，Shift 轨道高度，Ctrl 纵向滚动', () => {
+  const wheel = (deltaY: number, keys: Partial<{ ctrlKey: boolean; altKey: boolean; metaKey: boolean; shiftKey: boolean }> = {}, deltaX = 0, deltaMode = 0) => ({ deltaX, deltaY, deltaMode, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, ...keys })
+  expect(timelineWheelAction(wheel(100))).toEqual({ kind: 'scroll', left: 100, top: 0 })
+  expect(timelineWheelAction(wheel(0, {}, 40))).toEqual({ kind: 'scroll', left: 40, top: 0 })
+  expect(timelineWheelAction(wheel(3, { ctrlKey: true }, 0, 1))).toEqual({ kind: 'scroll', left: 0, top: 48 })
+  expect(timelineWheelAction(wheel(-100, { altKey: true }))).toEqual({ kind: 'zoom', factor: 1.25 })
+  expect(timelineWheelAction(wheel(100, { altKey: true }))).toEqual({ kind: 'zoom', factor: 0.8 })
+  // Windows 把 Shift+滚轮转成横向增量
+  expect(timelineWheelAction(wheel(0, { shiftKey: true }, -100))).toEqual({ kind: 'track-height', delta: 8 })
+  expect(timelineWheelAction(wheel(200, { shiftKey: true }))).toEqual({ kind: 'track-height', delta: -16 })
+  expect(timelineWheelAction(wheel(0))).toBeUndefined()
 })

@@ -20,6 +20,8 @@ export const VIDEO_EDIT_COMMANDS = [
   command('play_pause', '播放／暂停', monitorScopes, key('Space')),
   command('step_back', '上一帧', monitorScopes, key('ArrowLeft'), true),
   command('step_forward', '下一帧', monitorScopes, key('ArrowRight'), true),
+  command('step_back_five', '后退五帧', monitorScopes, key('ArrowLeft', false, true), true),
+  command('step_forward_five', '前进五帧', monitorScopes, key('ArrowRight', false, true), true),
   command('play_reverse', '反向浏览（静音）', monitorScopes, key('KeyJ')),
   command('play_stop', '停止播放', monitorScopes, key('KeyK')),
   command('play_forward', '正向播放', monitorScopes, key('KeyL')),
@@ -39,6 +41,15 @@ export const VIDEO_EDIT_COMMANDS = [
   command('export', '导出视频', ['global'], key('KeyM', true)),
   command('zoom_in', '放大时间线', ['timeline'], key('Equal'), true),
   command('zoom_out', '缩小时间线', ['timeline'], key('Minus'), true),
+  command('zoom_to_sequence', '缩放到整个序列', ['timeline', 'program'], key('Backslash')),
+  command('previous_screen', '显示上一屏', ['timeline'], key('PageUp'), true),
+  command('next_screen', '显示下一屏', ['timeline'], key('PageDown'), true),
+  command('increase_video_tracks', '增加视频轨道高度', ['timeline'], key('Equal', true), true),
+  command('decrease_video_tracks', '减小视频轨道高度', ['timeline'], key('Minus', true), true),
+  command('increase_audio_tracks', '增加音频轨道高度', ['timeline'], key('Equal', false, false, true), true),
+  command('decrease_audio_tracks', '减小音频轨道高度', ['timeline'], key('Minus', false, false, true), true),
+  command('expand_all_tracks', '展开所有轨道', ['timeline'], key('Equal', false, true)),
+  command('minimize_all_tracks', '最小化所有轨道', ['timeline'], key('Minus', false, true)),
   command('link', '链接片段', editScopes), command('unlink', '解除链接', editScopes),
   command('group', '编组', editScopes), command('ungroup', '解除编组', editScopes),
   command('separate_audio', '拆开音画', editScopes),
@@ -48,10 +59,10 @@ export const VIDEO_EDIT_COMMANDS = [
 ] as const
 export type VideoEditCommandId = typeof VIDEO_EDIT_COMMANDS[number]['id']
 export type VideoEditShortcutOverrides = Partial<Record<VideoEditCommandId, VideoEditShortcut | null>>
-const shortcutSchema = z.object({ code: z.string().regex(/^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Space|Arrow(?:Left|Right|Up|Down)|Delete|Backspace|Comma|Period|Equal|Minus|Bracket(?:Left|Right)|Home|End|Page(?:Up|Down))$/), ctrl: z.boolean(), alt: z.boolean(), shift: z.boolean(), meta: z.boolean() }).strict()
+const shortcutSchema = z.object({ code: z.string().regex(/^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Space|Arrow(?:Left|Right|Up|Down)|Delete|Backspace|Comma|Period|Equal|Minus|Bracket(?:Left|Right)|Backslash|Semicolon|Quote|Slash|Backquote|Home|End|Page(?:Up|Down))$/), ctrl: z.boolean(), alt: z.boolean(), shift: z.boolean(), meta: z.boolean() }).strict()
 export function videoEditShortcutLabel(shortcut: VideoEditShortcut | null | undefined): string {
   if (!shortcut) return '未设置'
-  const labels: Record<string, string> = { Space: 'Space', ArrowLeft: '←', ArrowRight: '→', Comma: ',', Period: '.', Equal: '=', Minus: '-' }
+  const labels: Record<string, string> = { Space: 'Space', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Comma: ',', Period: '.', Equal: '=', Minus: '-', Backslash: '\\', Semicolon: ';', Quote: "'", Slash: '/', Backquote: '`', BracketLeft: '[', BracketRight: ']', PageUp: 'PgUp', PageDown: 'PgDn' }
   return [shortcut.ctrl ? 'Ctrl' : '', shortcut.meta ? 'Cmd' : '', shortcut.alt ? 'Alt' : '', shortcut.shift ? 'Shift' : '', labels[shortcut.code] ?? shortcut.code.replace(/^(?:Key|Digit)/, '')].filter(Boolean).join('+')
 }
 export function videoEditCommandShortcut(id: VideoEditCommandId, overrides: VideoEditShortcutOverrides): VideoEditShortcut | undefined {

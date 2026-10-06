@@ -3,6 +3,7 @@ import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { expandVideoEditSelection, selectVideoEditRegion, selectVideoEditTrackFrom, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
+import { videoEditEditPoints, videoEditSnapFrame } from '@/core/videoEdit/timelineNavigation'
 import { beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, previewVideoEditTimelineDrag, updateVideoEditTrack, type VideoEditTimelineAdjustment, type VideoEditTimelineDrag } from '../application/videoEditTimeline'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
@@ -16,7 +17,8 @@ type PointerGesture = BaseGesture & (
   | { kind: 'clip'; handle: VideoEditTimelineDrag; ids: string[]; primary: string; mode: VideoEditTimelineAdjustment['mode']; moved: boolean; adjustment?: VideoEditTimelineAdjustment; error?: Error }
   | { kind: 'box'; initial: string[]; additive: boolean; linked: VideoEditRelations }
   | { kind: 'hand'; left: number; top: number }
-  | { kind: 'seek' }
+  /** `snap`: Shift held — the playhead snaps to edit points, markers and the sequence in/out (Premiere). */
+  | { kind: 'seek'; snap: boolean }
   | { kind: 'height'; trackId: string; height: number; next: number }
   | { kind: 'razor'; clipId: string; linked: VideoEditRelations }
 )
@@ -77,7 +79,9 @@ export function useTimelinePointer(options: Options) {
       gesture.next = Math.max(24, Math.min(160, Math.round(gesture.height + gesture.client.y - gesture.origin.y)))
       setResized({ trackId: gesture.trackId, height: gesture.next })
     } else if (gesture.kind === 'seek') {
-      setVideoEditView(instance.document.id, { playing: false, frame: Math.max(0, Math.min(Math.floor(videoEditFps(sequence.frameRate) * 1800), Math.round(at.x / pixels))) })
+      const raw = Math.max(0, Math.min(Math.floor(videoEditFps(sequence.frameRate) * 1800), Math.round(at.x / pixels)))
+      const frame = gesture.snap ? videoEditSnapFrame([...videoEditEditPoints(sequence), ...(sequence.markers ?? []).map(mark => mark.frame), ...[instance.inFrame, instance.outFrame].filter((value): value is number => value !== null)], raw, 8 / pixels) : raw
+      setVideoEditView(instance.document.id, { playing: false, frame })
     } else if (gesture.kind === 'hand' && viewport.current) {
       viewport.current.scrollLeft = gesture.left + gesture.origin.x - gesture.client.x
       viewport.current.scrollTop = gesture.top + gesture.origin.y - gesture.client.y
@@ -142,7 +146,7 @@ export function useTimelinePointer(options: Options) {
     const linked = videoEditPickRelations(instance.linkedSelection !== false, event.altKey)
     try {
       if (instance.tool === 'hand') { const host = viewport.current!; capture({ ...base(event), kind: 'hand', origin: { x: event.clientX, y: event.clientY }, left: host.scrollLeft, top: host.scrollTop }); return }
-      if (target.closest('[data-video-edit-ruler]')) { const gesture: PointerGesture = { ...base(event), kind: 'seek' }; capture(gesture); setVideoEditView(instance.document.id, { scrubbing: true }); applyPointer(gesture); return }
+      if (target.closest('[data-video-edit-ruler]')) { const gesture: PointerGesture = { ...base(event), kind: 'seek', snap: event.shiftKey }; capture(gesture); setVideoEditView(instance.document.id, { scrubbing: true }); applyPointer(gesture); return }
       if (instance.tool === 'track') { if (row) select(selectVideoEditTrackFrom(sequence, row.track.index, Math.max(0, Math.round(at.x / pixels)), event.shiftKey, linked), false, event.ctrlKey || event.metaKey, linked); return }
       if (instance.tool === 'razor') {
         // Alt-razor cuts only the clicked portion; its link to the uncut partner is kept.
@@ -166,7 +170,9 @@ export function useTimelinePointer(options: Options) {
   const move = (event: React.PointerEvent): void => {
     const gesture = pointer.current
     if (!gesture || gesture.pointerId !== event.pointerId) return
-    gesture.client = { x: event.clientX, y: event.clientY }; applyPointer(gesture); animateEdge()
+    gesture.client = { x: event.clientX, y: event.clientY }
+    if (gesture.kind === 'seek') gesture.snap = event.shiftKey
+    applyPointer(gesture); animateEdge()
   }
   const up = (event: React.PointerEvent): void => {
     const gesture = pointer.current

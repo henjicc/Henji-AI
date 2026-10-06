@@ -230,7 +230,7 @@ it('矮时间线在边缘区按住片段不动不滚动，拖向边缘才滚动�
   viewportHeight = 118
   const clock = layoutClock()
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const baseline = owner.document
-  fireEvent.wheel(host, { deltaY: 10 }); for (let frame = 0; frame < 8 && clock.callbacks.size; frame++) clock.step()
+  fireEvent.wheel(host, { deltaY: 10, ctrlKey: true }); for (let frame = 0; frame < 8 && clock.callbacks.size; frame++) clock.step()
   const row = timelineTrackRows(current()).find(value => value.track.index === 1)!
   host.scrollTop = row.top + row.height / 2 - 44; fireEvent.scroll(host)
   const scrolled = host.scrollTop; const y = trackClientY()
@@ -253,6 +253,25 @@ it('矮时间线在边缘区按住片段不动不滚动，拖向边缘才滚动�
     host.scrollLeft = 0; fireEvent.scroll(host)
   }
   expect(owner.document).toBe(baseline); expect(onError).not.toHaveBeenCalled()
+})
+
+it('滚轮横向滚动、Ctrl 纵向；Alt 缩放保持光标处时间；Shift 纵向缩放停下后只写一步历史', async () => {
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  fireEvent.wheel(host, { deltaY: 120 }); expect(host.scrollLeft).toBe(120)
+  fireEvent.wheel(host, { deltaY: 40, ctrlKey: true }); expect(host.scrollTop).toBe(40)
+  host.scrollLeft = 0; fireEvent.scroll(host)
+  const pixels = 60 * owner.zoom / current().fps; const anchor = (300 - header) / pixels
+  fireEvent.wheel(host, { deltaY: -100, altKey: true, clientX: 300, clientY: 100 })
+  expect(owner.zoom).toBeCloseTo(1.25)
+  const after = 60 * owner.zoom / current().fps
+  expect((host.scrollLeft + 300 - header) / after).toBeCloseTo(anchor)
+  const history = owner.past.length; const video = current().tracks.find(track => track.kind === 'video')!
+  fireEvent.wheel(host, { deltaY: -100, shiftKey: true, clientX: 300, clientY: trackClientY(video.index) })
+  fireEvent.wheel(host, { deltaY: -100, shiftKey: true, clientX: 300, clientY: trackClientY(video.index) })
+  expect(owner.past.length).toBe(history)
+  await waitFor(() => expect(owner.past.length).toBe(history + 1))
+  expect(current().tracks.find(track => track.id === video.id)!.height).toBe((video.height ?? 32) + 16)
+  expect(onError).not.toHaveBeenCalled()
 })
 
 it('正式运输/工具按钮共用命令与自定义键位；实时读数使用当前上下文', async () => {
