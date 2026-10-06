@@ -3,6 +3,18 @@ import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositin
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import { planVideoEditBuiltinEffect, planVideoEditBuiltinTransition, type VideoEditBuiltinPlan, type VideoEditBuiltinTexture } from './videoEditBuiltinEffectPasses'
 import { VIDEO_EDIT_BUILTIN_EFFECT_SHADER, type VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
+import type { CubeLut } from '@/core/videoEdit/cubeLut'
+import type { LumetriLutAsset } from '@/core/videoEdit/lumetriLutAsset'
+import { fetchVideoEditLumetriLut } from './videoEditLumetriLutSource'
+
+export type VideoEditLutLoader = (asset: LumetriLutAsset) => Promise<CubeLut>
+const loadLut: VideoEditLutLoader = fetchVideoEditLumetriLut
+interface UploadQueue { writeTexture(destination: unknown, data: ArrayBufferView, layout: unknown, size: unknown): void }
+function half(value: number): number {
+  const bits = new Uint32Array(new Float32Array([value]).buffer)[0]; const sign = (bits >>> 16) & 0x8000; const exponent = ((bits >>> 23) & 255) - 127 + 15; const mantissa = bits & 0x7fffff
+  if (exponent <= 0) return exponent < -10 ? sign : sign | ((mantissa | 0x800000) >>> (14 - exponent))
+  return sign | (exponent << 10) | (mantissa >>> 13)
+}
 
 interface LayoutDevice { createBindGroupLayout(descriptor: unknown): unknown; createPipelineLayout(descriptor: unknown): unknown }
 /** 中间纹理由宿主分配（计入宿主的显存预算），按尺寸与格式复用。 */
@@ -19,8 +31,11 @@ export class VideoEditBuiltinEffectsGpu {
   private readonly uniforms: GpuBuffer[] = []
   private layout?: unknown
   private module?: unknown
+  private fallbackLut?: GpuTexture
+  private readonly lookups = new Map<string, { texture: GpuTexture; cube?: CubeLut }>()
+  private disposed = false
   passes = 0
-  constructor(private readonly device: GpuDevice, private readonly sampler: unknown, private readonly allocator: VideoEditBuiltinScratchAllocator) {}
+  constructor(private readonly device: GpuDevice, private readonly sampler: unknown, private readonly allocator: VideoEditBuiltinScratchAllocator, private readonly lutLoader: VideoEditLutLoader = loadLut) {}
   private pipelineLayout(): unknown {
     if (this.layout) return this.layout
     const device = this.device as GpuDevice & Partial<LayoutDevice>
@@ -30,6 +45,7 @@ export class VideoEditBuiltinEffectsGpu {
       { binding: 1, visibility: 2, sampler: { type: 'filtering' } },
       { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 64 } },
       { binding: 3, visibility: 2, texture: { sampleType: 'float' } },
+      { binding: 4, visibility: 2, texture: { sampleType: 'float', viewDimension: '3d' } },
     ] })
     return this.layout = device.createPipelineLayout({ bindGroupLayouts: [group] })
   }
@@ -65,8 +81,8 @@ export class VideoEditBuiltinEffectsGpu {
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
   /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
-  async render(instance: VideoEditBuiltinEffectInstance, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1): Promise<void> {
-    await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale }), input.format, input.texture, output)
+  async render(instance: VideoEditBuiltinEffectInstance, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly LumetriLutAsset[] = []): Promise<void> {
+    await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale }), input.format, input.texture, output, undefined, luts)
   }
   /**
    * 带参数的视频过渡（4.7）：`outgoing` 前一段、`incoming` 后一段（单侧过渡两者可以是同一纹理，空着的一侧由参数标记），
@@ -75,13 +91,51 @@ export class VideoEditBuiltinEffectsGpu {
   async renderTransition(transition: VideoEditBuiltinTransitionInput, outgoing: GpuTexture, incoming: GpuTexture, output: GpuTexture, size: { width: number; height: number; format: string }): Promise<void> {
     await this.execute(planVideoEditBuiltinTransition(transition, size), size.format, outgoing, output, incoming)
   }
-  private async execute(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture): Promise<void> {
+  private upload(data: Float32Array, width: number, depth = 1, three = false): GpuTexture {
+    const height = three ? width : Math.ceil(data.length / 4 / width)
+    const padded = new Float32Array(width * height * depth * 4); padded.set(data)
+    const texture = this.device.createTexture({ size: [width, height, depth], dimension: three ? '3d' : '2d', format: 'rgba16float', usage: 2 | 4 })
+    ;(this.device.queue as typeof this.device.queue & UploadQueue).writeTexture({ texture }, Uint16Array.from(padded, half), { bytesPerRow: width * 8, rowsPerImage: height }, [width, height, depth])
+    return texture
+  }
+  private async execute(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly LumetriLutAsset[] = []): Promise<void> {
     const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, format)))
+    if (this.disposed) throw new Error('原调色渲染已关闭。')
+    // Resolve all resources before recording, so missing LUT never silently becomes identity.
+    const used = new Set<string>()
+    const lookups: Array<{ texture: GpuTexture; cube?: CubeLut } | undefined> = []
+    for (const pass of plan.passes) {
+      const lookup = pass.lookup
+      if (!lookup) { lookups.push(undefined); continue }
+      const asset = lookup.kind === 'cube' ? luts.find(asset => asset.id === lookup.ref) : undefined
+      if (lookup.kind === 'cube' && !asset) throw new Error('项目中找不到此 LUT，请重新导入或移除引用。')
+      const key = lookup.kind === 'curve' ? `curve:${Array.from(lookup.data).join(',')}` : `cube:${asset!.path}:${asset!.contentIdentity}`
+      used.add(key)
+      let resource = this.lookups.get(key)
+      if (!resource) {
+        if (lookup.kind === 'curve') {
+          const rgba = new Float32Array(lookup.data.length * 4); lookup.data.forEach((value, i) => rgba.set([value, value, value, 1], i * 4))
+          resource = { texture: this.upload(rgba, lookup.data.length) }
+        } else {
+          const cube = await this.lutLoader(asset!)
+          if (this.disposed) throw new Error('原调色渲染已关闭。')
+          resource = { cube, texture: this.upload(cube.data, cube.kind === '3d' ? cube.size : Math.min(1024, cube.size), cube.kind === '3d' ? cube.size : 1, cube.kind === '3d') }
+        }
+        this.lookups.set(key, resource)
+      }
+      lookups.push(resource)
+    }
+    this.fallbackLut ??= this.upload(new Float32Array([0, 0, 0, 1]), 1, 1, true)
     const taken = new Set<Scratch>()
     const scratch = plan.scratch.map(value => this.take(value.width, value.height, format, taken))
     const texture = (ref: VideoEditBuiltinTexture): GpuTexture => ref === 'input' ? input : ref === 'second' ? second ?? input : ref === 'output' ? output : scratch[ref]
     const encoder = this.device.createCommandEncoder()
     plan.passes.forEach((pass, index) => {
+      const lookup = lookups[index]; const cube = lookup?.cube
+      if (cube) {
+        pass.uniforms[5] = cube.kind === '1d' ? 1 : 0; pass.uniforms[6] = cube.size
+        pass.uniforms.set(cube.domainMin, 8); pass.uniforms.set(cube.domainMax.map((value, i) => value - cube.domainMin[i]), 12)
+      }
       const buffer = this.uniforms[index] ??= this.device.createBuffer({ size: 64, usage: 0x08 | 0x40 })
       this.device.queue.writeBuffer(buffer, 0, pass.uniforms)
       const target = encoder.beginRenderPass({ colorAttachments: [{ view: texture(pass.target).createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
@@ -89,11 +143,14 @@ export class VideoEditBuiltinEffectsGpu {
       target.setPipeline(pipeline)
       target.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
         { binding: 0, resource: texture(pass.source).createView() }, { binding: 1, resource: this.sampler },
-        { binding: 2, resource: { buffer } }, { binding: 3, resource: texture(pass.original ?? 'input').createView() },
+        { binding: 2, resource: { buffer } }, { binding: 3, resource: (lookup && cube?.kind !== '3d' ? lookup.texture : texture(pass.original ?? 'input')).createView() },
+        { binding: 4, resource: (cube?.kind === '3d' ? lookup!.texture : this.fallbackLut!).createView() },
       ] }))
       target.draw(3); target.end()
     })
     this.device.queue.submit([encoder.finish()])
+    // Bounded across animated curves/effect switches; resources in this command remain alive through submission.
+    if (this.lookups.size > 12) for (const [key, value] of this.lookups) { if (!used.has(key)) { value.texture.destroy(); this.lookups.delete(key) } }
     this.passes += plan.passes.length
   }
   /** 释放自上次调用以来没有用到的中间纹理。 */
@@ -105,6 +162,9 @@ export class VideoEditBuiltinEffectsGpu {
     }
   }
   dispose(): void {
+    this.disposed = true
+    for (const value of this.lookups.values()) value.texture.destroy()
+    this.lookups.clear(); this.fallbackLut?.destroy(); this.fallbackLut = undefined
     for (const entry of this.scratch) this.allocator.release(entry.texture)
     this.scratch.length = 0
     for (const buffer of this.uniforms) buffer.destroy()

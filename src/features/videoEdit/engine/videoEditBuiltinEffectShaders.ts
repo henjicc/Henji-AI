@@ -8,7 +8,7 @@
  * 单侧过渡空着的一侧按透明处理（与交叉溶解的单侧语义一致）。
  */
 import { VIDEO_EDIT_LUMETRI_SHADER } from './videoEditLumetriShader'
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'lumetri_basic', 'lumetri_creative', 'lumetri_curve', 'lumetri_wheel', 'lumetri_vignette'] as const
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'lumetri_basic', 'lumetri_creative', 'lumetri_curve', 'lumetri_wheel', 'lumetri_vignette', 'lumetri_hue_curve', 'lumetri_lut'] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
@@ -18,6 +18,7 @@ struct Params { size: vec4f, a: vec4f, b: vec4f, c: vec4f }
 @group(0) @binding(1) var s: sampler;
 @group(0) @binding(2) var<uniform> u: Params;
 @group(0) @binding(3) var original: texture_2d<f32>;
+@group(0) @binding(4) var colorLut: texture_3d<f32>;
 struct Vertex { @builtin(position) position: vec4f }
 @vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
  let p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3))[i];

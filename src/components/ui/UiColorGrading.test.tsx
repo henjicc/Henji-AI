@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { useState } from 'react'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { UiColorWheel, UiToneCurve } from './UiColorGrading'
 
@@ -30,4 +31,23 @@ it('色轮方向与强度使用意图单位；捕获丢失回退，Home 回到�
   fireEvent.keyDown(wheel, { key: 'Home' }); expect(onChange).toHaveBeenLastCalledWith(0, 0)
   view.rerender(<UiColorWheel label="中间调色轮" hue={0} strength={20} disabled {...{ onBegin, onFinish, onCancel, onChange }} />)
   onChange.mockClear(); fireEvent.pointerDown(wheel, { button: 0, clientX: 100, clientY: 50 }); fireEvent.keyDown(wheel, { key: 'ArrowUp' }); expect(onChange).not.toHaveBeenCalled()
+})
+
+it('自由控制点单击添加、横纵拖动、右键/拖出删除；最少两点与捕获丢失回退', () => {
+  const begin = vi.fn(); const finish = vi.fn(); const cancel = vi.fn()
+  function Curve(): React.ReactElement {
+    const [points, setPoints] = useState([{ x: 0, y: 0 }, { x: 100, y: 100 }])
+    return <UiToneCurve label="自由曲线" points={points} onPointsChange={setPoints} onBegin={begin} onFinish={finish} onCancel={cancel} />
+  }
+  const view = render(<Curve />); const plot = view.getByLabelText('自由曲线')
+  vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100))
+  fireEvent.pointerDown(plot, { button: 0, clientX: 40, clientY: 60 }); fireEvent.pointerUp(plot)
+  expect(view.getAllByRole('slider')).toHaveLength(3); expect(begin).toHaveBeenCalledOnce(); expect(finish).toHaveBeenCalledOnce()
+  const point = view.getByRole('slider', { name: '自由曲线 · 输入 40%' })
+  fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientX: 60, clientY: 20 }); fireEvent.pointerUp(plot)
+  expect(view.getByRole('slider', { name: '自由曲线 · 输入 60%' }).getAttribute('aria-valuenow')).toBe('80')
+  fireEvent.contextMenu(view.getByRole('slider', { name: '自由曲线 · 输入 60%' })); expect(view.getAllByRole('slider')).toHaveLength(2)
+  fireEvent.contextMenu(view.getAllByRole('slider')[0]); expect(view.getAllByRole('slider')).toHaveLength(2)
+  fireEvent.pointerDown(plot, { button: 0, clientX: 40, clientY: 60 }); fireEvent.pointerMove(plot, { clientX: -10, clientY: 60 }); fireEvent.pointerUp(plot); expect(view.getAllByRole('slider')).toHaveLength(2)
+  fireEvent.pointerDown(view.getAllByRole('slider')[0], { button: 0 }); fireEvent.lostPointerCapture(plot); expect(cancel).toHaveBeenCalledOnce()
 })

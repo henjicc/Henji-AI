@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, RotateCcw, WandSparkles } from 'lucide-react'
-import { Dropdown, UiButton, UiColorWheel, UiEmpty, UiGroup, UiIconButton, UiToneCurve } from '@/components/ui'
+import { ChevronDown, ChevronRight, RotateCcw, WandSparkles, Upload } from 'lucide-react'
+import { Dropdown, UiButton, UiColorWheel, UiEmpty, UiGroup, UiIconButton, UiRangeInput } from '@/components/ui'
 import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
-import { LUMETRI_BASIC_PARAMS, LUMETRI_CREATIVE_PARAMS, LUMETRI_CURVE_CHANNELS, LUMETRI_CURVE_PARAMS, LUMETRI_VIGNETTE_PARAMS, LUMETRI_WHEEL_PARAMS, LUMETRI_WHEEL_REGIONS, VIDEO_EDIT_LUMETRI } from '@/core/videoEdit/lumetri'
+import { LUMETRI_BASIC_PARAMS, LUMETRI_CREATIVE_PARAMS, LUMETRI_CURVE_CHANNELS, LUMETRI_HUE_CURVES, LUMETRI_HUE_CURVE_NAMES, LUMETRI_LUT_PARAMS, LUMETRI_POINT_PARAMS, LUMETRI_VIGNETTE_PARAMS, LUMETRI_WHEEL_PARAMS, LUMETRI_WHEEL_REGIONS, VIDEO_EDIT_LUMETRI } from '@/core/videoEdit/lumetri'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { getActiveVideoEditSequence, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
@@ -11,6 +11,8 @@ import { analyzeVideoEditLumetri, editVideoEditLumetri } from '../application/vi
 import type { VideoEditCompositeTarget } from '../application/videoEditCompositing'
 import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
+
+import { importVideoEditLumetriLut } from '../application/videoEditLumetriLuts'
 
 function Section({ title, children }: { title: string; children: ReactNode }): React.ReactElement {
   const [open, setOpen] = useState(title === '基本校正')
@@ -28,13 +30,26 @@ function LumetriEditor({ target, clip, selectedId, onError }: { target: VideoEdi
   const gesture = useVideoEditBuiltinParamGesture(target.projectId, `${target.sequenceId}:${target.clipId}:${selectedId}`, (changes, handle) => editVideoEditLumetri(target, changes, handle, selectedId || undefined), onError)
   const request = useRef<AbortController>(); const [busy, setBusy] = useState(false)
   useEffect(() => () => { request.current?.abort() }, [])
+  const [reference, setReference] = useState('')
+  const [matchMethod, setMatchMethod] = useState<'moments' | 'histogram'>('moments')
+  const [hueCurve, setHueCurve] = useState('hue_sat')
+  const luts = requireVideoEditInstance(target.projectId).document.lumetriLuts ?? []
+  const upload = async (stage: string): Promise<void> => {
+    if (busy || gesture.active()) return
+    const controller = new AbortController(); request.current = controller; setBusy(true)
+    try { const asset = await importVideoEditLumetriLut(target.projectId, controller.signal); controller.signal.throwIfAborted(); if (asset) gesture.commit({ params: { [`${stage}_lut`]: asset.id } }) }
+    catch (error) { if (!controller.signal.aborted) onError(error) }
+    finally { if (!controller.signal.aborted) setBusy(false) }
+  }
+  const lutControl = (stage: string): ReactNode => <div className="flex items-center gap-1"><div className="min-w-0 flex-1"><Dropdown ariaLabel={stage === 'input' ? '输入 LUT' : '创意 Look'} value={values[`${stage}_lut`] as string} options={[{ value: '', label: '无' }, ...luts.map(asset => ({ value: asset.id, label: asset.name }))]} onSelect={id => gesture.commit({ params: { [`${stage}_lut`]: id } })} /></div><UiIconButton size="xs" aria-label="导入 LUT" title="导入 .cube 颜色查找表" disabled={busy} onClick={() => { void upload(stage) }}><Upload size={14} /></UiIconButton></div>
+  const lutStrength = (stage: string): ReactNode => <UiRangeInput aria-label={stage === 'input' ? '输入 LUT 强度' : 'Look 强度'} min={0} max={100} step={1} value={values[`${stage}_lut_strength`] as number} disabled={busy} onPointerDown={gesture.begin} onPointerUp={gesture.finish} onPointerCancel={gesture.cancel} onLostPointerCapture={() => { if (gesture.active()) gesture.cancel() }} onKeyDown={event => { if (event.key === 'Escape') gesture.cancel() }} onChange={event => gesture.commit({ params: { [`${stage}_lut_strength`]: Number(event.target.value) } })} />
   const automatic = async (): Promise<void> => {
     if (busy || gesture.active()) return
     const controller = new AbortController(); request.current = controller; setBusy(true)
     try {
-      const result = await analyzeVideoEditLumetri(target, undefined, controller.signal, selectedId || undefined)
+      const result = await analyzeVideoEditLumetri(target, undefined, controller.signal, selectedId || undefined, reference ? { referenceClipId: reference, matchMethod } : {})
       controller.signal.throwIfAborted()
-      gesture.commit({ params: result.parameters })
+      gesture.commit({ params: result.parameters, ...(reference ? { curves: {} } : {}) })
     } catch (error) { if (!controller.signal.aborted) onError(error) }
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
@@ -42,15 +57,20 @@ function LumetriEditor({ target, clip, selectedId, onError }: { target: VideoEdi
   const [channel, setChannel] = useState('master')
   return <div className="flex flex-col gap-2">
     <div className="flex items-center justify-end gap-1">
-      <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} title="分析选中片段的白平衡与明暗；播放头不在片段内时取中间帧。艺术偏色或纯色画面请手动调整"><WandSparkles size={14} />{busy ? '分析中…' : '自动'}</UiButton>
+      <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} title="在片段内均匀采样，分析白平衡与明暗；选择参考后匹配其颜色"><WandSparkles size={14} />{busy ? '分析中…' : reference ? '匹配颜色' : '自动'}</UiButton>
       <UiIconButton size="xs" title="重置 Lumetri 颜色" aria-label="重置 Lumetri 颜色" disabled={busy || !effect} onClick={() => gesture.commit({ curves: {}, params: videoEditBuiltinDefaults(VIDEO_EDIT_LUMETRI) })}><RotateCcw size={14} /></UiIconButton>
     </div>
-    <Section title="基本校正"><VideoEditBuiltinParamRows params={LUMETRI_BASIC_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
-    <Section title="创意"><VideoEditBuiltinParamRows params={LUMETRI_CREATIVE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
+    <Dropdown ariaLabel="校色参考片段" value={reference} options={[{ value: '', label: '自动校色' }, ...getActiveVideoEditSequence(requireVideoEditInstance(target.projectId)).clips.filter(value => value.id !== clip.id && value.kind !== 'audio' && value.kind !== 'adjustment').map(value => ({ value: value.id, label: value.name }))]} onSelect={setReference} />
+    {reference && <Dropdown ariaLabel="颜色匹配方式" value={matchMethod} options={[{ value: 'moments', label: '均值与反差' }, { value: 'histogram', label: '颜色分布' }]} onSelect={value => setMatchMethod(value as 'moments' | 'histogram')} />}
+    <Section title="基本校正">{lutControl('input')}{lutStrength('input')}<VideoEditBuiltinParamRows params={LUMETRI_LUT_PARAMS.filter(param => param.key === 'input_lut_strength')} values={values} gesture={gesture} animation={animation} /><VideoEditBuiltinParamRows params={LUMETRI_BASIC_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
+    <Section title="创意">{lutControl('look')}{lutStrength('look')}<VideoEditBuiltinParamRows params={LUMETRI_LUT_PARAMS.filter(param => param.key === 'look_lut_strength')} values={values} gesture={gesture} animation={animation} /><VideoEditBuiltinParamRows params={LUMETRI_CREATIVE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
     <Section title="曲线">
       <Dropdown ariaLabel="曲线通道" value={channel} options={LUMETRI_CURVE_CHANNELS.map((value, i) => ({ value, label: ['RGB 主曲线', '红曲线', '绿曲线', '蓝曲线'][i] }))} onSelect={setChannel} />
-      <UiToneCurve label="RGB 曲线" values={Array.from({ length: 5 }, (_, i) => values[`curve_${channel}_${i}`] as number)} {...events} onChange={(i, value) => gesture.commit({ params: { [`curve_${channel}_${i}`]: value } })} />
-      <VideoEditBuiltinParamRows params={LUMETRI_CURVE_PARAMS.filter(param => param.key.startsWith(`curve_${channel}_`))} values={values} gesture={gesture} animation={animation} />
+      <VideoEditBuiltinParamRows params={LUMETRI_POINT_PARAMS.filter(param => param.key === `curve_${channel}_points`)} values={values} gesture={gesture} animation={animation} />
+    </Section>
+    <Section title="色相饱和度曲线">
+      <Dropdown ariaLabel="色相饱和度曲线类型" value={hueCurve} options={LUMETRI_HUE_CURVES.map((value, i) => ({ value, label: LUMETRI_HUE_CURVE_NAMES[i] }))} onSelect={setHueCurve} />
+      <VideoEditBuiltinParamRows params={LUMETRI_POINT_PARAMS.filter(param => param.key === `curve_${hueCurve}_points`)} values={values} gesture={gesture} animation={animation} />
     </Section>
     <Section title="色轮">
       {LUMETRI_WHEEL_REGIONS.map((region, i) => <UiGroup key={region} title={['阴影', '中间调', '高光'][i]} titleTone="compact" gap="none">

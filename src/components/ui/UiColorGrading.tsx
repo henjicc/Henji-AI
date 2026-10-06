@@ -1,25 +1,53 @@
+import { LUMETRI_MAX_CURVE_POINTS, lumetriSpline, type LumetriCurvePoint } from '@/core/videoEdit/lumetriCurves'
 import { useRef } from 'react'
 import { UI_COLOR_WHEEL_BACKGROUND } from './styleTokens'
 
 interface GestureProps { onBegin: () => void; onFinish: () => void; onCancel: () => void; disabled?: boolean }
-/** Five fixed input anchors; output is freely editable. Deliberately independent of document/undo ownership. */
-export function UiToneCurve({ label, values, onChange, onBegin, onFinish, onCancel, disabled }: GestureProps & { label: string; values: readonly number[]; onChange: (point: number, value: number) => void }): React.ReactElement {
-  const active = useRef<number | null>(null)
-  const move = (event: React.PointerEvent<SVGSVGElement>): void => {
-    if (active.current === null) return
+/** Document/undo independent curve editor; legacy values remain supported by existing consumers. */
+export function UiToneCurve({ label, values, points, onChange, onPointsChange, onBegin, onFinish, onCancel, disabled }: GestureProps & { label: string; values?: readonly number[]; points?: readonly LumetriCurvePoint[]; onChange?: (point: number, value: number) => void; onPointsChange?: (points: LumetriCurvePoint[]) => void }): React.ReactElement {
+  const current = points ?? (values ?? []).map((y, i) => ({ x: i * 25, y }))
+  const active = useRef<{ index: number; points: LumetriCurvePoint[]; outside: boolean } | null>(null)
+  const pointAt = (event: React.PointerEvent<SVGSVGElement>): LumetriCurvePoint => {
     const rect = event.currentTarget.getBoundingClientRect()
-    onChange(active.current, Math.max(0, Math.min(100, 100 - (event.clientY - rect.top) / rect.height * 100)))
+    return { x: (event.clientX - rect.left) / rect.width * 100, y: 100 - (event.clientY - rect.top) / rect.height * 100 }
   }
-  return <svg viewBox="0 0 100 100" aria-label={label} className="aspect-square w-full touch-none rounded-control bg-control" onPointerMove={move}
-    onPointerUp={event => { if (active.current === null) return; active.current = null; onFinish(); if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
-    onPointerCancel={() => { if (active.current !== null) { active.current = null; onCancel() } }}
-    onLostPointerCapture={() => { if (active.current !== null) { active.current = null; onCancel() } }}
-    onKeyDown={event => { if (event.key === 'Escape' && active.current !== null) { event.preventDefault(); event.stopPropagation(); active.current = null; onCancel() } }}>
-    <path d="M0 100L100 0M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" className="stroke-line" fill="none" strokeWidth="0.5" />
-    <polyline points={values.map((value, i) => `${i * 25},${100 - value}`).join(' ')} fill="none" className="stroke-accent" strokeWidth="1.5" />
-    {values.map((value, i) => <circle key={i} cx={i * 25} cy={100 - value} r="3" className="fill-text1 stroke-control" tabIndex={disabled ? -1 : 0} role="slider" aria-label={`${label} · 输入 ${i * 25}%`} aria-valuenow={Math.round(value)} aria-valuemin={0} aria-valuemax={100} aria-disabled={disabled}
-      onPointerDown={event => { if (disabled || event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); active.current = i; onBegin(); event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId) }}
-      onKeyDown={event => { if (disabled || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); event.stopPropagation(); onChange(i, event.key === 'Home' ? 0 : event.key === 'End' ? 100 : Math.max(0, Math.min(100, value + (event.key === 'ArrowUp' ? 1 : -1)))) }} />)}
+  const write = (next: LumetriCurvePoint[], index: number): void => { if (onPointsChange) onPointsChange(next); else onChange?.(index, next[index].y) }
+  const remove = (index: number): void => { if (!disabled && onPointsChange && current.length > 2) onPointsChange(current.filter((_, i) => i !== index)) }
+  const move = (event: React.PointerEvent<SVGSVGElement>): void => {
+    const drag = active.current; if (!drag) return
+    const point = pointAt(event); const index = drag.index
+    drag.outside = point.x < -5 || point.x > 105 || point.y < -5 || point.y > 105
+    const x = onPointsChange ? Math.max(index ? drag.points[index - 1].x + .01 : 0, Math.min(index < drag.points.length - 1 ? drag.points[index + 1].x - .01 : 100, point.x)) : drag.points[index].x
+    const next = drag.points.map((p, i) => i === index ? { x, y: Math.max(0, Math.min(100, point.y)) } : p)
+    drag.points = next; write(next, index)
+  }
+  const evaluate = current.length >= 2 ? lumetriSpline(current) : () => 0
+  return <svg viewBox="0 0 100 100" aria-label={label} tabIndex={disabled ? -1 : 0} className="aspect-square w-full touch-none rounded-control bg-control"
+    onPointerDown={event => {
+      if (disabled || event.button !== 0 || !onPointsChange || current.length >= LUMETRI_MAX_CURVE_POINTS || event.target !== event.currentTarget) return
+      const point = pointAt(event); point.x = Math.max(0, Math.min(100, point.x)); point.y = Math.max(0, Math.min(100, point.y))
+      if (current.some(p => Math.abs(p.x - point.x) < .01)) return
+      const next = [...current, point].sort((a, b) => a.x - b.x); const index = next.indexOf(point)
+      onBegin(); active.current = { index, points: next, outside: false }; onPointsChange(next); event.currentTarget.setPointerCapture(event.pointerId)
+    }} onPointerMove={move}
+    onPointerUp={event => { const drag = active.current; if (!drag) return; active.current = null; if (drag.outside && onPointsChange && drag.points.length > 2) onPointsChange(drag.points.filter((_, i) => i !== drag.index)); onFinish(); if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
+    onPointerCancel={() => { if (active.current) { active.current = null; onCancel() } }}
+    onLostPointerCapture={() => { if (active.current) { active.current = null; onCancel() } }}
+    onKeyDown={event => { if (event.key === 'Escape' && active.current) { event.preventDefault(); event.stopPropagation(); active.current = null; onCancel() } }}>
+    <path pointerEvents="none" d="M0 100L100 0M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" className="stroke-line" fill="none" strokeWidth="0.5" />
+    <polyline pointerEvents="none" points={Array.from({ length: 101 }, (_, x) => `${x},${100 - evaluate(x)}`).join(' ')} fill="none" className="stroke-accent" strokeWidth="1.5" />
+    {current.map((point, i) => <circle key={i} cx={point.x} cy={100 - point.y} r="3" className="fill-text1 stroke-control" tabIndex={disabled ? -1 : 0} role="slider" aria-label={`${label} · 输入 ${Math.round(point.x * 100) / 100}%`} aria-valuenow={Math.round(point.y)} aria-valuemin={0} aria-valuemax={100} aria-disabled={disabled}
+      onContextMenu={event => { event.preventDefault(); remove(i) }}
+      onPointerDown={event => { if (disabled || event.button !== 0) return; event.preventDefault(); event.stopPropagation(); event.currentTarget.focus(); active.current = { index: i, points: current.map(p => ({ ...p })), outside: false }; onBegin(); event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId) }}
+      onKeyDown={event => {
+        if (disabled) return
+        if (['Delete', 'Backspace'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); remove(i); return }
+        if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        event.preventDefault(); event.stopPropagation()
+        const x = !onPointsChange ? point.x : Math.max(i ? current[i - 1].x + .01 : 0, Math.min(i < current.length - 1 ? current[i + 1].x - .01 : 100, point.x + (event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0)))
+        const y = event.key === 'Home' ? 0 : event.key === 'End' ? 100 : Math.max(0, Math.min(100, point.y + (event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0)))
+        write(current.map((p, index) => index === i ? { x, y } : p), i)
+      }} />)}
   </svg>
 }
 

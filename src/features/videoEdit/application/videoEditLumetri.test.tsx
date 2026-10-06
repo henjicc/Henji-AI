@@ -10,6 +10,10 @@ import { analyzeVideoEditLumetri, editVideoEditLumetri } from './videoEditLumetr
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 
 vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditCodeTrial')>(), trialVideoEditCodeFrames: vi.fn(), trialVideoEditCodeDocument: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('./videoEditLumetriLutClient', async () => {
+  const { suggestLumetriAutoColor } = await import('@/core/videoEdit/lumetri'); const { suggestLumetriMatch } = await import('@/core/videoEdit/lumetriMatch')
+  return { analyzeVideoEditLumetriOffThread: async (pixels: Uint8ClampedArray, reference?: Uint8ClampedArray, method?: 'moments' | 'histogram') => reference ? suggestLumetriMatch(pixels, reference, method) : suggestLumetriAutoColor(pixels) }
+})
 const closeBitmap = vi.fn()
 beforeEach(() => {
   installHarnessNativeStorage()
@@ -48,7 +52,7 @@ it('分析隔离目标与 Lumetri 前的效果，不改播放头/文档；建议
   const { owner, target } = await setup(); editVideoEditLumetri(target, { params: { exposure: 2, faded_film: 30 } })
   const snapshot = owner.document; const history = owner.past.length; const frame = owner.frame
   const result = await analyzeVideoEditLumetri(target)
-  expect(owner.document).toBe(snapshot); expect(owner.frame).toBe(frame); expect(owner.past).toHaveLength(history); expect(closeBitmap).toHaveBeenCalledOnce()
+  expect(owner.document).toBe(snapshot); expect(owner.frame).toBe(frame); expect(owner.past).toHaveLength(history); expect(closeBitmap).toHaveBeenCalledTimes(5); expect(result.frames).toHaveLength(5)
   const rendered = vi.mocked(trialVideoEditCodeFrames).mock.calls[0][0][0]
   expect(rendered.document.clips).toHaveLength(1); expect(rendered.document.clips[0].effects).toEqual([]); expect(rendered.document.annotations).toEqual([]); expect(rendered.document.captions).toEqual([])
   editVideoEditLumetri(target, { params: result.parameters }); expect(owner.past).toHaveLength(history + 1)
@@ -88,14 +92,39 @@ it('独立面板曲线：首次拖动创建、重渲染不断开手势，松手�
   Element.prototype.setPointerCapture = vi.fn(); Element.prototype.releasePointerCapture = vi.fn(); Element.prototype.hasPointerCapture = () => true
   const view = render(<VideoEditLumetriPanel instance={owner} onError={onError} />)
   fireEvent.click(view.getByRole('button', { name: '曲线' }))
-  const plot = view.getByLabelText('RGB 曲线'); const point = view.getByRole('slider', { name: 'RGB 曲线 · 输入 50%' })
+  const plot = view.getByLabelText('RGB 主控制点'); const point = view.getByRole('slider', { name: 'RGB 主控制点 · 输入 50%' })
   vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100))
-  fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientY: 25 })
-  expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.curve_master_2).toBe(75)
+  fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 25 })
+  expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.curve_master_points).toContain('75')
   view.rerender(<VideoEditLumetriPanel instance={owner} onError={onError} />)
   expect(owner.past).toHaveLength(history)
   fireEvent.pointerUp(plot); expect(owner.past).toHaveLength(history + 1)
-  fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientY: 10 }); fireEvent.keyDown(point, { key: 'Escape' }); fireEvent.pointerMove(plot, { clientY: 5 })
-  expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.curve_master_2).toBe(75)
+  fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 10 }); fireEvent.keyDown(point, { key: 'Escape' }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 5 })
+  expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.curve_master_points).toContain('75')
   expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
+})
+
+it('公共参考匹配多帧保留参考调色，隔离淡化/不透明度动画；完整建议避免重复套旧Look，一步应用与撤销', async () => {
+  const { owner, target } = await setup(); appendVideoEditClip(target.projectId)
+  const reference = getActiveVideoEditSequence(owner).clips[1]
+  editVideoEditLumetri(target, { params: { faded_film: 40, curve_red_2: 80 } })
+  editVideoEditLumetri(target, { curves: { faded_film: [{ time: 0, value: 40, interpolation: 'hold' }] } })
+  editVideoEditLumetri({ ...target, clipId: reference.id }, { params: { exposure: 1 } })
+  editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, fadeInFrames: 5, curves: { opacity: [{ time: 0, value: .2, interpolation: 'hold' as const }] } })) })) }))
+  const snapshot = owner.document; const app = createApplicationHarness()
+  try {
+    const ref = (kind: string, child: string): { kind: string; id: string } => ({ kind, id: `${target.projectId}:${child}` })
+    const result = await app.requireResult('analyze_video_edit_lumetri', { documentRef: { kind: 'video_edit.document', id: target.projectId }, sequenceRef: ref('video_edit.sequence', target.sequenceId), clipRef: ref('video_edit.clip', target.clipId), sampleCount: 3, referenceClipRef: ref('video_edit.clip', reference.id), matchMethod: 'histogram' })
+    expect(result.frames).toHaveLength(3); expect(owner.document).toBe(snapshot)
+    const frames = vi.mocked(trialVideoEditCodeFrames).mock.calls.flatMap(call => call[0]); expect(frames).toHaveLength(6)
+    expect(frames.slice(0, 3).every(frame => frame.document.clips[0].effects?.length === 0)).toBe(true)
+    expect(frames.slice(3).every(frame => frame.document.clips[0].effects?.[0].builtin?.params.exposure === 1)).toBe(true)
+    expect(frames.every(frame => frame.document.clips[0].fadeInFrames === 0 && frame.document.clips[0].curves?.opacity === undefined)).toBe(true)
+    expect(result.parameters).toMatchObject({ faded_film: 0, curve_red_2: 50, look_lut: '' })
+    const effect = getActiveVideoEditSequence(owner).clips[0].effects![0]
+    expect(await app.change(ref('video_edit.effect', effect.id), { 'video_edit.effect.parameters.faded_film.keyframes': [], 'video_edit.effect.parameters': result.parameters })).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params).toEqual(result.parameters)
+    expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.curves?.faded_film).toBeUndefined()
+    undoVideoEdit(target.projectId); expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.faded_film).toBe(40)
+  } finally { app.dispose() }
 })

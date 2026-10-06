@@ -9,6 +9,7 @@
 import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS } from './audioEffectDefinitions'
 import { VIDEO_EDIT_LUMETRI } from './lumetri'
+import { parseLumetriCurve } from './lumetriCurves'
 
 export type VideoEditBuiltinParamValue = number | boolean | string
 export type VideoEditBuiltinParams = Record<string, VideoEditBuiltinParamValue>
@@ -20,6 +21,7 @@ export type VideoEditBuiltinParam =
   | ParamBase & { type: 'color'; default: string }
   | ParamBase & { type: 'enum'; options: ReadonlyArray<{ value: string; label: string }>; default: string }
   | ParamBase & { type: 'boolean'; default: boolean }
+  | ParamBase & { type: 'curve' | 'lut'; default: string }
 export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level'
 export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道' }
 /** 内置效果作用于画面还是声音：画面效果只加到画面片段，音频效果只加到声音片段。 */
@@ -158,6 +160,14 @@ function range(param: Extract<VideoEditBuiltinParam, { type: 'number' }>): strin
 /** 单个参数：`clamp` 时数值夹进范围（界面拖动、步进），否则超出范围直接报错（文档校验、助手写入，不静默改值）。 */
 export function videoEditBuiltinParamValue(param: VideoEditBuiltinParam, raw: unknown, clamp = false): VideoEditBuiltinParamValue {
   switch (param.type) {
+    case 'curve': {
+      const points = parseLumetriCurve(raw)
+      if (param.key.startsWith('curve_hue_') && points.length && (points[0].x !== 0 || points[points.length - 1].x !== 100 || points[0].y !== points[points.length - 1].y)) throw new Error('色相曲线必须覆盖0–100且两端输出相同，保证红色色相连续。')
+      return raw as string
+    }
+    case 'lut':
+      if (typeof raw !== 'string' || raw.length > 100 || (raw && !/^[A-Za-z0-9_-]+$/.test(raw))) throw new Error('LUT 需要项目中已导入的 LUT 引用，空字符串移除。')
+      return raw
     case 'number': {
       if (typeof raw !== 'number' || !Number.isFinite(raw)) throw new Error(`“${param.name}”（${param.key}）需要数字，范围 ${range(param)}。`)
       if (clamp) return Math.min(param.max, Math.max(param.min, raw))
