@@ -77,9 +77,12 @@ export class DocumentCoverStore {
         const { bytes, selected } = await this.options.render(request.sources)
         const target = path.join(folder, `${this.options.now?.() ?? Date.now()}${COVER_EXTENSION}`)
         await writeBufferAtomically(target, bytes)
-        const names = await fsp.readdir(folder).catch(() => [] as string[])
+        // 留下上一张：已经打开的列表可能还拿着它的地址（新封面在离开编辑器后才生成），删掉会让卡片图片 404；
+        // 再早的删掉。列表下次读取时拿到最新的一张。
+        const names = (await fsp.readdir(folder).catch(() => [] as string[])).filter((name) => path.join(folder, name) !== target).sort()
+        const previous = names.filter((name) => name.endsWith(COVER_EXTENSION)).at(-1)
         await Promise.all(names
-          .filter((name) => path.join(folder, name) !== target)
+          .filter((name) => name !== previous)
           .map((name) => fsp.rm(path.join(folder, name), { force: true }).catch(() => undefined)))
         ;(await this.loadCache()).set(request.docId, target)
         logger.info('文档封面已更新', {

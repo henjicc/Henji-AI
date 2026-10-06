@@ -1,10 +1,13 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { extensionFromMime, mimeFromExtension, normalizeExtension } from './path-utils'
+import { IMAGE_EDITOR_V3_MEDIA_HOST, resolveImageEditorV3ResourceMediaUrl } from '../image-editor-v3/resource-media-url'
 import type { ImageBytes } from './types'
 
 const FILE_URL_PREFIX = 'file://'
 const HENJI_MEDIA_PREFIX = 'henji-media://local/'
+/** 图片编辑资源库的内容哈希地址（多图层节点的预览等）：按哈希读资源库里的对象。 */
+const IMAGE_EDITOR_V3_MEDIA_PREFIX = `henji-media://${IMAGE_EDITOR_V3_MEDIA_HOST}/`
 
 export function decodeFileUrlPath(value: string): string {
   const raw = value.trim().replace(/^file:\/\//, '')
@@ -36,6 +39,10 @@ export async function resolveSourceBytes(source: string): Promise<ImageBytes> {
   if (!trimmed) throw new Error('Image source is empty')
   if (trimmed.startsWith('data:')) return parseDataUrl(trimmed)
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return await readRemote(trimmed)
+  if (trimmed.startsWith(IMAGE_EDITOR_V3_MEDIA_PREFIX)) {
+    const resource = resolveImageEditorV3ResourceMediaUrl(new URL(trimmed))
+    return { bytes: await fs.readFile(resource.targetPath), extension: extensionFromMime(resource.mediaType) }
+  }
   return await readLocal(normalizeLocalSource(trimmed))
 }
 

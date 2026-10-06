@@ -66,9 +66,14 @@ export function installCameraStageRenderLifecycleHost(): () => void {
     }
     lastIdentity = identity;
     reconcileRunning = true;
-    void reconcileCameraStageRenderTasks(projectId).catch((error) => report(
-      '3D 后台渲染恢复查询失败', error, { projectId },
-    )).finally(() => {
+    void reconcileCameraStageRenderTasks(projectId).catch((error) => {
+      // 画布正在关闭（离开、切换时画布 store 先换掉）：不算失败，下次打开时再恢复
+      if (error instanceof Error && error.message === 'PROJECT_CLOSING') {
+        lastIdentity = '';
+        return;
+      }
+      report('3D 后台渲染恢复查询失败', error, { projectId });
+    }).finally(() => {
       reconcileRunning = false;
       if (!disposed && reconcileQueued) {
         reconcileQueued = false;

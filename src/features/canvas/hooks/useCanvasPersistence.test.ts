@@ -64,3 +64,13 @@ it('切页卸载时把手势最后的视口同步回画布，由实例写进会�
   await vi.waitFor(async () => expect(await commands.readSessionState({ docId: a.id, key: 'canvas.viewport' })).toEqual({ x: -310, y: 90, zoom: 0.6 }), { timeout: 2_000 })
   expect(useProjectStore.getState().currentProjectId).toBe(a.id)
 })
+
+it('恢复的视口还没应用到画布时卸载（或效果重跑），不把画布的默认视口写回，恢复的视口保留', async () => {
+  const a = project('a')
+  setCanvasTestProjectState({ currentProjectId: a.id, currentProject: a })
+  liveViewport.current = { x: 0, y: 0, zoom: 1 }
+  const flow = { getViewport: () => liveViewport.current, setViewport: vi.fn(async () => true) } as unknown as ReactFlowInstance<CanvasNode, CanvasEdge>
+  const { unmount } = renderHook(() => useCanvasPersistence({ current: null }, flow))
+  unmount()
+  expect(useCanvasStore.getState().currentViewport).toEqual(a.viewport)
+})

@@ -5,8 +5,26 @@ const path = require('node:path')
 const { createAudioEditDocument, removeAudioEditDocument, updateAudioEditDocument } = require('./audioEditDocumentFixture.cjs')
 
 function createAudioEditScene({ setupToolbox, clickNamedButton }) {
+  /** 本场景建的口播与临时音频；截图后由 cleanup 撤掉，同一配置里换尺寸重跑或后续口播场景不受影响。 */
+  let fixture = null
   return {
     id: 'toolbox-audio-edit-waveform', surface: '工具箱', name: '口播剪辑-波形与连续播放', writesUserData: true,
+    cleanup: async (page) => {
+      const current = fixture
+      fixture = null
+      if (!current) return
+      try {
+        // 先经正式入口离开编辑器（会保存），再删口播文件，避免删掉仍在编辑的口播。
+        const leave = page.getByRole('button', { name: '返回口播列表', exact: true })
+        if (await leave.isVisible().catch(() => false)) {
+          await leave.click()
+          await page.getByRole('button', { name: '返回工具', exact: true }).waitFor({ timeout: 10000 })
+        }
+        await removeAudioEditDocument(page, current.id)
+      } finally {
+        fs.rmSync(current.directory, { recursive: true, force: true })
+      }
+    },
     setup: async (page) => {
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-audio-waveform-'))
       const file = path.join(directory, 'waveform.wav')
@@ -31,6 +49,7 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
         fs.rmdirSync(directory)
         throw error
       }
+      fixture = { id: project.id, directory }
       await setupToolbox(page)
       await clickNamedButton(page, /^(口播剪辑)/)
       // Tap the actual speaker-bound signal, without replacing decoding or playback.
@@ -49,7 +68,7 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
         }
       })
       try {
-        await page.getByRole('button', { name: /波形交互验收/ }).click()
+        await page.locator(`[data-project-id="${project.id}"]:visible`).first().click()
         await page.waitForFunction(() => Boolean(window.__audioEditOutputTap))
       } finally {
         await page.evaluate(() => { window.__audioEditRestoreTap(); delete window.__audioEditRestoreTap })

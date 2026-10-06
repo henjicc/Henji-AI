@@ -60,7 +60,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
           return result
         }
       })
-      await page.getByRole('button', { name: /口播直接剪辑验收/ }).click()
+      await page.locator(`[data-project-id="${id}"]:visible`).first().click()
       await page.waitForFunction(() => Boolean(window.__audioInteractionTap))
       await page.evaluate(() => window.__restoreAudioInteractionTap())
       const waveform = page.getByRole('slider', { name: '口播波形定位' })
@@ -115,7 +115,9 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       const pcm = execFileSync(ffmpegPath, ['-v', 'error', '-ss', '2.15', '-i', targetPath, '-t', '0.6', '-f', 'f32le', '-'], { windowsHide: true })
       assert.ok(pcm.length > 0 && pcm.every((byte) => byte === 0), '导出的静音段必须是零采样')
       await select(2, 3)
-      await waveform.click({ button: 'right' })
+      // 在选区里右键（波形中心在 8 秒处，窄窗口下离选区更远）
+      const restoreBounds = await waveform.boundingBox()
+      await page.mouse.click(restoreBounds.x + restoreBounds.width * 2.5 / 16, restoreBounds.y + restoreBounds.height * 0.65, { button: 'right' })
       await page.getByText('恢复选区', { exact: true }).last().click()
       await waitCuts(0)
       await page.getByRole('button', { name: '取消选区', exact: true }).click()

@@ -32,8 +32,12 @@ export function useCanvasPersistence(
 
   useEffect(() => {
     isRestoringRef.current = true;
+    // 恢复的视口应用到 ReactFlow 之前，ReactFlow 里还是默认视口；这期间卸载（或效果重跑）不能把它同步回 store，
+    // 否则恢复出来的视口会被默认值覆盖
+    let applied = false;
     const frame = requestAnimationFrame(() => {
       if (currentProjectId && useProjectStore.getState().currentProjectId === currentProjectId) {
+        applied = true;
         void reactFlow.setViewport(useCanvasStore.getState().currentViewport, { duration: 0 });
       }
     });
@@ -42,7 +46,7 @@ export function useCanvasPersistence(
       clearTimeout(restoreTimer);
       cancelAnimationFrame(frame);
       // 视口呈现按帧合并；切页 / 卸载可能发生在下一帧之前，把手势的最新位置同步回 store。
-      const viewport = flowStore.getState().panZoom?.getViewport();
+      const viewport = applied ? flowStore.getState().panZoom?.getViewport() : undefined;
       if (viewport && currentProjectId && useProjectStore.getState().currentProjectId === currentProjectId) {
         useCanvasStore.getState().setViewportState(viewport);
       }

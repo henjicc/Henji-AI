@@ -95,6 +95,12 @@ async function main() {
     finally { await cleanupIsolatedUserDataDir(userDataDir) }
     return
   }
+  if (options.target === 'canvas-documents') {
+    const { runCanvasDocumentsRestart } = require('./lib/canvasDocumentsRestart.cjs')
+    try { await runCanvasDocumentsRestart({ launch, userDataDir, outDir }) }
+    finally { await cleanupIsolatedUserDataDir(userDataDir) }
+    return
+  }
   if (options.target === 'video-edit-layout') {
     const { runVideoEditLayoutRestart } = require('./lib/videoEditLayoutRestart.cjs')
     try { await runVideoEditLayoutRestart({ launch, userDataDir, outDir }) }
