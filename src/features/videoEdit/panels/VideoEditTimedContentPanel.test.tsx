@@ -11,6 +11,23 @@ import { createVideoEditCaption, updateVideoEditTimedContent } from '../applicat
 import { VideoEditTimedContentPanel } from './VideoEditTimedContentPanel'
 import { reopenVideoEdit } from '../application/videoEditDocumentTestKit'
 
+it('字幕行点击定位、拆分与合并同步真实序列；旧草稿不能覆盖外部时间修改', async () => {
+  const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 30, duration: 90, text: '甲乙丙丁' })
+  const view = render(<View />)
+  fireEvent.click(await view.findByRole('button', { name: '字幕：甲乙丙丁' })); expect(owner.frame).toBe(30)
+  act(() => setVideoEditView(owner.document.id, { frame: 60, playing: false }))
+  fireEvent.change(view.getByLabelText('拆分文字位置'), { target: { value: '2' } })
+  fireEvent.click(view.getByRole('button', { name: '播放头拆分' }))
+  expect(sequence().captions?.map(cue => [cue.text, cue.start, cue.duration])).toEqual([['甲乙', 30, 30], ['丙丁', 60, 60]])
+  fireEvent.click(await view.findByRole('button', { name: '字幕：甲乙' }))
+  fireEvent.click(view.getByRole('button', { name: '合并下一行' }))
+  expect(sequence().captions).toMatchObject([{ id, text: '甲乙\n丙丁', start: 30, duration: 90 }])
+  fireEvent.click(await view.findByRole('button', { name: '字幕：甲乙 丙丁' }).catch(() => view.getByRole('button', { name: /字幕：甲乙/ })))
+  act(() => updateVideoEditTimedContent(owner.document.id, sequence().id, 'caption', id, { start: 40 }))
+  fireEvent.click(view.getByRole('button', { name: '播放头拆分' }))
+  expect(onError).toHaveBeenCalled(); expect(sequence().captions).toHaveLength(1); expect(sequence().captions![0].start).toBe(40)
+})
+
 const files = new Map<string, string>()
 let owner: VideoEditInstance
 let onError: ReturnType<typeof vi.fn>
@@ -21,6 +38,7 @@ function View({ visible = true, instance = owner }: { visible?: boolean; instanc
 }
 beforeEach(async () => {
   installHarnessNativeStorage(); files.clear(); onError = vi.fn()
+  vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([])
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/timed-panel.henji-video')
   vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue(null)
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
@@ -132,7 +150,7 @@ it.each(['hidden', 'sequence'] as const)('在途文件读取在%s时取消，不
 it('字幕导出走实际文件写入和回读，输出保持序列帧边界', async () => {
   createVideoEditCaption(owner.document.id, sequence().id, { start: 15, duration: 30, text: '导出字幕' })
   vi.mocked(getPlatform().system.dialog.save).mockResolvedValue('D:/output.srt')
-  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '导入或导出字幕' })); fireEvent.click(await view.findByRole('menuitem', { name: '导出 SRT' }))
+  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '导入或导出字幕' })); fireEvent.click(await view.findByRole('menuitem', { name: '导出 SRT（序列时间）' }))
   await waitFor(() => expect(files.get('D:/output.srt')).toContain('00:00:00,500 --> 00:00:01,500\n导出字幕'))
   await waitFor(() => expect(getPlatform().system.fs.readTextFile).toHaveBeenCalledWith('D:/output.srt')); expect(onError).not.toHaveBeenCalled()
 })

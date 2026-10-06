@@ -1,4 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { VideoEditSubtitleActions } from './VideoEditSubtitleActions'
+import { splitVideoEditSubtitle, mergeVideoEditSubtitles } from '../application/videoEditAutoSubtitles'
 import { Virtuoso } from 'react-virtuoso'
 import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiSearchInput, UiOptionButton, UiTextAreaField } from '@/components/ui'
@@ -35,6 +37,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
   const [keyword, setKeyword] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [selectedId, setSelectedId] = useState('')
+  const [splitCharacter, setSplitCharacter] = useState(1)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const pending = useRef<AbortController>()
@@ -61,7 +64,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     const start = mode === 'import' ? 0 : Math.max(clip?.start ?? 0, Math.min((clip ? clip.start + clip.duration : maxFrame) - 1, instance.frame))
     return { kind: mode, text: '', start, duration: Math.max(1, Math.min(Math.round(sequence.frameRate.numerator / sequence.frameRate.denominator * 2), (clip ? clip.start + clip.duration : maxFrame) - start)), clipId: clip?.id ?? '' }
   }
-  const openEntry = (entry: Entry): void => { setError(''); setSelectedId(entry.value.id); setDraft({ kind: entry.kind, id: entry.value.id, baseline: JSON.stringify(entry.value), text: entryText(entry), start: atFrame(entry), duration: entry.kind === 'caption' ? entry.value.duration : 1, clipId: entry.value.clipId ?? '' }) }
+  const openEntry = (entry: Entry): void => { setError(''); setSelectedId(entry.value.id); setSplitCharacter(Math.max(1, Math.floor(Array.from(entryText(entry)).length / 2))); setDraft({ kind: entry.kind, id: entry.value.id, baseline: JSON.stringify(entry.value), text: entryText(entry), start: atFrame(entry), duration: entry.kind === 'caption' ? entry.value.duration : 1, clipId: entry.value.clipId ?? '' }) }
   const locate = (entry: Entry): void => run(() => {
     const current = currentSequence(); const values = entry.kind === 'caption' ? current.captions : current.markers
     const value = values?.find(value => value.id === entry.value.id)
@@ -97,6 +100,11 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     setSelectedId(id ?? ''); setDraft(null)
   })
   const removeDraft = (): void => run(() => { if (draft?.id && draft.kind !== 'import') { removeVideoEditTimedContent(projectId, sequence.id, draft.kind, [draft.id]); setDraft(null); setSelectedId('') } })
+  const assertCaptionDraft = (): void => {
+    const cue = currentSequence().captions?.find(cue => cue.id === draft?.id)
+    if (!cue || JSON.stringify(cue) !== draft?.baseline) throw new Error('字幕已有新修改，请重新选择后拆分或合并。')
+    if (draft.text !== cue.text || draft.start !== cue.start || draft.duration !== cue.duration || draft.clipId !== (cue.clipId ?? '')) throw new Error('请先保存当前修改，再拆分或合并。')
+  }
   const asyncFile = (operation: (signal: AbortSignal) => Promise<unknown>): void => {
     try { currentSequence() } catch (reason) { report(reason); return }
     pending.current?.abort(); const controller = new AbortController(); pending.current = controller; setBusy(true); setError('')
@@ -113,10 +121,11 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
           onClick={() => { setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        {kind === 'caption' && <VideoEditSubtitleActions instance={instance} sequence={sequence} onError={report} />}
         <UiIconButton aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} title={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus size={16} /></UiIconButton>
         {kind === 'caption' && <PanelTrigger panelWidth={176} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={count >= 500} onClick={() => { setDraft(freshDraft('import')); setError('') }}><FileInput size={14} />导入字幕…</UiOptionButton>
-          <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'srt', sequence.id, signal))}><FileOutput size={14} />导出 SRT</UiOptionButton>
+          <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'srt', sequence.id, signal, 'sequence'))}><FileOutput size={14} />导出 SRT（序列时间）</UiOptionButton>
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'vtt', sequence.id, signal))}><FileOutput size={14} />导出 WebVTT</UiOptionButton>
         </div>}>
           {({ open, togglePanel }) => <UiIconButton aria-label="导入或导出字幕" title="导入或导出字幕" on={open} aria-haspopup="menu" aria-expanded={open} disabled={busy} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
@@ -128,7 +137,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     </div>
     <div className="min-h-0 flex-1 px-2" aria-label={kind === 'caption' ? '字幕列表' : '标记列表'}>
       {entries.length ? <Virtuoso className="h-full" data={entries} fixedItemHeight={56} increaseViewportBy={96} computeItemKey={(_index, entry) => entry.value.id} itemContent={(_index, entry) => <UiOptionButton variant="menu" active={selectedId === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
-        onClick={() => openEntry(entry)} onDoubleClick={() => locate(entry)}>
+        onClick={() => { openEntry(entry); locate(entry) }} onDoubleClick={() => locate(entry)}>
         <span className="block w-full truncate text-13" data-observation-sensitive>{entryText(entry)}</span>
         <span className={`${UI_TEXT_META_CLASS} block w-full truncate`}>第 {atFrame(entry)} 帧{entry.kind === 'caption' ? ` · ${entry.value.duration} 帧` : ''} · {clips.get(entry.value.clipId ?? '')?.name ?? '序列时钟'}</span>
       </UiOptionButton>} /> : <UiEmpty title={keyword ? '没有匹配内容' : kind === 'caption' ? '尚无字幕' : '尚无时间标记'} description={keyword ? undefined : kind === 'caption' ? '新增文字，或导入 SRT / WebVTT 字幕。' : '在需要定位的时刻新增标记。'} size="sm" />}
@@ -146,10 +155,15 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
             <UiFormRow label={draft.kind === 'caption' ? '开始帧' : '标记帧'} density="compact"><NumberInput ariaLabel={draft.kind === 'caption' ? '开始帧' : '标记帧'} size="sm" value={draft.start} min={0} max={maxFrame - 1} step={1} precision={0} widthClassName="w-full" disabled={busy} commitOnChange onChange={start => setDraft({ ...draft, start: Math.round(start) })} /></UiFormRow>
             {draft.kind === 'caption' && <UiFormRow label="时长（帧）" density="compact"><NumberInput ariaLabel="时长（帧）" size="sm" value={draft.duration} min={1} max={maxFrame} step={1} precision={0} widthClassName="w-full" disabled={busy} commitOnChange onChange={duration => setDraft({ ...draft, duration: Math.round(duration) })} /></UiFormRow>}
           </div>
+          {draft.kind === 'caption' && draft.id && <UiFormRow label="拆分文字位置" density="compact"><NumberInput ariaLabel="拆分文字位置" size="sm" value={splitCharacter} min={1} max={Math.max(1, Array.from(draft.text).length - 1)} precision={0} step={1} onChange={value => setSplitCharacter(Math.round(value))} /></UiFormRow>}
         </>}
         <div className="flex flex-wrap items-center gap-2">
           <UiButton variant="primary" size="sm" disabled={busy || draft.kind !== 'import' && !draft.text.trim()} onClick={() => draft.kind === 'import' ? asyncFile(signal => importVideoEditCaptionFile(projectId, sequence.id, { offset: draft.start, ...(draft.clipId ? { clipId: draft.clipId } : {}) }, signal)) : saveDraft()}>{draft.kind === 'import' ? busy ? '正在导入…' : '选择字幕文件' : draft.id ? '保存修改' : '添加'}</UiButton>
           {selected && draft.id && <UiButton size="sm" disabled={busy} onClick={() => locate(selected)}>定位</UiButton>}
+          {draft.kind === 'caption' && draft.id && <>
+            <UiButton size="sm" disabled={busy || !selected || draft.text !== entryText(selected)} onClick={() => run(() => { assertCaptionDraft(); splitVideoEditSubtitle(projectId, sequence.id, draft.id!, instance.frame, splitCharacter); setDraft(null) })}>播放头拆分</UiButton>
+            <UiButton size="sm" disabled={busy || !selected || draft.text !== entryText(selected)} onClick={() => run(() => { assertCaptionDraft(); const sorted = [...(currentSequence().captions ?? [])].sort((a, b) => a.start - b.start); const next = sorted[sorted.findIndex(cue => cue.id === draft.id) + 1]; if (!next) throw new Error('后面没有可合并的字幕。'); mergeVideoEditSubtitles(projectId, sequence.id, [draft.id!, next.id]); setDraft(null) })}>合并下一行</UiButton>
+          </>}
           {draft.id && <UiButton variant="danger" size="sm" disabled={busy} onClick={removeDraft}>删除</UiButton>}
           <UiButton size="sm" onClick={cancel}>取消</UiButton>
         </div>

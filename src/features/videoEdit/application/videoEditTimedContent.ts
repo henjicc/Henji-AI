@@ -57,12 +57,12 @@ export async function importVideoEditCaptionFile(projectId: string, sequenceId: 
     return ids
   } catch (error) { if (!signal?.aborted) logger.error('剪辑字幕导入失败', { event: 'video_edit.caption.import.failed', context: { projectId, sequenceId }, error }); throw error }
 }
-export async function exportVideoEditSubtitles(projectId: string, format: 'srt' | 'vtt', sequenceId = requireVideoEditInstance(projectId).activeSequenceId, signal?: AbortSignal): Promise<{ saved: boolean; verified: boolean }> {
+export async function exportVideoEditSubtitles(projectId: string, format: 'srt' | 'vtt', sequenceId = requireVideoEditInstance(projectId).activeSequenceId, signal?: AbortSignal, clock: 'sequence' | 'range' = 'range'): Promise<{ saved: boolean; verified: boolean }> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence || !sequence.captions?.length) throw new Error('此序列没有可导出的字幕。')
   const range = videoEditExportRange(owner, sequenceId)
-  const text = exportVideoEditCaptions(sequence, format, range)
+  const text = exportVideoEditCaptions(sequence, format, { ...range, clock })
   if (!text.replace(/^WEBVTT\s*/, '').trim()) throw new Error('序列入出点范围内没有字幕。')
   const path = await getPlatform().system.dialog.save({ defaultPath: `${sequence.name}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
   signal?.throwIfAborted()
