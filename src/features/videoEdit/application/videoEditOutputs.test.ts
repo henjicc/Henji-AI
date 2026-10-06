@@ -28,7 +28,7 @@ vi.mock('mediabunny', () => ({
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   canvas = {}; constructor() { if (encoder.failConstructor) throw new Error('GPU unavailable') }
-  render = encoder.render; dispose = encoder.dispose; mixAudio = encoder.mix
+  render = encoder.render; dispose = encoder.dispose; mixAudio = encoder.mix; setSmartRegions = vi.fn()
 } }))
 const files = new Map<string, string>(); const media = new Map<string, Uint8Array>(); const assets = new Map<string, AssetRecord>()
 const hash = 'a'.repeat(64)
