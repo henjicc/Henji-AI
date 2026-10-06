@@ -173,11 +173,11 @@ describe('LayerStackResultNode V3 编辑入口', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑' }))
 
     expect(nodeMocks.openMultiLayerDocumentNodeEditor).toHaveBeenNthCalledWith(1, {
-      projectRef: { kind: 'canvas.project', id: 'project-a' },
+      canvasRef: { kind: 'canvas.document', id: 'project-a' },
       nodeRef: { kind: 'canvas.node', id: 'project-a:multi-layer-node' },
     })
     expect(nodeMocks.openMultiLayerDocumentNodeEditor).toHaveBeenNthCalledWith(2, {
-      projectRef: { kind: 'canvas.project', id: 'project-a' },
+      canvasRef: { kind: 'canvas.document', id: 'project-a' },
       nodeRef: { kind: 'canvas.node', id: 'project-a:multi-layer-node' },
     })
   })

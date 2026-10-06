@@ -157,7 +157,7 @@ export function MultiLayerDocumentEditorDialog({
     setExporting(true)
     setExportFailed(false)
     void exportMultiLayerDocumentTargetToCanvas({
-      projectRef: { kind: 'canvas.project', id: currentProjectId },
+      canvasRef: { kind: 'canvas.document', id: currentProjectId },
       sourceNodeRef: { kind: 'canvas.node', id: `${currentProjectId}:${node.id}` },
       targetRef: exportSelection.targetRef,
     }).catch((error) => {
@@ -170,7 +170,7 @@ export function MultiLayerDocumentEditorDialog({
   }
 
   const exportUnavailableReason = !currentProjectId
-    ? '当前没有打开的画布项目'
+    ? '当前没有打开的画布'
     : exportSelection.ready ? undefined : exportSelection.reason
   const exportButton = (
     <UiButton

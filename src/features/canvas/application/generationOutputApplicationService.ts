@@ -55,7 +55,7 @@ export {
 function requireCurrentProjectId(): string {
   const project = useProjectStore.getState();
   if (!project.currentProjectId || project.currentProject?.id !== project.currentProjectId) {
-    throw new GenerationOutputApplicationError('NOT_FOUND', '当前画布项目不可用');
+    throw new GenerationOutputApplicationError('NOT_FOUND', '当前画布不可用');
   }
   return project.currentProjectId;
 }

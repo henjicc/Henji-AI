@@ -38,9 +38,9 @@ describe('画布批量写入内核', () => {
     expect(useCanvasStore.getState().edges).toHaveLength(edgesBefore)
   })
 
-  it('工程未打开时在写入之前就被拒绝', async () => {
+  it('画布未打开时在写入之前就被拒绝', async () => {
     // requireCurrentCanvasProject 在内核开头调用，任何操作都到不了执行阶段
-    await expect(applyCanvasOperationsAtomically('未打开的工程', [
+    await expect(applyCanvasOperationsAtomically('未打开的画布', [
       { kind: 'add_node', nodeType: 'text', placement: { mode: 'viewport_center' } },
     ])).rejects.toThrow()
     expect(useCanvasStore.getState().nodes).toHaveLength(0)

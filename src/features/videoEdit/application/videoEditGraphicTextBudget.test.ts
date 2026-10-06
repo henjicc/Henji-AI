@@ -8,7 +8,7 @@ import { validateVideoEditGraphicTextBudget } from './videoEditGraphicTextBudget
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditProject, closeVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition, type VideoEditInstance } from './videoEditService'
+import { createVideoEditProject, closeVideoEditProject, editVideoProject, listVideoEditInstances, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition, type VideoEditInstance } from './videoEditService'
 import { appendVideoEditItems, createVideoEditGraphicItem } from './videoEditProjectItems'
 import { renameVideoEditGraphicObject } from './videoEditGraphics'
 import { setVideoEditCodeParameter } from './videoEditCodeParameters'
@@ -54,7 +54,7 @@ async function clipFixture(): Promise<{ owner: VideoEditInstance; target: { proj
   return { owner, target: { projectId: owner.document.id, sequenceId: owner.activeSequenceId, clipId, objectId: clip.graphic!.objects[0].id } }
 }
 
-it('schema允许的超宽文字在模板和片段发布前拒绝，不改变工程或历史', async () => {
+it('schema允许的超宽文字在模板和片段发布前拒绝，不改变剪辑或历史', async () => {
   const owner = (await createVideoEditProject())!; const before = owner.document; const history = owner.past.length
   const bad = videoEditDocumentSchema.parse(document('W'.repeat(2000), 512))
   expect(() => editVideoProject(owner.document.id, value => ({ ...value, items: bad.items }))).toThrow('8192')
@@ -119,7 +119,7 @@ it('名称、形状位置和既有画面手势复用已验证绑定，不重新�
   updateVideoEditPicturePosition(gesture, target.sequenceId, target.clipId, { x: .1, y: .2 }); finishVideoEditGesture(gesture)
   expect(calls).toBe(0)
 })
-it('打开工程和新文字在缺失实际测量环境时拒绝，不安装损坏工程', async () => {
+it('打开剪辑和新文字在缺失实际测量环境时拒绝，不安装损坏剪辑', async () => {
   await expect(openSeededVideoEdit(videoEditDocumentSchema.parse(document('W'.repeat(2000), 512)))).rejects.toThrow('8192')
   expect(listVideoEditInstances()).toEqual([])
   const owner = (await createVideoEditProject())!; const before = owner.document; const history = owner.past.length

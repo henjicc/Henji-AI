@@ -14,11 +14,11 @@ const bindings = fieldLedgerEntries(fields)
 
 export const AUDIO_EDIT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'audioEditStore',
-  title: '口播剪辑工程',
+  title: '口播',
   entries: {
     setProject: {
       kind: 'excluded', category: 'internal',
-      reason: '工程载入由口播剪辑领域服务完成；该动作只把已读取文档放入界面状态。',
+      reason: '口播载入由口播剪辑领域服务完成；该动作只把已读取文档放入界面状态。',
     },
     toggleBlock: bindings.toggleBlock,
     setBlocksIncluded: bindings.setBlocksIncluded,

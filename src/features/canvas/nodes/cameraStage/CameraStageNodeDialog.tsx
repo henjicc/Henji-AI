@@ -86,7 +86,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
 
   const close = useCallback(() => {
     if (nodeProjectId) void saveCameraStageProjectRuntime(nodeProjectId).catch((error: unknown) => {
-      logger.error('画布 3D 工程保存失败', error, {
+      logger.error('画布里的镜头参考保存失败', error, {
         event: 'canvas.camera_stage.save.failed',
         context: { nodeId },
       });

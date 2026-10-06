@@ -12,7 +12,7 @@ const pending = new WeakSet<VideoEditInstance>()
 const published = new WeakMap<VideoEditInstance, { document: VideoEditInstance['document']; sequenceId: string; frame: number; output: VideoEditOutputReceipt }>()
 
 export function registerVideoEditProgramCapture(owner: VideoEditInstance, sequenceId: string, capture: Capture): () => void {
-  if (providers.has(owner)) throw new Error('此工程已有节目选帧宿主。')
+  if (providers.has(owner)) throw new Error('此剪辑已有节目选帧宿主。')
   const provider = { sequenceId, capture }; providers.set(owner, provider)
   return () => { if (providers.get(owner) === provider) providers.delete(owner) }
 }
@@ -20,7 +20,7 @@ export function registerVideoEditProgramCapture(owner: VideoEditInstance, sequen
 /** The current real Program frame is captured; cached publication is retryable. */
 export async function captureVideoEditProgramFrame(projectId: string, frame?: number, requestedPath?: string, signal?: AbortSignal): Promise<VideoEditOutputReceipt | null> {
   const owner = requireVideoEditInstance(projectId)
-  if (pending.has(owner)) throw new Error('此工程正在保存节目选帧，请等待完成。')
+  if (pending.has(owner)) throw new Error('此剪辑正在保存节目选帧，请等待完成。')
   pending.add(owner)
   logger.info('开始保存节目选帧', { event: 'video_edit.program_frame.start', context: { projectId } })
   try {
@@ -31,7 +31,7 @@ export async function captureVideoEditProgramFrame(projectId: string, frame?: nu
     const baseline = owner.document; const document = getActiveVideoEditSequence(owner); const command = videoEditProgramCommandIdentity(projectId)
     const assertCurrent = (): void => {
       signal?.throwIfAborted()
-      if (!listVideoEditInstances().includes(owner) || owner.document !== baseline || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing || videoEditProgramCommandIdentity(projectId) !== command) throw new Error('原节目帧已改变或工程已关闭，请重新选帧。')
+      if (!listVideoEditInstances().includes(owner) || owner.document !== baseline || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing || videoEditProgramCommandIdentity(projectId) !== command) throw new Error('原节目帧已改变或剪辑已关闭，请重新选帧。')
     }
     const cached = published.get(owner)
     if (!requestedPath && cached?.document === baseline && cached.sequenceId === document.id && cached.frame === target) {

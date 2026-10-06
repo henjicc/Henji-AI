@@ -41,7 +41,7 @@ export async function commitLocalRedrawGeneration(input: CommitLocalRedrawGenera
 }> {
   input.signal?.throwIfAborted()
   const projectId = input.projectId ?? useProjectStore.getState().currentProjectId
-  if (!projectId) throw new Error('未找到局部重绘的原画布项目')
+  if (!projectId) throw new Error('未找到局部重绘的原画布')
   const generatedSource = input.result.outputs[0] ?? input.result.primary
   if (!generatedSource) throw new Error('局部重绘模型没有返回图片')
   const composed = await composeLocalRedraw({ generatedSource, context: input.context })
@@ -67,7 +67,7 @@ export async function commitLocalRedrawGeneration(input: CommitLocalRedrawGenera
   }, input.runtime)
 }
 
-/** 界面与无挂载任务共用裁剪、校验及原项目合成。 */
+/** 界面与无挂载任务共用裁剪、校验及原画布合成。 */
 export const localRedrawGenerationExecution = {
   prepareRuntimeParams: async ({
     data: runtimeData,

@@ -93,7 +93,7 @@ const PROCESSOR_ORDER: NonNullable<AudioEditProcessorDescriptor['semanticRole']>
 export async function processAudioEditVstChain(inputPath: string, workingDirectory: string, recipe?: AudioEditProcessorSetting[], signal?: AbortSignal, onProgress?: (progress: number) => void): Promise<{ outputPath: string; temporaryPaths: string[] }> {
   const seen = new Set<string>()
   const available = await listAudioEditProcessors()
-  if (recipe?.some((setting) => setting.enabled && !available.some((processor) => processor.id === setting.id && processor.available))) throw new Error('工程使用的声音插件不可用，请重新选择或关闭声音处理。')
+  if (recipe?.some((setting) => setting.enabled && !available.some((processor) => processor.id === setting.id && processor.available))) throw new Error('口播使用的声音插件不可用，请重新选择或关闭声音处理。')
   const processors = available
     .filter((processor): processor is AudioEditProcessorDescriptor & { semanticRole: NonNullable<AudioEditProcessorDescriptor['semanticRole']> } => Boolean(processor.available && processor.semanticRole))
     .filter((processor) => {

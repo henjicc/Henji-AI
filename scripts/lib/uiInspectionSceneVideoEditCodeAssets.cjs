@@ -51,10 +51,10 @@ function createVideoEditCodeAssetsScene() {
           for (const ref of refs) baselines.push(await callTool(client, 'read_application_entity', { ref }))
           return checked(await callTool(client, 'change_application_entities', operationEnvelope(baselines, { summary: '验证可编辑代码资产原工程', changes })))
         }
-        const project = id => ({ kind: 'video_edit.project', id })
+        const project = id => ({ kind: 'video_edit.document', id })
         const seq = id => ({ kind: 'video_edit.sequence', id: `${id}:${fixture.sequences[0].id}` })
         const seek = async (id, frame) => {
-          await change([{ kind: 'set_properties', entityType: 'video_edit.project', target: project(id), properties: { 'video_edit.project.program_playback': { frame, playing: false, playbackDirection: 1 } } }]); await presented(page, frame)
+          await change([{ kind: 'set_properties', entityType: 'video_edit.document', target: project(id), properties: { 'video_edit.document.program_playback': { frame, playing: false, playbackDirection: 1 } } }]); await presented(page, frame)
           const revision = read(id === fixture.id ? originFile : targetFile).revision
           await page.waitForFunction(({ frame, revision }) => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.presentedRevision === String(revision) }, { frame, revision })
         }
@@ -76,7 +76,7 @@ function createVideoEditCodeAssetsScene() {
         const afterCollect = await workerSnapshot(page); assert.equal(afterCollect.workers.length, beforeCollect.workers.length); evidence.collectResources = { before: beforeCollect, after: afterCollect }; evidence.asset = asset; evidence.manifest = manifest
         const baseline = await callTool(client, 'read_application_entity', { ref: project(fixture.id) })
         const sourceRef = { kind: 'video_edit.clip', id: `${fixture.id}:${sourceClip.id}` }; const sourceRead = await callTool(client, 'read_application_entity', { ref: sourceRef })
-        const repeated = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([baseline, sourceRead], { projectRef: project(fixture.id), targetRef: sourceRef })))
+        const repeated = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([baseline, sourceRead], { documentRef: project(fixture.id), targetRef: sourceRef })))
         assert.equal(repeated.result.data.resultRef.id, asset.id); evidence.publicCollect = repeated
         await shot('code-asset-collected-original-source'); await clickOutsideFloatingAssets(page); await button(page, '关闭项目').click(); await waitReleased(page)
         await open(targetFile); await button(page, '资产库').click(); const card = page.locator(`[data-asset-id="${asset.id}"]`); await card.waitFor({ state: 'visible' })
@@ -112,17 +112,17 @@ function createVideoEditCodeAssetsScene() {
         document = await saved(page, targetFile, value => value.codeMaterials.length === 2); const filter = document.codeMaterials.find(definition => definition.versions[0].source === filterSource)
         await dialogs(app, [targetFile], filterPath); const filterRead = await callTool(client, 'read_application_entity', { ref: project(target.id) })
         const definitionRef = { kind: 'video_edit.code_material', id: `${target.id}:${filter.id}` }; const definitionRead = await callTool(client, 'read_application_entity', { ref: definitionRef })
-        const filterCollection = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([filterRead, definitionRead], { projectRef: project(target.id), targetRef: definitionRef })))
+        const filterCollection = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([filterRead, definitionRead], { documentRef: project(target.id), targetRef: definitionRef })))
         const filterAssetRef = filterCollection.result.data.resultRef; const clipCount = document.items.length; const mediaCount = document.media.length
         const otherClip = document.sequences[0].clips.find(clip => clip.kind === 'video'); assert.ok(otherClip)
         await page.locator(`[data-video-edit-clip="${otherClip.id}"]`).getByRole('button').nth(1).click()
         const importRead = await callTool(client, 'read_application_entity', { ref: project(target.id) })
-        evidence.publicFilter = checked(await callTool(client, 'import_video_edit_asset', operationEnvelope([importRead], { projectRef: project(target.id), assetRef: filterAssetRef, clipRef })))
+        evidence.publicFilter = checked(await callTool(client, 'import_video_edit_asset', operationEnvelope([importRead], { documentRef: project(target.id), assetRef: filterAssetRef, clipRef })))
         document = await saved(page, targetFile, value => value.sequences[0].clips.find(clip => clip.id === importedClip.id).effects?.length === 1); assert.equal(document.items.length, clipCount); assert.equal(document.media.length, mediaCount); assert.equal(document.sequences[0].clips.find(clip => clip.id === otherClip.id).effects?.length ?? 0, 0)
         await page.waitForFunction(revision => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedRevision === String(revision), document.revision)
         const finalPreview = await png(page, path.join(root, 'final-preview-179.png')); await dialogs(app, [targetFile], output); const exportAt = performance.now(); await button(page, '导出视频').click()
         let task
-        for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { projectRef: project(target.id) }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
+        for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: project(target.id) }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task)); const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs'); const metadata = mediaProbe(ffprobePath, output); const video = metadata.streams.find(stream => stream.codec_type === 'video')
         assert.equal(video.width, 3840); assert.equal(video.height, 2160); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 180); assert.ok(metadata.streams.some(stream => stream.codec_type === 'audio'))
         const decoded = path.join(root, 'export-179.png'); execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', output, '-vf', 'select=eq(n\\,179)', '-frames:v', '1', decoded], { windowsHide: true, timeout: 60000 })

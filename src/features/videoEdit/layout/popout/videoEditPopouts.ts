@@ -133,7 +133,7 @@ export function closeAllVideoEditPopouts(options: { keepRecords?: boolean } = {}
 }
 
 /**
- * 工程已打开、Dock 就绪后恢复上次浮出的面板；位置交给主进程校正到可见显示器。
+ * 剪辑已打开、Dock 就绪后恢复上次浮出的面板；位置交给主进程校正到可见显示器。
  * 打不开的记录（例如主进程拒绝）移除，面板留在 Dock。
  */
 export function restoreVideoEditPopouts(api: DockviewApi, host: Window = window): void {

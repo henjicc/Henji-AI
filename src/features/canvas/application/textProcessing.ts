@@ -141,7 +141,7 @@ function stableValue(value: unknown): unknown {
   )
 }
 
-/** 缓存只需要稳定判等，不承担安全用途；短哈希避免把提示词和媒体数据原文写回工程。 */
+/** 缓存只需要稳定判等，不承担安全用途；短哈希避免把提示词和媒体数据原文写回画布。 */
 export function createTextProcessingInputFingerprint(input: {
   prompt: string
   systemPrompt: string

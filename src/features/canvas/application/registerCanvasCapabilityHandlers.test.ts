@@ -105,7 +105,7 @@ describe('canvas capability handlers', () => {
     mocks.openApplicationSurface.mockImplementation((surfaceId: string) => ({ surfaceId }))
   })
 
-  it('画布项目管理交给通用文档能力：只登记打开方式（打开成功才进画布 Surface）与后台释放', async () => {
+  it('画布管理交给通用文档能力：只登记打开方式（打开成功才进画布 Surface）与后台释放', async () => {
     const handlers = registeredHandlers()
     for (const id of ['list_canvas_projects', 'open_canvas_project', 'create_canvas_project', 'close_canvas_project', 'rename_canvas_project', 'delete_canvas_project']) {
       expect(handlers.has(id), id).toBe(false)
@@ -128,13 +128,13 @@ describe('canvas capability handlers', () => {
     })
     const handler = registeredHandlers().get('add_generation_result_to_canvas')
     const input = {
-      projectId: 'project-1', resultRef: { kind: 'generation.result' as const, id: 'task-1' },
+      documentId: 'project-1', resultRef: { kind: 'generation.result' as const, id: 'task-1' },
       placement: { mode: 'absolute' as const, x: 320, y: 180 },
     }
 
     const result = await handler?.(input, context)
 
-    expect(mocks.addGenerationResultToCanvas).toHaveBeenCalledWith(input)
+    expect(mocks.addGenerationResultToCanvas).toHaveBeenCalledWith({ projectId: 'project-1', resultRef: input.resultRef, placement: input.placement })
     expect(result).toMatchObject({ nodeId: 'node-1' })
   })
 
@@ -146,17 +146,17 @@ describe('canvas capability handlers', () => {
     })
     const handler = registeredHandlers().get('apply_canvas_image_capability')
     const input = {
-      projectId: 'project-1', sourceNodeId: 'source-1',
+      documentId: 'project-1', sourceNodeId: 'source-1',
       capabilityId: 'image.background-removal' as const,
     }
 
     const result = await handler?.(input, context)
 
-    expect(mocks.executeCanvasImageCapabilityForProject).toHaveBeenCalledWith(input)
+    expect(mocks.executeCanvasImageCapabilityForProject).toHaveBeenCalledWith({ projectId: 'project-1', sourceNodeId: 'source-1', capabilityId: input.capabilityId })
     expect(result).toMatchObject({ nodeId: 'node-1', edgeId: 'edge-1' })
   })
 
-  it('定位节点时自动载入目标项目、打开画布后再聚焦', async () => {
+  it('定位节点时自动载入目标画布、打开画布后再聚焦', async () => {
     mocks.openCanvasProject.mockResolvedValue({
       projectId: 'project-2',
       name: '项目二',
@@ -169,10 +169,10 @@ describe('canvas capability handlers', () => {
     })
     const handler = registeredHandlers().get('focus_canvas_node')
 
-    const result = await handler?.({ projectId: 'project-2', nodeId: 'node-1' }, context)
+    const result = await handler?.({ documentId: 'project-2', nodeId: 'node-1' }, context)
 
     expect(result).toMatchObject({
-      projectId: 'project-2',
+      documentId: 'project-2',
       nodeId: 'node-1',
       focused: true,
       surfaceId: 'workspace.canvas',
@@ -187,26 +187,26 @@ describe('canvas capability handlers', () => {
   })
 
   it('打开多图层节点编辑器只把稳定引用和执行上下文交给正式应用服务', async () => {
-    const projectRef = { kind: 'canvas.project' as const, id: 'project-2' }
+    const canvasRef = { kind: 'canvas.document' as const, id: 'project-2' }
     const nodeRef = { kind: 'canvas.node' as const, id: 'project-2:node-1' }
     mocks.openMultiLayerDocumentNodeEditor.mockResolvedValue({
-      projectRef,
+      canvasRef,
       nodeRef,
       surfaceId: 'workspace.canvas',
       editorKind: 'multi_layer_document',
       status: 'opened',
       resultRefs: [
-        projectRef,
+        canvasRef,
         nodeRef,
         { kind: 'application.surface', id: 'workspace.canvas' },
       ],
     })
     const handler = registeredHandlers().get('open_multi_layer_document_node_editor')
 
-    const result = await handler?.({ projectRef, nodeRef }, context)
+    const result = await handler?.({ canvasRef, nodeRef }, context)
 
     expect(mocks.openMultiLayerDocumentNodeEditor).toHaveBeenCalledWith({
-      projectRef,
+      canvasRef,
       nodeRef,
       signal: context.signal,
       correlation: context,
@@ -231,14 +231,14 @@ describe('canvas capability handlers', () => {
     })
     const handler = registeredHandlers().get('download_canvas_media')
     const input = {
-      projectId: 'project-3',
+      documentId: 'project-3',
       nodeIds: ['node-1', 'node-2'],
       destination: { mode: 'quick' as const },
     }
 
     const result = await handler?.(input, context)
 
-    expect(mocks.downloadCanvasMediaFromAgent).toHaveBeenCalledWith(input)
+    expect(mocks.downloadCanvasMediaFromAgent).toHaveBeenCalledWith({ projectId: 'project-3', nodeIds: input.nodeIds, destination: input.destination })
     expect(result).toMatchObject({ savedNodeIds: ['node-1', 'node-2'] })
   })
 
@@ -246,7 +246,7 @@ describe('canvas capability handlers', () => {
     mocks.redoCanvasChangeFromAgent.mockReturnValue({ projectId: 'project-1', status: 'redone' })
     const handler = registeredHandlers().get('redo_canvas_change')
 
-    const result = await handler?.({ projectId: 'project-1' }, context)
+    const result = await handler?.({ documentId: 'project-1' }, context)
 
     expect(mocks.redoCanvasChangeFromAgent).toHaveBeenCalledWith('project-1')
     expect(result).toMatchObject({ status: 'redone' })
@@ -256,7 +256,7 @@ describe('canvas capability handlers', () => {
     mocks.ungroupCanvasNodeFromAgent.mockReturnValue({ projectId: 'project-1', groupNodeId: 'group-1', undoRef: 'canvas-undo:1' })
     const handler = registeredHandlers().get('ungroup_canvas_node')
 
-    const result = await handler?.({ projectId: 'project-1', groupNodeId: 'group-1' }, context)
+    const result = await handler?.({ documentId: 'project-1', groupNodeId: 'group-1' }, context)
 
     expect(mocks.ungroupCanvasNodeFromAgent).toHaveBeenCalledWith('project-1', 'group-1')
     expect(result).toMatchObject({ groupNodeId: 'group-1' })
@@ -268,14 +268,14 @@ describe('canvas capability handlers', () => {
       connected: 2, pending: 1, unsupported: 0, excluded: 0, undoRef: 'canvas-undo:2',
     })
     const connect = registeredHandlers().get('connect_asset_group_to_target')
-    await connect?.({ projectId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1' }, context)
+    await connect?.({ documentId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1' }, context)
     expect(mocks.connectAssetGroupToTarget).toHaveBeenCalledWith('project-1', 'group-1', 'target-1')
 
     mocks.disconnectAssetGroupFromTarget.mockReturnValue({
       projectId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1', undoRef: 'canvas-undo:3',
     })
     const disconnect = registeredHandlers().get('disconnect_asset_group_from_target')
-    await disconnect?.({ projectId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1' }, context)
+    await disconnect?.({ documentId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1' }, context)
     expect(mocks.disconnectAssetGroupFromTarget).toHaveBeenCalledWith('project-1', 'group-1', 'target-1')
   })
 
@@ -285,7 +285,7 @@ describe('canvas capability handlers', () => {
     })
     const handler = registeredHandlers().get('clear_canvas')
 
-    const result = await handler?.({ projectId: 'project-1' }, context)
+    const result = await handler?.({ documentId: 'project-1' }, context)
 
     expect(mocks.clearCanvasProjectFromAgent).toHaveBeenCalledWith('project-1')
     expect(result).toMatchObject({ clearedNodeCount: 3, clearedEdgeCount: 1 })
@@ -293,7 +293,7 @@ describe('canvas capability handlers', () => {
 
   it('多图层目标导出处理器只委托 UI 共用的领域事务入口', async () => {
     const input = {
-      projectRef: { kind: 'canvas.project', id: 'project-1' },
+      canvasRef: { kind: 'canvas.document', id: 'project-1' },
       sourceNodeRef: { kind: 'canvas.node', id: 'document-node' },
       targetRef: { kind: 'image_edit.layer', id: 'v3:document:raster' },
     }

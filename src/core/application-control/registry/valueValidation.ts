@@ -29,7 +29,7 @@ function refShapeHint(refKinds: readonly string[], received: unknown): string {
   const kind = refKinds[0] ?? 'entity.type'
   return `引用必须是对象 {"kind":"<实体类型>","id":"<稳定 id>"}，不是字符串；`
     + `kind 只能取 ${refKinds.join(' / ')}；`
-    + `id 用 list_application_entities 或观察结果里返回的原值（通常带父级前缀，如 "<工程 id>:<对象 id>"）。`
+    + `id 用 list_application_entities 或观察结果里返回的原值（通常带父级前缀，如 "<文档 id>:<对象 id>"）。`
     + `例：{"kind":"${kind}","id":"…"}。实际收到：${describeReceived(received)}`
 }
 

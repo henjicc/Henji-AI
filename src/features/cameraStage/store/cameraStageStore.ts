@@ -60,17 +60,17 @@ export interface CameraStageState extends CameraStagePathActions {
   gizmoMode: StageGizmoMode
   viewMode: StageViewMode
   activeCameraId: string | null
-  /** 当前已保存工程 id；null 表示尚未保存过（新场景） */
+  /** 当前已保存镜头参考 id；null 表示尚未保存过（新场景） */
   currentProjectId: string | null
-  /** 当前工程名（新场景用默认名，保存后与工程记录一致） */
+  /** 当前镜头参考名（新场景用默认名，保存后与镜头参考记录一致） */
   currentProjectName: string
   /** 由状态关键帧编译出的播放数据；不单独持久化。 */
   animation: StageSceneAnimation
   /** 播放界面态（不进撤销历史、不持久化） */
   playback: StagePlaybackState
-  /** 场景级设置（背景色/网格显隐），随工程持久化，不进撤销历史 */
+  /** 场景级设置（背景色/网格显隐），随镜头参考持久化，不进撤销历史 */
   sceneSettings: StageSceneSettings
-  /** 唯一可编辑时间轴真相源，随工程持久化。 */
+  /** 唯一可编辑时间轴真相源，随镜头参考持久化。 */
   stateKeyframes: StageStateKeyframe[]
   selectedStateKeyframeId: string | null
   /** 时间轴框选出的多个状态关键帧 id（界面态，不持久化、不进撤销历史） */
@@ -120,11 +120,11 @@ export interface CameraStageState extends CameraStagePathActions {
   updatePoseJoint: (id: string, jointId: StagePoseJointId, euler: StageVec3, changedPaths?: string[]) => void
   /** 一键应用预设姿势（整体替换当前姿态） */
   applyPosePreset: (id: string, preset: StagePosePreset) => void
-  /** 关联到某个已保存工程（保存/加载后调用），仅更新工程标识不动场景数据 */
+  /** 关联到某个已保存镜头参考（保存/加载后调用），仅更新镜头参考标识不动场景数据 */
   bindProject: (id: string, name: string) => void
-  /** 重置为空白新场景（新建工程用）：清空对象与工程标识，复位界面态 */
+  /** 重置为空白新场景（新建镜头参考用）：清空对象与镜头参考标识，复位界面态 */
   newScene: (name: string) => void
-  /** 用工程快照整体重置场景（加载工程用）；同时复位选中/视角等界面态 */
+  /** 用镜头参考快照整体重置场景（加载镜头参考用）；同时复位选中/视角等界面态 */
   loadSnapshot: (snapshot: StageSceneRuntimeSnapshot, project: { id: string; name: string }) => void
 
   /* ---- 播放/时间轴界面态动作（非 tracked） ---- */
@@ -169,7 +169,7 @@ export interface CameraStageState extends CameraStagePathActions {
   requestFocusSelected: () => void
 }
 
-/** 新场景默认工程名 */
+/** 新场景默认镜头参考名 */
 export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
 /** 撤销历史跟踪场景数据切片（对象列表 + 动画轨道），界面态/播放态不入历史 */
@@ -446,7 +446,7 @@ export const createCameraStageStore = () => {
   bindProject: (id, name) => set({ currentProjectId: id, currentProjectName: name }),
 
   newScene: (name) => {
-    // 新工程不继承上一次离开时的自由视角（跨工程共享的 localStorage 快照），回到标准正视角度
+    // 新镜头参考不继承上一次离开时的自由视角（跨镜头参考共享的 localStorage 快照），回到标准正视角度
     if (isAttached()) { resetDirectorView(); resetCameraStagePlaybackRuntime(0, null) }
     set(() => {
       const snapshot = createDefaultCameraStageSceneSnapshot()
@@ -835,7 +835,7 @@ export function endHistorySession(): void {
   (cameraStageStoreAttachment.getStore() as CameraStageOwnedStore).endHistorySession()
 }
 
-/** 清空撤销/重做历史（加载工程、新建场景后调用，避免跨工程回退） */
+/** 清空撤销/重做历史（加载镜头参考、新建场景后调用，避免跨镜头参考回退） */
 export function clearCameraStageHistory(): void {
   useCameraStageStore.temporal.getState().clear()
 }

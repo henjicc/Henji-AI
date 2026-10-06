@@ -12,7 +12,7 @@ const logger = createLogger('features.canvas.application.canvasProjectCover')
  * 画布封面：优先取画布里最早的生成图片，没有生成结果时退回节点区域截图。
  *
  * 自动更新层会在封面来源变化后低频调用；返回列表前再补一次立即刷新。
- * 转码、拼图与落盘交给通用文档封面（按文档 ID 存程序目录，3.4 起不再写工程表）。
+ * 转码、拼图与落盘交给通用文档封面（按文档 ID 存程序目录，3.4 起不再写画布表）。
  */
 
 /** 节点区域截图四周留出的呼吸空间（CSS px） */
@@ -106,7 +106,7 @@ async function captureNodeAreaDataUrl(): Promise<string | null> {
 }
 
 /**
- * 更新画布项目封面。必须在画布仍然挂载时调用（截图读的是真实 DOM）。
+ * 更新画布封面。必须在画布仍然挂载时调用（截图读的是真实 DOM）。
  * 失败只记日志：封面是装饰，不能因为它拦住用户退出项目。
  */
 export async function updateCanvasProjectCover(projectId: string): Promise<void> {

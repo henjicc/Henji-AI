@@ -93,7 +93,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     clip.graphic.objects.push(object); return videoEditGraphicObjectId(clip.id, object.id)
   }
   if (clip.kind === 'audio') throw new Error('音频片段不能添加画面效果。')
-  if (values.definitionId === undefined || typeof values.definitionId !== 'string') throw new Error('请提供此工程的滤镜定义。')
+  if (values.definitionId === undefined || typeof values.definitionId !== 'string') throw new Error('请提供此剪辑的滤镜定义。')
   const effect = makeVideoEditEffect(document, { definitionId: values.definitionId, ...(values.versionId !== undefined ? { versionId: String(values.versionId) } : {}), ...(values.name !== undefined ? { name: String(values.name) } : {}), ...(values.parameters !== undefined ? { parameters: codeMaterialInstanceSchema.shape.parameters.parse(values.parameters) } : {}) }, read)
   if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
   if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)

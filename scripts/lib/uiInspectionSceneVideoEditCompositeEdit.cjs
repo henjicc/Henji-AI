@@ -56,7 +56,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         client = await connectMcpClient(identity.config, 'Henji composite Reality')
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const ref = (kind, projectId, id) => ({ kind, id: id ? `${projectId}:${id}` : projectId })
-        const projectRef = ref('video_edit.project', mixed.id); const sequenceRef = ref('video_edit.sequence', mixed.id, sequence.id)
+        const projectRef = ref('video_edit.document', mixed.id); const sequenceRef = ref('video_edit.sequence', mixed.id, sequence.id)
         const change = async changes => {
           const owners = [...new Map(changes.flatMap(change => [change.target ?? change.parent, ...(change.targets ?? [])]).map(owner => [`${owner.kind}:${owner.id}`, owner])).values()]
           const baselines = []
@@ -68,7 +68,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const create = (entityType, parent, properties) => change([{ kind: 'create_items', entityType, parent, items: properties.map(properties => ({ properties })) }])
         const focus = async target => { const result = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: target })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
         const seek = async (target, frame, playing = false, playbackDirection = 1) => {
-          await set(target, { 'video_edit.project.program_playback': { frame, playing, playbackDirection } })
+          await set(target, { 'video_edit.document.program_playback': { frame, playing, playbackDirection } })
           if (!playing) {
             await presented(page, frame)
             const revision = readFile(target.id === mixed.id ? file : pressureFile).revision
@@ -224,7 +224,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const output = path.join(root, `mixed-4k60-${Date.now()}.mp4`); await dialogs(app, [file], output)
         const began = performance.now(); await button(page, '导出视频').click()
         let task
-        for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
+        for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))
         const metadata = mediaProbe(ffprobePath, output); const video = metadata.streams.find(stream => stream.codec_type === 'video'); const audio = metadata.streams.find(stream => stream.codec_type === 'audio')
         assert.equal(video.width, 3840); assert.equal(video.height, 2160); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 180)
@@ -244,7 +244,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const originalProbe = mediaProbe(ffprobePath, pressure.media.find(media => media.kind === 'video').path); evidence.originalVideoProbe = originalProbe
         assert.equal(originalProbe.streams.find(stream => stream.codec_type === 'video').width, 3840); assert.equal(originalProbe.streams.find(stream => stream.codec_type === 'video').avg_frame_rate, '60/1')
         const openAt = performance.now(); await open(pressureFile); evidence.firstDecodeMs = performance.now() - openAt
-        const pressureRef = ref('video_edit.project', pressure.id); const pressureSeqRef = ref('video_edit.sequence', pressure.id, pressureSequence.id)
+        const pressureRef = ref('video_edit.document', pressure.id); const pressureSeqRef = ref('video_edit.sequence', pressure.id, pressureSequence.id)
         const firstFrame = await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset })); evidence.firstFrame = firstFrame
         await create('video_edit.code_material', pressureRef, [{ 'video_edit.code_material.source': dynamicSource }, { 'video_edit.code_material.source': filterSource }])
         document = await saved(page, pressureFile, value => value.codeMaterials?.length === 2)

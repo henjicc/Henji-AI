@@ -105,7 +105,7 @@ it('公共应用入口 共用后台任务完成判据并只取消活动任务', 
   const firstRuntime = createApplicationHarness()
   runtimes.push(firstRuntime)
   const submitted = await firstRuntime.requireResult('render_camera_stage_output', {
-    projectRef: { kind: 'canvas.project', id: canvasProjectId }, nodeRef: { kind: 'canvas.node', id: `${canvasProjectId}:camera-node` },
+    canvasRef: { kind: 'canvas.document', id: canvasProjectId }, nodeRef: { kind: 'canvas.node', id: `${canvasProjectId}:camera-node` },
     outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 0,
   })
   expect(submitted.status).toBe('submitted')
@@ -140,7 +140,7 @@ it('公共应用入口 共用后台任务完成判据并只取消活动任务', 
   expect(completedRead.status).toBe('completed')
   expect((completedRead.resultRefs as unknown[]).length).toBeGreaterThan(0)
   expect((await secondRuntime.requireResult('render_camera_stage_output', {
-    projectRef: { kind: 'canvas.project', id: canvasProjectId }, nodeRef: { kind: 'canvas.node', id: `${canvasProjectId}:camera-node` },
+    canvasRef: { kind: 'canvas.document', id: canvasProjectId }, nodeRef: { kind: 'canvas.node', id: `${canvasProjectId}:camera-node` },
     outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 0,
   })).status).toBe('submitted')
   const secondTask = taskDescriptor()
@@ -219,7 +219,7 @@ it('后台三维等待和恢复共用原任务，保存失败后重试只落一�
   const visibleId = await createCanvasTestProject('编辑 A')
   const harness = createApplicationHarness(); runtimes.push(harness)
   const submitted = await harness.requireResult('render_camera_stage_output', {
-    projectRef: { kind: 'canvas.project', id: projectId }, nodeRef: { kind: 'canvas.node', id: `${projectId}:camera-node` },
+    canvasRef: { kind: 'canvas.document', id: projectId }, nodeRef: { kind: 'canvas.node', id: `${projectId}:camera-node` },
     outputKind: 'image', resolutionPreset: '720p',
   })
   const descriptor = instance.store.getState().nodes[0].data.renderTask!

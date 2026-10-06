@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, createVideoEditProject, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
+import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, createVideoEditProject, appendVideoEditClip, appendVideoEditMedia, editVideoProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
 import { splitVideoEditClip, clipSourceSeconds, adjustVideoEditClip } from '@/core/videoEdit/document'
 import { closeAllVideoEdits, failVideoEditSaves, reopenVideoEdit, savedVideoEdit, videoEditWrites } from './videoEditDocumentTestKit'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
@@ -120,14 +120,14 @@ it('序列切换和选区刷新助手上下文，控制改变并发基线而逐�
     const edited = createHostContextSnapshot()
     expect(edited.surface?.selectedRefs).toContain(`video_edit.clip:${projectId}:${instance.selection}`)
     // The edit block carries what an agent needs to aim: owner, sequence, time, range, focus, multi-select, targets.
-    expect(edited.videoEdit).toMatchObject({ projectRef: `video_edit.project:${projectId}`, sequenceRef: `video_edit.sequence:${projectId}:${sequenceId}`, frame: 61, playing: false, focusedPanel: instance.activePanel,
+    expect(edited.videoEdit).toMatchObject({ documentRef: `video_edit.document:${projectId}`, sequenceRef: `video_edit.sequence:${projectId}:${sequenceId}`, frame: 61, playing: false, focusedPanel: instance.activePanel,
       selectedClipRefs: [`video_edit.clip:${projectId}:${instance.selection}`], targetTrackRefs: instance.targetTrackIds.map(track => `video_edit.track:${projectId}:${track}`) })
     for (let index = 0; index < 40; index++) instance.selectedItemIds.push(`bulk-${index}`)
     expect(createHostContextSnapshot().surface?.selectedRefs[0]).toBe(`video_edit.clip:${projectId}:${instance.selection}`)
     expect(edited.scopeRevisions.video_edit).toBeGreaterThan(switched.scopeRevisions.video_edit)
   } finally { release(); useNavigationStore.setState(navigation) }
 })
-it('编辑与撤销在页面外静默自动保存，播放和定位不写工程', async () => {
+it('编辑与撤销在页面外静默自动保存，播放和定位不写剪辑', async () => {
   const instance = (await createVideoEditProject())!
   appendVideoEditClip(instance.document.id)
   await vi.waitFor(() => expect(savedVideoEdit(instance).sequences[0].clips).toHaveLength(1), { timeout: 3000 })
@@ -196,7 +196,7 @@ it('保存失败保留助手修改且恢复不会重放编辑', async () => {
   const app = createApplicationHarness()
   try {
     // 剪辑名就是文件名，内容能力不改名：改名属性只读并点名通用文档属性
-    const renamed = await app.change({ kind: 'video_edit.project', id: instance.document.id }, { 'video_edit.project.name': '改名' })
+    const renamed = await app.change({ kind: 'video_edit.document', id: instance.document.id }, { 'video_edit.document.name': '改名' })
     expect(renamed.ok).toBe(false); expect(JSON.stringify(renamed)).toContain('documents.document')
     failVideoEditSaves(true)
     const sequenceRef = { kind: 'video_edit.sequence', id: `${instance.document.id}:${instance.activeSequenceId}` }
@@ -211,7 +211,7 @@ it('保存失败保留助手修改且恢复不会重放编辑', async () => {
     expect(savedVideoEdit(instance).sequences[0].name).toBe('保留修改'); expect(instance.error).toBeNull()
   } finally { app.dispose() }
 })
-it('公共集合新增标注并拒绝跨工程引用', async () => {
+it('公共集合新增标注并拒绝跨剪辑引用', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   const app = createApplicationHarness()
   try {
@@ -256,10 +256,31 @@ it('公共拆分从磁盘回读核实片段边界', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   const app = createApplicationHarness()
   try {
-    const result = await app.requireResult('split_video_edit', { projectRef: { kind: 'video_edit.project', id: instance.document.id }, clipRef: { kind: 'video_edit.clip', id: `${instance.document.id}:${getActiveVideoEditSequence(instance).clips[0].id}` }, frame: 30 })
+    const result = await app.requireResult('split_video_edit', { documentRef: { kind: 'video_edit.document', id: instance.document.id }, clipRef: { kind: 'video_edit.clip', id: `${instance.document.id}:${getActiveVideoEditSequence(instance).clips[0].id}` }, frame: 30 })
     expect(result.verification).toMatchObject({ verified: true })
     const saved = savedVideoEdit(instance)
     expect(saved.sequences[0].clips.map((clip: { start: number; duration: number }) => [clip.start, clip.duration])).toEqual([[0, 30], [30, 60]])
+  } finally { app.dispose() }
+})
+
+it('公共收集素材（4.3）与剪辑页同一入口：外部文件复制进项目并改写引用，从文件回读核实', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  appendVideoEditMedia(id, { id: 'outside', name: '外部.mp4', path: 'E:/外部/外部.mp4', kind: 'video', durationSeconds: 3, width: 1920, height: 1080 })
+  await saveVideoEdit(id)
+  const store = harnessDocumentStore()
+  const container = store.stored(id)!.meta.container
+  if (container.kind !== 'project') throw new Error('剪辑必须在项目里')
+  const copied = `${store.projects.get(container.projectId)!.path}/素材/外部.mp4`
+  store.collectMapping.set('E:/外部/外部.mp4', copied)
+  const app = createApplicationHarness()
+  try {
+    const result = await app.requireResult('collect_video_edit_media', { documentRef: { kind: 'video_edit.document', id } }) as { message: string; verification: { verified: boolean } }
+    expect(result.verification.verified).toBe(true)
+    expect(result.message).toContain('1 个文件')
+    expect(instance.document.media[0].path).toBe(copied)
+    expect(savedVideoEdit(instance).media[0].path).toBe(copied)
+    const again = await app.requireResult('collect_video_edit_media', { documentRef: { kind: 'video_edit.document', id } }) as { message: string }
+    expect(again.message).toContain('没有需要收集的')
   } finally { app.dispose() }
 })
 
@@ -278,7 +299,7 @@ it('播放与拖动只通知瞬态叶子，相等写入不通知，也不污染�
     editor.mockClear(); setVideoEditView(id, { selection: getActiveVideoEditSequence(instance).clips[0].id }); expect(editor).toHaveBeenCalledOnce()
   } finally { offEditor(); offView() }
 })
-it('拖放固定到原工程与轨道，直接引用源路径，并复用撤销和磁盘保存', async () => {
+it('拖放固定到原剪辑与轨道，直接引用源路径，并复用撤销和磁盘保存', async () => {
   const a = (await createVideoEditProject())!
   const media = { id: 'original', name: 'image.png', kind: 'image' as const, path: 'E:/outside/image.png', durationSeconds: 0, width: 800, height: 600 }
   appendVideoEditMedia(a.document.id, media)
@@ -296,7 +317,7 @@ it('磁盘文件拖入只取 PAL 原始路径，禁止没有本地路径的内�
   expect(videoEditDropPaths(transfer)).toEqual(['E:/outside/video.mp4']); expect(path).toHaveBeenCalledWith(file)
   path.mockReturnValue(''); expect(() => videoEditDropPaths(transfer)).toThrow('本地文件')
 })
-it('裁剪即时预览和提交限制在源范围内，保持源时间与工程时间换算', async () => {
+it('裁剪即时预览和提交限制在源范围内，保持源时间与剪辑时间换算', async () => {
   const instance = (await createVideoEditProject())!
   appendVideoEditMedia(instance.document.id, { id: 'v', kind: 'video', path: 'E:/v.mp4', name: 'video', durationSeconds: 4, width: 3840, height: 2160 })
   appendVideoEditClip(instance.document.id, 'v', { frame: 30, track: 2 })
@@ -308,7 +329,7 @@ it('裁剪即时预览和提交限制在源范围内，保持源时间与工程�
   expect(clipSourceSeconds(clip, 40, 30)).toBeCloseTo(clipSourceSeconds(trimmed, 40, 30))
 })
 
-it('两个不同设置的序列保存冷重开，切换只保留会话，不写工程或历史', async () => {
+it('两个不同设置的序列保存冷重开，切换只保留会话，不写剪辑或历史', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id
   const first = instance.activeSequenceId
   appendVideoEditMedia(id, { id: 'shared', kind: 'image', path: 'E:/original/image.png', name: '原素材', durationSeconds: 0, width: 1920, height: 1080 })

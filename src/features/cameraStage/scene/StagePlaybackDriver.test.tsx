@@ -45,7 +45,7 @@ describe('StagePlaybackDriver', () => {
     expect(readCameraStagePlaybackRuntime().time).toBe(timeAfterUnmount)
   })
 
-  it('同工程 loadSnapshot 不重挂组件也能恢复租约并继续推进', () => {
+  it('同镜头参考 loadSnapshot 不重挂组件也能恢复租约并继续推进', () => {
     const store = useCameraStageStore.getState()
     store.loadSnapshot({
       objects: store.objects,
@@ -53,7 +53,7 @@ describe('StagePlaybackDriver', () => {
       animation: store.animation,
       sceneSettings: store.sceneSettings,
       stateKeyframes: store.stateKeyframes,
-    }, { id: 'same-project', name: '同工程' })
+    }, { id: 'same-project', name: '同镜头参考' })
     const view = render(<StagePlaybackDriver />)
 
     const loaded = useCameraStageStore.getState()
@@ -63,7 +63,7 @@ describe('StagePlaybackDriver', () => {
       animation: loaded.animation,
       sceneSettings: loaded.sceneSettings,
       stateKeyframes: loaded.stateKeyframes,
-    }, { id: 'same-project', name: '同工程重载' })
+    }, { id: 'same-project', name: '同镜头参考重载' })
     useCameraStageStore.setState((state) => ({
       animation: { ...state.animation, duration: 1 },
     }))

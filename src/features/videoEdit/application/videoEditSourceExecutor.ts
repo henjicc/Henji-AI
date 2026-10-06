@@ -8,7 +8,7 @@ import { readVideoEditSource, updateVideoEditSource, videoEditSourceCommandIdent
 interface ProgramPause { before: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; sequenceId: string; beforeCommand: object; afterCommand: object }
 const records = new Map<string, { target: ApplicationRef; owner: object; before: VideoEditSourceRequest; beforeCommand: VideoEditSourceCommandIdentity; afterCommand: VideoEditSourceCommandIdentity; programPause?: ProgramPause }>()
 function complete(target: ApplicationRef, undoToken?: string, programPaused = false): ApplicationCompletedStepResult {
-  return { status: 'completed', resultingRevisions: { video_edit: videoEditDomainRevision() }, directRefs: [target], ...(undoToken ? { undoToken } : {}), ...(programPaused ? { cascadeEffects: [{ effect: 'update' as const, entityType: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.entityType, propertyIds: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.propertyIds, refs: [{ kind: 'video_edit.project', id: splitVideoEditRef(target).projectId }], origin: { kind: 'cascade' as const, declarationId: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.declarationId } }] } : {}), evidence: [{ kind: 'entity_state', fact: '源预览已由实际媒体宿主确认；可回读实际播放与画面位置。', capturedAt: new Date().toISOString() }] }
+  return { status: 'completed', resultingRevisions: { video_edit: videoEditDomainRevision() }, directRefs: [target], ...(undoToken ? { undoToken } : {}), ...(programPaused ? { cascadeEffects: [{ effect: 'update' as const, entityType: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.entityType, propertyIds: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.propertyIds, refs: [{ kind: 'video_edit.document', id: splitVideoEditRef(target).projectId }], origin: { kind: 'cascade' as const, declarationId: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.declarationId } }] } : {}), evidence: [{ kind: 'entity_state', fact: '源预览已由实际媒体宿主确认；可回读实际播放与画面位置。', capturedAt: new Date().toISOString() }] }
 }
 export class VideoEditSourceExecutor implements ApplicationMutationExecutor {
   readonly entityType = 'video_edit.source'
@@ -37,8 +37,8 @@ export class VideoEditSourceExecutor implements ApplicationMutationExecutor {
     }, context.signal)
     const afterCommand = videoEditSourceCommandIdentity(projectId)
     const programPause = programBefore.playing && !owner.playing ? { before: programBefore, sequenceId, beforeCommand: programBeforeCommand, afterCommand: videoEditProgramCommandIdentity(projectId) } : undefined
-    try { await pending } catch (error) { if (!listVideoEditInstances().includes(owner) || !matchesVideoEditSourceCommand(projectId, afterCommand)) throw new Error('原工程已关闭或源预览已有后续操作。'); throw error }
-    if (requireVideoEditInstance(projectId) !== owner || !matchesVideoEditSourceCommand(projectId, afterCommand)) throw new Error('原工程已关闭或源预览已有后续操作。')
+    try { await pending } catch (error) { if (!listVideoEditInstances().includes(owner) || !matchesVideoEditSourceCommand(projectId, afterCommand)) throw new Error('原剪辑已关闭或源预览已有后续操作。'); throw error }
+    if (requireVideoEditInstance(projectId) !== owner || !matchesVideoEditSourceCommand(projectId, afterCommand)) throw new Error('原剪辑已关闭或源预览已有后续操作。')
     const token = crypto.randomUUID(); records.set(token, { target: step.target, owner, before, beforeCommand, afterCommand, programPause })
     while (records.size > 32) records.delete(records.keys().next().value!)
     return complete(step.target, token, !!programPause)
@@ -47,12 +47,12 @@ export class VideoEditSourceExecutor implements ApplicationMutationExecutor {
     const record = records.get(token)
     if (!record) throw new Error('源预览撤销记录已过期。')
     const { projectId } = splitVideoEditRef(record.target)
-    if (requireVideoEditInstance(projectId) !== record.owner || !matchesVideoEditSourceCommand(projectId, record.afterCommand)) throw new Error('源预览已有后续操作或工程已重开，请按当前状态操作。')
+    if (requireVideoEditInstance(projectId) !== record.owner || !matchesVideoEditSourceCommand(projectId, record.afterCommand)) throw new Error('源预览已有后续操作或剪辑已重开，请按当前状态操作。')
     const owner = requireVideoEditInstance(projectId)
     if (record.programPause && (owner.activeSequenceId !== record.programPause.sequenceId || videoEditProgramCommandIdentity(projectId) !== record.programPause.afterCommand)) throw new Error('节目播放已有后续操作，无法恢复旧预览操作。')
     const pending = updateVideoEditSource(projectId, { itemId: record.before.itemId, timeUs: record.before.timeUs, playing: record.before.playing, volume: record.before.volume, inUs: record.before.inUs, outUs: record.before.outUs, playbackDirection: record.before.playbackDirection })
     const restoringCommand = videoEditSourceCommandIdentity(projectId)
-    try { await pending } catch (error) { if (!listVideoEditInstances().includes(owner) || !matchesVideoEditSourceCommand(projectId, restoringCommand)) throw new Error('原工程已关闭或源预览已有后续操作。'); throw error }
+    try { await pending } catch (error) { if (!listVideoEditInstances().includes(owner) || !matchesVideoEditSourceCommand(projectId, restoringCommand)) throw new Error('原剪辑已关闭或源预览已有后续操作。'); throw error }
     if (record.programPause && (owner.activeSequenceId !== record.programPause.sequenceId || videoEditProgramCommandIdentity(projectId) !== record.programPause.afterCommand)) throw new Error('源预览已恢复，但节目已有后续操作，未覆盖节目控制。')
     restoreVideoEditSourceCommandIdentity(projectId, restoringCommand, record.beforeCommand)
     if (record.programPause) { const restored = setVideoEditView(projectId, record.programPause.before); restoreVideoEditProgramCommandIdentity(projectId, restored, record.programPause.beforeCommand) }

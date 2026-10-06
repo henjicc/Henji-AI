@@ -36,22 +36,22 @@ beforeEach(() => {
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
-it('公共观察按固定工程版本取指定合成帧与源时间画面，不改播放头，结果为可读资产', async () => {
+it('公共观察按固定剪辑版本取指定合成帧与源时间画面，不改播放头，结果为可读资产', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditMedia(id, { id: 'clip-media', name: '4K原片', path: 'D:/media/original.mp4', kind: 'video', width: 3840, height: 2160, durationSeconds: 7, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
   appendVideoEditClip(id, 'clip-media'); setVideoEditView(id, { frame: 3 })
   const item = owner.document.items.find(item => item.mediaId === 'clip-media')!
   const app = createApplicationHarness()
   try {
-    const program = await app.requireResult('observe_video_edit_frame', { projectRef: { kind: 'video_edit.project', id }, target: { kind: 'program', frame: 42 }, maxWidth: 960 })
+    const program = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'program', frame: 42 }, maxWidth: 960 })
     expect(render.calls[0]).toMatchObject({ frame: 42, document: { id: owner.activeSequenceId, revision: owner.document.revision } })
     expect(program).toMatchObject({ width: 960, height: 540, sourceWidth: 1920, sourceHeight: 1080, documentRevision: owner.document.revision, resultRef: { kind: 'asset', id: 'asset-1' } })
     expect(owner.frame).toBe(3)
-    const source = await app.requireResult('observe_video_edit_frame', { projectRef: { kind: 'video_edit.project', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, timeUs: 2_500_000 } })
+    const source = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, timeUs: 2_500_000 } })
     expect(render.calls[1]).toMatchObject({ frame: 0, document: { width: 3840, height: 2160, fps: 60, clips: [{ sourceInUs: 2_500_000, start: 0, duration: 1 }] } })
     expect(source).toMatchObject({ width: 1920, height: 1080, sourceWidth: 3840, sourceHeight: 2160, target: { kind: 'source', timeUs: 2_500_000 } })
     expect(assets.get('asset-2')).toMatchObject({ source: 'video-edit', mediaType: 'image' })
-    const outOfRange = await app.call('observe_video_edit_frame', { projectRef: { kind: 'video_edit.project', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, timeUs: 7_000_000 } })
+    const outOfRange = await app.call('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, timeUs: 7_000_000 } })
     expect(JSON.stringify(outOfRange)).toContain('素材时长内')
     expect(render.calls).toHaveLength(2)
   } finally { app.dispose() }

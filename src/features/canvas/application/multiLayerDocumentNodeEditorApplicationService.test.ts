@@ -32,7 +32,7 @@ function editableNode(id = 'document-node'): CanvasNode {
 
 function input(nodeId = 'document-node') {
   return {
-    projectRef: { kind: 'canvas.project' as const, id: 'project-a' },
+    canvasRef: { kind: 'canvas.document' as const, id: 'project-a' },
     nodeRef: { kind: 'canvas.node' as const, id: `project-a:${nodeId}` },
   }
 }
@@ -60,7 +60,7 @@ describe('openMultiLayerDocumentNodeEditor', () => {
     useCanvasStore.setState({ nodes: [], activeToolDialog: null })
   })
 
-  it('按工程、Surface、节点定位和权威文档校验顺序打开节点自己的编辑器', async () => {
+  it('按画布、Surface、节点定位和权威文档校验顺序打开节点自己的编辑器', async () => {
     const order: string[] = []
     useCanvasStore.setState({ nodes: [editableNode()] })
 
@@ -78,7 +78,7 @@ describe('openMultiLayerDocumentNodeEditor', () => {
       nodeRef: { kind: 'canvas.node', id: 'project-a:document-node' },
     })
     expect(result.resultRefs).toEqual([
-      { kind: 'canvas.project', id: 'project-a' },
+      { kind: 'canvas.document', id: 'project-a' },
       { kind: 'canvas.node', id: 'project-a:document-node' },
       { kind: 'application.surface', id: 'workspace.canvas' },
     ])
@@ -139,11 +139,11 @@ describe('openMultiLayerDocumentNodeEditor', () => {
     const calls = dependencies()
 
     await expect(openMultiLayerDocumentNodeEditor({
-      projectRef: { kind: 'canvas.project', id: 'project-a' },
+      canvasRef: { kind: 'canvas.document', id: 'project-a' },
       nodeRef: { kind: 'canvas.node', id: 'project-b:document-node' },
     }, calls)).rejects.toMatchObject({
       code: 'INVALID_INPUT',
-      message: expect.stringContaining('请重新读取该项目的节点引用'),
+      message: expect.stringContaining('请重新读取该画布的节点引用'),
     } satisfies Partial<CanvasApplicationError>)
     expect(calls.openProject).not.toHaveBeenCalled()
   })
@@ -155,7 +155,7 @@ describe('openMultiLayerDocumentNodeEditor', () => {
     const calls = dependencies()
 
     await expect(openMultiLayerDocumentNodeEditor({
-      projectRef: { kind: 'canvas.project', id: 'project-a' },
+      canvasRef: { kind: 'canvas.document', id: 'project-a' },
       nodeRef: { kind: 'canvas.node', id: nodeRefId },
     }, calls)).rejects.toMatchObject({
       code: 'INVALID_INPUT',

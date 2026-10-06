@@ -22,7 +22,7 @@
 - 生成器片段：`video_edit.clip.code_parameters`
 - 滤镜效果：`video_edit.effect.parameters`；另有 `video_edit.effect.amount`、`video_edit.effect.enabled`
 
-写入值是整份字典，漏掉的键回到默认值。先用 `read_application_entity` 读现值，合并后写回。值必须符合声明的类型和范围，否则整次修改被拒绝、工程不变。
+写入值是整份字典，漏掉的键回到默认值。先用 `read_application_entity` 读现值，合并后写回。值必须符合声明的类型和范围，否则整次修改被拒绝、剪辑不变。
 
 ## 关键帧
 
@@ -47,5 +47,5 @@ fps = `video_edit.sequence.frame_rate` 的 numerator ÷ denominator。新插入�
 
 源码版本不可原地改写。要改已经在用的源码：
 
-1. 在工程下 `create_items`，`entityType` 为 `video_edit.code_version`，属性 `video_edit.code_version.source`（新源码）和 `video_edit.code_version.definition_id`（`video_edit.code_material` 引用 id 冒号后的部分）。应用会检查并试渲染；与已有版本完全相同的源码会被拒绝。
+1. 在剪辑下 `create_items`，`entityType` 为 `video_edit.code_version`，属性 `video_edit.code_version.source`（新源码）和 `video_edit.code_version.definition_id`（`video_edit.code_material` 引用 id 冒号后的部分）。应用会检查并试渲染；与已有版本完全相同的源码会被拒绝。
 2. 新版本不会自动替换已有片段。在同一次事务里把 `video_edit.clip.code_version_id`（或 `video_edit.effect.version_id`）设为新版本 id，并一起写入符合新声明的参数和关键帧。

@@ -189,8 +189,8 @@ describe('application capability handler coverage', () => {
 
     const add = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_canvas_node')
     const created = add?.resolveObservedEffects?.(
-      { projectId: 'project-1', nodeType: 'textInput', placement: { mode: 'viewport_center' } },
-      { projectId: 'project-1', nodeId: 'node-1', nodeType: 'textInput', undoRef: 'undo-1' },
+      { documentId: 'project-1', nodeType: 'textInput', placement: { mode: 'viewport_center' } },
+      { documentId: 'project-1', nodeId: 'node-1', nodeType: 'textInput', undoRef: 'undo-1' },
     ) ?? []
     expect(created.map((effect) => applicationObservedEffectSchema.parse(effect))).toEqual([
       expect.objectContaining({
@@ -198,15 +198,15 @@ describe('application capability handler coverage', () => {
       }),
     ])
 
-    const read = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_canvas_project')
+    const read = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_canvas_document')
     const observed = read?.resolveObservedEffects?.(
-      { projectId: 'project-1' },
-      { project: { id: 'project-1' }, nodes: [{ id: 'node-1' }], edges: [{ id: 'edge-1' }], truncated: false },
+      { documentId: 'project-1' },
+      { document: { id: 'project-1' }, nodes: [{ id: 'node-1' }], edges: [{ id: 'edge-1' }], truncated: false },
     ) ?? []
     expect(observed.map((effect) => applicationObservedEffectSchema.parse(effect))[0]).toMatchObject({
       effect: 'observe', verified: true,
       targetRefs: expect.arrayContaining([
-        { kind: 'canvas.project', id: 'project-1' },
+        { kind: 'canvas.document', id: 'project-1' },
         { kind: 'canvas.node', id: 'node-1' },
         { kind: 'canvas.edge', id: 'edge-1' },
       ]),
@@ -217,21 +217,21 @@ describe('application capability handler coverage', () => {
     const bridge = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_generation_result_to_canvas')
     expect(bridge).toBeDefined()
     expect(bridge?.acceptsRefs).toEqual(expect.arrayContaining([
-      'canvas.project', 'generation.result',
+      'canvas.document', 'generation.result',
     ]))
     expect(bridge?.producesRefs).toContain('canvas.node')
     expect(bridge?.inputSchema.safeParse({
-      projectId: 'canvas-1',
+      documentId: 'canvas-1',
       resultRef: { kind: 'generation.result', id: 'task-1' },
       placement: { mode: 'absolute', x: 320, y: 180 },
     }).success).toBe(true)
     const effects = bridge?.resolveObservedEffects?.(
       {
-        projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'task-1' },
+        documentId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'task-1' },
         placement: { mode: 'absolute', x: 320, y: 180 },
       },
       {
-        projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'task-1' },
+        documentId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'task-1' },
         mediaType: 'image', nodeId: 'node-1', nodeType: 'uploadNode',
         nodeRef: { kind: 'canvas.node', id: 'node-1' }, undoRef: 'undo-1',
         revision: 2, scopeRevisions: { canvas: 2 },

@@ -33,11 +33,11 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
   useImageEditSessionStore.getState().ensureSession('application-mark-loop', createEmptyImageEditDocument())
   try {
     setCanvasTestProjectState({ currentProject: null, currentProjectId: null })
-    // 画布是通用文档（3.4）：用 create_document 新建，canvas.project 的 id 就是文档 ID；写域以节点标题验证
+    // 画布是通用文档（3.4）：用 create_document 新建，canvas.document 的 id 就是文档 ID；写域以节点标题验证
     const canvas = await app.requireResult('create_document', { kind: 'canvas', name: '公共画布回环' })
     const canvasDocumentId = (canvas.resultRef as ApplicationRef).id
     const canvasNode = await app.requireResult('change_application_entities', { summary: '公共画布节点', changes: [{
-      kind: 'create_items', parent: { kind: 'canvas.project', id: canvasDocumentId }, entityType: 'canvas.node',
+      kind: 'create_items', parent: { kind: 'canvas.document', id: canvasDocumentId }, entityType: 'canvas.node',
       items: [{ properties: { 'canvas.node.node_type': 'textAnnotationNode' } }],
     }] })
     const canvasNodeRef = (canvasNode.resultRefs as ApplicationRef[])[0]
@@ -73,7 +73,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'image_edit', ref: { kind: 'image_edit.layer', id: `v3:${document.id}:effect` }, property: 'image_edit.layer.opacity', value: 0.42 },
       { domain: 'assets', ref: (library.resultRefs as ApplicationRef[])[0], property: 'asset.library.name', value: '公共素材已改名' },
       // 口播名就是文件名（3.3，改名走 documents.document.name）；口播写域以参考稿验证内容写入与持久化
-      { domain: 'audio_edit', ref: { kind: 'audio_edit.project', id: 'audio-loop' }, property: 'audio_edit.project.reference_script', value: '公共口播参考稿' },
+      { domain: 'audio_edit', ref: { kind: 'audio_edit.document', id: 'audio-loop' }, property: 'audio_edit.document.reference_script', value: '公共口播参考稿' },
       // 剪辑名就是文件名（3.1，改名走 documents.document.name）；剪辑写域以序列名验证内容写入与持久化
       { domain: 'video_edit', ref: { kind: 'video_edit.sequence', id: `${video.document.id}:${video.activeSequenceId}` }, property: 'video_edit.sequence.name', value: '公共剪辑已改名' },
       { domain: 'documents', ref: { kind: 'documents.document', id: documentMeta.id }, property: 'documents.document.name', value: '公共文档已改名' },

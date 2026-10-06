@@ -29,7 +29,7 @@ export const VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH = 1920
 function sourceComposition(document: VideoEditDocument, itemId: string, timeUs: number): VideoEditComposition {
   const item = document.items.find(value => value.id === itemId)
   const media = document.media.find(value => value.id === item?.mediaId)
-  if (!item || !media) throw new Error('请指定工程中带源文件的视频或图片项目项。')
+  if (!item || !media) throw new Error('请指定剪辑中带源文件的视频或图片项目项。')
   if (media.kind === 'audio') throw new Error('声音素材没有画面，请改为读取波形或片段属性。')
   if (!Number.isSafeInteger(timeUs) || timeUs < 0 || media.kind === 'video' && timeUs >= Math.round(media.durationSeconds * 1e6)) throw new Error('源时间必须是素材时长内的非负整数微秒。')
   const frameRate = media.frameRate ?? { numerator: 60, denominator: 1 }

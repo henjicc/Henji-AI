@@ -31,7 +31,7 @@ async function editComposite(projectId: string, sequenceId: string, clipIds: str
   const frame = active ? requested : requireClip(sequence, clipIds[0]).start
   await trialVideoEditCodeDocument(owner, baseline, next, sequenceId, frame, signal, clipIds.map(clipId => ({ sequenceId, clipId })))
   signal?.throwIfAborted()
-  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('原工程已改变，请重新检查此编辑。')
+  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('原剪辑已改变，请重新检查此编辑。')
   editVideoProject(projectId, () => next)
 }
 export function listVideoEditFilterDefinitions(projectId: string): Array<{ id: string; name: string; versionId: string }> {
@@ -41,7 +41,7 @@ export function listVideoEditFilterDefinitions(projectId: string): Array<{ id: s
 export interface VideoEditEffectInput { definitionId: string; versionId?: string; name?: string; parameters?: CodeMaterialInstance['parameters'] }
 export function makeVideoEditEffect(document: VideoEditDocument, input: VideoEditEffectInput, read: CodeMaterialMetadataReader): VideoEditEffect {
   const definition = document.codeMaterials?.find(definition => definition.id === input.definitionId)
-  if (!definition) throw new Error('滤镜源码不属于此工程。')
+  if (!definition) throw new Error('滤镜源码不属于此剪辑。')
   const code = { definitionId: definition.id, versionId: input.versionId ?? definition.defaultVersionId, parameters: input.parameters ?? {} }
   const metadata = read(code)
   if (metadata.kind !== 'filter') throw new Error('附加效果需要输入滤镜源码。')

@@ -37,7 +37,7 @@ it('工程、文档与设置资源目录通过正式注册表读取，后台修�
     expect(uris.length).toBeGreaterThan(0)
     expect(new Set(uris).size).toBe(uris.length)
     expect(uris.some(uri => uri.startsWith('henji://entity/settings.'))).toBe(true)
-    expect(uris).toContain(`henji://entity/canvas.project/${backgroundId}`)
+    expect(uris).toContain(`henji://entity/canvas.document/${backgroundId}`)
     const beforeCanvas = notifications
     requireCanvasProjectInstance(backgroundId).store.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 })
     expect(notifications).toBeGreaterThan(beforeCanvas)

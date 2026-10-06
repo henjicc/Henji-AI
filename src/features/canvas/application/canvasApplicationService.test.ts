@@ -363,7 +363,7 @@ describe('canvas application service', () => {
     await expect(redoCanvasChange(projectId)).rejects.toThrow('当前画布没有可重做操作')
   })
 
-  it('拒绝目录外节点、任意媒体路径和不存在的工程', async () => {
+  it('拒绝目录外节点、任意媒体路径和不存在的画布', async () => {
     await expect(addCanvasNode({
       projectId,
       nodeType: 'unknownNode',

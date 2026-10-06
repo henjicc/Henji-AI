@@ -209,7 +209,7 @@ describe('MultiLayerDocumentEditorDialog', () => {
     fireEvent.click(button)
     expect(mocks.exportTarget).toHaveBeenCalledOnce()
     expect(mocks.exportTarget).toHaveBeenCalledWith(expect.objectContaining({
-      projectRef: { kind: 'canvas.project', id: 'project-a' },
+      canvasRef: { kind: 'canvas.document', id: 'project-a' },
       sourceNodeRef: { kind: 'canvas.node', id: 'project-a:multi-layer-node' },
       targetRef: expect.objectContaining({ kind: 'image_edit.layer' }),
     }))

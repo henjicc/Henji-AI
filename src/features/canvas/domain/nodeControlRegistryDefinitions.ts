@@ -402,7 +402,7 @@ export const nodeControlConfigs: CanvasNodeControlConfig[] = [
   {
     nodeType: CANVAS_NODE_TYPES.cameraStage,
     title: '3D 运镜节点',
-    description: '创建可关联独立 3D 运镜工程的画布节点。',
+    description: '创建可关联独立 镜头参考文档的画布节点。',
     dataSchema: uploadNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 } }, additionalProperties: false },
     requiresModelSchema: false,

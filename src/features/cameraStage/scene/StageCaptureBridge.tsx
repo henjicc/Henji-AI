@@ -20,7 +20,7 @@ import { resolveCenteredCaptureView } from './captureFraming'
  * - 不传参数：读取视口 PNG dataURL，供截图功能沿用既有裁剪路径。
  * - 传目标尺寸：渲染至离屏 RenderTarget 后直接读取原始 RGBA，避免逐帧 PNG 压缩。
  *
- * 离屏渲染按工程当前的渲染方式分流：彩色走场景渲染 + OutputPass 补色调映射与 sRGB；
+ * 离屏渲染按镜头参考当前的渲染方式分流：彩色走场景渲染 + OutputPass 补色调映射与 sRGB；
  * 深度/线稿等样式画面本身就是显示态数据，直接由样式管线写出，再补一次转换会把灰度整体拉偏，
  * 视口预览与导出成片就对不上了。
  */

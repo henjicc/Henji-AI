@@ -84,7 +84,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         await button(page, '剪辑').click(); await dialogs(app, [video, picture, audio], file); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, file)
         await button(page, '导入').click()
         let document = await saved(page, file, document => document.media.length === 3)
-        const projectRef = { kind: 'video_edit.project', id: document.id }
+        const projectRef = { kind: 'video_edit.document', id: document.id }
         const sequenceRef = { kind: 'video_edit.sequence', id: `${document.id}:${document.sequences[0].id}` }
         const identity = await authorizeMcpConnection(page, { name: '原创代码素材回环', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Henji native code Reality')
@@ -163,7 +163,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         await rejection.waitFor({ state: 'visible' }); evidence.refusedSource = await rejection.innerText()
         assert.deepEqual(readVideoEditFile(file), beforeRejected, '非法候选不得改变有效工程')
         await capture('code-invalid-source-preserved'); await button(page, '取消').click()
-        const split = await callTool(client, 'split_video_edit', operationEnvelope([await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.name'] })], { projectRef, clipRef: dynamicRef, frame: 90 }))
+        const split = await callTool(client, 'split_video_edit', operationEnvelope([await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.name'] })], { documentRef: projectRef, clipRef: dynamicRef, frame: 90 }))
         assert.equal(split.executionState, 'completed')
         document = await saved(page, file, value => value.sequences[0].clips.length === 6)
         const tail = document.sequences[0].clips.find(clip => clip.itemId === dynamicItem.id && clip.start === 90)

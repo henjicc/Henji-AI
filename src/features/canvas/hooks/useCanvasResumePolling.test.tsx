@@ -328,7 +328,7 @@ describe('useCanvasResumePolling 异步结果恢复', () => {
     expect(platformMocks.releaseManagedGenerationMedia).not.toHaveBeenCalled();
   });
 
-  it.each([false, true])('续查成功后把结果引用发布到原工程配方节点（后台：%s）', async background => {
+  it.each([false, true])('续查成功后把结果引用发布到原画布配方节点（后台：%s）', async background => {
     const source: CanvasNode = {
       id: 'panorama-generator',
       type: CANVAS_NODE_TYPES.panoramaGen,
@@ -370,7 +370,7 @@ describe('useCanvasResumePolling 异步结果恢复', () => {
   });
 
   it('离开画布不等续查：结果照常保存进原画布，任务结束后才关闭', async () => {
-    const projectId = await createCanvasTestProject('离开时续查工程');
+    const projectId = await createCanvasTestProject('离开时续查画布');
     useCanvasStore.getState().setCanvasData([createResumablePanoramaResult()], [], { past: [], future: [] });
     let finish!: (value: { outputs: string[]; primary: string }) => void;
     generationMocks.resumeCanvasGeneration.mockImplementation(() => new Promise(resolve => { finish = resolve; }));

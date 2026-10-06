@@ -138,7 +138,7 @@ export class VideoEditRenderer {
     void image.pending.then(bitmap => bitmap.close(), () => {})
   }
   async updateDocument(document: VideoEditComposition): Promise<void> {
-    if (document.id !== this.document.id) throw new Error('渲染目标工程已经改变。')
+    if (document.id !== this.document.id) throw new Error('渲染目标剪辑已经改变。')
     this.codeSources?.updateDocument(document)
     this.cancelPresentation()
     for (const [path, seeker] of this.seekers) if (!document.media.some(media => media.path === path)) { this.seekers.delete(path); await seeker.dispose() }

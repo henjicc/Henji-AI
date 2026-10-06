@@ -102,7 +102,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
   const readRuntime = (store = useCanvasStore) => resolveGenerationNodeRuntime(readOptions(store), store)
   const readExecutionInputs = async (execution: CanvasNodeExecutionContext) => {
     const projectId = execution.projectId
-    if (!projectId) throw new Error('当前没有可执行生成的画布项目')
+    if (!projectId) throw new Error('当前没有可执行生成的画布')
     const read = async (target: CanvasTransactionRuntime) => {
       const current = readOptions(target.store)
       return { current, runtime: resolveGenerationNodeRuntime(current, target.store), target }
@@ -217,7 +217,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
       ownership,
       operation: async () => {
         const generationProjectId = execution.projectId
-        if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
+        if (!generationProjectId) throw new Error('当前没有可执行生成的画布')
         const target = inputs.target
         const prepared = preparedInput ?? await prepareExecution(execution, inputs)
         const { runtime, promptInput, capabilityPreparation, generationParams } = prepared
@@ -287,7 +287,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
         const setProgress = useCanvasGenerationProgressStore.getState().setProgress
         try {
           await execution.assertCurrent(target.store)
-          if (!target.isCurrent()) throw new Error('原项目实例已变化，请重新核对任务。')
+          if (!target.isCurrent()) throw new Error('原画布实例已变化，请重新核对任务。')
           resultNodeId = createResultNode(target.store)
           await target.persist()
           taskLifecycle = createCanvasGenerationTaskLifecycle(
@@ -414,7 +414,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     }, activeTask.controller.signal)
     const prepared = await prepareExecution(execution, inputs)
     const projectId = execution.projectId
-    if (!projectId) throw new Error('当前没有可执行生成的画布项目')
+    if (!projectId) throw new Error('当前没有可执行生成的画布')
     const taskId = crypto.randomUUID()
     const controller = new AbortController()
     const parentSignal = current.signal ?? execution.signal

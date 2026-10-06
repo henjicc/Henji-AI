@@ -27,7 +27,7 @@ const logger = createLogger('features.canvas.mutation')
 
 function splitNodeRef(id: string): { projectId: string; nodeId: string } {
   const separator = id.indexOf(':')
-  if (separator < 1) throw new CanvasApplicationError('INVALID_INPUT', '画布节点引用缺少项目前缀')
+  if (separator < 1) throw new CanvasApplicationError('INVALID_INPUT', '画布节点引用缺少画布前缀')
   return { projectId: id.slice(0, separator), nodeId: id.slice(separator + 1) }
 }
 
@@ -62,7 +62,7 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
   ): Promise<ApplicationCompletedStepResult[]> {
     const targets = steps.map((step) => ({ step, ...splitNodeRef(step.target.id) }))
     const projectIds = new Set(targets.map((target) => target.projectId))
-    if (projectIds.size !== 1) throw new CanvasApplicationError('INVALID_INPUT', '画布节点事务不能跨项目')
+    if (projectIds.size !== 1) throw new CanvasApplicationError('INVALID_INPUT', '画布节点事务不能跨画布')
     const projectId = targets[0]?.projectId
     if (!projectId) throw new CanvasApplicationError('INVALID_INPUT', '画布节点事务为空')
     if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)

@@ -15,7 +15,7 @@ export const codeMaterialDefinitionsSchema = z.array(codeMaterialDefinitionSchem
     for (const version of definition.versions) {
       const bytes = new TextEncoder().encode(version.source).byteLength; total += bytes
       if (bytes > CODE_MATERIAL_LIMITS.sourceBytes) context.addIssue({ code: 'custom', message: '单个代码源码最多64KiB。' })
-      if (total > 8 * 1024 ** 2) { context.addIssue({ code: 'custom', message: '工程代码源码总量最多8MiB。' }); return }
+      if (total > 8 * 1024 ** 2) { context.addIssue({ code: 'custom', message: '剪辑代码源码总量最多8MiB。' }); return }
     }
   }
 })

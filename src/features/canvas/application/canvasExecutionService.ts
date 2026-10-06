@@ -106,7 +106,7 @@ export function registerCanvasNodeExecutor(
   executor: CanvasRegisteredExecutor,
   projectId = useProjectStore.getState().currentProjectId,
 ): () => void {
-  if (!projectId) throw new Error('当前没有可执行的画布项目')
+  if (!projectId) throw new Error('当前没有可执行的画布')
   const key = activeNodeKey(projectId, nodeId)
   executors.set(key, executor)
   return () => {
@@ -189,7 +189,7 @@ export async function isCanvasNodeInputSignatureCurrent(
   expectedInputSignature: string,
   projectId = useProjectStore.getState().currentProjectId,
 ): Promise<boolean> {
-  if (!projectId) throw new Error('当前没有可执行的画布项目')
+  if (!projectId) throw new Error('当前没有可执行的画布')
   return await resolveCurrentInputSignature(nodeId, projectId) === expectedInputSignature
 }
 
@@ -295,7 +295,7 @@ async function executeRegisteredNode(
           }
           await assertDependenciesCurrent(targetStore)
         }
-        if (!baseContext.runtime.isCurrent()) throw new Error('原项目实例已变化，请重新核对任务。')
+        if (!baseContext.runtime.isCurrent()) throw new Error('原画布实例已变化，请重新核对任务。')
         return assertInStore(store ?? baseContext.runtime.store)
       },
     }
@@ -321,7 +321,7 @@ async function executeRegisteredNode(
           throw new Error('节点运行期间输入已变化；本次结果已保留，请重新运行后再继续下游')
         }
         await assertDependenciesCurrent(runtime.store)
-        if (!runtime.isCurrent()) throw new Error('原项目实例在发布结果时发生变化，请查询已保存结果。')
+        if (!runtime.isCurrent()) throw new Error('原画布实例在发布结果时发生变化，请查询已保存结果。')
         publishCanvasSuccessfulExecution({ sourceNodeId: nodeId, inputSignature, outputMode, resultNodeIds: result.resultNodeIds }, runtime.store)
         await runtime.persist()
         return result
@@ -531,7 +531,7 @@ async function executeCanvasRun(rootNodeId: string, projectId: string, runtime: 
 
 export function runCanvasNode(rootNodeId: string, assertCurrent?: (store?: typeof useCanvasStore) => void,
   projectId = useProjectStore.getState().currentProjectId, signal?: AbortSignal): Promise<CanvasRunResult> {
-  if (!projectId) return Promise.reject(new Error('当前没有可执行的画布项目'))
+  if (!projectId) return Promise.reject(new Error('当前没有可执行的画布'))
   return withCanvasProjectRuntime(projectId, runtime => executeCanvasRun(rootNodeId, projectId, runtime, assertCurrent, signal))
 }
 

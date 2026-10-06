@@ -106,7 +106,7 @@ describe('画布图片能力应用服务', () => {
       projectId: 'other-project',
       sourceNodeId,
       capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
-    })).rejects.toThrow('当前画布项目与命令目标不一致')
+    })).rejects.toThrow('当前画布与命令目标不一致')
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
     expect(useCanvasStore.getState().edges).toHaveLength(0)
   })

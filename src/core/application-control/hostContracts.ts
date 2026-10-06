@@ -30,7 +30,8 @@ export const hostContextSnapshotSchema = z.object({
     id: z.enum(['generation', 'nodes', 'videoEdit', 'tools', 'assets']),
     activeToolId: z.enum(['audioEdit', 'cameraStage', 'imageMark']).nullable(),
   }),
-  project: z.object({
+  /** 当前打开的画布文档（id 即画布文档 ID）与画布选择；不是装文档的“项目”。 */
+  canvas: z.object({
     id: z.string().min(1).nullable(),
     selectedNodeId: z.string().min(1).nullable(),
     selectedNodeIsReference: z.boolean().optional(),
@@ -60,7 +61,7 @@ export const hostContextSnapshotSchema = z.object({
   }),
   /** Present only while the edit workspace is in front; refs use the public catalog format. */
   videoEdit: z.object({
-    projectRef: z.string().min(1).max(500),
+    documentRef: z.string().min(1).max(500),
     sequenceRef: z.string().min(1).max(500),
     frame: z.number().int().nonnegative(),
     playing: z.boolean(),

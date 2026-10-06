@@ -10,7 +10,7 @@ import { cameraStageApplicationService } from './cameraStageApplicationService'
  * 播放控制此前完全没注册：助手做完一段动画，只能让用户自己去点播放确认效果。
  * 现在它是 `camera_stage.playback` 单例实体的三条属性，走通用动词，零新增工具。
  *
- * 播放是会话态，不进工程文件——所以只有当前打开的工程才读得到，别的工程读出 null，
+ * 播放是会话态，不进镜头参考文件——所以只有当前打开的镜头参考才读得到，别的镜头参考读出 null，
  * 反射层据此不把它们列出来。
  */
 
@@ -61,7 +61,7 @@ describe('三维播放控制', () => {
     expect(playback?.currentTime).toBeCloseTo(2, 2)
   })
 
-  it('播放状态是会话态：没打开的工程读不到，反射层据此不列出它', () => {
+  it('播放状态是会话态：没打开的镜头参考读不到，反射层据此不列出它', () => {
     expect(cameraStageApplicationService.readPlayback('another-project')).toBeNull()
     expect(cameraStageApplicationService.readPlayback(PROJECT_ID)).not.toBeNull()
   })

@@ -44,7 +44,7 @@ const getToolboxState = defineApplicationCapability({
   id: 'get_toolbox_state',
   version: 1,
   title: '读取工具页状态',
-  description: '读取当前工具、3D 工程和选择摘要，不返回完整场景。',
+  description: '读取当前工具、镜头参考和选择摘要，不返回完整场景。',
   domain: 'toolbox',
   aliases: ['当前工具状态', 'toolbox state'],
   readOnly: true,

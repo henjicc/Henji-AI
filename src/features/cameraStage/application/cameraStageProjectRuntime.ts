@@ -167,7 +167,7 @@ export function bindCameraStageSession(session: DocumentSession): CameraStagePro
 
 export function cameraStageProjectStore(projectId: string): CameraStageOwnedStore {
   const instance = findCameraStageProjectInstance(projectId)
-  if (!instance) throw new Error('PROJECT_NOT_READY:请先读取原三维工程')
+  if (!instance) throw new Error('PROJECT_NOT_READY:请先读取原镜头参考')
   return instance.store
 }
 

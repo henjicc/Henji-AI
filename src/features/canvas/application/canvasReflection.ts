@@ -20,15 +20,15 @@ import { listCanvasDocumentSummaries } from './canvasProjectService'
 import { readCanvasProjectSnapshot } from './canvasQueryService'
 import { supportsCanvasNodeGenerationConfig } from './canvasNodeGenerationConfig'
 
-/** 3.4：canvas.project 就是一份画布文档，文档本身的管理全部归通用文档能力。 */
-const PROJECT_WRITE_EXCLUSION = 'canvas.project 就是一份画布文档（id 即文档 ID），本身只读：改名写 documents.document.name；'
+/** 3.4：canvas.document 就是一份画布文档，文档本身的管理全部归通用文档能力。 */
+const PROJECT_WRITE_EXCLUSION = 'canvas.document 就是一份画布文档（id 即文档 ID），本身只读：改名写 documents.document.name；'
   + '打开、移动、创建副本、移到回收站用 open_document / move_document / duplicate_document / trash_document；'
   + '新建用 create_document（kind=canvas）。画布内容经 canvas.node / canvas.edge 写入。'
 
 const DOMAIN = 'canvas'
 const REVISION_SCOPE = 'canvas'
 export const CANVAS_ENTITY_TYPES = {
-  project: 'canvas.project',
+  project: 'canvas.document',
   node: 'canvas.node',
   edge: 'canvas.edge',
 } as const
@@ -83,15 +83,15 @@ const propertiesByEntity: Record<CanvasEntityType, ApplicationPropertyDescriptor
   [CANVAS_ENTITY_TYPES.project]: [
     ...fieldDescriptors(PROJECT_FIELDS),
     property(CANVAS_ENTITY_TYPES.project, 'node_count', '节点数量', { kind: 'integer', hardRange: { min: 0 } }, {
-      readOnly: '节点数量由项目内容计算。',
+      readOnly: '节点数量由画布内容计算。',
     }),
     property(CANVAS_ENTITY_TYPES.project, 'edge_count', '连线数量', { kind: 'integer', hardRange: { min: 0 } }, {
-      readOnly: '连线数量由项目内容计算。',
+      readOnly: '连线数量由画布内容计算。',
     }),
   ],
   [CANVAS_ENTITY_TYPES.node]: [
-    property(CANVAS_ENTITY_TYPES.node, 'project_ref', '所属项目', { kind: 'ref', refKinds: [CANVAS_ENTITY_TYPES.project] }, {
-      readOnly: '节点所属项目不可变更。',
+    property(CANVAS_ENTITY_TYPES.node, 'document_ref', '所属画布', { kind: 'ref', refKinds: [CANVAS_ENTITY_TYPES.project] }, {
+      readOnly: '节点所属画布不可变更。',
       relation: { targetEntityTypes: [CANVAS_ENTITY_TYPES.project], cardinality: 'one' },
     }),
     property(CANVAS_ENTITY_TYPES.node, 'node_type', '节点类型', { kind: 'string', maxLength: 120 }, {
@@ -100,8 +100,8 @@ const propertiesByEntity: Record<CanvasEntityType, ApplicationPropertyDescriptor
     ...fieldDescriptors(NODE_FIELDS),
   ],
   [CANVAS_ENTITY_TYPES.edge]: [
-    property(CANVAS_ENTITY_TYPES.edge, 'project_ref', '所属项目', { kind: 'ref', refKinds: [CANVAS_ENTITY_TYPES.project] }, {
-      readOnly: '连线所属项目不可变更。',
+    property(CANVAS_ENTITY_TYPES.edge, 'document_ref', '所属画布', { kind: 'ref', refKinds: [CANVAS_ENTITY_TYPES.project] }, {
+      readOnly: '连线所属画布不可变更。',
       relation: { targetEntityTypes: [CANVAS_ENTITY_TYPES.project], cardinality: 'one' },
     }),
     property(CANVAS_ENTITY_TYPES.edge, 'source_ref', '来源节点', { kind: 'ref', refKinds: [CANVAS_ENTITY_TYPES.node] }, {
@@ -126,12 +126,12 @@ function childRef(kind: typeof CANVAS_ENTITY_TYPES.node | typeof CANVAS_ENTITY_T
 }
 
 /**
- * 画布子实体的稳定 id 是 `工程ID:子ID`，但专用能力（add_canvas_node 等）返回的是**裸 nodeId**。
+ * 画布子实体的稳定 id 是 `画布ID:子ID`，但专用能力（add_canvas_node 等）返回的是**裸 nodeId**。
  *
  * 同一样东西两种形状，调用方拿着能力返回的 id 去调通用动词就必然 NOT_FOUND——实测画布场景
  * 反复撞这一条。规则本来就写着"领域 provider 可将全局唯一的短引用补全成正式稳定引用，但存在
- * 歧义时必须拒绝"（docs/rules/assistant-capability.md），这里就是那条规则的落点：只有一个工程
- * 里存在这个子 ID 时补全它，出现在多个工程里则照旧拒绝。
+ * 歧义时必须拒绝"（docs/rules/assistant-capability.md），这里就是那条规则的落点：只有一个画布
+ * 里存在这个子 ID 时补全它，出现在多个画布里则照旧拒绝。
  */
 function splitChildRef(ref: ApplicationRef, expected: CanvasEntityType): { projectId: string; childId: string } {
   if (ref.kind !== expected) throw new Error('NOT_FOUND')
@@ -139,7 +139,7 @@ function splitChildRef(ref: ApplicationRef, expected: CanvasEntityType): { proje
   if (separator >= 1) {
     return { projectId: ref.id.slice(0, separator), childId: ref.id.slice(separator + 1) }
   }
-  // 只在**当前打开的工程**里补全：助手的写入本来就发生在这个工程上，跨工程扫描既慢又可能歧义。
+  // 只在**当前打开的画布**里补全：助手的写入本来就发生在这个画布上，跨画布扫描既慢又可能歧义。
   const projectId = useProjectStore.getState().currentProjectId
   if (!projectId) throw new Error('NOT_FOUND')
   const canvas = useCanvasStore.getState()
@@ -264,7 +264,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
 
   private nodeProperties(projectId: string, node: CanvasNode, propertyIds?: string[]): Record<string, JsonValue> {
     return {
-      [`${CANVAS_ENTITY_TYPES.node}.project_ref`]: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
+      [`${CANVAS_ENTITY_TYPES.node}.document_ref`]: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
       [`${CANVAS_ENTITY_TYPES.node}.node_type`]: node.type,
       ...fieldReadValues(propertyIds ? NODE_FIELDS.filter((field) => propertyIds.includes(field.propertyId)) : NODE_FIELDS, node),
     }
@@ -272,7 +272,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
 
   private edgeProperties(projectId: string, edge: CanvasEdge): Record<string, JsonValue> {
     return {
-      [`${CANVAS_ENTITY_TYPES.edge}.project_ref`]: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
+      [`${CANVAS_ENTITY_TYPES.edge}.document_ref`]: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
       [`${CANVAS_ENTITY_TYPES.edge}.source_ref`]: childRef(CANVAS_ENTITY_TYPES.node, projectId, edge.source),
       [`${CANVAS_ENTITY_TYPES.edge}.target_ref`]: childRef(CANVAS_ENTITY_TYPES.node, projectId, edge.target),
       [`${CANVAS_ENTITY_TYPES.edge}.source_handle`]: edge.sourceHandle ?? 'source',
@@ -282,9 +282,9 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
 }
 
 const META: Record<CanvasEntityType, { title: string; description: string; parents: CanvasEntityType[]; queryIds: string[] }> = {
-  [CANVAS_ENTITY_TYPES.project]: { title: '画布', description: '一份画布文档（.henji-canvas，id 即文档 ID）的节点画布内容。', parents: [], queryIds: ['get_canvas_project'] },
+  [CANVAS_ENTITY_TYPES.project]: { title: '画布', description: '一份画布文档（.henji-canvas，id 即文档 ID）的节点画布内容。', parents: [], queryIds: ['get_canvas_document'] },
   [CANVAS_ENTITY_TYPES.node]: { title: '画布节点', description: '由节点目录约束的数据与位置实体。', parents: [CANVAS_ENTITY_TYPES.project], queryIds: ['get_canvas_node'] },
-  [CANVAS_ENTITY_TYPES.edge]: { title: '画布连线', description: '通过节点端口校验建立的有向连接。', parents: [CANVAS_ENTITY_TYPES.project], queryIds: ['get_canvas_project'] },
+  [CANVAS_ENTITY_TYPES.edge]: { title: '画布连线', description: '通过节点端口校验建立的有向连接。', parents: [CANVAS_ENTITY_TYPES.project], queryIds: ['get_canvas_document'] },
 }
 
 export function createCanvasReflectionRegistrations(): ApplicationEntityRegistration[] {

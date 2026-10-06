@@ -31,12 +31,12 @@ export interface CameraStageVideoExportOptions {
   renderCameraCount: number
   /** 参与机位是否超过一台；与 renderCameraCount 同源，供日志检索使用 */
   isMultiCamera: boolean
-  /** 旧工程或异常写入导致的画幅不一致防御标记；不阻断导出，但必须留下告警日志 */
+  /** 旧镜头参考或异常写入导致的画幅不一致防御标记；不阻断导出，但必须留下告警日志 */
   hasInconsistentCameraAspectRatio: boolean
   fps: number
   durationSeconds: number
   resolutionPreset: CameraStageVideoResolutionPreset
-  /** 本次成片的渲染方式；只进日志，画面本身由截帧管线按工程设置成像 */
+  /** 本次成片的渲染方式；只进日志，画面本身由截帧管线按镜头参考设置成像 */
   renderStyle: StageRenderStyle
   captureFrame: (targetSize: { width: number; height: number }) => Promise<Uint8Array | null>
   disposeCaptureFrame: () => void

@@ -373,7 +373,7 @@ export interface VideoMediaNodeData extends NodeDisplayData, NodeGenerationStatu
   previewImageUrl?: string | null;
   aspectRatio: string;
   durationSec?: number | null;
-  /** 新导入视频由主进程一次探测得出；旧工程缺省时播放器按需补探测。 */
+  /** 新导入视频由主进程一次探测得出；旧画布缺省时播放器按需补探测。 */
   hasAudio?: boolean;
   sourceFileName?: string | null;
   isSizeManuallyAdjusted?: boolean;
@@ -393,7 +393,7 @@ export interface CameraStageNodeData extends NodeDisplayData {
   durationSec: number | null;
   selectedTimeSec: number;
   mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
-  /** 由画布图片输入派生，并同步到 3D 工程的球面环境贴图。 */
+  /** 由画布图片输入派生，并同步到 镜头参考的球面环境贴图。 */
   environmentImageUrl?: string | null;
   imageExporting?: boolean;
   imageRenderRequestId?: string | null;

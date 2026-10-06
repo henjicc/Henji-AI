@@ -24,13 +24,13 @@ export function readVideoEditCodeMetadata(owner: object, document: VideoEditDocu
   return instance => {
     const version = codeMaterialSource(document, instance)
     const entry = states.get(owner)?.get(version.id)
-    if (!entry || entry.definitionId !== instance.definitionId || entry.source !== version.source || entry.apiVersion !== version.apiVersion || entry.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码版本尚未检查或被替换，请重新打开原工程或提交新版本。')
+    if (!entry || entry.definitionId !== instance.definitionId || entry.source !== version.source || entry.apiVersion !== version.apiVersion || entry.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码版本尚未检查或被替换，请重新打开原剪辑或提交新版本。')
     return entry.metadata
   }
 }
 export function rememberVideoEditCodeMetadata(owner: object, definitionId: string, version: CodeMaterialVersion, program: CodeMaterialProgram): void {
   const metadata = states.get(owner)
-  if (!metadata) throw new Error('代码工程会话不存在。')
+  if (!metadata) throw new Error('剪辑的代码素材会话不存在。')
   put(metadata, definitionId, version, program)
 }
 export function forgetVideoEditCodeMetadata(owner: object, versionId: string): void { states.get(owner)?.delete(versionId) }
@@ -51,7 +51,7 @@ function put(entries: VideoEditCodeMetadata, definitionId: string, version: Code
   const { name, kind, mode, width, height, durationSeconds, seed, parameters } = program
   const metadata = { name, kind, mode, width, height, durationSeconds, seed, parameters }
   const bytes = new TextEncoder().encode(JSON.stringify(metadata)).byteLength + new TextEncoder().encode(version.source).byteLength
-  if (entries.size >= 4096 || [...entries.values()].reduce((sum, entry) => sum + entry.bytes, 0) + bytes > 32 * 1024 ** 2) throw new CodeMaterialError('BUDGET', '工程已检查的代码版本超出会话预算；保存并重新打开工程可释放历史版本。')
+  if (entries.size >= 4096 || [...entries.values()].reduce((sum, entry) => sum + entry.bytes, 0) + bytes > 32 * 1024 ** 2) throw new CodeMaterialError('BUDGET', '剪辑已检查的代码版本超出会话预算；保存并重新打开剪辑可释放历史版本。')
   entries.set(version.id, { definitionId, source: version.source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, metadata, bytes })
 }
 /** Rebuild only default/referenced declarations. Unused historical source is

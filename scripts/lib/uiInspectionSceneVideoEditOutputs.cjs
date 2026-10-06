@@ -38,9 +38,9 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1')); await observeWorkers(page); observed = true; await button(page, '剪辑').click()
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '剪辑输出收录验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji output collection Reality')
-        const projectRef = { kind: 'video_edit.project', id: fixture.id }
-        const baseline = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })
-        await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '定位真实节目选帧', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef, properties: { 'video_edit.project.program_playback': { frame: 90, playing: false, playbackDirection: 1 } } }] }))
+        const projectRef = { kind: 'video_edit.document', id: fixture.id }
+        const baseline = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
+        await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '定位真实节目选帧', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame: 90, playing: false, playbackDirection: 1 } } }] }))
         await presented(page, 90)
         evidence.program = await png(page, path.join(root, 'program-before-capture.png')); evidence.trackBanks = await trackBanks(page)
         const before = await workerSnapshot(page); await dialogs(app, [file], selectedPath)
@@ -60,12 +60,12 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         evidence.captureResources = { before, after }; evidence.frameAsset = selected; evidence.phases.push('真实节目4K PNG逐像素匹配，收录不创建额外Worker'); await shot('outputs-frame-collected-original-4k')
         // Calling the same public service must reuse the published PNG and existing native asset row.
         const readFrame = await callTool(client, 'read_application_entity', { ref: projectRef })
-        const frameResult = await callTool(client, 'collect_video_edit_output', operationEnvelope([readFrame], { projectRef, kind: 'frame', frame: 90 }))
+        const frameResult = await callTool(client, 'collect_video_edit_output', operationEnvelope([readFrame], { documentRef: projectRef, kind: 'frame', frame: 90 }))
         assert.equal(frameResult.executionState, 'completed', JSON.stringify(frameResult)); assert.equal(frameResult.verificationState, 'verified', JSON.stringify(frameResult)); assert.equal(frameResult.result.data.resultRef.id, selected.id)
         evidence.publicFrame = frameResult; await clickOutsideFloatingAssets(page); await page.locator('[data-asset-floating-panel]').waitFor({ state: 'hidden' })
         await dialogs(app, [file], exportPath); const exportAt = performance.now(); await button(page, '导出视频').click()
         let task
-        for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
+        for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))
         const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs'); const metadata = mediaProbe(ffprobePath, exportPath)
         const video = metadata.streams.find(stream => stream.codec_type === 'video'); const audio = metadata.streams.find(stream => stream.codec_type === 'audio')
@@ -82,18 +82,18 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         assert.ok(movie); assert.equal(normalized(movie.filePath), normalized(exportPath)); assert.equal(movie.source, 'video-edit'); assert.equal(movie.inspectionStatus, 'ready'); assert.equal(movie.width, 3840); assert.equal(movie.height, 2160)
         evidence.movieAsset = movie
         const outputRead = await callTool(client, 'read_application_entity', { ref: projectRef })
-        const movieResult = await callTool(client, 'collect_video_edit_output', operationEnvelope([outputRead], { projectRef, kind: 'export', taskId: task.data.task.id }))
+        const movieResult = await callTool(client, 'collect_video_edit_output', operationEnvelope([outputRead], { documentRef: projectRef, kind: 'export', taskId: task.data.task.id }))
         assert.equal(movieResult.executionState, 'completed', JSON.stringify(movieResult)); assert.equal(movieResult.verificationState, 'verified', JSON.stringify(movieResult)); assert.equal(movieResult.result.data.resultRef.id, movie.id)
         const library = await page.evaluate(() => window.henjiNative.assetLibrary.createLibrary('剪辑正式输出集合'))
         const libraryRead = await callTool(client, 'read_application_entity', { ref: { kind: 'asset.library', id: library.id } }); const currentRead = await callTool(client, 'read_application_entity', { ref: projectRef })
-        await callTool(client, 'collect_video_edit_output', operationEnvelope([currentRead, libraryRead], { projectRef, libraryRef: { kind: 'asset.library', id: library.id }, kind: 'export', taskId: task.data.task.id }))
+        await callTool(client, 'collect_video_edit_output', operationEnvelope([currentRead, libraryRead], { documentRef: projectRef, libraryRef: { kind: 'asset.library', id: library.id }, kind: 'export', taskId: task.data.task.id }))
         const membership = await page.evaluate(id => window.henjiNative.assetLibrary.inspectLibrary(id), library.id); assert.deepEqual(membership.assetIds, [movie.id])
         evidence.publicMovie = movieResult; evidence.library = membership; evidence.phases.push('原4K60实际MP4音画核验，手动与MCP复用同资产及集合')
         evidence.canvas = []
         for (const asset of [selected, movie]) {
-          const canvasRef = { kind: 'canvas.project', id: canvasFixtureProjectId }; const assetRef = { kind: 'asset', id: asset.id }
+          const canvasRef = { kind: 'canvas.document', id: canvasFixtureProjectId }; const assetRef = { kind: 'asset', id: asset.id }
           const reads = await Promise.all([callTool(client, 'read_application_entity', { ref: canvasRef }), callTool(client, 'read_application_entity', { ref: assetRef })])
-          const result = await callTool(client, 'add_asset_to_canvas', operationEnvelope(reads, { projectId: canvasFixtureProjectId, assetId: asset.id, placement: { mode: 'absolute', x: 320, y: asset.mediaType === 'image' ? 100 : 500 } }))
+          const result = await callTool(client, 'add_asset_to_canvas', operationEnvelope(reads, { documentId: canvasFixtureProjectId, assetId: asset.id, placement: { mode: 'absolute', x: 320, y: asset.mediaType === 'image' ? 100 : 500 } }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
           const record = await page.evaluate(id => window.henjiNative.testFixtures.readCanvas(id), canvasFixtureProjectId)
           const node = record.nodes.find(node => node.id === result.result.data.nodeId); assert.ok(node)

@@ -51,7 +51,7 @@ function requireObservedDefaultScene(documentId, observed) {
   const scene = observed?.scene
   const camera = scene?.objects?.find((object) => object.id === scene.activeCameraId)
   const stateKeyframe = scene?.stateKeyframes?.[0]
-  const valid = scene?.projectId === documentId
+  const valid = scene?.documentId === documentId
     && scene.objects?.length === 1
     && camera?.type === 'camera'
     && scene.stateKeyframes?.length === 1
@@ -60,7 +60,7 @@ function requireObservedDefaultScene(documentId, observed) {
     && Number.isInteger(observed.baseRevision)
   if (!valid) {
     throw new Error(`新建镜头参考的默认相机、关键帧或稳定引用不一致：${JSON.stringify({
-      projectId: scene?.projectId ?? null,
+      documentId: scene?.documentId ?? null,
       activeCameraId: scene?.activeCameraId ?? null,
       objects: scene?.objects?.map((object) => ({ id: object.id, type: object.type })) ?? null,
       stateKeyframes: scene?.stateKeyframes?.map((item) => ({ id: item.id, time: item.time, cameraId: item.cameraId })) ?? null,
@@ -274,13 +274,13 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
     documentId,
     ...requireObservedDefaultScene(documentId, requireCapabilitySuccess(await executeCapability(client, {
       id: 'observe_camera_stage_scene',
-      input: { projectId: documentId },
+      input: { documentId },
     }), 'observe_camera_stage_scene')),
   }
   requireCapabilitySuccess(await executeCapability(client, {
     id: 'apply_camera_stage_camera_move',
     input: {
-      projectId: documentId,
+      documentId,
       cameraId: defaults.cameraId,
       baseRevision: defaults.baseRevision,
       move: { kind: 'truck', offset: 1.5 },
@@ -306,11 +306,11 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
   await page.locator(`.react-flow__node[data-id="${CAMERA_NODE_ID}"]`)
     .waitFor({ state: 'visible', timeout: 12000 })
 
-  const projectRef = { kind: 'canvas.project', id: canvasProjectId }
+  const projectRef = { kind: 'canvas.document', id: canvasProjectId }
   const nodeRef = { kind: 'canvas.node', id: `${canvasProjectId}:${CAMERA_NODE_ID}` }
   const submitted = requireSubmittedTask(await executeCapability(client, {
     id: 'render_camera_stage_output',
-    input: { projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 0.25 },
+    input: { canvasRef: projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 0.25 },
   }), 'render_camera_stage_output')
   const completed = requireCompletedTask(await waitForTaskStatus(
     page, client, submitted.taskRef, ['completed'], ['failed', 'cancelled', 'interrupted'], 45000,
@@ -325,7 +325,7 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
   try {
     const videoSubmitted = requireSubmittedTask(await executeCapability(client, {
       id: 'render_camera_stage_output',
-      input: { projectRef, nodeRef, outputKind: 'video', resolutionPreset: '720p' },
+      input: { canvasRef: projectRef, nodeRef, outputKind: 'video', resolutionPreset: '720p' },
     }), 'render_camera_stage_output')
     const active = await waitForTaskStatus(
       page, client, videoSubmitted.taskRef, ['queued', 'running'],

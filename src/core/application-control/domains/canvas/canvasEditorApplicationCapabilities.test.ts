@@ -11,12 +11,12 @@ const capability = CANVAS_EDITOR_APPLICATION_CAPABILITIES.find(
 )
 
 const input = {
-  projectRef: { kind: 'canvas.project', id: 'project-a' },
+  canvasRef: { kind: 'canvas.document', id: 'project-a' },
   nodeRef: { kind: 'canvas.node', id: 'project-a:document-node' },
 }
 
 describe('open_multi_layer_document_node_editor contract', () => {
-  it('只接受严格的画布工程和节点稳定引用', () => {
+  it('只接受严格的画布和节点稳定引用', () => {
     expect(capability).toBeTruthy()
     const registered = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(
       OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID,
@@ -32,7 +32,7 @@ describe('open_multi_layer_document_node_editor contract', () => {
     expect(capability?.inputSchema.safeParse({ ...input, nodeId: 'raw-node' }).success).toBe(false)
     expect(capability?.inputSchema.safeParse({
       ...input,
-      projectRef: { ...input.projectRef, internal: true },
+      canvasRef: { ...input.canvasRef, internal: true },
     }).success).toBe(false)
     expect(capability?.aiInputSchema.additionalProperties).toBe(false)
   })
@@ -45,13 +45,13 @@ describe('open_multi_layer_document_node_editor contract', () => {
       idempotent: true,
       supportsUndo: false,
       requiredScopes: expect.arrayContaining(['navigation', 'canvas']),
-      acceptsRefs: ['canvas.project', 'canvas.node'],
-      producesRefs: ['canvas.project', 'canvas.node', 'application.surface'],
+      acceptsRefs: ['canvas.document', 'canvas.node'],
+      producesRefs: ['canvas.document', 'canvas.node', 'application.surface'],
     })
     expect(capability?.control.impacts).toEqual([
       expect.objectContaining({
         effect: 'navigate',
-        entityTypes: ['canvas.project', 'canvas.node', 'application.surface'],
+        entityTypes: ['canvas.document', 'canvas.node', 'application.surface'],
         verificationRequired: false,
       }),
     ])
@@ -66,7 +66,7 @@ describe('open_multi_layer_document_node_editor contract', () => {
       editorKind: 'multi_layer_document',
       status: 'opened',
       resultRefs: [
-        input.projectRef,
+        input.canvasRef,
         input.nodeRef,
         { kind: 'application.surface', id: 'workspace.canvas' },
       ],

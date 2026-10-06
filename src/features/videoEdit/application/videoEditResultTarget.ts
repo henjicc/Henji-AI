@@ -29,12 +29,12 @@ const targets = new WeakMap<VideoEditResultTarget, TargetState>()
 function stateOf(target: VideoEditResultTarget, signal?: AbortSignal): TargetState {
   signal?.throwIfAborted()
   const state = targets.get(target)
-  if (!state || !listVideoEditInstances().includes(state.owner)) throw new Error('原剪辑工程已关闭，请重新选择结果位置。')
+  if (!state || !listVideoEditInstances().includes(state.owner)) throw new Error('原剪辑已关闭，请重新选择结果位置。')
   return state
 }
 export function assertVideoEditResultTarget(target: VideoEditResultTarget, signal?: AbortSignal): void {
   const state = stateOf(target, signal)
-  if (state.owner.document !== (state.committed?.document ?? state.baseline)) throw new Error('原剪辑工程已有修改，请重新选择结果位置；已完成文件仍保留。')
+  if (state.owner.document !== (state.committed?.document ?? state.baseline)) throw new Error('原剪辑已有修改，请重新选择结果位置；已完成文件仍保留。')
 }
 /** Called before any producer/read/export awaits. UI focus is never a destination. */
 export function captureVideoEditResultTarget(projectId: string, sequenceId: string, placement: VideoEditResultPlacement): VideoEditResultTarget {
@@ -84,7 +84,7 @@ async function verifySaved(target: VideoEditResultTarget, state: TargetState): P
   assertVideoEditResultTarget(target)
   const stored = await verifyVideoEditSaved(target.projectId, state.committed!.document)
   assertVideoEditResultTarget(target)
-  if (!stored) throw new Error('结果已加入原工程，但保存回读不一致，请重试保存。')
+  if (!stored) throw new Error('结果已加入原剪辑，但保存回读不一致，请重试保存。')
   return { ...state.committed!.receipt, verified: true }
 }
 
@@ -130,7 +130,7 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
     }, state.placement.mode === 'replace' ? [state.placement.clipId] : [])
     stateOf(target)
     const committed = state.owner.document
-    if (committed.revision > state.baseline.revision + 1 || !publishedClip(committed, target.sequenceId, clipId, expectedClip)) throw new Error('结果发布后原工程已有后续修改，请回读原片段；不会重复回填。')
+    if (committed.revision > state.baseline.revision + 1 || !publishedClip(committed, target.sequenceId, clipId, expectedClip)) throw new Error('结果发布后原剪辑已有后续修改，请回读原片段；不会重复回填。')
     const receipt = { projectId: target.projectId, sequenceId: target.sequenceId, clipId, assetId: asset.id, verified: false }
     // 片段引用了来源文档：来源草稿哪怕只导入了素材，离开时也不能当空草稿删掉
     if (origin.type === 'document') getDocumentSessionRegistry().get(origin.docRef.docId)?.markInUse()

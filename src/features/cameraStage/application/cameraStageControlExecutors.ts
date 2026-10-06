@@ -179,7 +179,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
       evidence: [{
         kind: 'entity_state',
         target: { kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision },
-        fact: '三维工程已撤销到事务前状态。',
+        fact: '镜头参考已撤销到事务前状态。',
         capturedAt: new Date().toISOString(),
       }],
     }
@@ -252,14 +252,14 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
 
   private async applyPlayback(step: MutationStep): Promise<string> {
     const projectId = step.target.id
-    // updatePlayback 自己会按需加载；工程已经打开时绝不能重复 loadSnapshot。
-    // 连续 seek→改属性的事务若每次 seek 都重开工程，会制造无意义 revision 并用磁盘快照覆盖前序内存状态。
+    // updatePlayback 自己会按需加载；镜头参考已经打开时绝不能重复 loadSnapshot。
+    // 连续 seek→改属性的事务若每次 seek 都重开镜头参考，会制造无意义 revision 并用磁盘快照覆盖前序内存状态。
     await ensureCameraStageProjectRuntime(projectId)
     const undoToken = captureCameraStageUndo(projectId)
     const draft: CameraStagePlaybackDraft = {}
     await applyWriterTable(CAMERA_STAGE_PLAYBACK_WRITERS, draft, step.mutations)
     await cameraStageApplicationService.updatePlayback(projectId, draft)
-    // 播放态不进工程文件，所以这里不落盘。
+    // 播放态不进镜头参考文件，所以这里不落盘。
     return undoToken
   }
 

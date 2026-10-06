@@ -20,9 +20,9 @@ export function createStoryboardNodeExecutor(id: string, store: typeof useCanvas
     execution: CanvasNodeExecutionContext,
   ): Promise<CanvasNodeExecutionResult> => {
     const generationProjectId = execution.projectId
-    if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
+    if (!generationProjectId) throw new Error('当前没有可执行生成的画布')
     const target = execution.runtime
-    if (!target) throw new Error('生成任务缺少工程运行实例')
+    if (!target) throw new Error('生成任务缺少画布运行实例')
     const runtime = resolveStoryboardExecutionInput(id, store)
     if (
       !runtime.model

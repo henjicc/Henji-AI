@@ -162,7 +162,7 @@ export async function verifyCameraStageScene(
   if (request.expectedPlayback) {
     const state = useCameraStageStore.getState()
     if (state.currentProjectId !== request.projectId) {
-      unmetConditions.push('目标工程当前未加载，无法验证瞬时播放状态。')
+      unmetConditions.push('目标镜头参考当前未加载，无法验证瞬时播放状态。')
     } else {
       const expected = request.expectedPlayback
       const mismatched = [

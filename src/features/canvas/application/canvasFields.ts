@@ -17,12 +17,12 @@ import {
 } from './canvasNodeGenerationConfig'
 
 /*
- * 画布工程与节点的可写属性统一定义——1.3 迁移（project.name 1 + node.display_name/position 2），
+ * 画布与节点的可写属性统一定义——1.3 迁移（project.name 1 + node.display_name/position 2），
  * 3.2 又加了 node.storyboard_frames 1 条。不单独抽公共 shared 模块（像三维那样）：画布这边
  * 字段不多，样板重复换不来收益。
  */
 
-const PROJECT_ENTITY_TYPE = 'canvas.project' as const
+const PROJECT_ENTITY_TYPE = 'canvas.document' as const
 const NODE_ENTITY_TYPE = 'canvas.node' as const
 const REVISION_SCOPE = 'canvas' as const
 
@@ -62,7 +62,7 @@ function canvasDescriptor(
   }
 }
 
-/** 写入目标只有工程 id——改名直接落到领域服务，没有需要累积的中间态。 */
+/** 写入目标只有画布 id——改名直接落到领域服务，没有需要累积的中间态。 */
 /**
  * 画布名就是 `.henji-canvas` 的文件名（3.4）：只读，改名走通用文档属性 documents.document.name（同一个 ID）。
  */
@@ -146,7 +146,7 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
     propertyId: `${NODE_ENTITY_TYPE}.text_content`,
     descriptor: canvasDescriptor(NODE_ENTITY_TYPE, 'text_content', '文本正文',
       { kind: 'string', maxLength: 32768 },
-      '文本节点的可编辑正文，可保存剧本、角色设定或镜头说明。仅按需读取目标节点，不必读取整个工程；非文本节点返回 null。空字符串清空正文。', true),
+      '文本节点的可编辑正文，可保存剧本、角色设定或镜头说明。仅按需读取目标节点，不必读取整个画布；非文本节点返回 null。空字符串清空正文。', true),
     read: (node) => isTextAnnotationNode(node) ? node.data.content ?? '' : null,
     writer: { write(patch, mutation) {
       patch.textContent = z.string().max(32768).parse(mutation.value)

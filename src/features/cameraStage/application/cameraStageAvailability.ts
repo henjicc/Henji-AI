@@ -8,7 +8,7 @@ import type {
 import type { CameraStageProjectSnapshot } from './cameraStageProjectRuntime'
 
 const TYPES = {
-  project: 'camera_stage.project',
+  project: 'camera_stage.document',
   scene: 'camera_stage.scene',
   stateKeyframe: 'camera_stage.state_keyframe',
   playback: 'camera_stage.playback',

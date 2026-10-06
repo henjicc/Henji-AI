@@ -30,7 +30,7 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
   const prepareStateKeyframeEdit = useCameraStageStore((state) => state.prepareStateKeyframeEdit)
   // drei 的 OrbitControls 在默认相机切换时会整体重建实例（新实例 target 回到原点）。
   // 订阅 r3f 注册的当前实例并纳入下方 effect 依赖，保证重建后立刻重新对齐注视点，
-  // 否则新建工程后的第一次拖拽会突然从 (0,0,0) 环绕（画面瞬间跳变）。
+  // 否则新建镜头参考后的第一次拖拽会突然从 (0,0,0) 环绕（画面瞬间跳变）。
   const registeredControls = useThree((state) => state.controls)
   const controlTarget = useMemo(() => {
     const position = cameraObject.transform.position

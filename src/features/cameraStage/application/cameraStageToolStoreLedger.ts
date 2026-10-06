@@ -17,7 +17,7 @@ export const CAMERA_STAGE_TOOL_STORE_LEDGER: ApplicationStoreActionLedger<Action
     setTool: {
       kind: 'excluded',
       category: 'view_state',
-      reason: '手柄工具（移动/旋转/缩放/路径）只决定下一次鼠标拖拽被解释成什么操作，不写入工程'
+      reason: '手柄工具（移动/旋转/缩放/路径）只决定下一次鼠标拖拽被解释成什么操作，不写入镜头参考'
         + '文件也不影响出片；助手改变换值直接写 camera_stage.object.transform.*，不经过手柄，'
         + '与 cameraStageStore.setGizmoMode 是同一类排除（见 cameraStageStoreLedger.ts）。',
     },

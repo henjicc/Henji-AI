@@ -78,7 +78,7 @@ it('图片参数复用项目图片、正式文件选择、资产库和清除，�
   expect(owner.document.media.find(media => media.id === 'imageA')!.path).toBe('D:/originalA.png'); expect(onError).not.toHaveBeenCalled()
 })
 
-it('资产拖包的路径不参与绑定，项目项必须来自当前工程且是单张图片，文件拖入保留原路径', async () => {
+it('资产拖包的路径不参与绑定，项目项必须来自当前剪辑且是单张图片，文件拖入保留原路径', async () => {
   const view = render(<View />); const drop = view.getByLabelText('图片图片拖放区')
   await act(async () => { fireEvent.drop(drop, { dataTransfer: transfer(HENJI_DRAG_DATA_MIME, { type: 'image', sourceType: 'asset', assetId: 'assetA', filePath: 'D:/forged.png', imageUrl: 'media:assetA' }) }) })
   expect(bindVideoEditCodeImage).toHaveBeenLastCalledWith(editor().target, 'logo', { kind: 'asset', assetId: 'assetA' }, expect.any(AbortSignal))
@@ -138,7 +138,7 @@ it('批量范围明确选择，迁移逐项显示原值和动画影响，勾选�
   expect(commitVideoEditCodeCandidate).toHaveBeenCalledWith(proof, true); expect(onError).not.toHaveBeenCalled()
 })
 
-it('编译失败保留有效工程并呈现诊断，恢复当前源码仅恢复草稿', async () => {
+it('编译失败保留有效剪辑并呈现诊断，恢复当前源码仅恢复草稿', async () => {
   vi.mocked(prepareVideoEditCodeCandidate).mockRejectedValue(new Error('第2行：未知语法'))
   const baseline = owner.document; const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '查看与编辑源码' }))
   fireEvent.change(view.getByRole('textbox', { name: '代码素材源码' }), { target: { value: '错误源码' } }); await check(view)
@@ -164,7 +164,7 @@ it('编辑草稿和范围取消检查并释放晚到候选，关闭编辑与换�
   const switched = candidate(); await act(async () => third.resolve(switched)); expect(switched.bitmap.close).toHaveBeenCalledTimes(1); expect(view.queryByRole('textbox', { name: '代码素材源码' })).toBeNull(); expect(onError).not.toHaveBeenCalled()
 })
 
-it('外部工程修改立即使候选不可提交，自身提交的发布不被误判为取消', async () => {
+it('外部剪辑修改立即使候选不可提交，自身提交的发布不被误判为取消', async () => {
   const first = candidate(); vi.mocked(prepareVideoEditCodeCandidate).mockResolvedValue(first)
   const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '查看与编辑源码' })); await check(view)
   act(() => setVideoEditCodeParameter(editor().target, 'amount', 6))

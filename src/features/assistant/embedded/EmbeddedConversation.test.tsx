@@ -43,7 +43,7 @@ it('首次发送不等待 IPC 或模型启动就出现气泡，只展示加载�
 })
 
 it('显式自动发送沿正式入口只提交一次，保留点击时上下文与现有权限', async () => {
-  const context = JSON.stringify({ surface: { focusedRef: { kind: 'audio_edit.project', id: 'original' } } })
+  const context = JSON.stringify({ surface: { focusedRef: { kind: 'audio_edit.document', id: 'original' } } })
   openAssistant('请直接优化口播', { autoSend: true, context })
   render(<StrictMode><EmbeddedConversation /></StrictMode>)
   await waitFor(() => expect(mocks.prompt).toHaveBeenCalledTimes(1))

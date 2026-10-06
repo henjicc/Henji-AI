@@ -149,7 +149,7 @@ it('取消预取后销毁仍等待迟到 GPU 复制，不能遗留纹理或再�
   release(); await disposing
   expect(lateReleased).toHaveBeenCalledOnce(); expect(cache.bytes).toBe(0)
 })
-it('同一帧复制期间收到工程刷新请求，仍返回该帧而非等待整段后给出空画面', async () => {
+it('同一帧复制期间收到剪辑刷新请求，仍返回该帧而非等待整段后给出空画面', async () => {
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve })
   const cache = new VideoEditFrameCache(2400)
   const decoder = new VideoEditSeekDecoder('media:original', cache, async sample => { if (sample.timestamp === 0) await gate; return snapshot(sample) })

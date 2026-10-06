@@ -430,7 +430,7 @@ export const resolveAudioEditPersistenceParticipants: ApplicationPersistenceReso
       instance.batchDepth += 1
       return {
         async confirm() { try { await flushAudioEditProject(id) } catch (error) {
-          throw new ApplicationPersistenceFailure('口播修改已保留，但保存失败。请重试保存，不要重复剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'retry_audio_edit_save', target: { kind: 'audio_edit.project', id }, replayMutation: false } }, error)
+          throw new ApplicationPersistenceFailure('口播修改已保留，但保存失败。请重试保存，不要重复剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'retry_audio_edit_save', target: { kind: 'audio_edit.document', id }, replayMutation: false } }, error)
         } },
         release() {
           instance.batchDepth -= 1

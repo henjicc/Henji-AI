@@ -31,7 +31,7 @@ describe('共享画布保存完成屏障', () => {
     await expect(addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' } })).rejects.toMatchObject({
       code: 'PERSISTENCE_FAILED', memoryState: 'modified',
-      recovery: { capabilityId: 'retry_canvas_project_save', replayMutation: false },
+      recovery: { capabilityId: 'retry_canvas_document_save', replayMutation: false },
     })
     const before = useCanvasStore.getState()
     expect(before.nodes).toHaveLength(1)
@@ -56,7 +56,7 @@ describe('共享画布保存完成屏障', () => {
     expect(useCanvasStore.getState().history.past).toHaveLength(1)
   })
 
-  it('旧工程迟到保存失败不误归属新工程，返回后恢复未保存快照再重试', async () => {
+  it('旧画布迟到保存失败不误归属新画布，返回后恢复未保存快照再重试', async () => {
     let refuse!: () => void
     const blocked = new Promise<void>((_resolve, reject) => { refuse = () => reject(new Error('A readonly')) })
     canvasSaveSpy().mockImplementationOnce(async () => { await blocked; throw new Error('unreachable') })
@@ -64,7 +64,7 @@ describe('共享画布保存完成屏障', () => {
       placement: { mode: 'viewport_center' } })
     const failure = expect(creating).rejects.toThrow('保存未确认')
     await Promise.resolve()
-    const otherId = await createCanvasTestProject('工程 B')
+    const otherId = await createCanvasTestProject('画布 B')
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
     refuse()
     await failure

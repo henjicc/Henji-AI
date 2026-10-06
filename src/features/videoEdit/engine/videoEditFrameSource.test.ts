@@ -6,7 +6,7 @@ it.each<[string, VideoEditDecodeSupport, ReturnType<typeof chooseVideoEditDecode
   ['原生可解而浏览器不能解（专业格式）', { native: 'decodes', browser: 'cannot-decode' }, 'native'],
   ['原生不可用时回到浏览器', { native: 'unavailable', browser: 'decodes' }, 'browser'],
   ['原生探测失败或缺少解码器时回到浏览器', { native: 'cannot-decode', browser: 'decodes' }, 'browser'],
-  ['打开已保存工程时浏览器能力未知，原生不可用仍尝试浏览器', { native: 'unavailable', browser: 'unknown' }, 'browser'],
+  ['打开已保存剪辑时浏览器能力未知，原生不可用仍尝试浏览器', { native: 'unavailable', browser: 'unknown' }, 'browser'],
   ['两者都不能解时无后端，由调用方提示格式', { native: 'cannot-decode', browser: 'cannot-decode' }, undefined],
   ['原生不可用且浏览器不能解时无后端', { native: 'unavailable', browser: 'cannot-decode' }, undefined],
 ])('%s', (_name, support, expected) => {

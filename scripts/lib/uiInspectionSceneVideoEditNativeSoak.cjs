@@ -96,11 +96,11 @@ function createVideoEditNativeSoakScene() {
       const file = path.join(ROOT, 'soak.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture(tiles)))
       const evidence = { completed: false, acceptance: MINUTES >= TOLERANCE.minimumMinutes, minutes: MINUTES, source: SOURCE, tiles, tolerance: TOLERANCE, startedAt: new Date().toISOString(), samples: [], cycles: [], stalls: [] }
       const store = () => fs.writeFileSync(path.join(ROOT, 'evidence.json'), JSON.stringify(evidence, null, 2))
-      const projectRef = { kind: 'video_edit.project', id: PROJECT_ID }
+      const projectRef = { kind: 'video_edit.document', id: PROJECT_ID }
       let client
       const playback = async (frame, playing) => {
-        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })
-        await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '长时播放', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef, properties: { 'video_edit.project.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
+        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
+        await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '长时播放', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
       }
       try {
         evidence.runtime = await app.evaluate(async ({ app }) => ({ electron: process.versions.electron, chrome: process.versions.chrome, gpu: (await app.getGPUInfo('basic')).gpuDevice }))

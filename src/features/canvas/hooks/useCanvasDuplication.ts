@@ -156,7 +156,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
             data: { ...data },
             createNode: (forkedData) => {
               if (useProjectStore.getState().currentProjectId !== projectId) {
-                throw new Error('画布项目已切换，已取消节点复制')
+                throw new Error('画布已切换，已取消节点复制')
               }
               return addNode(sourceNode.type as CanvasNodeType, {
                 x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,

@@ -15,18 +15,18 @@ describe('cameraStageRenderApplicationCapabilities', () => {
 
     expect(render).toMatchObject({ completionKind: 'submitted', risk: 'R1', requiredScopes: ['canvas'] })
     expect(render?.inputSchema.safeParse({
-      projectRef: { kind: 'canvas.project', id: 'canvas-1' },
+      canvasRef: { kind: 'canvas.document', id: 'canvas-1' },
       nodeRef: { kind: 'canvas.node', id: 'canvas-1:stage-node' },
       outputKind: 'image',
     }).success).toBe(true)
     expect(render?.inputSchema.safeParse({
-      projectRef: { kind: 'canvas.project', id: 'canvas-1' },
+      canvasRef: { kind: 'canvas.document', id: 'canvas-1' },
       nodeRef: { kind: 'canvas.node', id: 'canvas-1:stage-node' },
       outputKind: 'image',
       rawNodeId: 'stage-node',
     }).success).toBe(false)
     expect(render?.inputSchema.safeParse({
-      projectRef: { kind: 'canvas.project', id: 'canvas-1' },
+      canvasRef: { kind: 'canvas.document', id: 'canvas-1' },
       nodeRef: { kind: 'canvas.node', id: 'canvas-1:stage-node' },
       outputKind: 'video',
       selectedTimeSec: 1,

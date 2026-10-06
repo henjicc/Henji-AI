@@ -94,7 +94,7 @@ function scopeOf(task: CameraStageRenderTaskScope): CameraStageRenderTaskScope {
 function currentCanvasProjectId(): string {
   const state = useProjectStore.getState();
   if (!state.currentProjectId || state.currentProject?.id !== state.currentProjectId) {
-    throw new Error('当前画布项目不可用');
+    throw new Error('当前画布不可用');
   }
   return state.currentProjectId;
 }
@@ -125,7 +125,7 @@ function terminalPatch(task: CameraStageRenderTaskSnapshot): DynamicValueMap {
 function requireCurrentNode(projectId: string, nodeId: string, requestId?: string | null, runtime?: CanvasTransactionRuntime) {
   const project = useProjectStore.getState();
   if (runtime ? !runtime.isCurrent() : project.currentProjectId !== projectId || project.currentProject?.id !== projectId) {
-    throw new Error('当前画布项目已切换，请返回原项目后重试');
+    throw new Error('当前画布已切换，请返回原画布后重试');
   }
   const node = (runtime?.store ?? useCanvasStore).getState().nodes.find((candidate) => candidate.id === nodeId);
   if (!isCameraStageNode(node)) throw new Error('3D 镜头节点已不存在');
@@ -215,7 +215,7 @@ async function applyCompletedTask(task: CameraStageRenderTaskSnapshot, runtime: 
     target: assetTarget,
     requestId: task.requestId,
   });
-  if (assetTarget.enabled && !asset) throw new Error('3D 渲染结果尚未完成资产收录，将在重入工程后重试');
+  if (assetTarget.enabled && !asset) throw new Error('3D 渲染结果尚未完成资产收录，将在重入画布后重试');
   await persistNodePatch(task.canvasProjectId, task.nodeId, patch, task.requestId, runtime);
 }
 
@@ -247,7 +247,7 @@ async function applyTaskInRuntime(task: CameraStageRenderTaskSnapshot, runtime: 
     let node = runtime.store.getState().nodes.find((candidate) => candidate.id === task.nodeId);
     if (!node || !matchesTask(node, task)) {
       // 删除可能只是批事务中的瞬时内存态。独立生命周期任务可以等待外层释放持久化租约；
-      // 写盘完成后必须重新核对工程和任务身份，回滚恢复的任务继续接管，不能误取消。
+      // 写盘完成后必须重新核对画布和任务身份，回滚恢复的任务继续接管，不能误取消。
       await runtime.persist();
       if (!runtime.isCurrent()) return;
       node = runtime.store.getState().nodes.find((candidate) => candidate.id === task.nodeId);
@@ -307,13 +307,13 @@ export async function startCameraStageNodeRender(
 
 async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video', options: CameraStageNodeRenderStartOptions, canvasProjectId: string, runtime: CanvasTransactionRuntime): Promise<CameraStageNodeRenderTaskReference | null> {
   if (options.expectedOwner && options.expectedOwner.canvasProjectId !== canvasProjectId) {
-    throw new Error('目标画布项目已经切换，请重新读取节点后再输出');
+    throw new Error('目标画布已经切换，请重新读取节点后再输出');
   }
   const startKey = `${canvasProjectId}:${nodeId}`;
   const requireUnchangedOwner = (expectedCameraStageProjectId: string | null) => {
     const current = requireCurrentNode(canvasProjectId, nodeId, undefined, runtime);
     if (current.data.projectId !== expectedCameraStageProjectId) {
-      throw new Error('3D 镜头节点绑定的工程已经变化，请重新读取节点后再输出');
+      throw new Error('3D 镜头节点绑定的镜头参考已经变化，请重新读取节点后再输出');
     }
     return current;
   };
@@ -329,7 +329,7 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
   try {
     if (!isCameraStageNode(node)) return null;
     if (options.expectedOwner && node.data.projectId !== options.expectedOwner.cameraStageDocumentId) {
-      throw new Error('3D 镜头节点绑定的工程已经变化，请重新读取节点后再输出');
+      throw new Error('3D 镜头节点绑定的镜头参考已经变化，请重新读取节点后再输出');
     }
     if (node.data.renderTask) return node.data.renderTask;
     let cameraStageDocumentId = node.data.projectId;

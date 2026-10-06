@@ -8,7 +8,7 @@ export interface DefaultCameraStageSceneSnapshot extends StageSceneSnapshotInput
 }
 
 /**
- * 新工程唯一的默认场景工厂。UI 新建与后台持久化都从这里取得完全相同的摄像机和首关键帧，
+ * 新镜头参考唯一的默认场景工厂。UI 新建与后台持久化都从这里取得完全相同的摄像机和首关键帧，
  * 调用本函数只构造纯领域数据，不修改当前编辑会话、导航或撤销历史。
  */
 export function createDefaultCameraStageSceneSnapshot(): DefaultCameraStageSceneSnapshot {

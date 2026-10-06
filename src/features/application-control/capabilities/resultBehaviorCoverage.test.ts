@@ -126,7 +126,7 @@ describe('写领域结果级能力覆盖', () => {
       ['src/features/canvas/application/generationResultCanvasApplicationService.test.ts', '编辑预览直接复用于生成并落回原画布，两步共用合成图且不收藏'],
       ['src/features/imageEdit/application/imageEditApplicationService.test.ts', '编辑后直接作为生成参考，实际合成编辑步骤且不收藏、不删除预览'],
       ['src/features/canvas/application/canvasGenerationTaskService.test.ts', '原视口位置固定后，移动画布仍将生成节点和持久结果放在原落点'],
-      ['src/features/canvas/application/canvasGenerationTaskService.test.ts', '在其他项目中恢复标准任务，只续查原任务并保存原项目结果'],
+      ['src/features/canvas/application/canvasGenerationTaskService.test.ts', '在其他画布中恢复标准任务，只续查原任务并保存原画布结果'],
     ]
     for (const [file, title] of chains) expect(fs.readFileSync(path.resolve(process.cwd(), file), 'utf8'), file).toContain(`it('${title}'`)
   })

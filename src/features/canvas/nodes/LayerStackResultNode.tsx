@@ -83,7 +83,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
         await migrateLegacyMultiLayerDocumentNode({ projectId, nodeId: id, data });
       }
       await openMultiLayerDocumentNodeEditor({
-        projectRef: { kind: 'canvas.project', id: projectId },
+        canvasRef: { kind: 'canvas.document', id: projectId },
         nodeRef: { kind: 'canvas.node', id: `${projectId}:${id}` },
       });
     } catch (error) {

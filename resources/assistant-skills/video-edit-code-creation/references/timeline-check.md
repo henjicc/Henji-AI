@@ -23,22 +23,22 @@
 
 `observe_video_edit_frame` 输入：
 
-- `projectRef`：`{kind:"video_edit.project", id}`
+- `documentRef`：`{kind:"video_edit.document", id}`
 - `target`：合成帧 `{kind:"program", sequenceRef, frame}`（frame 是序列整数帧）；源画面 `{kind:"source", itemRef, timeUs}`（timeUs 是项目项源素材的微秒时间）
 - `maxWidth` 可选，256–3840，默认 1920；常规核对用 960 左右即可。
 
-它按当前工程版本离屏渲染，不改用户的播放头、选区和画面。返回的 `resultRef` 交给 `read_application_media` 读到 eof，读到像素后再评价。动画至少看开始、关键帧附近和结束三处；只看一帧不能证明动画正确。
+它按当前剪辑版本离屏渲染，不改用户的播放头、选区和画面。返回的 `resultRef` 交给 `read_application_media` 读到 eof，读到像素后再评价。动画至少看开始、关键帧附近和结束三处；只看一帧不能证明动画正确。
 
 ## 撤销与保存
 
 - 写入成功后应用自动保存。
-- `undo_video_edit` / `redo_video_edit` 输入 `projectRef`，每次一步；撤销后回读相关属性，确认回到预期再报告。
+- `undo_video_edit` / `redo_video_edit` 输入 `documentRef`，每次一步；撤销后回读相关属性，确认回到预期再报告。
 - `save_video_edit` 只重试保存，不会重复编辑。
 
 ## 失败恢复
 
-- 编译或试渲染失败：工程没有变化。按错误类别和行列改源码，作为新操作提交。
-- 「检查期间工程已修改」「原工程已关闭」：重新读取目标后再提交。
+- 编译或试渲染失败：剪辑没有变化。按错误类别和行列改源码，作为新操作提交。
+- 「检查期间剪辑已修改」「原剪辑已关闭」：重新读取目标后再提交。
 - 属性或实体写错：错误会列出可用项，按列出的改，不要换名乱试。
 - 结果未知或断线：外部连接用 `get_application_operation` 按原 operationId 查询，不要换标识重做；部分完成且提示可只重试保存时用 `retry_application_operation_save`。
 - 删除片段或素材属于破坏性操作，需要用户明确同意，并按要求提供 baselineIds。

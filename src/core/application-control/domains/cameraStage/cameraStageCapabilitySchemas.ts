@@ -14,8 +14,8 @@ export const cameraStageVec3Schema = z.object({
 export const cameraStageBaseRevisionSchema = z.number().int().nonnegative()
 
 /**
- * 镜头参考文档 ID（3.2）：取自 list_documents（kind=camera_stage）或 camera_stage.project 实体的 id。
- * 字段名沿用 projectId（历史命名），指的是一份镜头参考文档，不是 documents 里装文档的“项目”。
+ * 镜头参考文档 ID（3.2）：取自 list_documents（kind=camera_stage）或 camera_stage.document 实体的 id。
+ * 4.3 起字段统一叫 documentId，指一份镜头参考文档，不是 documents 里装文档的“项目”。
  */
 export const cameraStageDocumentIdSchema = z.string().min(1)
   .describe('镜头参考文档 ID：取自 list_documents（kind=camera_stage）返回的 id，不是文档所在项目的 ID')
@@ -48,11 +48,11 @@ export const cameraStagePlacementSchema = z.object({
   scale: cameraStageVec3Schema.optional(),
   dimensions: cameraStageVec3Schema.optional(),
   /**
-   * 参照对象的 id，必须是观察结果里 `objects[].id` 的原值，不是对象名称、也不是带工程前缀
+   * 参照对象的 id，必须是观察结果里 `objects[].id` 的原值，不是对象名称、也不是带文档前缀
    * 的稳定引用。填错时会在任何写入之前被拒绝，错误信息里会列出当前可用的 id。
    */
   targetObjectId: z.string().min(1).optional()
-    .describe('参照对象 id：取自 observe_camera_stage_scene 返回的 objects[].id 原值，不要填名称或带工程前缀的引用'),
+    .describe('参照对象 id：取自 observe_camera_stage_scene 返回的 objects[].id 原值，不要填名称或带文档前缀的引用'),
   spacing: z.number().min(0).max(1_000).default(0.35),
   allowOverlap: z.boolean().default(false),
 }).strict()
@@ -71,7 +71,7 @@ export const cameraStageTransactionResultShape = {
   status: z.literal('completed'),
   transactionRef: z.string().min(1),
   /**
-   * 写入后的并发基线，直接用于下一次写入，不必再读一遍工程。
+   * 写入后的并发基线，直接用于下一次写入，不必再读一遍镜头参考。
    * 与不走事务的三维能力（复制、删除对象）返回同名同形状的字段。
    */
   baseRevision: cameraStageBaseRevisionSchema,
@@ -104,8 +104,8 @@ export const cameraStageTransactionResultShape = {
   undoRef: z.string().optional(),
 }
 
-export function cameraStageTarget(projectId: string, extra: Record<string, string> = {}): Record<string, string> {
-  return { projectId, ...extra }
+export function cameraStageTarget(documentId: string, extra: Record<string, string> = {}): Record<string, string> {
+  return { documentId, ...extra }
 }
 
 type CameraStageEffect = 'observe' | 'create' | 'update' | 'delete' | 'navigate' | 'execute'

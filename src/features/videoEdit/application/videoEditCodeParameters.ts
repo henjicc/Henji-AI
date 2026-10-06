@@ -59,7 +59,7 @@ export function readVideoEditGraphicEditor(projectId: string, sequenceId: string
   return { target, name: value.metadata.name, metadata: value.metadata, frame, sourceTime, object: structuredClone(value.binding), parameters: evaluateCodeMaterialParameters(prepared, sourceTime), curves: Object.fromEntries([...prepared.curves].map(([key, curve]) => [key, structuredClone(curve.points)])) }
 }
 function edit(target: VideoEditParameterTarget, change: (document: VideoEditDocument, value: ReturnType<typeof resolve>) => void, gesture?: VideoEditGesture): void {
-  if (gesture && gesture.projectId !== target.projectId) throw new Error('参数调整不属于此工程。')
+  if (gesture && gesture.projectId !== target.projectId) throw new Error('参数调整不属于此剪辑。')
   const update = (document: VideoEditDocument): VideoEditDocument => { change(document, resolve(document, target)); return document }
   if (gesture) updateVideoEditGesture(gesture, update)
   else editVideoProject(target.projectId, update)

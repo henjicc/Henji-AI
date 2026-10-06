@@ -82,7 +82,7 @@ export async function focusApplicationEntity(
     await assetApplicationService.select(ref.id)
     return { ref, ...openApplicationSurface('workspace.assets', correlation) }
   }
-  if (ref.kind === 'canvas.project') {
+  if (ref.kind === 'canvas.document') {
     await openCanvasProject(ref.id, signal)
     return { ref, ...openApplicationSurface('workspace.canvas', correlation) }
   }
@@ -98,15 +98,15 @@ export async function focusApplicationEntity(
   }
   if (ref.kind.startsWith('camera_stage.')) {
     const separator = ref.id.indexOf(':')
-    if (ref.kind !== 'camera_stage.project' && ref.kind !== 'camera_stage.scene' && separator < 1) {
+    if (ref.kind !== 'camera_stage.document' && ref.kind !== 'camera_stage.scene' && separator < 1) {
       throw new Error('INVALID_INPUT')
     }
-    const projectId = ref.kind === 'camera_stage.project' || ref.kind === 'camera_stage.scene'
+    const projectId = ref.kind === 'camera_stage.document' || ref.kind === 'camera_stage.scene'
       ? ref.id
       : ref.id.slice(0, separator)
     if (!projectId) throw new Error('INVALID_INPUT')
     await openCameraStageDocument({ id: projectId })
-    const childId = ref.kind === 'camera_stage.project' || ref.kind === 'camera_stage.scene'
+    const childId = ref.kind === 'camera_stage.document' || ref.kind === 'camera_stage.scene'
       ? null
       : ref.id.slice(separator + 1)
     if (childId && (ref.kind === 'camera_stage.object' || ref.kind === 'camera_stage.camera')) {

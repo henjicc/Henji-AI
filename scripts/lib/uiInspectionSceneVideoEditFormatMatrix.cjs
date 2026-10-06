@@ -168,10 +168,10 @@ function createVideoEditFormatMatrixScene() {
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         const identity = await authorizeMcpConnection(page, { name: '格式矩阵验收', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji format matrix Reality')
-        const projectRef = id => ({ kind: 'video_edit.project', id })
+        const projectRef = id => ({ kind: 'video_edit.document', id })
         const playbackOf = async (id, value) => {
-          const read = await callTool(client, 'read_application_entity', { ref: projectRef(id), propertyIds: ['video_edit.project.program_playback'] })
-          const result = await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '格式矩阵播放控制', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef(id), properties: { 'video_edit.project.program_playback': value } }] }))
+          const read = await callTool(client, 'read_application_entity', { ref: projectRef(id), propertyIds: ['video_edit.document.program_playback'] })
+          const result = await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '格式矩阵播放控制', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef(id), properties: { 'video_edit.document.program_playback': value } }] }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result))
         }
         const alerts = async () => (await page.getByRole('alert').allTextContents()).map(text => text.trim()).filter(Boolean)
@@ -441,7 +441,7 @@ function createVideoEditFormatMatrixScene() {
             await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 15000 })
             await button(page, '导出视频').waitFor({ state: 'visible', timeout: 600000 })
             const exportMs = performance.now() - exportStart; const exportCpuAfter = nativeCpuSeconds()
-            const task = (await callTool(client, 'query_video_edit_export', { projectRef: projectRef(id) })).data.task
+            const task = (await callTool(client, 'query_video_edit_export', { documentRef: projectRef(id) })).data.task
             const exportLog = (await page.evaluate(async afterTimestamp => (await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10), afterTimestamp, domainPrefix: 'features.videoEdit.export', limit: 50 })).events.filter(event => /^video_edit\.export\.(completed|failed|cancelled)$/.test(event.event)).map(event => ({ event: event.event, context: event.context, error: event.error })), exportedAt))[0] ?? null
             record.export = { state: task.state, ms: round(exportMs, 0), nativeCores: exportCpu === null || exportCpuAfter === null ? null : round((exportCpuAfter - exportCpu) / (exportMs / 1000), 2), log: exportLog, alerts: await alerts() }
             assert.equal(task.state, 'completed', `${sample.id} 导出失败：${JSON.stringify(record.export)}`)

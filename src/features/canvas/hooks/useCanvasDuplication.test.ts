@@ -75,7 +75,7 @@ describe('Alt 拖拽复制', () => {
     expect(view.persist).toHaveBeenCalledTimes(1)
   })
 
-  it('文档等待期间切换工程拒绝接管，不继续创建后续节点', async () => {
+  it('文档等待期间切换画布拒绝接管，不继续创建后续节点', async () => {
     const view = setup(true)
     let finish!: () => void
     mocks.fork.mockImplementation((input: ForkInput) => new Promise<string>((resolve, reject) => {
@@ -86,7 +86,7 @@ describe('Alt 拖拽复制', () => {
     mocks.project.currentProjectId = 'other'
     await act(async () => {
       finish()
-      await expect(pending).rejects.toThrow('画布项目已切换')
+      await expect(pending).rejects.toThrow('画布已切换')
     })
     expect(view.nodes()).toHaveLength(2)
     expect(mocks.fork).toHaveBeenCalledTimes(1)

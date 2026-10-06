@@ -126,7 +126,7 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
 /**
  * 浮动面板贴回主区域时落到它的默认方位（与 showVideoEditPanel 一致）：时间线在节目画面下方，项目与源监视器在左，
  * 其余在右，字幕与标记并入效果控件那一组。此前一律贴到右边，时间线贴回后成了一条窄竖列（960 窗口下只剩约 360px，
- * 标尺可见部分不到 130px），后续工程沿用这份布局（5.8 全量回归发现）。
+ * 标尺可见部分不到 130px），后续剪辑沿用这份布局（5.8 全量回归发现）。
  */
 function defaultDockTarget(api: DockviewApi, id: string, own: DockviewGroupPanel): { group: DockviewGroupPanel; position: 'left' | 'right' | 'bottom' | 'center' } | null {
   const isGridGroup = (group: DockviewGroupPanel | undefined): group is DockviewGroupPanel => Boolean(group && group !== own && group.api.location.type === 'grid')

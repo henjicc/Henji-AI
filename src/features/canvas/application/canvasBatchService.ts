@@ -270,7 +270,7 @@ export async function runCanvasTransaction(
         resultRefs: refs,
         effects: refs.length ? [{ effect: 'create', entityType: 'canvas.node', refs, propertyIds: [], origin: { kind: 'direct' } }] : [],
         persistence: { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'projection',
-          recovery: { capabilityId: 'retry_canvas_project_save', target: { kind: 'canvas.project', id: projectId }, replayMutation: false } },
+          recovery: { capabilityId: 'retry_canvas_document_save', target: { kind: 'canvas.document', id: projectId }, replayMutation: false } },
         partial: { completedStepIndexes: results.map((_, index) => index), compensatedStepIndexes: [], uncompensatedStepIndexes: results.map((_, index) => index) },
         recoveryVerification: { conditions: refs.map((target) => ({ kind: 'entity_exists', target })),
           evidence: refs.map((target) => ({ kind: 'entity_state', target, fact: '原事务已创建此结果节点，等待保存确认。', capturedAt: new Date().toISOString() })) },
@@ -334,7 +334,7 @@ export async function commitCanvasBatch(planRef: string): Promise<Record<string,
   if (!findCanvasProjectInstance(plan.projectId)) await getCanvasProjectInstance(plan.projectId)
   const canvas = requireCanvasProjectInstance(plan.projectId).store.getState()
   if (canvas.nodes !== plan.createdNodes || canvas.edges !== plan.createdEdges) {
-    throw new CanvasApplicationError('STALE_CONTEXT', '画布批量计划创建后项目已发生变化，请重新规划', true, {
+    throw new CanvasApplicationError('STALE_CONTEXT', '画布批量计划创建后画布已发生变化，请重新规划', true, {
       planRef,
       projectId: plan.projectId,
     })

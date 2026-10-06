@@ -98,7 +98,7 @@ export function matchReusableSceneObject(
   }
   if (spec.objectType === 'camera' && activeCameraId) {
     const active = objects.find((object) => object.id === activeCameraId && object.type === 'camera')
-    if (active) return { object: active, reason: '复用当前工程的活动摄像机。' }
+    if (active) return { object: active, reason: '复用当前镜头参考的活动摄像机。' }
   }
 
   const candidates = objects.filter((object) => matchesType(object, spec) && roleMatches(object, spec.role))

@@ -38,7 +38,7 @@ async function sources(ref: z.infer<typeof inputSchema>['ref']): Promise<string[
     return resultPaths
   }
   const separator = ref.id.indexOf(':')
-  if (separator < 1 || separator === ref.id.length - 1) failure('INVALID_REFERENCE', '请使用包含原工程的完整画布节点引用。')
+  if (separator < 1 || separator === ref.id.length - 1) failure('INVALID_REFERENCE', '请使用包含原画布的完整画布节点引用。')
   // 画布节点引用是“画布文档 ID:节点 ID”；从画布文件读（内容里的位置已换回绝对路径）
   let content: unknown
   try {
@@ -87,6 +87,6 @@ export async function readApplicationMediaResource(input: {
     logger.warn('关联媒体读取失败', { event: 'mcp.media.read.failed', context: { kind: parsed.ref.kind } })
     // 文件系统错误可能包含本地路径；不将其透传到外部客户端。
     if (error instanceof ApplicationMediaResourceError) throw error
-    throw new ApplicationMediaResourceError('MEDIA_READ_FAILED', '媒体读取未完成：请确认原文件仍然存在且原工程数据可正常读取。')
+    throw new ApplicationMediaResourceError('MEDIA_READ_FAILED', '媒体读取未完成：请确认原文件仍然存在且所属文档可正常读取。')
   }
 }

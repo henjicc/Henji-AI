@@ -8,7 +8,7 @@ import { makeVideoEditItemClip, makeVideoEditItemSequence } from './projectItems
 
 const source = (mode = 'dynamic') => `export default {apiVersion:1,name:"原创透明形状",kind:"generator",mode:"${mode}",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{amount:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}},render(ctx){return [rect({x:${mode === 'dynamic' ? 'ctx.time*10' : '10'},y:10,width:100,height:100,fill:[1,0,0,ctx.params.amount]})];}}`
 function setup(mode = 'dynamic') {
-  const program = compileCodeMaterial(source(mode)); const document = createVideoEditDocument('代码工程')
+  const program = compileCodeMaterial(source(mode)); const document = createVideoEditDocument('代码剪辑')
   document.codeMaterials = [{ id: 'definition', name: program.name, defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 1, languageVersion: 1, source: source(mode) }] }]
   document.items.push({ id: 'item', name: program.name, kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: { amount: .2 } } })
   const read = () => program; const sequence = document.sequences[0]
@@ -16,7 +16,7 @@ function setup(mode = 'dynamic') {
   sequence.clips.push(makeVideoEditItemClip(document, 'item', sequence.id, { frame: 0 }, read))
   return { document, program, read, sequence }
 }
-describe('代码项目项与独立实例的工程约束', () => {
+describe('代码项目项与独立实例的剪辑约束', () => {
   it('插入、裁剪、拆分保持固定版本与连续源画面，参数对象独立', () => {
     const { document, program, read, sequence } = setup()
     expect(videoEditDocumentSchema.parse(document).sequences[0].clips[0].code?.versionId).toBe('version')

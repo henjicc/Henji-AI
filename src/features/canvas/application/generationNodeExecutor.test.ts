@@ -17,7 +17,7 @@ import { attachCanvasGenerationFeedback, getCanvasDomainExecutor } from './canva
 import { findCanvasProjectInstance, leaveCanvasProject } from './canvasProjectInstances'
 import { createCanvasTestProject, readCanvasTestProject } from '@/tests/canvasProjectFixture'
 
-// 媒体 I/O 与历史存储使用替身；任务登记、图执行、结果编排及工程保存走正式服务。
+// 媒体 I/O 与历史存储使用替身；任务登记、图执行、结果编排及画布保存走正式服务。
 vi.mock('./imageData', async (original) => ({
   ...await original<typeof import('./imageData')>(),
   persistImageLocally: vi.fn(async (url: string) => url),

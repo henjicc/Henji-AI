@@ -55,7 +55,7 @@ beforeEach(() => {
 })
 
 describe('多图层文档候选清理', () => {
-  it('后台工程仍被另一工程的撤销历史引用时保留，历史释放后才清理', async () => {
+  it('后台画布仍被另一画布的撤销历史引用时保留，历史释放后才清理', async () => {
     const node = { id: 'retained', type: CANVAS_NODE_TYPES.layerStackResult, position: { x: 0, y: 0 },
       data: { resultKind: 'layer-stack', imageUrl: session.sourceUrl, imageEditSession: session } } as CanvasNode
     const other = registerCanvasTestProject({ ...requireCanvasProjectInstance(projectId).snapshot(), id: 'other',

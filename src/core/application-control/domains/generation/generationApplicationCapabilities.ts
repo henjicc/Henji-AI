@@ -6,20 +6,20 @@ import { canvasNodePlacementSchema } from '../canvas/canvasMutationApplicationCa
 
 export const generationDestinationSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('history') }).strict(),
-  z.object({ mode: z.literal('canvas'), projectId: z.string().min(1), sourceNodeIds: z.array(z.string().min(1)).max(16).default([]), placement: canvasNodePlacementSchema.optional() }).strict(),
+  z.object({ mode: z.literal('canvas'), documentId: z.string().min(1), sourceNodeIds: z.array(z.string().min(1)).max(16).default([]), placement: canvasNodePlacementSchema.optional() }).strict(),
 ])
 export type GenerationDestination = z.infer<typeof generationDestinationSchema>
 
 export const canvasGenerationResumeInputSchema = z.object({
   taskId: z.string().min(1),
-  projectId: z.string().min(1),
+  documentId: z.string().min(1),
   sourceNodeId: z.string().min(1),
   resultNodeIds: z.array(z.string().min(1)).min(1).max(64),
 }).strict()
 export type CanvasGenerationResumeInput = z.infer<typeof canvasGenerationResumeInputSchema>
 
 const canvasNodeGenerationInputSchema = z.object({
-  projectId: z.string().min(1), nodeId: z.string().min(1),
+  documentId: z.string().min(1), nodeId: z.string().min(1),
   inputSignature: z.string().min(1).optional(),
 }).strict()
 export type CanvasNodeGenerationInput = z.infer<typeof canvasNodeGenerationInputSchema>
@@ -209,12 +209,12 @@ const prepareGenerationTask = defineApplicationCapability({
 const createVisibleGenerationTask = defineApplicationCapability({
   id: 'create_visible_generation_task',
   resolveOperationWriteTargets: (input, operationId) => [{ kind: 'generation.task', id: applicationGenerationTaskId(operationId) },
-    ...(input.destination?.mode === 'canvas' ? [{ kind: 'canvas.project', id: input.destination.projectId }] : [])],
-  resolveOperationAppendTargets: (input) => input.destination?.mode === 'canvas' ? [{ kind: 'canvas.project', id: input.destination.projectId }] : [],
+    ...(input.destination?.mode === 'canvas' ? [{ kind: 'canvas.document', id: input.destination.documentId }] : [])],
+  resolveOperationAppendTargets: (input) => input.destination?.mode === 'canvas' ? [{ kind: 'canvas.document', id: input.destination.documentId }] : [],
   resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
-  description: '创建可见图片、视频或音频任务。画布用 destination={mode:"canvas",projectId,sourceNodeIds}，先创建生成节点与连线，结果自动落在旁侧，勿重复放入画布；仅存历史用 {mode:"history"}，默认当前画布优先。指定媒体类型但省略模型时读取当前默认模型；其余缺省字段用 generation.draft 补全。省略 baselineIds，宿主核对费用。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
+  description: '创建可见图片、视频或音频任务。画布用 destination={mode:"canvas",documentId,sourceNodeIds}，先创建生成节点与连线，结果自动落在旁侧，勿重复放入画布；仅存历史用 {mode:"history"}，默认当前画布优先。指定媒体类型但省略模型时读取当前默认模型；其余缺省字段用 generation.draft 补全。省略 baselineIds，宿主核对费用。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
@@ -234,7 +234,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
   supportsUndo: false,
   completionKind: 'submitted',
   requiredScopes: ['generation'],
-  acceptsRefs: ['generation.model', 'generation.draft', ...APPLICATION_MEDIA_REFERENCE_KINDS, 'canvas.project', 'canvas.node'],
+  acceptsRefs: ['generation.model', 'generation.draft', ...APPLICATION_MEDIA_REFERENCE_KINDS, 'canvas.document', 'canvas.node'],
   producesRefs: ['generation.task', 'canvas.node', 'canvas.edge'],
   successEvidence: [
     '返回稳定 taskId、submitted 状态和最新 generation revision。',
@@ -428,10 +428,10 @@ const resumeCanvasGenerationTask = defineApplicationCapability({
   inputSchema: canvasGenerationResumeInputSchema,
   outputSchema: capabilityOutputSchema({ taskId: z.string(), status: z.string(), task: z.record(z.string(), z.unknown()) }),
   concurrencyKey: 'generation', resolveConcurrencyKey: (input) => `generation:${input.taskId}`,
-  resolveTargetIds: (input) => ({ taskId: input.taskId, projectId: input.projectId, nodeId: input.sourceNodeId }),
+  resolveTargetIds: (input) => ({ taskId: input.taskId, documentId: input.documentId, nodeId: input.sourceNodeId }),
   resolveOperationTargets: (input) => [
     { kind: 'generation.task', id: input.taskId },
-    ...[input.sourceNodeId, ...input.resultNodeIds].map(id => ({ kind: 'canvas.node', id: `${input.projectId}:${id}` })),
+    ...[input.sourceNodeId, ...input.resultNodeIds].map(id => ({ kind: 'canvas.node', id: `${input.documentId}:${id}` })),
   ],
   summarize: (output) => `原画布任务状态：${output.status}，未重新提交生成。`,
 })
@@ -446,13 +446,13 @@ const prepareCanvasNodeGeneration = defineApplicationCapability({
   acceptsRefs: ['canvas.node'], producesRefs: ['generation.preparation'],
   inputSchema: canvasNodeGenerationInputSchema,
   outputSchema: capabilityOutputSchema({ preparation: z.record(z.string(), z.unknown()), submitInput: canvasNodeGenerationInputSchema }),
-  concurrencyKey: 'generation_prepare', resolveConcurrencyKey: input => `generation_prepare:${input.projectId}:${input.nodeId}`,
+  concurrencyKey: 'generation_prepare', resolveConcurrencyKey: input => `generation_prepare:${input.documentId}:${input.nodeId}`,
   summarize: () => '原节点输入与费用已准备，可以提交生成。',
 })
 
 const submitCanvasNodeGeneration = defineApplicationCapability({
   id: 'submit_canvas_node_generation', version: 1, title: '执行原画布生成节点',
-  description: '使用 prepare_canvas_node_generation 返回的 submitInput 执行已配置的原节点，保留参考连线，结果自动放在节点旁。支持图片、视频、音频及图层拆分、局部重绘等图片工具；切换页面后仍保存原项目，返回任务号后用 get_generation_task 查询。',
+  description: '使用 prepare_canvas_node_generation 返回的 submitInput 执行已配置的原节点，保留参考连线，结果自动放在节点旁。支持图片、视频、音频及图层拆分、局部重绘等图片工具；切换页面后仍保存到原画布，返回任务号后用 get_generation_task 查询。',
   domain: 'generation', aliases: ['运行图片工具', '执行生成节点'], readOnly: false,
   control: capabilityControl('execute', ['generation.task', 'canvas.node'], { revisionScopes: ['generation', 'canvas'], verificationRequired: false, resultState: 'submitted',
     alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task', 'canvas.node', 'canvas.edge'] }] }),
@@ -462,12 +462,12 @@ const submitCanvasNodeGeneration = defineApplicationCapability({
   executionPrerequisites: ['prepare_canvas_node_generation'], paidGenerationPreparation: 'prepare_canvas_node_generation',
   inputSchema: canvasNodeGenerationInputSchema.extend({ inputSignature: z.string().min(1) }),
   outputSchema: capabilityOutputSchema({ taskId: z.string().min(1), status: z.literal('submitted') }),
-  concurrencyKey: 'generation', resolveConcurrencyKey: input => `generation:${input.projectId}:${input.nodeId}`,
-  resolveTargetIds: input => ({ projectId: input.projectId, nodeId: input.nodeId }),
-  resolveOperationTargets: input => [{ kind: 'canvas.node', id: `${input.projectId}:${input.nodeId}` }],
-  resolveOperationWriteTargets: (input, operationId) => [{ kind: 'canvas.node', id: `${input.projectId}:${input.nodeId}` },
-    { kind: 'generation.task', id: applicationGenerationTaskId(operationId) }, { kind: 'canvas.project', id: input.projectId }],
-  resolveOperationAppendTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
+  concurrencyKey: 'generation', resolveConcurrencyKey: input => `generation:${input.documentId}:${input.nodeId}`,
+  resolveTargetIds: input => ({ documentId: input.documentId, nodeId: input.nodeId }),
+  resolveOperationTargets: input => [{ kind: 'canvas.node', id: `${input.documentId}:${input.nodeId}` }],
+  resolveOperationWriteTargets: (input, operationId) => [{ kind: 'canvas.node', id: `${input.documentId}:${input.nodeId}` },
+    { kind: 'generation.task', id: applicationGenerationTaskId(operationId) }, { kind: 'canvas.document', id: input.documentId }],
+  resolveOperationAppendTargets: input => [{ kind: 'canvas.document', id: input.documentId }],
   summarize: output => `原节点任务 ${output.taskId} 已提交，完成情况请查询任务。`,
 })
 

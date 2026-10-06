@@ -7,7 +7,7 @@ import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 
-export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.project', transcriptBlock: 'audio_edit.transcript_block', suggestion: 'audio_edit.suggestion', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
+export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcriptBlock: 'audio_edit.transcript_block', suggestion: 'audio_edit.suggestion', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
 export type AudioEditEntityType = typeof AUDIO_EDIT_ENTITY_TYPES[keyof typeof AUDIO_EDIT_ENTITY_TYPES]
 export interface AudioEditFieldSource { document: AudioEditProjectDocument; childId: string; availableProcessors?: AudioEditProcessorDescriptor[] }
 export function audioEditSchemaRef(kind: 'entity' | 'property', id: string) {
@@ -44,11 +44,11 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'duration_frames', '源时长帧数', INT, (s) => s.document.source.durationFrames),
     field(E.project, 'sample_rate', '采样率', INT, (s) => s.document.source.sampleRate),
     field(E.project, 'has_modifications', '是否存在可全部撤销的修改', BOOL, (s) => hasAudioEditModifications(s.document)),
-    field(E.project, 'original_text_available', '是否保留原始识别文本（旧工程为否，不能恢复过去的文字纠正）', BOOL, (s) => s.document.editBaseline?.kind === 'original'),
+    field(E.project, 'original_text_available', '是否保留原始识别文本（旧口播为否，不能恢复过去的文字纠正）', BOOL, (s) => s.document.editBaseline?.kind === 'original'),
   ],
   [E.transcriptBlock]: [
-    field(E.transcriptBlock, 'project_id', '所属口播（口播文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
-    field(E.transcriptBlock, 'original_text', '保留的初始文本（旧工程为升级时的文字）', TEXT, (s) => s.document.editBaseline?.transcript.find((item) => item.id === s.childId)?.text ?? block(s).text),
+    field(E.transcriptBlock, 'document_id', '所属口播（口播文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
+    field(E.transcriptBlock, 'original_text', '保留的初始文本（旧口播为升级时的文字）', TEXT, (s) => s.document.editBaseline?.transcript.find((item) => item.id === s.childId)?.text ?? block(s).text),
     field(E.transcriptBlock, 'text', '校正文本', TEXT, (s) => block(s).text, (s, v) => { const item = block(s); if (item.locked) throw new Error('词块已锁定'); item.text = string(v) }),
     field(E.transcriptBlock, 'caption_break_after', '此词之后结束字幕段（不改变声音或时间戳）', BOOL, (s) => block(s).captionBreakAfter ?? false, (s, v) => { const item = block(s); if (item.locked) throw new Error('词块已锁定'); item.captionBreakAfter = boolean(v) }),
     field(E.transcriptBlock, 'start_frame', '开始帧', INT, (s) => block(s).startFrame),
@@ -58,7 +58,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.transcriptBlock, 'granularity', '时间戳粒度', { kind: 'enum', values: [{ value: 'word', label: '逐词' }, { value: 'segment', label: '句段' }] }, (s) => block(s).granularity),
   ],
   [E.suggestion]: [
-    field(E.suggestion, 'project_id', '所属口播（口播文档 ID）', TEXT, (s) => s.document.id),
+    field(E.suggestion, 'document_id', '所属口播（口播文档 ID）', TEXT, (s) => s.document.id),
     field(E.suggestion, 'title', '线索标题', TEXT, (s) => suggestion(s).title),
     field(E.suggestion, 'detail', '检测线索（非审批，不限制助手基于全文自行判断）', TEXT, (s) => suggestion(s).kind === 'filler' ? '关键词匹配，不代表必须删除；结合全文判断是否影响语义、语气或节奏。' : suggestion(s).detail),
     field(E.suggestion, 'current_state', '当前实际状态（排除已删除、已静音、失效或锁定的线索）', { kind: 'enum', values: [ ['available', '可参考'], ['removed', '声音已处理'], ['dismissed', '已隐藏'], ['locked', '已锁定'], ['stale', '线索已失效'] ].map(([value, label]) => ({ value, label })) }, (s) => audioEditSuggestionState(s.document, suggestion(s))),

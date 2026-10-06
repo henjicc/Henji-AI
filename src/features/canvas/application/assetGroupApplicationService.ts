@@ -43,7 +43,7 @@ export class AssetGroupApplicationError extends Error {
 
 function requireProject(projectId?: string): string {
   const id = projectId ?? useProjectStore.getState().currentProjectId;
-  if (!id) throw new AssetGroupApplicationError('NOT_FOUND', '画布工程目标缺失');
+  if (!id) throw new AssetGroupApplicationError('NOT_FOUND', '画布目标缺失');
   return id;
 }
 

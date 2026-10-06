@@ -35,7 +35,7 @@ export function CanvasViewportFlow(props: Props): JSX.Element {
   }, [flushViewport]);
 
   const onMove = useCallback<NonNullable<Props['onMove']>>((event, next) => {
-    // 工程恢复、适应视图和小地图不是高频原生输入；在当前调用结束后提交，
+    // 画布恢复、适应视图和小地图不是高频原生输入；在当前调用结束后提交，
     // 同时避开 ReactFlow 初始化 effect 中调用 flushSync。
     if (!event && pending.current) queueMicrotask(flushViewport);
     notifyMove?.(event, next);

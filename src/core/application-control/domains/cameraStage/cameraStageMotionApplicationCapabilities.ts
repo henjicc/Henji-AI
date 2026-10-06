@@ -16,12 +16,12 @@ import {
 
 const applyCameraMove = defineApplicationCapability({
   id: 'apply_camera_stage_camera_move',
-  resolveOperationTargets: input => [{ kind: 'camera_stage.project', id: input.projectId }], version: 1, title: '应用摄像机语义运镜',
+  resolveOperationTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }], version: 1, title: '应用摄像机语义运镜',
   description: '按摄像机、注视目标、时间、方向、距离和缓动应用环绕、推拉、横移或升降轨迹。', domain: 'camera_stage',
   aliases: ['环绕主体', '推近拉远', '横移镜头', '升降镜头', 'orbit', 'dolly', 'truck', 'crane', 'camera move'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'camera_stage:write', idempotent: true, destructive: false,
   timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['toolbox'],
-  acceptsRefs: ['camera_stage.project', 'camera_stage.camera', 'camera_stage.object', 'camera_stage.state_keyframe'],
+  acceptsRefs: ['camera_stage.document', 'camera_stage.camera', 'camera_stage.object', 'camera_stage.state_keyframe'],
   producesRefs: ['camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
   successEvidence: ['事务返回路径起终点、采样数和受影响状态关键帧，并提供可撤销引用。'],
   failureRecovery: [
@@ -29,7 +29,7 @@ const applyCameraMove = defineApplicationCapability({
     '缺少目标、摄像机或有效时间范围时停止，重新观察场景后使用稳定引用；不得猜测名称。',
   ],
   inputSchema: z.object({
-    projectId: cameraStageDocumentIdSchema, cameraId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
+    documentId: cameraStageDocumentIdSchema, cameraId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
     move: cameraStageMoveSchema, targetObjectId: z.string().min(1).optional(), targetPoint: cameraStageVec3Schema.optional(),
     startStateKeyframeId: z.string().min(1).optional(), endStateKeyframeId: z.string().min(1).optional(),
     duration: z.number().positive().max(3600), speed: z.enum(['uniform', 'easeInOut', 'fastStart', 'slowStart']).default('easeInOut'),
@@ -38,8 +38,8 @@ const applyCameraMove = defineApplicationCapability({
     if (input.move.kind !== 'crane' && !input.targetObjectId && !input.targetPoint) context.addIssue({ code: 'custom', path: ['targetObjectId'], message: '该运镜必须声明注视对象或注视点' })
   }),
   outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
-  resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:camera:${input.cameraId}`,
-  resolveTargetIds: (input) => cameraStageTarget(input.projectId, { cameraId: input.cameraId }),
+  resolveConcurrencyKey: (input) => `camera_stage:${input.documentId}:camera:${input.cameraId}`,
+  resolveTargetIds: (input) => cameraStageTarget(input.documentId, { cameraId: input.cameraId }),
   control: cameraStageControl('execute', ['camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'], [
     'camera_stage.camera.look_at_target', 'camera_stage.camera.look_at_object_ref',
     'camera_stage.camera.transform.position', 'camera_stage.state_keyframe.transition_duration',
@@ -57,10 +57,10 @@ const verifyScene = defineApplicationCapability({
   description: '一次结构化验证对象、边界盒、活动摄像机、状态关键帧采样值与播放状态；动画任务把所有预期时间点放进 expectedStateSamples，不必逐枚读取关键帧。构图是否好看需另行观察界面截图判断。',
   domain: 'camera_stage', aliases: ['验证三维场景', '检查运镜结果', '检查构图', 'verify 3D scene'], readOnly: true, risk: 'R0', dataClasses: ['C1'],
   permission: 'camera_stage:read', idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: true, supportsUndo: false,
-  requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
-  producesRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
+  requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
+  producesRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
   inputSchema: z.object({
-    projectId: cameraStageDocumentIdSchema, expectedObjectIds: z.array(z.string().min(1)).max(128).default([]),
+    documentId: cameraStageDocumentIdSchema, expectedObjectIds: z.array(z.string().min(1)).max(128).default([]),
     expectedObjectRefs: z.array(applicationRefSchema.refine(
       (ref) => ref.kind === 'camera_stage.object',
       { message: 'expectedObjectRefs 只接受 camera_stage.object 稳定引用' },
@@ -93,7 +93,7 @@ const verifyScene = defineApplicationCapability({
     verified: z.boolean(), evidence: z.array(z.record(z.string(), z.unknown())), unmetConditions: z.array(z.string()), checkedAt: z.string(),
     baseRevision: cameraStageBaseRevisionSchema,
   }),
-  resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:verify`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
+  resolveConcurrencyKey: (input) => `camera_stage:${input.documentId}:verify`, resolveTargetIds: (input) => cameraStageTarget(input.documentId),
   control: cameraStageControl('observe', [
     'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera',
     'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback',
@@ -106,9 +106,9 @@ const verifyScene = defineApplicationCapability({
     return [
       {
         effect: 'observe' as const,
-        entityTypes: ['camera_stage.project', 'camera_stage.scene'],
+        entityTypes: ['camera_stage.document', 'camera_stage.scene'],
         propertyIds: [],
-        targetRefs: [{ kind: 'camera_stage.project', id: input.projectId }],
+        targetRefs: [{ kind: 'camera_stage.document', id: input.documentId }],
         count: 1,
         verified: output.verified,
         evidence,
@@ -153,7 +153,7 @@ const verifyScene = defineApplicationCapability({
               kind: sample.propertyId.startsWith('camera_stage.camera.')
                 ? 'camera_stage.camera'
                 : 'camera_stage.object',
-              id: `${input.projectId}:${sample.objectId ?? ''}`,
+              id: `${input.documentId}:${sample.objectId ?? ''}`,
             }),
         count: input.expectedStateSamples.length,
         verified: output.verified,
@@ -166,7 +166,7 @@ const verifyScene = defineApplicationCapability({
           ...(input.expectedPlayback.playing !== undefined ? ['camera_stage.playback.playing'] : []),
           ...(input.expectedPlayback.loop !== undefined ? ['camera_stage.playback.loop'] : []),
         ],
-        targetRefs: [{ kind: 'camera_stage.playback', id: input.projectId }],
+        targetRefs: [{ kind: 'camera_stage.playback', id: input.documentId }],
         count: 1,
         verified: output.verified,
         evidence,

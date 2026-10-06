@@ -38,7 +38,7 @@ vi.mock('@/stores/canvasStore', () => ({
 
 import { cancelCameraStageRenderTask, createCameraStageRenderTaskRef, getCameraStageRenderTask, parseCameraStageRenderTaskRef, renderCameraStageOutput, waitCameraStageRenderTask, recoverCameraStageRenderTask } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
 
-const projectRef = { kind: 'canvas.project' as const, id: 'canvas-1' }
+const canvasRef = { kind: 'canvas.document' as const, id: 'canvas-1' }
 const nodeRef = { kind: 'canvas.node' as const, id: 'canvas-1:stage-node' }
 const identity = {
   version: 1 as const,
@@ -134,7 +134,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
 
   it('uses the unique toolCallId instead of the runId and delegates to the shared node service', async () => {
     const result = await renderCameraStageOutput({
-      projectRef, nodeRef, outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 1.25,
+      canvasRef, nodeRef, outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 1.25,
     }, { signal: new AbortController().signal, requestId: 'run-1', taskId: 'tool-call-1' })
 
     expect(mocks.start).toHaveBeenCalledWith('stage-node', 'image', {
@@ -150,7 +150,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
 
   it('rejects a node ref outside its project before starting', async () => {
     await expect(renderCameraStageOutput({
-      projectRef,
+      canvasRef,
       nodeRef: { kind: 'canvas.node', id: 'canvas-2:stage-node' },
       outputKind: 'image',
       resolutionPreset: '720p',
@@ -164,7 +164,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
       finishRead = () => resolve({ id: 'canvas-1', nodes: [] })
     }))
     const rendering = renderCameraStageOutput({
-      projectRef, nodeRef, outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 1.25,
+      canvasRef, nodeRef, outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 1.25,
     }, { signal: new AbortController().signal, requestId: 'run-1', taskId: 'tool-call-1' })
     await vi.waitFor(() => expect(finishRead).toBeTypeOf('function'))
     mocks.projectState = { currentProjectId: 'canvas-2', currentProject: { id: 'canvas-2' } }
@@ -180,7 +180,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
       finishRead = () => resolve({ id: 'canvas-1', nodes: [] })
     }))
     const rendering = renderCameraStageOutput({
-      projectRef, nodeRef, outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 1.25,
+      canvasRef, nodeRef, outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 1.25,
     }, { signal: new AbortController().signal, requestId: 'run-1', taskId: 'tool-call-1' })
     await vi.waitFor(() => expect(finishRead).toBeTypeOf('function'))
     mocks.nodes[0].data = {
@@ -202,7 +202,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
     const projectId = mocks.projectState.currentProjectId!
 
     await expect(renderCameraStageOutput({
-      projectRef: { kind: 'canvas.project', id: projectId },
+      canvasRef: { kind: 'canvas.document', id: projectId },
       nodeRef: { kind: 'canvas.node', id: `${projectId}:stage-node` },
       outputKind: 'image',
       resolutionPreset: '720p',
@@ -215,7 +215,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
     mocks.start.mockResolvedValue(identity)
 
     await expect(renderCameraStageOutput({
-      projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 1.25,
+      canvasRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 1.25,
     }, { signal: new AbortController().signal, requestId: 'run-1', taskId: 'tool-call-1' }))
       .rejects.toThrow('当前已经在处理图片、1080p，时间 1.25 秒')
   })
@@ -231,7 +231,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
     const taskRef = createCameraStageRenderTaskRef(identity)
 
     const submitted = await renderCameraStageOutput({
-      projectRef, nodeRef, outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 1.25,
+      canvasRef, nodeRef, outputKind: 'image', resolutionPreset: '1080p', selectedTimeSec: 1.25,
     }, { signal: new AbortController().signal, requestId: 'run-1', taskId: 'tool-call-1' })
     const observed = await getCameraStageRenderTask(taskRef)
 
@@ -254,7 +254,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
     })
 
     await expect(renderCameraStageOutput({
-      projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 1.25,
+      canvasRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 1.25,
     }, { signal: new AbortController().signal, requestId: 'run-1', taskId: 'tool-call-1' }))
       .rejects.toThrow('已经提交为图片、1080p，时间 1.25 秒')
     expect(mocks.start).not.toHaveBeenCalled()

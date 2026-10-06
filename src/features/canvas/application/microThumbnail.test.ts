@@ -74,7 +74,7 @@ describe('微缩略图缓存生命周期', () => {
     expect(await ensureMicroThumbnail('valid')).toMatch(/^data:image\/webp;base64,/);
   });
 
-  it('退出千图工程后跳过全部旧排队工作，新图片只等待已经开始的任务', async () => {
+  it('退出千图画布后跳过全部旧排队工作，新图片只等待已经开始的任务', async () => {
     const { requestMicroThumbnail } = await import('./microThumbnail');
     const finishers: Array<() => void> = [];
     mocks.load.mockImplementation(() => new Promise(resolve => finishers.push(() => resolve({ naturalWidth: 200, naturalHeight: 100 }))));

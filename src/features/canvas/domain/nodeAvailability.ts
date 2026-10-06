@@ -4,7 +4,7 @@ import { getCanvasNodeDefinition } from './nodeRegistry';
 
 const capabilityIds = new Set<string>(Object.values(CANVAS_IMAGE_CAPABILITY_IDS));
 
-/** 可用性是运行时目录状态，不修改工程里保存的类型或参数。 */
+/** 可用性是运行时目录状态，不修改画布里保存的类型或参数。 */
 export function isCanvasNodeUnavailable(node: { type?: string; data: Record<string, unknown> }): boolean {
   const definition = node.type ? getCanvasNodeDefinition(node.type) : undefined;
   if (!definition) return true;

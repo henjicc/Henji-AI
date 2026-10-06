@@ -56,7 +56,7 @@ export const videoEditDocumentSchema = z.object({
   for (const media of document.media) if (media.assetContent && !media.assetId && !media.assetContent.contentIdentity) issue('原文件内容快照需要固定内容身份。')
   const ids = new Set<string>()
   for (const item of [...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
-    if (ids.has(item.id)) issue('工程包含重复标识。')
+    if (ids.has(item.id)) issue('剪辑包含重复标识。')
     ids.add(item.id)
   }
   for (const bin of document.bins) {

@@ -46,15 +46,15 @@ function readNodeInputSignature(projectId: string, nodeId: string, store?: typeo
 }
 
 export async function prepareCanvasNodeGeneration(input: CanvasNodeGenerationInput) {
-  const store = (await getCanvasProjectInstance(input.projectId)).store
-  const signature = readNodeInputSignature(input.projectId, input.nodeId)
+  const store = (await getCanvasProjectInstance(input.documentId)).store
+  const signature = readNodeInputSignature(input.documentId, input.nodeId)
   if (input.inputSignature && input.inputSignature !== signature) throw new CanvasApplicationError('INVALID_INPUT', '节点输入已改变，请重新调用 prepare_canvas_node_generation 获取当前参数和费用。', true)
   const canvas = store.getState()
   const plan = createCanvasExecutionPlan(input.nodeId, canvas.nodes, canvas.edges, () => 'auto')
   if (plan.dependencyNodeIds.length) throw new CanvasApplicationError('INVALID_INPUT', '请连接已完成的结果素材；本次节点估价不包含额外上游生成。', true)
   const executor = createGenerationNodeExecutor(target => readCanvasGenerationNodeProfile(input.nodeId, target ?? store))
-  const prepared = await executor.prepare({ projectId: input.projectId, runId: 'prepare', trigger: 'direct', inputSignature: signature, assertCurrent: async () => undefined })
-  if (readNodeInputSignature(input.projectId, input.nodeId) !== signature) throw new CanvasApplicationError('INVALID_INPUT', '准备期间节点输入已改变，请重新准备原节点。', true)
+  const prepared = await executor.prepare({ projectId: input.documentId, runId: 'prepare', trigger: 'direct', inputSignature: signature, assertCurrent: async () => undefined })
+  if (readNodeInputSignature(input.documentId, input.nodeId) !== signature) throw new CanvasApplicationError('INVALID_INPUT', '准备期间节点输入已改变，请重新准备原节点。', true)
   const { runtime, generationParams } = prepared
   if (!runtime.model) throw new Error('原节点模型不存在。')
   const options = { ...generationParams, images: runtime.images, uploadedFilePaths: runtime.images,
@@ -62,7 +62,7 @@ export async function prepareCanvasNodeGeneration(input: CanvasNodeGenerationInp
   const resolved: GenerationPreparationInput = { modelId: runtime.modelId, mediaType: readCanvasGenerationNodeProfile(input.nodeId, store).modelType,
     prompt: String(generationParams.prompt ?? ''), options }
   return { preparation: prepareGenerationModelInput(resolved, runtime.model),
-    submitInput: { projectId: input.projectId, nodeId: input.nodeId, inputSignature: signature } }
+    submitInput: { documentId: input.documentId, nodeId: input.nodeId, inputSignature: signature } }
 }
 
 export async function submitCanvasNodeGeneration(input: CanvasNodeGenerationInput & { inputSignature: string }, taskId: string, signal?: AbortSignal) {
@@ -70,21 +70,21 @@ export async function submitCanvasNodeGeneration(input: CanvasNodeGenerationInpu
     signal?.throwIfAborted()
     return result
   }).catch(error => { throw new ApplicationPreflightFailure(error) })
-  await confirmCanvasPersistence(input.projectId)
+  await confirmCanvasPersistence(input.documentId)
   if (signal?.aborted) throw new ApplicationPreflightFailure('任务已在提交前取消。')
-  const profile = readCanvasGenerationNodeProfile(input.nodeId, requireCanvasProjectInstance(input.projectId).store)
+  const profile = readCanvasGenerationNodeProfile(input.nodeId, requireCanvasProjectInstance(input.documentId).store)
   const options = preparation.options as Record<string, unknown>
   return startCanvasGenerationTask({ modelId: String(preparation.modelId), mediaType: profile.modelType,
-    prompt: String(options.prompt ?? ''), options }, { mode: 'canvas', projectId: input.projectId, sourceNodeIds: [] },
+    prompt: String(options.prompt ?? ''), options }, { mode: 'canvas', documentId: input.documentId, sourceNodeIds: [] },
   input.nodeId, taskId, store => {
-    const current = readNodeInputSignature(input.projectId, input.nodeId, store)
+    const current = readNodeInputSignature(input.documentId, input.nodeId, store)
     if (current !== input.inputSignature) throw new Error('节点输入已更改，请重新准备生成参数和费用。')
     return current
   })
 }
 
 export async function resolveCanvasGenerationOptions(input: GenerationPreparationInput, destination: CanvasDestination): Promise<Record<string, unknown>> {
-  const { nodes } = (await getCanvasProjectInstance(destination.projectId)).store.getState()
+  const { nodes } = (await getCanvasProjectInstance(destination.documentId)).store.getState()
   const index = new Map(nodes.map(node => [node.id, node]))
   const options = { ...input.options }
   for (const sourceId of destination.sourceNodeIds) {
@@ -104,7 +104,7 @@ export async function resolveCanvasGenerationOptions(input: GenerationPreparatio
 }
 
 export async function submitCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination, taskId: string) {
-  const instance = await getCanvasProjectInstance(destination.projectId)
+  const instance = await getCanvasProjectInstance(destination.documentId)
   if (await databaseService.getHistoryById(taskId)) throw new Error('此生成任务已登记，请查询原任务，不要重新提交。')
   const model = registry.getModel(input.modelId)
   if (!model) throw new Error('生成模型不存在。')
@@ -113,12 +113,12 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
   const placement = destination.placement ?? (destination.sourceNodeIds[0]
     ? { mode: 'right_of_node' as const, anchorNodeId: destination.sourceNodeIds[0] }
     : { mode: 'viewport_center' as const })
-  const transaction = await runCanvasTransaction(destination.projectId, destination.sourceNodeIds.length + 1, options => {
-    const created = stageControlledCanvasNode({ projectId: destination.projectId, nodeType, placement,
+  const transaction = await runCanvasTransaction(destination.documentId, destination.sourceNodeIds.length + 1, options => {
+    const created = stageControlledCanvasNode({ projectId: destination.documentId, nodeType, placement,
       data: { modelId: input.modelId, prompt: input.prompt, params } }, options)
     const nodeId = String(created.nodeId)
     const connections = []
-    for (const sourceNodeId of destination.sourceNodeIds) connections.push(stageCanvasConnection({ projectId: destination.projectId, sourceNodeId, targetNodeId: nodeId }, options))
+    for (const sourceNodeId of destination.sourceNodeIds) connections.push(stageCanvasConnection({ projectId: destination.documentId, sourceNodeId, targetNodeId: nodeId }, options))
     // 媒体由宿主解析；沿用标准节点的本地媒体输入，连线仍由正式图解析器负责。
     const mediaInputs = Object.fromEntries(['image', 'video', 'audio'].map(kind => [kind,
       Array.isArray(input.options?.[`${kind}s`]) ? input.options![`${kind}s`] : []]))
@@ -126,12 +126,12 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
     return [created, ...connections]
   })
   const nodeId = String(transaction.appliedOperations[0].nodeId)
-  const inputFingerprint = (store?: typeof useCanvasStore) => readNodeInputSignature(destination.projectId, nodeId, store)
+  const inputFingerprint = (store?: typeof useCanvasStore) => readNodeInputSignature(destination.documentId, nodeId, store)
   return startCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint).catch(error => {
     // 此入口已经创建并保存节点，后续登记失败不能冒充整个操作尚未执行。
     if (error instanceof ApplicationPreflightFailure || error instanceof CanvasApplicationError) {
       throw new CanvasApplicationError('INVALID_INPUT', error.message, true,
-        { nodeRef: { kind: 'canvas.node', id: `${destination.projectId}:${nodeId}` } })
+        { nodeRef: { kind: 'canvas.node', id: `${destination.documentId}:${nodeId}` } })
     }
     throw error
   })
@@ -139,11 +139,11 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
 
 async function startCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination,
   nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string) {
-  const key = `${destination.projectId}:${nodeId}`
+  const key = `${destination.documentId}:${nodeId}`
   const existingTaskId = activeNodeTasks.get(key)
   if (existingTaskId) throw new CanvasApplicationError('INVALID_INPUT', '此节点已有正在执行的任务，请查询原任务；其他节点可以独立生成。', true,
     { execution: { notExecuted: true }, taskId: existingTaskId })
-  if (isCanvasNodeRunActive(destination.projectId, nodeId)) throw new ApplicationPreflightFailure('此节点正在执行，请等待原节点完成；其他节点可以独立生成。')
+  if (isCanvasNodeRunActive(destination.documentId, nodeId)) throw new ApplicationPreflightFailure('此节点正在执行，请等待原节点完成；其他节点可以独立生成。')
   activeNodeTasks.set(key, taskId)
   try {
     return await registerCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint, () => {
@@ -170,19 +170,19 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
     controller.signal.throwIfAborted()
     if (inputFingerprint(store) !== fingerprint) throw new Error('节点输入已更改，请重新提交以核对生成参数和费用。')
   }
-  const record = await createCanvasGenerationTaskRecord(input, destination.projectId, nodeId, taskId, controller)
-  const releaseExecutor = retainCanvasTaskExecutor(destination.projectId, nodeId, createGenerationNodeExecutor(store => {
+  const record = await createCanvasGenerationTaskRecord(input, destination.documentId, nodeId, taskId, controller)
+  const releaseExecutor = retainCanvasTaskExecutor(destination.documentId, nodeId, createGenerationNodeExecutor(store => {
     const profile = readCanvasGenerationNodeProfile(nodeId, store)
     const extra = profile.resultNodeExtraData
     return { ...profile, requestId: taskId, signal: controller.signal,
       resultNodeExtraData: data => ({ ...(typeof extra === 'function' ? extra(data) : extra), generationTaskId: taskId }) }
   }))
-  logger.info('画布生成已创建节点与连线', { event: 'canvas.generationTask.start', taskId, projectId: destination.projectId, nodeId })
-  void record.run(() => runCanvasNode(nodeId, assertCurrent, destination.projectId, controller.signal))
+  logger.info('画布生成已创建节点与连线', { event: 'canvas.generationTask.start', taskId, projectId: destination.documentId, nodeId })
+  void record.run(() => runCanvasNode(nodeId, assertCurrent, destination.documentId, controller.signal))
     .catch(error => logger.error('画布生成结束时存在失败', error, { event: 'canvas.generationTask.run_failed', taskId }))
     .finally(() => { releaseExecutor(); releaseNode() })
   return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId },
-    nodeRef: { kind: 'canvas.node', id: `${destination.projectId}:${nodeId}` },
+    nodeRef: { kind: 'canvas.node', id: `${destination.documentId}:${nodeId}` },
     verification: { verified: true, condition: '生成节点、连线及任务已持久保存，后续进度在原画布中显示' } }
 }
 
@@ -254,7 +254,7 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
   return { taskId, status, normalizedStatus: status, progress, modelId: record.modelId, mediaType: record.type,
     resultAvailable, cancellable, waitingExternal, errorCode, errorMessage,
     resumeInput: !resultAvailable && resumable.length > 0 ? {
-      taskId, projectId, sourceNodeId: nodeId, resultNodeIds: resultNodes.map(node => node.id),
+      taskId, documentId: projectId, sourceNodeId: nodeId, resultNodeIds: resultNodes.map(node => node.id),
     } satisfies CanvasGenerationResumeInput : null,
     taskRef: { kind: 'generation.task', id: taskId }, nodeRef: { kind: 'canvas.node', id: `${projectId}:${nodeId}` },
     resultRefs: resultNodes.map(item => ({ kind: 'canvas.node', id: `${projectId}:${item.id}` })) }
@@ -277,8 +277,8 @@ export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeIn
   const task = await getCanvasGenerationTask(input.taskId)
   if (!task) return reject('原画布任务不存在，请用 get_generation_task 核对任务。')
   const nodeRef = task.nodeRef as { id: string }
-  if (nodeRef.id !== `${input.projectId}:${input.sourceNodeId}`) {
-    return reject('项目或来源节点与原任务不一致，请使用 get_generation_task 返回的 resumeInput。')
+  if (nodeRef.id !== `${input.documentId}:${input.sourceNodeId}`) {
+    return reject('画布或来源节点与原任务不一致，请使用 get_generation_task 返回的 resumeInput。')
   }
   if (task.resultAvailable) return { taskId: input.taskId, status: 'success', task }
   const expected = task.resumeInput as CanvasGenerationResumeInput | null
@@ -291,7 +291,7 @@ export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeIn
   let started = 0
   if (!task.waitingExternal) {
     if (signal?.aborted) return reject('恢复请求在开始前已取消。')
-    started = await resumeCanvasGenerationInProject(input.projectId, selected)
+    started = await resumeCanvasGenerationInProject(input.documentId, selected)
     if (started && ['cancelled', 'error', 'timeout'].includes(String(task.status))) await databaseService.updateHistory(input.taskId, { status: 'pending', errorMessage: null })
   }
   const current = await getCanvasGenerationTask(input.taskId)

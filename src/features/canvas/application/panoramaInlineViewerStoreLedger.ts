@@ -8,7 +8,7 @@ type ActionName = {
 }[keyof State]
 
 const REASON = '全景节点内嵌 WebGL 租约只限制同一时刻的 GPU 上下文数量；'
-  + '它不表达用户业务意图，不参与工程持久化，相机视角由画布节点数据单独保存。'
+  + '它不表达用户业务意图，不参与画布持久化，相机视角由画布节点数据单独保存。'
 
 export const PANORAMA_INLINE_VIEWER_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'panoramaInlineViewerStore',

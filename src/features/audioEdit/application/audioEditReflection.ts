@@ -48,7 +48,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
   async listEntities(request: { cursor?: string; limit: number }) {
     const summaries = await listAudioEditDocuments()
     const projectScoped = this.entityType === AUDIO_EDIT_ENTITY_TYPES.project || this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain || this.entityType === AUDIO_EDIT_ENTITY_TYPES.render
-    // 工程级实体只要名称，不为列出而打开每一份口播；词块与线索才需要读内容
+    // 口播级实体只要名称，不为列出而打开每一份口播；词块与线索才需要读内容
     const loaded = projectScoped ? [] : (await Promise.allSettled(summaries.map((summary) => project(summary.id)))).flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
     const refs = projectScoped ? summaries.map((summary) => ({ kind: this.entityType, id: summary.id, label: summary.name })) : loaded.flatMap((document) => {
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock) return document.transcript.map((block) => childRef(this.entityType, document.id, block.id, block.text))
@@ -78,7 +78,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
       const locked = this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock && !propertyId.endsWith('.locked') && document.transcript.find((b) => b.id === splitChild(ref).childId)?.locked
-      const reason = descriptor.readOnlyReason || (locked ? '词块已锁定' : getAudioEditProjectInstance(document.id)?.busy ? '工程正在处理' : clueState && clueState !== 'available' ? '这条线索已处理、隐藏、失效或受锁定保护，请以当前工程内容为准。' : '')
+      const reason = descriptor.readOnlyReason || (locked ? '词块已锁定' : getAudioEditProjectInstance(document.id)?.busy ? '口播正在处理' : clueState && clueState !== 'available' ? '这条线索已处理、隐藏、失效或受锁定保护，请以当前口播内容为准。' : '')
       return { propertyId, readable: true, writable: !reason, reasons: reason ? [reason] : [], requiredPermissions: ['audio_edit:read'], revisions: { audio_edit: getAudioEditRevision() } }
     })
   }

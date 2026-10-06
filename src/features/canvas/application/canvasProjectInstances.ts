@@ -210,7 +210,7 @@ export function bindCanvasSession(session: DocumentSession, initial: CanvasSessi
     }
     const state = session.getState()
     if (state.meta.name !== lastName || hasError(state.status) !== lastError) {
-      // 改名也是画布（canvas.project.name）的变化：推进版本，之前读到旧名的助手基线随之过期
+      // 改名也是画布（canvas.document.name）的变化：推进版本，之前读到旧名的助手基线随之过期
       if (state.meta.name !== lastName) bump()
       lastName = state.meta.name
       lastError = hasError(state.status)

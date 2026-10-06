@@ -13,20 +13,20 @@ import { openMultiLayerDocumentForEditing } from './multiLayerDocumentNodeGenera
 const logger = createLogger('features.canvas.multi_layer_document_editor_application')
 
 export interface OpenMultiLayerDocumentNodeEditorInput {
-  projectRef: ApplicationRef & { kind: 'canvas.project' }
+  canvasRef: ApplicationRef & { kind: 'canvas.document' }
   nodeRef: ApplicationRef & { kind: 'canvas.node' }
   signal?: AbortSignal
   correlation?: { requestId?: string; taskId?: string }
 }
 
 export interface OpenMultiLayerDocumentNodeEditorResult {
-  projectRef: ApplicationRef & { kind: 'canvas.project' }
+  canvasRef: ApplicationRef & { kind: 'canvas.document' }
   nodeRef: ApplicationRef & { kind: 'canvas.node' }
   surfaceId: 'workspace.canvas'
   editorKind: 'multi_layer_document'
   status: 'opened' | 'already_open'
   resultRefs: [
-    ApplicationRef & { kind: 'canvas.project' },
+    ApplicationRef & { kind: 'canvas.document' },
     ApplicationRef & { kind: 'canvas.node' },
     ApplicationRef & { kind: 'application.surface'; id: 'workspace.canvas' },
   ]
@@ -44,7 +44,7 @@ function resolveTarget(input: OpenMultiLayerDocumentNodeEditorInput): {
   nodeId: string
   nodeRef: ApplicationRef & { kind: 'canvas.node' }
 } {
-  const projectId = input.projectRef.id
+  const projectId = input.canvasRef.id
   const requiredPrefix = `${projectId}:`
   const nodeId = input.nodeRef.id.startsWith(requiredPrefix)
     ? input.nodeRef.id.slice(requiredPrefix.length)
@@ -52,10 +52,10 @@ function resolveTarget(input: OpenMultiLayerDocumentNodeEditorInput): {
   if (!nodeId) {
     throw new CanvasApplicationError(
       'INVALID_INPUT',
-      `canvas.node 引用 ${input.nodeRef.id} 不是项目 ${projectId} 的完整稳定引用；请重新读取该项目的节点引用并传入 ${projectId}:<nodeId>`,
+      `canvas.node 引用 ${input.nodeRef.id} 不是画布 ${projectId} 的完整稳定引用；请重新读取该画布的节点引用并传入 ${projectId}:<nodeId>`,
       true,
       {
-        projectRef: input.projectRef,
+        canvasRef: input.canvasRef,
         nodeRef: input.nodeRef,
         expectedNodeRefFormat: `${projectId}:<nodeId>`,
       },
@@ -101,7 +101,7 @@ function rejectionMessage(input: {
       : '该节点不存在'
   const available = input.editableRefs.length > 0
     ? input.editableRefs.join('、')
-    : '当前项目没有可打开的多图层图片文档节点'
+    : '当前画布没有可打开的多图层图片文档节点'
   return `不能打开节点 ${input.nodeId} 的多图层文档编辑器：${actual}。可打开的 canvas.node 引用：${available}`
 }
 
@@ -170,7 +170,7 @@ export async function openMultiLayerDocumentNodeEditor(
         status: 'already_open',
         ...input.correlation,
       })
-      return createResult(input.projectRef, target.nodeRef, 'already_open')
+      return createResult(input.canvasRef, target.nodeRef, 'already_open')
     }
     await validateDocument({ nodeId: node.id, data: node.data, signal })
     if (active) {
@@ -201,7 +201,7 @@ export async function openMultiLayerDocumentNodeEditor(
       status: 'opened',
       ...input.correlation,
     })
-    return createResult(input.projectRef, target.nodeRef, 'opened')
+    return createResult(input.canvasRef, target.nodeRef, 'opened')
   } catch (error) {
     logger.error('多图层文档节点编辑器打开失败', error, {
       event: 'canvas.multi_layer_document_editor.open.failed',
@@ -214,7 +214,7 @@ export async function openMultiLayerDocumentNodeEditor(
 }
 
 function createResult(
-  projectRef: ApplicationRef & { kind: 'canvas.project' },
+  canvasRef: ApplicationRef & { kind: 'canvas.document' },
   nodeRef: ApplicationRef & { kind: 'canvas.node' },
   status: OpenMultiLayerDocumentNodeEditorResult['status'],
 ): OpenMultiLayerDocumentNodeEditorResult {
@@ -223,11 +223,11 @@ function createResult(
     id: 'workspace.canvas' as const,
   }
   return {
-    projectRef,
+    canvasRef,
     nodeRef,
     surfaceId: 'workspace.canvas',
     editorKind: 'multi_layer_document',
     status,
-    resultRefs: [projectRef, nodeRef, surfaceRef],
+    resultRefs: [canvasRef, nodeRef, surfaceRef],
   }
 }

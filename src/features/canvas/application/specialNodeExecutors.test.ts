@@ -53,7 +53,7 @@ function addNode(type: CanvasNodeType): string {
 }
 
 it.each([CANVAS_NODE_TYPES.multiAngleGen, CANVAS_NODE_TYPES.relightGen, CANVAS_NODE_TYPES.storyboardGen])(
-  '%s 不挂载 React 也能在 A 页面运行 B，切换与关闭页面后保存原工程', async type => {
+  '%s 不挂载 React 也能在 A 页面运行 B，切换与关闭页面后保存原画布', async type => {
     const nodeId = addNode(type)
     let finish!: () => void
     const poll = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async () => {

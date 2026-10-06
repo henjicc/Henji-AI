@@ -122,7 +122,7 @@ export interface StageCameraEffector {
   frequency: number
 }
 
-/** 新建状态关键帧默认零停留时长；hold 仅保留用于兼容旧工程数据。 */
+/** 新建状态关键帧默认零停留时长；hold 仅保留用于兼容旧镜头参考数据。 */
 export const STAGE_STATE_KEYFRAME_DEFAULT_HOLD = 0
 export const STAGE_STATE_KEYFRAME_DEFAULT_TRANSITION_DURATION = 2
 const STAGE_STATE_KEYFRAME_DEFAULT_NAME = '关键帧'
@@ -335,7 +335,7 @@ function normalizeStateKeyframe(raw: unknown, fallbackTime: number): StageStateK
         : STAGE_STATE_KEYFRAME_DEFAULT_TRANSITION_DURATION,
     objectStates,
     transition: normalizeStateKeyframeTransition(record.transition),
-    // 旧工程无该字段 → null（未指定机位，沿用全局 activeCameraId，行为与改动前完全一致）
+    // 旧镜头参考无该字段 → null（未指定机位，沿用全局 activeCameraId，行为与改动前完全一致）
     cameraId: typeof record.cameraId === 'string' && record.cameraId ? record.cameraId : null,
   }
 }

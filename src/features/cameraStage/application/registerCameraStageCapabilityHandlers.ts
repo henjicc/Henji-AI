@@ -5,7 +5,7 @@ import { CAMERA_STAGE_RENDER_CAPABILITY_ID, CANCEL_CAMERA_STAGE_RENDER_TASK_CAPA
 
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 
-import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
+import { parseDocumentCapabilityInput as parseCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { applyCameraStageCameraMove, deleteCameraStageObject, duplicateCameraStageObject, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
 import { releaseCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
@@ -22,7 +22,12 @@ interface CameraObjectInput extends ProjectInput {
   objectId: string
 }
 
-export function registerCameraStageCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+/**
+ * 镜头参考内容能力的处理器。公共契约里的 `documentId`（镜头参考文档 ID）在取参时换成领域服务使用的 `projectId`，
+ * 结果顶层的 `projectId` 换回 `documentId`（见 handlerUtils 的说明）。
+ */
+export function registerCameraStageCapabilityHandlers(publicRegistrar: ApplicationCapabilityHandlerRegistrar): void {
+  const registrar = withDocumentIdOutput(publicRegistrar)
   configureCameraStageControlDependencies({
     readRevision: () => getHostScopeRevisions().toolbox,
     bumpRevision: () => notifyHostScopeChanged('toolbox'),

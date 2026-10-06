@@ -70,7 +70,7 @@ let focusHandler: CanvasNodeFocusHandler | null = null
 export function requireCurrentCanvasProject(projectId: string): void {
   const project = useProjectStore.getState()
   if (project.currentProjectId !== projectId || project.currentProject?.id !== projectId) {
-    throw new CanvasApplicationError('STALE_CONTEXT', '当前画布项目与命令目标不一致', true, {
+    throw new CanvasApplicationError('STALE_CONTEXT', '当前画布与命令目标不一致', true, {
       expectedProjectId: projectId,
       currentProjectId: project.currentProjectId,
     })
@@ -95,7 +95,7 @@ export async function openCanvasProject(
   signal: AbortSignal,
   path?: string,
 ): Promise<Record<string, unknown>> {
-  logger.info('画布打开开始', { event: 'canvas.project.open.start', projectId })
+  logger.info('画布打开开始', { event: 'canvas.document.open.start', projectId })
   throwIfAborted(signal)
   let opened: boolean
   try {
@@ -114,7 +114,7 @@ export async function openCanvasProject(
   if (!project || project.id !== projectId) {
     throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布无法打开', true, { projectId })
   }
-  logger.info('画布打开完成', { event: 'canvas.project.open.completed', projectId })
+  logger.info('画布打开完成', { event: 'canvas.document.open.completed', projectId })
   return { projectId }
 }
 
@@ -389,7 +389,7 @@ export async function undoCanvasChange(projectId: string, undoRef: string): Prom
   requireCanvasProjectInstance(projectId)
   const record = undoRecords.get(undoRef)
   if (!record || record.projectId !== projectId) {
-    throw new CanvasApplicationError('NOT_FOUND', '画布撤销引用不存在或不属于当前项目')
+    throw new CanvasApplicationError('NOT_FOUND', '画布撤销引用不存在或不属于当前画布')
   }
   await runPersistedCanvasUndo(projectId, undoRef, () => {
     const canvas = requireCanvasProjectInstance(projectId).store.getState()

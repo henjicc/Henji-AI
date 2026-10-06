@@ -42,13 +42,13 @@ function createVideoEditAgentLoopScene() {
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const phase = name => { evidence.currentPhase = name; store() }
       const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
-      const projectRef = { kind: 'video_edit.project', id: PROJECT_ID }
+      const projectRef = { kind: 'video_edit.document', id: PROJECT_ID }
       const sequenceRef = { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }
       let client; let observed = false; let server
       const observe = async (target, maxWidth = 960) => {
         // Read-only observation: no operation envelope or baseline, same as other read tools.
         const at = performance.now()
-        const result = await callTool(client, 'observe_video_edit_frame', { projectRef, target, maxWidth })
+        const result = await callTool(client, 'observe_video_edit_frame', { documentRef: projectRef, target, maxWidth })
         const data = result.result?.data ?? result.data
         assert.equal(data?.verification?.verified, true, JSON.stringify(result))
         const media = await readAllMedia(client, data.resultRef)
@@ -121,7 +121,7 @@ function createVideoEditAgentLoopScene() {
         const readOnly = await authorizeMcpConnection(page, { name: '只读剪辑观察', allowWrites: false }); const viewer = await connectMcpClient(readOnly.config, 'Henji read-only viewer')
         try {
           const before = JSON.stringify(readVideoEditFile(file))
-          const viewed = await callTool(viewer, 'observe_video_edit_frame', { projectRef, target: { kind: 'program', sequenceRef, frame: 60 }, maxWidth: 256 })
+          const viewed = await callTool(viewer, 'observe_video_edit_frame', { documentRef: projectRef, target: { kind: 'program', sequenceRef, frame: 60 }, maxWidth: 256 })
           assert.equal((viewed.result?.data ?? viewed.data).verification.verified, true)
           const readClip = await callTool(viewer, 'read_application_entity', { ref: clipRef })
           evidence.readOnlyRefusal = await expectToolRefusal(viewer, 'change_application_entities', operationEnvelope([readClip], { summary: '只读连接越权调参', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: clipRef, properties: { 'video_edit.clip.code_parameters': { red: 0.1 } } }] }))
@@ -151,7 +151,7 @@ function createVideoEditAgentLoopScene() {
           if (!issued('pi_skill')) delta = call('pi_skill', 'load_assistant_skill', { name: 'video-edit-code-creation', path: 'references/parameters-curves.md', reason: '调参数前读取参数契约' })
           else if (!issued('pi_read')) delta = call('pi_read', 'read_application_entity', { ref: clipRef, propertyIds: ['video_edit.clip.code_parameters'] })
           else if (!issued('pi_change')) delta = call('pi_change', 'change_application_entities', { operationId: require('node:crypto').randomUUID(), summary: 'Pi把红色调到0.5', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: clipRef, properties: { 'video_edit.clip.code_parameters': { red: 0.5 } } }] })
-          else if (!issued('pi_observe')) delta = call('pi_observe', 'observe_video_edit_frame', { projectRef, target: { kind: 'program', sequenceRef, frame: 60 }, maxWidth: 640 })
+          else if (!issued('pi_observe')) delta = call('pi_observe', 'observe_video_edit_frame', { documentRef: projectRef, target: { kind: 'program', sequenceRef, frame: 60 }, maxWidth: 640 })
           else if (!issued('pi_media')) {
             const assetId = /"resultRef":\{"kind":"asset","id":"([^"]+)"/.exec(toolText('pi_observe'))?.[1]
             delta = assetId ? call('pi_media', 'read_application_media', { ref: { kind: 'asset', id: assetId } }) : { content: '没有拿到观察资产。' }
@@ -185,7 +185,7 @@ function createVideoEditAgentLoopScene() {
         for (const name of ['observe_video_edit_frame', 'read_application_media', 'change_application_entities', 'load_assistant_skill']) assert.ok(firstTools.includes(name), `Pi剪辑界面首轮缺少 ${name}`)
         const skillResult = evidence.pi.toolResults.find(result => result.id === 'pi_skill')
         assert.ok(skillResult && !/拒绝|不存在|未准入/.test(skillResult.content.slice(0, 200)), `Pi应能加载剪辑创作技能参考：${skillResult?.content.slice(0, 300)}`)
-        assert.ok(JSON.stringify(requests[0].messages).includes('video_edit.project'), 'Pi上下文应包含剪辑宿主信息')
+        assert.ok(JSON.stringify(requests[0].messages).includes('video_edit.document'), 'Pi上下文应包含剪辑宿主信息')
         const imageSeen = requests.some(body => body.messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === 'image_url' || part.type === 'image')))
         assert.ok(imageSeen, 'Pi读取的观察图片应作为图像内容交给视觉模型')
         const piSaved = readProject(file).sequences[0].clips.find(value => value.id === clip.id)

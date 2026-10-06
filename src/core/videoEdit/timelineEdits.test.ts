@@ -167,7 +167,7 @@ it('复制粘贴重新映射链接与标注，换帧率按绝对边界换算且�
   expect(pasted).toHaveLength(2); expect(pasted[0].duration).toBe(30)
   expect(pasted[0].linkId).toBe(pasted[1].linkId); expect(pasted[0].linkId).not.toBe(clipboard.clips[0].linkId)
   expect(next.sequences[0].annotations.find(mark => mark.id !== 'm')).toMatchObject({ clipId: pasted[0].id, frame: 208 })
-  expect(() => apply(next, { kind: 'place', clipboard: { ...clipboard, projectId: 'other' }, frame: 0, mode: 'paste' })).toThrow('另一工程')
+  expect(() => apply(next, { kind: 'place', clipboard: { ...clipboard, projectId: 'other' }, frame: 0, mode: 'paste' })).toThrow('另一剪辑')
 })
 it('插入拆开跨入点片段并保持右侧源时间，覆盖只替换目标轨且保存两侧', () => {
   const { document, sequence } = fixture()

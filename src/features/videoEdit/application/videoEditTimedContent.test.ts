@@ -3,7 +3,7 @@ import { it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditProject, listVideoEditInstances, closeVideoEditProject, editVideoProject, appendVideoEditSequence, switchVideoEditSequence, saveVideoEdit, openVideoEditProject, undoVideoEdit, duplicateVideoEditSequence } from './videoEditService'
+import { createVideoEditProject, listVideoEditInstances, closeVideoEditProject, editVideoProject, appendVideoEditSequence, switchVideoEditSequence, saveVideoEdit, undoVideoEdit, duplicateVideoEditSequence } from './videoEditService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createVideoEditCaption, createVideoEditMarker, importVideoEditCaptionFile, exportVideoEditSubtitles, updateVideoEditTimedContent } from './videoEditTimedContent'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
@@ -97,7 +97,7 @@ it('手动与公共导出复用原快照/原文件回读，取消和错误不假
   vi.mocked(getPlatform().system.dialog.save).mockResolvedValue('D:/subtitle.vtt')
   const app = createApplicationHarness()
   try {
-    const output = await app.call('export_video_edit', { projectRef: { kind: 'video_edit.project', id: projectId }, format: 'vtt' })
+    const output = await app.call('export_video_edit', { documentRef: { kind: 'video_edit.document', id: projectId }, format: 'vtt' })
     expect(output, JSON.stringify(output)).toMatchObject({ ok: true, data: { verification: { verified: true } } })
     expect(files.get('D:/subtitle.vtt')).toContain('00:00:00.500 --> 00:00:01.500'); expect(files.get('D:/subtitle.vtt')).toContain('中&lt;文&amp;字幕')
     vi.mocked(getPlatform().system.dialog.save).mockResolvedValue(null)
@@ -116,7 +116,7 @@ it('字幕输出晚到时文件属于原快照，回执拒绝指认重新打开�
     files.set(path, text)
     if (path.endsWith('.srt')) await new Promise<void>(resolve => { finish = resolve })
   })
-  const pending = exportVideoEditSubtitles(projectId, 'srt'); const rejected = expect(pending).rejects.toThrow('原工程会话已关闭')
+  const pending = exportVideoEditSubtitles(projectId, 'srt'); const rejected = expect(pending).rejects.toThrow('原剪辑会话已关闭')
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
   await closeVideoEditProject(projectId); const reopened = await reopenVideoEdit(owner.document.id)
   finish(); await rejected

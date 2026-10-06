@@ -44,7 +44,7 @@ export function registerAudioEditTaskController(requestId: string, projectId: st
 }
 
 export function assertAudioEditProjectIdle(projectId: string): void {
-  if ([...active.values()].some((task) => task.projectId === projectId && !task.readOnly)) throw new Error('工程还有处理任务，请先取消或等待完成。')
+  if ([...active.values()].some((task) => task.projectId === projectId && !task.readOnly)) throw new Error('口播还有处理任务，请先取消或等待完成。')
 }
 
 export function cancelAudioEditTask(requestId: string): void { active.get(requestId)?.controller.abort() }
@@ -63,7 +63,7 @@ export async function runAudioEditTask<T>(projectId: string, kind: string, opera
   const inputDigest = crypto.createHash('sha256').update(input).digest('hex')
   const existing = getDb().prepare('SELECT document_id,kind,state,result_json,input_digest FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as { document_id: string; kind: string; state: string; result_json: string | null; input_digest: string } | undefined
   if (existing) {
-    if (existing.document_id !== projectId || existing.kind !== kind || existing.input_digest !== inputDigest) throw new Error('任务引用与当前工程不匹配。')
+    if (existing.document_id !== projectId || existing.kind !== kind || existing.input_digest !== inputDigest) throw new Error('任务引用与当前口播不匹配。')
     if (existing.state === 'completed' && existing.result_json) return decodeTaskResult(existing.result_json) as T
     throw new Error('该任务已提交，请查询原任务状态。')
   }

@@ -33,7 +33,7 @@ describe('areCameraAspectRatiosConsistent', () => {
     expect(areCameraAspectRatiosConsistent([cameraA, cameraB])).toBe(true)
   })
 
-  it('旧工程中参与渲染的机位画幅意外不一致时返回 false', () => {
+  it('旧镜头参考中参与渲染的机位画幅意外不一致时返回 false', () => {
     const cameraA = createCameraObject('摄像机01', pickDefaultColor(0))
     const cameraB = createCameraObject('摄像机02', pickDefaultColor(1))
     cameraB.aspectRatio = { preset: '1:1', ratio: 1 }

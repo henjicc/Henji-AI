@@ -73,7 +73,7 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
       kind: 'excluded',
       category: 'view_state',
       reason: '图片信息面板的展开/收起是查看时的显示状态（Tab 键切换）；面板是否存在已经由 '
-        + 'generation.viewer_info 覆盖，这里只是面板内部的折叠开关，不进工程内容。',
+        + 'generation.viewer_info 覆盖，这里只是面板内部的折叠开关，不进文档内容。',
     },
     setStoryboardGenKeepStyleConsistent: property('storyboard.keep_style_consistent'),
     setStoryboardGenDisableTextInImage: property('storyboard.disable_text_in_image'),

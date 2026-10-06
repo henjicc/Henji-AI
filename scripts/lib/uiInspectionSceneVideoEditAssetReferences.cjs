@@ -86,9 +86,9 @@ function createVideoEditAssetReferencesScene() {
         phase('同源公共MCP导入及固定资产内容保存')
         const identity = await authorizeMcpConnection(page, { name: '可信资产引用验收', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji asset reference Reality')
-        const projectRef = { kind: 'video_edit.project', id: fixture.id }
+        const projectRef = { kind: 'video_edit.document', id: fixture.id }
         const baseline = await callTool(client, 'read_application_entity', { ref: projectRef })
-        const result = await callTool(client, 'import_video_edit_asset', operationEnvelope([baseline], { projectRef, assetRef: { kind: 'asset', id: asset.id } }))
+        const result = await callTool(client, 'import_video_edit_asset', operationEnvelope([baseline], { documentRef: projectRef, assetRef: { kind: 'asset', id: asset.id } }))
         assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
         document = await saved(page, file, value => value.media.length === 1 && value.items.length === 1)
         assert.equal(document.sequences[0].clips.length, 1); assert.equal(document.media[0].sourceRevision, media.sourceRevision)

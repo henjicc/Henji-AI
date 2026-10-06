@@ -38,12 +38,12 @@ function plan(owner: VideoEditInstance, request: VideoEditSendRequest): VideoEdi
 /** Describes where a send would land now; the UI shows this before the user commits. */
 export function planVideoEditSend(request: VideoEditSendRequest): VideoEditSendPlan {
   const owner = activeVideoEditInstance()
-  return owner ? plan(owner, request) : { available: false, reason: '请先在剪辑工作区打开一个工程。' }
+  return owner ? plan(owner, request) : { available: false, reason: '请先在剪辑工作区打开一个剪辑。' }
 }
 /** Freezes owner/sequence/placement before any producer work; later focus changes never redirect it. */
 export function captureVideoEditSendTarget(request: VideoEditSendRequest, projectId?: string): { target: VideoEditResultTarget; label: string } {
   const owner = projectId ? listVideoEditInstances().find(owner => owner.document.id === projectId) : activeVideoEditInstance()
-  if (!owner) throw new Error('原剪辑工程未打开，请先在剪辑工作区打开工程。')
+  if (!owner) throw new Error('原剪辑未打开，请先在剪辑工作区打开剪辑。')
   const value = plan(owner, request)
   if (!value.available) throw new Error(value.reason)
   return { target: captureVideoEditResultTarget(value.projectId, value.sequenceId, value.placement), label: value.label }

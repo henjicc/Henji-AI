@@ -181,7 +181,7 @@ describe('cameraStageRenderApplicationService', () => {
 
     await expect(startCameraStageNodeRender('node-1', 'image', {
       expectedOwner: { canvasProjectId: 'canvas-1', cameraStageDocumentId: 'stage-1' },
-    })).rejects.toThrow('当前画布项目已切换');
+    })).rejects.toThrow('当前画布已切换');
 
     expect(mocks.updateNodeData).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
@@ -200,7 +200,7 @@ describe('cameraStageRenderApplicationService', () => {
     (mocks.nodes[0].data as Record<string, unknown>).projectId = 'stage-user-selected';
     finishCreate();
 
-    await expect(rendering).rejects.toThrow('绑定的工程已经变化');
+    await expect(rendering).rejects.toThrow('绑定的镜头参考已经变化');
     expect(mocks.start).not.toHaveBeenCalled();
     expect(mocks.updateNodeData).not.toHaveBeenCalled();
     expect(mocks.nodes[0].data).toMatchObject({

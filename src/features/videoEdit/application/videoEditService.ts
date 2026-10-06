@@ -253,7 +253,7 @@ export function editVideoProject(id: string, update: (document: VideoEditDocumen
 export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument, snapshot: VideoEditDocument): VideoEditDocument {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id); assertVideoEditWritable(instance)
-  if (gestures.has(instance) || !sameDocumentContent(instance.document, expected)) throw new Error('工程已有后续修改，请逐步撤销。')
+  if (gestures.has(instance) || !sameDocumentContent(instance.document, expected)) throw new Error('剪辑已有后续修改，请逐步撤销。')
   return applyVideoEditDocument(instance, () => snapshot, true, true)
 }
 function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
@@ -391,12 +391,12 @@ export async function saveVideoEdit(id: string): Promise<void> {
   } finally { publishVideoEdit() }
 }
 
-/** 文档内容（剪辑工程的持久部分）：去掉外壳表达的 format / version / id / name / revision。 */
+/** 文档内容（剪辑的持久部分）：去掉外壳表达的 format / version / id / name / revision。 */
 export function videoEditDocumentContent(document: VideoEditDocument): VideoEditDocumentContent {
   const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = document
   return content as VideoEditDocumentContent
 }
-/** 文档内容 → 剪辑工程（完整 schema 校验）；内容读不懂时报错，原文件不动。 */
+/** 文档内容 → 剪辑（完整 schema 校验）；内容读不懂时报错，原文件不动。 */
 export function videoEditDocumentFromContent(content: unknown, meta: { id: string; name: string }, revision = 0): VideoEditDocument {
   const raw = { format: 'henji-video-project', version: 2, id: meta.id, name: meta.name, revision, ...(typeof content === 'object' && content !== null ? content : {}) }
   const parsed = videoEditDocumentSchema.safeParse(raw)
@@ -606,12 +606,12 @@ export async function leaveVideoEditProject(id: string): Promise<DocumentLeaveOu
       if (outcome === 'saved') await renameMainAfterSave(project, id)
     } else outcome = await registry.leave(id)
     if (outcome !== 'cancelled') disposers.get(instance)?.()
-    logger.info('离开剪辑', { event: 'video_edit.project.leave.completed', context: { docId: id, outcome, draftProject: Boolean(project?.draft) } })
+    logger.info('离开剪辑', { event: 'video_edit.document.leave.completed', context: { docId: id, outcome, draftProject: Boolean(project?.draft) } })
     return outcome
   })()
   leaving.set(id, operation)
   try { return await operation } catch (error) {
-    logger.warn('离开剪辑失败，修改已保留', { event: 'video_edit.project.leave.failed', error: toError(error), context: { docId: id } })
+    logger.warn('离开剪辑失败，修改已保留', { event: 'video_edit.document.leave.failed', error: toError(error), context: { docId: id } })
     throw error
   } finally { if (leaving.get(id) === operation) leaving.delete(id) }
 }

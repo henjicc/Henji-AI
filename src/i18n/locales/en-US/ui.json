@@ -250,7 +250,7 @@
   },
   "videoEditSend": {
     "short": "Add to edit",
-    "addToPlayhead": "Add at the playhead of the open edit project",
+    "addToPlayhead": "Add at the playhead of the open edit",
     "added": "Added to the edit and saved; undo it in the editor",
     "failed": "Could not add to the edit"
   },
@@ -272,11 +272,11 @@
     "codeParameters": "{{count}} saved parameters",
     "codeEditableHint": "Edit source, parameters, and animation after importing. Filters apply to the visual clip selected when you import.",
     "codeImages": "References {{count}} image files. Keep the original files available.",
-    "codeOpenProject": "Open an editing project first",
-    "codeImport": "Import into current editing project",
+    "codeOpenProject": "Open an edit first",
+    "codeImport": "Import into the current edit",
     "codeImporting": "Checking and importing",
     "codeImportFailed": "Unable to import the code asset. Please retry.",
-    "codeImportedItem": "Added to project items, ready to edit and adjust",
+    "codeImportedItem": "Added to the edit's media, ready to edit and adjust",
     "codeImportedEffect": "Added to the original selected clip's effects, ready to adjust",
     "search": "Search assets",
     "newest": "Newest",
@@ -1228,7 +1228,7 @@
       "exported": "Exported “{{name}}”.",
       "exportedMissing": "Exported “{{name}}”. {{count}} referenced files could not be found and were left out.",
       "importedDocument": "Imported “{{name}}”.",
-      "importedProject": "Imported project “{{name}}”. Open it from the Edit project list."
+      "importedProject": "Imported project “{{name}}”. Open it from the project list on the Edit page."
     },
     "embedded": {
       "returnTo": "Back to Edit · {{name}}"

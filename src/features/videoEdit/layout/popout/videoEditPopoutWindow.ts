@@ -1,7 +1,7 @@
 /**
  * 剪辑系统浮窗的 DOM 宿主：主窗口以 `about:blank` 打开同源子窗口，把主题样式同步过去，
  * 再由主窗口 React 把面板 portal 进容器。子窗口不运行任何应用脚本、没有 preload，
- * 工程、历史与保存仍只在主窗口渲染运行时。
+ * 剪辑、历史与保存仍只在主窗口渲染运行时。
  *
  * 前缀必须与 `electron/main/windows/video-edit-popout-policy.ts` 一致，主进程只放行该白名单。
  */

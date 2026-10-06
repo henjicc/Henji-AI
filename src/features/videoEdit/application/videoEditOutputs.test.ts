@@ -78,11 +78,11 @@ it('真实公共能力回读素材引用；拒绝旧导出任务而不写文件�
   vi.mocked(getPlatform().system.dialog.save).mockResolvedValue('D:/public-frame.png')
   const app = createApplicationHarness()
   try {
-    const result = await app.requireResult('collect_video_edit_output', { projectRef: { kind: 'video_edit.project', id }, kind: 'frame', frame: 0 })
+    const result = await app.requireResult('collect_video_edit_output', { documentRef: { kind: 'video_edit.document', id }, kind: 'frame', frame: 0 })
     expect(result.resultRef).toEqual({ kind: 'asset', id: 'published-output' })
     expect(result.verification).toMatchObject({ verified: true })
     const state = await app.read(result.resultRef as { kind: 'asset'; id: string }, ['asset.display_name']); expect(state.properties).toEqual({ 'asset.display_name': '输出' })
-    const bad = await app.call('collect_video_edit_output', { projectRef: { kind: 'video_edit.project', id }, kind: 'export', taskId: 'stale-task' })
+    const bad = await app.call('collect_video_edit_output', { documentRef: { kind: 'video_edit.document', id }, kind: 'export', taskId: 'stale-task' })
     expect(bad.ok).toBe(false); expect(getPlatform().assetLibrary.createAsset).toHaveBeenCalledOnce(); expect(getPlatform().system.fs.writeFile).toHaveBeenCalledOnce()
   } finally { app.dispose(); unregister() }
 })
@@ -93,7 +93,7 @@ it.each(['image', 'video', 'audio'] as const)('%s资产加入未打开画布后�
   const projectId = await createCanvasTestProject(`正式${kind}资产画布`, { attach: false })
   const app = createApplicationHarness()
   try {
-    const result = await app.requireResult('add_asset_to_canvas', { projectId, assetId: asset.id, placement: { mode: 'absolute', x: 80, y: 100 } })
+    const result = await app.requireResult('add_asset_to_canvas', { documentId: projectId, assetId: asset.id, placement: { mode: 'absolute', x: 80, y: 100 } })
     expect(result.verification).toMatchObject({ verified: true })
     expect(result.nodeRef).toEqual({ kind: 'canvas.node', id: `${projectId}:${String(result.nodeId)}` })
     const persisted = await readPersistedCanvasProjectSnapshot(projectId); const node = persisted.nodes.find(node => node.id === result.nodeId)!
@@ -116,7 +116,7 @@ it('仅资产写权限的公共选帧不暂停节目，播放中拒绝且没有�
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   setVideoEditView(id, { playing: true })
   const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'asset-only', capabilityIds: ['collect_video_edit_output'], permissions: ['assets:write'], allowWrites: true, allowDestructive: false }))
-  const result = await session.execute({ id: 'collect_video_edit_output', version: 1, input: { projectRef: { kind: 'video_edit.project', id }, kind: 'frame' } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  const result = await session.execute({ id: 'collect_video_edit_output', version: 1, input: { documentRef: { kind: 'video_edit.document', id }, kind: 'frame' } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   expect(result.ok).toBe(false); expect(JSON.stringify(result)).toContain('先暂停'); expect(owner.playing).toBe(true); expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled(); expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled()
   setVideoEditView(id, { playing: false })
 })
@@ -134,7 +134,7 @@ it.each(['dialog', 'save'] as const)('导出提交前%s等待期间取消不创�
   expect(videoEditExportTask(id)).toBeUndefined(); expect(owner.busy).toBe(false); expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled(); expect(encoder.render).not.toHaveBeenCalled()
 })
 
-it.each(['frame', 'revision', 'command', 'cancel', 'reopen'] as const)('等待出帧期间%s改变拒绝发布，不串入新工程', async change => {
+it.each(['frame', 'revision', 'command', 'cancel', 'reopen'] as const)('等待出帧期间%s改变拒绝发布，不串入新剪辑', async change => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const gate = deferred<Blob>(); const controller = new AbortController()
   const capture = vi.fn(() => gate.promise); const unregister = registerVideoEditProgramCapture(owner, owner.activeSequenceId, capture)
   const operation = captureVideoEditProgramFrame(id, 0, 'D:/stale.png', controller.signal)
@@ -149,13 +149,13 @@ it.each(['frame', 'revision', 'command', 'cancel', 'reopen'] as const)('等待�
   expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled(); expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled(); unregister()
 })
 
-it('发布后原文件改变、取消或原工程关闭，收录均拒绝；同ID重开不接管旧回执', async () => {
+it('发布后原文件改变、取消或原剪辑关闭，收录均拒绝；同ID重开不接管旧回执', async () => {
   const owner = (await createVideoEditProject())!; const output = await publishVideoEditOutput({ owner, path: 'D:/finished.mp4', sequenceId: owner.activeSequenceId, revision: 0, kind: 'video', name: '成片' })
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValueOnce({ ...content, contentIdentity: 'b'.repeat(64) })
   await expect(collectVideoEditOutput(output)).rejects.toThrow('已改变')
   const controller = new AbortController(); controller.abort(); await expect(collectVideoEditOutput(output, {}, controller.signal)).rejects.toThrow()
   await closeVideoEditProject(owner.document.id); await reopenVideoEdit(owner.document.id)
-  await expect(collectVideoEditOutput(output)).rejects.toThrow('原工程已关闭'); expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled()
+  await expect(collectVideoEditOutput(output)).rejects.toThrow('原剪辑已关闭'); expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled()
 })
 
 it('收录提交前取消拒绝；已提交后不删除文件或已消费资产', async () => {

@@ -232,15 +232,15 @@ function createVideoEditMultitrackScene() {
 
         const identity = await authorizeMcpConnection(page, { name: '多音轨验收', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji multitrack Reality')
-        const projectRef = { kind: 'video_edit.project', id: project.id }
+        const projectRef = { kind: 'video_edit.document', id: project.id }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const change = async (ref, properties) => {
           const result = await callTool(client, 'change_application_entities', operationEnvelope([await read(ref, Object.keys(properties))], { summary: '多音轨验收', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result)); return result
         }
         const playhead = async frame => {
-          await change(projectRef, { 'video_edit.project.program_playback': { frame, playing: false, playbackDirection: 1 } })
-          assert.equal((await read(projectRef, ['video_edit.project.program_playback'])).data.properties['video_edit.project.program_playback'].frame, frame, '播放头未到达放置位置')
+          await change(projectRef, { 'video_edit.document.program_playback': { frame, playing: false, playbackDirection: 1 } })
+          assert.equal((await read(projectRef, ['video_edit.document.program_playback'])).data.properties['video_edit.document.program_playback'].frame, frame, '播放头未到达放置位置')
         }
         const append = async (key, frame, count) => {
           const before = readProject(file).sequences[0].clips.length
@@ -339,7 +339,7 @@ function createVideoEditMultitrackScene() {
         await showTrack(page, fourth.track); await clipNode(page, fourth.id).scrollIntoViewIfNeeded()
         await page.keyboard.down('Alt')
         try { await clipNode(page, fourth.id).getByRole('button', { name: `选择片段 ${fourth.name}`, exact: true }).click() } finally { await page.keyboard.up('Alt') }
-        assert.equal((await read(projectRef, ['video_edit.project.selection'])).data.properties['video_edit.project.selection'], fourth.id, 'Alt 点击应只选中音频 4 的片段')
+        assert.equal((await read(projectRef, ['video_edit.document.selection'])).data.properties['video_edit.document.selection'], fourth.id, 'Alt 点击应只选中音频 4 的片段')
         await page.locator('[aria-label="效果控件"]').getByLabel('音量', { exact: true }).fill('0.5')
         await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === fourth.id).volume === .5, '音频 4 片段音量未保存')
         await mix('音频 4 片段音量 0.5')

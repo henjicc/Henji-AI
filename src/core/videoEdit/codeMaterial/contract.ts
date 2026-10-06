@@ -77,7 +77,7 @@ export function codeColor(value: unknown, label: string): CodeColor {
 }
 /** A reference is data only; filenames, getters, prototypes and extra capabilities never cross this boundary. */
 export function codeImageReference(value: unknown, label: string): CodeImageReference {
-  if (typeof value !== 'object' || value === null || Array.isArray(value) || ![null, Object.prototype].includes(Object.getPrototypeOf(value))) throw new CodeMaterialError('PARAMETERS', `${label}必须是明确的工程图片引用。`)
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || ![null, Object.prototype].includes(Object.getPrototypeOf(value))) throw new CodeMaterialError('PARAMETERS', `${label}必须是明确的剪辑图片引用。`)
   const fields = Object.getOwnPropertyDescriptors(value)
   if (Reflect.ownKeys(fields).length !== 2 || !fields.kind || !fields.mediaId || !('value' in fields.kind) || !('value' in fields.mediaId) || fields.kind.value !== 'image' || typeof fields.mediaId.value !== 'string' || fields.mediaId.value.length < 1 || fields.mediaId.value.length > 100) throw new CodeMaterialError('PARAMETERS', `${label}仅允许 kind:image 和有效 mediaId。`)
   return { kind: 'image', mediaId: fields.mediaId.value }

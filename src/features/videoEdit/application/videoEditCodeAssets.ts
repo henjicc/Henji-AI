@@ -22,7 +22,7 @@ const collecting = new WeakSet<VideoEditInstance>()
 const latest = new WeakMap<VideoEditInstance, { document: VideoEditDocument; target: string; receipt: VideoEditOutputReceipt }>()
 function assertOwner(owner: VideoEditInstance, baseline: VideoEditDocument, signal?: AbortSignal): void {
   signal?.throwIfAborted()
-  if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('原工程已关闭或检查期间已有修改，请重新引用代码素材。')
+  if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('原剪辑已关闭或检查期间已有修改，请重新引用代码素材。')
 }
 function sameContent(left: AssetFileContent, right: AssetFileContent): boolean { return left.contentIdentity === right.contentIdentity && left.sizeBytes === right.sizeBytes && left.fileModifiedAt === right.fileModifiedAt }
 async function checkImage(image: CodeAsset['images'][number], signal?: AbortSignal): Promise<void> {
@@ -44,7 +44,7 @@ function binding(owner: VideoEditInstance, target: VideoEditCodeAssetTarget): { 
     const code = target.effectId ? effect?.code : clip?.code
     if (code && clip) return { code, name: effect?.name ?? clip.name, sequenceId: target.sequenceId }
   }
-  throw new Error('请选择原工程中的代码素材或代码效果。')
+  throw new Error('请选择原剪辑中的代码素材或代码效果。')
 }
 
 /** Native asset inspection validates structure only. Source runs only in its compiler. */
@@ -65,7 +65,7 @@ export async function readVideoEditCodeAsset(assetId: string, signal?: AbortSign
 /** Save the raw fixed instance, never the currently evaluated animation values. */
 export async function collectVideoEditCodeAsset(projectId: string, target: VideoEditCodeAssetTarget, options: { libraryId?: string; path?: string } = {}, signal?: AbortSignal): Promise<AssetRecord | null> {
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const targetKey = JSON.stringify(target)
-  if (collecting.has(owner)) throw new Error('原工程正在收录代码素材，请等待完成。')
+  if (collecting.has(owner)) throw new Error('原剪辑正在收录代码素材，请等待完成。')
   collecting.add(owner)
   try {
     assertOwner(owner, baseline, signal)
@@ -116,7 +116,7 @@ export async function importVideoEditCodeAsset(projectId: string, assetId: strin
     if (inspected?.assetContent?.contentIdentity) await verifyVideoEditMediaContent(inspected, signal)
     else if (inspected) {
       const current = await inspectVideoEditMedia(image.path, signal)
-      if (current.kind !== inspected.kind || current.width !== inspected.width || current.height !== inspected.height) throw new Error('原工程中的图片信息已改变，请先重新定位源素材。')
+      if (current.kind !== inspected.kind || current.width !== inspected.width || current.height !== inspected.height) throw new Error('原剪辑中的图片信息已改变，请先重新定位源素材。')
       inspected = { ...current, id: inspected.id, name: inspected.name, ...(inspected.assetId ? { assetId: inspected.assetId } : {}), sourceRevision: crypto.randomUUID() }
     } else inspected = await inspectVideoEditMedia(image.path, signal)
     if (inspected.kind !== 'image') throw new Error('代码素材图片依赖必须是真实图片。')
@@ -132,6 +132,6 @@ export async function importVideoEditCodeAsset(projectId: string, assetId: strin
     assertOwner(owner, baseline, signal)
   }
   const result = await createVideoEditCodeAssetInstance(projectId, { asset: manifest, media, mediaIds, origin: { assetId, contentIdentity: videoEditAssetContentSnapshot(asset).contentIdentity }, beforePublish, ...options }, options.binId, signal)
-  logger.info('可编辑代码资产已导入原工程', { event: 'video_edit.code_asset.import.completed', context: { projectId, assetId, ...result } })
+  logger.info('可编辑代码资产已导入原剪辑', { event: 'video_edit.code_asset.import.completed', context: { projectId, assetId, ...result } })
   return result
 }

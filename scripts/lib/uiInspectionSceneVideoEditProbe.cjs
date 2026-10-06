@@ -166,7 +166,7 @@ function createVideoEditProbeScene() {
       const identity = await authorizeMcpConnection(page, { name: '剪辑真实回环', allowWrites: true, allowDestructive: true })
       const client = await connectMcpClient(identity.config, 'Henji video edit Reality')
       try {
-        const projectRef = { kind: 'video_edit.project', id: original.id }
+        const projectRef = { kind: 'video_edit.document', id: original.id }
         const clips = original.sequences[0].clips.map(item => ({ kind: 'video_edit.clip', id: `${original.id}:${item.id}` }))
         // Stack the appended clips at frame 0 in one public transaction: pictures on their own tracks, the first
         // video's sound at half volume, the second video's sound silent, the tone at a quarter.
@@ -207,8 +207,8 @@ function createVideoEditProbeScene() {
         await page.waitForTimeout(150)
         assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[6].duration === 50, '修剪片段保存')).sequences[0].clips[6].duration, 50)
         await button(page, '撤销').click()
-        const splitBefore = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.name'] })
-        const split = await callTool(client, 'split_video_edit', operationEnvelope([splitBefore], { projectRef, clipRef: clips[0], frame: 30 }))
+        const splitBefore = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.name'] })
+        const split = await callTool(client, 'split_video_edit', operationEnvelope([splitBefore], { documentRef: projectRef, clipRef: clips[0], frame: 30 }))
         assert.equal(split.executionState, 'completed', JSON.stringify(split))
         const saved = readVideoEditFile(projectPath)
         // Linked Selection splits the picture and its linked sound together.
@@ -321,15 +321,15 @@ function createVideoEditProbeScene() {
         }
         await capture('video-edit-final'); evidence.afterMemory = await app.evaluate(({ app }) => app.getAppMetrics())
         evidence.afterGpu = await app.evaluate(({ app }) => app.getGPUInfo('basic'))
-        const lastRef = { kind: 'video_edit.project', id: `reality-${specs.at(-1).width}-${specs.at(-1).fps}` }
+        const lastRef = { kind: 'video_edit.document', id: `reality-${specs.at(-1).width}-${specs.at(-1).fps}` }
         const cancellationPath = path.join(root, `cancel-${Date.now()}.mp4`)
         await dialogs(app, [], cancellationPath)
-        const cancellationBaseline = await callTool(client, 'read_application_entity', { ref: lastRef, propertyIds: ['video_edit.project.name'] })
-        const submitted = await callTool(client, 'export_video_edit', operationEnvelope([cancellationBaseline], { projectRef: lastRef }))
+        const cancellationBaseline = await callTool(client, 'read_application_entity', { ref: lastRef, propertyIds: ['video_edit.document.name'] })
+        const submitted = await callTool(client, 'export_video_edit', operationEnvelope([cancellationBaseline], { documentRef: lastRef }))
         assert.equal(submitted.executionState, 'completed', JSON.stringify(submitted))
-        await callTool(client, 'cancel_video_edit_export', operationEnvelope([cancellationBaseline], { projectRef: lastRef }))
+        await callTool(client, 'cancel_video_edit_export', operationEnvelope([cancellationBaseline], { documentRef: lastRef }))
         await button(page, '导出视频').waitFor({ state: 'visible', timeout: 20000 })
-        const cancelled = await callTool(client, 'query_video_edit_export', { projectRef: lastRef })
+        const cancelled = await callTool(client, 'query_video_edit_export', { documentRef: lastRef })
         assert.equal(cancelled.data.task.state, 'cancelled'); assert.equal(fs.existsSync(cancellationPath), false)
         evidence.cancellation = { state: cancelled.data.task.state, partialFileRemoved: true }
         // Exercise sequence-specific output settings and disk reopening in the real host.
@@ -381,10 +381,10 @@ function createVideoEditProbeScene() {
           // Leaving the project is refused while its export runs; the export keeps going.
           await button(page, '关闭项目').click(); await page.waitForTimeout(300)
           const closeRefused = { stillOpen: await button(page, '关闭项目').count(), alerts: await alerts() }
-          const multiRef = { kind: 'video_edit.project', id: multi.id }
-          for (let state = 'running'; state === 'running';) { await page.waitForTimeout(250); state = (await callTool(client, 'query_video_edit_export', { projectRef: multiRef })).data.task.state }
+          const multiRef = { kind: 'video_edit.document', id: multi.id }
+          for (let state = 'running'; state === 'running';) { await page.waitForTimeout(250); state = (await callTool(client, 'query_video_edit_export', { documentRef: multiRef })).data.task.state }
           const metadata = probe(output); const video = metadata.streams.find(track => track.codec_type === 'video')
-          evidence.faults.editDuringExport = { frames: Number(video.nb_frames), duration: Number(metadata.format.duration), clipsBefore: before, closeRefused, task: (await callTool(client, 'query_video_edit_export', { projectRef: multiRef })).data.task, alerts: await alerts() }
+          evidence.faults.editDuringExport = { frames: Number(video.nb_frames), duration: Number(metadata.format.duration), clipsBefore: before, closeRefused, task: (await callTool(client, 'query_video_edit_export', { documentRef: multiRef })).data.task, alerts: await alerts() }
           assert.equal(evidence.faults.editDuringExport.frames, 60, '导出期间的编辑不能进入已固定的导出快照')
           assert.equal(closeRefused.stillOpen, 1); assert.ok(closeRefused.alerts.some(text => text.includes('请等待导出完成或取消导出')), JSON.stringify(closeRefused))
           assert.equal(evidence.faults.editDuringExport.task.state, 'completed')

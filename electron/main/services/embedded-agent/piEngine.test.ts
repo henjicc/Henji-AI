@@ -142,7 +142,7 @@ describe('Pi official SDK engine', () => {
       ['cinematic-director', 'references/blocking.md', '接触动作描述接近', '像幻灯片'],
     ['cinematic-director', 'references/repair.md', '像幻灯片', '接触动作描述接近'],
     ['cinematic-director', 'references/canvas-workspace.md', '场景从上到下分区', '接触动作描述接近'],
-    ['short-drama', 'references/resume.md', '重新读取工程当前状态', '对白保留原文和语言'],
+    ['short-drama', 'references/resume.md', '重新读取画布当前状态', '对白保留原文和语言'],
   ])('按需读取 %s/%s，实际请求不含无关模块且不激活生成工具', async (skill, reference, included, excluded) => {
     const f = await fixture()
     const definition = loadAssistantSkillCapability
@@ -239,7 +239,7 @@ describe('Pi official SDK engine', () => {
     expect(JSON.stringify(logs)).not.toContain('fixture-key')
     const initialTools = f.requests[0].tools as unknown as Array<{ name: string }>
     expect(initialTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
-      'get_canvas_project', 'change_application_entities', 'load_application_tools',
+      'get_canvas_document', 'change_application_entities', 'load_application_tools',
     ]))
     expect(initialTools).toHaveLength(6)
     expect(initialTools.map(tool => tool.name)).not.toEqual(expect.arrayContaining(['render_camera_stage_output']))
@@ -247,7 +247,7 @@ describe('Pi official SDK engine', () => {
     expect(initialTools.map(tool => tool.name)).not.toContain('get_canvas_node_schema')
     await f.engine.command({ action: 'prompt', input: { text: '编辑图片', context: '{"surface":{"id":"tool.image_edit"}}' } })
     const editTools = f.requests.at(-1)!.tools as unknown as Array<{ name: string }>
-    expect(editTools.map(tool => tool.name)).not.toContain('get_canvas_project')
+    expect(editTools.map(tool => tool.name)).not.toContain('get_canvas_document')
     expect(editTools.map(tool => tool.name)).not.toContain('create_image_edit_preview')
     const fullBytes = Buffer.byteLength(JSON.stringify(catalog.tools))
     expect(initialTools.length).toBeLessThan(catalog.tools.length / 2)
@@ -257,13 +257,13 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '检查剪辑画面', context: JSON.stringify({ surface: { id: 'workspace.video_edit' } }) } })
     const editNames = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
     expect(editNames).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'change_application_entities', 'load_application_tools']))
-    expect(editNames).not.toContain('export_video_edit'); expect(editNames).not.toContain('get_canvas_project')
+    expect(editNames).not.toContain('export_video_edit'); expect(editNames).not.toContain('get_canvas_document')
     for (const [surface, basic] of [['tool.camera_stage', 'observe_camera_stage_scene'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
       const names = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
       expect(names).toHaveLength(6)
       expect(names).toContain(basic)
-      expect(names).not.toContain('get_canvas_project')
+      expect(names).not.toContain('get_canvas_document')
       expect(names).not.toContain('create_visible_generation_task')
     }
   })

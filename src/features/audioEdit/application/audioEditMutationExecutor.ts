@@ -63,7 +63,7 @@ export class AudioEditMutationExecutor implements ApplicationMutationExecutor {
     const { previous, after } = record
     const instance = await loadAudioEditProject(previous.id)
     const content = (document: AudioEditProjectDocument) => JSON.stringify({ ...document, revision: 0, updatedAt: 0 })
-    if (content(instance.document) !== content(after)) throw new Error('工程已有后续修改，请使用工程撤销逐步恢复。')
+    if (content(instance.document) !== content(after)) throw new Error('口播已有后续修改，请使用口播撤销逐步恢复。')
     const saved = editAudioEditProject(previous.id, (current) => ({ ...previous, source: current.source }))
     await flushAudioEditProject(previous.id)
     undoRecords.delete(undoToken)

@@ -144,20 +144,20 @@ function createVideoEditPictureGestureScene() {
         assert.equal(evidence.firstDecode.width, 3840); assert.equal(evidence.firstDecode.height, 2160)
         const identity = await authorizeMcpConnection(page, { name: '原4K画面移动回环', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Henji picture gesture Reality')
-        const projectRef = { kind: 'video_edit.project', id: project.id }; const clipRef = { kind: 'video_edit.clip', id: `${project.id}:${target.id}` }
+        const projectRef = { kind: 'video_edit.document', id: project.id }; const clipRef = { kind: 'video_edit.clip', id: `${project.id}:${target.id}` }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const frame = async value => {
-          const baseline = await read(projectRef, ['video_edit.project.program_playback'])
-          const result = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '原4K画面移动验收', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'video_edit.project.program_playback': { frame: value, playing: false, playbackDirection: 1 } } }] }))
+          const baseline = await read(projectRef, ['video_edit.document.program_playback'])
+          const result = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '原4K画面移动验收', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'video_edit.document.program_playback': { frame: value, playing: false, playbackDirection: 1 } } }] }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
           await presented(page, value)
         }
         await frame(1); await frame(0)
         const focus = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: clipRef }))
         assert.equal(focus.executionState, 'completed', JSON.stringify(focus))
-        const selection = await read(projectRef, ['video_edit.project.selection', 'video_edit.project.timeline_view'])
-        assert.equal(selection.data.properties['video_edit.project.selection'], target.id)
-        assert.deepEqual(selection.data.properties['video_edit.project.timeline_view'].selectedClipIds, [target.id])
+        const selection = await read(projectRef, ['video_edit.document.selection', 'video_edit.document.timeline_view'])
+        assert.equal(selection.data.properties['video_edit.document.selection'], target.id)
+        assert.deepEqual(selection.data.properties['video_edit.document.timeline_view'].selectedClipIds, [target.id])
         const program = page.locator('[data-video-edit-panel="program"]').first()
         await button(program, '移动画面').click(); await presented(page, 0)
         const beforeFile = JSON.stringify(readVideoEditFile(file)); const before = readProject(file)

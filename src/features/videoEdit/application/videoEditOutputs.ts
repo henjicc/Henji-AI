@@ -42,11 +42,11 @@ export async function collectVideoEditOutput(output: VideoEditOutputReceipt, opt
   logger.info('开始收录剪辑输出', { event: 'video_edit.output.collect.start', context: { outputId: output.id, projectId: output.owner.document.id, sequenceId: output.sequenceId } })
   try {
     signal?.throwIfAborted()
-    if (!listVideoEditInstances().includes(output.owner)) throw new Error('原工程已关闭，请从已导出的文件引用素材。')
+    if (!listVideoEditInstances().includes(output.owner)) throw new Error('原剪辑已关闭，请从已导出的文件引用素材。')
     if (options.libraryId) await assetApplicationService.inspectLibrary(options.libraryId)
     await verifyVideoEditOutput(output)
     signal?.throwIfAborted()
-    if (!listVideoEditInstances().includes(output.owner)) throw new Error('原工程已关闭，输出不会收录到重新打开的工程。')
+    if (!listVideoEditInstances().includes(output.owner)) throw new Error('原剪辑已关闭，输出不会收录到重新打开的剪辑。')
     // Asset creation commits here. Later cancellation never deletes a completed
     // output or a record that another consumer may already have referenced.
     const created = await addMediaReferenceToLibrary({ filePath: output.path, mediaType: output.kind, source: 'video-edit', displayName: options.displayName ?? output.name, ...(options.libraryId ? { libraryIds: [options.libraryId] } : {}) })

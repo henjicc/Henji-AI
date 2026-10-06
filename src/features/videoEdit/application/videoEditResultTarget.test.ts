@@ -157,7 +157,7 @@ it('公共创建与属性修改都不能伪造创作来源', async () => {
   expect(field.writer).toBeUndefined(); expect(owner.document.sequences[0].clips.find(clip => clip.id === receipt.clipId)?.creativeSource).toEqual(origin)
 })
 
-it('损坏或字段缺失的工程文件给出可理解的拒绝，不向界面泄露 schema 路径', async () => {
+it('损坏或字段缺失的剪辑文件给出可理解的拒绝，不向界面泄露 schema 路径', async () => {
   // 文件本身读不懂（不是 JSON、外壳损坏）由主进程文档仓库拒绝；这里是外壳完好、剪辑内容缺字段
   const owner = await createVideoEditProject(); const id = owner.document.id; await closeVideoEditProject(id)
   replaceSavedVideoEdit(id, { media: [], bins: [], items: [], sequences: [{ id: 's' }] })

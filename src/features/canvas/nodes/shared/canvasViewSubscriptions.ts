@@ -48,7 +48,7 @@ export function createCanvasViewSubscriptions(flow: CanvasViewSource, settings: 
           if (!listeners.delete(notify)) return;
           if (--subscriberCount === 0) {
             disconnect?.(); disconnect = undefined;
-            // ReactFlowProvider 可比工程活得更久，不能借共享投影保留已卸载的整棵 DOM。
+            // ReactFlowProvider 可比画布活得更久，不能借共享投影保留已卸载的整棵 DOM。
             channels.forEach(channel => channel.clear());
             cachedRoot = undefined;
             cachedPortal = null;

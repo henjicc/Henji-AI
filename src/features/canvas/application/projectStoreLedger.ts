@@ -37,7 +37,7 @@ export const PROJECT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     getCurrentProject: {
       kind: 'excluded',
       category: 'internal',
-      reason: '纯读取访问器；助手读画布内容用 get_canvas_project。',
+      reason: '纯读取访问器；助手读画布内容用 get_canvas_document。',
     },
   },
 }

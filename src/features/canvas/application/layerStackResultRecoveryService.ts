@@ -23,7 +23,7 @@ export interface RetryLayerStackResultResult {
   resultRefs: Array<ApplicationRef & { kind: 'canvas.node' }>
 }
 
-/** 同步原子启用现有续查 hook；不提交模型生成，不回退工程历史，也不改变其他节点。 */
+/** 同步原子启用现有续查 hook；不提交模型生成，不回退画布历史，也不改变其他节点。 */
 export function retryLayerStackResult(input: RetryLayerStackResultInput): RetryLayerStackResultResult {
   const context = { projectId: input.projectId, nodeId: input.nodeId, ...input.correlation }
   logger.info('重新获取多图层图片开始', { event: 'canvas.layer_stack.retrieve.start', ...context })
@@ -31,12 +31,12 @@ export function retryLayerStackResult(input: RetryLayerStackResultInput): RetryL
     if (input.signal?.aborted) throw new CanvasApplicationError('ABORTED', '重新获取结果已取消')
     const project = useProjectStore.getState()
     if (project.currentProjectId !== input.projectId || project.currentProject?.id !== input.projectId) {
-      throw new CanvasApplicationError('STALE_CONTEXT', `请先打开画布项目 ${input.projectId}，再重新获取它的多图层结果。`)
+      throw new CanvasApplicationError('STALE_CONTEXT', `请先打开画布 ${input.projectId}，再重新获取它的多图层结果。`)
     }
     const canvas = useCanvasStore.getState()
     const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)
     if (!node || node.type !== 'layerStackResultNode') {
-      throw new CanvasApplicationError('NOT_FOUND', '目标不是当前工程中的多图层结果节点，请重新读取画布节点引用。')
+      throw new CanvasApplicationError('NOT_FOUND', '目标不是当前画布中的多图层结果节点，请重新读取画布节点引用。')
     }
     const nodeRef = { kind: 'canvas.node' as const, id: `${input.projectId}:${node.id}` }
     if (node.data.resultKind === 'layer-stack' && !hasLayerStackRecoveryResult(node.data)

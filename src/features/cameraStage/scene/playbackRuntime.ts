@@ -52,7 +52,7 @@ function publish(
 
 /**
  * 一个 renderer 会话只允许 primary StageScene 推进时间；四视口中的其余 Canvas 只消费。
- * 同工程切换 primary 时保留精确运行时时间，切工程则以新工程 store 播放头重置。
+ * 同镜头参考切换 primary 时保留精确运行时时间，切镜头参考则以新镜头参考 store 播放头重置。
  */
 export function claimCameraStagePlaybackDriver(input: {
   sessionKey: string | null
@@ -80,8 +80,8 @@ export function releaseCameraStagePlaybackDriver(token: symbol): void {
 }
 
 /**
- * 同一工程在已挂载 Canvas 内重载时，store 会先让租约失效；原 primary driver 可在下一帧
- * 重新认领。token 的原始工程和当前 runtime 工程必须同时匹配，旧工程 driver 不能越界复活。
+ * 同一镜头参考在已挂载 Canvas 内重载时，store 会先让租约失效；原 primary driver 可在下一帧
+ * 重新认领。token 的原始镜头参考和当前 runtime 镜头参考必须同时匹配，旧镜头参考 driver 不能越界复活。
  */
 export function resumeCameraStagePlaybackDriver(
   token: symbol,
@@ -98,7 +98,7 @@ export function resumeCameraStagePlaybackDriver(
 }
 
 export function resetCameraStagePlaybackRuntime(time = 0, nextSessionKey: string | null = null): void {
-  // 工程真相源已切换时先让旧 Canvas 的 driver 租约失效，等新 primary 明确重新 claim。
+  // 镜头参考真相源已切换时先让旧 Canvas 的 driver 租约失效，等新 primary 明确重新 claim。
   activeDriver = null
   sessionKey = nextSessionKey
   publish(time, false, 'reset')

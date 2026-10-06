@@ -287,7 +287,7 @@ function createVideoEditExportNativeScene() {
         evidence.placements = Object.fromEntries(Object.entries(placements).map(([key, value]) => [key, value.group.map(clip => ({ kind: clip.kind, track: clip.track, sourceComponent: clip.sourceComponent ?? null, audioMapping: clip.audioMapping ?? null }))]))
         store()
 
-        const projectRef = id => ({ kind: 'video_edit.project', id })
+        const projectRef = id => ({ kind: 'video_edit.document', id })
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const change = async (ref, properties) => {
           const result = await callTool(client, 'change_application_entities', operationEnvelope([await read(ref, Object.keys(properties))], { summary: '导出验收', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] }))
@@ -303,7 +303,7 @@ function createVideoEditExportNativeScene() {
         const previewFrames = async (document, frames) => {
           const files = {}
           for (const frame of frames) {
-            await change(projectRef(document.id), { 'video_edit.project.program_playback': { frame, playing: false, playbackDirection: 1 } })
+            await change(projectRef(document.id), { 'video_edit.document.program_playback': { frame, playing: false, playbackDirection: 1 } })
             await presented(page, frame)
             const image = await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => ({ base64: canvas.toDataURL('image/png').split(',')[1], width: canvas.width, height: canvas.height }))
             assert.equal(image.width, WIDTH); assert.equal(image.height, HEIGHT)
@@ -323,7 +323,7 @@ function createVideoEditExportNativeScene() {
           }
           await button(page, '导出视频').waitFor({ state: 'visible', timeout: 600000 })
           const ms = performance.now() - started; const cpuAfter = nativeCpuSeconds(); const metricsAfter = await app.evaluate(({ app }) => app.getAppMetrics())
-          const task = (await callTool(client, 'query_video_edit_export', { projectRef: projectRef(document.id) })).data.task
+          const task = (await callTool(client, 'query_video_edit_export', { documentRef: projectRef(document.id) })).data.task
           const logs = await page.evaluate(async afterTimestamp => (await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10), afterTimestamp, domainPrefix: 'features.videoEdit.export', limit: 50 })).events.filter(event => /^video_edit\.export\.(completed|failed|cancelled)$/.test(event.event)).map(event => ({ event: event.event, context: event.context, error: event.error })), startedAt)
           const cpu = (metrics, type) => metrics.filter(metric => metric.type === type).reduce((sum, metric) => sum + (metric.cpu?.cumulativeCPUUsage ?? 0), 0)
           return { ms, task, log: logs[0] ?? null, nativeCpuSeconds: cpuBefore === null || cpuAfter === null ? null : cpuAfter - cpuBefore, nativeCores: cpuBefore === null || cpuAfter === null ? null : (cpuAfter - cpuBefore) / (ms / 1000), rendererCpuSeconds: cpu(metricsAfter, 'Tab') - cpu(metricsBefore, 'Tab'), gpuCpuSeconds: cpu(metricsAfter, 'GPU') - cpu(metricsBefore, 'GPU'), alerts: await alerts() }
@@ -423,13 +423,13 @@ function createVideoEditExportNativeScene() {
             const output = path.join(ROOT, `${rangeId}.mp4`)
             await open(document, output)
             const ref = projectRef(rangeId)
-            const view = (await read(ref, ['video_edit.project.timeline_view'])).data.properties['video_edit.project.timeline_view']
-            await change(ref, { 'video_edit.project.timeline_view': { ...view, inFrame: 100, outFrame: 261 } })
+            const view = (await read(ref, ['video_edit.document.timeline_view'])).data.properties['video_edit.document.timeline_view']
+            await change(ref, { 'video_edit.document.timeline_view': { ...view, inFrame: 100, outFrame: 261 } })
             const run = await exportUi(document, output)
             assert.equal(run.task.state, 'completed', JSON.stringify(run))
             const verified = verify(document, output, pictureTrack('prores'), 100, 261, '范围导出（跨两个剪辑点）')
             const cancelled = path.join(ROOT, `${rangeId}-cancelled.mp4`)
-            await change(ref, { 'video_edit.project.timeline_view': { ...view, inFrame: null, outFrame: null } })
+            await change(ref, { 'video_edit.document.timeline_view': { ...view, inFrame: null, outFrame: null } })
             await dialogs(app, [], cancelled)
             const cancel = await exportUi(document, cancelled, { cancelAt: 20 })
             assert.equal(cancel.task.state, 'cancelled'); assert.equal(fs.existsSync(cancelled), false, '取消后不应留下未完成文件')

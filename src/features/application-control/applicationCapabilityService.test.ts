@@ -58,12 +58,12 @@ describe('独立应用调用入口', () => {
       const projectId = (project.resultRef as { id: string }).id
       expect(useProjectStore.getState().currentProjectId).toBeNull()
       const nodeId = (await getCanvasProjectInstance(projectId)).store.getState().addNode('textAnnotationNode', { x: 0, y: 0 }, { text: '复制源', displayName: '原节点' })
-      const duplicated = await call('duplicate_canvas_node', { projectId, nodeId, placement: { mode: 'absolute', x: 400, y: 0 } })
+      const duplicated = await call('duplicate_canvas_node', { documentId: projectId, nodeId, placement: { mode: 'absolute', x: 400, y: 0 } })
       const saved = await readPersistedCanvasProjectSnapshot(projectId)
       expect(saved.nodes.find(node => node.id === duplicated.nodeId)?.data.displayName).toContain('原节点')
       expect(saved.nodes).toHaveLength(2)
       await call('open_document', { documentId: projectId })
-      await call('select_canvas_node', { projectId, nodeId: null })
+      await call('select_canvas_node', { documentId: projectId, nodeId: null })
       await call('get_canvas_node_schema', { nodeType: 'textAnnotationNode' })
     } finally {
       useNavigationStore.getState().setActiveWorkspace(beforeWorkspace)
@@ -192,7 +192,7 @@ describe('独立应用调用入口', () => {
     const session = createApplicationCapabilitySession(grant(['application:read', 'settings:read']))
     clearLogEvents()
     const missing = await session.execute(
-      { ...read, input: { ref: { kind: 'canvas.project', id: 'not-persisted-project' }, propertyIds: ['canvas.project.name'] } },
+      { ...read, input: { ref: { kind: 'canvas.document', id: 'not-persisted-project' }, propertyIds: ['canvas.document.name'] } },
       request('missing-ref')
     )
     expect(missing.ok).toBe(false)

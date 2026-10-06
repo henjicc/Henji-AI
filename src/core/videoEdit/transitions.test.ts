@@ -12,7 +12,7 @@ import { prepareCodeMaterialParameters, evaluateCodeMaterialParameters } from '.
 import { offsetVideoEditSource } from './time'
 
 function fixture() {
-  const document = createVideoEditDocument('转场工程'); const sequence = document.sequences[0]
+  const document = createVideoEditDocument('转场剪辑'); const sequence = document.sequences[0]
   sequence.frameRate = { numerator: 60, denominator: 1 }
   document.media = [{ id: 'media', name: '原路径', kind: 'video', path: 'D:/original.mp4', durationSeconds: 10, width: 3840, height: 2160, hasAudio: true }]
   document.items = [{ id: 'item', name: '视频', kind: 'video', mediaId: 'media' }]
@@ -128,7 +128,7 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     expect(videoEditTransitionWindow(converted, converted.transitions![0])).toMatchObject({ cut: 45, start: 38, end: 53 })
     expect(() => validateVideoEditTransitions({ ...document, sequences: [converted] })).not.toThrow()
   })
-  it('非默认固定滤镜版本进入打开工程的源码检查引用集合', () => {
+  it('非默认固定滤镜版本进入打开剪辑的源码检查引用集合', () => {
     const { document } = fixture(); const program = addEffect(document)
     document.codeMaterials![0].versions.push({ ...document.codeMaterials![0].versions[0], id: 'held-version' })
     document.sequences[0].clips[0].effects![0].code.versionId = 'held-version'

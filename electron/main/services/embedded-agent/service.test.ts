@@ -17,40 +17,40 @@ vi.mock('./attachments', () => ({ prepareEmbeddedAttachments: mocks.prepare }))
 import { EmbeddedAgentService, withGenerationOrigin } from './service'
 
 it('默认生成落点固定为消息原项目，明确目标优先，非画布不借用后台项目', () => {
-  const context = JSON.stringify({ workspace: { id: 'nodes' }, project: { id: 'original', selectedNodeId: 'reference' } })
-  expect(withGenerationOrigin('create_visible_generation_task', { prompt: '图' }, context)).toMatchObject({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: ['reference'] } })
+  const context = JSON.stringify({ workspace: { id: 'nodes' }, canvas: { id: 'original', selectedNodeId: 'reference' } })
+  expect(withGenerationOrigin('create_visible_generation_task', { prompt: '图' }, context)).toMatchObject({ destination: { mode: 'canvas', documentId: 'original', sourceNodeIds: ['reference'] } })
   const explicit = { destination: { mode: 'history' } }
   expect(withGenerationOrigin('create_visible_generation_task', explicit, context)).toBe(explicit)
-  expect(withGenerationOrigin('prepare_generation_task', {}, JSON.stringify({ workspace: { id: 'tools' }, project: { id: 'background' } }))).toEqual({ destination: { mode: 'history' } })
+  expect(withGenerationOrigin('prepare_generation_task', {}, JSON.stringify({ workspace: { id: 'tools' }, canvas: { id: 'background' } }))).toEqual({ destination: { mode: 'history' } })
   expect(withGenerationOrigin('read_application_entity', {}, context)).toEqual({})
 })
 
 it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 未选中节点时使用发送时的位置，选中和明确目标仍优先', name => {
-  const origin = { workspace: { id: 'nodes' }, project: { id: 'original', viewportNodePosition: { x: 90, y: -20 } } }
+  const origin = { workspace: { id: 'nodes' }, canvas: { id: 'original', viewportNodePosition: { x: 90, y: -20 } } }
   expect(withGenerationOrigin(name, {}, JSON.stringify(origin))).toMatchObject({
-    destination: { projectId: 'original', sourceNodeIds: [], placement: { mode: 'absolute', x: 90, y: -20 } },
+    destination: { documentId: 'original', sourceNodeIds: [], placement: { mode: 'absolute', x: 90, y: -20 } },
   })
-  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, project: { ...origin.project, selectedNodeId: 'anchor' } })))
-    .toEqual({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: ['anchor'] } })
-  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, project: { ...origin.project, selectedNodeId: 'anchor', selectedNodeIsReference: false } })))
-    .toEqual({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: 'anchor' } } })
-  const explicit = { destination: { mode: 'canvas', projectId: 'specified', sourceNodeIds: [], placement: { mode: 'absolute', x: 1, y: 2 } } }
+  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, canvas: { ...origin.canvas, selectedNodeId: 'anchor' } })))
+    .toEqual({ destination: { mode: 'canvas', documentId: 'original', sourceNodeIds: ['anchor'] } })
+  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, canvas: { ...origin.canvas, selectedNodeId: 'anchor', selectedNodeIsReference: false } })))
+    .toEqual({ destination: { mode: 'canvas', documentId: 'original', sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: 'anchor' } } })
+  const explicit = { destination: { mode: 'canvas', documentId: 'specified', sourceNodeIds: [], placement: { mode: 'absolute', x: 1, y: 2 } } }
   expect(withGenerationOrigin(name, explicit, JSON.stringify(origin))).toBe(explicit)
-  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, project: { ...origin.project, viewportNodePosition: { x: null, y: 4 } } })))
-    .toEqual({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: [] } })
+  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, canvas: { ...origin.canvas, viewportNodePosition: { x: null, y: 4 } } })))
+    .toEqual({ destination: { mode: 'canvas', documentId: 'original', sourceNodeIds: [] } })
 })
 
 it('已有生成结果导入沿用原选中对象或原视口，显式落点与其他项目保持优先', () => {
   const name = 'add_generation_result_to_canvas'
   const input = { resultRef: { kind: 'generation.result', id: 'saved' } }
-  const origin = { workspace: { id: 'nodes' }, project: { id: 'original', viewportNodePosition: { x: 90, y: -20 } } }
-  expect(withGenerationOrigin(name, input, JSON.stringify(origin))).toEqual({ ...input, projectId: 'original', placement: { mode: 'absolute', x: 90, y: -20 } })
-  expect(withGenerationOrigin(name, { ...input, projectId: 'original' }, JSON.stringify({ ...origin,
-    project: { ...origin.project, selectedNodeId: 'selected', selectedNodeIsReference: true } })))
+  const origin = { workspace: { id: 'nodes' }, canvas: { id: 'original', viewportNodePosition: { x: 90, y: -20 } } }
+  expect(withGenerationOrigin(name, input, JSON.stringify(origin))).toEqual({ ...input, documentId: 'original', placement: { mode: 'absolute', x: 90, y: -20 } })
+  expect(withGenerationOrigin(name, { ...input, documentId: 'original' }, JSON.stringify({ ...origin,
+    canvas: { ...origin.canvas, selectedNodeId: 'selected', selectedNodeIsReference: true } })))
     .toMatchObject({ placement: { mode: 'right_of_node', anchorNodeId: 'selected' } })
-  const explicit = { ...input, projectId: 'original', placement: { mode: 'absolute', x: 1, y: 2 } }
+  const explicit = { ...input, documentId: 'original', placement: { mode: 'absolute', x: 1, y: 2 } }
   expect(withGenerationOrigin(name, explicit, JSON.stringify(origin))).toEqual(explicit)
-  const other = { ...input, projectId: 'another-project' }
+  const other = { ...input, documentId: 'another-project' }
   expect(withGenerationOrigin(name, other, JSON.stringify(origin))).toBe(other)
   expect(withGenerationOrigin(name, input, JSON.stringify({ ...origin, workspace: { id: 'tools' } }))).toBe(input)
   expect(withGenerationOrigin(name, input, 'null')).toBe(input)

@@ -139,7 +139,7 @@ const implementation = {
     const state = cameraStageProjectStore(projectId).getState()
     const missing = stateKeyframeIds.filter((id) => !state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === id))
     if (missing.length > 0) {
-      throw new Error(`STATE_KEYFRAME_NOT_FOUND：${missing.join('、')} 不是本工程中的状态关键帧 id，先观察场景再删除。`)
+      throw new Error(`STATE_KEYFRAME_NOT_FOUND：${missing.join('、')} 不是本镜头参考中的状态关键帧 id，先观察场景再删除。`)
     }
     const undoToken = captureCameraStageUndo(projectId)
     try {

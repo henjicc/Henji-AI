@@ -99,11 +99,11 @@ describe('多图层下载失败原任务恢复', () => {
     expect(useCanvasStore.getState().nodes[0].data.imageUrl).toBe('completed.png')
   })
 
-  it('取消和错误工程拒绝前不产生写入，错误给出下一步', () => {
+  it('取消和错误画布拒绝前不产生写入，错误给出下一步', () => {
     const before = useCanvasStore.getState().nodes
     const controller = new AbortController(); controller.abort()
     expect(() => retryLayerStackResult({ projectId: 'project', nodeId: 'result', signal: controller.signal })).toThrow('已取消')
-    expect(() => retryLayerStackResult({ projectId: 'other', nodeId: 'result' })).toThrow('请先打开画布项目 other')
+    expect(() => retryLayerStackResult({ projectId: 'other', nodeId: 'result' })).toThrow('请先打开画布 other')
     expect(useCanvasStore.getState().nodes).toBe(before)
   })
 
@@ -111,7 +111,7 @@ describe('多图层下载失败原任务恢复', () => {
     const handlers = new Map<string, CapabilityHandler>()
     registerCanvasCapabilityHandlers({ registerHandler: (id, handler) => handlers.set(id, handler) })
     const capability = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('retry_layer_stack_result')!
-    const input = { projectRef: { kind: 'canvas.project', id: 'project' }, nodeRef: { kind: 'canvas.node', id: 'project:result' } }
+    const input = { canvasRef: { kind: 'canvas.document', id: 'project' }, nodeRef: { kind: 'canvas.node', id: 'project:result' } }
     expect(capability.completionKind).toBe('submitted')
     expect(capability.risk).toBe('R1')
     expect(capability.aiInputSchema.additionalProperties).toBe(false)

@@ -11,10 +11,10 @@ describe('apply_canvas_image_capability contract', () => {
   it('只接受后台可创建节点的图片能力，不接受本地弹窗工具', () => {
     expect(capability).toBeTruthy()
     expect(capability?.inputSchema.safeParse({
-      projectId: 'project-1', sourceNodeId: 'source-1', capabilityId: 'image.background-removal',
+      documentId: 'project-1', sourceNodeId: 'source-1', capabilityId: 'image.background-removal',
     }).success).toBe(true)
     expect(capability?.inputSchema.safeParse({
-      projectId: 'project-1', sourceNodeId: 'source-1', capabilityId: 'image.grid-split',
+      documentId: 'project-1', sourceNodeId: 'source-1', capabilityId: 'image.grid-split',
     }).success).toBe(false)
   })
 
@@ -24,21 +24,21 @@ describe('apply_canvas_image_capability contract', () => {
       expect.objectContaining({ effect: 'create', entityTypes: ['canvas.edge'] }),
       expect.objectContaining({
         effect: 'update',
-        entityTypes: ['canvas.project'],
-        propertyIds: ['canvas.project.selected_node'],
+        entityTypes: ['canvas.document'],
+        propertyIds: ['canvas.document.selected_node'],
       }),
     ]))
 
     const effects = capability?.resolveObservedEffects?.({
-      projectId: 'project-1', sourceNodeId: 'source-1', capabilityId: 'image.background-removal',
+      documentId: 'project-1', sourceNodeId: 'source-1', capabilityId: 'image.background-removal',
     }, {
-      projectId: 'project-1', kind: 'canvas-node', sourceNodeId: 'source-1',
+      documentId: 'project-1', kind: 'canvas-node', sourceNodeId: 'source-1',
       capabilityId: 'image.background-removal', nodeId: 'node-1', edgeId: 'edge-1', undoRef: 'undo-1',
     }) ?? []
     expect(effects).toHaveLength(3)
     expect(effects[2]).toMatchObject({
       effect: 'update',
-      targetRefs: [{ kind: 'canvas.project', id: 'project-1' }],
+      targetRefs: [{ kind: 'canvas.document', id: 'project-1' }],
       evidence: ['selected-node:node-1'],
     })
   })
@@ -49,7 +49,7 @@ describe('export_image_edit_target_to_canvas contract', () => {
     (item) => item.id === 'export_image_edit_target_to_canvas',
   )
   const input = {
-    projectRef: { kind: 'canvas.project', id: 'project-1' },
+    canvasRef: { kind: 'canvas.document', id: 'project-1' },
     sourceNodeRef: { kind: 'canvas.node', id: 'project-1:document-node' },
     targetRef: { kind: 'image_edit.layer', id: 'v3:document:raster' },
   }
@@ -74,7 +74,7 @@ describe('export_image_edit_target_to_canvas contract', () => {
     expect(exportCapability).toMatchObject({
       domain: 'image_edit', permission: 'canvas:write', risk: 'R1', version: 1,
       idempotent: false, parallelSafe: false, supportsUndo: true,
-      acceptsRefs: expect.arrayContaining(['canvas.project', 'canvas.node', 'image_edit.layer']),
+      acceptsRefs: expect.arrayContaining(['canvas.document', 'canvas.node', 'image_edit.layer']),
       producesRefs: ['canvas.node', 'canvas.edge'],
     })
     expect(exportCapability?.resolveConcurrencyKey?.(input)).toContain('document-node')
@@ -88,7 +88,7 @@ describe('export_image_edit_target_to_canvas contract', () => {
       nodeRef: { kind: 'canvas.node', id: 'export-node' },
       edgeRef: { kind: 'canvas.edge', id: 'export-edge' },
       undoRef: 'undo-export', width: 400, height: 300, mediaType: 'image/png',
-      verification: { verified: true, condition: '持久结果已核对', target: input.projectRef },
+      verification: { verified: true, condition: '持久结果已核对', target: input.canvasRef },
       revision: 1, scopeRevisions: { canvas: 2, image_edit: 1 },
     }
     expect(exportCapability?.outputSchema.safeParse(output).success).toBe(true)

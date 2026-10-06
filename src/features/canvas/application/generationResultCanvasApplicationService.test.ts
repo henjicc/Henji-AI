@@ -34,7 +34,7 @@ import { resolveGenerationMediaReferences } from '@/features/generation/applicat
 describe('generation result canvas bridge', () => {
   beforeEach(() => { vi.clearAllMocks(); mocks.history.mockResolvedValue(null) })
 
-  it('历史结果不在页面内存中仍能直接放入原项目，不需要先打开生成页', async () => {
+  it('历史结果不在页面内存中仍能直接放入原画布，不需要先打开生成页', async () => {
     mocks.history.mockResolvedValue({ id: 'saved', type: 'image', status: 'success', resultPaths: ['C:/history/result.png'], params: {}, prompt: '历史图片' })
     mocks.getResult.mockImplementationOnce(() => { throw new Error('生成页未挂载') })
     mocks.addTrustedMediaCanvasNode.mockResolvedValue({ projectId: 'canvas-1', nodeId: 'node-1', nodeType: 'uploadNode' })
@@ -110,7 +110,7 @@ describe('generation result canvas bridge', () => {
       data: expect.objectContaining({ sourceFileName: '详细描述'.repeat(30) }),
     }), {})
   })
-  it('指定其他项目时不误用当前项目的选中节点', async () => {
+  it('指定其他项目时不误用当前画布的选中节点', async () => {
     mocks.getResult.mockReturnValue({ mediaType: 'image', urls: ['C:/result.png'], filePaths: [], prompt: '' })
     mocks.addTrustedMediaCanvasNode.mockResolvedValue({ nodeId: 'node-1' })
     await addGenerationResultToCanvas({ projectId: 'other-project', resultRef: { kind: 'generation.result', id: 'task-1' } })

@@ -82,7 +82,7 @@ describe('NodeToolDialogRouter', () => {
     expect(screen.queryByTestId('standard-tool-dialog')).toBeNull()
   })
 
-  it('同工程关闭把 flush 精确会话和权威节点交给唯一应用服务', async () => {
+  it('同画布关闭把 flush 精确会话和权威节点交给唯一应用服务', async () => {
     const node = editableNode()
     attachProject('project-a')
     useCanvasStore.setState({
@@ -114,7 +114,7 @@ describe('NodeToolDialogRouter', () => {
     }, expect.objectContaining({ store: requireCanvasProjectInstance('project-a').store }))
   })
 
-  it('切换工程后关闭回调仍保存原工程，当前工程与页面保持不变', async () => {
+  it('切换画布后关闭回调仍保存原画布，当前画布与页面保持不变', async () => {
     const node = editableNode()
     attachProject('project-a')
     useCanvasStore.setState({ nodes: [node], activeToolDialog: { nodeId: node.id, toolType: 'edit' } })

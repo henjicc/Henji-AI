@@ -257,7 +257,7 @@ describe('应用反射通用能力适配器', () => {
       changes: [{
         kind: 'set_properties',
         // 真实日志中的错误形状：id 正确，但 kind 沿用了 project。
-        target: { kind: 'camera_stage.project', id: 'project-1' },
+        target: { kind: 'camera_stage.document', id: 'project-1' },
         entityType: 'camera_stage.playback',
         properties: { 'camera_stage.playback.current_time': 1 },
       }],

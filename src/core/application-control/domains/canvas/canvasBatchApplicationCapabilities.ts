@@ -65,7 +65,7 @@ function stringArray(value: unknown): string[] {
 }
 
 function resolveCanvasBatchEffects(output: {
-  projectId: string
+  documentId: string
   appliedOperations: Array<Record<string, unknown>>
   undoRef: string
 }): ApplicationObservedEffect[] {
@@ -127,8 +127,8 @@ function resolveCanvasBatchEffects(output: {
     if (record.kind === 'select_node') {
       effects.push({
         effect: 'update' as const,
-        entityTypes: ['canvas.project'], propertyIds: ['canvas.project.selected_node'],
-        targetRefs: [{ kind: 'canvas.project', id: output.projectId }],
+        entityTypes: ['canvas.document'], propertyIds: ['canvas.document.selected_node'],
+        targetRefs: [{ kind: 'canvas.document', id: output.documentId }],
         count: 1, verified: false, evidence,
       })
     }
@@ -154,25 +154,25 @@ const planCanvasBatch = defineApplicationCapability({
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: ['canvas'],
-  acceptsRefs: ['canvas.project', 'canvas.node', 'canvas.edge'],
+  acceptsRefs: ['canvas.document', 'canvas.node', 'canvas.edge'],
   producesRefs: ['canvas.batch_plan'],
   inputSchema: z.object({
-    projectId: canvasDocumentIdSchema,
+    documentId: canvasDocumentIdSchema,
     operations: z.array(canvasBatchOperationSchema).min(1).max(20),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     planRef: z.string(),
-    projectId: z.string(),
+    documentId: z.string(),
     operationCount: z.number(),
     operations: z.array(z.record(z.string(), z.unknown())),
     reversible: z.boolean(),
   }),
   concurrencyKey: 'canvas_plan',
-  resolveConcurrencyKey: (input) => `canvas_plan:${input.projectId}`,
-  resolveTargetIds: (input) => ({ projectId: input.projectId }),
+  resolveConcurrencyKey: (input) => `canvas_plan:${input.documentId}`,
+  resolveTargetIds: (input) => ({ documentId: input.documentId }),
   summarize: (output) => `已生成包含 ${output.operationCount} 个步骤的画布批量计划。`,
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'observed' }, impacts: [{
-    effect: 'observe', entityTypes: ['canvas.project', 'canvas.node', 'canvas.edge'], propertyIds: [],
+    effect: 'observe', entityTypes: ['canvas.document', 'canvas.node', 'canvas.edge'], propertyIds: [],
     revisionScopes: ['canvas'], verificationRequired: false,
   }] },
 })
@@ -201,7 +201,7 @@ const previewCanvasBatch = defineApplicationCapability({
   inputSchema: z.object({ planRef: z.string().min(1) }).strict(),
   outputSchema: capabilityOutputSchema({
     planRef: z.string(),
-    projectId: z.string(),
+    documentId: z.string(),
     operations: z.array(z.record(z.string(), z.unknown())),
     summary: z.string(),
     reversible: z.boolean(),
@@ -245,7 +245,7 @@ const commitCanvasBatch = defineApplicationCapability({
   supportsUndo: true,
   requiredScopes: ['canvas'],
   acceptsRefs: ['canvas.batch_plan'],
-  producesRefs: ['canvas.project', 'canvas.undo'],
+  producesRefs: ['canvas.document', 'canvas.undo'],
   inputSchema: commitCanvasBatchInputSchema,
   aiInputSchema: {
     type: 'object',
@@ -255,7 +255,7 @@ const commitCanvasBatch = defineApplicationCapability({
   },
   outputSchema: capabilityOutputSchema({
     planRef: z.string(),
-    projectId: z.string(),
+    documentId: z.string(),
     appliedOperations: z.array(z.record(z.string(), z.unknown())),
     operationCount: z.number(),
     undoRef: z.string(),
@@ -284,7 +284,7 @@ const commitCanvasBatch = defineApplicationCapability({
   resolveObservedEffects: (_input, output) => resolveCanvasBatchEffects(output),
   control: { execution: { mode: 'confirmation_required', cancelable: false, resultState: 'completed' }, impacts: [
     { effect: 'create', entityTypes: ['canvas.node', 'canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
-    { effect: 'update', entityTypes: ['canvas.node', 'canvas.project'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
+    { effect: 'update', entityTypes: ['canvas.node', 'canvas.document'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
     { effect: 'delete', entityTypes: ['canvas.node', 'canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
   ] },
 })

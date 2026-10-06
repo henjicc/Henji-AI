@@ -80,7 +80,7 @@ it('公共入口以通用属性读写项目项音频声道与片段声道映射�
   } finally { app.dispose() }
 })
 
-it('项目面板“插入”把多音轨素材连同新增音频轨放在同一撤销步；旧工程合一片段拆开时声音保留映射', async () => {
+it('项目面板“插入”把多音轨素材连同新增音频轨放在同一撤销步；旧剪辑合一片段拆开时声音保留映射', async () => {
   const { owner, id, item } = await obsProject()
   const tracks = getActiveVideoEditSequence(owner).tracks.length
   await executeVideoEditCommand(captureVideoEditCommandContext(id, 'project', { itemIds: [item.id], frame: 0 }), 'insert')

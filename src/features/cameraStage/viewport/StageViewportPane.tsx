@@ -63,7 +63,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
    * 绑死的摄像机不在场景里时，退回**跟随当前机位**而不是自由透视。
    *
    * 退回自由透视会让四窗格里出现两个一模一样的透视画面（左上角本来就是自由透视），信息量
-   * 直接少掉四分之一，而用户什么都没做——只是换了个工程，或者删掉了那台摄像机。
+   * 直接少掉四分之一，而用户什么都没做——只是换了个镜头参考，或者删掉了那台摄像机。
    */
   const source: StageViewportSource = configuredCameraId
     && !cameras.some((camera) => camera.id === configuredCameraId)

@@ -52,15 +52,15 @@ function createVideoEditTimelineScene() {
         await button(page, '剪辑').click(); await open(file)
         const identity = await authorizeMcpConnection(page, { name: '剪辑命令回环', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Henji timeline Reality')
-        const projectRef = { kind: 'video_edit.project', id: project.id }
+        const projectRef = { kind: 'video_edit.document', id: project.id }
         const read = async (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const change = async (ref, properties) => {
           const baseline = await read(ref, Object.keys(properties))
           const result = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '真实混剪命令验收', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result
         }
-        const view = async () => (await read(projectRef, ['video_edit.project.timeline_view'])).data.properties['video_edit.project.timeline_view']
-        const frame = async value => { await change(projectRef, { 'video_edit.project.program_playback': { frame: value, playing: false, playbackDirection: 1 } }); await presented(page, value) }
+        const view = async () => (await read(projectRef, ['video_edit.document.timeline_view'])).data.properties['video_edit.document.timeline_view']
+        const frame = async value => { await change(projectRef, { 'video_edit.document.program_playback': { frame: value, playing: false, playbackDirection: 1 } }); await presented(page, value) }
         const timeline = page.locator('[data-video-edit-timeline-viewport]')
         await clipNode(page, video.id).getByRole('button', { name: '选择片段 原视频', exact: true }).click()
         await clipNode(page, code.id).getByRole('button', { name: '选择片段 原创代码', exact: true }).click({ modifiers: ['Control'] })
@@ -148,11 +148,11 @@ function createVideoEditTimelineScene() {
         assert.equal(evidence.firstFrame.width, 3840); assert.equal(evidence.firstFrame.height, 2160)
         assert.equal(await page.locator('[data-video-edit-track]').count(), 32)
         evidence.visibleClips = await page.locator('[data-video-edit-clip]').count(); assert.ok(evidence.visibleClips < 20, '500片段只绘制视口内对象')
-        const pressureRef = { kind: 'video_edit.project', id: pressure.id }
-        const pressureFrame = async (frame, playing, playbackDirection) => change(pressureRef, { 'video_edit.project.program_playback': { frame, playing, playbackDirection } })
+        const pressureRef = { kind: 'video_edit.document', id: pressure.id }
+        const pressureFrame = async (frame, playing, playbackDirection) => change(pressureRef, { 'video_edit.document.program_playback': { frame, playing, playbackDirection } })
         const pressureTimeline = page.locator('[data-video-edit-timeline-viewport]')
         await pressureTimeline.focus(); await pressureTimeline.press('Control+a'); await pressureTimeline.press('Control+c')
-        const pressureView = (await read(pressureRef, ['video_edit.project.timeline_view'])).data.properties['video_edit.project.timeline_view']
+        const pressureView = (await read(pressureRef, ['video_edit.document.timeline_view'])).data.properties['video_edit.document.timeline_view']
         assert.equal(pressureView.selectedClipIds.length, 500)
         await pressureFrame(179, false, 1); await presented(page, 179); await pressureFrame(0, false, 1); await presented(page, 0)
         evidence.playback = []

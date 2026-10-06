@@ -67,7 +67,7 @@ function requireCurrentProjectId(): string {
     || !project.currentProject
     || project.currentProject.id !== project.currentProjectId
   ) {
-    throw new CanvasApplicationError('PROJECT_NOT_FOUND', '当前没有可写入的画布项目')
+    throw new CanvasApplicationError('PROJECT_NOT_FOUND', '当前没有可写入的画布')
   }
   return project.currentProjectId
 }

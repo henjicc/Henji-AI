@@ -20,7 +20,7 @@ export function writeVideoEditSourceDrag(transfer: DataTransfer, projectId: stri
 export function placeVideoEditSourceRange(projectId: string, input: VideoEditSourceRange, sequenceId: string, placement: { frame: number; track?: number }): string[] {
   input = videoEditSourceRangeSchema.parse(input)
   const owner = requireVideoEditInstance(projectId)
-  if (input.projectId !== projectId) throw new Error('源范围属于另一工程，请先引用原素材。')
+  if (input.projectId !== projectId) throw new Error('源范围属于另一剪辑，请先引用原素材。')
   const sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)
   const item = owner.document.items.find(item => item.id === input.itemId); const media = owner.document.media.find(media => media.id === item?.mediaId)
   if (!sequence || !media || identity(media) !== input.sourceIdentity) throw new Error('原序列或源素材已改变，请重新拖入。')

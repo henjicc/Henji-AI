@@ -47,7 +47,7 @@ it('公共能力与界面发送走同一固定目标事务：落点、来源、�
   const track = sequence.tracks.find(track => track.kind === 'video')!
   const app = createApplicationHarness()
   try {
-    const placed = await app.requireResult('place_video_edit_creative_result', { projectRef: { kind: 'video_edit.project', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }, placement: { mode: 'add', frame: 12, trackRef: { kind: 'video_edit.track', id: `${id}:${track.id}` }, durationFrames: 20 }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: 'history-7' }, outputIndex: 0 } })
+    const placed = await app.requireResult('place_video_edit_creative_result', { documentRef: { kind: 'video_edit.document', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }, placement: { mode: 'add', frame: 12, trackRef: { kind: 'video_edit.track', id: `${id}:${track.id}` }, durationFrames: 20 }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: 'history-7' }, outputIndex: 0 } })
     const clipId = String((placed.resultRef as { id: string }).id).slice(id.length + 1)
     expect(placed.verification).toMatchObject({ verified: true }); expect(placed.assetRef).toEqual({ kind: 'asset', id: 'asset-1' })
     expect(owner.document.sequences[0].clips.find(clip => clip.id === clipId)).toMatchObject({ start: 12, duration: 20, track: track.index, creativeSource: { type: 'generation', recordId: 'history-7', outputIndex: 0 } })
@@ -66,15 +66,15 @@ it('公共能力与界面发送走同一固定目标事务：落点、来源、�
     undoVideoEdit(id); expect(owner.document.sequences[0].clips[0].creativeSource).toMatchObject({ recordId: 'history-7' })
 
     // 回到来源（4.1）：公共入口与时间线右键同一条路，生成记录来源打开生成页
-    const source = await app.requireResult('open_video_edit_clip_source', { projectRef: { kind: 'video_edit.project', id }, clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` } }) as { status: string; sourceType: string; verification: { verified: boolean } }
+    const source = await app.requireResult('open_video_edit_clip_source', { documentRef: { kind: 'video_edit.document', id }, clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` } }) as { status: string; sourceType: string; verification: { verified: boolean } }
     expect(source).toMatchObject({ status: 'opened', sourceType: 'generation', verification: { verified: true } })
     generation.read.mockResolvedValueOnce(null)
-    const gone = await app.requireResult('open_video_edit_clip_source', { projectRef: { kind: 'video_edit.project', id }, clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` } }) as { status: string; message: string }
+    const gone = await app.requireResult('open_video_edit_clip_source', { documentRef: { kind: 'video_edit.document', id }, clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` } }) as { status: string; message: string }
     expect(gone).toMatchObject({ status: 'missing' }); expect(gone.message).toContain('已被删除')
 
     const otherProject = (await createVideoEditProject())!
-    const forged = await app.call('place_video_edit_creative_result', { projectRef: { kind: 'video_edit.project', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${otherProject.document.id}:${otherProject.document.sequences[0].id}` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` } }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: 'history-9' }, outputIndex: 0 } })
-    expect(JSON.stringify(forged)).toContain('必须属于目标剪辑工程')
+    const forged = await app.call('place_video_edit_creative_result', { documentRef: { kind: 'video_edit.document', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${otherProject.document.id}:${otherProject.document.sequences[0].id}` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` } }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: 'history-9' }, outputIndex: 0 } })
+    expect(JSON.stringify(forged)).toContain('必须属于目标剪辑')
     expect(owner.document.sequences[0].clips[0].creativeSource).toMatchObject({ recordId: 'history-7' })
   } finally { app.dispose() }
 })

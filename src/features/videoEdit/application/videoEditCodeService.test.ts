@@ -3,7 +3,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditProject, closeVideoEditProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia } from './videoEditService'
+import { createVideoEditProject, closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia } from './videoEditService'
 import { createVideoEditCodeItems, createVideoEditCodeMaterials, createVideoEditCodeVersions, createVideoEditFilterMaterials, createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { appendVideoEditItems, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from './videoEditProjectItems'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
@@ -83,7 +83,7 @@ function collectionBoundary() {
 }
 it('公共图形效果转场实体原子增改删、精确回执、锁定与保存重开均消费正式状态', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const seq = owner.activeSequenceId; const app = createApplicationHarness()
-  const project = { kind: 'video_edit.project', id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${seq}` }
+  const project = { kind: 'video_edit.document', id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${seq}` }
   const create = async (entityType: string, parent: { kind: string; id: string }, items: Array<{ properties: Record<string, unknown> }>) => app.call('change_application_entities', { summary: '验证真实图层集合', changes: [{ kind: 'create_items', entityType, parent, items }] }, (await app.read(parent)).revisions as Record<string, number>)
   try {
     expect(await create('video_edit.item', project, [{ properties: { 'video_edit.item.kind': 'graphic', 'video_edit.item.graphic_kind': 'solid', 'video_edit.item.name': '公共纯色', 'video_edit.item.graphic_width': 3840, 'video_edit.item.graphic_height': 2160 } }])).toMatchObject({ ok: true })
@@ -226,7 +226,7 @@ it('原创滤镜先完整试渲染后只发布源码定义，追加滤镜版本�
   await saveVideoEdit(id); const reopened = await reopenVideoEdit(owner.document.id)
   expect(reopened.document.codeMaterials).toEqual(owner.document.codeMaterials); expect(reopened.document.items).toEqual([])
 })
-it('滤镜试渲染失败、取消和工程变化都不发布部分源码或留下历史', async () => {
+it('滤镜试渲染失败、取消和剪辑变化都不发布部分源码或留下历史', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const baseline = owner.document; const history = owner.past.length
   boundary.failTrial = true
   await expect(createVideoEditCodeMaterials(id, [{ source: filterSource }])).rejects.toThrow('GPU trial')
@@ -288,7 +288,7 @@ it('候选返回前渲染器释放失败时仍关闭候选画面并释放试渲�
 it('公共集合提交新源码、实例参数独立、保存重开只保存源码版本，手动与工具共用撤销', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id; const app = createApplicationHarness()
   try {
-    const parent = { kind: 'video_edit.project', id }; const baseline = await app.read(parent)
+    const parent = { kind: 'video_edit.document', id }; const baseline = await app.read(parent)
     const created = await app.call('change_application_entities', { summary: '创作新的透明动态图形', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': source } }] }] }, baseline.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
     expect(instance.past).toHaveLength(1); expect(boundary.dimensions).toEqual([[3840, 2160]]); expect(boundary.activeRenderers).toBe(0)
@@ -335,25 +335,25 @@ it('非法源码与试渲染失败均不入库，不留下历史或像素资源�
   expect(instance.document).toBe(good); expect(boundary.activeRenderers).toBe(0)
 })
 
-it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写入重开的同ID工程', async () => {
+it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写入重开的同ID剪辑', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id
   let release!: () => void
   boundary.trialGate = new Promise<void>(resolve => { release = resolve })
   const creating = createVideoEditCodeItems(id, [{ source }])
   await vi.waitFor(() => expect(boundary.trialCalls).toBe(1))
   editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '检查期间的手动编辑' }) }))
-  release(); await expect(creating).rejects.toThrow('工程已修改')
+  release(); await expect(creating).rejects.toThrow('剪辑已修改')
   expect(instance.document.sequences[0].name).toBe('检查期间的手动编辑'); expect(instance.document.items).toEqual([]); expect(instance.past).toHaveLength(1)
   boundary.trialGate = undefined
   boundary.compileGate = new Promise<void>(resolve => { release = resolve })
   const count = boundary.compileCalls; const pending = createVideoEditCodeItems(id, [{ source }])
   await vi.waitFor(() => expect(boundary.compileCalls).toBe(count + 1))
   await closeVideoEditProject(id); const reopened = await reopenVideoEdit(instance.document.id)
-  release(); await expect(pending).rejects.toThrow('原工程已关闭')
+  release(); await expect(pending).rejects.toThrow('原剪辑已关闭')
   expect(reopened.document.items).toEqual([]); expect(reopened.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
 })
 
-it('磁盘替换固定版本或未检查引用不能进入工程，失败打开释放源码线程并保留原文件', async () => {
+it('磁盘替换固定版本或未检查引用不能进入剪辑，失败打开释放源码线程并保留原文件', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id
   await createVideoEditCodeItems(id, [{ source }]); const original = instance.document
   expect(() => editVideoProject(id, document => { document.codeMaterials![0].versions[0].source = source.replace('seed:7', 'seed:8'); return document })).toThrow('被替换')
@@ -387,7 +387,7 @@ it('公共集合的显式请求取消进入同一候选流程，不提交晚到�
   let release!: () => void
   boundary.trialGate = new Promise<void>(resolve => { release = resolve })
   const executor = new VideoEditCollectionExecutor('video_edit.code_material')
-  const rejected = expect(executor.apply({ kind: 'collection', entityType: executor.entityType, parent: { kind: 'video_edit.project', id: instance.document.id }, expectedRevisions: {}, operation: { kind: 'create', items: [{ properties: { 'video_edit.code_material.source': source } }] } }, { requestId: 'cancel-create', exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']), signal: controller.signal })).rejects.toThrow('请求取消')
+  const rejected = expect(executor.apply({ kind: 'collection', entityType: executor.entityType, parent: { kind: 'video_edit.document', id: instance.document.id }, expectedRevisions: {}, operation: { kind: 'create', items: [{ properties: { 'video_edit.code_material.source': source } }] } }, { requestId: 'cancel-create', exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']), signal: controller.signal })).rejects.toThrow('请求取消')
   await vi.waitFor(() => expect(boundary.trialCalls).toBe(1)); controller.abort(new Error('请求取消')); await rejected
   expect(instance.document.items).toEqual([]); expect(instance.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
   release()
@@ -417,7 +417,7 @@ it('候选显示迁移影响，确认后只绑定原片段一次撤销，明确�
   expect(getActiveVideoEditSequence(owner).clips[0].code!.curves!.amount).toHaveLength(1)
 })
 
-it('取消或工程变化释放候选，非法源码和GPU失败保留最后有效源码与历史', async () => {
+it('取消或剪辑变化释放候选，非法源码和GPU失败保留最后有效源码与历史', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   const [item] = await createVideoEditCodeItems(id, [{ source }]); appendVideoEditItems(id, [item], owner.activeSequenceId)
   const clip = getActiveVideoEditSequence(owner).clips[0]
@@ -441,7 +441,7 @@ it('MCP只追加检查后的不可变版本，显式版本/参数/曲线事务�
   try {
     const [item] = await createVideoEditCodeItems(id, [{ source }]); appendVideoEditItems(id, [item], owner.activeSequenceId)
     const definition = owner.document.codeMaterials![0]; const clip = getActiveVideoEditSequence(owner).clips[0]
-    const ref = { kind: 'video_edit.clip', id: `${id}:${clip.id}` }; const parent = { kind: 'video_edit.project', id }
+    const ref = { kind: 'video_edit.clip', id: `${id}:${clip.id}` }; const parent = { kind: 'video_edit.document', id }
     const read = await app.read(parent)
     const created = await app.call('change_application_entities', { summary: '检查并保存新源码版本', changes: [{ kind: 'create_items', entityType: 'video_edit.code_version', parent, items: [{ properties: { 'video_edit.code_version.source': source.replace('max:1', 'max:2'), 'video_edit.code_version.definition_id': definition.id } }] }] }, read.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
@@ -489,7 +489,7 @@ it('图片参数引用原媒体，经同一候选检查后写入；失败无半�
       ['video_edit.item', { 'video_edit.item.name': '伪造代码项', 'video_edit.item.kind': 'code', 'video_edit.item.code': { ...clip.code!, parameters: { logo: { kind: 'image', mediaId: 'image' } } } }],
       ['video_edit.sequence', { 'video_edit.sequence.name': '隐藏片段', 'video_edit.sequence.clips': [getActiveVideoEditSequence(owner).clips[0]] }],
     ] as const) {
-      const parent = { kind: 'video_edit.project', id }
+      const parent = { kind: 'video_edit.document', id }
       expect(await app.call('change_application_entities', { summary: '检查集合边界', changes: [{ kind: 'create_items', entityType, parent, items: [{ properties }] }] }, (await app.read(parent)).revisions as Record<string, number>)).toMatchObject({ ok: false })
       expect(owner.document).toBe(collectionBefore); expect(owner.past).toHaveLength(collectionHistory)
     }
@@ -582,7 +582,7 @@ it('批量候选绑定已有源码版本只检查选定原版本集合，不重�
   disposeVideoEditCodeCandidate(candidate)
 })
 
-it('代码资产原始参数和有理源曲线一次发布、保存重开、单次撤销，固定源码不依赖源工程', async () => {
+it('代码资产原始参数和有理源曲线一次发布、保存重开、单次撤销，固定源码不依赖源剪辑', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const before = owner.past.length
   const result = await createVideoEditCodeAssetInstance(id, importPublication())
   expect(owner.past).toHaveLength(before + 1); expect(boundary.activeRenderers).toBe(0)
@@ -667,7 +667,7 @@ it('代码资产收录失败保留清单；重试不再选路径、写文件、�
   expect(boundary.compileCalls).toBe(compiled); expect(boundary.trialCalls).toBe(rendered); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
 })
 
-it('公共收录引用确切附加效果，清单不包含选中片段的生成器；跨工程目标拒绝', async () => {
+it('公共收录引用确切附加效果，清单不包含选中片段的生成器；跨剪辑目标拒绝', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const [item] = await createVideoEditCodeItems(id, [{ source }]); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
   const asset = { ...codeAssetFixture(filterSource), parameters: { gain: .8 }, curves: undefined }
   await createVideoEditCodeAssetInstance(id, { ...importPublication(asset), filterTarget: { sequenceId: owner.activeSequenceId, clipId } })
@@ -675,16 +675,16 @@ it('公共收录引用确切附加效果，清单不包含选中片段的生成�
   vi.mocked(platform.system.dialog.save).mockResolvedValue('D:/filter.henji-code')
   const app = createApplicationHarness()
   try {
-    const input = { projectRef: { kind: 'video_edit.project', id }, targetRef: { kind: 'video_edit.effect', id: `${id}:${effect.id}` } }
+    const input = { documentRef: { kind: 'video_edit.document', id }, targetRef: { kind: 'video_edit.effect', id: `${id}:${effect.id}` } }
     const result = await app.call('collect_video_edit_code_asset', input)
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true, data: { resultRef: { kind: 'asset' }, verification: { verified: true } } })
     expect(decodeCodeAsset(bytes.get('D:/filter.henji-code')!)).toMatchObject({ sourceVersion: { source: filterSource }, parameters: { gain: .8 } })
-    expect((await app.call('collect_video_edit_code_asset', { ...input, projectRef: { kind: 'video_edit.project', id: 'other-project' } })).ok).toBe(false)
+    expect((await app.call('collect_video_edit_code_asset', { ...input, documentRef: { kind: 'video_edit.document', id: 'other-project' } })).ok).toBe(false)
     expect(platform.system.fs.writeFile).toHaveBeenCalledOnce()
   } finally { app.dispose() }
 })
 
-it('代码清单选择路径期间工程修改或取消不写文件、不收录资产', async () => {
+it('代码清单选择路径期间剪辑修改或取消不写文件、不收录资产', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const created = await createVideoEditCodeAssetInstance(id, importPublication())
   const { platform } = collectionBoundary(); const target = { kind: 'item' as const, itemId: created.itemId! }
   vi.mocked(platform.system.dialog.save).mockImplementationOnce(async () => { editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '保存期间的新名称' }) })); return 'D:/late.henji-code' })

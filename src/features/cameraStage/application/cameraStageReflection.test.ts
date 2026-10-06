@@ -81,13 +81,13 @@ describe('三维应用反射注册', () => {
     const listed = await registration.provider!.listEntities({ limit: 20 })
     const snapshot = await registration.provider!.readEntity(listed.refs[0], {})
 
-    expect(listed.refs[0]).toMatchObject({ kind: 'camera_stage.project', id: 'project-1' })
+    expect(listed.refs[0]).toMatchObject({ kind: 'camera_stage.document', id: 'project-1' })
     expect(listed.revisions).toEqual({ toolbox: 7 })
-    expect(snapshot.properties['camera_stage.project.name']).toBe('反射测试')
+    expect(snapshot.properties['camera_stage.document.name']).toBe('反射测试')
     expect(snapshot.revisions).toEqual({ toolbox: 7 })
   })
 
-  it('当前工程内唯一的子实体短 ID 会规范化为完整稳定引用', async () => {
+  it('当前镜头参考内唯一的子实体短 ID 会规范化为完整稳定引用', async () => {
     const camera = createCameraObject('主摄像机', pickDefaultColor(0))
     const object = createPrimitiveObject('sphere', '球', pickDefaultColor(1))
     mocks.readSnapshot.mockResolvedValue({
@@ -109,7 +109,7 @@ describe('三维应用反射注册', () => {
     })
   })
 
-  it('单条不可读记录不会污染其余现役工程的实体枚举', async () => {
+  it('单条不可读记录不会污染其余现役镜头参考的实体枚举', async () => {
     mocks.listProjects.mockResolvedValue([
       { id: 'old-project', name: '旧记录', createdAt: 0, updatedAt: 0, objectCount: 0 },
       { id: 'project-1', name: '反射测试', createdAt: 1, updatedAt: 2, objectCount: 1 },

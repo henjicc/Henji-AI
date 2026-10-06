@@ -149,7 +149,7 @@ function startCanvasProjectResume(
       releaseLease,
     })).catch(error => {
       releaseLease();
-      logger.error('原工程续查无法启动或保存', error, {
+      logger.error('原画布续查无法启动或保存', error, {
         event: 'canvas.resume_polling.runtime_failed', taskId: task.taskId, context: { projectId, nodeId: node.id },
       });
     });

@@ -70,8 +70,8 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
   const cancel = (): void => { controller.abort(signal?.reason ?? new Error('代码素材创建已取消。')) }
   signal?.addEventListener('abort', cancel, { once: true })
   const unsubscribe = subscribeVideoEditDomain(() => {
-    if (!listVideoEditInstances().includes(owner)) controller.abort(new Error('原工程已关闭，候选已取消。'))
-    else if (owner.document !== baseline) controller.abort(new Error('检查期间工程已修改，候选已取消。'))
+    if (!listVideoEditInstances().includes(owner)) controller.abort(new Error('原剪辑已关闭，候选已取消。'))
+    else if (owner.document !== baseline) controller.abort(new Error('检查期间剪辑已修改，候选已取消。'))
   })
   const candidates: Candidate[] = []
   logger.info('检查代码素材', { event: 'video_edit.code.create.start', context: { projectId, count: inputs.length } })
@@ -81,7 +81,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       controller.signal.throwIfAborted()
       if (expectedKind === 'generator' && program.kind !== 'generator') throw new Error('输入滤镜应添加为效果，不能直接创建生成素材。')
       if (expectedKind === 'filter' && program.kind !== 'filter') throw new Error('效果源码需要声明为输入滤镜。')
-      if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，源码检查不会写入新会话。')
+      if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，源码检查不会写入新会话。')
       if (input.name !== undefined) definition.name = input.name
       let initial: Pick<CodeMaterialInstance, 'parameters' | 'curves'> | undefined
       if (publication) {
@@ -98,7 +98,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       candidates.push(candidate(definition, program, publication && program.kind === 'filter' ? { name: input.name } : input, initial))
       rememberVideoEditCodeMetadata(owner, definition.id, definition.versions[0], program)
     }
-    if (owner.document !== baseline) throw new Error('源码检查期间工程已修改，请重新检查候选。')
+    if (owner.document !== baseline) throw new Error('源码检查期间剪辑已修改，请重新检查候选。')
     const items = candidates.filter(candidate => !candidate.filter).map(candidate => candidate.item)
     let candidateDocument = videoEditDocumentSchema.parse({ ...baseline, media: [...baseline.media.map(media => publication?.media.find(incoming => incoming.id === media.id) ?? media), ...(publication?.media ?? []).filter(media => !baseline.media.some(existing => existing.id === media.id))], codeMaterials: [...(baseline.codeMaterials ?? []), ...candidates.map(candidate => candidate.definition)], items: [...baseline.items, ...items] })
     const filter = candidates.find(candidate => candidate.filter)
@@ -123,8 +123,8 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal)
     if (publication) await publication.beforePublish()
     controller.signal.throwIfAborted()
-    if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，候选不会写入新会话。')
-    if (owner.document !== baseline) throw new Error('试渲染期间工程已修改，请重新检查候选。')
+    if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，候选不会写入新会话。')
+    if (owner.document !== baseline) throw new Error('试渲染期间剪辑已修改，请重新检查候选。')
     editVideoProject(projectId, () => candidateDocument)
     logger.info('代码素材已创建', { event: 'video_edit.code.create.completed', context: { projectId, count: candidates.length } })
     return candidates
@@ -160,12 +160,12 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document
   const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('源码版本创建已取消。'))
   signal?.addEventListener('abort', cancel, { once: true })
-  const off = subscribeVideoEditDomain(() => { if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) controller.abort(new Error('原工程已关闭或内容已改变，候选已取消。')) })
+  const off = subscribeVideoEditDomain(() => { if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) controller.abort(new Error('原剪辑已关闭或内容已改变，候选已取消。')) })
   const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []
   try {
     for (const input of inputs) {
       const definition = definitions.get(input.definitionId)
-      if (!definition) throw new Error('代码素材定义不属于此工程。')
+      if (!definition) throw new Error('代码素材定义不属于此剪辑。')
       const result = await appendCodeMaterialVersion(definition, input.source, source => compileVideoEditCode(source, controller.signal))
       controller.signal.throwIfAborted()
       if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
@@ -179,7 +179,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     // source trial avoids duplicate definitions while retaining one queue.
     await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read)), controller.signal)
     controller.signal.throwIfAborted()
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('源码版本检查期间原工程已改变。')
+    if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, () => document)
     return added
   } catch (error) { added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }

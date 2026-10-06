@@ -46,7 +46,7 @@ describe('application control coverage', () => {
     const canvas = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_generation_result_to_canvas')!
     for (const kind of ['generation.result', 'image_edit.preview']) {
       expect(canvas.acceptsRefs).toContain(kind)
-      expect(canvas.inputSchema.safeParse({ projectId: 'project', resultRef: { kind, id: 'result' } }).success).toBe(true)
+      expect(canvas.inputSchema.safeParse({ documentId: 'project', resultRef: { kind, id: 'result' } }).success).toBe(true)
     }
   })
   it('新增业务声明自动进入投影，新写操作缺少目标不能静默消失', () => {

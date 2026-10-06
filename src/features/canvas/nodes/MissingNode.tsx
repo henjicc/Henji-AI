@@ -13,7 +13,7 @@ import {
 } from '../ui/nodeControlStyles';
 
 /**
- * 只负责缺失节点的呈现；原始类型、参数、尺寸与连线仍由工程保存。
+ * 只负责缺失节点的呈现；原始类型、参数、尺寸与连线仍由画布保存。
  * 外壳与其他节点同一套（节点圆角、面板底、选中描边）：原来用浮层卡片 `UiPanel`，带浮层阴影、
  * 选中后没有任何变化，用户看不出是否已选中、能否按删除（任务 5.4）。静息用失败节点的危险描边。
  */
@@ -24,7 +24,7 @@ export const MissingNode = memo(function MissingNode({ id, data, width, height, 
     ...(edge.source === id ? [`source:${edge.sourceHandle ?? ''}`] : []),
     ...(edge.target === id ? [`target:${edge.targetHandle ?? ''}`] : []),
   ]))], [edges, id]);
-  // 工程里没保存尺寸（或为 0 / 非数）时用默认尺寸，否则外壳收缩成一条窄列、几乎点不中（任务 5.4 截图发现）
+  // 画布里没保存尺寸（或为 0 / 非数）时用默认尺寸，否则外壳收缩成一条窄列、几乎点不中（任务 5.4 截图发现）
   const resolvedWidth = typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : 280;
   const resolvedHeight = typeof height === 'number' && Number.isFinite(height) && height > 0 ? height : 160;
   const title = typeof data.displayName === 'string' && data.displayName ? data.displayName : t('node.missing');

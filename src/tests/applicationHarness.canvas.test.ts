@@ -24,7 +24,7 @@ it('公共实体调用在 A 页面创建、修改并保存 B，打开 B 复用�
     await app.requireResult('open_document', { documentId: documentId(a) })
     const visible = useCanvasStore.getState()
     const b = await app.requireResult('create_document', { kind: 'canvas', name: '后台 B' })
-    const parent = { kind: 'canvas.project', id: documentId(b) }
+    const parent = { kind: 'canvas.document', id: documentId(b) }
     const result = await app.requireResult('change_application_entities', { summary: '在后台工程创建文本', changes: [{
       kind: 'create_items', parent, entityType: 'canvas.node', items: [{ properties: { 'canvas.node.node_type': 'textAnnotationNode' } }],
     }] })
@@ -47,7 +47,7 @@ it('公共入口连续创建节点和连线，位置与持久化结果一致，�
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
     setCanvasTestProjectState({ currentProjectId: null, currentProject: null })
     const project = await app.requireResult('create_document', { kind: 'canvas', name: '公共画布创建' })
-    const parent = { kind: 'canvas.project', id: documentId(project) }
+    const parent = { kind: 'canvas.document', id: documentId(project) }
     await app.requireResult('open_document', { documentId: parent.id })
     const created = await app.requireResult('change_application_entities', { summary: '创建两个节点', changes: [{
       kind: 'create_items', parent, entityType: 'canvas.node', items: [

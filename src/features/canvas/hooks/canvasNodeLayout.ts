@@ -146,7 +146,7 @@ export function createCanvasNodeLayout(source: Source): () => void {
       const width = node.measured.width, height = node.measured.height;
       const left = node.internals.positionAbsolute.x * zoom + x;
       const top = node.internals.positionAbsolute.y * zoom + y;
-      // 工程可能带持久化尺寸；仍须等官方首次测出端口后才能暂停 DOM 布局。
+      // 画布可能带持久化尺寸；仍须等官方首次测出端口后才能暂停 DOM 布局。
       const outside = node.internals.handleBounds && width && height && (left + width * zoom < -512 || left > state.width + 512
         || top + height * zoom < -512 || top > state.height + 512);
       const keep = keyboardNavigation || node.selected || node.dragging || parents.has(node.id) || entry.expanded || entry.element.contains(focused);

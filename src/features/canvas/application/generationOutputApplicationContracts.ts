@@ -26,7 +26,7 @@ export class GenerationOutputRollbackError extends GenerationOutputApplicationEr
 }
 
 export interface CommitCanvasGenerationOutputsInput {
-  /** 旧工程可能在任务运行期间删除来源连线；缺省时仍恢复结果，但不补来源边。 */
+  /** 旧画布可能在任务运行期间删除来源连线；缺省时仍恢复结果，但不补来源边。 */
   sourceNodeId?: string
   /** 模型生成可传已有进度占位节点；本地确定性处理可省略，由本服务在事务内创建首个结果。 */
   placeholderNodeId?: string

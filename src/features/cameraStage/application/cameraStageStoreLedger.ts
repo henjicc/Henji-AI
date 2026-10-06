@@ -52,7 +52,7 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     setSceneEnvironmentImageUrl: {
       kind: 'excluded',
       category: 'internal',
-      reason: '全景环境由画布媒体连线派生并随工程持久化；助手通过画布连线使用同一入口，'
+      reason: '全景环境由画布媒体连线派生并随镜头参考持久化；助手通过画布连线使用同一入口，'
         + '这里不额外暴露可能包含本地路径的底层字段。',
     },
     ...fieldLedgerEntries(SCENE_TIMELINE_FIELDS),
@@ -125,13 +125,13 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     setGizmoMode: {
       kind: 'excluded',
       category: 'view_state',
-      reason: '手柄模式只决定用户下一次鼠标拖拽被解释成移动还是旋转，不写入工程文件也不影响出片；'
+      reason: '手柄模式只决定用户下一次鼠标拖拽被解释成移动还是旋转，不写入镜头参考文件也不影响出片；'
         + '助手改变换值直接写 camera_stage.object.transform.*，不经过手柄。',
     },
     setViewMode: {
       kind: 'excluded',
       category: 'view_state',
-      reason: '导演视角与机位视角的切换只影响本机当前窗口看到的画面，不进工程文件；'
+      reason: '导演视角与机位视角的切换只影响本机当前窗口看到的画面，不进镜头参考文件；'
         + '助手要看某个机位的画面用 observe_camera_stage_scene 读结构化状态。',
     },
   },

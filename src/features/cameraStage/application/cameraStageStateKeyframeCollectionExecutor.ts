@@ -60,7 +60,7 @@ function optionalContinuity(value: JsonValue | undefined): StageStateKeyframe['c
 /** 状态关键帧稳定引用形如 `projectId:stateKeyframeId`。 */
 function childStateKeyframeId(ref: ApplicationRef): string {
   const separator = ref.id.indexOf(':')
-  if (separator < 1) throw new Error(`STATE_KEYFRAME_REF_INVALID：«${ref.id}» 不是合法状态关键帧引用，应为 工程:镜头。`)
+  if (separator < 1) throw new Error(`STATE_KEYFRAME_REF_INVALID：«${ref.id}» 不是合法状态关键帧引用，应为 <镜头参考文档 ID>:<镜头 ID>。`)
   return ref.id.slice(separator + 1)
 }
 

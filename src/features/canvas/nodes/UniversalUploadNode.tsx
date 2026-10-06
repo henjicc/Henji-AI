@@ -214,7 +214,7 @@ const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUp
 
 EmptyUploadNode.displayName = 'EmptyUploadNode'
 
-/** 统一上传节点入口；沿用媒体类型标识以兼容已有工程、连线和媒体工具。 */
+/** 统一上传节点入口；沿用媒体类型标识以兼容已有画布、连线和媒体工具。 */
 export const UniversalUploadNode = memo((props: NodeProps) => {
   switch (props.type) {
     case CANVAS_NODE_TYPES.upload:

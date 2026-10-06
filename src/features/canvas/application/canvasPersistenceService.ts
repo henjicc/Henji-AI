@@ -41,7 +41,7 @@ export class CanvasTransactionConflictError extends Error {
   readonly code = 'STALE_CONTEXT'
   readonly memoryState = 'preserved'
   readonly persistenceState = 'unconfirmed'
-  readonly recovery = { capabilityId: 'retry_canvas_project_save', replayMutation: false }
+  readonly recovery = { capabilityId: 'retry_canvas_document_save', replayMutation: false }
   constructor(readonly projectId: string, readonly cause?: unknown) {
     super('画布事务期间出现新的编辑，已保留当前内容；请重试保存并检查结果后重新规划，不会覆盖新编辑')
     this.name = 'CanvasTransactionConflictError'
@@ -95,7 +95,7 @@ export class CanvasPersistenceError extends Error {
   transactionFacts?: Extract<ApplicationTransactionResult, { status: 'failed' }>
   readonly code = 'PERSISTENCE_FAILED'
   readonly retryable = true
-  readonly recovery = { capabilityId: 'retry_canvas_project_save', replayMutation: false }
+  readonly recovery = { capabilityId: 'retry_canvas_document_save', replayMutation: false }
   readonly memoryState = 'modified'
   readonly persistenceState = 'unconfirmed'
   constructor(readonly projectId: string, readonly cause: unknown) {

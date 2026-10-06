@@ -171,7 +171,7 @@ describe('generationOutputApplicationService 图层栈', () => {
   });
   afterEach(() => uninstallHarnessNativeStorage());
 
-  it.each(['background', 'switch', 'cancel', 'rollback-unknown', 'rollback-error'] as const)('图层原子提交使用原项目并正确补偿未提交文档（%s）', async mode => {
+  it.each(['background', 'switch', 'cancel', 'rollback-unknown', 'rollback-error'] as const)('图层原子提交使用原画布并正确补偿未提交文档（%s）', async mode => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     let running: Promise<unknown> | undefined;

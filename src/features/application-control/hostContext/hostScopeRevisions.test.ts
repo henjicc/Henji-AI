@@ -86,7 +86,7 @@ describe('宿主作用域 revision', () => {
     const snapshot = createHostContextSnapshot()
     expect(snapshot.surface).toMatchObject({
       id: 'tool.audio_edit',
-      focusedRef: 'audio_edit.project:audio-project',
+      focusedRef: 'audio_edit.document:audio-project',
       selectedRefs: ['audio_edit.transcript_block:audio-project:word-1'],
     })
     expect(snapshot.scopeRevisions.audio_edit).toBe(getAudioEditRevision())
@@ -114,25 +114,25 @@ describe('宿主作用域 revision', () => {
       useCanvasStore.setState({ selectedNodeId: null, currentViewport: { x: 100, y: 200, zoom: 2 }, canvasViewportSize: { width: 1000, height: 800 } })
       const before = getHostScopeRevisions().canvas
       const sent = createHostContextSnapshot()
-      expect(sent.project.viewportNodePosition).toEqual({ x: 90, y: -20 })
+      expect(sent.canvas.viewportNodePosition).toEqual({ x: 90, y: -20 })
       useCanvasStore.setState({ currentViewport: { x: 900, y: 600, zoom: 1 } })
-      expect(createHostContextSnapshot().project.viewportNodePosition).toEqual({ x: -510, y: -320 })
-      expect(sent.project.viewportNodePosition).toEqual({ x: 90, y: -20 })
+      expect(createHostContextSnapshot().canvas.viewportNodePosition).toEqual({ x: -510, y: -320 })
+      expect(sent.canvas.viewportNodePosition).toEqual({ x: 90, y: -20 })
       expect(getHostScopeRevisions().canvas).toBe(before)
       useCanvasStore.setState({ selectedNodeId: 'selected' })
-      expect(createHostContextSnapshot().project.viewportNodePosition).toBeUndefined()
-      expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(false)
+      expect(createHostContextSnapshot().canvas.viewportNodePosition).toBeUndefined()
+      expect(createHostContextSnapshot().canvas.selectedNodeIsReference).toBe(false)
       useCanvasStore.setState({ nodes: [{ id: 'selected', type: 'uploadNode', position: { x: 0, y: 0 }, data: { imageUrl: 'C:/reference.png' } }] })
-      expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(true)
+      expect(createHostContextSnapshot().canvas.selectedNodeIsReference).toBe(true)
       useCanvasStore.getState().updateNodeData('selected', { isGenerating: true })
-      expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(false)
-      expect(createHostContextSnapshot().project.selectedNodeSummary).toEqual({ type: 'uploadNode', name: 'uploadNode', isGenerating: true })
+      expect(createHostContextSnapshot().canvas.selectedNodeIsReference).toBe(false)
+      expect(createHostContextSnapshot().canvas.selectedNodeSummary).toEqual({ type: 'uploadNode', name: 'uploadNode', isGenerating: true })
       useCanvasStore.setState({ nodes: [{ id: 'selected', type: 'imageNode', position: { x: 0, y: 0 }, data: { prompt: '待生成' } }] })
-      expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(false)
+      expect(createHostContextSnapshot().canvas.selectedNodeIsReference).toBe(false)
       useCanvasStore.setState({ selectedNodeId: null })
       useNavigationStore.setState({ activeWorkspace: 'generation' })
-      expect(createHostContextSnapshot().project.viewportNodePosition).toBeUndefined()
-      expect(createHostContextSnapshot().project.selectedNodeSummary).toBeUndefined()
+      expect(createHostContextSnapshot().canvas.viewportNodePosition).toBeUndefined()
+      expect(createHostContextSnapshot().canvas.selectedNodeSummary).toBeUndefined()
     } finally {
       useCanvasStore.setState(canvas); useProjectStore.setState(project); useNavigationStore.setState(navigation)
     }

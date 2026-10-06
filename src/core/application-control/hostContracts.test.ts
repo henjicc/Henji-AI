@@ -23,7 +23,7 @@ describe('application host contracts', () => {
       revision: 4,
       scopeRevisions: { navigation: 1, generation: 0, canvas: 2, toolbox: 1, assets: 0 },
       workspace: { id: 'nodes', activeToolId: null },
-      project: { id: 'project-1', selectedNodeId: 'node-1' },
+      canvas: { id: 'project-1', selectedNodeId: 'node-1' },
       generation: { commandReady: true },
       assets: { view: 'closed', selectedAssetId: null },
       uiReady: true,

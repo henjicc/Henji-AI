@@ -19,13 +19,13 @@ it('正式助手写入遭存储拒绝后通过恢复动作保存同一修改，�
   const app = createApplicationHarness()
   try {
     const result = await app.call('change_application_entities', { summary: '新增上传节点', changes: [{
-      kind: 'create_items', entityType: 'canvas.node', parent: { kind: 'canvas.project', id: projectId },
+      kind: 'create_items', entityType: 'canvas.node', parent: { kind: 'canvas.document', id: projectId },
       items: [{ properties: { 'canvas.node.node_type': 'uploadNode' } }],
     }] })
     expect(result.ok, JSON.stringify(result)).toBe(false)
     expect(JSON.stringify(result)).toContain('保存未确认')
     expect(JSON.stringify(result)).toContain('不要重复')
-    const retry = await app.call('retry_canvas_project_save', { projectRef: { kind: 'canvas.project', id: projectId } })
+    const retry = await app.call('retry_canvas_document_save', { documentRef: { kind: 'canvas.document', id: projectId } })
     expect(retry.ok, JSON.stringify(retry)).toBe(true)
   } finally { app.dispose() }
   const record = (readCanvasTestProject(projectId))!

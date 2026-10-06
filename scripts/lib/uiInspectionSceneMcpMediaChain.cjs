@@ -109,7 +109,7 @@ function createMcpMediaChainScenes(context) {
          * 这种纯文生图（images 上限 0）会因为「用户刚好选中了一个节点」而校验失败。
          * 单独跑这个场景时画布没有选中项，所以看不出来；和别的场景连跑就必现。
          */
-        const destination = { mode: 'canvas', projectId: projectB, sourceNodeIds: [] }
+        const destination = { mode: 'canvas', documentId: projectB, sourceNodeIds: [] }
         const prepared = await callTool(client, 'prepare_generation_task', {
           modelId: IMAGE_MODEL, prompt: '链路验收底图', mediaType: 'image', params: { kieZImageAspectRatio: '1:1' },
           destination,

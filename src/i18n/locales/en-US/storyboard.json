@@ -527,9 +527,9 @@
       "errors": {
         "nodeMissing": "Canvas execution node not found: {{id}}",
         "singleSource": "Multi-angle generation requires exactly one source image",
-        "projectMissing": "There is no canvas project available for generation",
+        "projectMissing": "There is no canvas available for generation",
         "singleOutput": "A single multi-angle view must return exactly one output; received {{count}}",
-        "projectSwitched": "The canvas project changed, so this generation result was discarded",
+        "projectSwitched": "The canvas changed, so this generation result was discarded",
         "batchIncomplete": "The multi-angle batch did not complete"
       },
       "status": {

@@ -27,7 +27,7 @@ export function isStageRenderStyle(raw: unknown): raw is StageRenderStyle {
   return typeof raw === 'string' && (STAGE_RENDER_STYLE_VALUES as readonly string[]).includes(raw)
 }
 
-/** 旧工程没有这个字段、或写入了非法值时一律回退彩色，保证老工程按原样出片。 */
+/** 旧镜头参考没有这个字段、或写入了非法值时一律回退彩色，保证老镜头参考按原样出片。 */
 export function normalizeStageRenderStyle(raw: unknown): StageRenderStyle {
   return isStageRenderStyle(raw) ? raw : DEFAULT_STAGE_RENDER_STYLE
 }

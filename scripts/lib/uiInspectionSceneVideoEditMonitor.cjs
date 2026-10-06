@@ -169,15 +169,15 @@ function createVideoEditMonitorScene() {
         evidence.trackBanks = { mixed: await trackBanks(page) }
         const identity = await authorizeMcpConnection(page, { name: '源监视器音画与字幕回环', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Henji monitor Reality')
-        const projectRef = { kind: 'video_edit.project', id: project.id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${project.id}:${sequence.id}` }; const sourceRef = { kind: 'video_edit.source', id: `${project.id}:source` }
+        const projectRef = { kind: 'video_edit.document', id: project.id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${project.id}:${sequence.id}` }; const sourceRef = { kind: 'video_edit.source', id: `${project.id}:source` }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const change = async (ref, properties) => {
           const result = await callTool(client, 'change_application_entities', operationEnvelope([await read(ref, Object.keys(properties))], { summary: '监视器正式音画与字幕编辑', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result
         }
         const focus = async ref => { const result = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref })); assert.equal(result.executionState, 'completed', JSON.stringify(result)); return result }
-        const frame = async value => { await change(projectRef, { 'video_edit.project.program_playback': { frame: value, playing: false, playbackDirection: 1 } }); await presented(page, value) }
-        const play = async ref => change(ref, { 'video_edit.project.program_playback': { frame: 0, playing: true, playbackDirection: 1 } })
+        const frame = async value => { await change(projectRef, { 'video_edit.document.program_playback': { frame: value, playing: false, playbackDirection: 1 } }); await presented(page, value) }
+        const play = async ref => change(ref, { 'video_edit.document.program_playback': { frame: 0, playing: true, playbackDirection: 1 } })
         const sourceRead = async () => (await read(sourceRef, ['video_edit.source.time_us', 'video_edit.source.presented_time_us', 'video_edit.source.in_us', 'video_edit.source.out_us', 'video_edit.source.playing', 'video_edit.source.status'])).data.properties
         const openSource = async item => {
           await focus({ kind: 'video_edit.item', id: `${project.id}:${item.id}` })
@@ -260,7 +260,7 @@ function createVideoEditMonitorScene() {
         evidence.sourceRangeWaveform = { ...rangeWave, monoDecodes: monoDecodes(rangeWave), sourceInk }
         await play(projectRef); await waitLevel(page, '节目播放电平', true)
         await button(panel(page, 'source'), '正向').click(); await waitLevel(page, '源播放电平', true); await waitLevel(page, '节目播放电平', false)
-        const stoppedProgram = (await read(projectRef, ['video_edit.project.program_playback'])).data.properties['video_edit.project.program_playback']; assert.equal(stoppedProgram.playing, false)
+        const stoppedProgram = (await read(projectRef, ['video_edit.document.program_playback'])).data.properties['video_edit.document.program_playback']; assert.equal(stoppedProgram.playing, false)
         // Native is the primary path (2.3): local items play through the native source views (no media element);
         // the diagnostic setting forcing the browser keeps the media elements.
         const sourceNative = String(process.env.HENJI_VIDEO_DECODER ?? '').toLowerCase() !== 'browser'
@@ -301,7 +301,7 @@ function createVideoEditMonitorScene() {
         await frame(0); evidence.sourceRange = await setRange(); await shot('monitor-source-precise-range')
         evidence.currentPhase = '源画面、声音和关联分量拖入与一次撤销'; store()
         const viewport = page.locator('[data-video-edit-timeline-viewport]'); const beforeRange = readProject(file).sequences[0].clips
-        await change(projectRef, { 'video_edit.project.timeline_view': { ...(await read(projectRef, ['video_edit.project.timeline_view'])).data.properties['video_edit.project.timeline_view'], zoom: 1, targetTrackIds: ['monitor-track-7'] } })
+        await change(projectRef, { 'video_edit.document.timeline_view': { ...(await read(projectRef, ['video_edit.document.timeline_view'])).data.properties['video_edit.document.timeline_view'], zoom: 1, targetTrackIds: ['monitor-track-7'] } })
         evidence.rangeDrops = []
         for (const component of ['video', 'audio', 'linked']) {
           const track = component === 'audio' ? 7 : 6; const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
@@ -380,7 +380,7 @@ function createVideoEditMonitorScene() {
         await dialogs(app, [file], srtOutput); await button(content, '导入或导出字幕').click(); await page.getByRole('menuitem', { name: '导出 SRT', exact: true }).click()
         await poll(page, async () => fs.existsSync(srtOutput) ? fs.readFileSync(srtOutput, 'utf8') : '', value => value.includes('Agent 字幕 · 中文验收'), '手动SRT导出未写出')
         await dialogs(app, [file], vttOutput)
-        const subtitleExport = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.project.name'])], { projectRef, format: 'vtt' }))
+        const subtitleExport = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, format: 'vtt' }))
         assert.equal(subtitleExport.executionState, 'completed', JSON.stringify(subtitleExport)); assert.equal(subtitleExport.verificationState, 'verified', JSON.stringify(subtitleExport))
         const srt = fs.readFileSync(srtOutput, 'utf8'); const vtt = fs.readFileSync(vttOutput, 'utf8')
         assert.match(srt, /00:00:00,533 --> 00:00:01,467/); assert.match(vtt, /00:00:00\.533 --> 00:00:01\.467/); assert.ok(vtt.startsWith('WEBVTT'))
@@ -403,8 +403,8 @@ function createVideoEditMonitorScene() {
           await dialogs(app, [file], output)
           const startedAt = performance.now()
           if (settings.rate === 48000) await button(page, '导出视频').click()
-          else { const result = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.project.name'])], { projectRef, format: 'mp4' })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
-          const task = await poll(page, () => callTool(client, 'query_video_edit_export', { projectRef }), value => ['completed', 'failed', 'cancelled'].includes(value.data.task?.state), '正式视频导出没有结束', 2400)
+          else { const result = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, format: 'mp4' })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
+          const task = await poll(page, () => callTool(client, 'query_video_edit_export', { documentRef: projectRef }), value => ['completed', 'failed', 'cancelled'].includes(value.data.task?.state), '正式视频导出没有结束', 2400)
           assert.equal(task.data.task.state, 'completed', JSON.stringify(task))
           const metadata = mediaProbe(ffprobePath, output); const video = metadata.streams.find(stream => stream.codec_type === 'video'); const audio = metadata.streams.find(stream => stream.codec_type === 'audio')
           assert.equal(video.width, 3840); assert.equal(video.height, 2160); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 180)
@@ -436,8 +436,8 @@ function createVideoEditMonitorScene() {
         evidence.phases.push('SRT/VTT导入编辑、锚定删除撤销、MCP定位修改、隐藏草稿、保存重开、4K60字幕边界和两种音频格式'); store()
         evidence.currentPhase = '原4K60完整压力样本与500字幕有界列表'; store()
         const firstAt = performance.now(); await open(pressureFile); evidence.firstDecodeMs = performance.now() - firstAt
-        const canvas = page.getByLabel('剪辑画面', { exact: true }); const pressureRef = { kind: 'video_edit.project', id: pressure.id }
-        const pressureFrame = async (value, playing = false, direction = 1) => change(pressureRef, { 'video_edit.project.program_playback': { frame: value, playing, playbackDirection: direction } })
+        const canvas = page.getByLabel('剪辑画面', { exact: true }); const pressureRef = { kind: 'video_edit.document', id: pressure.id }
+        const pressureFrame = async (value, playing = false, direction = 1) => change(pressureRef, { 'video_edit.document.program_playback': { frame: value, playing, playbackDirection: direction } })
         evidence.firstFrame = await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset }))
         evidence.trackBanks.pressure = await trackBanks(page)
         assert.equal(evidence.firstFrame.width, 3840); assert.equal(evidence.firstFrame.height, 2160); assert.equal(await page.locator('[data-video-edit-track]').count(), 32)

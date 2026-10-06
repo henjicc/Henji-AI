@@ -108,7 +108,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   const requestIds = { original: randomUUID(), waiting: randomUUID(), inserted: randomUUID() }
   const send = (text: string, project: keyof typeof requestIds, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery,
     model: { providerId: 'test', modelId: 'fixture' }, access: 'full',
-    context: JSON.stringify({ workspace: { id: 'nodes' }, project: { id: project, selectedNodeId: `${project}-reference`, selectedNodeIsReference: project !== 'waiting' } }) }, requestIds[project])
+    context: JSON.stringify({ workspace: { id: 'nodes' }, canvas: { id: project, selectedNodeId: `${project}-reference`, selectedNodeIsReference: project !== 'waiting' } }) }, requestIds[project])
   await send('原请求', 'original')
   await vi.waitFor(() => expect(requests[0]).toBe('原请求'), { timeout: 15000 })
   const originalCalls = stage === 'tool' ? 1 : 0
@@ -116,7 +116,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   await send('等待消息', 'waiting')
   await send('插入消息', 'inserted', 'interrupt')
   await vi.waitFor(() => expect(calls).toHaveLength(originalCalls + 1), { timeout: 10000 })
-  expect(calls[originalCalls]).toMatchObject({ prompt: '插入消息', destination: { mode: 'canvas', projectId: 'inserted', sourceNodeIds: ['inserted-reference'] } })
+  expect(calls[originalCalls]).toMatchObject({ prompt: '插入消息', destination: { mode: 'canvas', documentId: 'inserted', sourceNodeIds: ['inserted-reference'] } })
   expect(service.snapshot().busy).toBe(true)
   expect(service.snapshot().pendingMessages?.map(message => message.text)).toEqual(['等待消息'])
   expect(requests).not.toContain('等待消息')
@@ -127,11 +127,11 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
     expect(originalSignal?.aborted).toBe(true)
     finishOriginal()
     await vi.waitFor(() => expect(mocks.info).toHaveBeenCalledWith('内置助手工具调用完成', expect.objectContaining({ requestId: requestIds.original })))
-    expect(calls[0]).toMatchObject({ prompt: '原请求', destination: { projectId: 'original', sourceNodeIds: ['original-reference'] } })
+    expect(calls[0]).toMatchObject({ prompt: '原请求', destination: { documentId: 'original', sourceNodeIds: ['original-reference'] } })
   }
   expect(calls.slice(originalCalls)).toEqual([
-    { prompt: '插入消息', destination: { mode: 'canvas', projectId: 'inserted', sourceNodeIds: ['inserted-reference'] } },
-    { prompt: '等待消息', destination: { mode: 'canvas', projectId: 'waiting', sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: 'waiting-reference' } } },
+    { prompt: '插入消息', destination: { mode: 'canvas', documentId: 'inserted', sourceNodeIds: ['inserted-reference'] } },
+    { prompt: '等待消息', destination: { mode: 'canvas', documentId: 'waiting', sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: 'waiting-reference' } } },
   ])
   expect(requests).toEqual(stage === 'model'
     ? ['原请求', '插入消息', '插入消息', '插入消息', '等待消息', '等待消息']

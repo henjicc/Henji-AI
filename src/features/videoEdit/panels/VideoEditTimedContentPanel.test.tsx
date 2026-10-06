@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances, saveVideoEdit, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { createVideoEditCaption, updateVideoEditTimedContent } from '../application/videoEditTimedContent'
 import { VideoEditTimedContentPanel } from './VideoEditTimedContentPanel'
 import { reopenVideoEdit } from '../application/videoEditDocumentTestKit'
@@ -35,7 +35,7 @@ beforeEach(async () => {
 })
 afterEach(async () => { cleanup(); for (const current of listVideoEditInstances()) await closeVideoEditProject(current.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
-it('真实片段字幕创建、整笔编辑、定位和撤销使用同一工程历史', async () => {
+it('真实片段字幕创建、整笔编辑、定位和撤销使用同一剪辑历史', async () => {
   const view = render(<View />); const history = owner.past.length
   fireEvent.click(view.getByRole('button', { name: '新增字幕' }))
   expect((view.getByLabelText('开始帧') as HTMLInputElement).value).toBe('45')
@@ -73,7 +73,7 @@ it('标记可改为序列锚定、编辑整数帧、定位和删除，一次操�
   expect(sequence().markers).toEqual([]); expect(owner.past).toHaveLength(history + 3); expect(onError).not.toHaveBeenCalled()
 })
 
-it('锁定片段拒绝字幕写入，失败保留草稿和原工程', async () => {
+it('锁定片段拒绝字幕写入，失败保留草稿和原剪辑', async () => {
   const id = createVideoEditCaption(owner.document.id, sequence().id, { clipId: 'clip', start: 40, duration: 20, text: '原字幕' })
   editVideoProject(owner.document.id, document => { document.sequences[0].tracks[1].locked = true; return document })
   const view = render(<View />); const history = owner.past.length
@@ -92,7 +92,7 @@ it('外部已改字幕不会被旧草稿覆盖', async () => {
   expect(sequence().captions![0].text).toBe('助手新修改'); expect(view.getByRole('alert').textContent).toContain('新修改')
 })
 
-it('隐藏、切序列和同工程重开清除原草稿，不提交到新目标', async () => {
+it('隐藏、切序列和同剪辑重开清除原草稿，不提交到新目标', async () => {
   const original = sequence().id; const second = appendVideoEditSequence(owner.document.id)
   const view = render(<View />)
   fireEvent.click(view.getByRole('button', { name: '新增字幕' })); fireEvent.change(view.getByLabelText('字幕文字'), { target: { value: '未提交原草稿' } })

@@ -149,11 +149,11 @@ function createVideoEditPerformanceScene() {
       const evidence = { completed: false, startedAt: new Date().toISOString(), tolerance: TOLERANCE, phases: [], captures: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const phase = name => { evidence.currentPhase = name; store() }
-      const projectRef = { kind: 'video_edit.project', id: PROJECT_ID }; const sequenceRef = { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }
+      const projectRef = { kind: 'video_edit.document', id: PROJECT_ID }; const sequenceRef = { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }
       let client; let observed = false
       const playback = async (frame, playing) => {
-        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })
-        await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '性能定位', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef, properties: { 'video_edit.project.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
+        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
+        await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '性能定位', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
       }
       const create = async (entityType, parent, items) => { const read = await callTool(client, 'read_application_entity', { ref: parent }); const result = await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: `创建${entityType}`, changes: [{ kind: 'create_items', entityType, parent, items: items.map(properties => ({ properties })) }] })); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result }
       const readProject = () => readVideoEditFile(file)

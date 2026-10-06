@@ -53,7 +53,7 @@ export function setDirectorView(snapshot: DirectorViewSnapshot): void {
   current = snapshot
 }
 
-/** 新建工程时调用：不继承上一次离开时的自由视角，回到标准正视角度 */
+/** 新建镜头参考时调用：不继承上一次离开时的自由视角，回到标准正视角度 */
 export function resetDirectorView(): void {
   current = cloneDirectorView(DEFAULT_DIRECTOR_VIEW)
 }

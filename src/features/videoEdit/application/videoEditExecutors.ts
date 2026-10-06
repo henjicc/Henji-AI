@@ -86,13 +86,13 @@ function content(document: VideoEditDocument): string { return JSON.stringify({ 
 function completed(before: VideoEditDocument, after: VideoEditDocument, refs: ApplicationRef[], viewBefore?: ProjectViewSnapshot, sourcePause?: VideoEditSourcePause): ApplicationCompletedStepResult {
   const undoToken = crypto.randomUUID(); undo.set(undoToken, { owner: requireVideoEditInstance(before.id), before, after, refs, viewBefore, viewAfter: viewBefore ? projectViewSnapshot(before.id) : undefined, sourcePause })
   while (undo.size > 100) undo.delete(undo.keys().next().value!)
-  return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: refs, undoToken, cascadeEffects: [...cascades(before, after), ...(sourcePause ? [sourcePauseEffect(before.id)] : [])], evidence: [{ kind: 'entity_state', fact: '剪辑工程已修改，可由同一工程历史撤销。', capturedAt: new Date().toISOString() }] }
+  return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: refs, undoToken, cascadeEffects: [...cascades(before, after), ...(sourcePause ? [sourcePauseEffect(before.id)] : [])], evidence: [{ kind: 'entity_state', fact: '剪辑已修改，可由同一剪辑历史撤销。', capturedAt: new Date().toISOString() }] }
 }
 async function restore(token: string): Promise<ApplicationCompletedStepResult> {
-  const record = undo.get(token); if (!record) throw new Error('撤销记录已过期，请使用工程撤销。')
+  const record = undo.get(token); if (!record) throw new Error('撤销记录已过期，请使用剪辑撤销。')
   const instance = requireVideoEditInstance(record.before.id)
-  if (instance !== record.owner) throw new Error('原工程会话已关闭，请使用当前工程历史。')
-  if (content(instance.document) !== content(record.after)) throw new Error('工程已有后续修改，请逐步撤销。')
+  if (instance !== record.owner) throw new Error('原剪辑会话已关闭，请使用当前剪辑历史。')
+  if (content(instance.document) !== content(record.after)) throw new Error('剪辑已有后续修改，请逐步撤销。')
   if (record.viewAfter && !sameProjectView(projectViewSnapshot(record.before.id), record.viewAfter)) throw new Error('项目浏览会话已有后续修改，请按当前状态操作。')
   if (record.sourcePause) {
     if (!matchesVideoEditSourceCommand(record.before.id, record.sourcePause.afterCommand)) throw new Error('源预览已有后续操作，无法恢复旧节目操作。')
@@ -101,14 +101,14 @@ async function restore(token: string): Promise<ApplicationCompletedStepResult> {
     const pausedCommand = setVideoEditView(record.before.id, { playing: false })
     const controller = new AbortController()
     const valid = (): boolean => listVideoEditInstances().includes(instance) && content(instance.document) === content(record.after) && !!record.viewAfter && sameProjectView({ ...projectViewSnapshot(record.before.id), programCommand: previousCommand }, record.viewAfter) && videoEditProgramCommandIdentity(record.before.id) === pausedCommand
-    const cancelIfChanged = (): void => { if (!valid()) controller.abort(new Error('工程或节目已有后续操作，源恢复已取消。')) }
+    const cancelIfChanged = (): void => { if (!valid()) controller.abort(new Error('剪辑或节目已有后续操作，源恢复已取消。')) }
     const unsubscribeView = subscribeVideoEditView(cancelIfChanged)
     const unsubscribeDomain = subscribeVideoEditDomain(cancelIfChanged)
     const pending = restoreVideoEditSourcePause(record.before.id, record.sourcePause, controller.signal)
     const restoringSource = videoEditSourceCommandIdentity(record.before.id)
     try {
       await pending
-      if (!valid()) throw new Error('工程或节目已有后续操作，未覆盖新状态。')
+      if (!valid()) throw new Error('剪辑或节目已有后续操作，未覆盖新状态。')
     } catch (error) {
       const expected = matchesVideoEditSourceCommand(record.before.id, restoringSource) ? restoringSource : record.sourcePause.beforeCommand
       if (listVideoEditInstances().includes(instance) && matchesVideoEditSourceCommand(record.before.id, expected)) {
@@ -128,7 +128,7 @@ async function restore(token: string): Promise<ApplicationCompletedStepResult> {
     const restoredCommand = setVideoEditView(record.before.id, record.viewBefore.program)
     restoreVideoEditProgramCommandIdentity(record.before.id, restoredCommand, record.viewBefore.programCommand)
   }
-  return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: record.refs, cascadeEffects: [...cascades(record.after, record.before), ...(record.sourcePause ? [sourcePauseEffect(record.before.id)] : [])], evidence: [{ kind: 'entity_state', fact: '已恢复修改前工程内容。', capturedAt: new Date().toISOString() }] }
+  return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: record.refs, cascadeEffects: [...cascades(record.after, record.before), ...(record.sourcePause ? [sourcePauseEffect(record.before.id)] : [])], evidence: [{ kind: 'entity_state', fact: '已恢复修改前剪辑内容。', capturedAt: new Date().toISOString() }] }
 }
 export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
   readonly effectContract
@@ -139,31 +139,31 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const { projectId, childId } = splitVideoEditRef(step.target)
     const owner = requireVideoEditInstance(projectId); const before = owner.document
     const keys = step.mutations.map(mutation => mutation.propertyId)
-    const writesView = this.entityType === 'video_edit.project' && keys.some(key => ['video_edit.project.selected_item_ids', 'video_edit.project.selected_bin_id', 'video_edit.project.open_sequence_ids', 'video_edit.project.timeline_view', 'video_edit.project.program_playback'].includes(key))
+    const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback'].includes(key))
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
     const data = readVideoEditData(step.target)
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('工程或浏览会话已有后续修改，请重读当前状态。')
+    if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('剪辑或浏览会话已有后续修改，请重读当前状态。')
     if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => mutation.propertyId === 'video_edit.clip.source_in_us')) data.sourceRemainder = { numerator: 0, denominator: 1 }
     if (this.entityType === 'video_edit.item') for (const key of ['graphicKind', 'graphicWidth', 'graphicHeight']) delete data[key]
-    if (this.entityType === 'video_edit.project') {
+    if (this.entityType === 'video_edit.document') {
       // Validate view writes before any persistent rename; a failed transaction cannot leave half an edit.
       const instance = requireVideoEditInstance(projectId)
       const selectedItemIds = data.selectedItemIds as string[]; const selectedBinId = String(data.selectedBinId); const openSequenceIds = data.openSequenceIds as string[]
       if (selectedItemIds.some(id => !instance.document.items.some(item => item.id === id)) || (selectedBinId && !instance.document.bins.some(bin => bin.id === selectedBinId)) || !openSequenceIds.length || openSequenceIds.some(id => !instance.document.sequences.some(sequence => sequence.id === id))) throw new Error('项目选区、素材箱或序列标签引用无效。')
-      if (keys.includes('video_edit.project.timeline_view')) {
+      if (keys.includes('video_edit.document.timeline_view')) {
         if (!openSequenceIds.includes(instance.activeSequenceId)) throw new Error('请先切换序列，再修改该序列时间线视图。')
         validateVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
       }
-      if (keys.includes('video_edit.project.program_playback')) {
+      if (keys.includes('video_edit.document.program_playback')) {
         if (!openSequenceIds.includes(instance.activeSequenceId)) throw new Error('请先切换序列，再修改该序列节目播放。')
         validateVideoEditProgramControl(projectId, data.programPlayback as ProjectViewSnapshot['program'])
       }
     }
     const update = (document: VideoEditDocument): VideoEditDocument => {
       if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType)) return updateVideoEditCompositeEntity(document, this.entityType as VideoEditCompositeEntityType, childId, data)
-      // 剪辑名是文件名，不在内容里改（name 只读）；其余工程视图属性在上面直接写入实例
-      if (this.entityType === 'video_edit.project') return document
+      // 剪辑名是文件名，不在内容里改（name 只读）；其余剪辑视图属性在上面直接写入实例
+      if (this.entityType === 'video_edit.document') return document
       if (this.entityType === 'video_edit.bin') return { ...document, bins: document.bins.map(item => item.id === childId ? videoEditBinSchema.parse(data) : item) }
       if (this.entityType === 'video_edit.item') return { ...document, items: document.items.map(item => item.id === childId ? videoEditItemSchema.parse(data) : item) }
       if (this.entityType === 'video_edit.code_material') return { ...document, codeMaterials: document.codeMaterials?.map(definition => definition.id === childId ? { ...definition, name: String(data.name) } : definition) }
@@ -200,12 +200,12 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       }
     }
     let sourcePause: VideoEditSourcePause | undefined
-    if (this.entityType === 'video_edit.project' && keys.includes('video_edit.project.program_playback') && (data.programPlayback as ProjectViewSnapshot['program']).playing) {
+    if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback') && (data.programPlayback as ProjectViewSnapshot['program']).playing) {
       videoEditDocumentSchema.parse(update(structuredClone(before)))
       sourcePause = await pauseVideoEditSourceForProgram(projectId, context?.signal)
       try {
         context?.signal?.throwIfAborted()
-        if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore)) throw new Error('工程或节目已有后续修改，节目尚未开始。')
+        if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore)) throw new Error('剪辑或节目已有后续修改，节目尚未开始。')
       } catch (error) {
         if (sourcePause && listVideoEditInstances().includes(owner) && viewBefore && !viewBefore.program.playing && videoEditProgramCommandIdentity(projectId) === viewBefore.programCommand && matchesVideoEditSourceCommand(projectId, sourcePause.afterCommand)) {
           try { await restoreVideoEditSourcePause(projectId, sourcePause) }
@@ -216,8 +216,8 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     }
     const after = editVideoProject(projectId, update)
     if (writesView) setVideoEditProjectView(projectId, { selectedItemIds: data.selectedItemIds as string[], selectedBinId: String(data.selectedBinId), openSequenceIds: data.openSequenceIds as string[] })
-    if (this.entityType === 'video_edit.project' && keys.includes('video_edit.project.timeline_view')) setVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
-    if (this.entityType === 'video_edit.project' && keys.includes('video_edit.project.program_playback')) setVideoEditView(projectId, data.programPlayback as ProjectViewSnapshot['program'])
+    if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.timeline_view')) setVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
+    if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback')) setVideoEditView(projectId, data.programPlayback as ProjectViewSnapshot['program'])
     return completed(before, after, [step.target], viewBefore, sourcePause)
   }
   async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken)).evidence : [] }
@@ -232,7 +232,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const clipChild = ['video_edit.graphic_object', 'video_edit.effect'].includes(this.entityType)
     const nested = ['video_edit.clip', 'video_edit.annotation', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition'].includes(this.entityType)
-    if (step.parent.kind !== (clipChild ? 'video_edit.clip' : nested ? 'video_edit.sequence' : 'video_edit.project')) throw new Error('请使用目录声明的所属父实体。')
+    if (step.parent.kind !== (clipChild ? 'video_edit.clip' : nested ? 'video_edit.sequence' : 'video_edit.document')) throw new Error('请使用目录声明的所属父实体。')
     const parsed = splitVideoEditRef(step.parent)
     const instance = requireVideoEditInstance(parsed.projectId); const before = instance.document
     const refs: ApplicationRef[] = []
@@ -312,7 +312,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           refs.push({ kind: this.entityType, id: `${before.id}:${id}` })
         }
       } else {
-        const ids = step.operation.targets.map(ref => { const target = splitVideoEditRef(ref); if (target.projectId !== before.id || ref.kind !== this.entityType) throw new Error('目标不属于此剪辑工程或集合。'); readVideoEditData(ref); return target.childId })
+        const ids = step.operation.targets.map(ref => { const target = splitVideoEditRef(ref); if (target.projectId !== before.id || ref.kind !== this.entityType) throw new Error('目标不属于此剪辑或集合。'); readVideoEditData(ref); return target.childId })
         if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType)) { removeVideoEditCompositeEntities(document, this.entityType as VideoEditCompositeEntityType, parsed.childId, ids); refs.push(...step.operation.targets); return document }
         switch (this.entityType) {
           case 'video_edit.sequence':

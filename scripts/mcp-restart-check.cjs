@@ -250,7 +250,7 @@ async function main() {
           assert.equal(task.cancellable, false, '无本地执行时不能冒称可以取消')
           if (kind === 'resumable') {
             assert.equal(task.status, 'pending')
-            assert.deepEqual(task.resumeInput, { taskId, projectId: FIXTURE_PROJECT_ID, sourceNodeId: `source-${taskId}`, resultNodeIds: [`result-${taskId}`] })
+            assert.deepEqual(task.resumeInput, { taskId, documentId: FIXTURE_PROJECT_ID, sourceNodeId: `source-${taskId}`, resultNodeIds: [`result-${taskId}`] })
           } else if (kind === 'unknown') {
             assert.equal(task.errorCode, 'GENERATION_OUTCOME_UNKNOWN')
             assert.equal(task.resumeInput, null)

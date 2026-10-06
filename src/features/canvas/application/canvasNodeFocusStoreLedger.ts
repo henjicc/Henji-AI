@@ -8,7 +8,7 @@ type ActionName = {
 }[keyof State]
 
 const REASON = '记录的是"鼠标点进了哪个节点里的输入框"，用来补上原生选中在 nodrag 控件上不触发的缺口，'
-  + '本身是鼠标操作的中间产物，不进工程文件也不影响产物；助手用节点 id 直接寻址，不需要先聚焦某个节点。'
+  + '本身是鼠标操作的中间产物，不进画布文件也不影响产物；助手用节点 id 直接寻址，不需要先聚焦某个节点。'
 
 export const CANVAS_NODE_FOCUS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   // storeId 必须等于 store 文件的 basename：store 就写在 hooks/useCanvasNodeFocus.ts 里，

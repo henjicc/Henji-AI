@@ -45,7 +45,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   let committed = false
   const unsubscribe = subscribeVideoEditDomain(() => {
     if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) {
-      controller.abort(new Error('原工程已关闭或内容已改变，请重新检查候选。'))
+      controller.abort(new Error('原剪辑已关闭或内容已改变，请重新检查候选。'))
       if (candidate) disposeVideoEditCodeCandidate(candidate)
     }
   })
@@ -89,7 +89,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const uniqueFrames = videoEditCodeValidationFrames(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => selectedIds.has(clip.id)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: selectedEffects.get(clip.id) } : {}) }))), { sequenceId: target.sequenceId, frame })
     bitmap = await trialVideoEditCodeFrames(uniqueFrames, controller.signal, true)
     controller.signal.throwIfAborted()
-    if (!bitmap || requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('源码候选的原工程已改变。')
+    if (!bitmap || requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('源码候选的原剪辑已改变。')
     candidate = Object.freeze({ target: Object.freeze({ ...target }), scope, source, versionId: appended.versionId, clipCount: count, bitmap, impacts: structuredClone(impacts) })
     candidates.set(candidate, { owner, baseline, document, controller, clean: () => { committed = owner.document.codeMaterials?.some(definition => definition.versions.some(version => version.id === newVersion)) ?? false; clean() }, needsConfirmation: impacts.length > 0 })
     const set = active.get(owner) ?? new Set(); set.add(candidate); active.set(owner, set)
@@ -102,7 +102,7 @@ export function disposeVideoEditCodeCandidate(candidate: VideoEditCodeCandidate)
 export function commitVideoEditCodeCandidate(candidate: VideoEditCodeCandidate, confirmMigration = false): string {
   const state = candidates.get(candidate)
   if (!state || state.controller.signal.aborted) throw new Error('源码候选已失效，请重新检查。')
-  if (requireVideoEditInstance(candidate.target.projectId) !== state.owner || state.owner.document !== state.baseline) { state.clean(); throw new Error('原工程内容已改变，请重新检查候选。') }
+  if (requireVideoEditInstance(candidate.target.projectId) !== state.owner || state.owner.document !== state.baseline) { state.clean(); throw new Error('原剪辑内容已改变，请重新检查候选。') }
   if (state.needsConfirmation && !confirmMigration) throw new Error('请先确认列出的参数和关键帧迁移。')
   try { editVideoProject(candidate.target.projectId, () => state.document); return candidate.versionId }
   finally { state.clean() }

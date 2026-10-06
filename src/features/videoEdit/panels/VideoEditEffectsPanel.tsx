@@ -21,7 +21,7 @@ const TIME_KEYS: readonly ClipNumberKey[] = ['start', 'duration', 'sourceInUs', 
 
 /**
  * 片段数值行（设计稿 VideoEdit 效果控件）：名称在左、数值拖动字段在右（2.2 `NumberInput`：拖动改值、单击编辑）。
- * 只有与当前值不同的数值才写入，聚焦后失焦不会把读数取整写回工程。
+ * 只有与当前值不同的数值才写入，聚焦后失焦不会把读数取整写回剪辑。
  */
 function ClipNumberRow({ label, value, step, precision, onCommit }: { label: string; value: number | undefined; step: number; precision: number; onCommit: (next: number) => void }): React.ReactElement {
   const factor = 10 ** precision

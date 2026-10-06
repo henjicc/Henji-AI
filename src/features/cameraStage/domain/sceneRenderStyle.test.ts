@@ -27,11 +27,11 @@ describe('渲染方式的持久化', () => {
     expect(normalizeStageRenderStyle('depth')).toBe('depth')
   })
 
-  it('工程读写保留渲染方式', () => {
+  it('镜头参考读写保留渲染方式', () => {
     expect(deserializeScene(sceneJson('lineart')).sceneSettings.render.style).toBe('lineart')
   })
 
-  it('没有渲染方式字段的旧工程按彩色打开，不因此变成不可读工程', () => {
+  it('没有渲染方式字段的旧镜头参考按彩色打开，不因此变成不可读镜头参考', () => {
     const snapshot = deserializeScene(sceneJson(null, { omitRender: true }))
 
     expect(snapshot.sceneSettings.render.style).toBe('beauty')

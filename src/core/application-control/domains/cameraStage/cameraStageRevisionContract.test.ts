@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { BUILTIN_APPLICATION_CAPABILITIES } from '../../builtinApplicationCapabilityRegistry'
 
 /**
- * 三维写入靠 `baseRevision` 做乐观并发。要让模型能连续写入而不是每写一次就重读一次工程，
+ * 三维写入靠 `baseRevision` 做乐观并发。要让模型能连续写入而不是每写一次就重读一次镜头参考，
  * **每个写能力都必须收 `baseRevision`，也必须回带写入后的 `baseRevision`**。
  *
  * 实测踩过的坑：摆放走事务引擎，只返回 `resultingRevisions` 这个映射，而复制、删除走的是
  * 另一条路，返回扁平的 `baseRevision`——同一个领域同一个概念两种形状。模型每摆一个物体都
- * 要额外读一次工程，叠加单轮工具位轮换，任务直接卡死。
+ * 要额外读一次镜头参考，叠加单轮工具位轮换，任务直接卡死。
  */
 const cameraStageWrites = BUILTIN_APPLICATION_CAPABILITIES.filter((capability) => (
   capability.domain === 'camera_stage' && !capability.readOnly
@@ -79,14 +79,14 @@ describe('三维写入的 revision 契约', () => {
       (capability) => capability.id === 'render_camera_stage_output'
     )
     const renderInput = render?.inputSchema.parse({
-      projectRef: { kind: 'canvas.project', id: 'canvas-1' },
+      canvasRef: { kind: 'canvas.document', id: 'canvas-1' },
       nodeRef: { kind: 'canvas.node', id: 'canvas-1:camera-node-1' },
       outputKind: 'image',
       resolutionPreset: '720p',
       selectedTimeSec: 0,
     })
     expect(render?.resolveTargetIds?.(renderInput)).toEqual({
-      projectId: 'canvas-1', nodeRefId: 'canvas-1:camera-node-1',
+      canvasDocumentId: 'canvas-1', nodeRefId: 'canvas-1:camera-node-1',
     })
     expect(render?.outputSchema.parse({
       revision: 0,

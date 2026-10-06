@@ -5,7 +5,7 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
-import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit } from './videoEditService'
+import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, undoVideoEdit } from './videoEditService'
 import { ensureVideoEditMediaAudioStreams, importVideoEditSources, relinkVideoEditMedia, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
 import { inferLocalMediaKind } from '@/services/localMediaImport'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
@@ -148,7 +148,7 @@ it('公共导入使用同一可信解析与静默保存', async () => {
   vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset())
   const app = createApplicationHarness()
   try {
-    const result = await app.call('import_video_edit_asset', { projectRef: { kind: 'video_edit.project', id }, assetRef: { kind: 'asset', id: 'image-asset' } })
+    const result = await app.call('import_video_edit_asset', { documentRef: { kind: 'video_edit.document', id }, assetRef: { kind: 'asset', id: 'image-asset' } })
     expect(result).toMatchObject({ ok: true }); expect(owner.document.media).toHaveLength(1)
     expect(savedVideoEdit(owner).media[0].assetContent!.contentIdentity).toBe('a'.repeat(64))
   } finally { app.dispose() }
@@ -167,7 +167,7 @@ it.each(['duration', 'fps', 'hasAudio'] as const)('旧视频首次可信绑定�
   expect(owner.document).toBe(baseline); expect(owner.document.media[0].assetContent).toBeUndefined()
 })
 
-it('导入先问原生探测：只有原生能解的专业格式按原生元数据导入且只写现有字段；原生不可用时给出格式提示、工程不变；原生故障不阻断后备', async () => {
+it('导入先问原生探测：只有原生能解的专业格式按原生元数据导入且只写现有字段；原生不可用时给出格式提示、剪辑不变；原生故障不阻断后备', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
@@ -227,7 +227,7 @@ it('多音轨 MXF（2.6）：导入记录四条单声道流，拖入时间线铺
   expect(getActiveVideoEditSequence(reopened).clips).toEqual(sequence.clips)
   expect(getActiveVideoEditSequence(reopened).tracks).toHaveLength(11)
 })
-it('旧工程素材没有声音流清单：打开音频声道设置时按需读取一次并记录，不迁移其余素材；无声素材给出提示', async () => {
+it('旧剪辑素材没有声音流清单：打开音频声道设置时按需读取一次并记录，不迁移其余素材；无声素材给出提示', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')

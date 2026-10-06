@@ -45,7 +45,7 @@ describe('cameraStage playback runtime', () => {
     expect(listener).toHaveBeenCalledTimes(4)
   })
 
-  it('切换工程会重置 runtime，上一会话 driver 随即失效', () => {
+  it('切换镜头参考会重置 runtime，上一会话 driver 随即失效', () => {
     const previous = claimCameraStagePlaybackDriver({ sessionKey: 'scene-a', time: 1, playing: true })
     resetCameraStagePlaybackRuntime(0.25, 'scene-b')
     expect(resumeCameraStagePlaybackDriver(previous, 'scene-a')).toBe(false)
@@ -59,7 +59,7 @@ describe('cameraStage playback runtime', () => {
       .toBe(true)
   })
 
-  it('同一工程重载后允许已挂载 driver 恢复租约', () => {
+  it('同一镜头参考重载后允许已挂载 driver 恢复租约', () => {
     const driver = claimCameraStagePlaybackDriver({ sessionKey: 'scene-a', time: 0.4, playing: true })
     resetCameraStagePlaybackRuntime(0, 'scene-a')
 
@@ -68,7 +68,7 @@ describe('cameraStage playback runtime', () => {
       .toMatchObject({ accepted: true, time: 0.1 })
   })
 
-  it('重置后新 driver 会永久撤销同工程旧 token', () => {
+  it('重置后新 driver 会永久撤销同镜头参考旧 token', () => {
     const previous = claimCameraStagePlaybackDriver({ sessionKey: 'scene-a', time: 0, playing: true })
     resetCameraStagePlaybackRuntime(0, 'scene-a')
     const current = claimCameraStagePlaybackDriver({ sessionKey: 'scene-a', time: 0, playing: true })

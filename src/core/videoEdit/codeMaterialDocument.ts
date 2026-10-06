@@ -26,7 +26,7 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
   const images = new Set(document.media.filter(media => media.kind === 'image').map(media => media.id))
   const validate = (instance: CodeMaterialInstance, program: CodeMaterialMetadata): void => {
     prepareCodeMaterialParameters(program, instance)
-    for (const mediaId of codeMaterialImageIds(instance)) if (!images.has(mediaId)) throw new CodeMaterialError('PARAMETERS', '图片参数引用不属于此工程，或引用的素材不是图片。')
+    for (const mediaId of codeMaterialImageIds(instance)) if (!images.has(mediaId)) throw new CodeMaterialError('PARAMETERS', '图片参数引用不属于此剪辑，或引用的素材不是图片。')
   }
   for (const definition of document.codeMaterials ?? []) read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })
   for (const item of document.items) if (item.code) {

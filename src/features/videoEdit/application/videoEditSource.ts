@@ -42,7 +42,7 @@ function mediaIdentity(projectId: string, itemId: string): string | undefined {
 export function readVideoEditSource(projectId: string): VideoEditSourceState { return { ...session(projectId).state } }
 export function registerVideoEditSourcePresenter(projectId: string, presenter: VideoEditSourcePresenter, retire?: () => Promise<void>): () => void {
   const current = session(projectId)
-  if (current.presenter && current.presenter !== presenter) throw new Error('此工程已有源预览宿主。')
+  if (current.presenter && current.presenter !== presenter) throw new Error('此剪辑已有源预览宿主。')
   current.presenter = presenter; current.retire = retire; current.wake?.()
   return () => { if (sessions.get(projectId) !== current || current.presenter !== presenter) return; closeVideoEditSource(projectId); current.presenter = undefined; current.retire = undefined }
 }

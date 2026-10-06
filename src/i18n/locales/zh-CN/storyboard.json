@@ -527,9 +527,9 @@
       "errors": {
         "nodeMissing": "画布执行节点不存在：{{id}}",
         "singleSource": "多角度生成必须且只能提供 1 张源图",
-        "projectMissing": "当前没有可执行生成的画布项目",
+        "projectMissing": "当前没有可执行生成的画布",
         "singleOutput": "多角度单视图预期 1 个输出，实际 {{count}}",
-        "projectSwitched": "画布项目已切换，本次生成结果已丢弃",
+        "projectSwitched": "画布已切换，本次生成结果已丢弃",
         "batchIncomplete": "多角度批次未完整完成"
       },
       "status": {

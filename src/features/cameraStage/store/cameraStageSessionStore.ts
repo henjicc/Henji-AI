@@ -30,7 +30,7 @@ export const useCameraStageSessionStore = create<CameraStageSessionState>()(
     }),
     {
       name: 'camera-stage-session',
-      // 3.2 起记的是文档 ID（版本 1 记的是旧工程 ID，丢弃）
+      // 3.2 起记的是文档 ID（版本 1 记的是旧镜头参考 ID，丢弃）
       version: 2,
       migrate: (): Pick<CameraStageSessionState, 'appView' | 'lastDocumentId' | 'stageViewMode'> => (
         { appView: 'list', lastDocumentId: null, stageViewMode: 'director' }

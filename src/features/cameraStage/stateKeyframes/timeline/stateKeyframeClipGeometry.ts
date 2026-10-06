@@ -20,7 +20,7 @@ export function quantizeToFrame(seconds: number, fps: number): number {
   return Math.round(seconds * safeFps) / safeFps
 }
 
-/** hold 仅用于旧工程兼容；关键帧模式允许为 0。 */
+/** hold 仅用于旧镜头参考兼容；关键帧模式允许为 0。 */
 export function clampHold(seconds: number, _fps: number): number {
   return Math.max(0, seconds)
 }

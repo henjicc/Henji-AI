@@ -20,15 +20,15 @@ import { type OpenMultiLayerDocumentNodeEditorInput, openMultiLayerDocumentNodeE
 import { exportMultiLayerDocumentTargetToCanvas, type MultiLayerDocumentTargetExportInput } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
 import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
-import { parseCapabilityInput as parseApplicationCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
+import { parseDocumentCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { normalizeCanvasNodeIds } from './canvasNodeIdNormalization'
 
 /**
- * 画布能力统一从这里取参：调用方拿到的 `canvas.node` 稳定引用是 `<工程>:<节点>`，原样回传时
- * 在这里把本工程的前缀剥掉，各处理器不必各写一遍，也不会漏掉新增的能力。
+ * 画布能力统一从这里取参：公共契约里的 `documentId`（画布文档 ID）在这里换成领域服务使用的 `projectId`；
+ * 调用方拿到的 `canvas.node` 稳定引用是 `<画布>:<节点>`，原样回传时在这里把本画布的前缀剥掉，各处理器不必各写一遍，也不会漏掉新增的能力。
  */
 function parseCapabilityInput<TInput>(id: string, input: unknown): TInput {
-  return normalizeCanvasNodeIds(parseApplicationCapabilityInput<TInput>(id, input))
+  return normalizeCanvasNodeIds(parseDocumentCapabilityInput<TInput>(id, input))
 }
 
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
@@ -49,15 +49,16 @@ interface AddNodeInput extends ProjectInput {
 }
 
 export function registerCanvasCapabilityHandlers(
-  registrar: ApplicationCapabilityHandlerRegistrar
+  publicRegistrar: ApplicationCapabilityHandlerRegistrar
 ): void {
-  registrar.registerHandler('retry_canvas_project_save', async (input, context) => {
+  const registrar = withDocumentIdOutput(publicRegistrar)
+  registrar.registerHandler('retry_canvas_document_save', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const { projectRef } = parseCapabilityInput<{ projectRef: { kind: 'canvas.project'; id: string } }>(
-      'retry_canvas_project_save', input,
+    const { documentRef } = parseCapabilityInput<{ documentRef: { kind: 'canvas.document'; id: string } }>(
+      'retry_canvas_document_save', input,
     )
-    await confirmCanvasPersistence(projectRef.id)
-    return { ref: projectRef, status: 'persisted' }
+    await confirmCanvasPersistence(documentRef.id)
+    return { ref: documentRef, status: 'persisted' }
   })
   // 画布文档的通用打开与后台释放（3.4）：列出、新建、改名、移动、副本、回收站走通用文档能力，
   // 这里只登记“打开到哪里”（画布工作区）和“后台持有的实例怎么释放”。
@@ -98,9 +99,10 @@ export function registerCanvasCapabilityHandlers(
     return { schema }
   })
 
-  registrar.registerHandler('get_canvas_project', (input) => {
-    const parsed = parseCapabilityInput<ProjectInput>('get_canvas_project', input)
-    return getCanvasProject(parsed.projectId)
+  registrar.registerHandler('get_canvas_document', async (input) => {
+    const parsed = parseCapabilityInput<ProjectInput>('get_canvas_document', input)
+    const { project, ...rest } = await getCanvasProject(parsed.projectId)
+    return { document: project, ...rest }
   })
 
   registrar.registerHandler('get_canvas_node', (input) => {
@@ -182,15 +184,15 @@ export function registerCanvasCapabilityHandlers(
 
   registrar.registerHandler(RETRY_LAYER_STACK_RESULT_CAPABILITY_ID, (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<{ projectRef: ApplicationRef; nodeRef: ApplicationRef }>(
+    const parsed = parseCapabilityInput<{ canvasRef: ApplicationRef; nodeRef: ApplicationRef }>(
       RETRY_LAYER_STACK_RESULT_CAPABILITY_ID, input,
     )
-    const prefix = `${parsed.projectRef.id}:`
+    const prefix = `${parsed.canvasRef.id}:`
     if (!parsed.nodeRef.id.startsWith(prefix) || parsed.nodeRef.id.length === prefix.length) {
       throw new Error(`请读取目标画布的完整节点引用，格式为 ${prefix}<nodeId>。`)
     }
     return { ...retryLayerStackResult({
-      projectId: parsed.projectRef.id,
+      projectId: parsed.canvasRef.id,
       nodeId: parsed.nodeRef.id.slice(prefix.length),
       signal: context.signal,
       correlation: context,

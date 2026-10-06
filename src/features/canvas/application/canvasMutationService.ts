@@ -176,7 +176,7 @@ interface CanvasNodeDuplicationInput<T> {
   createNode: (data: Record<string, unknown>) => T | Promise<T>
 }
 
-/** 已载入的普通节点同步提交；只有加载工程、复制文档或调用方自身需要时才异步等待。 */
+/** 已载入的普通节点同步提交；只有加载画布、复制文档或调用方自身需要时才异步等待。 */
 export function commitCanvasNodeDuplication<T>(input: CanvasNodeDuplicationInput<T>): T | Promise<T> {
   const commit = () => {
     const source = requireNode(input.projectId, input.sourceNodeId)
@@ -378,10 +378,10 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
 }
 
 /**
- * 清空画布（3.1）：整个工程一次性重置，不是"逐个删除很多节点"。走 `remove_items` 意味着助手
+ * 清空画布（3.1）：整个画布一次性重置，不是"逐个删除很多节点"。走 `remove_items` 意味着助手
  * 要先枚举全部节点/连线引用、再分批提交（`canvas.node`/`canvas.edge` 的 collectionWrite
  * 限了 `maxItemsPerChange: 50`，节点稍多就要拆好几批）——为一个界面上单按钮触发的原子动作
- * 多绕两步，不如照 `undo_canvas_change`/`group_canvas_nodes` 的先例：工程级整体状态操作
+ * 多绕两步，不如照 `undo_canvas_change`/`group_canvas_nodes` 的先例：画布级整体状态操作
  * 走专用能力，不勉强表达成集合写入。
  */
 export async function clearCanvasProject(projectId: string, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {

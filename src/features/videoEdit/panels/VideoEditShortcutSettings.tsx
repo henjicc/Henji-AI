@@ -19,7 +19,7 @@ export function VideoEditShortcutSettings(): React.ReactElement {
   </>
 }
 
-/** 快捷键弹窗本体：剪辑命令带的工程名菜单打开它（界面重设计 3.5），打开时读取当前持久设置作为草稿。 */
+/** 快捷键弹窗本体：剪辑命令带的剪辑名菜单打开它（界面重设计 3.5），打开时读取当前持久设置作为草稿。 */
 export function VideoEditShortcutDialog({ open, onClose }: { open: boolean; onClose: () => void }): React.ReactElement {
   const { t } = useI18n('settings')
   const [draft, setDraft] = useState<VideoEditShortcutOverrides>({})

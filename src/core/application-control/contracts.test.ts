@@ -36,7 +36,7 @@ describe('application-control contracts', () => {
       refKind: 'camera_stage.object',
       dataClass: 'C1',
       exposures: ['ui', 'assistant'],
-      parentTypes: ['camera_stage.project'],
+      parentTypes: ['camera_stage.document'],
       revisionScopes: ['camera_stage.scene'],
       queryCapabilityIds: ['get_camera_stage_project'],
       schemaRef,

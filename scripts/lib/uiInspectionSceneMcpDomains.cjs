@@ -45,7 +45,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
       const identity = await authorizeMcpConnection(page, { name: '三维渲染验收', allowWrites: true, allowDestructive: true })
       const client = await connectMcpClient(identity.config, 'Henji camera render Reality')
       try {
-        const projectRef = { kind: 'canvas.project', id: projectId }
+        const projectRef = { kind: 'canvas.document', id: projectId }
         const nodeRef = { kind: 'canvas.node', id: `${projectId}:${nodeId}` }
         const sceneRef = { kind: 'camera_stage.scene', id: stageId }
         const sceneBefore = await callTool(client, 'read_application_entity', {
@@ -63,7 +63,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         })).data.properties['camera_stage.scene.sky_color'], skyColor)
         const reads = []
         for (const ref of [projectRef, nodeRef]) reads.push(await callTool(client, 'read_application_entity', { ref, propertyIds: [] }))
-        const args = operationEnvelope(reads, { projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 0.25 })
+        const args = operationEnvelope(reads, { canvasRef: projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 0.25 })
         const submitted = await callTool(client, 'render_camera_stage_output', args)
         const taskRef = submitted.result.data.taskRef
         let observation
@@ -92,7 +92,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         const cancelReads = []
         for (const ref of [projectRef, nodeRef]) cancelReads.push(await callTool(client, 'read_application_entity', { ref, propertyIds: [] }))
         const cancelSubmission = await callTool(client, 'render_camera_stage_output', operationEnvelope(cancelReads, {
-          projectRef, nodeRef, outputKind: 'video', resolutionPreset: '720p',
+          canvasRef: projectRef, nodeRef, outputKind: 'video', resolutionPreset: '720p',
         }))
         const cancelTaskRef = cancelSubmission.result.data.taskRef
         const active = await callTool(client, 'get_camera_stage_render_task', { taskRef: cancelTaskRef })
@@ -138,7 +138,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         await setupSettings(page)
         const identity = await authorizeMcpConnection(page, { name: `结果落图-${historyId}`, allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji generation canvas Reality')
-        const projectRef = { kind: 'canvas.project', id: projectId }
+        const projectRef = { kind: 'canvas.document', id: projectId }
         const resultRef = { kind: 'generation.result', id: historyId }
         const baseline = async (ref) => callTool(client, 'read_application_entity', { ref, propertyIds: [] })
         const before = await baseline(projectRef)
@@ -151,13 +151,13 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
           summary: '通过正式实例给画布改名，使旧读取基线过期', changes: [{ kind: 'set_properties',
             entityType: documentRef.kind, target: documentRef, properties: { 'documents.document.name': '已修改的后台工程' } }],
         }))
-        const stale = operationEnvelope([before, result], { projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 } })
+        const stale = operationEnvelope([before, result], { documentId: projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 } })
         const refused = await client.callTool({ name: 'add_generation_result_to_canvas', arguments: stale })
         assert.equal(refused.isError, true)
         assert.equal(refused.structuredContent.executionState, 'not_executed', JSON.stringify(refused))
         assert.ok(refused.structuredContent.result.error.message.includes('重新读取'))
         const args = operationEnvelope([await baseline(projectRef), await baseline(resultRef)], {
-          projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 },
+          documentId: projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 },
         })
         const placed = await callTool(client, 'add_generation_result_to_canvas', args)
         assert.equal(placed.executionState, 'completed', JSON.stringify(placed))
@@ -233,9 +233,9 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         assert.equal(storedStage.meta.name, renamed, '镜头参考改名没有落到文档文件')
         assert.ok(storedStage.meta.path.endsWith(`${renamed}.henji-stage`), `文件名没有跟着改：${storedStage.meta.path}`)
         const stageEntity = await callTool(client, 'read_application_entity', {
-          ref: { kind: 'camera_stage.project', id: stageDocumentId }, propertyIds: ['camera_stage.project.name'],
+          ref: { kind: 'camera_stage.document', id: stageDocumentId }, propertyIds: ['camera_stage.document.name'],
         })
-        assert.equal(stageEntity.data.properties['camera_stage.project.name'], renamed, '三维实体读到的名称与文档不一致')
+        assert.equal(stageEntity.data.properties['camera_stage.document.name'], renamed, '三维实体读到的名称与文档不一致')
         /*
          * 三维后台任务不是反射实体，只能由 render_camera_stage_output 产生并按返回的稳定引用查询；
          * 客户端拿不到"自己编一个任务引用去列举"的口子。这里核对三件工具都在修改档目录里。

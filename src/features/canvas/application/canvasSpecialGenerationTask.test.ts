@@ -20,7 +20,7 @@ import { prepareCanvasNodeGeneration, submitCanvasNodeGeneration, getCanvasGener
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 
-// 仅供应商、像素与 V3 文档 I/O 使用替身，任务、执行器和原项目保存走正式服务。
+// 仅供应商、像素与 V3 文档 I/O 使用替身，任务、执行器和原画布保存走正式服务。
 vi.mock('./imageData', async original => ({
   ...await original<typeof import('./imageData')>(),
   persistImageLocally: vi.fn(async (url: string) => url),
@@ -33,7 +33,7 @@ beforeEach(async () => {
   records.clear()
   installHarnessNativeStorage()
   resetCanvasExecutionServiceForTests()
-  projectId = await createCanvasTestProject('特殊生成原项目')
+  projectId = await createCanvasTestProject('特殊生成原画布')
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, apimart: true, volcengine: true } })
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
   vi.spyOn(databaseService, 'getHistoryById').mockImplementation(async id => records.get(id) ?? null)
@@ -79,14 +79,14 @@ it.each(['redraw', 'layers'] as const)('%s 缺少必要输入时准备失败，�
   if (kind === 'redraw') useCanvasStore.getState().updateNodeData(nodeId, { localRedrawMaskSource: null })
   else useCanvasStore.getState().setCanvasData(useCanvasStore.getState().nodes, [])
   const generate = vi.spyOn(GenerationService.getInstance(), 'generate')
-  await expect(prepareCanvasNodeGeneration({ projectId, nodeId })).rejects.toThrow()
+  await expect(prepareCanvasNodeGeneration({ documentId: projectId, nodeId })).rejects.toThrow()
   expect(records.size).toBe(0)
   expect(generate).not.toHaveBeenCalled()
 })
 
 it.each(['ui', 'mcp'] as const)('%s 准备后修改蒙版使旧输入失效，不会提交过时请求', async entry => {
   const { nodeId } = addSpecialNode('redraw')
-  const prepared = await prepareCanvasNodeGeneration({ projectId, nodeId })
+  const prepared = await prepareCanvasNodeGeneration({ documentId: projectId, nodeId })
   const profile = createGenerationNodeExecutor(store => readCanvasGenerationNodeProfile(nodeId, store))
   const signature = profile.getInputSignatureExtras?.(useCanvasStore)
   useCanvasStore.getState().updateNodeData(nodeId, { localRedrawMaskSource: 'C:/changed-mask.png' })
@@ -98,7 +98,7 @@ it.each(['ui', 'mcp'] as const)('%s 准备后修改蒙版使旧输入失效，�
 it.each([
   ['redraw', 'ui', false], ['redraw', 'mcp', false], ['redraw', 'mcp', true],
   ['layers', 'ui', false], ['layers', 'mcp', false], ['layers', 'mcp', true],
-] as const)('%s 首次生成通过 %s 在切换后保存原项目（取消 %s）', async (kind, entry, cancel) => {
+] as const)('%s 首次生成通过 %s 在切换后保存原画布（取消 %s）', async (kind, entry, cancel) => {
   const { nodeId, sourceId } = addSpecialNode(kind)
   let release!: () => void
   const gate = new Promise<void>(resolve => { release = resolve })
@@ -117,7 +117,7 @@ it.each([
       unmount = registerCanvasNodeExecutor(nodeId, createGenerationNodeExecutor(store => readCanvasGenerationNodeProfile(nodeId, store)))
       outcome = runCanvasNode(nodeId).catch(error => error)
     } else {
-      const prepared = await prepareCanvasNodeGeneration({ projectId, nodeId })
+      const prepared = await prepareCanvasNodeGeneration({ documentId: projectId, nodeId })
       await submitCanvasNodeGeneration(prepared.submitInput, crypto.randomUUID())
     }
     await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1))

@@ -31,7 +31,7 @@ export function captureVideoEditCommandContext(projectId: string | undefined, sc
 function stateOf(context: VideoEditCommandContext): ContextState {
   const state = contexts.get(context)
   if (!state) throw new Error('剪辑命令上下文已失效。')
-  if (state.owner && (requireVideoEditInstance(context.projectId!) !== state.owner || state.owner.document !== state.document || state.owner.activeSequenceId !== context.sequenceId)) throw new Error('原工程或序列已改变，请重新选择操作。')
+  if (state.owner && (requireVideoEditInstance(context.projectId!) !== state.owner || state.owner.document !== state.document || state.owner.activeSequenceId !== context.sequenceId)) throw new Error('原剪辑或序列已改变，请重新选择操作。')
   if (state.sourceCommand && !matchesVideoEditSourceCommand(context.projectId!, state.sourceCommand)) throw new Error('源素材已有后续操作，请重新选择命令。')
   return state
 }
@@ -39,7 +39,7 @@ function selection(context: VideoEditCommandContext) { const owner = stateOf(con
 function sourceItem(context: VideoEditCommandContext): string | undefined { return context.scope === 'source' ? stateOf(context).source?.itemId : getActiveVideoEditSequence(stateOf(context).owner!).clips.find(clip => clip.id === context.clipIds[0])?.itemId }
 /** Source and project placements also return the audio tracks a multi-track item needs (task 2.6); their clips are already on target tracks. */
 function placeClipboard(context: VideoEditCommandContext): { clipboard: VideoEditClipboard; newTracks?: VideoEditSequence['tracks'] } {
-  const { owner, source } = stateOf(context); if (!owner) throw new Error('请先打开剪辑工程。')
+  const { owner, source } = stateOf(context); if (!owner) throw new Error('请先打开剪辑。')
   if (context.scope !== 'source' && context.scope !== 'project') { const clipboard = stateOf(context).clipboard; if (!clipboard) throw new Error('请先复制片段。'); return { clipboard } }
   const sequence = getActiveVideoEditSequence(owner); const items = context.scope === 'source' ? source?.itemId ? [source.itemId] : [] : [...context.itemIds]
   if (!items.length) throw new Error('请选择要放入序列的源素材或项目项。')
@@ -94,7 +94,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (!descriptor.scopes.includes('global') && !descriptor.scopes.includes(context.scope)) return { enabled: false, reason: '此命令不适用于当前面板。' }
     const { owner, source } = stateOf(context)
     if (id === 'new_project') return { enabled: true }
-    if (!owner) return { enabled: false, reason: '请先打开剪辑工程。' }
+    if (!owner) return { enabled: false, reason: '请先打开剪辑。' }
     const sequence = getActiveVideoEditSequence(owner)
     if (id === 'undo' || id === 'redo') return { enabled: Boolean(id === 'undo' ? owner.past.length : owner.future.length), reason: '没有可恢复的编辑。' }
     const tools = { select_tool: 'select', razor_tool: 'razor', hand_tool: 'hand', track_tool: 'track' } as const
@@ -113,7 +113,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
       if (id === 'split' && !clips.some(clip => context.frame > clip.start && context.frame < clip.start + clip.duration)) return { enabled: false, reason: '播放头不在所选片段内部。' }
       // Splitting only adds a bounded right half; deletion only removes owned data.
       // Their display state must not clone/compile the project or allocate edit IDs every video frame.
-      if (id === 'split') return { enabled: sequence.clips.length + clips.filter(clip => context.frame > clip.start && context.frame < clip.start + clip.duration).length <= 500, reason: '拆分后片段超过工程上限。' }
+      if (id === 'split') return { enabled: sequence.clips.length + clips.filter(clip => context.frame > clip.start && context.frame < clip.start + clip.duration).length <= 500, reason: '拆分后片段超过剪辑上限。' }
       if (id === 'delete') return { enabled: true }
       if ((id === 'link' || id === 'group') && clips.length < 2) return { enabled: false, reason: '请至少选择两个片段。' }
       if (id === 'unlink' || id === 'ungroup') return { enabled: clips.some(clip => id === 'unlink' ? clip.linkId : clip.groupId), reason: '所选片段没有该关联。' }

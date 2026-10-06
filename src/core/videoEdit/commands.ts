@@ -7,10 +7,10 @@ const editScopes: VideoEditCommandScope[] = ['timeline', 'program']
 const monitorScopes: VideoEditCommandScope[] = ['timeline', 'program', 'source']
 function command<const T extends string>(id: T, title: string, scopes: VideoEditCommandScope[], shortcut?: VideoEditShortcut, repeat = false) { return { id, title, scopes, shortcut, repeat } }
 export const VIDEO_EDIT_COMMANDS = [
-  command('new_project', '新建工程', ['global'], key('KeyN', true, false, true)),
+  command('new_project', '新建项目', ['global'], key('KeyN', true, false, true)),
   command('new_sequence', '新建序列', ['global'], key('KeyN', true)),
   command('import', '导入素材', ['global'], key('KeyI', true)),
-  command('save', '保存工程', ['global'], key('KeyS', true)),
+  command('save', '保存剪辑', ['global'], key('KeyS', true)),
   command('undo', '撤销', ['global'], key('KeyZ', true)),
   command('redo', '重做', ['global'], key('KeyZ', true, true)),
   command('select_tool', '选择工具', ['timeline'], key('KeyV')),

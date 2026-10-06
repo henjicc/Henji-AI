@@ -113,7 +113,7 @@ describe('toolbox capability handlers', () => {
     })
     const handlers = registeredHandlers()
     const renderInput = {
-      projectRef: { kind: 'canvas.project' as const, id: 'canvas-1' },
+      canvasRef: { kind: 'canvas.document' as const, id: 'canvas-1' },
       nodeRef: { kind: 'canvas.node' as const, id: 'canvas-1:stage-node' },
       outputKind: 'image' as const,
       resolutionPreset: '720p' as const,

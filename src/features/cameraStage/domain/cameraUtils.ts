@@ -95,8 +95,8 @@ export function getCameraObjects(objects: StageObject[]): StageCameraObject[] {
 }
 
 /**
- * 校验一组参与渲染的摄像机是否使用同一画幅。正常工程由首摄像机画幅规则保证此不变量；
- * 本函数仅为旧工程数据或未来写入口遗漏时的导出前防御性兜底，不参与画幅的业务写入。
+ * 校验一组参与渲染的摄像机是否使用同一画幅。正常镜头参考由首摄像机画幅规则保证此不变量；
+ * 本函数仅为旧镜头参考数据或未来写入口遗漏时的导出前防御性兜底，不参与画幅的业务写入。
  */
 export function areCameraAspectRatiosConsistent(cameras: StageCameraObject[]): boolean {
   const referenceRatio = cameras[0]?.aspectRatio.ratio

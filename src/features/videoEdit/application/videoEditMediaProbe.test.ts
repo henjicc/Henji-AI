@@ -32,7 +32,7 @@ it('原生与浏览器都能解：原生是主路径（默认）时为原生，�
   expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserStreams, 'browser').fields.audioStreams).toEqual([{ channels: 1 }, { channels: 1 }])
 })
 
-it('只有原生能解的专业格式：原生播放接通前按具体格式拒绝；接通后后端为原生、元数据取自原生探测并通过工程素材校验', () => {
+it('只有原生能解的专业格式：原生播放接通前按具体格式拒绝；接通后后端为原生、元数据取自原生探测并通过剪辑素材校验', () => {
   expect(() => resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null), undefined, false)).toThrow('剪辑暂不能播放此视频格式（Apple ProRes 4444，12 位 4:4:4，带透明），请先转为 H.264 视频后再导入。')
   expect(() => resolveVideoEditMediaInspection('D:/a.mkv', probe([videoStream('h264', 'High'), audioStream('truehd')]), { status: 'read', video: { codec: 'avc', decodable: true }, audio: { codec: null, decodable: false } }, undefined, false)).toThrow('剪辑暂不能播放此声音格式（Dolby TrueHD）')
   // A file whose sound only native decodes plays natively as a whole (one backend per file).

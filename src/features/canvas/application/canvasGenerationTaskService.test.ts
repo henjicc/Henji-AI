@@ -61,7 +61,7 @@ it('用户拒绝提交确认后，画布节点和任务都进入取消状态', a
   vi.mocked(GenerationService.getInstance().generate).mockRejectedValue(new GenerationSubmissionCancelledError())
   const taskId = crypto.randomUUID()
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '取消测试', options: {} },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('cancelled'))
   const saved = await readPersistedCanvasProjectSnapshot(projectId)
   expect(saved.nodes.some(node => node.data.generationTaskId === taskId && node.data.generationCancelled === true)).toBe(true)
@@ -77,7 +77,7 @@ it('A 页面准备和提交 B 的生成，打开 B 不重复提交，结果保�
     return { status: 'completed', urls: ['C:/result.png'], filePaths: ['C:/result.png'] }
   })
   const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: '后台 B', options: {} }
-  const destination = { mode: 'canvas' as const, projectId: targetId, sourceNodeIds: ['reference'] }
+  const destination = { mode: 'canvas' as const, documentId: targetId, sourceNodeIds: ['reference'] }
   input.options = await resolveCanvasGenerationOptions(input, destination)
   expect(input.options).toMatchObject({ images: ['C:/reference.png'] })
   const taskId = crypto.randomUUID()
@@ -102,7 +102,7 @@ it('无需挂载节点即可生成，页面中途挂载不会替换任务执行�
     await pending
     return { status: 'completed', urls: ['C:/result.png'], filePaths: ['C:/result.png'] }
   })
-  const destination = { mode: 'canvas' as const, projectId, sourceNodeIds: ['reference'] }
+  const destination = { mode: 'canvas' as const, documentId: projectId, sourceNodeIds: ['reference'] }
   const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: '生成三视图', options: {} }
   input.options = await resolveCanvasGenerationOptions(input, destination)
   const taskId = crypto.randomUUID()
@@ -134,7 +134,7 @@ it('已有 B 节点的估价与提交读取 B 的配置，不需要切换 A 页�
   })
   useCanvasStore.getState().addEdge('reference', nodeId)
   const visibleId = await createCanvasTestProject('A')
-  const prepared = await prepareCanvasNodeGeneration({ projectId, nodeId })
+  const prepared = await prepareCanvasNodeGeneration({ documentId: projectId, nodeId })
   expect(prepared.preparation.modelId).toBe('canvas-task-fixture')
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
   const taskId = crypto.randomUUID()
@@ -150,7 +150,7 @@ it('原视口位置固定后，移动画布仍将生成节点和持久结果放�
   const taskId = crypto.randomUUID()
   useCanvasStore.setState({ currentViewport: { x: 900, y: 600, zoom: 1 } })
   const result = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原视口生成' },
-    { mode: 'canvas', projectId, sourceNodeIds: [], placement: { mode: 'absolute', x: 90, y: -20 } }, taskId)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [], placement: { mode: 'absolute', x: 90, y: -20 } }, taskId)
   await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
   const saved = await readPersistedCanvasProjectSnapshot(projectId)
   const source = saved.nodes.find(node => `${projectId}:${node.id}` === result.nodeRef.id)!
@@ -164,7 +164,7 @@ it('选中生成节点仅作为布局锚点时，新任务独立执行，不重�
   const anchorId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.imageEdit, { x: 100, y: 200 }, { prompt: '不可重放的旧请求' })
   const taskId = crypto.randomUUID()
   const result = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '独立生成' },
-    { mode: 'canvas', projectId, sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: anchorId } }, taskId)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: anchorId } }, taskId)
   await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
   const saved = await readPersistedCanvasProjectSnapshot(projectId)
   const source = saved.nodes.find(node => `${projectId}:${node.id}` === result.nodeRef.id)!
@@ -220,7 +220,7 @@ it.each([CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval, CANVAS_IMAGE_CAPABILITY_
   }))
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, fal: true } })
   const execute = taskControlSession()
-  const created = await execute('apply_canvas_image_capability', { projectId, sourceNodeId: 'reference', capabilityId })
+  const created = await execute('apply_canvas_image_capability', { documentId: projectId, sourceNodeId: 'reference', capabilityId })
   expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
   if (!created.ok) throw new Error('节点创建失败')
   const nodeId = String(created.data.nodeId)
@@ -230,7 +230,7 @@ it.each([CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval, CANVAS_IMAGE_CAPABILITY_
   const ref = { kind: 'canvas.node', id: `${projectId}:${nodeId}` }
   const configuration = await execute('read_application_entity', { ref, propertyIds: ['canvas.node.generation_schema', 'canvas.node.generation_config'] })
   expect(configuration, JSON.stringify(configuration)).toMatchObject({ ok: true })
-  const prepared = await execute('prepare_canvas_node_generation', { projectId, nodeId })
+  const prepared = await execute('prepare_canvas_node_generation', { documentId: projectId, nodeId })
   expect(prepared, JSON.stringify(prepared)).toMatchObject({ ok: true })
   if (!prepared.ok) throw new Error('节点准备失败')
   const modelId = String((prepared.data.preparation as Record<string, unknown>).modelId)
@@ -258,7 +258,7 @@ it('原节点准备后改输入必须重新估价，同节点运行中不重复�
   const canvas = useCanvasStore.getState()
   const nodeId = canvas.addNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: 0 }, { modelId: 'canvas-task-fixture', prompt: '第一张', params: {} })
   const execute = taskControlSession()
-  const prepared = await execute('prepare_canvas_node_generation', { projectId, nodeId })
+  const prepared = await execute('prepare_canvas_node_generation', { documentId: projectId, nodeId })
   expect(prepared, JSON.stringify(prepared)).toMatchObject({ ok: true })
   if (!prepared.ok) throw new Error('准备失败')
   canvas.updateNodeData(nodeId, { prompt: '修改后的任务' })
@@ -266,7 +266,7 @@ it('原节点准备后改输入必须重新估价，同节点运行中不重复�
   expect(stale).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } } } })
   expect(records.size).toBe(0)
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
-  const updated = await execute('prepare_canvas_node_generation', { projectId, nodeId })
+  const updated = await execute('prepare_canvas_node_generation', { documentId: projectId, nodeId })
   if (!updated.ok) throw new Error(JSON.stringify(updated))
   let release!: () => void
   const pending = new Promise<void>(resolve => { release = resolve })
@@ -280,7 +280,7 @@ it('原节点准备后改输入必须重新估价，同节点运行中不重复�
   expect(await execute('submit_canvas_node_generation', updated.data.submitInput as Record<string, unknown>)).toMatchObject({ ok: false })
   expect(records.size).toBe(1)
   const otherTask = crypto.randomUUID()
-  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '独立请求' }, { mode: 'canvas', projectId, sourceNodeIds: [] }, otherTask)
+  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '独立请求' }, { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, otherTask)
   await vi.waitFor(() => expect(GenerationService.getInstance().generate).toHaveBeenCalledTimes(2))
   release()
   await vi.waitFor(() => expect([...records.values()].map(record => record.status)).toEqual(['success', 'success']))
@@ -289,7 +289,7 @@ it('原节点准备后改输入必须重新估价，同节点运行中不重复�
 it('准备阶段取消不登记任务，新增未估价上游连线也不能触发额外生成', async () => {
   const canvas = useCanvasStore.getState()
   const nodeId = canvas.addNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: 0 }, { modelId: 'canvas-task-fixture', prompt: '目标', params: {} })
-  const { submitInput } = await prepareCanvasNodeGeneration({ projectId, nodeId })
+  const { submitInput } = await prepareCanvasNodeGeneration({ documentId: projectId, nodeId })
   const controller = new AbortController()
   const pending = submitCanvasNodeGeneration(submitInput, crypto.randomUUID(), controller.signal)
   controller.abort()
@@ -298,7 +298,7 @@ it('准备阶段取消不登记任务，新增未估价上游连线也不能触�
   const upstream = canvas.addNode(CANVAS_NODE_TYPES.imageEdit, { x: 0, y: 0 }, { modelId: 'canvas-task-fixture', prompt: '额外生成', params: {} })
   canvas.addEdge(upstream, nodeId)
   await expect(submitCanvasNodeGeneration(submitInput, crypto.randomUUID())).rejects.toThrow('节点输入已改变')
-  await expect(prepareCanvasNodeGeneration({ projectId, nodeId })).rejects.toThrow('额外上游生成')
+  await expect(prepareCanvasNodeGeneration({ documentId: projectId, nodeId })).rejects.toThrow('额外上游生成')
   expect(records.size).toBe(0)
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
@@ -306,7 +306,7 @@ it('准备阶段取消不登记任务，新增未估价上游连线也不能触�
 it('新建节点后登记失败保留已创建节点事实，不冒充整次操作未执行', async () => {
   vi.mocked(databaseService.getHistoryById).mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('历史存储读取失败'))
   await expect(submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '新建后登记' },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, crypto.randomUUID()))
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, crypto.randomUUID()))
     .rejects.toMatchObject({ details: { nodeRef: { kind: 'canvas.node' } } })
   const saved = await readPersistedCanvasProjectSnapshot(projectId)
   expect(saved.nodes.filter(node => node.type === CANVAS_NODE_TYPES.imageEdit)).toHaveLength(1)
@@ -332,7 +332,7 @@ it.each([false, true])('界面直接执行登记同一份任务，MCP 可查询�
   const taskId = [...records.keys()][0]
   const execute = taskControlSession()
   expect(await execute('get_generation_task', { taskId })).toMatchObject({ ok: true, data: { task: { waitingExternal: true, cancellable: true } } })
-  await expect(submitCanvasNodeGeneration({ projectId, nodeId, inputSignature: (await prepareCanvasNodeGeneration({ projectId, nodeId })).submitInput.inputSignature }, crypto.randomUUID())).rejects.toThrow('此节点已有')
+  await expect(submitCanvasNodeGeneration({ documentId: projectId, nodeId, inputSignature: (await prepareCanvasNodeGeneration({ documentId: projectId, nodeId })).submitInput.inputSignature }, crypto.randomUUID())).rejects.toThrow('此节点已有')
   const otherProject = await createCanvasTestProject('界面生成后的其他项目')
   if (cancel) expect(await execute('cancel_generation_task', { taskId, reason: '停止界面任务' })).toMatchObject({ ok: true })
   release()
@@ -397,7 +397,7 @@ it('MCP 取消一个原任务不影响并行请求，迟到输出不冒充成功
   })
   const ids = [crypto.randomUUID(), crypto.randomUUID()]
   for (const id of ids) await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: `图-${id}`, options: {} },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, id)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, id)
   await vi.waitFor(() => expect(signals.size).toBe(2))
   const execute = taskControlSession()
   expect(await getCanvasGenerationTask(ids[0])).toMatchObject({ cancellable: true })
@@ -442,7 +442,7 @@ it('取消续查后保存停止状态，不自动恢复；明确恢复仍获取�
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 
-it.each([false, true])('离开原项目后 MCP 仍可取消续查（后台启动 %s）', async startInBackground => {
+it.each([false, true])('离开原画布后 MCP 仍可取消续查（后台启动 %s）', async startInBackground => {
   const { taskId, resultId } = await restoredTask({ serverTaskId: 'background-original-task', serverTaskModelId: 'canvas-task-fixture' })
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async (_model, _task, _params, _progress, options) => {
     await new Promise<void>((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(new Error('停止后台续查')), { once: true }))
@@ -453,7 +453,7 @@ it.each([false, true])('离开原项目后 MCP 仍可取消续查（后台启动
   let otherProject = startInBackground ? await createCanvasTestProject('后台启动续查') : null
   expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
-  otherProject ??= await createCanvasTestProject('后台续查时的当前项目')
+  otherProject ??= await createCanvasTestProject('后台续查时的当前画布')
   expect(await getCanvasGenerationTask(taskId)).toMatchObject({ cancellable: true })
   expect(await execute('cancel_generation_task', { taskId, reason: '停止后台任务' })).toMatchObject({ ok: true })
   await vi.waitFor(async () => {
@@ -469,7 +469,7 @@ it.each([false, true])('离开原项目后 MCP 仍可取消续查（后台启动
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 
-it('在其他项目中恢复标准任务，只续查原任务并保存原项目结果', async () => {
+it('在其他画布中恢复标准任务，只续查原任务并保存原画布结果', async () => {
   const { taskId, resultId } = await restoredTask({ serverTaskId: 'offscreen-original', serverTaskModelId: 'canvas-task-fixture' })
   const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
   const otherProject = await createCanvasTestProject('恢复时保留的页面')
@@ -648,7 +648,7 @@ it('旧任务不能把同来源节点上另一次生成的结果认成自己的�
   expect(records.get(taskId)?.status).toBe('pending')
 })
 
-it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保持独立执行、排队和原项目归属（%s）', async mode => {
+it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保持独立执行、排队和原画布归属（%s）', async mode => {
   const background = mode !== 'foreground'
   let release!: () => void
   const waiting = new Promise<void>(resolve => { release = resolve })
@@ -662,7 +662,7 @@ it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保
   try {
     for (let index = 0; index < 5; index++) {
       const taskId = crypto.randomUUID()
-      const destination = { mode: 'canvas' as const, projectId, sourceNodeIds: ['reference'] }
+      const destination = { mode: 'canvas' as const, documentId: projectId, sourceNodeIds: ['reference'] }
       const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: `第 ${index} 张`, options: {} }
       input.options = await resolveCanvasGenerationOptions(input, destination)
       const submitted = await submitCanvasGenerationTask(input, destination, taskId)
@@ -701,7 +701,7 @@ it.each([false, true])('任务刚登记就切换项目，执行与取消保持�
   const waiting = new Promise<void>(resolve => { release = resolve })
   const update = databaseService.updateHistory
   vi.mocked(databaseService.updateHistory).mockImplementationOnce(async (...args) => { await waiting; return update(...args) })
-  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '图', options: {} }, { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '图', options: {} }, { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   const otherProject = await createCanvasTestProject('登记后立即切换')
   if (cancel) expect(await taskControlSession()('cancel_generation_task', { taskId, reason: '取消刚登记的任务' })).toMatchObject({ ok: true })
   release()
@@ -718,8 +718,8 @@ it.each([false, true])('生成前等待估算时切换项目，执行与取消�
   const gate = new Promise<null>(resolve => { release = () => resolve(null) })
   vi.mocked(GenerationService.getInstance().getProgressEstimate).mockReturnValue(gate)
   const taskId = crypto.randomUUID()
-  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原项目准备中', options: {} },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原画布准备中', options: {} },
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(GenerationService.getInstance().getProgressEstimate).toHaveBeenCalledTimes(1))
   const otherProject = await createCanvasTestProject('准备期间切换')
   if (cancel) expect(await taskControlSession()('cancel_generation_task', { taskId, reason: '取消准备中的任务' })).toMatchObject({ ok: true })
@@ -737,9 +737,9 @@ it('后台占位保存失败时不提交供应商，并保存原节点失败状�
   vi.mocked(GenerationService.getInstance().getProgressEstimate).mockReturnValue(new Promise(resolve => { release = () => resolve(null) }))
   const taskId = crypto.randomUUID()
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '保存失败', options: {} },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(GenerationService.getInstance().getProgressEstimate).toHaveBeenCalledTimes(1))
-  await createCanvasTestProject('保存失败时的当前项目')
+  await createCanvasTestProject('保存失败时的当前画布')
   // 后台画布的下一次写入失败（文档仓库替身）
   canvasTestRegistry().commands.failSaves = 1
   release()
@@ -750,13 +750,13 @@ it('后台占位保存失败时不提交供应商，并保存原节点失败状�
   expect(useCanvasStore.getState().nodes).toHaveLength(0)
 })
 
-it('供应商任务已保存后切换项目，持续轮询并保存原项目，不影响当前项目', async () => {
+it('供应商任务已保存后切换项目，持续轮询并保存原画布，不影响当前画布', async () => {
   vi.mocked(GenerationService.getInstance().generate).mockResolvedValue({ status: 'pending', taskId: 'persisted-provider-task', urls: [], filePaths: [] })
   let finishOriginal!: (value: { status: 'completed'; urls: string[]; filePaths: string[] }) => void
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(() => new Promise(resolve => { finishOriginal = resolve }))
   const taskId = crypto.randomUUID()
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '保留任务', options: {} },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
   await confirmCanvasPersistence(projectId)
   const otherProject = await createCanvasTestProject('另一个工作区')
@@ -784,7 +784,7 @@ it('切走后才收到供应商任务号，仍保存原任务并继续获取结�
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({ status: 'completed', urls: ['C:/late-id.png'], filePaths: ['C:/late-id.png'] })
   const taskId = crypto.randomUUID()
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '迟到任务号', options: {} },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(submitted).toBeTypeOf('function'))
   const otherProject = await createCanvasTestProject('切走等待')
   await openCanvasProject(otherProject, new AbortController().signal)
@@ -805,7 +805,7 @@ it('在其他项目中取消原画布任务，停止状态仍保存到原节点'
   })
   const taskId = crypto.randomUUID()
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '后台取消', options: {} },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
   const otherProject = await createCanvasTestProject('其他项目')
   await openCanvasProject(otherProject, new AbortController().signal)
@@ -830,7 +830,7 @@ it('生成已经派发后修改输入，原结果保存成功不会被缓存发�
   })
   const taskId = crypto.randomUUID()
   const submitted = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原始描述', options: {} },
-    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+    { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1))
   const nodeId = submitted.nodeRef.id.slice(projectId.length + 1)
   useCanvasStore.getState().updateNodeData(nodeId, { prompt: '下次生成的描述' })
@@ -853,7 +853,7 @@ it('没有活动执行的旧任务取消明确返回未执行，保留原供应�
 
 it('提交前用户修改生成参数，原任务不能按未经估价的新输入执行', async () => {
   const taskId = crypto.randomUUID()
-  const task = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原提示词', options: {} }, { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+  const task = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原提示词', options: {} }, { mode: 'canvas', documentId: projectId, sourceNodeIds: [] }, taskId)
   const nodeId = task.nodeRef.id.slice(projectId.length + 1)
   useCanvasStore.getState().updateNodeData(nodeId, { prompt: '新的提示词' })
   const run = vi.fn(async () => ({ status: 'completed' as const, resultNodeIds: [] }))

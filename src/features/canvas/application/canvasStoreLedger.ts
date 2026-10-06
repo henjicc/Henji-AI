@@ -12,8 +12,8 @@ import { CANVAS_ENTITY_TYPES as ENTITY } from './canvasReflection'
  * 免得下一个人误以为它们也该注册。
  *
  * 节点菜单「设置默认值」由 NodeParameterDefaults 保存为设备个人偏好，明确不向助手开放：
- * 它改变用户未来所有工程的新建习惯，超出当前工程编辑权限；助手创建节点仍应显式提供任务参数。
- * 此动作不修改 canvasStore、当前工程或节点运行状态，不登记为工程属性写入。
+ * 它改变用户未来所有画布的新建习惯，超出当前画布编辑权限；助手创建节点仍应显式提供任务参数。
+ * 此动作不修改 canvasStore、当前画布或节点运行状态，不登记为画布属性写入。
  */
 
 type State = ReturnType<typeof useCanvasStore.getState>
@@ -67,7 +67,7 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
      */
     ...fieldLedgerEntries(NODE_FIELDS),
     groupNodes: { kind: 'capability', capabilityId: 'group_canvas_nodes' },
-    // 工程级整体状态操作，与 undo/group 同属专用能力（3.1，见执行记录：走集合删除要么绕两步、
+    // 画布级整体状态操作，与 undo/group 同属专用能力（3.1，见执行记录：走集合删除要么绕两步、
     // 要么撞 maxItemsPerChange，不如照 undo_canvas_change 的先例）。
     clearCanvas: { kind: 'capability', capabilityId: 'clear_canvas' },
     // 集合删除对节点早就是级联删除子节点的语义，解散分组要求子节点保留，两者冲突，
@@ -91,7 +91,7 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setCanvasData: {
       kind: 'excluded',
       category: 'internal',
-      reason: '整图替换，由工程加载与事务回滚链路调用；助手侧对应的是打开工程与撤销，不直接换图。',
+      reason: '整图替换，由画布加载与事务回滚链路调用；助手侧对应的是打开画布与撤销，不直接换图。',
     },
     findNodePosition: {
       kind: 'excluded',
@@ -112,7 +112,7 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setModelSelectorExpanded: {
       kind: 'excluded',
       category: 'view_state',
-      reason: '节点上模型选择器的展开收起只影响这一个节点在屏幕上占多大，不写进工程文件；'
+      reason: '节点上模型选择器的展开收起只影响这一个节点在屏幕上占多大，不写进画布文件；'
         + '助手选模型直接写节点数据。',
     },
 

@@ -99,7 +99,7 @@ export async function commitLayerSeparationGeneration(
   if (input.result.outputs.length !== structuredOutput.outputs.length) {
     throw new Error(`图层媒体与结构化描述数量不一致：${input.result.outputs.length}/${structuredOutput.outputs.length}`);
   }
-  if (!projectId && !input.commitOutputs) throw new Error('未找到图层拆分的原画布项目');
+  if (!projectId && !input.commitOutputs) throw new Error('未找到图层拆分的原画布');
   const prepareDocument = input.prepareDocument ?? prepareLayerStackDocument;
   const releaseResources = input.releaseResources ?? ((filePaths) => getPlatform().image.releaseLayerStackResources(filePaths));
   let createdFilePaths: string[] = [];

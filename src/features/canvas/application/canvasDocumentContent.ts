@@ -12,12 +12,12 @@ import { mapCanvasNodeMediaReferences, resolveCanvasNodeMediaSchema } from './ca
  *
  * - 文档内容（kinds/canvas.ts）= 节点、连线、可选媒体池（缺失模型的不透明参数用）、可选多图层包位置；
  *   位置都是绝对路径，换成相对写法由主进程整份完成，这里不声明路径字段。
- * - 写入前清掉节点里的瞬时运行状态（与原工程保存规则相同）：没有服务端任务的“生成中”落盘为失败提示等。
+ * - 写入前清掉节点里的瞬时运行状态（与原画布保存规则相同）：没有服务端任务的“生成中”落盘为失败提示等。
  * - 撤销记录与视口不写进文档，存在程序目录的会话状态里（见 canvasSessionState.ts）；撤销记录用同一套规则清理与校验。
  */
 
 export const DEFAULT_CANVAS_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
-/** 程序目录里保留的撤销步数（与原工程记录一致）。 */
+/** 程序目录里保留的撤销步数（与原画布记录一致）。 */
 export const MAX_PERSISTED_CANVAS_HISTORY_STEPS = 12
 
 export interface ProjectSummary {

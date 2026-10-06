@@ -61,11 +61,11 @@ const surfaceDefinitions = [
   { id: 'workspace.generation', kind: 'workspace', workspace: 'generation', ...immediate },
   {
     id: 'workspace.canvas', kind: 'workspace', workspace: 'nodes', ...immediate,
-    acceptedRefKinds: ['canvas.project', 'canvas.node', 'canvas.edge'],
+    acceptedRefKinds: ['canvas.document', 'canvas.node', 'canvas.edge'],
     openPolicy: 'after_target_resolved',
   },
   { id: 'workspace.tools', kind: 'workspace', workspace: 'tools', ...immediate },
-  { id: 'workspace.video_edit', kind: 'workspace', workspace: 'videoEdit', ...immediate, acceptedRefKinds: ['video_edit.project', 'video_edit.clip', 'video_edit.annotation'] },
+  { id: 'workspace.video_edit', kind: 'workspace', workspace: 'videoEdit', ...immediate, acceptedRefKinds: ['video_edit.document', 'video_edit.clip', 'video_edit.annotation'] },
   {
     id: 'workspace.assets', kind: 'workspace', workspace: 'assets', ...immediate,
     acceptedRefKinds: ['asset', 'asset.library'],
@@ -77,13 +77,13 @@ const surfaceDefinitions = [
   },
   {
     id: 'tool.audio_edit', kind: 'tool', workspace: 'tools', toolId: 'audioEdit', ...immediate,
-    acceptedRefKinds: ['audio_edit.project', 'audio_edit.transcript_block', 'audio_edit.suggestion', 'audio_edit.render'],
+    acceptedRefKinds: ['audio_edit.document', 'audio_edit.transcript_block', 'audio_edit.suggestion', 'audio_edit.render'],
     openPolicy: 'after_target_resolved',
   },
   {
     id: 'tool.camera_stage', kind: 'tool', workspace: 'tools', toolId: 'cameraStage', ...immediate,
     acceptedRefKinds: [
-      'camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera',
+      'camera_stage.document', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera',
       'camera_stage.state_keyframe', 'camera_stage.trajectory',
     ],
     openPolicy: 'after_target_resolved',

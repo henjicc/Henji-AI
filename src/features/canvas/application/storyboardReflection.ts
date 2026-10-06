@@ -11,7 +11,7 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
 import { getStoryboardProject, listStoryboardProjects } from './storyboardProjectService'
 
 export const STORYBOARD_ENTITY_TYPES = {
-  project: 'storyboard.project',
+  project: 'storyboard.document',
   card: 'storyboard.card',
 } as const
 
@@ -67,16 +67,16 @@ function property(
  */
 const properties: Record<StoryboardEntityType, ApplicationPropertyDescriptor[]> = {
   [STORYBOARD_ENTITY_TYPES.project]: [
-    property(STORYBOARD_ENTITY_TYPES.project, 'name', '项目名称', { kind: 'string', maxLength: 200 },
-      '分镜工程名即画布文档名，改名请写 documents.document.name（同一个 ID）。'),
+    property(STORYBOARD_ENTITY_TYPES.project, 'name', '名称', { kind: 'string', maxLength: 200 },
+      '分镜画布名即画布文档名，改名请写 documents.document.name（同一个 ID）。'),
     property(STORYBOARD_ENTITY_TYPES.project, 'card_refs', '分镜卡引用', { kind: 'ref_list', refKinds: [STORYBOARD_ENTITY_TYPES.card], maxItems: 1000 },
       '卡片集合由画布节点派生，增删请用 canvas.node 的集合写入。'),
     property(STORYBOARD_ENTITY_TYPES.project, 'edge_count', '关系数量', { kind: 'integer', hardRange: { min: 0 } },
       '由画布连线数量统计得出。'),
   ],
   [STORYBOARD_ENTITY_TYPES.card]: [
-    property(STORYBOARD_ENTITY_TYPES.card, 'project_ref', '所属项目', { kind: 'ref', refKinds: [STORYBOARD_ENTITY_TYPES.project] },
-      '卡片所属工程不可变更。'),
+    property(STORYBOARD_ENTITY_TYPES.card, 'document_ref', '所属画布', { kind: 'ref', refKinds: [STORYBOARD_ENTITY_TYPES.project] },
+      '卡片所属画布不可变更。'),
     property(STORYBOARD_ENTITY_TYPES.card, 'node_type', '节点类型', { kind: 'string', maxLength: 120 },
       '卡片即画布节点，节点类型创建后不可变更。'),
   ],
@@ -128,16 +128,16 @@ class StoryboardReflectionProvider implements ApplicationEntityProvider {
       if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
       const cards = itemsOf(project, 'nodeSummary')
       values = {
-        'storyboard.project.name': String(project.name),
-        'storyboard.project.card_refs': cards.map((node) => cardRef(projectId, String(node.id))),
-        'storyboard.project.edge_count': Number((project.edgeSummary as Record<string, unknown>)?.count) || 0,
+        'storyboard.document.name': String(project.name),
+        'storyboard.document.card_refs': cards.map((node) => cardRef(projectId, String(node.id))),
+        'storyboard.document.edge_count': Number((project.edgeSummary as Record<string, unknown>)?.count) || 0,
       }
     } else {
       const { nodeId } = splitCardRef(ref)
       const node = itemsOf(project, 'nodeSummary').find((item) => item.id === nodeId)
       if (!node) throw new Error('NOT_FOUND')
       values = {
-        'storyboard.card.project_ref': { kind: STORYBOARD_ENTITY_TYPES.project, id: projectId },
+        'storyboard.card.document_ref': { kind: STORYBOARD_ENTITY_TYPES.project, id: projectId },
         'storyboard.card.node_type': String(node.type),
       }
     }
@@ -180,15 +180,15 @@ export function createStoryboardReflectionRegistrations(): ApplicationEntityRegi
       id: entityType,
       domain: 'storyboard',
       version: 1,
-      title: entityType === STORYBOARD_ENTITY_TYPES.project ? '分镜项目' : '分镜卡',
-      description: '分镜项目及其卡片的稳定只读关系。',
+      title: entityType === STORYBOARD_ENTITY_TYPES.project ? '分镜画布' : '分镜卡',
+      description: '分镜画布及其卡片的稳定只读关系。',
       refKind: entityType,
       dataClass: 'C1',
       exposures: ['ui', 'assistant', 'local_adapter'],
       parentTypes: entityType === STORYBOARD_ENTITY_TYPES.card ? [STORYBOARD_ENTITY_TYPES.project] : [],
       revisionScopes: ['storyboard'],
-      // 分镜工程就是画布文档（同一个 ID），详情读 get_canvas_project
-      queryCapabilityIds: ['get_canvas_project'],
+      // 分镜画布就是画布文档（同一个 ID），详情读 get_canvas_document
+      queryCapabilityIds: ['get_canvas_document'],
       schemaRef: schemaRef('entity', entityType),
       writeExclusion: {
         reason: '分镜是画布的只读摘要投影。改格子内容与顺序请写 canvas.node.storyboard_frames'

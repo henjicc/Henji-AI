@@ -31,7 +31,7 @@ describe('三维四窗格默认布局', () => {
 
   it('默认给出一个摄像机视角——这是运镜工具的产出物本身', () => {
     expect(DEFAULT_STAGE_VIEWPORTS.camera.source).toEqual({ kind: 'active_camera' })
-    // 跟随当前机位而不是绑死 id：视口配置存在本机、摄像机 id 属于工程，绑死换个工程就失效。
+    // 跟随当前机位而不是绑死 id：视口配置存在本机、摄像机 id 属于镜头参考，绑死换个镜头参考就失效。
     const bound = STAGE_VIEWPORT_IDS.filter((id) => DEFAULT_STAGE_VIEWPORTS[id].source.kind === 'camera')
     expect(bound, '默认布局不该绑定具体摄像机 id').toEqual([])
   })

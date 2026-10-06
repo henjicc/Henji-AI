@@ -23,7 +23,7 @@ export async function commitPanoramaViewSnapshot(input: {
     const project = useProjectStore.getState();
     const projectId = project.currentProjectId;
     if (!projectId || project.currentProject?.id !== projectId) {
-      throw new Error('当前画布项目不可用');
+      throw new Error('当前画布不可用');
     }
     await runCanvasTransaction(projectId, 2, (options) => runCanvasMutationStage(options, () => {
       const canvas = useCanvasStore.getState();

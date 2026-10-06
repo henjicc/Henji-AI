@@ -33,7 +33,7 @@ import { calculateStageObjectBounds } from './sceneAnalysis'
 const DOMAIN = 'camera_stage'
 const REVISION_SCOPE = 'toolbox'
 const ENTITY_TYPES = {
-  project: 'camera_stage.project',
+  project: 'camera_stage.document',
   scene: 'camera_stage.scene',
   object: 'camera_stage.object',
   camera: 'camera_stage.camera',
@@ -120,9 +120,9 @@ function property(
 
 const STRING = { kind: 'string', maxLength: 500 } as const
 
-/** 3.2：camera_stage.project 就是一份镜头参考文档，文档本身的管理全部归通用文档能力。 */
+/** 3.2：camera_stage.document 就是一份镜头参考文档，文档本身的管理全部归通用文档能力。 */
 const PROJECT_NAME_READ_ONLY = '名称就是镜头参考文档的文件名：改名用 change_application_entities 写 documents.document.name（同一个 id）。'
-const PROJECT_WRITE_EXCLUSION = 'camera_stage.project 就是一份镜头参考文档（id 即文档 ID），本身只读：改名写 documents.document.name；'
+const PROJECT_WRITE_EXCLUSION = 'camera_stage.document 就是一份镜头参考文档（id 即文档 ID），本身只读：改名写 documents.document.name；'
   + '移动、创建副本、移到回收站用 move_document / duplicate_document / trash_document；新建用 create_document（kind=camera_stage）。'
   + '场景内容经 camera_stage.scene 及其对象、摄像机、状态关键帧等子实体写入。'
 const INTEGER = { kind: 'integer', hardRange: { min: 0 } } as const
@@ -135,7 +135,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.project, 'state_keyframe_count', '状态关键帧数量', INTEGER, { readOnly: '数量由状态关键帧集合计算。' }),
   ],
   [ENTITY_TYPES.scene]: [
-    property(ENTITY_TYPES.scene, 'project_ref', '所属工程', { kind: 'ref', refKinds: [ENTITY_TYPES.project] }, { readOnly: '所属工程不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.project], cardinality: 'one' } }),
+    property(ENTITY_TYPES.scene, 'document_ref', '所属镜头参考', { kind: 'ref', refKinds: [ENTITY_TYPES.project] }, { readOnly: '所属镜头参考不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.project], cardinality: 'one' } }),
     property(ENTITY_TYPES.scene, 'object_refs', '场景对象', { kind: 'ref_list', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '对象集合通过正式创建和删除操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'many' } }),
     property(ENTITY_TYPES.scene, 'state_keyframe_refs', '状态关键帧', { kind: 'ref_list', refKinds: [ENTITY_TYPES.stateKeyframe] }, { readOnly: '状态关键帧的增删排序通过 camera_stage.state_keyframe 的集合写入维护，这里只读列出当前集合。', relation: { targetEntityTypes: [ENTITY_TYPES.stateKeyframe], cardinality: 'many' } }),
     /*
@@ -268,7 +268,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     return snapshots.flatMap((snapshot) => {
       if (this.entityType === ENTITY_TYPES.project) return [{ kind: this.entityType, id: snapshot.id, label: snapshot.name }]
       if (this.entityType === ENTITY_TYPES.scene) return [{ kind: this.entityType, id: snapshot.id, label: `${snapshot.name} 场景` }]
-      // 播放是会话态：只有当前打开的那个工程才有播放头，没打开的工程列出来也读不到值。
+      // 播放是会话态：只有当前打开的那个镜头参考才有播放头，没打开的镜头参考列出来也读不到值。
       if (this.entityType === ENTITY_TYPES.playback) {
         return cameraStageApplicationService.readPlayback(snapshot.id)
           ? [{ kind: this.entityType, id: snapshot.id, label: `${snapshot.name} 播放` }]
@@ -283,10 +283,10 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   }
 
   /**
-   * 接受当前工程内唯一的子实体短 ID，并立即规范化成正式的 `projectId:childId`。
+   * 接受当前镜头参考内唯一的子实体短 ID，并立即规范化成正式的 `projectId:childId`。
    *
    * 模型偶尔会从已返回的稳定引用里只保留末段 UUID。让它因此多失败、再 list 一轮没有任何
-   * 安全价值：短 ID 只有在全工程唯一时才解析，存在歧义仍按 NOT_FOUND 拒绝。
+   * 安全价值：短 ID 只有在全镜头参考唯一时才解析，存在歧义仍按 NOT_FOUND 拒绝。
    */
   private async normalizeRef(ref: ApplicationRef): Promise<ApplicationRef> {
     if (ref.kind !== this.entityType || ref.id.includes(':')) return ref
@@ -347,7 +347,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
 
   private sceneProperties(snapshot: CameraStageProjectSnapshot): Record<string, JsonValue> {
     return {
-      [`${ENTITY_TYPES.scene}.project_ref`]: { kind: ENTITY_TYPES.project, id: snapshot.id, label: snapshot.name },
+      [`${ENTITY_TYPES.scene}.document_ref`]: { kind: ENTITY_TYPES.project, id: snapshot.id, label: snapshot.name },
       [`${ENTITY_TYPES.scene}.object_refs`]: snapshot.objects.map((object) => childRef(object.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, snapshot.id, object.id, object.name)),
       [`${ENTITY_TYPES.scene}.state_keyframe_refs`]: snapshot.stateKeyframes.map((stateKeyframe) => childRef(ENTITY_TYPES.stateKeyframe, snapshot.id, stateKeyframe.id, stateKeyframe.name)),
       ...fieldReadValues(SCENE_TIMELINE_FIELDS, snapshot),
@@ -401,12 +401,12 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
 
 const ENTITY_META: Record<EntityType, { title: string; description: string; parents: EntityType[]; queryIds: string[] }> = {
   [ENTITY_TYPES.project]: { title: '镜头参考文档', description: '一份镜头参考文档（.henji-stage）里的三维场景与运镜；id 即文档 ID。', parents: [], queryIds: ['observe_camera_stage_scene'] },
-  [ENTITY_TYPES.scene]: { title: '三维场景', description: '工程中的对象、活动摄像机和状态关键帧集合。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.scene]: { title: '三维场景', description: '镜头参考中的对象、活动摄像机和状态关键帧集合。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.object]: { title: '三维对象', description: '基础几何体或角色对象。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.camera]: { title: '三维摄像机', description: '具有取景、注视和轨迹控制的摄像机。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.stateKeyframe]: { title: '状态关键帧', description: '指定时刻的完整场景状态和到下一时刻的过渡定义。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.trajectory]: { title: '三维轨迹', description: '对象或摄像机在相邻状态关键帧间的空间路径。', parents: [ENTITY_TYPES.stateKeyframe], queryIds: ['observe_camera_stage_scene'] },
-  [ENTITY_TYPES.playback]: { title: '三维播放控制', description: '时间轴的播放、播放头位置与循环开关。只对当前打开的工程有意义。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.playback]: { title: '三维播放控制', description: '时间轴的播放、播放头位置与循环开关。只对当前打开的镜头参考有意义。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
 }
 
 export function createCameraStageReflectionRegistrations(readRevision: RevisionReader): ApplicationEntityRegistration[] {

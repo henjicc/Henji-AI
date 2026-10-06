@@ -68,7 +68,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     apiRef.current = api
     restoreVideoEditLayout(api)
     bindVideoEditPopoutDock(api)
-    // Dock 只在工程已打开时挂载：此时恢复上次浮出的面板，没有工程时不会弹窗。
+    // Dock 只在剪辑已打开时挂载：此时恢复上次浮出的面板，没有剪辑时不会弹窗。
     restoreVideoEditPopouts(api)
     onApiChange(api)
     let timer: ReturnType<typeof setTimeout> | undefined

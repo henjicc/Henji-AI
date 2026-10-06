@@ -157,7 +157,7 @@ it('口播导出新 WAV/SRT 并读取剪后字幕；取消转发到原任务，�
 it('目标失效时不再收录资产：原结果保留在生产方', async () => {
   producers.generation.mockResolvedValue({ mediaType: 'video', source: 'D:/results/clip.mp4', name: '视频' })
   let valid = true
-  const assertTarget = vi.fn(() => { if (!valid) throw new Error('原剪辑工程已有修改') })
+  const assertTarget = vi.fn(() => { if (!valid) throw new Error('原剪辑已有修改') })
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => { valid = false; return content })
   await expect(prepareVideoEditCreativeResult({ type: 'generation', recordId: 'h', outputIndex: 0 }, options(assertTarget))).rejects.toThrow('已有修改')
   expect(producers.addAsset).not.toHaveBeenCalled()

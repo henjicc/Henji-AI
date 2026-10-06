@@ -9,8 +9,8 @@ export const CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID = 'cancel_camera_stag
 export const WAIT_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID = 'wait_camera_stage_render_task'
 export const RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID = 'recover_camera_stage_render_task'
 
-export const cameraStageRenderProjectRefSchema = applicationRefSchema.extend({
-  kind: z.literal('canvas.project'),
+export const cameraStageRenderCanvasRefSchema = applicationRefSchema.extend({
+  kind: z.literal('canvas.document'),
 }).strict()
 
 export const cameraStageRenderNodeRefSchema = applicationRefSchema.extend({
@@ -40,7 +40,7 @@ const renderTaskObservationFields = {
 
 const renderOutput = defineApplicationCapability({
   id: CAMERA_STAGE_RENDER_CAPABILITY_ID,
-  resolveOperationTargets: (input) => [input.projectRef, input.nodeRef],
+  resolveOperationTargets: (input) => [input.canvasRef, input.nodeRef],
   resolveOperationWriteTargets: (input) => [input.nodeRef],
   version: 1,
   title: '输出 3D 镜头结果',
@@ -59,15 +59,15 @@ const renderOutput = defineApplicationCapability({
   completionKind: 'submitted',
   requiredScopes: ['canvas'],
   parallelSafe: false,
-  availability: ['目标画布项目存在，目标节点是可输出的 3D 镜头参考节点；无需打开原工程。'],
+  availability: ['目标画布存在，目标节点是可输出的 3D 镜头参考节点；无需打开原画布。'],
   prerequisites: [
-    'projectRef 与 nodeRef 必须来自同一次画布读取，nodeRef 必须是 projectRef 下的完整稳定引用。',
+    'canvasRef 与 nodeRef 必须来自同一次画布读取，nodeRef 必须是 canvasRef 下的完整稳定引用。',
     '本能力只提交后台任务；提交后用 wait_camera_stage_render_task 等待，或 get_camera_stage_render_task 查询。',
   ],
-  acceptsRefs: ['canvas.project', 'canvas.node'],
+  acceptsRefs: ['canvas.document', 'canvas.node'],
   producesRefs: ['camera_stage.render_task'],
   inputSchema: z.object({
-    projectRef: cameraStageRenderProjectRefSchema,
+    canvasRef: cameraStageRenderCanvasRefSchema,
     nodeRef: cameraStageRenderNodeRefSchema,
     outputKind: z.enum(['image', 'video']),
     resolutionPreset: z.enum(['720p', '1080p']).default('720p'),
@@ -83,8 +83,8 @@ const renderOutput = defineApplicationCapability({
     resultRefs: z.tuple([cameraStageRenderTaskRefSchema]),
   }),
   concurrencyKey: 'camera_stage_render',
-  resolveConcurrencyKey: (input) => `camera_stage_render:${input.projectRef.id}:${input.nodeRef.id}`,
-  resolveTargetIds: (input) => ({ projectId: input.projectRef.id, nodeRefId: input.nodeRef.id }),
+  resolveConcurrencyKey: (input) => `camera_stage_render:${input.canvasRef.id}:${input.nodeRef.id}`,
+  resolveTargetIds: (input) => ({ canvasDocumentId: input.canvasRef.id, nodeRefId: input.nodeRef.id }),
   control: capabilityControl('execute', ['camera_stage.render_task'], {
     revisionScopes: ['canvas'],
     resultState: 'submitted',
@@ -148,7 +148,7 @@ const recoverRenderTaskOutputSchema = capabilityOutputSchema({ ...renderTaskObse
 const recoverRenderTask = defineApplicationCapability<z.infer<typeof getRenderTask.inputSchema>, z.infer<typeof recoverRenderTaskOutputSchema>>({
   ...getRenderTask,
   id: RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, title: '恢复 3D 镜头结果保存',
-  description: '只接收原任务已经产生的媒体和终态，重试保存原工程结果；不会重新渲染。任务仍在运行或已保存时仅返回原状态。',
+  description: '只接收原任务已经产生的媒体和终态，重试保存到原画布；不会重新渲染。任务仍在运行或已保存时仅返回原状态。',
   aliases: ['恢复3D输出保存', 'recover camera stage render'],
   readOnly: false, risk: 'R1', permission: 'canvas:write', timeoutMs: 30_000,
   completionKind: 'executed', parallelSafe: false,

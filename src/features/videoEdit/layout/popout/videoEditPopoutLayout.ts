@@ -5,7 +5,7 @@ const logger = createLogger('features.videoEdit.layout.popout')
 
 /**
  * 每台机器的视图便利项：哪些面板浮出到系统窗口及其上次位置。与 Dock 布局一样只存
- * 视图状态，不含工程内容；读写失败只记日志，按“没有浮窗”正常启动。
+ * 视图状态，不含剪辑内容；读写失败只记日志，按“没有浮窗”正常启动。
  */
 export const VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY = 'henji.videoEdit.popoutLayout.v1'
 const MAX_RECORDS = 8

@@ -33,7 +33,7 @@ export default {
   "changes": [{
     "kind": "create_items",
     "entityType": "video_edit.clip",
-    "parent": { "kind": "video_edit.sequence", "id": "工程id:序列id" },
+    "parent": { "kind": "video_edit.sequence", "id": "剪辑id:序列id" },
     "items": [{ "properties": {
       "video_edit.clip.item_id": "项目项id",
       "video_edit.clip.kind": "code",
@@ -80,7 +80,7 @@ export default {
   "changes": [{
     "kind": "create_items",
     "entityType": "video_edit.effect",
-    "parent": { "kind": "video_edit.clip", "id": "工程id:片段id" },
+    "parent": { "kind": "video_edit.clip", "id": "剪辑id:片段id" },
     "items": [{ "properties": {
       "video_edit.effect.definition_id": "素材定义id",
       "video_edit.effect.name": "暖色暗角",

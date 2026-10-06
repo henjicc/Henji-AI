@@ -79,7 +79,7 @@ describe('CameraStageRenderLifecycleHost', () => {
     dispose();
   });
 
-  it('启动恢复未打开工程的结果，销毁后的迟到目录不再处理', async () => {
+  it('启动恢复未打开画布的结果，销毁后的迟到目录不再处理', async () => {
     mocks.projectState = { currentProjectId: null, currentProject: null };
     mocks.list.mockResolvedValueOnce([{ requestId: 'background-b' }]);
     const dispose = installCameraStageRenderLifecycleHost();

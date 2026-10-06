@@ -58,13 +58,13 @@ function createVideoEditCreativeResultsScene(context) {
       const phase = name => { evidence.currentPhase = name; store() }
       let client; let observed = false; let audioProjectId
       const playhead = async frame => {
-        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })
-        await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '定位回填播放头', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef, properties: { 'video_edit.project.program_playback': { frame, playing: false, playbackDirection: 1 } } }] }))
+        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
+        await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '定位回填播放头', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing: false, playbackDirection: 1 } } }] }))
       }
       const openEdit = async () => { await button(page, '剪辑').first().click(); await button(page, '关闭项目').or(button(page, '新建项目')).first().waitFor({ state: 'visible', timeout: 30000 }) }
       try {
         editProject = await seedVideoEditProject(page, fixture); file = editProject.file; PROJECT_ID = editProject.documentId
-        projectRef = { kind: 'video_edit.project', id: PROJECT_ID }; evidence.project = { projectPath: editProject.projectPath, file }
+        projectRef = { kind: 'video_edit.document', id: PROJECT_ID }; evidence.project = { projectPath: editProject.projectPath, file }
         evidence.display = await app.evaluate(({ BrowserWindow, screen }, { point, hostContentsId }) => {
           const host = (BrowserWindow.getAllWindows().find(window => window.webContents.id === hostContentsId) ?? BrowserWindow.getAllWindows()[0])
           const bounds = host.getBounds(); const current = screen.getDisplayMatching(bounds); const coordinates = point?.split(',').map(Number)
@@ -145,7 +145,7 @@ function createVideoEditCreativeResultsScene(context) {
         phase('mcp-replace-generation')
         const read = await callTool(client, 'read_application_entity', { ref: projectRef })
         at = performance.now()
-        const replaced = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([read], { projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${generated.clip.id}` } }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: generated.clip.creativeSource.recordId === 'creative-generation-a' ? 'creative-generation-b' : 'creative-generation-a' }, outputIndex: 0 } }))
+        const replaced = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([read], { documentRef: projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${generated.clip.id}` } }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: generated.clip.creativeSource.recordId === 'creative-generation-a' ? 'creative-generation-b' : 'creative-generation-a' }, outputIndex: 0 } }))
         evidence.timings.mcpReplaceMs = performance.now() - at
         assert.equal(replaced.executionState, 'completed', JSON.stringify(replaced)); assert.equal(replaced.verificationState, 'verified', JSON.stringify(replaced))
         const afterReplace = readProject(file).sequences[0].clips.find(clip => clip.id === generated.clip.id)
@@ -223,7 +223,7 @@ function createVideoEditCreativeResultsScene(context) {
         await shot('creative-camera-stage-sent')
         // Same canvas completion through the public canvas-node source, replacing the 3D clip in place.
         const nodeRead = await callTool(client, 'read_application_entity', { ref: projectRef })
-        const canvasReplace = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([nodeRead], { projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${staged.clip.id}` } }, result: { type: 'document', documentRef: { kind: 'documents.document', id: canvasId }, nodeRef: { kind: 'canvas.node', id: `${canvasId}:${resultNodeId}` } } }))
+        const canvasReplace = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([nodeRead], { documentRef: projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${staged.clip.id}` } }, result: { type: 'document', documentRef: { kind: 'documents.document', id: canvasId }, nodeRef: { kind: 'canvas.node', id: `${canvasId}:${resultNodeId}` } } }))
         assert.equal(canvasReplace.verificationState, 'verified', JSON.stringify(canvasReplace))
         assert.deepEqual(readProject(file).sequences[0].clips.find(clip => clip.id === staged.clip.id).creativeSource.part, resultNodeId)
         evidence.phases.push('三维正式完成结果经画布节点工具条进入播放头；同一完成节点经MCP画布来源替换')
@@ -238,7 +238,7 @@ function createVideoEditCreativeResultsScene(context) {
         evidence.reopenDifference = await pixelDifference(afterImage.file, reopenedFrame.file); assert.ok(evidence.reopenDifference.equal)
         const exportPath = path.join(root, `creative-${Date.now()}.mp4`); await dialogs(app, [], exportPath); at = performance.now(); await button(page, '导出视频').click()
         let task
-        for (let attempt = 0; attempt < 6000; attempt++) { task = await callTool(client, 'query_video_edit_export', { projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
+        for (let attempt = 0; attempt < 6000; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))
         const metadata = mediaProbe(ffprobePath, exportPath); const exportedVideo = metadata.streams.find(stream => stream.codec_type === 'video'); const exportedAudio = metadata.streams.find(stream => stream.codec_type === 'audio')
         assert.equal(exportedVideo.width, 3840); assert.equal(exportedVideo.height, 2160); assert.equal(exportedVideo.avg_frame_rate, '60/1'); const timelineEnd = Math.max(...reopened.sequences[0].clips.map(clip => clip.start + clip.duration)); assert.equal(Number(exportedVideo.nb_frames), timelineEnd)

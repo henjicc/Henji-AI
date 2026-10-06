@@ -36,7 +36,7 @@ function idempotencyKey(capabilityId: string, revision: number, context: Capabil
  *
  * 走事务引擎的能力（摆放、运镜、改属性）此前只返回 `resultingRevisions` 这个映射，
  * 而不走事务的能力（复制、删除对象）返回的是扁平的 `baseRevision`——同一个领域里
- * 同一个概念两种形状。结果是模型每摆一个物体就得再读一次工程才能拿到下一次写入要用的
+ * 同一个概念两种形状。结果是模型每摆一个物体就得再读一次镜头参考才能拿到下一次写入要用的
  * revision，本来一步的事变成两步。叠加单轮 8 个工具位的轮换，读的那个工具下一轮往往就
  * 不在了，任务就卡死在这里。
  */
@@ -116,7 +116,7 @@ function vec3Value(value: { x: number; y: number; z: number }): JsonValue {
 
 export async function observeCameraStageScene(projectId: string): Promise<Record<string, unknown>> {
   const scene = await cameraStageApplicationService.observeProject(projectId)
-  return { scene: { projectId, ...scene }, baseRevision: baseRevision() }
+  return { scene: { documentId: projectId, ...scene }, baseRevision: baseRevision() }
 }
 
 export async function placeCameraStageObject(input: Record<string, unknown> & { baseRevision: number }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {

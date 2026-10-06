@@ -45,7 +45,7 @@ import {
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities/types';
 import { validateLayerStackDocument, type LayerStackDocumentV1 } from './layerStack';
 
-/** 恢复全景节点被旧工程或损坏数据覆盖的能力固定语义。 */
+/** 恢复全景节点被旧画布或损坏数据覆盖的能力固定语义。 */
 export function migratePanoramaGenerationData(data: DynamicValueMap): void {
   data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.panorama;
   data.fixedSemanticParams = { ...PANORAMA_PROMPT_POLICY.fixedSemanticParams };

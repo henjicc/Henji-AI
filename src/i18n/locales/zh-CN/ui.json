@@ -250,7 +250,7 @@
   },
   "videoEditSend": {
     "short": "加入剪辑",
-    "addToPlayhead": "加入当前剪辑项目的播放头位置",
+    "addToPlayhead": "加入当前剪辑的播放头位置",
     "added": "已加入剪辑并保存，可在剪辑中撤销。",
     "failed": "未能加入剪辑。"
   },
@@ -272,11 +272,11 @@
     "codeParameters": "已保存 {{count}} 个参数",
     "codeEditableHint": "导入后可继续编辑源码、参数和动画。滤镜会应用到导入时所选的画面片段。",
     "codeImages": "引用 {{count}} 个图片文件，请保留原文件。",
-    "codeOpenProject": "请先打开剪辑项目",
-    "codeImport": "导入当前剪辑项目",
+    "codeOpenProject": "请先打开剪辑",
+    "codeImport": "导入当前剪辑",
     "codeImporting": "正在检查并导入",
     "codeImportFailed": "代码素材导入失败，请重试",
-    "codeImportedItem": "已加入项目素材，可继续剪辑和调参",
+    "codeImportedItem": "已加入剪辑素材，可继续剪辑和调参",
     "codeImportedEffect": "已添加到原选中片段的效果，可继续调参",
     "search": "搜索资产",
     "newest": "最新加入",

@@ -26,7 +26,7 @@ function streamDuration(stream: ProbeStream, fallback: number): number {
   return stream.duration_ts && time.numerator ? stream.duration_ts * time.numerator / time.denominator : Number(stream.duration ?? fallback)
 }
 export function audioEditCacheDirectory(projectId: string): string {
-  if (!/^[\w-]+$/.test(projectId)) throw new Error('工程引用无效')
+  if (!/^[\w-]+$/.test(projectId)) throw new Error('口播引用无效')
   return path.join(getProgramStoreDir('audioEdit'), projectId, 'cache')
 }
 export async function identifyAudioEditSource(sourcePath: string): Promise<AudioEditSourceIdentity> {

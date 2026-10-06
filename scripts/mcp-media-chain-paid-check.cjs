@@ -150,7 +150,7 @@ async function main() {
         await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: 'MCP链路付费夹具', replace: true })
       }, { projectId: FIXTURE_PROJECT_ID })
       created.project = true
-      const destination = { mode: 'canvas', projectId: FIXTURE_PROJECT_ID, sourceNodeIds: [] }
+      const destination = { mode: 'canvas', documentId: FIXTURE_PROJECT_ID, sourceNodeIds: [] }
 
       // ——— 校验两段参数；只读，不产生费用 ———
       for (const [label, item, mediaType, prompt] of [['image', IMAGE, 'image', IMAGE_PROMPT], ['video', VIDEO, 'video', VIDEO_PROMPT]]) {

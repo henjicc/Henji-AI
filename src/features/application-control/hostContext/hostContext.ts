@@ -231,7 +231,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const videoEdit = navigation.activeWorkspace === 'videoEdit' ? activeVideoEditInstance() : undefined
   const isAudioEditSurface = navigation.activeWorkspace === 'tools' && navigation.activeToolId === 'audioEdit'
   const activeAudioProjectRef = isAudioEditSurface && audioEdit.project
-    ? `audio_edit.project:${audioEdit.project.id}`
+    ? `audio_edit.document:${audioEdit.project.id}`
     : null
   const selectedRefs = [
     // The primary clip comes first so a long item selection never hides it.
@@ -302,7 +302,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       id: navigation.activeWorkspace,
       activeToolId: navigation.activeToolId,
     },
-    project: {
+    canvas: {
       id: project.currentProjectId,
       selectedNodeId: canvas.selectedNodeId,
       ...(navigation.activeWorkspace === 'nodes' && canvas.selectedNodeId ? {
@@ -319,7 +319,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     },
     generation: { commandReady: generationReady },
     ...(videoEdit ? { videoEdit: {
-      projectRef: `video_edit.project:${videoEdit.document.id}`,
+      documentRef: `video_edit.document:${videoEdit.document.id}`,
       sequenceRef: `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}`,
       frame: videoEdit.frame, playing: videoEdit.playing, inFrame: videoEdit.inFrame, outFrame: videoEdit.outFrame, focusedPanel: videoEdit.activePanel,
       selectedClipRefs: videoEdit.selectedClipIds.slice(0, 48).map(id => `video_edit.clip:${videoEdit.document.id}:${id}`),

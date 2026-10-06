@@ -9,7 +9,7 @@ import type { CameraStageRenderRequest, CameraStageRenderTaskSnapshot } from '@/
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
 interface RenderTargetInput {
-  projectRef: ApplicationRef & { kind: 'canvas.project' }
+  canvasRef: ApplicationRef & { kind: 'canvas.document' }
   nodeRef: ApplicationRef & { kind: 'canvas.node' }
   outputKind: 'image' | 'video'
   resolutionPreset: '720p' | '1080p'
@@ -109,10 +109,10 @@ async function requireCurrentTarget(input: RenderTargetInput): Promise<{
   cameraStageDocumentId: string | null
   selectedTimeSec: number | undefined
 }> {
-  const projectId = input.projectRef.id
+  const projectId = input.canvasRef.id
   const prefix = `${projectId}:`
   if (!input.nodeRef.id.startsWith(prefix) || input.nodeRef.id.length === prefix.length) {
-    throw new Error(`INVALID_INPUT:nodeRef 必须是项目 ${projectId} 下的完整稳定引用`)
+    throw new Error(`INVALID_INPUT:nodeRef 必须是画布 ${projectId} 下的完整稳定引用`)
   }
   const project = await readCanvasProjectSnapshot(projectId)
   const nodeId = input.nodeRef.id.slice(prefix.length)
@@ -281,16 +281,16 @@ export async function renderCameraStageOutput(
   const requestedIdentity: RenderTaskIdentity = {
     version: 1,
     requestId,
-    canvasProjectId: input.projectRef.id,
+    canvasProjectId: input.canvasRef.id,
     nodeId: target.nodeId,
     cameraStageDocumentId: target.cameraStageDocumentId ?? GENERATED_PROJECT_ID_PLACEHOLDER,
     resolutionPreset: input.resolutionPreset,
     outputKind: input.outputKind,
     ...(target.selectedTimeSec === undefined ? {} : { selectedTimeSec: target.selectedTimeSec }),
   }
-  // 在创建后台工程和提交主进程任务前拒绝无法形成合法稳定引用的输入。
+  // 在创建后台镜头参考和提交主进程任务前拒绝无法形成合法稳定引用的输入。
   createCameraStageRenderTaskRef(requestedIdentity)
-  const existing = await readPersistedCompletion(input.projectRef.id, requestId)
+  const existing = await readPersistedCompletion(input.canvasRef.id, requestId)
   await requireUnchangedTarget(input, target)
   if (existing) {
     const expected = target.cameraStageDocumentId
@@ -311,7 +311,7 @@ export async function renderCameraStageOutput(
     resolutionPreset: input.resolutionPreset,
     selectedTimeSec: target.selectedTimeSec,
     expectedOwner: {
-      canvasProjectId: input.projectRef.id,
+      canvasProjectId: input.canvasRef.id,
       cameraStageDocumentId: target.cameraStageDocumentId,
     },
   })

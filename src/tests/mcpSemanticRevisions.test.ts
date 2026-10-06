@@ -146,7 +146,7 @@ it('MCP 实际授权可发现、创建和配置图片节点，并从原工程存
       permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS] }))
     expect(session.list().map((definition) => definition.id)).toContain('apply_canvas_image_capability')
     const result = await session.execute({ id: 'apply_canvas_image_capability', version: 1,
-      input: { projectId, sourceNodeId: source.id, capabilityId: 'image.background-removal' } }, request())
+      input: { documentId: projectId, sourceNodeId: source.id, capabilityId: 'image.background-removal' } }, request())
     expect(result.ok, JSON.stringify(result)).toBe(true)
     if (!result.ok) throw new Error('图片能力创建失败')
     const persisted = await readPersistedCanvasProjectSnapshot(projectId)
@@ -268,13 +268,13 @@ it('生成结果与后台画布各用原读取版本，创建节点后从正式�
   replaceGenerationTaskStatusSnapshots([{ ...task, status: 'success', progress: 100, resultAvailable: true }])
   const resultRef = { kind: 'generation.result', id: task.taskId }
   const expectedRevisions: Record<string, number> = {}
-  for (const ref of [{ kind: 'canvas.project', id: projectId }, resultRef]) {
+  for (const ref of [{ kind: 'canvas.document', id: projectId }, resultRef]) {
     const read = await session.execute({ id: 'read_application_entity', version: 1, input: { ref, propertyIds: [] } }, request())
     expect(read.ok, JSON.stringify(read)).toBe(true)
     if (read.ok) Object.assign(expectedRevisions, read.data.revisions)
   }
   const result = await session.execute({ id: 'add_generation_result_to_canvas', version: 1, expectedRevisions,
-    input: { projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 } } }, request())
+    input: { documentId: projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 } } }, request())
   expect(result.ok, JSON.stringify(result)).toBe(true)
   const { nodes } = await readPersistedCanvasProjectSnapshot(projectId)
   expect(nodes).toHaveLength(1)

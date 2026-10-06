@@ -119,7 +119,7 @@ describe('三维状态关键帧状态捕获（capture_object_refs）', () => {
     expect(useCameraStageStore.getState().stateKeyframes).toEqual(before)
   })
 
-  it('接受带工程前缀的稳定引用', async () => {
+  it('接受带文档前缀的稳定引用', async () => {
     const second = useCameraStageStore.getState().stateKeyframes[1]
     moveLiveObject(cubeId, { x: 9, y: 0, z: 0 })
 

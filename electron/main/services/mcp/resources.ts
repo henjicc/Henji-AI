@@ -5,7 +5,7 @@ import type { ApplicationToolDispatcher } from '../application-runtime/applicati
 
 export const APPLICATION_RESOURCE_TEMPLATES = ['entity', 'text', 'media'].map(format => ({
   uriTemplate: `henji://${format}/{kind}/{id}`, name: `application_${format}`,
-  description: format === 'media' ? '业务引用关联的媒体元数据，二进制通过受控分块工具读取。' : format === 'text' ? '工程或文档实体的文本表示。' : '实体的授权属性快照。',
+  description: format === 'media' ? '业务引用关联的媒体元数据，二进制通过受控分块工具读取。' : format === 'text' ? '文档实体的文本表示。' : '实体的授权属性快照。',
   mimeType: format === 'text' ? 'text/plain' : 'application/json',
 }))
 

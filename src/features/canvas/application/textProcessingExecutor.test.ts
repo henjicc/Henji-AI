@@ -33,7 +33,7 @@ beforeEach(async () => {
   installHarnessNativeStorage()
   resetCanvasExecutionServiceForTests()
   vi.spyOn(llmConfigService, 'getConfig').mockResolvedValue(config)
-  projectId = await createCanvasTestProject('文本工程 B')
+  projectId = await createCanvasTestProject('文本画布 B')
   nodeId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textProcessing, { x: 0, y: 0 }, {
     prompt: '写一句话', providerId: 'fixture', modelId: 'text',
   })
@@ -67,7 +67,7 @@ it('未挂载文本节点可从 A 页面运行 B，打开再关闭 B 不取消�
   expect((await readPersistedCanvasProjectSnapshot(visibleId)).nodes).toHaveLength(0)
 })
 
-it('取消一条文本任务不会取消另一工程的流，已收到文本与失败状态仍保存', async () => {
+it('取消一条文本任务不会取消另一画布的流，已收到文本与失败状态仍保存', async () => {
   const finishers = new Map<string, () => void>()
   vi.mocked(llmChatStream).mockImplementation(async (request, emit) => {
     emit({ type: 'Token', data: '保留片段' })
@@ -77,7 +77,7 @@ it('取消一条文本任务不会取消另一工程的流，已收到文本与�
   vi.mocked(llmCancelTask).mockImplementation(async requestId => { finishers.get(requestId)?.() })
   const firstProject = projectId
   const firstNode = nodeId
-  const secondProject = await createCanvasTestProject('并行工程')
+  const secondProject = await createCanvasTestProject('并行画布')
   const secondNode = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textProcessing, { x: 0, y: 0 }, { prompt: '另一句', providerId: 'fixture', modelId: 'text' })
   const controller = new AbortController()
   const first = runCanvasNode(firstNode, undefined, firstProject, controller.signal)
@@ -96,7 +96,7 @@ it('取消一条文本任务不会取消另一工程的流，已收到文本与�
   expect((await readPersistedCanvasProjectSnapshot(secondProject)).nodes.find(node => node.id === secondNode)?.data.lastExecutionStatus).toBe('success')
 })
 
-it('流提前结束不发布成功缓存，保存已收到片段并释放工程租用', async () => {
+it('流提前结束不发布成功缓存，保存已收到片段并释放画布租用', async () => {
   vi.mocked(llmChatStream).mockImplementation(async (_request, emit) => { emit({ type: 'Token', data: '未完成' }) })
   await expect(runCanvasNode(nodeId)).rejects.toThrow('未收到完成事件')
   const saved = await readPersistedCanvasProjectSnapshot(projectId)

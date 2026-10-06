@@ -138,7 +138,7 @@ export const SCENE_APPEARANCE_FIELDS = [
 ]
 
 /*
- * 活动摄像机引用需要工程 id 拼装稳定 ref，因此直接定义读写函数。
+ * 活动摄像机引用需要镜头参考 id 拼装稳定 ref，因此直接定义读写函数。
  */
 export const SCENE_TIMELINE_FIELDS = [
   {

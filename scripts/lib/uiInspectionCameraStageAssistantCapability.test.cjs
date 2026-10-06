@@ -84,14 +84,14 @@ test('后台新建镜头参考必须按返回引用落成非草稿文档文件',
   const read = { meta: { id: 'doc-1', kind: 'camera_stage', name: '后台镜头', draft: false, path: 'D:/文档/痕迹AI/镜头参考/后台镜头.henji-stage' } }
   assert.equal(requirePersistedCreatedDocument(created, read), 'doc-1')
   assert.throws(() => requirePersistedCreatedDocument(created, { meta: { ...read.meta, draft: true } }), /没有按返回引用落盘/)
-  assert.throws(() => requirePersistedCreatedDocument({ ...created, resultRef: { kind: 'camera_stage.project', id: 'doc-1' } }, read), /文档稳定引用/)
+  assert.throws(() => requirePersistedCreatedDocument({ ...created, resultRef: { kind: 'camera_stage.document', id: 'doc-1' } }, read), /文档稳定引用/)
 })
 
 test('观察新建的镜头参考必须得到唯一默认相机与零秒关键帧', () => {
   const observed = {
     baseRevision: 3,
     scene: {
-      projectId: 'doc-1',
+      documentId: 'doc-1',
       activeCameraId: 'camera-1',
       objects: [{ id: 'camera-1', type: 'camera' }],
       stateKeyframes: [{ id: 'state-1', time: 0, cameraId: 'camera-1' }],

@@ -19,7 +19,7 @@ export interface RenderCameraScheduleEntry {
 
 /**
  * 由状态关键帧序列 + 兜底机位（通常传全局 activeCameraId）派生渲染机位时间表。
- * 卡自身未指定机位（cameraId 为 null）时沿用 fallbackCameraId，覆盖旧工程（无 cameraId）
+ * 卡自身未指定机位（cameraId 为 null）时沿用 fallbackCameraId，覆盖旧镜头参考（无 cameraId）
  * 与"未特意设置机位"的场景，行为与改动前一致（始终渲染同一台机位）。空数组返回空表。
  */
 export function buildRenderCameraSchedule(

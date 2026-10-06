@@ -53,7 +53,7 @@ function cacheThumbnail(src: string, url: string): void {
 }
 
 let activeGenerations = 0;
-// 按加入顺序调度，取消排队任务为 O(1)，避免切换大工程时逐项扫描队列。
+// 按加入顺序调度，取消排队任务为 O(1)，避免切换大画布时逐项扫描队列。
 const generationWaiters = new Set<GenerationTask>();
 
 async function generateMicroThumbnail(src: string): Promise<string> {

@@ -5,8 +5,8 @@ import { createVideoEditDocument, videoEditDocumentSchema } from './document'
 const content = { sizeBytes: 123, fileModifiedAt: 456, contentIdentity: 'a'.repeat(64) }
 const fixture = (): CodeAsset => ({ format: 'henji-code-asset', version: 1, name: '透明标题', sourceVersion: { apiVersion: 1, languageVersion: 2, source: 'source' }, parameters: { label: '中文', size: 20, tint: [1, 0, 0, 1], image: { kind: 'image', mediaId: 'old-image' } }, curves: { size: [{ id: 'key', sourceInUs: 1, sourceRemainder: { numerator: 1, denominator: 3 }, value: 21, interpolation: 'ease' }] }, images: [{ id: 'old-image', path: 'D:/original.png', content, assetId: 'original' }] })
 describe('可编辑代码资产文件契约', () => {
-  it('清单原图片可凭固定内容身份进入工程；无库记录又无身份的快照拒绝', () => {
-    const document = createVideoEditDocument('原图片工程')
+  it('清单原图片可凭固定内容身份进入剪辑；无库记录又无身份的快照拒绝', () => {
+    const document = createVideoEditDocument('原图片剪辑')
     document.media = [{ id: 'fixed-image', name: '原图片', path: 'D:/original.png', kind: 'image', width: 100, height: 100, durationSeconds: 0, assetContent: { ...content }, sourceRevision: 'new-source' }]
     expect(() => videoEditDocumentSchema.parse(document)).not.toThrow()
     delete document.media[0].assetContent!.contentIdentity

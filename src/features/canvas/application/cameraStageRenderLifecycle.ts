@@ -25,7 +25,7 @@ export function installCameraStageRenderLifecycleHost(): () => void {
       requestId: task.requestId, nodeId: task.nodeId,
     }));
   });
-  // 先订阅再恢复全部未确认任务，未打开的工程同样接收重启后的结果。
+  // 先订阅再恢复全部未确认任务，未打开的画布同样接收重启后的结果。
   void listCameraStageRenderTasks().then(async tasks => {
     if (disposed) return;
     const results = await Promise.allSettled(tasks.map(task => applyCameraStageRenderTask(task)));

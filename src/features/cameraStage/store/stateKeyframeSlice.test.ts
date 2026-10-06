@@ -131,7 +131,7 @@ describe('状态关键帧模式 store 分片', () => {
   })
 
   it('新建场景默认自带一台摄像机并进入摄像机视角', () => {
-    useCameraStageStore.getState().newScene('新工程')
+    useCameraStageStore.getState().newScene('新镜头参考')
     const state = useCameraStageStore.getState()
     const camera = state.objects.find((item) => item.type === 'camera')
     expect(state.objects).toHaveLength(1)

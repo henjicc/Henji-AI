@@ -14,7 +14,7 @@ import {
 
 function fixture(): AudioEditProjectDocument {
   return {
-    id: 'audio-result', name: '原工程', referenceScript: '', suggestions: [], vstEnabled: false,
+    id: 'audio-result', name: '原口播', referenceScript: '', suggestions: [], vstEnabled: false,
     source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 96_000, sampleRate: 48_000, channels: 1 },
     transcript: [
       { id: 'first', text: '第一句', startFrame: 0, endFrame: 48_000, included: true, locked: false, granularity: 'word' },
@@ -34,12 +34,12 @@ afterEach(async () => { await resetAudioEditProjectInstancesForTests(); uninstal
 it('口播名就是文件名：内容实体的名称只读，读到的是文档名（改名走 documents.document.name）', async () => {
   const app = createApplicationHarness()
   try {
-    const ref = { kind: 'audio_edit.project', id: 'audio-result' }
-    expect((await app.read(ref, ['audio_edit.project.name'])).properties).toMatchObject({ 'audio_edit.project.name': '原工程' })
-    const result = await app.change(ref, { 'audio_edit.project.name': '新工程名' })
+    const ref = { kind: 'audio_edit.document', id: 'audio-result' }
+    expect((await app.read(ref, ['audio_edit.document.name'])).properties).toMatchObject({ 'audio_edit.document.name': '原口播' })
+    const result = await app.change(ref, { 'audio_edit.document.name': '新口播名' })
     expect(result.ok).toBe(false)
     expect(JSON.stringify(result)).toContain('documents.document.name')
-    expect(harnessDocumentStore().stored('audio-result')?.meta.name).toBe('原工程')
+    expect(harnessDocumentStore().stored('audio-result')?.meta.name).toBe('原口播')
   } finally {
     app.dispose()
   }
@@ -48,18 +48,18 @@ it('口播名就是文件名：内容实体的名称只读，读到的是文档�
 it('通用属性静音与界面设置保存可回读，静音不缩短成片且可以撤销', async () => {
   const app = createApplicationHarness()
   try {
-    const ref = { kind: 'audio_edit.project', id: 'audio-result' }
+    const ref = { kind: 'audio_edit.document', id: 'audio-result' }
     const view = { textSize: 28, sidePadding: 80, timelineCaptions: false }
     expect((await app.change(ref, {
-      'audio_edit.project.cuts': [{ id: 'mute', startFrame: 12000, endFrame: 36000, reason: 'manual', enabled: true, mode: 'mute' }],
-      'audio_edit.project.view_settings': view,
+      'audio_edit.document.cuts': [{ id: 'mute', startFrame: 12000, endFrame: 36000, reason: 'manual', enabled: true, mode: 'mute' }],
+      'audio_edit.document.view_settings': view,
     })).ok).toBe(true)
-    expect((await app.read(ref, ['audio_edit.project.view_settings'])).properties).toMatchObject({ 'audio_edit.project.view_settings': view })
+    expect((await app.read(ref, ['audio_edit.document.view_settings'])).properties).toMatchObject({ 'audio_edit.document.view_settings': view })
     const instance = await loadAudioEditProject('audio-result')
     const spans = buildProjectAudioEditTimeline(instance.document)
     expect(editedDurationFrames(spans)).toBe(96000)
     expect(spans.some((span) => span.muted)).toBe(true)
-    expect((await app.change(ref, { 'audio_edit.project.view_settings': { ...view, textSize: 32 } })).ok).toBe(true)
+    expect((await app.change(ref, { 'audio_edit.document.view_settings': { ...view, textSize: 32 } })).ok).toBe(true)
     expect(instance.past).toHaveLength(1)
     undoAudioEditProject('audio-result')
     expect(instance.document.cuts).toBeUndefined()
@@ -88,7 +88,7 @@ it('助手修改与手工历史共存，撤销助手操作不会抹去之前的�
     const instance = await loadAudioEditProject('audio-result')
     editAudioEditProject('audio-result', (document) => ({ ...document, referenceScript: '手工参考稿' }))
     await flushAudioEditProject('audio-result')
-    expect((await app.change({ kind: 'audio_edit.project', id: 'audio-result' }, { 'audio_edit.project.reference_script': '助手参考稿', 'audio_edit.project.cuts': [{ id: 'manual', startFrame: 1000, endFrame: 3000, reason: 'manual', enabled: true }] })).ok).toBe(true)
+    expect((await app.change({ kind: 'audio_edit.document', id: 'audio-result' }, { 'audio_edit.document.reference_script': '助手参考稿', 'audio_edit.document.cuts': [{ id: 'manual', startFrame: 1000, endFrame: 3000, reason: 'manual', enabled: true }] })).ok).toBe(true)
     expect(instance.past).toHaveLength(2)
     undoAudioEditProject('audio-result')
     expect(instance.document.cuts).toBeUndefined()

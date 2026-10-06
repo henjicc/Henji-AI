@@ -251,7 +251,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
     try {
       const result = await exportCameraStageVideo({
         projectName: exportState.currentProjectName,
-        // 重要记录 007：首摄像机的画幅是工程级最终导出画幅，所有后续机位必须与其保持一致。
+        // 重要记录 007：首摄像机的画幅是镜头参考级最终导出画幅，所有后续机位必须与其保持一致。
         cameraRatio: exportCamera.aspectRatio.ratio,
         renderCameraCount: renderCameras.length,
         isMultiCamera: renderCameras.length > 1,

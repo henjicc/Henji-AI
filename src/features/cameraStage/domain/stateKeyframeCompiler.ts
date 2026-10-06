@@ -70,7 +70,7 @@ export interface StateKeyframeTimelineSegment {
 /**
  * 相邻两卡是否均已指定机位且机位不同（重要记录 005：多机位强制硬切）。
  * 只要有一侧未指定机位（cameraId 为 null，沿用全局值），就不视为"机位不同"，
- * 因为此时无法确定该段实际是否跨机位——保持与改动前一致的行为，避免旧工程/单机位工程误判。
+ * 因为此时无法确定该段实际是否跨机位——保持与改动前一致的行为，避免旧镜头参考/单机位镜头参考误判。
  * 导出供 UI 层（3.2 过渡块/气泡的跨机位硬切呈现）复用，不另起一套判断。
  */
 export function hasForcedHardCut(current: StageStateKeyframe, next: StageStateKeyframe): boolean {
@@ -83,7 +83,7 @@ export function hasForcedHardCut(current: StageStateKeyframe, next: StageStateKe
  * `stateKeyframe.transitionDuration` 本身不被改写，机位改回相同后布点自动恢复原时长。
  */
 export function buildStateKeyframeTimeline(stateKeyframes: StageStateKeyframe[]): StateKeyframeTimelineSegment[] {
-  // 旧工程可能仍带有 hold；在保存迁移完成前继续按旧时长还原绝对点位，避免打开后节奏突变。
+  // 旧镜头参考可能仍带有 hold；在保存迁移完成前继续按旧时长还原绝对点位，避免打开后节奏突变。
   const needsLegacyTiming = stateKeyframes.some((stateKeyframe) => stateKeyframe.hold > 0)
     || stateKeyframes.some((stateKeyframe, index) => index > 0 && stateKeyframe.time <= stateKeyframes[index - 1].time)
   if (needsLegacyTiming) {

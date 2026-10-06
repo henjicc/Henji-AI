@@ -105,11 +105,11 @@ describe('canvas reflection and mutation', () => {
   })
 
   /*
-   * 专用能力（add_canvas_node 等）返回的是裸 nodeId，通用动词要的是 `工程ID:节点ID`。
+   * 专用能力（add_canvas_node 等）返回的是裸 nodeId，通用动词要的是 `画布ID:节点ID`。
    * 同一样东西两种形状，拿着能力返回的 id 去调通用动词就必然 NOT_FOUND——实测画布场景反复
    * 撞这一条。规则本来就写着"领域 provider 可将全局唯一的短引用补全成正式稳定引用"。
    */
-  it('裸子实体 id 在当前工程内被补全成正式稳定引用', async () => {
+  it('裸子实体 id 在当前画布内被补全成正式稳定引用', async () => {
     const registrations = createCanvasReflectionRegistrations()
     const nodeProvider = registrations
       .find((item) => item.entity.id === CANVAS_ENTITY_TYPES.node)?.provider
@@ -124,7 +124,7 @@ describe('canvas reflection and mutation', () => {
     })
   })
 
-  it('当前工程里没有这个子 id 时照旧拒绝', async () => {
+  it('当前画布里没有这个子 id 时照旧拒绝', async () => {
     const registrations = createCanvasReflectionRegistrations()
     const nodeProvider = registrations
       .find((item) => item.entity.id === CANVAS_ENTITY_TYPES.node)?.provider
@@ -154,7 +154,7 @@ describe('canvas reflection and mutation', () => {
       'canvas.node.position': { x: 100, y: 200 },
     })
     expect(nodeRegistration?.properties.map((item) => item.id)).toEqual([
-      'canvas.node.project_ref',
+      'canvas.node.document_ref',
       'canvas.node.node_type',
       'canvas.node.text_content',
       'canvas.node.generation_config',
@@ -167,10 +167,10 @@ describe('canvas reflection and mutation', () => {
     ])
     const projectRegistration = registrations.find((item) => item.entity.id === CANVAS_ENTITY_TYPES.project)
     // 3.4：画布名就是文档文件名，只读，改名走通用文档属性；画布实体本身只读
-    expect(projectRegistration?.properties.find((item) => item.id === 'canvas.project.name')).toMatchObject({
+    expect(projectRegistration?.properties.find((item) => item.id === 'canvas.document.name')).toMatchObject({
       requiredPermissions: { write: [] },
     })
-    expect(projectRegistration?.properties.find((item) => item.id === 'canvas.project.name')?.readOnlyReason)
+    expect(projectRegistration?.properties.find((item) => item.id === 'canvas.document.name')?.readOnlyReason)
       .toContain('documents.document.name')
     expect(projectRegistration?.entity.writeExclusion?.reason).toContain('documents.document.name')
   })

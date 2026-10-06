@@ -50,7 +50,7 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
     return placeVideoEditSourceRange(projectId, input, sequenceId, placement)
   }
   let createdId: string | undefined; let selectedClip: string | undefined
-  if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前工程，不能跨工程引用项目项。')
+  if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前剪辑，不能跨剪辑引用项目项。')
   const apply = (document: VideoEditDocument, ids: string[]): VideoEditDocument => {
     if (!placement || !ids.length) return document
     const sequence = document.sequences.find(sequence => sequence.id === sequenceId)

@@ -54,7 +54,7 @@ export function resolveImageEditPersistenceParticipantsV3(
     if (!id) continue
     const owner = requireImageEditPersistenceOwnerV3(id)
     if (owner.projection?.requiredPermissions.some((permission) => !context.permissions.has(permission))) {
-      throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布项目写入权限')
+      throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
     }
     owners.set(owner.key, owner)
   }

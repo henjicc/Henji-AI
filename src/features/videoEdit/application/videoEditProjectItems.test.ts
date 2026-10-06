@@ -3,7 +3,7 @@ import { beforeEach, afterEach, it, expect, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createVideoEditProject, appendVideoEditMedia, listVideoEditInstances, closeVideoEditProject, getActiveVideoEditSequence, undoVideoEdit, saveVideoEdit, openVideoEditProject, setVideoEditView, getVideoEditProjectView, setVideoEditProjectView, appendVideoEditSequence } from './videoEditService'
+import { createVideoEditProject, appendVideoEditMedia, listVideoEditInstances, closeVideoEditProject, getActiveVideoEditSequence, undoVideoEdit, saveVideoEdit, setVideoEditView, getVideoEditProjectView, setVideoEditProjectView, appendVideoEditSequence } from './videoEditService'
 import { createVideoEditBin, updateVideoEditItems, appendVideoEditItems, createVideoEditSequenceFromItem, deleteVideoEditItems, deleteVideoEditBins, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from './videoEditProjectItems'
 import { importVideoEditSources, relinkVideoEditMedia } from './videoEditMedia'
 import { dropVideoEditInput } from './videoEditDrop'
@@ -41,7 +41,7 @@ it('公共移除项目项与手动删除同样清除孤儿媒体，并以声明�
   const instance = (await createVideoEditProject())!; const id = instance.document.id
   appendVideoEditMedia(id, { id: 'unused-media', name: '原图', path: 'D:/media/original.png', kind: 'image', width: 10, height: 10, durationSeconds: 0 })
   const executor = new VideoEditCollectionExecutor('video_edit.item')
-  const result = await executor.apply({ kind: 'collection', entityType: executor.entityType, parent: { kind: 'video_edit.project', id }, expectedRevisions: {}, operation: { kind: 'remove', targets: [{ kind: 'video_edit.item', id: `${id}:${instance.document.items[0].id}` }] } })
+  const result = await executor.apply({ kind: 'collection', entityType: executor.entityType, parent: { kind: 'video_edit.document', id }, expectedRevisions: {}, operation: { kind: 'remove', targets: [{ kind: 'video_edit.item', id: `${id}:${instance.document.items[0].id}` }] } })
   expect(instance.document.items).toEqual([]); expect(instance.document.media).toEqual([])
   expect(result.cascadeEffects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.media', effect: 'delete', origin: { kind: 'cascade', declarationId: 'video_edit.item_media_delete' } })]))
   const restored = await executor.undo(result.undoToken!)
@@ -101,12 +101,12 @@ it('项目浏览选区和标签经通用写入共用状态，不保存且不进�
   try {
     const second = appendVideoEditSequence(id)
     await saveVideoEdit(id); const history = instance.past.length; const saved = JSON.stringify(savedVideoEdit(instance))
-    const changed = await app.change({ kind: 'video_edit.project', id }, { 'video_edit.project.selected_item_ids': [instance.document.items[0].id], 'video_edit.project.open_sequence_ids': [second] })
+    const changed = await app.change({ kind: 'video_edit.document', id }, { 'video_edit.document.selected_item_ids': [instance.document.items[0].id], 'video_edit.document.open_sequence_ids': [second] })
     expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
     expect(getVideoEditProjectView(id)).toMatchObject({ selectedItemIds: [instance.document.items[0].id], openSequenceIds: [second] })
     expect(instance.activeSequenceId).toBe(second); expect(instance.past).toHaveLength(history); expect(JSON.stringify(savedVideoEdit(instance))).toBe(saved)
     setVideoEditProjectView(id, { selectedItemIds: [] })
-    expect((await app.read({ kind: 'video_edit.project', id }, ['video_edit.project.selected_item_ids']) as { properties: Record<string, unknown> }).properties['video_edit.project.selected_item_ids']).toEqual([])
+    expect((await app.read({ kind: 'video_edit.document', id }, ['video_edit.document.selected_item_ids']) as { properties: Record<string, unknown> }).properties['video_edit.document.selected_item_ids']).toEqual([])
   } finally { app.dispose() }
 })
 it('一次批量插入保持指定序列和一条历史，不跟随其他序列当前帧', async () => {
@@ -134,20 +134,20 @@ it('通用属性可将素材箱、项目项和序列移回根级，与手动服�
 it('项目会话撤销恢复原活动序列，后续手动选区不被旧撤销覆盖', async () => {
   const instance = await fixture(); const id = instance.document.id; const first = instance.activeSequenceId; const second = appendVideoEditSequence(id)
   setVideoEditProjectView(id, { openSequenceIds: [first, second] })
-  const executor = new VideoEditMutationExecutor('video_edit.project')
-  const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = { kind: 'mutation', entityType: 'video_edit.project', target: { kind: 'video_edit.project', id }, expectedRevisions: { video_edit: 0 }, mutations: [{ propertyId: 'video_edit.project.open_sequence_ids', operation: 'set', value: [second] }] }
+  const executor = new VideoEditMutationExecutor('video_edit.document')
+  const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = { kind: 'mutation', entityType: 'video_edit.document', target: { kind: 'video_edit.document', id }, expectedRevisions: { video_edit: 0 }, mutations: [{ propertyId: 'video_edit.document.open_sequence_ids', operation: 'set', value: [second] }] }
   const changed = await executor.apply(step); expect(instance.activeSequenceId).toBe(second)
   await executor.undo(changed.undoToken!); expect(instance.activeSequenceId).toBe(first)
   expect(getVideoEditProjectView(id).openSequenceIds).toEqual([first, second])
   const stale = await executor.apply(step); setVideoEditProjectView(id, { selectedItemIds: [instance.document.items[0].id] })
   await expect(executor.undo(stale.undoToken!)).rejects.toThrow('后续修改')
   expect(instance.activeSequenceId).toBe(second)
-  const nameStep = { ...step, mutations: [{ propertyId: 'video_edit.project.name', operation: 'set' as const, value: '改名' }] }
+  const nameStep = { ...step, mutations: [{ propertyId: 'video_edit.document.name', operation: 'set' as const, value: '改名' }] }
   // 剪辑名就是文件名（3.1）：内容执行器不改名，改名走通用文档属性
   const beforeName = instance.document.name
   await expect(executor.apply(nameStep)).rejects.toThrow('不可写'); expect(instance.document.name).toBe(beforeName)
 })
-it('缺失源帧率读回明确未知值，删除最后项目引用释放工程媒体容量且可撤销', async () => {
+it('缺失源帧率读回明确未知值，删除最后项目引用释放剪辑媒体容量且可撤销', async () => {
   const instance = await fixture(); const id = instance.document.id; const app = createApplicationHarness()
   appendVideoEditMedia(id, { id: 'still', name: 'still', path: 'D:/media/still.png', kind: 'image', width: 320, height: 180, durationSeconds: 0 })
   try {
@@ -170,7 +170,7 @@ it('空时间线按多源创建匹配序列与片段只提交一条历史；未�
   await expect(dropVideoEditInput(id, { kind: 'sources', sources: [{ path: 'D:/media/unknown.mp4' }] }, { frame: 0, track: 1 }, undefined, { sequenceId: first, createSequenceWhenEmpty: true })).rejects.toThrow('选择剪辑帧率')
   expect(instance.document).toBe(before)
 })
-it('重新定位只更新原工程引用并关闭旧源；关闭重开不会接受旧异步结果', async () => {
+it('重新定位只更新原剪辑引用并关闭旧源；关闭重开不会接受旧异步结果', async () => {
   const first = await fixture(); const firstId = first.document.id
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValueOnce('D:/other-project.henji-video')
   const other = await createVideoEditProject(); const otherId = other!.document.id

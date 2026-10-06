@@ -111,14 +111,14 @@ it.each(['complete', 'missing-edge', 'wrong-image', 'wrong-document'] as const)(
     })
   }
   const result = await harness.requireResult('export_image_edit_target_to_canvas', {
-    projectRef: { kind: 'canvas.project', id: state.projectId },
+    canvasRef: { kind: 'canvas.document', id: state.projectId },
     sourceNodeRef: { kind: 'canvas.node', id: `${state.projectId}:attached-node` },
     targetRef: imageEditV3LayerRef(state.document.id, 'raster'),
   })
   expect(result.nodeRef).toMatchObject({ kind: 'canvas.node', id: expect.stringMatching(`^${state.projectId}:`) })
   expect(result.edgeRef).toMatchObject({ kind: 'canvas.edge', id: expect.stringMatching(`^${state.projectId}:`) })
   expect(result.verification).toMatchObject({
-    verified: storedResult === 'complete', target: { kind: 'canvas.project', id: state.projectId },
+    verified: storedResult === 'complete', target: { kind: 'canvas.document', id: state.projectId },
   })
   const nodeRef = result.nodeRef as { kind: 'canvas.node'; id: string }
   await expect(harness.read(nodeRef)).resolves.toMatchObject({ ref: expect.objectContaining({ id: nodeRef.id }) })

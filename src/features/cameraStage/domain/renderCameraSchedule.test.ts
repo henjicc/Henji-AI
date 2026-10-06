@@ -9,7 +9,7 @@ describe('buildRenderCameraSchedule / resolveRenderCameraAt', () => {
     expect(resolveRenderCameraAt(schedule, 0)).toBeNull()
   })
 
-  it('未指定机位的卡沿用 fallbackCameraId（旧工程/单机位工程行为不变）', () => {
+  it('未指定机位的卡沿用 fallbackCameraId（旧镜头参考/单机位镜头参考行为不变）', () => {
     const stateKeyframeA = createStateKeyframe([], '卡1')
     const stateKeyframeB = createStateKeyframe([], '卡2')
     stateKeyframeA.hold = 1

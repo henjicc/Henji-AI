@@ -262,7 +262,7 @@ export const GenerationNodeShell = memo(({
     () => resolveNodeDisplayName(nodeType, data as CanvasNodeData),
     [data, nodeType]
   );
-  // 旧工程仍可能声明 workbench；只有真实交互工作面才展开双栏。
+  // 旧画布仍可能声明 workbench；只有真实交互工作面才展开双栏。
   const resolvedLayoutMode = layoutMode === 'workbench' && workbenchStage != null ? 'workbench' : 'stacked';
   const useDefaultWorkbenchMinimum = resolvedLayoutMode === 'workbench' && !workbenchStageAspectRatio;
   const resolvedMinWidth = useDefaultWorkbenchMinimum ? Math.max(640, minWidth) : minWidth;

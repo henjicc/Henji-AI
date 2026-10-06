@@ -100,7 +100,7 @@ export async function trialVideoEditCodeDocument(owner: VideoEditInstance, basel
   signal?.throwIfAborted()
   const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('代码编辑已取消。'))
   signal?.addEventListener('abort', cancel, { once: true })
-  const assert = (): void => { if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('原工程已关闭或内容已改变，请重新编辑。') }
+  const assert = (): void => { if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('原剪辑已关闭或内容已改变，请重新编辑。') }
   const off = subscribeVideoEditDomain(() => { try { assert() } catch (error) { controller.abort(error) } })
   try {
     assert(); await ensureVideoEditCodeDocumentMetadata(owner, document, controller.signal)

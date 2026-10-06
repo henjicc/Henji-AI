@@ -39,7 +39,7 @@ function generationDestination(input: GenerationInput): GenerationDestination {
   const projectId = useProjectStore.getState().currentProjectId
   const selectedNodeId = useCanvasStore.getState().selectedNodeId
   return useNavigationStore.getState().activeWorkspace === 'nodes' && projectId
-    ? { mode: 'canvas', projectId, sourceNodeIds: selectedNodeId ? [selectedNodeId] : [] }
+    ? { mode: 'canvas', documentId: projectId, sourceNodeIds: selectedNodeId ? [selectedNodeId] : [] }
     : { mode: 'history' }
 }
 

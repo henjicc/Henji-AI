@@ -53,7 +53,7 @@ export function applyRelightModeLayout(previous: CanvasNode, next: CanvasNode): 
   }, newSize)
 }
 
-/** 修复历史工程中的窄外框 / 宽工作面，并将自动布局尺寸统一给 ReactFlow。 */
+/** 修复历史画布中的窄外框 / 宽工作面，并将自动布局尺寸统一给 ReactFlow。 */
 export function normalizeRelightNodeLayout(node: CanvasNode): CanvasNode {
   if (node.type !== CANVAS_NODE_TYPES.relightGen) return node
   return withSize(node, node.data.isSizeManuallyAdjusted

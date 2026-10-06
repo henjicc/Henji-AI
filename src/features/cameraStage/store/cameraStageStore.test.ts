@@ -10,14 +10,14 @@ import {
   resetCameraStagePlaybackRuntimeForTest,
 } from '../scene/playbackRuntime'
 
-describe('3D 镜头工程快照加载', () => {
+describe('3D 镜头镜头参考快照加载', () => {
   beforeEach(() => {
     resetCameraStagePlaybackRuntimeForTest()
-    useCameraStageStore.getState().newScene('测试工程')
+    useCameraStageStore.getState().newScene('测试镜头参考')
     clearCameraStageHistory()
   })
 
-  it('打开工程时立即显示播放头 0 秒的首关键帧画面', () => {
+  it('打开镜头参考时立即显示播放头 0 秒的首关键帧画面', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     camera.transform.position.x = 99
     const first = createStateKeyframe([camera], '关键帧 1', camera.id, 0)
@@ -31,7 +31,7 @@ describe('3D 镜头工程快照加载', () => {
       animation: createDefaultAnimation(),
       sceneSettings: createDefaultSceneSettings(),
       stateKeyframes: [first, second],
-    }, { id: 'camera-project', name: '测试工程' })
+    }, { id: 'camera-project', name: '测试镜头参考' })
 
     const state = useCameraStageStore.getState()
     expect(state.playback.currentTime).toBe(0)

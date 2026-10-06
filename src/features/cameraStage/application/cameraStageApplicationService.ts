@@ -270,8 +270,8 @@ const implementation = {
   },
 
   /**
-   * 播放状态只对**当前打开的**工程有意义：它是会话态，不进工程文件。
-   * 未打开该工程时返回 null，反射层据此不列出这个实体。
+   * 播放状态只对**当前打开的**镜头参考有意义：它是会话态，不进镜头参考文件。
+   * 未打开该镜头参考时返回 null，反射层据此不列出这个实体。
    */
   readPlayback(projectId: string): StagePlaybackState | null {
     try { return { ...cameraStageProjectStore(projectId).getState().playback } } catch { return null }

@@ -300,7 +300,7 @@ describe('失效、身份与资源上限', () => {
       expect(boundary.sources.diagnostics().staticPictures).toBe(1)
     } finally { await boundary.sources.dispose() }
   })
-  it('晚到编译不能生成旧工程，取消/更新/关闭清理观察与compiler', async () => {
+  it('晚到编译不能生成旧剪辑，取消/更新/关闭清理观察与compiler', async () => {
     const document = fixture(); const boundary = boundaries(document)
     let resolve!: (program: CodeMaterialProgram) => void
     boundary.compiler.compile.mockImplementationOnce(() => new Promise<CodeMaterialProgram>(done => { resolve = done }))
@@ -329,7 +329,7 @@ describe('失效、身份与资源上限', () => {
       expect(boundary.compiler.compile).toHaveBeenCalledTimes(36)
     } finally { await boundary.sources.dispose() }
   })
-  it('不可变身份历史达到数量或源码字节上限后明确拒绝，移出工程也不绕过历史', async () => {
+  it('不可变身份历史达到数量或源码字节上限后明确拒绝，移出剪辑也不绕过历史', async () => {
     const atCountLimit = fixture(source(), 4096); const counted = boundaries(atCountLimit)
     const atByteLimit = fixture()
     atByteLimit.codeMaterials![0].versions = Array.from({ length: 128 }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, source: ' '.repeat(65536) }))

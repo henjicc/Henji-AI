@@ -266,7 +266,7 @@ export function saveMultiLayerDocumentAfterEditing(input: {
 const pendingExports = new Map<string, Promise<MultiLayerDocumentTargetExportResult>>()
 
 export interface MultiLayerDocumentTargetExportInput {
-  projectRef: ApplicationRef & { kind: 'canvas.project' }
+  canvasRef: ApplicationRef & { kind: 'canvas.document' }
   sourceNodeRef: ApplicationRef & { kind: 'canvas.node' }
   targetRef: ApplicationRef & {
     kind: 'image_edit.layer' | 'image_edit.group' | 'image_mark.annotation'
@@ -275,7 +275,7 @@ export interface MultiLayerDocumentTargetExportInput {
 }
 
 export interface MultiLayerDocumentTargetExportResult {
-  projectRef: ApplicationRef & { kind: 'canvas.project' }
+  canvasRef: ApplicationRef & { kind: 'canvas.document' }
   sourceNodeRef: ApplicationRef & { kind: 'canvas.node' }
   targetRef: MultiLayerDocumentTargetExportInput['targetRef']
   nodeRef: ApplicationRef & { kind: 'canvas.node' }
@@ -287,7 +287,7 @@ export interface MultiLayerDocumentTargetExportResult {
   verification: {
     verified: boolean
     condition: string
-    target: ApplicationRef & { kind: 'canvas.project' }
+    target: ApplicationRef & { kind: 'canvas.document' }
   }
 }
 
@@ -307,16 +307,16 @@ function exportTargetFromRef(
 export function exportMultiLayerDocumentTargetToCanvas(
   input: MultiLayerDocumentTargetExportInput,
 ): Promise<MultiLayerDocumentTargetExportResult> {
-  const key = `${input.projectRef.id}\u0000${input.sourceNodeRef.id}\u0000${input.targetRef.kind}\u0000${input.targetRef.id}`
+  const key = `${input.canvasRef.id}\u0000${input.sourceNodeRef.id}\u0000${input.targetRef.kind}\u0000${input.targetRef.id}`
   const pending = pendingExports.get(key)
   if (pending) return pending
-  const operation = withCanvasProjectRuntime(input.projectRef.id, async (runtime): Promise<MultiLayerDocumentTargetExportResult> => {
-    if (input.projectRef.kind !== 'canvas.project' || input.sourceNodeRef.kind !== 'canvas.node') {
-      throw new Error('多图层文档导出的项目或节点引用无效')
+  const operation = withCanvasProjectRuntime(input.canvasRef.id, async (runtime): Promise<MultiLayerDocumentTargetExportResult> => {
+    if (input.canvasRef.kind !== 'canvas.document' || input.sourceNodeRef.kind !== 'canvas.node') {
+      throw new Error('多图层文档导出的画布或节点引用无效')
     }
-    const prefix = `${input.projectRef.id}:`
+    const prefix = `${input.canvasRef.id}:`
     if (!input.sourceNodeRef.id.startsWith(prefix) || input.sourceNodeRef.id.length === prefix.length) {
-      throw new Error('来源节点必须使用所属工程的完整稳定引用')
+      throw new Error('来源节点必须使用所属画布的完整稳定引用')
     }
     const nodeId = input.sourceNodeRef.id.slice(prefix.length)
     const node = runtime.store.getState().nodes.find((candidate) => candidate.id === nodeId)
@@ -328,33 +328,33 @@ export function exportMultiLayerDocumentTargetToCanvas(
       const reference = await saveImageEditDocumentInstanceV3(documentId)
       const session = createCanvasEditV3SessionReference(originalSession.sourceUrl, reference)
       const exported = await generationApplication(runtime).exportTarget({
-        projectId: input.projectRef.id,
+        projectId: input.canvasRef.id,
         sourceNodeId: node.id,
         data: node.data,
         session,
         target: exportTargetFromRef(input.targetRef),
         signal: input.signal,
       })
-      const saved = await readPersistedCanvasProjectSnapshot(input.projectRef.id)
+      const saved = await readPersistedCanvasProjectSnapshot(input.canvasRef.id)
       const savedNode = saved.nodes.find(candidate => candidate.id === exported.nodeId)
       const savedSource = saved.nodes.find(candidate => candidate.id === node.id)
       const verified = savedNode?.data.imageUrl === exported.raster.imageUrl
         && savedSource?.data.imageEditSession?.documentRef === session.documentRef
         && saved.edges.some(edge => edge.id === exported.edgeId && edge.source === node.id && edge.target === exported.nodeId)
       return {
-        projectRef: input.projectRef,
+        canvasRef: input.canvasRef,
         sourceNodeRef: input.sourceNodeRef,
         targetRef: input.targetRef,
-        nodeRef: { kind: 'canvas.node' as const, id: `${input.projectRef.id}:${exported.nodeId}` },
-        edgeRef: { kind: 'canvas.edge' as const, id: `${input.projectRef.id}:${exported.edgeId}` },
+        nodeRef: { kind: 'canvas.node' as const, id: `${input.canvasRef.id}:${exported.nodeId}` },
+        edgeRef: { kind: 'canvas.edge' as const, id: `${input.canvasRef.id}:${exported.edgeId}` },
         undoRef: exported.undoRef,
         width: exported.raster.width,
         height: exported.raster.height,
         mediaType: exported.raster.mediaType,
         verification: {
           verified,
-          condition: '从原工程持久存储核对导出图片、来源文档和连线',
-          target: input.projectRef,
+          condition: '从原画布持久存储核对导出图片、来源文档和连线',
+          target: input.canvasRef,
         },
       }
     })

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, getVideoEditTimelineView, listVideoEditInstances, openVideoEditProject, saveVideoEdit, setVideoEditTimelineView, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, getVideoEditTimelineView, listVideoEditInstances, saveVideoEdit, setVideoEditTimelineView, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
 import { beginVideoEditTimelineDrag, copyVideoEditTimeline, executeVideoEditTimelineEdit, finishVideoEditTimelineDrag, previewVideoEditTimelineDrag, readVideoEditClipboard, separateVideoEditAudio, updateVideoEditTrack } from './videoEditTimeline'
 import * as mediaService from './videoEditMedia'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
@@ -55,14 +55,14 @@ it('正式设置反射读写封闭键位对象，冲突写入保留原配置', a
 })
 it('时间线与节目公共视图沿原会话回读，实际逐帧观察不妨碍逆序补偿', async () => {
   const { owner, id, ids } = await fixture(); const app = createApplicationHarness(); const baseline = getVideoEditTimelineView(id); const history = owner.past.length
-  const ref = { kind: 'video_edit.project', id }
+  const ref = { kind: 'video_edit.document', id }
   try {
-    const result = await app.change(ref, { 'video_edit.project.timeline_view': { ...baseline, selectedClipIds: [ids[0]], tool: 'razor', inFrame: 3, outFrame: 30 } })
+    const result = await app.change(ref, { 'video_edit.document.timeline_view': { ...baseline, selectedClipIds: [ids[0]], tool: 'razor', inFrame: 3, outFrame: 30 } })
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
-    expect((await app.read(ref, ['video_edit.project.timeline_view'])).properties).toMatchObject({ 'video_edit.project.timeline_view': { selectedClipIds: [ids[0]], tool: 'razor' } })
+    expect((await app.read(ref, ['video_edit.document.timeline_view'])).properties).toMatchObject({ 'video_edit.document.timeline_view': { selectedClipIds: [ids[0]], tool: 'razor' } })
     expect(owner.past.length).toBe(history)
-    const executor = new VideoEditMutationExecutor('video_edit.project')
-    const step = (frame: number): Extract<ApplicationPlannedStep, { kind: 'mutation' }> => ({ kind: 'mutation', entityType: ref.kind, target: ref, expectedRevisions: {}, mutations: [{ propertyId: 'video_edit.project.program_playback', operation: 'set', value: { frame, playing: true, playbackDirection: -1 } }] })
+    const executor = new VideoEditMutationExecutor('video_edit.document')
+    const step = (frame: number): Extract<ApplicationPlannedStep, { kind: 'mutation' }> => ({ kind: 'mutation', entityType: ref.kind, target: ref, expectedRevisions: {}, mutations: [{ propertyId: 'video_edit.document.program_playback', operation: 'set', value: { frame, playing: true, playbackDirection: -1 } }] })
     const first = await executor.apply(step(50)); const second = await executor.apply(step(60))
     setVideoEditView(id, { frame: 55 }, true)
     await executor.undo(second.undoToken!); expect(owner.frame).toBe(50)
@@ -71,9 +71,9 @@ it('时间线与节目公共视图沿原会话回读，实际逐帧观察不妨�
     await expect(executor.undo(stale.undoToken!)).rejects.toThrow('后续修改')
     expect(owner.frame).toBe(70); expect(owner.past.length).toBe(history)
     const before = owner.document.name
-    expect((await app.change(ref, { 'video_edit.project.name': '不可半改', 'video_edit.project.timeline_view': { ...baseline, selectedClipIds: ['missing'] } })).ok).toBe(false)
+    expect((await app.change(ref, { 'video_edit.document.name': '不可半改', 'video_edit.document.timeline_view': { ...baseline, selectedClipIds: ['missing'] } })).ok).toBe(false)
     expect(owner.document.name).toBe(before)
-    expect((await app.change(ref, { 'video_edit.project.name': '不可超范围半改', 'video_edit.project.program_playback': { frame: 54001, playing: false, playbackDirection: 1 } })).ok).toBe(false)
+    expect((await app.change(ref, { 'video_edit.document.name': '不可超范围半改', 'video_edit.document.program_playback': { frame: 54001, playing: false, playbackDirection: 1 } })).ok).toBe(false)
     expect(owner.document.name).toBe(before); expect(owner.frame).toBe(70)
     const fresh = await executor.apply(step(50))
     const secondSequence = appendVideoEditSequence(id)
@@ -99,7 +99,7 @@ it('插入/覆盖后删除只删除放入的片段，原片段左右尾部保持
     expect(JSON.stringify({ ...owner.document, revision: 0 })).toBe(JSON.stringify({ ...baseline, revision: 0 }))
   }
 })
-it('多选/工具/目标/范围按真实序列保存视图，兼容selection投影且时间位置不入工程历史', async () => {
+it('多选/工具/目标/范围按真实序列保存视图，兼容selection投影且时间位置不入剪辑历史', async () => {
   const { owner, id, ids, sequence } = await fixture(); const history = owner.past.length
   setVideoEditTimelineView(id, { tool: 'razor', targetTrackIds: [sequence.tracks[1].id], inFrame: 2, outFrame: 50, zoom: 2 })
   const before = getVideoEditTimelineView(id)
@@ -113,7 +113,7 @@ it('多选/工具/目标/范围按真实序列保存视图，兼容selection投�
   expect(() => setVideoEditView(id, { selection: 'foreign' })).toThrow('序列')
   expect(getVideoEditTimelineView(id)).toEqual(valid); expect(owner.selection).toBe(ids[1])
 })
-it('64次指针预览不改工程/保存/历史，释放只提交一次且可撤销', async () => {
+it('64次指针预览不改剪辑/保存/历史，释放只提交一次且可撤销', async () => {
   const { owner, id, sequence } = await fixture(); await saveVideoEdit(id)
   const baseline = owner.document; const past = owner.past.length; const saved = JSON.stringify(savedVideoEdit(owner))
   const handle = beginVideoEditTimelineDrag(id, sequence.id)
@@ -189,7 +189,7 @@ it('公共创建按显式源入点和短时长引用长视频，不把整段源�
     expect(owner.document.media[0].path).toBe('D:/original-long.mp4')
   } finally { app.dispose() }
 })
-it('旧工程拆音先检测真实音轨，检查期间文档变化/无音轨均不产生半个编辑', async () => {
+it('旧剪辑拆音先检测真实音轨，检查期间文档变化/无音轨均不产生半个编辑', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditMedia(id, { id: 'media', name: '视频', path: 'D:/original.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3 })
   appendVideoEditClip(id, owner.document.media[0].id)
@@ -214,17 +214,17 @@ it('助手经时间线视图读写链接选择；拆分能力与剃刀同语义�
   await separateVideoEditAudio(id, sequence.id, [sequence.clips[0].id], 0)
   const [picture, sound] = getActiveVideoEditSequence(owner).clips.map(clip => clip.id)
   expect(new Set(owner.selectedClipIds)).toEqual(new Set([picture, sound]))
-  const app = createApplicationHarness(); const projectRef = { kind: 'video_edit.project', id }
+  const app = createApplicationHarness(); const projectRef = { kind: 'video_edit.document', id }
   try {
-    expect((await app.read(projectRef, ['video_edit.project.timeline_view']) as { properties: Record<string, unknown> }).properties['video_edit.project.timeline_view']).toMatchObject({ linkedSelection: true })
-    expect((await app.change(projectRef, { 'video_edit.project.timeline_view': { ...getVideoEditTimelineView(id), selectedClipIds: [sound], linkedSelection: false } })).ok).toBe(true)
+    expect((await app.read(projectRef, ['video_edit.document.timeline_view']) as { properties: Record<string, unknown> }).properties['video_edit.document.timeline_view']).toMatchObject({ linkedSelection: true })
+    expect((await app.change(projectRef, { 'video_edit.document.timeline_view': { ...getVideoEditTimelineView(id), selectedClipIds: [sound], linkedSelection: false } })).ok).toBe(true)
     expect(owner.selectedClipIds).toEqual([sound]); expect(owner.linkedSelection).toBe(false)
     const clipRef = (clipId: string) => ({ kind: 'video_edit.clip', id: `${id}:${clipId}` })
-    await app.requireResult('split_video_edit', { projectRef, clipRef: clipRef(picture), frame: 30 })
+    await app.requireResult('split_video_edit', { documentRef: projectRef, clipRef: clipRef(picture), frame: 30 })
     expect(getActiveVideoEditSequence(owner).clips).toHaveLength(3)
     expect(new Set(getActiveVideoEditSequence(owner).clips.map(clip => clip.linkId)).size).toBe(1)
     setVideoEditTimelineView(id, { linkedSelection: true })
-    await app.requireResult('split_video_edit', { projectRef, clipRef: clipRef(picture), frame: 15 })
+    await app.requireResult('split_video_edit', { documentRef: projectRef, clipRef: clipRef(picture), frame: 15 })
     const clips = getActiveVideoEditSequence(owner).clips
     expect(clips).toHaveLength(5)
     expect(clips.filter(clip => clip.start === 15).map(clip => clip.kind).sort()).toEqual(['audio', 'video'])

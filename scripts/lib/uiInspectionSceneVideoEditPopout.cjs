@@ -48,7 +48,7 @@ function createVideoEditPopoutScene() {
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const phase = name => { evidence.currentPhase = name; store() }
       const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
-      const projectRef = { kind: 'video_edit.project', id: PROJECT_ID }
+      const projectRef = { kind: 'video_edit.document', id: PROJECT_ID }
       let client; let observed = false
       const allWindows = () => app.evaluate(({ BrowserWindow, screen }) => BrowserWindow.getAllWindows().map(window => ({ id: window.id, title: window.getTitle(), bounds: window.getBounds(), display: screen.getDisplayMatching(window.getBounds()).id, primary: screen.getDisplayMatching(window.getBounds()).id === screen.getPrimaryDisplay().id, visible: window.isVisible() })))
       // 主窗口按 Playwright 句柄定位，不按标题：之前的场景可能留下标题同为“痕迹AI”的隐藏窗口
@@ -66,8 +66,8 @@ function createVideoEditPopoutScene() {
         return child
       }
       const playback = async (frame, playing) => {
-        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })
-        await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '节目播放控制', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef, properties: { 'video_edit.project.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
+        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
+        await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '节目播放控制', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
       }
       try {
         const displays = await app.evaluate(({ screen }) => ({ all: screen.getAllDisplays().map(display => ({ id: display.id, bounds: display.bounds, scaleFactor: display.scaleFactor })), primary: screen.getPrimaryDisplay().id }))

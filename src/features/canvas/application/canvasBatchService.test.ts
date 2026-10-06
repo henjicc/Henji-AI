@@ -139,7 +139,7 @@ describe('canvas batch service', () => {
     const capability = CANVAS_BATCH_APPLICATION_CAPABILITIES.find((item) => item.id === 'commit_canvas_batch')
     const effects = capability?.resolveObservedEffects?.({ planRef: 'canvas-plan:test' }, {
       planRef: 'canvas-plan:test',
-      projectId,
+      documentId: projectId,
       appliedOperations: [
         { index: 0, kind: 'add_node', nodeId: 'node-a' },
         { index: 1, kind: 'add_node', nodeId: 'node-b' },

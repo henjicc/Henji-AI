@@ -45,7 +45,7 @@ export async function separateVideoEditAudio(projectId: string, sequenceId: stri
     if (media.hasAudio === undefined) updates.set(media.id, (await inspectVideoEditMedia(media.path, signal)).hasAudio === true)
   }
   signal?.throwIfAborted()
-  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('音轨检查期间原工程已改变，请重新选择。')
+  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('音轨检查期间原剪辑已改变，请重新选择。')
   const candidate = { ...baseline, media: baseline.media.map(media => updates.has(media.id) ? { ...media, hasAudio: updates.get(media.id)! } : media) }
   const next = applyVideoEditTimelineEdit(candidate, sequenceId, { kind: 'separate_audio', clipIds, linked, audioTrack })
   editVideoProject(projectId, () => ({ ...candidate, sequences: candidate.sequences.map(value => value.id === sequenceId ? next : value) }))

@@ -72,7 +72,7 @@ describe('CameraStageApp 会话恢复', () => {
 
   afterEach(() => cleanup())
 
-  it('隐藏挂载期间外部切换工程只恢复一次视角，随后用户选择不会被弹回', async () => {
+  it('隐藏挂载期间外部切换镜头参考只恢复一次视角，随后用户选择不会被弹回', async () => {
     render(<CameraStageApp />)
     await screen.findByTestId('camera-stage-editor')
 
@@ -98,7 +98,7 @@ describe('CameraStageApp 会话恢复', () => {
   it.each([
     { label: '成功', staleNotFound: false },
     { label: 'NOT_FOUND', staleNotFound: true },
-  ])('连续切换工程时串行撤回旧恢复，迟到工程$label不能覆盖最新身份', async ({ staleNotFound }) => {
+  ])('连续切换镜头参考时串行撤回旧恢复，迟到镜头参考$label不能覆盖最新身份', async ({ staleNotFound }) => {
     const resolvers = new Map<string, () => void>()
     projectMocks.loadProjectIntoScene.mockImplementation((
       projectId: string,

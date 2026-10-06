@@ -186,16 +186,16 @@ export class ApplicationOperationCoordinator {
     if (existing && existing.state !== 'prepared') return existing
     const original = this.store.get(originalOperationId, callerId)
     if (!original || original.state !== 'partial') throw new Error('RECOVERY_UNAVAILABLE:原操作没有已确认的保存失败，未知修改不能重放。')
-    if (original.rendererEpoch !== rendererEpoch) throw new Error('RECOVERY_SESSION_LOST:原编辑会话已关闭，未保存的内存不能伪造恢复；请在应用中核对原工程。')
+    if (original.rendererEpoch !== rendererEpoch) throw new Error('RECOVERY_SESSION_LOST:原编辑会话已关闭，未保存的内存不能伪造恢复；请在应用中核对原文档。')
     const transaction = object(object(object(original.result?.error).details).transaction)
     const recovery = object(object(transaction.persistence).recovery)
     const target = refSchema.safeParse(recovery.target)
-    if (recovery.replayMutation !== false || !target.success || !((recovery.capabilityId === 'retry_canvas_project_save' && target.data.kind === 'canvas.project') || (recovery.capabilityId === 'retry_image_edit_document_save' && target.data.kind === 'image_edit.document'))) throw new Error('RECOVERY_UNAVAILABLE:原领域没有登记可执行的仅保存恢复入口。')
+    if (recovery.replayMutation !== false || !target.success || !((recovery.capabilityId === 'retry_canvas_document_save' && target.data.kind === 'canvas.document') || (recovery.capabilityId === 'retry_image_edit_document_save' && target.data.kind === 'image_edit.document'))) throw new Error('RECOVERY_UNAVAILABLE:原领域没有登记可执行的仅保存恢复入口。')
     const verification = transaction.recoveryVerification as OperationRecord['recoveryVerification']
     const ownerId = recovery.capabilityId === 'retry_image_edit_document_save' ? z.string().uuid().safeParse(recovery.ownerId) : undefined
     if (ownerId && !ownerId.success) throw new Error('RECOVERY_SESSION_LOST:原记录缺少图片保存宿主身份，请在原文档核对，不会借用新宿主恢复。')
     if (!verification?.conditions.length || !verification.evidence.length) throw new Error('RECOVERY_PROOF_MISSING:原操作缺少精确验证条件，请在应用中保存并核对。')
-    return this.store.prepare({ operationId, callerId, inputDigest: operationDigest(raw), input: { [recovery.capabilityId === 'retry_canvas_project_save' ? 'projectRef' : 'documentRef']: { kind: target.data.kind, id: target.data.id }, ...(ownerId?.success ? { expectedOwnerId: ownerId.data } : {}) },
+    return this.store.prepare({ operationId, callerId, inputDigest: operationDigest(raw), input: { documentRef: { kind: target.data.kind, id: target.data.id }, ...(ownerId?.success ? { expectedOwnerId: ownerId.data } : {}) },
       expectedRevisions: {}, state: 'prepared', recoveryOf: originalOperationId, capabilityId: recovery.capabilityId as OperationRecord['capabilityId'], recoveryVerification: verification })
   }
   result(record: OperationRecord): Record<string, unknown> {

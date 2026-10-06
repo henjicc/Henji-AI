@@ -222,7 +222,7 @@ function withDefaultCameraEffectors(objects: StageObject[]): StageObject[] {
   })
 }
 
-/** 统一旧工程摄像机的手动注视点与 XYZ 旋转；Z 轴 roll 无法由 lookAt 推导，因此原样保留。 */
+/** 统一旧镜头参考摄像机的手动注视点与 XYZ 旋转；Z 轴 roll 无法由 lookAt 推导，因此原样保留。 */
 function withNormalizedCameraRotations(objects: StageObject[]): StageObject[] {
   return objects.map((object) => {
     if (object.type !== 'camera' || object.lookAt.mode !== 'manual') return object
@@ -261,7 +261,7 @@ export function sceneToDocumentContent(input: StageSceneSnapshotInput): CameraSt
   }
 }
 
-/** 文档内容 → 运行时快照：与旧工程数据相同的逐字段规范化，非法字段回退默认值。 */
+/** 文档内容 → 运行时快照：与旧镜头参考数据相同的逐字段规范化，非法字段回退默认值。 */
 export function sceneFromDocumentContent(content: unknown): StageSceneRuntimeSnapshot {
   if (!content || typeof content !== 'object') throw new Error('[cameraStage] 场景数据结构无效')
   const { objects, activeCameraId, animation, sceneSettings, stateKeyframes } = normalizeSceneRecord(content as Record<string, unknown>)

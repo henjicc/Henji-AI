@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { createVideoEditDocument } from '@/core/videoEdit/document'
 import { selectVideoEditProjectItems, videoEditBinRows, videoEditProjectEntries } from './videoEditProjectModel'
-it('素材箱层级折叠保持同级名称排序，搜索跨箱匹配标签且不修改工程', () => {
+it('素材箱层级折叠保持同级名称排序，搜索跨箱匹配标签且不修改剪辑', () => {
   const document = createVideoEditDocument('项目')
   document.bins = [{ id: 'b', name: 'B' }, { id: 'a', name: 'A' }, { id: 'nested', name: '子箱', parentId: 'a' }]
   document.items = [{ id: 'second', name: 'B素材', kind: 'text', binId: 'nested', tags: ['片头'] }, { id: 'first', name: 'A素材', kind: 'text' }]

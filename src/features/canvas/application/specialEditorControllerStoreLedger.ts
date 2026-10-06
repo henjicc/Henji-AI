@@ -8,7 +8,7 @@ type ActionName = {
 }[keyof State]
 
 const SESSION_REASON = '专用编辑器会话只保存节点外面板的初始值、未确认草稿和关闭确认状态；'
-  + '确认后的业务数据由 specialEditorApplicationService 原子写回画布节点，工程持久化不读取该会话。'
+  + '确认后的业务数据由 specialEditorApplicationService 原子写回画布节点，画布持久化不读取该会话。'
 
 export const SPECIAL_EDITOR_CONTROLLER_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'specialEditorController',

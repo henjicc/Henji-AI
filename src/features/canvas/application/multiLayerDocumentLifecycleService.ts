@@ -89,7 +89,7 @@ export async function maintainMultiLayerDocumentReleaseCandidates(projectId: str
       for (const ref of refs) persistedRefs.add(ref)
     }
   } catch (error) {
-    logger.error('工程引用读取失败，保留图片文档候选', error, {
+    logger.error('画布引用读取失败，保留图片文档候选', error, {
       event: 'canvas.multi_layer_document.release_candidate.references.failed', projectId,
     })
     return
@@ -155,7 +155,7 @@ export function createMultiLayerDocumentLifecyclePort(): Pick<
   return {
     async markReleaseCandidate(input): Promise<void> {
       const projectId = input.projectId
-      if (!projectId) throw new Error('文档回收缺少原画布工程')
+      if (!projectId) throw new Error('文档回收缺少原画布')
       const candidate: ReleaseCandidate = {
         projectId,
         nodeId: input.nodeId,

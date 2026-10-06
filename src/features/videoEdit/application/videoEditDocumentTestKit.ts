@@ -4,10 +4,10 @@ import { closeVideoEditProject, listVideoEditInstances, openVideoEditDocument, v
 
 /*
  * 仅供测试（3.1）：剪辑存成项目里的文档文件后，单测经测试夹具的内存文档仓库（harnessNativeStorage 的
- * henjiNative.documents）读写。这里把“磁盘上的剪辑”还原成剪辑工程形状，并提供造数据与重新打开。
+ * henjiNative.documents）读写。这里把“磁盘上的剪辑”还原成剪辑形状，并提供造数据与重新打开。
  */
 
-/** 磁盘（内存仓库）里这份剪辑的内容，按剪辑工程形状返回（名称取文件名）。 */
+/** 磁盘（内存仓库）里这份剪辑的内容，按剪辑形状返回（名称取文件名）。 */
 export function savedVideoEdit(owner: VideoEditInstance | string): VideoEditDocument {
   const id = typeof owner === 'string' ? owner : owner.document.id
   const stored = harnessDocumentStore().stored(id)
@@ -15,7 +15,7 @@ export function savedVideoEdit(owner: VideoEditInstance | string): VideoEditDocu
   return { format: 'henji-video-project', version: 2, id, name: stored.meta.name, revision: 0, ...(stored.content as object) } as VideoEditDocument
 }
 
-/** 把一份剪辑工程写进测试文档仓库（建同名项目并放进去），保留原 ID，返回文档 ID。 */
+/** 把一份剪辑写进测试文档仓库（建同名项目并放进去），保留原 ID，返回文档 ID。 */
 export function seedVideoEditDocument(document: VideoEditDocument, options: { projectName?: string } = {}): string {
   const store = harnessDocumentStore()
   const project = store.seedProject({ name: options.projectName ?? document.name })

@@ -23,7 +23,7 @@ import { useStateKeyframeMarqueeSelect } from './timeline/useStateKeyframeMarque
  * 新增/移动关键帧只能扩展内容范围，禁止自动 fit 改变时间尺度。
  */
 
-/** 轨道内容最小宽度，避免空/极短工程时轨道过窄 */
+/** 轨道内容最小宽度，避免空/极短镜头参考时轨道过窄 */
 const MIN_CONTENT_WIDTH = 320
 /** 缩放到该像素密度以上时，标尺切换为帧刻度（更精细，配合 trim 帧级吸附） */
 const FRAME_TICK_PX_PER_SECOND = 200

@@ -223,7 +223,7 @@ export const focusApplicationEntityCapability = defineCapability({
   id: 'focus_application_entity',
   version: 1,
   title: '定位应用对象',
-  description: '根据稳定引用定位生成记录、素材、画布节点、剪辑工程或序列中的对象。',
+  description: '根据稳定引用定位生成记录、素材、画布节点、剪辑或序列中的对象。',
   domain: 'navigation',
   aliases: ['定位', '打开这条记录', '查看这个项目', 'focus entity'],
   side: 'frontend',
@@ -239,7 +239,7 @@ export const focusApplicationEntityCapability = defineCapability({
   supportsUndo: false,
   requiredScopes: ['navigation'],
   prerequisites: ['必须提供由应用能力返回的稳定引用。'],
-  acceptsRefs: ['generation.record', 'generation.result', 'asset', 'canvas.project', 'canvas.node', 'video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.media', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.source', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption'],
+  acceptsRefs: ['generation.record', 'generation.result', 'asset', 'canvas.document', 'canvas.node', 'video_edit.document', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.media', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.source', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption'],
   producesRefs: ['application.entity'],
   successEvidence: ['返回实际定位的引用与 Surface。'],
   failureRecovery: ['引用失效时重新读取来源模块，不根据名称猜测对象。'],
@@ -288,7 +288,7 @@ export const listGenerationHistoryCapability = defineCapability({
   acceptsRefs: [],
   producesRefs: ['generation.record', 'generation.result'],
   successEvidence: ['返回按时间倒序排列的记录及稳定引用，不暴露本地路径。'],
-  failureRecovery: ['没有成功结果时明确返回空列表，不创建画布或其他项目。'],
+  failureRecovery: ['没有成功结果时明确返回空列表，不创建画布或其他文档。'],
   /*
    * 筛选维度与生成页的筛选栏一一对应。此前只有 mediaType / status / limit，
    * 界面上的关键词、供应商、模型、时间范围助手一概查不到——用户能筛出来的记录，
@@ -355,7 +355,7 @@ export const openImageEditorWithSourceCapability = defineCapability({
   acceptsRefs: ['generation.result', 'asset', 'image_edit.preview'],
   producesRefs: ['application.surface'],
   successEvidence: ['图片编辑器已打开，返回并验证 Surface ID=tool.image_edit。'],
-  failureRecovery: ['引用不存在或不是图片时停止并说明，不创建画布项目。'],
+  failureRecovery: ['引用不存在或不是图片时停止并说明，不创建画布。'],
   inputSchema: z.object({ sourceRef: imageEditorSourceRefSchema }).strict(),
   outputSchema: capabilityOutputSchema({
     sourceRef: imageEditorSourceRefSchema,

@@ -130,13 +130,13 @@ export async function transcribeAudioEditProject(
   if (project.transcript.length) throw new Error('口播已有转写，请保留当前编辑；需要重新识别时另建口播。')
   await verifyAudioEditSource(project)
   const previous = findAudioEditTranscription(project.id)
-  if (previous && isAudioEditTaskActive(previous.request_id)) throw new Error('该工程正在转写，请等待或取消。')
+  if (previous && isAudioEditTaskActive(previous.request_id)) throw new Error('该口播正在转写，请等待或取消。')
   const priorInput = previous?.result_json ? JSON.parse(previous.result_json) as { modelId?: string; sourceDigest?: string; language?: string } : undefined
-  if (previous && (!previous.provider_task_id || !priorInput?.modelId)) throw new Error('上次转写的提交结果无法确认，已阻止重复付费。请核对供应商任务后另建工程识别。')
+  if (previous && (!previous.provider_task_id || !priorInput?.modelId)) throw new Error('上次转写的提交结果无法确认，已阻止重复付费。请核对供应商任务后另建口播识别。')
   const modelId = priorInput?.modelId ?? await chooseModel(project.source.sourcePath, request.modelId)
   if (previous && !client.get(modelId)?.descriptor.features?.includes('resume-task')) throw new Error('此模型不支持恢复查询，已阻止自动重复提交。')
   const sourceDigest = project.source.identity?.digest ?? project.source.sourcePath
-  if (previous && priorInput?.sourceDigest !== sourceDigest) throw new Error('素材已变化，旧转写任务不能覆盖当前工程。')
+  if (previous && priorInput?.sourceDigest !== sourceDigest) throw new Error('素材已变化，旧转写任务不能覆盖当前口播。')
   const language = priorInput?.language ?? request.language ?? 'zh'
   const inputDigest = crypto.createHash('sha256').update(JSON.stringify({ projectId: project.id, sourceDigest, modelId, language })).digest('hex')
   const requestId = previous?.request_id ?? request.requestId ?? crypto.randomUUID()

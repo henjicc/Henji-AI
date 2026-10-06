@@ -3,8 +3,8 @@ import { listCanvasDocumentSummaries } from './canvasProjectService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 
 /*
- * 分镜摘要（画布的只读投影）：3.4 起直接读画布文档（打开着的取实例，其余读文件），不再查工程表。
- * 列出与读取由分镜反射使用；分镜没有自己的能力入口，读详情用 get_canvas_project。
+ * 分镜摘要（画布的只读投影）：3.4 起直接读画布文档（打开着的取实例，其余读文件），不再查画布表。
+ * 列出与读取由分镜反射使用；分镜没有自己的能力入口，读详情用 get_canvas_document。
  */
 
 const MAX_DETAIL_ITEMS = 32

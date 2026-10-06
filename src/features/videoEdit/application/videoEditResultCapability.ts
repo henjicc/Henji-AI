@@ -11,7 +11,7 @@ type PlaceOutput = z.infer<typeof placeVideoEditCreativeResultCapability.outputS
 
 function childOf(projectId: string, ref: { kind: string; id: string }): string {
   const value = splitVideoEditRef(ref)
-  if (value.projectId !== projectId || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑工程，请使用目录返回的完整引用。`)
+  if (value.projectId !== projectId || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑，请使用目录返回的完整引用。`)
   return value.childId
 }
 /** 公共入口只把引用换成来源（文档引用补上当前位置），之后与界面同一条放入流程。 */
@@ -29,7 +29,7 @@ async function sourceRequest(source: PlaceInput['result']): Promise<VideoEditCre
 
 /** Same frozen-target transfer as the UI send menus; the public layer only maps refs. */
 export async function placeVideoEditCreativeResultFromCapability(input: PlaceInput, signal?: AbortSignal): Promise<PlaceOutput> {
-  const projectId = input.projectRef.id
+  const projectId = input.documentRef.id
   const sequenceId = childOf(projectId, input.sequenceRef)
   const placement = input.placement.mode === 'add'
     ? { mode: 'add' as const, frame: input.placement.frame, trackId: childOf(projectId, input.placement.trackRef), ...(input.placement.durationFrames !== undefined ? { duration: input.placement.durationFrames } : {}) }
@@ -38,8 +38,8 @@ export async function placeVideoEditCreativeResultFromCapability(input: PlaceInp
   const receipt = await runVideoEditCreativeTransfer(createVideoEditCreativeTransfer(target, await sourceRequest(input.result)), signal)
   const resultRef = { kind: 'video_edit.clip' as const, id: `${projectId}:${receipt.clipId}` }
   return {
-    resultRef, projectRef: input.projectRef, assetRef: { kind: 'asset', id: receipt.assetId },
+    resultRef, documentRef: input.documentRef, assetRef: { kind: 'asset', id: receipt.assetId },
     message: placement.mode === 'replace' ? '创作结果已替换原片段并保存，可一次撤销恢复。' : '创作结果已加入指定轨道并保存，可一次撤销移除。',
-    verification: { verified: receipt.verified, target: resultRef, condition: '已从工程文件回读并核对该片段、来源与资产内容身份。' },
+    verification: { verified: receipt.verified, target: resultRef, condition: '已从剪辑文件回读并核对该片段、来源与资产内容身份。' },
   }
 }

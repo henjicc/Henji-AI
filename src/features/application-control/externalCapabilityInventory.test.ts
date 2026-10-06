@@ -65,7 +65,7 @@ describe('外部能力面派生自真实注册表', () => {
       expect(writable.has(type), `${type} 应属于公开业务写入范围`).toBe(true)
     }
     // 声明了 writeExclusion 的实体一律在范围外，通用读改增删不能落到它们身上。
-    for (const type of ['generation.task', 'generation.result', 'generation.record', 'image_edit.document', 'image_edit.preview', 'image_edit.resource', 'asset.catalog', 'storyboard.card', 'storyboard.project', 'toolbox.tool', 'canvas.project', 'camera_stage.project']) {
+    for (const type of ['generation.task', 'generation.result', 'generation.record', 'image_edit.document', 'image_edit.preview', 'image_edit.resource', 'asset.catalog', 'storyboard.card', 'storyboard.document', 'toolbox.tool', 'canvas.document', 'camera_stage.document']) {
       expect(writable.has(type), `${type} 已声明有意只读，不能出现在公开写入范围`).toBe(false)
     }
   })

@@ -71,7 +71,7 @@ describe('application surface registry', () => {
     mocks.openCanvasProjectFromAgent.mockResolvedValue({ projectId: 'project-1' })
 
     const result = await focusApplicationEntity(
-      { kind: 'canvas.project', id: 'project-1' },
+      { kind: 'canvas.document', id: 'project-1' },
       new AbortController().signal
     )
 

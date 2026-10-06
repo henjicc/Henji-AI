@@ -82,7 +82,7 @@ export async function inspectAssetFileContent(filePath: string, mediaType: Asset
   } else fileContentActive++
   try {
     const normalized = normalizeAssetPath(filePath)
-    if (!isPathWithinAllowedMediaRoots(normalized)) throw new Error('源素材尚未获得读取权限，请先从工程或素材库打开。')
+    if (!isPathWithinAllowedMediaRoots(normalized)) throw new Error('源素材尚未获得读取权限，请先从文档或素材库打开。')
     const canonical = await fs.realpath(normalized)
     if (!isPathWithinAllowedMediaRoots(canonical)) throw new Error('源素材的实际路径不在已授权目录内。')
     const identity = await readAssetFileIdentity(canonical)

@@ -94,7 +94,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           progress: 0.02,
         })
         const snapshot = sceneFromDocumentContent(request.sceneContent)
-        // 渲染宿主持有任务快照投影，不注册业务实例、不向工程反向保存采样状态。
+        // 渲染宿主持有任务快照投影，不注册业务实例、不向镜头参考反向保存采样状态。
         const projection = createCameraStageStore()
         projection.getState().loadSnapshot(snapshot, { id: request.cameraStageDocumentId, name: '渲染投影' })
         attachCameraStageStore(projection)

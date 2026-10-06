@@ -282,11 +282,11 @@ async function main() {
          */
         let canvasFailure = null
         try {
-          const projectRef = { kind: 'canvas.project', id: FIXTURE_PROJECT_ID }
-          const projectRead = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
+          const projectRef = { kind: 'canvas.document', id: FIXTURE_PROJECT_ID }
+          const projectRead = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.document.name'] })
           const resultRead = await callTool(client, 'read_application_entity', { ref: task.resultRef, propertyIds: [] })
           const placed = await callTool(client, 'add_generation_result_to_canvas', operationEnvelope([projectRead, resultRead], {
-            projectId: FIXTURE_PROJECT_ID, resultRef: { kind: 'generation.result', id: task.resultRef.id }, placement: { mode: 'absolute', x: 0, y: 0 },
+            documentId: FIXTURE_PROJECT_ID, resultRef: { kind: 'generation.result', id: task.resultRef.id }, placement: { mode: 'absolute', x: 0, y: 0 },
           }))
           assert.equal(placed.executionState, 'completed', JSON.stringify(placed))
           const nodeRef = placed.result.data.nodeRef

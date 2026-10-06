@@ -392,7 +392,7 @@ export function DialogSection(): JSX.Element {
           isOpen
           scope="container"
           type="warning"
-          title="删除这个工程？"
+          title="删除这个画布？"
           message="删除后无法恢复。"
           onClose={noop}
           closeLabel="取消"

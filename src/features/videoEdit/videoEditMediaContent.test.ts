@@ -4,7 +4,7 @@ import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditDocument, videoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit } from './application/videoEditService'
+import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, listVideoEditInstances, saveVideoEdit } from './application/videoEditService'
 import { closeVideoEditSource, registerVideoEditSourcePresenter, updateVideoEditSource, type VideoEditSourceRequest } from './application/videoEditSource'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import type { RenderRequest, RenderResponse } from './engine/videoEditWorker'
@@ -50,7 +50,7 @@ afterEach(async () => {
   for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id)
   vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage()
 })
-it('保存关闭后同大小同mtime替换：允许打开恢复工程，Source在消费前拒绝新文件', async () => {
+it('保存关闭后同大小同mtime替换：允许打开恢复剪辑，Source在消费前拒绝新文件', async () => {
   const owner = (await createVideoEditProject())!; appendVideoEditMedia(owner.document.id, structuredClone(original))
   await saveVideoEdit(owner.document.id); await closeVideoEditProject(owner.document.id)
   const reopened = await reopenVideoEdit(owner.document.id); const baseline = reopened.document

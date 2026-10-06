@@ -34,7 +34,7 @@ beforeEach(async () => {
 })
 afterEach(async () => { cleanup(); for (const current of listVideoEditInstances()) await closeVideoEditProject(current.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
-it('多选批改委托同一工程历史，移动保留各自标签且不改源文件路径', async () => {
+it('多选批改委托同一剪辑历史，移动保留各自标签且不改源文件路径', async () => {
   const ids = instance.document.items.map(item => item.id)
   updateVideoEditItems(instance.document.id, [ids[0]], { tags: ['片头'] }); updateVideoEditItems(instance.document.id, [ids[1]], { tags: ['片尾'] })
   const bin = createVideoEditBin(instance.document.id, '镜头')

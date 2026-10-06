@@ -5,7 +5,7 @@ import type { DocumentKindDescriptor } from './registry'
 /*
  * 剪辑（`.henji-video`，3.1 剪辑接入）：项目的主文档，始终放在项目里（可以在项目之间移动）。
  *
- * 内容 = 剪辑工程的持久部分（内存形态，素材位置都是绝对路径）：
+ * 内容 = 剪辑的持久部分（内存形态，素材位置都是绝对路径）：
  * - media：引用的源文件；bins / items：素材箱与项目项；sequences：序列（轨道、片段、标注、标记、字幕、转场）；
  * - codeMaterials：可编辑代码素材的固定源码版本（可选）。
  * 稳定 ID、名称与版本由文档外壳表达（剪辑名就是文件名），不进内容。
@@ -122,7 +122,7 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   standaloneFolderNames: null,
   untitledNames: { zh: '未命名剪辑', en: 'Untitled Edit' },
   storage: 'json',
-  // 版本 1 = 旧剪辑工程文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
+  // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
   version: 1,
   contentSchema: videoEditContentSchema,
   upgradeContent: (content) => content,

@@ -267,7 +267,7 @@ describe('多图层文档目标导出画布事务', () => {
     expect(useCanvasStore.getState().edges).toHaveLength(0)
   })
 
-  it('连线失败时回滚新节点；切换项目后仍向原工程提交', async () => {
+  it('连线失败时回滚新节点；切换项目后仍向原画布提交', async () => {
     const originalAddEdge = useCanvasStore.getState().addEdge
     useCanvasStore.setState({ addEdge: vi.fn(() => null) })
     try {

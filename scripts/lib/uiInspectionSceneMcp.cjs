@@ -92,15 +92,15 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       let client = await connect()
       try {
         assertReadOnlyTools((await client.listTools()).tools.map((tool) => tool.name))
-        const described = await client.callTool({ name: 'describe_application_entities', arguments: { entityTypes: ['settings.registry', 'asset.library', 'canvas.project', 'generation.model'] } })
+        const described = await client.callTool({ name: 'describe_application_entities', arguments: { entityTypes: ['settings.registry', 'asset.library', 'canvas.document', 'generation.model'] } })
         assert.equal(described.isError, false, JSON.stringify(described))
-        for (const entityType of ['settings.registry', 'asset.library', 'canvas.project', 'generation.model']) {
+        for (const entityType of ['settings.registry', 'asset.library', 'canvas.document', 'generation.model']) {
           console.log(`[MCP Reality] 读取 ${entityType}`)
           const listed = await client.callTool({ name: 'list_application_entities', arguments: { entityType, limit: 5 } })
           assert.equal(listed.isError, false, JSON.stringify(listed))
           const refs = listed.structuredContent.data.refs
           assert.ok(refs.length > 0, `${entityType} 必须存在真实实例`)
-          const ref = entityType === 'canvas.project' ? refs.find((item) => item.id === canvasFixtureProjectId) : refs[0]
+          const ref = entityType === 'canvas.document' ? refs.find((item) => item.id === canvasFixtureProjectId) : refs[0]
           assert.ok(ref, `${entityType} 夹具引用存在`)
           const propertyIds = described.structuredContent.data.properties.filter((property) => property.entityType === entityType).slice(0, 3).map((property) => property.id)
           assert.ok(propertyIds.length > 0, `${entityType} 必须有授权可读字段`)
@@ -187,7 +187,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.equal(library.data.properties['asset.library.name'], 'MCP新建集合')
         await change([{ kind: 'set_properties', entityType: 'asset.library', target: libraryRef, properties: { 'asset.library.name': 'MCP已改名集合' } }], [library])
         assert.equal((await read(libraryRef, ['asset.library.name'])).data.properties['asset.library.name'], 'MCP已改名集合')
-        // 3.4 起画布是通用文档：改名走 documents.document.name（canvas.project.name 只读）
+        // 3.4 起画布是通用文档：改名走 documents.document.name（canvas.document.name 只读）
         const projectRef = { kind: 'documents.document', id: canvasFixtureProjectId }
         const project = await read(projectRef, ['documents.document.name'])
         await change([{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': 'MCP已保存画布' } }], [project])

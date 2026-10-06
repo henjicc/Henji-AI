@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 describe('画布附着前提示词迁移', () => {
-  it('千节点只提交一次，保留历史、工程归属和保存通知，重复附着不重复写入', () => {
+  it('千节点只提交一次，保留历史、画布归属和保存通知，重复附着不重复写入', () => {
     const project = registerCanvasTestProject({ id: 'bulk', name: 'bulk', createdAt: 1, updatedAt: 1,
       coverPath: null, nodeCount: 1000, viewport: { x: 2, y: 3, zoom: 0.5 },
       nodes: Array.from({ length: 1000 }, (_, i) => generator(String(i))), edges: [],

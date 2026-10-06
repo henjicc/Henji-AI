@@ -149,7 +149,7 @@ function createMcpBackgroundDocumentScenes(context) {
         assert.equal((await readNodeSession(page, projectB, nodeId)).session.revision, markedDocument.document.revision)
 
         const exported = await callTool(client, 'export_image_edit_target_to_canvas', operationEnvelope([], {
-          projectRef: { kind: 'canvas.project', id: projectB },
+          canvasRef: { kind: 'canvas.document', id: projectB },
           sourceNodeRef: { kind: 'canvas.node', id: `${projectB}:${nodeId}` }, targetRef: annotationRef,
         }))
         assert.equal(exported.executionState, 'completed', JSON.stringify(exported))

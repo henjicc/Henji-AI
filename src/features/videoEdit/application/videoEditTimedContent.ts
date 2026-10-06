@@ -51,7 +51,7 @@ export async function importVideoEditCaptionFile(projectId: string, sequenceId: 
   try {
     const text = await getPlatform().system.fs.readTextFile(path)
     signal?.throwIfAborted()
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== before) throw new Error('原工程已有新修改，请重新导入字幕。')
+    if (requireVideoEditInstance(projectId) !== owner || owner.document !== before) throw new Error('原剪辑已有新修改，请重新导入字幕。')
     const ids = appendVideoEditCaptionText(projectId, sequenceId, text, options)
     logger.info('剪辑字幕导入完成', { event: 'video_edit.caption.import.complete', context: { projectId, sequenceId, count: ids.length } })
     return ids
@@ -68,13 +68,13 @@ export async function exportVideoEditSubtitles(projectId: string, format: 'srt' 
   signal?.throwIfAborted()
   if (!path) return { saved: false, verified: false }
   if (!path.toLowerCase().endsWith(`.${format}`)) throw new Error(`请将字幕保存为.${format}文件。`)
-  if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，请重新导出。')
+  if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，请重新导出。')
   logger.info('开始导出剪辑字幕', { event: 'video_edit.caption.export.start', context: { projectId, sequenceId, format } })
   try {
     await getPlatform().system.fs.writeTextFile(path, text)
     const verified = await getPlatform().system.fs.readTextFile(path) === text
     if (!verified) throw new Error('字幕已写入，但回读结果不一致，请检查目标文件后重试。')
-    if (requireVideoEditInstance(projectId) !== owner) throw new Error('字幕文件已写出，但原工程会话已关闭，请检查原输出。')
+    if (requireVideoEditInstance(projectId) !== owner) throw new Error('字幕文件已写出，但原剪辑会话已关闭，请检查原输出。')
     signal?.throwIfAborted()
     logger.info('剪辑字幕导出完成', { event: 'video_edit.caption.export.complete', context: { projectId, sequenceId, format } })
     return { saved: true, verified }

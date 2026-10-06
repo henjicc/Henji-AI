@@ -116,6 +116,33 @@ it('新建项目、把文档移进去、创建副本再移到回收站，作品�
   }
 })
 
+it('把整个项目移到回收站（4.3）：项目与里面的文档从作品索引消失，缺失的项目如实拒绝', async () => {
+  const project = fake.seedProject({ name: '旧项目' })
+  const inside = fake.seed({ name: '剪辑一', content: { items: ['a'] }, folder: project.path, projectId: project.id })
+  const outside = fake.seed({ name: '独立画布', content: { items: [] } })
+  const app = createApplicationHarness()
+  try {
+    // 破坏性操作：带上读取项目时拿到的基线
+    const baseline = await app.read({ kind: 'documents.project', id: project.id }, ['documents.project.name'])
+    const trashed = await app.requireResult('trash_project', { projectId: project.id }, baseline.revisions as Record<string, number>) as { status: string; name: string; verification: { verified: boolean } }
+    expect(trashed).toMatchObject({ status: 'trashed', name: '旧项目', verification: { verified: true } })
+    expect(fake.trashed).toContain(project.id)
+    expect(fake.projects.has(project.id)).toBe(false)
+    expect(fake.stored(inside.id)).toBeUndefined()
+    expect(fake.stored(outside.id)).toBeDefined()
+
+    const missing = fake.seedProject({ name: '找不到的项目' })
+    fake.projects.set(missing.id, { ...fake.projects.get(missing.id)!, missing: true })
+    const missingBaseline = await app.read({ kind: 'documents.project', id: missing.id }, ['documents.project.name'])
+    const refused = await app.call('trash_project', { projectId: missing.id }, missingBaseline.revisions as Record<string, number>)
+    expect(refused.ok).toBe(false)
+    expect(JSON.stringify(refused)).toContain('从列表移除')
+    expect(fake.trashed).not.toContain(missing.id)
+  } finally {
+    app.dispose()
+  }
+})
+
 it('移动遇到重名时给出改道办法，按 keepBoth 重试后两个都保留', async () => {
   const project = fake.seedProject({ name: '项目甲' })
   fake.seed({ name: '镜头', content: { items: [] }, folder: project.path, projectId: project.id })
