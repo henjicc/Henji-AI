@@ -1,5 +1,6 @@
 import { memo, useLayoutEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Power, RotateCcw, Trash2 } from 'lucide-react'
+import { ICON_ASSET_CODE } from '@/core/theme/icons'
 import { Dropdown, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiOptionButton, UiSwitch } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
@@ -9,6 +10,7 @@ import { requireVideoEditInstance, type VideoEditInstance } from '../application
 import { CodeParameterPanel } from './CodeParameterPanel'
 import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
+import { VideoEditEffectSection } from './VideoEditEffectSection'
 type CompositeAction = ReturnType<typeof useVideoEditCompositeAction>
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; clip: VideoEditClip; onError: (reason: unknown) => void }
 
@@ -31,12 +33,13 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const target = { projectId, sequenceId, clipId }
   const action = useVideoEditCompositeAction(instance, JSON.stringify([projectId, sequenceId, clipId]), onError)
   const effects = clip.effects ?? []
-  const [selectedId, setSelectedId] = useState(effects[0]?.id ?? '')
+  /** 展开的效果（同一时间只展开一项，参数编辑器只挂一份）；空串表示全部收起。 */
+  const [selectedId, setSelectedId] = useState('')
   const [definitionId, setDefinitionId] = useState('')
   const [copySource, setCopySource] = useState('')
   const [creatingFilter, setCreatingFilter] = useState(false)
   const [createdFilter, setCreatedFilter] = useState(false)
-  const selected = effects.find(effect => effect.id === selectedId) ?? effects[0]
+  const selected = effects.find(effect => effect.id === selectedId)
   const selectedIndex = selected ? effects.findIndex(effect => effect.id === selected.id) : -1
   const definitions = useMemo(() => {
     try {
@@ -55,27 +58,49 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
     ids[selectedIndex] = ids[next]; ids[next] = previous
     void action.run(signal => reorderVideoEditEffects(target, ids, signal))
   }
+  const toggle = (id: string): void => setSelectedId(selected?.id === id ? '' : id)
+  const CodeIcon = ICON_ASSET_CODE
   return <>
     {clip.kind === 'adjustment' && <AdjustmentRange target={target} sequence={sequence} clip={clip} action={action} />}
-    <UiGroup title="附加效果" titleTone="compact" divided data-video-edit-effect-chain={clipId} actions={<UiButton disabled={action.busy} onClick={() => setCreatingFilter(true)}>编写新滤镜源码</UiButton>}>
-      <UiFormRow density="compact" label="剪辑滤镜"><div className="flex flex-wrap items-center gap-2"><Dropdown ariaLabel="选择剪辑滤镜" value={definition?.id} display={definitions.items.length ? undefined : '暂无滤镜源码'} options={definitions.options} disabled={action.busy || !definitions.items.length} onSelect={setDefinitionId} /><UiButton variant="secondary" className="shrink-0" disabled={action.busy || !definition || effects.length >= 4} onClick={() => { if (definition) void action.run(signal => createVideoEditEffect(target, { definitionId: definition.id, versionId: definition.versionId }, signal), setSelectedId) }}>添加到片段</UiButton></div></UiFormRow>
-      {createdFilter && <p className="text-2xs text-text3">滤镜源码已创建，选择“添加到片段”检查并应用。</p>}
-      {definitions.error ? <UiError size="xs" message={definitions.error instanceof Error ? definitions.error.message : '剪辑滤镜暂不可用。'} /> : null}
-      {effects.length ? <><p className="text-2xs text-text3">从上到下依次执行，最多添加四项。</p><div className="flex flex-col gap-1">{effects.map(effect => <UiOptionButton key={effect.id} variant="menu" size="sm" className="w-full min-w-0 justify-between gap-2" active={selected?.id === effect.id} disabled={action.busy} aria-label={`选择效果${effect.name}`} aria-pressed={selected?.id === effect.id} data-video-edit-effect={effect.id} onClick={() => setSelectedId(effect.id)}><span className="truncate">{effect.name}</span><span className="shrink-0 text-2xs text-text3">{effect.enabled ? '启用' : '关闭'}</span></UiOptionButton>)}</div></> : <UiEmpty size="xs" title="尚未添加效果" description="选择剪辑滤镜，或编写新的滤镜源码。" />}
-      {selected && <>
-        <UiFormRow density="compact" label="启用效果" inline><UiSwitch aria-label="启用所选效果" checked={selected.enabled} disabled={action.busy} onCheckedChange={enabled => { void action.run(signal => updateVideoEditEffect(target, selected.id, { enabled }, signal)) }} /></UiFormRow>
-        <EffectStrength key={selected.id} effect={selected} action={action} target={target} owner={instance} />
-        <div className="flex items-center gap-1">
-          <UiIconButton title="提前执行" aria-label="上移效果" disabled={action.busy || selectedIndex <= 0} onClick={() => move(-1)}><ArrowUp size={15} /></UiIconButton>
-          <UiIconButton title="稍后执行" aria-label="下移效果" disabled={action.busy || selectedIndex >= effects.length - 1} onClick={() => move(1)}><ArrowDown size={15} /></UiIconButton>
-          <UiIconButton title="恢复默认参数、强度和开关，并移除此效果关键帧" aria-label="重置效果与关键帧" disabled={action.busy} onClick={() => { void action.run(signal => resetVideoEditEffect(target, selected.id, signal)) }}><RotateCcw size={15} /></UiIconButton>
-          <UiIconButton tone="danger" title="删除效果" aria-label="删除所选效果" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditEffects(target, [selected.id], signal), () => setSelectedId(effects[selectedIndex + 1]?.id ?? effects[selectedIndex - 1]?.id ?? '')) }}><Trash2 size={15} /></UiIconButton>
+    <VideoEditEffectSection id="effects" title="附加效果" info="滤镜从上到下依次处理画面，一个片段最多四项。"
+      actions={<UiIconButton size="xs" aria-label="编写新滤镜源码" title="编写新滤镜源码" disabled={action.busy} onClick={() => setCreatingFilter(true)}><CodeIcon size={13} /></UiIconButton>}>
+      <div className="flex flex-col gap-1 pl-5" data-video-edit-effect-chain={clipId}>
+        {effects.length ? effects.map((effect, index) => {
+          const open = selected?.id === effect.id
+          return <div key={effect.id} className="flex flex-col">
+            <div className="flex min-h-8 items-center gap-1">
+              <UiOptionButton variant="menu" size="sm" className="min-w-0 flex-1 justify-start gap-1" active={open} disabled={action.busy} aria-label={`选择效果${effect.name}`} aria-expanded={open} data-video-edit-effect={effect.id} onClick={() => toggle(effect.id)}>
+                {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}<span className={`truncate ${effect.enabled ? '' : 'text-text3 line-through'}`}>{effect.name}</span>
+              </UiOptionButton>
+              <UiIconButton size="xs" on={effect.enabled} aria-pressed={effect.enabled} aria-label={`${effect.enabled ? '停用' : '启用'}效果${effect.name}`} title={effect.enabled ? '停用此效果（保留参数）' : '启用此效果'} disabled={action.busy} onClick={() => { void action.run(signal => updateVideoEditEffect(target, effect.id, { enabled: !effect.enabled }, signal)) }}><Power size={12} /></UiIconButton>
+              <UiIconButton size="xs" aria-label={`重置效果${effect.name}`} title="恢复默认参数、强度和开关，并移除此效果关键帧" disabled={action.busy} onClick={() => { void action.run(signal => resetVideoEditEffect(target, effect.id, signal)) }}><RotateCcw size={12} /></UiIconButton>
+            </div>
+            {open && <div className="flex flex-col gap-1 pb-2 pl-4" data-video-edit-effect-editor={effect.id}>
+              <div className="flex items-center gap-1">
+                <UiFormRow density="compact" label="启用" inline className="flex-1"><UiSwitch aria-label="启用所选效果" checked={effect.enabled} disabled={action.busy} onCheckedChange={enabled => { void action.run(signal => updateVideoEditEffect(target, effect.id, { enabled }, signal)) }} /></UiFormRow>
+                <UiIconButton size="xs" title="提前执行" aria-label="上移效果" disabled={action.busy || index <= 0} onClick={() => move(-1)}><ArrowUp size={13} /></UiIconButton>
+                <UiIconButton size="xs" title="稍后执行" aria-label="下移效果" disabled={action.busy || index >= effects.length - 1} onClick={() => move(1)}><ArrowDown size={13} /></UiIconButton>
+                <UiIconButton size="xs" title="恢复默认参数、强度和开关，并移除此效果关键帧" aria-label="重置效果与关键帧" disabled={action.busy} onClick={() => { void action.run(signal => resetVideoEditEffect(target, effect.id, signal)) }}><RotateCcw size={13} /></UiIconButton>
+                <UiIconButton size="xs" tone="danger" title="删除效果" aria-label="删除所选效果" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditEffects(target, [effect.id], signal), () => setSelectedId(effects[index + 1]?.id ?? effects[index - 1]?.id ?? '')) }}><Trash2 size={13} /></UiIconButton>
+              </div>
+              <EffectStrength key={effect.id} effect={effect} action={action} target={target} owner={instance} />
+              {!action.busy && <CodeParameterPanel key={JSON.stringify([projectId, sequenceId, clipId, effect.id, effect.code.versionId])} projectId={projectId} sequenceId={sequenceId} clipId={clipId} effectId={effect.id} onError={onError} />}
+            </div>}
+          </div>
+        }) : <UiEmpty size="xs" title="尚未添加效果" />}
+        <div className="flex items-center gap-1 pt-1">
+          <div className="min-w-0 flex-1"><Dropdown ariaLabel="选择剪辑滤镜" value={definition?.id} display={definitions.items.length ? undefined : '暂无滤镜源码'} options={definitions.options} disabled={action.busy || !definitions.items.length} onSelect={setDefinitionId} buttonClassName="w-full" /></div>
+          <UiButton variant="secondary" size="sm" className="shrink-0" disabled={action.busy || !definition || effects.length >= 4} onClick={() => { if (definition) void action.run(signal => createVideoEditEffect(target, { definitionId: definition.id, versionId: definition.versionId }, signal), setSelectedId) }}>添加到片段</UiButton>
         </div>
-      </>}
-      {sources.length > 0 && <><UiFormRow density="compact" label="复制来源"><Dropdown ariaLabel="复制效果的来源片段" value={source?.value} display={source ? undefined : '选择来源片段'} options={sources} disabled={action.busy} onSelect={setCopySource} /></UiFormRow><p className="text-2xs text-text3">复制来源片段的整条效果链及关键帧，替换当前片段已有的附加效果。</p><UiButton variant="secondary" disabled={action.busy || !source} onClick={() => { if (source) void action.run(signal => copyVideoEditEffects(target, { sequenceId: source.sequenceId, clipId: source.clipId }, signal), () => setSelectedId('')) }}>复制并替换当前效果链</UiButton></>}
-      {action.busy && <div className="flex items-center gap-2"><UiLoading size="xs" message="正在检查混合画面" /><UiButton onClick={action.cancel}>取消检查</UiButton></div>}
-    </UiGroup>
-    {selected && !action.busy && <div data-video-edit-effect-editor={selected.id}><CodeParameterPanel key={JSON.stringify([projectId, sequenceId, clipId, selected.id, selected.code.versionId])} projectId={projectId} sequenceId={sequenceId} clipId={clipId} effectId={selected.id} onError={onError} /></div>}
+        {createdFilter && <p className="text-2xs text-text3">滤镜源码已创建，选择“添加到片段”检查并应用。</p>}
+        {definitions.error ? <UiError size="xs" message={definitions.error instanceof Error ? definitions.error.message : '剪辑滤镜暂不可用。'} /> : null}
+        {sources.length > 0 && <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1"><Dropdown ariaLabel="复制效果的来源片段" value={source?.value} display={source ? undefined : '从其他片段复制效果'} options={sources} disabled={action.busy} onSelect={setCopySource} buttonClassName="w-full" /></div>
+          <UiIconButton size="sm" aria-label="复制并替换当前效果链" title="复制来源片段的整条效果链及关键帧，替换当前片段已有的附加效果" disabled={action.busy || !source} onClick={() => { if (source) void action.run(signal => copyVideoEditEffects(target, { sequenceId: source.sequenceId, clipId: source.clipId }, signal), () => setSelectedId('')) }}><Copy size={13} /></UiIconButton>
+        </div>}
+        {action.busy && <div className="flex items-center gap-2"><UiLoading size="xs" message="正在检查混合画面" /><UiButton onClick={action.cancel}>取消检查</UiButton></div>}
+      </div>
+    </VideoEditEffectSection>
     {creatingFilter && <VideoEditCodeCreateDialog projectId={projectId} mode="filter" onClose={() => setCreatingFilter(false)} onCreated={ids => { if (requireVideoEditInstance(projectId) === instance) { setDefinitionId(ids[0] ?? ''); setCreatedFilter(true) } }} />}
   </>
 })

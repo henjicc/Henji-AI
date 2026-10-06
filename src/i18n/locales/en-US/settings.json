@@ -18,6 +18,7 @@
     "providers": "Providers & Models",
     "workspace-generation": "Generate",
     "workspace-canvas": "Canvas",
+    "workspace-video-edit": "Edit",
     "workspace-assets": "Assets",
     "files-storage": "Works Folder",
     "files-upload": "Uploads",
@@ -453,6 +454,10 @@
         "tools": "Tools",
         "assets": "Assets"
       }
+    },
+    "videoEdit": {
+      "selectionFollowsPlayheadLabel": "Selection follows playhead",
+      "selectionFollowsPlayheadInfo": "Same as Premiere Pro's Selection Follows Playhead: while playing or moving the playhead, the topmost visible clip at the current frame is selected and Effect Controls shows it."
     },
     "assetLibrary": {
       "title": "Asset Library",

@@ -18,6 +18,7 @@
     "providers": "供应商与模型",
     "workspace-generation": "生成",
     "workspace-canvas": "画布",
+    "workspace-video-edit": "剪辑",
     "workspace-assets": "资产",
     "files-storage": "作品目录",
     "files-upload": "上传",
@@ -453,6 +454,10 @@
         "tools": "工具",
         "assets": "资产"
       }
+    },
+    "videoEdit": {
+      "selectionFollowsPlayheadLabel": "播放头自动选中片段",
+      "selectionFollowsPlayheadInfo": "对应 PR 的“选择跟随播放指示器”：播放或拖动播放头时，自动选中当前帧最上面的可见片段，效果控件随之显示它的参数。"
     },
     "assetLibrary": {
       "title": "资产库行为",

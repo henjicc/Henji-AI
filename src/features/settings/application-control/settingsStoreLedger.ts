@@ -110,5 +110,6 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setVideoEditShortcuts: property('video_edit.shortcuts'),
     setVideoEditMonitorButtons: property('video_edit.monitor_buttons'),
     setVideoEditTrackHeaderButtons: property('video_edit.track_header_buttons'),
+    setVideoEditSelectionFollowsPlayhead: property('video_edit.selection_follows_playhead'),
   },
 }

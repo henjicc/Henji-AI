@@ -97,6 +97,7 @@ const surfaceDefinitions = [
   { id: 'settings.workspace', kind: 'settings', settingsTarget: { tab: 'workspace' }, ...immediate },
   { id: 'settings.workspace.generation', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-generation' }, ...immediate },
   { id: 'settings.workspace.canvas', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-canvas' }, ...immediate },
+  { id: 'settings.workspace.video_edit', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-video-edit' }, ...immediate },
   { id: 'settings.workspace.assets', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-assets' }, ...immediate },
   { id: 'settings.files', kind: 'settings', settingsTarget: { tab: 'files' }, ...immediate },
   { id: 'settings.storage', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-storage' }, ...immediate },

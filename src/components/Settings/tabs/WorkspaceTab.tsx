@@ -11,9 +11,10 @@ import PromptOptimizationSection from '../sections/PromptOptimizationSection'
 import BottomPanelSection from '../sections/BottomPanelSection'
 import CanvasSection from '../sections/CanvasSection'
 import AssetLibrarySection from '../sections/AssetLibrarySection'
+import VideoEditSection from '../sections/VideoEditSection'
 
 /**
- * 工作区：按应用顶部的页面分节（生成 / 画布 / 资产库）。
+ * 工作区：按应用顶部的页面分节（生成 / 画布 / 剪辑 / 资产库）。
  * 生成相关的设置以前散在「默认项与首次设置」「行为与并发」「界面 › 布局行为」三处，现在集中在这里。
  */
 const WorkspaceTab: React.FC = () => {
@@ -58,6 +59,10 @@ const WorkspaceTab: React.FC = () => {
 
       <SettingsSection id="workspace-canvas">
         <CanvasSection />
+      </SettingsSection>
+
+      <SettingsSection id="workspace-video-edit">
+        <VideoEditSection />
       </SettingsSection>
 
       <SettingsSection id="workspace-assets">

@@ -99,16 +99,16 @@ function createVideoEditPopoutScene() {
         await app.evaluate(({ BrowserWindow }, { id, bounds }) => BrowserWindow.fromId(id).setBounds(bounds), { id: effectsWindow.id, bounds: { x: primary.bounds.x + 120, y: primary.bounds.y + 120, width: 520, height: 720 } })
         evidence.effectsMoved = (await windows()).find(window => window.id === effectsWindow.id)
         assert.equal(evidence.effectsMoved.display, displays.primary, '浮窗应能移动到另一显示器')
-        assert.equal(await effects.getByLabel('片段名称').inputValue(), '片头A', '浮窗附着同一工程的当前选区')
+        assert.equal(await effects.locator('[data-video-edit-effects-clip-name]').first().textContent(), '片头A', '浮窗附着同一工程的当前选区')
         const historyBefore = readProject(file).revision
-        await effects.getByLabel('不透明度').fill('0.5')
+        await effects.getByLabel('不透明度', { exact: true }).fill('50'); await effects.getByLabel('不透明度', { exact: true }).press('Enter')
         const edited = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === 'a').opacity === 0.5, '浮窗修改没有经主窗口工程静默保存')
         assert.equal(edited.sequences[0].clips.length, 2, '在浮窗输入框中打字不得触发剪辑快捷键')
-        await effects.getByLabel('片段名称').fill('片头A浮窗改名')
+        await button(effects, '重命名片段').click(); await effects.getByLabel('片段名称', { exact: true }).fill('片头A浮窗改名'); await effects.getByLabel('片段名称', { exact: true }).press('Enter')
         await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === 'a').name === '片头A浮窗改名', '浮窗文字修改没有保存')
         // Keyboard undo from inside the popout runs once, on the same shared history.
-        // Leave the text field first: Ctrl+Z inside an input is the field's own text undo, as in the main window.
-        await effects.getByLabel('片段名称').blur(); await effects.locator('[data-video-edit-panel="effects"]').first().focus()
+        // Enter already left the rename field: Ctrl+Z inside an input is the field's own text undo, as in the main window.
+        await effects.locator('[data-video-edit-panel="effects"]').first().focus()
         evidence.focusBeforeUndo = await effects.evaluate(() => ({ tag: document.activeElement?.tagName, panel: document.activeElement?.closest('[data-video-edit-panel]')?.getAttribute('data-video-edit-panel') ?? null }))
         await effects.keyboard.press('Control+z')
         const undone = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === 'a').name === '片头A', '浮窗内撤销没有生效')
@@ -122,7 +122,7 @@ function createVideoEditPopoutScene() {
         phase('timeline-popout')
         const timeline = await popOut('时间线')
         await timeline.locator('[data-video-edit-clip="b"]').click()
-        await effects.getByLabel('片段名称').waitFor(); assert.equal(await effects.getByLabel('片段名称').inputValue(), '片头B', '浮窗时间线选区应同步到另一浮窗')
+        await effects.locator('[data-video-edit-effects-clip-name]').first().waitFor(); assert.equal(await effects.locator('[data-video-edit-effects-clip-name]').first().textContent(), '片头B', '浮窗时间线选区应同步到另一浮窗')
         const handle = timeline.locator('[data-video-edit-clip="b"]'); const box = await handle.boundingBox()
         await timeline.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await timeline.mouse.down()
         await timeline.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2, { steps: 6 }); await timeline.mouse.up()

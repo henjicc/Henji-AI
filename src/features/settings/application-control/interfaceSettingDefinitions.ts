@@ -62,6 +62,12 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
     store.setVideoEditTrackHeaderButtons('audio', layouts.audio ?? null)
   }),
   storeSetting({
+    id: 'video_edit.selection_follows_playhead', title: '剪辑播放头自动选中片段', description: '对应 PR 的“选择跟随播放指示器”：开启后播放或移动播放头时，自动选中当前帧最上面的可见片段（不进撤销历史），效果控件随之显示该片段。默认关闭。',
+    aliases: ['选择跟随播放指示器', '播放头选中', '自动选中片段', 'selection follows playhead'], schema: z.boolean(), defaultValue: false,
+    target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().videoEditSelectionFollowsPlayhead,
+  (value) => useSettingsStore.getState().setVideoEditSelectionFollowsPlayhead(value)),
+  storeSetting({
     id: 'interface.scale', title: '界面缩放', description: '调整整个应用界面的显示大小，自动模式会根据窗口可用空间选择合适比例。',
     aliases: ['界面大小', '显示缩放', 'UI 缩放', 'scale', 'zoom'], schema: z.enum(UI_SCALE_MODES), defaultValue: DEFAULT_UI_SCALE_MODE,
     target: { tab: 'general', sectionId: 'general-appearance' }, requiresReload: false, requiresRestart: false, sensitive: false,

@@ -41,7 +41,10 @@ function CodeScalarControl({ target, parameter, value, label, time, onError, onW
     onClickCapture={event => { if (elementOfEventTarget(event.target)?.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
     onKeyDownCapture={event => { if (['ArrowUp', 'ArrowDown'].includes(event.key)) touched.current = true }}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) gesture.finish() }}
-  ><NumberInput key={gesture.epoch} value={current} min={min} max={max} step={step} ariaLabel={ariaLabel} widthClassName="w-full" commitOnChange onChange={next => {
+  ><NumberInput key={gesture.epoch} value={current} min={min} max={max} step={step} ariaLabel={ariaLabel} widthClassName="w-full" commitOnChange
+    // 数值拖动没有键盘焦点：越过拖动阈值即开始手势，松手提交一步撤销，Esc 回到拖动前
+    onScrubStart={() => { touched.current = true; gesture.begin() }} onScrubEnd={cancelled => { if (cancelled) { touched.current = false; gesture.cancel() } else gesture.finish() }}
+    onChange={next => {
     if (!touched.current) return
     if (gesture.active()) change(next)
     else { gesture.begin(); change(next); gesture.finish() }

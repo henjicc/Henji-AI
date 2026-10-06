@@ -186,4 +186,37 @@ describe('NumberInput', () => {
     fireEvent.pointerMove(input, { pointerId: 6, clientX: 40 })
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('拖动手势只在越过阈值时开始，松手提交，Esc 取消并回到拖动前的读数', () => {
+    const onChange = vi.fn(); const onScrubStart = vi.fn(); const onScrubEnd = vi.fn()
+    render(<NumberInput ariaLabel="亮度" value={100} min={0} max={200} onChange={onChange} onScrubStart={onScrubStart} onScrubEnd={onScrubEnd} />)
+    const input = screen.getByRole('spinbutton', { name: '亮度' }) as HTMLInputElement
+    fireEvent.pointerDown(input, { pointerId: 7, button: 0, clientX: 0 })
+    fireEvent.pointerMove(input, { pointerId: 7, clientX: 2 })
+    expect(onScrubStart).not.toHaveBeenCalled()
+    fireEvent.pointerMove(input, { pointerId: 7, clientX: 400 })
+    expect(onScrubStart).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenLastCalledWith(200)
+    fireEvent.pointerUp(input, { pointerId: 7, clientX: 400 })
+    expect(onScrubEnd).toHaveBeenLastCalledWith(false)
+
+    fireEvent.pointerDown(input, { pointerId: 8, button: 0, clientX: 0 })
+    fireEvent.pointerMove(input, { pointerId: 8, clientX: 20 })
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onScrubEnd).toHaveBeenLastCalledWith(true)
+    expect(input.value).toBe('100')
+    const calls = onChange.mock.calls.length
+    fireEvent.pointerMove(input, { pointerId: 8, clientX: 60 })
+    fireEvent.pointerUp(input, { pointerId: 8, clientX: 60 })
+    expect(onChange).toHaveBeenCalledTimes(calls); expect(onScrubEnd).toHaveBeenCalledTimes(2)
+  })
+
+  it('键盘编辑时 Esc 放弃输入，不提交', () => {
+    const onChange = vi.fn()
+    render(<NumberInput ariaLabel="旋转" value={5} onChange={onChange} />)
+    const input = screen.getByRole('spinbutton', { name: '旋转' }) as HTMLInputElement
+    fireEvent.focus(input); fireEvent.change(input, { target: { value: '90' } })
+    fireEvent.keyDown(input, { key: 'Escape' }); fireEvent.blur(input)
+    expect(onChange).not.toHaveBeenCalled(); expect(input.value).toBe('5')
+  })
 })

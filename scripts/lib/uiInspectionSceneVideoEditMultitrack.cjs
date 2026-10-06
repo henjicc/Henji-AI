@@ -340,7 +340,7 @@ function createVideoEditMultitrackScene() {
         await page.keyboard.down('Alt')
         try { await clipNode(page, fourth.id).getByRole('button', { name: `选择片段 ${fourth.name}`, exact: true }).click() } finally { await page.keyboard.up('Alt') }
         assert.equal((await read(projectRef, ['video_edit.document.selection'])).data.properties['video_edit.document.selection'], fourth.id, 'Alt 点击应只选中音频 4 的片段')
-        await page.locator('[aria-label="效果控件"]').getByLabel('音量', { exact: true }).fill('0.5')
+        await page.locator('[aria-label="效果控件"]').getByLabel('音量', { exact: true }).fill('50'); await page.locator('[aria-label="效果控件"]').getByLabel('音量', { exact: true }).press('Enter')
         await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === fourth.id).volume === .5, '音频 4 片段音量未保存')
         await mix('音频 4 片段音量 0.5')
         evidence.phases.push('逐轨静音、独奏与片段音量在混音中逐一生效'); store()

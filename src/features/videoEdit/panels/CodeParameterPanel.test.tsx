@@ -46,6 +46,38 @@ it('原生对象切换取消参数草稿，层序与删除空态消费同一对�
   fireEvent.click(view.getByRole('button', { name: '删除图形对象' })); fireEvent.click(view.getByRole('button', { name: '删除图形对象' }))
   expect(clip().graphic!.objects).toEqual([]); expect(view.getByText('此图形暂无对象')).toBeTruthy(); expect(view.queryByRole('button', { name: '为水平位置添加关键帧' })).toBeNull(); expect(onError).not.toHaveBeenCalled()
 })
+it('效果控件拖动数值只记一步撤销，Esc 回到拖动前，读数夹在合法范围内', () => {
+  const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 })
+  setVideoEditView(id, { selection: clipId })
+  const view = render(<View />); const clip = () => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!
+  const brightness = view.getByRole('spinbutton', { name: '亮度' }) as HTMLInputElement
+  const history = owner.past.length
+  fireEvent.pointerDown(brightness, { pointerId: 1, button: 0, clientX: 0 })
+  fireEvent.pointerMove(brightness, { pointerId: 1, clientX: 20 }); expect(clip().brightness).toBeCloseTo(1.1)
+  fireEvent.pointerMove(brightness, { pointerId: 1, clientX: 5000 }); expect(clip().brightness).toBe(2)
+  expect(videoEditGestureActive(id)).toBe(true); expect(owner.past).toHaveLength(history)
+  fireEvent.pointerUp(brightness, { pointerId: 1, clientX: 5000 })
+  expect(videoEditGestureActive(id)).toBe(false); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(id)); expect(clip().brightness).toBe(1)
+
+  fireEvent.pointerDown(brightness, { pointerId: 2, button: 0, clientX: 0 })
+  fireEvent.pointerMove(brightness, { pointerId: 2, clientX: -40 }); expect(clip().brightness).toBeCloseTo(.8)
+  fireEvent.keyDown(window, { key: 'Escape' })
+  expect(clip().brightness).toBe(1); expect(videoEditGestureActive(id)).toBe(false); expect(owner.past).toHaveLength(history)
+
+  fireEvent.click(view.getByRole('button', { name: '增加缩放' })); expect(clip().scale).toBeCloseTo(1.01); expect(owner.past).toHaveLength(history + 1)
+  fireEvent.click(view.getByRole('button', { name: '重置缩放' })); expect(clip().scale).toBe(1)
+  expect(view.queryByRole('spinbutton', { name: '开始帧' })).toBeNull()
+
+  const objectX = within(view.container.querySelector('[data-video-edit-code-parameter="x"]') as HTMLElement).getByRole('spinbutton', { name: '水平位置' })
+  const before = clip().graphic!.objects[0].parameters.x; const objectHistory = owner.past.length
+  fireEvent.pointerDown(objectX, { pointerId: 3, button: 0, clientX: 0 })
+  for (const clientX of [10, 20, 30]) fireEvent.pointerMove(objectX, { pointerId: 3, clientX })
+  expect(clip().graphic!.objects[0].parameters.x).not.toBe(before); expect(owner.past).toHaveLength(objectHistory)
+  fireEvent.pointerUp(objectX, { pointerId: 3, clientX: 30 }); expect(owner.past).toHaveLength(objectHistory + 1)
+  act(() => undoVideoEdit(id)); expect(clip().graphic!.objects[0].parameters.x).toBe(before)
+  expect(onError).not.toHaveBeenCalled()
+})
 it('原生参数隐藏时回滚草稿，调整图层只呈现合法画面属性', () => {
   const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'text' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 }); setVideoEditView(id, { selection: clipId })
   const view = render(<View />); const number = within(view.container.querySelector('[data-video-edit-code-parameter="fontSize"]') as HTMLElement).getByRole('spinbutton', { name: '字号' })
@@ -54,7 +86,7 @@ it('原生参数隐藏时回滚草稿，调整图层只呈现合法画面属性'
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].parameters.fontSize).toBe(original); expect(owner.past).toHaveLength(history)
   const adjustment = createVideoEditAdjustmentItem(id); const [adjustmentClip] = appendVideoEditItems(id, [adjustment], sequenceId, { frame: 0, track: 2 })
   act(() => setVideoEditView(id, { selection: adjustmentClip })); view.rerender(<View />)
-  for (const label of ['水平位置', '垂直位置', '缩放', '旋转', '亮度效果', '音量']) expect(view.queryByRole('spinbutton', { name: label })).toBeNull()
+  for (const label of ['水平位置', '垂直位置', '缩放', '旋转', '亮度', '音量']) expect(view.queryByRole('spinbutton', { name: label })).toBeNull()
   expect(view.getByRole('spinbutton', { name: '不透明度' })).toBeTruthy(); expect(onError).not.toHaveBeenCalled()
 })
 
@@ -97,7 +129,10 @@ it('五种标量控件消费源码声明，并按原实例写入、重置，保�
   expect(editor().parameters.ink).toEqual([32 / 255, 64 / 255, 96 / 255, 0.4])
   fireEvent.click(view.getByRole('button', { name: '重置强度' })); expect(editor().parameters.amount).toBe(5)
   expect(owner.document.items[0].code!.parameters.amount).toBe(5)
-  fireEvent.change(view.getByRole('textbox', { name: '片段名称' }), { target: { value: '我的片段' } }); expect(editor().name).toBe('我的片段')
+  const renameHistory = owner.past.length
+  fireEvent.click(view.getByRole('button', { name: '重命名片段' })); const name = view.getByRole('textbox', { name: '片段名称' })
+  fireEvent.change(name, { target: { value: '我的片段' } }); expect(owner.past).toHaveLength(renameHistory); fireEvent.blur(name)
+  expect(editor().name).toBe('我的片段'); expect(owner.past).toHaveLength(renameHistory + 1)
   expect(onError).not.toHaveBeenCalled()
 })
 

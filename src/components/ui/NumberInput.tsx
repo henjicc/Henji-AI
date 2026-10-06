@@ -36,6 +36,13 @@ type NumberInputProps = {
   commitOnChange?: boolean
   /** 悬浮时滚轮直接步进并提交（无需先聚焦），会阻止容器滚动 */
   wheelStep?: boolean
+  /**
+   * 数值拖动的手势边界（用于“一次拖动只记一步撤销”）：越过拖动阈值时 `onScrubStart`，
+   * 松手 `onScrubEnd(false)`；拖动中按 Esc 或指针被系统取消时 `onScrubEnd(true)`，由调用方回到拖动前的值。
+   * 不传时拖动中按 Esc 直接以拖动前的值调用一次 `onChange`。
+   */
+  onScrubStart?: () => void
+  onScrubEnd?: (cancelled: boolean) => void
 }
 
 /** 键盘 Shift + 上下键一次走十个步长。 */
@@ -105,6 +112,8 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     textHistory,
     commitOnChange = false,
     wheelStep = false,
+    onScrubStart,
+    onScrubEnd,
   } = props
 
   const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : (min ?? 0)
@@ -115,6 +124,11 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   const [isScrubbing, setIsScrubbing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrubRef = useRef<ScrubSession | null>(null)
+  /** 聚焦编辑开始时的值：Esc 放弃键盘输入时回到它（逐字提交的字段也撤回已提交的中间值）。 */
+  const focusValueRef = useRef(safeValue)
+  const escapingRef = useRef(false)
+  const scrubEndRef = useRef({ onScrubEnd, onChange, effectivePrecision })
+  scrubEndRef.current = { onScrubEnd, onChange, effectivePrecision }
 
   const clamp = useCallback((raw: number): number => {
     let next = raw
@@ -126,6 +140,11 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
 
   const handleBlur = (): void => {
     setIsFocused(false)
+    if (escapingRef.current) {
+      escapingRef.current = false
+      setInputValue(formatNumber(focusValueRef.current, effectivePrecision))
+      return
+    }
     const parsed = Number.parseFloat(inputValue)
     const next = clamp(Number.isFinite(parsed) ? parsed : (min ?? 0))
     onChange(next)
@@ -134,6 +153,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
 
   const handleFocus = (): void => {
     setIsFocused(true)
+    focusValueRef.current = safeValue
     setInputValue(displayValue)
   }
 
@@ -183,6 +203,27 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     return () => element.removeEventListener('wheel', handleWheel)
   }, [disabled, stepBy, wheelStep])
 
+  // 拖动时读数没有键盘焦点：Esc 在拖动所在窗口（可能是剪辑浮窗）的捕获阶段处理，只在拖动期间监听
+  useEffect(() => {
+    if (!isScrubbing) return
+    const target = inputRef.current?.ownerDocument.defaultView
+    if (!target) return
+    const handleKey = (event: KeyboardEvent): void => {
+      const session = scrubRef.current
+      if (event.key !== 'Escape' || !session?.active) return
+      event.preventDefault()
+      event.stopPropagation()
+      scrubRef.current = null
+      setIsScrubbing(false)
+      const { onScrubEnd: end, onChange: change, effectivePrecision: digits } = scrubEndRef.current
+      setInputValue(formatNumber(session.startValue, digits))
+      if (end) end(true)
+      else change(session.startValue)
+    }
+    target.addEventListener('keydown', handleKey, true)
+    return () => target.removeEventListener('keydown', handleKey, true)
+  }, [isScrubbing])
+
   const beginScrub = (event: ReactPointerEvent<HTMLElement>, fromInput: boolean): void => {
     if (disabled || event.button !== 0) return
     // 正在键盘编辑时，读数上的按下是移动光标/选择文字，不是拖动
@@ -209,6 +250,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
       session.active = true
       session.lastX = session.startX
       setIsScrubbing(true)
+      onScrubStart?.()
     }
     session.travel += (event.clientX - session.lastX) * resolveScrubFactor(event)
     session.lastX = event.clientX
@@ -227,6 +269,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     event.currentTarget.releasePointerCapture?.(event.pointerId)
     if (session.active) {
       setIsScrubbing(false)
+      onScrubEnd?.(false)
       return
     }
     // 没有拖动：单击读数或标签进入编辑
@@ -237,9 +280,14 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   }
 
   const cancelScrub = (event: ReactPointerEvent<HTMLElement>): void => {
-    if (scrubRef.current?.pointerId !== event.pointerId) return
+    const session = scrubRef.current
+    if (session?.pointerId !== event.pointerId) return
     scrubRef.current = null
     setIsScrubbing(false)
+    if (session.active && onScrubEnd) {
+      setInputValue(formatNumber(session.startValue, effectivePrecision))
+      onScrubEnd(true)
+    }
   }
 
   const scrubHandlers = (fromInput: boolean) => ({
@@ -282,6 +330,14 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           {...scrubHandlers(true)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
+              event.currentTarget.blur()
+            }
+            if (event.key === 'Escape' && isFocused) {
+              // 放弃这次键盘输入：回到聚焦时的值；逐字提交的字段把已提交的中间值撤回
+              event.preventDefault()
+              event.stopPropagation()
+              escapingRef.current = true
+              if (commitOnChange && clamp(Number.parseFloat(inputValue)) !== focusValueRef.current) onChange(focusValueRef.current)
               event.currentTarget.blur()
             }
             if (event.key === 'ArrowUp') {

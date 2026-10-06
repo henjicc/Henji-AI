@@ -228,10 +228,10 @@ function createVideoEditProbeScene() {
           const pixel = () => canvas.evaluate(canvas => canvas.toDataURL('image/png'))
           await page.getByTitle('1920-30.mp4', { exact: true }).first().click()
           const originalPixel = await pixel(); const effectStart = performance.now()
-          await page.getByLabel('亮度效果', { exact: true }).fill('0.7')
+          await page.getByLabel('亮度', { exact: true }).fill('70'); await page.getByLabel('亮度', { exact: true }).press('Enter')
           await page.waitForFunction(previous => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas.toDataURL('image/png') !== previous }, originalPixel)
           const effectMs = performance.now() - effectStart
-          await page.getByLabel('亮度效果', { exact: true }).fill('1'); await presented(page, 0)
+          await page.getByLabel('亮度', { exact: true }).fill('100'); await page.getByLabel('亮度', { exact: true }).press('Enter'); await presented(page, 0)
           for (const frame of [spec.fps + 3, 4, spec.fps - 1, spec.fps, 4]) { const start = performance.now(); await seek(page, frame, spec.fps); seeks.push({ frame, milliseconds: performance.now() - start }) }
           const rulerBox = await page.getByRole('slider', { name: '剪辑时间定位' }).boundingBox()
           await page.mouse.move(rulerBox.x + 6, rulerBox.y + 12); await page.mouse.down()

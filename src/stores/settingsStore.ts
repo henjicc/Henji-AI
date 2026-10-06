@@ -101,6 +101,8 @@ interface SettingsState {
   videoEditMonitorButtons: VideoEditMonitorButtonLayouts;
   /** 剪辑视频轨／音频轨轨道头按钮（按钮编辑器）；只存改过的那一类。 */
   videoEditTrackHeaderButtons: VideoEditTrackHeaderButtonLayouts;
+  /** 剪辑：播放头移动时自动选中该帧最上面的可见片段（PR“选择跟随播放指示器”，默认关）。 */
+  videoEditSelectionFollowsPlayhead: boolean;
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
@@ -142,6 +144,7 @@ interface SettingsState {
   setVideoEditMonitorButtons: (kind: VideoEditMonitorKind, ids: readonly string[] | null) => void;
   /** `null` = 重置为默认按钮。 */
   setVideoEditTrackHeaderButtons: (kind: VideoEditTrackHeaderKind, ids: readonly string[] | null) => void;
+  setVideoEditSelectionFollowsPlayhead: (enabled: boolean) => void;
 }
 
 /** 主题文件导入范围：全部 / 仅配色 / 仅圆角。 */
@@ -236,6 +239,7 @@ export const useSettingsStore = create<SettingsState>()(
       videoEditShortcuts: {},
       videoEditMonitorButtons: {},
       videoEditTrackHeaderButtons: {},
+      videoEditSelectionFollowsPlayhead: false,
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         set((state) => ({
@@ -321,6 +325,7 @@ export const useSettingsStore = create<SettingsState>()(
       setVideoEditShortcuts: (shortcuts) => set({ videoEditShortcuts: parseVideoEditShortcutOverrides(shortcuts) }),
       setVideoEditMonitorButtons: (kind, ids) => set((state) => ({ videoEditMonitorButtons: withVideoEditMonitorButtons(state.videoEditMonitorButtons, kind, ids) })),
       setVideoEditTrackHeaderButtons: (kind, ids) => set((state) => ({ videoEditTrackHeaderButtons: withVideoEditTrackHeaderButtons(state.videoEditTrackHeaderButtons, kind, ids) })),
+      setVideoEditSelectionFollowsPlayhead: (videoEditSelectionFollowsPlayhead) => set({ videoEditSelectionFollowsPlayhead }),
     }),
     {
       name: 'settings-storage',

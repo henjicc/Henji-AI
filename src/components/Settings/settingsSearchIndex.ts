@@ -75,6 +75,9 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'sections.canvas.storyboardAutoInferEmptyFrameLabel',
     'sections.canvas.ignoreAtTagLabel',
   ]),
+  ...rows('workspace-video-edit', [
+    ['sections.videoEdit.selectionFollowsPlayheadLabel', ['剪辑', '播放头', '自动选中', '效果控件', 'playhead', 'selection']],
+  ]),
   ...rows('workspace-assets', [
     ['sections.assetLibrary.tabAction', ['资产', '素材', 'asset']],
     'sections.assetLibrary.panelPosition',

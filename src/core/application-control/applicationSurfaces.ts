@@ -3,7 +3,7 @@ export const APPLICATION_SURFACE_IDS = [
   'tool.image_edit', 'tool.camera_stage', 'tool.audio_edit',
   'settings.general', 'settings.general.basic', 'settings.general.view', 'settings.general.appearance', 'settings.general.about',
   'settings.providers_models',
-  'settings.workspace', 'settings.workspace.generation', 'settings.workspace.canvas', 'settings.workspace.assets',
+  'settings.workspace', 'settings.workspace.generation', 'settings.workspace.canvas', 'settings.workspace.video_edit', 'settings.workspace.assets',
   'settings.files', 'settings.storage', 'settings.upload', 'settings.files.download',
   'settings.assistant', 'settings.assistant.models', 'settings.assistant_preferences', 'settings.assistant.mcp',
   'settings.assistant_skills', 'overlay.assets', 'overlay.assistant',

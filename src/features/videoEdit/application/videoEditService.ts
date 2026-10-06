@@ -17,6 +17,8 @@ import type { DocumentContentAdapter, DocumentLeaveOutcome } from '@/features/do
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
 import { ensureVideoEditCodeDocumentMetadata, installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import { validateVideoEditGraphicTextBudget } from './videoEditGraphicTextBudget'
+import { videoEditClipUnderPlayhead } from './videoEditPlayheadSelection'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { updateVideoEditProjectCover } from './videoEditProjectCover'
 
 const logger = createLogger('features.videoEdit')
@@ -300,9 +302,19 @@ export function validateVideoEditProgramControl(id: string, values: VideoEditPro
   if (values.playbackDirection !== undefined && values.playbackDirection !== 1 && values.playbackDirection !== -1) throw new Error('播放方向无效。')
   if (values.playing !== undefined && typeof values.playing !== 'boolean') throw new Error('播放状态无效。')
 }
+/**
+ * 设置“播放头自动选中片段”打开时（PR 选择跟随播放指示器），播放头移动顺带选中该帧最上面的可见片段；
+ * 只改视图选区，不进撤销历史。调用方显式指定选区、或正在拖动参数时不覆盖。
+ */
+function followPlayheadSelection(instance: VideoEditInstance, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing' | 'scrubbing' | 'playbackDirection'>>): typeof values {
+  if (values.frame === undefined || values.selection !== undefined || gestures.has(instance) || !useSettingsStore.getState().videoEditSelectionFollowsPlayhead) return values
+  const selection = videoEditClipUnderPlayhead(getActiveVideoEditSequence(instance), values.frame)
+  return selection === instance.selection ? values : { ...values, selection }
+}
 export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing' | 'scrubbing' | 'playbackDirection'>>, observation = false): object {
   const instance = requireVideoEditInstance(id)
   validateVideoEditProgramControl(id, values)
+  values = followPlayheadSelection(instance, values)
   if (Object.entries(values).every(([key, value]) => instance[key as keyof VideoEditInstance] === value)) return videoEditProgramCommandIdentity(id)
   const selectionChanged = values.selection !== undefined && values.selection !== instance.selection
   const selectedClipIds = values.selection !== undefined ? values.selection ? expandVideoEditSelection(getActiveVideoEditSequence(instance), [values.selection], videoEditPickRelations(instance.linkedSelection !== false)) : [] : instance.selectedClipIds

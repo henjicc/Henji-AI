@@ -154,7 +154,7 @@ function createVideoEditLayoutScene() {
         await page.getByTitle('布局验收文字', { exact: true }).click()
         await page.getByRole('slider', { name: '剪辑时间定位' }).click({ position: { x: 120.1, y: 12 } }); await presented(page, 120)
         await page.evaluate(() => { window.__videoLayoutOriginalCanvas = document.querySelector('canvas[aria-label="剪辑画面"]') })
-        const baseline = { frame: await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'), selection: await page.getByLabel('片段名称', { exact: true }).inputValue() }
+        const baseline = { frame: await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'), selection: await page.locator('[data-video-edit-effects-clip-name]').first().textContent() }
         const stable = async (name, sameCanvas = true) => {
           const current = await page.evaluate(() => ({ sameCanvas: window.__videoLayoutOriginalCanvas === document.querySelector('canvas[aria-label="剪辑画面"]'), canvasCount: document.querySelectorAll('canvas[aria-label="剪辑画面"]').length,
             width: document.querySelector('canvas[aria-label="剪辑画面"]')?.width, height: document.querySelector('canvas[aria-label="剪辑画面"]')?.height }))
@@ -162,7 +162,7 @@ function createVideoEditLayoutScene() {
           assert.equal(current.canvasCount, 1, `${name} 只能有一份节目画面`)
           assert.equal(current.width, 3840); assert.equal(current.height, 2160)
           assert.equal(await page.getByRole('slider', { name: '剪辑时间定位', includeHidden: true }).getAttribute('aria-valuenow'), baseline.frame, `${name} 保持播放位置`)
-          assert.equal(await page.getByLabel('片段名称', { exact: true }).inputValue(), baseline.selection, `${name} 保持片段选区`)
+          assert.equal(await page.locator('[data-video-edit-effects-clip-name]').first().textContent(), baseline.selection, `${name} 保持片段选区`)
           assert.equal(await button(page, '撤销').isDisabled(), true, `${name} 不产生剪辑历史`)
           assert.equal(JSON.stringify(readVideoEditFile(file)), openedJson, `${name} 不修改工程 JSON`)
           const worker = await workerSnapshot(page)
