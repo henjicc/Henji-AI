@@ -55,7 +55,7 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   playbackDirection: 1 | -1
   scrubbing?: boolean
   busy: boolean
-  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content' | 'tracking'
+  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content'
   panelFocusVersion?: number
   version: number
 }
@@ -391,7 +391,7 @@ export function setVideoEditTimelineView(id: string, values: Partial<VideoEditTi
 }
 export function focusVideoEditPanel(id: string, panel: VideoEditInstance['activePanel']): void {
   const instance = requireVideoEditInstance(id)
-  if (!['project', 'source', 'program', 'timeline', 'effects', 'content', 'tracking'].includes(panel)) throw new Error('剪辑面板不存在。')
+  if (!['project', 'source', 'program', 'timeline', 'effects', 'content'].includes(panel)) throw new Error('剪辑面板不存在。')
   instance.activePanel = panel; instance.panelFocusVersion = (instance.panelFocusVersion ?? 0) + 1; publishView()
 }
 export type VideoEditProjectView = Pick<VideoEditInstance, 'selectedItemIds' | 'selectedBinId' | 'openSequenceIds'>
