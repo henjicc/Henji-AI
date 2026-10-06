@@ -24,7 +24,7 @@ export const collectVideoEditOutputCapability = defineApplicationCapability({
   resolveObservedEffects: (_input: z.infer<typeof collectInput>, result: z.infer<typeof collectOutput>) => [{ effect: 'execute', entityTypes: ['asset'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
 export const collectVideoEditCodeAssetCapability = defineApplicationCapability({
-  id: 'collect_video_edit_code_asset', title: '收录可编辑代码素材', description: '将明确代码项目项、代码片段或附加效果的固定源码、原始参数、关键帧和原图片依赖保存为可编辑资产，可在另一剪辑调参。失败保留已完成文件，重试只收录。',
+  id: 'collect_video_edit_code_asset', title: '收录可编辑代码素材', description: '将明确代码素材项、代码片段或附加效果的固定源码、原始参数、关键帧和原图片依赖保存为可编辑资产，可在另一剪辑调参。失败保留已完成文件，重试只收录。',
   version: 1, domain: 'video_edit', aliases: ['代码素材加入资产库'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'assets:write', idempotent: true, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false,
   requiredScopes: ['video_edit', 'assets'], acceptsRefs: ['video_edit.document', 'video_edit.item', 'video_edit.clip', 'video_edit.effect', 'video_edit.code_material', 'asset.library'], producesRefs: ['asset'],
   inputSchema: z.object({ documentRef, targetRef: applicationRefSchema.extend({ kind: z.enum(['video_edit.item', 'video_edit.clip', 'video_edit.effect', 'video_edit.code_material']) }).strict(), libraryRef: libraryRef.optional() }).strict(), outputSchema: collectOutput,
@@ -82,11 +82,11 @@ const observeTarget = z.discriminatedUnion('kind', [
 const observeOutput = z.object({ resultRef: assetRef, documentRef, target: observeTarget, width: z.number().int().positive(), height: z.number().int().positive(), sourceWidth: z.number().int().positive(), sourceHeight: z.number().int().positive(), documentRevision: z.number().int().nonnegative(), message: z.string(),
   verification: z.object({ verified: z.boolean(), condition: z.string(), target: assetRef }) }).strict()
 export const observeVideoEditFrameCapability = defineApplicationCapability({
-  id: 'observe_video_edit_frame', title: '观察剪辑指定画面', description: '按当前剪辑版本离屏渲染序列指定整数帧的最终合成画面（含代码素材、滤镜、转场与字幕），或项目项源素材指定微秒时间的原始画面，保存为资产库图片并返回assetRef；用 read_application_media 读取图片内容。不改变用户的播放头、选区和节目画面。默认宽度1920，可设256到3840。',
+  id: 'observe_video_edit_frame', title: '观察剪辑指定画面', description: '按当前剪辑版本离屏渲染序列指定整数帧的最终合成画面（含代码素材、滤镜、转场与字幕），或素材项源素材指定微秒时间的原始画面，保存为资产库图片并返回assetRef；用 read_application_media 读取图片内容。不改变用户的播放头、选区和节目画面。默认宽度1920，可设256到3840。',
   version: 1, domain: 'video_edit', aliases: ['查看剪辑帧', '取合成帧', '取源帧', '检查画面'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.item'], producesRefs: ['asset'],
   successEvidence: ['返回固定剪辑版本渲染的资产图片；画面内容需经模型读取后才能判断是否符合预期。'],
-  failureRecovery: ['帧超出范围或项目项没有画面时按提示修正；渲染队列已满时稍后重试。'],
+  failureRecovery: ['帧超出范围或素材项没有画面时按提示修正；渲染队列已满时稍后重试。'],
   inputSchema: z.object({ documentRef, target: observeTarget, maxWidth: z.number().int().min(256).max(3840).optional() }).strict(), outputSchema: observeOutput,
   concurrencyKey: 'video_edit_observe', resolveConcurrencyKey: parsed => `video_edit_observe:${parsed.documentRef.id}`,
   resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: () => [],

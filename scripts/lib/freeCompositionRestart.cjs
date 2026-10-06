@@ -117,7 +117,7 @@ async function openProjectCard(page, projectId) {
   await button(page, '关闭项目').waitFor({ state: 'visible', timeout: 30000 })
 }
 
-/** 项目文档面板（剪辑项目面板里的“项目文档”）里点一项。 */
+/** 项目文档面板（剪辑素材面板里的“项目文档”）里点一项。 */
 async function projectDocumentsAction(page, label) {
   await page.locator('[data-video-edit-project-documents]:visible').first().click()
   const item = page.getByRole('button', { name: label }).filter({ visible: true }).first()

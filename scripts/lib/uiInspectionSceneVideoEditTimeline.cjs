@@ -80,7 +80,7 @@ function createVideoEditTimelineScene() {
         await button(page, '撤销').click(); await saved(page, file, document => document.sequences[0].clips.length === 6)
         await button(page, '撤销').click(); await saved(page, file, document => document.sequences[0].clips.length === 3)
         await frame(0)
-        const search = page.getByLabel('搜索项目素材', { exact: true }); await search.fill('中文输入'); await search.press('v')
+        const search = page.getByLabel('搜索素材', { exact: true }); await search.fill('中文输入'); await search.press('v')
         await search.evaluate(input => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Process', code: 'KeyC', isComposing: true, bubbles: true })))
         assert.equal((await view()).tool, 'select'); await search.fill('')
         await clipNode(page, video.id).click({ button: 'right' })

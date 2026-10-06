@@ -32,7 +32,7 @@ const gridComponents = { List: GridList, Item: GridItem }
 const SORT_OPTIONS = [{ value: 'name', label: '名称' }, { value: 'kind', label: '类型' }, { value: 'duration', label: '时长' }] as const
 type SequenceDialog = { kind: 'create' | 'edit' | 'fromItem'; settings: VideoEditSequenceSettings; id?: string; requireFrameRate?: boolean }
 
-/** 素材箱树放得下根目录名称所需的宽度（“项目根目录”五个字 + 图标 + 内边距约 96px）；树最多占面板宽的 40% */
+/** 素材箱树放得下根目录名称所需的宽度（“素材根目录”五个字 + 图标 + 内边距约 96px）；树最多占面板宽的 40% */
 const BIN_TREE_LABEL_MIN_WIDTH = 96
 const BIN_TREE_MAX_RATIO = 0.4
 
@@ -41,8 +41,8 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const [sort, setSort] = useState<'name' | 'kind' | 'duration'>('name')
   const [view, setView] = useState<'list' | 'grid'>('list')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  // 面板窄到素材箱树放不下“项目根目录”时（窄停靠面板，如 960 宽窗口），树收成一列图标、名称进悬停说明，
-  // 让出宽度给项目项列表；不把根目录截成“项目…”（5.8 shortTextTruncated）。按面板宽度判断，避免收起后自己变窄回不来。
+  // 面板窄到素材箱树放不下“素材根目录”时（窄停靠面板，如 960 宽窗口），树收成一列图标、名称进悬停说明，
+  // 让出宽度给素材项列表；不把根目录截成“项目…”（5.8 shortTextTruncated）。按面板宽度判断，避免收起后自己变窄回不来。
   const binTreeRef = useRef<HTMLDivElement>(null)
   const [compactBinTree, setCompactBinTree] = useState(false)
   useLayoutEffect(() => {
@@ -101,7 +101,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'import', label: '导入文件', icon: <Import size={16} />, onClick: choose },
     { id: 'assets', label: '从资产库拖入', icon: <AssetLibraryIcon size={16} />, onClick: () => openAssetLibrary('floating') },
     { id: 'bin', label: '新建素材箱', icon: <FolderPlus size={16} />, onClick: () => setEdit({ kind: 'createBin', parentId: binId }) },
-    { id: 'sequence', label: '新建项目项 → 序列', icon: <SequenceIcon size={16} />, onClick: newSequence },
+    { id: 'sequence', label: '新建素材项 → 序列', icon: <SequenceIcon size={16} />, onClick: newSequence },
     { id: 'code', label: '新建代码素材', icon: <Code2 size={16} />, onClick: () => setCreatingCode(true) },
     ...graphicMenu(),
   ]
@@ -124,7 +124,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       { id: 'edit', label: '重命名、标签与移动', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'items', items }) },
       { id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: !audioTarget, onClick: () => { if (audioTarget) setAudioChannels(audioTarget) } },
       { id: 'relink', label: '重新定位源文件', icon: <RefreshCw size={16} />, disabled: !item.mediaId || ids.length !== 1, onClick: () => run(() => relinkVideoEditMedia(projectId, item.mediaId!)) },
-      { id: 'remove', label: `从项目移除${ids.length > 1 ? ` ${ids.length} 项` : ''}`, icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditItems(projectId, ids)) },
+      { id: 'remove', label: `从素材移除${ids.length > 1 ? ` ${ids.length} 项` : ''}`, icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditItems(projectId, ids)) },
     ]
   }
   const selectBin = (id: string): void => { anchor.current = null; setSelectedSequence(null); run(() => setVideoEditProjectView(projectId, { selectedBinId: id, selectedItemIds: [] })) }
@@ -146,7 +146,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const kind = entry.kind === 'sequence' ? 'sequence' : entry.value.kind
     const graphic = entry.kind === 'item' && kind === 'graphic' ? entry.value.graphic : undefined
     const detail = entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemMedia.durationSeconds ? ` · ${itemMedia.durationSeconds.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : graphic ? `可编辑图形 · ${graphic.width} × ${graphic.height}` : kind === 'adjustment' ? '调整图层 · 添加到现有序列上方画面轨道' : kind === 'code' ? '原生代码素材' : '文字'
-    // 列表行（设计稿 VideoEdit 项目面板）：缩略图 52×30 + 名称（12/500）+ 规格（11 辅助文字）；网格视图为封面 + 名称。
+    // 列表行（设计稿 VideoEdit 素材面板）：缩略图 52×30 + 名称（12/500）+ 规格（11 辅助文字）；网格视图为封面 + 名称。
     return <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className={`w-full min-w-0 ${view === 'grid' ? 'flex-col items-stretch gap-1.5 !p-1.5' : 'min-h-11 gap-2.5 !px-1.5'}`} data-video-edit-project-entry={entry.value.id} data-entry-kind={kind} aria-label={entry.value.name} aria-pressed={selected} draggable={entry.kind === 'item'}
       onClick={event => {
         if (entry.kind === 'sequence') { setSelectedSequence(entry.value.id); run(() => setVideoEditProjectView(projectId, { selectedItemIds: [] })); return }
@@ -168,7 +168,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'edit', label: '重命名与移动素材箱', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'bin', bin }) },
     { id: 'delete', label: '移除空素材箱', icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditBins(projectId, [bin.id])) },
   ]
-  return <div className="flex h-full min-h-0 flex-col" aria-label="项目素材" tabIndex={0}
+  return <div className="flex h-full min-h-0 flex-col" aria-label="素材面板" tabIndex={0}
     onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }} onDrop={event => drop(event)}
     onKeyDown={event => {
       if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true]')) return
@@ -176,10 +176,10 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       if (event.key === 'F2' && selectedItems.length) { event.preventDefault(); event.stopPropagation(); setEdit({ kind: 'items', items: selectedItems }) }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); event.stopPropagation(); run(() => setVideoEditProjectView(projectId, { selectedItemIds: entries.filter(value => value.kind === 'item').map(value => value.value.id) })) }
     }}>
-    {/* 一行：搜索 + 视图与排序 + 资产库 + 新建 + 导入（设计稿 VideoEdit 项目面板；新建类入口收进“新建”菜单） */}
+    {/* 一行：搜索 + 视图与排序 + 资产库 + 新建 + 导入（设计稿 VideoEdit 素材面板；新建类入口收进“新建”菜单） */}
     {/* 窄面板（960 窗口下约 160px）时图标组整体换到第二行，不被裁掉。 */}
     <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-0.5 px-2 py-1">
-      <UiSearchInput className="mr-1 min-w-28 flex-1" aria-label="搜索项目素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} />
+      <UiSearchInput className="mr-1 min-w-28 flex-1" aria-label="搜索素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} />
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
       <PanelTrigger panelWidth={168} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={14} />列表视图</UiOptionButton>
@@ -198,21 +198,21 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
         {graphicMenu().map(item => <UiOptionButton key={item.id} variant="menu" size="sm" className="gap-2" onClick={item.onClick}><GraphicIcon size={14} />{item.label}</UiOptionButton>)}
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="新建项目项" title="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus size={16} /></UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" title="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus size={16} /></UiIconButton>}
       </PanelTrigger>
       <UiIconButton aria-label="导入" title="导入素材" onClick={choose}><Import size={15} /></UiIconButton>
       </div>
     </div>
     <div className="flex min-h-0 flex-1">
       <div ref={binTreeRef} className={`flex shrink-0 flex-col border-r border-line pl-1 ${compactBinTree ? 'w-10' : 'w-28 min-w-14 max-w-[40%]'}`} aria-label="素材箱树" role="tree">
-        <UiChipButton selectionRole="navigation" active={!binId} size="sm" className="w-full gap-1 !px-2" aria-label={compactBinTree ? '项目根目录' : undefined} title={compactBinTree ? '项目根目录' : undefined} onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} />{compactBinTree ? null : <span className="truncate">项目根目录</span>}</UiChipButton>
+        <UiChipButton selectionRole="navigation" active={!binId} size="sm" className="w-full gap-1 !px-2" aria-label={compactBinTree ? '素材根目录' : undefined} title={compactBinTree ? '素材根目录' : undefined} onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} />{compactBinTree ? null : <span className="truncate">素材根目录</span>}</UiChipButton>
         <Virtuoso className="min-h-0 flex-1" data={bins} computeItemKey={(_index, row) => row.bin.id} itemContent={(_index, row) => <div className="flex items-center" style={{ paddingLeft: compactBinTree ? 0 : Math.min(row.depth, 8) * 10 }} role="treeitem" aria-level={row.depth + 1} aria-expanded={row.hasChildren ? !collapsed.has(row.bin.id) : undefined}>
           {compactBinTree ? null : <UiIconButton size="sm" className="shrink-0" disabled={!row.hasChildren} title={collapsed.has(row.bin.id) ? '展开素材箱' : '折叠素材箱'} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(row.bin.id)) next.delete(row.bin.id); else next.add(row.bin.id); return next })}>{row.hasChildren ? collapsed.has(row.bin.id) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}</UiIconButton>}
           <UiChipButton selectionRole="navigation" active={binId === row.bin.id} data-video-edit-bin={row.bin.id} size="sm" className="min-w-0 flex-1 gap-1 !px-1" aria-label={compactBinTree ? row.bin.name : undefined} title={compactBinTree ? row.bin.name : undefined} onClick={() => selectBin(row.bin.id)} onContextMenu={event => menu.showMenu(event, binMenu(row.bin))} onDrop={event => drop(event, row.bin.id)}><Folder size={13} className="shrink-0" />{compactBinTree ? null : <span className="truncate" data-user-content>{row.bin.name}</span>}</UiChipButton>
         </div>} />
       </div>
-      <div className="min-h-0 min-w-0 flex-1" aria-label="项目项列表" onDoubleClick={event => { if (!(event.target as HTMLElement).closest('[data-video-edit-project-entry]')) choose() }} onContextMenu={event => menu.showMenu(event, blankMenu())}>
-        {!entries.length ? <UiEmpty className="h-full" title={keyword ? '没有匹配的项目项' : '此素材箱为空'} description={keyword ? '尝试其他名称或标签。' : '双击空白导入文件，或从资产库拖入素材。'} /> : view === 'grid' ? <VirtuosoGrid key={`${binId}:grid`} data={entries} components={gridComponents} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderEntry} /> : <Virtuoso key={`${binId}:list`} data={entries} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderEntry} />}
+      <div className="min-h-0 min-w-0 flex-1" aria-label="素材项列表" onDoubleClick={event => { if (!(event.target as HTMLElement).closest('[data-video-edit-project-entry]')) choose() }} onContextMenu={event => menu.showMenu(event, blankMenu())}>
+        {!entries.length ? <UiEmpty className="h-full" title={keyword ? '没有匹配的素材项' : '此素材箱为空'} description={keyword ? '尝试其他名称或标签。' : '双击空白导入文件，或从资产库拖入素材。'} /> : view === 'grid' ? <VirtuosoGrid key={`${binId}:grid`} data={entries} components={gridComponents} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderEntry} /> : <Virtuoso key={`${binId}:list`} data={entries} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderEntry} />}
       </div>
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />

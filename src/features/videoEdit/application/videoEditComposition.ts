@@ -15,13 +15,13 @@ import { editVideoProject, getActiveVideoEditSequence, openVideoEditDocument, re
  * - 把别处的文档移进 / 复制进本项目（复制换新 ID，原容器里用到的素材一并复制）；
  * - 片段“回到来源继续编辑”：打开来源文档并定位到部位（画布节点），或打开生成记录；
  *   来源文档找不到时由界面提示，可以重新定位到一份文件，本剪辑里引用它的片段一并改写（一次撤销即可恢复）。
- * 剪辑里引用的、不在本项目里的文档在项目面板标出“来自其他位置”，“收集素材”会把它们复制进项目。
+ * 剪辑里引用的、不在本项目里的文档在素材面板标出“来自其他位置”，“收集素材”会把它们复制进项目。
  */
 
 const logger = createLogger('features.videoEdit.composition')
 const kindOfPath = (filePath: string) => documentKindRegistry.forFileName(filePath.slice(Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\')) + 1))
 
-/** 剪辑里可以新建的文档类型（剪辑本身除外），按项目面板的显示顺序。 */
+/** 剪辑里可以新建的文档类型（剪辑本身除外），按素材面板的显示顺序。 */
 export const VIDEO_EDIT_COMPOSABLE_KINDS: readonly DocumentKindId[] = ['canvas', 'audio_edit', 'camera_stage', 'image_document']
 
 /** 嵌入模式的宿主：返回按钮显示剪辑所在项目的名称，返回时重新显示这份剪辑。 */

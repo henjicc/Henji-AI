@@ -16,7 +16,7 @@ function setup(mode = 'dynamic') {
   sequence.clips.push(makeVideoEditItemClip(document, 'item', sequence.id, { frame: 0 }, read))
   return { document, program, read, sequence }
 }
-describe('代码项目项与独立实例的剪辑约束', () => {
+describe('代码素材项与独立实例的剪辑约束', () => {
   it('插入、裁剪、拆分保持固定版本与连续源画面，参数对象独立', () => {
     const { document, program, read, sequence } = setup()
     expect(videoEditDocumentSchema.parse(document).sequences[0].clips[0].code?.versionId).toBe('version')

@@ -203,7 +203,7 @@
         "open": {
           "trigger": {
             "role": "button",
-            "name": "新建项目项"
+            "name": "新建素材项"
           },
           "expect": {
             "selector": "[data-panel-scroll-region]"
@@ -269,7 +269,7 @@
         "press": {
           "key": "F2",
           "target": {
-            "selector": "[aria-label=\"项目素材\"]"
+            "selector": "[aria-label=\"素材面板\"]"
           }
         }
       },

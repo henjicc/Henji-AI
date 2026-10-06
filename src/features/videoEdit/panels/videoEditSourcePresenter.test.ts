@@ -401,7 +401,7 @@ it('只有原生能解的声音素材：不用媒体元素，定位只移动时�
   expect(player.calls.filter(([kind]) => kind === 'pump').length).toBeGreaterThan(1)
   await vi.advanceTimersByTimeAsync(400)
   expect(observe).toHaveBeenLastCalledWith('audio', { timeUs: 300_000, presentedTimeUs: 300_000, playing: false, volume: 1 })
-  sound.fail = new Error('素材「原视频」的声音读取失败，请确认文件可用，或在项目素材中重新定位源文件。')
+  sound.fail = new Error('素材「原视频」的声音读取失败，请确认文件可用，或在素材面板中重新定位源文件。')
   await presenter.present({ itemId: 'audio', timeUs: 0, playing: true, volume: 1 }, new AbortController().signal)
   await vi.advanceTimersByTimeAsync(100)
   expect(observe).toHaveBeenLastCalledWith('audio', expect.objectContaining({ playing: false, error: sound.fail.message }))

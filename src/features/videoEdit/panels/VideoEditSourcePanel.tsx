@@ -49,7 +49,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       const document = requireVideoEditInstance(projectId).document
       const item = document.items.find(item => item.id === itemId)
       const media = document.media.find(media => media.id === item?.mediaId)
-      if (!media) throw new Error('此项目项没有源文件，请选择视频、图片或音频。')
+      if (!media) throw new Error('此素材项没有源文件，请选择视频、图片或音频。')
       return media
     }, (itemId, observation) => observeVideoEditSource(projectId, itemId, observation), setLevels, itemId => {
       const document = requireVideoEditInstance(projectId).document
@@ -70,7 +70,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
     {/* 媒体底只给画面（视频/图片）；音频源是随主题的迷你播放器，压在固定深色媒体底上纸白下读不清（4.1） */}
     <div className={`relative min-h-0 flex-1 ${state.itemId && media?.kind !== 'audio' ? 'bg-media' : ''}`}><div ref={host} className={display === 'fit' ? 'absolute bottom-3 left-3 right-6 top-3' : 'absolute bottom-3 left-3 right-6 top-3 overflow-auto [&>video]:!h-auto [&>video]:!w-auto [&>img]:!h-auto [&>img]:!w-auto [&>canvas]:!h-auto [&>canvas]:!w-auto'} data-video-edit-source-host data-video-edit-source-display={display} />
       {media?.kind === 'audio' && <div className="relative flex h-full items-center px-3 pr-6"><AudioPlayer src={resolveImageDisplayUrl(media.path)} filePath={media.path} compact surface="plain" active={visible} controlledPlayback={{ currentTime: state.timeUs / 1e6, duration: media.durationSeconds, playing: state.playing, volume: state.volume, disabled: state.status !== 'ready', onTogglePlay: () => command('play_pause'), onSeek: seconds => run({ timeUs: Math.round(seconds * 1e6), playing: false }), onVolume: volume => run({ volume }) }} /></div>}
-      {!state.itemId && <UiEmpty size="sm" className="h-full" title="选择源素材" description="在项目素材中双击视频、图片或音频，独立预览原文件。" />}
+      {!state.itemId && <UiEmpty size="sm" className="h-full" title="选择源素材" description="在素材面板中双击视频、图片或音频，独立预览原文件。" />}
       {state.itemId && sounding && <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={meterLevels} title="源播放电平" />}
       {state.itemId && (state.status === 'loading' || state.playing && state.playbackDirection === -1) && <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-media-scrim px-2 py-1 text-xs text-on-media">{state.status === 'loading' ? '正在打开源素材…' : '正在反向静音浏览'}</span>}
     </div>

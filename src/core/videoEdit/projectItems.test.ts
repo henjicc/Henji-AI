@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { createVideoEditDocument, type VideoEditDocument } from './document'
 import { removeVideoEditItems } from './projectItems'
 
-it('删除图片项目项保留代码图片引用，随后移除最后代码项目项回收原媒体', () => {
+it('删除图片素材项保留代码图片引用，随后移除最后代码素材项回收原媒体', () => {
   const document = createVideoEditDocument('引用回收')
   document.media = [{ id: 'picture', name: '图片', kind: 'image', path: 'D:/original.png', width: 3840, height: 2160, durationSeconds: 0 }]
   const code = { definitionId: 'definition', versionId: 'version', parameters: { logo: { kind: 'image' as const, mediaId: 'picture' } } }

@@ -116,10 +116,10 @@ function createVideoEditProbeScene() {
       await dialogs(app, [specs[0].source, sound], projectPath)
       // Import only creates project items (original paths); the asset-library image joins by drag.
       await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, projectPath); await button(page, '导入').click()
-      let imported = await savedProject(page, projectPath, document => document.media.length === 2, '导入项目项保存')
-      assert.equal(imported.sequences[0].clips.length, 0, '导入只创建项目项')
+      let imported = await savedProject(page, projectPath, document => document.media.length === 2, '导入素材项保存')
+      assert.equal(imported.sequences[0].clips.length, 0, '导入只创建素材项')
       await page.evaluate(async picture => { await window.henjiNative.assetLibrary.createAsset({ filePath: picture, mediaType: 'image', source: 'external', displayName: '素材库图片' }) }, picture)
-      const list = page.getByLabel('项目项列表', { exact: true }); const listRect = await list.boundingBox()
+      const list = page.getByLabel('素材项列表', { exact: true }); const listRect = await list.boundingBox()
       await button(page, '资产库').click()
       const card = page.locator('[data-asset-card]').filter({ hasText: '素材库图片' })
       await card.waitFor({ state: 'visible', timeout: 10000 }); await card.dragTo(list, { targetPosition: { x: 12, y: listRect.height - 30 } })
@@ -131,7 +131,7 @@ function createVideoEditProbeScene() {
       for (const item of [items.video, items.video, items.image, items.audio]) {
         await entry(page, item.id).click(); await entry(page, item.id).click({ button: 'right' }); await menuItem(page, '添加到当前序列').click()
       }
-      // 3.5：“文字”在时间线工具栏；项目面板随后也会列出同名文字项，所以限定在时间线面板内。
+      // 3.5：“文字”在时间线工具栏；素材面板随后也会列出同名文字项，所以限定在时间线面板内。
       await button(page.locator('[data-video-edit-panel="timeline"]').first(), '文字').click()
       try { await page.waitForFunction(() => ![...document.querySelectorAll('[role=alert]')].some(alert => alert.getClientRects().length && alert.textContent?.trim())) }
       catch (error) { await capture('video-edit-import-error'); throw new Error(`导入后界面报错：${await page.getByRole('alert').allTextContents()}`, { cause: error }) }

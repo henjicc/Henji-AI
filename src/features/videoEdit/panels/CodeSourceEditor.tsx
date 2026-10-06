@@ -47,7 +47,7 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
   }, [release])
   useLayoutEffect(() => {
     if (pending.current && pending.current.baseline !== document) {
-      invalidate(); setError('项目内容已改变，请重新检查源码。')
+      invalidate(); setError('剪辑内容已改变，请重新检查源码。')
     }
   }, [document, invalidate])
   const changeDraft = (value: string): void => { invalidate(); setDraft(value); setError(null) }

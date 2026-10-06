@@ -68,18 +68,18 @@ export const videoEditDocumentSchema = z.object({
     }
   }
   for (const item of document.items) {
-    if (item.binId && !document.bins.some(bin => bin.id === item.binId)) issue('项目项的素材箱不存在。')
+    if (item.binId && !document.bins.some(bin => bin.id === item.binId)) issue('素材项的素材箱不存在。')
     const media = document.media.find(media => media.id === item.mediaId)
-    if (!['text', 'code', 'graphic', 'adjustment'].includes(item.kind) && (!media || item.kind !== media.kind)) issue(`项目项 ${item.name} 的素材引用无效。`)
+    if (!['text', 'code', 'graphic', 'adjustment'].includes(item.kind) && (!media || item.kind !== media.kind)) issue(`素材项 ${item.name} 的素材引用无效。`)
     if (['text', 'graphic', 'adjustment'].includes(item.kind) && item.mediaId) issue('文字、图形及调整图层不能引用媒体文件。')
-    if (item.kind === 'graphic' ? !item.graphic : Boolean(item.graphic)) issue('只有图形项目项可以且必须保存结构化图形。')
+    if (item.kind === 'graphic' ? !item.graphic : Boolean(item.graphic)) issue('只有图形素材项可以且必须保存结构化图形。')
     if (item.kind === 'code') {
-      if (item.mediaId || !item.code) issue('代码项目项必须引用固定源码实例，不能引用预渲染媒体。')
+      if (item.mediaId || !item.code) issue('代码素材项必须引用固定源码实例，不能引用预渲染媒体。')
       const definition = document.codeMaterials?.find(value => value.id === item.code?.definitionId)
-      if (!definition?.versions.some(version => version.id === item.code?.versionId)) issue('代码项目项的固定源码版本不存在。')
-    } else if (item.code) issue('普通项目项不能附带代码生成实例。')
+      if (!definition?.versions.some(version => version.id === item.code?.versionId)) issue('代码素材项的固定源码版本不存在。')
+    } else if (item.code) issue('普通素材项不能附带代码生成实例。')
     if (item.audioChannels) {
-      if (!media || !(item.kind === 'audio' || item.kind === 'video' && media.hasAudio !== false)) issue('只有带声音的音视频项目项可以设置音频声道。')
+      if (!media || !(item.kind === 'audio' || item.kind === 'video' && media.hasAudio !== false)) issue('只有带声音的音视频素材项可以设置音频声道。')
       for (const mapping of item.audioChannels) { const problem = videoEditAudioMappingIssue(mapping, media?.audioStreams); if (problem) issue(problem) }
     }
   }
@@ -93,7 +93,7 @@ export const videoEditDocumentSchema = z.object({
       const media = document.media.find(media => media.id === item?.mediaId)
       const track = sequence.tracks.find(track => track.index === clip.track)
       const extractedAudio = item?.kind === 'video' && clip.kind === 'audio' && clip.sourceComponent === 'audio'
-      if (!item || (item.kind !== clip.kind && !extractedAudio)) issue(`片段 ${clip.name} 的项目项引用无效。`)
+      if (!item || (item.kind !== clip.kind && !extractedAudio)) issue(`片段 ${clip.name} 的素材项引用无效。`)
       if (clip.sourceComponent && !(item?.kind === 'video' && ((clip.kind === 'video' && clip.sourceComponent === 'video') || extractedAudio))) issue('只有视频素材可以拆开引用画面或声音。')
       if (extractedAudio && media?.hasAudio !== true) issue('拆出的声音必须引用已确认具有音轨的视频素材。')
       if (clip.audioMapping) {

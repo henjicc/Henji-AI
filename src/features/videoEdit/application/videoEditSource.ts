@@ -54,7 +54,7 @@ function validateRequest(projectId: string, request: VideoEditSourceRequest): vo
   const document = requireVideoEditInstance(projectId).document
   const item = document.items.find(item => item.id === request.itemId)
   const media = document.media.find(media => media.id === item?.mediaId)
-  if (!item || !media) throw new Error('请打开一个有效的视频、图片或音频项目项。')
+  if (!item || !media) throw new Error('请打开一个有效的视频、图片或音频素材项。')
   if (media.kind === 'image' && (request.timeUs || request.playing)) throw new Error('静态图片不支持源播放或定位。')
   if (media.kind !== 'image' && request.timeUs > Math.round(media.durationSeconds * 1e6)) throw new Error('定位超出源素材时长。')
   for (const time of [request.inUs, request.outUs]) if (time !== null && time !== undefined && (!Number.isSafeInteger(time) || time < 0 || time > Math.round(media.durationSeconds * 1e6))) throw new Error('源入出点超出素材范围。')

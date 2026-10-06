@@ -291,7 +291,7 @@ it('关联片段右键按点击主对象定位项目与属性，代码素材保�
   const view = render(<View />)
   fireEvent.contextMenu(view.getByRole('button', { name: '选择片段 代码' }), { clientX: 400, clientY: 80 })
   expect(view.getByRole('menuitem', { name: '打开源素材' }).getAttribute('aria-disabled')).toBe('true')
-  fireEvent.click(view.getByRole('menuitem', { name: '在项目中定位' }))
+  fireEvent.click(view.getByRole('menuitem', { name: '在素材中定位' }))
   await waitFor(() => expect(owner.selectedItemIds).toEqual(['code-item'])); expect(owner.activePanel).toBe('project')
   fireEvent.contextMenu(view.getByRole('button', { name: '选择片段 代码' }), { clientX: 400, clientY: 80 }); fireEvent.click(view.getByRole('menuitem', { name: '编辑片段属性' }))
   await waitFor(() => expect(owner.activePanel).toBe('effects')); expect(owner.selection).toBe(ids[1]); expect(new Set(owner.selectedClipIds)).toEqual(new Set(ids)); expect(onError).not.toHaveBeenCalled()
@@ -372,7 +372,7 @@ it('隐藏或零高度初次挂载等待实际显示定位，单类32轨道不�
   expect(onError).not.toHaveBeenCalled()
 })
 
-it('项目项拖放按重排后的原轨道命中，音画分界不产生伪落点或历史', async () => {
+it('素材项拖放按重排后的原轨道命中，音画分界不产生伪落点或历史', async () => {
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   const transfer = { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: owner.document.id, itemIds: ['video-item'] }) }
   const baseline = owner.document; const history = owner.past.length

@@ -30,7 +30,7 @@ it('批量移动不覆盖各自原标签，只有主动编辑标签时才统一�
   fireEvent.change(view.getByLabelText('移动到素材箱'), { target: { value: 'bin' } })
   fireEvent.click(view.getByRole('button', { name: '保存' }))
   expect(submit).toHaveBeenLastCalledWith({ binId: 'bin' })
-  fireEvent.change(view.getByLabelText('项目项标签'), { target: { value: '共用，片头,共用' } })
+  fireEvent.change(view.getByLabelText('素材项标签'), { target: { value: '共用，片头,共用' } })
   fireEvent.click(view.getByRole('button', { name: '保存' }))
   expect(submit).toHaveBeenLastCalledWith({ binId: 'bin', tags: ['共用', '片头'] })
 })

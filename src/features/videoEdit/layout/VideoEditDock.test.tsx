@@ -13,7 +13,7 @@ import { createPopoutTestHost } from './popout/videoEditPopout.testSupport'
 
 const lifetime = vi.hoisted(() => ({ created: 0, live: 0, peak: 0, disposed: 0 }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }))
-vi.mock('../panels/VideoEditProjectPanel', () => ({ VideoEditProjectPanel: () => <div>项目素材</div> }))
+vi.mock('../panels/VideoEditProjectPanel', () => ({ VideoEditProjectPanel: () => <div>素材面板</div> }))
 vi.mock('../panels/VideoEditEffectsPanel', () => ({ VideoEditEffectsPanel: () => <div>效果控件</div> }))
 vi.mock('../VideoEditTimeline', () => ({ VideoEditTimeline: () => <div>时间线</div> }))
 vi.mock('../VideoEditPreview', async () => {

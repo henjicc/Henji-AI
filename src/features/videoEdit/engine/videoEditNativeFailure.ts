@@ -57,7 +57,7 @@ export function videoEditNativeFailureMessage(name: string, kind: VideoEditNativ
   if (kind === 'service') return `素材「${name}」的解码暂时中断，请稍后重试；如果一直出现，请重启软件。`
   if (kind === 'budget') return '同时读取的视频素材过多，请减少同时显示的视频后重试。'
   if (kind === 'closed') return '预览解码已关闭。'
-  return `素材「${name}」解码失败，请确认文件可用，或在项目素材中重新定位源文件。`
+  return `素材「${name}」解码失败，请确认文件可用，或在素材面板中重新定位源文件。`
 }
 
 /** A failed read of an open session in user language, keeping kind and code for the router. */

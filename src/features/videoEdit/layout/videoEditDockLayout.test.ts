@@ -57,6 +57,10 @@ describe('剪辑面板布局', () => {
     saveVideoEditLayout(api)
     const saved = localStorage.getItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY)!
     expect(parseVideoEditLayout(saved).panels.timeline).toBeUndefined()
+    // 旧名称保存的布局恢复后改用当前面板名
+    const renamed = JSON.parse(saved) as { panels: Record<string, { title?: string }> }
+    renamed.panels.project.title = '项目素材'
+    expect(parseVideoEditLayout(JSON.stringify(renamed)).panels.project.title).toBe('素材')
     restoreVideoEditLayout(api)
     expect(api.getPanel('timeline')).toBeUndefined()
     expect(api.getPanel('effects')!.api.location.type).toBe('floating')

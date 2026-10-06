@@ -327,8 +327,8 @@ it('节目渲染失败在监视器上就地提示，不转交全局错误；序�
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   const onError = vi.fn(); const view = render(<VideoEditPreview instance={instance} onError={onError} />)
   await act(async () => { await Promise.resolve() })
-  await act(async () => { pixel.requests.shift()!.reject(new Error('找不到素材「A」的源文件，请在项目素材中右键该素材，选择“重新定位源文件”。')) })
-  expect(view.getByText('找不到素材「A」的源文件，请在项目素材中右键该素材，选择“重新定位源文件”。')).toBeTruthy()
+  await act(async () => { pixel.requests.shift()!.reject(new Error('找不到素材「A」的源文件，请在素材面板中右键该素材，选择“重新定位源文件”。')) })
+  expect(view.getByText('找不到素材「A」的源文件，请在素材面板中右键该素材，选择“重新定位源文件”。')).toBeTruthy()
   // An unchanged sequence at the same frame is not re-requested.
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) }); expect(pixel.requests).toHaveLength(0)
   act(() => { editVideoSequence(instance.document.id, instance.activeSequenceId, sequence => ({ ...sequence, name: '重新定位后' })) })

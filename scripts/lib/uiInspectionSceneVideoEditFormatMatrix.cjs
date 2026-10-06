@@ -11,7 +11,7 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
  * 专业格式矩阵（任务 3.2）在真实 Electron 中逐格验收。样本由 scripts/lib/videoEditFormatMatrix.cjs 生成（帧号条码、BT.709
  * 标注、每声道不同正弦 + 扫频），每格：
  * - 导入：经界面导入，素材宽高、声音流与 ffprobe 一致，日志记录实际后端（强制浏览器时只有原生能解的格式按格式拒绝、工程不变）；
- * - 放置：项目面板“添加到当前序列”，画面 + 每条声音流一个链接音频片段；序列改为样本自己的尺寸与帧率；
+ * - 放置：素材面板“添加到当前序列”，画面 + 每条声音流一个链接音频片段；序列改为样本自己的尺寸与帧率；
  * - 节目监视器：首帧与另两帧的预览像素对 FFmpeg 参考（按文件标注转换，透明叠在黑底上）PSNR > 24dB、条码为应有源帧；
  *   时间线标尺键盘逐帧（前进 5、后退 3）、正向播放、反向播放、标尺拖动（往返），每次呈现的源时间都是该序列帧应有的源帧；
  *   正向播放记录更新率、遗漏、原生进程平均核数与节目电平；
@@ -510,7 +510,7 @@ function createVideoEditFormatMatrixScene() {
             const media = project.media.find(item => same(item.path, file)); const item = project.items.find(candidate => candidate.mediaId === media.id)
             const fps = media.frameRate.numerator / media.frameRate.denominator
             // The project list is virtualized: filter it to this file so its entry exists.
-            await page.getByLabel('搜索项目素材', { exact: true }).fill(item.name ?? media.name)
+            await page.getByLabel('搜索素材', { exact: true }).fill(item.name ?? media.name)
             const openedAt = Date.now(); await entry(page, item.id).dblclick()
             await page.waitForFunction(() => document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && (document.querySelector('[data-video-edit-source-canvas]')?.dataset.presentedTimeUs !== undefined || document.querySelector('[data-video-edit-source-host] video')?.readyState >= 2), null, { timeout: 60000 })
             const openMs = Date.now() - openedAt
@@ -541,7 +541,7 @@ function createVideoEditFormatMatrixScene() {
             if (/透明/.test(result.file)) await capture('matrix-tripo-prores4444')
             await button(page, '关闭源素材').click()
           }
-          await page.getByLabel('搜索项目素材', { exact: true }).fill('')
+          await page.getByLabel('搜索素材', { exact: true }).fill('')
           for (const file of files) { const stat = fs.statSync(file); assert.deepEqual({ size: stat.size, mtimeMs: stat.mtimeMs }, stamp[file], `${path.basename(file)} 不能被改动`) }
           evidence.tripo.unchanged = true
           await capture('matrix-tripo-project')

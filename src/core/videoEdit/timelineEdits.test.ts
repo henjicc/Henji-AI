@@ -79,7 +79,7 @@ it('不允许来源轨折叠成新重叠，实际插入和删除轨始终纳入�
   const deleted = apply(document, { kind: 'delete', clipIds: ['a'], ripple: true, targetTracks: [2] }).sequences[0]
   expect(deleted.clips.find(clip => clip.id === 'b')!.start).toBe(40)
 })
-it('旧v2仍可读，音画拆开不增加媒体或项目项，源时间与联动剪切保持精确', () => {
+it('旧v2仍可读，音画拆开不增加媒体或素材项，源时间与联动剪切保持精确', () => {
   const { document } = fixture(); delete document.media[0].hasAudio
   expect(videoEditDocumentSchema.parse(document).version).toBe(2)
   expect(() => apply(document, { kind: 'separate_audio', clipIds: ['a'], audioTrack: 0 })).toThrow('音轨')

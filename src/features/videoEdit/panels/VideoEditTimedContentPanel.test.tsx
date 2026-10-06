@@ -27,7 +27,7 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   owner = (await createVideoEditProject())!
   editVideoProject(owner.document.id, document => {
-    document.items = [{ id: 'text-item', kind: 'text', name: '真实文字项目项' }]
+    document.items = [{ id: 'text-item', kind: 'text', name: '真实文字素材项' }]
     document.sequences[0].clips = [{ ...makeVideoEditItemClip(document, 'text-item', document.sequences[0].id, { frame: 30, track: 1 }), id: 'clip', name: '片段一', duration: 90 }]
     return document
   })

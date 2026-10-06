@@ -8,7 +8,7 @@
 
 - 生成器：提交 `video_edit.code_material` 后，结果里会有级联新建的 `video_edit.item`。没看到时用 `list_application_entities`，entityType 为 `video_edit.item`，`where` 写 `{"video_edit.item.kind":"code","video_edit.item.name":"素材名"}`。
 - 插入片段：`create_items`，entityType `video_edit.clip`，parent 为序列引用，属性：
-  - 必填 `video_edit.clip.item_id`（项目项引用 id 冒号后的部分）、`video_edit.clip.kind`（填 `"code"`）、`video_edit.clip.name`；
+  - 必填 `video_edit.clip.item_id`（素材项引用 id 冒号后的部分）、`video_edit.clip.kind`（填 `"code"`）、`video_edit.clip.name`；
   - 常用 `video_edit.clip.start`（序列帧，默认取上下文的 `frame`）、`video_edit.clip.track`（轨道号）、`video_edit.clip.duration`（帧，动态素材不能超过声明时长）；
   - 可同时写 `video_edit.clip.code_parameters`、`video_edit.clip.code_curves`。
 - 轨道号可以从同轨已有片段的 `video_edit.clip.track` 读到；新建序列默认 0 号是音频轨，1–7 号是视频轨。锁定的轨道会拒绝修改，换轨道或请用户解锁。
@@ -24,7 +24,7 @@
 `observe_video_edit_frame` 输入：
 
 - `documentRef`：`{kind:"video_edit.document", id}`
-- `target`：合成帧 `{kind:"program", sequenceRef, frame}`（frame 是序列整数帧）；源画面 `{kind:"source", itemRef, timeUs}`（timeUs 是项目项源素材的微秒时间）
+- `target`：合成帧 `{kind:"program", sequenceRef, frame}`（frame 是序列整数帧）；源画面 `{kind:"source", itemRef, timeUs}`（timeUs 是素材项源素材的微秒时间）
 - `maxWidth` 可选，256–3840，默认 1920；常规核对用 960 左右即可。
 
 它按当前剪辑版本离屏渲染，不改用户的播放头、选区和画面。返回的 `resultRef` 交给 `read_application_media` 读到 eof，读到像素后再评价。动画至少看开始、关键帧附近和结束三处；只看一帧不能证明动画正确。

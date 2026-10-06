@@ -66,7 +66,7 @@ function createVideoEditAssetReferencesScene() {
           return window.henjiNative.assetLibrary.inspectAsset(id)
         }, { id: asset.id, filePath: second })
         assert.equal(relocated.inspectionStatus, 'ready'); assert.notEqual(relocated.contentIdentity, asset.contentIdentity)
-        const list = page.getByLabel('项目项列表', { exact: true }); const rectangle = await list.boundingBox(); assert.ok(rectangle)
+        const list = page.getByLabel('素材项列表', { exact: true }); const rectangle = await list.boundingBox(); assert.ok(rectangle)
         const dragStart = performance.now(); await card.dragTo(list, { targetPosition: { x: 12, y: rectangle.height - 30 } })
         let document = await saved(page, file, value => value.media.length === 1 && value.items.length === 1)
         evidence.dragImportMs = performance.now() - dragStart

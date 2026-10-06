@@ -112,10 +112,10 @@ describe('导出逐帧取得准确画面（2.4）', () => {
 
   it('单帧读取也失败时以用户语言报错：后端原因只带一次素材名，原始解码错误换成可操作的说明并保留在 cause', async () => {
     for (const [failure, message] of [
-      [new Error('素材「A.mov」解码失败，请确认文件可用，或在项目素材中重新定位源文件。'), '素材「A.mov」取不到准确的画面：解码失败，请确认文件可用，或在项目素材中重新定位源文件。'],
-      [new Error('找不到素材「A.mov」的源文件，请在项目素材中右键该素材，选择“重新定位源文件”。'), '素材「A.mov」取不到准确的画面：找不到素材「A.mov」的源文件，请在项目素材中右键该素材，选择“重新定位源文件”。'],
+      [new Error('素材「A.mov」解码失败，请确认文件可用，或在素材面板中重新定位源文件。'), '素材「A.mov」取不到准确的画面：解码失败，请确认文件可用，或在素材面板中重新定位源文件。'],
+      [new Error('找不到素材「A.mov」的源文件，请在素材面板中右键该素材，选择“重新定位源文件”。'), '素材「A.mov」取不到准确的画面：找不到素材「A.mov」的源文件，请在素材面板中右键该素材，选择“重新定位源文件”。'],
       [new Error('素材「A.mov」的解码暂时中断，请稍后重试；如果一直出现，请重启软件。'), '素材「A.mov」取不到准确的画面：解码暂时中断，请稍后重试；如果一直出现，请重启软件。'],
-      [new DOMException('Decoding error.', 'EncodingError'), '素材「A.mov」取不到准确的画面：解码失败，请确认文件可用，或在项目素材中重新定位源文件。'],
+      [new DOMException('Decoding error.', 'EncodingError'), '素材「A.mov」取不到准确的画面：解码失败，请确认文件可用，或在素材面板中重新定位源文件。'],
     ] as const) {
       const { video, delivered } = stream(range(0, 10), { failAt: [1], frameAt: async () => { throw failure } }); const clip: VideoEditExportClipState = { previousTime: -1 }
       await exportFrames(video, clip, [0])

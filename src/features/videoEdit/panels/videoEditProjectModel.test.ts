@@ -12,7 +12,7 @@ it('素材箱层级折叠保持同级名称排序，搜索跨箱匹配标签且�
   expect(videoEditProjectEntries(document, 'nested', '', 'name').map(entry => entry.value.id)).toEqual(['second'])
   expect(JSON.stringify(document)).toBe(snapshot)
 })
-it('Ctrl 切换与 Shift 范围依据当前过滤排序，不混入隐藏项目项', () => {
+it('Ctrl 切换与 Shift 范围依据当前过滤排序，不混入隐藏素材项', () => {
   const ids = ['c', 'a', 'b']
   expect(selectVideoEditProjectItems(ids, ['hidden'], 'b', 'c', { toggle: false, range: true })).toEqual(['c', 'a', 'b'])
   expect(selectVideoEditProjectItems(ids, ['hidden'], 'b', 'a', { toggle: true, range: true })).toEqual(['hidden', 'a', 'b'])

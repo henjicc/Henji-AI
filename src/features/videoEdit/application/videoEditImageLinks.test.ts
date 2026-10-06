@@ -9,7 +9,7 @@ import { refreshVideoEditImageDocumentClips } from './videoEditImageLinks'
 
 /*
  * 4.1 图片文档放进剪辑保持链接：图片文档写回后，剪辑里链接它的片段换用新渲染、记下新版本，
- * 位置与变换不变，旧项目项与旧媒体移出剪辑；版本没变时不重新渲染。受管渲染与工作副本读取在边界替换。
+ * 位置与变换不变，旧素材项与旧媒体移出剪辑；版本没变时不重新渲染。受管渲染与工作副本读取在边界替换。
  */
 
 const links = vi.hoisted(() => ({ prepare: vi.fn(), load: vi.fn() }))
@@ -30,7 +30,7 @@ beforeEach(() => {
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
-it('图片文档写回后片段换用新渲染：位置与变换保留，旧项目项和旧媒体移出；版本没变时不重新渲染', async () => {
+it('图片文档写回后片段换用新渲染：位置与变换保留，旧素材项和旧媒体移出；版本没变时不重新渲染', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequence = owner.document.sequences[0]
   const target = captureVideoEditResultTarget(id, sequence.id, { mode: 'add', frame: 15, duration: 45, trackId: sequence.tracks.find(track => track.kind === 'video')!.id })
   const placed = await commitVideoEditCreativeResult(target, { asset: asset(), origin: { type: 'document', docRef, revision: 1 } })

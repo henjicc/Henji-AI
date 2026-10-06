@@ -90,7 +90,7 @@ function createVideoEditAgentLoopScene() {
         const baseline = await callTool(client, 'read_application_entity', { ref: projectRef })
         const created = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '编写原创色块代码素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: projectRef, items: [{ properties: { 'video_edit.code_material.source': SOURCE } }] }] }))
         assert.equal(created.verificationState, 'verified', JSON.stringify(created)); evidence.timings.authorMs = performance.now() - at
-        const authored = readProject(file); const item = authored.items.find(value => value.kind === 'code'); assert.ok(item, '应生成真实代码项目项')
+        const authored = readProject(file); const item = authored.items.find(value => value.kind === 'code'); assert.ok(item, '应生成真实代码素材项')
         assert.equal(authored.codeMaterials[0].versions[0].source, SOURCE)
         const seqRead = await callTool(client, 'read_application_entity', { ref: sequenceRef })
         const inserted = await callTool(client, 'change_application_entities', operationEnvelope([seqRead], { summary: '插入原创色块', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: { 'video_edit.clip.item_id': item.id, 'video_edit.clip.name': '原创色块', 'video_edit.clip.kind': 'code', 'video_edit.clip.track': 2, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 120 } }] }] }))

@@ -19,7 +19,7 @@ afterEach(async () => { for (const owner of listVideoEditInstances()) await clos
 async function fixture() {
   const owner = (await createVideoEditProject())!; const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
   editVideoProject(projectId, document => {
-    document.items.push({ id: 'text-item', name: '真实项目项', kind: 'text' })
+    document.items.push({ id: 'text-item', name: '真实素材项', kind: 'text' })
     document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'text-item', sequenceId, { frame: 0, track: 1 }), id: 'text-clip', duration: 90 })
     return document
   })

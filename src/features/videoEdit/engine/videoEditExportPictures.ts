@@ -84,7 +84,7 @@ function covers(picture: ClipPicture | undefined, time: number): boolean {
 function exactReadError(name: string, cause: unknown): Error {
   const prefix = `素材「${name}」`
   const reason = cause instanceof Error ? cause.message : String(cause)
-  const detail = !/[一-鿿]/.test(reason) ? '解码失败，请确认文件可用，或在项目素材中重新定位源文件。' : reason.startsWith(prefix) ? reason.slice(prefix.length).replace(/^的/, '') : reason
+  const detail = !/[一-鿿]/.test(reason) ? '解码失败，请确认文件可用，或在素材面板中重新定位源文件。' : reason.startsWith(prefix) ? reason.slice(prefix.length).replace(/^的/, '') : reason
   return new Error(`${prefix}取不到准确的画面：${detail}`, { cause })
 }
 

@@ -144,7 +144,7 @@ describe('运行中原生失败的恢复（3.1）', () => {
     expect(log).toHaveBeenCalledWith('warn', expect.any(String), 'video_edit.decode.native.retry', expect.objectContaining({ kind: 'service' }))
     failures = 2
     await expect(clip.frameAt(2)).rejects.toThrow('解码暂时中断')
-    const fileFailure = new VideoEditNativeFailure('素材「素材」解码失败，请确认文件可用，或在项目素材中重新定位源文件。', 'file', 'DECODE_FAILED')
+    const fileFailure = new VideoEditNativeFailure('素材「素材」解码失败，请确认文件可用，或在素材面板中重新定位源文件。', 'file', 'DECODE_FAILED')
     const broken = scripted('native', { frameAt: async () => { throw fileFailure } })
     const budget = new VideoEditNativeFailure('同时读取的视频素材过多，请减少同时显示的视频后重试。', 'budget', 'BUDGET_EXCEEDED')
     const full = scripted('native', { frameAt: async () => { throw budget } })

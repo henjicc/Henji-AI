@@ -84,8 +84,8 @@ async function renderState(page) {
 }
 
 async function floatingProjectState(page) {
-  const project = group(page, '项目素材')
-  assert.equal(await project.count(), 1, '浮动项目面板只能有一份实际视图')
+  const project = group(page, '素材')
+  assert.equal(await project.count(), 1, '浮动素材面板只能有一份实际视图')
   await project.getByRole('button', { name: '面板菜单', exact: true }).click()
   assert.equal(await button(page, '贴回面板').isVisible(), true, '实际面板必须处于浮动位置')
   await project.getByRole('button', { name: '面板菜单', exact: true }).click()
@@ -156,7 +156,7 @@ async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
     openedJson = JSON.stringify(readVideoEditFile(file))
     currentRun.initialRender = await renderState(current.page)
     await button(current.page, '关闭效果控件').click()
-    await group(current.page, '项目素材').getByRole('button', { name: '面板菜单', exact: true }).click()
+    await group(current.page, '素材').getByRole('button', { name: '面板菜单', exact: true }).click()
     await button(current.page, '浮动面板').click()
     await current.page.waitForTimeout(450)
     const nonDefault = await readLayout(current.page)
@@ -199,7 +199,7 @@ async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
     const restored = await readLayout(current.page)
     assertLayoutRestored(saved.value, restored.value)
     assert.equal(await button(current.page, '关闭效果控件').count(), 0, '重启后效果面板仍须关闭')
-    assert.equal(await group(current.page, '项目素材').count(), 1, '浮动面板只能恢复一份')
+    assert.equal(await group(current.page, '素材').count(), 1, '浮动面板只能恢复一份')
     assert.equal(await group(current.page, '节目画面').count(), 1)
     currentRun.floatingBounds = await floatingProjectState(current.page)
     for (const key of ['x', 'y', 'width', 'height']) assert.ok(

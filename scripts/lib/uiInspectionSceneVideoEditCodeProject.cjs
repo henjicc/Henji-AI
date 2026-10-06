@@ -104,7 +104,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         const materialRef = { kind: 'video_edit.code_material', id: `${document.id}:${dynamicItem.code.definitionId}` }
         const read = await callTool(client, 'read_application_entity', { ref: materialRef, propertyIds: ['video_edit.code_material.source'] })
         assert.equal(read.data.properties['video_edit.code_material.source'], dynamicSource)
-        await button(page, '新建项目项').click(); await button(page, '新建代码素材').click()
+        await button(page, '新建素材项').click(); await button(page, '新建代码素材').click()
         await page.getByLabel('作者源码', { exact: true }).fill(staticSource)
         await capture('code-source-authoring')
         await button(page, '检查并创建').click()
@@ -156,7 +156,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         await button(page, '撤销').click(); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === dynamicClip.id).code.parameters.speed === 80)
         await page.waitForFunction(previous => document.querySelector('canvas[aria-label="剪辑画面"]').toDataURL('image/png') === previous, snapshots[120], { timeout: 10000 })
         const beforeRejected = readVideoEditFile(file)
-        await button(page, '新建项目项').click(); await button(page, '新建代码素材').click()
+        await button(page, '新建素材项').click(); await button(page, '新建代码素材').click()
         await page.getByLabel('作者源码', { exact: true }).fill(dynamicSource.replace('const x=', 'while(true){} const x='))
         await button(page, '检查并创建').click()
         const rejection = page.getByText(/render 中仅允许 const 和最后一个 return/)

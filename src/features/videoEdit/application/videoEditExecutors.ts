@@ -93,7 +93,7 @@ async function restore(token: string): Promise<ApplicationCompletedStepResult> {
   const instance = requireVideoEditInstance(record.before.id)
   if (instance !== record.owner) throw new Error('原剪辑会话已关闭，请使用当前剪辑历史。')
   if (content(instance.document) !== content(record.after)) throw new Error('剪辑已有后续修改，请逐步撤销。')
-  if (record.viewAfter && !sameProjectView(projectViewSnapshot(record.before.id), record.viewAfter)) throw new Error('项目浏览会话已有后续修改，请按当前状态操作。')
+  if (record.viewAfter && !sameProjectView(projectViewSnapshot(record.before.id), record.viewAfter)) throw new Error('素材浏览会话已有后续修改，请按当前状态操作。')
   if (record.sourcePause) {
     if (!matchesVideoEditSourceCommand(record.before.id, record.sourcePause.afterCommand)) throw new Error('源预览已有后续操作，无法恢复旧节目操作。')
     const program = { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }
@@ -150,7 +150,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       // Validate view writes before any persistent rename; a failed transaction cannot leave half an edit.
       const instance = requireVideoEditInstance(projectId)
       const selectedItemIds = data.selectedItemIds as string[]; const selectedBinId = String(data.selectedBinId); const openSequenceIds = data.openSequenceIds as string[]
-      if (selectedItemIds.some(id => !instance.document.items.some(item => item.id === id)) || (selectedBinId && !instance.document.bins.some(bin => bin.id === selectedBinId)) || !openSequenceIds.length || openSequenceIds.some(id => !instance.document.sequences.some(sequence => sequence.id === id))) throw new Error('项目选区、素材箱或序列标签引用无效。')
+      if (selectedItemIds.some(id => !instance.document.items.some(item => item.id === id)) || (selectedBinId && !instance.document.bins.some(bin => bin.id === selectedBinId)) || !openSequenceIds.length || openSequenceIds.some(id => !instance.document.sequences.some(sequence => sequence.id === id))) throw new Error('素材选区、素材箱或序列标签引用无效。')
       if (keys.includes('video_edit.document.timeline_view')) {
         if (!openSequenceIds.includes(instance.activeSequenceId)) throw new Error('请先切换序列，再修改该序列时间线视图。')
         validateVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
@@ -266,7 +266,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       if (step.operation.kind === 'create') {
         for (const item of step.operation.items) {
           const allowed = new Set(VIDEO_EDIT_FIELDS[this.entityType].filter(field => !VIDEO_EDIT_CONTROLLED_AGGREGATES.some(key => videoEditDataKey(field.propertyId.split('.').at(-1)!) === key) && !(VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) && ['sequence_id', 'clip_id'].some(key => field.propertyId.endsWith(`.${key}`)))).map(field => field.propertyId))
-          if (Object.keys(item.properties).some(key => !allowed.has(key))) throw new Error('创建仅接受已公开的实体字段；代码实例由正式源码检查或已有项目项维护。')
+          if (Object.keys(item.properties).some(key => !allowed.has(key))) throw new Error('创建仅接受已公开的实体字段；代码实例由正式源码检查或已有素材项维护。')
           const values = videoEditCollectionValues(this.entityType, item.properties)
           for (const key of ['binId', 'parentId', 'linkId', 'groupId', 'clipId']) if (values[key] === '') delete values[key]
           if (values.sourceComponent === 'all') delete values.sourceComponent
@@ -281,12 +281,12 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             case 'video_edit.item': {
               if (values.kind === 'graphic') {
                 const kind = values.graphicKind
-                if (!['solid', 'rect', 'ellipse', 'text'].includes(String(kind))) throw new Error('创建图形项目项需要graphic_kind。')
+                if (!['solid', 'rect', 'ellipse', 'text'].includes(String(kind))) throw new Error('创建图形素材项需要graphic_kind。')
                 const dimensions = document.sequences.find(sequence => sequence.id === instance.activeSequenceId)!
                 const made = makeVideoEditGraphicItem({ kind: kind as 'solid' | 'rect' | 'ellipse' | 'text', name: String(values.name), ...(values.graphicWidth != null ? { width: Number(values.graphicWidth) } : {}), ...(values.graphicHeight != null ? { height: Number(values.graphicHeight) } : {}), ...(values.binId ? { binId: String(values.binId) } : {}) }, dimensions)
                 document.items.push({ ...made, id })
               } else {
-                if (['graphicKind', 'graphicWidth', 'graphicHeight'].some(key => key in values)) throw new Error('图形创建属性只适用于graphic项目项。')
+                if (['graphicKind', 'graphicWidth', 'graphicHeight'].some(key => key in values)) throw new Error('图形创建属性只适用于graphic素材项。')
                 document.items.push(videoEditItemSchema.parse({ id, ...values }))
               }
               break
@@ -321,7 +321,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           case 'video_edit.bin': document.bins = removeVideoEditBins(document, ids).bins; break
           case 'video_edit.item': { const next = removeVideoEditItems(document, ids); document.items = next.items; document.media = next.media; break }
           case 'video_edit.code_material':
-            if (document.items.some(item => item.code && ids.includes(item.code.definitionId)) || document.sequences.some(sequence => sequence.clips.some(clip => clip.code && ids.includes(clip.code.definitionId) || clip.effects?.some(effect => ids.includes(effect.code.definitionId))))) throw new Error('代码素材仍被项目项、片段或效果引用，请先移除引用，再移除源码定义。')
+            if (document.items.some(item => item.code && ids.includes(item.code.definitionId)) || document.sequences.some(sequence => sequence.clips.some(clip => clip.code && ids.includes(clip.code.definitionId) || clip.effects?.some(effect => ids.includes(effect.code.definitionId))))) throw new Error('代码素材仍被素材项、片段或效果引用，请先移除引用，再移除源码定义。')
             document.codeMaterials = document.codeMaterials?.filter(definition => !ids.includes(definition.id)); break
           case 'video_edit.clip':
             if (ids.some(id => !sequence!.clips.some(clip => clip.id === id))) throw new Error('片段不属于目标序列。')

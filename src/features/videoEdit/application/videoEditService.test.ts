@@ -348,7 +348,7 @@ it('两个不同设置的序列保存冷重开，切换只保留会话，不写�
   expect(reopened.document.media[0].path).toBe('E:/original/image.png')
   expect(reopened.document.sequences.flatMap(sequence => sequence.clips.map(clip => clip.itemId))).toEqual([reopened.document.items[0].id, reopened.document.items[0].id])
 })
-it('复制序列重建实例标识但复用项目项，删除和设置变更共用历史', async () => {
+it('复制序列重建实例标识但复用素材项，删除和设置变更共用历史', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id; const first = instance.activeSequenceId
   appendVideoEditClip(id); setVideoEditView(id, { frame: 30 })
   const duplicate = duplicateVideoEditSequence(id, first)
@@ -404,7 +404,7 @@ it('正式事务撤销保留实体引用，帧率写入回执包含实际片段�
     expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ duration: 90, text: '输入文字' })
   }
 })
-it('移除未使用的项目项后再次添加原媒体，在一次编辑内恢复引用', async () => {
+it('移除未使用的素材项后再次添加原媒体，在一次编辑内恢复引用', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id
   appendVideoEditMedia(id, { id: 'unused', kind: 'image', path: 'E:/unused.png', name: '未使用', durationSeconds: 0, width: 320, height: 180 })
   editVideoProject(id, document => ({ ...document, items: [] }))

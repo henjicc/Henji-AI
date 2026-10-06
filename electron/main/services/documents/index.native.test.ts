@@ -144,7 +144,7 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
     const media = path.join(project.path, '素材', 'clip.mp4')
     fs.mkdirSync(path.dirname(media), { recursive: true })
     fs.writeFileSync(media, 'x')
-    // 3.1 起剪辑有真实内容 schema：在空内容上放一条引用项目素材的媒体
+    // 3.1 起剪辑有真实内容 schema：在空内容上放一条引用素材的媒体
     const mediaItem = { id: 'clip', name: 'clip.mp4', path: media, kind: 'video', durationSeconds: 1, width: 16, height: 16 }
     await service.saveDocument({ target: { id: edit.meta.id }, expectedRevision: 0, content: { ...(edit.content as object), media: [mediaItem] } })
     await scanner.refresh()

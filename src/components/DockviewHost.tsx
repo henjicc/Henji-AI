@@ -10,7 +10,7 @@ import { useRef, type ReactNode } from 'react'
  *    shell 下、className 元素之外，只在 className 元素上覆盖 `--dv-*` 时浮动分组仍是 abyss 的深蓝底，
  *    纸白下面板文字几乎不可读（4.1 对比度审计实测 1.1:1）。
  * 3. 按下分隔条后不允许启动原生拖放：分隔条压在面板边缘，Chromium 会把按下点下面的可拖动元素
- *    （剪辑项目面板的素材行等 `draggable` 元素）当成拖放源，指针一移出 4px 宽的分隔条就触发
+ *    （剪辑素材面板的素材行等 `draggable` 元素）当成拖放源，指针一移出 4px 宽的分隔条就触发
  *    dragstart → pointercancel，dockview 的拖动随之中断，分隔条只能挪动第一下。
  */
 export function DockviewHost({ className = '', children }: { className?: string; children: ReactNode }): JSX.Element {

@@ -93,7 +93,7 @@ export function restoreVideoEditProgramCommandIdentity(id: string, expected: obj
   if (videoEditProgramCommandIdentity(id) !== expected) throw new Error('节目播放已有后续操作。')
   programCommands.set(requireVideoEditInstance(id), previous)
 }
-function assertVideoEditWritable(owner: VideoEditInstance): void { if (closing.has(owner)) throw new Error('项目正在关闭，请等待保存完成。') }
+function assertVideoEditWritable(owner: VideoEditInstance): void { if (closing.has(owner)) throw new Error('剪辑正在关闭，请等待保存完成。') }
 export function videoEditGestureActive(projectId: string): boolean { return gestures.has(requireVideoEditInstance(projectId)) }
 export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   assertApplicationWritesAllowed()
@@ -236,7 +236,7 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] })); return sequence.id
 }
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {
-  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('项目至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
+  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('剪辑至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
 }
 export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null }): void {
   const { name, binId, ...timing } = settings
@@ -369,7 +369,7 @@ export function getVideoEditProjectView(id: string): VideoEditProjectView {
 export function setVideoEditProjectView(id: string, values: Partial<VideoEditProjectView>): void {
   const instance = requireVideoEditInstance(id)
   const next = { ...getVideoEditProjectView(id), ...values }
-  if (next.selectedItemIds.some(itemId => !instance.document.items.some(item => item.id === itemId)) || next.selectedItemIds.length > 500) throw new Error('项目选区包含无效项目项。')
+  if (next.selectedItemIds.some(itemId => !instance.document.items.some(item => item.id === itemId)) || next.selectedItemIds.length > 500) throw new Error('素材选区包含无效素材项。')
   if (next.selectedBinId && !instance.document.bins.some(bin => bin.id === next.selectedBinId)) throw new Error('目标素材箱不存在。')
   if (!next.openSequenceIds.length || next.openSequenceIds.some(sequenceId => !instance.document.sequences.some(sequence => sequence.id === sequenceId))) throw new Error('请至少保留一个有效的序列标签。')
   next.selectedItemIds = [...new Set(next.selectedItemIds)]; next.openSequenceIds = [...new Set(next.openSequenceIds)]
@@ -702,5 +702,5 @@ export function appendVideoEditClip(id: string, mediaId?: string, placement?: { 
 }
 // 剪辑内容由文档会话登记表在退出屏障里写完；这里只拦住进行中的导出并收起参数调整与播放
 registerApplicationCloseGuard(async () => {
-  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑项目正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false }
+  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false }
 })

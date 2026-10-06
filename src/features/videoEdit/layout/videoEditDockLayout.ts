@@ -4,7 +4,7 @@ import { createLogger } from '@/core/logging'
 const logger = createLogger('features.videoEdit.layout')
 export const VIDEO_EDIT_LAYOUT_STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 export const VIDEO_EDIT_PANELS = [
-  { id: 'project', title: '项目素材' },
+  { id: 'project', title: '素材' },
   { id: 'program', title: '节目画面' },
   { id: 'effects', title: '效果控件' },
   { id: 'timeline', title: '时间线' },
@@ -47,6 +47,8 @@ export function parseVideoEditLayout(raw: string): SerializedDockview {
     if (!known.has(id) || !isRecord(panel) || panel.id !== id || panel.contentComponent !== id) throw new Error('无效的剪辑面板')
     // Inactive tabs retain a single mounted view, including its preview session.
     panel.renderer = 'always'
+    // 面板名以当前定义为准：保存过的布局里可能还是旧名称（如“项目素材”改称“素材”之前保存的）。
+    panel.title = VIDEO_EDIT_PANELS.find(definition => definition.id === id)?.title
   }
   const seen = new Set<string>()
   const groups = new Set<string>()

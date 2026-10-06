@@ -216,7 +216,7 @@ function createVideoEditMediaProbeScene() {
         }
         if (forced !== 'browser') for (const record of evidence.imports.filter((item) => item.accepted)) {
           const item = project().items.find((candidate) => candidate.mediaId === record.media.id)
-          assert.ok(item, `${path.basename(record.file)} 缺少项目项`)
+          assert.ok(item, `${path.basename(record.file)} 缺少素材项`)
           const fps = record.media.frameRate.numerator / record.media.frameRate.denominator
           evidence.sourceMonitor.push({ file: record.file, ...await nativeSourceMonitor(page, item.id, fps, record.media.durationSeconds, record.media.hasAudio === true) })
           store()

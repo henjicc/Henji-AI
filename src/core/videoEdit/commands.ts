@@ -43,7 +43,7 @@ export const VIDEO_EDIT_COMMANDS = [
   command('group', '编组', editScopes), command('ungroup', '解除编组', editScopes),
   command('separate_audio', '拆开音画', editScopes),
   command('move_into_sync', '移入同步', editScopes), command('slip_into_sync', '滑入同步', editScopes),
-  command('locate_source', '打开源素材', editScopes), command('locate_project', '在项目中定位', editScopes),
+  command('locate_source', '打开源素材', editScopes), command('locate_project', '在素材中定位', editScopes),
   command('locate_effects', '编辑片段属性', editScopes),
 ] as const
 export type VideoEditCommandId = typeof VIDEO_EDIT_COMMANDS[number]['id']

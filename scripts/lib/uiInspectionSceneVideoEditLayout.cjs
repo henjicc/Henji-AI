@@ -183,11 +183,11 @@ function createVideoEditLayoutScene() {
         // Always-rendered views live in Dockview's overlay beside its empty ARIA tabpanel.
         // The visible group is the real mouse target; the empty tabpanel is covered by its canvas.
         let target = group(page, '节目画面'); let box = await target.boundingBox()
-        evidence.centerDrag = await pointerDrag(page, tab(page, '项目素材'), target, { x: box.width / 2, y: box.height / 2 })
-        assert.equal(await tab(page, '项目素材').getAttribute('aria-controls'), await tab(page, '节目画面').getAttribute('aria-controls'), '中心拖入合并为同一标签组')
+        evidence.centerDrag = await pointerDrag(page, tab(page, '素材'), target, { x: box.width / 2, y: box.height / 2 })
+        assert.equal(await tab(page, '素材').getAttribute('aria-controls'), await tab(page, '节目画面').getAttribute('aria-controls'), '中心拖入合并为同一标签组')
         // 拖入的标签成为组内当前标签，节目面板随即不可见：按产品契约（ffd46ccf「隐藏节目停止取帧并释放会话」）
         // 释放渲染会话与画面，与“关闭节目面板”同一套释放回执；切回后重建一份画面并回到原播放位置与选区。
-        await tab(page, '项目素材').click({ position: { x: 12, y: 14 } })
+        await tab(page, '素材').click({ position: { x: 12, y: 14 } })
         await waitReleased(page)
         assert.equal(await page.getByLabel('剪辑画面', { exact: true }).count(), 0, '组内隐藏节目面板释放画面')
         evidence.hiddenRelease = (await workerSnapshot(page)).workers.at(-1)
@@ -200,8 +200,8 @@ function createVideoEditLayoutScene() {
 
         // The same real drag at the content's edge must split the group again.
         target = group(page, '节目画面'); box = await target.boundingBox()
-        evidence.edgeDrag = await pointerDrag(page, tab(page, '项目素材'), target, { x: 8, y: box.height / 2 })
-        assert.notEqual(await tab(page, '项目素材').getAttribute('aria-controls'), await tab(page, '节目画面').getAttribute('aria-controls'), '边缘拖入拆分面板')
+        evidence.edgeDrag = await pointerDrag(page, tab(page, '素材'), target, { x: 8, y: box.height / 2 })
+        assert.notEqual(await tab(page, '素材').getAttribute('aria-controls'), await tab(page, '节目画面').getAttribute('aria-controls'), '边缘拖入拆分面板')
         // 按下同组标签开始拖动即切换组内当前标签（节目暂时不可见并释放），拆分后节目回到可见并重建一份画面。
         await presented(page, 120)
         await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
@@ -209,7 +209,7 @@ function createVideoEditLayoutScene() {
         await page.evaluate(() => { window.__videoLayoutOriginalCanvas = document.querySelector('canvas[aria-label="剪辑画面"]') })
 
         const beforeResize = await group(page, '节目画面').boundingBox()
-        const projectBox = await group(page, '项目素材').boundingBox()
+        const projectBox = await group(page, '素材').boundingBox()
         const sashes = await page.locator('[aria-label="剪辑面板工作区"] .dv-sash').evaluateAll(elements => elements.map(element => {
           const rect = element.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
         }).filter(rect => rect.width > 0 && rect.width <= 12 && rect.height > 80))
@@ -258,14 +258,14 @@ function createVideoEditLayoutScene() {
         await capture('video-layout-reopened')
 
         // Persist a deliberately non-default layout, then exercise the actual workspace unmount/remount.
-        await button(page, '关闭效果控件').click(); await menuAction(page, '项目素材', '浮动整组')
+        await button(page, '关闭效果控件').click(); await menuAction(page, '素材', '浮动整组')
         const beforeRoundTrip = await savedLayout(page); evidence.restoration.before = layoutSignature(beforeRoundTrip)
         await button(page, '生成').click(); await waitReleased(page)
         assert.equal(await page.getByLabel('剪辑画面', { exact: true }).count(), 0)
         await button(page, '剪辑').click(); await presented(page, 120)
         await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
         assert.equal(await button(page, '关闭效果控件').count(), 0, '页面往返保持关闭的效果面板')
-        assert.equal(await group(page, '项目素材').evaluate(element => element.classList.contains('dv-groupview-floating')), true, '页面往返恢复浮动分组')
+        assert.equal(await group(page, '素材').evaluate(element => element.classList.contains('dv-groupview-floating')), true, '页面往返恢复浮动分组')
         const afterRoundTrip = await savedLayout(page); evidence.restoration.after = layoutSignature(afterRoundTrip)
         assert.deepEqual(evidence.restoration.after, evidence.restoration.before)
         // Restore the effects view so the selected clip can be observed again.
@@ -297,17 +297,17 @@ function createVideoEditLayoutScene() {
 }
 
 /**
- * 点浮动资产库外面的项目项列表把它关掉。960 宽窗口下浮层几乎盖满主窗口，写死的坐标会点在浮层上；
+ * 点浮动资产库外面的素材项列表把它关掉。960 宽窗口下浮层几乎盖满主窗口，写死的坐标会点在浮层上；
  * 在列表里找一个不被浮层盖住的点（5.8）。
  */
 async function clickOutsideFloatingAssets(page) {
-  const list = page.getByLabel('项目项列表', { exact: true })
+  const list = page.getByLabel('素材项列表', { exact: true })
   const [listBox, panelBox] = await Promise.all([list.boundingBox(), page.locator('[data-asset-floating-panel]').boundingBox()])
-  if (!listBox) throw new Error('项目项列表不可见')
+  if (!listBox) throw new Error('素材项列表不可见')
   const inside = (x, y) => panelBox && x >= panelBox.x && x <= panelBox.x + panelBox.width && y >= panelBox.y && y <= panelBox.y + panelBox.height
   const candidates = [[12, 25], [12, listBox.height - 12], [listBox.width - 12, listBox.height - 12], [listBox.width - 12, 25]]
   const point = candidates.find(([x, y]) => !inside(listBox.x + x, listBox.y + y))
-  if (!point) throw new Error(`项目项列表完全被浮动资产库盖住：${JSON.stringify({ listBox, panelBox })}`)
+  if (!point) throw new Error(`素材项列表完全被浮动资产库盖住：${JSON.stringify({ listBox, panelBox })}`)
   await list.click({ position: { x: point[0], y: point[1] } })
 }
 

@@ -50,7 +50,7 @@ it('对象树的增删命名排序同源持久，稳定引用不跟随顺序并�
   expect(() => createVideoEditGraphicObject(target, { kind: 'text' })).toThrow('锁定')
 })
 
-it('命名图形对象复用参数曲线和单笔手势，不伪造代码版本并保持项目项独立', async () => {
+it('命名图形对象复用参数曲线和单笔手势，不伪造代码版本并保持素材项独立', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
   const itemId = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [itemId], sequenceId)
   const objectId = getActiveVideoEditSequence(owner).clips[0].graphic!.objects[0].id

@@ -62,14 +62,14 @@ it('双击素材请求正式源会话，双击空白使用当前箱导入，资�
     await act(async () => fireEvent.doubleClick(view.getByRole('button', { name: 'A原视频' })))
     expect(readVideoEditSource(instance.document.id)).toMatchObject({ itemId: instance.document.items[0].id, status: 'ready' })
     await act(async () => fireEvent.click(view.getByRole('button', { name: '素材箱' })))
-    await act(async () => fireEvent.doubleClick(view.getByLabelText('项目项列表')))
+    await act(async () => fireEvent.doubleClick(view.getByLabelText('素材项列表')))
     expect(getPlatform().system.dialog.open).toHaveBeenCalledTimes(1)
     // Asset identity checks live in videoEditMedia.test.ts; this only proves the panel drop targets the current bin.
     vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/'); vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
     vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue({ id: 'assetA', mediaType: 'image', displayName: '资产图片', filePath: 'D:/asset.png', displayUrl: 'henji-media://local/asset', source: 'imported', mimeType: 'image/png', sizeBytes: 4096, width: 3840, height: 2160, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 2, tags: [], libraryIds: [] })
     const payload = JSON.stringify({ type: 'image', imageUrl: 'henji-media://local/asset', filePath: 'E:/forged.png', displayName: '资产图片', sourceType: 'asset', assetId: 'assetA' })
     const transfer = { types: [HENJI_DRAG_DATA_MIME], getData: (type: string) => type === HENJI_DRAG_DATA_MIME ? payload : '', files: [] } as unknown as DataTransfer
-    fireEvent.drop(view.getByLabelText('项目项列表'), { dataTransfer: transfer })
+    fireEvent.drop(view.getByLabelText('素材项列表'), { dataTransfer: transfer })
     await waitFor(() => expect(instance.document.media.find(media => media.path === 'D:/asset.png')?.assetId).toBe('assetA'))
     const media = instance.document.media.find(media => media.path === 'D:/asset.png')!
     expect(instance.document.items.some(item => item.binId === bin && item.mediaId === media.id)).toBe(true)

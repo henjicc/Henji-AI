@@ -20,7 +20,7 @@ async function mxfProject() {
   return { owner, id, item: owner.document.items[0] }
 }
 
-it('项目项“音频声道”：预设立体声把四条单声道两两合成，逐声道改源后确定只写入项目项；预设回到使用文件即清除', async () => {
+it('素材项“音频声道”：预设立体声把四条单声道两两合成，逐声道改源后确定只写入素材项；预设回到使用文件即清除', async () => {
   const { owner, id, item } = await mxfProject()
   const close = vi.fn()
   const target = { kind: 'items' as const, itemIds: [item.id], mediaId: 'mxf' }

@@ -14,7 +14,7 @@ export function videoEditItemUsage(document: VideoEditDocument, itemId: string):
 export function removeVideoEditItems(document: VideoEditDocument, ids: string[]): VideoEditDocument {
   for (const id of ids) {
     const item = document.items.find(item => item.id === id)
-    if (!item) throw new Error('项目项不存在。')
+    if (!item) throw new Error('素材项不存在。')
     const used = videoEditItemUsage(document, id)
     if (used.length) throw new Error(`“${item.name}”仍被序列“${used[0].sequenceName}”等 ${used.length} 个片段引用。请先移除这些片段。`)
   }
@@ -26,13 +26,13 @@ export function removeVideoEditItems(document: VideoEditDocument, ids: string[])
 export function removeVideoEditBins(document: VideoEditDocument, ids: string[]): VideoEditDocument {
   for (const id of ids) {
     if (!document.bins.some(bin => bin.id === id)) throw new Error('素材箱不存在。')
-    if (document.items.some(item => item.binId === id) || document.sequences.some(sequence => sequence.binId === id) || document.bins.some(bin => bin.parentId === id && !ids.includes(bin.id))) throw new Error('素材箱仍有内容，请先移动或移除其中的项目项和子素材箱。')
+    if (document.items.some(item => item.binId === id) || document.sequences.some(sequence => sequence.binId === id) || document.bins.some(bin => bin.parentId === id && !ids.includes(bin.id))) throw new Error('素材箱仍有内容，请先移动或移除其中的素材项和子素材箱。')
   }
   return { ...document, bins: document.bins.filter(bin => !ids.includes(bin.id)) }
 }
 export function makeVideoEditItemClip(document: VideoEditDocument, itemId: string, sequenceId: string, placement: { frame: number; track?: number; duration?: number; sourceComponent?: 'video' | 'audio'; sourceInUs?: number; sourceOutUs?: number; audioMapping?: VideoEditAudioMapping }, codeMetadata?: CodeMaterialMetadataReader): VideoEditClip {
   const item = document.items.find(item => item.id === itemId)
-  if (!item) throw new Error('项目项不存在。')
+  if (!item) throw new Error('素材项不存在。')
   const sequence = videoEditComposition(document, sequenceId)
   const media = document.media.find(media => media.id === item.mediaId)
   if (placement.sourceComponent && (item.kind !== 'video' || placement.sourceComponent === 'audio' && media?.hasAudio !== true)) throw new Error('此素材没有已确认可引用的音画分量。')
@@ -92,7 +92,7 @@ function audioTracksFor(sequence: VideoEditSequence, count: number, start: numbe
  */
 export function placeVideoEditItem(document: VideoEditDocument, itemId: string, sequenceId: string, placement: VideoEditItemPlacement, codeMetadata?: CodeMaterialMetadataReader): { clips: VideoEditClip[]; addedTracks: VideoEditTrack[] } {
   const item = document.items.find(item => item.id === itemId)
-  if (!item) throw new Error('项目项不存在。')
+  if (!item) throw new Error('素材项不存在。')
   const sequence = document.sequences.find(sequence => sequence.id === sequenceId)
   if (!sequence) throw new Error('目标序列不存在。')
   const media = document.media.find(media => media.id === item.mediaId)
@@ -131,7 +131,7 @@ export function placeVideoEditItems(document: VideoEditDocument, itemIds: readon
 export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: string, settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const { binId, ...sequenceSettings } = settings
   const item = document.items.find(item => item.id === itemId)
-  if (!item) throw new Error('项目项不存在。')
+  if (!item) throw new Error('素材项不存在。')
   const media = document.media.find(media => media.id === item.mediaId)
   const program = item.code ? codeMetadata?.(item.code) : undefined
   if (item.kind === 'code' && !program) throw new Error('代码素材尚未完成源码检查。')
@@ -141,7 +141,7 @@ export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: s
   return { ...createVideoEditSequence(item.name), ...(program ? { width: Math.max(16, program.width), height: Math.max(16, program.height) } : item.graphic ? { width: item.graphic.width, height: item.graphic.height } : media && media.width >= 16 && media.height >= 16 ? { width: media.width, height: media.height } : {}), ...(supportedRate ? { frameRate: supportedRate } : {}), ...(item.binId ? { binId: item.binId } : {}), ...sequenceSettings, ...(binId !== undefined ? { binId: binId || undefined } : {}) }
 }
 export function makeVideoEditItemSequence(document: VideoEditDocument, itemIds: string[], settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
-  if (!itemIds.length) throw new Error('请选择至少一个项目项。')
+  if (!itemIds.length) throw new Error('请选择至少一个素材项。')
   const sequence = videoEditSequenceFromItem(document, itemIds[0], settings, codeMetadata)
   const placed = placeVideoEditItems({ ...document, sequences: [...document.sequences, sequence] }, itemIds, sequence.id, { frame: 0 }, codeMetadata)
   return { ...sequence, tracks: [...sequence.tracks, ...placed.addedTracks], clips: placed.clips }

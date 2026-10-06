@@ -165,7 +165,7 @@ function fixture(): ReturnType<typeof videoEditComposition> {
   document.sequences[0].clips = [clip]
   return videoEditComposition(document, document.sequences[0].id)
 }
-it('修改项目项引用后画面与声音共同使用新素材，关闭旧解码输入', async () => {
+it('修改素材项引用后画面与声音共同使用新素材，关闭旧解码输入', async () => {
   const document = fixture(); const renderer = new VideoEditRenderer(document)
   try {
     await renderer.render(0); expect(boundary.pictures).toEqual([1])
@@ -353,7 +353,7 @@ it('源文件缺失时给出可操作的提示，失败不缓存；重新定位�
   const renderer = new VideoEditRenderer(missing)
   try {
     const failure = await renderer.render(0).then(() => undefined, (error: Error) => error)
-    expect(failure?.message).toBe('找不到素材「A」的源文件，请在项目素材中右键该素材，选择“重新定位源文件”。')
+    expect(failure?.message).toBe('找不到素材「A」的源文件，请在素材面板中右键该素材，选择“重新定位源文件”。')
     expect(failure?.message).not.toContain('henji-media')
     expect(boundary.disposed).toContain('D:/missing.mp4')
     await renderer.updateDocument(base)
@@ -445,7 +445,7 @@ it('导出逐帧（无预览宽度的顺序渲染，2.4）：读取器跳过或�
     open: media => ({ key: media.path, ready: Promise.resolve({ clipAudio: () => undefined, async *schedule() {},
       clipFrames: () => ({
         async *frames(start: number) { const reader = starts.push(start) - 1; for (let index = Math.round(start * 30); index <= lastIndex[reader]; index++) if (!lost[reader].includes(index)) yield picture(index) },
-        async frameAt(time: number) { singleReads.push(Math.round(time * 30)); if (frameAtFails) throw new Error('素材「A」解码失败，请确认文件可用，或在项目素材中重新定位源文件。'); return picture(Math.round(time * 30)) },
+        async frameAt(time: number) { singleReads.push(Math.round(time * 30)); if (frameAtFails) throw new Error('素材「A」解码失败，请确认文件可用，或在素材面板中重新定位源文件。'); return picture(Math.round(time * 30)) },
       }) }) }),
     release: () => {},
     seeker: () => { throw new Error('导出不定位。') },
@@ -462,7 +462,7 @@ it('导出逐帧（无预览宽度的顺序渲染，2.4）：读取器跳过或�
     // Picture 2 (lost) and 5 (after the first reader ended) came from single-frame reads; the next frame restarted the reader.
     expect(singleReads).toEqual([2, 5]); expect(reads).toBe(2); expect(starts).toEqual([0, 6 / 30].map(videoEditPictureSeconds))
     frameAtFails = true; const draws = boundary.draws.length
-    await expect(renderer.render(10, true)).rejects.toThrow('素材「A」取不到准确的画面：解码失败，请确认文件可用，或在项目素材中重新定位源文件。')
+    await expect(renderer.render(10, true)).rejects.toThrow('素材「A」取不到准确的画面：解码失败，请确认文件可用，或在素材面板中重新定位源文件。')
     expect(boundary.draws).toHaveLength(draws); expect(singleReads).toEqual([2, 5, 10])
   } finally { await renderer.dispose() }
   // Every decoded picture, including the one held ahead of the failed frame, went back exactly once.

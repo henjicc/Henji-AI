@@ -13,7 +13,7 @@ import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePres
 import { editVideoSequence, editVideoProject } from './videoEditService'
 import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
 const files = new Map<string, string>()
-it('原生项目项使用真实图形、素材箱与历史，调整层默认选择有下方画面的轨道', async () => {
+it('原生素材项使用真实图形、素材箱与历史，调整层默认选择有下方画面的轨道', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
   editVideoSequence(id, sequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.filter(track => track.index <= 1) }))
   const { width, height } = getActiveVideoEditSequence(owner)
@@ -37,7 +37,7 @@ it('原生项目项使用真实图形、素材箱与历史，调整层默认选�
   await saveVideoEdit(id); const reopened = await reopenVideoEdit(owner.document.id)
   expect(reopened.document.items.find(item => item.id === graphicId)?.graphic).toEqual(item.graphic)
 })
-it('公共移除项目项与手动删除同样清除孤儿媒体，并以声明级联撤销恢复', async () => {
+it('公共移除素材项与手动删除同样清除孤儿媒体，并以声明级联撤销恢复', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id
   appendVideoEditMedia(id, { id: 'unused-media', name: '原图', path: 'D:/media/original.png', kind: 'image', width: 10, height: 10, durationSeconds: 0 })
   const executor = new VideoEditCollectionExecutor('video_edit.item')
@@ -63,7 +63,7 @@ async function fixture() {
   appendVideoEditMedia(instance.document.id, { id: 'source-video', name: '4k original', path: 'D:/media/original.mp4', kind: 'video', width: 3840, height: 2160, durationSeconds: 3, frameRate: { numerator: 60000, denominator: 1001 }, frameRateMode: 'sampled-constant' })
   return instance
 }
-it('同路径在不同箱内保留不同项目项及资产身份，拖入按指定项目项引用', async () => {
+it('同路径在不同箱内保留不同素材项及资产身份，拖入按指定素材项引用', async () => {
   const instance = await fixture(); const id = instance.document.id
   vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue({ id: 'asset-original', mediaType: 'video', displayName: '原片', filePath: 'D:/media/original.mp4', displayUrl: '', source: 'imported', mimeType: 'video/mp4', sizeBytes: 4096, width: 3840, height: 2160, durationSeconds: 3, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] })
   editVideoProject(id, document => ({ ...document, media: document.media.map(media => ({ ...media, assetId: 'asset-original', assetContent: { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) } })) }))
@@ -71,10 +71,10 @@ it('同路径在不同箱内保留不同项目项及资产身份，拖入按指�
   const ids = await importVideoEditSources(id, [{ path: 'd:\\media\\original.mp4', assetId: 'asset-original' }], bin)
   expect(instance.document.media).toHaveLength(1); expect(instance.document.media[0].assetId).toBe('asset-original')
   expect(instance.document.items).toHaveLength(2)
-  updateVideoEditItems(id, ids, { name: '选定项目项', tags: ['片头'] })
+  updateVideoEditItems(id, ids, { name: '选定素材项', tags: ['片头'] })
   const history = instance.past.length
   await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: ids }, { frame: 12, track: 1 })
-  expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ itemId: ids[0], name: '选定项目项', start: 12 })
+  expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ itemId: ids[0], name: '选定素材项', start: 12 })
   expect(instance.past).toHaveLength(history + 1)
   expect(() => deleteVideoEditItems(id, ids)).toThrow('仍被序列')
   expect(() => deleteVideoEditBins(id, [bin])).toThrow('仍有内容')
@@ -117,7 +117,7 @@ it('一次批量插入保持指定序列和一条历史，不跟随其他序列�
   expect(instance.document.sequences[0].clips.map(clip => clip.start)).toEqual([0, 90])
   expect(instance.document.sequences[1].clips).toHaveLength(0); expect(instance.past).toHaveLength(history + 1)
 })
-it('通用属性可将素材箱、项目项和序列移回根级，与手动服务的清除语义一致', async () => {
+it('通用属性可将素材箱、素材项和序列移回根级，与手动服务的清除语义一致', async () => {
   const instance = await fixture(); const id = instance.document.id; const app = createApplicationHarness()
   const parent = createVideoEditBin(id, '父箱'); const child = createVideoEditBin(id, '子箱', parent)
   const item = instance.document.items[0]; updateVideoEditItems(id, [item.id], { binId: parent })

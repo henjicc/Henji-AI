@@ -25,7 +25,7 @@ export default {
 }
 ```
 
-提交源码并找到新的代码项目项后，第二次调用插入片段，同时写参数和 0–0.5 秒的滑入关键帧：
+提交源码并找到新的代码素材项后，第二次调用插入片段，同时写参数和 0–0.5 秒的滑入关键帧：
 
 ```json
 {
@@ -35,7 +35,7 @@ export default {
     "entityType": "video_edit.clip",
     "parent": { "kind": "video_edit.sequence", "id": "剪辑id:序列id" },
     "items": [{ "properties": {
-      "video_edit.clip.item_id": "项目项id",
+      "video_edit.clip.item_id": "素材项id",
       "video_edit.clip.kind": "code",
       "video_edit.clip.name": "滑入标题条",
       "video_edit.clip.start": 120,

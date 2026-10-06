@@ -277,7 +277,7 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
   const added = edit.newTracks ?? []
   if (added.some(track => track.kind !== 'audio' || original.tracks.some(value => value.index === track.index || value.id === track.id)) || new Set(added.map(track => track.index)).size !== added.length || original.tracks.length + added.length > 32) throw new Error('新增的音频轨道无效，或序列将超过 32 条轨道。')
   const sequence = added.length ? { ...original, tracks: [...original.tracks, ...added] } : original
-  if (edit.clipboard.projectId !== document.id) throw new Error('此剪贴板属于另一剪辑，请通过项目素材引用导入。')
+  if (edit.clipboard.projectId !== document.id) throw new Error('此剪贴板属于另一剪辑，请通过素材面板引用导入。')
   if (!edit.clipboard.clips.length || edit.clipboard.clips.length > 500) throw new Error('剪贴板没有有效片段。')
   const from = Math.min(...edit.clipboard.clips.map(clip => clip.start))
   const convert = (frame: number): number => rescaleVideoEditFrame(frame - from, edit.clipboard.frameRate, sequence.frameRate)

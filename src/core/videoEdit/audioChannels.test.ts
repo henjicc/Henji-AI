@@ -59,7 +59,7 @@ describe('声道配置（Premiere 修改音频声道）', () => {
     expect(videoEditDefaultAudioGains(2, 1)).toEqual([[0.5, 0.5]])
   })
 
-  it('素材、项目项和片段只加可选字段：旧剪辑原样通过；映射须落在素材声音流内，静音画面片段不能带映射', () => {
+  it('素材、素材项和片段只加可选字段：旧剪辑原样通过；映射须落在素材声音流内，静音画面片段不能带映射', () => {
     const legacy = project(undefined)
     expect(videoEditDocumentSchema.parse(legacy)).toEqual(legacy)
     expect(videoEditItemAudioLayout(legacy.items[0], legacy.media[0])).toBeUndefined()

@@ -6,7 +6,7 @@ import type { DocumentKindDescriptor } from './registry'
  * 剪辑（`.henji-video`，3.1 剪辑接入）：项目的主文档，始终放在项目里（可以在项目之间移动）。
  *
  * 内容 = 剪辑的持久部分（内存形态，素材位置都是绝对路径）：
- * - media：引用的源文件；bins / items：素材箱与项目项；sequences：序列（轨道、片段、标注、标记、字幕、转场）；
+ * - media：引用的源文件；bins / items：素材箱与素材项；sequences：序列（轨道、片段、标注、标记、字幕、转场）；
  * - codeMaterials：可编辑代码素材的固定源码版本（可选）。
  * 稳定 ID、名称与版本由文档外壳表达（剪辑名就是文件名），不进内容。
  *
@@ -60,7 +60,7 @@ function sequenceHasContent(sequence: VideoEditDocumentContent['sequences'][numb
 }
 
 /**
- * 空内容：没有引用任何素材、没有项目项与素材箱、没有代码素材，序列里也没有任何片段、标注、标记、字幕或转场。
+ * 空内容：没有引用任何素材、没有素材项与素材箱、没有代码素材，序列里也没有任何片段、标注、标记、字幕或转场。
  * 新建后只是改了序列规格或多建了一条空序列的草稿项目离开时直接丢弃，不询问。
  */
 function isEmptyVideoEditContent(content: VideoEditDocumentContent): boolean {

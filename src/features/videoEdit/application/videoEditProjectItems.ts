@@ -35,8 +35,8 @@ export function updateVideoEditBin(projectId: string, binId: string, values: { n
 }
 export function updateVideoEditItems(projectId: string, ids: string[], values: { name?: string; binId?: string | null; tags?: string[] }): void {
   editVideoProject(projectId, document => {
-    if (ids.some(id => !document.items.some(item => item.id === id))) throw new Error('项目项不存在。')
-    if (values.name && ids.length !== 1) throw new Error('请逐个重命名项目项。')
+    if (ids.some(id => !document.items.some(item => item.id === id))) throw new Error('素材项不存在。')
+    if (values.name && ids.length !== 1) throw new Error('请逐个重命名素材项。')
     return { ...document, items: document.items.map(item => ids.includes(item.id) ? videoEditItemSchema.parse({ ...item, ...values, ...(values.binId === null ? { binId: undefined } : {}) }) : item) }
   })
 }
@@ -47,7 +47,7 @@ export function updateVideoEditItems(projectId: string, ids: string[], values: {
 export function setVideoEditItemAudioChannels(projectId: string, itemIds: string[], layout: VideoEditAudioMapping[] | null): void {
   const parsed = layout === null ? null : videoEditAudioLayoutSchema.parse(layout)
   editVideoProject(projectId, document => {
-    if (!itemIds.length || itemIds.some(id => !document.items.some(item => item.id === id))) throw new Error('项目项不存在。')
+    if (!itemIds.length || itemIds.some(id => !document.items.some(item => item.id === id))) throw new Error('素材项不存在。')
     return { ...document, items: document.items.map(item => { if (!itemIds.includes(item.id)) return item; const next = { ...item }; if (parsed) next.audioChannels = structuredClone(parsed); else delete next.audioChannels; return videoEditItemSchema.parse(next) }) }
   })
 }

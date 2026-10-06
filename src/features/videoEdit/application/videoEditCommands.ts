@@ -42,7 +42,7 @@ function placeClipboard(context: VideoEditCommandContext): { clipboard: VideoEdi
   const { owner, source } = stateOf(context); if (!owner) throw new Error('请先打开剪辑。')
   if (context.scope !== 'source' && context.scope !== 'project') { const clipboard = stateOf(context).clipboard; if (!clipboard) throw new Error('请先复制片段。'); return { clipboard } }
   const sequence = getActiveVideoEditSequence(owner); const items = context.scope === 'source' ? source?.itemId ? [source.itemId] : [] : [...context.itemIds]
-  if (!items.length) throw new Error('请选择要放入序列的源素材或项目项。')
+  if (!items.length) throw new Error('请选择要放入序列的源素材或素材项。')
   const target = (kind: 'video' | 'audio'): number | undefined => sequence.tracks.find(track => stateOf(context).targetTrackIds.includes(track.id) && track.kind === kind)?.index
   const videoTrack = target('video'); const audioTrack = target('audio')
   for (const itemId of items) {

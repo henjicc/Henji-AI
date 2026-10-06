@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { appendVideoEditClip, appendVideoEditSequence, beginVideoEditGesture, closeVideoEditProject, createVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, saveVideoEdit, setVideoEditView, switchVideoEditSequence, undoVideoEdit, updateVideoEditGesture } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditSequence, beginVideoEditGesture, closeVideoEditProject, createVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, setVideoEditView, switchVideoEditSequence, undoVideoEdit, updateVideoEditGesture } from './videoEditService'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
@@ -75,8 +75,8 @@ it('关闭保存期间拒绝新的手势和写入，合并并发关闭，失败�
   const store = harnessDocumentStore(); store.saveGate = gate
   const first = closeVideoEditProject(id); const second = closeVideoEditProject(id)
   await vi.waitFor(() => expect(store.activeSaves).toBe(1))
-  expect(() => beginVideoEditGesture(id)).toThrow('项目正在关闭')
-  expect(() => editVideoProject(id, position(.9))).toThrow('项目正在关闭')
+  expect(() => beginVideoEditGesture(id)).toThrow('剪辑正在关闭')
+  expect(() => editVideoProject(id, position(.9))).toThrow('剪辑正在关闭')
   store.saveGate = null; release(); await Promise.all([first, second])
   expect(listVideoEditInstances()).toEqual([]); expect(savedVideoEdit(owner).sequences[0].clips[0].x).toBe(.6)
   const reopened = await reopenVideoEdit(owner.document.id); editVideoProject(id, position(.7))

@@ -16,7 +16,7 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
  * - 经“添加到当前序列”与真实拖放放入时间线：画面 + 每条声音流一个链接音频片段，铺到相邻音频轨，不够时新增音频轨；
  *   单条声音流的普通视频也拆为画面 + 1 个音频片段；轨道头与波形显示声道类型；
  * - 正式渲染 Worker 的 `mixAudio`（原生声音会话）与 FFmpeg soxr 参考 PCM 按同一声道规则合成的期望逐段互相关；
- * - 轨道头静音/独奏与效果控件音量逐轨生效；项目项“音频声道…”预设（立体声两两合成、单声道拆分）只影响之后放入的片段；
+ * - 轨道头静音/独奏与效果控件音量逐轨生效；素材项“音频声道…”预设（立体声两两合成、单声道拆分）只影响之后放入的片段；
  *   时间线片段“音频声道…”改源声道；OBS 与普通 MP4 另用强制浏览器后端混音对照；
  * - 导出音轨与期望互相关；源监视器播放多音轨素材时每条声音流都有原生声音会话且出声；
  * - 2.6 之前的旧工程（无声音流清单、画面声音合一片段）打开不迁移、只播放第一条流。
@@ -345,7 +345,7 @@ function createVideoEditMultitrackScene() {
         await mix('音频 4 片段音量 0.5')
         evidence.phases.push('逐轨静音、独奏与片段音量在混音中逐一生效'); store()
 
-        phase('项目项音频声道：只影响之后放入的片段')
+        phase('素材项音频声道：只影响之后放入的片段')
         const clipsBefore = JSON.stringify(readProject(file).sequences[0].clips)
         await entry(page, items.mxf.id).click(); await entry(page, items.mxf.id).click({ button: 'right' }); await menuItem(page, '音频声道…').click()
         const presetSelect = page.getByLabel('音频声道预设', { exact: true })
@@ -355,7 +355,7 @@ function createVideoEditMultitrackScene() {
         assert.equal(await page.getByLabel('音频片段数量', { exact: true }).inputValue(), '2')
         await page.waitForTimeout(300); await shot('multitrack-item-audio-channels')
         await button(page.getByRole('dialog'), '确定').click()
-        project = await saved(page, file, value => value.items.find(item => item.id === items.mxf.id).audioChannels, 'MXF 项目项音频声道未保存')
+        project = await saved(page, file, value => value.items.find(item => item.id === items.mxf.id).audioChannels, 'MXF 素材项音频声道未保存')
         assert.deepEqual(project.items.find(item => item.id === items.mxf.id).audioChannels, [stereo([0, 0], [1, 0]), stereo([2, 0], [3, 0])])
         assert.equal(JSON.stringify(project.sequences[0].clips), clipsBefore, '已在时间线上的片段不应改变')
         placed = await append('mxf', 540, 3)
@@ -363,7 +363,7 @@ function createVideoEditMultitrackScene() {
         await entry(page, items.obs.id).click(); await entry(page, items.obs.id).click({ button: 'right' }); await menuItem(page, '音频声道…').click()
         await presetSelect.waitFor({ state: 'visible', timeout: 15000 }); await presetSelect.selectOption('mono')
         await button(page.getByRole('dialog'), '确定').click()
-        await saved(page, file, value => value.items.find(item => item.id === items.obs.id).audioChannels?.length === 4, 'OBS 项目项音频声道未保存')
+        await saved(page, file, value => value.items.find(item => item.id === items.obs.id).audioChannels?.length === 4, 'OBS 素材项音频声道未保存')
         placed = await append('obs', 675, 5)
         assertGroup(placed.group, [['audio', 0, mono(0, 0)], ['audio', 8, mono(0, 1)], ['audio', 9, mono(1, 0)], ['audio', 10, mono(1, 1)]], 'OBS 两条立体声拆为四个单声道')
         evidence.phases.push('预设立体声两两合成、单声道拆分；已在时间线的片段不变'); store()

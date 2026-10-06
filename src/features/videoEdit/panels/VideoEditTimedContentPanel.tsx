@@ -48,7 +48,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
   }, [sequence.captions, sequence.markers, kind, keyword, clips])
   const maxFrame = Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * 1800)
   const currentSequence = (): VideoEditSequence => {
-    if (!mounted.current || requireVideoEditInstance(projectId) !== instance) throw new Error('原项目已关闭，请重新选择字幕或标记。')
+    if (!mounted.current || requireVideoEditInstance(projectId) !== instance) throw new Error('原剪辑已关闭，请重新选择字幕或标记。')
     const current = instance.document.sequences.find(value => value.id === sequence.id)
     if (!current) throw new Error('原序列已移除，请重新选择。')
     return current

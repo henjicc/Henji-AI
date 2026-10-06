@@ -215,7 +215,7 @@ it.each(['constructor', 'render', 'cancel-last-frame'] as const)('完成前%s失
 it.each([['画面', 45, '00:00:01:15'], ['声音', 30, '00:00:01:00']] as const)('导出中%s取不到准确内容时停在该帧：提示序列位置与原因，删除半成品且不编码之后的帧', async (kind, frame, timecode) => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditCaptionText(id, owner.activeSequenceId, '1\n00:00:00,000 --> 00:00:03,000\n字幕')
-  const reason = kind === '画面' ? '素材「A.mov」取不到准确的画面：解码失败，请确认文件可用，或在项目素材中重新定位源文件。' : '素材「A.mov」的声音读取失败，请确认文件可用，或在项目素材中重新定位源文件。'
+  const reason = kind === '画面' ? '素材「A.mov」取不到准确的画面：解码失败，请确认文件可用，或在素材面板中重新定位源文件。' : '素材「A.mov」的声音读取失败，请确认文件可用，或在素材面板中重新定位源文件。'
   if (kind === '画面') encoder.render.mockImplementation(async (at: number) => { if (at === frame) throw new Error(reason); return { singleFrameReads: 0 } })
   else encoder.mix.mockImplementation(async (start: number) => { if (Math.round(start * 30) === frame) throw new Error(reason); return {} })
   await expect(exportVideoEdit(id, 'D:/stopped.mp4')).rejects.toThrow(`导出在 ${timecode} 处停止。${reason}`)

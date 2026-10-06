@@ -93,7 +93,7 @@ it('保存失败后重试只保存，不重复导入、字幕或历史', async (
   expect(owner.past).toHaveLength(1); expect(vi.mocked(getPlatform().assetLibrary.inspectAsset).mock.calls).toHaveLength(calls)
 })
 
-it('替换保留原时间/画面与节目字幕锚点，原文件和旧项目项保留', async () => {
+it('替换保留原时间/画面与节目字幕锚点，原文件和旧素材项保留', async () => {
   const { owner, target, result } = await setup(); const first = await commitVideoEditCreativeResult(target, result)
   editVideoProject(owner.document.id, doc => ({ ...doc, sequences: doc.sequences.map(seq => ({ ...seq, clips: seq.clips.map(clip => ({ ...clip, x: .4, sourceInUs: 1_000_000 })), captions: [{ id: 'old-caption', clipId: first.clipId, start: 31, duration: 5, text: '保留节目位置' }] })) }))
   const replacement = captureVideoEditResultTarget(owner.document.id, owner.activeSequenceId, { mode: 'replace', clipId: first.clipId })

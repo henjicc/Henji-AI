@@ -212,7 +212,7 @@ export async function relinkVideoEditMedia(projectId: string, mediaId: string): 
 export async function ensureVideoEditMediaAudioStreams(projectId: string, mediaId: string, signal?: AbortSignal): Promise<NonNullable<VideoEditMedia['audioStreams']>> {
   const owner = requireVideoEditInstance(projectId)
   const media = owner.document.media.find(media => media.id === mediaId)
-  if (!media || media.kind === 'image') throw new Error('此项目项没有声音。')
+  if (!media || media.kind === 'image') throw new Error('此素材项没有声音。')
   if (media.audioStreams) return media.audioStreams
   const inspected = await inspectVideoEditMedia(media.path, signal)
   signal?.throwIfAborted()

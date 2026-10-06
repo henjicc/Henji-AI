@@ -30,7 +30,7 @@ async function obsProject() {
   return { owner, id, item: owner.document.items[0] }
 }
 
-it('修改项目项音频声道只影响之后放入的片段（Premiere 规则），已在序列中的片段不变；恢复“使用文件”', async () => {
+it('修改素材项音频声道只影响之后放入的片段（Premiere 规则），已在序列中的片段不变；恢复“使用文件”', async () => {
   const { owner, id, item } = await obsProject()
   const sequenceId = owner.activeSequenceId
   appendVideoEditItems(id, [item.id], sequenceId, { frame: 0 })
@@ -54,7 +54,7 @@ it('修改项目项音频声道只影响之后放入的片段（Premiere 规则�
   expect(() => setVideoEditClipAudioMapping(id, sequenceId, [first[0].id], mono(0))).toThrow('只有发声的音视频片段')
 })
 
-it('公共入口以通用属性读写项目项音频声道与片段声道映射，越界映射拒绝且零提交，源声音流只读', async () => {
+it('公共入口以通用属性读写素材项音频声道与片段声道映射，越界映射拒绝且零提交，源声音流只读', async () => {
   const { owner, id, item } = await obsProject()
   appendVideoEditItems(id, [item.id], owner.activeSequenceId, { frame: 0 })
   const sound = getActiveVideoEditSequence(owner).clips[1]
@@ -80,7 +80,7 @@ it('公共入口以通用属性读写项目项音频声道与片段声道映射�
   } finally { app.dispose() }
 })
 
-it('项目面板“插入”把多音轨素材连同新增音频轨放在同一撤销步；旧剪辑合一片段拆开时声音保留映射', async () => {
+it('素材面板“插入”把多音轨素材连同新增音频轨放在同一撤销步；旧剪辑合一片段拆开时声音保留映射', async () => {
   const { owner, id, item } = await obsProject()
   const tracks = getActiveVideoEditSequence(owner).tracks.length
   await executeVideoEditCommand(captureVideoEditCommandContext(id, 'project', { itemIds: [item.id], frame: 0 }), 'insert')

@@ -83,7 +83,7 @@ function createVideoEditCodeAssetsScene() {
         const beforePreview = await workerSnapshot(page); await card.locator('.aspect-square').dblclick(); await page.locator('[data-asset-code-preview]').waitFor({ state: 'visible' }); await page.locator('[data-asset-code-import]').waitFor({ state: 'visible' })
         assert.equal((await workerSnapshot(page)).workers.length, beforePreview.workers.length, '资产清单预览不能启动GPU或编译Worker')
         const importAt = performance.now(); await page.locator('[data-asset-code-import]').click()
-        document = await saved(page, targetFile, value => value.items.some(item => item.kind === 'code')); await page.getByText('已加入项目素材，可继续剪辑和调参', { exact: true }).waitFor({ state: 'visible' }); evidence.importMs = performance.now() - importAt
+        document = await saved(page, targetFile, value => value.items.some(item => item.kind === 'code')); await page.getByText('已加入剪辑素材，可继续剪辑和调参', { exact: true }).waitFor({ state: 'visible' }); evidence.importMs = performance.now() - importAt
         await page.getByRole('dialog', { name: '可编辑代码', exact: true }).getByRole('button', { name: '可编辑代码 - 关闭', exact: true }).click()
         await clickOutsideFloatingAssets(page)
         const imported = document.items.find(item => item.kind === 'code'); const originalCount = target.media.length

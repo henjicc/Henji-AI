@@ -7,6 +7,6 @@ export function videoEditSourceReadError(name: string, error: unknown): Error {
   // Chromium reports a missing file as 404; the native decoder service passes on the operating-system error.
   const missing = /\b404\b|not found|ENOENT|no such file/i.test(raw)
   return new Error(missing
-    ? `找不到素材「${name}」的源文件，请在项目素材中右键该素材，选择“重新定位源文件”。`
-    : `素材「${name}」无法读取，请确认文件可用，或在项目素材中重新定位源文件。`, { cause: error })
+    ? `找不到素材「${name}」的源文件，请在素材面板中右键该素材，选择“重新定位源文件”。`
+    : `素材「${name}」无法读取，请确认文件可用，或在素材面板中重新定位源文件。`, { cause: error })
 }

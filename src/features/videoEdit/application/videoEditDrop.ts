@@ -19,7 +19,7 @@ export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
   if (transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME)) return videoEditSourceRangeSchema.parse(JSON.parse(transfer.getData(VIDEO_EDIT_SOURCE_DRAG_MIME)))
   if (transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME)) {
     const raw: unknown = JSON.parse(transfer.getData(VIDEO_EDIT_ITEM_DRAG_MIME))
-    if (typeof raw !== 'object' || raw === null || !('projectId' in raw) || typeof raw.projectId !== 'string' || !('itemIds' in raw) || !Array.isArray(raw.itemIds) || !raw.itemIds.length || raw.itemIds.length > 500 || !raw.itemIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 100)) throw new Error('项目项拖拽数据无效。')
+    if (typeof raw !== 'object' || raw === null || !('projectId' in raw) || typeof raw.projectId !== 'string' || !('itemIds' in raw) || !Array.isArray(raw.itemIds) || !raw.itemIds.length || raw.itemIds.length > 500 || !raw.itemIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 100)) throw new Error('素材项拖拽数据无效。')
     return { kind: 'items', projectId: raw.projectId, itemIds: raw.itemIds as string[] }
   }
   const payload = readHenjiDragData(transfer)
@@ -50,7 +50,7 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
     return placeVideoEditSourceRange(projectId, input, sequenceId, placement)
   }
   let createdId: string | undefined; let selectedClip: string | undefined
-  if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前剪辑，不能跨剪辑引用项目项。')
+  if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前剪辑，不能跨剪辑引用素材项。')
   const apply = (document: VideoEditDocument, ids: string[]): VideoEditDocument => {
     if (!placement || !ids.length) return document
     const sequence = document.sequences.find(sequence => sequence.id === sequenceId)

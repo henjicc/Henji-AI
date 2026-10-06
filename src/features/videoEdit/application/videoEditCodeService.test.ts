@@ -612,7 +612,7 @@ it('代码资产不匹配语言、参数或图片映射均拒绝且不发布部�
     expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
   }
 })
-it('代码资产filter强制检查隐藏真实目标并保留参数，不制造项目项；动态源时长和锁定拒绝', async () => {
+it('代码资产filter强制检查隐藏真实目标并保留参数，不制造素材项；动态源时长和锁定拒绝', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const [item] = await createVideoEditCodeItems(id, [{ source }]); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
   editVideoSequence(id, owner.activeSequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, opacity: 0 })), tracks: sequence.tracks.map(track => ({ ...track, enabled: false })) }))
   const filterTarget = { sequenceId: owner.activeSequenceId, clipId }; const asset = { ...codeAssetFixture(filterSource), parameters: { gain: .8 }, curves: undefined }; const before = owner.past.length
