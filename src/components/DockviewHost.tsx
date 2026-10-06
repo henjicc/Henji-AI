@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react'
+import { forwardRef, useRef, type ReactNode } from 'react'
 
 /**
  * dockview 宿主外壳：剪辑工作区与 3D 镜头参考两个停靠布局共用（4.1 定位的两处同源缺陷）。
@@ -12,12 +12,14 @@ import { useRef, type ReactNode } from 'react'
  * 3. 按下分隔条后不允许启动原生拖放：分隔条压在面板边缘，Chromium 会把按下点下面的可拖动元素
  *    （剪辑素材面板的素材行等 `draggable` 元素）当成拖放源，指针一移出 4px 宽的分隔条就触发
  *    dragstart → pointercancel，dockview 的拖动随之中断，分隔条只能挪动第一下。
+ * 4. 根元素是 PR 式拖放的宿主（`dockviewDocking.ts`）：窗口边缘停靠指示画在它里面，所以带 `relative`。
  */
-export function DockviewHost({ className = '', children }: { className?: string; children: ReactNode }): JSX.Element {
+export const DockviewHost = forwardRef<HTMLDivElement, { className?: string; children: ReactNode }>(function DockviewHost({ className = '', children }, ref) {
   const sashPress = useRef(false)
   return (
     <div
-      className={`isolate ${className}`}
+      ref={ref}
+      className={`relative isolate ${className}`}
       onPointerDownCapture={(event) => {
         sashPress.current = event.target instanceof Element && event.target.closest('.dv-sash') !== null
       }}
@@ -29,5 +31,5 @@ export function DockviewHost({ className = '', children }: { className?: string;
       {children}
     </div>
   )
-}
+})
 

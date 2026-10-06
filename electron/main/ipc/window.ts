@@ -2,6 +2,8 @@ import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { isUiScaleFactor, type UiScaleFactor } from '../../../src/core/theme/uiScale'
 import { parseWindowAppearance, windowAppearance } from '../services/window-appearance'
 import { parseRecord, parseVoid, registerIpcHandler } from './registry'
+import { controlVideoEditPopout } from '../windows/video-edit-popout'
+import { parseVideoEditPopoutControl } from '../windows/video-edit-popout-policy'
 
 const WINDOW_MINIMIZE = 'window:minimize'
 const WINDOW_TOGGLE_MAXIMIZE = 'window:toggleMaximize'
@@ -14,6 +16,7 @@ const WINDOW_TOGGLE_DEVTOOLS = 'window:toggleDevTools'
 const WINDOW_STATE_CHANGED = 'window:stateChanged'
 const WINDOW_CLOSE_REQUESTED = 'window:closeRequested'
 const WINDOW_CONFIRM_CLOSE = 'window:confirmClose'
+const WINDOW_CONTROL_POPOUT = 'window:controlPopout'
 
 const approvedCloseWindows = new WeakSet<BrowserWindow>()
 
@@ -123,5 +126,10 @@ export function registerWindowIpc(): void {
     const win = getEventWindow(event)
     approvedCloseWindows.add(win)
     win.close()
+  })
+
+  // 剪辑独立面板窗口无 preload，标题栏拖动/最大化由打开它的主窗口代为请求；只能控制发送方自己的浮窗。
+  registerIpcHandler(WINDOW_CONTROL_POPOUT, parseVideoEditPopoutControl, (request, event) => {
+    controlVideoEditPopout(event.sender, request)
   })
 }

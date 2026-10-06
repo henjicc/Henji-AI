@@ -85,6 +85,7 @@ const windowApi: HenjiWindowApi = {
     return () => ipcRenderer.removeListener('window:closeRequested', listener)
   },
   confirmClose: () => nativeInvoke('window:confirmClose'),
+  controlPopout: (request) => nativeInvoke('window:controlPopout', request),
 }
 
 const assistantApi: HenjiAssistantApi = {

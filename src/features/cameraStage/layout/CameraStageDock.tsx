@@ -3,6 +3,7 @@ import React, {
   forwardRef,
   useCallback,
   useContext,
+  useEffect,
   useImperativeHandle,
   useRef,
 } from 'react'
@@ -20,6 +21,7 @@ import StateKeyframeTimelinePanel from '../stateKeyframes/StateKeyframeTimelineP
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
+import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { DockHeaderActions, DockTab } from './DockChrome'
 import { LAYOUT_STORAGE_KEY, resetCameraStageWorkspace, restoreLayout } from './dockLayout'
 
@@ -66,14 +68,23 @@ interface CameraStageDockProps {
 const CameraStageDock = forwardRef<CameraStageDockHandle, CameraStageDockProps>(
   ({ captureRef }, ref) => {
     const apiRef = useRef<DockviewApi | null>(null)
+    const hostRef = useRef<HTMLDivElement | null>(null)
+    const unbindRef = useRef<() => void>(() => {})
 
     const onReady = useCallback((event: DockviewReadyEvent): void => {
       apiRef.current = event.api
       restoreLayout(event.api)
+      // 应用内浮动组已不是入口（Shift 拖动浮出已关闭）：旧布局里的浮动组恢复后贴到右侧。
+      dockFloatingGroupsBack(event.api, (group) => group.api.moveTo({ position: 'right' }))
+      // PR 式拖放：整个区域四边可停靠。3D 镜头参考没有独立窗口，Ctrl 拖动与空白处松开不浮出。
+      unbindRef.current()
+      unbindRef.current = hostRef.current ? bindDockDragGestures(event.api, { root: hostRef.current }) : () => {}
       event.api.onDidLayoutChange(() => {
         localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(event.api.toJSON()))
       })
     }, [])
+
+    useEffect(() => () => unbindRef.current(), [])
 
     useImperativeHandle(ref, () => ({
       resetLayout: () => {
@@ -85,13 +96,14 @@ const CameraStageDock = forwardRef<CameraStageDockHandle, CameraStageDockProps>(
     return (
       <ViewportCaptureContext.Provider value={captureRef}>
         {/* 层叠隔离与分隔条拖动保护见 DockviewHost（与剪辑工作区共用） */}
-        <DockviewHost className="h-full w-full">
+        <DockviewHost ref={hostRef} className="h-full w-full">
           <DockviewReact
             className="henji-cameraStage-dock dockview-theme-abyss"
             theme={CAMERA_STAGE_DOCK_THEME}
             components={DOCK_COMPONENTS}
             defaultTabComponent={DockTab}
             rightHeaderActionsComponent={DockHeaderActions}
+            {...DOCKVIEW_HOST_DND_OPTIONS}
             onReady={onReady}
           />
         </DockviewHost>

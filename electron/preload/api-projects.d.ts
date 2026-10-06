@@ -32,6 +32,10 @@ export interface HenjiWindowApi {
   onStateChanged(handler: (payload: HenjiWindowStatePayload) => void): () => void
   onCloseRequested(handler: () => void): () => void
   confirmClose(): Promise<void>
+  /** 与渲染层 `WindowPopoutControlRequest`、主进程 `VideoEditPopoutControlRequest` 同形。 */
+  controlPopout(request:
+    | { panelKey: string; action: 'begin-move' | 'move'; x: number; y: number }
+    | { panelKey: string; action: 'end-move' | 'collapse' | 'expand' | 'toggle-maximize' }): Promise<void>
 }
 
 export interface HenjiDiagnosticsStreamEvent {

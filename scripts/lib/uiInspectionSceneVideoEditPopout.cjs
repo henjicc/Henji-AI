@@ -60,7 +60,7 @@ function createVideoEditPopoutScene() {
         await group(page, title).locator('.dv-tab').filter({ has: button(page, `关闭${title}`) }).click()
         const opened = app.waitForEvent('window', { timeout: 30000 })
         await group(page, title).getByRole('button', { name: '面板菜单', exact: true }).click()
-        await page.getByText('在独立窗口打开', { exact: true }).click()
+        await button(page, '浮动面板').click()
         const child = await opened; await child.waitForLoadState('domcontentloaded')
         await child.locator(`[data-video-edit-panel]`).first().waitFor({ state: 'visible', timeout: 30000 })
         return child
@@ -164,27 +164,36 @@ function createVideoEditPopoutScene() {
         for (let attempt = 0; attempt < 200 && JSON.stringify((await windows()).map(window => window.title).sort()) !== JSON.stringify(expectedTitles); attempt++) await page.waitForTimeout(100)
         app.off('window', onWindow)
         evidence.windowsAfterRestore = await windows()
+        // 记录的是渲染层看到的窗口矩形（无边框窗口含隐形边框），按同一语义比较恢复后的窗口。
         for (const record of evidence.persistedLayout?.panels ?? []) {
           const title = { effects: '痕迹AI · 效果控件', timeline: '痕迹AI · 时间线', program: '痕迹AI · 节目画面' }[record.id]
-          const restored = evidence.windowsAfterRestore.find(window => window.title === title)
-          for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(restored.bounds[key] - record.bounds[key]) <= 1, `浮窗恢复位置/尺寸不得漂移：${record.id}.${key} ${record.bounds[key]}→${restored.bounds[key]}`)
+          let restored = null
+          for (const child of restoredWindows) if (!child.isClosed() && await child.title().catch(() => '') === title) restored = child
+          assert.ok(restored, `应恢复 ${title}`)
+          let view = null
+          for (let attempt = 0; attempt < 30; attempt++) {
+            view = await restored.evaluate(() => ({ x: window.screenX, y: window.screenY, width: window.outerWidth, height: window.outerHeight }))
+            if (['x', 'y', 'width', 'height'].every(key => Math.abs(view[key] - record.bounds[key]) <= 1)) break
+            await page.waitForTimeout(100)
+          }
+          for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(view[key] - record.bounds[key]) <= 1, `浮窗恢复位置/尺寸不得漂移：${record.id}.${key} ${record.bounds[key]}→${view[key]}`)
         }
         assert.deepEqual(evidence.windowsAfterRestore.map(window => window.title).sort(), ['痕迹AI', '痕迹AI · 效果控件', '痕迹AI · 时间线', '痕迹AI · 节目画面'].sort(), '重开工程后应恢复上次浮出的面板')
         assert.equal(evidence.windowsAfterRestore.find(window => window.title === '痕迹AI · 效果控件').display, displays.primary, '恢复的浮窗应回到上次所在显示器')
-        const restoredProgram = restoredWindows.find(child => child.url() === 'about:blank' && child !== page)
         evidence.restoredPages = restoredWindows.length
         evidence.phases.push('主窗口重载无幽灵浮窗；重开工程按本机记录恢复三扇浮窗及其显示器位置')
-        void restoredProgram
 
         phase('dock-back')
-        for (const title of ['痕迹AI · 节目画面', '痕迹AI · 时间线', '痕迹AI · 效果控件']) {
-          await app.evaluate(({ BrowserWindow }, value) => BrowserWindow.getAllWindows().find(window => window.getTitle() === value)?.close(), title)
+        // 自绘标题栏的“贴回主窗口”放回 Dock（PR：关闭窗口则关闭面板，见 video-edit-dock-gestures）。
+        for (const child of restoredWindows.filter(value => value !== page && !value.isClosed())) {
+          await child.getByRole('button', { name: '贴回主窗口', exact: true }).click().catch(() => {})
         }
         await page.locator('canvas[aria-label="剪辑画面"]').waitFor({ state: 'visible', timeout: 60000 }); await presented(page, 0)
         await group(page, '效果控件').waitFor({ state: 'visible' }); await group(page, '时间线').waitFor({ state: 'visible' })
-        evidence.windowsAfterDock = await windows(); assert.equal(evidence.windowsAfterDock.length, 1, '关闭浮窗后不得残留窗口')
+        for (let attempt = 0; attempt < 100 && (await windows()).length > 1; attempt++) await page.waitForTimeout(100)
+        evidence.windowsAfterDock = await windows(); assert.equal(evidence.windowsAfterDock.length, 1, '贴回后不得残留窗口')
         await shot('popout-docked-back')
-        evidence.phases.push('关闭浮窗即贴回，节目画面回主窗口，无残留窗口')
+        evidence.phases.push('标题栏贴回：节目画面回主窗口，无残留窗口')
 
         await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
@@ -200,4 +209,171 @@ function createVideoEditPopoutScene() {
     },
   }
 }
-module.exports = { createVideoEditPopoutScene }
+/**
+ * 剪辑对齐 PR 1.1/1.2：停靠拖放与独立窗口自绘标题栏，必须在真实 Electron 里验收的部分——
+ * Ctrl 拖动浮出到松开处、拖到停靠区域外浮出、窗口边缘停靠指示、无边框窗口的标题栏移动与双击最大化、
+ * 拖标题栏回主窗口显示停靠指示并停靠、关闭窗口即关闭面板。
+ * 跨窗口拖动用浮窗文档内派发的指针事件（带屏幕坐标）驱动：CDP 鼠标坐标相对页面，窗口随拖动移动后会自我叠加。
+ */
+function createVideoEditDockGesturesScene() {
+  return { id: 'video-edit-dock-gestures', surface: '剪辑', name: '剪辑-PR式停靠拖放与独立窗口标题栏', writesUserData: true,
+    setup: async (page, app, { capture }) => {
+      const root = path.resolve('node_modules/.cache/video-edit-dock-gestures'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
+      const file = path.join(root, 'gestures.henji-video'); fs.writeFileSync(file, JSON.stringify({ ...fixture(), id: 'video-edit-dock-gestures', name: '停靠拖放验收' }))
+      const evidence = { completed: false, phases: [], captures: [] }
+      const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
+      const phase = name => { evidence.currentPhase = name; store() }
+      const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
+      const tab = title => group(page, title).locator('.dv-tab').filter({ has: button(page, `关闭${title}`) })
+      const center = box => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
+      const popoutWindows = () => app.evaluate(({ BrowserWindow, screen }) => BrowserWindow.getAllWindows().filter(window => window.getTitle().startsWith('痕迹AI · ')).map(window => ({ id: window.id, title: window.getTitle(), bounds: window.getBounds(), maximized: window.isMaximized(), workArea: screen.getDisplayMatching(window.getBounds()).workArea })))
+      const popoutBounds = async title => (await popoutWindows()).find(window => window.title === title)?.bounds
+      const dockRoot = () => page.evaluate(() => { const rect = document.querySelector('.henji-videoEdit-dock').parentElement.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height } })
+      /** 主窗口客户区点 → 屏幕坐标（DIP）。 */
+      const toScreen = async point => {
+        const handle = await app.browserWindow(page); const bounds = await handle.evaluate(window => window.getBounds()); await handle.dispose()
+        const zoom = await page.evaluate(() => (Number(document.documentElement.dataset.uiScale) || 100) / 100)
+        return { x: Math.round(bounds.x + point.x * zoom), y: Math.round(bounds.y + point.y * zoom) }
+      }
+      /** 在浮窗标题栏上派发带屏幕坐标的指针事件（按下 → 逐步移动；`release` 为 true 时松开）。 */
+      const titleDrag = (child, steps, release) => child.evaluate(({ steps, release }) => {
+        const bar = document.querySelector('[data-window-titlebar="panel"]')
+        const rect = bar.getBoundingClientRect(); const local = { x: rect.left + rect.width * 0.6, y: rect.top + rect.height / 2 }
+        const fire = (type, point) => bar.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: local.x, clientY: local.y, screenX: point.x, screenY: point.y, ctrlKey: Boolean(steps.ctrl) }))
+        if (steps.start) fire('pointerdown', steps.start)
+        for (const point of steps.moves ?? []) fire('pointermove', point)
+        if (release) fire('pointerup', steps.moves?.at(-1) ?? steps.start)
+      }, { steps, release })
+      const lerp = (from, to, count) => Array.from({ length: count }, (_, index) => ({ x: Math.round(from.x + (to.x - from.x) * (index + 1) / count), y: Math.round(from.y + (to.y - from.y) * (index + 1) / count) }))
+      try {
+        phase('open-project')
+        await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
+        await page.evaluate(() => { localStorage.removeItem('henji.videoEdit.dockLayout.v1'); localStorage.removeItem('henji.videoEdit.popoutLayout.v1') })
+        await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
+
+        phase('ctrl-drag-float')
+        // Ctrl+拖动标签：拖动中不显示停靠指示、指针处显示浮动窗口预览；松开浮出为独立窗口，标题栏抓取点落在松开处。
+        const effectsTab = center(await tab('效果控件').boundingBox())
+        const release = center(await group(page, '节目画面').boundingBox())
+        await page.mouse.move(effectsTab.x, effectsTab.y); await page.keyboard.down('Control'); await page.mouse.down()
+        await page.mouse.move(release.x, release.y, { steps: 16 })
+        evidence.ctrlPreviewVisible = await page.locator('[data-dock-float-preview]:not(.hidden)').isVisible()
+        evidence.ctrlDockOverlayVisible = await page.locator('.dv-drop-target-anchor, .dv-drop-target-selection').evaluateAll(nodes => nodes.some(node => getComputedStyle(node).visibility !== 'hidden' && node.getBoundingClientRect().width > 0))
+        await shot('dock-ctrl-drag-preview')
+        const floated = app.waitForEvent('window', { timeout: 30000 })
+        await page.mouse.up(); await page.keyboard.up('Control')
+        const effects = await floated; await effects.waitForLoadState('domcontentloaded')
+        await effects.locator('[data-video-edit-panel="effects"]').waitFor({ state: 'visible', timeout: 30000 })
+        assert.equal(evidence.ctrlPreviewVisible, true, 'Ctrl 拖动时应显示浮动窗口预览')
+        assert.equal(evidence.ctrlDockOverlayVisible, false, 'Ctrl 拖动时不应显示停靠指示')
+        const releaseScreen = await toScreen(release)
+        evidence.ctrlFloat = { releaseScreen, bounds: await popoutBounds('痕迹AI · 效果控件') }
+        assert.ok(evidence.ctrlFloat.bounds, '应浮出效果控件独立窗口')
+        assert.ok(Math.abs(evidence.ctrlFloat.bounds.x - (releaseScreen.x - 48)) <= 12 && Math.abs(evidence.ctrlFloat.bounds.y - (releaseScreen.y - 16)) <= 12, `浮出窗口应放在松开处：${JSON.stringify(evidence.ctrlFloat)}`)
+        assert.equal(await button(page, '关闭效果控件').count(), 0, '浮出后主窗口不再有效果控件')
+        assert.equal(await effects.locator('[data-window-titlebar="panel"]').count(), 1, '独立窗口使用自绘标题栏')
+        await effects.screenshot({ path: path.join(root, 'child-titlebar.png') })
+        evidence.phases.push('Ctrl 拖动：无停靠指示、有浮动预览，松开在松开处浮出独立窗口（自绘标题栏）')
+
+        phase('titlebar-maximize')
+        const bar = await effects.locator('[data-window-titlebar="panel"]').boundingBox()
+        await effects.mouse.dblclick(bar.x + bar.width * 0.6, bar.y + bar.height / 2)
+        await page.waitForTimeout(400)
+        const maximized = (await popoutWindows()).find(window => window.title === '痕迹AI · 效果控件')
+        evidence.maximized = maximized
+        // 系统最大化：无边框窗口的外框会超出可用区域一圈隐形边框，以最大化状态为准。
+        assert.equal(maximized.maximized, true, `双击标题栏应最大化：${JSON.stringify(maximized)}`)
+        await effects.screenshot({ path: path.join(root, 'child-maximized.png') })
+        const maxBar = await effects.locator('[data-window-titlebar="panel"]').boundingBox()
+        await effects.mouse.dblclick(maxBar.x + maxBar.width * 0.6, maxBar.y + maxBar.height / 2)
+        await page.waitForTimeout(400)
+        evidence.restored = await popoutBounds('痕迹AI · 效果控件')
+        evidence.restoredRendererView = await effects.evaluate(() => ({ x: window.screenX, y: window.screenY, width: window.outerWidth, height: window.outerHeight }))
+        // 尺寸与横向位置还原；纵向位置可能被系统夹回屏幕内（浮出时窗口下沿超出了屏幕）。
+        const original = evidence.ctrlFloat.bounds; const area = maximized.workArea
+        assert.ok(['x', 'width', 'height'].every(key => Math.abs(evidence.restored[key] - original[key]) <= 2)
+          && (Math.abs(evidence.restored.y - original.y) <= 2 || (evidence.restored.y < original.y && evidence.restored.y + evidence.restored.height <= area.y + area.height + 2)), `再次双击应还原：${JSON.stringify({ original, restored: evidence.restored })}`)
+        evidence.phases.push('双击标题栏最大化（铺满可用区域）与还原')
+
+        phase('titlebar-move')
+        const before = await popoutBounds('痕迹AI · 效果控件')
+        const displayLeft = (await popoutWindows())[0].workArea.x
+        const start = { x: before.x + 200, y: before.y + 16 }
+        // 拖过显示器左边界到另一块屏幕（渲染层 moveTo 做不到，由主进程代管）；
+        // 浮窗与主窗口重叠：按住 Ctrl 拖动只移动、不停靠（PR）。
+        const delta = { x: displayLeft - before.x - 300, y: -70 }
+        await titleDrag(effects, { start, moves: lerp(start, { x: start.x + delta.x, y: start.y + delta.y }, 10), ctrl: true }, true)
+        await page.waitForTimeout(300)
+        evidence.moved = { before, delta, after: await popoutBounds('痕迹AI · 效果控件') }
+        assert.ok(Math.abs(evidence.moved.after.x - before.x - delta.x) <= 2 && Math.abs(evidence.moved.after.y - before.y - delta.y) <= 2, `拖动标题栏应移动窗口（可跨显示器）：${JSON.stringify(evidence.moved)}`)
+        evidence.phases.push('拖动自绘标题栏移动无边框窗口并跨到另一块显示器（Ctrl：在主窗口上方也不停靠）')
+
+        phase('drag-back-dock')
+        // 拖标题栏回主窗口：在主窗口显示停靠指示、窗口收成标题条；松开停靠到节目画面所在组（编组）。
+        const moved = evidence.moved.after
+        const grab = { x: moved.x + 200, y: moved.y + 16 }
+        const target = await toScreen(center(await group(page, '节目画面').boundingBox()))
+        await titleDrag(effects, { start: grab, moves: lerp(grab, target, 12) }, false)
+        await page.waitForTimeout(300)
+        evidence.dragBack = { indicator: await page.locator('[data-dock-drop-zone]:not(.hidden)').evaluateAll(nodes => nodes.map(node => ({ zone: node.dataset.dockDropZone, rect: node.getBoundingClientRect().toJSON() }))), window: await popoutBounds('痕迹AI · 效果控件') }
+        await shot('dock-drag-back-indicator')
+        assert.equal(evidence.dragBack.indicator.length, 1, '拖回主窗口时应显示停靠指示')
+        assert.equal(evidence.dragBack.indicator[0].zone, 'group', '节目画面中部是编组区')
+        assert.ok(evidence.dragBack.window.height <= 120, `拖向落点时窗口应收成标题条：${JSON.stringify(evidence.dragBack.window)}`)
+        await titleDrag(effects, { moves: [target] }, true)
+        for (let attempt = 0; attempt < 50 && (await popoutWindows()).length; attempt++) await page.waitForTimeout(100)
+        assert.equal((await popoutWindows()).length, 0, '停靠后独立窗口关闭')
+        await group(page, '节目画面').getByRole('button', { name: '关闭效果控件', exact: true }).waitFor({ state: 'attached', timeout: 10000 })
+        assert.equal(await page.locator('[data-dock-drop-zone]:not(.hidden)').count(), 0, '停靠后指示消失')
+        evidence.phases.push('拖标题栏回主窗口：主窗口显示停靠指示、窗口收成标题条，松开叠进目标组')
+
+        phase('root-edge')
+        // 贴近整个停靠区域右边缘：窗口边缘停靠（窄带指示），松开后素材组贴到最右侧。
+        const dock = await dockRoot()
+        const projectTab = center(await tab('素材').boundingBox())
+        const edge = { x: dock.x + dock.width - 6, y: dock.y + dock.height / 2 }
+        await page.mouse.move(projectTab.x, projectTab.y); await page.mouse.down()
+        await page.mouse.move(edge.x, edge.y, { steps: 16 })
+        evidence.rootEdge = { indicator: await page.locator('[data-dock-drop-zone]:not(.hidden)').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON())) }
+        await shot('dock-root-edge-indicator')
+        await page.mouse.up(); await page.waitForTimeout(300)
+        const projectBox = await group(page, '素材').boundingBox()
+        evidence.rootEdge.project = projectBox; evidence.rootEdge.dock = dock
+        assert.equal(evidence.rootEdge.indicator.length, 1, '贴近窗口边缘应显示停靠指示')
+        assert.ok(evidence.rootEdge.indicator[0].width <= dock.width * 0.1 + 1, '窗口边缘停靠指示是窄带')
+        assert.ok(Math.abs(projectBox.x + projectBox.width - (dock.x + dock.width)) <= 2 && projectBox.height >= dock.height - 4, `素材组应贴到整个区域右侧：${JSON.stringify(evidence.rootEdge)}`)
+        evidence.phases.push('窗口边缘停靠：窄带指示，松开贴到整个区域右侧')
+
+        phase('drop-outside-float')
+        // 不按修饰键拖到停靠区域外（命令带）松开：浮出为独立窗口；关闭窗口即关闭面板。
+        const timelineTab = center(await tab('时间线').boundingBox())
+        const outside = { x: dock.x + dock.width / 2, y: dock.y - 12 }
+        await page.mouse.move(timelineTab.x, timelineTab.y); await page.mouse.down()
+        await page.mouse.move(outside.x, outside.y, { steps: 16 })
+        evidence.outsidePreviewVisible = await page.locator('[data-dock-float-preview]:not(.hidden)').isVisible()
+        await shot('dock-outside-float-preview')
+        const floatedTimeline = app.waitForEvent('window', { timeout: 30000 })
+        await page.mouse.up()
+        const timeline = await floatedTimeline; await timeline.waitForLoadState('domcontentloaded')
+        await timeline.locator('[data-video-edit-panel="timeline"]').waitFor({ state: 'visible', timeout: 30000 })
+        assert.equal(evidence.outsidePreviewVisible, true, '拖到空白处应显示浮动窗口预览')
+        await timeline.locator('[data-window-titlebar="panel"]').getByRole('button', { name: '关闭时间线', exact: true }).click()
+        for (let attempt = 0; attempt < 50 && (await popoutWindows()).length; attempt++) await page.waitForTimeout(100)
+        assert.equal((await popoutWindows()).length, 0, '关闭按钮关闭独立窗口')
+        assert.equal(await button(page, '关闭时间线').count(), 0, '关闭独立窗口即关闭其中的面板')
+        evidence.phases.push('拖到停靠区域外松开浮出；关闭独立窗口即关闭面板')
+
+        await page.getByRole('button', { name: '面板', exact: true }).click(); await button(page, '重置布局').click()
+        await button(page, '关闭项目').click()
+        evidence.completed = true; store()
+      } catch (error) { evidence.failed = { phase: evidence.currentPhase, message: String(error.message ?? error), stack: error.stack }; store(); await shot('dock-gestures-failed').catch(() => {}); throw error }
+      finally {
+        await page.mouse.up().catch(() => {}); await page.keyboard.up('Control').catch(() => {})
+        await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter(window => window.getTitle().startsWith('痕迹AI · ')).forEach(window => window.close())).catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
+        await page.evaluate(() => { localStorage.removeItem('henji.videoEdit.dockLayout.v1'); localStorage.removeItem('henji.videoEdit.popoutLayout.v1') }).catch(() => {}); store()
+      }
+    },
+  }
+}
+module.exports = { createVideoEditPopoutScene, createVideoEditDockGesturesScene }

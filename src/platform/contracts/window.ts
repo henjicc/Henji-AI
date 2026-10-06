@@ -5,6 +5,15 @@ export interface WindowAppearance {
   colorScheme: 'dark' | 'light'
 }
 
+/**
+ * 剪辑独立面板窗口（无系统边框、无 preload）由主窗口代为移动：标题栏拖动时主窗口把指针的屏幕坐标交给主进程，
+ * 主进程按抓取点移动窗口（不受渲染层 moveTo 必须完整留在当前屏幕内的限制，可拖过显示器、可部分移出屏幕）。
+ * `panelKey` 只能指向调用窗口自己打开的浮窗。
+ */
+export type WindowPopoutControlRequest =
+  | { panelKey: string; action: 'begin-move' | 'move'; x: number; y: number }
+  | { panelKey: string; action: 'end-move' | 'collapse' | 'expand' | 'toggle-maximize' }
+
 export interface WindowPlatform {
   minimize(): Promise<void>
   toggleMaximize(): Promise<void>
@@ -21,4 +30,6 @@ export interface WindowPlatform {
   /** 主进程准备关闭窗口时触发；渲染层完成关键写入后必须调用 confirmClose。 */
   onCloseRequested(handler: () => void): () => void
   confirmClose(): Promise<void>
+  /** 移动/收起/最大化本窗口打开的剪辑独立面板窗口（见 WindowPopoutControlRequest）。 */
+  controlPopout(request: WindowPopoutControlRequest): Promise<void>
 }

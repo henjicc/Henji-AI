@@ -1033,6 +1033,21 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   box-shadow: inset 0 -1.5px 0 rgb(var(--line-strong-rgb));
 }
 
+/* 停靠拖放指示（剪辑对齐 PR 1.1，按用户 PR 录屏，剪辑与 3D 镜头参考共用）：半透明强调色着色放下后占的区域——
+ * 编组（中部或标签栏，叠成标签）= 整个目标组着色；停靠（四边，贴在旁边）= 只沿那条边一条窄带（约 8%，尺寸由
+ * dockviewDocking.ts 的 dropOverlayModel 决定）。dockview 自带指示（.dv-drop-target-*）与自绘的窗口边缘/跨窗口
+ * 指示（dockviewDocking.ts，bg-accent/35）同一外观；按住 Ctrl 或拖到停靠区域外准备浮出时不显示停靠指示，改为浮动窗口预览。 */
+.henji-cameraStage-dock.dockview-theme-abyss {
+  --dv-drag-over-background-color: rgb(var(--accent-rgb) / 0.35);
+  --dv-drag-over-border: none;
+  --dv-drag-over-border-color: rgb(var(--accent-rgb));
+}
+
+[data-dock-float-intent='true'] .dv-drop-target-anchor,
+[data-dock-float-intent='true'] .dv-drop-target-dropzone {
+  visibility: hidden;
+}
+
 /* 剪辑工作区（界面重设计 3.5，设计稿 VideoEdit）：面板之间只露 1px 间隙色（不再画发丝线），
  * 面板头右侧的“放大/面板菜单”平时隐藏，悬停该面板组、键盘聚焦或菜单展开时出现。
  * 只用 opacity：按钮始终占位、可被键盘与自动化命中，标签条不因显隐抖动。 */

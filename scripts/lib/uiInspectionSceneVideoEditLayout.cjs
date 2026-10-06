@@ -23,12 +23,6 @@ async function pointerDrag(page, source, target, position) {
   return { from, to, position, milliseconds: performance.now() - startedAt }
 }
 
-async function menuAction(page, title, action) {
-  await group(page, title).getByRole('button', { name: '面板菜单', exact: true }).click()
-  await button(page, action).click()
-  // PanelTrigger keeps the closing menu mounted for its registered 200ms exit animation.
-  await page.waitForTimeout(250)
-}
 async function layoutAction(page, action) {
   await button(page, '面板').click(); await button(page, action).click(); await page.waitForTimeout(250)
 }
@@ -227,22 +221,15 @@ function createVideoEditLayoutScene() {
         evidence.resize = { milliseconds: performance.now() - dragBegan, before: beforeResize, after: afterResize }
         await stable('拖动分隔线'); await capture('video-layout-resized')
 
-        await menuAction(page, '节目画面', '浮动面板')
-        assert.equal(await group(page, '节目画面').evaluate(element => element.classList.contains('dv-groupview-floating')), true)
-        const floatingBox = await group(page, '节目画面').boundingBox(); const workspaceBox = await page.getByLabel('剪辑面板工作区', { exact: true }).boundingBox()
-        assert.ok(floatingBox.x >= workspaceBox.x - 1 && floatingBox.y >= workspaceBox.y - 1 && floatingBox.x + floatingBox.width <= workspaceBox.x + workspaceBox.width + 1 && floatingBox.y + floatingBox.height <= workspaceBox.y + workspaceBox.height + 1, '浮动面板在工作区可见范围内')
-        await stable('浮动面板'); await capture('video-layout-floating')
-        await menuAction(page, '节目画面', '贴回面板')
-        assert.equal(await group(page, '节目画面').evaluate(element => element.classList.contains('dv-groupview-floating')), false)
-        await stable('贴回面板')
-        await group(page, '节目画面').getByRole('button', { name: '放大面板', exact: true }).click()
-        await group(page, '节目画面').getByRole('button', { name: '还原面板', exact: true }).waitFor({ state: 'visible' })
-        await stable('放大面板'); await capture('video-layout-maximized')
-        await group(page, '节目画面').getByRole('button', { name: '还原面板', exact: true }).click()
-        await stable('还原面板')
+        // 应用内浮动组已不是入口（剪辑对齐 PR 记录 001：浮动统一为独立系统窗口，见 video-edit-popout / video-edit-dock-gestures 场景）。
+        await group(page, '节目画面').getByRole('button', { name: '最大化面板组', exact: true }).click()
+        await group(page, '节目画面').getByRole('button', { name: '恢复面板组大小', exact: true }).waitFor({ state: 'visible' })
+        await stable('最大化面板组'); await capture('video-layout-maximized')
+        await group(page, '节目画面').getByRole('button', { name: '恢复面板组大小', exact: true }).click()
+        await stable('恢复面板组大小')
         await layoutAction(page, '重置布局'); await stable('重置布局'); await capture('video-layout-reset')
         const beforeCloseWorkers = await workerSnapshot(page)
-        // 组内隐藏/拆分时按契约释放并重建会话；除这些重建外，移动、浮动、放大与重置不创建新 Worker，旧会话都已退场。
+        // 组内隐藏/拆分时按契约释放并重建会话；除这些重建外，移动、放大与重置不创建新 Worker，旧会话都已退场。
         assert.equal(beforeCloseWorkers.workers.length, 1 + rebuiltSessions, '移动、隐藏和重置整个过程只在节目面板不可见再显示时重建会话')
         assert.equal(beforeCloseWorkers.live, 1, '重建后只保留一个真实渲染 Worker')
 
@@ -258,14 +245,13 @@ function createVideoEditLayoutScene() {
         await capture('video-layout-reopened')
 
         // Persist a deliberately non-default layout, then exercise the actual workspace unmount/remount.
-        await button(page, '关闭效果控件').click(); await menuAction(page, '素材', '浮动整组')
+        await button(page, '关闭效果控件').click()
         const beforeRoundTrip = await savedLayout(page); evidence.restoration.before = layoutSignature(beforeRoundTrip)
         await button(page, '生成').click(); await waitReleased(page)
         assert.equal(await page.getByLabel('剪辑画面', { exact: true }).count(), 0)
         await button(page, '剪辑').click(); await presented(page, 120)
         await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
         assert.equal(await button(page, '关闭效果控件').count(), 0, '页面往返保持关闭的效果面板')
-        assert.equal(await group(page, '素材').evaluate(element => element.classList.contains('dv-groupview-floating')), true, '页面往返恢复浮动分组')
         const afterRoundTrip = await savedLayout(page); evidence.restoration.after = layoutSignature(afterRoundTrip)
         assert.deepEqual(evidence.restoration.after, evidence.restoration.before)
         // Restore the effects view so the selected clip can be observed again.

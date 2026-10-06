@@ -13,9 +13,10 @@ import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel
 import { readVideoEditSource, subscribeVideoEditSource } from '../application/videoEditSource'
 import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
+import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { VideoEditDockHeaderActions, VideoEditDockTab } from './VideoEditDockChrome'
-import { restoreVideoEditLayout, saveVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
-import { bindVideoEditPopoutDock, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
+import { dockVideoEditGroup, restoreVideoEditLayout, saveVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
+import { bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
 import { VideoEditPopoutPortals } from './popout/VideoEditPopoutPortals'
 
 const logger = createLogger('features.videoEdit.layout')
@@ -47,6 +48,7 @@ function EmptyLayout({ containerApi }: IWatermarkPanelProps): React.ReactElement
 
 export function VideoEditDock({ instance, onError, onApiChange }: DockContext & { onApiChange: (api: DockviewApi | null) => void }): React.ReactElement {
   const apiRef = useRef<DockviewApi | null>(null)
+  const hostRef = useRef<HTMLDivElement | null>(null)
   const disposeRef = useRef<() => void>(() => {})
   useEffect(() => {
     let previous = instance.panelFocusVersion ?? 0
@@ -67,7 +69,11 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     disposeRef.current()
     apiRef.current = api
     restoreVideoEditLayout(api)
-    bindVideoEditPopoutDock(api)
+    // 应用内浮动组已不是入口（重要记录 001）：旧布局里的浮动组恢复后贴回默认方位。
+    dockFloatingGroupsBack(api, group => dockVideoEditGroup(api, group))
+    const root = hostRef.current
+    bindVideoEditPopoutDock(api, window, root)
+    const unbindGestures = root ? bindDockDragGestures(api, { root, canFloat: canFloatVideoEditDockSource, float: (source, at) => floatVideoEditDockSource(api, source, at) }) : () => {}
     // Dock 只在剪辑已打开时挂载：此时恢复上次浮出的面板，没有剪辑时不会弹窗。
     restoreVideoEditPopouts(api)
     onApiChange(api)
@@ -85,15 +91,15 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
       const panel = value.panel?.id
       if (panel && ['project', 'source', 'program', 'timeline', 'effects', 'content'].includes(panel) && instance.activePanel !== panel && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'])
     })
-    disposeRef.current = () => { event.dispose(); focus.dispose(); if (timer !== undefined) save() }
+    disposeRef.current = () => { event.dispose(); focus.dispose(); unbindGestures(); if (timer !== undefined) save() }
   }, [onApiChange, onError, instance])
   useEffect(() => () => { bindVideoEditPopoutDock(null); disposeRef.current(); apiRef.current = null; onApiChange(null) }, [onApiChange])
   return <Context.Provider value={{ instance, onError }}>
     {/* 层叠隔离与分隔条拖动保护见 DockviewHost（与 3D 镜头参考共用） */}
-    <DockviewHost className="h-full min-h-0 w-full">
+    <DockviewHost ref={hostRef} className="h-full min-h-0 w-full">
       <DockviewReact className="henji-cameraStage-dock henji-videoEdit-dock dockview-theme-abyss h-full min-h-0 w-full" theme={VIDEO_EDIT_DOCK_THEME} components={COMPONENTS}
         defaultTabComponent={VideoEditDockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
-        dndStrategy="pointer" floatingGroupBounds="boundedWithinViewport" floatingGroupDragHandle="tabbar" defaultRenderer="always" onReady={onReady} />
+        {...DOCKVIEW_HOST_DND_OPTIONS} defaultRenderer="always" onReady={onReady} />
     </DockviewHost>
     <VideoEditPopoutPortals onFocusPanel={id => { if (instance.activePanel !== id && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id) }}
       render={(id, visible) => { const Body = BODIES[id]; return <Body visible={visible} /> }} />

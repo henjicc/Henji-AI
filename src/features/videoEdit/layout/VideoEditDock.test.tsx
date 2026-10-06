@@ -5,8 +5,8 @@ import type { DockviewApi } from 'dockview-react'
 import { createVideoEditDocument } from '@/core/videoEdit/document'
 import type { VideoEditInstance } from '../application/videoEditService'
 import { VideoEditDock } from './VideoEditDock'
-import { dockVideoEditPanel, resetVideoEditLayout, showVideoEditPanel } from './videoEditDockLayout'
-import { listVideoEditPopouts, popOutVideoEditPanel, resetVideoEditWorkspaceLayout } from './popout/videoEditPopouts'
+import { dockVideoEditPanel, resetVideoEditLayout, saveVideoEditLayout, showVideoEditPanel } from './videoEditDockLayout'
+import { dockVideoEditPopout, listVideoEditPopouts, popOutVideoEditPanel, resetVideoEditWorkspaceLayout } from './popout/videoEditPopouts'
 import { VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY } from './popout/videoEditPopoutLayout'
 import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
 import { createPopoutTestHost } from './popout/videoEditPopout.testSupport'
@@ -63,7 +63,7 @@ it('真实 Dockview React 移动、隐藏标签、缩放和重置不卸载节目
   expect(lifetime).toMatchObject({ live: 0, disposed: 2 })
 })
 
-it('DOM 面板浮出到系统窗口后仍由同一 React 树渲染；关闭浮窗贴回，重置与卸载不留浮窗或重复面板', () => {
+it('DOM 面板浮出到系统窗口后仍由同一 React 树渲染；关闭窗口即关闭面板，贴回按钮与拖回落点放回 Dock，重置与卸载不留浮窗或重复面板', () => {
   const document = createVideoEditDocument('浮窗验收')
   const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 3, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
   let api: DockviewApi | null = null
@@ -86,21 +86,38 @@ it('DOM 面板浮出到系统窗口后仍由同一 React 树渲染；关闭浮�
   expect(opened).toHaveLength(1)
   expect(effects.focus).toHaveBeenCalled()
 
+  // 自绘标题栏：面板标签 + 贴回 + 关闭。
+  expect(effects.document.querySelector('[data-window-titlebar="panel"]')?.textContent).toContain('效果控件')
+
+  // PR：关闭浮动窗口即关闭其中的面板（可从面板菜单重新打开），不贴回。
   act(() => effects.userClose())
-  expect(dock.getPanel('effects')).toBeDefined()
+  expect(dock.getPanel('effects')).toBeUndefined()
   expect(effects.document.querySelector('[data-video-edit-panel]')).toBeNull()
   expect(listVideoEditPopouts()).toHaveLength(0)
+
+  // 标题栏“贴回主窗口”：回到默认方位。
+  act(() => { popOutVideoEditPanel(dock, 'effects', host) })
+  const dockBack = opened[1].child.document.querySelector<HTMLElement>('[aria-label="贴回主窗口"]')!
+  act(() => dockBack.click())
+  expect(dock.getPanel('effects')).toBeDefined()
+  expect(listVideoEditPopouts()).toHaveLength(0)
+
+  // 拖回主窗口落在时间线组的编组区：叠进那一组。
+  act(() => { popOutVideoEditPanel(dock, 'effects', host) })
+  const timelineGroup = dock.getPanel('timeline')!.group
+  act(() => dockVideoEditPopout('effects', { kind: 'group', group: timelineGroup, position: 'center', rect: { left: 0, top: 0, width: 10, height: 10 } }))
+  expect(dock.getPanel('effects')!.group).toBe(timelineGroup)
 
   act(() => { popOutVideoEditPanel(dock, 'timeline', host) })
   expect(dock.getPanel('timeline')).toBeUndefined()
   act(() => resetVideoEditWorkspaceLayout(dock))
-  expect(opened[1].child.close).toHaveBeenCalledOnce()
+  expect(opened[3].child.close).toHaveBeenCalledOnce()
   expect(dock.panels.filter(panel => panel.id === 'timeline')).toHaveLength(1)
 
   act(() => { popOutVideoEditPanel(dock, 'project', host) })
   expect(lifetime).toMatchObject({ created: 1, live: 1 })
   view.unmount()
-  expect(opened[2].child.close).toHaveBeenCalledOnce()
+  expect(opened[4].child.close).toHaveBeenCalledOnce()
   expect(listVideoEditPopouts()).toHaveLength(0)
   expect(onError).not.toHaveBeenCalled()
 })
@@ -111,7 +128,7 @@ const makeInstance = (name: string): VideoEditInstance => {
 }
 const savedPopouts = (): unknown => JSON.parse(localStorage.getItem(VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY) ?? 'null')
 
-it('节目面板可浮出（重挂载一次、不并存两份）；浮窗记录随工作区卸载/主窗口退出保留并在 Dock 就绪后恢复，用户关闭即移除', () => {
+it('节目面板可浮出（重挂载一次、不并存两份）；浮窗记录随工作区卸载/主窗口退出保留并在 Dock 就绪后恢复，用户关闭即关闭面板并移除记录', () => {
   const { opened, open } = createPopoutTestHost()
   vi.spyOn(window, 'open').mockImplementation(open as typeof window.open)
   const instance = makeInstance('持久化')
@@ -131,9 +148,9 @@ it('节目面板可浮出（重挂载一次、不并存两份）；浮窗记录�
     { id: 'timeline', bounds: { x: 2760, y: 200, width: 480, height: 360 } },
   ] })
 
-  // 用户关闭节目浮窗 = 贴回并移除记录。
+  // 用户关闭节目浮窗 = 关闭面板并移除记录（PR）。
   act(() => opened[0].child.userClose())
-  expect(dock.getPanel('program')).toBeDefined()
+  expect(dock.getPanel('program')).toBeUndefined()
   expect(savedPopouts()).toEqual({ version: 1, panels: [{ id: 'timeline', bounds: { x: 2760, y: 200, width: 480, height: 360 } }] })
 
   // 工作区卸载：浮窗关闭、不贴回，但记录与最后位置保留。
@@ -205,4 +222,18 @@ it('浮窗焦点从 body 收回到 React 焦点根，Ctrl+Z 沿 React 树到达�
   expect(handled).toEqual(['undo']); expect(typing.defaultPrevented).toBe(false)
   input.remove()
   view.unmount(); frame.remove()
+})
+
+it('旧布局里的应用内浮动组恢复后贴回主区域（浮动统一为独立窗口）', () => {
+  let api: DockviewApi | null = null
+  const first = render(<VideoEditDock instance={makeInstance('旧浮动组')} onError={vi.fn()} onApiChange={value => { api = value }} />)
+  let dock = api as unknown as DockviewApi
+  act(() => { dock.layout(1440, 860); dock.addFloatingGroup(dock.getPanel('effects')!); saveVideoEditLayout(dock) })
+  expect(dock.getPanel('effects')!.api.location.type).toBe('floating')
+  first.unmount()
+  const second = render(<VideoEditDock instance={makeInstance('旧浮动组')} onError={vi.fn()} onApiChange={value => { api = value }} />)
+  dock = api as unknown as DockviewApi
+  expect(dock.groups.every(group => group.api.location.type === 'grid')).toBe(true)
+  expect(dock.getPanel('effects')).toBeDefined()
+  second.unmount()
 })

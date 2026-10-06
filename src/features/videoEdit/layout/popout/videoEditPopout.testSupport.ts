@@ -17,6 +17,9 @@ export function createPopoutTestHost(options: { href?: string; deny?: boolean } 
       /** 模拟用户点系统标题栏关闭按钮。 */
       userClose: () => { child.closed = true; events.dispatchEvent(new Event('pagehide')) },
       screenX: 2760, screenY: 200, outerWidth: 480, outerHeight: 360,
+      screen: { availLeft: 2560, availTop: 0, availWidth: 1920, availHeight: 1040 },
+      moveTo: vi.fn((x: number, y: number) => { child.screenX = x; child.screenY = y }),
+      resizeTo: vi.fn((width: number, height: number) => { child.outerWidth = width; child.outerHeight = height }),
     }
     return child
   }

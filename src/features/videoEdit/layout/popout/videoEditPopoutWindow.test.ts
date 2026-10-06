@@ -98,3 +98,36 @@ it('焦点不留在子窗 body：初次打开、输入框失焦和窗口重新�
   expect(child.activeElement).toBe(popout.container)
   popout.close(); frame.remove(); vi.useRealTimers()
 })
+
+it('无系统边框窗口：桌面端几何交给主进程代管；兜底路径用 moveTo/resizeTo 跟随、收起、模拟最大化并在拖动时先还原', () => {
+  const { host, opened } = createPopoutTestHost()
+  const control = vi.fn()
+  const native = openVideoEditPopoutWindow('effects', options({ control }), host)!
+  native.beginMove({ x: 10, y: 20 }); native.moveWith({ x: 30, y: 40 }); native.setCollapsed(true); native.endMove(); native.toggleMaximized()
+  expect(control.mock.calls.map(([request]) => request)).toEqual([
+    { action: 'begin-move', x: 10, y: 20 }, { action: 'move', x: 30, y: 40 }, { action: 'collapse' }, { action: 'end-move' }, { action: 'toggle-maximize' },
+  ])
+  expect(opened[0].child.moveTo).not.toHaveBeenCalled()
+  native.close()
+
+  const popout = openVideoEditPopoutWindow('effects', options(), host)!
+  const child = opened[1].child
+  // 抓在 (2900,210)，窗口 (2760,200,480,360)：跟随指针移动。
+  popout.beginMove({ x: 2900, y: 210 }); popout.moveWith({ x: 3000, y: 260 })
+  expect(child.moveTo).toHaveBeenLastCalledWith(2860, 250)
+  popout.setCollapsed(true)
+  expect(child.resizeTo).toHaveBeenLastCalledWith(480, 32)
+  popout.endMove()
+  expect(child.resizeTo).toHaveBeenLastCalledWith(480, 360)
+  // 双击最大化：铺满所在显示器可用区域；记录位置时用还原外框。
+  popout.toggleMaximized()
+  expect(child.moveTo).toHaveBeenLastCalledWith(2560, 0)
+  expect(child.resizeTo).toHaveBeenLastCalledWith(1920, 1040)
+  expect(popout.readBounds()).toEqual({ x: 2860, y: 250, width: 480, height: 360 })
+  // 最大化时拖动：先还原，指针保持在标题栏同样的相对横向位置（中点）。
+  popout.beginMove({ x: 3520, y: 10 })
+  expect(child.resizeTo).toHaveBeenLastCalledWith(480, 360)
+  expect(child.moveTo).toHaveBeenLastCalledWith(3280, 0)
+  popout.endMove()
+  popout.close()
+})

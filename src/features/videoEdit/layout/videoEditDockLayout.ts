@@ -1,5 +1,6 @@
-import { Orientation, type DockviewApi, type DockviewGroupPanel, type IDockviewPanel, type SerializedDockview } from 'dockview-react'
+import { Orientation, positionToDirection, type DockviewApi, type DockviewGroupPanel, type IDockviewPanel, type SerializedDockview } from 'dockview-react'
 import { createLogger } from '@/core/logging'
+import { toggleDockGroupMaximized, type DockDropZone } from '@/components/dockviewDocking'
 
 const logger = createLogger('features.videoEdit.layout')
 export const VIDEO_EDIT_LAYOUT_STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
@@ -153,4 +154,26 @@ export function dockVideoEditPanel(api: DockviewApi, panel: IDockviewPanel): voi
 export function dockVideoEditGroup(api: DockviewApi, group: DockviewGroupPanel): void {
   const target = defaultDockTarget(api, group.activePanel?.id ?? '', group)
   group.api.moveTo(target ?? { position: 'right' })
+}
+
+/**
+ * 把面板放到拖回时指示的位置（独立窗口拖回主窗口）：窗口边缘 = 贴到整个区域那一边；面板组四边 = 贴在旁边；
+ * 中部或标签栏 = 叠成标签。目标组已不存在时回到默认方位。
+ */
+export function addVideoEditPanelAt(api: DockviewApi, id: VideoEditPanelId, zone: DockDropZone): IDockviewPanel {
+  const existing = api.getPanel(id)
+  if (existing) { existing.api.setActive(); return existing }
+  const definition = VIDEO_EDIT_PANELS.find(panel => panel.id === id)!
+  const base = { id, component: id, title: definition.title, renderer: 'always' as const }
+  if (zone.kind === 'root') return api.addPanel({ ...base, position: { direction: positionToDirection(zone.side) } })
+  if (!api.groups.includes(zone.group)) return showVideoEditPanel(api, id)
+  return api.addPanel({ ...base, position: { referenceGroup: zone.group, direction: positionToDirection(zone.position) } })
+}
+
+/**
+ * 最大化／还原面板组（PR 的 `` ` `` 键）：最大化指针下的面板组，指针不在面板组上时用当前活动组；
+ * 已最大化时还原。供快捷键命令调用，返回是否有变化。
+ */
+export function toggleVideoEditGroupMaximized(api: DockviewApi, point?: { clientX: number; clientY: number }): boolean {
+  return toggleDockGroupMaximized(api, point)
 }

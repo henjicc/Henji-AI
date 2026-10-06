@@ -3,8 +3,9 @@ import { Check, LayoutGrid, Maximize2, Menu, Minimize2, RotateCcw, X } from 'luc
 import type { DockviewApi, IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
 import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
-import { dockVideoEditGroup, dockVideoEditPanel, showVideoEditPanel, VIDEO_EDIT_PANELS } from './videoEditDockLayout'
-import { dockVideoEditPopout, isVideoEditPanelPoppedOut, isVideoEditPopoutPanel, popOutVideoEditPanel, resetVideoEditWorkspaceLayout, subscribeVideoEditPopouts, videoEditPopoutRevision } from './popout/videoEditPopouts'
+import { toggleDockGroupMaximized } from '@/components/dockviewDocking'
+import { showVideoEditPanel, VIDEO_EDIT_PANELS } from './videoEditDockLayout'
+import { dockVideoEditPopout, isVideoEditPanelPoppedOut, isVideoEditPopoutPanel, popOutVideoEditGroup, popOutVideoEditPanel, resetVideoEditWorkspaceLayout, subscribeVideoEditPopouts, videoEditPopoutRevision } from './popout/videoEditPopouts'
 
 export function VideoEditDockTab({ api }: IDockviewPanelHeaderProps): React.ReactElement {
   const [title, setTitle] = useState(api.title ?? '')
@@ -18,28 +19,33 @@ export function VideoEditDockTab({ api }: IDockviewPanelHeaderProps): React.Reac
   </span>
 }
 
+/**
+ * 面板组菜单，叫法与 PR 一致（剪辑对齐 PR 1.1）。“浮动”即浮出为独立系统窗口（重要记录 001）；
+ * 一个窗口放多个面板不在本期，浮动面板组时组内每个面板各开一个窗口。
+ */
 export function VideoEditDockHeaderActions({ api, containerApi, activePanel, panels, group }: IDockviewHeaderActionsProps): React.ReactElement {
   const [maximized, setMaximized] = useState(api.isMaximized())
-  const [floating, setFloating] = useState(api.location.type === 'floating')
   useEffect(() => {
-    const events = [containerApi.onDidMaximizedGroupChange(() => setMaximized(api.isMaximized())), api.onDidLocationChange(value => setFloating(value.location.type === 'floating'))]
-    return () => events.forEach(event => event.dispose())
+    const event = containerApi.onDidMaximizedGroupChange(() => setMaximized(api.isMaximized()))
+    return () => event.dispose()
   }, [api, containerApi])
-  const popoutId = activePanel && isVideoEditPopoutPanel(activePanel.id) ? activePanel.id : null
-  return <PanelTrigger panelWidth={180} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu"
-    renderPanel={() => <div className="flex flex-col gap-1">
-      <UiOptionButton variant="menu" size="sm" disabled={!activePanel} onClick={() => activePanel?.api.close()}>关闭面板</UiOptionButton>
-      <UiOptionButton variant="menu" size="sm" disabled={panels.length < 2 || !activePanel} onClick={() => panels.filter(panel => panel !== activePanel).forEach(panel => panel.api.close())}>关闭其他标签</UiOptionButton>
-      <UiOptionButton variant="menu" size="sm" onClick={() => api.close()}>关闭整组</UiOptionButton>
-      <UiOptionButton variant="menu" size="sm" disabled={!activePanel} onClick={() => { if (activePanel) { if (floating) dockVideoEditPanel(containerApi, activePanel); else containerApi.addFloatingGroup(activePanel) } }}>{floating ? '贴回面板' : '浮动面板'}</UiOptionButton>
-      <UiOptionButton variant="menu" size="sm" onClick={() => { if (floating) dockVideoEditGroup(containerApi, group); else containerApi.addFloatingGroup(group) }}>{floating ? '贴回整组' : '浮动整组'}</UiOptionButton>
-      {popoutId && <UiOptionButton variant="menu" size="sm" onClick={() => popOutVideoEditPanel(containerApi, popoutId)}>在独立窗口打开</UiOptionButton>}
-      <UiOptionButton variant="menu" size="sm" disabled={api.location.type !== 'grid'} onClick={() => { if (maximized) api.exitMaximized(); else api.maximize() }}>{maximized ? '还原面板' : '放大面板'}</UiOptionButton>
-      <UiOptionButton variant="menu" size="sm" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiOptionButton>
+  const canFloatPanel = Boolean(activePanel && isVideoEditPopoutPanel(activePanel.id))
+  const canFloatGroup = panels.some(panel => isVideoEditPopoutPanel(panel.id))
+  const toggleMaximized = (): void => { toggleDockGroupMaximized(containerApi, undefined, group) }
+  const maximizeLabel = maximized ? '恢复面板组大小' : '最大化面板组'
+  return <PanelTrigger panelWidth={196} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu"
+    renderPanel={() => <div className="flex flex-col gap-1" role="menu" aria-label="面板菜单">
+      <UiOptionButton role="menuitem" variant="menu" size="sm" disabled={!activePanel} onClick={() => activePanel?.api.close()}>关闭面板</UiOptionButton>
+      <UiOptionButton role="menuitem" variant="menu" size="sm" disabled={!canFloatPanel} onClick={() => { if (activePanel && isVideoEditPopoutPanel(activePanel.id)) popOutVideoEditPanel(containerApi, activePanel.id) }}>浮动面板</UiOptionButton>
+      <UiOptionButton role="menuitem" variant="menu" size="sm" disabled={panels.length < 2 || !activePanel} onClick={() => panels.filter(panel => panel !== activePanel).forEach(panel => panel.api.close())}>关闭组中的其他面板</UiOptionButton>
+      <UiOptionButton role="menuitem" variant="menu" size="sm" disabled={!canFloatGroup} onClick={() => popOutVideoEditGroup(containerApi, group)}>浮动面板组</UiOptionButton>
+      <UiOptionButton role="menuitem" variant="menu" size="sm" disabled={api.location.type !== 'grid' || (!maximized && containerApi.groups.length < 2)} onClick={toggleMaximized}>{maximizeLabel}</UiOptionButton>
+      <UiOptionButton role="menuitem" variant="menu" size="sm" onClick={() => api.close()}>关闭面板组</UiOptionButton>
+      <UiOptionButton role="menuitem" variant="menu" size="sm" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiOptionButton>
     </div>}>
     {({ open, togglePanel }) => <div className="flex h-full items-center gap-1 pr-1" data-video-edit-dock-actions data-open={open ? 'true' : undefined}>
-      {api.location.type === 'grid' && <UiIconButton size="sm" title={maximized ? '还原面板' : '放大面板'} aria-label={maximized ? '还原面板' : '放大面板'} onClick={() => { if (maximized) api.exitMaximized(); else api.maximize() }}>{maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</UiIconButton>}
-      <UiIconButton size="sm" title="面板菜单" aria-label="面板菜单" on={open} data-panel-trigger-button onClick={togglePanel}><Menu size={14} /></UiIconButton>
+      {api.location.type === 'grid' && <UiIconButton size="sm" title={maximizeLabel} aria-label={maximizeLabel} onClick={toggleMaximized}>{maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</UiIconButton>}
+      <UiIconButton size="sm" title="面板菜单" aria-label="面板菜单" aria-haspopup="menu" aria-expanded={open} on={open} data-panel-trigger-button onClick={togglePanel}><Menu size={14} /></UiIconButton>
     </div>}
   </PanelTrigger>
 }

@@ -21,6 +21,18 @@ export interface VideoEditPopoutWindow {
   /** 内容挂载后调用：焦点仍在 body/容器时移到焦点根。 */
   restoreFocus(): void
   focus(): void
+  /** 移动/缩放窗口（渲染层看到的窗口矩形，DIP）；没有主进程代管时的兜底路径。 */
+  setBounds(bounds: Partial<VideoEditPopoutBounds>): void
+  /** 标题栏拖动：在屏幕坐标 `pointer` 处抓起（最大化时先还原，指针保持在标题栏同样的相对位置）。 */
+  beginMove(pointer: { x: number; y: number }): void
+  /** 拖动中：窗口跟随指针。 */
+  moveWith(pointer: { x: number; y: number }): void
+  /** 拖向主窗口停靠时收成只剩标题条／恢复原高度。 */
+  setCollapsed(collapsed: boolean): void
+  /** 拖动结束（未停靠）：恢复收起前的高度。 */
+  endMove(): void
+  /** 最大化／还原（标题栏双击）。 */
+  toggleMaximized(): void
   /** 主动关闭；`onClosed` 仍只触发一次。 */
   close(): void
 }
@@ -34,7 +46,18 @@ export interface OpenVideoEditPopoutOptions {
   onVisibilityChange: (visible: boolean) => void
   /** 用户调整浮窗尺寸时通知，便于记住位置；移动没有事件，在关闭或退出前读取。 */
   onResize?: () => void
+  /**
+   * 主进程代管窗口几何（桌面端）：标题栏拖动、收起、最大化交给打开它的主窗口经 IPC 请求主进程执行——
+   * 渲染层 moveTo 必须完整留在当前屏幕内，拖不过显示器。不提供时用 moveTo/resizeTo 兜底（测试与浏览器）。
+   */
+  control?: (request: VideoEditPopoutControl) => void
 }
+
+/** 浮窗标题栏高度（DIP）；与主进程 `VIDEO_EDIT_POPOUT_TITLEBAR_HEIGHT` 同值。 */
+export const VIDEO_EDIT_POPOUT_TITLEBAR_HEIGHT = 32
+export type VideoEditPopoutControl =
+  | { action: 'begin-move' | 'move'; x: number; y: number }
+  | { action: 'end-move' | 'collapse' | 'expand' | 'toggle-maximize' }
 
 const STYLE_SELECTOR = 'style, link[rel="stylesheet"]'
 
@@ -166,12 +189,91 @@ export function openVideoEditPopoutWindow(panelKey: string, options: OpenVideoEd
   child.addEventListener('resize', resized)
   target.addEventListener('visibilitychange', visibility)
 
+  // 无系统边框：最大化只能由宿主模拟（铺满所在显示器的可用区域），记住还原外框。
+  let restoreBounds: VideoEditPopoutBounds | null = null
+  const readBounds = (): VideoEditPopoutBounds | null => closed || child.closed ? null : { x: child.screenX, y: child.screenY, width: child.outerWidth, height: child.outerHeight }
+  const setBounds = (bounds: Partial<VideoEditPopoutBounds>): void => {
+    if (closed || child.closed) return
+    const resize = bounds.width !== undefined && bounds.height !== undefined
+    // 浏览器会把窗口夹在屏幕内：先按目标尺寸缩放再移动，移动后再定一次尺寸（从最大化还原时，
+    // 先移动会因大窗口放不下而被夹回原处）。
+    if (resize) child.resizeTo(Math.round(bounds.width!), Math.round(bounds.height!))
+    if (bounds.x !== undefined && bounds.y !== undefined) child.moveTo(Math.round(bounds.x), Math.round(bounds.y))
+    if (resize) child.resizeTo(Math.round(bounds.width!), Math.round(bounds.height!))
+  }
+  const readAvailableArea = (): VideoEditPopoutBounds | null => {
+    if (closed || child.closed) return null
+    const screen = child.screen as Screen & { availLeft?: number; availTop?: number }
+    return { x: screen.availLeft ?? 0, y: screen.availTop ?? 0, width: screen.availWidth, height: screen.availHeight }
+  }
+  const restoreFromMaximized = (): VideoEditPopoutBounds | null => {
+    const previous = restoreBounds
+    if (!previous) return null
+    restoreBounds = null
+    setBounds(previous)
+    return previous
+  }
+  // 兜底路径的拖动状态：抓取时的窗口矩形与指针、收起前的高度。
+  let move: { origin: VideoEditPopoutBounds; anchor: { x: number; y: number }; last: { x: number; y: number }; collapsedFrom: number | null } | null = null
+  const positionAt = (pointer: { x: number; y: number }): { x: number; y: number } => move
+    ? { x: move.origin.x + pointer.x - move.anchor.x, y: move.origin.y + pointer.y - move.anchor.y }
+    : pointer
+  const control = options.control
+
   return {
     window: child,
     container,
+    setBounds,
+    beginMove: pointer => {
+      if (closed) return
+      if (control) { control({ action: 'begin-move', x: pointer.x, y: pointer.y }); return }
+      let origin = readBounds()
+      if (!origin) return
+      if (restoreBounds) {
+        const area = readAvailableArea() ?? origin
+        const restored = restoreFromMaximized()!
+        const ratio = Math.min(1, Math.max(0, (pointer.x - area.x) / Math.max(1, area.width)))
+        origin = { ...restored, x: Math.round(pointer.x - restored.width * ratio), y: Math.round(pointer.y - Math.min(VIDEO_EDIT_POPOUT_TITLEBAR_HEIGHT / 2, pointer.y - area.y)) }
+        setBounds({ x: origin.x, y: origin.y })
+      }
+      move = { origin, anchor: pointer, last: pointer, collapsedFrom: null }
+    },
+    moveWith: pointer => {
+      if (closed) return
+      if (control) { control({ action: 'move', x: pointer.x, y: pointer.y }); return }
+      if (!move) return
+      move.last = pointer
+      setBounds(positionAt(pointer))
+    },
+    setCollapsed: collapsed => {
+      if (closed) return
+      if (control) { control({ action: collapsed ? 'collapse' : 'expand' }); return }
+      if (!move || collapsed === (move.collapsedFrom !== null)) return
+      // 窗口矩形含系统的隐形边框（Windows 无边框窗口下沿约 7），标题条高度要加上它才完整露出。
+      const chromeHeight = child.outerHeight - child.innerHeight
+      const chrome = Number.isFinite(chromeHeight) ? Math.max(0, chromeHeight) : 0
+      if (collapsed) move.collapsedFrom = move.origin.height
+      setBounds({ ...positionAt(move.last), width: move.origin.width, height: collapsed ? VIDEO_EDIT_POPOUT_TITLEBAR_HEIGHT + chrome : move.collapsedFrom ?? move.origin.height })
+      if (!collapsed) move.collapsedFrom = null
+    },
+    endMove: () => {
+      if (closed) return
+      if (control) { control({ action: 'end-move' }); return }
+      if (move?.collapsedFrom !== null && move) setBounds({ ...positionAt(move.last), width: move.origin.width, height: move.collapsedFrom })
+      move = null
+    },
+    toggleMaximized: () => {
+      if (closed) return
+      if (control) { control({ action: 'toggle-maximize' }); return }
+      if (restoreFromMaximized()) return
+      const current = readBounds(); const area = readAvailableArea()
+      if (!current || !area) return
+      restoreBounds = current
+      setBounds(area)
+    },
     isVisible: () => !closed && target.visibilityState === 'visible',
     restoreFocus: reclaimFocus,
-    readBounds: () => closed || child.closed ? null : { x: child.screenX, y: child.screenY, width: child.outerWidth, height: child.outerHeight },
+    readBounds: () => closed || child.closed ? null : restoreBounds ?? readBounds(),
     focus: () => { if (!closed && !target.hasFocus()) child.focus() },
     close: () => { if (closed) return; finish(); child.close() },
   }

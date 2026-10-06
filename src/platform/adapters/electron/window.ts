@@ -1,4 +1,4 @@
-import type { WindowAppearance, WindowPlatform } from '@/platform/contracts/window'
+import type { WindowAppearance, WindowPlatform, WindowPopoutControlRequest } from '@/platform/contracts/window'
 import type { UiScaleFactor, WindowContentSize } from '@/core/theme/uiScale'
 
 const DOMAIN = 'window'
@@ -19,6 +19,7 @@ interface ElectronWindowApi {
   toggleDevTools(): Promise<void>
   onCloseRequested(handler: () => void): () => void
   confirmClose(): Promise<void>
+  controlPopout(request: WindowPopoutControlRequest): Promise<void>
 }
 
 interface ElectronNativeApi {
@@ -67,6 +68,9 @@ export function createElectronWindow(): WindowPlatform {
     },
     async confirmClose() {
       await getWindowApi().confirmClose()
+    },
+    async controlPopout(request) {
+      await getWindowApi().controlPopout(request)
     },
   }
 }

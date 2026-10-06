@@ -1,14 +1,11 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
 import { useApplyRuntimeTheme } from '@/hooks/useApplyRuntimeTheme'
 import { useApplyUiScale } from '@/hooks/useApplyUiScale'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform } from '@/platform/runtime'
 import { UiWindowControl } from '@/components/ui'
+import { WindowTitleBar } from '@/components/WindowTitleBar'
 import { LogsPanel } from './LogsPanel'
-
-type AppRegionStyle = CSSProperties & { WebkitAppRegion: 'drag' | 'no-drag' }
-const dragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'drag' }
-const noDragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'no-drag' }
 
 /**
  * 独立日志窗口的顶层壳：自定义无边框标题栏（沿用主窗口 frame:false 风格，
@@ -61,15 +58,11 @@ export default function LogsShell(): JSX.Element {
 
   const maximizeLabel = isMaximized ? t('windowControls.restore') : t('windowControls.maximize')
 
-  // 标题栏与主窗口同一套：window 底 + 发丝线、标题 13/600，窗口控件用 `UiWindowControl`（设计稿 TitleBar）。
+  // 标题栏与剪辑独立面板窗口共用 WindowTitleBar（与主窗口同一外观），窗口控件用 `UiWindowControl`。
   return (
     <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-window text-text1">
-      <header
-        className="flex h-10 shrink-0 select-none items-center justify-between gap-3 border-b border-line bg-window pl-4 pr-1.5"
-        style={dragRegionStyle}
-      >
-        <span className="min-w-0 truncate text-13 font-semibold">{t('logsWindow.title')}</span>
-        <div className="flex shrink-0 items-center gap-0.5" style={noDragRegionStyle}>
+      <WindowTitleBar
+        actions={<>
           <UiWindowControl
             action="minimize"
             onClick={handleMinimize}
@@ -88,8 +81,10 @@ export default function LogsShell(): JSX.Element {
             title={t('windowControls.close')}
             aria-label={t('windowControls.close')}
           />
-        </div>
-      </header>
+        </>}
+      >
+        <span className="min-w-0 truncate text-13 font-semibold">{t('logsWindow.title')}</span>
+      </WindowTitleBar>
       <div className="min-h-0 flex-1">
         <LogsPanel />
       </div>
