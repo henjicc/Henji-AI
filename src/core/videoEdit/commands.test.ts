@@ -3,12 +3,15 @@ import { z } from 'zod'
 import { matchVideoEditShortcut, parseVideoEditShortcutOverrides, sanitizeVideoEditShortcutOverrides, VIDEO_EDIT_COMMANDS, videoEditCommandShortcut, videoEditCommandShortcuts, videoEditShortcutLabel, videoEditShortcutOverridesSchema, type VideoEditKeyEvent } from './commands'
 
 const event = (code: string, values: Partial<VideoEditKeyEvent> = {}): VideoEditKeyEvent => ({ code, key: code, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, isComposing: false, defaultPrevented: false, ...values })
-it('默认键位无冲突，工具限定时间线而播放作用于当前监视器', () => {
+it('默认键位无冲突，文字与选择工具同时作用于节目，而播放作用于当前监视器', () => {
   expect(parseVideoEditShortcutOverrides({})).toEqual({})
   expect(new Set(VIDEO_EDIT_COMMANDS.map(command => command.id)).size).toBe(VIDEO_EDIT_COMMANDS.length)
   const schema = z.toJSONSchema(videoEditShortcutOverridesSchema)
   expect(schema.additionalProperties).toBe(false); expect(Object.keys(schema.properties ?? {})).toEqual(VIDEO_EDIT_COMMANDS.map(command => command.id)); expect(schema.required).toBeUndefined()
   expect(matchVideoEditShortcut(event('KeyV'), 'timeline', {})).toBe('select_tool')
+  expect(matchVideoEditShortcut(event('KeyV'), 'program', {})).toBe('select_tool')
+  expect(matchVideoEditShortcut(event('KeyT'), 'program', {})).toBe('type_tool')
+  expect(matchVideoEditShortcut(event('KeyT'), 'source', {})).toBeUndefined()
   expect(matchVideoEditShortcut(event('KeyV'), 'source', {})).toBeUndefined()
   expect(matchVideoEditShortcut(event('Space'), 'source', {})).toBe('play_pause')
   expect(matchVideoEditShortcut(event('KeyK', { ctrlKey: true, shiftKey: true }), 'timeline', {})).toBe('split_tracks')

@@ -2,6 +2,15 @@
 import { expect, it } from 'vitest'
 import { videoEditKeyboardCommand } from './videoEditKeyboard'
 const event = (target: EventTarget | null, code: string, ctrlKey = false) => ({ target, code, key: code, ctrlKey, metaKey: false, altKey: false, shiftKey: false, repeat: false, isComposing: false, defaultPrevented: false })
+it('节目画面 T/V 切换文字和选择，纯文本就地编辑保留 T/V 输入', () => {
+  const panel = document.createElement('div'); panel.dataset.videoEditPanel = 'program'
+  const picture = document.createElement('div'); panel.append(picture)
+  expect(videoEditKeyboardCommand(event(picture, 'KeyT'), 'timeline', {})).toEqual({ id: 'type_tool', scope: 'program' })
+  expect(videoEditKeyboardCommand(event(picture, 'KeyV'), 'timeline', {})).toEqual({ id: 'select_tool', scope: 'program' })
+  const editor = document.createElement('div'); editor.setAttribute('contenteditable', 'plaintext-only'); picture.append(editor)
+  expect(videoEditKeyboardCommand(event(editor, 'KeyT'), 'timeline', {})).toBeUndefined()
+  expect(videoEditKeyboardCommand(event(editor, 'KeyV'), 'timeline', {})).toBeUndefined()
+})
 it('当前真实面板限定命令；输入、原生按钮和弹窗保留自己的键盘行为', () => {
   const source = document.createElement('div'); source.dataset.videoEditPanel = 'source'
   const child = document.createElement('div'); source.append(child)
