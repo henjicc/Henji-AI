@@ -22,6 +22,7 @@ import type { VideoFramesPlatform } from './videoFrames'
 import type { VideoDecoderPlatform } from './videoDecoder'
 import type { DocumentsPlatform } from './documents'
 import type { WorkRootPlatform } from './workRoot'
+import type { LocalModelsPlatform } from './localModels'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
@@ -51,6 +52,7 @@ export interface PlatformRuntime {
   videoDecoder: VideoDecoderPlatform
   documents: DocumentsPlatform
   workRoot: WorkRootPlatform
+  localModels: LocalModelsPlatform
 }
 
 export type {
@@ -98,3 +100,4 @@ export * from './assistant'
 export * from './audioEdit'
 export * from './documents'
 export * from './workRoot'
+export * from './localModels'

@@ -39,7 +39,9 @@ describe('设置搜索索引', () => {
     expect(searchSettings('别名', zh)[0]).toMatchObject({ entry: { labelKey: 'providerCenter.actions.renameModel' } })
     expect(searchSettings('  ', zh)).toEqual([])
     // 有直接命中时不混入只靠大类名命中的条目；没有直接命中时按分区名兜底
-    expect(searchSettings('下载', zh).every((item) => item.entry.sectionId === 'files-download')).toBe(true)
+    // “下载”同时命中下载分区与本地模型的“下载源”，都在文件与下载大类里
+    expect(searchSettings('下载', zh).every((item) => ['files-download', 'files-models'].includes(item.entry.sectionId))).toBe(true)
+    expect(searchSettings('下载', zh)[0]).toMatchObject({ entry: { sectionId: 'files-download' } })
     expect(searchSettings('工作区', zh).length).toBeGreaterThan(0)
     expect(searchSettings('exchange', translate('en'))[0]).toMatchObject({ entry: { labelKey: 'sections.display.exchangeRateLabel' } })
   })

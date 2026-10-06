@@ -44,6 +44,7 @@ import { createVideoDecoderApi } from './video-decoder-api'
 import { createDocumentsApi } from './documents-api'
 import { createCanvasTestFixturesApi } from './canvas-test-fixtures'
 import { createWorkRootApi } from './work-root-api'
+import { createLocalModelsApi } from './local-models-api'
 import { createGenerationHistoryApi, createPresetsApi, createSettingsApi } from './local-records-api'
 
 type IpcResultEnvelope<T> =
@@ -59,6 +60,12 @@ async function nativeInvoke<T>(channel: string, payload?: unknown): Promise<T> {
   const error = new Error(result.error.message)
   error.name = result.error.name
   throw error
+}
+
+function subscribeChannel(channel: string, listener: (payload: unknown) => void): () => void {
+  const wrapped = (_event: Electron.IpcRendererEvent, payload: unknown): void => listener(payload)
+  ipcRenderer.on(channel, wrapped)
+  return () => { ipcRenderer.removeListener(channel, wrapped) }
 }
 
 const windowApi: HenjiWindowApi = {
@@ -457,11 +464,8 @@ const api: HenjiNativeApi = {
   diagnostics: diagnosticsApi,
   assetLibrary: assetLibraryApi,
   documents: createDocumentsApi(nativeInvoke),
-  workRoot: createWorkRootApi(nativeInvoke, (channel, listener) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, payload: unknown): void => listener(payload)
-    ipcRenderer.on(channel, wrapped)
-    return () => { ipcRenderer.removeListener(channel, wrapped) }
-  }),
+  workRoot: createWorkRootApi(nativeInvoke, subscribeChannel),
+  localModels: createLocalModelsApi(nativeInvoke, subscribeChannel),
 }
 
 contextBridge.exposeInMainWorld('henjiNative', api)

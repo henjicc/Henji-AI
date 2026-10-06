@@ -11,6 +11,7 @@ import { navigationApplicationDomain } from '@/features/navigation/application/a
 import { audioEditApplicationDomain } from '@/features/audioEdit/application/applicationDomain'
 import { videoEditApplicationDomain } from '@/features/videoEdit/application/applicationDomain'
 import { documentsApplicationDomain } from '@/features/documents/application/applicationDomain'
+import { localModelsApplicationDomain } from '@/features/localModels/application/applicationDomain'
 import type { ApplicationDomainModule } from './domainModule'
 import { configureImageEditDocumentProjectionResolverV3 } from '@/features/imageEdit/v3/application/imageEditDocumentBindings'
 import { resolveCanvasImageEditDocumentProjection } from '@/features/canvas/application/imageEditDocumentProjectionBinding'
@@ -29,6 +30,7 @@ export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [
   audioEditApplicationDomain,
   videoEditApplicationDomain,
   documentsApplicationDomain,
+  localModelsApplicationDomain,
   memoryApplicationDomain,
   navigationApplicationDomain,
 ]

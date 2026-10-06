@@ -103,6 +103,7 @@ const surfaceDefinitions = [
   { id: 'settings.storage', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-storage' }, ...immediate },
   { id: 'settings.upload', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-upload' }, ...immediate },
   { id: 'settings.files.download', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-download' }, ...immediate },
+  { id: 'settings.files.models', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-models' }, ...immediate },
   { id: 'settings.assistant', kind: 'settings', settingsTarget: { tab: 'assistant' }, ...immediate },
   { id: 'settings.assistant.models', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-models' }, ...immediate },
   { id: 'settings.assistant_preferences', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-preferences' }, ...immediate },

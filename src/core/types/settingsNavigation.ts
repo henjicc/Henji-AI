@@ -17,7 +17,7 @@ export const SETTINGS_TAB_SECTIONS = {
   general: ['general-basic', 'general-view', 'general-appearance', 'general-about'],
   providers: ['providers'],
   workspace: ['workspace-generation', 'workspace-canvas', 'workspace-video-edit', 'workspace-assets'],
-  files: ['files-storage', 'files-upload', 'files-download'],
+  files: ['files-storage', 'files-upload', 'files-download', 'files-models'],
   assistant: ['assistant-models', 'assistant-preferences', 'assistant-mcp'],
   skills: ['assistant-skills'],
 } as const

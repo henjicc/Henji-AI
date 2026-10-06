@@ -250,6 +250,21 @@ export function getUserFolderDir(key: UserFolderKey): string {
   return dir
 }
 
+/**
+ * 本地模型文件夹（任务 4.11）：不在首次创建的分类文件夹里，第一次下载模型时才建。
+ * 每个模型一个子文件夹，用户能看懂、能手动删除；程序读取前按清单校验。
+ */
+export const USER_MODELS_FOLDER_NAMES: Readonly<Record<UserFolderLocale, string>> = {
+  zh: '模型',
+  en: 'Models',
+}
+
+/** 本地模型总文件夹与其语言（子文件夹名按同一语言取）；不创建目录。 */
+export function getUserModelsLocation(): { dir: string; locale: UserFolderLocale } {
+  const layout = getUserDataLayout()
+  return { dir: path.join(layout.root, USER_MODELS_FOLDER_NAMES[layout.locale]), locale: layout.locale }
+}
+
 /** 媒体协议按文件夹名判断内容寻址缓存；包含两种语言的生成结果、上传素材与缩略图目录名。 */
 export const CONTENT_ADDRESSED_FOLDER_NAMES: ReadonlySet<string> = new Set([
   PROGRAM_STORE_NAMES.thumbnails,

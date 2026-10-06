@@ -97,6 +97,10 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'sections.download.buttonOnlyLabel',
     ['sections.download.presetPathsLabel', ['保存到', '下载路径']],
   ]),
+  ...rows('files-models', [
+    ['sections.localModels.listLabel', ['模型', '抠像', '人脸', '文字', '跟踪', 'ONNX', 'model', 'matting']],
+    ['sections.localModels.sourceLabel', ['ModelScope', 'Hugging Face', '国内', '国外', '镜像', 'mirror']],
+  ]),
   ...rows('assistant-models', [
     ['agentModels.roles.primary', ['助手', '智能体', 'assistant', 'agent', 'LLM']],
     'agentModels.roles.router',

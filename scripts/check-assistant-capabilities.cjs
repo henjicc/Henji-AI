@@ -201,6 +201,8 @@ const ASSISTANT_BLIND_FEATURES = {
   toolbox: '工具目录由正式工具注册表定义，属于应用结构而非用户数据，已有 toolbox.tool 的 writeExclusion。',
   devGallery: '开发模式组件样张页只在开发构建中挂载，用于目视检查界面组件与主题组合，'
     + '不承载用户数据、不出现在正式界面，助手无需观察或操作。',
+  localModels: '本地模型状态由主进程 LocalModelService 持有，没有 Zustand store；localModelsReflection 的 '
+    + 'local_model.item 与 local_model.settings 两个实体及其执行器覆盖状态读取、下载、删除与下载源设置。',
   maskEditor: '蒙版编辑器只管理本次面板内的位图绘制与未确认草稿，没有独立持久化实体或 zustand store；'
     + '确认后的蒙版引用和编辑文档由画布节点与派生媒体服务持有，入口由画布专用编辑器会话统一编排。'
     + '助手可读写最终画布节点，但不伪造逐像素鼠标绘制能力。',

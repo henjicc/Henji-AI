@@ -23,6 +23,7 @@
     "files-storage": "作品目录",
     "files-upload": "上传",
     "files-download": "下载",
+    "files-models": "本地模型",
     "assistant-models": "助手模型",
     "assistant-preferences": "用户指令",
     "assistant-mcp": "外部智能体连接",
@@ -372,6 +373,35 @@
       "presetPathsAdd": "添加目录",
       "presetPathsCount": "已添加 {{count}} / {{limit}}",
       "presetPathsRemove": "移除预设路径 {{path}}"
+    },
+    "localModels": {
+      "sourceLabel": "下载源",
+      "sourceHint": "自动会先试一下哪边更快；选定的一边下载失败时会自动换另一边",
+      "source": {
+        "auto": "自动",
+        "domestic": "国内",
+        "global": "国外"
+      },
+      "listLabel": "本地模型",
+      "listHint": "抠像、人脸、文字区域、物体跟踪等在本机运行的小模型。第一次用到时会自动下载，这里可以提前下载或删除",
+      "loadFailed": "读取本地模型状态失败",
+      "download": "下载",
+      "redownload": "重新下载",
+      "retry": "重试",
+      "cancel": "取消",
+      "openFolder": "打开所在文件夹",
+      "remove": "删除 {{name}}",
+      "status": {
+        "ready": "已下载",
+        "corrupt": "校验失败",
+        "unavailable": "暂不可下载"
+      },
+      "failure": {
+        "network": "下载失败：连不上下载源，可换个下载源后重试",
+        "checksum": "下载失败：下载到的文件不完整或被改动，请重试",
+        "disk": "下载失败：无法写入作品目录，请检查磁盘空间与权限",
+        "unavailable": "暂时没有可下载的文件"
+      }
     },
     "updates": {
       "title": "更新检测",

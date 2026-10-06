@@ -24,6 +24,7 @@ import { createElectronVideoFrames } from './videoFrames'
 import { createElectronVideoDecoder } from './videoDecoder'
 import { createElectronDocuments } from './documents'
 import { createElectronWorkRoot } from './workRoot'
+import { createElectronLocalModels } from './localModels'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -54,5 +55,6 @@ export function createElectronPlatform(): PlatformRuntime {
     videoDecoder: createElectronVideoDecoder(),
     documents: createElectronDocuments(),
     workRoot: createElectronWorkRoot(),
+    localModels: createElectronLocalModels(),
   }
 }

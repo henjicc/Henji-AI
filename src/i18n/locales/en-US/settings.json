@@ -23,6 +23,7 @@
     "files-storage": "Works Folder",
     "files-upload": "Uploads",
     "files-download": "Downloads",
+    "files-models": "Local models",
     "assistant-models": "Assistant Models",
     "assistant-preferences": "User Instructions",
     "assistant-mcp": "External Agents",
@@ -372,6 +373,35 @@
       "presetPathsAdd": "Add folder",
       "presetPathsCount": "{{count}} / {{limit}} added",
       "presetPathsRemove": "Remove preset folder {{path}}"
+    },
+    "localModels": {
+      "sourceLabel": "Download source",
+      "sourceHint": "Auto checks which source is faster; if the chosen source fails, the other one is used",
+      "source": {
+        "auto": "Auto",
+        "domestic": "China",
+        "global": "Global"
+      },
+      "listLabel": "Local models",
+      "listHint": "Small models that run on this computer for matting, faces, text regions and object tracking. They download automatically when first needed; you can download or delete them here",
+      "loadFailed": "Couldn't read local model status",
+      "download": "Download",
+      "redownload": "Download again",
+      "retry": "Retry",
+      "cancel": "Cancel",
+      "openFolder": "Open folder",
+      "remove": "Delete {{name}}",
+      "status": {
+        "ready": "Downloaded",
+        "corrupt": "Verification failed",
+        "unavailable": "Not available yet"
+      },
+      "failure": {
+        "network": "Download failed: couldn't reach the source. Try another download source",
+        "checksum": "Download failed: the file was incomplete or modified. Please retry",
+        "disk": "Download failed: couldn't write to the works folder. Check disk space and permissions",
+        "unavailable": "No downloadable files yet"
+      }
     },
     "updates": {
       "title": "Updates",

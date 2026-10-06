@@ -15,6 +15,8 @@ import { configureDatabaseMigrations } from './services/db'
 import { databaseMigrationOptions } from './services/db-locations'
 import { registerDocumentsIpc } from './ipc/documents'
 import { registerWorkRootIpc } from './ipc/work-root'
+import { registerLocalModelsIpc } from './ipc/local-models'
+import { disposeLocalModels } from './services/local-models/runtime'
 import { disposeWorkRootChange } from './services/work-root/runtime'
 import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
@@ -104,6 +106,7 @@ app.whenReady().then(() => {
   registerTestFixturesIpc()
   registerDocumentsIpc()
   registerWorkRootIpc()
+  registerLocalModelsIpc()
   registerDragIpc()
   registerImageIpc()
   registerImageEditorV3Ipc()
@@ -183,6 +186,6 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [disposeWorkRootChange, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [disposeWorkRootChange, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 })
