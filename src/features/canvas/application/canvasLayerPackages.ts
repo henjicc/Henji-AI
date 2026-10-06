@@ -3,6 +3,7 @@ import { parseImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionRef
 import { createLogger } from '@/core/logging'
 
 import type { CanvasNode } from '../domain/canvasNodes'
+import type { CanvasHistoryState } from '@/stores/canvasStore'
 import { canvasDocumentCommands } from './canvasDocumentEnvironment'
 
 /*
@@ -83,15 +84,31 @@ export async function prepareCanvasLayers(
   }
 }
 
-/** 把当前节点引用的内嵌图片文档写成画布所在容器里的包，返回 文档 ID → 包位置。失败抛错（写回失败，修改保留）。 */
-export async function commitCanvasLayers(canvasId: string, meta: Pick<DocumentMeta, 'container'>, nodes: readonly CanvasNode[]): Promise<Record<string, string>> {
-  const ids = canvasLayerDocumentIds(nodes)
-  if (!ids.length) return {}
+/** 画布仍在用的内嵌图片文档：当前节点 + 撤销 / 重做记录里的节点（撤销能把删掉的节点找回来）。 */
+export function retainedCanvasLayerDocumentIds(nodes: readonly CanvasNode[], history: CanvasHistoryState): string[] {
+  const snapshots = [...history.past, ...history.future]
+  return canvasLayerDocumentIds([...nodes, ...snapshots.flatMap((snapshot) => snapshot.nodes)])
+}
+
+/**
+ * 把当前节点引用的内嵌图片文档写成画布所在容器里的包，返回 文档 ID → 包位置。失败抛错（写回失败，修改保留）。
+ * 同时带上仍在用的文档，主进程顺带清理这份画布不再用、别的画布也没提到的内嵌文档（3.6）。
+ */
+export async function commitCanvasLayers(
+  canvasId: string,
+  meta: Pick<DocumentMeta, 'container'>,
+  nodes: readonly CanvasNode[],
+  history: CanvasHistoryState,
+): Promise<Record<string, string>> {
   const result = await canvasDocumentCommands().commitLayers({
     requestId: `canvas-layers:commit:${crypto.randomUUID()}`,
     canvasId,
     container: meta.container,
-    documentIds: ids,
+    documentIds: canvasLayerDocumentIds(nodes),
+    retainedDocumentIds: retainedCanvasLayerDocumentIds(nodes, history),
   })
+  if (result.released) {
+    logger.info('画布不再用的内嵌图片文档已清理', { event: 'canvas.layers.released', context: { docId: canvasId, count: result.released } })
+  }
   return result.packages
 }

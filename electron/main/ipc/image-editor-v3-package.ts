@@ -73,7 +73,7 @@ export function registerImageEditorV3ImageDocumentIpc(
   ), guard)
   registerIpcHandler('imageEditorV3:canvasLayers:commit', parseImageEditorV3CanvasLayersCommitPayload, (payload, event) => (
     runRequest('canvas_layers.commit', payload.requestId, event.sender.id, () => (
-      canvasLayers().commit({ canvasId: payload.canvasId, container: payload.container, documentIds: payload.documentIds })
+      canvasLayers().commit({ canvasId: payload.canvasId, container: payload.container, documentIds: payload.documentIds, retainedDocumentIds: payload.retainedDocumentIds })
     ))
   ), guard)
 }

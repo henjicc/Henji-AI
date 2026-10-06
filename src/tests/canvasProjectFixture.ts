@@ -46,7 +46,7 @@ const canvasCommands: CanvasDocumentCommands = {
   importFile: async (request) => ({ path: request.sourcePath, copied: false }),
   // 多图层内嵌图片文档的包由主进程写，这里不碰：准备不改指向，写出不产生包
   prepareLayers: async () => ({ rewrites: {}, missing: [] }),
-  commitLayers: async () => ({ packages: {}, written: 0 }),
+  commitLayers: async () => ({ packages: {}, written: 0, released: 0 }),
 }
 
 let registry = createRegistry()

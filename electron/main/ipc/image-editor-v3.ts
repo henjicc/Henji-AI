@@ -141,6 +141,7 @@ function getRuntime(): ImageEditorV3Runtime {
       logger: createMainLogger('main.image_editor_v3.canvas_layers'),
       validateDocument: (document) => { validateSnapshotDocument(document) },
       resolveInternalFolder: resolveContainerInternalFolder,
+      referencedByOtherCanvases: findCanvasLayersReferencedElsewhere,
     }),
   }
   // 图片文档工作副本回收（4.1）：运行时建好后在后台检查一次，不阻塞第一次请求；本次运行用过的文档一律跳过。
@@ -149,6 +150,23 @@ function getRuntime(): ImageEditorV3Runtime {
   pruneTimer.unref?.()
   return runtime
 }
+/**
+ * 别的画布（含草稿、尚未打开的副本）内容里还提到的内嵌文档：按文档 ID 在内容里查找。
+ * 找不到文件的画布读不了，跳过；读得到却读失败时抛错，调用方本次不清理。
+ */
+async function findCanvasLayersReferencedElsewhere(canvasId: string, documentIds: readonly string[]): Promise<Set<string>> {
+  const service = getDocumentService()
+  const referenced = new Set<string>()
+  const canvases = await service.listDocuments({ kind: 'canvas', includeMissing: false })
+  for (const canvas of canvases) {
+    if (canvas.id === canvasId) continue
+    const text = JSON.stringify((await service.readDocument({ id: canvas.id, path: canvas.path })).content)
+    for (const documentId of documentIds) if (text.includes(documentId)) referenced.add(documentId)
+    if (referenced.size === documentIds.length) break
+  }
+  return referenced
+}
+
 function trackRendererLifetime(sender: WebContents): void {
   if (trackedSenders.has(sender)) return
   const cleanup = (): void => {

@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createImageEditDocumentV3,
@@ -27,6 +27,8 @@ let programDir = ''
 let resources: ContentAddressedResourceStore
 let documents: ImageEditDocumentRepository
 let service: CanvasLayerPackageService
+/** 别的画布内容里提到的文档（测试里直接给出；null = 读别的画布失败）。 */
+let otherCanvasRefs: Set<string> | null = new Set()
 
 function containerRoot(container: DocumentContainerRef): string {
   return container.kind === 'user' ? path.join(root, '作品') : path.join(root, '项目', container.projectId)
@@ -44,6 +46,10 @@ function createService(): CanvasLayerPackageService {
       await fsp.mkdir(folder, { recursive: true })
       return folder
     },
+    referencedByOtherCanvases: async (_canvasId, documentIds) => {
+      if (!otherCanvasRefs) throw new Error('读不了别的画布')
+      return new Set(documentIds.filter((id) => otherCanvasRefs!.has(id)))
+    },
   })
 }
 
@@ -53,9 +59,11 @@ beforeEach(async () => {
   resources = new ContentAddressedResourceStore(path.join(programDir, 'resources'))
   documents = new ImageEditDocumentRepository(path.join(programDir, 'documents'))
   service = createService()
+  otherCanvasRefs = new Set()
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await fsp.rm(root, { recursive: true, force: true })
 })
 
@@ -98,7 +106,7 @@ describe('画布内嵌图片文档的包', () => {
     await workingCopy('layer-a')
     const first = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a'] })
     const target = path.join(root, '作品', '.henji', 'canvas-layers', 'layer-a.henjilayer')
-    expect(first).toEqual({ packages: { 'layer-a': target }, written: 1 })
+    expect(first).toEqual({ packages: { 'layer-a': target }, written: 1, released: 0 })
     expect(fs.existsSync(target)).toBe(true)
 
     const again = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a'] })
@@ -119,7 +127,7 @@ describe('画布内嵌图片文档的包', () => {
     const before = (await fsp.stat(moved)).mtimeMs
 
     const result = await service.commit({ canvasId: 'canvas-1', container: project, documentIds: ['layer-a'] })
-    expect(result).toEqual({ packages: { 'layer-a': moved }, written: 0 })
+    expect(result).toEqual({ packages: { 'layer-a': moved }, written: 0, released: 0 })
     expect((await fsp.stat(moved)).mtimeMs).toBe(before)
     expect((await service.prepare({ canvasId: 'canvas-1', layers: [{ documentId: 'layer-a', packagePath: moved }] })).rewrites).toEqual({})
   })
@@ -189,5 +197,73 @@ describe('画布内嵌图片文档的包', () => {
 
     await service.prepare({ canvasId: 'canvas-1', layers: [{ documentId: 'layer-a', packagePath: packages['layer-a'] }] })
     expect((await documents.load('layer-a')).revision).toBe(2)
+  })
+
+  it('删掉节点后写回：属于这份画布、撤销记录也不再提到、别的画布也没提到的文档连同包与工作副本清理', async () => {
+    await workingCopy('layer-a')
+    await workingCopy('layer-b')
+    await workingCopy('layer-c')
+    const { packages } = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a', 'layer-b', 'layer-c'], retainedDocumentIds: ['layer-a', 'layer-b', 'layer-c'] })
+    // 别的画布的文档不归这份画布管
+    await workingCopy('layer-other')
+    await service.commit({ canvasId: 'canvas-2', container: user, documentIds: ['layer-other'], retainedDocumentIds: ['layer-other'] })
+
+    // 删了 b、c：b 还在撤销记录里，c 谁都不提
+    const result = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a'], retainedDocumentIds: ['layer-a', 'layer-b'] })
+    expect(result.released).toBe(1)
+    expect(fs.existsSync(packages['layer-c'])).toBe(false)
+    await expect(documents.load('layer-c')).rejects.toThrow()
+    expect(await service.links.read('layer-c')).toBeNull()
+    expect(fs.existsSync(packages['layer-b'])).toBe(true)
+    expect((await documents.load('layer-b')).documentId).toBe('layer-b')
+    expect((await documents.load('layer-other')).documentId).toBe('layer-other')
+
+    // 撤销记录也清空（例如重新打开）、节点全删：最后的也清理
+    expect((await service.commit({ canvasId: 'canvas-1', container: user, documentIds: [], retainedDocumentIds: [] })).released).toBe(2)
+    expect(fs.existsSync(packages['layer-a'])).toBe(false)
+    expect(fs.existsSync(packages['layer-b'])).toBe(false)
+    expect((await documents.load('layer-other')).documentId).toBe('layer-other')
+  })
+
+  it('别的画布（如尚未打开的副本）还提到的保留；读不了别的画布时整次不清理；没带在用清单时不清理', async () => {
+    await workingCopy('layer-a')
+    const { packages } = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a'] })
+    expect((await service.commit({ canvasId: 'canvas-1', container: user, documentIds: [] })).released).toBe(0)
+
+    otherCanvasRefs = null
+    expect((await service.commit({ canvasId: 'canvas-1', container: user, documentIds: [], retainedDocumentIds: [] })).released).toBe(0)
+    otherCanvasRefs = new Set(['layer-a'])
+    expect((await service.commit({ canvasId: 'canvas-1', container: user, documentIds: [], retainedDocumentIds: [] })).released).toBe(0)
+    expect(fs.existsSync(packages['layer-a'])).toBe(true)
+    expect((await documents.load('layer-a')).documentId).toBe('layer-a')
+
+    // 同一批候选刚因别的画布在用而保留：短时间内的写回不再重复读全部画布
+    otherCanvasRefs = new Set()
+    expect((await service.commit({ canvasId: 'canvas-1', container: user, documentIds: [], retainedDocumentIds: [] })).released).toBe(0)
+    expect(fs.existsSync(packages['layer-a'])).toBe(true)
+
+    // 过一阵再核对：副本那边已分出自己的文档、不再提到原文档，原画布这次清理
+    const now = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(now + 6 * 60 * 1000)
+    expect((await service.commit({ canvasId: 'canvas-1', container: user, documentIds: [], retainedDocumentIds: [] })).released).toBe(1)
+    expect(fs.existsSync(packages['layer-a'])).toBe(false)
+  })
+
+  it('工作副本在清理前又被改过（版本变了）：留着不删', async () => {
+    await workingCopy('layer-a')
+    await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a'] })
+    const deleteIfRevision = documents.deleteIfRevision.bind(documents)
+    documents.deleteIfRevision = async (id, revision) => { await editWorkingCopy('layer-a'); return deleteIfRevision(id, revision) }
+    expect((await service.commit({ canvasId: 'canvas-1', container: user, documentIds: [], retainedDocumentIds: [] })).released).toBe(0)
+    expect((await documents.load('layer-a')).revision).toBe(1)
+    expect((await service.links.read('layer-a'))?.ownerCanvasId).toBe('canvas-1')
+  })
+
+  it('记录归属索引：重启后（新服务实例）按目录重建，仍能找到这份画布的文档', async () => {
+    await workingCopy('layer-a')
+    const { packages } = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a'] })
+    service = createService()
+    expect((await service.commit({ canvasId: 'canvas-1', container: user, documentIds: [], retainedDocumentIds: [] })).released).toBe(1)
+    expect(fs.existsSync(packages['layer-a'])).toBe(false)
   })
 })

@@ -24,7 +24,10 @@ import { readPackageDocumentHeaderBytes } from '../image-document/package-file'
  *
  * 程序目录 `canvas-layer-links/<文档ID>.json` 记下这份工作副本属于哪份画布、最后一次写出的包与版本，
  * 用来判断“这次是不是副本”“包是不是最新的”。只存程序内部状态；删掉只会让下次打开按包重新判断。
- * 不在用的包不自动清理（节点删掉后包留在 `.henji/` 里）。
+ *
+ * 不再用的清理（3.6）：画布写回时渲染层带上“仍在用”的文档（当前节点 + 撤销记录），属于这份画布、
+ * 不在其中、也没有任何别的画布内容提到的文档，连同它的包与本机工作副本一起删掉。别的画布（含尚未打开、
+ * 还指着原文档的副本）提到的一律保留；读别的画布失败时整次不清理。
  */
 
 export const CANVAS_LAYER_PACKAGE_EXTENSION = '.henjilayer'
@@ -68,12 +71,19 @@ export interface CanvasLayerCommitRequest {
   canvasId: string
   container: DocumentContainerRef
   documentIds: readonly string[]
+  /**
+   * 这份画布仍在用的全部内嵌文档（当前节点 + 撤销 / 重做记录）。给出时，写出后清理属于这份画布却不在其中的文档；
+   * 省略时不清理。
+   */
+  retainedDocumentIds?: readonly string[]
 }
 
 export interface CanvasLayerCommitResult {
   /** 文档 ID → 包的位置（只含成功写出或已是最新的）。 */
   packages: Record<string, string>
   written: number
+  /** 本次清理掉的不再用的内嵌文档数。 */
+  released: number
 }
 
 export interface CanvasLayerPackageServiceOptions {
@@ -84,6 +94,11 @@ export interface CanvasLayerPackageServiceOptions {
   validateDocument(envelope: ImageEditDocumentEnvelope): void
   /** 容器的 `.henji` 文件夹（用到时才建并设为隐藏）。 */
   resolveInternalFolder(container: DocumentContainerRef): Promise<string>
+  /**
+   * 除 canvasId 以外的画布内容里仍提到的文档（从 documentIds 中挑出）。读不了别的画布时应抛错，
+   * 本次就不清理。省略时从不清理。
+   */
+  referencedByOtherCanvases?(canvasId: string, documentIds: readonly string[]): Promise<Set<string>>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -109,6 +124,9 @@ export function forkedCanvasLayerDocumentId(canvasId: string, documentId: string
 }
 
 export class CanvasLayerLinks {
+  /** 文档 ID → 所属画布；首次需要按归属查找时扫一遍目录，之后随写入 / 删除更新（只有本进程写记录）。 */
+  private owners: Map<string, string> | null = null
+
   constructor(private readonly directory: string) {}
 
   private file(documentId: string): string {
@@ -140,11 +158,39 @@ export class CanvasLayerLinks {
 
   async write(link: CanvasLayerLink): Promise<void> {
     await writeBufferAtomically(this.file(link.documentId), Buffer.from(`${JSON.stringify(link)}\n`, 'utf8'))
+    this.owners?.set(link.documentId, link.ownerCanvasId)
+  }
+
+  async remove(documentId: string): Promise<void> {
+    await fsp.rm(this.file(documentId), { force: true })
+    this.owners?.delete(documentId)
+  }
+
+  /** 属于这份画布的全部内嵌文档 ID。 */
+  async listOwnedBy(canvasId: string): Promise<string[]> {
+    if (!this.owners) {
+      const owners = new Map<string, string>()
+      const names = await fsp.readdir(this.directory).catch(() => [] as string[])
+      for (const name of names) {
+        if (!name.endsWith('.json')) continue
+        const documentId = name.slice(0, -'.json'.length)
+        if (!DOCUMENT_ID_PATTERN.test(documentId)) continue
+        const link = await this.read(documentId)
+        if (link) owners.set(documentId, link.ownerCanvasId)
+      }
+      this.owners = owners
+    }
+    return [...this.owners].filter(([, owner]) => owner === canvasId).map(([documentId]) => documentId)
   }
 }
 
+/** 同一批候选上次因别的画布还在用而保留后，这段时间内不再重复读全部画布（每次空闲写回都会走到这里）。 */
+const RELEASE_RECHECK_MS = 5 * 60 * 1000
+
 export class CanvasLayerPackageService {
   readonly links: CanvasLayerLinks
+  /** 画布 ID → 上次全部保留的候选与时间。 */
+  private readonly keptCandidates = new Map<string, { key: string; at: number }>()
 
   constructor(private readonly options: CanvasLayerPackageServiceOptions) {
     this.links = new CanvasLayerLinks(options.linksDirectory)
@@ -208,6 +254,59 @@ export class CanvasLayerPackageService {
 
   /** 画布写回时：把每份内嵌文档写成容器 `.henji/canvas-layers/` 里的包；已是最新的不写。 */
   async commit(request: CanvasLayerCommitRequest): Promise<CanvasLayerCommitResult> {
+    const { packages, written } = await this.writePackages(request)
+    const released = request.retainedDocumentIds
+      ? await this.releaseUnreferenced(request.canvasId, new Set([...request.retainedDocumentIds, ...request.documentIds]))
+      : 0
+    return { packages, written, released }
+  }
+
+  /**
+   * 清理属于这份画布、却不在 retained 里、也没有别的画布提到的内嵌文档：删本机工作副本、删包、删记录。
+   * 工作副本只在版本没变时删（期间有人在编辑就留着）；任何一步失败只记日志，下次写回再试。
+   */
+  private async releaseUnreferenced(canvasId: string, retained: ReadonlySet<string>): Promise<number> {
+    const referencedElsewhere = this.options.referencedByOtherCanvases
+    if (!referencedElsewhere) return 0
+    const candidates = (await this.links.listOwnedBy(canvasId)).filter((id) => !retained.has(id))
+    if (!candidates.length) return 0
+    const candidateKey = [...candidates].sort().join(',')
+    const kept = this.keptCandidates.get(canvasId)
+    if (kept && kept.key === candidateKey && Date.now() - kept.at < RELEASE_RECHECK_MS) return 0
+    let keep: Set<string>
+    try {
+      keep = await referencedElsewhere(canvasId, candidates)
+    } catch (error) {
+      this.logger.warn('核对别的画布引用失败，本次不清理内嵌图片文档', { event: 'canvas_layers.release.check_failed', context: { canvasId, candidates: candidates.length }, error })
+      return 0
+    }
+    if (keep.size === candidates.length) this.keptCandidates.set(canvasId, { key: candidateKey, at: Date.now() })
+    else this.keptCandidates.delete(canvasId)
+    let released = 0
+    for (const id of candidates) {
+      if (keep.has(id)) continue
+      try {
+        const link = await this.links.read(id)
+        if (!link || link.ownerCanvasId !== canvasId) continue
+        const working = await this.loadWorking(id)
+        if (working && !await this.options.documents.deleteIfRevision(id, working.revision)) continue
+        if (link.packagePath) {
+          const header = await this.readHeader(link.packagePath)
+          if (header?.documentId === id) await fsp.rm(link.packagePath, { force: true })
+        }
+        await this.links.remove(id)
+        released += 1
+      } catch (error) {
+        this.logger.warn('不再用的内嵌图片文档清理失败', { event: 'canvas_layers.release.failed', context: { canvasId, documentId: id }, error })
+      }
+    }
+    if (released || keep.size) {
+      this.logger.info('画布不再用的内嵌图片文档已清理', { event: 'canvas_layers.release.completed', context: { canvasId, released, keptForOtherCanvases: keep.size } })
+    }
+    return released
+  }
+
+  private async writePackages(request: CanvasLayerCommitRequest): Promise<Omit<CanvasLayerCommitResult, 'released'>> {
     const packages: Record<string, string> = {}
     let written = 0
     if (request.documentIds.length === 0) return { packages, written }

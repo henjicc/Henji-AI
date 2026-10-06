@@ -489,6 +489,8 @@ export interface CanvasLayersCommitPayload {
   canvasId: string
   container: CreateImageDocumentPayload['container']
   documentIds: string[]
+  /** 画布仍在用的全部内嵌文档（当前节点 + 撤销记录）；给出时主进程写出后清理不再用的。 */
+  retainedDocumentIds?: string[]
 }
 
 function readLayerList<T>(value: unknown, read: (item: unknown) => T): T[] {
@@ -521,12 +523,14 @@ export function parseImageEditorV3CanvasLayersPreparePayload(input: unknown): Ca
 
 export function parseImageEditorV3CanvasLayersCommitPayload(input: unknown): CanvasLayersCommitPayload {
   const record = parseRecord(input)
-  assertExactKeys(record, ['requestId', 'canvasId', 'container', 'documentIds'], 'canvas layers commit payload')
+  assertExactKeys(record, ['requestId', 'canvasId', 'container', 'documentIds', 'retainedDocumentIds'], 'canvas layers commit payload')
+  const readId = (item: unknown): string => readDocumentId(item, 'canvas layer document id')
   return {
     requestId: readRequestId(record),
     canvasId: readDocumentId(record.canvasId, 'canvas id'),
     container: parseDocumentContainer(record.container),
-    documentIds: readLayerList(record.documentIds, (item) => readDocumentId(item, 'canvas layer document id')),
+    documentIds: readLayerList(record.documentIds, readId),
+    ...(record.retainedDocumentIds === undefined ? {} : { retainedDocumentIds: readLayerList(record.retainedDocumentIds, readId) }),
   }
 }
 

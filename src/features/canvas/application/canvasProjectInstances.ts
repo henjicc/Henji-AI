@@ -247,7 +247,8 @@ function createCanvasPersistence(): { persistence: DocumentPersistence; bind(ins
   const writeLayers = async (meta: DocumentMeta): Promise<DocumentMeta | void> => {
     const instance = bound
     if (!instance) return
-    const packages = await commitCanvasLayers(instance.id, meta, instance.store.getState().nodes)
+    const { nodes, history } = instance.store.getState()
+    const packages = await commitCanvasLayers(instance.id, meta, nodes, history)
     if (!instance.setLayerPackages(packages)) return
     const result = await canvasDocumentCommands().saveDocument({
       target: { id: meta.id, path: meta.path }, expectedRevision: meta.revision, content: instance.documentContent(),

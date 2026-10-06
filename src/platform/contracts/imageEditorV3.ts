@@ -252,6 +252,8 @@ export interface ImageEditorV3CanvasLayersCommitResult {
   /** 文档 ID → 包所在位置（画布所在容器的 `.henji/canvas-layers/`）。 */
   packages: Record<string, string>
   written: number
+  /** 本次清理掉的不再用的内嵌文档数。 */
+  released: number
 }
 
 export type ImageEditorV3RasterExportFormat =
@@ -443,12 +445,17 @@ export interface ImageEditorV3Platform {
     canvasId: string
     layers: Array<{ documentId: string; packagePath?: string }>
   }): Promise<ImageEditorV3CanvasLayersPrepareResult>
-  /** 画布写回时把内嵌图片文档写成画布所在容器 `.henji/canvas-layers/` 里的包；已是最新的不写。 */
+  /**
+   * 画布写回时把内嵌图片文档写成画布所在容器 `.henji/canvas-layers/` 里的包；已是最新的不写。
+   * 带上 retainedDocumentIds（当前节点 + 撤销记录仍在用的）时，顺带清理属于这份画布、不再用、
+   * 也没有别的画布提到的内嵌文档（包与本机工作副本）。
+   */
   commitCanvasLayers(request: {
     requestId: string
     canvasId: string
     container: DocumentContainerRef
     documentIds: string[]
+    retainedDocumentIds?: string[]
   }): Promise<ImageEditorV3CanvasLayersCommitResult>
   /** 保存位置只由主进程原生对话框产生，渲染层不能注入输出路径。 */
   startRasterExport(request: {
