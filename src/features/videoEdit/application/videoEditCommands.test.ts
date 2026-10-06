@@ -3,10 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './videoEditCommands'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
 import { copyVideoEditTimeline, updateVideoEditTrack } from './videoEditTimeline'
 import { registerVideoEditTimelineViewport } from './videoEditTimelineViewport'
 import { registerVideoEditSourcePresenter, readVideoEditSource, updateVideoEditSource, observeVideoEditSource } from './videoEditSource'
+import { createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 
 beforeEach(() => {
   installHarnessNativeStorage()
@@ -18,7 +19,7 @@ beforeEach(() => {
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   appendVideoEditClip(id); appendVideoEditClip(id)
   editVideoProject(id, document => { document.sequences[0].clips[1].start = 200; return document })
   const [first, second] = getActiveVideoEditSequence(owner).clips.map(clip => clip.id)

@@ -4,11 +4,12 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import type { VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
-import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { appendVideoEditItems, setVideoEditClipAudioMapping, setVideoEditItemAudioChannels } from './videoEditProjectItems'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from './videoEditCommands'
 import { separateVideoEditAudio } from './videoEditTimeline'
+import { createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 
 const files = new Map<string, string>()
 beforeEach(() => {
@@ -24,7 +25,7 @@ afterEach(async () => { for (const owner of listVideoEditInstances()) await clos
 
 const mono = (stream: number, channel = 0): VideoEditAudioMapping => ({ format: 'mono', sources: [{ stream, channel }] })
 async function obsProject() {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   // OBS-style recording: two stereo streams (game and microphone).
   appendVideoEditMedia(id, { id: 'obs', name: '录屏', path: 'D:/fixture/obs.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 4, hasAudio: true, frameRate: { numerator: 30, denominator: 1 }, frameRateMode: 'sampled-constant', audioStreams: [{ channels: 2, sampleRate: 48000 }, { channels: 2, sampleRate: 48000 }] })
   return { owner, id, item: owner.document.items[0] }

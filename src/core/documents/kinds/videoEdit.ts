@@ -84,11 +84,11 @@ function summarizeVideoEdit(content: VideoEditDocumentContent): { clips: number;
   }
 }
 
-/** 新剪辑的空内容：一条 1920×1080、30 fps 的空序列（一条音频轨、七条视频轨），与剪辑工具新建时相同。 */
+/** 新剪辑的空内容：一条 1920×1080、30 fps 的空序列（一条视频轨、一条音频轨，同 PR），与剪辑工具新建时相同。 */
 function createEmptyVideoEditContent(): VideoEditDocumentContent {
   const track = (index: number) => ({
     id: crypto.randomUUID(),
-    name: index === 0 ? '音频 1' : `视频 ${index}`,
+    name: index === 0 ? '音频 1' : '视频 1',
     index,
     kind: index === 0 ? 'audio' : 'video',
     locked: false,
@@ -109,7 +109,7 @@ function createEmptyVideoEditContent(): VideoEditDocumentContent {
       pixelAspectRatio: { numerator: 1, denominator: 1 },
       sampleRate: 48000,
       channels: 2,
-      tracks: Array.from({ length: 8 }, (_, index) => track(index)),
+      tracks: Array.from({ length: 2 }, (_, index) => track(index)),
       clips: [],
       annotations: [],
     }],

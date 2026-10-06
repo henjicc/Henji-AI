@@ -3,6 +3,7 @@ import { videoEditDocumentSchema, type VideoEditSequence } from '@/core/videoEdi
 import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult, copyVideoEditClips, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { clampVideoEditTrackHeight, VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/core/videoEdit/timelineNavigation'
+import { insertVideoEditTracks, removeVideoEditTracks, type VideoEditTrackKind } from '@/core/videoEdit/tracks'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { inspectVideoEditMedia } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, setVideoEditTimelineView, type VideoEditInstance } from './videoEditService'
@@ -123,4 +124,29 @@ export function updateVideoEditTrack(projectId: string, sequenceId: string, trac
     if (!sequence?.tracks.some(track => track.id === trackId)) throw new Error('目标轨道不存在。')
     return { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, tracks: value.tracks.map(track => track.id === trackId ? { ...track, ...patch } : track) } : value) }
   })
+}
+/**
+ * PR“添加轨道”：每项在同类轨道的第 `slot` 个位置（自然顺序，0 = 第一条之前）插入 `count` 条；全部请求是一步编辑。
+ * 轨道头菜单的“添加单个轨道”与“添加轨道…”对话框共用。返回新轨道 ID。
+ */
+export function addVideoEditTracks(projectId: string, sequenceId: string, requests: ReadonlyArray<{ kind: VideoEditTrackKind; count: number; slot: number }>): string[] {
+  let added: string[] = []
+  editVideoProject(projectId, document => {
+    let sequence = document.sequences.find(value => value.id === sequenceId)
+    if (!sequence) throw new Error('目标序列不存在。')
+    added = []
+    for (const request of requests) {
+      const result = insertVideoEditTracks(sequence, request.kind, request.count, request.slot)
+      sequence = result.sequence; added.push(...result.added.map(track => track.id))
+    }
+    const next = sequence
+    return { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? next : value) }
+  })
+  logger.info('添加序列轨道', { event: 'video_edit.tracks.add.completed', context: { projectId, sequenceId, requests: requests.map(request => `${request.kind}:${request.count}@${request.slot}`) } })
+  return added
+}
+/** PR“删除轨道”：删除轨道连同上面的片段，一步编辑。 */
+export function deleteVideoEditTracks(projectId: string, sequenceId: string, trackIds: readonly string[]): void {
+  editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? removeVideoEditTracks(document, sequenceId, trackIds) : value) }))
+  logger.info('删除序列轨道', { event: 'video_edit.tracks.delete.completed', context: { projectId, sequenceId, count: trackIds.length } })
 }

@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditDocument, type VideoEditClip, type VideoEditDocument } from '@/core/videoEdit/document'
 import { updateVideoEditProjectCover, videoEditCoverSource } from './videoEditProjectCover'
+import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 
 /* 剪辑封面：取第一个序列里最早出现的画面片段；没有画面不写；同一来源不重复生成。 */
 
@@ -11,7 +12,7 @@ function clip(patch: Partial<VideoEditClip> & Pick<VideoEditClip, 'id' | 'itemId
   return { name: patch.id, duration: 30, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '', ...patch } as VideoEditClip
 }
 function withClips(clips: VideoEditClip[]): VideoEditDocument {
-  const document = createVideoEditDocument('短片')
+  const document = createVideoEditDocument('短片'); addLegacyVideoEditTracks(document.sequences[0])
   return {
     ...document,
     media: [

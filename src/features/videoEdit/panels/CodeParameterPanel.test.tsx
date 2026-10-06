@@ -8,10 +8,11 @@ import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { addVideoEditCodeKeyframe, readVideoEditCodeEditor, updateVideoEditCodeKeyframe } from '../application/videoEditCodeParameters'
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from '../application/videoEditCodeState'
-import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditGestureActive, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditGestureActive, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { VideoEditEffectsPanel } from './VideoEditEffectsPanel'
 import { appendVideoEditItems, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from '../application/videoEditProjectItems'
 import { createVideoEditGraphicObject } from '../application/videoEditGraphics'
+import { createLegacyTrackVideoEditProject } from '../application/videoEditDocumentTestKit'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/textMeasurement', () => ({ measureElementTextWidth: () => 30 }))
@@ -62,7 +63,7 @@ beforeEach(async () => {
   installHarnessNativeStorage(); onError = vi.fn()
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-controls.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
-  owner = (await createVideoEditProject())!
+  owner = (await createLegacyTrackVideoEditProject())
   const programs = [source, alternate].map(compileCodeMaterial)
   for (const [index, program] of programs.entries()) rememberVideoEditCodeMetadata(owner, `d${index}`, { id: `v${index}`, source: [source, alternate][index], apiVersion: 1, languageVersion: 1 }, program)
   editVideoProject(owner.document.id, document => {

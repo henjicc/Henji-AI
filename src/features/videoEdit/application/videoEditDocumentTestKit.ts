@@ -1,6 +1,7 @@
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
-import { closeVideoEditProject, listVideoEditInstances, openVideoEditDocument, videoEditDocumentContent, type VideoEditInstance } from './videoEditService'
+import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
+import { closeVideoEditProject, createVideoEditProject, listVideoEditInstances, openVideoEditDocument, videoEditDocumentContent, type VideoEditInstance } from './videoEditService'
 
 /*
  * 仅供测试（3.1）：剪辑存成项目里的文档文件后，单测经测试夹具的内存文档仓库（harnessNativeStorage 的
@@ -58,4 +59,16 @@ export function replaceSavedVideoEdit(id: string, document: VideoEditDocument | 
 /** 造一份剪辑并打开（等同在剪辑页打开它所在的项目）。 */
 export async function openSeededVideoEdit(document: VideoEditDocument): Promise<VideoEditInstance> {
   return await openVideoEditDocument({ id: seedVideoEditDocument(document) })
+}
+
+/**
+ * 新建剪辑项目，并把主序列补齐旧版默认的八条轨道（A1 + V1–V7）后重新打开：新序列默认只有 V1/A1（剪辑对齐 PR 2.4），
+ * 需要多条视频轨的用例用它，打开后没有编辑历史、磁盘内容即八条轨道。
+ */
+export async function createLegacyTrackVideoEditProject(): Promise<VideoEditInstance> {
+  const created = await createVideoEditProject()
+  const document = structuredClone(created.document)
+  addLegacyVideoEditTracks(document.sequences[0])
+  replaceSavedVideoEdit(document.id, document)
+  return await reopenVideoEdit(document.id)
 }

@@ -1,3 +1,4 @@
+import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { z } from 'zod'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { placeVideoEditItem } from '@/core/videoEdit/projectItems'
@@ -17,24 +18,28 @@ export function captureVideoEditSourceRange(projectId: string, component: VideoE
   return videoEditSourceRangeSchema.parse({ kind: 'source_range', projectId, itemId: item.id, sourceIdentity: identity(media), inUs: source.inUs ?? 0, outUs: source.outUs ?? Math.round(media.durationSeconds * 1e6), component })
 }
 export function writeVideoEditSourceDrag(transfer: DataTransfer, projectId: string, component: VideoEditSourceRange['component']): void { transfer.setData(VIDEO_EDIT_SOURCE_DRAG_MIME, JSON.stringify(captureVideoEditSourceRange(projectId, component))) }
-export function placeVideoEditSourceRange(projectId: string, input: VideoEditSourceRange, sequenceId: string, placement: { frame: number; track?: number }): string[] {
+/** `newTrack`: dropped beyond the outer tracks — the range lands on a new track of that kind (PR), in the same edit. */
+export function placeVideoEditSourceRange(projectId: string, input: VideoEditSourceRange, sequenceId: string, placement: { frame: number; track?: number; newTrack?: 'video' | 'audio' }): string[] {
   input = videoEditSourceRangeSchema.parse(input)
   const owner = requireVideoEditInstance(projectId)
   if (input.projectId !== projectId) throw new Error('源范围属于另一剪辑，请先引用原素材。')
   const sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)
   const item = owner.document.items.find(item => item.id === input.itemId); const media = owner.document.media.find(media => media.id === item?.mediaId)
   if (!sequence || !media || identity(media) !== input.sourceIdentity) throw new Error('原序列或源素材已改变，请重新拖入。')
-  const trackFor = (kind: 'video' | 'audio'): number | undefined => (sequence.tracks.find(track => track.kind === kind && owner.targetTrackIds.includes(track.id) && !track.locked) ?? sequence.tracks.find(track => track.kind === kind && !track.locked && track.enabled))?.index
+  const edge = placement.newTrack ? videoEditEdgeTracks(sequence, placement.newTrack, 1)[0] : undefined
+  const trackFor = (kind: 'video' | 'audio'): number | undefined => edge?.kind === kind ? edge.index : (sequence.tracks.find(track => track.kind === kind && owner.targetTrackIds.includes(track.id) && !track.locked) ?? sequence.tracks.find(track => track.kind === kind && !track.locked && track.enabled))?.index
   if (Math.floor((input.outUs - input.inUs) / 1e6 * videoEditFps(sequence.frameRate) + 1e-6) < 1) throw new Error('源选区短于一个序列帧。')
   const primary = input.component === 'audio' || media.kind === 'audio' ? 'audio' : 'video'
   const fallback = trackFor(primary)
   if (placement.track === undefined && fallback === undefined) throw new Error('请先创建未锁定的对应轨道。')
+  const document = edge ? { ...owner.document, sequences: owner.document.sequences.map(value => value.id === sequenceId ? { ...value, tracks: [...value.tracks, edge] } : value) } : owner.document
   const videoTrack = primary === 'video' ? placement.track ?? fallback : undefined; const audioTrack = primary === 'audio' ? placement.track ?? fallback : trackFor('audio')
   // Every audio clip of the item's layout comes along, on the following audio tracks (task 2.6).
-  const placed = placeVideoEditItem(owner.document, input.itemId, sequenceId, { frame: 0, ...(videoTrack !== undefined ? { videoTrack } : {}), ...(audioTrack !== undefined ? { audioTrack } : {}), sourceInUs: input.inUs, sourceOutUs: input.outUs, components: media.kind === 'video' ? input.component : 'audio' })
+  const placed = placeVideoEditItem(document, input.itemId, sequenceId, { frame: 0, ...(videoTrack !== undefined ? { videoTrack } : {}), ...(audioTrack !== undefined ? { audioTrack } : {}), sourceInUs: input.inUs, sourceOutUs: input.outUs, components: media.kind === 'video' ? input.component : 'audio' })
   // The same paste algorithm owns overlap, locks, boundaries, selection and history.
-  const tracks = [...sequence.tracks, ...placed.addedTracks]
-  const result = executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'place', frame: placement.frame, mode: 'paste', clipboard: { projectId, frameRate: sequence.frameRate, clips: placed.clips, annotations: [], tracks: tracks.map(track => ({ index: track.index, kind: track.kind })) }, ...(placed.addedTracks.length ? { newTracks: placed.addedTracks } : {}) })
+  const added = [...(edge && placed.clips.some(clip => clip.track === edge.index) ? [edge] : []), ...placed.addedTracks]
+  const tracks = [...sequence.tracks, ...added]
+  const result = executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'place', frame: placement.frame, mode: 'paste', clipboard: { projectId, frameRate: sequence.frameRate, clips: placed.clips, annotations: [], tracks: tracks.map(track => ({ index: track.index, kind: track.kind })) }, ...(added.length ? { newTracks: added } : {}) })
   const prior = new Set(sequence.clips.map(clip => clip.id)); const ids = result.clips.filter(clip => !prior.has(clip.id)).map(clip => clip.id)
   if (owner.activeSequenceId === sequenceId) setVideoEditTimelineView(projectId, { selectedClipIds: ids })
   return ids

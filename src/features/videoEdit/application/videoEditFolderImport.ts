@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import { importVideoEditSources, sameVideoEditMediaPath, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
-import { requireVideoEditInstance } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.folderImport')
 /** 文件夹层级与条目上限：防止误拖整个磁盘把主进程枚举拖住。 */
@@ -53,7 +53,7 @@ export function planVideoEditFolderImport(folders: readonly VideoEditImportFolde
 
 /**
  * Premiere 拖入文件夹：按文件夹层级建同名素材箱（放在 `binId` 下），其中的素材进对应素材箱；不支持或读不出的文件跳过并计数。
- * 混合拖入的散文件放在 `binId`。只有含可导入素材的文件夹才建素材箱。全部写入是一步编辑。
+ * 混合拖入的散文件放在 `binId`。空文件夹（或只有不支持文件的文件夹）也建同名空素材箱（PR）。全部写入是一步编辑。
  * 没有文件夹时与普通导入完全一致（散文件不按扩展名过滤、读不出就报错）。
  */
 export async function importVideoEditPathsAndFolders(projectId: string, paths: readonly string[], binId?: string, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>): Promise<VideoEditFolderImportResult> {
@@ -67,7 +67,10 @@ export async function importVideoEditPathsAndFolders(projectId: string, paths: r
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，请重新导入。')
   const existing = new Set(owner.document.items.map(item => item.id))
   const sources = [...loose, ...plan.files.map(file => file.path)].map(path => ({ path }))
-  if (!sources.length) { logger.info('文件夹里没有可导入的素材', { event: 'video_edit.media.folder_import.empty', context: { projectId, skipped } }); return { itemIds: [], skipped } }
+  // 每个拖入的文件夹及其子文件夹（含空的）都建素材箱，按文件夹顺序先建好。
+  const folderChains: string[][] = []
+  const collect = (folder: VideoEditImportFolder, chain: string[]): void => { const current = [...chain, folder.name]; folderChains.push(current); for (const child of folder.folders) collect(child, current) }
+  for (const folder of folders) collect(folder, [])
   const placeInBins = (document: VideoEditDocument, ids: string[]): { document: VideoEditDocument; ids: string[] } => {
     const bins = [...document.bins]; const items = [...document.items]; const created = new Map<string, string>()
     const binFor = (chain: string[]): string | undefined => {
@@ -79,6 +82,7 @@ export async function importVideoEditPathsAndFolders(projectId: string, paths: r
       }
       return parent
     }
+    for (const chain of folderChains) binFor(chain)
     const placed = ids.map(id => {
       const index = items.findIndex(item => item.id === id); const item = items[index]
       const path = document.media.find(media => media.id === item.mediaId)?.path
@@ -92,6 +96,11 @@ export async function importVideoEditPathsAndFolders(projectId: string, paths: r
     })
     if (bins.length > 200) throw new Error('导入后素材箱会超过 200 个，请分批导入文件夹。')
     return { document: { ...document, bins, items }, ids: placed }
+  }
+  if (!sources.length) {
+    editVideoProject(projectId, document => placeInBins(document, []).document)
+    logger.info('文件夹里没有可导入的素材，只建素材箱', { event: 'video_edit.media.folder_import.empty', context: { projectId, bins: folderChains.length, skipped } })
+    return { itemIds: [], skipped }
   }
   let itemIds: string[] = []
   await importVideoEditSources(projectId, sources, binId, undefined, async (document, ids) => {

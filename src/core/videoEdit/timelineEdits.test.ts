@@ -6,9 +6,10 @@ import { expandVideoEditSelection, selectVideoEditRegion } from './timelineSelec
 import { assertVideoEditLockedTracks } from './lockedTracks'
 import { videoEditSyncOffsets } from './linkSync'
 import { offsetVideoEditSource } from './time'
+import { addLegacyVideoEditTracks } from './testFixtures'
 
 function fixture() {
-  const document = createVideoEditDocument('多轨剪辑')
+  const document = createVideoEditDocument('多轨剪辑'); addLegacyVideoEditTracks(document.sequences[0])
   document.media = [{ id: 'media', name: '原视频', path: 'D:/original.mp4', kind: 'video', width: 3840, height: 2160, durationSeconds: 20, hasAudio: true }]
   document.items = [{ id: 'item', name: '原视频', kind: 'video', mediaId: 'media' }]
   const sequence = document.sequences[0]

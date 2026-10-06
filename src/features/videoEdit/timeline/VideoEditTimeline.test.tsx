@@ -12,9 +12,9 @@ import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject,
 import { executeVideoEditTimelineEdit } from '../application/videoEditTimeline'
 import { VIDEO_EDIT_ITEM_DRAG_MIME } from '../application/videoEditDrop'
 import { VideoEditTimeline } from '../VideoEditTimeline'
-import { VideoEditTransportControls } from './VideoEditTimelineTransport'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { TIMELINE_HEADER_WIDTH as header, timelineInitialScrollTop, timelineTrackRows } from './timelineGeometry'
+import { TIMELINE_HEADER_WIDTH as header, TIMELINE_DEFAULT_SPLIT, timelineLayout } from './timelineGeometry'
+import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { resetFilmstripFramesForTests } from '@/services/videoFilmstrip/filmstripFrameService'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
@@ -24,11 +24,14 @@ let ids: string[]
 let onError: ReturnType<typeof vi.fn>
 function View({ visible = true }: { visible?: boolean }): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditTimeline instance={owner} onError={onError} visible={visible} /> }
 const current = () => getActiveVideoEditSequence(owner)
+/** 轨道中线的客户区纵坐标：按实际渲染的区位置与区内滚动读取（视口 getBoundingClientRect 固定在 0）。 */
 const trackClientY = (index = 1): number => {
-  const row = timelineTrackRows(current()).find(row => row.track.index === index)!
-  const host = document.querySelector<HTMLElement>('[data-video-edit-timeline-viewport]')
-  return row.top + row.height / 2 - (host?.scrollTop ?? 0)
+  const row = document.querySelector<HTMLElement>(`[data-video-edit-track][data-track-index="${index}"]`)
+  if (row) return Number.parseFloat(row.parentElement!.style.top) + Number.parseFloat(row.style.top) + Number.parseFloat(row.style.height) / 2
+  const layout = timelineLayout(current(), { viewportHeight, split: TIMELINE_DEFAULT_SPLIT, scroll: { video: 0, audio: 0 } }).rows.find(value => value.track.index === index)!
+  return layout.top + layout.height / 2
 }
+const trackTop = (index: number): number => { const row = document.querySelector<HTMLElement>(`[data-video-edit-track][data-track-index="${index}"]`)!; return Number.parseFloat(row.parentElement!.style.top) + Number.parseFloat(row.style.top) }
 const event = (clientX: number, clientY = trackClientY(), extra: Partial<PointerEventInit> = {}) => ({ clientX, clientY, pointerId: 1, button: 0, ...extra })
 let viewportHeight = 300
 const mixedTracks = () => Array.from({ length: 32 }, (_, index) => ({ ...current().tracks[1], id: `track-${current().id}-${index}`, index, kind: index % 2 ? 'video' as const : 'audio' as const, name: `轨道${index}`, height: 32 }))
@@ -62,6 +65,8 @@ beforeEach(async () => {
     document.media.push({ id: 'media', name: '视频', path: 'D:/fixture/video.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 30, hasAudio: false })
     document.codeMaterials = [{ id: 'definition', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', source, apiVersion: 1, languageVersion: 1 }] }]
     document.items.push({ id: 'video-item', name: '视频', kind: 'video', mediaId: 'media' }, { id: 'code-item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
+    // 多轨编辑用例沿用八条轨道（A1 + V1–V7）；新序列默认只有 V1/A1。
+    addLegacyVideoEditTracks(document.sequences[0])
     document.sequences[0].clips = ['video-item', 'code-item'].map((id, index) => ({ ...makeVideoEditItemClip(document, id, document.sequences[0].id, { frame: index * 60, track: 1 }, readVideoEditCodeMetadata(owner, document)), duration: 30 }))
     return document
   })
@@ -125,7 +130,40 @@ it('Premiere 修饰键拖动：Alt 复制、Ctrl 重排插入、Ctrl+Alt 复制�
   expect(onError).not.toHaveBeenCalled()
 })
 
+it('吸附开启时修饰键拖动也吸附：Alt 复制的副本贴到原片段末尾（2.3 复核）', () => {
+  act(() => setVideoEditTimelineView(owner.document.id, { snapping: true }))
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  // 片段：视频 [0,30)，代码 [60,90)；每帧 2px，拖 27 帧落在 [27,57)，吸附到原片段末尾 30
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20, trackClientY(), { altKey: true }))
+  fireEvent.pointerMove(host, event(header + 74, trackClientY(), { altKey: true })); fireEvent.pointerUp(host, event(header + 74, trackClientY(), { altKey: true }))
+  expect(current().clips.filter(clip => clip.track === 1).map(clip => clip.start).sort((a, b) => a - b)).toEqual([0, 30, 60])
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it('新序列只有 V1/A1：片段拖到最上视频轨之上自动加轨，素材拖到那里也加轨，各一步撤销（2.4）', async () => {
+  editVideoProject(owner.document.id, document => { document.sequences[0].tracks = document.sequences[0].tracks.filter(track => track.index <= 1); return document })
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  expect(view.container.querySelectorAll('[data-video-edit-track]')).toHaveLength(2)
+  const history = owner.past.length
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
+  fireEvent.pointerMove(host, event(header + 20, 60))
+  // 预览里已出现新轨道，继续在它上面移动仍是同一条新轨道
+  expect(view.container.querySelectorAll('[data-video-edit-track]')).toHaveLength(3)
+  fireEvent.pointerMove(host, event(header + 22, trackClientY(2))); fireEvent.pointerUp(host, event(header + 22, trackClientY(2)))
+  expect(current().tracks.filter(track => track.kind === 'video').map(track => track.index)).toEqual([1, 2])
+  expect(current().clips.find(clip => clip.id === ids[0])).toMatchObject({ track: 2, start: 1 }); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(owner.document.id)); expect(current().tracks).toHaveLength(2)
+  const transfer = { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: owner.document.id, itemIds: ['video-item'] }) }
+  fireEvent.dragOver(host, { clientX: header + 200, clientY: 60, dataTransfer: transfer })
+  expect(view.getByText('释放以新建轨道并添加')).not.toBeNull()
+  fireEvent.drop(host, { clientX: header + 200, clientY: 60, dataTransfer: transfer })
+  await waitFor(() => expect(current().clips).toHaveLength(3))
+  expect(current().tracks).toHaveLength(3); expect(current().clips.at(-1)).toMatchObject({ itemId: 'video-item', track: 2, start: 100 })
+  expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
+})
+
 it('锁定轨道阻止指针编辑；目标/静音/独奏/输出/同步使用同一领域轨道', () => {
+  act(() => useSettingsStore.getState().setVideoEditTrackHeaderButtons('video', ['target', 'sync', 'enabled', 'locked', 'muted', 'solo']))
   const view = render(<View />); const name = current().tracks[1].name
   fireEvent.click(view.getByRole('button', { name: `${name}锁定` })); expect(current().tracks[1].locked).toBe(true)
   const baseline = owner.document; const history = owner.past.length
@@ -135,6 +173,7 @@ it('锁定轨道阻止指针编辑；目标/静音/独奏/输出/同步使用同
   expect(current().tracks[1]).toMatchObject({ muted: true, solo: true, enabled: false, syncLocked: false })
   const trackId = current().tracks[1].id; const before = owner.targetTrackIds.includes(trackId)
   fireEvent.click(view.getByRole('button', { name: `${name}设为目标` })); expect(owner.targetTrackIds.includes(trackId)).toBe(!before)
+  act(() => useSettingsStore.getState().setVideoEditTrackHeaderButtons('video', null))
 })
 
 it('切序列后的晚到释放、Escape、丢捕获、窗口失焦与卸载均清理原拖动', () => {
@@ -201,7 +240,9 @@ it('高度只在释放提交一次，实际32轨道与高度用于纵向命中',
   expect(current().tracks[1].height).toBeUndefined(); expect(owner.past).toHaveLength(history)
   fireEvent.pointerUp(host, event(100, resizeY + 40)); expect(current().tracks[1].height).toBe(72); expect(owner.past).toHaveLength(history + 1)
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
-  host.scrollTop = 60; fireEvent.scroll(host); const targetY = trackClientY(29)
+  // 拖动中 Ctrl+滚轮把视频区往上滚，露出上层轨道（只滚光标所在的视频区）
+  fireEvent.wheel(host, { deltaY: -830, ctrlKey: true, clientX: 300, clientY: 60 }); const targetY = trackClientY(29)
+  expect(targetY).toBeGreaterThanOrEqual(28); expect(targetY).toBeLessThan(160)
   fireEvent.pointerMove(host, event(header + 20, targetY)); fireEvent.pointerUp(host, event(header + 20, targetY))
   expect(current().clips[0].track).toBe(29); expect(onError).not.toHaveBeenCalled()
 })
@@ -211,7 +252,10 @@ it('手形只滚动，轨道向前选择按命中轨道和位置', () => {
   fireEvent.click(view.getByRole('button', { name: '轨道向前选择' })); fireEvent.pointerDown(host, event(header + 90)); expect(owner.selectedClipIds).toEqual([ids[1]])
   const baseline = owner.document
   fireEvent.click(view.getByRole('button', { name: '手形工具' })); fireEvent.pointerDown(host, event(500, 200)); fireEvent.pointerMove(host, event(450, 150)); fireEvent.pointerUp(host, event(450, 150))
-  expect(host.scrollLeft).toBe(50); expect(host.scrollTop).toBe(50); expect(owner.document).toBe(baseline); expect(onError).not.toHaveBeenCalled()
+  expect(host.scrollLeft).toBe(50); expect(owner.document).toBe(baseline)
+  // 手形纵向拖动滚动按下处所在的区：视频区往下拖露出上层轨道
+  const before = trackTop(1); fireEvent.pointerDown(host, event(500, 100)); fireEvent.pointerMove(host, event(500, 140)); fireEvent.pointerUp(host, event(500, 140))
+  expect(trackTop(1)).toBe(before + 40); expect(onError).not.toHaveBeenCalled()
 })
 
 it('真实入出点拖动、播放头吸附和冲突失败保留基线', () => {
@@ -252,25 +296,20 @@ it('边缘持续滚动使用同一命中坐标，取消释放动画资源且无�
   fireEvent.pointerUp(host, event(895)); expect(owner.document).toBe(baseline); expect(onError).not.toHaveBeenCalled()
 })
 
-it('矮时间线在边缘区按住片段不动不滚动，拖向边缘才滚动、离开即停；框选与标尺横向一致', () => {
+it('矮时间线：片段拖向所在区的边缘才滚动这一区，按住不动不滚；框选与标尺横向一致', () => {
   vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(() => ({ left: 0, top: 0, right: 900, bottom: 118, width: 900, height: 118, x: 0, y: 0, toJSON: () => ({}) }))
   viewportHeight = 118
   const clock = layoutClock()
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const baseline = owner.document
-  fireEvent.wheel(host, { deltaY: 10, ctrlKey: true }); for (let frame = 0; frame < 8 && clock.callbacks.size; frame++) clock.step()
-  const row = timelineTrackRows(current()).find(value => value.track.index === 1)!
-  host.scrollTop = row.top + row.height / 2 - 44; fireEvent.scroll(host)
-  const scrolled = host.scrollTop; const y = trackClientY()
-  expect(y).toBeGreaterThanOrEqual(28); expect(y).toBeLessThan(60) // 落在顶部 32px 自动滚动区
+  const y = trackClientY(); const top = trackTop(1)
+  expect(y).toBeGreaterThanOrEqual(28); expect(y).toBeLessThan(69) // 视频区 [28, 69)
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20, y))
   fireEvent.pointerMove(host, event(header + 20, y)); fireEvent.pointerMove(host, event(header + 21, y + 1))
-  expect(clock.callbacks.size).toBe(0); expect(host.scrollTop).toBe(scrolled)
+  expect(clock.callbacks.size).toBe(0); expect(trackTop(1)).toBe(top)
   fireEvent.pointerMove(host, event(header + 20, y - 10))
-  expect(clock.callbacks.size).toBe(1); clock.step(); expect(host.scrollTop).toBeLessThan(scrolled)
-  fireEvent.pointerMove(host, event(header + 20, 74)); const held = host.scrollTop
-  clock.step(); expect(host.scrollTop).toBe(held); expect(clock.callbacks.size).toBe(0)
-  fireEvent.pointerCancel(host, event(header + 20, 74)); expect(owner.document).toBe(baseline)
-  for (const [pressY, label] of [[74, 'box'], [14, 'ruler']] as const) {
+  expect(clock.callbacks.size).toBe(1); clock.step(); expect(trackTop(1)).toBeGreaterThan(top)
+  fireEvent.pointerCancel(host, event(header + 20, y - 10)); expect(clock.callbacks.size).toBe(0); expect(owner.document).toBe(baseline)
+  for (const [pressY, label] of [[100, 'box'], [14, 'ruler']] as const) {
     const target = label === 'ruler' ? view.getByRole('slider', { name: '剪辑时间定位' }) : host
     fireEvent.pointerDown(target, event(890, pressY)); fireEvent.pointerMove(host, event(890, pressY))
     expect(clock.callbacks.size).toBe(0); expect(host.scrollLeft).toBe(0)
@@ -285,7 +324,10 @@ it('矮时间线在边缘区按住片段不动不滚动，拖向边缘才滚动�
 it('滚轮横向滚动、Ctrl 纵向；Alt 缩放保持光标处时间；Shift 纵向缩放停下后只写一步历史', async () => {
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   fireEvent.wheel(host, { deltaY: 120 }); expect(host.scrollLeft).toBe(120)
-  fireEvent.wheel(host, { deltaY: 40, ctrlKey: true }); expect(host.scrollTop).toBe(40)
+  // Ctrl+滚轮只滚光标所在的区：视频区往上滚，音频区不动
+  const videoTop = trackTop(1); const audioTop = trackTop(0)
+  fireEvent.wheel(host, { deltaY: -40, ctrlKey: true, clientY: 100 }); expect(trackTop(1)).toBe(videoTop + 40); expect(trackTop(0)).toBe(audioTop)
+  fireEvent.wheel(host, { deltaY: 40, ctrlKey: true, clientY: 100 }); expect(trackTop(1)).toBe(videoTop)
   host.scrollLeft = 0; fireEvent.scroll(host)
   const pixels = 60 * owner.zoom / current().fps; const anchor = (300 - header) / pixels
   fireEvent.wheel(host, { deltaY: -100, altKey: true, clientX: 300, clientY: 100 })
@@ -301,18 +343,12 @@ it('滚轮横向滚动、Ctrl 纵向；Alt 缩放保持光标处时间；Shift �
   expect(onError).not.toHaveBeenCalled()
 })
 
-it('正式运输/工具按钮共用命令与自定义键位；实时读数使用当前上下文', async () => {
-  // 3.5：播放控制在节目监视器（VideoEditTransportControls），时间线工具栏只留工具、开关与编辑动作。
-  const view = render(<><View /><VideoEditTransportControls instance={owner} onError={onError} /></>)
+it('时间线工具按钮共用命令与自定义键位', () => {
+  const view = render(<View />)
   const previous = useSettingsStore.getState().videoEditShortcuts
   try {
     act(() => useSettingsStore.getState().setVideoEditShortcuts({ ...previous, select_tool: { code: 'F9', ctrl: false, alt: false, shift: false, meta: false } }))
     expect(view.getByRole('button', { name: '选择工具' }).getAttribute('title')).toBe('选择工具（F9）')
-    fireEvent.click(view.getByRole('button', { name: '下一帧' })); expect(owner.frame).toBe(1)
-    fireEvent.click(view.getByRole('button', { name: '下一帧' })); expect(owner.frame).toBe(2)
-    fireEvent.click(view.getByRole('button', { name: '上一帧' })); expect(owner.frame).toBe(1)
-    fireEvent.click(view.getByRole('button', { name: '播放／暂停' })); await waitFor(() => expect(owner.playing).toBe(true))
-    fireEvent.click(view.getByRole('button', { name: '播放／暂停' })); expect(owner.playing).toBe(false)
     fireEvent.click(view.getByRole('button', { name: '吸附' })); expect(owner.snapping).toBe(true)
   } finally { act(() => useSettingsStore.getState().setVideoEditShortcuts(previous)) }
   expect(onError).not.toHaveBeenCalled()
@@ -355,7 +391,7 @@ it('剃刀释放时固定最初点击片段，移动改变落点且切序列取�
   expect(owner.document).toBe(baseline); expect(current().clips).toEqual([]); expect(onError).not.toHaveBeenCalled()
 })
 
-it('交错32轨道与500片段分成真实音画两区，初次可见底层画面且DOM仍有界', () => {
+it('交错32轨道与500片段分成音画两区，各自纵向滚动，DOM仍有界', () => {
   const tracks = mixedTracks()
   editVideoProject(owner.document.id, document => {
     const sequence = document.sequences[0]; const clip = sequence.clips[0]
@@ -368,53 +404,19 @@ it('交错32轨道与500片段分成真实音画两区，初次可见底层画�
   expect(displayedTracks).toHaveLength(32)
   expect(displayedTracks.map(row => Number(row.getAttribute('data-track-index')))).toEqual([...Array.from({ length: 16 }, (_, index) => 31 - index * 2), ...Array.from({ length: 16 }, (_, index) => index * 2)])
   expect(current().tracks).toEqual(tracks)
-  expect(host.scrollTop).toBe(timelineInitialScrollTop(timelineTrackRows(current()), 300))
-  expect(view.getByRole('separator', { name: '画面与声音轨道分界' })).not.toBeNull()
+  // 初次即见底层画面（V1 贴分隔条上方）与首条声音（A1 贴下方）
+  const divider = view.getByRole('separator', { name: '画面与声音轨道分界' }) as HTMLElement
+  expect(trackTop(1) + 32).toBe(Number.parseFloat(divider.style.top)); expect(trackTop(0)).toBe(Number.parseFloat(divider.style.top) + 8)
+  expect(view.container.querySelectorAll('[data-video-edit-region-scrollbar]')).toHaveLength(2)
   expect(view.container.querySelector('[data-video-edit-clip="clip-0"]')).not.toBeNull()
   expect(view.container.querySelectorAll('[data-video-edit-clip]').length).toBeGreaterThan(0)
   expect(view.container.querySelectorAll('[data-video-edit-clip]').length).toBeLessThan(10)
+  // 音频区往下滚，视频区不动
+  const video = trackTop(1); fireEvent.wheel(host, { deltaY: 64, ctrlKey: true, clientY: 250 })
+  expect(trackTop(0)).toBe(Number.parseFloat(divider.style.top) + 8 - 64); expect(trackTop(1)).toBe(video)
   host.scrollLeft = 10000; fireEvent.scroll(host)
   expect(view.container.querySelector('[data-video-edit-clip="clip-0"]')).toBeNull(); expect(view.container.querySelector('[data-video-edit-clip="clip-50"]')).not.toBeNull()
   expect(view.container.querySelectorAll('[data-video-edit-clip]').length).toBeLessThan(10); expect(view.container.querySelector('[data-video-edit-ruler]')!.querySelectorAll('span').length).toBeLessThan(20)
-  expect(onError).not.toHaveBeenCalled()
-})
-
-it('初始定位只做一次，手动滚动后播放、文档刷新、尺寸变化和重新显示均保留位置，切序列重新定位', () => {
-  const tracks = mixedTracks()
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks = tracks; return document })
-  let resize: (() => void) | undefined
-  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resize = callback } observe(): void {} disconnect(): void {} })
-  const view = render(<View />); let host = view.getByRole('region', { name: '时间线编辑区域' })
-  expect(host.scrollTop).toBeGreaterThan(0)
-  host.scrollTop = 0; fireEvent.scroll(host)
-  act(() => { editVideoProject(owner.document.id, document => { document.sequences[0].tracks[1].name = '改名'; return document }); setVideoEditView(owner.document.id, { frame: 20, playing: true }) })
-  viewportHeight = 250; act(() => resize?.())
-  view.rerender(<View visible={false} />); view.rerender(<View />)
-  expect(host.scrollTop).toBe(0)
-  act(() => {
-    const id = appendVideoEditSequence(owner.document.id)
-    editVideoProject(owner.document.id, document => { const sequence = document.sequences.find(sequence => sequence.id === id)!; sequence.tracks = tracks.map(track => ({ ...track, id: `new-${track.id}` })); return document })
-    switchVideoEditSequence(owner.document.id, id)
-  })
-  host = view.getByRole('region', { name: '时间线编辑区域' })
-  expect(host.scrollTop).toBe(timelineInitialScrollTop(timelineTrackRows(current()), 250))
-  expect(host.scrollTop).toBeGreaterThan(0); expect(onError).not.toHaveBeenCalled()
-})
-
-it('隐藏或零高度初次挂载等待实际显示定位，单类32轨道不制造空分区', () => {
-  const tracks = mixedTracks()
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks = tracks; return document })
-  viewportHeight = 0
-  const view = render(<View visible={false} />); const host = view.getByRole('region', { name: '时间线编辑区域' })
-  expect(host.scrollTop).toBe(0)
-  viewportHeight = 300; view.rerender(<View />)
-  expect(host.scrollTop).toBe(timelineInitialScrollTop(timelineTrackRows(current()), 300))
-  view.unmount()
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks = tracks.map(track => ({ ...track, kind: 'video' })); return document })
-  const single = render(<View />)
-  expect(single.getByRole('region', { name: '时间线编辑区域' }).scrollTop).toBe(0)
-  expect(single.queryByRole('separator', { name: '画面与声音轨道分界' })).toBeNull()
-  expect([...single.container.querySelectorAll('[data-video-edit-track]')].map(row => Number(row.getAttribute('data-track-index')))).toEqual(Array.from({ length: 32 }, (_, index) => 31 - index))
   expect(onError).not.toHaveBeenCalled()
 })
 
@@ -433,73 +435,6 @@ it('素材项拖放按重排后的原轨道命中，音画分界不产生伪落�
   await waitFor(() => expect(current().clips).toHaveLength(3))
   expect(current().clips.at(-1)).toMatchObject({ itemId: 'video-item', track: 3, start: 100 })
   expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
-})
-
-it('首测300后Dock缩到190仍完成首次分界定位，程序scroll不提前冻结；稳定后普通resize与内容刷新不复位', () => {
-  editVideoProject(owner.document.id, document => {
-    const sequence = document.sequences[0]
-    sequence.tracks = sequence.tracks.map(track => ({ ...track, kind: [0, 1, 7].includes(track.index) ? 'audio' : 'video' }))
-    sequence.clips = sequence.clips.map(clip => ({ ...clip, track: 2 }))
-    return document
-  })
-  let resize: (() => void) | undefined
-  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resize = callback } observe(): void {} disconnect(): void {} })
-  const clock = layoutClock()
-  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
-  expect(host.scrollTop).toBe(0); clock.step()
-  viewportHeight = 190; act(() => resize?.())
-  const positioned = timelineInitialScrollTop(timelineTrackRows(current()), 190)
-  expect(host.scrollTop).toBe(positioned); expect(positioned).toBeGreaterThan(0)
-  fireEvent.scroll(host)
-  expect(clock.callbacks.size).toBe(1)
-  const rows = timelineTrackRows(current()); const picture = rows.find(row => row.track.index === 2)!; const audio = rows.find(row => row.track.index === 1)!
-  expect(picture.top - positioned).toBeGreaterThanOrEqual(28)
-  expect(audio.top + audio.height - positioned).toBeLessThanOrEqual(190)
-  clock.step(); clock.step(); expect(clock.callbacks.size).toBe(0)
-  viewportHeight = 170; act(() => resize?.())
-  act(() => { editVideoProject(owner.document.id, document => { document.sequences[0].tracks[2].height = 80; return document }); setVideoEditView(owner.document.id, { playing: true, frame: 10 }) })
-  expect(host.scrollTop).toBe(positioned); expect(clock.callbacks.size).toBe(0); expect(onError).not.toHaveBeenCalled()
-})
-
-it('初始布局等待中用户滚轮立即冻结，非程序scroll也保留用户位置', () => {
-  const tracks = mixedTracks()
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks = tracks; return document })
-  const clock = layoutClock()
-  let resize: (() => void) | undefined
-  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resize = callback } observe(): void {} disconnect(): void {} })
-  for (const action of ['wheel', 'scroll'] as const) {
-    viewportHeight = 300
-    const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const initial = host.scrollTop
-    expect(clock.callbacks.size).toBe(1)
-    fireEvent.scroll(host) // Only the pending programmatic target is ignored.
-    if (action === 'wheel') fireEvent.wheel(host, { deltaY: 10 })
-    if (action === 'scroll') { host.scrollTop = initial + 10; fireEvent.scroll(host) }
-    const position = host.scrollTop
-    expect(clock.callbacks.size).toBe(0)
-    viewportHeight = 190; act(() => resize?.())
-    expect(host.scrollTop).toBe(position); clock.step(); expect(host.scrollTop).toBe(position)
-    view.unmount()
-  }
-  expect(onError).not.toHaveBeenCalled()
-})
-
-it('初始布局等待隐藏与卸载即释放，持续变化也在有限布局帧内停止', () => {
-  const tracks = mixedTracks()
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks = tracks; return document })
-  const clock = layoutClock()
-  const view = render(<View />)
-  expect(clock.callbacks.size).toBe(1)
-  view.rerender(<View visible={false} />); expect(clock.callbacks.size).toBe(0)
-  view.rerender(<View />); expect(clock.callbacks.size).toBe(1)
-  for (let index = 0; index < 12; index++) { viewportHeight = index % 2 ? 190 : 191; clock.step() }
-  expect(clock.callbacks.size).toBe(0)
-  view.unmount(); expect(clock.callbacks.size).toBe(0)
-  viewportHeight = 300
-  const pending = render(<View />); expect(clock.callbacks.size).toBe(1)
-  const previousFrame = [...clock.callbacks.keys()][0]
-  act(() => { const next = appendVideoEditSequence(owner.document.id); switchVideoEditSequence(owner.document.id, next) })
-  expect(clock.callbacks.has(previousFrame)).toBe(false); expect(clock.callbacks.size).toBe(1)
-  pending.unmount(); expect(clock.callbacks.size).toBe(0); expect(onError).not.toHaveBeenCalled()
 })
 
 function linkedPair(): { picture: string; sound: string } {
@@ -631,21 +566,55 @@ it('视频片段显示缩略图条：首格取入点画面，只铺可见范围�
   expect(onError).not.toHaveBeenCalled()
 })
 
-it('轨道头全部为图标开关并显示 V/A 编号，独奏不再是文字“S”，目标轨道整行高亮（2.4）', () => {
+it('轨道头按 PR 默认只放几个开关，右键“自定义…”用按钮编辑器加按钮；点编号名称设为目标并整行高亮（2.4）', async () => {
   const view = render(<View />)
-  const video = current().tracks.find(track => track.index === 1)!
+  const video = current().tracks.find(track => track.index === 1)!; const audio = current().tracks.find(track => track.kind === 'audio')!
   const header = view.container.querySelector<HTMLElement>(`[data-video-edit-track-header="${video.id}"]`)!
   expect(header.querySelector('[data-video-edit-track-code]')!.textContent).toBe('V1')
-  expect(view.container.querySelector(`[data-video-edit-track-header="${current().tracks.find(track => track.kind === 'audio')!.id}"] [data-video-edit-track-code]`)!.textContent).toBe('A1')
-  for (const label of ['设为目标', '同步锁定', '输出', '锁定', '静音', '独奏']) {
-    const toggle = view.getByRole('button', { name: `${video.name}${label}` })
-    expect(toggle.querySelector('svg')).not.toBeNull(); expect(toggle.textContent).toBe('')
-  }
-  // Picture tracks lead with show/lock, sound tracks with mute/solo/lock.
+  expect(view.container.querySelector(`[data-video-edit-track-header="${audio.id}"] [data-video-edit-track-code]`)!.textContent).toBe('A1')
   const order = (id: string): string[] => [...view.container.querySelectorAll(`[data-video-edit-track-header="${id}"] button`)].map(button => button.getAttribute('aria-label')!.replace(/^.*?(设为目标|同步锁定|输出|锁定|静音|独奏)$/, '$1')).slice(1)
-  expect(order(video.id)).toEqual(['设为目标', '同步锁定', '输出', '锁定', '静音', '独奏'])
-  expect(order(current().tracks.find(track => track.kind === 'audio')!.id)).toEqual(['设为目标', '同步锁定', '静音', '独奏', '锁定', '输出'])
+  expect(order(video.id)).toEqual(['锁定', '同步锁定', '输出'])
+  expect(order(audio.id)).toEqual(['锁定', '静音', '独奏'])
+  for (const label of ['锁定', '同步锁定', '输出']) { const toggle = view.getByRole('button', { name: `${video.name}${label}` }); expect(toggle.querySelector('svg')).not.toBeNull(); expect(toggle.textContent).toBe('') }
   expect(view.getByRole('button', { name: `${video.name}输出` }).getAttribute('aria-pressed')).toBe('true')
-  fireEvent.click(view.getByRole('button', { name: `${video.name}设为目标` }))
-  expect(header.className.includes('bg-raised')).toBe(owner.targetTrackIds.includes(video.id))
+  try {
+    fireEvent.contextMenu(header, { clientX: 40, clientY: 100 })
+    fireEvent.click(await view.findByText('自定义…'))
+    fireEvent.click(await view.findByRole('button', { name: '设为目标' }))
+    fireEvent.click(view.getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(order(video.id)).toEqual(['锁定', '同步锁定', '输出', '设为目标']))
+    expect(useSettingsStore.getState().videoEditTrackHeaderButtons).toEqual({ video: ['locked', 'sync', 'enabled', 'target'] })
+    expect(order(audio.id)).toEqual(['锁定', '静音', '独奏'])
+  } finally { act(() => useSettingsStore.getState().setVideoEditTrackHeaderButtons('video', null)) }
+  const targeted = owner.targetTrackIds.includes(video.id)
+  fireEvent.click(view.getByRole('button', { name: `目标轨道 ${video.name}` }))
+  expect(owner.targetTrackIds.includes(video.id)).toBe(!targeted); expect(header.className.includes('bg-raised')).toBe(!targeted)
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it('轨道头右键：添加／删除单个轨道各一步撤销，重命名，删除轨道…删除所有空轨道（2.4）', async () => {
+  const view = render(<View />)
+  const v1 = current().tracks.find(track => track.index === 1)!
+  const headerOf = (id: string) => view.container.querySelector<HTMLElement>(`[data-video-edit-track-header="${id}"]`)!
+  const count = (kind: 'video' | 'audio') => current().tracks.filter(track => track.kind === kind).length
+  const history = owner.past.length
+  fireEvent.contextMenu(headerOf(v1.id), { clientX: 40, clientY: 100 }); fireEvent.click(await view.findByText('添加单个轨道'))
+  await waitFor(() => expect(count('video')).toBe(8)); expect(owner.past).toHaveLength(history + 1)
+  // 新轨道紧贴在 V1 之上，原 V2 及以上顺延为 V3…
+  const codes = [...view.container.querySelectorAll('[data-video-edit-track-code]')].map(node => node.textContent)
+  expect(codes.filter(code => code?.startsWith('V'))).toEqual(['V8', 'V7', 'V6', 'V5', 'V4', 'V3', 'V2', 'V1'])
+  expect(current().clips.every(clip => current().tracks.some(track => track.index === clip.track))).toBe(true)
+  act(() => undoVideoEdit(owner.document.id)); expect(count('video')).toBe(7)
+  fireEvent.contextMenu(headerOf(v1.id), { clientX: 40, clientY: 100 }); fireEvent.click(await view.findByText('重命名'))
+  const input = await view.findByRole('textbox', { name: '轨道名称' })
+  fireEvent.change(input, { target: { value: '主画面' } }); fireEvent.keyDown(input, { key: 'Enter' })
+  expect(current().tracks.find(track => track.id === v1.id)!.name).toBe('主画面')
+  // V1 上有片段：删除单个轨道连同片段删除
+  fireEvent.contextMenu(headerOf(v1.id), { clientX: 40, clientY: 100 }); fireEvent.click(await view.findByText('删除单个轨道'))
+  await waitFor(() => expect(current().tracks.some(track => track.id === v1.id)).toBe(false)); expect(current().clips).toEqual([])
+  act(() => undoVideoEdit(owner.document.id)); expect(current().clips).toHaveLength(2)
+  fireEvent.contextMenu(headerOf(v1.id), { clientX: 40, clientY: 100 }); fireEvent.click(await view.findByText('删除轨道…'))
+  fireEvent.click(await view.findByRole('button', { name: '删除 6 条轨道' }))
+  expect(count('video')).toBe(1); expect(count('audio')).toBe(1); expect(current().clips).toHaveLength(2)
+  expect(onError).not.toHaveBeenCalled()
 })

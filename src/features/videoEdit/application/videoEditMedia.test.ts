@@ -5,12 +5,12 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
-import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, undoVideoEdit } from './videoEditService'
+import { appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, undoVideoEdit } from './videoEditService'
 import { ensureVideoEditMediaAudioStreams, importVideoEditSources, relinkVideoEditMedia, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
 import { inferLocalMediaKind } from '@/services/localMediaImport'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { dropVideoEditInput, readVideoEditDrop, videoEditDropPaths } from './videoEditDrop'
-import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
+import { savedVideoEdit, reopenVideoEdit, createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 
 const files = new Map<string, string>()
 const video = vi.hoisted(() => ({ duration: 3, fps: 60, hasAudio: false, decodable: true }))
@@ -47,7 +47,7 @@ afterEach(async () => {
 })
 
 it('拖包路径不能覆盖正式assetId；导入落点与来源一次历史并保存重开', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset())
   const decode = vi.fn(); vi.stubGlobal('createImageBitmap', decode)
   const transfer = { types: [HENJI_DRAG_DATA_MIME], getData: () => JSON.stringify({ type: 'image', imageUrl: 'https://invalid.test/forged.png', sourceType: 'asset', assetId: 'image-asset', filePath: 'E:/forged.png' }) } as unknown as DataTransfer
@@ -66,7 +66,7 @@ it('拖包路径不能覆盖正式assetId；导入落点与来源一次历史并
 })
 
 it.each(['content', 'path', 'pending', 'deleted'] as const)('最终%s改变拒绝整批发布，不留导入、片段或保存', async change => {
-  const owner = (await createVideoEditProject())!; const baseline = owner.document; const history = owner.past.length; const saved = JSON.stringify(savedVideoEdit(owner))
+  const owner = (await createLegacyTrackVideoEditProject()); const baseline = owner.document; const history = owner.past.length; const saved = JSON.stringify(savedVideoEdit(owner))
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValueOnce(asset())
   if (change === 'deleted') inspect.mockRejectedValueOnce(new Error('资产不存在'))
   else inspect.mockResolvedValueOnce(asset(change === 'content' ? { contentIdentity: 'b'.repeat(64) } : change === 'path' ? { filePath: 'D:/media/relocated.png' } : { inspectionStatus: 'pending' }))
@@ -75,7 +75,7 @@ it.each(['content', 'path', 'pending', 'deleted'] as const)('最终%s改变拒�
 })
 
 it('改名标签与最近使用允许复核；首次绑定旧路径刷新资源身份且可撤销', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   appendVideoEditMedia(id, { id: 'old-path', path: 'D:/media/original.png', name: '旧路径', kind: 'image', width: 3840, height: 2160, durationSeconds: 0, sourceRevision: 'old-revision' })
   const original = owner.document
   vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValueOnce(asset()).mockResolvedValueOnce(asset({ displayName: '改名', tags: ['标签'], lastUsedAt: 9000, updatedAt: 9000 }))
@@ -85,7 +85,7 @@ it('改名标签与最近使用允许复核；首次绑定旧路径刷新资源�
 })
 
 it('已绑定同路径的新内容须显式relink，原路径入口不能绕过内容核对', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset())
   await importVideoEditSources(id, [{ assetId: 'image-asset' }]); const baseline = owner.document
   inspect.mockResolvedValue(asset({ contentIdentity: 'b'.repeat(64) }))
@@ -104,7 +104,7 @@ it('已绑定同路径的新内容须显式relink，原路径入口不能绕过�
 })
 
 it('关闭同ID重开与取消不能接收晚到解析，元数据队列继续可用', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; await saveVideoEdit(id)
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; await saveVideoEdit(id)
   const pending = deferred<AssetRecord>()
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockImplementationOnce(() => pending.promise).mockResolvedValue(asset())
   const late = importVideoEditSources(id, [{ assetId: 'image-asset' }]).catch(error => error)
@@ -117,7 +117,7 @@ it('关闭同ID重开与取消不能接收晚到解析，元数据队列继续�
   await importVideoEditSources(id, [{ assetId: 'image-asset' }]); expect(reopened.document.media).toHaveLength(1)
 })
 it('删除素材库条目后原路径仍可重复引用和显式恢复，不重新登记或自动追随资产', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const library = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset())
   await importVideoEditSources(id, [{ assetId: 'image-asset' }]); const baseline = owner.document
   library.mockRejectedValue(new Error('资产不存在'))
@@ -135,7 +135,7 @@ it('删除素材库条目后原路径仍可重复引用和显式恢复，不重�
 })
 
 it('候选处理和最终解析期间的手动修改保留，不被旧草稿覆盖', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const pending = deferred<AssetRecord>()
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const pending = deferred<AssetRecord>()
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValueOnce(asset()).mockImplementationOnce(() => pending.promise)
   const importing = importVideoEditSources(id, [{ assetId: 'image-asset' }]).catch(error => error)
   await vi.waitFor(() => expect(inspect).toHaveBeenCalledTimes(2))
@@ -144,7 +144,7 @@ it('候选处理和最终解析期间的手动修改保留，不被旧草稿覆�
 })
 
 it('公共导入使用同一可信解析与静默保存', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset())
   const app = createApplicationHarness()
   try {
@@ -155,7 +155,7 @@ it('公共导入使用同一可信解析与静默保存', async () => {
 })
 
 it.each(['duration', 'fps', 'hasAudio'] as const)('旧视频首次可信绑定必须核验当前%s，不认证旧元数据', async field => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   appendVideoEditMedia(id, { id: 'legacy', path: 'D:/media/legacy.mp4', name: '旧视频', kind: 'video', width: 3840, height: 2160, durationSeconds: 3, hasAudio: false, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
   vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset({ mediaType: 'video', filePath: 'D:/media/legacy.mp4', durationSeconds: field === 'duration' ? 4 : 3 }))
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
@@ -168,7 +168,7 @@ it.each(['duration', 'fps', 'hasAudio'] as const)('旧视频首次可信绑定�
 })
 
 it('导入先问原生探测：只有原生能解的专业格式按原生元数据导入且只写现有字段；原生不可用时给出格式提示、剪辑不变；原生故障不阻断后备', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
   video.decodable = false
@@ -189,7 +189,7 @@ it('导入先问原生探测：只有原生能解的专业格式按原生元数�
   expect(Object.keys(owner.document.media[1]).sort()).toEqual(['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
 })
 it('诊断变量强制浏览器时不调用原生探测', async () => {
-  const owner = (await createVideoEditProject())!
+  const owner = (await createLegacyTrackVideoEditProject())
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')
   const native = vi.spyOn(videoEditNativeMediaProbe, 'probe')
@@ -201,7 +201,7 @@ it('剪辑导入对话框的每种格式都能进入素材库，从素材库拖�
 })
 
 it('多音轨 MXF（2.6）：导入记录四条单声道流，拖入时间线铺成画面加四个链接单声道片段并新增音频轨，一次撤销全部回到拖入前；保存重开不变', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
   video.decodable = false
@@ -228,7 +228,7 @@ it('多音轨 MXF（2.6）：导入记录四条单声道流，拖入时间线铺
   expect(getActiveVideoEditSequence(reopened).tracks).toHaveLength(11)
 })
 it('旧剪辑素材没有声音流清单：打开音频声道设置时按需读取一次并记录，不迁移其余素材；无声素材给出提示', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')
   appendVideoEditMedia(id, { id: 'old', name: '旧视频', path: 'D:/media/old.mp4', kind: 'video', width: 3840, height: 2160, durationSeconds: 3, hasAudio: true, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })

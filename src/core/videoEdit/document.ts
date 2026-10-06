@@ -137,7 +137,8 @@ export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
 export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials'> & { fps: number }
 export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {
   return { id: crypto.randomUUID(), name, width: 1920, height: 1080, frameRate: { numerator: 30, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
-    tracks: Array.from({ length: 8 }, (_, index) => ({ id: crypto.randomUUID(), name: index === 0 ? '音频 1' : `视频 ${index}`, index, kind: index === 0 ? 'audio' : 'video', locked: false, enabled: true, muted: false, solo: false })), clips: [], annotations: [] }
+    // 新序列与 PR 一样只有一条视频轨（V1）和一条音频轨（A1）；需要更多轨道时拖到轨道外或用轨道头菜单添加。
+    tracks: Array.from({ length: 2 }, (_, index) => ({ id: crypto.randomUUID(), name: index === 0 ? '音频 1' : '视频 1', index, kind: index === 0 ? 'audio' : 'video', locked: false, enabled: true, muted: false, solo: false })), clips: [], annotations: [] }
 }
 export function createVideoEditDocument(name: string): VideoEditDocument {
   return { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name, revision: 0, media: [], bins: [], items: [], sequences: [createVideoEditSequence()] }

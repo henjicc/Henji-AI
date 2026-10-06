@@ -9,6 +9,7 @@ import { VIDEO_EDIT_SOURCE_DRAG_MIME, videoEditSourceRangeSchema, placeVideoEdit
 import { CODE_ASSET_DRAG_MIME, readCodeAssetDrag } from '@/features/assets/drag/assetDragPayload'
 import { importVideoEditCodeAsset } from './videoEditCodeAssets'
 import { importVideoEditPathsAndFolders } from './videoEditFolderImport'
+import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
 export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
@@ -41,7 +42,9 @@ export function videoEditDropPaths(transfer: DataTransfer): string[] {
   return paths
 }
 /** Placement is captured before metadata I/O; switching projects cannot redirect a drop. */
-export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: { frame: number; track?: number }, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void } = {}): Promise<string[]> {
+/** `newTrack`: dropped above the top video track / below the bottom audio track — a new track of that kind is created (PR). */
+export interface VideoEditDropPlacement { frame: number; track?: number; newTrack?: 'video' | 'audio' }
+export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: VideoEditDropPlacement, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void } = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()
   const sequenceId = options.sequenceId ?? owner.activeSequenceId
@@ -63,11 +66,15 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
       return { ...document, sequences: [...document.sequences, created] }
     }
     const target = (kind: 'video' | 'audio'): number | undefined => sequence.tracks.find(track => targetTrackIds.includes(track.id) && track.kind === kind)?.index
-    const video = target('video'); const audio = target('audio')
+    // Dropped beyond the outer tracks: the new track takes the place of that kind's target; it is kept only when used.
+    const edge = placement.newTrack ? videoEditEdgeTracks(sequence, placement.newTrack, 1)[0] : undefined
+    const base = edge ? { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, tracks: [...item.tracks, edge] } : item) } : document
+    const video = edge?.kind === 'video' ? edge.index : target('video'); const audio = edge?.kind === 'audio' ? edge.index : target('audio')
     // Multi-track sound spreads over consecutive audio tracks from the targeted one (task 2.6).
-    const placed = placeVideoEditItems(document, ids, sequenceId, { frame: placement.frame, ...(placement.track !== undefined ? { track: placement.track } : {}), ...(video !== undefined ? { videoTrack: video } : {}), ...(audio !== undefined ? { audioTrack: audio } : {}) }, readVideoEditCodeMetadata(owner, document))
+    const placed = placeVideoEditItems(base, ids, sequenceId, { frame: placement.frame, ...(placement.track !== undefined ? { track: placement.track } : {}), ...(video !== undefined ? { videoTrack: video } : {}), ...(audio !== undefined ? { audioTrack: audio } : {}) }, readVideoEditCodeMetadata(owner, base))
+    const created = edge && placed.clips.some(clip => clip.track === edge.index) ? [edge] : []
     selectedClip = placed.primaryIds.at(-1)
-    return { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, tracks: [...item.tracks, ...placed.addedTracks], clips: [...item.clips, ...placed.clips] } : item) }
+    return { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, tracks: [...item.tracks, ...created, ...placed.addedTracks], clips: [...item.clips, ...placed.clips] } : item) }
   }
   let ids: string[]
   if (input.kind === 'items') ids = input.itemIds

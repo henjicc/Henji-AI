@@ -8,16 +8,18 @@ import { beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, finishVideoEdi
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
-import { TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineTrackAt, type TimelineEdgeAxis, type TimelineTrackRow } from './timelineGeometry'
+import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
+import { TIMELINE_HEADER_WIDTH, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, type TimelineEdgeAxis, type TimelineLayout, type TimelineRegionKind, type TimelineTrackRow } from './timelineGeometry'
 
 interface Point { x: number; y: number }
 export interface TimelineBox { from: Point; to: Point }
 interface BaseGesture { owner: VideoEditInstance; baseline: VideoEditInstance['document']; sequenceId: string; pointerId: number; origin: Point; client: Point; edge: { x: TimelineEdgeAxis; y: TimelineEdgeAxis }; tool: VideoEditInstance['tool']; zoom: number; pixels: number }
 type PointerGesture = BaseGesture & (
   /** `variant`: Premiere modifier drag of a clip body, read from the keys held on every move (Alt copy, Ctrl insert, both: copy and insert). */
-  | { kind: 'clip'; handle: VideoEditTimelineDrag; ids: string[]; primary: string; mode: VideoEditTimelineAdjustment['mode']; variant: ClipDragVariant; moved: boolean; adjustment?: VideoEditTimelineAdjustment; rearrange?: VideoEditTimelineRearrange; error?: Error }
+  /** `newTracks`: tracks this drag creates above the top video track / below the bottom audio track, kept stable across moves. */
+  | { kind: 'clip'; handle: VideoEditTimelineDrag; ids: string[]; primary: string; mode: VideoEditTimelineAdjustment['mode']; variant: ClipDragVariant; moved: boolean; adjustment?: VideoEditTimelineAdjustment; rearrange?: VideoEditTimelineRearrange; error?: Error; newTracks: VideoEditSequence['tracks'] }
   | { kind: 'box'; initial: string[]; additive: boolean; linked: VideoEditRelations }
-  | { kind: 'hand'; left: number; top: number }
+  | { kind: 'hand'; left: number; last: number; region?: TimelineRegionKind }
   /** `snap`: Shift held — the playhead snaps to edit points, markers and the sequence in/out (Premiere). */
   | { kind: 'seek'; snap: boolean }
   | { kind: 'height'; trackId: string; height: number; next: number }
@@ -27,7 +29,21 @@ type ClipDragVariant = 'move' | VideoEditTimelineRearrange['mode']
 function clipDragVariant(event: { ctrlKey: boolean; metaKey: boolean; altKey: boolean }): ClipDragVariant {
   return event.ctrlKey || event.metaKey ? event.altKey ? 'copy_insert' : 'insert' : event.altKey ? 'copy' : 'move'
 }
-interface Options { instance: VideoEditInstance; sequence: VideoEditSequence; rows: TimelineTrackRow[]; pixels: number; onError: (error: unknown) => void }
+/** `scrollRegion(kind, dy)`: scrolls one region (dy > 0 shows lower content), returns whether it moved. */
+interface Options { instance: VideoEditInstance; sequence: VideoEditSequence; layout: { readonly current: TimelineLayout }; pixels: number; onError: (error: unknown) => void; scrollRegion: (kind: TimelineRegionKind, dy: number) => boolean }
+/**
+ * PR：把片段拖到最上面的视频轨之上（或最下面的音频轨之下）会新建轨道。按需要的条数逐条加，直到整个选区放得下。
+ * 返回新轨道与按候选序列算出的轨道映射；放不下（如轨道已满）时抛出原因。
+ */
+function edgeTrackMove(sequence: VideoEditSequence, ids: string[], primary: string, kind: TimelineRegionKind, reuse: VideoEditSequence['tracks']): { newTracks: VideoEditSequence['tracks']; trackMap: Record<number, number> } {
+  let failure: unknown
+  for (let count = 1; count <= 32 - sequence.tracks.length; count++) {
+    const newTracks = reuse.length >= count && reuse.slice(0, count).every(track => track.kind === kind) ? reuse.slice(0, count) : videoEditEdgeTracks(sequence, kind, count)
+    const candidate = { ...sequence, tracks: [...sequence.tracks, ...newTracks] }
+    try { return { newTracks, trackMap: videoEditMoveTrackMap(candidate, ids, primary, newTracks[0].index) } } catch (error) { failure = error }
+  }
+  throw failure ?? new Error('序列最多 32 条轨道，请先删除不用的轨道。')
+}
 
 /** Pointer drafts are local and bounded; only release enters the shared edit history. */
 export function useTimelinePointer(options: Options) {
@@ -65,23 +81,30 @@ export function useTimelinePointer(options: Options) {
   }
   const applyPointer = (gesture: PointerGesture): void => {
     if (!valid(gesture)) { cancel(); return }
-    const { instance, sequence, rows, pixels } = current.current
+    const { instance, sequence, pixels } = current.current; const layout = current.current.layout.current
     const at = point(gesture.client)
     if (gesture.kind === 'clip') {
       if (!gesture.moved && Math.hypot(at.x - gesture.origin.x, at.y - gesture.origin.y) < 3) return
       gesture.moved = true
       try {
-        const row = timelineTrackAt(rows, at.y)
-        if (!row) throw new Error('请将片段放在可用轨道内。')
+        const row = timelineTrackAt(layout.rows, at.y)
+        // 预览里已出现的新轨道仍按“拖到轨道外”处理（新轨道不在原序列里）。
+        const fresh = row && !sequence.tracks.some(track => track.id === row.track.id) ? row.track.kind : undefined
+        const zone = gesture.mode !== 'move' ? undefined : fresh ?? (row ? undefined : timelineNewTrackZone(layout, at.y))
+        if (!row && !zone) throw new Error('请将片段放在可用轨道内。')
         const delta = Math.round((at.x - gesture.origin.x) / pixels)
-        const trackMap = gesture.mode === 'move' ? videoEditMoveTrackMap(sequence, gesture.ids, gesture.primary, row.track.index) : undefined
+        const edge = zone ? edgeTrackMove(sequence, gesture.ids, gesture.primary, zone, gesture.newTracks) : undefined
+        if (edge) gesture.newTracks = edge.newTracks
+        const newTracks = edge ? { newTracks: edge.newTracks } : {}
+        const trackMap = gesture.mode === 'move' ? edge?.trackMap ?? videoEditMoveTrackMap(sequence, gesture.ids, gesture.primary, row!.track.index) : undefined
+        const snap = instance.snapping ? { snapThreshold: 8 / pixels, snapFrames: [instance.frame] } : {}
         if (gesture.mode === 'move' && gesture.variant !== 'move') {
-          const rearrange: VideoEditTimelineRearrange = { mode: gesture.variant, delta, ...(trackMap ? { trackMap } : {}) }
+          const rearrange: VideoEditTimelineRearrange = { mode: gesture.variant, delta, ...(trackMap ? { trackMap } : {}), ...snap, ...newTracks }
           const next = previewVideoEditTimelineRearrange(gesture.handle, rearrange)
           gesture.rearrange = rearrange; gesture.adjustment = undefined; gesture.error = undefined; setFailure(null); setPreview(next)
           return
         }
-        const adjustment: VideoEditTimelineAdjustment = { mode: gesture.mode, delta, ...(trackMap ? { trackMap } : {}), ...(instance.snapping ? { snapThreshold: 8 / pixels, snapFrames: [instance.frame] } : {}) }
+        const adjustment: VideoEditTimelineAdjustment = { mode: gesture.mode, delta, ...(trackMap ? { trackMap } : {}), ...snap, ...newTracks }
         const next = previewVideoEditTimelineDrag(gesture.handle, adjustment)
         gesture.adjustment = adjustment; gesture.rearrange = undefined; gesture.error = undefined; setFailure(null); setPreview(next)
       } catch (error) {
@@ -97,26 +120,31 @@ export function useTimelinePointer(options: Options) {
       setVideoEditView(instance.document.id, { playing: false, frame })
     } else if (gesture.kind === 'hand' && viewport.current) {
       viewport.current.scrollLeft = gesture.left + gesture.origin.x - gesture.client.x
-      viewport.current.scrollTop = gesture.top + gesture.origin.y - gesture.client.y
+      if (gesture.region) current.current.scrollRegion(gesture.region, gesture.last - gesture.client.y)
+      gesture.last = gesture.client.y
     }
   }
-  /** Clip/box/seek drags scroll at the edges only after the pointer actually moved toward them. */
-  const edgeVelocity = (gesture: PointerGesture, host: HTMLDivElement): Point => {
+  /**
+   * Clip/box/seek drags scroll at the edges only after the pointer actually moved toward them. Vertically the region the
+   * gesture started in scrolls at its own edges (PR: picture and sound tracks scroll separately).
+   */
+  const edgeVelocity = (gesture: PointerGesture, host: HTMLDivElement): Point & { region?: TimelineRegionKind } => {
     if ((gesture.kind !== 'clip' && gesture.kind !== 'box' && gesture.kind !== 'seek') || (gesture.kind === 'clip' && !gesture.moved)) return { x: 0, y: 0 }
     const rect = host.getBoundingClientRect()
-    return {
-      x: timelineArmedEdgeVelocity(gesture.edge.x, gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right),
-      y: gesture.kind === 'seek' ? 0 : timelineArmedEdgeVelocity(gesture.edge.y, gesture.client.y, rect.top + TIMELINE_RULER_HEIGHT, rect.bottom),
-    }
+    const x = timelineArmedEdgeVelocity(gesture.edge.x, gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right)
+    const region = gesture.kind === 'seek' ? undefined : timelineRegionAt(current.current.layout.current, gesture.origin.y)
+    if (!region) return { x, y: 0 }
+    const bounds = current.current.layout.current.regions[region]
+    return { x, y: timelineArmedEdgeVelocity(gesture.edge.y, gesture.client.y, rect.top + bounds.top, rect.top + bounds.top + bounds.height), region }
   }
   const tick = (): void => {
     animation.current = undefined
     const gesture = pointer.current; const host = viewport.current
     if (!gesture || !host) return
-    const velocity = edgeVelocity(gesture, host); const beforeX = host.scrollLeft; const beforeY = host.scrollTop
+    const velocity = edgeVelocity(gesture, host); const beforeX = host.scrollLeft
     if (velocity.x) host.scrollLeft = Math.max(0, host.scrollLeft + velocity.x)
-    if (velocity.y) host.scrollTop = Math.max(0, host.scrollTop + velocity.y)
-    if (host.scrollLeft !== beforeX || host.scrollTop !== beforeY) {
+    const scrolledY = velocity.y && velocity.region ? current.current.scrollRegion(velocity.region, velocity.y) : false
+    if (host.scrollLeft !== beforeX || scrolledY) {
       applyPointer(gesture)
       if (pointer.current) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
     }
@@ -149,8 +177,9 @@ export function useTimelinePointer(options: Options) {
     // 浮窗中的目标属于子窗口 realm，不能用 instanceof Element 判定。
     const target = elementOfEventTarget(event.target)
     if (event.button !== 0 || !target) return
-    const { instance, sequence, rows, pixels, onError } = current.current
-    if (target.closest('[data-video-edit-track-header]')) return
+    const { instance, sequence, pixels, onError } = current.current; const layout = current.current.layout.current
+    const rows = layout.rows
+    if (target.closest('[data-video-edit-track-header]') || target.closest('[data-video-edit-timeline-chrome]')) return
     event.preventDefault(); event.stopPropagation()
     viewport.current?.focus({ preventScroll: true })
     const at = point({ x: event.clientX, y: event.clientY }); const row = timelineTrackAt(rows, at.y)
@@ -158,7 +187,7 @@ export function useTimelinePointer(options: Options) {
     const clip = sequence.clips.find(value => value.id === clipId)
     const linked = videoEditPickRelations(instance.linkedSelection !== false, event.altKey)
     try {
-      if (instance.tool === 'hand') { const host = viewport.current!; capture({ ...base(event), kind: 'hand', origin: { x: event.clientX, y: event.clientY }, left: host.scrollLeft, top: host.scrollTop }); return }
+      if (instance.tool === 'hand') { const host = viewport.current!; const region = timelineRegionAt(layout, at.y); capture({ ...base(event), kind: 'hand', origin: { x: event.clientX, y: event.clientY }, left: host.scrollLeft, last: event.clientY, ...(region ? { region } : {}) }); return }
       if (target.closest('[data-video-edit-ruler]')) { const gesture: PointerGesture = { ...base(event), kind: 'seek', snap: event.shiftKey }; capture(gesture); setVideoEditView(instance.document.id, { scrubbing: true }); applyPointer(gesture); return }
       if (instance.tool === 'track') { if (row) select(selectVideoEditTrackFrom(sequence, row.track.index, Math.max(0, Math.round(at.x / pixels)), event.shiftKey, linked), false, event.ctrlKey || event.metaKey, linked); return }
       if (instance.tool === 'razor') {
@@ -177,7 +206,7 @@ export function useTimelinePointer(options: Options) {
       // Validate even a stationary gesture so locked related clips cannot enter edit preview.
       const handle = beginVideoEditTimelineDrag(instance.document.id, sequence.id, ids)
       try { previewVideoEditTimelineDrag(handle, { mode, delta: 0 }) } catch (error) { finishVideoEditTimelineDrag(handle); throw error }
-      capture({ ...base(event), kind: 'clip', handle, ids, primary: clip.id, mode, variant: clipDragVariant(event), moved: false })
+      capture({ ...base(event), kind: 'clip', handle, ids, primary: clip.id, mode, variant: clipDragVariant(event), moved: false, newTracks: [] })
       setVideoEditView(instance.document.id, { playing: false })
     } catch (error) { onError(error) }
   }
@@ -197,18 +226,19 @@ export function useTimelinePointer(options: Options) {
     const previous = detach(); clear()
     if (!previous) return
     if (!valid(previous)) { if (previous.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); return }
-    const { instance, sequence, rows, pixels, onError } = current.current
+    const { instance, sequence, pixels, onError } = current.current; const layout = current.current.layout.current
+    const rows = layout.rows
     try {
       if (previous.kind === 'clip') {
         if (previous.error) { finishVideoEditTimelineDrag(previous.handle); throw previous.error }
         const rearrange = previous.rearrange
-        if (rearrange && (rearrange.delta || Object.entries(rearrange.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineRearrange(previous.handle, rearrange)
+        if (rearrange && (rearrange.delta || rearrange.newTracks?.length || Object.entries(rearrange.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineRearrange(previous.handle, rearrange)
         else if (rearrange) finishVideoEditTimelineDrag(previous.handle)
-        else if (previous.adjustment && (previous.adjustment.delta || Object.entries(previous.adjustment.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineDrag(previous.handle, previous.adjustment)
+        else if (previous.adjustment && (previous.adjustment.delta || previous.adjustment.newTracks?.length || Object.entries(previous.adjustment.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineDrag(previous.handle, previous.adjustment)
         else finishVideoEditTimelineDrag(previous.handle)
       } else if (previous.kind === 'box') {
         const at = point(previous.client); const fromY = Math.min(previous.origin.y, at.y); const toY = Math.max(previous.origin.y, at.y)
-        const ids = selectVideoEditRegion(sequence, { from: Math.max(0, previous.origin.x / pixels), to: Math.max(0, at.x / pixels), tracks: rows.filter(row => row.top < toY && row.top + row.height > fromY).map(row => row.track.index) }, previous.linked)
+        const ids = selectVideoEditRegion(sequence, { from: Math.max(0, previous.origin.x / pixels), to: Math.max(0, at.x / pixels), tracks: rows.filter(row => Math.max(row.top, row.clipTop) < toY && Math.min(row.top + row.height, row.clipBottom) > fromY).map(row => row.track.index) }, previous.linked)
         setVideoEditTimelineView(instance.document.id, { selectedClipIds: previous.additive ? [...new Set([...previous.initial, ...ids])] : ids })
       } else if (previous.kind === 'height' && previous.next !== previous.height) updateVideoEditTrack(instance.document.id, sequence.id, previous.trackId, { height: previous.next })
       else if (previous.kind === 'seek') setVideoEditView(instance.document.id, { scrubbing: false })
@@ -218,7 +248,7 @@ export function useTimelinePointer(options: Options) {
       }
     } catch (error) { if (previous.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); onError(error) }
   }
-  const resize = (event: React.PointerEvent<HTMLDivElement>, row: TimelineTrackRow): void => {
+  const resize = (event: React.PointerEvent<HTMLElement>, row: TimelineTrackRow): void => {
     if (event.button !== 0) return
     event.preventDefault(); event.stopPropagation()
     capture({ ...base(event), kind: 'height', origin: { x: event.clientX, y: event.clientY }, trackId: row.track.id, height: row.height, next: row.height })

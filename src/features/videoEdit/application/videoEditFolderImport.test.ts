@@ -21,6 +21,8 @@ const tree: Record<string, Array<{ name: string; isDirectory: boolean }>> = {
   'D:/drop/拍摄': [{ name: 'B 10.mp4', isDirectory: false }, { name: 'B 9.mp4', isDirectory: false }, { name: 'notes.txt', isDirectory: false }, { name: 'desktop.ini', isDirectory: false }, { name: '子文件夹', isDirectory: true }, { name: '空文件夹', isDirectory: true }],
   'D:/drop/拍摄/子文件夹': [{ name: 'C.mp4', isDirectory: false }, { name: 'missing.mp4', isDirectory: false }],
   'D:/drop/拍摄/空文件夹': [{ name: 'readme.md', isDirectory: false }],
+  'D:/drop/全空': [{ name: '下级', isDirectory: true }],
+  'D:/drop/全空/下级': [],
 }
 beforeEach(() => {
   installHarnessNativeStorage()
@@ -41,7 +43,9 @@ it('文件夹按层级建同名素材箱，散文件留在落点；不支持与�
   expect(skipped).toBe(3) // notes.txt、readme.md、missing.mp4
   const bins = owner.document.bins
   const shoot = bins.find(bin => bin.name === '拍摄')!; const nested = bins.find(bin => bin.name === '子文件夹')!
-  expect(shoot.parentId).toBeUndefined(); expect(nested.parentId).toBe(shoot.id); expect(bins).toHaveLength(2)
+  expect(shoot.parentId).toBeUndefined(); expect(nested.parentId).toBe(shoot.id)
+  // 只有不支持文件的文件夹也建同名空素材箱（PR）
+  expect(bins).toHaveLength(3); expect(bins.find(bin => bin.name === '空文件夹')!.parentId).toBe(shoot.id)
   const binOf = (name: string) => owner.document.items.find(item => item.name === name)?.binId
   expect(binOf('B 9.mp4')).toBe(shoot.id); expect(binOf('C.mp4')).toBe(nested.id); expect(binOf('散.mp4')).toBeUndefined()
   // 文件按自然顺序
@@ -53,4 +57,12 @@ it('没有文件夹时保持原来的导入：散文件读不出就报错，不�
   const owner = (await createVideoEditProject())!
   await expect(dropVideoEditInput(owner.document.id, { kind: 'sources', sources: [{ path: 'D:/drop/missing.mp4' }] })).rejects.toThrow('源文件已移动或丢失')
   expect(planVideoEditFolderImport([{ path: 'D:/x', name: 'x', files: ['D:/x/a.MOV', 'D:/x/b.psd'], folders: [] }])).toEqual({ files: [{ path: 'D:/x/a.MOV', chain: ['x'] }], unsupported: 1 })
+})
+it('只拖入空文件夹也按 PR 建同名空素材箱（含子文件夹），一步撤销', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const history = owner.past.length
+  expect(await dropVideoEditInput(id, { kind: 'sources', sources: [{ path: 'D:/drop/全空' }] })).toEqual([])
+  const top = owner.document.bins.find(bin => bin.name === '全空')!
+  expect(owner.document.bins.map(bin => [bin.name, bin.parentId ?? null])).toEqual([['全空', null], ['下级', top.id]])
+  expect(owner.past).toHaveLength(history + 1)
+  undoVideoEdit(id); expect(owner.document.bins).toEqual([])
 })

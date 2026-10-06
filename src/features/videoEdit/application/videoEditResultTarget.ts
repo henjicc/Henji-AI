@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { videoEditClipSchema, videoEditCreativeSourceSchema, type VideoEditCreativeSource, type VideoEditDocument } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { importVideoEditCaptions } from '@/core/videoEdit/timedContent'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
@@ -44,8 +45,11 @@ export function captureVideoEditResultTarget(projectId: string, sequenceId: stri
   if (!sequence) throw new Error('原序列不存在。')
   const clip = placement.mode === 'replace' ? sequence.clips.find(value => value.id === placement.clipId) : undefined
   if (placement.mode === 'replace' && (!clip || clip.kind === 'adjustment')) throw new Error('请选择可替换的原画面或声音片段。')
-  const track = placement.mode === 'add' ? sequence.tracks.find(value => value.id === placement.trackId) : sequence.tracks.find(value => value.index === clip?.track)
-  if (!track || track.locked) throw new Error('原目标轨道不存在或已锁定。')
+  if (placement.mode === 'add' && placement.newTrack) videoEditEdgeTracks(sequence, placement.newTrack, 1)
+  else {
+    const track = placement.mode === 'add' ? sequence.tracks.find(value => value.id === placement.trackId) : sequence.tracks.find(value => value.index === clip?.track)
+    if (!track || track.locked) throw new Error('原目标轨道不存在或已锁定。')
+  }
   if (placement.mode === 'add' && (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame >= Math.floor(videoEditFps(sequence.frameRate) * 1800) || placement.duration !== undefined && (!Number.isSafeInteger(placement.duration) || placement.duration < 1))) throw new Error('请选择序列范围内的落点与正整数帧时长。')
   const target = Object.freeze({ projectId, sequenceId, id: crypto.randomUUID() })
   targets.set(target, { owner, baseline: owner.document, placement: { ...placement }, busy: false })
@@ -110,10 +114,13 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       assertVideoEditResultTarget(target, signal)
       const item = document.items.find(item => itemIds.includes(item.id) && document.media.some(media => item.mediaId === media.id && sameAsset(media, asset)))
       if (!item) throw new Error('创作结果在引用期间已改变，请重新选择原结果。')
-      const sequence = document.sequences.find(value => value.id === target.sequenceId)!
       const placement = state.placement
+      // 没有空余轨道时新建的轨道与片段同一步编辑（一次撤销）。
+      const added = placement.mode === 'add' && placement.newTrack ? videoEditEdgeTracks(document.sequences.find(value => value.id === target.sequenceId)!, placement.newTrack, 1) : []
+      if (added.length) document = { ...document, sequences: document.sequences.map(value => value.id === target.sequenceId ? { ...value, tracks: [...value.tracks, ...added] } : value) }
+      const sequence = document.sequences.find(value => value.id === target.sequenceId)!
       const prior = placement.mode === 'replace' ? sequence.clips.find(value => value.id === placement.clipId)! : undefined
-      const track = placement.mode === 'add' ? sequence.tracks.find(value => value.id === placement.trackId)!.index : prior!.track
+      const track = placement.mode === 'add' ? added[0]?.index ?? sequence.tracks.find(value => value.id === placement.trackId)!.index : prior!.track
       const frame = placement.mode === 'add' ? placement.frame : prior!.start
       const component = asset.mediaType === 'video' && prior?.sourceComponent ? { sourceComponent: prior.sourceComponent } : {}
       // A shorter timed replacement keeps its own length; stills fill the original slot.

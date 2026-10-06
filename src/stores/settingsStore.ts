@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { parseVideoEditShortcutOverrides, sanitizeVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
 import { sanitizeVideoEditMonitorButtons, withVideoEditMonitorButtons, type VideoEditMonitorButtonLayouts, type VideoEditMonitorKind } from '@/core/videoEdit/monitorButtons';
+import { sanitizeVideoEditTrackHeaderButtons, withVideoEditTrackHeaderButtons, type VideoEditTrackHeaderButtonLayouts, type VideoEditTrackHeaderKind } from '@/core/videoEdit/trackHeaderButtons';
 
 /** 下载预设路径的条数上限：菜单里超过这个数就要滚动，反而比「另存为」更慢 */
 export const DOWNLOAD_PRESET_PATH_LIMIT = 8;
@@ -98,6 +99,8 @@ interface SettingsState {
   videoEditShortcuts: VideoEditShortcutOverrides;
   /** 剪辑节目／源监视器按钮栏（按钮编辑器）；只存改过的那一侧。 */
   videoEditMonitorButtons: VideoEditMonitorButtonLayouts;
+  /** 剪辑视频轨／音频轨轨道头按钮（按钮编辑器）；只存改过的那一类。 */
+  videoEditTrackHeaderButtons: VideoEditTrackHeaderButtonLayouts;
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
@@ -137,6 +140,8 @@ interface SettingsState {
   setVideoEditShortcuts: (shortcuts: VideoEditShortcutOverrides) => void;
   /** `null` = 重置为默认按钮。 */
   setVideoEditMonitorButtons: (kind: VideoEditMonitorKind, ids: readonly string[] | null) => void;
+  /** `null` = 重置为默认按钮。 */
+  setVideoEditTrackHeaderButtons: (kind: VideoEditTrackHeaderKind, ids: readonly string[] | null) => void;
 }
 
 /** 主题文件导入范围：全部 / 仅配色 / 仅圆角。 */
@@ -230,6 +235,7 @@ export const useSettingsStore = create<SettingsState>()(
       assetThumbnailFit: 'cover',
       videoEditShortcuts: {},
       videoEditMonitorButtons: {},
+      videoEditTrackHeaderButtons: {},
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         set((state) => ({
@@ -314,6 +320,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAssetThumbnailFit: (assetThumbnailFit) => set({ assetThumbnailFit }),
       setVideoEditShortcuts: (shortcuts) => set({ videoEditShortcuts: parseVideoEditShortcutOverrides(shortcuts) }),
       setVideoEditMonitorButtons: (kind, ids) => set((state) => ({ videoEditMonitorButtons: withVideoEditMonitorButtons(state.videoEditMonitorButtons, kind, ids) })),
+      setVideoEditTrackHeaderButtons: (kind, ids) => set((state) => ({ videoEditTrackHeaderButtons: withVideoEditTrackHeaderButtons(state.videoEditTrackHeaderButtons, kind, ids) })),
     }),
     {
       name: 'settings-storage',
@@ -326,7 +333,7 @@ export const useSettingsStore = create<SettingsState>()(
       // 剪辑快捷键：默认键位随版本对齐 PR 时，旧改键里不认识或与新默认冲突的部分在恢复时让出，避免读设置失败。
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<SettingsState>;
-        return { ...currentState, ...persisted, videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons) };
+        return { ...currentState, ...persisted, videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons) };
       },
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;

@@ -3,9 +3,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, createVideoEditProject, appendVideoEditClip, appendVideoEditMedia, editVideoProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
+import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, appendVideoEditClip, appendVideoEditMedia, editVideoProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
 import { splitVideoEditClip, clipSourceSeconds, adjustVideoEditClip } from '@/core/videoEdit/document'
-import { closeAllVideoEdits, failVideoEditSaves, reopenVideoEdit, savedVideoEdit, videoEditWrites } from './videoEditDocumentTestKit'
+import { closeAllVideoEdits, failVideoEditSaves, reopenVideoEdit, savedVideoEdit, videoEditWrites, createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 import { dropVideoEditInput, videoEditDropPaths } from './videoEditDrop'
 import { importVideoEditPaths, sameVideoEditMediaPath } from './videoEditMedia'
@@ -19,7 +19,7 @@ import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 
 it('原生图形和调整范围独立持久，复制序列重映射转场，错误草稿不改变历史', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequenceId = owner.activeSequenceId
   editVideoProject(id, document => {
     const sequence = document.sequences[0]
     document.items.push({ id: 'native-graphic', name: '图形', kind: 'graphic', graphic: createVideoEditGraphic('rect', 3840, 2160) }, { id: 'native-adjustment', name: '调整层', kind: 'adjustment' })
@@ -51,7 +51,7 @@ it('原生图形和调整范围独立持久，复制序列重映射转场，错�
   expect(reopened.document).toEqual({ ...saved, revision: 0 })
 })
 it('受限画面位置草稿保留时间及锚定对象，保存等待释放并只记录一笔历史', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequenceId = owner.activeSequenceId
   appendVideoEditClip(id); const clipId = owner.selection!; appendVideoEditClip(id)
   editVideoSequence(id, sequenceId, sequence => ({ ...sequence, captions: [{ id: 'position-caption', clipId, start: 1, duration: 3, text: '跟随' }], markers: [{ id: 'position-marker', clipId, frame: 2, name: '时刻' }] }))
   await saveVideoEdit(id)
@@ -78,7 +78,7 @@ it('受限画面位置草稿保留时间及锚定对象，保存等待释放并�
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips).toEqual(sequence.clips)
 })
 it('受限位置写入拒绝越界、额外属性、锁定和旧手势，应用关闭屏障同样生效', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequenceId = owner.activeSequenceId
   appendVideoEditClip(id); const clipId = owner.selection!
   editVideoSequence(id, sequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, locked: true })) }))
   let gesture = beginVideoEditGesture(id)
@@ -100,7 +100,7 @@ it('序列切换和选区刷新助手上下文，控制改变并发基线而逐�
   const navigation = useNavigationStore.getState()
   const release = retainHostContextTracking()
   try {
-    const instance = (await createVideoEditProject())!
+    const instance = (await createLegacyTrackVideoEditProject())
     const projectId = instance.document.id
     const sequenceId = appendVideoEditSequence(projectId)
     useNavigationStore.setState({ activeWorkspace: 'videoEdit' })
@@ -128,7 +128,7 @@ it('序列切换和选区刷新助手上下文，控制改变并发基线而逐�
   } finally { release(); useNavigationStore.setState(navigation) }
 })
 it('编辑与撤销在页面外静默自动保存，播放和定位不写剪辑', async () => {
-  const instance = (await createVideoEditProject())!
+  const instance = (await createLegacyTrackVideoEditProject())
   appendVideoEditClip(instance.document.id)
   await vi.waitFor(() => expect(savedVideoEdit(instance).sequences[0].clips).toHaveLength(1), { timeout: 3000 })
   undoVideoEdit(instance.document.id)
@@ -141,7 +141,7 @@ it('编辑与撤销在页面外静默自动保存，播放和定位不写剪辑'
 it('自动保存失败保留修改并在磁盘恢复后只重试保存，不重放编辑', async () => {
   vi.useFakeTimers()
   try {
-    const instance = (await createVideoEditProject())!
+    const instance = (await createLegacyTrackVideoEditProject())
     failVideoEditSaves(true); appendVideoEditClip(instance.document.id)
     await vi.advanceTimersByTimeAsync(800)
     expect(instance.dirty).toBe(true); expect(instance.error).toContain('修改仍保留在当前剪辑')
@@ -152,7 +152,7 @@ it('自动保存失败保留修改并在磁盘恢复后只重试保存，不重�
   } finally { vi.useRealTimers() }
 })
 it('素材库规范化的 Windows 路径与原引用是同一素材，拖放不增加导入历史', async () => {
-  const instance = (await createVideoEditProject())!
+  const instance = (await createLegacyTrackVideoEditProject())
   const media = { id: 'picture', name: 'Card.png', path: 'D:/Media/Card.png', kind: 'image' as const, width: 320, height: 180, durationSeconds: 0 }
   appendVideoEditMedia(instance.document.id, media)
   const before = instance.past.length
@@ -173,7 +173,7 @@ beforeEach(() => {
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
 it('公共修改与手动编辑共用历史并可保存重开', async () => {
-  const instance = (await createVideoEditProject())!
+  const instance = (await createLegacyTrackVideoEditProject())
   appendVideoEditClip(instance.document.id)
   const clip = getActiveVideoEditSequence(instance).clips[0]
   const app = createApplicationHarness()
@@ -192,7 +192,7 @@ it('公共修改与手动编辑共用历史并可保存重开', async () => {
   } finally { app.dispose() }
 })
 it('保存失败保留助手修改且恢复不会重放编辑', async () => {
-  const instance = (await createVideoEditProject())!
+  const instance = (await createLegacyTrackVideoEditProject())
   const app = createApplicationHarness()
   try {
     // 剪辑名就是文件名，内容能力不改名：改名属性只读并点名通用文档属性
@@ -212,7 +212,7 @@ it('保存失败保留助手修改且恢复不会重放编辑', async () => {
   } finally { app.dispose() }
 })
 it('公共集合新增标注并拒绝跨剪辑引用', async () => {
-  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const instance = (await createLegacyTrackVideoEditProject()); appendVideoEditClip(instance.document.id)
   const app = createApplicationHarness()
   try {
     const ref = { kind: 'video_edit.sequence', id: `${instance.document.id}:${instance.activeSequenceId}` }
@@ -226,7 +226,7 @@ it('公共集合新增标注并拒绝跨剪辑引用', async () => {
   } finally { app.dispose() }
 })
 it('保存中发生新修改时继续写入最新版本而不提前清除脏状态', async () => {
-  const instance = (await createVideoEditProject())!
+  const instance = (await createLegacyTrackVideoEditProject())
   const rename = (name: string) => editVideoProject(instance.document.id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name }) }))
   rename('第一版')
   let unblock!: () => void
@@ -240,7 +240,7 @@ it('保存中发生新修改时继续写入最新版本而不提前清除脏状�
   expect(savedVideoEdit(instance).sequences[0].name).toBe('保存期间的修改')
 })
 it('手动定位推进并发版本，播放观察不推进版本，拆分保持源时间连续', async () => {
-  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const instance = (await createLegacyTrackVideoEditProject()); appendVideoEditClip(instance.document.id)
   const revision = videoEditDomainRevision()
   setVideoEditView(instance.document.id, { frame: 30 })
   expect(videoEditDomainRevision()).toBe(revision + 1)
@@ -253,7 +253,7 @@ it('手动定位推进并发版本，播放观察不推进版本，拆分保持�
   expect(getActiveVideoEditSequence(instance).clips.reduce((sum, clip) => sum + clip.duration, 0)).toBe(original.duration)
 })
 it('公共拆分从磁盘回读核实片段边界', async () => {
-  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const instance = (await createLegacyTrackVideoEditProject()); appendVideoEditClip(instance.document.id)
   const app = createApplicationHarness()
   try {
     const result = await app.requireResult('split_video_edit', { documentRef: { kind: 'video_edit.document', id: instance.document.id }, clipRef: { kind: 'video_edit.clip', id: `${instance.document.id}:${getActiveVideoEditSequence(instance).clips[0].id}` }, frame: 30 })
@@ -264,7 +264,7 @@ it('公共拆分从磁盘回读核实片段边界', async () => {
 })
 
 it('通用收集素材能力（4.4）与剪辑页同一入口：外部文件复制进项目并改写引用，从文件回读核实', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   appendVideoEditMedia(id, { id: 'outside', name: '外部.mp4', path: 'E:/外部/外部.mp4', kind: 'video', durationSeconds: 3, width: 1920, height: 1080 })
   await saveVideoEdit(id)
   const store = harnessDocumentStore()
@@ -285,7 +285,7 @@ it('通用收集素材能力（4.4）与剪辑页同一入口：外部文件复�
 })
 
 it('播放与拖动只通知瞬态叶子，相等写入不通知，也不污染历史或保存', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   const editor = vi.fn(); const view = vi.fn(); const offEditor = subscribeVideoEdit(editor); const offView = subscribeVideoEditView(view)
   const revision = videoEditDomainRevision()
   try {
@@ -300,10 +300,10 @@ it('播放与拖动只通知瞬态叶子，相等写入不通知，也不污染�
   } finally { offEditor(); offView() }
 })
 it('拖放固定到原剪辑与轨道，直接引用源路径，并复用撤销和磁盘保存', async () => {
-  const a = (await createVideoEditProject())!
+  const a = (await createLegacyTrackVideoEditProject())
   const media = { id: 'original', name: 'image.png', kind: 'image' as const, path: 'E:/outside/image.png', durationSeconds: 0, width: 800, height: 600 }
   appendVideoEditMedia(a.document.id, media)
-  const b = (await createVideoEditProject())!
+  const b = (await createLegacyTrackVideoEditProject())
   await dropVideoEditInput(a.document.id, { kind: 'sources', sources: [{ path: media.path }] }, { frame: 90, track: 4 })
   expect(getActiveVideoEditSequence(a).clips[0]).toMatchObject({ itemId: a.document.items[0].id, start: 90, track: 4 })
   expect(getActiveVideoEditSequence(b).clips).toHaveLength(0); expect(a.document.media).toHaveLength(1)
@@ -318,7 +318,7 @@ it('磁盘文件拖入只取 PAL 原始路径，禁止没有本地路径的内�
   path.mockReturnValue(''); expect(() => videoEditDropPaths(transfer)).toThrow('本地文件')
 })
 it('裁剪即时预览和提交限制在源范围内，保持源时间与剪辑时间换算', async () => {
-  const instance = (await createVideoEditProject())!
+  const instance = (await createLegacyTrackVideoEditProject())
   appendVideoEditMedia(instance.document.id, { id: 'v', kind: 'video', path: 'E:/v.mp4', name: 'video', durationSeconds: 4, width: 3840, height: 2160 })
   appendVideoEditClip(instance.document.id, 'v', { frame: 30, track: 2 })
   const clip = { ...getActiveVideoEditSequence(instance).clips[0], duration: 60, sourceInUs: 1000000 }
@@ -330,7 +330,7 @@ it('裁剪即时预览和提交限制在源范围内，保持源时间与剪辑�
 })
 
 it('两个不同设置的序列保存冷重开，切换只保留会话，不写剪辑或历史', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   const first = instance.activeSequenceId
   appendVideoEditMedia(id, { id: 'shared', kind: 'image', path: 'E:/original/image.png', name: '原素材', durationSeconds: 0, width: 1920, height: 1080 })
   appendVideoEditClip(id, 'shared'); const firstClip = getActiveVideoEditSequence(instance).clips[0].id
@@ -349,7 +349,7 @@ it('两个不同设置的序列保存冷重开，切换只保留会话，不写�
   expect(reopened.document.sequences.flatMap(sequence => sequence.clips.map(clip => clip.itemId))).toEqual([reopened.document.items[0].id, reopened.document.items[0].id])
 })
 it('复制序列重建实例标识但复用素材项，删除和设置变更共用历史', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id; const first = instance.activeSequenceId
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id; const first = instance.activeSequenceId
   appendVideoEditClip(id); setVideoEditView(id, { frame: 30 })
   const duplicate = duplicateVideoEditSequence(id, first)
   const [source, copy] = instance.document.sequences
@@ -363,7 +363,7 @@ it('复制序列重建实例标识但复用素材项，删除和设置变更共�
   expect(instance.activeSequenceId).toBe(first); undoVideoEdit(id); expect(instance.document.sequences).toHaveLength(2)
 })
 it('公共事务修改后台序列设置与片段为一步撤销，前台选区和原目标不变', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id; const first = instance.activeSequenceId
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id; const first = instance.activeSequenceId
   appendVideoEditClip(id)
   const second = duplicateVideoEditSequence(id, first)
   setVideoEditView(id, { frame: 17 })
@@ -385,7 +385,7 @@ it('公共事务修改后台序列设置与片段为一步撤销，前台选区�
 })
 
 it('正式事务撤销保留实体引用，帧率写入回执包含实际片段级联', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   appendVideoEditClip(id); const clipId = getActiveVideoEditSequence(instance).clips[0].id
   const engine = getApplicationControlExecutionEngine()
   const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']) }
@@ -405,7 +405,7 @@ it('正式事务撤销保留实体引用，帧率写入回执包含实际片段�
   }
 })
 it('移除未使用的素材项后再次添加原媒体，在一次编辑内恢复引用', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   appendVideoEditMedia(id, { id: 'unused', kind: 'image', path: 'E:/unused.png', name: '未使用', durationSeconds: 0, width: 320, height: 180 })
   editVideoProject(id, document => ({ ...document, items: [] }))
   const history = instance.past.length
@@ -414,7 +414,7 @@ it('移除未使用的素材项后再次添加原媒体，在一次编辑内恢�
   expect(instance.past).toHaveLength(history + 1)
 })
 it('异步拖放开始后切换序列，片段仍落在开始时序列', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id; const first = instance.activeSequenceId
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id; const first = instance.activeSequenceId
   appendVideoEditMedia(id, { id: 'drop', kind: 'image', path: 'E:/drop.png', name: '拖放', durationSeconds: 0, width: 320, height: 180 })
   const second = appendVideoEditSequence(id)
   const dropping = dropVideoEditInput(id, { kind: 'sources', sources: [{ path: 'E:/drop.png' }] }, { frame: 30, track: 1 })

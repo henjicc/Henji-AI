@@ -24,7 +24,8 @@ export interface VideoEditClipboard {
  * on exactly those clips; the link relation itself is kept and drift shows as out-of-sync offsets.
  */
 export type VideoEditTimelineEdit =
-  | { kind: 'adjust'; clipIds: string[]; linked?: VideoEditRelations; mode: 'move' | 'in' | 'out'; delta: number; trackMap?: Record<number, number>; snapThreshold?: number; snapFrames?: number[] }
+  /** `newTracks`: tracks created by dragging above the top video track or below the bottom audio track (one edit, one undo). */
+  | { kind: 'adjust'; clipIds: string[]; linked?: VideoEditRelations; mode: 'move' | 'in' | 'out'; delta: number; trackMap?: Record<number, number>; snapThreshold?: number; snapFrames?: number[]; newTracks?: VideoEditSequence['tracks'] }
   | { kind: 'split'; clipIds: string[]; linked?: VideoEditRelations; frame: number }
   | { kind: 'delete'; clipIds: string[]; linked?: VideoEditRelations; ripple?: boolean; targetTracks?: number[] }
   | { kind: 'link' | 'unlink' | 'group' | 'ungroup'; clipIds: string[]; linked?: VideoEditRelations }
@@ -39,12 +40,28 @@ export type VideoEditTimelineEdit =
    * Premiere modifier drags of the selection by `delta` frames (and `trackMap`): Alt = duplicate (overwrite at the drop),
    * Ctrl+Alt = duplicate and insert, Ctrl = rearrange (extract from the source closing the gap, then insert at the drop).
    */
-  | { kind: 'rearrange'; clipIds: string[]; delta: number; trackMap?: Record<number, number>; mode: 'copy' | 'copy_insert' | 'insert' }
+  | { kind: 'rearrange'; clipIds: string[]; delta: number; trackMap?: Record<number, number>; mode: 'copy' | 'copy_insert' | 'insert'; snapThreshold?: number; snapFrames?: number[]; newTracks?: VideoEditSequence['tracks'] }
   /** Premiere "Move into sync" / "Slip into sync" for the selected out-of-sync portions only. */
   | { kind: 'sync'; clipIds: string[]; mode: 'move' | 'slip' }
-  /** `newTracks`: audio tracks appended before placing (a multi-track item needs more audio tracks than the sequence has). */
+  /** `newTracks`: tracks appended before placing (a multi-track item needs more audio tracks than the sequence has, or a drop beyond the outer tracks). */
   | { kind: 'place'; clipboard: VideoEditClipboard; frame: number; mode: 'paste' | 'insert' | 'overwrite'; trackMap?: Record<number, number>; targetTracks?: number[]; newTracks?: VideoEditSequence['tracks'] }
 
+/** Appends new tracks before an edit (drag beyond the outer tracks, paste needing more audio tracks); indexes and ids must be unused. */
+export function withVideoEditTracks(sequence: VideoEditSequence, added: readonly VideoEditSequence['tracks'][number][] | undefined): VideoEditSequence {
+  if (!added?.length) return sequence
+  if (added.some(track => track.index < 0 || track.index > 31 || sequence.tracks.some(value => value.index === track.index || value.id === track.id)) || new Set(added.map(track => track.index)).size !== added.length || sequence.tracks.length + added.length > 32) throw new Error('新增的轨道无效，或序列将超过 32 条轨道。')
+  return { ...sequence, tracks: [...sequence.tracks, ...added] }
+}
+/** Snap offset for moving `edges` by `delta`: the nearest candidate within `threshold`, else 0. */
+function snapOffset(edges: readonly number[], candidates: readonly number[], delta: number, threshold: number): number {
+  if (!Number.isFinite(threshold) || threshold < 0) throw new Error('吸附距离无效。')
+  let offset = threshold + 1
+  for (const edge of edges) for (const candidate of candidates) {
+    const difference = candidate - edge - delta
+    if (Math.abs(difference) < Math.abs(offset)) offset = difference
+  }
+  return Math.abs(offset) <= threshold ? offset : 0
+}
 function integer(value: number): void { if (!Number.isSafeInteger(value)) throw new Error('剪辑位置和位移必须为整数帧。') }
 function sequenceOf(document: VideoEditDocument, id: string): VideoEditSequence {
   const sequence = document.sequences.find(value => value.id === id)
@@ -162,6 +179,7 @@ export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequence
   return applyVideoEditTimelineEditResult(document, sequenceId, edit, metadata).sequence
 }
 export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
+  if (edit.kind === 'adjust' && edit.newTracks?.length) document = { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? withVideoEditTracks(value, edit.newTracks) : value) }
   const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
   if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || (result.sequence.markers?.length ?? 0) > 500 || (result.sequence.captions?.length ?? 0) > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
   if ((result.sequence.transitions?.length ?? 0) > 500) throw new Error('序列最多500项转场。')
@@ -196,10 +214,14 @@ function removeRange(sequence: VideoEditSequence, edit: Extract<VideoEditTimelin
 }
 function rearrangeClips(document: VideoEditDocument, sequenceId: string, edit: Extract<VideoEditTimelineEdit, { kind: 'rearrange' }>, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds: string[] } {
   integer(edit.delta)
+  if (edit.newTracks?.length) document = { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? withVideoEditTracks(value, edit.newTracks) : value) }
   const sequence = sequenceOf(document, sequenceId)
   const clipboard = copyVideoEditClips(document, sequenceId, edit.clipIds, false)
   const from = Math.min(...clipboard.clips.map(clip => clip.start))
-  const frame = Math.max(0, from + edit.delta)
+  // Snapping (when on) as for a plain move: duplicates also snap to the originals, an insert-rearrange only to the clips it lands among.
+  const moving = new Set(edit.clipIds)
+  const snap = edit.snapThreshold === undefined ? 0 : snapOffset(clipboard.clips.flatMap(clip => [clip.start, clip.start + clip.duration]), [0, ...(edit.snapFrames ?? []), ...(sequence.markers ?? []).map(mark => mark.frame), ...sequence.clips.filter(clip => edit.mode !== 'insert' || !moving.has(clip.id)).flatMap(clip => [clip.start, clip.start + clip.duration])], edit.delta, edit.snapThreshold)
+  const frame = Math.max(0, from + edit.delta + snap)
   const tracks = [...new Set(clipboard.clips.map(clip => edit.trackMap?.[clip.track] ?? clip.track))]
   if (edit.mode !== 'insert') return placeClips(document, sequence, { kind: 'place', clipboard, frame, mode: edit.mode === 'copy' ? 'overwrite' : 'insert', ...(edit.trackMap ? { trackMap: edit.trackMap } : {}), targetTracks: tracks })
   // Extract first; the drop frame moves left by the extracted ranges before it (a drop inside a range lands at its start).
@@ -223,15 +245,9 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
       const from = Math.min(...clips.map(clip => clip.start)); const to = Math.max(...clips.map(clip => clip.start + clip.duration))
       delta = Math.max(-from, Math.min(Math.floor(composition.fps * 1800) - to, delta))
       if (edit.snapThreshold !== undefined) {
-        const threshold = edit.snapThreshold
-        if (!Number.isFinite(threshold) || threshold < 0) throw new Error('吸附距离无效。')
         const candidates = [0, ...(edit.snapFrames ?? []), ...(sequence.markers ?? []).map(mark => mark.frame), ...sequence.annotations.map(mark => mark.frame), ...sequence.clips.filter(clip => !selected.has(clip.id)).flatMap(clip => [clip.start, clip.start + clip.duration])]
-        let offset = threshold + 1
-        for (const edge of clips.flatMap(clip => [clip.start, clip.start + clip.duration])) for (const candidate of candidates) {
-          const difference = candidate - edge - delta
-          if (Math.abs(difference) < Math.abs(offset)) offset = difference
-        }
-        if (Math.abs(offset) <= threshold) delta = Math.max(-from, Math.min(Math.floor(composition.fps * 1800) - to, delta + offset))
+        const offset = snapOffset(clips.flatMap(clip => [clip.start, clip.start + clip.duration]), candidates, delta, edit.snapThreshold)
+        if (offset) delta = Math.max(-from, Math.min(Math.floor(composition.fps * 1800) - to, delta + offset))
       }
     } else {
       const clamp = (requested: number): number => {
@@ -323,9 +339,7 @@ function syncClips(document: VideoEditDocument, sequence: VideoEditSequence, ids
 
 function placeClips(document: VideoEditDocument, original: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'place' }>): { sequence: VideoEditSequence; selectedClipIds: string[] } {
   integer(edit.frame)
-  const added = edit.newTracks ?? []
-  if (added.some(track => track.kind !== 'audio' || original.tracks.some(value => value.index === track.index || value.id === track.id)) || new Set(added.map(track => track.index)).size !== added.length || original.tracks.length + added.length > 32) throw new Error('新增的音频轨道无效，或序列将超过 32 条轨道。')
-  const sequence = added.length ? { ...original, tracks: [...original.tracks, ...added] } : original
+  const sequence = withVideoEditTracks(original, edit.newTracks)
   if (edit.clipboard.projectId !== document.id) throw new Error('此剪贴板属于另一剪辑，请通过素材面板引用导入。')
   if (!edit.clipboard.clips.length || edit.clipboard.clips.length > 500) throw new Error('剪贴板没有有效片段。')
   const from = Math.min(...edit.clipboard.clips.map(clip => clip.start))

@@ -9,6 +9,7 @@ import type { VideoEditFrameBackend } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './videoEditNativeAudio'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
+import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 
 const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as number[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
@@ -158,7 +159,7 @@ it('关闭或替换媒体期间晚到GPU复制不能挂回已释放源或遗留�
 })
 afterEach(() => { vi.unstubAllGlobals() })
 function fixture(): ReturnType<typeof videoEditComposition> {
-  const document = createVideoEditDocument('媒体绑定')
+  const document = createVideoEditDocument('媒体绑定'); addLegacyVideoEditTracks(document.sequences[0])
   document.media = ['A', 'B'].map(id => ({ id, name: id, path: `D:/${id}.mp4`, kind: 'video', width: 3840, height: 2160, durationSeconds: 2 }))
   document.items = document.media.map(media => ({ id: `item-${media.id}`, name: media.name, kind: media.kind, mediaId: media.id }))
   const clip: VideoEditClip = { id: 'clip', itemId: 'item-A', name: '片段', kind: 'video', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }

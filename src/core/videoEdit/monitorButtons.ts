@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { sanitizeVideoEditButtonBars, withVideoEditButtonBar } from './buttonBars'
 
 /**
  * 监视器按钮栏可自定义（剪辑对齐 PR 2.5）：节目、源监视器各有一组可用按钮，默认只显示 PR 默认的那几个，
@@ -49,29 +50,12 @@ export function videoEditMonitorButtons(layouts: VideoEditMonitorButtonLayouts, 
   return layouts[kind] ?? VIDEO_EDIT_MONITOR_BUTTON_DEFAULTS[kind]
 }
 
-function sanitizeList(kind: VideoEditMonitorKind, value: unknown): VideoEditMonitorButtonId[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const catalog = videoEditMonitorButtonCatalog(kind) as readonly string[]
-  return [...new Set(value.filter((id): id is VideoEditMonitorButtonId => typeof id === 'string' && catalog.includes(id)))]
-}
-
 /** 读设置时清洗：去掉不认识的按钮与重复项，形状不对的那一侧回到默认，不让旧设置读失败。 */
 export function sanitizeVideoEditMonitorButtons(value: unknown): VideoEditMonitorButtonLayouts {
-  if (!value || typeof value !== 'object') return {}
-  const record = value as Record<string, unknown>
-  const result: VideoEditMonitorButtonLayouts = {}
-  for (const kind of ['program', 'source'] as const) {
-    const list = sanitizeList(kind, record[kind])
-    if (list) result[kind] = list
-  }
-  return result
+  return sanitizeVideoEditButtonBars(['program', 'source'] as const, videoEditMonitorButtonCatalog, value)
 }
 
 /** 写设置：与默认相同就不存（以后默认调整时跟着走）。 */
 export function withVideoEditMonitorButtons(layouts: VideoEditMonitorButtonLayouts, kind: VideoEditMonitorKind, ids: readonly string[] | null): VideoEditMonitorButtonLayouts {
-  const { [kind]: _previous, ...rest } = layouts
-  const list = ids === null ? undefined : sanitizeList(kind, ids)
-  const defaults = VIDEO_EDIT_MONITOR_BUTTON_DEFAULTS[kind] as readonly string[]
-  if (!list || (list.length === defaults.length && list.every((id, index) => id === defaults[index]))) return rest
-  return { ...rest, [kind]: list }
+  return withVideoEditButtonBar<VideoEditMonitorKind, VideoEditMonitorButtonId>(layouts, kind, ids, videoEditMonitorButtonCatalog(kind), VIDEO_EDIT_MONITOR_BUTTON_DEFAULTS[kind])
 }

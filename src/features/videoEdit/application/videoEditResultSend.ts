@@ -1,6 +1,7 @@
 import type { VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
+import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { activeVideoEditInstance, getActiveVideoEditSequence, listVideoEditInstances, type VideoEditInstance } from './videoEditService'
 import { captureVideoEditResultTarget, type VideoEditResultReceipt, type VideoEditResultTarget } from './videoEditResultTarget'
 import { createVideoEditCreativeTransfer, runVideoEditCreativeTransfer } from './videoEditCreativeTransfer'
@@ -31,7 +32,11 @@ function plan(owner: VideoEditInstance, request: VideoEditSendRequest): VideoEdi
   const candidates = free.filter(track => track.index > floor).sort((a, b) => a.index - b.index)
   const targeted = candidates.find(track => owner.targetTrackIds.includes(track.id))
   const track = request.above ? candidates[0] : targeted ?? candidates[0]
-  if (!track) return { available: false, reason: request.above ? '播放头处上方没有空的画面轨道，请先腾出一条上方轨道。' : `播放头处没有空的${kind === 'audio' ? '音频' : '画面'}轨道。` }
+  if (!track) {
+    // 没有空余轨道：与 PR 拖到轨道外一样，在最上面的视频轨之上（或最下面的音频轨之下）新建一条。
+    try { videoEditEdgeTracks(sequence, kind, 1) } catch (error) { return { available: false, reason: error instanceof Error ? error.message : String(error) } }
+    return { available: true, projectId: owner.document.id, sequenceId: sequence.id, label: `加入 ${where} · 新建${kind === 'audio' ? '音频' : '视频'}轨道 · ${videoEditFrameTimecode(frame, videoEditFps(sequence.frameRate))}`, placement: { mode: 'add', frame, newTrack: kind } }
+  }
   return { available: true, projectId: owner.document.id, sequenceId: sequence.id, label: `加入 ${where} · ${track.name} · ${videoEditFrameTimecode(frame, videoEditFps(sequence.frameRate))}`, placement: { mode: 'add', frame, trackId: track.id } }
 }
 

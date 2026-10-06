@@ -3,7 +3,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditProject, closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia } from './videoEditService'
+import { closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia } from './videoEditService'
 import { createVideoEditCodeItems, createVideoEditCodeMaterials, createVideoEditCodeVersions, createVideoEditFilterMaterials, createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { appendVideoEditItems, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from './videoEditProjectItems'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
@@ -25,7 +25,7 @@ import { collectVideoEditCodeAsset, importVideoEditCodeAsset } from './videoEdit
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import * as mediaService from './videoEditMedia'
-import { openSeededVideoEdit, replaceSavedVideoEdit, savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
+import { openSeededVideoEdit, replaceSavedVideoEdit, savedVideoEdit, reopenVideoEdit, createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 
 const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[] }))
 // Only thread/pixel boundaries are replaced. AST language checks, domain
@@ -82,7 +82,7 @@ function collectionBoundary() {
   return { bytes, platform }
 }
 it('公共图形效果转场实体原子增改删、精确回执、锁定与保存重开均消费正式状态', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const seq = owner.activeSequenceId; const app = createApplicationHarness()
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const seq = owner.activeSequenceId; const app = createApplicationHarness()
   const project = { kind: 'video_edit.document', id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${seq}` }
   const create = async (entityType: string, parent: { kind: string; id: string }, items: Array<{ properties: Record<string, unknown> }>) => app.call('change_application_entities', { summary: '验证真实图层集合', changes: [{ kind: 'create_items', entityType, parent, items }] }, (await app.read(parent)).revisions as Record<string, number>)
   try {
@@ -129,7 +129,7 @@ it('公共图形效果转场实体原子增改删、精确回执、锁定与保�
   } finally { app.dispose() }
 })
 it('隐藏或关闭滤镜的候选仍进入真实范围证明，负转场不安全源码不发布', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const seq = owner.activeSequenceId
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const seq = owner.activeSequenceId
   const item = createVideoEditGraphicItem(id, { kind: 'rect' }); const [left, right] = appendVideoEditItems(id, [item, item], seq)
   const [definitionId] = await createVideoEditCodeMaterials(id, [{ source: filterSource }])
   const effectId = await createVideoEditEffect({ projectId: id, sequenceId: seq, clipId: right }, { definitionId })
@@ -154,7 +154,7 @@ it('隐藏或关闭滤镜的候选仍进入真实范围证明，负转场不安�
   expect(boundary.filterProofs).toBeGreaterThan(proofs); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(boundary.activeRenderers).toBe(0)
 })
 it('滤镜创作入口在发布前拒绝生成源码，检查通过后只新增滤镜定义', async () => {
-  const owner = (await createVideoEditProject())!; const baseline = owner.document; const history = owner.past.length
+  const owner = (await createLegacyTrackVideoEditProject()); const baseline = owner.document; const history = owner.past.length
   await expect(createVideoEditFilterMaterials(owner.document.id, [{ source }])).rejects.toThrow('输入滤镜')
   expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(boundary.activeRenderers).toBe(0)
   const [id] = await createVideoEditFilterMaterials(owner.document.id, [{ source: filterSource }])
@@ -162,7 +162,7 @@ it('滤镜创作入口在发布前拒绝生成源码，检查通过后只新增�
   expect(owner.past).toHaveLength(history + 1); expect(boundary.activeRenderers).toBe(0)
 })
 it('效果链排序开关复制同源提交，转场检查首末和窗口边界，失败不留下状态', async () => {
-  const owner = (await createVideoEditProject())!; const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
+  const owner = (await createLegacyTrackVideoEditProject()); const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
   const itemId = createVideoEditGraphicItem(projectId, { kind: 'rect' }); const [leftClipId, rightClipId] = appendVideoEditItems(projectId, [itemId, itemId], sequenceId)
   const [definitionId] = await createVideoEditCodeMaterials(projectId, [{ source: filterSource }])
   const target = { projectId, sequenceId, clipId: leftClipId }; const history = owner.past.length
@@ -192,7 +192,7 @@ it('效果链排序开关复制同源提交，转场检查首末和窗口边界�
   undoVideoEdit(projectId); expect(getActiveVideoEditSequence(owner).transitions).toHaveLength(1)
 })
 it('效果源码候选只迁移指定稳定实例，并检查转场边界后单笔保存', async () => {
-  const owner = (await createVideoEditProject())!; const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
+  const owner = (await createLegacyTrackVideoEditProject()); const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
   const itemId = createVideoEditGraphicItem(projectId, { kind: 'rect' }); const [leftClipId, rightClipId] = appendVideoEditItems(projectId, [itemId, itemId], sequenceId)
   const [definitionId] = await createVideoEditCodeMaterials(projectId, [{ source: filterSource }])
   const target = { projectId, sequenceId, clipId: rightClipId }
@@ -210,7 +210,7 @@ it('效果源码候选只迁移指定稳定实例，并检查转场边界后单�
   expect(owner.document.items).toHaveLength(1)
 })
 it('原创滤镜先完整试渲染后只发布源码定义，追加滤镜版本保持类型与既有引用', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const history = owner.past.length
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const history = owner.past.length
   const [definitionId] = await createVideoEditCodeMaterials(id, [{ source: filterSource }])
   expect(boundary.trialCalls).toBe(1); expect(boundary.activeRenderers).toBe(0); expect(boundary.dimensions).toEqual([[3840, 2160]])
   expect(owner.document.items).toEqual([]); expect(owner.document.media).toEqual([]); expect(owner.past).toHaveLength(history + 1)
@@ -227,7 +227,7 @@ it('原创滤镜先完整试渲染后只发布源码定义，追加滤镜版本�
   expect(reopened.document.codeMaterials).toEqual(owner.document.codeMaterials); expect(reopened.document.items).toEqual([])
 })
 it('滤镜试渲染失败、取消和剪辑变化都不发布部分源码或留下历史', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const baseline = owner.document; const history = owner.past.length
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const baseline = owner.document; const history = owner.past.length
   boundary.failTrial = true
   await expect(createVideoEditCodeMaterials(id, [{ source: filterSource }])).rejects.toThrow('GPU trial')
   expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(boundary.activeRenderers).toBe(0)
@@ -275,7 +275,7 @@ beforeEach(() => {
 afterEach(async () => { for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
 it('候选返回前渲染器释放失败时仍关闭候选画面并释放试渲染队列', async () => {
-  const owner = (await createVideoEditProject())!; const close = vi.fn()
+  const owner = (await createLegacyTrackVideoEditProject()); const close = vi.fn()
   vi.spyOn(VideoEditRenderSession.prototype, 'present').mockResolvedValueOnce({ id: 1, presented: true, bitmap: { width: 1, height: 1, close } })
   vi.spyOn(VideoEditRenderSession.prototype, 'dispose').mockRejectedValueOnce(new Error('释放失败'))
   const input = [{ document: videoEditComposition(owner.document, owner.activeSequenceId), frame: 0 }]
@@ -286,7 +286,7 @@ it('候选返回前渲染器释放失败时仍关闭候选画面并释放试渲�
 })
 
 it('公共集合提交新源码、实例参数独立、保存重开只保存源码版本，手动与工具共用撤销', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id; const app = createApplicationHarness()
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id; const app = createApplicationHarness()
   try {
     const parent = { kind: 'video_edit.document', id }; const baseline = await app.read(parent)
     const created = await app.call('change_application_entities', { summary: '创作新的透明动态图形', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': source } }] }] }, baseline.revisions as Record<string, number>)
@@ -322,7 +322,7 @@ it('公共集合提交新源码、实例参数独立、保存重开只保存源�
 })
 
 it('非法源码与试渲染失败均不入库，不留下历史或像素资源，成功重试仍是一笔编辑', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id; const before = instance.document
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id; const before = instance.document
   await expect(createVideoEditCodeItems(id, [{ source: source.replace('return [ellipse', 'while(true){} return [ellipse') }])).rejects.toThrow()
   boundary.failTrial = true
   await expect(createVideoEditCodeItems(id, [{ source }])).rejects.toThrow('GPU trial rejected')
@@ -336,7 +336,7 @@ it('非法源码与试渲染失败均不入库，不留下历史或像素资源�
 })
 
 it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写入重开的同ID剪辑', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   let release!: () => void
   boundary.trialGate = new Promise<void>(resolve => { release = resolve })
   const creating = createVideoEditCodeItems(id, [{ source }])
@@ -354,7 +354,7 @@ it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写�
 })
 
 it('磁盘替换固定版本或未检查引用不能进入剪辑，失败打开释放源码线程并保留原文件', async () => {
-  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   await createVideoEditCodeItems(id, [{ source }]); const original = instance.document
   expect(() => editVideoProject(id, document => { document.codeMaterials![0].versions[0].source = source.replace('seed:7', 'seed:8'); return document })).toThrow('被替换')
   expect(instance.document).toBe(original)
@@ -369,7 +369,7 @@ it('磁盘替换固定版本或未检查引用不能进入剪辑，失败打开�
 })
 
 it('试渲染无回执在期限内释放队列和资源，随后候选可正常创建', async () => {
-  const instance = (await createVideoEditProject())!
+  const instance = (await createLegacyTrackVideoEditProject())
   vi.useFakeTimers()
   try {
     boundary.trialGate = new Promise(() => {})
@@ -383,7 +383,7 @@ it('试渲染无回执在期限内释放队列和资源，随后候选可正常�
 })
 
 it('公共集合的显式请求取消进入同一候选流程，不提交晚到画面', async () => {
-  const instance = (await createVideoEditProject())!; const controller = new AbortController()
+  const instance = (await createLegacyTrackVideoEditProject()); const controller = new AbortController()
   let release!: () => void
   boundary.trialGate = new Promise<void>(resolve => { release = resolve })
   const executor = new VideoEditCollectionExecutor('video_edit.code_material')
@@ -394,7 +394,7 @@ it('公共集合的显式请求取消进入同一候选流程，不提交晚到�
 })
 
 it('候选显示迁移影响，确认后只绑定原片段一次撤销，明确批量更新同原版本片段', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const [item] = await createVideoEditCodeItems(id, [{ source }])
   appendVideoEditItems(id, [item, item], owner.activeSequenceId, { frame: 0 })
   const first = getActiveVideoEditSequence(owner).clips[0]
@@ -418,7 +418,7 @@ it('候选显示迁移影响，确认后只绑定原片段一次撤销，明确�
 })
 
 it('取消或剪辑变化释放候选，非法源码和GPU失败保留最后有效源码与历史', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const [item] = await createVideoEditCodeItems(id, [{ source }]); appendVideoEditItems(id, [item], owner.activeSequenceId)
   const clip = getActiveVideoEditSequence(owner).clips[0]
   const target = { projectId: id, sequenceId: owner.activeSequenceId, clipId: clip.id, versionId: clip.code!.versionId }
@@ -437,7 +437,7 @@ it('取消或剪辑变化释放候选，非法源码和GPU失败保留最后有�
 })
 
 it('MCP只追加检查后的不可变版本，显式版本/参数/曲线事务共用手动保存与撤销', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const app = createApplicationHarness()
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const app = createApplicationHarness()
   try {
     const [item] = await createVideoEditCodeItems(id, [{ source }]); appendVideoEditItems(id, [item], owner.activeSequenceId)
     const definition = owner.document.codeMaterials![0]; const clip = getActiveVideoEditSequence(owner).clips[0]
@@ -462,7 +462,7 @@ it('MCP只追加检查后的不可变版本，显式版本/参数/曲线事务�
 })
 
 it('图片参数引用原媒体，经同一候选检查后写入；失败无半导入，MCP回读与手动一致', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const app = createApplicationHarness()
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const app = createApplicationHarness()
   const imageSource = 'export default {apiVersion:1,name:"透明图片",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
   try {
     const [item] = await createVideoEditCodeItems(id, [{ source: imageSource }]); appendVideoEditItems(id, [item], owner.activeSequenceId)
@@ -522,7 +522,7 @@ it('图片参数引用原媒体，经同一候选检查后写入；失败无半�
 })
 
 it.each(['cancel', 'edit'] as const)('图片候选试渲染已结束后发生%s，发布瞬间守卫拒绝旧草稿', async action => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const imageSource = 'export default {apiVersion:1,name:"图片守卫",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
   const [item] = await createVideoEditCodeItems(id, [{ source: imageSource }]); appendVideoEditItems(id, [item], owner.activeSequenceId)
   appendVideoEditMedia(id, { id: 'guard-image', name: '原图', kind: 'image', path: 'D:/guard.png', width: 100, height: 100, durationSeconds: 0 })
@@ -543,7 +543,7 @@ it.each(['cancel', 'edit'] as const)('图片候选试渲染已结束后发生%s�
 })
 
 it('滤镜维持单输入边界，不能声明图片资源或把其它参数当作图片绑定', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const app = createApplicationHarness()
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const app = createApplicationHarness()
   const imageFilter = filterSource.replace('parameters:{', 'parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false},')
   try {
     const item = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
@@ -567,7 +567,7 @@ it('滤镜维持单输入边界，不能声明图片资源或把其它参数当�
 })
 
 it('批量候选绑定已有源码版本只检查选定原版本集合，不重复检查已使用新版本的其他片段', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const [item] = await createVideoEditCodeItems(id, [{ source }]); appendVideoEditItems(id, [item, item], owner.activeSequenceId)
   const definition = owner.document.codeMaterials![0]; const nextSource = source.replace('seed:7', 'seed:12')
   const [newVersion] = await createVideoEditCodeVersions(id, [{ definitionId: definition.id, source: nextSource }])
@@ -583,7 +583,7 @@ it('批量候选绑定已有源码版本只检查选定原版本集合，不重�
 })
 
 it('代码资产原始参数和有理源曲线一次发布、保存重开、单次撤销，固定源码不依赖源剪辑', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const before = owner.past.length
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const before = owner.past.length
   const result = await createVideoEditCodeAssetInstance(id, importPublication())
   expect(owner.past).toHaveLength(before + 1); expect(boundary.activeRenderers).toBe(0)
   const code = owner.document.items.find(item => item.id === result.itemId)!.code!
@@ -596,7 +596,7 @@ it('代码资产原始参数和有理源曲线一次发布、保存重开、单�
   expect(reopened.document.items.some(item => item.id === next.itemId)).toBe(false); expect(reopened.document.items[0].code).toEqual(code)
 })
 it('代码资产图片局部ID重映射和依赖媒体在同一次历史提交中发布', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
   const publication = importPublication({ ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'old-image' } }, curves: undefined, images: [{ id: 'old-image', path: 'D:/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] })
   const media = { id: 'new-image', kind: 'image' as const, name: '原图片', path: 'D:/original.png', width: 100, height: 100, durationSeconds: 0, assetContent: publication.asset.images[0].content, sourceRevision: 'fixed-source' }
@@ -606,14 +606,14 @@ it('代码资产图片局部ID重映射和依赖媒体在同一次历史提交�
   undoVideoEdit(id); expect(owner.document.media).toEqual([]); expect(owner.document.items).toEqual([]); expect(owner.document.codeMaterials ?? []).toEqual([])
 })
 it('代码资产不匹配语言、参数或图片映射均拒绝且不发布部分定义', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const baseline = owner.document
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const baseline = owner.document
   for (const asset of [{ ...codeAssetFixture(), sourceVersion: { ...codeAssetFixture().sourceVersion, languageVersion: 2 as const } }, { ...codeAssetFixture(), parameters: { amount: 100 } }, { ...codeAssetFixture(), parameters: { amount: { kind: 'image' as const, mediaId: 'not-mapped' } } }]) {
     await expect(createVideoEditCodeAssetInstance(id, importPublication(asset))).rejects.toThrow()
     expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
   }
 })
 it('代码资产filter强制检查隐藏真实目标并保留参数，不制造素材项；动态源时长和锁定拒绝', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const [item] = await createVideoEditCodeItems(id, [{ source }]); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const [item] = await createVideoEditCodeItems(id, [{ source }]); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
   editVideoSequence(id, owner.activeSequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, opacity: 0 })), tracks: sequence.tracks.map(track => ({ ...track, enabled: false })) }))
   const filterTarget = { sequenceId: owner.activeSequenceId, clipId }; const asset = { ...codeAssetFixture(filterSource), parameters: { gain: .8 }, curves: undefined }; const before = owner.past.length
   boundary.proveFilters = true
@@ -627,7 +627,7 @@ it('代码资产filter强制检查隐藏真实目标并保留参数，不制造�
   const locked = owner.document; await expect(createVideoEditCodeAssetInstance(id, { ...importPublication(asset), filterTarget })).rejects.toThrow('锁定'); expect(owner.document).toBe(locked)
 })
 it.each(['cancel', 'edit', 'identity'] as const)('代码资产最终%s检查不发布旧候选或泄漏资源', async action => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const baseline = owner.document; const controller = new AbortController()
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const baseline = owner.document; const controller = new AbortController()
   await expect(createVideoEditCodeAssetInstance(id, { ...importPublication(), beforePublish: async () => {
     if (action === 'cancel') controller.abort(new Error('已取消'))
     if (action === 'edit') editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '后续手工修改' }) }))
@@ -637,7 +637,7 @@ it.each(['cancel', 'edit', 'identity'] as const)('代码资产最终%s检查不�
   if (action !== 'edit') { expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0) } else expect(owner.document.sequences[0].name).toBe('后续手工修改')
 })
 it('代码资产未授权图片在任何媒体探测之前被拒绝，原目标零改动', async () => {
-  const owner = (await createVideoEditProject())!; const baseline = owner.document
+  const owner = (await createLegacyTrackVideoEditProject()); const baseline = owner.document
   const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
   const manifest = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image' as const, mediaId: 'original' } }, curves: undefined, images: [{ id: 'original', path: 'D:/unauthorized/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] }
   const bytes = encodeCodeAsset(manifest)
@@ -650,7 +650,7 @@ it('代码资产未授权图片在任何媒体探测之前被拒绝，原目标�
 })
 
 it('代码资产收录失败保留清单；重试不再选路径、写文件、编译或生成历史，保存的是原参数与曲线', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const created = await createVideoEditCodeAssetInstance(id, importPublication()); const baseline = owner.document; const history = owner.past.length
   const { bytes, platform } = collectionBoundary(); const compiled = boundary.compileCalls; const rendered = boundary.trialCalls
   vi.mocked(platform.system.dialog.save).mockClear()
@@ -668,7 +668,7 @@ it('代码资产收录失败保留清单；重试不再选路径、写文件、�
 })
 
 it('公共收录引用确切附加效果，清单不包含选中片段的生成器；跨剪辑目标拒绝', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const [item] = await createVideoEditCodeItems(id, [{ source }]); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const [item] = await createVideoEditCodeItems(id, [{ source }]); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
   const asset = { ...codeAssetFixture(filterSource), parameters: { gain: .8 }, curves: undefined }
   await createVideoEditCodeAssetInstance(id, { ...importPublication(asset), filterTarget: { sequenceId: owner.activeSequenceId, clipId } })
   const effect = getActiveVideoEditSequence(owner).clips[0].effects![0]; const { bytes, platform } = collectionBoundary()
@@ -685,7 +685,7 @@ it('公共收录引用确切附加效果，清单不包含选中片段的生成�
 })
 
 it('代码清单选择路径期间剪辑修改或取消不写文件、不收录资产', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const created = await createVideoEditCodeAssetInstance(id, importPublication())
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const created = await createVideoEditCodeAssetInstance(id, importPublication())
   const { platform } = collectionBoundary(); const target = { kind: 'item' as const, itemId: created.itemId! }
   vi.mocked(platform.system.dialog.save).mockImplementationOnce(async () => { editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '保存期间的新名称' }) })); return 'D:/late.henji-code' })
   await expect(collectVideoEditCodeAsset(id, target)).rejects.toThrow('已有修改')
@@ -695,7 +695,7 @@ it('代码清单选择路径期间剪辑修改或取消不写文件、不收录�
 })
 
 it.each([false, true])('旧无身份图片正式重探测：尺寸变化%s；同尺寸刷新原会话版本，保留正式资产绑定', async resized => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   editVideoProject(id, document => ({ ...document, media: [{ id: 'existing-image', name: '原图片', kind: 'image', path: 'D:/original.png', width: 100, height: 100, durationSeconds: 0, sourceRevision: 'cached-original', assetId: 'current-real-asset' }] }))
   const baseline = owner.document
   const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
@@ -715,7 +715,7 @@ it.each([false, true])('旧无身份图片正式重探测：尺寸变化%s；同
 })
 
 it('真正新原图片依赖经正式导入 facade 固定身份、保存重开与一次撤销，不伪造库记录', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
   const manifest: CodeAsset = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'local-image' } }, curves: undefined, images: [{ id: 'local-image', path: 'D:/original.png', assetId: 'deleted-source-asset', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } }] }
   const { bytes } = collectionBoundary(); bytes.set('D:/source.henji-code', encodeCodeAsset(manifest))

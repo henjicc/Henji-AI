@@ -14,6 +14,7 @@ import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, updateVideoEditCompositeEntity, createVideoEditCompositeEntity, removeVideoEditCompositeEntities, updateVideoEditClipStructure, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
 import { makeVideoEditGraphicItem } from './videoEditProjectItems'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
+import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
@@ -66,8 +67,9 @@ function cascades(before: VideoEditDocument, after: VideoEditDocument): Applicat
   }
   for (const effect of ['create', 'delete'] as const) {
     const from = effect === 'create' ? before : after; const to = effect === 'create' ? after : before
-    const oldTracks = new Set(from.sequences.flatMap(sequence => sequence.tracks.map(track => track.id)))
-    const tracks = to.sequences.flatMap(sequence => sequence.tracks).filter(track => !oldTracks.has(track.id))
+    // 新建／删除序列带出的轨道；在已有序列里增删轨道是轨道集合自身的直接结果。
+    const oldSequences = new Set(from.sequences.map(sequence => sequence.id))
+    const tracks = to.sequences.filter(sequence => !oldSequences.has(sequence.id)).flatMap(sequence => sequence.tracks)
     for (let offset = 0; offset < tracks.length; offset += 256) effects.push({ effect, entityType: 'video_edit.track', propertyIds: [], refs: tracks.slice(offset, offset + 256).map(track => ({ kind: 'video_edit.track', id: `${after.id}:${track.id}` })), origin: { kind: 'cascade', declarationId: `video_edit.sequence_tracks_${effect}` } })
     const oldDefinitions = new Set(from.codeMaterials?.map(definition => definition.id))
     const definitions = (to.codeMaterials ?? []).filter(definition => !oldDefinitions.has(definition.id))
@@ -225,13 +227,13 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
 }
 export class VideoEditCollectionExecutor implements ApplicationCollectionExecutor {
   readonly effectContract: ApplicationEffectContract
-  constructor(readonly entityType: 'video_edit.sequence' | 'video_edit.bin' | 'video_edit.item' | 'video_edit.clip' | 'video_edit.annotation' | 'video_edit.code_material' | 'video_edit.code_version' | 'video_edit.marker' | 'video_edit.caption' | VideoEditCompositeEntityType) {
+  constructor(readonly entityType: 'video_edit.sequence' | 'video_edit.bin' | 'video_edit.item' | 'video_edit.clip' | 'video_edit.annotation' | 'video_edit.code_material' | 'video_edit.code_version' | 'video_edit.marker' | 'video_edit.caption' | 'video_edit.track' | VideoEditCompositeEntityType) {
     this.effectContract = { direct: [], cascades: entityType === 'video_edit.sequence' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.sequence_tracks_${effect}`, effect, entityType: 'video_edit.track', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.code_material' ? (['create', 'delete'] as const).flatMap(effect => (['video_edit.item', 'video_edit.code_version'] as const).map(type => ({ declarationId: `video_edit.code_${type.split('.').at(-1)}_${effect}`, effect, entityType: type, propertyIds: [], revisionScopes: ['video_edit'] }))) : entityType === 'video_edit.item' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.item_media_${effect}`, effect, entityType: 'video_edit.media', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.clip' ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : [] }
-    this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, ...VIDEO_EDIT_COMPOSITE_CASCADES] }
+    this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, ...VIDEO_EDIT_COMPOSITE_CASCADES, ...(entityType === 'video_edit.track' ? [{ declarationId: 'video_edit.track_clips_delete', effect: 'delete' as const, entityType: 'video_edit.clip', propertyIds: [], revisionScopes: ['video_edit'] }] : [])] }
   }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const clipChild = ['video_edit.graphic_object', 'video_edit.effect'].includes(this.entityType)
-    const nested = ['video_edit.clip', 'video_edit.annotation', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition'].includes(this.entityType)
+    const nested = ['video_edit.clip', 'video_edit.annotation', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition', 'video_edit.track'].includes(this.entityType)
     if (step.parent.kind !== (clipChild ? 'video_edit.clip' : nested ? 'video_edit.sequence' : 'video_edit.document')) throw new Error('请使用目录声明的所属父实体。')
     const parsed = splitVideoEditRef(step.parent)
     const instance = requireVideoEditInstance(parsed.projectId); const before = instance.document
@@ -308,6 +310,14 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             case 'video_edit.annotation': sequence!.annotations.push(videoEditAnnotationSchema.parse({ id, frame: 0, kind: 'point', space: 'composition-normalized', x: 0.5, y: 0.5, width: 0, height: 0, ...values })); break
             case 'video_edit.marker': (sequence!.markers ??= []).push(videoEditMarkerSchema.parse({ id, ...values })); break
             case 'video_edit.caption': (sequence!.captions ??= []).push(videoEditCaptionSchema.parse({ id, ...values })); break
+            case 'video_edit.track': {
+              // 新轨道与 PR 拖到轨道外一样：视频轨加在最上面，音频轨加在最下面；编号由序列分配，不接受指定。
+              if (values.kind !== 'video' && values.kind !== 'audio') throw new Error('创建轨道需要 kind：video 或 audio。')
+              if ('index' in values) throw new Error('轨道编号由序列按位置分配，创建时不能指定 index。')
+              const [track] = videoEditEdgeTracks(sequence!, values.kind, 1)
+              sequence!.tracks.push(videoEditTrackSchema.parse({ ...track, ...values, index: track.index, id }))
+              break
+            }
           }
           refs.push({ kind: this.entityType, id: `${before.id}:${id}` })
         }
@@ -336,6 +346,12 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           case 'video_edit.caption':
             if (ids.some(id => !sequence!.captions?.some(caption => caption.id === id))) throw new Error('字幕不属于目标序列。')
             sequence!.captions = sequence!.captions!.filter(caption => !ids.includes(caption.id)); break
+          case 'video_edit.track': {
+            // 与轨道头“删除轨道”同一领域规则：连同轨道上的片段一并删除，每类至少保留一条。
+            if (ids.some(id => !sequence!.tracks.some(track => track.id === id))) throw new Error('轨道不属于目标序列。')
+            const next = removeVideoEditTracks(document, sequence!.id, ids)
+            document.sequences = document.sequences.map(value => value.id === next.id ? next : value); break
+          }
         }
         refs.push(...step.operation.targets)
       }
@@ -356,7 +372,14 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       }
     }
     const after = editVideoProject(before.id, () => next)
-    return completed(before, after, refs)
+    const result = completed(before, after, refs)
+    // 删除轨道连同其上的片段（同 PR）：被删片段是级联副作用。
+    if (this.entityType === 'video_edit.track') {
+      const kept = new Set(after.sequences.flatMap(sequence => sequence.clips.map(clip => clip.id)))
+      const removed = before.sequences.flatMap(sequence => sequence.clips).filter(clip => !kept.has(clip.id))
+      for (let offset = 0; offset < removed.length; offset += 256) result.cascadeEffects = [...(result.cascadeEffects ?? []), { effect: 'delete', entityType: 'video_edit.clip', propertyIds: [], refs: removed.slice(offset, offset + 256).map(clip => ({ kind: 'video_edit.clip', id: `${before.id}:${clip.id}` })), origin: { kind: 'cascade', declarationId: 'video_edit.track_clips_delete' } }]
+    }
+    return result
   }
   async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken)).evidence : [] }
   async undo(token: string): Promise<ApplicationCompletedStepResult> { return restore(token) }

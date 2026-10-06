@@ -117,7 +117,7 @@ const sequenceChildren = ['video_edit.clip', 'video_edit.annotation', 'video_edi
 const required: Partial<Record<VideoEditEntityType, string[]>> = {
   'video_edit.sequence': ['video_edit.sequence.name'], 'video_edit.bin': ['video_edit.bin.name'], 'video_edit.item': ['video_edit.item.name', 'video_edit.item.kind'],
   'video_edit.clip': ['video_edit.clip.item_id', 'video_edit.clip.kind', 'video_edit.clip.name'], 'video_edit.annotation': ['video_edit.annotation.clip_id', 'video_edit.annotation.text'],
-  'video_edit.marker': ['video_edit.marker.frame', 'video_edit.marker.name'], 'video_edit.caption': ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.text'],
+  'video_edit.marker': ['video_edit.marker.frame', 'video_edit.marker.name'], 'video_edit.track': ['video_edit.track.kind'], 'video_edit.caption': ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.text'],
   'video_edit.code_material': ['video_edit.code_material.source'],
   'video_edit.code_version': ['video_edit.code_version.source', 'video_edit.code_version.definition_id'],
   'video_edit.graphic_object': ['video_edit.graphic_object.kind'],

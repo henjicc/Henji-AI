@@ -5,10 +5,11 @@ import { applyVideoEditTimelineEdit, copyVideoEditClips, type VideoEditTimelineE
 import { expandVideoEditSelection, selectVideoEditRegion, videoEditPickRelations } from './timelineSelection'
 import { videoEditSyncCorrections, videoEditSyncOffsets } from './linkSync'
 import { offsetVideoEditSource } from './time'
+import { addLegacyVideoEditTracks } from './testFixtures'
 
 /** Two sources: a camera file (picture + two sound streams) and a separate recorder file. */
 function fixture() {
-  const document = createVideoEditDocument('链接剪辑')
+  const document = createVideoEditDocument('链接剪辑'); addLegacyVideoEditTracks(document.sequences[0])
   document.media = [
     { id: 'camera', name: '机位', path: 'D:/camera.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 20, hasAudio: true },
     { id: 'cutaway', name: '空镜', path: 'D:/cutaway.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 20, hasAudio: true },

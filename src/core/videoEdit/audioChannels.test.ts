@@ -6,6 +6,7 @@ import {
 } from './audioChannels'
 import { makeVideoEditItemClip, placeVideoEditItem, placeVideoEditItems, makeVideoEditItemSequence } from './projectItems'
 import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult } from './timelineEdits'
+import { addLegacyVideoEditTracks } from './testFixtures'
 
 const mono = (stream: number, channel = 0): VideoEditAudioMapping => ({ format: 'mono', sources: [{ stream, channel }] })
 const stereo = (left: [number, number], right: [number, number]): VideoEditAudioMapping => ({ format: 'stereo', sources: [{ stream: left[0], channel: left[1] }, { stream: right[0], channel: right[1] }] })
@@ -14,7 +15,7 @@ const OBS: VideoEditAudioStream[] = [{ channels: 2, sampleRate: 48000 }, { chann
 const MIXED: VideoEditAudioStream[] = [{ channels: 2 }, { channels: 1 }]
 
 function project(streams: VideoEditAudioStream[] | undefined, kind: 'video' | 'audio' = 'video'): VideoEditDocument {
-  const document = createVideoEditDocument('多音轨')
+  const document = createVideoEditDocument('多音轨'); addLegacyVideoEditTracks(document.sequences[0])
   const media: VideoEditMedia = { id: 'media', name: '素材', kind, path: 'D:/a.mxf', width: kind === 'video' ? 1920 : 0, height: kind === 'video' ? 1080 : 0, durationSeconds: 10, hasAudio: true, ...(kind === 'video' ? { frameRate: { numerator: 30, denominator: 1 }, frameRateMode: 'sampled-constant' as const } : {}), ...(streams ? { audioStreams: streams } : {}) }
   document.media = [media]
   document.items = [{ id: 'item', name: '素材', kind, mediaId: 'media' }]
@@ -161,7 +162,7 @@ describe('放入时间线铺轨（Premiere 默认音轨“使用文件”）', (
     expect(result.sequence.tracks).toHaveLength(11)
     expect(result.selectedClipIds).toHaveLength(5)
     expect(() => applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', mode: 'paste', frame: 0, clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips: placed.clips, annotations: [], tracks } })).toThrow('目标轨道与片段类型不匹配')
-    expect(() => applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', mode: 'paste', frame: 0, clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips: placed.clips, annotations: [], tracks }, newTracks: [{ ...placed.addedTracks[0], index: 1 }] })).toThrow('新增的音频轨道无效')
+    expect(() => applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', mode: 'paste', frame: 0, clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips: placed.clips, annotations: [], tracks }, newTracks: [{ ...placed.addedTracks[0], index: 1 }] })).toThrow('新增的轨道无效')
     // A picture-and-sound clip of an older project carrying a mapping keeps it on the separated sound.
     const merged = project([{ channels: 1 }, { channels: 1 }])
     const old = { ...makeVideoEditItemClip(merged, 'item', merged.sequences[0].id, { frame: 0 }), audioMapping: stereo([0, 0], [1, 0]) }

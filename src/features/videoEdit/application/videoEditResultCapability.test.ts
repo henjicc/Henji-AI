@@ -6,12 +6,13 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { Blob as NativeBlob } from 'node:buffer'
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore'
-import { appendVideoEditClip, closeVideoEditProject, createVideoEditProject, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, closeVideoEditProject, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
 import { registerVideoEditProgramCapture } from './videoEditProgramCapture'
 import { editVideoEditProgramFrame, readVideoEditImageReturn } from './videoEditFrameEdit'
 import { commitVideoEditCreativeResult } from './videoEditResultTarget'
 vi.mock('@/features/navigation/application/surfaceNavigationService', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), openApplicationSurface: vi.fn(() => ({ status: 'opened' })) }))
 import { planVideoEditSend, sendCreativeResultToVideoEdit } from './videoEditResultSend'
+import { createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 
 // Only the producer (generation history) and native I/O are replaced; the public
 // registry, permissions, transfer, library collection and project save are real.
@@ -43,7 +44,7 @@ beforeEach(() => {
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
 it('公共能力与界面发送走同一固定目标事务：落点、来源、资产与一次撤销一致', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequence = owner.document.sequences[0]
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequence = owner.document.sequences[0]
   const track = sequence.tracks.find(track => track.kind === 'video')!
   const app = createApplicationHarness()
   try {
@@ -72,7 +73,7 @@ it('公共能力与界面发送走同一固定目标事务：落点、来源、�
     const gone = await app.requireResult('open_video_edit_clip_source', { documentRef: { kind: 'video_edit.document', id }, clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` } }) as { status: string; message: string }
     expect(gone).toMatchObject({ status: 'missing' }); expect(gone.message).toContain('已被删除')
 
-    const otherProject = (await createVideoEditProject())!
+    const otherProject = (await createLegacyTrackVideoEditProject())
     const forged = await app.call('place_video_edit_creative_result', { documentRef: { kind: 'video_edit.document', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${otherProject.document.id}:${otherProject.document.sequences[0].id}` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` } }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: 'history-9' }, outputIndex: 0 } })
     expect(JSON.stringify(forged)).toContain('必须属于目标剪辑')
     expect(owner.document.sequences[0].clips[0].creativeSource).toMatchObject({ recordId: 'history-7' })
@@ -80,7 +81,7 @@ it('公共能力与界面发送走同一固定目标事务：落点、来源、�
 })
 
 it('编辑当前帧先固定上方空画面轨道，再出帧交给图片编辑；回填落到原帧上方', async () => {
-  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequence = owner.document.sequences[0]
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequence = owner.document.sequences[0]
   const lowest = sequence.tracks.filter(track => track.kind === 'video').sort((a, b) => a.index - b.index)[0]
   appendVideoEditClip(id, undefined, { frame: 0, track: lowest.index })
   setVideoEditView(id, { frame: 30, playing: false })
