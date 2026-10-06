@@ -43,9 +43,21 @@ GridItem.displayName = 'VideoEditProjectGridItem'
 const gridComponents = { List: GridList, Item: GridItem }
 const SORT_OPTIONS = [{ value: 'name', label: '名称' }, { value: 'kind', label: '类型' }, { value: 'duration', label: '时长' }] as const
 /** 列表视图的列（PR 素材面板：名称、帧速率、媒体开始、媒体结束、媒体持续时间），点表头排序。 */
-const LIST_COLUMNS: Array<{ key: Exclude<VideoEditProjectSortKey, 'kind' | 'name'>; label: string; className: string }> = [
-  { key: 'frameRate', label: '帧速率', className: 'w-16' }, { key: 'mediaStart', label: '媒体开始', className: 'w-20' }, { key: 'mediaEnd', label: '媒体结束', className: 'w-20' }, { key: 'duration', label: '持续时间', className: 'w-20' },
+const LIST_COLUMNS: Array<{ key: Exclude<VideoEditProjectSortKey, 'kind' | 'name'>; label: string }> = [
+  { key: 'frameRate', label: '帧速率' }, { key: 'mediaStart', label: '媒体开始' }, { key: 'mediaEnd', label: '媒体结束' }, { key: 'duration', label: '持续时间' },
 ]
+/** 列宽（PR：拖表头之间的分隔线调整），本机记住；列宽总和超过面板宽时左右滚动。 */
+type ListColumnKey = 'name' | (typeof LIST_COLUMNS)[number]['key']
+const DEFAULT_COLUMN_WIDTHS: Record<ListColumnKey, number> = { name: 220, frameRate: 72, mediaStart: 96, mediaEnd: 96, duration: 96 }
+const COLUMN_WIDTHS_KEY = 'henji.videoEdit.projectColumns'
+const MIN_COLUMN_WIDTH = 48
+function readColumnWidths(): Record<ListColumnKey, number> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(COLUMN_WIDTHS_KEY) ?? 'null')
+    if (raw && typeof raw === 'object') return Object.fromEntries(Object.entries(DEFAULT_COLUMN_WIDTHS).map(([key, value]) => { const saved = (raw as Record<string, unknown>)[key]; return [key, typeof saved === 'number' && Number.isFinite(saved) ? Math.max(MIN_COLUMN_WIDTH, Math.min(800, saved)) : value] })) as Record<ListColumnKey, number>
+  } catch { /* 读不到就用默认列宽 */ }
+  return DEFAULT_COLUMN_WIDTHS
+}
 /** 树缩进：每级 12px，最多 8 级。 */
 const INDENT_PX = 12
 const NO_EXPANDED: ReadonlySet<string> = new Set()
@@ -59,6 +71,20 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const [view, setView] = useState<'list' | 'grid'>('list')
   // PR 列表视图：素材箱是可展开的树（三角展开），没有单独的素材箱侧栏。
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [columnWidths, setColumnWidths] = useState<Record<ListColumnKey, number>>(readColumnWidths)
+  const resizeColumn = (key: ListColumnKey) => (event: React.PointerEvent<HTMLElement>): void => {
+    if (event.button !== 0) return
+    event.preventDefault(); event.stopPropagation()
+    const handle = event.currentTarget; handle.setPointerCapture(event.pointerId)
+    const startX = event.clientX; const startWidth = columnWidths[key]
+    const move = (next: PointerEvent): void => setColumnWidths(current => ({ ...current, [key]: Math.max(MIN_COLUMN_WIDTH, Math.min(800, Math.round(startWidth + next.clientX - startX))) }))
+    const up = (): void => {
+      handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up)
+      setColumnWidths(current => { try { localStorage.setItem(COLUMN_WIDTHS_KEY, JSON.stringify(current)) } catch { /* 只是本机偏好 */ } return current })
+    }
+    handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up)
+  }
+  const tableWidth = Object.values(columnWidths).reduce((sum, value) => sum + value, 0) + 20 + 12
   // 拖出素材时跟着鼠标的小标签（浏览器缩略图已去掉）；到了时间线上由时间线画片段虚影，这里隐藏
   const [dragFollow, setDragFollow] = useState<{ count: number; x: number; y: number; hidden: boolean } | null>(null)
   const dragging = dragFollow !== null
@@ -244,8 +270,8 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="min-h-7 min-w-0 flex-1 gap-2 !px-1.5" data-entry-kind={kind} {...entryHandlers(entry, selected)}>
         <LabelSwatch label={columns.label} />
         <Icon size={13} className="shrink-0 text-text2" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-left text-xs" data-observation-sensitive title={entry.kind === 'item' && entry.value.tags?.length ? `${entry.value.name}（${entry.value.tags.join(' · ')}）` : `${entry.value.name} · ${detailOf(entry)}`}>{entry.value.name}</span>
-        {LIST_COLUMNS.map(column => <span key={column.key} className={`${column.className} shrink-0 truncate text-left font-mono text-2xs tabular-nums text-text3`} data-video-edit-project-column={column.key}>{cells[column.key]}</span>)}
+        <span className="min-w-0 shrink-0 truncate text-left text-xs" style={{ width: Math.max(40, columnWidths.name - Math.min(row.depth, 8) * INDENT_PX - 44) }} data-observation-sensitive title={entry.kind === 'item' && entry.value.tags?.length ? `${entry.value.name}（${entry.value.tags.join(' · ')}）` : `${entry.value.name} · ${detailOf(entry)}`}>{entry.value.name}</span>
+        {LIST_COLUMNS.map(column => <span key={column.key} className="shrink-0 truncate pl-2 text-left font-mono text-2xs tabular-nums text-text3" style={{ width: columnWidths[column.key] }} data-video-edit-project-column={column.key}>{cells[column.key]}</span>)}
       </UiOptionButton>
     </div>
   }
@@ -328,10 +354,13 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       {!entries.length ? <UiEmpty className="h-full" title={keyword ? '没有匹配的素材项' : '此素材箱为空'} description={keyword ? '尝试其他名称或标签。' : '双击空白导入文件，或从资产库拖入素材。'} />
         : view === 'grid' ? <VirtuosoGrid ref={gridRef} key={`${binId}:grid`} data={entries} components={gridComponents} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderTile} />
           // 列表视图（PR）：表头点击排序，素材箱是可展开的树；窄面板横向滚动看全部列。
-          : <div className="flex h-full min-w-96 flex-col">
+          : <div className="flex h-full flex-col" style={{ minWidth: tableWidth }}>
             <div className="flex h-7 shrink-0 items-center border-b border-gap pl-5 pr-1.5" role="row" aria-label="列表列">
-              <UiButton size="sm" className="min-w-0 flex-1 !justify-start !px-1.5" aria-sort={sort.key === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => sortBy('name')}>名称<SortMark sort={sort} column="name" /></UiButton>
-              {LIST_COLUMNS.map(column => <UiButton key={column.key} size="sm" className={`${column.className} shrink-0 !justify-start !px-0`} aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => sortBy(column.key)}>{column.label}<SortMark sort={sort} column={column.key} /></UiButton>)}
+              {([{ key: 'name' as const, label: '名称' }, ...LIST_COLUMNS]).map(column => <div key={column.key} className="relative flex shrink-0 items-center" style={{ width: columnWidths[column.key] }}>
+                <UiButton size="sm" className="min-w-0 flex-1 !justify-start !px-1.5" aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => sortBy(column.key)}>{column.label}<SortMark sort={sort} column={column.key} /></UiButton>
+                {/* 列分隔线：按住左右拖动调整列宽 */}
+                <span role="separator" aria-orientation="vertical" aria-label={`调整“${column.label}”列宽`} title="拖动调整列宽" className="absolute -right-1 bottom-1 top-1 z-raised w-2 cursor-col-resize border-r border-line hover:border-accent-ring" onPointerDown={resizeColumn(column.key)} onClick={event => event.stopPropagation()} />
+              </div>)}
             </div>
             <Virtuoso ref={listRef} className="min-h-0 flex-1" key={`${binId}:list`} data={rows} computeItemKey={(_index, row) => row.entry.value.id} itemContent={renderRow} role="tree" aria-label="素材与素材箱" />
           </div>}
