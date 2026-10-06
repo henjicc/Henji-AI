@@ -49,8 +49,8 @@ beforeAll(async () => {
 afterAll(async () => {
   fixture.db?.close(); fixture.db = undefined
   vi.unstubAllEnvs()
-  // 本测试创建的独立临时目录，解析后确认边界再删除。
-  if (parent && path.dirname(path.resolve(parent)) === path.resolve(os.tmpdir()) && path.basename(parent).startsWith('henji-mcp-native-media-')) await fs.rm(parent, { recursive: true, force: true })
+  // 本测试创建的独立临时目录，解析后确认边界再删除；日志可能仍在异步写入 appData，ENOTEMPTY 时重试。
+  if (parent && path.dirname(path.resolve(parent)) === path.resolve(os.tmpdir()) && path.basename(parent).startsWith('henji-mcp-native-media-')) await fs.rm(parent, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
 it.each([

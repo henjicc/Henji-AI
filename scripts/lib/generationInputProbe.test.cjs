@@ -91,7 +91,7 @@ test('后台任务只接受约定模型和任务，每个请求仅释放一次�
   await assert.rejects(request({}, { modelId: 'kie-z-image', taskId: '__generation_background_0' }))
   assert.equal(fixture.snapshot().waiting, 1)
   fixture.release()
-  assert.equal((await first).data.filePath, '/fixture.png')
+  assert.deepEqual([...(await first).data.filePaths], ['/fixture.png'])
   assert.equal(fixture.snapshot().waiting, 0)
   const second = request({}, { modelId: 'kie-z-image', taskId: '__generation_background_1' })
   fixture.dispose()
