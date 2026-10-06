@@ -3,7 +3,15 @@
 本清单是 `@henjicc/ai-sdk` 消费方的唯一维护入口，用于 SDK 发布后的跨仓升级协调。
 绝对路径仅描述当前开发机上的仓库位置，不进入 SDK 运行时代码、发布包或用户配置。
 
-最后核对日期：2026-09-28
+最后核对日期：2026-10-06
+
+`0.9.0` 已发布（2026-10-06）：在 09-28 候选（Seed-ICL 2.0 声音复刻、百炼转写恢复）基础上新增生成结果地址数组 `urls`（`url` 保留为兼容字段）。发布源码 `7ec755d9` 的必需 CI [37430089661](https://github.com/henjicc/Henji-AI/actions/runs/37430089661) 全部成功；`urls` 改动后 SDK 86 文件 / 1056 项测试、`check:sdk` 可移植性与两个 tsc 通过，Henji-AI 主进程宿主改为直接读取 `urls`。固定候选包仓外回装后由用户完成 npm 网页认证发布；公共索引可读后，隔离配置与缓存的仓外匿名安装通过，206 个公开导出可导入，lockfile integrity 与候选一致。未执行真实付费生成。Henji-AI workspace 使用 `0.9.0`；外部 `say-it` 只用 ASR／翻译／LLM，三个示例不涉及声音复刻与 `urls`，不机械升级。
+
+- `0.9.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.9.0.tgz)
+- `0.9.0` shasum：`918bd48e81c8fbe7a4846ec6cce3fa41ffdcbd78`
+- `0.9.0` integrity：`sha512-9RxzxhydKsXU6V2+tlf2pi6wUDXm/bcHWzyYwPmwQtzE7wGidVQejLiFBSatoVoVsrFeHJ03s1TmmnfsDQF2iw==`
+
+以下 09-28 记录为当时候选的证据，最终发布包以上面为准。
 
 同日后续修正：豆包入口改名“豆包语音 2.0”，补全 431 个官方系统音色并按系统/克隆音色选择 TTS/ICL 资源；克隆提交在宿主共享生成入口要求用户二次确认。仍为 0.9.0 未发布开发候选。下方 `9e52c4df` 的包哈希与全量门禁仅证明此前候选，不能作为本次修订包的发布证据；待用户测试并明确要求发布后重新执行适用发布门禁与打包。
 
@@ -56,7 +64,7 @@
 
 Henji-AI 安装包的 GPT Image 2.5 高分辨率报错归属：宿主智能比例预处理曾忽略联动过滤，将 `smart` 转成 KIE 仅限 1K 的 `27:16`，SDK 在请求前正确拒绝。修复位于应用公共预处理，按当前分辨率/渠道的合法选项匹配；Flare/Sunburst 的 1K/2K/4K 及 APIMart、Grsai 同类筛选已有定向覆盖。无需放宽 SDK 契约或发布 SDK；安装包需随应用更新才包含修复，现有版本可手动选合法比例规避。
 
-当前仓内 SDK：`0.9.0` 候选；公共 npm 最新已核实版本为 `0.8.0`（2026-09-27 已发布并完成公共匿名回装）。以下为历史发布证据。
+当前仓内 SDK：`0.9.0`；公共 npm 最新已核实版本为 `0.9.0`（2026-10-06 已发布并完成公共匿名回装）。以下为历史发布证据。
 
 `0.5.2` 完善轻量 `@henjicc/ai-sdk/llm/streaming`：正式类型支持文本、JSON Object 与 JSON Schema，Chat Completions 的最终请求体写入 `response_format`，OpenAI 输出上限写入 `max_completion_tokens`；结构化输出、思考模式和模型能力的非法组合会在请求前返回结构化错误。流式正文与思考继续分离，保留外部 `AbortSignal`，不设置默认总时限；未显式配置输出上限时不再注入 4096，服务端以 `length` 等原因结束时返回 `truncated: true`。发布前 77 个测试文件 / 909 项测试、可移植性、构建、49 个 Vite 公开入口和受限宿主门禁通过；故意撤销结构化参数、输出上限、OpenAI 字段映射和截断标记后，8 项定向断言失败，恢复后通过。公共索引可读后，已使用隔离 npm 配置和缓存匿名安装精确版本，并从已发布的轻量入口验证最终请求体包含 JSON Schema、思考强度和 24,000 token 上限，SSE 正文/思考事件分离且未截断。
 
