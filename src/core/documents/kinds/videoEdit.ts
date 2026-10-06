@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { DocumentKindDescriptor } from './registry'
+import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
 
 /*
  * 剪辑（`.henji-video`，3.1 剪辑接入）：项目的主文档，始终放在项目里（可以在项目之间移动）。
@@ -39,6 +40,7 @@ export const videoEditContentSchema = z.object({
   sequences: z.array(sequenceSchema).min(1),
   codeMaterials: z.array(identified).optional(),
   posterFrame: z.looseObject({ sequenceId: z.string().min(1), frame: z.number() }).optional(),
+  inPlaceGenerations: videoEditInPlaceRecordsSchema.optional(),
 })
 
 export type VideoEditDocumentContent = z.infer<typeof videoEditContentSchema>
@@ -69,6 +71,7 @@ function isEmptyVideoEditContent(content: VideoEditDocumentContent): boolean {
     && content.items.length === 0
     && content.bins.length === 0
     && (content.codeMaterials?.length ?? 0) === 0
+    && (content.inPlaceGenerations?.length ?? 0) === 0
     && !content.sequences.some(sequenceHasContent)
 }
 

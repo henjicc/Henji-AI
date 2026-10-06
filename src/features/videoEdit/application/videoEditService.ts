@@ -20,6 +20,7 @@ import { validateVideoEditGraphicTextBudget } from './videoEditGraphicTextBudget
 import { videoEditClipUnderPlayhead } from './videoEditPlayheadSelection'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { updateVideoEditProjectCover } from './videoEditProjectCover'
+import { videoEditInPlaceRecordsSchema, type VideoEditInPlaceRecord } from '@/core/videoEdit/inPlacePersistence'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -54,7 +55,7 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   playbackDirection: 1 | -1
   scrubbing?: boolean
   busy: boolean
-  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content'
+  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content' | 'tracking'
   panelFocusVersion?: number
   version: number
 }
@@ -109,7 +110,26 @@ export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   gestures.set(owner, { handle, before: owner.document, finished, release })
   return handle
 }
-function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0 }) === JSON.stringify({ ...right, revision: 0 }) }
+function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0, inPlaceGenerations: undefined }) === JSON.stringify({ ...right, revision: 0, inPlaceGenerations: undefined }) }
+function withInPlaceMetadata(document: VideoEditDocument, current: VideoEditDocument): VideoEditDocument {
+  const next = { ...document }
+  if (current.inPlaceGenerations?.length) next.inPlaceGenerations = current.inPlaceGenerations
+  else delete next.inPlaceGenerations
+  return next
+}
+/** 任务元数据沿用会话保存屏障，不增加撤销步、不清空重做，也不推进剪辑内容版本。 */
+export function updateVideoEditInPlaceMetadata(id: string, records: readonly VideoEditInPlaceRecord[]): void {
+  assertApplicationWritesAllowed()
+  const owner = requireVideoEditInstance(id)
+  // 关闭已冻结会话内容；保留此前已保存的续接点，关闭完成后由新会话续查。
+  if (closing.has(owner) || owner.session.isEnded) return
+  const parsed = videoEditInPlaceRecordsSchema.parse(records)
+  if (JSON.stringify(owner.document.inPlaceGenerations ?? []) === JSON.stringify(parsed)) return
+  owner.document = { ...owner.document }
+  if (parsed.length) owner.document.inPlaceGenerations = parsed
+  else delete owner.document.inPlaceGenerations
+  owner.version++; notifyVideoEditContent(owner); publishVideoEdit()
+}
 export function updateVideoEditGesture(handle: VideoEditGesture, update: (document: VideoEditDocument) => VideoEditDocument): VideoEditDocument {
   assertApplicationWritesAllowed()
   const owner = requireVideoEditInstance(handle.projectId)
@@ -143,7 +163,7 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
     owner.past = [...owner.past.slice(-49), state.before]; owner.future = []
   } else {
     const before = owner.document
-    owner.document = { ...state.before, name: before.name, revision: before.revision + 1 }; owner.version++
+    owner.document = withInPlaceMetadata({ ...state.before, name: before.name, revision: before.revision + 1 }, before); owner.version++
     rescaleSequenceViews(owner, before); reconcileSequenceView(owner)
   }
   state.release(); publishVideoEdit(true)
@@ -257,7 +277,7 @@ export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id); assertVideoEditWritable(instance)
   if (gestures.has(instance) || !sameDocumentContent(instance.document, expected)) throw new Error('剪辑已有后续修改，请逐步撤销。')
-  return applyVideoEditDocument(instance, () => snapshot, true, true)
+  return applyVideoEditDocument(instance, () => withInPlaceMetadata(snapshot, instance.document), true, true)
 }
 function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   const requested = update(structuredClone(instance.document))
@@ -288,7 +308,7 @@ export function undoVideoEdit(id: string, redo = false): void {
   if (!target) return
   if (redo) instance.past.push(instance.document); else instance.future.unshift(instance.document)
   const before = instance.document
-  instance.document = { ...target, name: before.name, revision: instance.document.revision + 1 }; instance.version++
+  instance.document = withInPlaceMetadata({ ...target, name: before.name, revision: instance.document.revision + 1 }, before); instance.version++
   rescaleSequenceViews(instance, before)
   reconcileSequenceView(instance)
   publishVideoEdit(true)
@@ -371,7 +391,7 @@ export function setVideoEditTimelineView(id: string, values: Partial<VideoEditTi
 }
 export function focusVideoEditPanel(id: string, panel: VideoEditInstance['activePanel']): void {
   const instance = requireVideoEditInstance(id)
-  if (!['project', 'source', 'program', 'timeline', 'effects', 'content'].includes(panel)) throw new Error('剪辑面板不存在。')
+  if (!['project', 'source', 'program', 'timeline', 'effects', 'content', 'tracking'].includes(panel)) throw new Error('剪辑面板不存在。')
   instance.activePanel = panel; instance.panelFocusVersion = (instance.panelFocusVersion ?? 0) + 1; publishView()
 }
 export type VideoEditProjectView = Pick<VideoEditInstance, 'selectedItemIds' | 'selectedBinId' | 'openSequenceIds'>
@@ -474,7 +494,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   contentListeners.set(instance, listeners)
   const adapter: DocumentContentAdapter<VideoEditDocumentContent> = {
     // 参数调整进行中时写调整前的内容；提交后再标脏保存
-    getContent: () => videoEditDocumentContent(gestures.get(instance)?.before ?? instance.document),
+    getContent: () => videoEditDocumentContent(withInPlaceMetadata(gestures.get(instance)?.before ?? instance.document, instance.document)),
     receiveContent: (content) => {
       // 冲突后“重新载入”、收集素材改写了引用：按新内容重建，撤销历史不跨版本
       cancelVideoEditGesture(instance)
@@ -488,6 +508,9 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
       reconcileSequenceView(instance)
       void ensureVideoEditCodeDocumentMetadata(instance, instance.document).catch(error => logger.warn('重新载入后代码素材检查未完成', { event: 'video_edit.document.code_metadata_failed', error }))
       publishVideoEdit(true)
+      void import('./videoEditInPlaceGeneration').then(inPlace => {
+        if (!session.isEnded && instances.get(session.id) === instance) inPlace.restoreVideoEditInPlaceJobs(session.id)
+      }).catch(error => logger.warn('重新载入后原地生成恢复未完成', { event: 'video_edit.in_place.reload.failed', error }))
     },
     subscribe: (onChange) => { listeners.add(onChange); return () => { listeners.delete(onChange) } },
   }
@@ -514,6 +537,11 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   if (focus || !activeId) activeId = session.id
   publishVideoEdit(true)
   logger.info('剪辑已打开', { event: 'video_edit.document.open.completed', context: { docId: session.id, missing: session.getState().missingPaths.length } })
+  // 打开即恢复（含后台打开），无需挂载时间线；只续查原任务，不重新生成。
+  if (instance.document.inPlaceGenerations?.length) {
+    const inPlace = await import('./videoEditInPlaceGeneration')
+    if (!session.isEnded) inPlace.restoreVideoEditInPlaceJobs(session.id)
+  }
   return instance
 }
 

@@ -1,5 +1,5 @@
 import { videoEditClipMedia, VIDEO_EDIT_MAX_CLIP_TAKES, type VideoEditClip, type VideoEditCreativeSource, type VideoEditClipTake, type VideoEditDocument, type VideoEditSequence } from './document'
-import { makeVideoEditItemClip } from './projectItems'
+import { makeVideoEditItemClip, placeVideoEditItem } from './projectItems'
 import { applyVideoEditTimelineEditResult } from './timelineEdits'
 import { videoEditFps } from './time'
 import { videoEditClipSourceMidSecondsAt, videoEditClipTailRoom } from './clipSpeed'
@@ -158,10 +158,39 @@ export function planVideoEditInPlaceGeneration(document: VideoEditDocument, sequ
   return { ...base, mediaType: kind, frame, duration, fill, trackIndex, placement: 'add', references: kind === 'video' ? neighbours(document, sequence, trackIndex, frame, frame + duration) : [] }
 }
 
-function takeOf(clip: VideoEditClip): VideoEditClipTake {
+function linkedAudioOf(sequence: VideoEditSequence, clip: VideoEditClip): VideoEditClip[] {
+  return clip.kind !== 'audio' && clip.linkId ? sequence.clips.filter(value => value.kind === 'audio' && value.linkId === clip.linkId) : []
+}
+function takeOf(clip: VideoEditClip, sequence: VideoEditSequence): VideoEditClipTake {
   return { itemId: clip.itemId, name: clip.name, kind: clip.kind === 'audio' ? 'audio' : clip.kind === 'image' ? 'image' : 'video', duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: { ...clip.sourceRemainder },
     ...(clip.sourceComponent ? { sourceComponent: clip.sourceComponent } : {}), ...(clip.creativeSource ? { creativeSource: structuredClone(clip.creativeSource) } : {}),
+    ...(clip.audioMapping ? { audioMapping: structuredClone(clip.audioMapping) } : {}),
+    ...(clip.kind !== 'audio' ? { linkedAudio: linkedAudioOf(sequence, clip).map(value => {
+      const { takes: _takes, ...state } = value
+      return { clip: structuredClone(state), offset: value.start - clip.start }
+    }) } : {}),
     ...(clip.speed ? { speed: { ...clip.speed } } : {}), ...(clip.reverse ? { reverse: true as const } : {}), ...(clip.preservePitch ? { preservePitch: true as const } : {}) }
+}
+/** 复用普通素材拆分/链接；原地生成仅补充“空闲音频轨”策略，保护生成期间的后续剪辑。 */
+function placeGeneratedItem(document: VideoEditDocument, sequence: VideoEditSequence, itemId: string, frame: number, duration: number, track: number, preferredAudio?: number, metadata?: CodeMaterialMetadataReader) {
+  const videos = sequence.tracks.filter(value => value.kind === 'video').sort((a, b) => a.index - b.index)
+  const audios = sequence.tracks.filter(value => value.kind === 'audio').sort((a, b) => a.index - b.index)
+  const corresponding = preferredAudio ?? audios[videos.findIndex(value => value.index === track)]?.index
+  let candidate = sequence
+  const placed = placeVideoEditItem(document, itemId, sequence.id, { frame, track, duration,
+    audioTrack: freeTrack(sequence, 'audio', frame, frame + duration, corresponding === undefined ? [] : [corresponding]) ?? undefined,
+  }, metadata)
+  candidate = { ...candidate, tracks: [...candidate.tracks, ...placed.addedTracks] }
+  const clips = placed.clips.map(clip => {
+    if (clip.kind === 'audio' && candidate.clips.some(value => value.track === clip.track && overlaps(value, frame, frame + duration))) {
+      let free = freeTrack(candidate, 'audio', frame, frame + duration, [])
+      if (free === null) { const added = videoEditEdgeTracks(candidate, 'audio', 1); candidate = { ...candidate, tracks: [...candidate.tracks, ...added] }; free = added[0].index }
+      clip = { ...clip, track: free }
+    }
+    candidate = { ...candidate, clips: [...candidate.clips, clip] }
+    return clip
+  })
+  return { clips, sequence: { ...sequence, tracks: candidate.tracks } }
 }
 function replaceSequence(document: VideoEditDocument, sequence: VideoEditSequence): VideoEditDocument {
   return { ...document, sequences: document.sequences.map(value => value.id === sequence.id ? sequence : value) }
@@ -175,7 +204,7 @@ function roomAfter(sequence: VideoEditSequence, clip: VideoEditClip): number {
 export interface VideoEditInPlaceLanding { document: VideoEditDocument; clipId: string; newTrack: boolean; fallback?: 'clip_missing' | 'slot_taken' }
 /**
  * 把已导入项目的生成结果（素材项 `itemId`）按规划落进 `document` 的当前状态，返回整份新剪辑（一步编辑）。
- * 生成结果比规划短时片段跟着变短；替换时位置、变换、效果与链接不动，原素材记为可切回的版本。
+ * 生成结果比规划短时片段跟着变短；替换保留镜头位置、变换与效果，链接声音一起换，原音画记为可切回版本。
  */
 export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: VideoEditInPlacePlan, itemId: string, origin?: VideoEditCreativeSource, metadata?: CodeMaterialMetadataReader): VideoEditInPlaceLanding {
   let sequence = document.sequences.find(value => value.id === plan.sequenceId)
@@ -188,18 +217,26 @@ export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: Vi
   const prior = plan.clipId ? sequence.clips.find(value => value.id === plan.clipId) : undefined
   const priorTrack = prior && sequence.tracks.find(track => track.index === prior.track)
   if (plan.placement === 'replace' && prior && !priorTrack?.locked) {
+    const oldAudio = linkedAudioOf(sequence, prior)
+    if (oldAudio.some(clip => sequence!.tracks.find(track => track.index === clip.track)?.locked)) throw new Error('链接声音所在轨道已锁定，请先解锁再替换镜头。')
     const component = prior.sourceComponent && item.kind === 'video' && (prior.sourceComponent === 'video' || media.hasAudio === true) ? { sourceComponent: prior.sourceComponent } : {}
     const duration = Math.min(prior.duration, natural)
-    const made = makeVideoEditItemClip(document, itemId, sequence.id, { frame: prior.start, track: prior.track, duration, ...component }, metadata)
-    const takes = [takeOf(prior), ...(prior.takes ?? [])].slice(0, VIDEO_EDIT_MAX_CLIP_TAKES)
+    const clean = { ...sequence, clips: sequence.clips.filter(value => !oldAudio.some(audio => audio.id === value.id) && value.id !== prior.id) }
+    const placement = prior.kind === 'audio'
+      ? { clips: [makeVideoEditItemClip(document, itemId, sequence.id, { frame: prior.start, track: prior.track, duration, ...component }, metadata)], sequence: clean }
+      : placeGeneratedItem(replaceSequence(document, clean), clean, itemId, prior.start, duration, prior.track, oldAudio[0]?.track, metadata)
+    const made = placement.clips[0]
+    const takes = [takeOf(prior, sequence), ...(prior.takes ?? [])].slice(0, VIDEO_EDIT_MAX_CLIP_TAKES)
     const clip: VideoEditClip = { ...prior, itemId: made.itemId, name: made.name, kind: made.kind, duration, sourceInUs: made.sourceInUs, sourceRemainder: made.sourceRemainder, takes }
-    if (component.sourceComponent) clip.sourceComponent = component.sourceComponent; else delete clip.sourceComponent
+    if (made.sourceComponent) clip.sourceComponent = made.sourceComponent; else delete clip.sourceComponent
+    if (prior.kind !== 'audio') { if (made.linkId) clip.linkId = made.linkId; else delete clip.linkId }
     if (origin) clip.creativeSource = structuredClone(origin); else delete clip.creativeSource
     // 生成结果按原速放进来（4.13）：原片段的速度随版本保存，切回时恢复。
     delete clip.audioMapping; delete clip.speed; delete clip.reverse; delete clip.preservePitch
     if (clip.fadeInFrames && clip.fadeInFrames > duration) clip.fadeInFrames = duration
     if (clip.fadeOutFrames && clip.fadeOutFrames > duration) clip.fadeOutFrames = duration
-    return { document: replaceSequence(document, { ...sequence, clips: sequence.clips.map(value => value.id === prior.id ? clip : value) }), clipId: clip.id, newTrack: false }
+    const audio = placement.clips.slice(1).map(value => origin ? { ...value, creativeSource: structuredClone(origin) } : value)
+    return { document: replaceSequence(document, { ...placement.sequence, clips: [...clean.clips, clip, ...audio] }), clipId: clip.id, newTrack: placement.sequence.tracks.length > sequence.tracks.length }
   }
   // 延长跟着原片段走：它被移动或修剪过就接在它现在的尾巴上。
   const extending = plan.action === 'extend_shot' && prior && !priorTrack?.locked
@@ -221,12 +258,12 @@ export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: Vi
   }
   if (newTracks) sequence = { ...sequence, tracks: [...sequence.tracks, ...newTracks] }
   const base = replaceSequence(document, sequence)
-  const made = makeVideoEditItemClip(base, itemId, sequence.id, { frame, track: track!, duration }, metadata)
-  const clip = origin ? { ...made, creativeSource: structuredClone(origin) } : made
-  const result = applyVideoEditTimelineEditResult(base, sequence.id, { kind: 'place', clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips: [clip], annotations: [] }, frame, mode }, metadata)
+  const placement = placeGeneratedItem(base, sequence, itemId, frame, duration, track!, undefined, metadata)
+  const clips = placement.clips.map(clip => origin ? { ...clip, creativeSource: structuredClone(origin) } : clip)
+  const result = applyVideoEditTimelineEditResult(replaceSequence(base, placement.sequence), sequence.id, { kind: 'place', clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips, annotations: [] }, frame, mode }, metadata)
   const placed = result.selectedClipIds?.[0]
   if (!placed) throw new Error('生成结果没有放进时间线。')
-  return { document: replaceSequence(document, result.sequence), clipId: placed, newTrack: Boolean(newTracks), ...(fallback ? { fallback } : {}) }
+  return { document: replaceSequence(document, result.sequence), clipId: placed, newTrack: Boolean(newTracks) || placement.sequence.tracks.length > sequence.tracks.length, ...(fallback ? { fallback } : {}) }
 }
 
 /**
@@ -246,15 +283,32 @@ export function switchVideoEditClipTake(document: VideoEditDocument, sequenceId:
   const fps = videoEditFps(sequence.frameRate)
   const available = media && media.kind !== 'image' ? take.duration + videoEditClipTailRoom({ ...take, start: 0 }, fps, media.durationSeconds) : Number.MAX_SAFE_INTEGER
   const duration = Math.max(1, Math.min(take.duration, available, roomAfter(sequence, clip)))
-  const takes = [takeOf(clip), ...clip.takes!.filter((_, at) => at !== index)].slice(0, VIDEO_EDIT_MAX_CLIP_TAKES)
+  const currentAudio = linkedAudioOf(sequence, clip)
+  if (currentAudio.some(value => sequence.tracks.find(track => track.index === value.track)?.locked)) throw new Error('链接声音所在轨道已锁定，请先解锁再切回镜头。')
+  const takes = [takeOf(clip, sequence), ...clip.takes!.filter((_, at) => at !== index)].slice(0, VIDEO_EDIT_MAX_CLIP_TAKES)
   const next: VideoEditClip = { ...clip, itemId: take.itemId, name: take.name, kind: take.kind, duration, sourceInUs: take.sourceInUs, sourceRemainder: { ...take.sourceRemainder }, takes }
   if (take.sourceComponent) next.sourceComponent = take.sourceComponent; else delete next.sourceComponent
   if (take.creativeSource) next.creativeSource = structuredClone(take.creativeSource); else delete next.creativeSource
   delete next.audioMapping; delete next.speed; delete next.reverse; delete next.preservePitch
+  if (take.audioMapping) next.audioMapping = structuredClone(take.audioMapping)
   if (take.speed) next.speed = { ...take.speed }
   if (take.reverse) next.reverse = true
   if (take.preservePitch) next.preservePitch = true
   if (next.fadeInFrames && next.fadeInFrames > duration) next.fadeInFrames = duration
   if (next.fadeOutFrames && next.fadeOutFrames > duration) next.fadeOutFrames = duration
-  return replaceSequence(document, { ...sequence, clips: sequence.clips.map(value => value.id === clip.id ? next : value) })
+  if (take.linkedAudio === undefined || clip.kind === 'audio') return replaceSequence(document, { ...sequence, clips: sequence.clips.map(value => value.id === clip.id ? next : value) })
+  let restored = { ...sequence, clips: sequence.clips.filter(value => value.id !== clip.id && !currentAudio.some(audio => audio.id === value.id)) }
+  const linkId = take.linkedAudio.length ? crypto.randomUUID() : undefined
+  if (linkId) next.linkId = linkId; else delete next.linkId
+  for (const saved of take.linkedAudio) {
+    const item = document.items.find(item => item.id === saved.clip.itemId)
+    const media = document.media.find(media => media.id === item?.mediaId)
+    if (!item || !media || saved.clip.sourceComponent === 'audio' && media.hasAudio !== true) throw new Error('原镜头的链接声音已从项目中移除，不能切回。')
+    const start = next.start + saved.offset
+    if (start < 0) throw new Error('原链接声音超出序列起点，请先移动镜头再切回。')
+    let track = freeTrack(restored, 'audio', start, start + saved.clip.duration, [saved.clip.track])
+    if (track === null) { const added = videoEditEdgeTracks(restored, 'audio', 1); restored = { ...restored, tracks: [...restored.tracks, ...added] }; track = added[0].index }
+    restored.clips.push({ ...structuredClone(saved.clip), id: crypto.randomUUID(), start, track, linkId })
+  }
+  return replaceSequence(document, { ...restored, clips: [...restored.clips, next] })
 }

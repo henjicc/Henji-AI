@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createVideoEditDocument, videoEditDocumentSchema, type VideoEditClip, type VideoEditDocument } from './document'
-import { makeVideoEditItemClip } from './projectItems'
+import { makeVideoEditItemClip, placeVideoEditItem } from './projectItems'
 import { landVideoEditInPlaceResult, planVideoEditInPlaceGeneration, switchVideoEditClipTake, videoEditTrackGap } from './inPlaceGeneration'
 import { videoEditSourceSeconds } from './time'
 
@@ -53,6 +53,70 @@ describe('原地生成规划', () => {
 })
 
 describe('原地生成落位', () => {
+  it('带声音结果拆成链接音画，A1 被占时建空轨且保护已有声音', () => {
+    const { document, sequenceId, video, audio } = fixture()
+    document.media.find(value => value.id === 'gen')!.hasAudio = true
+    const occupied = makeVideoEditItemClip(document, 'voice-item', sequenceId, { frame: 60, track: audio, duration: 60 })
+    sequenceOf(document).clips.push(occupied)
+    const landed = landVideoEditInPlaceResult(document, planVideoEditInPlaceGeneration(document, sequenceId, { action: 'generate_shot', frame: 60, trackIndex: video }), 'gen-item')
+    const result = sequenceOf(valid(landed.document))
+    const picture = result.clips.find(value => value.id === landed.clipId)!
+    const sound = result.clips.find(value => value.kind === 'audio' && value.linkId === picture.linkId)!
+    expect(picture).toMatchObject({ sourceComponent: 'video', track: video, start: 60, duration: 90 })
+    expect(sound).toMatchObject({ sourceComponent: 'audio', itemId: 'gen-item', start: 60, duration: 90 })
+    expect(picture.linkId).toBeTruthy(); expect(sound.track).not.toBe(audio)
+    expect(result.clips.find(value => value.id === occupied.id)).toEqual(occupied)
+    expect(result.tracks.find(value => value.index === sound.track)?.kind).toBe('audio')
+  })
+  it('空闲音频轨直接复用；延长与插入也保持音画链接', () => {
+    const { document, sequenceId, video, audio } = fixture()
+    document.media.find(value => value.id === 'gen')!.hasAudio = true
+    for (const intent of [{ action: 'generate_shot' as const, frame: 60, trackIndex: video }, { action: 'extend_shot' as const, clipId: 'a', duration: 30 }, { action: 'extend_shot' as const, clipId: 'a', duration: 30, mode: 'overwrite' as const }]) {
+      const landed = landVideoEditInPlaceResult(document, planVideoEditInPlaceGeneration(document, sequenceId, intent), 'gen-item')
+      const result = sequenceOf(valid(landed.document)); const picture = result.clips.find(value => value.id === landed.clipId)!
+      expect(result.clips.find(value => value.kind === 'audio' && value.linkId === picture.linkId)).toMatchObject({ track: audio, start: picture.start, duration: picture.duration })
+      expect(result.tracks).toHaveLength(sequenceOf(document).tracks.length)
+    }
+  })
+  it('替换连同链接声音更新，切回在移动后恢复原声音源范围/音量；静音结果移除原声音', () => {
+    const { document, sequenceId, video, audio } = fixture()
+    document.media[0].hasAudio = true; document.media[1].hasAudio = true
+    const original = placeVideoEditItem(document, 'item', sequenceId, { frame: 150, track: video, audioTrack: audio, duration: 60, sourceInUs: 5_000_000 }).clips
+    original[0].id = 'b'; original[0].x = .25; original[1].volume = .4
+    sequenceOf(document).clips = original
+    const plan = planVideoEditInPlaceGeneration(document, sequenceId, { action: 'replace_shot', clipId: 'b' })
+    const replaced = valid(landVideoEditInPlaceResult(document, plan, 'gen-item').document)
+    expect(sequenceOf(replaced).clips.filter(value => value.kind === 'audio')).toEqual([expect.objectContaining({ itemId: 'gen-item', sourceInUs: 0 })])
+    sequenceOf(replaced).clips.forEach(value => { value.start += 30 })
+    const restored = valid(switchVideoEditClipTake(replaced, sequenceId, 'b', 0))
+    const picture = sequenceOf(restored).clips.find(value => value.id === 'b')!
+    expect(picture).toMatchObject({ itemId: 'item', start: 180, x: .25 })
+    expect(sequenceOf(restored).clips.find(value => value.kind === 'audio')).toMatchObject({ itemId: 'item', start: 180, sourceInUs: 5_000_000, volume: .4, linkId: picture.linkId })
+    document.media[1].hasAudio = false
+    const silent = valid(landVideoEditInPlaceResult(document, plan, 'gen-item').document)
+    expect(sequenceOf(silent).clips.filter(value => value.kind === 'audio')).toHaveLength(0)
+    expect(sequenceOf(valid(switchVideoEditClipTake(silent, sequenceId, 'b', 0))).clips.filter(value => value.kind === 'audio')).toHaveLength(1)
+  })
+  it('锁定的链接声音拒绝替换，不留半个更新', () => {
+    const { document, sequenceId, video, audio } = fixture()
+    document.media[0].hasAudio = true; document.media[1].hasAudio = true
+    sequenceOf(document).clips = placeVideoEditItem(document, 'item', sequenceId, { frame: 0, track: video, duration: 60 }).clips
+    const clipId = sequenceOf(document).clips[0].id
+    sequenceOf(document).tracks.find(value => value.index === audio)!.locked = true
+    const plan = planVideoEditInPlaceGeneration(document, sequenceId, { action: 'replace_shot', clipId })
+    expect(() => landVideoEditInPlaceResult(document, plan, 'gen-item')).toThrow('链接声音所在轨道已锁定')
+    expect(sequenceOf(document).clips.every(value => value.itemId === 'item')).toBe(true)
+  })
+  it('多声道结果复用普通导入布局，各声音分量选择不同空轨且保留映射', () => {
+    const { document, sequenceId, video } = fixture()
+    const media = document.media.find(value => value.id === 'gen')!
+    media.hasAudio = true; media.audioStreams = [{ channels: 2 }, { channels: 1 }]
+    const landed = landVideoEditInPlaceResult(document, planVideoEditInPlaceGeneration(document, sequenceId, { action: 'generate_shot', frame: 60, trackIndex: video }), 'gen-item')
+    const result = sequenceOf(valid(landed.document)); const primary = result.clips.find(value => value.id === landed.clipId)!
+    const audio = result.clips.filter(value => value.kind === 'audio' && value.linkId === primary.linkId)
+    expect(audio).toHaveLength(2); expect(new Set(audio.map(value => value.track)).size).toBe(2)
+    expect(audio[1].audioMapping).toEqual({ format: 'mono', sources: [{ stream: 1, channel: 0 }] })
+  })
   it('落进空隙：生成结果比空隙短时片段跟着变短，记住来源', () => {
     const { document, sequenceId, video } = fixture()
     const plan = planVideoEditInPlaceGeneration(document, sequenceId, { action: 'generate_shot', frame: 60, trackIndex: video })

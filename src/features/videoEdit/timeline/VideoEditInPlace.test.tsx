@@ -78,5 +78,5 @@ it('占位显示在原位置并可取消；取消后占位消失、生成任务�
   fireEvent.click(view.getByRole('button', { name: '取消生成' }))
   await waitFor(() => expect(document.querySelector('[data-video-edit-in-place-job]')).toBeNull())
   expect(generation.cancelTask).toHaveBeenCalledWith('ui-task', expect.any(String))
-  expect(owner.document).toBe(before)
+  expect(owner.document).toEqual(before)
 })

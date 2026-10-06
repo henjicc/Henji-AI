@@ -73,7 +73,7 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
   if (id === getVideoEditInPlaceGenerationCapability.id) {
     const input = getVideoEditInPlaceGenerationCapability.inputSchema.parse(raw)
     const job = findVideoEditInPlaceJobByTask(input.taskRef.id)
-    if (!job || job.projectId !== input.documentRef.id) throw new Error('这个剪辑里没有该任务的原地生成记录（应用重启后占位不保留）。生成结果仍在生成记录里，可用 place_video_edit_creative_result 按 generation.result 放入。')
+    if (!job || job.projectId !== input.documentRef.id) throw new Error('这个剪辑里没有该任务的原地生成记录，请先打开原剪辑恢复占位。已经落位或移除的占位不再恢复，生成结果仍可从生成历史放入。')
     let progress: number | undefined
     if (job.status === 'generating') try { progress = Math.max(0, Math.min(100, generationApplicationService.getTask(input.taskRef.id).progress)) } catch { progress = undefined }
     const clipRef = job.clipId ? { kind: 'video_edit.clip' as const, id: `${job.projectId}:${job.clipId}` } : undefined

@@ -6,19 +6,21 @@ import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { isGenerationTerminalStatus, normalizeGenerationTaskStatus } from '@/core/application-control/domains/generation/taskStatus'
 import { landVideoEditInPlaceResult, planVideoEditInPlaceGeneration, switchVideoEditClipTake, type VideoEditInPlaceIntent, type VideoEditInPlacePlan, type VideoEditInPlaceReference, type VideoEditReferenceRole } from '@/core/videoEdit/inPlaceGeneration'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
+import { databaseService } from '@/services/database'
+import { videoEditInPlaceRecordSchema } from '@/core/videoEdit/inPlacePersistence'
 import { subscribeVisibleGenerationTaskChanges } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { prepareVideoEditCreativeResult } from './videoEditCreativeSources'
 import { placeVideoEditFileInProject } from './videoEditResultTarget'
 import { importVideoEditSources } from './videoEditMedia'
-import { editVideoProject, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, saveVideoEdit, subscribeVideoEdit, updateVideoEditInPlaceMetadata } from './videoEditService'
 
 /*
  * 原地生成（4.12）的执行：规划 → 放占位 → 取参考帧 → 走正式生成链路提交 → 等待 → 结果复制进项目并收录 → 一步编辑落进时间线。
  * - 生成走 generationApplicationService（与生成页、助手同一条可见任务链路），记录同时出现在生成历史里。
  * - 参考帧走 observeVideoEditFrame（正式渲染器离屏取源帧并收录为图片），上传由主进程按当前供应商的官方上传完成。
- * - 占位只在这里（运行时状态），不写进剪辑文件：取消、失败不留任何剪辑修改；完成时才做唯一的一步编辑（一次撤销）。
+ * - 占位持久化为不进撤销的文档元数据；完成时才做唯一的一步剪辑编辑（一次撤销）。
  * - 落点在完成时按当时的剪辑重新求（core/videoEdit/inPlaceGeneration.ts），生成期间不阻塞编辑。
  */
 
@@ -76,7 +78,7 @@ function update(id: string, patch: Partial<VideoEditInPlaceJob>): VideoEditInPla
   const job = jobs.get(id)
   if (!job) return undefined
   const next = { ...job, ...patch }
-  jobs.set(id, next); publish()
+  jobs.set(id, next); persist(next); publish()
   return next
 }
 function prune(): void {
@@ -90,6 +92,78 @@ export function readVideoEditInPlaceJob(id: string): VideoEditInPlaceJob | undef
 export function findVideoEditInPlaceJobByTask(taskId: string): VideoEditInPlaceJob | undefined { return [...jobs.values()].find(job => job.taskId === taskId) }
 /** 仅供测试：清空任务表。 */
 export function resetVideoEditInPlaceJobsForTest(): void { for (const controller of controllers.values()) controller.abort(); controllers.clear(); jobs.clear(); publish() }
+
+function persist(job: VideoEditInPlaceJob): void {
+  let owner: ReturnType<typeof requireVideoEditInstance>
+  try { owner = requireVideoEditInstance(job.projectId) } catch { return }
+  const records = (owner.document.inPlaceGenerations ?? []).filter(value => value.id !== job.id)
+  if (job.taskId && job.status !== 'placed' && job.status !== 'cancelled') {
+    const { projectId: _projectId, ...request } = job.request
+    records.push(videoEditInPlaceRecordSchema.parse({ id: job.id, taskId: job.taskId, modelId: job.modelId, plan: job.plan, request,
+      status: job.status, ...(job.error ? { error: job.error.slice(0, 10_000) } : {}), ...(job.clipId ? { clipId: job.clipId } : {}),
+    }))
+  }
+  updateVideoEditInPlaceMetadata(job.projectId, records)
+}
+
+function recordFailure(id: string, error: unknown): void {
+  const job = jobs.get(id)
+  if (!job) return
+  const next: VideoEditInPlaceJob = { ...job, status: 'failed', error: message(error) }
+  jobs.set(id, next)
+  // 退出写屏障或保存异常不能再从失败处理抛出未捕获错误；保留原任务号供重开续查。
+  try { persist(next) } catch (metadataError) {
+    logger.warn('原地生成恢复信息未能更新，请保存剪辑后核对原任务', { event: 'video_edit.in_place.metadata.failed', error: metadataError, requestId: job.taskId, taskId: job.taskId, context: { projectId: job.projectId } })
+  }
+  publish()
+}
+
+/** 只暂停剪辑的等待/落位，生成任务继续；关闭屏障已经保存其续接元数据。 */
+function watchOwner(job: VideoEditInPlaceJob, controller: AbortController): () => void {
+  const owner = requireVideoEditInstance(job.projectId)
+  return subscribeVideoEdit(() => {
+    let current: typeof owner | undefined
+    try { current = requireVideoEditInstance(job.projectId) } catch { current = undefined }
+    if (current === owner) return
+    controller.abort(new DOMException('剪辑已关闭，重新打开后继续落位。', 'AbortError'))
+    if (controllers.get(job.id) === controller) { controllers.delete(job.id); jobs.delete(job.id); publish() }
+  })
+}
+
+/** 文档打开即恢复，同一会话多次请求不会启动第二个落位器。失败占位保留原设置。 */
+export function restoreVideoEditInPlaceJobs(projectId: string): void {
+  const owner = requireVideoEditInstance(projectId)
+  const records = owner.document.inPlaceGenerations ?? []
+  // 文件重新载入时以新的元数据为准，移除旧文件的落位器。
+  for (const job of jobs.values()) if (job.projectId === projectId && job.status !== 'placed' && job.status !== 'cancelled' && !records.some(record => record.id === job.id)) {
+    controllers.get(job.id)?.abort(new DOMException('占位已从剪辑文件移除。', 'AbortError'))
+    controllers.delete(job.id); jobs.delete(job.id)
+  }
+  for (const record of records) {
+    if (controllers.has(record.id)) continue
+    const job: VideoEditInPlaceJob = { ...record, status: record.status === 'preparing' ? 'generating' : record.status, projectId, request: { ...record.request, projectId } }
+    jobs.set(job.id, job)
+    if (job.status !== 'failed') {
+      const controller = new AbortController(); controllers.set(job.id, controller)
+      void resume(job, controller)
+    }
+  }
+  publish()
+}
+
+async function resume(job: VideoEditInPlaceJob, controller: AbortController): Promise<void> {
+  const unwatch = watchOwner(job, controller)
+  logger.info('恢复剪辑原地生成', { event: 'video_edit.in_place.restore.start', requestId: job.taskId, taskId: job.taskId, context: { projectId: job.projectId } })
+  try {
+    await complete(job, job.taskId!, controller.signal, true)
+    logger.info('剪辑原地生成已恢复落位', { event: 'video_edit.in_place.restore.completed', requestId: job.taskId, taskId: job.taskId, context: { projectId: job.projectId } })
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      recordFailure(job.id, error)
+      logger.warn('剪辑原地生成恢复未完成', { event: 'video_edit.in_place.restore.failed', error, requestId: job.taskId, taskId: job.taskId })
+    }
+  } finally { unwatch(); if (controllers.get(job.id) === controller) controllers.delete(job.id) }
+}
 
 // ---- 规划与参数 ----
 export function planVideoEditInPlace(projectId: string, sequenceId: string, intent: VideoEditInPlaceIntent): VideoEditInPlacePlan {
@@ -163,24 +237,45 @@ function message(error: unknown): string { return error instanceof Error ? error
 function aborted(signal: AbortSignal): boolean { return signal.aborted }
 
 /** 等生成任务到终态；进度由界面直接订阅生成进度。 */
-async function waitTask(taskId: string, signal: AbortSignal): Promise<{ ok: true } | { ok: false; error: string }> {
+async function waitTask(taskId: string, signal: AbortSignal, recovering = false): Promise<{ ok: true } | { ok: false; error: string }> {
   return await new Promise((resolve, reject) => {
-    const check = (): boolean => {
-      let task: ReturnType<typeof generationApplicationService.getTask>
-      try { task = generationApplicationService.getTask(taskId) } catch { return false }
-      if (!isGenerationTerminalStatus(task.status)) return false
-      cleanup()
-      const status = normalizeGenerationTaskStatus(task.status)
-      resolve(status === 'success' && task.resultAvailable ? { ok: true } : { ok: false, error: task.errorMessage || (status === 'cancelled' ? '生成已取消。' : '生成没有完成。') })
-      return true
+    let checking = false
+    let checkAgain = false
+    let settled = false
+    const finish = (outcome: { ok: true } | { ok: false; error: string }): void => { if (settled) return; settled = true; cleanup(); resolve(outcome) }
+    const check = async (): Promise<void> => {
+      if (settled) return
+      if (checking) { checkAgain = true; return }
+      checking = true
+      try {
+        let task: ReturnType<typeof generationApplicationService.getTask> | undefined
+        try { task = generationApplicationService.getTask(taskId) } catch { task = undefined }
+        // 恢复优先读持久历史，防止生成页尚未刷新时用旧内存状态盖掉关闭期间的结果。
+        if (recovering || !task) {
+          const record = await databaseService.getHistoryById(taskId)
+          if (settled || signal.aborted) return
+          if (record && isGenerationTerminalStatus(record.status)) {
+            finish(normalizeGenerationTaskStatus(record.status) === 'success'
+              ? { ok: true } : { ok: false, error: record.errorMessage || '原生成任务未完成，可重试或换模型重新生成。' })
+            return
+          }
+          if (!task && !record) { finish({ ok: false, error: '找不到原生成任务，请从生成历史核对结果，或重试重新生成。' }); return }
+        }
+        if (task && isGenerationTerminalStatus(task.status)) {
+          const status = normalizeGenerationTaskStatus(task.status)
+          finish(status === 'success' && task.resultAvailable ? { ok: true } : { ok: false, error: task.errorMessage || (status === 'cancelled' ? '生成已取消。' : '生成没有完成。') })
+          return
+        }
+      } catch (error) { if (!settled) { settled = true; cleanup(); reject(error) } }
+      finally { checking = false; if (checkAgain) { checkAgain = false; void check() } }
     }
-    const onAbort = (): void => { cleanup(); reject(signal.reason ?? new DOMException('已取消。', 'AbortError')) }
-    const unsubscribe = subscribeVisibleGenerationTaskChanges(() => { check() })
+    const onAbort = (): void => { settled = true; cleanup(); reject(signal.reason ?? new DOMException('已取消。', 'AbortError')) }
+    const unsubscribe = subscribeVisibleGenerationTaskChanges(() => { void check() })
     // 状态事件之外再兜底轮询（结果写回与事件可能错开）。
-    const timer = setInterval(check, 2000)
+    const timer = setInterval(() => { void check() }, 2000)
     function cleanup(): void { unsubscribe(); clearInterval(timer); signal.removeEventListener('abort', onAbort) }
     signal.addEventListener('abort', onAbort, { once: true })
-    check()
+    if (signal.aborted) onAbort(); else void check()
   })
 }
 
@@ -202,38 +297,67 @@ async function land(job: VideoEditInPlaceJob, taskId: string, signal: AbortSigna
     const item = document.items.find(value => itemIds.includes(value.id) && document.media.some(media => media.id === value.mediaId && media.assetId === prepared.asset.id))
     if (!item) throw new Error('生成结果没有导入项目。')
     landed = landVideoEditInPlaceResult(document, job.plan, item.id, prepared.origin)
-    return landed.document
+    // 落位与已应用标记是同一份内容；保存响应丢失/崩溃重开仅保存，不再次放置。
+    return { ...landed.document, inPlaceGenerations: (document.inPlaceGenerations ?? []).map(value => value.id === job.id ? { ...value, status: 'placing' as const, clipId: landed!.clipId } : value) }
   })
+  // 在等待保存前记住已发生的编辑：保存失败/取消竞态不能再次导入同一结果。
+  update(job.id, { clipId: landed!.clipId })
   await saveVideoEdit(job.projectId)
   return { clipId: landed!.clipId, ...(landed!.fallback ? { fallback: landed!.fallback } : {}) }
 }
 
+async function complete(job: VideoEditInPlaceJob, taskId: string, signal: AbortSignal, recovering = false): Promise<void> {
+  const current = jobs.get(job.id) ?? job
+  if (current.clipId) {
+    // 已编辑，只有保存未确认。先写完原修改，再移除续接记录。
+    await saveVideoEdit(job.projectId)
+    update(job.id, { status: 'placed', error: undefined })
+    await saveVideoEdit(job.projectId)
+    return
+  }
+  const outcome = await waitTask(taskId, signal, recovering)
+  signal.throwIfAborted()
+  if (!outcome.ok) throw new Error(outcome.error)
+  update(job.id, { status: 'placing', error: undefined })
+  const landed = await land(job, taskId, signal)
+  update(job.id, { status: 'placed', clipId: landed.clipId, ...(landed.fallback ? { fallback: landed.fallback } : {}) })
+  await saveVideoEdit(job.projectId)
+  prune()
+}
+
 async function run(job: VideoEditInPlaceJob, preparation: VideoEditInPlacePreparation, taskId: string, controller: AbortController, submitted: (taskId: string) => void, failed: (error: unknown) => void): Promise<void> {
   const signal = controller.signal
+  const unwatch = watchOwner(job, controller)
+  let submittedId: string | undefined
   const context = { projectId: job.projectId, jobId: job.id, action: job.plan.action, modelId: job.modelId }
   try {
+    // 先持久登记续接点；即使提交响应丢失，也只查同一个任务号而不重放付费生成。
+    persist(job)
+    await saveVideoEdit(job.projectId)
     const paths = await referenceFiles(job, preparation.references, signal)
     signal.throwIfAborted()
     const options = { ...preparation.params, ...(paths.length ? { images: paths.map(toFetchableMediaUrl), uploadedFilePaths: paths } : {}) }
     const submittedTask = await generationApplicationService.submit({ modelId: job.modelId, prompt: job.request.prompt, mediaType: preparation.mediaType, options }, taskId)
+    submittedId = submittedTask.taskId
+    signal.throwIfAborted()
     update(job.id, { status: 'generating', taskId: submittedTask.taskId })
     logger.info('原地生成已提交', { event: 'video_edit.in_place.submitted', requestId: submittedTask.taskId, taskId: submittedTask.taskId, modelId: job.modelId, context })
     submitted(submittedTask.taskId)
-    const outcome = await waitTask(submittedTask.taskId, signal)
-    if (!outcome.ok) throw new Error(outcome.error)
-    update(job.id, { status: 'placing' })
-    const landed = await land(job, submittedTask.taskId, signal)
-    update(job.id, { status: 'placed', clipId: landed.clipId, ...(landed.fallback ? { fallback: landed.fallback } : {}) })
-    prune()
-    logger.info('原地生成已落进时间线', { event: 'video_edit.in_place.completed', requestId: submittedTask.taskId, taskId: submittedTask.taskId, modelId: job.modelId, context: { ...context, clipId: landed.clipId, fallback: landed.fallback ?? null } })
+    await complete(job, submittedTask.taskId, signal)
+    logger.info('原地生成已落进时间线', { event: 'video_edit.in_place.completed', requestId: submittedTask.taskId, taskId: submittedTask.taskId, modelId: job.modelId, context: { ...context, clipId: jobs.get(job.id)?.clipId } })
   } catch (error) {
     if (aborted(signal) || jobs.get(job.id)?.status === 'cancelled') { failed(error); return }
     const current = jobs.get(job.id)
     // 还没提交就失败（取帧、校验、供应商未配置）：撤回占位，错误交给发起方（面板里就地显示，可直接改了再试）。
-    if (!current?.taskId) { jobs.delete(job.id); publish() } else update(job.id, { status: 'failed', error: message(error) })
+    if (!submittedId) {
+      try { persist({ ...job, status: 'cancelled' }) } catch (metadataError) {
+        logger.warn('原地生成提交失败后占位尚未保存', { event: 'video_edit.in_place.metadata.failed', error: metadataError, requestId: taskId, taskId, context: { projectId: job.projectId } })
+      }
+      jobs.delete(job.id); publish()
+    } else recordFailure(job.id, error)
     logger.warn('原地生成未完成', { event: 'video_edit.in_place.failed', error, ...(current?.taskId ? { requestId: current.taskId, taskId: current.taskId } : {}), modelId: job.modelId, context })
     failed(error)
-  } finally { controllers.delete(job.id) }
+  } finally { unwatch(); if (controllers.get(job.id) === controller) controllers.delete(job.id) }
 }
 
 export interface VideoEditInPlaceStart { job: VideoEditInPlaceJob; taskId: string }
@@ -243,10 +367,10 @@ export interface VideoEditInPlaceStart { job: VideoEditInPlaceJob; taskId: strin
  */
 export async function startVideoEditInPlaceGeneration(request: VideoEditInPlaceRequest, options: { taskId?: string; replacesJobId?: string } = {}): Promise<VideoEditInPlaceStart> {
   const preparation = await prepareVideoEditInPlace(request)
-  const job: VideoEditInPlaceJob = { id: crypto.randomUUID(), projectId: request.projectId, plan: preparation.plan, request: structuredClone(request), modelId: preparation.modelId, status: 'preparing' }
+  const taskId = options.taskId ?? `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  const job: VideoEditInPlaceJob = { id: crypto.randomUUID(), projectId: request.projectId, plan: preparation.plan, request: structuredClone(request), modelId: preparation.modelId, status: 'preparing', taskId }
   jobs.set(job.id, job); publish()
   const controller = new AbortController(); controllers.set(job.id, controller)
-  const taskId = options.taskId ?? `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   logger.info('原地生成开始', { event: 'video_edit.in_place.start', requestId: taskId, modelId: job.modelId, context: { projectId: job.projectId, jobId: job.id, action: job.plan.action, frame: job.plan.frame, duration: job.plan.duration, references: preparation.references.map(value => value.role) } })
   // 提交前（取参考帧、提交）失败时调用方拿到错误；提交后的失败只反映在占位上。
   return await new Promise<VideoEditInPlaceStart>((resolve, reject) => {
@@ -272,12 +396,24 @@ export async function cancelVideoEditInPlaceJob(id: string): Promise<void> {
 export function dismissVideoEditInPlaceJob(id: string): void {
   const job = jobs.get(id)
   if (!job || job.status !== 'failed') return
-  jobs.delete(id); publish()
+  persist({ ...job, status: 'cancelled' }); jobs.delete(id); publish()
 }
 /** 用同样的设置重试失败的那一次。 */
 export async function retryVideoEditInPlaceJob(id: string): Promise<VideoEditInPlaceStart> {
   const job = jobs.get(id)
   if (!job || job.status !== 'failed') throw new Error('只有失败的原地生成可以重试。')
+  // 生成已成功但落位/保存失败：复用原结果，不发起新的付费请求。
+  let successful = Boolean(job.clipId)
+  if (!successful && job.taskId) {
+    try { successful = normalizeGenerationTaskStatus(generationApplicationService.getTask(job.taskId).status) === 'success' } catch { successful = false }
+    if (!successful) successful = normalizeGenerationTaskStatus((await databaseService.getHistoryById(job.taskId))?.status ?? '') === 'success'
+  }
+  if (successful && job.taskId) {
+    update(id, { status: 'placing', error: undefined })
+    const controller = new AbortController(); controllers.set(id, controller)
+    void resume(jobs.get(id)!, controller)
+    return { job: jobs.get(id)!, taskId: job.taskId }
+  }
   return await startVideoEditInPlaceGeneration({ ...job.request, modelId: job.modelId }, { replacesJobId: id })
 }
 

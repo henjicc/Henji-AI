@@ -12,17 +12,23 @@ const state = vi.hoisted(() => ({
   task: { status: 'pending', resultAvailable: false, errorMessage: null as string | null, cancellable: true, progress: 0 },
   listeners: new Set<() => void>(),
   submitError: null as Error | null,
+  opened: true,
+  ownerListeners: new Set<() => void>(),
+  history: null as { status: string } | null,
+  liveMissing: false,
+  saveError: false,
 }))
 const generation = vi.hoisted(() => ({
   resolveModel: vi.fn(async () => ({ modelId: 'test-video', providerId: 'test', selection: 'user_default' })),
   prepare: vi.fn(() => ({ prepared: true, priceEstimate: { comparableCnyAmount: 1 } })),
   submit: vi.fn(async (_input: unknown, taskId?: string) => { if (state.submitError) throw state.submitError; return { taskId: taskId!, status: 'submitted' } }),
-  getTask: vi.fn(() => ({ ...state.task })),
+  getTask: vi.fn(() => { if (state.liveMissing) throw new Error('TASK_NOT_FOUND'); return { ...state.task } }),
   cancelTask: vi.fn(async () => ({})),
 }))
 const observe = vi.hoisted(() => vi.fn(async (_projectId: string, target: { itemId: string; timeUs: number }) => ({ asset: { filePath: `D:/frames/${target.itemId}-${target.timeUs}.png` } })))
 const imports = vi.hoisted(() => vi.fn())
-const saves = vi.hoisted(() => vi.fn(async () => undefined))
+const saves = vi.hoisted(() => vi.fn(async () => { if (state.saveError) throw new Error('保存失败') }))
+vi.mock('@/services/database', () => ({ databaseService: { getHistoryById: vi.fn(async () => state.history) } }))
 
 vi.mock('@/core/ModelRegistry', () => ({ registry: { getModel: (id: string) => ({ meta: { id, type: id.startsWith('test-audio') ? 'audio' : 'video', provider: 'test' } }), getSchema: () => [], getDefaultValues: () => ({}) } }))
 vi.mock('@/core/inputs/inputLimits', () => ({ resolveInputLimits: () => ({ images: { min: 0, max: 2 }, videos: { min: 0, max: 0 }, audios: { min: 0, max: 0 } }) }))
@@ -34,10 +40,14 @@ vi.mock('./videoEditCreativeSources', () => ({ prepareVideoEditCreativeResult: a
 vi.mock('./videoEditResultTarget', () => ({ placeVideoEditFileInProject: async (_owner: unknown, path: string) => path }))
 vi.mock('./videoEditMedia', () => ({ importVideoEditSources: imports }))
 vi.mock('./videoEditService', () => ({
-  requireVideoEditInstance: () => ({ document: state.document, activeSequenceId: state.document.sequences[0].id, targetTrackIds: [], sequenceViews: new Map() }),
+  requireVideoEditInstance: () => { if (!state.opened) throw new Error('已关闭'); return owner },
+  subscribeVideoEdit: (listener: () => void) => { state.ownerListeners.add(listener); return () => state.ownerListeners.delete(listener) },
+  updateVideoEditInPlaceMetadata: (_id: string, records: VideoEditDocument['inPlaceGenerations']) => { state.document = { ...state.document }; if (records?.length) state.document.inPlaceGenerations = structuredClone(records); else delete state.document.inPlaceGenerations },
   saveVideoEdit: saves,
   editVideoProject: (_id: string, update: (document: VideoEditDocument) => VideoEditDocument) => { state.document = update(state.document) },
 }))
+
+const owner = { get document() { return state.document }, get activeSequenceId() { return state.document.sequences[0].id }, targetTrackIds: [], sequenceViews: new Map() }
 
 const service = await import('./videoEditInPlaceGeneration')
 
@@ -60,6 +70,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   state.task = { status: 'pending', resultAvailable: false, errorMessage: null, cancellable: true, progress: 0 }
   state.submitError = null
+  state.opened = true; state.history = null; state.liveMissing = false; state.saveError = false
   fixture()
   // 导入：把生成结果作为素材项加进剪辑，再交给落位回调（一步编辑）
   imports.mockImplementation(async (_projectId: string, _sources: unknown, _bin: unknown, _signal: unknown, after: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument) => {
@@ -70,6 +81,68 @@ beforeEach(() => {
 })
 
 describe('原地生成执行', () => {
+  it('占位存入项目，重启后按原任务恢复等待，完成只落位一次', async () => {
+    const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'resume-task' })
+    expect(state.document.inPlaceGenerations).toEqual([expect.objectContaining({ taskId: 'resume-task', request: expect.objectContaining({ prompt: '黄昏海边空镜' }), plan: expect.objectContaining({ frame: 60 }) })])
+    const stored = structuredClone(state.document)
+    service.resetVideoEditInPlaceJobsForTest(); await flush()
+    state.document = stored
+    service.restoreVideoEditInPlaceJobs(stored.id); service.restoreVideoEditInPlaceJobs(stored.id)
+    expect(service.readVideoEditInPlaceJob(started.job.id)?.status).toBe('generating')
+    notify({ status: 'success', resultAvailable: true }); await flush(); await flush()
+    expect(service.readVideoEditInPlaceJob(started.job.id)?.status).toBe('placed')
+    expect(state.document.inPlaceGenerations).toBeUndefined()
+    expect(imports).toHaveBeenCalledTimes(1); expect(generation.submit).toHaveBeenCalledTimes(1)
+    service.restoreVideoEditInPlaceJobs(stored.id); await flush()
+    expect(imports).toHaveBeenCalledTimes(1)
+  })
+  it('项目关闭暂停落位而不取消生成，关闭期间历史完成，重开直接落位', async () => {
+    const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'closed-task' })
+    const stored = structuredClone(state.document)
+    state.opened = false; for (const listener of [...state.ownerListeners]) listener()
+    await flush()
+    expect(generation.cancelTask).not.toHaveBeenCalled()
+    notify({ status: 'success', resultAvailable: true }); await flush()
+    expect(imports).not.toHaveBeenCalled()
+    state.opened = true; state.document = stored; state.liveMissing = true; state.history = { status: 'completed' }
+    service.restoreVideoEditInPlaceJobs(stored.id); await flush(); await flush()
+    expect(service.readVideoEditInPlaceJob(started.job.id)).toMatchObject({ status: 'placed', taskId: 'closed-task' })
+    expect(imports).toHaveBeenCalledTimes(1); expect(generation.submit).toHaveBeenCalledTimes(1)
+  })
+  it('历史已完成而内存仍旧显示生成中时，恢复以持久结果为准；已应用标记仅保存', async () => {
+    const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'history-task' })
+    const stored = structuredClone(state.document)
+    service.resetVideoEditInPlaceJobsForTest(); await flush(); state.document = stored
+    state.history = { status: 'success' }
+    service.restoreVideoEditInPlaceJobs(stored.id); await flush(); await flush()
+    expect(service.readVideoEditInPlaceJob(started.job.id)?.status).toBe('placed')
+    expect(imports).toHaveBeenCalledTimes(1)
+    const clipId = service.readVideoEditInPlaceJob(started.job.id)!.clipId!
+    service.resetVideoEditInPlaceJobsForTest(); await flush()
+    state.document.inPlaceGenerations = [{ ...stored.inPlaceGenerations![0], status: 'placing', clipId }]
+    service.restoreVideoEditInPlaceJobs(stored.id); await flush(); await flush()
+    expect(service.readVideoEditInPlaceJob(started.job.id)).toMatchObject({ status: 'placed', clipId })
+    expect(imports).toHaveBeenCalledTimes(1); expect(generation.submit).toHaveBeenCalledTimes(1)
+  })
+  it('重开的失败占位保留错误与参数；找不到任务时显示可恢复失败', async () => {
+    const started = await service.startVideoEditInPlaceGeneration({ ...request(), params: { duration: 3 } }, { taskId: 'failed-task' })
+    notify({ status: 'error', errorMessage: '审核失败' }); await flush()
+    const stored = structuredClone(state.document); service.resetVideoEditInPlaceJobsForTest(); await flush(); state.document = stored
+    service.restoreVideoEditInPlaceJobs(stored.id)
+    expect(service.readVideoEditInPlaceJob(started.job.id)).toMatchObject({ status: 'failed', error: '审核失败', request: { params: { duration: 3 } } })
+    state.document.inPlaceGenerations![0].status = 'generating'; state.liveMissing = true
+    service.resetVideoEditInPlaceJobsForTest(); await flush(); service.restoreVideoEditInPlaceJobs(stored.id); await flush()
+    expect(service.readVideoEditInPlaceJob(started.job.id)).toMatchObject({ status: 'failed', error: expect.stringContaining('找不到原生成任务') })
+    expect(generation.submit).toHaveBeenCalledTimes(1)
+  })
+  it('生成成功后的落位保存失败，重试只保存已有编辑，不再次生成或导入', async () => {
+    const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'save-task' })
+    state.saveError = true; notify({ status: 'success', resultAvailable: true }); await flush(); await flush()
+    expect(service.readVideoEditInPlaceJob(started.job.id)).toMatchObject({ status: 'failed', clipId: expect.any(String), error: '保存失败' })
+    state.saveError = false; await service.retryVideoEditInPlaceJob(started.job.id); await flush(); await flush()
+    expect(service.readVideoEditInPlaceJob(started.job.id)?.status).toBe('placed')
+    expect(imports).toHaveBeenCalledTimes(1); expect(generation.submit).toHaveBeenCalledTimes(1)
+  })
   it('带入前后镜头参考帧提交；占位随状态推进，完成后一步落进空隙并保存', async () => {
     const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'task-1' })
     expect(started.taskId).toBe('task-1')
@@ -93,7 +166,7 @@ describe('原地生成执行', () => {
     const before = state.document
     await expect(service.startVideoEditInPlaceGeneration(request())).rejects.toThrow('供应商密钥未配置')
     expect(service.listVideoEditInPlaceJobs()).toHaveLength(0)
-    expect(state.document).toBe(before)
+    expect(state.document).toEqual(before)
   })
   it('生成失败留下可恢复的占位；重试换成新任务，旧占位移除', async () => {
     const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'task-2' })

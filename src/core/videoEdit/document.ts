@@ -9,7 +9,9 @@ import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdju
 import { videoEditTransitionSchema, validateVideoEditTransitions } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
 import { videoEditLabelSchema } from './labels'
+import { videoEditTrackerSchema, videoEditClipFollowSchema, VIDEO_EDIT_MAX_TRACKERS } from './tracking'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from './audioChannels'
+import { videoEditInPlaceRecordsSchema } from './inPlacePersistence'
 
 const frame = z.number().int().min(0).max(108_000)
 const identifier = z.string().min(1).max(100)
@@ -31,14 +33,10 @@ export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './c
  * 被替换下来的镜头版本（4.12 原地生成的“替换镜头”，PR 的替换素材）：片段换成新画面后仍记着原来用的素材与入点，
  * 可以随时切回。只记引用，不校验素材项是否还在（素材从项目移除后切回时如实拒绝），不参与渲染。
  */
-export const videoEditClipTakeSchema = z.object({
-  itemId: identifier, name, kind: z.enum(['video', 'audio', 'image']), duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
-  sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(),
-  /** 被替换时片段的速度（4.13），切回时一并恢复。 */
-  speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
-}).strict()
 export const VIDEO_EDIT_MAX_CLIP_TAKES = 8
-export const videoEditClipSchema = z.object({
+const videoEditClipStateSchema = z.object({
+  trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
+  follow: videoEditClipFollowSchema.optional(),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), track: z.number().int().min(0).max(31), code: codeMaterialInstanceSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).max(VIDEO_EDIT_MAX_EFFECTS).optional(), adjustment: videoEditAdjustmentSchema.optional(),
   linkId: identifier.optional(), groupId: identifier.optional(), sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(), audioMapping: videoEditAudioMappingSchema.optional(),
@@ -48,14 +46,22 @@ export const videoEditClipSchema = z.object({
   opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), brightness: z.number().min(0).max(2), text: z.string().max(2000),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
   fadeInFrames: z.number().int().min(1).max(108_000).optional(), fadeOutFrames: z.number().int().min(1).max(108_000).optional(),
-  /** 可切回的镜头版本（新的在前）。 */
-  takes: z.array(videoEditClipTakeSchema).max(VIDEO_EDIT_MAX_CLIP_TAKES).optional(),
   /**
    * 片段速度（4.13，PR“速度/持续时间”）：倍率有理数，缺省 1；`reverse` 倒放；`preservePitch` 变速时保持音调。
    * 源时间与时间线的换算只在 `clipSpeed.ts`。
    */
   speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
 }).strict()
+export const videoEditClipTakeSchema = z.object({
+  itemId: identifier, name, kind: z.enum(['video', 'audio', 'image']), duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
+  sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(), audioMapping: videoEditAudioMappingSchema.optional(),
+  speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
+  /** 与镜头一起替换的声音，保留源范围、声道与效果；offset 相对镜头起点，可随移动切回。 */
+  linkedAudio: z.array(z.object({ clip: videoEditClipStateSchema, offset: z.number().int() }).strict()).max(32).optional(),
+}).strict()
+export const videoEditClipSchema = videoEditClipStateSchema.extend({
+  takes: z.array(videoEditClipTakeSchema).max(VIDEO_EDIT_MAX_CLIP_TAKES).optional(),
+})
 export const videoEditAnnotationSchema = z.object({
   id: identifier, clipId: identifier, frame, space: z.literal('composition-normalized'), kind: z.enum(['point', 'region']),
   x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().min(0).max(1), height: z.number().min(0).max(1), text: z.string().max(2000),
@@ -75,6 +81,8 @@ export const videoEditDocumentSchema = z.object({
   codeMaterials: codeMaterialDefinitionsSchema.optional(),
   /** 用户指定的封面帧（“设为项目封面”）；没有时自动取第一条序列约 1/3 处的画面。 */
   posterFrame: z.object({ sequenceId: identifier, frame: z.number().int().nonnegative() }).strict().optional(),
+  /** 原地生成续接元数据，不属于剪辑撤销历史。旧文件可省略。 */
+  inPlaceGenerations: videoEditInPlaceRecordsSchema.optional(),
 }).strict().superRefine((document, ctx) => {
   const issue = (message: string): void => { ctx.addIssue({ code: 'custom', message }) }
   for (const media of document.media) if (media.assetContent && !media.assetId && !media.assetContent.contentIdentity) issue('原文件内容快照需要固定内容身份。')
@@ -113,6 +121,8 @@ export const videoEditDocumentSchema = z.object({
     if (Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator) > 8192) issue('等效画面宽度超出导出范围。')
     if (new Set(sequence.tracks.map(track => track.index)).size !== sequence.tracks.length) issue('序列轨道编号重复。')
     for (const clip of sequence.clips) {
+      if (clip.trackers?.length && clip.kind !== 'video' && clip.kind !== 'image') issue('跟踪器只能放在视频或图片片段上。')
+      if (new Set(clip.trackers?.map(tracker => tracker.id)).size !== (clip.trackers?.length ?? 0)) issue(`片段“${clip.name}”的跟踪器 ID 重复。`)
       const item = document.items.find(item => item.id === clip.itemId)
       const media = document.media.find(media => media.id === item?.mediaId)
       const track = sequence.tracks.find(track => track.index === clip.track)
