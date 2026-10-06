@@ -149,6 +149,9 @@ it('口播导出新 WAV/SRT 并读取剪后字幕；取消转发到原任务，�
   const placed = await prepareVideoEditCreativeResult(voice, { ...options(), outputFolder: async () => 'D:/项目/生成结果' })
   expect(placed.asset.filePath).toBe('D:/项目/生成结果/口播-剪辑 (2).wav')
   expect(platform.system.dialog.save).not.toHaveBeenCalled()
+  // 没转写过的口播导出的 SRT 为空：只放声音，不带字幕（否则字幕导入报“没有可导入的字幕”）
+  vi.mocked(platform.system.fs.readFile).mockResolvedValue(new TextEncoder().encode(''))
+  expect((await prepareVideoEditCreativeResult(voice, { ...options(), outputFolder: async () => 'D:/项目/生成结果' })).captions).toBeUndefined()
 })
 
 it('目标失效时不再收录资产：原结果保留在生产方', async () => {

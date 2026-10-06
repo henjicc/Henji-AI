@@ -90,6 +90,8 @@ export class DocumentSession {
   private conflictPrompt: Promise<void> | null = null
   private closing: Promise<void> | null = null
   private ended = false
+  /** 结果已被别处（剪辑片段）引用：草稿离开时不再按“空”直接删除，改走询问（4.1）。 */
+  private inUse = false
   private readonly listeners = new Set<() => void>()
   private snapshot: DocumentSessionState
   private readonly persistence: DocumentPersistence
@@ -148,10 +150,19 @@ export class DocumentSession {
 
   /** 内容是否为空（草稿离开时判断）；内容不符合类型 schema 时按“不为空”处理，避免误删。 */
   isEmpty(): boolean {
+    if (this.inUse) return false
     const content = this.getContent()
     if (this.adapter?.isEmpty) return this.adapter.isEmpty(content)
     const parsed = this.kind.contentSchema.safeParse(content)
     return parsed.success ? this.kind.isEmptyContent(parsed.data) : false
+  }
+
+  /**
+   * 标记这份文档的结果已经放进别处（如剪辑片段引用了它）。只导入了素材、没做修改的草稿
+   * 在类型上算“空”，但被引用后直接删除会让引用断开，所以离开时改为询问保存。
+   */
+  markInUse(): void {
+    this.inUse = true
   }
 
   /** 工具实例接到会话上；返回解除函数（解除时把当前内容留在会话里）。同一时间只能附着一个实例。 */

@@ -173,7 +173,9 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
       onDoubleClick={event => {
         // 双击记着来源的片段：回到来源继续编辑（图片文档片段打开图片编辑，4.1）
-        const clipId = elementOfEventTarget(event.target)?.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
+        // 按下时视口捕获了指针，双击事件的目标是视口本身：按落点找片段
+        const hit = elementOfEventTarget(event.target)?.closest('[data-video-edit-clip]') ?? document.elementFromPoint?.(event.clientX, event.clientY)?.closest('[data-video-edit-clip]')
+        const clipId = hit?.getAttribute('data-video-edit-clip')
         if (clipId && sequence.clips.find(clip => clip.id === clipId)?.creativeSource) { event.preventDefault(); clipSource.open(projectId, clipId) }
       }}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); pointer.cancel() } }}

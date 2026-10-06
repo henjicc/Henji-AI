@@ -5,6 +5,7 @@ import { importVideoEditCaptions } from '@/core/videoEdit/timedContent'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
+import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { getPlatform } from '@/platform/runtime'
 import { videoEditResultPlacementSchema, type VideoEditResultPlacement } from '@/core/videoEdit/creativeResult'
 import { importVideoEditSources, sameVideoEditMediaPath } from './videoEditMedia'
@@ -131,6 +132,8 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
     const committed = state.owner.document
     if (committed.revision > state.baseline.revision + 1 || !publishedClip(committed, target.sequenceId, clipId, expectedClip)) throw new Error('结果发布后原工程已有后续修改，请回读原片段；不会重复回填。')
     const receipt = { projectId: target.projectId, sequenceId: target.sequenceId, clipId, assetId: asset.id, verified: false }
+    // 片段引用了来源文档：来源草稿哪怕只导入了素材，离开时也不能当空草稿删掉
+    if (origin.type === 'document') getDocumentSessionRegistry().get(origin.docRef.docId)?.markInUse()
     state.committed = { document: committed, result: resultKey, receipt }
     // After the atomic edit, late cancellation cannot turn a committed result into a retry.
     const saved = await verifySaved(target, state)

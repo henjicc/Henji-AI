@@ -214,7 +214,17 @@ async function runFreeCompositionRestart({ launch, userDataDir, outDir }) {
     await stubShell(current.app, recycleDir)
     collector = createRuntimeEvidenceCollector(current.page)
   }
-  const shot = async (name) => capture(current, path.join(outDir, `free-composition-${name}.png`), currentRun)
+  // 截图前等进出场动画与工作区切换结束，避免拍到半透明的浮层或尚未绘制的页面
+  const settle = async () => {
+    await current.page.evaluate(async () => {
+      const running = () => document.getAnimations().filter((animation) => animation.playState === 'running' && !(animation.effect && animation.effect.getComputedTiming().iterations === Infinity))
+      const deadline = Date.now() + 3000
+      while (running().length && Date.now() < deadline) await Promise.race([Promise.all(running().map((animation) => animation.finished.catch(() => undefined))), new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - Date.now())))])
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    })
+    await current.page.waitForTimeout(250)
+  }
+  const shot = async (name) => { await settle(); return capture(current, path.join(outDir, `free-composition-${name}.png`), currentRun) }
   const step = (name) => { currentRun.step = name; save() }
 
   try {
@@ -237,6 +247,7 @@ async function runFreeCompositionRestart({ launch, userDataDir, outDir }) {
     await returnButton(page).waitFor({ state: 'visible', timeout: 30000 })
     const draftCanvas = (await listDocuments(page, { kind: 'canvas', container, includeDrafts: true })).find((document) => document.draft)
     assert.ok(draftCanvas && inside(project.path, draftCanvas.path), `剪辑里新建的画布应是项目里的草稿：${JSON.stringify(draftCanvas)}`)
+    await page.locator('.react-flow__pane').first().waitFor({ state: 'visible', timeout: 15000 })
     await shot('graphite-canvas-embedded')
     await returnToEdit(page, null)
     assert.equal((await listDocuments(page, { kind: 'canvas', container, includeDrafts: true })).length, 0, '空的画布草稿返回剪辑时应直接删掉')
@@ -286,6 +297,9 @@ async function runFreeCompositionRestart({ launch, userDataDir, outDir }) {
     assert.ok(inside(path.join(project.path, '生成结果'), voiceClip.media.path), `剪后声音应写进项目“生成结果”：${voiceClip.media.path}`)
     await returnToEdit(page, '片头口播')
     currentRun.voice = { id: voiceDraft.id, clip: voiceClip.clip.id }
+    const voiceAfter = (await listDocuments(page, { kind: 'audio_edit', container, includeDrafts: true })).map((document) => ({ id: document.id, name: document.name, draft: document.draft, path: document.path }))
+    currentRun.voice.after = voiceAfter
+    assert.ok(voiceAfter.some((document) => document.id === voiceDraft.id && !document.draft), `返回剪辑后口播应按起的名字保存：${JSON.stringify(voiceAfter)}`)
 
     // ---- 新建图片文档：按序列尺寸的空白图（在项目里），改一下，加入剪辑 ----
     step('image-document')
@@ -427,6 +441,11 @@ async function runFreeCompositionRestart({ launch, userDataDir, outDir }) {
     evidence.error = error instanceof Error ? error.stack ?? error.message : String(error)
     save()
     if (current) await shot('failed').catch((captureError) => { evidence.failureCaptureError = captureError.message; save() })
+    if (current) {
+      // 失败时把这次启动以来的警告与错误一并留进证据（隔离资料目录结束后会被删掉）
+      currentRun.failureLogs = await queryApplicationLogs(current.page, { afterTimestamp: currentRun.startedAt, endTimestamp: new Date().toISOString(), level: 'warn' }).catch((logError) => String(logError))
+      save()
+    }
     throw error
   } finally {
     collector?.dispose()

@@ -42,6 +42,17 @@ describe('离开文档', () => {
     expect(registry.get(session.id)).toBeUndefined()
   })
 
+  it('被别处引用的空草稿（4.1）：离开时询问，不直接删除', async () => {
+    const { registry, commands, prompter } = createTestRegistry()
+    const session = await registry.create({ kind: 'canvas', container: { kind: 'user' } })
+    session.markInUse()
+    prompter.leaveChoices.push('cancel')
+    expect(await registry.leave(session.id)).toBe('cancelled')
+    expect(prompter.log).toEqual(['leave:document:未命名测试 1'])
+    expect(commands.calls).not.toContain('deleteEmptyDraft')
+    expect(commands.stored(session.id)?.meta.draft).toBe(true)
+  })
+
   it('内容被清空但尚未写盘的草稿：先写完再删除', async () => {
     const { registry, commands, session, tool } = await draftWithContent()
     await session.flush()

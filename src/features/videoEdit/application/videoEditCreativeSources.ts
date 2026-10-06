@@ -192,7 +192,9 @@ async function audioSource(meta: DocumentMeta, includeProcessing: boolean | unde
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
   }
   const captions = await guarded(options, readCaptions)
-  return { path: target, mediaType: 'audio', name: `${baseline.name} · 剪后声音`, librarySource: 'imported', origin: documentOrigin(meta, { revision: baseline.revision }), captions,
+  return { path: target, mediaType: 'audio', name: `${baseline.name} · 剪后声音`, librarySource: 'imported', origin: documentOrigin(meta, { revision: baseline.revision }),
+    // 没转写过的口播导出的 SRT 是空的：不带字幕，只放声音
+    ...(captions.trim() ? { captions } : {}),
     async recheck() { assertSource(); if (await readCaptions() !== captions) conflict(); assertSource() },
   }
 }
