@@ -91,7 +91,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const [renderFailure, setRenderFailure] = useState<string | null>(null)
   const [collecting, setCollecting] = useState(false)
   /** 正在拖入时指针所在的落点区；替换区在播放头下没有片段时不可用。 */
-  const [dropZone, setDropZone] = useState<{ mode: VideoEditDropMode; replaceable: boolean } | null>(null)
+  const [dropZone, setDropZone] = useState<{ mode: VideoEditDropMode; replaceable: boolean; frame: { left: number; top: number; width: number; height: number } } | null>(null)
   const libraryId = useAssetLibraryStore(state => state.libraryId)
   const session = useRef<VideoEditRenderSession | null>(null)
   const stopPreview = useRef<() => void>(() => {})
@@ -346,7 +346,10 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         const mode = programDropZoneAt(event)
         const sequence = instance.document.sequences.find(item => item.id === instance.activeSequenceId)
         const replaceable = Boolean(sequence && findVideoEditReplaceTarget(sequence, instance.frame, instance.targetTrackIds))
-        setDropZone(current => current?.mode === mode && current.replaceable === replaceable ? current : { mode, replaceable })
+        // 分区盖住看得见的画面区：“100%”显示滚动过时，叠层按当前滚动位置放，而不是内容原点
+        const host = event.currentTarget
+        const frame = { left: host.scrollLeft, top: host.scrollTop, width: host.clientWidth, height: host.clientHeight }
+        setDropZone(current => current?.mode === mode && current.replaceable === replaceable && current.frame.left === frame.left && current.frame.top === frame.top && current.frame.width === frame.width && current.frame.height === frame.height ? current : { mode, replaceable, frame })
         if (mode === 'replace' && !replaceable) { event.dataTransfer.dropEffect = 'none'; return }
         event.preventDefault(); event.dataTransfer.dropEffect = 'copy'
       }}
@@ -383,7 +386,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiEmpty size="xs" title="请先选择要编辑的片段" />}
         </UiPanel>
       </div>}
-      {dropZone && <div className="pointer-events-none absolute inset-0 grid grid-cols-4 grid-rows-5 bg-media-scrim" aria-hidden>
+      {dropZone && <div className="pointer-events-none absolute grid grid-cols-4 grid-rows-5 bg-media-scrim" style={dropZone.frame} aria-hidden>
         {PROGRAM_DROP_ZONES.map(zone => {
           const disabled = zone.mode === 'replace' && !dropZone.replaceable; const active = dropZone.mode === zone.mode && !disabled
           return <div key={zone.mode} className={`flex min-h-0 min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden border px-2 text-center text-on-media transition-colors duration-120 ${zone.cell} ${active ? 'border-accent bg-accent/30' : 'border-media-line'} ${disabled ? 'opacity-50' : ''}`}>
