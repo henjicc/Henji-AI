@@ -5,6 +5,8 @@ import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
+import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
+import { isDomNode } from '@/utils/crossRealmDom'
 import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
@@ -42,6 +44,25 @@ const PROGRAM_COMMAND_ICONS: Record<Exclude<typeof PROGRAM_COMMAND_BUTTONS[numbe
 /** 窄面板先收起优先级低的：播放、逐帧、入出点留到最后。 */
 const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>> = { play_pause: 100, step_back: 90, step_forward: 90, mark_in: 80, mark_out: 80 }
 
+/**
+ * 拖到节目监视器上的落点区（对齐 Premiere）：上 1/5 放在顶层、下 1/5 添加到末尾，中间一行左 1/4 插入、右 1/4 替换、其余覆盖（默认的大区）。
+ * 叠层用同一份网格比例绘制，松手按指针所在区落点，保证所见即所得。
+ */
+const PROGRAM_DROP_ZONES = [
+  { mode: 'top', label: '放在顶层', hint: '放到上方空轨道', cell: 'col-span-4 row-span-1' },
+  { mode: 'insert', label: '插入', hint: '在播放头处插入，后面的片段后移', cell: 'col-span-1 row-span-3' },
+  { mode: 'overwrite', label: '覆盖', hint: '在播放头处覆盖', cell: 'col-span-2 row-span-3' },
+  { mode: 'replace', label: '替换', hint: '替换播放头下的片段，保留其时长', cell: 'col-span-1 row-span-3' },
+  { mode: 'end', label: '添加到末尾', hint: '接在序列最后一个片段之后', cell: 'col-span-4 row-span-1' },
+] as const satisfies ReadonlyArray<{ mode: VideoEditDropMode; label: string; hint: string; cell: string }>
+function programDropZoneAt(event: React.DragEvent<HTMLElement>): VideoEditDropMode {
+  const rect = event.currentTarget.getBoundingClientRect()
+  const x = (event.clientX - rect.left) / Math.max(1, rect.width); const y = (event.clientY - rect.top) / Math.max(1, rect.height)
+  if (y < 0.2) return 'top'
+  if (y >= 0.8) return 'end'
+  return x < 0.25 ? 'insert' : x >= 0.75 ? 'replace' : 'overwrite'
+}
+
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 export function VideoEditPreview({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
@@ -69,6 +90,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const [retry, setRetry] = useState(0)
   const [renderFailure, setRenderFailure] = useState<string | null>(null)
   const [collecting, setCollecting] = useState(false)
+  /** 正在拖入时指针所在的落点区；替换区在播放头下没有片段时不可用。 */
+  const [dropZone, setDropZone] = useState<{ mode: VideoEditDropMode; replaceable: boolean } | null>(null)
   const libraryId = useAssetLibraryStore(state => state.libraryId)
   const session = useRef<VideoEditRenderSession | null>(null)
   const stopPreview = useRef<() => void>(() => {})
@@ -318,11 +341,22 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   // 压在画面上的状态与标注输入用玻璃 / 媒体叠层令牌。
   return <div className="flex min-h-0 flex-1 flex-col bg-panel">
     <div className={`relative flex min-h-0 flex-1 bg-media py-3 pl-3 pr-6 ${display === 'fit' ? 'items-center justify-center overflow-hidden' : 'items-start justify-start overflow-auto'}`}
-      onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }}
+      onDragOver={event => {
+        if (!acceptsVideoEditDrop(event.dataTransfer)) return
+        const mode = programDropZoneAt(event)
+        const sequence = instance.document.sequences.find(item => item.id === instance.activeSequenceId)
+        const replaceable = Boolean(sequence && findVideoEditReplaceTarget(sequence, instance.frame, instance.targetTrackIds))
+        setDropZone(current => current?.mode === mode && current.replaceable === replaceable ? current : { mode, replaceable })
+        if (mode === 'replace' && !replaceable) { event.dataTransfer.dropEffect = 'none'; return }
+        event.preventDefault(); event.dataTransfer.dropEffect = 'copy'
+      }}
+      onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) setDropZone(null) }}
       onDrop={event => {
+        setDropZone(null)
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
         event.preventDefault(); event.stopPropagation()
-        try { void dropVideoEditInput(instance.document.id, readVideoEditDrop(event.dataTransfer), { frame: instance.frame }).catch(onError) } catch (error) { onError(error) }
+        const mode = programDropZoneAt(event)
+        try { void dropVideoEditInput(instance.document.id, readVideoEditDrop(event.dataTransfer), { frame: instance.frame, mode }).catch(onError) } catch (error) { onError(error) }
       }}>
       <div className={`relative ${display === 'fit' ? 'max-h-full max-w-full' : 'shrink-0'}`} style={display === 'fit' ? { aspectRatio: `${document.width}/${document.height}`, height: '100%' } : { width: document.width, height: document.height }} data-video-edit-program-display={display}>
         <div ref={host} className="h-full w-full"
@@ -348,6 +382,15 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
           {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiEmpty size="xs" title="请先选择要编辑的片段" />}
         </UiPanel>
+      </div>}
+      {dropZone && <div className="pointer-events-none absolute inset-0 grid grid-cols-4 grid-rows-5 bg-media-scrim" aria-hidden>
+        {PROGRAM_DROP_ZONES.map(zone => {
+          const disabled = zone.mode === 'replace' && !dropZone.replaceable; const active = dropZone.mode === zone.mode && !disabled
+          return <div key={zone.mode} className={`flex min-h-0 min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden border px-2 text-center text-on-media transition-colors duration-120 ${zone.cell} ${active ? 'border-accent bg-accent/30' : 'border-media-line'} ${disabled ? 'opacity-50' : ''}`}>
+            <span className="truncate text-13 font-semibold">{zone.label}</span>
+            <span className="max-w-full truncate text-2xs">{disabled ? '播放头下没有片段' : zone.hint}</span>
+          </div>
+        })}
       </div>}
     </div>
     {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线工具栏有同一读数），

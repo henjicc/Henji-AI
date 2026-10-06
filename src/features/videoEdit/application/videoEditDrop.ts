@@ -13,6 +13,7 @@ import { importVideoEditCodeAsset } from './videoEditCodeAssets'
 import { importVideoEditPathsAndFolders } from './videoEditFolderImport'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { rescaleVideoEditFrame, type VideoEditRatio } from '@/core/videoEdit/time'
+import { resolveVideoEditDropMode, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
 export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
@@ -74,28 +75,30 @@ export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly stri
   const video = edge?.kind === 'video' ? edge.index : target('video'); const audio = edge?.kind === 'audio' ? edge.index : target('audio')
   // Multi-track sound spreads over consecutive audio tracks from the targeted one (task 2.6).
   const placed = placeVideoEditItems(base, ids, sequenceId, { frame, ...(placement.track !== undefined ? { track: placement.track } : {}), ...(video !== undefined ? { videoTrack: video } : {}), ...(audio !== undefined ? { audioTrack: audio } : {}) }, options.codeMetadata)
-  const created = edge && placed.clips.some(clip => clip.track === edge.index) ? [edge] : []
   // 落到已有片段上：默认覆盖（盖住的部分被裁掉），按住 Ctrl 为插入（落点之后的片段整体后移），与 Premiere 相同。
-  // 与粘贴共用时间线放置规则，拖动中的虚影由同一结果给出。
+  // 节目监视器的替换／放在顶层／添加到末尾先换算成覆盖，再与粘贴共用时间线放置规则；拖动中的虚影由同一结果给出。
+  const resolved = resolveVideoEditDropMode(sequence, placed.clips, { mode: placement.mode ?? 'overwrite', frame: Math.min(...placed.clips.map(clip => clip.start)), targetTrackIds: options.targetTrackIds, tracks: [...(edge ? [edge] : []), ...placed.addedTracks] })
+  const candidates = [...(edge ? [edge] : []), ...placed.addedTracks, ...resolved.newTracks]
   const result = applyVideoEditTimelineEditResult(document, sequenceId, {
-    kind: 'place', mode: placement.mode ?? 'overwrite', frame: Math.min(...placed.clips.map(clip => clip.start)),
-    clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips: placed.clips, annotations: [] },
-    newTracks: [...created, ...placed.addedTracks],
-    ...(placement.mode === 'insert' ? { targetTracks: [...new Set(placed.clips.map(clip => clip.track))] } : {}),
+    kind: 'place', mode: resolved.mode, frame: resolved.frame,
+    clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips: resolved.clips, annotations: [] },
+    newTracks: candidates.filter(track => resolved.clips.some(clip => clip.track === track.index)),
+    ...(resolved.mode === 'insert' ? { targetTracks: [...new Set(resolved.clips.map(clip => clip.track))] } : {}),
   }, options.codeMetadata)
-  const selectedIndex = placed.primaryIds.length ? placed.clips.findIndex(clip => clip.id === placed.primaryIds.at(-1)) : -1
+  const selectedIndex = placed.primaryIds.length ? resolved.clips.findIndex(clip => clip.id === placed.primaryIds.at(-1)) : -1
   const selectedClip = selectedIndex >= 0 ? result.selectedClipIds?.[selectedIndex] : undefined
   return {
     document: { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? result.sequence : item) },
     ...(selectedClip ? { selectedClip } : {}),
-    placedClips: placed.clips,
+    placedClips: resolved.clips,
     resultSequence: result.sequence,
     frameRate: sequence.frameRate,
   }
 }
 /** Placement is captured before metadata I/O; switching projects cannot redirect a drop. */
 /** `newTrack`: dropped above the top video track / below the bottom audio track — a new track of that kind is created (PR). */
-export interface VideoEditDropPlacement { frame: number; track?: number; newTrack?: 'video' | 'audio'; mode?: 'overwrite' | 'insert' }
+/** `mode`：落点方式，替换／放在顶层／添加到末尾来自节目监视器的拖放区（见 `VideoEditDropMode`）。 */
+export interface VideoEditDropPlacement { frame: number; track?: number; newTrack?: 'video' | 'audio'; mode?: VideoEditDropMode }
 export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: VideoEditDropPlacement, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void } = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()

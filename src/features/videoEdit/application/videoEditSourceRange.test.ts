@@ -47,3 +47,22 @@ it('落点类型、音轨、短范围与重新链接拒绝，不留下半段链�
     expect(getActiveVideoEditSequence(owner).clips).toHaveLength(0)
   } finally { off() }
 })
+it('节目监视器拖放区：源范围按插入、替换、添加到末尾放置，一次撤销', async () => {
+  const { owner, id, off } = await fixture()
+  try {
+    const input = captureVideoEditSourceRange(id, 'linked')
+    placeVideoEditSourceRange(id, input, owner.activeSequenceId, { frame: 0, mode: 'overwrite' })
+    placeVideoEditSourceRange(id, input, owner.activeSequenceId, { frame: 10, mode: 'insert' })
+    let clips = getActiveVideoEditSequence(owner).clips
+    // 原片段在 10 处被切开，后半段后移 30 帧
+    expect(clips.map(clip => [clip.start, clip.duration]).sort((a, b) => a[0] - b[0] || a[1] - b[1])).toEqual([[0, 10], [0, 10], [10, 30], [10, 30], [40, 20], [40, 20]])
+    expect(Math.max(...clips.map(clip => clip.start + clip.duration))).toBe(60)
+    const appended = placeVideoEditSourceRange(id, input, owner.activeSequenceId, { frame: 0, mode: 'end' })
+    expect(getActiveVideoEditSequence(owner).clips.filter(clip => appended.includes(clip.id)).every(clip => clip.start === 60)).toBe(true)
+    const history = owner.past.length
+    const replaced = placeVideoEditSourceRange(id, input, owner.activeSequenceId, { frame: 15, mode: 'replace' })
+    clips = getActiveVideoEditSequence(owner).clips.filter(clip => replaced.includes(clip.id))
+    expect(clips.map(clip => [clip.kind, clip.start, clip.duration])).toEqual([['video', 10, 30], ['audio', 10, 30]])
+    expect(owner.past).toHaveLength(history + 1)
+  } finally { off() }
+})

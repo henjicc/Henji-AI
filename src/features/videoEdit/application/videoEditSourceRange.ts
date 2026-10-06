@@ -2,6 +2,7 @@ import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { z } from 'zod'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { placeVideoEditItem } from '@/core/videoEdit/projectItems'
+import { resolveVideoEditDropMode, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { readVideoEditSource } from './videoEditSource'
 import { requireVideoEditInstance, setVideoEditTimelineView } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
@@ -19,7 +20,7 @@ export function captureVideoEditSourceRange(projectId: string, component: VideoE
 }
 export function writeVideoEditSourceDrag(transfer: DataTransfer, projectId: string, component: VideoEditSourceRange['component']): void { transfer.setData(VIDEO_EDIT_SOURCE_DRAG_MIME, JSON.stringify(captureVideoEditSourceRange(projectId, component))) }
 /** `newTrack`: dropped beyond the outer tracks — the range lands on a new track of that kind (PR), in the same edit. */
-export function placeVideoEditSourceRange(projectId: string, input: VideoEditSourceRange, sequenceId: string, placement: { frame: number; track?: number; newTrack?: 'video' | 'audio' }): string[] {
+export function placeVideoEditSourceRange(projectId: string, input: VideoEditSourceRange, sequenceId: string, placement: { frame: number; track?: number; newTrack?: 'video' | 'audio'; mode?: VideoEditDropMode }): string[] {
   input = videoEditSourceRangeSchema.parse(input)
   const owner = requireVideoEditInstance(projectId)
   if (input.projectId !== projectId) throw new Error('源范围属于另一剪辑，请先引用原素材。')
@@ -38,8 +39,12 @@ export function placeVideoEditSourceRange(projectId: string, input: VideoEditSou
   const placed = placeVideoEditItem(document, input.itemId, sequenceId, { frame: 0, ...(videoTrack !== undefined ? { videoTrack } : {}), ...(audioTrack !== undefined ? { audioTrack } : {}), sourceInUs: input.inUs, sourceOutUs: input.outUs, components: media.kind === 'video' ? input.component : 'audio' })
   // The same paste algorithm owns overlap, locks, boundaries, selection and history.
   const added = [...(edge && placed.clips.some(clip => clip.track === edge.index) ? [edge] : []), ...placed.addedTracks]
-  const tracks = [...sequence.tracks, ...added]
-  const result = executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'place', frame: placement.frame, mode: 'paste', clipboard: { projectId, frameRate: sequence.frameRate, clips: placed.clips, annotations: [], tracks: tracks.map(track => ({ index: track.index, kind: track.kind })) }, ...(added.length ? { newTracks: added } : {}) })
+  // 不带落点方式（时间线拖入）按粘贴放置，不覆盖已有内容；节目监视器的拖放区给出方式，换算后走同一放置编辑。
+  const resolved = placement.mode ? resolveVideoEditDropMode(sequence, placed.clips, { mode: placement.mode, frame: placement.frame, targetTrackIds: owner.targetTrackIds, tracks: added }) : undefined
+  const newTracks = resolved ? [...added, ...resolved.newTracks].filter(track => resolved.clips.some(clip => clip.track === track.index)) : added
+  const tracks = [...sequence.tracks, ...newTracks]
+  const clips = resolved?.clips ?? placed.clips
+  const result = executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'place', frame: resolved?.frame ?? placement.frame, mode: resolved?.mode ?? 'paste', clipboard: { projectId, frameRate: sequence.frameRate, clips, annotations: [], tracks: tracks.map(track => ({ index: track.index, kind: track.kind })) }, ...(newTracks.length ? { newTracks } : {}), ...(resolved?.mode === 'insert' ? { targetTracks: [...new Set(clips.map(clip => clip.track))] } : {}) })
   const prior = new Set(sequence.clips.map(clip => clip.id)); const ids = result.clips.filter(clip => !prior.has(clip.id)).map(clip => clip.id)
   if (owner.activeSequenceId === sequenceId) setVideoEditTimelineView(projectId, { selectedClipIds: ids })
   return ids
