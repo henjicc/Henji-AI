@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/client'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { LocalMcpServer } from './server'
 import { McpConnections } from './connections'
+import { ApplicationResourceSubscriptions } from './resourceSubscriptions'
 import { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { readApplicationMediaResource } from '../application-runtime/mediaResources'
@@ -95,6 +96,13 @@ describe('本地 MCP 协议与边界', () => {
     expect(media).toHaveBeenCalledTimes(1)
   })
   it('订阅建立和每次资源通知按各自调用者核验，撤销读取后不泄漏事件', async () => {
+    const unsubscribed = vi.fn()
+    const subscribe = ApplicationResourceSubscriptions.prototype.subscribe
+    const subscriptionSpy = vi.spyOn(ApplicationResourceSubscriptions.prototype, 'subscribe').mockImplementation(function (this: ApplicationResourceSubscriptions, send) {
+      const unsubscribe = subscribe.call(this, send)
+      return () => { unsubscribe(); unsubscribed() }
+    })
+    closers.push(async () => { subscriptionSpy.mockRestore() })
     const allowed = new Set<string>()
     const f = await fixture({ reply: request => allowed.has(request.callerId)
       ? { ok: true, data: { ref: request.input.ref, properties: { name: '可读' } } }
@@ -117,6 +125,9 @@ describe('本地 MCP 协议与边界', () => {
     await vi.waitFor(() => expect(eventsB).toEqual([uri]))
     expect(eventsA).toEqual([])
     await subA.close(); await subB.close()
+    // close() 只完成客户端取消；HTTP 断线传到服务端后才会解除总线订阅。
+    // 等待真实解除回调，避免把尚在关闭的流发起的权限核验误判成事件泄漏。
+    await vi.waitFor(() => expect(unsubscribed).toHaveBeenCalledTimes(2))
     const count = f.calls.length
     f.change()
     expect(f.calls).toHaveLength(count)
