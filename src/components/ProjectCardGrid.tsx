@@ -11,6 +11,7 @@ import {
   UiOptionButton,
 } from '@/components/ui';
 import { ProjectCardCover } from '@/components/ProjectCardCover';
+import { ProjectCardHoverScrub, type ProjectCardHoverPreviewLoader } from './ProjectCardHoverScrub';
 import { PROJECT_GRID_COLUMNS_CLASS } from '@/components/projectGridLayout';
 import type { ProjectLibrarySort } from '@/components/projectLibraryArrange';
 import type { ProjectLibraryView } from '@/components/projectLibraryPrefs';
@@ -44,6 +45,8 @@ export interface ProjectCardGridItem {
   location?: string;
   /** 列表视图名称后的类型专属说明（如“12 个节点”），不含位置与时间 */
   detail?: string;
+  /** 悬停预览（鼠标在封面上左右移动看片子不同位置的画面）；不传 = 不支持 */
+  hoverPreview?: ProjectCardHoverPreviewLoader;
 }
 
 export interface ProjectCardGridExtraAction {
@@ -353,7 +356,9 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
                   selection="multiple"
                   className={`grid w-full ${columnsClass} gap-4 ${selection.active ? 'pl-11' : ''}`}
                 >
-                  <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="flex min-w-0 items-center gap-2">
+                    {/* 列表也带一张小封面，扫一眼就能认出是哪个 */}
+                    <span className={`${UI_COVER_FRAME_CLASS} aspect-[16/10] h-7 shrink-0`} aria-hidden="true"><ProjectCardCover coverPath={item.coverPath} icon={item.icon ?? Icon} alt="" /></span>
                     {item.draft ? draftMarker : null}
                     <span className="truncate font-medium text-text1" title={item.name}>{item.name}</span>
                     {item.status ? (
@@ -388,7 +393,9 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
             className="w-full"
           >
             <span data-draft={item.draft ? 'true' : undefined} className={`${UI_COVER_FRAME_CLASS} aspect-[16/10] w-full`}>
-              <ProjectCardCover coverPath={item.coverPath} icon={item.icon ?? Icon} alt={item.name} />
+              {item.hoverPreview
+                ? <ProjectCardHoverScrub load={item.hoverPreview}><ProjectCardCover coverPath={item.coverPath} icon={item.icon ?? Icon} alt={item.name} /></ProjectCardHoverScrub>
+                : <ProjectCardCover coverPath={item.coverPath} icon={item.icon ?? Icon} alt={item.name} />}
               {/* 草稿：封面照常显示，左上角一个小标签（PR 式），不再整圈虚线 */}
               {item.draft && labels.draft ? <span className="absolute left-2 top-2 rounded-full bg-warning-solid px-1.5 py-0.5 text-xs font-medium text-on-warning">{labels.draft.marker}</span> : null}
             </span>

@@ -44,6 +44,18 @@ export function videoEditCoverSource(document: VideoEditDocument): DocumentCover
   return null
 }
 
+/** 悬停预览（项目卡片上左右移动看整条片子）：第一条序列在 fraction（0–1）处最上层的画面；那一刻没有画面时为 null。 */
+export function videoEditFrameSourceAt(document: VideoEditDocument, fraction: number): DocumentCoverSource | null {
+  const sequence = document.sequences[0]
+  if (!sequence) return null
+  const fps = videoEditFps(sequence.frameRate)
+  const visible = videoEditVisibleTracks(sequence)
+  const frame = Math.floor(Math.max(0, Math.min(0.999, fraction)) * videoEditDuration(sequence))
+  const atFrame = sequence.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'image') && visible.has(clip.track) && frame >= clip.start && frame < clip.start + clip.duration).sort((left, right) => right.track - left.track)
+  for (const clip of atFrame) { const source = clipCoverSource(document, clip, frame, fps); if (source) return source }
+  return null
+}
+
 /** 按剪辑当前内容更新封面；用户指定过封面帧时不自动覆盖。失败只记日志，不影响保存与离开。 */
 export async function updateVideoEditProjectCover(document: VideoEditDocument): Promise<void> {
   if (document.posterFrame) return

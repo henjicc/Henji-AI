@@ -55,3 +55,38 @@ export async function ensureDocumentCover(docId: string, kind: DocumentKindId): 
     logger.warn('补生成文档封面失败', { event: 'documents.cover.ensure_failed', context: { docId, kind }, error: String(error) })
   }
 }
+
+/**
+ * 悬停预览（Premiere 素材的悬停擦洗）：鼠标在卡片封面上左右移动，按位置显示文档里对应时刻的画面。
+ * 各工具登记“内容 → 某个位置（0–1）的画面来源”；第一次悬停时读一次文档内容并缓存。
+ */
+export type DocumentHoverPreview = (read: DocumentReadResult, fraction: number) => DocumentCoverSource | null
+const hoverPreviews = new Map<DocumentKindId, DocumentHoverPreview>()
+const hoverReads = new Map<string, Promise<DocumentReadResult | null>>()
+
+export function registerDocumentHoverPreview(kind: DocumentKindId, preview: DocumentHoverPreview): () => void {
+  hoverPreviews.set(kind, preview)
+  return () => { if (hoverPreviews.get(kind) === preview) hoverPreviews.delete(kind) }
+}
+
+export function hasDocumentHoverPreview(kind: DocumentKindId): boolean {
+  return hoverPreviews.has(kind)
+}
+
+/** 读出（并缓存）文档内容，返回“位置 → 画面来源”的取法；读不出或这类文档不支持时为 null。 */
+export async function loadDocumentHoverPreview(docId: string, kind: DocumentKindId): Promise<((fraction: number) => DocumentCoverSource | null) | null> {
+  const preview = hoverPreviews.get(kind)
+  if (!preview) return null
+  let pending = hoverReads.get(docId)
+  if (!pending) {
+    pending = getDocumentOperations().readDocument({ id: docId }).catch((error: unknown) => {
+      logger.warn('读取悬停预览内容失败', { event: 'documents.hover_preview.read_failed', context: { docId, kind }, error: String(error) })
+      return null
+    })
+    hoverReads.set(docId, pending)
+    // 内容会变：短时间内复用，之后重读
+    setTimeout(() => hoverReads.delete(docId), 60_000)
+  }
+  const read = await pending
+  return read ? (fraction) => { try { return preview(read, fraction) } catch { return null } } : null
+}

@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditDocument, type VideoEditClip, type VideoEditDocument } from '@/core/videoEdit/document'
-import { updateVideoEditProjectCover, videoEditCoverSource } from './videoEditProjectCover'
+import { updateVideoEditProjectCover, videoEditCoverSource, videoEditFrameSourceAt } from './videoEditProjectCover'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 
 /* 剪辑封面：指定的封面帧或第一条序列约 1/3 处最上层的画面，那一帧没有画面时取最早的画面片段；没有画面不写；同一来源不重复生成。 */
@@ -68,4 +68,14 @@ it('写成通用封面；画面来源没变时不重复生成，没有画面时�
   expect(save).toHaveBeenCalledTimes(1)
   await updateVideoEditProjectCover(withClips([]))
   expect(save).toHaveBeenCalledTimes(1)
+})
+
+it('悬停预览按位置取那一刻最上层的画面，没有画面时为空', () => {
+  const document = withClips([
+    clip({ id: 'img', itemId: 'i-image', kind: 'image', track: 1, start: 0, duration: 50 }),
+    clip({ id: 'vid', itemId: 'i-video', kind: 'video', track: 2, start: 50, duration: 50 }),
+  ])
+  expect(videoEditFrameSourceAt(document, 0.1)).toEqual({ source: 'D:/素材/海报.png', sourceKind: 'image' })
+  expect(videoEditFrameSourceAt(document, 0.9)?.source).toBe('D:/素材/镜头.mp4')
+  expect(videoEditFrameSourceAt(withClips([]), 0.5)).toBeNull()
 })

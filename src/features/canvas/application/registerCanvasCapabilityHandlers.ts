@@ -10,6 +10,9 @@ import { addCanvasNode, connectCanvasNodes, focusCanvasNode, openCanvasProject, 
 import { commitCanvasBatch, planCanvasBatch, previewCanvasBatch } from '@/features/canvas/application/canvasBatchService'
 import { createCanvasDocumentIn, openCanvasDocument, releaseCanvasDocument } from '@/features/canvas/application/canvasProjectService'
 import { registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { registerDocumentCoverProvider } from '@/features/documents/documentCovers'
+import { findGeneratedCoverSources } from './canvasProjectCover'
+import type { CanvasNode } from '@/stores/canvasStore'
 import { clearCanvasProject, connectAssetGroupToTarget, deleteCanvasNodes, disconnectAssetGroupFromTarget, disconnectCanvasEdge, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, ungroupCanvasNode, updateCanvasNode } from '@/features/canvas/application/canvasMutationService'
 import { getCanvasNode, getCanvasProject } from '@/features/canvas/application/canvasQueryService'
 import { addAssetToCanvas } from '@/features/assets/application/assetCanvasApplicationService'
@@ -62,6 +65,11 @@ export function registerCanvasCapabilityHandlers(
   })
   // 画布文档的通用打开与后台释放（3.4）：列出、新建、改名、移动、副本、回收站走通用文档能力，
   // 这里只登记“打开到哪里”（画布工作区）和“后台持有的实例怎么释放”。
+  // 列表封面：从没打开过（没有封面）的画布，从内容里的生成结果取封面，与编辑时同一取法
+  registerDocumentCoverProvider('canvas', (read) => {
+    const nodes = (read.content as { nodes?: unknown } | null)?.nodes
+    return Array.isArray(nodes) ? findGeneratedCoverSources(nodes as CanvasNode[]) : null
+  })
   registerDocumentOpener('canvas', async (document, { part } = {}) => {
     if (!await openCanvasDocument(document)) return
     openApplicationSurface('workspace.canvas')

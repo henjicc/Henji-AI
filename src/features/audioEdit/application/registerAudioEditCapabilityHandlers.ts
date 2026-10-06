@@ -7,7 +7,7 @@ import { getPlatform } from '@/platform/runtime'
 import { join } from '@/platform/desktopApi'
 import { getDocumentOperations, registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
-import { registerDocumentCoverProvider } from '@/features/documents/documentCovers'
+import { registerDocumentCoverProvider, registerDocumentHoverPreview } from '@/features/documents/documentCovers'
 import { audioEditContentSchema } from '@/core/documents/kinds/audioEdit'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject } from './audioEditProjectInstances'
@@ -22,6 +22,12 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
   })
   registerDocumentReleaser('audio_edit', releaseAudioEditProject)
   // 列表封面：从视频导入的口播取原视频约 1/3 处的一帧；纯音频没有画面，保持口播图标
+  // 卡片悬停预览：从视频导入的口播按位置看原视频画面
+  registerDocumentHoverPreview('audio_edit', (read, fraction) => {
+    const source = audioEditContentSchema.safeParse(read.content).data?.source
+    if (!source || source.mediaType !== 'video') return null
+    return { source: source.sourcePath, sourceKind: 'video', atSeconds: Math.round(fraction * source.durationFrames / Math.max(1, source.sampleRate) * 1000) / 1000 }
+  })
   registerDocumentCoverProvider('audio_edit', (read) => {
     const source = audioEditContentSchema.safeParse(read.content).data?.source
     if (!source || source.mediaType !== 'video') return null

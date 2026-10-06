@@ -17,7 +17,7 @@ import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/nami
 import type { DocumentContainerRef, DocumentKindId, DocumentSummary, NameCheckResult } from '@/core/documents/types'
 import { openDialog } from '@/platform/desktopApi'
 
-import { ensureDocumentCover, hasDocumentCoverProvider, subscribeDocumentCoverChanged } from './documentCovers'
+import { ensureDocumentCover, hasDocumentCoverProvider, hasDocumentHoverPreview, loadDocumentHoverPreview, subscribeDocumentCoverChanged } from './documentCovers'
 import { toError } from './documentErrors'
 import { documentKindPresentation } from './documentKindPresentation'
 import { exportDocumentPackageInteractive, importPackageInteractive, packageFileName } from './documentPackageActions'
@@ -122,6 +122,8 @@ export function DocumentLibraryPage({
     if (!hasDocumentCoverProvider(kind)) return
     for (const item of [...library.items, ...draftItems]) if (!item.coverPath) void ensureDocumentCover(item.id, kind)
   }, [kind, library.items, draftItems])
+  // 登记了悬停预览的类型：卡片封面上左右移动预览内容
+  const withHoverPreview = <T extends ProjectCardGridItem>(items: T[]): T[] => hasDocumentHoverPreview(kind) ? items.map((item) => ({ ...item, hoverPreview: () => loadDocumentHoverPreview(item.id, kind) })) : items
   const presentation = documentKindPresentation(kind)
   const kindName = t(presentation.nameKey)
   const PageIcon = icon ?? presentation.icon
@@ -361,8 +363,8 @@ export function DocumentLibraryPage({
         title={title}
         description={description}
         persistKey={`documents.${kind}`}
-        items={library.items}
-        drafts={draftItems}
+        items={withHoverPreview(library.items)}
+        drafts={withHoverPreview(draftItems)}
         onDiscardDraft={async (item) => {
           setActionError(null)
           try {

@@ -16,7 +16,7 @@ import { useLeftoverDraftProjects } from '@/features/documents/useLeftoverDrafts
 import { createLogger } from '@/core/logging/logger'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { getDocumentCover } from '@/commands/documents'
-import { ensureDocumentCover, subscribeDocumentCoverChanged } from '@/features/documents/documentCovers'
+import { ensureDocumentCover, loadDocumentHoverPreview, subscribeDocumentCoverChanged } from '@/features/documents/documentCovers'
 
 /*
  * 剪辑页 = 项目列表（实施方案 2.10，3.1 剪辑接入）：每个项目是一个文件夹，剪辑是它的主文档。
@@ -68,8 +68,11 @@ function useProjectCovers(items: readonly ProjectCardItem[], readCover: (docId: 
     return () => { disposed = true }
   }, [mainIds, readCover, ensureCover, version])
   return useMemo(() => items.map((item) => {
-    const cover = item.project.mainVideoEditId ? covers.get(item.project.mainVideoEditId) : undefined
-    return cover ? { ...item, coverPath: cover } : item
+    const mainId = item.project.mainVideoEditId
+    const cover = mainId ? covers.get(mainId) : undefined
+    // 悬停在封面上左右移动：预览主剪辑不同位置的画面
+    const withPreview = mainId ? { ...item, hoverPreview: () => loadDocumentHoverPreview(mainId, 'video_edit') } : item
+    return cover ? { ...withPreview, coverPath: cover } : withPreview
   }), [items, covers])
 }
 

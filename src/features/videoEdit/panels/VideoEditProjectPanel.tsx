@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } from 'react-virtuoso'
 import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
@@ -58,6 +59,19 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const [view, setView] = useState<'list' | 'grid'>('list')
   // PR 列表视图：素材箱是可展开的树（三角展开），没有单独的素材箱侧栏。
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // 拖出素材时跟着鼠标的小标签（浏览器缩略图已去掉）；到了时间线上由时间线画片段虚影，这里隐藏
+  const [dragFollow, setDragFollow] = useState<{ count: number; x: number; y: number; hidden: boolean } | null>(null)
+  const dragging = dragFollow !== null
+  useEffect(() => {
+    if (!dragging) return
+    const move = (event: DragEvent): void => {
+      const target = event.target instanceof Element ? event.target : null
+      const hidden = Boolean(target?.closest('[data-video-edit-timeline-viewport]')) || (event.clientX === 0 && event.clientY === 0)
+      setDragFollow(current => current && { ...current, x: event.clientX, y: event.clientY, hidden })
+    }
+    document.addEventListener('dragover', move, true)
+    return () => document.removeEventListener('dragover', move, true)
+  }, [dragging])
   const [selectedBinRow, setSelectedBinRow] = useState<string | null>(null)
   const [labelPicker, setLabelPicker] = useState<{ anchor: FloatingPanelAnchorRect; targets: LabelTargets; current?: VideoEditLabel } | null>(null)
   const pointerAt = useRef<FloatingPanelAnchorRect>({ left: 0, top: 0, bottom: 0, width: 0 })
@@ -200,8 +214,13 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       menu.showMenu(event, itemMenu(entry))
     },
     // 不显示浏览器自带的拖拽缩略图：它遮住落点、和实际位置对不上；拖到时间线上由时间线画出片段虚影（所见即所得）
-    onDragStart: (event: React.DragEvent) => { if (entry.kind !== 'item') return; writeVideoEditItemDrag(event.dataTransfer, projectId, selected ? instance.selectedItemIds : [entry.value.id]); event.dataTransfer.effectAllowed = 'copyMove'; event.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0) },
-    onDragEnd: () => endVideoEditItemDrag(),
+    onDragStart: (event: React.DragEvent) => {
+      if (entry.kind !== 'item') return
+      const ids = selected ? instance.selectedItemIds : [entry.value.id]
+      writeVideoEditItemDrag(event.dataTransfer, projectId, ids); event.dataTransfer.effectAllowed = 'copyMove'; event.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0)
+      setDragFollow({ count: ids.length, x: event.clientX, y: event.clientY, hidden: false })
+    },
+    onDragEnd: () => { endVideoEditItemDrag(); setDragFollow(null) },
     ...(entry.kind === 'bin' ? { onDragOver: (event: React.DragEvent) => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } }, onDrop: (event: React.DragEvent) => drop(event, entry.value.id) } : {}),
   })
   const isSelected = (entry: VideoEditProjectEntry): boolean => entry.kind === 'item' ? instance.selectedItemIds.includes(entry.value.id) : entry.kind === 'bin' ? selectedBinRow === entry.value.id : selectedSequence === entry.value.id
@@ -237,6 +256,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'open', label: '打开素材箱', icon: <FolderOpen size={16} />, onClick: () => selectBin(bin.id) },
     { id: 'delete', label: '移除空素材箱', icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditBins(projectId, [bin.id])) },
   ]
+  const followLabel = dragFollow && !dragFollow.hidden ? createPortal(<div aria-hidden="true" data-video-edit-drag-follow className="pointer-events-none fixed z-drag rounded-full bg-raised px-2.5 py-1 text-xs text-text1 shadow-panel" style={{ left: dragFollow.x + 14, top: dragFollow.y + 14 }}>{dragFollow.count > 1 ? `${dragFollow.count} 个素材` : '1 个素材'}</div>, document.body) : null
   return <div className="relative flex h-full min-h-0 flex-col" aria-label="素材面板" tabIndex={0}
     onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }} onDrop={event => drop(event)}
     onKeyDown={event => {
@@ -266,6 +286,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       if (event.key === 'F2' && selectedItems.length) { event.preventDefault(); event.stopPropagation(); setEdit({ kind: 'items', items: selectedItems }) }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); event.stopPropagation(); run(() => setVideoEditProjectView(projectId, { selectedItemIds: entries.filter(value => value.kind === 'item').map(value => value.value.id) })) }
     }}>
+    {followLabel}
     {/* 一行：搜索 + 视图与排序 + 资产库 + 新建 + 导入（设计稿 VideoEdit 素材面板；新建类入口收进“新建”菜单） */}
     {/* 窄面板（960 窗口下约 160px）时图标组整体换到第二行，不被裁掉。 */}
     <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-0.5 px-2 py-1">

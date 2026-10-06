@@ -4,8 +4,8 @@ import { createVideoEditRegistrations } from './videoEditReflection'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
 import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, videoEditDocumentFromContent, type VideoEditInstance } from './videoEditService'
-import { videoEditCoverSource } from './videoEditProjectCover'
-import { registerDocumentCoverProvider } from '@/features/documents/documentCovers'
+import { videoEditCoverSource, videoEditFrameSourceAt } from './videoEditProjectCover'
+import { registerDocumentCoverProvider, registerDocumentHoverPreview } from '@/features/documents/documentCovers'
 import { getDocumentOperations, registerDocumentBusyCheck, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { startVideoEditImageDocumentLinks } from './videoEditImageLinks'
@@ -45,6 +45,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     })
     registerDocumentReleaser('video_edit', releaseVideoEditDocument)
     // 列表里没有封面的剪辑（含草稿）从内容补生成：与编辑时同一取法
+    // 项目卡片悬停预览：按位置取剪辑里那一刻最上层的画面
+    registerDocumentHoverPreview('video_edit', (read, fraction) => videoEditFrameSourceAt(videoEditDocumentFromContent(read.content, { id: read.meta.id, name: read.meta.name }), fraction))
     registerDocumentCoverProvider('video_edit', (read) => { const source = videoEditCoverSource(videoEditDocumentFromContent(read.content, { id: read.meta.id, name: read.meta.name })); return source ? [source] : null })
     // 通用“收集素材到项目”（4.4）：导出进行中或参数调整未完成时不允许整份改写
     registerDocumentBusyCheck('video_edit', videoEditBusyReason)
