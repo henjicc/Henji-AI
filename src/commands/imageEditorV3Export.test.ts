@@ -4,7 +4,7 @@ import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorV3RestartableExportTileStream } from './imageEditorV3Export'
 
 const mocks = vi.hoisted(() => ({ getPlatform: vi.fn() }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: mocks.getPlatform }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: mocks.getPlatform }))
 
 import {
   exportImageEditorV3Raster,

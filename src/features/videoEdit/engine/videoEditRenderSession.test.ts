@@ -13,7 +13,7 @@ const platform = vi.hoisted(() => ({
   dirname: vi.fn(async (path: string) => path.slice(0, path.lastIndexOf('/'))),
   logs: [] as Array<{ level: string; message: string; meta: unknown }>,
 }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect }, media: { allowRoot: platform.allowRoot }, system: { paths: { dirname: platform.dirname } } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect }, media: { allowRoot: platform.allowRoot }, system: { paths: { dirname: platform.dirname } } }) }))
 vi.mock('@/services/imageSource', () => ({ toFetchableMediaUrl: (path: string) => `url:${path}`, isLikelyLocalImagePath: (path: string) => /^[A-Z]:/.test(path) }))
 vi.mock('../videoEditMediaContent', () => ({ VideoEditMediaContentVerifier: class { async check() {} dispose() {} } }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: (message: string, meta: unknown) => platform.logs.push({ level: 'info', message, meta }), warn: (message: string, meta: unknown) => platform.logs.push({ level: 'warn', message, meta }) }) }))

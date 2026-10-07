@@ -19,7 +19,7 @@ vi.mock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   dispose(): Promise<void> { return boundary.dispose() }
 } }))
 const decoding = vi.hoisted(() => ({ status: vi.fn(async () => ({ available: true, forcedBackend: null as 'native' | 'browser' | null })), browser: vi.fn(async (_url: string) => true) }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoDecoder: { status: decoding.status } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ videoDecoder: { status: decoding.status } }) }))
 vi.mock('@/services/imageSource', () => ({ toFetchableMediaUrl: (path: string) => `url:${path}`, isLikelyLocalImagePath: (path: string) => /^[A-Z]:/.test(path) }))
 vi.mock('./videoEditBrowserFrames', () => ({ videoEditBrowserDecodable: decoding.browser }))
 const media: VideoEditMedia = { id: 'media', name: '原视频', kind: 'video', path: 'D:/素材/原视频.mp4', sourceRevision: 'relinked', assetId: 'asset', width: 3840, height: 2160, durationSeconds: 7, frameRate: { numerator: 60, denominator: 1 } }

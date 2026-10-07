@@ -3,7 +3,7 @@ import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { VideoEditProjectThumbnail } from './VideoEditProjectThumbnail'
 const cached = vi.hoisted(() => vi.fn())
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ video: { getCachedThumbnail: cached } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ video: { getCachedThumbnail: cached } }) }))
 vi.mock('@/services/imageSource', () => ({ resolveImageDisplayUrl: (path: string) => `media:${path}` }))
 let intersect: (entries: Array<{ isIntersecting: boolean }>) => void
 beforeEach(() => {

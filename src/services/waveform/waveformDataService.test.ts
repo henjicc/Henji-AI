@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const platform = vi.hoisted(() => ({ audioEdit: { extractWaveformPyramid: vi.fn(), extractWaveformRange: vi.fn() } }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => platform }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => platform }))
 import type { AudioWaveformPyramid, AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeResult } from '@/platform/contracts/audioWaveform'
 import { acquireWaveform, acquireWaveformDetail, planWaveformDetailWindow, readWaveformDetail, readWaveformState, resetWaveformDataForTests, waveformDetailKey, WAVEFORM_OVERVIEW_MAX_BUCKETS } from './waveformDataService'
 

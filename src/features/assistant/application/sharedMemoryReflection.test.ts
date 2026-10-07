@@ -3,7 +3,7 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { beforeEach, expect, it, vi } from 'vitest'
 import { applicationReflectionHandlers } from '../../application-control/capabilities/applicationReflectionAdapter'
 const memory = vi.hoisted(() => ({ content: '', enabled: true, revision: 1 }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ assistant: {
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ assistant: {
   getSharedMemory: async () => ({ ...memory }),
   updateSharedMemory: async (input: { content: string; expectedRevision: number }) => {
     if (input.expectedRevision !== memory.revision) throw new Error('conflict')

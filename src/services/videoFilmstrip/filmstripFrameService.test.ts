@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const platform = vi.hoisted(() => ({ video: { getFilmstripFrame: vi.fn() } }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => platform }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => platform }))
 vi.mock('@/services/imageSource', () => ({ resolveImageDisplayUrl: (path: string) => `henji-media://${path}` }))
 import type { FilmstripFrameRequest } from '@/platform/contracts/video'
 import {

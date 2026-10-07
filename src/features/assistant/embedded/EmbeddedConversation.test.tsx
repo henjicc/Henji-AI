@@ -9,7 +9,7 @@ import { openAssistant, useAssistantUiStore } from '../store/assistantUiStore'
 
 const mocks = vi.hoisted(() => ({ prompt: vi.fn(), snapshot: { value: {} }, models: vi.fn() }))
 vi.mock('./controller', () => ({ useEmbeddedAgent: () => mocks.snapshot.value, reportEmbeddedAgentError: vi.fn() }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ embeddedAgent: { prompt: mocks.prompt, models: mocks.models } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ embeddedAgent: { prompt: mocks.prompt, models: mocks.models } }) }))
 vi.mock('../../application-control/hostContext/hostContext', () => ({ createHostContextSnapshot: () => ({ workspace: {}, project: {}, surface: {} }) }))
 vi.mock('../conversation/useConversationAutoScroll', () => ({ useConversationAutoScroll: () => ({ scrollToBottom: vi.fn(), suspendFollowing: vi.fn() }) }))
 vi.mock('../conversation/AssistantComposer', () => ({ AssistantComposer: ({ onSubmit, disabled, value }: { onSubmit(text: string, attachments: []): void; disabled: boolean; value: PromptDocumentV1 }) =>

@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/platform/desktopApi', () => ({
   getPathForFile: mocks.getPathForFile,
 }))
-vi.mock('@/platform/runtime', () => ({
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false,
   getPlatform: () => ({
     media: {
       importFromPath: mocks.importFromPath,

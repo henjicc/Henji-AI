@@ -6,7 +6,7 @@ import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { useAudioEditSilencePreview } from './useAudioEditSilencePreview'
 
 const native = vi.hoisted(() => ({ detectSilence: vi.fn(), cancelTask: vi.fn(async () => undefined) }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ audioEdit: native }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ audioEdit: native }) }))
 vi.mock('../application/audioEditProjectInstances', () => ({ flushAudioEditProject: async () => undefined }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }))
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks() })

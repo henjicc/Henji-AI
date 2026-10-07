@@ -6,7 +6,7 @@ import { useAudioEditPreview } from './useAudioEditPreview'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 
 const { prepare } = vi.hoisted(() => ({ prepare: vi.fn() }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ audioEdit: { preparePreviewChunk: prepare } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ audioEdit: { preparePreviewChunk: prepare } }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn() }) }))
 let node: FakeNode
 function captureNode(value: FakeNode) { node = value }

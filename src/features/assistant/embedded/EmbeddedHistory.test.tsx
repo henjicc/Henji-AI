@@ -5,7 +5,7 @@ import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentSnapshot } from '@/core/a
 
 const mocks = vi.hoisted(() => ({ sessions: vi.fn(), snapshot: { value: {} as EmbeddedAgentSnapshot } }))
 vi.mock('./controller', () => ({ useEmbeddedAgent: () => mocks.snapshot.value, reportEmbeddedAgentError: vi.fn() }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ embeddedAgent: { sessions: mocks.sessions, openSession: vi.fn() } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ embeddedAgent: { sessions: mocks.sessions, openSession: vi.fn() } }) }))
 import { EmbeddedHistory } from './EmbeddedHistory'
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
