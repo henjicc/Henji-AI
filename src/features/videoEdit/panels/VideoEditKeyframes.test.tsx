@@ -9,6 +9,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { appendVideoEditClip, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, subscribeVideoEdit, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { applyVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 import { VideoEditEffectsPanel } from './VideoEditEffectsPanel'
+import { addVideoEditTextClipAt } from '../application/videoEditTimeline'
 import { VideoEditTimelineKeyframes } from '../timeline/VideoEditTimelineKeyframes'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { videoEditClipValue } from '@/core/videoEdit/keyframes'
@@ -155,4 +156,12 @@ it('助手同一通用事务写运动与 Lumetri 序列、读回；越界拒绝�
     expect(clip().curves!.x!.at(-1)?.time).toBe(19)
     expect(clip().effects?.[0].builtin?.curves?.exposure.at(-1)?.time).toBe(19)
   } finally { app.dispose() }
+})
+
+it('选中在文字与画面片段间来回切换，效果控件顶部始终只有一行片段名', async () => {
+  const { owner, id, sequenceId, clipId, clip } = await project()
+  const textId = addVideoEditTextClipAt(id, sequenceId, clip().start + clip().duration, clip().track)
+  const panel = render(<Panel owner={owner} />)
+  for (const selection of [textId, clipId, textId, clipId]) act(() => setVideoEditView(id, { selection }))
+  expect(panel.container.querySelectorAll('[data-video-edit-effects-clip-name]')).toHaveLength(1)
 })
