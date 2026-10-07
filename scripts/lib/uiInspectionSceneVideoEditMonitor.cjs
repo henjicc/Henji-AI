@@ -441,7 +441,8 @@ function createVideoEditMonitorScene() {
           await dialogs(app, [file], output)
           const startedAt = performance.now()
           if (settings.rate === 48000) await confirmVideoEditExport(page, () => shot('monitor-export-dialog'))
-          else { const result = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, exports: [{ settings: { ...(await read({ kind: 'video_edit.export_preset', id: 'builtin:sequence' }, ['video_edit.export_preset.settings'])).data.properties['video_edit.export_preset.settings'], loudness: null, captionMode: 'burn' } }] })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
+          // 完整 settings 严格校验、不做设备适配；H.264 4K60 在部分设备上只有软件编码可用，这里显式选软件编码。
+          else { const result = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, exports: [{ settings: { ...(await read({ kind: 'video_edit.export_preset', id: 'builtin:sequence' }, ['video_edit.export_preset.settings'])).data.properties['video_edit.export_preset.settings'], loudness: null, captionMode: 'burn', encoderPreference: 'software' } }] })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
           const task = await poll(page, () => callTool(client, 'query_video_edit_export', { documentRef: projectRef }), value => ['completed', 'failed', 'cancelled'].includes(value.data.task?.state), '正式视频导出没有结束', 2400)
           assert.equal(task.data.task.state, 'completed', JSON.stringify(task))
           const metadata = mediaProbe(ffprobePath, output); const video = metadata.streams.find(stream => stream.codec_type === 'video'); const audio = metadata.streams.find(stream => stream.codec_type === 'audio')

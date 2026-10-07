@@ -219,7 +219,7 @@ it('8K120帧母版导出实际选HEVC并保持120帧时钟', async () => {
   const jobs = await enqueueVideoEditExports([{ projectId: owner.document.id, presetId: 'builtin:master', path: file('8k.mp4') }])
   const job = await videoEditExportQueue.wait(jobs[0].id)
   expect(job.state).toBe('completed')
-  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 80_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware', fullCodecString: 'hev1.1.6.H180.B0', latencyMode: 'quality', alpha: 'discard' }])
+  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 80_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware', fullCodecString: 'hev1.1.6.L186.B0', latencyMode: 'quality', alpha: 'discard' }])
   expect(encoding.videoTimes).toEqual([0, 1 / 120, 2 / 120, 3 / 120])
 })
 it('导出面板对设备不支持的8K120帧禁用动作并给出降低规格的恢复方式', async () => {
@@ -487,6 +487,25 @@ it('助手完整settings严格拒绝不支持H264且不选路径；只传预设�
     expect(job.state).toBe('completed'); expect(job.presetName).toBe('与序列一致'); expect(job.settings).toMatchObject({ codec: 'hevc', width: 3840, height: 2160, fps: 60, videoBitrateMbps: 50 })
     await app.requireResult('export_video_edit', { documentRef })
     expect((await videoEditExportQueue.wait(videoEditExportQueue.list()[1].id)).settings.codec).toBe('hevc')
+  } finally { app.dispose() }
+})
+it('本机4K60约束：format-only走软件适配；内置预设完整settings保持严格拒绝', async () => {
+  const owner = await project()
+  editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, sampleRate: 44100, channels: 1 }))
+  canEncodeVideo.mockImplementation(async config => config.codec === 'avc1.640034' && config.hardwareAcceleration === 'prefer-software')
+  const app = createApplicationHarness(); const documentRef = { kind: 'video_edit.document', id: owner.document.id }
+  try {
+    // The monitor scenario passes these explicit 12 Mbps hardware settings, which skip adaptation.
+    const explicit = await app.call('export_video_edit', { documentRef, exports: [{ settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, loudness: null, captionMode: 'burn' } }] })
+    expect(explicit.ok).toBe(false); expect(JSON.stringify(explicit)).toContain('当前设备不支持所选编码设置')
+    expect(canEncodeVideo).toHaveBeenCalledWith(expect.objectContaining({ codec: 'avc1.640034', width: 3840, height: 2160, framerate: 60, bitrate: 12_000_000, hardwareAcceleration: 'prefer-hardware' }))
+    expect(videoEditExportQueue.list()).toHaveLength(0); expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
+    vi.mocked(getPlatform().audioEdit.loudness.read).mockImplementation(async (_id, _start, frames) => [new Float32Array(frames)])
+    await app.requireResult('export_video_edit', { documentRef, format: 'mp4' })
+    const job = await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id)
+    expect(job.state, job.error).toBe('completed')
+    expect(job.settings).toMatchObject({ codec: 'avc', encoderPreference: 'software', fps: 60, videoBitrateMbps: 50, sampleRate: 44100, channels: 1 })
+    expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'avc', fullCodecString: 'avc1.640034', bitrate: 50_000_000, hardwareAcceleration: 'prefer-software' })
   } finally { app.dispose() }
 })
 

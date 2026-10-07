@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { adaptVideoEditExportPreset, assertVideoEditExportSupported, assertVideoEditExportAudioSupported, canEncodeVideoEditExport, canEncodeVideoEditExportAudio, probeVideoEditExport, probeVideoEditExportAudioBitrates, selectVideoEditExportEncoder, videoEditExportAudioUserError, videoEditExportProbeKey, videoEditExportVideoOptions } from './videoEditExportEncoder'
-import { videoEditSequenceExportSettings, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import { resolveVideoEditExportSettings, videoEditSequenceExportSettings, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+const diagnostics = vi.hoisted(() => ({ debug: vi.fn(), warn: vi.fn() }))
+vi.mock('@/core/logging', () => ({ createLogger: () => diagnostics }))
 const video = vi.fn(async (_config: VideoEncoderConfig): Promise<boolean> => true)
 const audio = vi.fn(async (_config: AudioEncoderConfig): Promise<boolean> => true)
 const spec = { width: 7680, height: 4320, frameRate: 120, bitrate: 80_000_000 }
 const fourK = (): VideoEditExportSettings => videoEditSequenceExportSettings({ width: 3840, height: 2160, fps: 60, sampleRate: 48000, channels: 2 })
 beforeEach(() => {
+  diagnostics.debug.mockClear(); diagnostics.warn.mockClear()
   video.mockReset().mockResolvedValue(true); audio.mockReset().mockResolvedValue(true)
   vi.stubGlobal('VideoEncoder', { isConfigSupported: async (config: VideoEncoderConfig) => ({ config, supported: await video(config) }) })
   vi.stubGlobal('AudioEncoder', { isConfigSupported: async (config: AudioEncoderConfig) => ({ config, supported: await audio(config) }) })
@@ -29,13 +32,21 @@ it('两种编码都不支持时说明规格与恢复方式；奇数尺寸拒绝'
   expect(await canEncodeVideoEditExport({ ...spec, width: 1921, codec: 'avc' })).toBe(false)
 })
 it('硬件不支持、软件支持时4K60预设回落H264软件，严格校验与实际选项一致', async () => {
-  video.mockImplementation(async config => config.hardwareAcceleration === 'prefer-software')
+  video.mockImplementation(async config => config.codec === 'avc1.640034' && config.hardwareAcceleration === 'prefer-software')
   const input = { ...fourK(), videoBitrateMbps: 12, sampleRate: 44100 as const, channels: 1 as const }
   await expect(assertVideoEditExportSupported(input)).rejects.toThrow('当前设备不支持所选编码设置')
   const adapted = await adaptVideoEditExportPreset(input)
   expect(adapted).toMatchObject({ codec: 'avc', encoderPreference: 'software', videoBitrateMbps: 12, bitrateMode: 'vbr' })
   await expect(assertVideoEditExportSupported(adapted)).resolves.toBeUndefined()
-  expect(videoEditExportVideoOptions(adapted)).toMatchObject({ hardwareAcceleration: 'prefer-software', fullCodecString: expect.stringMatching(/^avc1\./), latencyMode: 'quality' })
+  expect(videoEditExportVideoOptions(adapted)).toMatchObject({ hardwareAcceleration: 'prefer-software', fullCodecString: 'avc1.640034', latencyMode: 'quality' })
+  expect(video.mock.calls.every(([config]) => config.codec !== 'avc1.640033')).toBe(true)
+  const logs = diagnostics.debug.mock.calls.map(([, value]) => value)
+  const adaptedProbe = logs.find(value => value.context.phase === 'adapt' && value.context.configuration?.hardwareAcceleration === 'prefer-software')
+  const strictProbe = logs.find(value => value.context.phase === 'strict' && value.context.configuration?.hardwareAcceleration === 'prefer-software')
+  expect(adaptedProbe.context).toMatchObject({ cacheHit: false, supported: true })
+  expect(strictProbe.context).toMatchObject({ cacheHit: true, supported: true })
+  expect(strictProbe.context.configuration).toStrictEqual(adaptedProbe.context.configuration)
+  expect(strictProbe.context.candidateKey).toBe(adaptedProbe.context.candidateKey)
 })
 it('按H264硬件/软件、HEVC硬件/软件尝试VBR/CBR，再尝试推荐码率', async () => {
   video.mockImplementation(async config => Number(config.bitrate) <= 45_000_000 && config.bitrateMode === 'constant' && config.hardwareAcceleration === 'prefer-software')
@@ -45,6 +56,16 @@ it('按H264硬件/软件、HEVC硬件/软件尝试VBR/CBR，再尝试推荐码�
     ['hev1', 'prefer-hardware', 'variable'], ['hev1', 'prefer-hardware', 'constant'], ['hev1', 'prefer-software', 'variable'], ['hev1', 'prefer-software', 'constant'],
   ])
   expect(video.mock.calls.slice(0, 8).every(([config]) => config.bitrate === 50_000_000)).toBe(true)
+})
+it('面板4K30硬件缓存不污染4K60适配；相同settings入队解析前后配置不变', async () => {
+  video.mockImplementation(async config => (config.codec === 'avc1.640033' && config.framerate === 30) || (config.codec === 'avc1.640034' && config.hardwareAcceleration === 'prefer-software'))
+  expect((await probeVideoEditExport({ ...fourK(), fps: 30 })).supported).toBe(true)
+  const adapted = await adaptVideoEditExportPreset(fourK())
+  expect(adapted.encoderPreference).toBe('software')
+  const resolved = resolveVideoEditExportSettings(adapted, { width: 3840, height: 2160, fps: 60, sampleRate: 48000, channels: 2 })
+  expect(videoEditExportProbeKey(resolved)).toBe(videoEditExportProbeKey(adapted))
+  await expect(assertVideoEditExportSupported(resolved)).resolves.toBeUndefined()
+  expect(video.mock.calls.filter(([config]) => config.codec === 'avc1.640034' && config.hardwareAcceleration === 'prefer-hardware').length).toBeGreaterThan(0)
 })
 it('严格拒绝H264，预设可适配HEVC；全部不可用保持失败', async () => {
   video.mockImplementation(async config => config.codec.startsWith('hev1'))
