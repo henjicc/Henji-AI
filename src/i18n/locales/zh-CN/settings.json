@@ -820,7 +820,6 @@
     "reset": "恢复 PR 默认",
     "cancel": "取消",
     "save": "保存快捷键",
-    "hint": "默认键位与 Adobe Premiere Pro（Windows）默认快捷键一致。点击键位后按下新的组合键，冲突会阻止保存；Esc 取消录入。工具键仅作用于时间线，播放键作用于当前监视器。",
     "keyLabel": "{{command}}键位",
     "capturing": "请按下组合键…",
     "clearLabel": "清除{{command}}键位",

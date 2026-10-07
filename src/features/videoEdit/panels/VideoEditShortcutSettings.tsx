@@ -33,7 +33,7 @@ export function VideoEditShortcutDialog({ open, onClose }: { open: boolean; onCl
     setError(result)
   }
   return <>
-    <UiModal isOpen={open} title={t('videoEditShortcuts.label')} size="editor" onClose={close} footer={<>
+    <UiModal isOpen={open} title={t('videoEditShortcuts.label')} size="compact" onClose={close} footer={<>
       <UiButton onClick={() => { setCapture(null); change({}) }}>{t('videoEditShortcuts.reset')}</UiButton><UiButton onClick={close}>{t('videoEditShortcuts.cancel')}</UiButton>
       <UiButton variant="primary" disabled={Boolean(error) || capture !== null} onClick={() => { try { useSettingsStore.getState().setVideoEditShortcuts(draft); close() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } }}>{t('videoEditShortcuts.save')}</UiButton>
     </>}>
@@ -46,7 +46,6 @@ export function VideoEditShortcutDialog({ open, onClose }: { open: boolean; onCl
         if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) return
         change({ ...draft, [capture]: { code: event.code, ctrl: event.ctrlKey, shift: event.shiftKey, alt: event.altKey, meta: event.metaKey } }); setCapture(null)
       }}>
-        <p className="mb-3 text-xs text-text3">{t('videoEditShortcuts.hint')}</p>
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {VIDEO_EDIT_COMMANDS.map(command => <div className="flex items-center gap-2 border-b border-line py-1" key={command.id}>
             <span className="min-w-0 flex-1 text-xs">{command.title}</span>
