@@ -127,7 +127,8 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const entries = useMemo(() => rows.map(row => row.entry), [rows])
   const binPath = videoEditBinPath(instance.document.bins, binId)
   const media = useMemo(() => new Map(instance.document.media.map(value => [value.id, value])), [instance.document.media])
-  const selectedItems = instance.document.items.filter(item => instance.selectedItemIds.includes(item.id))
+  const selectedIds = new Set(instance.selectedItemIds)
+  const selectedItems = instance.document.items.filter(item => selectedIds.has(item.id))
   const run = (operation: () => unknown | Promise<unknown>): void => { void Promise.resolve().then(operation).catch(error => {
     if (error instanceof Error && /源预览请求已被更新|源预览已关闭/.test(error.message)) return
     onError(error)
@@ -136,9 +137,12 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   // 导入结果提示：文件夹导入跳过了不支持或读不出的文件时告诉用户跳过几个（Premiere 同样只导入能用的文件）。
   const [notice, setNotice] = useState<string | null>(null)
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(null), 4000); return () => clearTimeout(timer) }, [notice])
-  const reportSkipped = (skipped: number): void => { if (skipped) setNotice(`已跳过 ${skipped} 个不支持或无法读取的文件`) }
+  const reportSkipped = (skipped: number): void => { if (skipped) setNotice(`已跳过 ${skipped} 项不支持、无法读取或重复的素材及目录`) }
   /** 文件夹的素材进了新建的子素材箱：当前素材箱只选中直接放进来的素材项。 */
-  const selectImported = (targetBin: string, ids: string[]): void => setVideoEditProjectView(projectId, { selectedBinId: targetBin, selectedItemIds: ids.filter(id => (instance.document.items.find(item => item.id === id)?.binId ?? '') === targetBin) })
+  const selectImported = (targetBin: string, ids: string[]): void => {
+    const items = new Map(instance.document.items.map(item => [item.id, item]))
+    setVideoEditProjectView(projectId, { selectedBinId: targetBin, selectedItemIds: ids.filter(id => (items.get(id)?.binId ?? '') === targetBin) })
+  }
   const chooseFolders = (): void => run(async () => {
     const result = await chooseVideoEditFolders(projectId, binId || undefined)
     if (result.itemIds.length) selectImported(binId, result.itemIds)
@@ -199,7 +203,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const sounding = items.map(value => media.get(value.mediaId ?? '')).filter(value => value && (value.kind === 'audio' || value.kind === 'video' && value.hasAudio !== false))
     const audioTarget: VideoEditAudioChannelsTarget | undefined = sounding.length === items.length && sounding[0] && (items.length === 1 || sounding.every(value => value!.audioStreams && JSON.stringify(value!.audioStreams) === JSON.stringify(sounding[0]!.audioStreams))) ? { kind: 'items', itemIds: items.map(value => value.id), mediaId: sounding[0].id, ...(items[0].audioChannels ? { layout: items[0].audioChannels } : {}) } : undefined
     return [
-      { id: 'create_multicam', label: '创建多机位源序列…', icon: <SequenceIcon size={16} />, disabled: items.length < 2 || items.length > 9 || items.some(item => item.kind !== 'video'), onClick: () => setMulticamItemIds(ids) },
+      { id: 'create_multicam', label: '创建多机位源序列…', icon: <SequenceIcon size={16} />, disabled: items.length < 2 || items.some(item => item.kind !== 'video'), onClick: () => setMulticamItemIds(ids) },
       { id: 'create_proxy', label: '创建代理…', icon: <ProxyIcon size={16} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => setProxyMediaIds(proxyIds) },
       { id: 'cancel_proxy', label: '取消创建代理', icon: <RefreshCw size={16} />, disabled: !proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => proxyIds.forEach(id => cancelVideoEditProxy(projectId, id)) },
       { id: 'preview', label: '打开源素材', icon: <Play size={16} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },

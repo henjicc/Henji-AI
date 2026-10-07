@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
@@ -303,8 +304,8 @@ export class VideoEditCodeGpu {
     // The output has the input's size. `context.width/height` is the sequence size the author's code reads; at a reduced
     // playback resolution (task 4.9) it is larger than the input, so offsets written as `n / width` keep their look.
     if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '代码滤镜输入必须属于当前设备。')
-    for (const name of ['localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps'] as const) { const value = context[name]; if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 432000) throw new CodeMaterialError('CONTEXT', `滤镜时间上下文无效：${name}`) }
-    if (shaderTime > 1800 || context.sequenceTime < 0 || context.sequenceTime > 1800 || context.localTime < (transitionHandles ? -1800 : 0) || context.localTime > 1800 || !Number.isInteger(context.frame) || context.frame < 0 || context.frame > 432000 || context.fps < 1 || context.fps > 240) throw new CodeMaterialError('CONTEXT', '滤镜时间或帧率超出范围。')
+    for (const name of ['localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps'] as const) { const value = context[name]; if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > VIDEO_EDIT_MAX_SEQUENCE_FRAMES) throw new CodeMaterialError('CONTEXT', `滤镜时间上下文无效：${name}`) }
+    if (shaderTime > VIDEO_EDIT_MAX_SEQUENCE_SECONDS || context.sequenceTime < 0 || context.sequenceTime > VIDEO_EDIT_MAX_SEQUENCE_SECONDS || context.localTime < (transitionHandles ? -VIDEO_EDIT_MAX_SEQUENCE_SECONDS : 0) || context.localTime > VIDEO_EDIT_MAX_SEQUENCE_SECONDS || !Number.isInteger(context.frame) || context.frame < 0 || context.frame > VIDEO_EDIT_MAX_SEQUENCE_FRAMES || context.fps < 1 || context.fps > 240) throw new CodeMaterialError('CONTEXT', '滤镜时间或帧率超出范围。')
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     // The output keeps the input's precision: an effect on 10-bit material stays rgba16float.
     const format = input.textureFormat

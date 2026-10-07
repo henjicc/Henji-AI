@@ -42,7 +42,8 @@ export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, inpu
   const rows: TimelineTrackRow[] = []
   let bottom = video.top + video.height + video.scroll
   // V1 在最下：从 V1 往上排，显示时最上面的合成层在前。
-  for (const track of tracks.video) { const value = height(track); bottom -= value; rows.unshift({ track, top: bottom, height: value, region: 'video', clipTop: video.top, clipBottom: video.top + video.height }) }
+  for (const track of tracks.video) { const value = height(track); bottom -= value; rows.push({ track, top: bottom, height: value, region: 'video', clipTop: video.top, clipBottom: video.top + video.height }) }
+  rows.reverse()
   let top = audio.top - audio.scroll
   for (const track of tracks.audio) { const value = height(track); rows.push({ track, top, height: value, region: 'audio', clipTop: audio.top, clipBottom: audio.top + audio.height }); top += value }
   return { rows, regions: { video, audio }, divider: video.top + video.height + TIMELINE_TRACK_SECTION_GAP / 2 }

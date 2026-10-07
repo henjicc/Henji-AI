@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { CodeMaterialError, CODE_MATERIAL_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeExpression, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 
@@ -51,8 +52,8 @@ const divide = (a: Range, b: Range): Range => {
   return operationRange(Math.min(...values), Math.max(...values), false, 3)
 }
 const contextRanges: Record<string, Range> = {
-  time: range(0, 1800, false), localTime: range(0, 1800, false), sequenceTime: range(0, 1800, false),
-  width: range(1, 8192, true), height: range(1, 8192, true), frame: range(0, 432000, true), fps: range(1, 240, false), u: range(0, 1, false), v: range(0, 1, false),
+  time: range(0, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, false), localTime: range(0, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, false), sequenceTime: range(0, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, false),
+  width: range(1, 8192, true), height: range(1, 8192, true), frame: range(0, VIDEO_EDIT_MAX_SEQUENCE_FRAMES, true), fps: range(1, 240, false), u: range(0, 1, false), v: range(0, 1, false),
 }
 const contextCode: Record<string, string> = { time: 'p.context0.x', localTime: 'p.context0.y', sequenceTime: 'p.context0.z', width: 'p.context0.w', height: 'p.context1.x', frame: 'p.context1.y', fps: 'p.context1.z', u: 'uv.x', v: 'uv.y' }
 
@@ -76,7 +77,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
       case 'color': { const values = expression.values.map(next); return { code: `vec4f(${values.map(value => value.code).join(',')})`, bounds: values.map(scalar) } }
       case 'context': {
         if (!contextRanges[expression.key]) throw new CodeMaterialError('TYPE', '未知滤镜时间字段。')
-        return { code: contextCode[expression.key], bounds: expression.key === 'localTime' && transitionHandles ? range(-1800, 1800, false) : contextRanges[expression.key] }
+        return { code: contextCode[expression.key], bounds: expression.key === 'localTime' && transitionHandles ? range(-VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, false) : contextRanges[expression.key] }
       }
       case 'parameter': {
         const index = program.parameters.findIndex(item => item.key === expression.key); const parameter = program.parameters[index]

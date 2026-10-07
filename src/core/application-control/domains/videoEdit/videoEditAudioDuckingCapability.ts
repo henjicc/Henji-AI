@@ -5,8 +5,8 @@ import { videoEditDuckingSettingsSchema } from '../../../videoEdit/audioDucking'
 
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 const clipRef = applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict()
-const input = z.object({ documentRef, musicClipRefs: z.array(clipRef).min(1).max(256).describe('同一序列里已标为 music 的声音片段；先用 video_edit.clip.audio_role 通用属性标注音乐及对话或音效。'), settings: videoEditDuckingSettingsSchema }).strict()
-const output = z.object({ resultRef: documentRef, clipRefs: z.array(clipRef).min(1).max(256), message: z.string(), verified: z.boolean() }).strict()
+const input = z.object({ documentRef, musicClipRefs: z.array(clipRef).min(1).describe('同一序列里已标为 music 的声音片段；先用 video_edit.clip.audio_role 通用属性标注音乐及对话或音效。'), settings: videoEditDuckingSettingsSchema }).strict()
+const output = z.object({ resultRef: documentRef, clipRefs: z.array(clipRef).min(1), message: z.string(), verified: z.boolean() }).strict()
 export const generateVideoEditAudioDuckingCapability = defineApplicationCapability<z.infer<typeof input>, z.infer<typeof output>>({
   id: 'generate_video_edit_audio_ducking', title: '对话出现时自动压低背景音乐',
   description: '在明确音乐片段上自动生成音量回避关键帧，可一步撤销。targetRole 指定对话 dialogue 或音效 sound_effect；分析同时间可听目标片段的非静音区间，不是语义识别，目标中残留音乐或噪声也可能触发。reductionDb 为降低分贝（12 常用，越大越低），sensitivity 0–100（越高越能捕获轻声），fadeSeconds 为语音前压低及结束后恢复的时长。重新生成只替换回避生成的点，用户点保留且同帧优先；需保护原手动曲线时先试听。静音目标或无重叠目标会清除旧回避点。只分析本地声音，未调用付费模型。',

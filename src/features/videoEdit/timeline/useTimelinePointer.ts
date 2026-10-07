@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -47,13 +48,15 @@ interface Options { instance: VideoEditInstance; sequence: VideoEditSequence; la
  * 返回新轨道与按候选序列算出的轨道映射；放不下（如轨道已满）时抛出原因。
  */
 function edgeTrackMove(sequence: VideoEditSequence, ids: string[], primary: string, kind: TimelineRegionKind, reuse: VideoEditSequence['tracks']): { newTracks: VideoEditSequence['tracks']; trackMap: Record<number, number> } {
-  let failure: unknown
-  for (let count = 1; count <= 32 - sequence.tracks.length; count++) {
-    const newTracks = reuse.length >= count && reuse.slice(0, count).every(track => track.kind === kind) ? reuse.slice(0, count) : videoEditEdgeTracks(sequence, kind, count)
-    const candidate = { ...sequence, tracks: [...sequence.tracks, ...newTracks] }
-    try { return { newTracks, trackMap: videoEditMoveTrackMap(candidate, ids, primary, newTracks[0].index) } } catch (error) { failure = error }
-  }
-  throw failure ?? new Error('序列最多 32 条轨道，请先删除不用的轨道。')
+  const positions = new Map(sequence.tracks.filter(track => track.kind === kind).sort((a, b) => a.index - b.index).map((track, index) => [track.index, index]))
+  const selected = new Set(ids); const primaryClip = sequence.clips.find(clip => clip.id === primary)
+  const origin = primaryClip ? positions.get(primaryClip.track) : undefined
+  if (origin === undefined) throw new Error('无法为选区建立对应轨道，请检查片段类型与轨道。')
+  let count = 1
+  for (const clip of sequence.clips) if (selected.has(clip.id)) { const rank = positions.get(clip.track); if (rank !== undefined) count = Math.max(count, rank - origin + 1) }
+  const newTracks = reuse.length >= count && reuse.slice(0, count).every(track => track.kind === kind) ? reuse.slice(0, count) : videoEditEdgeTracks(sequence, kind, count)
+  const candidate = { ...sequence, tracks: [...sequence.tracks, ...newTracks] }
+  return { newTracks, trackMap: videoEditMoveTrackMap(candidate, ids, primary, newTracks[0].index) }
 }
 
 /** Pointer drafts are local and bounded; only release enters the shared edit history. */
@@ -177,7 +180,7 @@ export function useTimelinePointer(options: Options) {
       gesture.next = Math.max(24, Math.min(160, Math.round(gesture.height + gesture.client.y - gesture.origin.y)))
       setResized({ trackId: gesture.trackId, height: gesture.next })
     } else if (gesture.kind === 'seek') {
-      const raw = Math.max(0, Math.min(Math.floor(videoEditFps(sequence.frameRate) * 1800), Math.round(at.x / pixels)))
+      const raw = Math.max(0, Math.min(Math.floor(videoEditFps(sequence.frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS), Math.round(at.x / pixels)))
       const frame = snapTimelineFrame(sequence.id, gesture.snap ? timelineSnapPoints(sequence, { extra: [instance.inFrame, instance.outFrame].filter((value): value is number => value !== null) }) : [], raw, TIMELINE_SNAP_PIXELS / pixels)
       setVideoEditView(instance.document.id, { playing: false, frame })
     } else if (gesture.kind === 'hand' && viewport.current) {

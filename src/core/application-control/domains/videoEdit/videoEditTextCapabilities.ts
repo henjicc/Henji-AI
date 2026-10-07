@@ -1,10 +1,11 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '../../../videoEdit/time'
 import { z } from 'zod'
 import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
 import { videoEditTextSelectorSchema } from '../../../videoEdit/textTranscript'
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
 const documentRef = ref('video_edit.document'); const sequenceRef = ref('video_edit.sequence')
-const input = z.object({ documentRef, sequenceRef, selector: videoEditTextSelectorSchema, frame: z.number().int().nonnegative().max(108000).optional(), name: z.string().trim().min(1).max(200).optional() }).strict()
+const input = z.object({ documentRef, sequenceRef, selector: videoEditTextSelectorSchema, frame: z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(), name: z.string().trim().min(1).max(200).optional() }).strict()
 const output = z.object({ documentRef, resultRef: sequenceRef, ranges: z.array(z.object({ from: z.number().int().nonnegative(), to: z.number().int().positive() }).strict()), changed: z.boolean(), verified: z.boolean(), message: z.string() }).strict()
 export const VIDEO_EDIT_TEXT_CAPABILITIES = ([
   ['ripple_delete_video_edit_text', '按文本波纹删除剪辑范围', 'delete', '波纹删除对应视频、链接声音及其他轨道并闭合间隙，返回实际删除的原时间线半开帧范围。'],

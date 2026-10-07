@@ -9,7 +9,7 @@ import { publishVideoEdit } from './videoEditService'
 const logger = createLogger('features.videoEdit.subtitlePresets')
 const presetSchema = z.object({ id: z.string().min(1).max(100), name: z.string().trim().min(1, '请填写预设名称。').max(200), style: videoEditSubtitleStyleSchema }).strict()
 export type VideoEditSubtitlePreset = z.infer<typeof presetSchema>
-const librarySchema = z.object({ presets: z.array(presetSchema).max(256) }).strict()
+const librarySchema = z.object({ presets: z.array(presetSchema) }).strict()
 interface LibraryData { presets: VideoEditSubtitlePreset[] }
 interface LibraryState extends LibraryData {
   revision: number

@@ -731,3 +731,11 @@ it('真正新原图片依赖经正式导入 facade 固定身份、保存重开�
   const reopened = await reopenVideoEdit(id)
   expect(reopened.document.media[0].assetContent).toEqual(manifest.images[0].content); expect(reopened.document.media[0].assetId).toBeUndefined(); expect(reopened.document.items[0].code!.parameters.logo).toEqual({ kind: 'image', mediaId: 'fresh-image' })
 })
+
+it('一次创建260份代码素材和试渲染边界不受32/64/257旧数量限制，保持一笔历史', async () => {
+  const instance = await createLegacyTrackVideoEditProject()
+  const ids = await createVideoEditCodeItems(instance.document.id, Array.from({ length: 260 }, () => ({ source })))
+  expect(ids).toHaveLength(260); expect(instance.document.codeMaterials).toHaveLength(260)
+  expect(instance.document.items).toHaveLength(260); expect(instance.past).toHaveLength(1)
+  expect(boundary.activeRenderers).toBe(0)
+})

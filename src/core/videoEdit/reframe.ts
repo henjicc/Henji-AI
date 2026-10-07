@@ -56,7 +56,6 @@ export function generateVideoEditReframeKeyframes(clip: VideoEditClip, boxes: re
   const samples = smoothVideoEditAttention(boxes, picture, target, fps, settings.motion, cuts).map((sample, time) => ({ ...sample, x: sample.x + (anchor('anchorX', time) - 0.5) / viewport.width, y: sample.y + (anchor('anchorY', time) - 0.5) / viewport.height }))
   const validCuts = cuts.filter(time => Number.isInteger(time) && time > 0 && time < clip.duration)
   const times = new Set([0, clip.duration - 1, ...validCuts.flatMap(time => [time - 1, time])])
-  if (times.size > 256) throw new Error('镜头切点过于密集，请分割片段后重试。')
   const segments = [...times].sort((a, b) => a - b); const stack = segments.slice(1).map((end, i) => [segments[i], end])
   while (stack.length) {
     const [start, end] = stack.pop()!; let worst = 0; let index = -1
@@ -70,7 +69,7 @@ export function generateVideoEditReframeKeyframes(clip: VideoEditClip, boxes: re
       const score = violation > 1e-8 ? 1 + violation : error / 0.0005
       if (score > worst && score > 1) { worst = score; index = frame }
     }
-    if (index >= 0) { times.add(index); if (times.size > 256) throw new Error('主体运动变化过于密集，请在镜头切点分割片段后重试。'); stack.push([start, index], [index, end]) }
+    if (index >= 0) { times.add(index); stack.push([start, index], [index, end]) }
   }
   let result = clip; const sorted = [...times].sort((a, b) => a - b)
   for (const key of ['x', 'y', 'scale'] as const) {
@@ -79,7 +78,6 @@ export function generateVideoEditReframeKeyframes(clip: VideoEditClip, boxes: re
       const value = samples[time][key]; const interpolation = validCuts.includes(time + 1) ? 'hold' as const : 'linear' as const
       return { time, value, interpolation, source: 'reframe', reframeOrigin: { time, value, interpolation } }
     })
-    if (manual.length + generated.length > 256) throw new Error('运动关键帧过于密集，请分割片段后重试；手动关键帧已保留。')
     result = writeVideoEditClipKeyframes(result, key, [...manual, ...generated].sort((a, b) => a.time - b.time), false)
   }
   // Hand-authored keys and anchors remain untouched. Reject the whole operation if they violate framing.

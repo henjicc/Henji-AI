@@ -183,7 +183,7 @@ it('导入先问原生探测：只有原生能解的专业格式按原生元数�
   ] } })
   expect(owner.document).toBe(baseline)
   await importVideoEditSources(id, [{ path: 'D:/media/lotus.mov' }])
-  expect(native).toHaveBeenCalledWith('D:/media/lotus.mov', undefined)
+  expect(native).toHaveBeenCalledWith('D:/media/lotus.mov', expect.any(AbortSignal))
   expect(owner.document.media[0]).toMatchObject({ path: 'D:/media/lotus.mov', kind: 'video', width: 2560, height: 2560, durationSeconds: 14.283, hasAudio: false, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
   expect(Object.keys(owner.document.media[0]).sort()).toEqual(['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
   video.decodable = true; native.mockRejectedValue(new Error('服务崩溃'))

@@ -16,7 +16,9 @@ import { rasterizeVideoEditMaskShapes } from './effectMasks'
 export const VIDEO_EDIT_TRACK_METHODS = ['shape', 'box', 'point', 'planar'] as const
 export type VideoEditTrackMethod = (typeof VIDEO_EDIT_TRACK_METHODS)[number]
 export const VIDEO_EDIT_TRACK_METHOD_LABELS: Readonly<Record<VideoEditTrackMethod, string>> = { shape: '形状跟踪', box: '物体框跟踪', point: '点跟踪', planar: '平面跟踪' }
+/** Per-clip live matte/geometry analysis budget, shared with rendering and background model preparation. */
 export const VIDEO_EDIT_MAX_TRACKERS = 8
+/** Per-request inference prompt budget; limits simultaneous model/optical-flow seed state, not project size. */
 export const VIDEO_EDIT_MAX_TRACK_PROMPTS = 16
 /** 跟踪分析的帧率上限（形状跟踪每帧约 12 ms，30 帧足够跟住；播放时框按相邻两帧插值）。 */
 export const VIDEO_EDIT_TRACK_FPS_LIMIT = 30

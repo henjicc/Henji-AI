@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { createVideoEditSequence, videoEditDocumentSchema, videoEditVisibleTracks, type VideoEditClip, type VideoEditDocument, type VideoEditSequence, type VideoEditComposition } from './document'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { clipSourceSeconds } from './document'
@@ -5,7 +6,7 @@ import { videoEditTransitionClipIds } from './transitions'
 
 /** Shared by matching frames, preview and export (floor selects the child's half-open frame). */
 export function videoEditSequenceFrameAtSeconds(seconds: number, fps: number): number {
-  return Math.max(0, Math.min(Math.floor(fps * 1800) - 1, Math.floor(seconds * fps + 1e-7)))
+  return Math.max(0, Math.min(Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) - 1, Math.floor(seconds * fps + 1e-7)))
 }
 export function videoEditNestedFrame(parent: Pick<VideoEditComposition, 'fps'>, clip: VideoEditClip, child: Pick<VideoEditComposition, 'fps'>, frame: number): number {
   // A child may be shortened after nesting. Keep the parent's edit and source clock; its now-empty tail is transparent.

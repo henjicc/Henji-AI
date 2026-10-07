@@ -1,4 +1,4 @@
-import { LUMETRI_MAX_CURVE_POINTS, lumetriSpline, type LumetriCurvePoint } from '@/core/videoEdit/lumetriCurves'
+import { lumetriSpline, type LumetriCurvePoint } from '@/core/videoEdit/lumetriCurves'
 import { useRef } from 'react'
 import { UI_COLOR_WHEEL_BACKGROUND } from './styleTokens'
 
@@ -24,7 +24,7 @@ export function UiToneCurve({ label, values, points, onChange, onPointsChange, o
   const evaluate = current.length >= 2 ? lumetriSpline(current) : () => 0
   return <svg viewBox="0 0 100 100" aria-label={label} tabIndex={disabled ? -1 : 0} className="aspect-square w-full touch-none rounded-control bg-control"
     onPointerDown={event => {
-      if (disabled || event.button !== 0 || !onPointsChange || current.length >= LUMETRI_MAX_CURVE_POINTS || event.target !== event.currentTarget) return
+      if (disabled || event.button !== 0 || !onPointsChange || event.target !== event.currentTarget) return
       const point = pointAt(event); point.x = Math.max(0, Math.min(100, point.x)); point.y = Math.max(0, Math.min(100, point.y))
       if (current.some(p => Math.abs(p.x - point.x) < .01)) return
       const next = [...current, point].sort((a, b) => a.x - b.x); const index = next.indexOf(point)

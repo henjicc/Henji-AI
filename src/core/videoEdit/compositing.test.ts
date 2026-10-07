@@ -86,7 +86,8 @@ describe('调整图层的半开合成范围与唯一转场节点', () => {
     expect(() => validateVideoEditAdjustmentRanges({ clips: [missing] })).toThrow('下方')
     for (const fromTrack of [4, 5]) expect(() => validateVideoEditAdjustmentRanges({ clips: [adjustment('bad', 4, fromTrack)] })).toThrow('下方')
     expect(() => validateVideoEditAdjustmentRanges({ clips: [{ ...base, opacity: .25 }] })).not.toThrow()
-    for (const value of [{ fromTrack: -1 }, { fromTrack: 31 }, { fromTrack: .5 }, { fromTrack: NaN }, { fromTrack: 0, extra: 1 }]) expect(videoEditAdjustmentSchema.safeParse(value).success).toBe(false)
+    expect(videoEditAdjustmentSchema.safeParse({ fromTrack: 1000 }).success).toBe(true)
+    for (const value of [{ fromTrack: -1 }, { fromTrack: Number.MAX_SAFE_INTEGER + 1 }, { fromTrack: .5 }, { fromTrack: NaN }, { fromTrack: 0, extra: 1 }]) expect(videoEditAdjustmentSchema.safeParse(value).success).toBe(false)
   })
   it('构建器拒绝把已处理band局部拆给后续调整层，完整包含可以继续合成', () => {
     const first = adjustment('already-processed', 3, 0)

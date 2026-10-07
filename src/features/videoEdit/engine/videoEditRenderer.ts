@@ -50,8 +50,8 @@ const NEAREST_SAMPLE_EDGE = 0.5 + 1e-6
 const AUDIO_STREAM_KEY = '\u0000'
 /** Files decoded through one long-lived decoder each during forward playback. */
 const PLAYBACK_SCHEDULE_FILES = 4
-// Sequences are at most 30 minutes; one schedule covers the rest of it, since a rebuild means new decoders.
-const PLAYBACK_SCHEDULE_SECONDS = 1800
+// Bound per-frame timestamp allocation independently of sequence duration. Rebuild as playback crosses this rolling window.
+const PLAYBACK_SCHEDULE_SECONDS = 30
 interface VideoSource {
   /** Key of the shared opened source this clip's own readers read from. */
   demux: string

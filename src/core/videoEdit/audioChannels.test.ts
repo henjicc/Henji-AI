@@ -144,14 +144,14 @@ describe('放入时间线铺轨（Premiere 默认音轨“使用文件”）', (
     expect(sound.clips[0].linkId).toBe(sound.clips[1].linkId)
   })
 
-  it('按素材新建序列也铺轨；序列最多 32 条轨道时给出可行动提示', () => {
+  it('按素材新建序列也铺轨；超过32条轨道仍可继续铺全部声音', () => {
     const document = project(MXF)
     const sequence = makeVideoEditItemSequence(document, ['item'])
     expect(sequence.tracks.filter(track => track.kind === 'audio')).toHaveLength(4)
     expect(sequence.clips).toHaveLength(5)
     const crowded = project(Array.from({ length: 16 }, () => ({ channels: 1 })))
     crowded.sequences[0].tracks.push(...Array.from({ length: 20 }, (_, index) => ({ id: `v${index}`, name: `视频 ${index + 8}`, index: index + 8, kind: 'video' as const, locked: false, enabled: true, muted: false, solo: false })))
-    expect(() => placeVideoEditItem(crowded, 'item', crowded.sequences[0].id, { frame: 0 })).toThrow('序列最多 32 条轨道')
+    expect(placeVideoEditItem(crowded, 'item', crowded.sequences[0].id, { frame: 0 }).clips).toHaveLength(17)
   })
 
   it('放置编辑可同时新增音频轨（插入/覆盖同一撤销步），新增轨无效时拒绝；拆开音画时声音带走映射、画面不再带映射', () => {

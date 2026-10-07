@@ -40,6 +40,7 @@ function createFs(): FsPlatform {
     readDir: async (path) => {
       return await getNative().fs.readDir(path)
     },
+    readDirPage: async (path, options) => getNative().fs.readDirPage(path, options),
     copyFile: async (src, dest) => {
       await getNative().fs.copyFile(src, dest)
     },

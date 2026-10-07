@@ -7,7 +7,8 @@ import { applyVideoEditTimelineEdit } from './timelineEdits'
  */
 export type VideoEditTrack = VideoEditSequence['tracks'][number]
 export type VideoEditTrackKind = VideoEditTrack['kind']
-export const VIDEO_EDIT_TRACK_LIMIT = 32
+/** Track indexes are dynamic map keys, not mixer/GPU slots; only integer arithmetic bounds them. */
+export const VIDEO_EDIT_TRACK_LIMIT = Number.MAX_SAFE_INTEGER
 const MAX_INDEX = VIDEO_EDIT_TRACK_LIMIT - 1
 
 /** 同类轨道的自然顺序：V1、V2…（自下而上）或 A1、A2…（自上而下），即编号升序。 */
@@ -32,7 +33,7 @@ function createTrack(kind: VideoEditTrackKind, index: number, name: string): Vid
 }
 function assertRoom(sequence: Pick<VideoEditSequence, 'tracks'>, count: number): void {
   if (!Number.isSafeInteger(count) || count < 1) throw new Error('请至少添加一条轨道。')
-  if (sequence.tracks.length + count > VIDEO_EDIT_TRACK_LIMIT) throw new Error(`序列最多 ${VIDEO_EDIT_TRACK_LIMIT} 条轨道，请先删除不用的轨道。`)
+  if (!Number.isSafeInteger(sequence.tracks.length + count)) throw new Error('轨道数量超出整数范围。')
 }
 
 /**
@@ -72,15 +73,16 @@ export function insertVideoEditTracks(sequence: VideoEditSequence, kind: VideoEd
   const ordered = { video: videoEditTracksOfKind(sequence, 'video'), audio: videoEditTracksOfKind(sequence, 'audio') }
   ordered[kind] = [...lanes.slice(0, at), ...fresh, ...lanes.slice(at)]
   const renumbered = [...ordered.audio, ...ordered.video].map((track, index) => ({ ...track, index }))
-  const mapping = new Map<number, number>()
-  for (const track of renumbered) { const before = sequence.tracks.find(value => value.id === track.id); if (before) mapping.set(before.index, track.index) }
+  const mapping = new Map<number, number>(); const originals = new Map(sequence.tracks.map(track => [track.id, track]))
+  for (const track of renumbered) { const before = originals.get(track.id); if (before) mapping.set(before.index, track.index) }
   const moved = sequence.tracks.find(track => track.locked && mapping.get(track.index) !== track.index)
   if (moved) throw new Error(`添加轨道需要调整轨道“${moved.name}”的位置，请先解锁该轨道。`)
   const videoBefore = videoEditTracksOfKind(sequence, 'video')
   // 调整图层的作用范围“从某编号起的下方画面”：换算到不低于原起点的第一条视频轨的新编号。
   const fromTrack = (value: number): number => { const first = videoBefore.find(track => track.index >= value); return first ? mapping.get(first.index)! : value }
   const clips = sequence.clips.map(clip => ({ ...clip, track: mapping.get(clip.track) ?? clip.track, ...(clip.adjustment ? { adjustment: { ...clip.adjustment, fromTrack: fromTrack(clip.adjustment.fromTrack) } } : {}) }))
-  const added = renumbered.filter(track => fresh.some(value => value.id === track.id))
+  const freshIds = new Set(fresh.map(track => track.id))
+  const added = renumbered.filter(track => freshIds.has(track.id))
   return { sequence: { ...sequence, tracks: renumbered, clips }, added }
 }
 

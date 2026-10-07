@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { describe, expect, it } from 'vitest'
 import { compileCodeMaterial } from './codeMaterial/compiler'
 import { CodeMaterialError } from './codeMaterial/contract'
@@ -23,7 +24,7 @@ describe('真实转场余量保持原片段时钟', () => {
     for (const frame of [60, 74]) expect(codeMaterialContextForTransitionFrame(right, frame, rate, moving, window)).toEqual(codeMaterialContextForFrame(right, frame, rate, moving))
     for (const frame of [44, 75]) expect(() => codeMaterialContextForTransitionFrame(right, frame, rate, moving, window)).toThrow('转场')
     expect(() => codeMaterialContextForTransitionFrame({ ...right, sourceInUs: 0 }, 45, rate, moving, window)).toThrow('源入点')
-    expect(() => evaluateCodeMaterial(moving, { ...before, localTime: -1801 }, {}, { transitionHandles: true })).toThrow('时间')
+    expect(() => evaluateCodeMaterial(moving, { ...before, localTime: -VIDEO_EDIT_MAX_SEQUENCE_SECONDS - 1 }, {}, { transitionHandles: true })).toThrow('时间')
   })
   it('静态源零之前保持源首点，NTSC余量和真实时长仍精确验证', () => {
     const clip = { start: 60, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
@@ -101,6 +102,6 @@ describe('片段与时钟输入边界', () => {
   it('拒绝无效比例、源余数、尺寸及声明时长', () => {
     for (const rate of [{ numerator: 0, denominator: 1 }, { numerator: 30, denominator: 0 }, { numerator: .5, denominator: 1 }, { numerator: Number.POSITIVE_INFINITY, denominator: 1 }, { numerator: 241, denominator: 1 }, { numerator: 1_000_001, denominator: 1 }]) expect(() => codeMaterialContextForFrame(base, base.start, rate, program)).toThrow(CodeMaterialError)
     for (const clip of [{ ...base, sourceInUs: -1 }, { ...base, sourceInUs: .1 }, { ...base, sourceRemainder: { numerator: -1, denominator: 3 } }, { ...base, sourceRemainder: { numerator: 3, denominator: 3 } }, { ...base, sourceRemainder: { numerator: 0, denominator: 0 } }, { ...base, sourceRemainder: { numerator: 1, denominator: 1.5 } }, { ...base, sourceRemainder: { numerator: 1, denominator: 1_000_001 } }]) expect(() => codeMaterialContextForFrame(clip, base.start, rates[0], program)).toThrow(CodeMaterialError)
-    for (const definition of [{ ...program, width: 0 }, { ...program, height: 8193 }, { ...program, durationSeconds: 0 }, { ...program, durationSeconds: Number.NaN }, { ...program, durationSeconds: 1801 }]) expect(() => codeMaterialContextForFrame(base, base.start, rates[0], definition)).toThrow(CodeMaterialError)
+    for (const definition of [{ ...program, width: 0 }, { ...program, height: 8193 }, { ...program, durationSeconds: 0 }, { ...program, durationSeconds: Number.NaN }, { ...program, durationSeconds: VIDEO_EDIT_MAX_SEQUENCE_SECONDS + 1 }]) expect(() => codeMaterialContextForFrame(base, base.start, rates[0], definition)).toThrow(CodeMaterialError)
   })
 })

@@ -201,3 +201,10 @@ it('导出面板对设备不支持的8K120帧禁用动作并给出降低规格�
   fireEvent.change(view.getByLabelText('导出预设'), { target: { value: 'builtin:bilibili' } })
   expect(view.getByRole('button', { name: '立即导出' })).toHaveProperty('disabled', false)
 })
+
+it('导出队列接纳300项，仍串行处理而不按128项拒绝', async () => {
+  const owner = await project(); let active = 0; let peak = 0
+  const queue = new VideoEditExportQueue(async () => { peak = Math.max(peak, ++active); await Promise.resolve(); active-- })
+  queue.append(Array.from({ length: 300 }, (_, index) => localJob(owner, `large-${index}`)))
+  await queue.wait('large-299'); expect(queue.list()).toHaveLength(300); expect(peak).toBe(1)
+})

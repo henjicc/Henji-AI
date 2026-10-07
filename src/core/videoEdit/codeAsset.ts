@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from './codeMaterialPersistence'
 import { CODE_MATERIAL_LIMITS } from './codeMaterial/contract'
 
+/** A source has at most 32 typed parameter slots (compiler contract), hence at most 32 distinct image dependencies. Bytes bound a single serialized source manifest. */
 export const CODE_ASSET_LIMITS = Object.freeze({ bytes: 512 * 1024, images: 32 })
 export const CODE_ASSET_MIME = 'application/x-henji-code'
 export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()

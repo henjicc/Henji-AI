@@ -1,13 +1,21 @@
 import { videoEditFft } from './fft'
 
 export const VIDEO_EDIT_MULTICAM_SYNC_RATE = 1000
+/** Four Float64 FFT planes and two prefix-energy arrays coexist. This memory budget is independent of sequence duration. */
+const SYNC_MEMORY_BYTES = 256 * 1024 ** 2
+export function videoEditAudioSyncSize(referenceSamples: number, candidateSamples: number): number {
+  if (![referenceSamples, candidateSamples].every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error('同步声音样本数量无效。')
+  let size = 1
+  while (size < referenceSamples + candidateSamples - 1) size *= 2
+  if ((size * 4 + referenceSamples + candidateSamples + 2) * 8 > SYNC_MEMORY_BYTES) throw new Error('共同声音同步需要的内存过多，请用入点或时间码同步长素材。')
+  return size
+}
 /** Positive offset means candidate starts later on the reference clock. Linear, zero-padded correlation. */
 export function videoEditAudioOffset(reference: Float32Array, candidate: Float32Array, sampleRate = VIDEO_EDIT_MULTICAM_SYNC_RATE): { seconds: number; confidence: number } {
-  if (!Number.isFinite(sampleRate) || sampleRate <= 0 || Math.max(reference.length, candidate.length) > sampleRate * 1800) throw new Error('同步声音最长为30分钟。')
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) throw new Error('同步声音采样率无效。')
   const minimum = Math.max(8, Math.min(Math.round(sampleRate), Math.floor(Math.min(reference.length, candidate.length) / 4)))
   if (Math.min(reference.length, candidate.length) < Math.max(minimum, sampleRate / 2)) throw new Error('声音太短，无法同步，请使用入点或时间码。')
-  let size = 1
-  while (size < reference.length + candidate.length - 1) size *= 2
+  const size = videoEditAudioSyncSize(reference.length, candidate.length)
   const ar = new Float64Array(size); const ai = new Float64Array(size); const br = new Float64Array(size); const bi = new Float64Array(size)
   const energy = (input: Float32Array, real: Float64Array): Float64Array => {
     let mean = 0

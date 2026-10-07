@@ -1,4 +1,4 @@
-/** Both persisted documents and render snapshots obey this same bounded DAG. */
+/** Render/mix nesting budget: every child owns full-size compositor targets and nested decoder/mixer state. Protect recursive live resources, independently of sequence count or imported folder depth. */
 export const VIDEO_EDIT_MAX_SEQUENCE_DEPTH = 8
 interface SequenceGraph {
   items: readonly { id: string; kind: string; sequenceId?: string }[]

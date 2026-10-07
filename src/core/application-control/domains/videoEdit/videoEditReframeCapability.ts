@@ -9,7 +9,7 @@ const input = z.object({
   clipRef: clipRef.optional().describe('仅重构原片段，使用其所属序列的画幅，不复制序列。与 sequenceRef 二选一。'),
   targetSize: videoEditReframeSizeSchema.default({ width: 1080, height: 1920 }), name: z.string().trim().min(1).max(200).optional(),
   settings: videoEditReframeSettingsSchema.default({ motion: 'default', attention: 'auto' }),
-  trackerBindings: z.array(z.object({ clipRef, trackerRef: ref('video_edit.tracker') }).strict()).max(500).default([]),
+  trackerBindings: z.array(z.object({ clipRef, trackerRef: ref('video_edit.tracker') }).strict()).default([]),
   exportPresetRef: ref('video_edit.export_preset').optional().describe('可选：成功保存后用已有视频预设加入导出队列，需用户选输出文件；提交不等于编码完成，随后 query_video_edit_export。'),
 }).strict().refine(value => Boolean(value.sequenceRef) !== Boolean(value.clipRef), 'sequenceRef 与 clipRef 必须二选一。')
 const output = z.object({ resultRef: sequenceRef, documentRef, clipRefs: z.array(clipRef), created: z.boolean(), missingFrames: z.number().int().nonnegative(), faceFrames: z.number().int().nonnegative(), exportJobIds: z.array(z.string()), exportIssue: z.string().optional(), message: z.string(), verified: z.boolean() }).strict()

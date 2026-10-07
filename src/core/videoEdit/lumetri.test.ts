@@ -1,3 +1,4 @@
+import { encodeLumetriCurve, parseLumetriCurve, lumetriCurveLut } from './lumetriCurves'
 import { describe, expect, it } from 'vitest'
 import { normalizeVideoEditBuiltinParams, videoEditBuiltinEffect, videoEditBuiltinDefaults } from './builtinEffects'
 import { VIDEO_EDIT_LUMETRI, lumetriLinear, lumetriSrgb, lumetriWhiteBalance, suggestLumetriAutoColor } from './lumetri'
@@ -38,4 +39,11 @@ describe('Lumetri 参数与自动校色', () => {
     expect(() => suggestLumetriAutoColor(new Float32Array(100), 1)).toThrow('缺少')
     expect(() => suggestLumetriAutoColor([1, 2], 1)).toThrow('RGBA')
   })
+})
+
+it('调色曲线超过32个控制点仍保留，查找区段沿升序点二分并保持中性曲线', () => {
+  const points = Array.from({ length: 101 }, (_, x) => ({ x, y: x }))
+  expect(parseLumetriCurve(encodeLumetriCurve(points))).toEqual(points)
+  const lut = lumetriCurveLut(points)
+  expect(lut[500]).toBeCloseTo(500 / 1023, 6)
 })

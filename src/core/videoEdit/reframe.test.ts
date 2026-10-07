@@ -67,7 +67,7 @@ it('主体装不下、超缩放、手动构图冲突整批拒绝；非中心锚�
 it('30 分钟真实帧数的静态构图只产生端点；密集切换不静默丢弃关键帧', () => {
   const result = generateVideoEditReframeKeyframes(clip(54000), Array(54000).fill(box(.45)), picture, target, 30, settings)
   expect(result.curves!.x).toHaveLength(2)
-  expect(() => generateVideoEditReframeKeyframes(clip(300), Array.from({ length: 300 }, (_, frame) => box(frame % 2 ? .1 : .7)), picture, target, 30, settings, Array.from({ length: 299 }, (_, i) => i + 1))).toThrow()
+  expect(generateVideoEditReframeKeyframes(clip(300), Array.from({ length: 300 }, (_, frame) => box(frame % 2 ? .1 : .7)), picture, target, 30, settings, Array.from({ length: 299 }, (_, i) => i + 1)).curves!.x!.length).toBeGreaterThan(256)
 })
 it('序列复制重新分配所有序列内引用；媒体共享，音轨、字幕、过渡、跟随和标记保留', () => {
   const document = createVideoEditDocument('复制测试'); const sequence = document.sequences[0]

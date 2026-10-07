@@ -60,6 +60,5 @@ export function replaceVideoEditDuckingKeyframes(clip: VideoEditClip, activity: 
     if (stop < end) put(Math.min(end, stop + fade), 1)
   }
   const result = [...manual, ...generated.values()].sort((a, b) => a.time - b.time)
-  if (result.length > 256) throw new Error('回避变化过于密集，请分割音乐片段或增加淡化时长后重试。')
   return videoEditKeyframesSchema.parse(result)
 }

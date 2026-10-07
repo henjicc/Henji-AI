@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { videoEditClipSourceDuration, videoEditComposition, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
@@ -22,7 +23,7 @@ export interface VideoEditSpeedChange {
   ripple?: boolean
 }
 const end = (clip: Pick<VideoEditClip, 'start' | 'duration'>): number => clip.start + clip.duration
-function sequenceLimit(fps: number): number { return Math.floor(fps * 1800) }
+function sequenceLimit(fps: number): number { return Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) }
 /** 不能改速度的片段说明原因（图片、文字、图形、调整图层没有可变速的源时间）。 */
 export function assertVideoEditSpeedClips(clips: readonly VideoEditClip[]): void {
   const blocked = clips.find(clip => !videoEditClipSpeedSupported(clip.kind))
@@ -74,7 +75,7 @@ export function applyVideoEditSpeedChange(document: VideoEditDocument, sequenceI
     const moving = sequence.clips.filter(clip => shiftOf(clip) !== 0)
     assertVideoEditClipsEditable(sequence, moving.map(clip => clip.id))
     clips = clips.map(clip => { const original = sequence.clips.find(value => value.id === clip.id)!; const shift = shiftOf(original); return shift ? { ...clip, start: clip.start + shift } : clip })
-    if (clips.some(clip => end(clip) > limit)) throw new Error('波纹编辑会让后面的片段超出序列最长 30 分钟，请先缩短序列。')
+    if (clips.some(clip => end(clip) > limit)) throw new Error('波纹编辑会让后面的片段超出序列最长 24 小时，请先缩短序列。')
   }
   return finish(sequence, clips, fps)
 }

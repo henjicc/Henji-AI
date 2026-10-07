@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { CodeMaterialError } from './codeMaterial/contract'
 import type { CodeMaterialContext, CodeMaterialProgram } from './codeMaterial/contract'
 import { videoEditFps, videoEditSourceSeconds } from './time'
@@ -22,7 +23,7 @@ export function codeMaterialContextForFrame(clip: CodeMaterialTimedClip, timelin
 /** The domain validates both endpoints and real source handles before supplying this window. */
 export function codeMaterialContextForTransitionFrame(clip: CodeMaterialTimedClip, timelineFrame: number, rate: VideoEditRatio, program: TimingProgram, window: { start: number; end: number }): CodeMaterialContext {
   integer(window.start, '转场起点'); integer(window.end, '转场终点', window.start + 1)
-  if (timelineFrame < window.start || timelineFrame >= window.end || window.end > Math.floor(videoEditFps(rate) * 1800)) throw new CodeMaterialError('CONTEXT', '请求帧必须位于有效转场窗口内。')
+  if (timelineFrame < window.start || timelineFrame >= window.end || window.end > Math.floor(videoEditFps(rate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) throw new CodeMaterialError('CONTEXT', '请求帧必须位于有效转场窗口内。')
   return contextForFrame(clip, timelineFrame, rate, program, true)
 }
 function contextForFrame(clip: CodeMaterialTimedClip, timelineFrame: number, rate: VideoEditRatio, program: TimingProgram, transitionHandles = false): CodeMaterialContext {
@@ -36,7 +37,7 @@ function contextForFrame(clip: CodeMaterialTimedClip, timelineFrame: number, rat
   integer(clip.sourceRemainder.denominator, '源入点余数分母', 1, 1_000_000)
   integer(clip.sourceRemainder.numerator, '源入点余数分子', 0, clip.sourceRemainder.denominator - 1)
   integer(program.width, '作者画面宽度', 1, 8192); integer(program.height, '作者画面高度', 1, 8192)
-  if (!Number.isFinite(program.durationSeconds) || program.durationSeconds <= 0 || program.durationSeconds > 1800 || (program.mode !== 'static' && program.mode !== 'dynamic')) throw new CodeMaterialError('CONTEXT', '代码素材模式或声明时长无效。')
+  if (!Number.isFinite(program.durationSeconds) || program.durationSeconds <= 0 || program.durationSeconds > VIDEO_EDIT_MAX_SEQUENCE_SECONDS || (program.mode !== 'static' && program.mode !== 'dynamic')) throw new CodeMaterialError('CONTEXT', '代码素材模式或声明时长无效。')
   const relativeFrame = timelineFrame - clip.start
   const source = videoEditClipSourceTimeAt(clip, relativeFrame, rate, transitionHandles && program.mode === 'static')
   integer(source.sourceInUs, '求值连续源入点')

@@ -106,7 +106,7 @@ it.each(['paths', 'asset'] as const)('零时间线从%s导入图片后直接落�
   const owner = await createVideoEditProject(); const id = owner.document.id; const platform = getPlatform()
   const path = resolve('fixture', 'fresh.png')
   if (source === 'paths') {
-    vi.spyOn(platform.system.fs, 'readDir').mockRejectedValue(new Error('文件'))
+    vi.spyOn(platform.system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))
     vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)
     vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue(resolve('fixture'))
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Uint8Array())))

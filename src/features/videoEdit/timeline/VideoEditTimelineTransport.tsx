@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { UiInput } from '@/components/ui'
 import { parseVideoEditTimecodeInput, videoEditFrameCount } from '@/core/videoEdit/timecode'
@@ -29,7 +30,7 @@ export function VideoEditTimecode({ instance, label, className = '' }: { instanc
   const sequence = getActiveVideoEditSequence(instance)
   const [editing, setEditing] = useState<string | null>(null)
   const drag = useRef<{ x: number; frame: number; moved: boolean; pointerId: number } | null>(null)
-  const maxFrame = Math.floor(sequence.fps * 1800)
+  const maxFrame = Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
   const text = display === 'frames' ? videoEditFrameCount(instance.frame) : `${timelineTimecode(instance.frame, sequence.fps)}${Number.isInteger(sequence.fps) ? '' : ' NDF'}`
   const seek = (frame: number, scrubbing = false): void => { setVideoEditView(instance.document.id, { frame: Math.max(0, Math.min(maxFrame, Math.round(frame))), playing: false, scrubbing }) }
   const commit = (value: string): void => {
@@ -97,5 +98,5 @@ export function VideoEditTimelinePlayheadHead({ instance, pixels }: { instance: 
 }
 export function VideoEditTimelinePosition({ instance, children }: { instance: VideoEditInstance; children: ReactNode }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
-  return <div className="relative min-w-0 flex-1" role="slider" tabIndex={0} aria-label="剪辑时间定位" aria-valuemin={0} aria-valuemax={Math.floor(getActiveVideoEditSequence(instance).fps * 1800)} aria-valuenow={instance.frame}>{children}</div>
+  return <div className="relative min-w-0 flex-1" role="slider" tabIndex={0} aria-label="剪辑时间定位" aria-valuemin={0} aria-valuemax={Math.floor(getActiveVideoEditSequence(instance).fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)} aria-valuenow={instance.frame}>{children}</div>
 }

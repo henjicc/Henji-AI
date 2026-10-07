@@ -63,7 +63,7 @@ function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataRead
  * trial-rendered, then becomes one atomic domain edit. It never executes JS. */
 async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication): Promise<Candidate[]> {
   signal?.throwIfAborted()
-  if (!inputs.length || inputs.length > 32) throw new Error('每次创建1到32个代码素材。')
+  if (!inputs.length) throw new Error('请提供要创建的代码素材。')
   const owner = requireVideoEditInstance(projectId)
   const baseline = owner.document
   const controller = new AbortController()
@@ -156,7 +156,7 @@ export async function createVideoEditCodeAssetInstance(projectId: string, public
  * their fixed bindings; an explicit domain property edit binds a new version. */
 export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal): Promise<string[]> {
   signal?.throwIfAborted()
-  if (!inputs.length || inputs.length > 32) throw new Error('每次创建1到32个源码版本。')
+  if (!inputs.length) throw new Error('请提供要创建的源码版本。')
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document
   const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('源码版本创建已取消。'))
   signal?.addEventListener('abort', cancel, { once: true })

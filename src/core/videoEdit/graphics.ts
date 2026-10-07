@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { z } from 'zod'
 import { CodeMaterialError } from './codeMaterial/contract'
 import type { CodeColor, CodeDrawCommand, CodeParameterDeclaration, CodeParameterValues } from './codeMaterial/contract'
@@ -12,7 +13,7 @@ const graphicObjectSchema = z.object({
   id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), kind: z.enum(['rect', 'ellipse', 'text']),
   parameters: codeMaterialInstanceSchema.shape.parameters, curves: codeMaterialCurvesSchema.optional(),
 }).strict()
-const graphicSchema = dimensionsSchema.extend({ objects: z.array(graphicObjectSchema).max(32) })
+const graphicSchema = dimensionsSchema.extend({ objects: z.array(graphicObjectSchema) })
 export type VideoEditGraphicObject = z.infer<typeof graphicObjectSchema>
 export type VideoEditGraphic = z.infer<typeof graphicSchema>
 export function orderVideoEditGraphicObjects(objects: VideoEditGraphicObject[], ids: string[]): VideoEditGraphicObject[] {
@@ -51,23 +52,20 @@ export function videoEditGraphicObjectMetadata(graphic: VideoEditGraphic, object
     parameters.push(number('width', '宽度', width, 0, 16384), number('height', '高度', height, 0, 16384), color('fill', '填充颜色'))
     if (object.kind === 'rect') parameters.push(number('radius', '圆角', 0, 0, 8192))
   }
-  return { name: object.name, kind: 'generator', mode: 'static', width: graphic.width, height: graphic.height, durationSeconds: 1800, seed: 0, parameters }
+  return { name: object.name, kind: 'generator', mode: 'static', width: graphic.width, height: graphic.height, durationSeconds: VIDEO_EDIT_MAX_SEQUENCE_SECONDS, seed: 0, parameters }
 }
 
 export const videoEditGraphicSchema = graphicSchema.superRefine((graphic, context) => {
-  const ids = new Set<string>(); let curveCount = 0; let pointCount = 0
+  const ids = new Set<string>()
   for (const [index, object] of graphic.objects.entries()) {
     if (ids.has(object.id)) context.addIssue({ code: 'custom', path: ['objects', index, 'id'], message: '图形对象标识不能重复。' })
     ids.add(object.id)
-    const curves = Object.values(object.curves ?? {})
-    curveCount += curves.length; pointCount += curves.reduce((count, points) => count + points.length, 0)
     try { prepareCodeMaterialParameters(videoEditGraphicObjectMetadata(graphic, object), object) }
     catch (error) {
       if (!(error instanceof CodeMaterialError) && !(error instanceof z.ZodError)) throw error
       context.addIssue({ code: 'custom', path: ['objects', index], message: error.message })
     }
   }
-  if (curveCount > 32 || pointCount > 2048) context.addIssue({ code: 'custom', path: ['objects'], message: '整份图形最多32条曲线及2048个关键帧。' })
 })
 
 /** Prepare per immutable graphic; the caller owns caching and its bounded lifetime. */

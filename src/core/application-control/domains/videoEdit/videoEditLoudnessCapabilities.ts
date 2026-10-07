@@ -5,8 +5,8 @@ import { videoEditLoudnessMeasurementSchema } from '../../../videoEdit/loudness'
 
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 const clipRef = applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict()
-const input = z.object({ documentRef, clipRefs: z.array(clipRef).min(1).max(256).describe('同一序列中要单独测量或标准化的声音片段；从实体目录读取完整引用。') }).strict()
-const output = z.object({ resultRef: documentRef, results: z.array(z.object({ clipRef, volume: z.number().min(0).max(2), measurement: videoEditLoudnessMeasurementSchema })).min(1).max(256), message: z.string(), verified: z.boolean() }).strict()
+const input = z.object({ documentRef, clipRefs: z.array(clipRef).min(1).describe('同一序列中要单独测量或标准化的声音片段；从实体目录读取完整引用。') }).strict()
+const output = z.object({ resultRef: documentRef, results: z.array(z.object({ clipRef, volume: z.number().min(0).max(2), measurement: videoEditLoudnessMeasurementSchema })).min(1), message: z.string(), verified: z.boolean() }).strict()
 export const measureVideoEditLoudnessCapability = defineApplicationCapability<z.infer<typeof input>, z.infer<typeof output>>({
   id: 'measure_video_edit_loudness', title: '测量剪辑片段响度与真峰值',
   description: '只读测量明确声音片段的积分 LUFS、末尾三秒短期 LUFS、4 倍重建真峰值 dBTP、采样峰值 dBFS。每段独立测量，包含当前音量、变速、声道映射、淡化与音频效果，忽略轨道静音和相邻片段过渡；不是整片混音。静音、低于门限或太短时 LUFS 为 null，不是零。',

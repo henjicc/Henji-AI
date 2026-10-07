@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { copyVideoEditSequence } from '@/core/videoEdit/sequenceCopy'
 import { createLogger } from '@/core/logging'
 import { reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
@@ -325,7 +326,7 @@ export function validateVideoEditProgramControl(id: string, values: VideoEditPro
   const instance = requireVideoEditInstance(id)
   if (!instance.activeSequenceId && (values.frame !== undefined && values.frame !== 0 || values.playing === true)) throw new Error('没有序列，请先新建序列。')
   if (values.frame !== undefined && (!Number.isSafeInteger(values.frame) || values.frame < 0)) throw new Error('播放位置必须为非负整数帧。')
-  if (values.frame !== undefined && values.frame > Math.floor((findActiveVideoEditSequence(instance)?.fps ?? 60) * 1800)) throw new Error('播放位置超出序列范围。')
+  if (values.frame !== undefined && values.frame > Math.floor((findActiveVideoEditSequence(instance)?.fps ?? 60) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) throw new Error('播放位置超出序列范围。')
   if (values.playbackDirection !== undefined && values.playbackDirection !== 1 && values.playbackDirection !== -1) throw new Error('播放方向无效。')
   if (values.playing !== undefined && typeof values.playing !== 'boolean') throw new Error('播放状态无效。')
 }
@@ -382,7 +383,7 @@ export function validateVideoEditTimelineView(id: string, values: Partial<VideoE
   next.targetTrackIds = [...new Set(next.targetTrackIds)]
   if (next.targetTrackIds.some(id => !sequence.tracks.some(track => track.id === id))) throw new Error('目标轨道不属于此序列。')
   if (!(VIDEO_EDIT_TIMELINE_TOOLS as readonly string[]).includes(next.tool) || typeof next.snapping !== 'boolean' || !Number.isFinite(next.zoom) || next.zoom < .1 || next.zoom > 20) throw new Error('时间线工具、吸附或缩放无效。')
-  for (const frame of [next.inFrame, next.outFrame]) if (frame !== null && (!Number.isSafeInteger(frame) || frame < 0 || frame > Math.floor(sequence.fps * 1800))) throw new Error('序列入出点超出范围。')
+  for (const frame of [next.inFrame, next.outFrame]) if (frame !== null && (!Number.isSafeInteger(frame) || frame < 0 || frame > Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('序列入出点超出范围。')
   if (next.inFrame !== null && next.outFrame !== null && next.outFrame <= next.inFrame) throw new Error('出点必须晚于入点。')
   return next
 }
@@ -409,7 +410,8 @@ export function getVideoEditProjectView(id: string): VideoEditProjectView {
 export function setVideoEditProjectView(id: string, values: Partial<VideoEditProjectView>): void {
   const instance = requireVideoEditInstance(id)
   const next = { ...getVideoEditProjectView(id), ...values }
-  if (next.selectedItemIds.some(itemId => !instance.document.items.some(item => item.id === itemId)) || next.selectedItemIds.length > 500) throw new Error('素材选区包含无效素材项。')
+  const itemIds = new Set(instance.document.items.map(item => item.id))
+  if (next.selectedItemIds.some(itemId => !itemIds.has(itemId))) throw new Error('素材选区包含无效素材项。')
   if (next.selectedBinId && !instance.document.bins.some(bin => bin.id === next.selectedBinId)) throw new Error('目标素材箱不存在。')
   if (instance.document.sequences.length && !next.openSequenceIds.length || next.openSequenceIds.some(sequenceId => !instance.document.sequences.some(sequence => sequence.id === sequenceId))) throw new Error('请至少保留一个有效的序列标签。')
   next.selectedItemIds = [...new Set(next.selectedItemIds)]; next.openSequenceIds = [...new Set(next.openSequenceIds)]

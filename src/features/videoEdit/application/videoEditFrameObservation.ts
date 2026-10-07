@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { createLogger } from '@/core/logging'
 import { videoEditComposition, type VideoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -58,7 +59,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
     if (!document.sequences.some(sequence => sequence.id === sequenceId)) throw new Error('目标序列不存在。')
     composition = snapshot ?? videoEditComposition(document, sequenceId)
     if (composition.id !== sequenceId || composition.revision !== document.revision) throw new Error('原片段版本已改变，请重新发送。')
-    if (!Number.isSafeInteger(target.frame) || target.frame < 0 || target.frame >= Math.floor(composition.fps * 1800)) throw new Error('请指定序列范围内的整数帧。')
+    if (!Number.isSafeInteger(target.frame) || target.frame < 0 || target.frame >= Math.floor(composition.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) throw new Error('请指定序列范围内的整数帧。')
     frame = target.frame
   } else composition = sourceComposition(document, target.itemId, target.timeUs)
   logger.info('剪辑指定画面观察开始', { event: 'video_edit.frame_observation.start', context: { projectId, kind: target.kind, revision: document.revision } })

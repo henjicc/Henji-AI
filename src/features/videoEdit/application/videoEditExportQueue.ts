@@ -7,7 +7,7 @@ import { getPlatform } from '@/platform/runtime'
 import { exportVideoEdit, videoEditExportTask, type VideoEditExportTask } from './videoEditExport'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { holdVideoEditActivity, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, videoEditExportRange, type VideoEditInstance } from './videoEditService'
-import { sameVideoEditMediaPath } from './videoEditMedia'
+import { videoEditMediaPathKey } from './videoEditMedia'
 
 const logger = createLogger('features.videoEdit.exportQueue')
 export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; range?: { startFrame: number; endFrame: number }; path?: string }
@@ -28,8 +28,7 @@ export class VideoEditExportQueue {
   list(): readonly VideoEditExportJob[] { return this.jobs }
   private publish(): void { this.revision++; for (const listener of this.listeners) listener(); publishVideoEdit() }
   append(jobs: VideoEditExportJob[]): void {
-    if (this.jobs.length + jobs.length > 128) throw new Error('导出列表最多保留 128 项，请清除已结束项后再加入。')
-    this.jobs.push(...jobs); this.publish(); void this.drain()
+    this.jobs = this.jobs.concat(jobs); this.publish(); void this.drain()
   }
   pending(projectId?: string): boolean { return this.jobs.some(job => (!projectId || job.owner.document.id === projectId) && ['queued', 'running'].includes(job.state)) }
   clearFinished(): void { this.jobs = this.jobs.filter(job => ['queued', 'running'].includes(job.state)); this.publish() }
@@ -91,13 +90,18 @@ export const videoEditExportQueue = new VideoEditExportQueue(async job => {
 /** Validate the whole batch and obtain local paths before committing any item. */
 export async function enqueueVideoEditExports(requests: readonly VideoEditExportRequest[], signal?: AbortSignal): Promise<VideoEditExportJob[]> {
   assertApplicationWritesAllowed(); signal?.throwIfAborted()
-  if (!requests.length || requests.length > 32 || videoEditExportQueue.list().length + requests.length > 128) throw new Error('每次请加入 1–32 项，导出列表最多 128 项。')
+  if (!requests.length) throw new Error('请选择要导出的序列。')
   const releases: Array<() => void> = []
   try {
+    // Reuse the same immutable composition snapshot across different formats of one sequence.
+    const snapshots = new Map<VideoEditInstance, Map<string, VideoEditComposition>>()
     const jobs = requests.map(request => {
       const owner = requireVideoEditInstance(request.projectId)
       const sequenceId = request.sequenceId ?? owner.activeSequenceId
-      const snapshot = structuredClone(videoEditComposition(owner.document, sequenceId))
+      let sequences = snapshots.get(owner)
+      if (!sequences) { sequences = new Map(); snapshots.set(owner, sequences) }
+      let snapshot = sequences.get(sequenceId)
+      if (!snapshot) { snapshot = structuredClone(videoEditComposition(owner.document, sequenceId)); sequences.set(sequenceId, snapshot) }
       const preset = request.presetId ? videoEditExportPresetLibrary.list().find(value => value.id === request.presetId) : undefined
       if (request.presetId && !preset) throw new Error('原预设不存在，请从 video_edit.export_preset 目录重新选择。')
       const settings = videoEditExportSettingsSchema.parse(request.settings ?? preset?.settings ?? { format: 'mp4', width: snapshot.width, height: snapshot.height, fps: null, videoBitrateMbps: 8, audioBitrateKbps: 192, fit: 'fit', loudness: null })
@@ -108,6 +112,7 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
       return { id: crypto.randomUUID(), owner, name: snapshot.name, presetName: preset?.name ?? '自定义导出', snapshot, settings, range, path: request.path ?? '', state: 'queued' as const, controller: new AbortController(), release }
     })
     const platform = getPlatform()
+    const paths = new Set<string>()
     for (const job of jobs) {
       signal?.throwIfAborted()
       if (!job.path) {
@@ -117,13 +122,17 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
       }
       if (!job.path.toLowerCase().endsWith(`.${job.settings.format}`)) throw new Error(`输出文件需要 .${job.settings.format} 扩展名。`)
       if (await platform.system.fs.exists(job.path)) throw new Error('请选择新的文件名导出，避免覆盖已有文件。')
-      if (videoEditExportQueue.list().some(value => ['queued', 'running'].includes(value.state) && sameVideoEditMediaPath(value.path, job.path)) || jobs.some(other => other !== job && other.path && sameVideoEditMediaPath(other.path, job.path))) throw new Error('多个导出不能使用同一个输出文件，请选择不同文件名。')
+      const key = videoEditMediaPathKey(job.path)
+      if (paths.has(key)) throw new Error('多个导出不能使用同一个输出文件，请选择不同文件名。')
+      paths.add(key)
     }
     for (const owner of new Set(jobs.map(job => job.owner))) await saveVideoEdit(owner.document.id)
     signal?.throwIfAborted()
-    if (jobs.some(job => !listVideoEditInstances().includes(job.owner))) throw new Error('原剪辑已关闭，未加入导出。')
+    const owners = new Set(listVideoEditInstances())
+    if (jobs.some(job => !owners.has(job.owner))) throw new Error('原剪辑已关闭，未加入导出。')
     assertApplicationWritesAllowed()
-    if (jobs.some(job => videoEditExportQueue.list().some(value => ['queued', 'running'].includes(value.state) && sameVideoEditMediaPath(value.path, job.path)))) throw new Error('输出位置已被另一个导出占用，请选择不同文件名。')
+    const occupied = new Set(videoEditExportQueue.list().filter(value => ['queued', 'running'].includes(value.state)).map(value => videoEditMediaPathKey(value.path)))
+    if (jobs.some(job => occupied.has(videoEditMediaPathKey(job.path)))) throw new Error('输出位置已被另一个导出占用，请选择不同文件名。')
     videoEditExportQueue.append(jobs); return jobs
   } catch (error) { for (const release of releases) release(); throw error }
 }

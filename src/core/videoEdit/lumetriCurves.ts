@@ -1,11 +1,10 @@
 export interface LumetriCurvePoint { x: number; y: number }
-export const LUMETRI_MAX_CURVE_POINTS = 32
 /** Coordinates are percentages. Empty encoding means legacy five anchors / neutral hue curve. */
 export function parseLumetriCurve(value: unknown): LumetriCurvePoint[] {
-  if (typeof value !== 'string' || value.length > 4096) throw new Error('曲线需要最多32个 {x,y} 百分比控制点的 JSON 数组。')
+  if (typeof value !== 'string' || value.length > 4096) throw new Error('曲线需要不超过4096字符的 {x,y} 百分比控制点 JSON 数组。')
   if (!value) return []
   const points: unknown = JSON.parse(value)
-  if (!Array.isArray(points) || points.length < 2 || points.length > LUMETRI_MAX_CURVE_POINTS) throw new Error('曲线需要2–32个控制点。')
+  if (!Array.isArray(points) || points.length < 2) throw new Error('曲线至少需要2个控制点。')
   return points.map((point: unknown, i: number) => {
     if (!point || typeof point !== 'object' || Object.keys(point).some(key => key !== 'x' && key !== 'y')) throw new Error('曲线控制点只能包含 x 和 y。')
     const { x, y } = point as Record<string, unknown>
@@ -26,7 +25,9 @@ export function lumetriSpline(points: readonly LumetriCurvePoint[]): (x: number)
   return x => {
     if (x <= points[0].x) return points[0].y
     if (x >= points[points.length - 1].x) return points[points.length - 1].y
-    const i = points.findIndex((point, index) => index < points.length - 1 && x < points[index + 1].x)
+    let low = 0; let high = points.length - 2
+    while (low < high) { const mid = Math.floor((low + high) / 2); if (x < points[mid + 1].x) high = mid; else low = mid + 1 }
+    const i = low
     const left = points[i]; const right = points[i + 1]; const h = right.x - left.x; const t = (x - left.x) / h
     return (2 * t ** 3 - 3 * t ** 2 + 1) * left.y + (t ** 3 - 2 * t ** 2 + t) * h * tangents[i] + (-2 * t ** 3 + 3 * t ** 2) * right.y + (t ** 3 - t ** 2) * h * tangents[i + 1]
   }

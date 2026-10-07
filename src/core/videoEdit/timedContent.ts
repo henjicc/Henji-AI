@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
 import { z } from 'zod'
 import type { VideoEditClip, VideoEditSequence, VideoEditDocument } from './document'
 import { videoEditFps, type VideoEditRatio } from './time'
@@ -8,7 +9,7 @@ import { subtitleGraphic, videoEditSubtitleStyleSchema } from './subtitleStyle'
 import type { VideoEditGraphic } from './graphics'
 
 const id = z.string().min(1).max(100)
-const frame = z.number().int().nonnegative().max(108000)
+const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 export const videoEditMarkerSchema = z.object({ id, clipId: id.optional(), frame, name: z.string().trim().min(1).max(200) }).strict()
 export const videoEditCaptionSchema = z.object({ id, clipId: id.optional(), start: frame, duration: frame.min(1), text: z.string().trim().min(1).max(2000),
   translation: z.string().trim().max(2000).optional().describe('第二语言字幕，显示在原文下方；空字符串清除翻译。'),
@@ -79,7 +80,7 @@ export function importVideoEditCaptions(source: string, rate: VideoEditRatio, op
   const boundary = (us: number): number => Math.round(us * rate.numerator / (1e6 * rate.denominator)) + offset
   return parseSubtitleText(source).map(cue => {
     const start = boundary(cue.startUs); const end = boundary(cue.endUs)
-    if (start < 0 || end <= start || end > Math.floor(fps * 1800) || options.clip && (start < options.clip.start || end > options.clip.start + options.clip.duration)) throw new Error('字幕范围超出序列或所属片段；请调整导入位置或字幕时间。')
+    if (start < 0 || end <= start || end > Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) || options.clip && (start < options.clip.start || end > options.clip.start + options.clip.duration)) throw new Error('字幕范围超出序列或所属片段；请调整导入位置或字幕时间。')
     return { id: crypto.randomUUID(), ...(options.clip ? { clipId: options.clip.id } : {}), start, duration: end - start, text: cue.text }
   })
 }

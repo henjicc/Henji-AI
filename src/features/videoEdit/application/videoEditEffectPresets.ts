@@ -27,7 +27,7 @@ interface LibraryState extends LibraryData {
   toggleFavorite(id: string): void
 }
 export const VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY = 'video-edit-effects-library'
-const dataSchema = z.object({ favorites: z.array(z.string().max(150)).max(1024), presets: z.array(videoEditEffectPresetSchema).max(256) }).strict()
+const dataSchema = z.object({ favorites: z.array(z.string().max(150)), presets: z.array(videoEditEffectPresetSchema) }).strict()
 interface SyncSettingsStorage { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
 
 /** Shared by UI and assistant discovery. The persistence write precedes publication;

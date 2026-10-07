@@ -6,7 +6,7 @@ import { publishVideoEdit } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.titleTemplates')
 export const TITLE_TEMPLATE_STORAGE_KEY = 'video-edit-title-templates'
-const librarySchema = z.array(titleTemplateSchema).max(128).superRefine((items, context) => { if (new Set(items.map(item => item.id)).size !== items.length || items.some(item => item.id.startsWith('title:'))) context.addIssue({ code: 'custom', message: '自定义模板标识重复或与内置模板冲突。' }) })
+const librarySchema = z.array(titleTemplateSchema).superRefine((items, context) => { if (new Set(items.map(item => item.id)).size !== items.length || items.some(item => item.id.startsWith('title:'))) context.addIssue({ code: 'custom', message: '自定义模板标识重复或与内置模板冲突。' }) })
 interface LibraryState { templates: TitleTemplate[]; error: string; replace(templates: readonly TitleTemplate[]): void }
 export function createTitleTemplateLibrary(storage?: Pick<Storage, 'getItem' | 'setItem'>): UseBoundStore<StoreApi<LibraryState>> {
   let templates: TitleTemplate[] = []; let error = ''

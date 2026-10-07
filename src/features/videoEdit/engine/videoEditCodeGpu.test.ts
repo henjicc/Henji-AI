@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { describe, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
@@ -50,10 +51,11 @@ describe('代码GPU会话复用与资源边界', () => {
     await runtime.filter('out', 'static', fixed, { ...context, time: 3600 }, {}, input)
     const packed = vi.mocked(device.queue.writeBuffer).mock.lastCall![2] as Float32Array
     expect([...packed.slice(0, 3)]).toEqual([0, 1, 1])
-    await expect(runtime.filter('bad', 'dynamic', compileCodeMaterial(source('return sample(ctx.u,ctx.v);', 'filter')), { ...context, time: 3600 }, {}, input)).rejects.toThrow('时间')
+    await runtime.filter('long', 'dynamic', compileCodeMaterial(source('return sample(ctx.u,ctx.v);', 'filter')), { ...context, time: 3600 }, {}, input)
+    await expect(runtime.filter('bad', 'dynamic', compileCodeMaterial(source('return sample(ctx.u,ctx.v);', 'filter')), { ...context, time: VIDEO_EDIT_MAX_SEQUENCE_SECONDS + 1 }, {}, input)).rejects.toThrow('时间')
     await expect(runtime.filter('bad', 'static', fixed, { ...context, time: NaN }, {}, input)).rejects.toThrow('时间')
     await expect(runtime.filter('bad', 'static', fixed, { ...context, time: -1 }, {}, input)).rejects.toThrow('时间')
-    expect(runtime.diagnostics().filterFrames).toBe(1)
+    expect(runtime.diagnostics().filterFrames).toBe(2)
     await runtime.dispose()
   })
   it('并发普通滤镜编译完成后，等待相同版本的转场调用仍重证负时钟且不额外提交', async () => {

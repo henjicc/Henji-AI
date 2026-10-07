@@ -25,7 +25,7 @@ export const titleTemplateOverridesSchema = z.object({
 const contentClipSchema = videoEditClipSchema.pick({ name: true, kind: true, track: true, start: true, duration: true, sourceInUs: true, sourceRemainder: true, x: true, y: true, scale: true, rotation: true, anchorX: true, anchorY: true, opacity: true, volume: true, text: true, textStyle: true, graphic: true, curves: true }).strip().superRefine((clip, ctx) => {
   if (clip.kind !== 'graphic' && clip.kind !== 'text' || clip.kind === 'graphic' && !clip.graphic) ctx.addIssue({ code: 'custom', message: '标题模板只接受文字或图形片段。' })
 })
-export const titleTemplateContentSchema = z.object({ width: z.number().int().min(16).max(8192), height: z.number().int().min(16).max(8192), fps: z.number().finite().positive().max(120), clips: z.array(contentClipSchema).min(1).max(8) }).strict()
+export const titleTemplateContentSchema = z.object({ width: z.number().int().min(16).max(8192), height: z.number().int().min(16).max(8192), fps: z.number().finite().positive().max(120), clips: z.array(contentClipSchema).min(1) }).strict()
 const definition = z.object({ kind: z.enum(TITLE_TEMPLATE_KINDS).optional(), content: titleTemplateContentSchema.optional(), parameters: titleTemplateParametersSchema }).strict()
 export const titleTemplateDefinitionSchema = definition.refine(value => Boolean(value.kind) !== Boolean(value.content), '请选择内置类型或提供文字图形组合。')
 export const titleTemplateSchema = definition.extend({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200) }).refine(value => Boolean(value.kind) !== Boolean(value.content), '请选择内置类型或提供文字图形组合。')
@@ -63,7 +63,7 @@ function builtinGraphic(template: TitleTemplate, p: TitleTemplateParameters, wid
   return videoEditGraphicSchema.parse({ width, height, objects })
 }
 export function captureTitleTemplate(name: string, sequence: VideoEditSequence, clips: readonly VideoEditClip[]): TitleTemplate {
-  if (!clips.length || clips.some(clip => !['text', 'graphic'].includes(clip.kind) || clip.speed || clip.reverse || clip.effects?.length || clip.follow)) throw new Error('请选择1–8个原速文字或图形片段；含效果或跟随时请先移除这些绑定。')
+  if (!clips.length || clips.some(clip => !['text', 'graphic'].includes(clip.kind) || clip.speed || clip.reverse || clip.effects?.length || clip.follow)) throw new Error('请选择原速文字或图形片段；含效果或跟随时请先移除这些绑定。')
   const start = Math.min(...clips.map(clip => clip.start)); const track = Math.min(...clips.map(clip => clip.track)); const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
   const durationSeconds = (Math.max(...clips.map(clip => clip.start + clip.duration)) - start) / fps
   return titleTemplateSchema.parse({ id: crypto.randomUUID(), name, content: { width: sequence.width, height: sequence.height, fps, clips: clips.map(clip => ({ ...structuredClone(clip), start: clip.start - start, track: clip.track - track })) }, parameters: { durationSeconds, text: clips.find(clip => clip.kind === 'text')?.text ?? (clips.flatMap(clip => clip.graphic?.objects ?? []).find(object => object.kind === 'text')?.parameters.text || '标题') } })

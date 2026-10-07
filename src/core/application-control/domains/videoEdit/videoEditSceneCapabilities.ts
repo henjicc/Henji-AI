@@ -6,12 +6,12 @@ import { sceneApplyOptionsSchema, sceneCutsSchema, sceneSensitivitySchema } from
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 const clipRef = applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict()
 const target = z.object({ documentRef, clipRef }).strict()
-const analysis = z.object({ analysisId: z.string().min(1).max(100), cutsSeconds: sceneCutsSchema, cutFrames: z.array(z.number().int().nonnegative()).max(499) }).strict()
+const analysis = z.object({ analysisId: z.string().min(1).max(100), cutsSeconds: sceneCutsSchema, cutFrames: z.array(z.number().int().nonnegative()) }).strict()
 const detectInput = target.extend({ sensitivity: sceneSensitivitySchema.default(50) })
 const detectOutput = analysis.extend({ resultRef: documentRef, message: z.string() })
 const common = { version: 1, domain: 'video_edit' as const, dataClasses: ['C1'] as ['C1'], destructive: false, supportsPreview: false, requiredScopes: ['video_edit'] as ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.document'], resolveConcurrencyKey: (input: z.infer<typeof target>) => `video_edit:${input.documentRef.id}`, resolveOperationTargets: (input: z.infer<typeof target>) => [input.documentRef, input.clipRef] }
 export const detectVideoEditScenesCapability = defineApplicationCapability<z.infer<typeof detectInput>, z.infer<typeof detectOutput>>({
-  ...common, id: 'detect_video_edit_scenes', title: '检测视频片段的镜头切换', description: '免费本地后台检测一个原视频片段所用的源范围（最长30分钟），返回源时间 cutsSeconds（从原文件起点计秒）、当前序列整数帧 cutFrames 与 analysisId。灵敏度0只保留明显切换，100包含细微变化，默认50；裁剪、变速和倒放按当前片段换算。检测不改剪辑，可取消；原剪辑或源视频改变后结果失效。随后用 apply_video_edit_scenes 按结果批量应用，不要逐切点调用拆分。',
+  ...common, id: 'detect_video_edit_scenes', title: '检测视频片段的镜头切换', description: '免费本地后台检测一个原视频片段所用的源范围（最长24小时），返回源时间 cutsSeconds（从原文件起点计秒）、当前序列整数帧 cutFrames 与 analysisId。灵敏度0只保留明显切换，100包含细微变化，默认50；裁剪、变速和倒放按当前片段换算。检测不改剪辑，可取消；原剪辑或源视频改变后结果失效。随后用 apply_video_edit_scenes 按结果批量应用，不要逐切点调用拆分。',
   aliases: ['场景编辑检测', '镜头切换', 'scene detection'], readOnly: true, risk: 'R0', permission: 'video_edit:read', idempotent: true, timeoutMs: 600000, supportsUndo: false,
   inputSchema: detectInput, outputSchema: detectOutput, resolveOperationWriteTargets: () => [],
   control: capabilityControl('observe', ['video_edit.clip'], { revisionScopes: ['video_edit'], cancelable: true }), summarize: result => result.message,

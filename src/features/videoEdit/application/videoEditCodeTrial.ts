@@ -8,7 +8,7 @@ import { videoEditTransitionClipIds, videoEditTransitionWindow } from '@/core/vi
 export interface VideoEditTrialTarget { sequenceId: string; clipId: string; effectIds?: string[] }
 /** Exact original-clock endpoints, plus every affected transition boundary. */
 export function videoEditCodeTrialFrames(document: VideoEditDocument, targets: VideoEditTrialTarget[], selected?: { sequenceId: string; frame: number }): Array<{ document: VideoEditComposition; frame: number }> {
-  if (!targets.length || targets.length > 32) throw new Error('每次检查1到32个片段。')
+  if (!targets.length) throw new Error('请选择要检查的片段。')
   const frames = new Map<string, { document: VideoEditComposition; frame: number }>()
   const compositions = new Map<string, VideoEditComposition>()
   const add = (sequenceId: string, frame: number): void => {
@@ -27,14 +27,13 @@ export function videoEditCodeTrialFrames(document: VideoEditDocument, targets: V
     }
   }
   if (selected) { const key = `${selected.sequenceId}:${selected.frame}`; frames.delete(key); add(selected.sequenceId, selected.frame) }
-  if (frames.size > 257) throw new Error('试渲染边界超过257帧，请缩小编辑范围。')
   return [...frames.values()]
 }
 /** Hidden state cannot certify a source by merely producing an empty bitmap.
  * Each target gets a separate, nonpersistent composition with honest clocks;
  * the final preview retains the user's original visibility and effect switches. */
 export function videoEditCodeValidationFrames(document: VideoEditDocument, targets: VideoEditTrialTarget[], selected: { sequenceId: string; frame: number }): Array<{ document: VideoEditComposition; frame: number }> {
-  if (!targets.length || targets.length > 32) throw new Error('每次检查1到32个片段。')
+  if (!targets.length) throw new Error('请选择要检查的片段。')
   const frames: Array<{ document: VideoEditComposition; frame: number }> = []
   for (const target of targets) {
     const actual = videoEditComposition(document, target.sequenceId)
@@ -49,7 +48,6 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
     for (const input of videoEditCodeTrialFrames(document, [target])) frames.push({ document: forced, frame: input.frame })
   }
   frames.push({ document: videoEditComposition(document, selected.sequenceId), frame: selected.frame })
-  if (frames.length > 257) throw new Error('试渲染边界超过257帧，请缩小编辑范围。')
   return frames
 }
 
@@ -58,7 +56,7 @@ let waiting = 0
 /** One bounded queue for creation, source candidates and explicit version binds.
  * Every trial uses the production full-composition worker and releases it. */
 export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false): Promise<ImageBitmap | undefined> {
-  if (!frames.length || frames.length > 257) throw new Error('源码检查需要1到257个边界画面。')
+  if (!frames.length) throw new Error('源码检查需要边界画面。')
   if (waiting >= 4) throw new Error('代码素材试渲染队列已满，请等待当前检查完成。')
   waiting++; const previous = tail; let release!: () => void
   tail = new Promise<void>(resolve => { release = resolve })
@@ -67,13 +65,17 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
   let expired = false; let timer: ReturnType<typeof setTimeout> | undefined; let abort: (() => void) | undefined
   try {
     signal.throwIfAborted()
+    let rejectDeadline!: (reason: Error) => void
     const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => { expired = true; reject(new Error('源码试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
+      rejectDeadline = reject
       abort = () => { expired = true; reject(signal.reason) }
       signal.addEventListener('abort', abort, { once: true })
     })
     for (const input of frames) {
       signal.throwIfAborted()
+      // Detect a stalled frame, rather than imposing a total duration/count budget on a large edit.
+      clearTimeout(timer)
+      timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
       if (renderer && sequenceId !== input.document.id) { await renderer.dispose(); renderer = undefined }
       if (!renderer) { renderer = new VideoEditRenderSession(input.document); sequenceId = input.document.id }
       else await Promise.race([renderer.updateDocument(input.document), deadline])

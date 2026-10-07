@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+/** Shared numeric timeline domain: 24 hours at every supported frame rate, with integer microseconds well below MAX_SAFE_INTEGER. No whole-timeline allocation may depend on this value. */
+export const VIDEO_EDIT_MAX_SEQUENCE_SECONDS = 24 * 60 * 60
+export const VIDEO_EDIT_MAX_SEQUENCE_FRAMES = VIDEO_EDIT_MAX_SEQUENCE_SECONDS * 120
+
 export const videoEditRatioSchema = z.object({ numerator: z.number().int().positive().max(1_000_000), denominator: z.number().int().positive().max(1_000_000) }).strict()
 export type VideoEditRatio = z.infer<typeof videoEditRatioSchema>
 export const VIDEO_EDIT_FRAME_RATES: VideoEditRatio[] = [

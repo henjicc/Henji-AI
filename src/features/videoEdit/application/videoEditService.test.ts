@@ -167,6 +167,7 @@ it('素材库规范化的 Windows 路径与原引用是同一素材，拖放不�
 beforeEach(() => {
   installHarnessNativeStorage()
   const platform = getPlatform()
+  vi.spyOn(platform.system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))
   vi.spyOn(platform.system.paths, 'dirname').mockImplementation(async path => path.replace(/[\\/][^\\/]+$/, ''))
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
 })

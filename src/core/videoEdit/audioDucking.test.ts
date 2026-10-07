@@ -39,10 +39,10 @@ it('重新生成仅替换回避点，手动点原样保留且同帧优先；手�
   expect(replaceVideoEditDuckingKeyframes(trimmed, [], 30, settings)).toEqual([])
   expect(rescaleVideoEditClipKeyframes(music({ curves: { volume: generated } }), time => time * 2, 600).curves?.volume?.every(isVideoEditDuckingKeyframe)).toBe(true)
 })
-it('音量按连续采样时刻求值，没有帧或音频块台阶；过密点整体拒绝', () => {
+it('音量按连续采样时刻求值，没有帧或音频块台阶；密集关键帧仍完整保留', () => {
   const points = replaceVideoEditDuckingKeyframes(music(), [{ startSeconds: 3, endSeconds: 4 }], 30, settings)
   const a = evaluateVideoEditKeyframes(points, 52.5, 0); const b = evaluateVideoEditKeyframes(points, 52.5 + 30 / 48000, 0)
   expect(a).toBeCloseTo(0.44); expect(a - b).toBeCloseTo(0.72 / 15 * 30 / 48000, 12)
   const long = music({ start: 0, duration: 30000 })
-  expect(() => replaceVideoEditDuckingKeyframes(long, Array.from({ length: 100 }, (_, index) => ({ startSeconds: index * 5 + 1, endSeconds: index * 5 + 2 })), 30, settings)).toThrow('过于密集')
+  expect(replaceVideoEditDuckingKeyframes(long, Array.from({ length: 100 }, (_, index) => ({ startSeconds: index * 5 + 1, endSeconds: index * 5 + 2 })), 30, settings).length).toBeGreaterThan(256)
 })

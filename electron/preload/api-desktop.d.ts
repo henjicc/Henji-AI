@@ -4,6 +4,7 @@ import type {
   AgentTraceQuery,
   AgentTraceQueryResult,
 } from '../../src/core/assistant/trace'
+import type { FsDirPage, FsDirPageOptions } from '../../src/platform/contracts/system'
 
 export interface HenjiFsDirEntry {
   name: string
@@ -35,6 +36,7 @@ export interface HenjiFsApi {
   exists(path: string): Promise<boolean>
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>
   readDir(path: string): Promise<HenjiFsDirEntry[]>
+  readDirPage(path: string, options?: FsDirPageOptions): Promise<FsDirPage>
   copyFile(src: string, dest: string): Promise<void>
   remove(path: string, options?: { recursive?: boolean }): Promise<void>
 }

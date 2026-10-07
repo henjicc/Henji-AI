@@ -10,9 +10,9 @@ const blockSchema = z.object({ id: z.string(), text: z.string().max(20000), star
 const sourceRangeSchema = z.object({ startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() }).strict().refine(value => value.endFrame > value.startFrame)
 export const videoEditTextTranscriptionSchema = z.object({
   audioDocumentId: z.string().min(1),
-  audioDocumentIds: z.array(z.string().min(1)).max(500).optional(),
-  fillers: z.array(z.string().min(1).max(30)).max(100).optional(),
-  sources: z.array(z.object({ itemId: z.string(), mediaIdentity: z.string(), audioMappingIdentity: z.string().optional(), coverage: z.array(sourceRangeSchema).max(500).optional(), blocks: z.array(blockSchema).max(100000), silences: z.array(sourceRangeSchema).max(100000) }).strict()).max(500),
+  audioDocumentIds: z.array(z.string().min(1)).optional(),
+  fillers: z.array(z.string().min(1).max(30)).optional(),
+  sources: z.array(z.object({ itemId: z.string(), mediaIdentity: z.string(), audioMappingIdentity: z.string().optional(), coverage: z.array(sourceRangeSchema).optional(), blocks: z.array(blockSchema), silences: z.array(sourceRangeSchema) }).strict()),
 }).strict()
 export type VideoEditTextTranscription = z.infer<typeof videoEditTextTranscriptionSchema>
 /** Keep recognition for other source ranges when only a selected clip is transcribed again. */
@@ -81,9 +81,9 @@ export function groupVideoEditTextWords(words: readonly VideoEditTextWord[], fps
   return groups
 }
 export const videoEditTextSelectorSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('words'), ranges: z.array(z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict().refine(value => value.end >= value.start)).min(1).max(500) }).strict(),
+  z.object({ kind: z.literal('words'), ranges: z.array(z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict().refine(value => value.end >= value.start)).min(1) }).strict(),
   z.object({ kind: z.literal('text'), text: z.string().trim().min(1).max(20000), occurrence: z.number().int().nonnegative().optional() }).strict(),
-  z.object({ kind: z.literal('fillers'), words: z.array(z.string().trim().min(1).max(30)).min(1).max(100).optional() }).strict(),
+  z.object({ kind: z.literal('fillers'), words: z.array(z.string().trim().min(1).max(30)).min(1).optional() }).strict(),
   z.object({ kind: z.literal('silence') }).strict(),
 ])
 export type VideoEditTextSelector = z.infer<typeof videoEditTextSelectorSchema>

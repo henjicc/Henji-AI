@@ -1,3 +1,4 @@
+import { videoEditAudioSyncSize } from '@/core/videoEdit/multicamSync'
 import { createLogger } from '@/core/logging'
 import { activeVideoEditClips, clipSourceSeconds, videoEditComposition, type VideoEditComposition } from '@/core/videoEdit/document'
 import { applyVideoEditMulticamCuts, changeVideoEditMulticamCamera, createVideoEditMulticam, suggestVideoEditMulticamCuts, videoEditMulticamSource, type VideoEditMulticamActivity, type VideoEditMulticamCreate } from '@/core/videoEdit/multicam'
@@ -21,10 +22,12 @@ export interface VideoEditMulticamTarget { projectId: string; sequenceId: string
 export interface VideoEditMulticamAutoOptions { minimumSeconds?: number; sensitivity?: number; speech?: { startSeconds: number; endSeconds: number; speaker: string }[] }
 
 async function readSyncSound(composition: VideoEditComposition, start: number, duration: number, signal?: AbortSignal): Promise<Float32Array> {
+  const samples = Math.floor(duration * VIDEO_EDIT_MULTICAM_SYNC_RATE)
+  videoEditAudioSyncSize(samples, samples)
   const renderer = new VideoEditRenderSession(composition, 1)
   const abort = (): void => { void renderer.dispose().catch(() => undefined) }
   signal?.addEventListener('abort', abort, { once: true })
-  const output = new Float32Array(Math.floor(duration * VIDEO_EDIT_MULTICAM_SYNC_RATE))
+  const output = new Float32Array(samples)
   try {
     for (let second = 0; second < duration; second++) {
       signal?.throwIfAborted()

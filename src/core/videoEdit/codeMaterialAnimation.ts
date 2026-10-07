@@ -13,8 +13,7 @@ export const codeMaterialKeyframeSchema = z.object({
   id: z.string().min(1).max(100), sourceInUs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), sourceRemainder,
   value, interpolation: z.enum(['linear', 'hold', 'ease']),
 }).strict()
-export const codeMaterialCurvesSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.array(codeMaterialKeyframeSchema).min(1).max(256)).superRefine((curves, context) => {
-  if (Object.keys(curves).length > 32 || Object.values(curves).reduce((count, points) => count + points.length, 0) > 2048) context.addIssue({ code: 'custom', message: '实例曲线最多32项及2048个关键帧，每项最多256个。' })
+export const codeMaterialCurvesSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.array(codeMaterialKeyframeSchema).min(1)).superRefine((curves, context) => {
   const ids = Object.values(curves).flat().map(point => point.id)
   if (new Set(ids).size !== ids.length) context.addIssue({ code: 'custom', message: '实例关键帧标识不能重复。' })
 })

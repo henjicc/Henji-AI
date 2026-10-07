@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { VideoEditSubtitleActions } from './VideoEditSubtitleActions'
 import { VideoEditTextPanel } from './VideoEditTextPanel'
@@ -55,7 +56,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     const search = keyword.toLocaleLowerCase()
     return values.filter(entry => `${entryText(entry)} ${clips.get(entry.value.clipId ?? '')?.name ?? ''}`.toLocaleLowerCase().includes(search)).sort((left, right) => atFrame(left) - atFrame(right) || left.value.id.localeCompare(right.value.id))
   }, [sequence.captions, sequence.markers, kind, keyword, clips])
-  const maxFrame = Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * 1800)
+  const maxFrame = Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
   const currentSequence = (): VideoEditSequence => {
     if (!mounted.current || requireVideoEditInstance(projectId) !== instance) throw new Error('原剪辑已关闭，请重新选择字幕或标记。')
     const current = instance.document.sequences.find(value => value.id === sequence.id)

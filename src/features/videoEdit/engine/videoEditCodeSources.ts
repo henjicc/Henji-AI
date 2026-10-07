@@ -26,7 +26,6 @@ import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 
 const logger = createLogger('features.videoEdit.codeSources')
 const MAX_PROGRAMS = 32; const MAX_PROGRAM_BYTES = 16 * 1024 ** 2
-const MAX_SEEN_VERSIONS = 4096; const MAX_SEEN_SOURCE_BYTES = 8 * 1024 ** 2
 type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'retainProgramVersions'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'compile' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
@@ -79,7 +78,6 @@ export class VideoEditCodeSources {
       const size = new TextEncoder().encode(version.source).byteLength
       if (size > 65536) throw new CodeMaterialError('SOURCE_LIMIT', '源码最多64KiB。')
       bytes += size
-      if (this.known.size + additions.size >= MAX_SEEN_VERSIONS || bytes > MAX_SEEN_SOURCE_BYTES) throw new CodeMaterialError('BUDGET', '本次预览已见源码超过4096版本或8MiB，请重新加载预览。')
       additions.set(key, { source: version.source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, bytes: size })
     }
     for (const [key, version] of additions) this.known.set(key, version)

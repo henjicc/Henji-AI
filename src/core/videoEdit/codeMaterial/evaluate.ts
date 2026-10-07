@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '../time'
 import { CODE_MATERIAL_LIMITS, CodeMaterialError, codeBinaryCost, codeBuiltinCost, codeColor, codeConditionalCost, codeImageReference, finiteCodeNumber } from './contract'
 import type { CodeColor, CodeDrawCommand, CodeExpression, CodeMaterialContext, CodeMaterialProgram, CodeParameterValue } from './contract'
 import { validateCodeMaterialParameters } from './parameters'
@@ -12,7 +13,7 @@ export function codeMaterialRandom(seed: number, index: number): number {
 }
 function validateContext(context: CodeMaterialContext, transitionHandles: boolean): void {
   for (const key of ['time', 'localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps'] as const) finiteCodeNumber(context[key], `ctx.${key}`)
-  if (context.time < 0 || context.localTime < (transitionHandles ? -1800 : 0) || context.localTime > 1800 || context.sequenceTime < 0 || !Number.isSafeInteger(context.frame) || context.frame < 0 || context.fps <= 0 || context.fps > 240 || ![context.width, context.height].every(value => Number.isInteger(value) && value > 0 && value <= 8192)) throw new CodeMaterialError('CONTEXT', '时间、尺寸、帧或帧率无效。')
+  if (context.time < 0 || context.localTime < (transitionHandles ? -VIDEO_EDIT_MAX_SEQUENCE_SECONDS : 0) || context.localTime > VIDEO_EDIT_MAX_SEQUENCE_SECONDS || context.sequenceTime < 0 || !Number.isSafeInteger(context.frame) || context.frame < 0 || context.fps <= 0 || context.fps > 240 || ![context.width, context.height].every(value => Number.isInteger(value) && value > 0 && value <= 8192)) throw new CodeMaterialError('CONTEXT', '时间、尺寸、帧或帧率无效。')
 }
 /** Evaluate generator IR once at an explicit source time. Filter IR stays on the trusted GPU path. */
 export function evaluateCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>> = {}, options: { transitionHandles?: boolean } = {}): CodeDrawCommand[] {

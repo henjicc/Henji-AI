@@ -1,4 +1,5 @@
-import { videoEditClipMedia, VIDEO_EDIT_MAX_CLIP_TAKES, type VideoEditClip, type VideoEditCreativeSource, type VideoEditClipTake, type VideoEditDocument, type VideoEditSequence } from './document'
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
+import { videoEditClipMedia, type VideoEditClip, type VideoEditCreativeSource, type VideoEditClipTake, type VideoEditDocument, type VideoEditSequence } from './document'
 import { makeVideoEditItemClip, placeVideoEditItem } from './projectItems'
 import { applyVideoEditTimelineEditResult } from './timelineEdits'
 import { videoEditFps } from './time'
@@ -55,7 +56,7 @@ export const VIDEO_EDIT_IN_PLACE_DEFAULT_SECONDS = 5
 const REFERENCE_LABELS: Record<VideoEditReferenceRole, string> = { previous_tail: '前一镜头的最后一帧', next_head: '后一镜头的第一帧', replaced_head: '原镜头的第一帧', extended_tail: '原镜头的最后一帧' }
 export function videoEditReferenceLabel(reference: VideoEditInPlaceReference): string { return `「${reference.clipName}」${REFERENCE_LABELS[reference.role].replace('镜头', '')}` }
 
-function maxFrames(sequence: VideoEditSequence): number { return Math.floor(videoEditFps(sequence.frameRate) * 1800) }
+function maxFrames(sequence: VideoEditSequence): number { return Math.floor(videoEditFps(sequence.frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) }
 function overlaps(clip: VideoEditClip, from: number, to: number): boolean { return clip.start < to && clip.start + clip.duration > from }
 function pictured(document: Pick<VideoEditDocument, 'items' | 'media'>, clip: VideoEditClip): boolean {
   if (clip.kind !== 'video' && clip.kind !== 'image') return false
@@ -226,7 +227,7 @@ export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: Vi
       ? { clips: [makeVideoEditItemClip(document, itemId, sequence.id, { frame: prior.start, track: prior.track, duration, ...component }, metadata)], sequence: clean }
       : placeGeneratedItem(replaceSequence(document, clean), clean, itemId, prior.start, duration, prior.track, oldAudio[0]?.track, metadata)
     const made = placement.clips[0]
-    const takes = [takeOf(prior, sequence), ...(prior.takes ?? [])].slice(0, VIDEO_EDIT_MAX_CLIP_TAKES)
+    const takes = [takeOf(prior, sequence), ...(prior.takes ?? [])].slice(0)
     const clip: VideoEditClip = { ...prior, itemId: made.itemId, name: made.name, kind: made.kind, duration, sourceInUs: made.sourceInUs, sourceRemainder: made.sourceRemainder, takes }
     if (made.sourceComponent) clip.sourceComponent = made.sourceComponent; else delete clip.sourceComponent
     if (prior.kind !== 'audio') { if (made.linkId) clip.linkId = made.linkId; else delete clip.linkId }
@@ -285,7 +286,7 @@ export function switchVideoEditClipTake(document: VideoEditDocument, sequenceId:
   const duration = Math.max(1, Math.min(take.duration, available, roomAfter(sequence, clip)))
   const currentAudio = linkedAudioOf(sequence, clip)
   if (currentAudio.some(value => sequence.tracks.find(track => track.index === value.track)?.locked)) throw new Error('链接声音所在轨道已锁定，请先解锁再切回镜头。')
-  const takes = [takeOf(clip, sequence), ...clip.takes!.filter((_, at) => at !== index)].slice(0, VIDEO_EDIT_MAX_CLIP_TAKES)
+  const takes = [takeOf(clip, sequence), ...clip.takes!.filter((_, at) => at !== index)].slice(0)
   const next: VideoEditClip = { ...clip, itemId: take.itemId, name: take.name, kind: take.kind, duration, sourceInUs: take.sourceInUs, sourceRemainder: { ...take.sourceRemainder }, takes }
   if (take.sourceComponent) next.sourceComponent = take.sourceComponent; else delete next.sourceComponent
   if (take.creativeSource) next.creativeSource = structuredClone(take.creativeSource); else delete next.creativeSource

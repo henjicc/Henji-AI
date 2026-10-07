@@ -1,3 +1,4 @@
+import { videoEditImportTask } from './videoEditImportTask'
 import { ensureVideoEditProxyState, getVideoEditProxyPreference, readVideoEditProxyState } from './videoEditProxy'
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
 import { videoEditClipMedia, type VideoEditDocument } from '@/core/videoEdit/document'
@@ -44,7 +45,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
 }
 export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
-  if (ref.kind === 'video_edit.document') return { proxyPreference: { ...getVideoEditProxyPreference(projectId) }, lumetriLuts: (instance.document.lumetriLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
+  if (ref.kind === 'video_edit.document') return { mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, lumetriLuts: (instance.document.lumetriLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === ref.kind)) return videoEditCompositeData(instance.document, ref.kind as VideoEditCompositeEntityType, childId)
   if (ref.kind === 'video_edit.builtin_effect') {
@@ -144,7 +145,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
       else if (sequence!.tracks.find(track => track.index === clip.track)?.locked) createReason = removeReason = '所属轨道已锁定。'
       else if (this.entityType === 'video_edit.graphic_object') {
         if (!clip.graphic) createReason = removeReason = '请选择结构化图形片段。'
-        else { if (clip.graphic.objects.length >= 32) createReason = '图形已达到32个对象上限。'; if (!clip.graphic.objects.length) removeReason = '此图形没有可移除的对象。' }
+        else { if (!clip.graphic.objects.length) removeReason = '此图形没有可移除的对象。' }
       } else if (this.entityType === 'video_edit.tracker') {
         if (!['video', 'image', 'sequence'].includes(clip.kind)) createReason = '请选择视频、图片或嵌套序列片段。'
         else if ((clip.trackers?.length ?? 0) >= 8) createReason = '片段已有 8 个跟踪器，请先删除不用的跟踪器。'

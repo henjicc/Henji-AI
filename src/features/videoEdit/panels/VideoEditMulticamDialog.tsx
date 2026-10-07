@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { useEffect, useRef, useState } from 'react'
 import { Dropdown, UiButton, UiError, UiFormRow, UiInput, UiModal } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
@@ -31,7 +32,7 @@ export function VideoEditMulticamDialog({ projectId, sequenceId, itemIds, onClos
       <UiFormRow label="主音频"><Dropdown value={audioCameraIndex} disabled={busy} options={cameras} onSelect={setAudio} /></UiFormRow>
       {cameras.map((camera, index) => <div key={itemIds[index]} className="flex flex-col gap-2">
         <UiFormRow label={camera.label}><UiInput aria-label={`机位${index + 1}说话人`} placeholder="说话人（可选）" maxLength={200} disabled={busy} value={speakers[index]} onChange={event => setSpeakers(values => values.map((value, i) => i === index ? event.target.value : value))} /></UiFormRow>
-        {sync !== 'audio' && <UiFormRow label={sync === 'in_points' ? '同步入点（秒）' : '素材开始时间码（秒）'}><NumberInput ariaLabel={`机位${index + 1}同步时间`} min={0} max={sync === 'in_points' ? 1800 : 86400} step={.001} precision={3} value={sync === 'in_points' ? points[index] : timecodes[index]} disabled={busy} onChange={next => (sync === 'in_points' ? setPoints : setTimecodes)(values => values.map((value, i) => i === index ? next : value))} /></UiFormRow>}
+        {sync !== 'audio' && <UiFormRow label={sync === 'in_points' ? '同步入点（秒）' : '素材开始时间码（秒）'}><NumberInput ariaLabel={`机位${index + 1}同步时间`} min={0} max={VIDEO_EDIT_MAX_SEQUENCE_SECONDS} step={.001} precision={3} value={sync === 'in_points' ? points[index] : timecodes[index]} disabled={busy} onChange={next => (sync === 'in_points' ? setPoints : setTimecodes)(values => values.map((value, i) => i === index ? next : value))} /></UiFormRow>}
       </div>)}
       {error && <UiError message={error} />}
     </div>

@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { adjustVideoEditClip, splitVideoEditClip, videoEditClipMedia, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
@@ -57,7 +58,7 @@ export type VideoEditTimelineEdit =
 /** Appends new tracks before an edit (drag beyond the outer tracks, paste needing more audio tracks); indexes and ids must be unused. */
 export function withVideoEditTracks(sequence: VideoEditSequence, added: readonly VideoEditSequence['tracks'][number][] | undefined): VideoEditSequence {
   if (!added?.length) return sequence
-  if (added.some(track => track.index < 0 || track.index > 31 || sequence.tracks.some(value => value.index === track.index || value.id === track.id)) || new Set(added.map(track => track.index)).size !== added.length || sequence.tracks.length + added.length > 32) throw new Error('新增的轨道无效，或序列将超过 32 条轨道。')
+  if (added.some(track => track.index < 0 || !Number.isSafeInteger(track.index) || sequence.tracks.some(value => value.index === track.index || value.id === track.id)) || new Set(added.map(track => track.index)).size !== added.length) throw new Error('新增的轨道无效。')
   return { ...sequence, tracks: [...sequence.tracks, ...added] }
 }
 /** Snap offset for moving `edges` by `delta`: the nearest candidate within `threshold`, else 0. */
@@ -167,16 +168,18 @@ export function copyVideoEditClips(document: VideoEditDocument, sequenceId: stri
 
 /** Vertical dragging moves the selected lanes of the primary kind; linked audio keeps its lane. */
 export function videoEditMoveTrackMap(sequence: VideoEditSequence, clipIds: readonly string[], primaryId: string, targetIndex: number): Record<number, number> {
+  const selected = new Set(clipIds)
   const primary = sequence.clips.find(clip => clip.id === primaryId)
-  if (!primary || !clipIds.includes(primaryId)) throw new Error('拖动主片段不在选区中。')
+  if (!primary || !selected.has(primaryId)) throw new Error('拖动主片段不在选区中。')
   const kind = primary.kind === 'audio' ? 'audio' : 'video'
   const lanes = sequence.tracks.filter(track => track.kind === kind).sort((a, b) => a.index - b.index)
-  const source = lanes.findIndex(track => track.index === primary.track); const target = lanes.findIndex(track => track.index === targetIndex)
+  const positions = new Map(lanes.map((track, index) => [track.index, index]))
+  const source = positions.get(primary.track) ?? -1; const target = positions.get(targetIndex) ?? -1
   if (source < 0 || target < 0) throw new Error('请将片段移动到同类型轨道。')
   const map: Record<number, number> = {}
-  for (const clip of sequence.clips.filter(clip => clipIds.includes(clip.id))) {
+  for (const clip of sequence.clips.filter(clip => selected.has(clip.id))) {
     if ((clip.kind === 'audio' ? 'audio' : 'video') !== kind) continue
-    const lane = lanes[lanes.findIndex(track => track.index === clip.track) + target - source]
+    const lane = lanes[(positions.get(clip.track) ?? -1) + target - source]
     if (!lane) throw new Error('选区超出可用轨道。')
     map[clip.track] = lane.index
   }
@@ -191,8 +194,7 @@ export function applyVideoEditTimelineEditResult(document: VideoEditDocument, se
   const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : edit.kind === 'trim' ? { sequence: applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata).sequence }
     : edit.kind === 'speed' ? { sequence: applyVideoEditSpeedChange(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.change, metadata) }
     : edit.kind === 'stretch' ? { sequence: applyVideoEditRateStretch(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.edge, edit.delta).sequence } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
-  if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || (result.sequence.markers?.length ?? 0) > 500 || (result.sequence.captions?.length ?? 0) > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
-  if ((result.sequence.transitions?.length ?? 0) > 500) throw new Error('序列最多500项转场。')
+  if (result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('编辑结果超出序列时间边界。')
   validateVideoEditAdjustmentRanges(result.sequence)
   validateVideoEditTransitions({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? result.sequence : sequence) }, metadata)
   return result
@@ -253,11 +255,11 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
     let delta = edit.delta
     if (edit.mode === 'move') {
       const from = Math.min(...clips.map(clip => clip.start)); const to = Math.max(...clips.map(clip => clip.start + clip.duration))
-      delta = Math.max(-from, Math.min(Math.floor(composition.fps * 1800) - to, delta))
+      delta = Math.max(-from, Math.min(Math.floor(composition.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) - to, delta))
       if (edit.snapThreshold !== undefined) {
         const candidates = [0, ...(edit.snapFrames ?? []), ...(sequence.markers ?? []).map(mark => mark.frame), ...sequence.annotations.map(mark => mark.frame), ...sequence.clips.filter(clip => !selected.has(clip.id)).flatMap(clip => [clip.start, clip.start + clip.duration])]
         const offset = snapOffset(clips.flatMap(clip => [clip.start, clip.start + clip.duration]), candidates, delta, edit.snapThreshold)
-        if (offset) delta = Math.max(-from, Math.min(Math.floor(composition.fps * 1800) - to, delta + offset))
+        if (offset) delta = Math.max(-from, Math.min(Math.floor(composition.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) - to, delta + offset))
       }
     } else {
       const clamp = (requested: number): number => {
@@ -324,7 +326,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
 function syncClips(document: VideoEditDocument, sequence: VideoEditSequence, ids: string[], mode: 'move' | 'slip'): VideoEditSequence {
   const corrections = videoEditSyncCorrections(sequence, ids)
   if (!corrections.size) throw new Error('所选片段与链接片段没有失步。')
-  const composition = videoEditComposition(document, sequence.id); const limit = Math.floor(composition.fps * 1800)
+  const composition = videoEditComposition(document, sequence.id); const limit = Math.floor(composition.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
   const before = sequence.clips.filter(clip => corrections.has(clip.id))
   const after = before.map(clip => {
     const offset = corrections.get(clip.id)!
@@ -351,14 +353,14 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
   integer(edit.frame)
   const sequence = withVideoEditTracks(original, edit.newTracks)
   if (edit.clipboard.projectId !== document.id) throw new Error('此剪贴板属于另一剪辑，请通过素材面板引用导入。')
-  if (!edit.clipboard.clips.length || edit.clipboard.clips.length > 500) throw new Error('剪贴板没有有效片段。')
+  if (!edit.clipboard.clips.length) throw new Error('剪贴板没有有效片段。')
   const from = Math.min(...edit.clipboard.clips.map(clip => clip.start))
   const convert = (frame: number): number => rescaleVideoEditFrame(frame - from, edit.clipboard.frameRate, sequence.frameRate)
   const ids = new Map(edit.clipboard.clips.map(clip => [clip.id, crypto.randomUUID()]))
   const incoming = remapRelations(edit.clipboard.clips.map(clip => ({ ...structuredClone(clip), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start) })))
   assertTargets(sequence, incoming)
   assertNewInternalOverlap(edit.clipboard.clips, incoming)
-  if (incoming.some(clip => !document.items.some(item => item.id === clip.itemId) || clip.duration < 1 || clip.start < 0 || clip.start + clip.duration > Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * 1800))) throw new Error('剪贴板引用已移除，或粘贴范围超出序列边界。')
+  if (incoming.some(clip => !document.items.some(item => item.id === clip.itemId) || clip.duration < 1 || clip.start < 0 || clip.start + clip.duration > Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('剪贴板引用已移除，或粘贴范围超出序列边界。')
   const length = Math.max(...incoming.map(clip => clip.start + clip.duration)) - edit.frame
   const tracks = new Set(incoming.map(clip => clip.track))
   let kept = sequence

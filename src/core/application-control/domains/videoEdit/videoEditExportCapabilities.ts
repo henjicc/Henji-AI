@@ -8,7 +8,7 @@ const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z
 const documentRef = ref('video_edit.document')
 const range = z.object({ startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() }).strict().refine(value => value.endFrame > value.startFrame, '出点必须晚于入点。')
 const item = z.object({ documentRef: documentRef.optional(), sequenceRef: ref('video_edit.sequence').optional(), presetRef: ref('video_edit.export_preset'), fit: z.enum(['fit', 'fill', 'letterbox']).optional(), range: range.optional() }).strict()
-export const videoEditExportInputSchema = z.object({ documentRef, format: z.enum(['mp4', 'srt', 'vtt']).optional(), subtitleClock: z.enum(['sequence', 'range']).optional(), loudness: videoEditLoudnessSettingsSchema.optional(), exports: z.array(item).min(1).max(32).optional(), retryTaskId: z.string().min(1).optional() }).strict().superRefine((value, ctx) => {
+export const videoEditExportInputSchema = z.object({ documentRef, format: z.enum(['mp4', 'srt', 'vtt']).optional(), subtitleClock: z.enum(['sequence', 'range']).optional(), loudness: videoEditLoudnessSettingsSchema.optional(), exports: z.array(item).min(1).optional(), retryTaskId: z.string().min(1).optional() }).strict().superRefine((value, ctx) => {
   if (value.exports && (value.retryTaskId || value.format || value.loudness || value.subtitleClock)) ctx.addIssue({ code: 'custom', message: '批量 exports 已包含预设声音与格式设置，不能混用旧格式、响度、字幕时间或重试参数。' })
   if (value.retryTaskId && (value.format || value.loudness || value.subtitleClock)) ctx.addIssue({ code: 'custom', message: '重试使用原快照与设置，不可同时更改格式或响度。' })
   if (value.subtitleClock && value.format !== 'srt' && value.format !== 'vtt') ctx.addIssue({ code: 'custom', message: 'subtitleClock 只用于字幕文件。' })
@@ -19,7 +19,7 @@ export const videoEditExportJobSummarySchema = z.object({
   taskId: z.string().optional(), error: z.string().optional(), outputReady: z.boolean(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(),
 }).strict()
 const task = z.object({ id: z.string(), state: z.enum(['running', 'completed', 'failed', 'cancelled']), progress: z.number(), revision: z.number(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), loudness: videoEditLoudnessSettingsSchema.optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional() }).strict()
-const output = z.object({ resultRef: documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: documentRef }).strict(), queue: z.array(videoEditExportJobSummarySchema).max(128), task: task.optional() }).strict()
+const output = z.object({ resultRef: documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: documentRef }).strict(), queue: z.array(videoEditExportJobSummarySchema), task: task.optional() }).strict()
 export const videoEditExportQuerySchema = z.object({ documentRef, taskId: z.string().min(1).optional() }).strict()
 const descriptions = {
   export_video_edit: ['导出剪辑成片或字幕', '按平台预设一次导出多份：先用通用实体列出/读取 video_edit.export_preset，再在 exports 中提交 presetRef，sequenceRef 可指定不同序列，documentRef 可指定已打开的另一剪辑。range 为序列整数帧的半开入出点；省略时用该序列入出点，无标记则整条序列。fit=适合保留全画面，fill=中心裁切铺满，letterbox=留黑边。用户本地对话框选择每项新文件；全部路径确认后一次进入后台顺序队列，不切页。提交不等于完成，query_video_edit_export 回读；retryTaskId 只重试未发布文件的失败项。旧 format=mp4/srt/vtt 保留；字幕 subtitleClock 默认 range，sequence 保留序列时间。'],

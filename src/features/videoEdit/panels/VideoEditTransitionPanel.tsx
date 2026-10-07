@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { memo, useSyncExternalStore } from 'react'
 import { Trash2 } from 'lucide-react'
 import { UiButton, UiFormRow, UiGroup, UiLoading } from '@/components/ui'
@@ -54,7 +55,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
         onSelect={kind => { if (kind !== transition.kind) update({ kind }) }} />
     </UiFormRow>
     <UiFormRow density="compact" label="持续时间（帧）" hint={`${timelineTimecode(transition.durationFrames, fps)}`}>
-      <NumberInput ariaLabel="过渡持续时间帧" size="sm" min={2} max={108_000} step={1} precision={0} value={transition.durationFrames} disabled={action.busy}
+      <NumberInput ariaLabel="过渡持续时间帧" size="sm" min={2} max={VIDEO_EDIT_MAX_SEQUENCE_FRAMES} step={1} precision={0} value={transition.durationFrames} disabled={action.busy}
         onChange={durationFrames => { if (durationFrames !== transition.durationFrames) update(transition.alignment === 'custom' ? { durationFrames, framesBeforeCut: Math.min(durationFrames, before) } : { durationFrames }) }} />
     </UiFormRow>
     {/* 单侧过渡整段在片段内，没有对齐可选（PR 只列出它所在的一端） */}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { videoEditUserErrorMessage } from './application/videoEditUserError'
+import { cancelVideoEditImport, videoEditImportTask } from './application/videoEditImportTask'
 import { VideoEditProjectsPage } from './VideoEditProjectsPage'
 import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, Redo2, Undo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -57,6 +58,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
   const { t } = useTranslation('ui')
   const sequence = findActiveVideoEditSequence(instance); const projectId = instance.document.id
   const task = videoEditExportTask(projectId)
+  const importing = videoEditImportTask(projectId)
   const marked = instance.inFrame !== null || instance.outFrame !== null ? (() => { try { return videoEditExportRange(instance) } catch { return undefined } })() : undefined
   const [collecting, setCollecting] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -81,6 +83,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
       } finally { setCollecting(false) }
     })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
     {task?.state === 'running' && <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton>}
+    {importing && <UiButton aria-label="取消导入素材" onClick={() => cancelVideoEditImport(projectId)}>{importing.phase === 'enumerating' ? `正在查找素材 ${importing.total}` : `正在导入 ${importing.completed} / ${importing.total}`} · 取消</UiButton>}
     <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download size={15} />导出</UiButton>
   </>}>
     <UiIconButton size="lg" aria-label={t('videoEditProject.back')} title={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft size={18} /></UiIconButton>

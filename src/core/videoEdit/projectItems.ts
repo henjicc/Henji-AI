@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { createVideoEditSequence, videoEditComposition, videoEditDuration, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import { videoEditIsDefaultAudioMapping, videoEditItemAudioLayout, type VideoEditAudioMapping } from './audioChannels'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from './time'
@@ -60,7 +61,7 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   if (availableDuration < 1) throw new Error('源选区短于一个序列帧。')
   if (!Number.isSafeInteger(duration) || duration < 1 || (sourceDuration !== undefined || program?.mode === 'dynamic') && duration > availableDuration) throw new Error('片段时长必须为源范围内的正整数帧。')
   if (duration < 1) throw new Error('源选区短于一个序列帧。')
-  if (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame + duration > Math.floor(sequence.fps * 1800)) throw new Error('素材落点或长度超出序列的 30 分钟范围，请先裁剪素材。')
+  if (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame + duration > Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) throw new Error('素材落点或长度超出序列的 24 小时范围，请先裁剪素材。')
   return { id: crypto.randomUUID(), itemId, name: item.name, kind, ...(placement.sourceComponent ? { sourceComponent: placement.sourceComponent } : {}), ...(placement.audioMapping ? { audioMapping: structuredClone(placement.audioMapping) } : {}), ...(item.code ? { code: structuredClone(item.code) } : {}), ...(item.graphic ? { graphic: structuredClone(item.graphic) } : {}), ...(kind === 'adjustment' ? { adjustment: { fromTrack: Math.min(...lowerVisualTracks(track).map(track => track.index)) } } : {}), track, start: placement.frame, duration, sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: kind === 'adjustment' ? 0 : 1, text: item.kind === 'text' ? '输入文字' : '' }
 }
 type VideoEditTrack = VideoEditSequence['tracks'][number]
@@ -83,7 +84,7 @@ function audioTracksFor(sequence: VideoEditSequence, count: number, start: numbe
   const added: VideoEditTrack[] = []
   for (let next = Math.max(-1, ...sequence.tracks.filter(track => track.kind === 'audio').map(track => track.index)) + 1; indexes.length < count; next++) {
     while (sequence.tracks.some(track => track.index === next)) next++
-    if (next > 31 || sequence.tracks.length + added.length >= 32) throw new Error('序列最多 32 条轨道，放不下此素材的全部音频片段。请减少素材的音频片段数量。')
+    if (!Number.isSafeInteger(next)) throw new Error('轨道编号超出整数范围。')
     added.push({ id: crypto.randomUUID(), name: `音频 ${audio.length + added.length + 1}`, index: next, kind: 'audio', locked: false, enabled: true, muted: false, solo: false })
     indexes.push(next)
   }

@@ -6,7 +6,7 @@ import { requireVideoEditInstance, videoEditDomainRevision } from './videoEditSe
 import { videoEditSchemaRef } from './videoEditFields'
 
 const type = 'video_edit.title_template'
-const reason = '本机动态图形模板目录。内置项固定；通用集合创建/删除自定义模板，不进入剪辑撤销。definition 包含 kind 或 content（二选一）及 parameters，字段语义看 schema。content 是源画幅、fps 与最多8个文字/图形快照（start/track 相对组合起点），不携带媒体、代码或跟踪；图形动画使用源微秒，文字运动使用片段内帧。应用用 apply_video_edit_title_template 按画幅/时长换算，一步撤销；实例可用原图形/文字通用属性继续修改。'
+const reason = '本机动态图形模板目录。内置项固定；通用集合创建/删除自定义模板，不进入剪辑撤销。definition 包含 kind 或 content（二选一）及 parameters，字段语义看 schema。content 是源画幅、fps 与文字/图形快照（start/track 相对组合起点），不携带媒体、代码或跟踪；图形动画使用源微秒，文字运动使用片段内帧。应用用 apply_video_edit_title_template 按画幅/时长换算，一步撤销；实例可用原图形/文字通用属性继续修改。'
 const definitionSchema = titleTemplateDefinitionSchema
 const fields: ApplicationFieldDefinition<TitleTemplate, TitleTemplate>[] = [
   { propertyId: `${type}.name`, storeActions: [], read: value => value.name, descriptor: { id: `${type}.name`, entityType: type, version: 1, title: '模板名称', description: '标题模板名称。', value: { kind: 'string', maxLength: 200 }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: ['video_edit:write'] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', `${type}.name`), readOnlyReason: reason } },

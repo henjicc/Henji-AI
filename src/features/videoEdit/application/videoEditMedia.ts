@@ -1,3 +1,4 @@
+import { reportVideoEditImport, withVideoEditImportTask, type VideoEditImportTask, type VideoEditImportProgress } from './videoEditImportTask'
 import { autoCreateVideoEditProxies } from './videoEditProxy'
 import { ALL_FORMATS, Input, UrlSource } from 'mediabunny'
 import { getPlatform } from '@/platform/runtime'
@@ -20,12 +21,22 @@ async function boundedMetadata<T>(operation: () => Promise<T>): Promise<T> {
   try { return await operation() } finally { const next = metadataQueue.shift(); if (next) next(); else metadataActive-- }
 }
 
-export function sameVideoEditMediaPath(left: string, right: string): boolean {
-  const normalize = (value: string): string => {
-    const path = value.replaceAll('\\', '/')
-    return /^[a-z]:\//i.test(path) || path.startsWith('//') ? path.toLowerCase() : path
+export function videoEditMediaPathKey(value: string): string {
+  const path = value.replaceAll('\\', '/')
+  return /^[a-z]:\//i.test(path) || path.startsWith('//') ? path.toLowerCase() : path
+}
+export function sameVideoEditMediaPath(left: string, right: string): boolean { return videoEditMediaPathKey(left) === videoEditMediaPathKey(right) }
+/** Only one page of promises enters the existing two-decoder queue at a time. */
+async function settleImportBatches<T, R>(values: readonly T[], operation: (value: T) => Promise<R>, signal?: AbortSignal, onCompleted?: (completed: number) => void): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = []; let completed = 0
+  for (let offset = 0; offset < values.length; offset += 32) {
+    signal?.throwIfAborted()
+    results.push(...await Promise.allSettled(values.slice(offset, offset + 32).map(async value => {
+      try { signal?.throwIfAborted(); return await operation(value) }
+      finally { if (!signal?.aborted) onCompleted?.(++completed) }
+    })))
   }
-  return normalize(left) === normalize(right)
+  signal?.throwIfAborted(); return results
 }
 export async function inspectVideoEditMedia(path: string, signal?: AbortSignal): Promise<VideoEditMedia> {
   return boundedMetadata(() => inspectMedia(path, signal))
@@ -71,7 +82,7 @@ async function inspectBrowserMedia(path: string, signal?: AbortSignal): Promise<
   try {
     const video = await input.getPrimaryVideoTrack()
     const audio = await input.getPrimaryAudioTrack()
-    const audioTracks = audio ? (await input.getAudioTracks()).slice(0, 64) : []
+    const audioTracks = audio ? await input.getAudioTracks() : []
     const streams = { ...(video ? { video: { codec: video.codec, decodable: await video.canDecode() } } : {}), ...(audio ? { audio: { codec: audio.codec, decodable: await audio.canDecode() } } : {}) }
     if ((!video && !audio) || streams.video?.decodable === false || streams.audio?.decodable === false) return { status: 'read', ...streams }
     const metrics = video ? await video.computeFrameRateMetrics({ targetPacketCount: 256 }) : undefined
@@ -91,38 +102,43 @@ function validateAssetMedia(media: VideoEditMedia, asset: AssetRecord): void {
   if (media.kind !== asset.mediaType || asset.width !== null && asset.width !== media.width || asset.height !== null && asset.height !== media.height) throw new Error('素材库与剪辑的源文件信息不一致，请重新定位源素材。')
 }
 /** `skipUnreadable`：本地文件读不出或解码不了时跳过并报告（文件夹导入），而不是让整批导入失败。素材库引用始终严格。 */
-export interface VideoEditImportOptions { skipUnreadable?: (path: string, reason: unknown) => void }
+export interface VideoEditImportOptions { skipUnreadable?: (path: string, reason: unknown) => void; task?: VideoEditImportTask; onProgress?: (progress: VideoEditImportProgress) => void }
 export async function importVideoEditSources(projectId: string, sources: VideoEditImportSource[], binId?: string, signal?: AbortSignal, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>, preserveProgramAnchors: readonly string[] = [], options: VideoEditImportOptions = {}): Promise<string[]> {
+  if (!options.task) return withVideoEditImportTask(projectId, signal, task => importVideoEditSources(projectId, sources, binId, task.controller.signal, afterImport, preserveProgramAnchors, { ...options, task }))
   const owner = requireVideoEditInstance(projectId)
+  const existingByPath = new Map(owner.document.media.map(media => [videoEditMediaPathKey(media.path), media]))
   logger.info('导入剪辑素材开始', { event: 'video_edit.media.import.start', context: { projectId, count: sources.length } })
   try {
   if (binId && !owner.document.bins.some(bin => bin.id === binId)) throw new Error('目标素材箱不存在。')
   if (sources.some(source => !source.assetId && !source.path)) throw new Error('请引用素材库素材或本地源文件。')
-  const unique = sources.filter((source, index) => sources.findIndex(other => source.assetId ? other.assetId === source.assetId : !other.assetId && typeof source.path === 'string' && typeof other.path === 'string' && sameVideoEditMediaPath(other.path, source.path)) === index)
-  if (unique.length > 200) throw new Error('剪辑最多引用 200 个源文件，请分批导入。')
-  const results = await Promise.allSettled(unique.map(async input => {
+  const seen = new Set<string>()
+  const unique = sources.filter(source => { const key = source.assetId ? `asset:${source.assetId}` : `path:${videoEditMediaPathKey(source.path!)}`; if (seen.has(key)) return false; seen.add(key); return true })
+  const results = await settleImportBatches(unique, async input => {
     signal?.throwIfAborted()
-    const fixed = !input.assetId && input.path ? owner.document.media.find(media => sameVideoEditMediaPath(media.path, input.path!) && media.assetContent?.contentIdentity) : undefined
-    if (fixed) await boundedMetadata(() => verifyVideoEditMediaContent(fixed, signal))
+    const fixed = !input.assetId && input.path ? existingByPath.get(videoEditMediaPathKey(input.path)) : undefined
+    if (fixed?.assetContent?.contentIdentity) await boundedMetadata(() => verifyVideoEditMediaContent(fixed, signal))
     const asset = input.assetId ? await boundedMetadata(() => resolveVideoEditAssetReference(input.assetId!)) : undefined
     const path = asset?.filePath ?? input.path
     if (!path) throw new Error('请引用素材库素材或本地源文件。')
-    return { path, ...(asset ? { asset } : {}), ...(fixed ? { fixed } : {}) }
-  }))
+    return { path, ...(asset ? { asset } : {}), ...(fixed?.assetContent?.contentIdentity ? { fixed } : {}) }
+  }, signal)
   const failed = results.find(result => result.status === 'rejected')
   if (failed?.status === 'rejected') throw failed.reason
   const resolved: Array<{ path: string; asset?: AssetRecord; fixed?: VideoEditMedia }> = []
+  const resolvedByPath = new Map<string, typeof resolved[number]>()
   for (const result of results) if (result.status === 'fulfilled') {
-    const previous = resolved.find(source => sameVideoEditMediaPath(source.path, result.value.path))
+    const key = videoEditMediaPathKey(result.value.path)
+    const previous = resolvedByPath.get(key)
     if (previous?.asset && result.value.asset && previous.asset.id !== result.value.asset.id) throw new Error('同一源文件包含冲突的素材库引用，请重新引用。')
-    if (!previous) resolved.push(result.value)
+    if (!previous) { resolved.push(result.value); resolvedByPath.set(key, result.value) }
     else if (result.value.asset) previous.asset = result.value.asset
   }
   signal?.throwIfAborted()
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，导入不会写入重新打开的剪辑。')
-  const metadata = await Promise.allSettled(resolved.map(async source => {
+  reportVideoEditImport(options.task, { phase: 'probing', completed: 0, total: resolved.length }, options.onProgress)
+  const metadata = await settleImportBatches(resolved, async source => {
     signal?.throwIfAborted()
-    const existing = owner.document.media.find(media => sameVideoEditMediaPath(media.path, source.path))
+    const existing = existingByPath.get(videoEditMediaPathKey(source.path))
     if (existing && source.asset) validateAssetMedia(existing, source.asset)
     const media = existing ?? (source.asset?.mediaType === 'image' && source.asset.width && source.asset.height && /\.(png|jpe?g|webp|bmp|avif)$/i.test(source.path)
       ? { id: crypto.randomUUID(), path: source.path, name: source.asset.displayName, kind: 'image' as const, width: source.asset.width, height: source.asset.height, durationSeconds: 0 }
@@ -133,7 +149,7 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
     }
     if (source.asset) validateAssetMedia(media, source.asset)
     return { source, media }
-  }))
+  }, signal, completed => reportVideoEditImport(options.task!, { phase: 'probing', completed, total: resolved.length }, options.onProgress))
   signal?.throwIfAborted()
   const skipped = new Set(options.skipUnreadable ? metadata.flatMap((result, index) => result.status === 'rejected' && !resolved[index].asset ? [index] : []) : [])
   for (const index of skipped) options.skipUnreadable!(resolved[index].path, (metadata[index] as PromiseRejectedResult).reason)
@@ -145,10 +161,12 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
   const ids: string[] = []
   const baseline = owner.document
   const document = structuredClone(baseline)
+  const mediaByPath = new Map(document.media.map(media => [videoEditMediaPathKey(media.path), media]))
+  const itemsByMedia = new Map(document.items.filter(item => item.binId === binId).map(item => [item.mediaId, item]))
     if (binId && !document.bins.some(bin => bin.id === binId)) throw new Error('导入期间目标素材箱已移除，请重新选择导入位置。')
     for (const { source, media: inspectedMedia } of inspected) {
-      let media = document.media.find(media => sameVideoEditMediaPath(media.path, source.path))
-      if (!media) { media = { ...inspectedMedia }; document.media.push(media) }
+      let media = mediaByPath.get(videoEditMediaPathKey(source.path))
+      if (!media) { media = { ...inspectedMedia }; document.media.push(media); mediaByPath.set(videoEditMediaPathKey(source.path), media) }
       if (source.asset) {
         validateAssetMedia(media, source.asset)
         const content = videoEditAssetContentSnapshot(source.asset)
@@ -156,19 +174,22 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
         media.path = source.path
         media.assetId = source.asset.id; media.assetContent = content
       }
-      let item = document.items.find(item => item.mediaId === media!.id && item.binId === binId)
-      if (!item) { item = { id: crypto.randomUUID(), name: media.name, kind: media.kind, mediaId: media.id, ...(binId ? { binId } : {}) }; document.items.push(item) }
+      let item = itemsByMedia.get(media.id)
+      if (!item) { item = { id: crypto.randomUUID(), name: media.name, kind: media.kind, mediaId: media.id, ...(binId ? { binId } : {}) }; document.items.push(item); itemsByMedia.set(media.id, item) }
       ids.push(item.id)
     }
   const next = afterImport ? await afterImport(document, ids) : document
-  await Promise.all(inspected.map(({ source }) => source.asset ? boundedMetadata(async () => {
+  const rechecks = await settleImportBatches(inspected, async ({ source }) => source.asset ? boundedMetadata(async () => {
     signal?.throwIfAborted()
     if (!sameVideoEditAssetContent(source.asset!, await resolveVideoEditAssetReference(source.asset!.id))) throw new Error('素材库源文件在导入期间已改变，请重新引用该素材。')
-  }) : source.fixed ? boundedMetadata(() => verifyVideoEditMediaContent(source.fixed!, signal)) : undefined))
+  }) : source.fixed ? boundedMetadata(() => verifyVideoEditMediaContent(source.fixed!, signal)) : undefined, signal)
+  const recheckFailure = rechecks.find(result => result.status === 'rejected')
+  if (recheckFailure?.status === 'rejected') throw recheckFailure.reason
   signal?.throwIfAborted()
   if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('导入检查期间原剪辑已改变，请重新导入。')
   editVideoProject(projectId, () => next, preserveProgramAnchors)
-  void autoCreateVideoEditProxies(projectId, ids.flatMap(id => { const item = next.items.find(value => value.id === id); return item?.mediaId ? [item.mediaId] : [] })).catch(error => logger.warn('导入后代理创建未完成', { event: 'video_edit.proxy.import_failed', error }))
+  const nextItems = new Map(next.items.map(item => [item.id, item]))
+  void autoCreateVideoEditProxies(projectId, ids.flatMap(id => { const item = nextItems.get(id); return item?.mediaId ? [item.mediaId] : [] })).catch(error => logger.warn('导入后代理创建未完成', { event: 'video_edit.proxy.import_failed', error }))
   logger.info('导入剪辑素材完成', { event: 'video_edit.media.import.completed', context: { projectId, count: ids.length } })
   return ids
   } catch (error) {
@@ -176,7 +197,8 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
   }
 }
 export async function importVideoEditPaths(projectId: string, paths: string[], binId?: string): Promise<string[]> {
-  return importVideoEditSources(projectId, paths.map(path => ({ path })), binId)
+  const { importVideoEditPathsAndFolders } = await import('./videoEditFolderImport')
+  return (await importVideoEditPathsAndFolders(projectId, paths, binId)).itemIds
 }
 /**
  * Import dialog formats: containers the media probe reads. Whether a file actually decodes is decided by

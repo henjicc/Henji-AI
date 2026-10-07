@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '../time'
 import ts from 'typescript'
 import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_MATERIAL_LIMITS, CODE_TIME_KEYS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, codeConditionalCost, finiteCodeNumber } from './contract'
 import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, CodeExpression, CodeMaterialProgram, CodeValueType } from './contract'
@@ -94,7 +95,7 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   const imageParameters = parameters.some(parameter => parameter.type === 'image')
   if (imageParameters && kind !== 'generator') throw new CodeMaterialError('TYPE', '图片资源参数仅用于生成器，滤镜仍只采样当前输入。')
   const program: CodeMaterialProgram = { apiVersion: 1, languageVersion: imageParameters ? 2 : 1, name: staticString(value('name'), 'name', 160), kind, mode,
-    width: staticNumber(value('width'), 'width', 1, 8192, true), height: staticNumber(value('height'), 'height', 1, 8192, true), durationSeconds: staticNumber(value('durationSeconds'), 'durationSeconds', 0.000001, 1800), seed: staticNumber(value('seed'), 'seed', 0, 4294967295, true),
+    width: staticNumber(value('width'), 'width', 1, 8192, true), height: staticNumber(value('height'), 'height', 1, 8192, true), durationSeconds: staticNumber(value('durationSeconds'), 'durationSeconds', 0.000001, VIDEO_EDIT_MAX_SEQUENCE_SECONDS), seed: staticNumber(value('seed'), 'seed', 0, 4294967295, true),
     parameters, bindings: [], result: { kind: 'literal', type: 'boolean', value: false }, metrics: { ...ast, cpuOperations: 0, scalarOperations: 0, samples: 0 } }
   if (!render?.body || render.modifiers?.length || render.asteriskToken || render.questionToken || render.type || render.typeParameters?.length || render.parameters.length !== 1) fail(render ?? definition, '需要纯 render(ctx) 方法。')
   const argument = render.parameters[0]

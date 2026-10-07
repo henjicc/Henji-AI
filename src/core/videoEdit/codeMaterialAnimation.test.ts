@@ -40,10 +40,10 @@ describe('连续源时刻的有界代码参数曲线', () => {
     const exact = prepareCodeMaterialParameters(program, instance({ amount: [point('zero', 0, 0), rationalBoundary] }))
     expect(evaluateCodeMaterialParameters(exact, offsetVideoEditSource(initial, 1, rate)).amount).toBe(10)
   })
-  it('拒绝重复源时刻/标识、超预算、越界及未声明或不可动画参数', () => {
+  it('拒绝重复源时刻/标识、越界及未声明或不可动画参数，允许长曲线', () => {
     expect(() => prepareCodeMaterialParameters(program, instance({ amount: [point('a', 1, 0), { ...point('b', 1, 10), sourceRemainder: { numerator: 0, denominator: 2 } }] }))).toThrow('重复关键帧')
     expect(() => codeMaterialCurvesSchema.parse({ amount: [point('same', 0, 0)], ink: [point('same', 1, [1, 1, 1, 1])] })).toThrow('标识')
-    expect(() => codeMaterialCurvesSchema.parse({ amount: Array.from({ length: 257 }, (_, index) => point(String(index), index, 1)) })).toThrow()
+    expect(codeMaterialCurvesSchema.parse({ amount: Array.from({ length: 1200 }, (_, index) => point(String(index), index, 1)) }).amount).toHaveLength(1200)
     expect(() => prepareCodeMaterialParameters(program, instance({ missing: [point('a', 0, 1)] }))).toThrow('不支持关键帧')
     expect(() => prepareCodeMaterialParameters(program, instance({ amount: [point('a', 0, 11)] }))).toThrow('范围')
     expect(() => prepareCodeMaterialParameters(program, instance({ amount: [point('a', 11e6, 1)] }))).toThrow('时长')

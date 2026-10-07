@@ -35,6 +35,7 @@ import { videoEditQueuedExportTask } from './videoEditExportQueue'
 import { VideoEditExportPresetExecutor } from './videoEditExportPresetReflection'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
+import { chooseVideoEditFolders } from './videoEditFolderImport'
 import { collectVideoEditOutput } from './videoEditOutputs'
 import { captureVideoEditProgramFrame } from './videoEditProgramCapture'
 import { collectVideoEditCodeAsset, importVideoEditCodeAsset, type VideoEditCodeAssetTarget } from './videoEditCodeAssets'
@@ -177,6 +178,15 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const input = definition.inputSchema.parse(raw) as { documentRef: { kind: 'video_edit.document'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string } }
       const id = input.documentRef.id; const owner = requireVideoEditInstance(id)
       switch (definition.id) {
+        case 'import_video_edit_folder': {
+          const baseline = owner.document
+          const result = await chooseVideoEditFolders(id, undefined, { signal: context.signal })
+          if (owner.document === baseline) throw new Error('未导入素材，用户取消选择或所选目录无法读取。')
+          await saveVideoEdit(id)
+          const current = requireVideoEditInstance(id)
+          const verified = await verifyVideoEditSaved(id, current.document)
+          return { resultRef: input.documentRef, verification: { verified, target: input.documentRef, condition: '已从剪辑文件回读并核对导入的素材与素材箱。' }, message: `已导入 ${result.itemIds.length} 个素材，跳过 ${result.skipped} 项。` }
+        }
         case 'undo_video_edit': undoVideoEdit(id); await saveVideoEdit(id); break
         case 'redo_video_edit': undoVideoEdit(id, true); await saveVideoEdit(id); break
         case 'save_video_edit': await saveVideoEdit(id); break

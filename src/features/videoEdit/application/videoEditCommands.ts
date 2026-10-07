@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { placeVideoEditItems } from '@/core/videoEdit/projectItems'
 import { videoEditDuration, type VideoEditSequence } from '@/core/videoEdit/document'
@@ -110,7 +111,7 @@ function targetClipsAtFrame(context: VideoEditCommandContext) {
 /** Premiere 导航键的落点；没有可去的位置时给出原因。 */
 function navigationTarget(context: VideoEditCommandContext, id: VideoEditCommandId): { frame?: number; reason: string } {
   const owner = stateOf(context).owner!; const sequence = getActiveVideoEditSequence(owner)
-  const limit = Math.floor(sequence.fps * 1800)
+  const limit = Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
   if (id === 'go_start') return { frame: 0, reason: '' }
   if (id === 'go_end') return { frame: Math.min(limit, videoEditDuration(sequence)), reason: '' }
   if (id === 'go_in') return { frame: owner.inFrame ?? undefined, reason: '序列没有入点。' }
@@ -169,8 +170,8 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (!owner) return { enabled: false, reason: '请先打开剪辑。' }
     if (id === 'undo' || id === 'redo') return { enabled: Boolean(id === 'undo' ? owner.past.length : owner.future.length), reason: '没有可恢复的编辑。' }
     if (id in FOCUS_PANELS || id === 'maximize_panel' || id === 'save' || id === 'import') return { enabled: true }
-    if (id === 'new_sequence') return { enabled: owner.document.sequences.length < 32, reason: '序列数量已达上限。' }
-    if (id === 'new_bin') return { enabled: owner.document.bins.length < 200, reason: '素材箱数量已达上限。' }
+    if (id === 'new_sequence') return { enabled: true }
+    if (id === 'new_bin') return { enabled: true }
     if (id === 'open_in_source') return { enabled: owner.document.items.some(item => context.itemIds.includes(item.id) && item.mediaId), reason: '请先选择有源文件的素材项。' }
     if (id === 'deselect_all' && context.scope === 'project') return { enabled: true }
     const sequence = findActiveVideoEditSequence(owner)
@@ -184,7 +185,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (PROJECT_PANEL_COMMANDS.has(id)) return { enabled: false, reason: '请在素材面板中使用。' }
     if (NAVIGATIONS.has(id)) { const target = navigationTarget(context, id); return { enabled: target.frame !== undefined, reason: target.reason } }
     if (id === 'mark_clip' || id === 'select_clip_at_playhead') return { enabled: targetClipsAtFrame(context).length > 0, reason: '播放头处的目标轨道没有片段。' }
-    if (id === 'add_marker') return { enabled: (sequence.markers?.length ?? 0) < 500, reason: '序列最多500个标记。' }
+    if (id === 'add_marker') return { enabled: true }
     if (id === 'clear_in' || id === 'clear_out' || id === 'clear_in_out') {
       const [inPoint, outPoint] = context.scope === 'source' ? [source?.inUs ?? null, source?.outUs ?? null] : [owner.inFrame, owner.outFrame]
       return { enabled: id === 'clear_in' ? inPoint !== null : id === 'clear_out' ? outPoint !== null : inPoint !== null || outPoint !== null, reason: '没有可清除的入出点。' }
@@ -216,7 +217,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
       if (id === 'split' && !clips.some(clip => context.frame > clip.start && context.frame < clip.start + clip.duration)) return { enabled: false, reason: '播放头不在所选片段内部。' }
       // Splitting only adds a bounded right half; deletion only removes owned data.
       // Their display state must not clone/compile the project or allocate edit IDs every video frame.
-      if (id === 'split') return { enabled: sequence.clips.length + clips.filter(clip => context.frame > clip.start && context.frame < clip.start + clip.duration).length <= 500, reason: '拆分后片段超过剪辑上限。' }
+      if (id === 'split') return { enabled: true }
       if (id === 'delete') return { enabled: true }
       if ((id === 'link' || id === 'group') && clips.length < 2) return { enabled: false, reason: '请至少选择两个片段。' }
       if (id === 'unlink' || id === 'ungroup') return { enabled: clips.some(clip => id === 'unlink' ? clip.linkId : clip.groupId), reason: '所选片段没有该关联。' }
@@ -316,7 +317,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
         if (id === 'mark_in') await updateVideoEditSource(projectId, { inUs: timeUs, ...(source!.outUs !== null && source!.outUs <= timeUs ? { outUs: null } : {}) })
         else { const outUs = Math.min(Math.round(media.durationSeconds * 1e6), media.kind === 'video' ? Math.round((Math.round(timeUs / 1e6 * fps) + 1) / fps * 1e6) : Math.round(timeUs + 1e6 / fps)); await updateVideoEditSource(projectId, { outUs, ...(source!.inUs !== null && source!.inUs >= outUs ? { inUs: null } : {}) }) }
       } else if (id === 'mark_in') setVideoEditTimelineView(projectId, { inFrame: context.frame, ...(owner!.outFrame !== null && owner!.outFrame <= context.frame ? { outFrame: null } : {}) })
-      else { const outFrame = Math.min(Math.floor(sequence.fps * 1800), context.frame + 1); setVideoEditTimelineView(projectId, { outFrame, ...(owner!.inFrame !== null && owner!.inFrame >= outFrame ? { inFrame: null } : {}) }) }
+      else { const outFrame = Math.min(Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS), context.frame + 1); setVideoEditTimelineView(projectId, { outFrame, ...(owner!.inFrame !== null && owner!.inFrame >= outFrame ? { inFrame: null } : {}) }) }
       return
     }
     case 'play_pause': case 'play_stop': case 'play_forward': case 'play_reverse': {

@@ -25,9 +25,19 @@ import {
 } from '../services/system'
 import { getAppDirectories, setUserFolderLanguageHint, type AppDirectoriesDto } from '../services/appPaths'
 import { parseOptionalStringField, parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
+import { closeDirectoryScans, readDirectoryPage } from '../services/systemDirectory'
+import type { FsDirPage } from '../../../src/platform/contracts/system'
 
 interface PathPayload {
   path: string
+}
+interface ReadDirPayload extends PathPayload { paged?: boolean; cursor?: string; close?: boolean }
+function parseReadDirPayload(input: unknown): ReadDirPayload {
+  const record = parseRecord(input)
+  if (record.paged !== undefined && typeof record.paged !== 'boolean' || record.close !== undefined && typeof record.close !== 'boolean') throw new Error('目录读取选项无效。')
+  const cursor = parseOptionalStringField(input, 'cursor')
+  if (cursor !== undefined && !/^[a-f0-9-]{36}$/.test(cursor)) throw new Error('目录读取游标无效。')
+  return { ...parsePathPayload(input), paged: record.paged as boolean | undefined, close: record.close as boolean | undefined, cursor }
 }
 
 interface ReadFilePayload extends PathPayload { maxBytes?: number }
@@ -217,7 +227,15 @@ export function registerSystemIpc(): void {
   registerIpcHandler<PathPayload, string>('fs:readTextFile', parsePathPayload, ({ path }) => readTextFile(path))
   registerIpcHandler<PathPayload, boolean>('fs:exists', parsePathPayload, ({ path }) => pathExists(path))
   registerIpcHandler<MkdirPayload, void>('fs:mkdir', parseMkdirPayload, ({ path, recursive }) => makeDir(path, recursive))
-  registerIpcHandler<PathPayload, FsDirEntryDto[]>('fs:readDir', parsePathPayload, ({ path }) => readDirectory(path))
+  const directoryOwners = new Set<number>()
+  registerIpcHandler<ReadDirPayload, FsDirEntryDto[] | FsDirPage>('fs:readDir', parseReadDirPayload, (input, event) => {
+    if (!input.paged) return readDirectory(input.path)
+    if (!directoryOwners.has(event.sender.id)) {
+      const owner = event.sender.id; directoryOwners.add(owner)
+      event.sender.once('destroyed', () => { directoryOwners.delete(owner); void closeDirectoryScans(owner) })
+    }
+    return readDirectoryPage(input.path, input, event.sender.id)
+  })
   registerIpcHandler<CopyFilePayload, void>('fs:copyFile', parseCopyFilePayload, ({ src, dest }) => copyFilePath(src, dest))
   registerIpcHandler<RemovePayload, void>('fs:remove', parseRemovePayload, ({ path, recursive }) => removePath(path, recursive))
 

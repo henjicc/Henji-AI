@@ -18,7 +18,7 @@ export const VIDEO_EDIT_MASK_MODE_LABELS: Readonly<Record<VideoEditMaskMode, str
 export const VIDEO_EDIT_MASK_SHAPE_KINDS = ['rect', 'ellipse', 'path'] as const
 export type VideoEditMaskShapeKind = (typeof VIDEO_EDIT_MASK_SHAPE_KINDS)[number]
 export const VIDEO_EDIT_MASK_SHAPE_LABELS: Readonly<Record<VideoEditMaskShapeKind, string>> = { rect: '矩形遮罩', ellipse: '椭圆遮罩', path: '钢笔遮罩' }
-/** 一个效果最多 8 个遮罩，一条钢笔路径最多 64 个顶点。 */
+/** Per-effect rasterization budget: up to 8 matte combines and 64 path vertices bound full-resolution per-frame geometry work; independent of project size. */
 export const VIDEO_EDIT_MAX_MASK_SHAPES = 8
 export const VIDEO_EDIT_MAX_MASK_POINTS = 64
 /** 不透明度 0–100（%）。羽化、扩展与智能区域同一量纲：100 ≈ 画面高度的 10%。 */

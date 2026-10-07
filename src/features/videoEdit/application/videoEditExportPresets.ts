@@ -6,7 +6,7 @@ import { publishVideoEdit } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.exportPresets')
 export const VIDEO_EDIT_EXPORT_PRESETS_KEY = 'video-edit-export-presets'
-const librarySchema = z.array(videoEditExportPresetSchema).max(256)
+const librarySchema = z.array(videoEditExportPresetSchema)
 export class VideoEditExportPresetLibrary {
   private presets: VideoEditExportPreset[] = []
   private error = ''

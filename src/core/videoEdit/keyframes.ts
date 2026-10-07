@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
 import { z } from 'zod'
 import { codeMaterialKeyframeSchema } from './codeMaterialAnimation'
 import { interpolateVideoEditKeyframe } from './keyframeInterpolation'
@@ -6,17 +7,15 @@ import type { VideoEditClip } from './document'
 import type { VideoEditEffect } from './compositing'
 
 /** Same value/interpolation contract as source curves; clip-relative integer frames replace source microseconds. */
-export const videoEditKeyframeSchema = codeMaterialKeyframeSchema.omit({ id: true, sourceInUs: true, sourceRemainder: true }).extend({ time: z.number().int().min(0).max(108_000), source: z.enum(['ducking', 'reframe']).optional(), reframeOrigin: z.object({ time: z.number().int().min(0).max(108_000), value: z.number().finite(), interpolation: z.enum(['linear', 'hold']) }).strict().optional(), duckingOrigin: z.object({ time: z.number().int().min(0).max(108_000), value: z.number().finite().min(0).max(2) }).strict().optional(), easeRange: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]).refine(([a, b]) => b > a, '缓动区间终点须大于起点。').optional() })
-export const videoEditKeyframesSchema = z.array(videoEditKeyframeSchema).max(256).superRefine((points, ctx) => {
+export const videoEditKeyframeSchema = codeMaterialKeyframeSchema.omit({ id: true, sourceInUs: true, sourceRemainder: true }).extend({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), source: z.enum(['ducking', 'reframe']).optional(), reframeOrigin: z.object({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), value: z.number().finite(), interpolation: z.enum(['linear', 'hold']) }).strict().optional(), duckingOrigin: z.object({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), value: z.number().finite().min(0).max(2) }).strict().optional(), easeRange: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]).refine(([a, b]) => b > a, '缓动区间终点须大于起点。').optional() })
+export const videoEditKeyframesSchema = z.array(videoEditKeyframeSchema).superRefine((points, ctx) => {
   if (points.some((point, i) => i > 0 && point.time <= points[i - 1].time)) ctx.addIssue({ code: 'custom', message: '关键帧 time 必须按片段内帧升序排列，不能重复。' })
 })
 export const VIDEO_EDIT_ANIMATABLE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume'] as const
 export type VideoEditAnimatableKey = typeof VIDEO_EDIT_ANIMATABLE_KEYS[number]
 export type VideoEditKeyframe = z.infer<typeof videoEditKeyframeSchema>
 export type VideoEditKeyframes = VideoEditKeyframe[]
-export const videoEditCurvesSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), videoEditKeyframesSchema).superRefine((curves, ctx) => {
-  if (Object.keys(curves).length > 128 || Object.values(curves).reduce((n, points) => n + points.length, 0) > 4096) ctx.addIssue({ code: 'custom', message: '关键帧最多128项及4096个点，每项最多256个。' })
-})
+export const videoEditCurvesSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), videoEditKeyframesSchema)
 export const videoEditClipCurvesSchema = z.partialRecord(z.enum(VIDEO_EDIT_ANIMATABLE_KEYS), videoEditKeyframesSchema)
 export type VideoEditCurves = z.infer<typeof videoEditCurvesSchema>
 

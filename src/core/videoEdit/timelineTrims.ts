@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { adjustVideoEditClip, videoEditClipSourceDuration, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
@@ -32,7 +33,7 @@ class TrimContext {
   readonly fps: number
   readonly limit: number
   constructor(readonly composition: VideoEditComposition, readonly sequence: VideoEditSequence, readonly metadata?: CodeMaterialMetadataReader) {
-    this.fps = composition.fps; this.limit = Math.floor(composition.fps * 1800)
+    this.fps = composition.fps; this.limit = Math.floor(composition.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
   }
   /** 开头还能往前补多少帧（沿播放方向在开头之前的素材，按片段速度换算）；没有源时间的片段不受限。 */
   head(clip: VideoEditClip): number {

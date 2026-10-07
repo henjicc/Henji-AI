@@ -6,7 +6,9 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { closeVideoEditProject, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { dropVideoEditInput } from './videoEditDrop'
-import { planVideoEditFolderImport } from './videoEditFolderImport'
+import { importVideoEditPathsAndFolders, planVideoEditFolderImport } from './videoEditFolderImport'
+import { cancelVideoEditImport, videoEditImportTask, type VideoEditImportProgress } from './videoEditImportTask'
+import { createApplicationHarness } from '@/tests/applicationHarness'
 
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], UrlSource: class {},
@@ -31,7 +33,7 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/drop')
   vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
-  vi.spyOn(getPlatform().system.fs, 'readDir').mockImplementation(async path => { if (!tree[path]) throw new Error('ENOTDIR'); return tree[path] })
+  vi.spyOn(getPlatform().system.fs, 'readDirPage').mockImplementation(async (path, options) => { if (options?.close) return { entries: [], realPath: path }; if (!tree[path]) throw new Error('ENOTDIR'); const offset = Number(options?.cursor ?? 0); const entries = tree[path].slice(offset, offset + 256); return { entries, realPath: path, ...(offset + entries.length < tree[path].length ? { cursor: String(offset + entries.length) } : {}) } })
   vi.spyOn(getPlatform().system.fs, 'exists').mockImplementation(async path => !path.includes('missing'))
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')
 })
@@ -66,4 +68,65 @@ it('只拖入空文件夹也按 PR 建同名空素材箱（含子文件夹），
   expect(owner.document.bins.map(bin => [bin.name, bin.parentId ?? null])).toEqual([['全空', null], ['下级', top.id]])
   expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(id); expect(owner.document.bins).toEqual([])
+})
+
+it('分页导入1200个文件和24层目录，进度递增，超过200个素材箱仍只写入一步历史', async () => {
+  const root = 'D:/large'; const local: typeof tree = { [root]: Array.from({ length: 1200 }, (_, index) => ({ name: `${index}.mp4`, isDirectory: false })) }
+  for (let depth = 0; depth < 24; depth++) { const path = root + '/child'.repeat(depth); local[path] ??= []; local[path].push({ name: 'child', isDirectory: true }); local[`${path}/child`] = [] }
+  for (let index = 0; index < 300; index++) { local[root].push({ name: `bin${index}`, isDirectory: true }); local[`${root}/bin${index}`] = [] }
+  vi.mocked(getPlatform().system.fs.readDirPage).mockImplementation(async (path, options) => {
+    if (options?.close) return { entries: [], realPath: path }
+    const values = local[path]; if (!values) throw new Error('ENOTDIR')
+    const offset = Number(options?.cursor ?? 0); const entries = values.slice(offset, offset + 128)
+    return { entries, realPath: path, ...(offset + entries.length < values.length ? { cursor: String(offset + entries.length) } : {}) }
+  })
+  const owner = (await createVideoEditProject())!; const history = owner.past.length
+  const progress: VideoEditImportProgress[] = []
+  const result = await importVideoEditPathsAndFolders(owner.document.id, [root], undefined, undefined, { onProgress: value => progress.push({ ...value }) })
+  expect(result).toMatchObject({ skipped: 0 }); expect(result.itemIds).toHaveLength(1200)
+  expect(owner.document.media).toHaveLength(1200); expect(owner.document.bins).toHaveLength(325); expect(owner.past).toHaveLength(history + 1)
+  const probing = progress.filter(value => value.phase === 'probing')
+  expect(probing.at(-1)).toMatchObject({ completed: 1200, total: 1200 })
+  expect(probing.every((value, index) => !index || value.completed > probing[index - 1].completed)).toBe(true)
+  expect(videoEditImportTask(owner.document.id)).toBeUndefined()
+  undoVideoEdit(owner.document.id); expect(owner.document.items).toEqual([]); expect(owner.document.bins).toEqual([])
+})
+
+it('真实路径相同的联接回环和读不出的目录跳过计数，并关闭未读完的页', async () => {
+  const read = vi.mocked(getPlatform().system.fs.readDirPage).mockImplementation(async (path, options) => {
+    if (options?.close) return { entries: [], realPath: 'D:/loop' }
+    if (path.endsWith('/denied')) throw new Error('EACCES')
+    if (path.endsWith('/back')) return { realPath: 'D:/loop', cursor: 'unfinished', entries: [] }
+    return { realPath: path, entries: [{ name: 'ok.mp4', isDirectory: false }, { name: 'back', isDirectory: true }, { name: 'denied', isDirectory: true }] }
+  })
+  const owner = (await createVideoEditProject())!
+  const result = await importVideoEditPathsAndFolders(owner.document.id, ['D:/loop'])
+  expect(result.skipped).toBe(2); expect(result.itemIds).toHaveLength(1); expect(owner.document.bins).toHaveLength(1)
+  expect(read).toHaveBeenCalledWith('D:/loop/back', { cursor: 'unfinished', close: true })
+})
+
+it.each(['enumerating', 'probing'] as const)('在%s进度取消后没有写入或撤销步', async phase => {
+  const owner = (await createVideoEditProject())!; const original = owner.document; const history = owner.past.length
+  await expect(importVideoEditPathsAndFolders(owner.document.id, ['D:/drop/拍摄'], undefined, undefined, {
+    onProgress: progress => { if (progress.phase === phase) cancelVideoEditImport(owner.document.id) },
+  })).rejects.toMatchObject({ name: 'AbortError' })
+  expect(owner.document).toBe(original); expect(owner.past).toHaveLength(history); expect(videoEditImportTask(owner.document.id)).toBeUndefined()
+})
+
+it('落位回调完成之前取消，暂存素材箱和素材全部丢弃', async () => {
+  const owner = (await createVideoEditProject())!; const original = owner.document; const history = owner.past.length
+  await expect(importVideoEditPathsAndFolders(owner.document.id, ['D:/drop/拍摄'], undefined, async candidate => {
+    cancelVideoEditImport(owner.document.id); return candidate
+  })).rejects.toMatchObject({ name: 'AbortError' })
+  expect(owner.document).toBe(original); expect(owner.past).toHaveLength(history)
+})
+
+it('助手文件夹导入通过同一选择窗口、递归链路与保存回读', async () => {
+  const owner = (await createVideoEditProject())!; const history = owner.past.length
+  vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue(['D:/drop/拍摄'])
+  const app = createApplicationHarness()
+  try {
+    expect(await app.call('import_video_edit_folder', { documentRef: { kind: 'video_edit.document', id: owner.document.id } })).toMatchObject({ ok: true })
+    expect(owner.document.items).toHaveLength(3); expect(owner.document.bins).toHaveLength(3); expect(owner.past).toHaveLength(history + 1)
+  } finally { app.dispose() }
 })

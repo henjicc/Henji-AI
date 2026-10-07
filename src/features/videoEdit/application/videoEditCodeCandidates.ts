@@ -85,7 +85,6 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     validateCodeMaterialDocument(document, readVideoEditCodeMetadata(owner, document))
     const requested = owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? original.start
     const frame = videoEditTransitionsAt(videoEditComposition(document, target.sequenceId), requested).some(window => window.left.id === original.id || window.right.id === original.id) ? requested : Math.max(original.start, Math.min(original.start + original.duration - 1, requested))
-    if (count > 32) throw new Error('批量源码更新最多32个片段，请缩小应用范围。')
     const uniqueFrames = videoEditCodeValidationFrames(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => selectedIds.has(clip.id)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: selectedEffects.get(clip.id) } : {}) }))), { sequenceId: target.sequenceId, frame })
     bitmap = await trialVideoEditCodeFrames(uniqueFrames, controller.signal, true)
     controller.signal.throwIfAborted()

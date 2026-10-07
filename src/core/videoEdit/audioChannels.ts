@@ -14,17 +14,18 @@ import { z } from 'zod'
  *   sequence is the average of its two channels.
  */
 
-export const VIDEO_EDIT_MAX_AUDIO_CLIPS = 16
+/** Layout count is dynamic; retain only the JS safe-integer bound used by NumberInput and index arithmetic. */
+export const VIDEO_EDIT_MAX_AUDIO_CLIPS = Number.MAX_SAFE_INTEGER
 export const videoEditAudioStreamSchema = z.object({ channels: z.number().int().min(1).max(64), sampleRate: z.number().int().min(1).max(768_000).optional() }).strict()
 export type VideoEditAudioStream = z.infer<typeof videoEditAudioStreamSchema>
-export const videoEditAudioStreamsSchema = z.array(videoEditAudioStreamSchema).min(1).max(64)
-export const videoEditAudioSourceSchema = z.object({ stream: z.number().int().min(0).max(63), channel: z.number().int().min(0).max(63) }).strict()
+export const videoEditAudioStreamsSchema = z.array(videoEditAudioStreamSchema).min(1)
+export const videoEditAudioSourceSchema = z.object({ stream: z.number().int().nonnegative(), channel: z.number().int().min(0).max(63) }).strict()
 export type VideoEditAudioSource = z.infer<typeof videoEditAudioSourceSchema>
 export type VideoEditAudioFormat = 'mono' | 'stereo'
 export const videoEditAudioMappingSchema = z.object({ format: z.enum(['mono', 'stereo']), sources: z.array(videoEditAudioSourceSchema).min(1).max(2) }).strict()
   .refine(mapping => mapping.sources.length === videoEditAudioWidth(mapping.format), '单声道片段读取 1 个源声道，立体声片段读取 2 个源声道。')
 export type VideoEditAudioMapping = z.infer<typeof videoEditAudioMappingSchema>
-export const videoEditAudioLayoutSchema = z.array(videoEditAudioMappingSchema).min(1).max(VIDEO_EDIT_MAX_AUDIO_CLIPS)
+export const videoEditAudioLayoutSchema = z.array(videoEditAudioMappingSchema).min(1)
   .refine(layout => layout.every(mapping => mapping.format === layout[0].format), '同一素材放入的音频片段使用同一种声道格式。')
 export type VideoEditAudioLayout = z.infer<typeof videoEditAudioLayoutSchema>
 export type VideoEditAudioPreset = 'file' | 'mono' | 'stereo'

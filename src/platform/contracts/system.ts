@@ -1,7 +1,11 @@
 export interface FsDirEntry {
   name: string
   isDirectory: boolean
+  unreadable?: boolean
 }
+
+export interface FsDirPage { entries: FsDirEntry[]; realPath: string; cursor?: string }
+export interface FsDirPageOptions { cursor?: string; close?: boolean }
 
 export interface FsPlatform {
   readFile(path: string, options?: { maxBytes: number }): Promise<Uint8Array>
@@ -11,6 +15,7 @@ export interface FsPlatform {
   exists(path: string): Promise<boolean>
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>
   readDir(path: string): Promise<FsDirEntry[]>
+  readDirPage(path: string, options?: FsDirPageOptions): Promise<FsDirPage>
   copyFile(src: string, dest: string): Promise<void>
   remove(path: string, options?: { recursive?: boolean }): Promise<void>
 }

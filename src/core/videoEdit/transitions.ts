@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
 import { z } from 'zod'
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
@@ -42,10 +43,10 @@ export type VideoEditTransitionAlignment = typeof VIDEO_EDIT_TRANSITION_ALIGNMEN
 export const videoEditTransitionSchema = z.object({
   id: z.string().min(1).max(100), kind: z.enum(KINDS),
   leftClipId: z.string().min(1).max(100).optional(), rightClipId: z.string().min(1).max(100).optional(),
-  durationFrames: z.number().int().min(2).max(108_000),
+  durationFrames: z.number().int().min(2).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES),
   alignment: z.enum(VIDEO_EDIT_TRANSITION_ALIGNMENTS).optional(),
   /** 只在自定义起点时使用：过渡在切点之前的帧数。 */
-  framesBeforeCut: z.number().int().min(0).max(108_000).optional(),
+  framesBeforeCut: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(),
   /** 带参数的视频过渡（擦除、推动等，见 `transitionParams.ts`）的参数；可只写一部分，缺的键按默认值。 */
   parameters: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(64)])).optional(),
 }).strict().superRefine((transition, ctx) => {
@@ -102,14 +103,40 @@ export function videoEditTransitionAlignmentFields(durationFrames: number, frame
 }
 export function videoEditTransitionAlignmentOf(transition: Pick<VideoEditTransition, 'alignment'>): VideoEditTransitionAlignment { return transition.alignment ?? 'center' }
 
+interface TransitionClipIndex { byId: Map<string, VideoEditClip>; tracks: Map<number, { clips: VideoEditClip[]; ends: number[] }> }
+function indexTransitionClips(clips: readonly VideoEditClip[]): TransitionClipIndex {
+  const tracks: TransitionClipIndex['tracks'] = new Map()
+  for (const clip of clips) {
+    let lane = tracks.get(clip.track)
+    if (!lane) { lane = { clips: [], ends: [] }; tracks.set(clip.track, lane) }
+    lane.clips.push(clip)
+  }
+  for (const lane of tracks.values()) {
+    lane.clips.sort((a, b) => a.start - b.start)
+    let end = 0
+    for (const clip of lane.clips) { end = Math.max(end, clip.start + clip.duration); lane.ends.push(end) }
+  }
+  return { byId: new Map(clips.map(clip => [clip.id, clip])), tracks }
+}
+function overlapsOtherClip(index: TransitionClipIndex, left: VideoEditClip, right: VideoEditClip, start: number, end: number): boolean {
+  const lane = index.tracks.get(left.track)!
+  let low = 0; let high = lane.clips.length
+  while (low < high) { const mid = (low + high) >>> 1; if (lane.clips[mid].start < end) low = mid + 1; else high = mid }
+  for (let at = low - 1; at >= 0 && lane.ends[at] > start; at--) {
+    const clip = lane.clips[at]
+    if (clip.id !== left.id && clip.id !== right.id && clip.start + clip.duration > start) return true
+  }
+  return false
+}
 /** Derive every temporal field from the original clips; never rewrite their clocks. */
-export function videoEditTransitionWindow(sequence: Pick<VideoEditSequence, 'clips'>, transition: VideoEditTransition): VideoEditTransitionWindow {
-  if (!Number.isInteger(transition.durationFrames) || transition.durationFrames < 2 || transition.durationFrames > 108_000) throw new Error('转场时长必须为2到108000的整数帧。')
+export function videoEditTransitionWindow(sequence: Pick<VideoEditSequence, 'clips'>, transition: VideoEditTransition, index?: TransitionClipIndex): VideoEditTransitionWindow {
+  if (!Number.isInteger(transition.durationFrames) || transition.durationFrames < 2 || transition.durationFrames > VIDEO_EDIT_MAX_SEQUENCE_FRAMES) throw new Error('转场时长必须为序列范围内至少2个整数帧。')
   const medium = videoEditTransitionMedium(transition.kind)
   const side = videoEditTransitionSide(transition)
   if (side) {
     // 单侧过渡（PR）：整段在自己的片段内，从入点起或到出点止。
-    const clip = sequence.clips.find(value => value.id === (side === 'in' ? transition.rightClipId : transition.leftClipId))
+    const clipId = (side === 'in' ? transition.rightClipId : transition.leftClipId)!
+    const clip = index ? index.byId.get(clipId) : sequence.clips.find(value => value.id === clipId)
     if (!clip || !videoEditTransitionAccepts(medium, clip)) throw new Error(medium === 'audio' ? '音频过渡需要挂在声音片段上。' : '视频过渡需要挂在画面片段上。')
     const cut = side === 'in' ? clip.start : clip.start + clip.duration
     const start = side === 'in' ? cut : cut - transition.durationFrames; const end = start + transition.durationFrames
@@ -117,17 +144,19 @@ export function videoEditTransitionWindow(sequence: Pick<VideoEditSequence, 'cli
     return { transition, left: clip, right: clip, start, end, cut, side }
   }
   if (!transition.leftClipId && !transition.rightClipId) throw new Error('过渡至少要挂在一个片段上。')
-  const left = sequence.clips.find(clip => clip.id === transition.leftClipId)
-  const right = sequence.clips.find(clip => clip.id === transition.rightClipId)
+  const left = index ? index.byId.get(transition.leftClipId!) : sequence.clips.find(clip => clip.id === transition.leftClipId)
+  const right = index ? index.byId.get(transition.rightClipId!) : sequence.clips.find(clip => clip.id === transition.rightClipId)
   if (!left || !right || left === right || !videoEditTransitionAccepts(medium, left) || !videoEditTransitionAccepts(medium, right) || left.track !== right.track || left.start + left.duration !== right.start) throw new Error(medium === 'audio' ? '音频过渡需要同一声音轨道上紧邻的两个片段。' : '交叉溶解需要同一画面轨道上紧邻的两个片段。')
   const cut = right.start; const start = cut - videoEditTransitionFramesBeforeCut(transition); const end = start + transition.durationFrames
   if (start < left.start || end > right.start + right.duration) throw new Error('转场窗口超出两侧片段，请减小转场时长。')
-  if (sequence.clips.some(clip => clip.track === left.track && clip.id !== left.id && clip.id !== right.id && clip.start < end && clip.start + clip.duration > start)) throw new Error('转场窗口内还有其他片段，请先调整剪辑位置。')
+  if (index ? overlapsOtherClip(index, left, right, start, end) : sequence.clips.some(clip => clip.track === left.track && clip.id !== left.id && clip.id !== right.id && clip.start < end && clip.start + clip.duration > start)) throw new Error('转场窗口内还有其他片段，请先调整剪辑位置。')
   return { transition, left, right, start, end, cut }
 }
 /** 指定帧上生效的过渡窗口；`medium` 区分画面过渡（渲染）与音频过渡（混音）。 */
 export function videoEditTransitionsAt(sequence: Pick<VideoEditSequence, 'clips' | 'transitions'>, frame: number, medium: VideoEditTransitionMedium = 'video'): VideoEditTransitionWindow[] {
-  return (sequence.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === medium).map(transition => videoEditTransitionWindow(sequence, transition)).filter(window => frame >= window.start && frame < window.end)
+  if (!sequence.transitions?.length) return []
+  const index = indexTransitionClips(sequence.clips)
+  return sequence.transitions.filter(transition => videoEditTransitionMedium(transition.kind) === medium).map(transition => videoEditTransitionWindow(sequence, transition, index)).filter(window => frame >= window.start && frame < window.end)
 }
 export function videoEditTransitionAmount(window: Pick<VideoEditTransitionWindow, 'start' | 'end'>, frame: number): number {
   if (!Number.isInteger(window.start) || !Number.isInteger(window.end) || window.end - window.start < 2 || !Number.isInteger(frame) || frame < window.start || frame >= window.end) throw new Error('请求帧不在转场半开窗口内。')
@@ -212,11 +241,13 @@ function assertSourceHandles(document: VideoEditDocument, sequence: VideoEditSeq
 }
 export function validateVideoEditTransitions(document: VideoEditDocument, read?: CodeMaterialMetadataReader): void {
   for (const sequence of document.sequences) {
-    const windows = (sequence.transitions ?? []).map(transition => videoEditTransitionWindow(sequence, transition))
-    for (let index = 0; index < windows.length; index++) {
-      const window = windows[index]
-      if (windows.slice(0, index).some(previous => previous.left.track === window.left.track && previous.start < window.end && previous.end > window.start)) throw new Error('同轨转场窗口不能重叠。')
-      assertSourceHandles(document, sequence, window, read)
+    if (!sequence.transitions?.length) continue
+    const index = indexTransitionClips(sequence.clips)
+    const windows = sequence.transitions.map(transition => videoEditTransitionWindow(sequence, transition, index)).sort((a, b) => a.left.track - b.left.track || a.start - b.start)
+    let prior: VideoEditTransitionWindow | undefined
+    for (const window of windows) {
+      if (prior && prior.left.track === window.left.track && prior.end > window.start) throw new Error('同轨转场窗口不能重叠。')
+      assertSourceHandles(document, sequence, window, read); prior = window
     }
   }
 }
@@ -353,7 +384,7 @@ export function videoEditTransitionFit(sequence: Pick<VideoEditSequence, 'clips'
   const leftRoom = cut - lower; const rightRoom = upper - cut
   const side = !left ? 'in' : !right ? 'out' : undefined
   const limit = side === 'in' || !side && alignment === 'start' ? rightRoom : side === 'out' || alignment === 'end' ? leftRoom : Math.min(2 * leftRoom + 1, 2 * rightRoom)
-  const durationFrames = Math.min(108_000, desired, limit)
+  const durationFrames = Math.min(VIDEO_EDIT_MAX_SEQUENCE_FRAMES, desired, limit)
   if (durationFrames < 2) return undefined
   const framesBeforeCut = side === 'in' || !side && alignment === 'start' ? 0 : side === 'out' || alignment === 'end' ? durationFrames : Math.floor(durationFrames / 2)
   return { durationFrames, framesBeforeCut }

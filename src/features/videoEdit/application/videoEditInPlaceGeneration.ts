@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { createLogger } from '@/core/logging'
 import { registry } from '@/core/ModelRegistry'
 import type { ParamDef } from '@/core/types'
@@ -227,7 +228,7 @@ export function selectVideoEditInPlaceReferences(plan: VideoEditInPlacePlan, sel
   const wanted: VideoEditInPlaceSelectedReference[] = plan.references.filter(reference => selection.referenceRoles === undefined || selection.referenceRoles.includes(reference.role))
   if (selection.referenceFrame !== undefined) {
     if (plan.mediaType === 'audio') throw new Error('声音生成不接受参考画面，请取消指定时间帧。')
-    const limit = Math.floor(plan.fps * 1800)
+    const limit = Math.floor(plan.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
     if (!Number.isSafeInteger(selection.referenceFrame) || selection.referenceFrame < 0 || selection.referenceFrame >= limit) throw new Error(`参考帧须为目标序列 0 到 ${limit - 1} 范围内的整数帧。`)
     wanted.push({ role: 'specified_time', sequenceId: plan.sequenceId, frame: selection.referenceFrame })
   }

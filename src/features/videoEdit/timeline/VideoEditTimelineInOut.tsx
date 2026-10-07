@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { useRef, useSyncExternalStore } from 'react'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { setVideoEditTimelineView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
@@ -13,7 +14,7 @@ export function VideoEditTimelineInOut({ instance, sequence, fps, duration, pixe
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const drag = useRef<{ handle: Handle; pointerId: number; x: number; inFrame: number | null; outFrame: number | null } | null>(null)
   if (instance.inFrame === null && instance.outFrame === null) return null
-  const maxFrame = Math.floor(fps * 1800)
+  const maxFrame = Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
   const from = instance.inFrame ?? 0
   const to = instance.outFrame ?? Math.max(from + 1, duration)
   const start = (event: React.PointerEvent<HTMLElement>, handle: Handle): void => {

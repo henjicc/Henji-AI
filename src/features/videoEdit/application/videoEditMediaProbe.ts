@@ -44,7 +44,7 @@ function nativeStreams(probe: VideoEditNativeProbe): { video?: VideoEditNativeSt
 }
 /** Every sound stream in file order, the order both decoders number them by (task 2.6); absent without sound. */
 export function videoEditNativeAudioStreams(probe: VideoEditNativeProbe): Pick<VideoEditMedia, 'audioStreams'> {
-  const streams = probe.streams.filter(stream => stream.kind === 'audio').sort((a, b) => a.index - b.index).slice(0, 64)
+  const streams = probe.streams.filter(stream => stream.kind === 'audio').sort((a, b) => a.index - b.index)
   if (!streams.length || streams.some(stream => !stream.audio || !Number.isInteger(stream.audio.channels) || stream.audio.channels < 1 || stream.audio.channels > 64)) return {}
   return { audioStreams: streams.map(stream => ({ channels: stream.audio!.channels, ...(Number.isInteger(stream.audio!.sampleRate) && stream.audio!.sampleRate > 0 && stream.audio!.sampleRate <= 768_000 ? { sampleRate: stream.audio!.sampleRate } : {}) })) }
 }

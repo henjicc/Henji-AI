@@ -34,7 +34,7 @@ export function VideoEditAddTracksDialog({ sequence, kind, onSubmit, onClose }: 
           {lanes[kind].map((track, rank) => <option key={track.id} value={rank + 1}>{rank === lanes[kind].length - 1 ? '最后一条轨道之后' : `${codes.get(track.id)} 之后`}</option>)}
         </UiSelect></div></UiFormRow>
       </UiGroup>)}
-      {total > room && <UiError size="xs" align="start" title={`序列最多 ${VIDEO_EDIT_TRACK_LIMIT} 条轨道，还能再加 ${room} 条。`} message="" />}
+      {total > room && <UiError size="xs" align="start" title="轨道数量超出整数范围。" message="" />}
       {error && <UiError size="xs" align="start" title={error} message="" />}
     </div>
   </UiModal>

@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { videoEditTrackerSchema } from '@/core/videoEdit/tracking'
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
 import { videoEditTextStyleSchema } from '@/core/videoEdit/text'
@@ -36,7 +37,7 @@ export const VIDEO_EDIT_COMPOSITE_CASCADES = (['create', 'update', 'delete'] as 
 export const VIDEO_EDIT_SOURCE_PROGRAM_CASCADE = { declarationId: 'video_edit.source_foreground_program_pause', effect: 'update' as const, entityType: 'video_edit.document', propertyIds: ['video_edit.document.program_playback'], revisionScopes: ['video_edit'] }
 export const VIDEO_EDIT_PROGRAM_SOURCE_CASCADE = { declarationId: 'video_edit.program_foreground_source_pause', effect: 'update' as const, entityType: 'video_edit.source', propertyIds: ['video_edit.source.playing'], revisionScopes: ['video_edit'] }
 const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
-  'video_edit.document': { name: z.string().min(1).max(200), frame: z.number().int().nonnegative(), selection: z.string(), activeSequenceId: z.string(), dirty: z.boolean(), selectedItemIds: z.array(z.string().min(1)).max(500), selectedBinId: z.string().max(100), openSequenceIds: z.array(z.string().min(1)).max(32) },
+  'video_edit.document': { name: z.string().min(1).max(200), frame: z.number().int().nonnegative(), selection: z.string(), activeSequenceId: z.string(), dirty: z.boolean(), selectedItemIds: z.array(z.string().min(1)), selectedBinId: z.string().max(100), openSequenceIds: z.array(z.string().min(1)) },
   // 速度（4.13）以 speed_percent 百分比公开（见下），不公开内部有理数。
   'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => !['id', 'sourceRemainder', 'speed', 'curves'].includes(key))),
   'video_edit.annotation': Object.fromEntries(Object.entries(videoEditAnnotationSchema.shape).filter(([key]) => key !== 'id' && key !== 'sourceRemainder')),
@@ -49,7 +50,7 @@ const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   'video_edit.track': Object.fromEntries(Object.entries(videoEditTrackSchema.shape).filter(([key]) => key !== 'id')),
   'video_edit.media': { name: text, kind: z.enum(['video', 'image', 'audio']), durationSeconds: z.number(), width: z.number(), height: z.number() },
   'video_edit.source': { itemId: z.string().max(100), timeUs: z.number().int().nonnegative(), presentedTimeUs: z.number().int().nonnegative(), playing: z.boolean(), volume: z.number().min(0).max(1), inUs: z.number().int().nonnegative().nullable(), outUs: z.number().int().nonnegative().nullable(), playbackDirection: z.union([z.literal(1), z.literal(-1)]), status: z.enum(['closed', 'loading', 'ready', 'error']), error: text },
-  'video_edit.code_material': { name: z.string().min(1).max(200), source: z.string().max(65536), defaultVersionId: z.string().min(1).max(100), versionIds: z.array(z.string()).max(64), binId: z.string().max(100) },
+  'video_edit.code_material': { name: z.string().min(1).max(200), source: z.string().max(65536), defaultVersionId: z.string().min(1).max(100), versionIds: z.array(z.string()), binId: z.string().max(100) },
   'video_edit.code_version': { source: codeMaterialVersionSchema.shape.source, apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, definitionId: z.string().min(1).max(100) },
   'video_edit.tracker': { name: videoEditTrackerSchema.shape.name, method: videoEditTrackerSchema.shape.method, prompts: videoEditTrackerSchema.shape.prompts, status: text, clipId: z.string().min(1).max(100), sequenceId: z.string().min(1).max(100) },
   'video_edit.graphic_object': { name: z.string().trim().min(1).max(200), kind: z.enum(['rect', 'ellipse', 'text']), clipId: z.string().min(1).max(100), sequenceId: z.string().min(1).max(100), parameters: codeMaterialInstanceSchema.shape.parameters, curves: codeMaterialCurvesSchema },
@@ -74,15 +75,16 @@ schemas['video_edit.item'].sourceRange = videoEditItemSchema.shape.sourceRange.u
 schemas['video_edit.item'].sequenceId = z.string().max(100)
 // 颜色标签：读出 null 表示按类型默认，写 null 恢复默认（3.2）。
 for (const type of ['video_edit.item', 'video_edit.bin', 'video_edit.sequence'] as const) schemas[type].label = videoEditLabelSchema.nullable()
-schemas['video_edit.clip'].graphicObjectIds = z.array(z.string().min(1).max(100)).max(32)
+schemas['video_edit.clip'].graphicObjectIds = z.array(z.string().min(1).max(100))
 schemas['video_edit.clip'].effectIds = z.array(z.string().min(1).max(100)).max(VIDEO_EDIT_MAX_EFFECTS)
 schemas['video_edit.clip'].adjustmentFromTrack = videoEditAdjustmentSchema.shape.fromTrack.nullable()
 schemas['video_edit.item'].graphicKind = z.enum(['solid', 'rect', 'ellipse', 'text']).nullable()
 schemas['video_edit.item'].graphicWidth = z.number().int().min(16).max(8192).nullable()
 schemas['video_edit.item'].graphicHeight = z.number().int().min(16).max(8192).nullable()
 schemas['video_edit.effect'].parameters = codeMaterialInstanceSchema.shape.parameters.or(videoEditBuiltinEffectInstanceSchema.shape.params.refine(value => Object.keys(value).length <= 128, '内置效果参数最多128个。'))
-schemas['video_edit.document'].lumetriLuts = z.array(z.object({ id: z.string(), name: z.string() }).strict()).max(200)
+schemas['video_edit.document'].lumetriLuts = z.array(z.object({ id: z.string(), name: z.string() }).strict())
 schemas['video_edit.document'].timelineView = videoEditTimelineViewSchema
+schemas['video_edit.document'].mediaImport = z.object({ phase: z.enum(['enumerating', 'probing']), completed: z.number().int().nonnegative(), total: z.number().int().nonnegative() }).strict().nullable()
 schemas['video_edit.document'].programPlayback = videoEditProgramPlaybackSchema
 // 回放分辨率（4.9）：节目监视器的视图偏好，按剪辑记在本机，不进剪辑文件与撤销栈。
 schemas['video_edit.document'].proxyPreference = z.object({ enabled: z.boolean(), autoCreate: z.boolean() }).strict()
@@ -108,8 +110,8 @@ schemas['video_edit.item'].audioChannels = videoEditAudioLayoutSchema.nullable()
 schemas['video_edit.clip'].audioMapping = videoEditAudioMappingSchema.nullable()
 schemas['video_edit.clip'].audioRole = videoEditClipSchema.shape.audioRole.unwrap().nullable()
 // 淡化手柄（4.3）：没有淡化时读出 0，写 0 去掉。
-schemas['video_edit.clip'].fadeInFrames = z.number().int().min(0).max(108_000)
-schemas['video_edit.clip'].fadeOutFrames = z.number().int().min(0).max(108_000)
+schemas['video_edit.clip'].fadeInFrames = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
+schemas['video_edit.clip'].fadeOutFrames = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 // 片段速度（4.13）：百分比（100 原速），写入时时长按速度换算；倒放与保持音调为开关。
 schemas['video_edit.clip'].speedPercent = z.number().min(1, '速度须在 1 到 10000（%）之间。').max(10000, '速度须在 1 到 10000（%）之间。')
 schemas['video_edit.clip'].reverse = z.boolean()
@@ -119,7 +121,7 @@ export function videoEditSchemaRef(kind: 'entity' | 'property', id: string): App
   const hash = [...id].reduce((result, char) => (result * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
   return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 1, digest: `sha256:${hash.repeat(64).slice(0, 64)}` }
 }
-const labels: Record<string, string> = { name: '名称', selectedItemIds: '所选素材项', selectedBinId: '当前素材箱', openSequenceIds: '打开的序列', tags: '标签', assetId: '资产来源', frameRateMode: '源帧率状态', timeUs: '源定位微秒', presentedTimeUs: '实际画面微秒', playing: '源播放', status: '源预览状态', error: '预览失败原因', frame: '当前帧', selection: '所选片段', width: '宽度', height: '高度', fps: '序列帧率', dirty: '尚未保存', activeSequenceId: '当前序列', frameRate: '帧率', pixelAspectRatio: '像素长宽比', sampleRate: '音频采样率', channels: '声道数量', parentId: '父素材箱', binId: '素材箱', itemId: '素材项', enabled: '输出启用', locked: '锁定', muted: '静音', solo: '独奏', mediaId: '源素材标识', kind: '类型', track: '轨道', start: '时间线开始帧', duration: '时长帧', sourceInUs: '源素材入点微秒', x: '水平位置', y: '垂直位置', scale: '缩放', rotation: '旋转角度', opacity: '不透明度', volume: '音量', text: '文字', clipId: '所属片段标识', space: '坐标空间', durationSeconds: '源时长秒', index: '轨道号' }
+const labels: Record<string, string> = { mediaImport: '素材导入进度', name: '名称', selectedItemIds: '所选素材项', selectedBinId: '当前素材箱', openSequenceIds: '打开的序列', tags: '标签', assetId: '资产来源', frameRateMode: '源帧率状态', timeUs: '源定位微秒', presentedTimeUs: '实际画面微秒', playing: '源播放', status: '源预览状态', error: '预览失败原因', frame: '当前帧', selection: '所选片段', width: '宽度', height: '高度', fps: '序列帧率', dirty: '尚未保存', activeSequenceId: '当前序列', frameRate: '帧率', pixelAspectRatio: '像素长宽比', sampleRate: '音频采样率', channels: '声道数量', parentId: '父素材箱', binId: '素材箱', itemId: '素材项', enabled: '输出启用', locked: '锁定', muted: '静音', solo: '独奏', mediaId: '源素材标识', kind: '类型', track: '轨道', start: '时间线开始帧', duration: '时长帧', sourceInUs: '源素材入点微秒', x: '水平位置', y: '垂直位置', scale: '缩放', rotation: '旋转角度', opacity: '不透明度', volume: '音量', text: '文字', clipId: '所属片段标识', space: '坐标空间', durationSeconds: '源时长秒', index: '轨道号' }
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', codeParameters: '代码实例参数', codeCurves: '参数关键帧', codeVersionId: '固定源码版本', linkId: '片段链接', groupId: '片段编组', sourceComponent: '使用画面或声音', syncLocked: '同步波纹编辑', hasAudio: '已检测到音轨', timelineView: '时间线选区、工具、链接选择与范围', programPlayback: '节目播放控制', playbackResolution: '节目回放分辨率', inUs: '源入点微秒', outUs: '源出点微秒', playbackDirection: '播放方向（反向静音）' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', audioStreams: '源声音流（文件顺序，每条的声道数与采样率）', audioChannels: '放入序列时的音频声道（每项一个音频片段：单声道或立体声及其源声道；空为按文件）', audioMapping: '声道映射（单声道或立体声及其源声音流与声道；空为第一条声音流原声道）' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', label: '颜色标签（空为按类型默认）', graphic: '图形对象结构', effects: '效果链', adjustment: '调整图层范围', transitions: '序列转场' })
@@ -135,6 +137,7 @@ Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静�
 labels.multicamCameraId = '机位'
 labels.multicam = '多机位源（机位与说话人、主音频）'
 const descriptions: Record<string, string> = {
+  'video_edit.document.media_import': '当前素材导入进度，只读；null 表示没有导入。enumerating 正在递归查找文件，probing 正在读取素材；completed/total 为已检查与待检查文件数。通过导入能力或界面发起，取消走原操作取消或界面取消按钮。完成才一次写入文档。',
   'video_edit.clip.multicam_camera_id': '此段使用的机位ID，从源序列multicam.cameras读取；空字符串恢复机位1。仅多机位序列片段可写，保留源入点与固定主音频，可一步撤销。切点用滚动编辑或start/duration/source_in_us通用属性调整。',
   'video_edit.sequence.multicam': '多机位源定义：cameras含机位id/name/clipId与可选speaker说话人；audioCameraId为固定主音频机位。只能编辑现有源的机位名称、说话人和主音频，保留id与clipId；创建请用create_video_edit_multicam，普通序列读null。',
   'video_edit.item.sequence_id': '序列素材引用的原始 sequence ID（从 video_edit.sequence 完整引用的子 ID 取得）；仅 kind=sequence 可设置。创建序列素材需 name、kind=sequence、sequence_id，然后通过 video_edit.clip 集合放入父序列。循环引用或超过八层会整组拒绝；普通媒体留空。',

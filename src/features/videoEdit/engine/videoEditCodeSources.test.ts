@@ -330,7 +330,7 @@ describe('失效、身份与资源上限', () => {
       expect(boundary.compiler.compile).toHaveBeenCalledTimes(36)
     } finally { await boundary.sources.dispose() }
   })
-  it('不可变身份历史达到数量或源码字节上限后明确拒绝，移出剪辑也不绕过历史', async () => {
+  it('不可变身份历史不限制数量或总源码字节，编译资源仍按缓存预算分配', async () => {
     const atCountLimit = fixture(source(), 4096); const counted = boundaries(atCountLimit)
     const atByteLimit = fixture()
     atByteLimit.codeMaterials![0].versions = Array.from({ length: 128 }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, source: ' '.repeat(65536) }))
@@ -338,10 +338,12 @@ describe('失效、身份与资源上限', () => {
     try {
       expect(counted.sources.diagnostics().seenVersions).toBe(4096)
       const oneNew = fixture(); oneNew.id = atCountLimit.id; oneNew.codeMaterials![0].versions[0].id = 'new'
-      expect(() => counted.sources.updateDocument(oneNew)).toThrow('重新加载预览')
+      expect(() => counted.sources.updateDocument(oneNew)).not.toThrow()
+      expect(counted.sources.diagnostics().seenVersions).toBe(4097)
       expect(sized.sources.diagnostics().seenSourceBytes).toBe(8 * 1024 ** 2)
       oneNew.id = atByteLimit.id
-      expect(() => sized.sources.updateDocument(oneNew)).toThrow('重新加载预览')
+      expect(() => sized.sources.updateDocument(oneNew)).not.toThrow()
+      expect(sized.sources.diagnostics().seenSourceBytes).toBeGreaterThan(8 * 1024 ** 2)
       expect(counted.compiler.compile).not.toHaveBeenCalled(); expect(sized.compiler.compile).not.toHaveBeenCalled()
       expect(counted.acquire).not.toHaveBeenCalled(); expect(sized.acquire).not.toHaveBeenCalled()
     } finally { await counted.sources.dispose(); await sized.sources.dispose() }

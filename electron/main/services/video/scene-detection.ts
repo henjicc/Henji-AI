@@ -17,7 +17,7 @@ export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal:
     '-threads', '2', '-filter_threads', '2', '-progress', 'pipe:1', '-f', 'null', '-']
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
-    const cuts: number[] = []; let stderr = ''; let stdout = ''; let failure: Error | undefined
+    const cuts: number[] = []; let stderr = ''; let stdout = ''
     const abort = (): void => { child.kill() }
     signal.addEventListener('abort', abort, { once: true })
     if (signal.aborted) abort()
@@ -29,7 +29,6 @@ export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal:
         if (!match) continue
         const time = request.startSeconds + Number(match[1])
         if (time <= request.startSeconds + 1e-7 || time >= request.endSeconds - 1e-7 || cuts.at(-1) === time) continue
-        if (cuts.length >= 499) { failure = new Error('切点超过 499 个，请降低灵敏度或缩短检测范围。'); child.kill(); break }
         cuts.push(time)
       }
     })
@@ -45,7 +44,6 @@ export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal:
     child.once('close', code => {
       signal.removeEventListener('abort', abort)
       if (signal.aborted) reject(signal.reason ?? new Error('场景检测已取消。'))
-      else if (failure) reject(failure)
       else if (code !== 0) reject(new Error('场景检测失败，请确认原视频可读取后重试。'))
       else { progress(1); resolve(cuts) }
     })

@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditVisibleTracks } from '@/core/videoEdit/document'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
@@ -14,7 +15,7 @@ export function addVideoEditProgramText(instance: VideoEditInstance, point: { x:
     .sort((a, b) => b.index - a.index).find(track => !sequence.clips.some(clip => clip.track === track.index && clip.start <= frame && frame < clip.start + clip.duration))
   const added = lane ? [] : videoEditEdgeTracks(sequence, 'video', 1).map(track => ({ ...track, solo: sequence.tracks.some(value => value.kind === 'video' && value.enabled && value.solo) }))
   const track = lane ?? added[0]
-  const nextFrame = Math.min(108000, ...sequence.clips.filter(clip => clip.track === track.index && clip.start > frame).map(clip => clip.start))
+  const nextFrame = Math.min(VIDEO_EDIT_MAX_SEQUENCE_FRAMES, ...sequence.clips.filter(clip => clip.track === track.index && clip.start > frame).map(clip => clip.start))
   const item = { id: crypto.randomUUID(), name: '文字', kind: 'text' as const }
   const candidate = { ...instance.document, items: [...instance.document.items, item], sequences: instance.document.sequences.map(value => value.id === sequence.id ? { ...value, tracks: [...value.tracks, ...added] } : value) }
   const clip = { ...makeVideoEditItemClip(candidate, item.id, sequence.id, { frame, track: track.index, duration: Math.max(1, Math.min(Math.round(sequence.frameRate.numerator / sequence.frameRate.denominator * 3), nextFrame - frame)) }),

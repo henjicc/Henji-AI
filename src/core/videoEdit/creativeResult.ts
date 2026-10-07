@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
 import { z } from 'zod'
 
 import { documentIdSchema } from '../documents/envelope'
@@ -25,7 +26,7 @@ const documentSource = z.object({
 const generationSource = z.object({
   type: z.literal('generation'),
   recordId: id,
-  outputIndex: z.number().int().nonnegative().max(199),
+  outputIndex: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
 }).strict()
 
 /** 剪辑文件里片段记录的来源。 */
@@ -65,9 +66,9 @@ export function sameVideoEditCreativeSource(left: VideoEditCreativeSource, right
 
 /** `add` 落到 `trackId`，或在没有空余轨道时 `newTrack`：最上面的视频轨之上／最下面的音频轨之下新建一条（与 PR 拖到轨道外一样）。 */
 export const videoEditResultPlacementSchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('add'), frame: z.number().int().nonnegative().max(108000), trackId: id.optional(), newTrack: z.enum(['video', 'audio']).optional(), duration: z.number().int().positive().max(108000).optional() }).strict(),
+  z.object({ mode: z.literal('add'), frame: z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), trackId: id.optional(), newTrack: z.enum(['video', 'audio']).optional(), duration: z.number().int().positive().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional() }).strict(),
   z.object({ mode: z.literal('library') }).strict(),
-  z.object({ mode: z.enum(['insert', 'overwrite']), frame: z.number().int().nonnegative().max(108000), trackId: id, duration: z.number().int().positive().max(108000).optional() }).strict(),
+  z.object({ mode: z.enum(['insert', 'overwrite']), frame: z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), trackId: id, duration: z.number().int().positive().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional() }).strict(),
   z.object({ mode: z.literal('replace'), clipId: id }).strict(),
 ]).superRefine((value, context) => { if (value.mode === 'add' && (value.trackId === undefined) === (value.newTrack === undefined)) context.addIssue({ code: z.ZodIssueCode.custom, message: '请指定目标轨道或新建轨道之一。' }) })
 export type VideoEditResultPlacement = z.infer<typeof videoEditResultPlacementSchema>

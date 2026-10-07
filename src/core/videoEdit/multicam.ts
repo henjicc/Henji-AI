@@ -8,7 +8,7 @@ export interface VideoEditMulticamCameraInput { itemId: string; name?: string; s
 export interface VideoEditMulticamCreate { name: string; cameras: VideoEditMulticamCameraInput[]; sync: 'audio' | 'in_points' | 'timecode'; audioCameraIndex?: number }
 /** Offset is the start of each selected source range on a common clock (seconds). */
 export function createVideoEditMulticam(document: VideoEditDocument, templateId: string, options: VideoEditMulticamCreate, audioOffsets?: number[]): { document: VideoEditDocument; sequence: VideoEditSequence; itemId: string } {
-  if (options.cameras.length < 2 || options.cameras.length > 9 || new Set(options.cameras.map(camera => camera.itemId)).size !== options.cameras.length) throw new Error('请选择2–9个不同的视频素材。')
+  if (options.cameras.length < 2 || new Set(options.cameras.map(camera => camera.itemId)).size !== options.cameras.length) throw new Error('请选择至少2个不同的视频素材。')
   const template = document.sequences.find(sequence => sequence.id === templateId)
   if (!template) throw new Error('目标序列不存在。')
   const source = options.cameras.map(camera => {
@@ -82,7 +82,6 @@ export function applyVideoEditMulticamCuts(document: VideoEditDocument, sequence
   const parent = document.sequences.find(sequence => sequence.id === sequenceId); const clip = parent?.clips.find(clip => clip.id === clipId)
   if (!parent || !clip || !cuts.length || cuts[0].frame !== 0 || cuts.some((cut, index) => !Number.isInteger(cut.frame) || cut.frame < 0 || cut.frame >= clip.duration || index > 0 && cut.frame <= cuts[index - 1].frame)) throw new Error('自动机位段必须按时间排列并完整覆盖片段。')
   assertVideoEditClipsEditable(parent, [clipId])
-  if (parent.clips.length - 1 + cuts.length > 500) throw new Error('切换后超过500个片段，请增加最短镜头时长或缩短分析范围。')
   const source = videoEditMulticamSource(document, clip)
   if (!source?.multicam || cuts.some(cut => !source.multicam!.cameras.some(camera => camera.id === cut.cameraId))) throw new Error('自动切换引用了不存在的机位。')
   let next = parent

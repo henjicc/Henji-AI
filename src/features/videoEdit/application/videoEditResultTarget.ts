@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { createLogger } from '@/core/logging'
 import { videoEditClipSchema, videoEditCreativeSourceSchema, type VideoEditCreativeSource, type VideoEditDocument } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip, placeVideoEditItem } from '@/core/videoEdit/projectItems'
@@ -56,7 +57,7 @@ export function captureVideoEditResultTarget(projectId: string, sequenceId: stri
     const track = placement.mode !== 'replace' ? sequence.tracks.find(value => value.id === placement.trackId) : sequence.tracks.find(value => value.index === clip?.track)
     if (!track || track.locked) throw new Error('原目标轨道不存在或已锁定。')
   }
-  if (placement.mode !== 'replace' && placement.mode !== 'library' && (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame >= Math.floor(videoEditFps(sequence.frameRate) * 1800) || placement.duration !== undefined && (!Number.isSafeInteger(placement.duration) || placement.duration < 1))) throw new Error('请选择序列范围内的落点与正整数帧时长。')
+  if (placement.mode !== 'replace' && placement.mode !== 'library' && (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame >= Math.floor(videoEditFps(sequence.frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) || placement.duration !== undefined && (!Number.isSafeInteger(placement.duration) || placement.duration < 1))) throw new Error('请选择序列范围内的落点与正整数帧时长。')
   const target = Object.freeze({ projectId, sequenceId, id: crypto.randomUUID() })
   targets.set(target, { owner, baseline: owner.document, placement: { ...placement }, busy: false })
   return target

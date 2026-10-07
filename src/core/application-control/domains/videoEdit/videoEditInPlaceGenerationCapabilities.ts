@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '../../../videoEdit/time'
 import { z } from 'zod'
 import { applicationRefSchema, type ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
@@ -8,7 +9,7 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
  */
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
 const documentRef = ref('video_edit.document')
-const seconds = z.number().finite().min(0).max(1800)
+const seconds = z.number().finite().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
 const length = z.number().finite().positive().max(600)
 const target = z.discriminatedUnion('action', [
   z.object({

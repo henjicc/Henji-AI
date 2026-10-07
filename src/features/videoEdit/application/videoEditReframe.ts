@@ -45,7 +45,6 @@ export async function reframeVideoEdit(target: VideoEditReframeTarget, options: 
   const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
   const sequence = baseline.sequences.find(sequence => sequence.id === target.sequenceId)
   if (!sequence) throw new Error('原序列不存在，请重新选择。')
-  if (!target.clipId && baseline.sequences.length >= 32) throw new Error('剪辑最多保留 32 个序列，请先移除空序列。')
   const size = videoEditReframeSizeSchema.parse(target.clipId ? { width: sequence.width, height: sequence.height } : options.size)
   if (sequence.pixelAspectRatio.numerator !== sequence.pixelAspectRatio.denominator) throw new Error('自动重构暂只支持方形像素序列，请先调整序列像素长宽比。')
   const clips = sequence.clips.filter(clip => (!target.clipId || clip.id === target.clipId) && clip.kind === 'video' && clip.sourceComponent !== 'audio')

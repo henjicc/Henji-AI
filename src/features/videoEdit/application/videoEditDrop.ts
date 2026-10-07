@@ -38,7 +38,7 @@ export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
   if (transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME)) return videoEditSourceRangeSchema.parse(JSON.parse(transfer.getData(VIDEO_EDIT_SOURCE_DRAG_MIME)))
   if (transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME)) {
     const raw: unknown = JSON.parse(transfer.getData(VIDEO_EDIT_ITEM_DRAG_MIME))
-    if (typeof raw !== 'object' || raw === null || !('projectId' in raw) || typeof raw.projectId !== 'string' || !('itemIds' in raw) || !Array.isArray(raw.itemIds) || !raw.itemIds.length || raw.itemIds.length > 500 || !raw.itemIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 100)) throw new Error('素材项拖拽数据无效。')
+    if (typeof raw !== 'object' || raw === null || !('projectId' in raw) || typeof raw.projectId !== 'string' || !('itemIds' in raw) || !Array.isArray(raw.itemIds) || !raw.itemIds.length || !raw.itemIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 100)) throw new Error('素材项拖拽数据无效。')
     return { kind: 'items', projectId: raw.projectId, itemIds: raw.itemIds as string[] }
   }
   const payload = readHenjiDragData(transfer)
@@ -110,7 +110,7 @@ export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly stri
 /** `newTrack`: dropped above the top video track / below the bottom audio track — a new track of that kind is created (PR). */
 /** `mode`：落点方式，替换／放在顶层／添加到末尾来自节目监视器的拖放区（见 `VideoEditDropMode`）。 */
 export interface VideoEditDropPlacement { frame: number; track?: number; newTrack?: 'video' | 'audio'; mode?: VideoEditDropMode }
-export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: VideoEditDropPlacement, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void } = {}): Promise<string[]> {
+export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: VideoEditDropPlacement, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void; signal?: AbortSignal } = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()
   let sequenceId = options.sequenceId ?? owner.activeSequenceId
@@ -146,10 +146,10 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   else if (input.kind === 'code_asset') { const result = await importVideoEditCodeAsset(projectId, input.assetId, { binId, filterTarget, afterImport: apply }); ids = result.itemId ? [result.itemId] : [] }
   else if (input.sources.every(source => source.path && !source.assetId)) {
     // 本地路径可能是文件夹（Premiere：拖入文件夹即按层级建素材箱）。
-    const result = await importVideoEditPathsAndFolders(projectId, input.sources.map(source => source.path!), binId, apply)
+    const result = await importVideoEditPathsAndFolders(projectId, input.sources.map(source => source.path!), binId, apply, { signal: options.signal })
     ids = result.itemIds
     if (result.skipped) options.onSkipped?.(result.skipped)
-  } else ids = await importVideoEditSources(projectId, input.sources, binId, undefined, apply)
+  } else ids = await importVideoEditSources(projectId, input.sources, binId, options.signal, apply)
   if (input.kind === 'items') editVideoProject(projectId, document => apply(document, ids))
   if (selectedClip && owner.activeSequenceId === sequenceId) setVideoEditView(projectId, { selection: selectedClip })
   return ids

@@ -252,6 +252,7 @@ const fsApi: HenjiFsApi = {
   exists: (path) => nativeInvoke('fs:exists', { path }),
   mkdir: (path, options) => nativeInvoke('fs:mkdir', { path, recursive: options?.recursive }),
   readDir: (path) => nativeInvoke('fs:readDir', { path }),
+  readDirPage: (path, options) => nativeInvoke('fs:readDir', { path, ...options, paged: true }),
   copyFile: (src, dest) => nativeInvoke('fs:copyFile', { src, dest }),
   remove: (path, options) => nativeInvoke('fs:remove', { path, recursive: options?.recursive }),
 }

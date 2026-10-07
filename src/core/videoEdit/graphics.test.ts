@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CodeMaterialKeyframe } from './codeMaterialAnimation'
 import { createVideoEditGraphic, evaluateVideoEditGraphic, prepareVideoEditGraphic, videoEditGraphicObjectMetadata, videoEditGraphicSchema } from './graphics'
 import type { VideoEditGraphic, VideoEditGraphicObject } from './graphics'
-import { offsetVideoEditSource } from './time'
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, offsetVideoEditSource } from './time'
 
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
 const point = (id: string, sourceInUs: number, value: CodeMaterialKeyframe['value'], interpolation: CodeMaterialKeyframe['interpolation'] = 'linear'): CodeMaterialKeyframe => ({ id, ...time(sourceInUs), value, interpolation })
@@ -24,7 +24,7 @@ describe('正式结构化图形模型与共用曲线求值', () => {
     expect(draw(created[2]).command).toMatchObject({ kind: 'ellipse', x: 960, y: 540, width: 1920, height: 1080 })
     expect(draw(created[3]).command).toMatchObject({ kind: 'text', text: '文字', x: 1920, y: 1080, align: 'center' })
   })
-  it('尺寸、对象和逐类型参数的上限必须在持久化schema中拒绝', () => {
+  it('尺寸和逐类型参数的合法范围仍校验，对象数量不设上限', () => {
     const graphic = rect()
     expect(videoEditGraphicSchema.safeParse({ ...graphic, width: 15 }).success).toBe(false)
     expect(videoEditGraphicSchema.safeParse({ ...graphic, height: 8193 }).success).toBe(false)
@@ -33,7 +33,7 @@ describe('正式结构化图形模型与共用曲线求值', () => {
     expect(videoEditGraphicSchema.safeParse({ ...graphic, extra: 1 }).success).toBe(false)
     expect(videoEditGraphicSchema.safeParse({ ...graphic, objects: [{ ...graphic.objects[0], extra: 1 }] }).success).toBe(false)
     expect(videoEditGraphicSchema.safeParse({ ...graphic, objects: [graphic.objects[0], graphic.objects[0]] }).success).toBe(false)
-    expect(videoEditGraphicSchema.safeParse({ ...graphic, objects: Array.from({ length: 33 }, (_, index) => ({ ...graphic.objects[0], id: String(index) })) }).success).toBe(false)
+    expect(videoEditGraphicSchema.safeParse({ ...graphic, objects: Array.from({ length: 1200 }, (_, index) => ({ ...graphic.objects[0], id: String(index) })) }).success).toBe(true)
     const invalidParameters: VideoEditGraphicObject['parameters'][] = [{ x: NaN }, { y: Infinity }, { x: -16385 }, { width: -1 }, { height: 16385 }, { rotation: 361 }, { opacity: 1.01 }, { radius: 8193 }, { fill: [0, 0, 0, 2] }, { fill: [0, 0, NaN, 1] }, { fontSize: 12 }, { unknown: 1 }]
     for (const parameters of invalidParameters) expect(videoEditGraphicSchema.safeParse(rect(parameters)).success).toBe(false)
     const ellipse = createVideoEditGraphic('ellipse', 16, 8192)
@@ -44,7 +44,7 @@ describe('正式结构化图形模型与共用曲线求值', () => {
   it('数值/颜色声明与对象名、画幅共源，离散值只允许保持插值', () => {
     const graphic = createVideoEditGraphic('text', 1920, 1080)
     const metadata = videoEditGraphicObjectMetadata(graphic, graphic.objects[0])
-    expect(metadata).toMatchObject({ name: '文字', kind: 'generator', mode: 'static', width: 1920, height: 1080, durationSeconds: 1800, seed: 0 })
+    expect(metadata).toMatchObject({ name: '文字', kind: 'generator', mode: 'static', width: 1920, height: 1080, durationSeconds: VIDEO_EDIT_MAX_SEQUENCE_SECONDS, seed: 0 })
     expect(metadata.parameters.every(parameter => parameter.animatable)).toBe(true)
     expect(metadata.parameters.find(parameter => parameter.key === 'text')).toMatchObject({ type: 'text', maxLength: 2000 })
     for (const parameters of [{ text: '字'.repeat(2001) }, { fontSize: 0 }, { fontSize: 513 }, { fontFamily: 'custom' }, { align: 'justify' }, { width: 100 }]) {
@@ -103,7 +103,7 @@ describe('正式结构化图形模型与共用曲线求值', () => {
     expect(draw(graphic, 1e6).command).toMatchObject({ x: 100, text: '新', fontFamily: 'monospace' })
     expect(graphic).toEqual(original)
   })
-  it('拒绝未知曲线、重复有理时刻、非法关键帧值及曲线点上限', () => {
+  it('拒绝未知曲线、重复有理时刻和非法关键帧值', () => {
     const graphic = rect()
     for (const curves of [
       { unknown: [point('u', 0, 0)] },
@@ -112,18 +112,17 @@ describe('正式结构化图形模型与共用曲线求值', () => {
       { x: [point('out', 0, 16385)] },
       { x: [{ ...point('extra', 0, 0), extra: 1 }] },
       { x: [{ ...point('r', 0, 0), sourceRemainder: { numerator: 1, denominator: 1 } }] },
-      { x: Array.from({ length: 257 }, (_, index) => point(String(index), index, 0)) },
     ]) expect(videoEditGraphicSchema.safeParse({ ...graphic, objects: [{ ...graphic.objects[0], curves }] }).success).toBe(false)
   })
-  it('32个对象共用整份32曲线/2048点预算，不能按对象放大', () => {
+  it('多对象动画不限制持久化曲线或关键帧总数量', () => {
     const object = rect().objects[0]
     const makeObject = (index: number, curves: VideoEditGraphicObject['curves']): VideoEditGraphicObject => ({ ...object, id: String(index), curves })
     const curves = { x: [point('x', 0, 0)], y: [point('y', 0, 0)] }
     expect(videoEditGraphicSchema.safeParse({ width: 3840, height: 2160, objects: Array.from({ length: 16 }, (_, index) => makeObject(index, curves)) }).success).toBe(true)
-    expect(videoEditGraphicSchema.safeParse({ width: 3840, height: 2160, objects: Array.from({ length: 17 }, (_, index) => makeObject(index, curves)) }).success).toBe(false)
-    const points = Array.from({ length: 256 }, (_, index) => point(String(index), index, 0))
+    expect(videoEditGraphicSchema.safeParse({ width: 3840, height: 2160, objects: Array.from({ length: 200 }, (_, index) => makeObject(index, curves)) }).success).toBe(true)
+    const points = Array.from({ length: 1200 }, (_, index) => point(String(index), index, 0))
     expect(videoEditGraphicSchema.safeParse({ width: 3840, height: 2160, objects: Array.from({ length: 8 }, (_, index) => makeObject(index, { x: points })) }).success).toBe(true)
-    expect(videoEditGraphicSchema.safeParse({ width: 3840, height: 2160, objects: Array.from({ length: 9 }, (_, index) => makeObject(index, { x: points })) }).success).toBe(false)
+    expect(videoEditGraphicSchema.safeParse({ width: 3840, height: 2160, objects: Array.from({ length: 9 }, (_, index) => makeObject(index, { x: points })) }).success).toBe(true)
   })
   it('prepared快照与求值颜色不能反向修改持久图形，对象顺序保持', () => {
     const graphic = rect({ fill: [.1, .2, .3, 1] })
