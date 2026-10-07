@@ -3,6 +3,7 @@ import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { downloadAudioFile, saveAudioFromUrl } from '@/utils/save'
 import { UiIconButton, UiRangeInput, UI_PANEL_SURFACE_CLASS, UI_TEXT_TIMECODE_CLASS } from '@/components/ui'
 import { WaveformView } from './waveform/WaveformView'
+import { TooltipContent } from './ui/Tooltip'
 import { useI18n } from '@/hooks/useI18n'
 import { useWaveformData } from '@/hooks/useWaveformData'
 import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
@@ -380,12 +381,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           className={`absolute ${layout === 'inline' ? 'right-[calc(100%+0.5rem)]' : 'left-[calc(100%+0.5rem)]'} top-1/2 z-sticky -translate-y-1/2 ${volumeSliderWidthClass}`}
           ref={volumeSliderRef}
         >
-          {/* 音量数值 tooltip 是浮层，边框背景是其在波形上可读所必需的 */}
-          {showVolumeValueTip && (
-            <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-line/70 bg-raised/95 px-1.5 py-0.5 text-2xs text-text1">
-              {volumePercent}%
-            </div>
-          )}
+          {showVolumeValueTip && <TooltipContent anchorRef={volumeSliderRef} content={`${volumePercent}%`} interactive={false} />}
           <UiRangeInput
             disabled={!active || controlledPlayback?.disabled}
             min={0}

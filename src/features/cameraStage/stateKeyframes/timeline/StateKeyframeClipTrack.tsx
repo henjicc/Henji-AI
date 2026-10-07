@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useRef } from 'react'
+import { TooltipContent } from '@/components/ui/Tooltip'
 import { UiEmpty } from '@/components/ui'
 import { getCameraObjects } from '../../domain/cameraUtils'
 import type { StageObject } from '../../domain/sceneTypes'
@@ -10,8 +11,6 @@ import { formatStateKeyframeTimecode } from './stateKeyframeTimecodeFormat'
 import StaticClipBlock from './StaticClipBlock'
 import TransitionClipBlock from './TransitionClipBlock'
 import { useKeyframeTimeDrag } from './useKeyframeTimeDrag'
-
-const DRAG_BADGE_TOP = -20
 
 interface StateKeyframeClipTrackProps {
   stateKeyframes: StageStateKeyframe[]
@@ -52,6 +51,7 @@ const StateKeyframeClipTrack: React.FC<StateKeyframeClipTrackProps> = ({
   onUpdateStateKeyframeCamera,
   onUpdateStateKeyframeContinuity,
 }) => {
+  const trackRef = useRef<HTMLDivElement>(null)
   const cameras = useMemo(() => getCameraObjects(objects), [objects])
   const drag = useKeyframeTimeDrag({
     stateKeyframes,
@@ -71,7 +71,7 @@ const StateKeyframeClipTrack: React.FC<StateKeyframeClipTrackProps> = ({
   }, [currentTime, fps, layoutStateKeyframes])
 
   return (
-    <div className="relative shrink-0" style={{ width: contentWidth, height: STATE_KEYFRAME_CLIP_TRACK_HEIGHT }}>
+    <div ref={trackRef} className="relative shrink-0" style={{ width: contentWidth, height: STATE_KEYFRAME_CLIP_TRACK_HEIGHT }}>
       {stateKeyframes.length === 0 && (
         <UiEmpty
           size="xs"
@@ -124,12 +124,12 @@ const StateKeyframeClipTrack: React.FC<StateKeyframeClipTrackProps> = ({
       })}
 
       {drag.preview && (
-        <div
-          className="pointer-events-none absolute z-panel -translate-x-1/2 whitespace-nowrap rounded bg-accent px-1.5 py-0.5 font-mono text-2xs font-medium text-on-accent shadow-panel"
-          style={{ left: drag.preview.time * pxPerSecond, top: DRAG_BADGE_TOP }}
-        >
-          {formatStateKeyframeTimecode(drag.preview.time, 'secondsFrames', fps)}
-        </div>
+        <TooltipContent anchorRef={trackRef} content={formatStateKeyframeTimecode(drag.preview.time, 'secondsFrames', fps)} interactive={false}
+          getAnchorRect={() => {
+            const rect = trackRef.current!.getBoundingClientRect()
+            const left = rect.left + drag.preview!.time * pxPerSecond
+            return { top: rect.top, left, right: left, width: 0, height: 0 }
+          }} />
       )}
     </div>
   )

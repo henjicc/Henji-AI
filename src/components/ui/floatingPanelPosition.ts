@@ -1,5 +1,10 @@
 export type FloatingPanelPlacement = 'above' | 'below'
 
+/** 同时供面板和提示框使用；尺寸超过边界时由调用方限制尺寸。 */
+export function clampFloatingAxis(position: number, size: number, start: number, end: number): number {
+  return Math.min(Math.max(start, position), Math.max(start, end - size))
+}
+
 export interface FloatingPanelAnchorRect {
   top: number
   bottom: number
@@ -60,8 +65,7 @@ export function resolveFloatingPanelPosition({
     : horizontalAlign === 'right'
       ? anchor.left + anchor.width - width
       : anchor.left
-  const maxLeft = Math.max(viewportLeft, viewportRight - width)
-  const left = Math.min(Math.max(viewportLeft, preferredLeft), maxLeft)
+  const left = clampFloatingAxis(preferredLeft, width, viewportLeft, viewportRight)
   const spaceAbove = Math.max(0, anchor.top - gap - viewportTop)
   const spaceBelow = Math.max(0, viewportBottom - anchor.bottom - gap)
   const preferredSpace = preferredPlacement === 'above' ? spaceAbove : spaceBelow

@@ -1,4 +1,5 @@
 import React from 'react'
+import { TooltipContent } from '@/components/ui/Tooltip'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { useWaveformDetail, type WaveformState } from '@/hooks/useWaveformData'
 import { drawWaveform, type WaveformPalette, type WaveformTier, type WaveformTone } from './waveformDraw'
@@ -136,7 +137,11 @@ export const WaveformView = React.memo(function WaveformView({ waveform, startSe
       {interactive && hoverX !== null && (
         <>
           <div className="pointer-events-none absolute inset-y-0 w-px bg-text1/35" style={{ left: hoverX }} />
-          <span className="pointer-events-none absolute top-0.5 rounded-control bg-raised/80 px-1 text-2xs tabular-nums text-text1" style={{ left: Math.max(2, Math.min(size.width - 40, hoverX + 6)) }}>{readout(hoverSeconds)}</span>
+          <TooltipContent anchorRef={host} content={readout(hoverSeconds)} placement="bottom" alignment="start" interactive={false}
+            getAnchorRect={() => {
+              const rect = host.current!.getBoundingClientRect()
+              return { top: rect.top, left: rect.left + hoverX, right: rect.left + hoverX, width: 0, height: 0 }
+            }} />
         </>
       )}
     </div>

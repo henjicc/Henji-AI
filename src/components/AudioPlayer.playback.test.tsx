@@ -21,6 +21,21 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
+it('调整音量时百分比读数复用提示框，并按视口限制位置', () => {
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(60)
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(30)
+  const view = render(<AudioPlayer src="media:a" />)
+  fireEvent.click(view.getByTitle('ui:audioPlayer.volume'))
+  const slider = view.container.querySelector('input')!
+  vi.spyOn(slider.parentElement!, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 2, right: 100, bottom: 22, width: 100, height: 20, x: 0, y: 2, toJSON: () => ({}) })
+  fireEvent.pointerDown(slider)
+  const tooltip = view.getByRole('tooltip')
+  expect(tooltip.textContent).toBe('100%')
+  expect(tooltip.style.top).toBe('30px')
+  expect(tooltip.style.left).toBe('20px')
+  expect(tooltip.parentElement).toBe(document.body)
+})
+
 it('重新挂载恢复暂停位置和音量，切换媒体仍从头开始', () => {
   const view = render(<AudioPlayer src="media:a" initialPlaybackState={{ currentTime: 23, volume: 0.35 }} />)
   const audio = view.container.querySelector('audio')!

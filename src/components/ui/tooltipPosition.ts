@@ -1,22 +1,12 @@
-/**
- * 提示框相对触发元素的位置（有限枚举）：
- * - `top`（默认）：触发元素正上方、水平居中。
- * - `left`：贴触发元素左侧、垂直居中；左侧放不下依次退到右侧、上方。用于一列紧挨着的表单行
- *   （画布节点参数行的名称），放在上方会盖住上一行（任务 5.4）。
- */
-export type TooltipPlacement = 'top' | 'left'
-export type ResolvedTooltipPlacement = 'top' | 'left' | 'right'
+import { clampFloatingAxis } from './floatingPanelPosition'
 
+/** 首选位置；侧向提示放不下时先换侧，再尝试上下方。 */
+export type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right'
+export type ResolvedTooltipPlacement = TooltipPlacement
+export const TOOLTIP_VIEWPORT_GUTTER_PX = 8
 const TOOLTIP_GAP_PX = 8
-const TOOLTIP_VIEWPORT_GUTTER_PX = 8
 
-export const TOOLTIP_PLACEMENT_TRANSFORM_CLASS: Record<ResolvedTooltipPlacement, string> = {
-    top: '-translate-x-1/2 -translate-y-full',
-    left: '-translate-x-full -translate-y-1/2',
-    right: '-translate-y-1/2',
-}
-
-interface TooltipAnchorRect {
+export interface TooltipAnchorRect {
     top: number
     left: number
     right: number
@@ -24,21 +14,48 @@ interface TooltipAnchorRect {
     height: number
 }
 
-/** 按首选位置与可用宽度决定实际位置与坐标：`left` 放不下退 `right`，再放不下退 `top`。 */
-export function resolveTooltipPosition({ rect, placement, tooltipWidth, viewportWidth }: {
+/** 返回测量后提示框的左上角，不需要 CSS translate；超大内容按整个视口限制尺寸。 */
+export function resolveTooltipPosition({ rect, placement, tooltipWidth, tooltipHeight, viewportWidth, viewportHeight, alignment = 'center' }: {
     rect: TooltipAnchorRect
     placement: TooltipPlacement
     tooltipWidth: number
+    tooltipHeight: number
     viewportWidth: number
-}): { placement: ResolvedTooltipPlacement; top: number; left: number } {
-    const middle = rect.top + rect.height / 2
-    if (placement === 'left') {
-        if (rect.left - TOOLTIP_GAP_PX - tooltipWidth >= TOOLTIP_VIEWPORT_GUTTER_PX) {
-            return { placement: 'left', top: middle, left: rect.left - TOOLTIP_GAP_PX }
-        }
-        if (rect.right + TOOLTIP_GAP_PX + tooltipWidth <= viewportWidth - TOOLTIP_VIEWPORT_GUTTER_PX) {
-            return { placement: 'right', top: middle, left: rect.right + TOOLTIP_GAP_PX }
-        }
+    viewportHeight: number
+    alignment?: 'center' | 'start'
+}): { placement: ResolvedTooltipPlacement; top: number; left: number; maxWidth: number; maxHeight: number } {
+    const gutter = TOOLTIP_VIEWPORT_GUTTER_PX
+    const maxWidth = Math.max(0, viewportWidth - gutter * 2)
+    const maxHeight = Math.max(0, viewportHeight - gutter * 2)
+    const width = Math.min(Math.max(0, tooltipWidth), maxWidth)
+    const height = Math.min(Math.max(0, tooltipHeight), maxHeight)
+    const space = {
+        top: rect.top - TOOLTIP_GAP_PX - gutter,
+        bottom: viewportHeight - gutter - rect.top - rect.height - TOOLTIP_GAP_PX,
+        left: rect.left - TOOLTIP_GAP_PX - gutter,
+        right: viewportWidth - gutter - rect.right - TOOLTIP_GAP_PX,
     }
-    return { placement: 'top', top: rect.top - TOOLTIP_GAP_PX, left: rect.left + rect.width / 2 }
+    let resolved = placement
+    if (placement === 'left' || placement === 'right') {
+        const opposite = placement === 'left' ? 'right' : 'left'
+        if (width > space[placement]) resolved = width <= space[opposite] ? opposite : 'top'
+    }
+    if (resolved === 'top' || resolved === 'bottom') {
+        const opposite = resolved === 'top' ? 'bottom' : 'top'
+        if (height > space[resolved] && space[opposite] > space[resolved]) resolved = opposite
+    }
+    const vertical = resolved === 'top' || resolved === 'bottom'
+    const left = vertical
+        ? rect.left + (alignment === 'center' ? (rect.width - width) / 2 : TOOLTIP_GAP_PX)
+        : resolved === 'left' ? rect.left - TOOLTIP_GAP_PX - width : rect.right + TOOLTIP_GAP_PX
+    const top = vertical
+        ? resolved === 'top' ? rect.top - TOOLTIP_GAP_PX - height : rect.top + rect.height + TOOLTIP_GAP_PX
+        : rect.top + (rect.height - height) / 2
+    return {
+        placement: resolved,
+        top: clampFloatingAxis(top, height, gutter, viewportHeight - gutter),
+        left: clampFloatingAxis(left, width, gutter, viewportWidth - gutter),
+        maxWidth,
+        maxHeight,
+    }
 }
