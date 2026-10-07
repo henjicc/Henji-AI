@@ -173,7 +173,7 @@ export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
  * 窗口首帧底色 = 默认主题（石墨）推导出的 `window` 令牌；`themeStaticDefaults.test.ts` 断言二者一致。
  * 主进程创建窗口时用它；用户主题同步到主进程之前，非石墨主题在窗口 ready-to-show 之前的极短时间仍是此色。
  */
-export const APP_WINDOW_BACKGROUND_HEX = '#0E0F12';
+export const APP_WINDOW_BACKGROUND_HEX = '#151617';
 
 export const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
   bg: '#0F0F0F',

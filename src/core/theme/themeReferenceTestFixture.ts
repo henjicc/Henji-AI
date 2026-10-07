@@ -47,7 +47,7 @@ const lum = (x: string) => { const [r, g, b] = parse(x).map(v => toLin(v / 255))
 export const referenceContrast = (a: string, b: string) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 const alpha = (x: string, a: number) => { const [r, g, b] = parse(x); return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'; };
 export const REFERENCE_PRESETS: Record<string, ReferenceSeed & { name: string }> = {
-  graphite: { name: '石墨', mode: 'dark', hue: 260, tint: 0.006, base: 0.17, accent: THEME_SEED_ACCENT_HEX.blue },
+  graphite: { name: '石墨', mode: 'dark', hue: 260, tint: 0.003, base: 0.2, accent: THEME_SEED_ACCENT_HEX.blue },
   ocean: { name: '深海', mode: 'dark', hue: 245, tint: 0.024, base: 0.165, accent: THEME_SEED_ACCENT_HEX.oceanBlue },
   film: { name: '胶片', mode: 'dark', hue: 70, tint: 0.013, base: 0.172, accent: THEME_SEED_ACCENT_HEX.orange },
   paper: { name: '纸白', mode: 'light', hue: 260, tint: 0.005, base: 0.975, accent: THEME_SEED_ACCENT_HEX.blue }

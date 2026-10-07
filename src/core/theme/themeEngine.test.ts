@@ -102,7 +102,9 @@ describe('themeEngine 与设计稿参考实现对照', () => {
 describe('themeEngine 对比度（重要记录 010）', () => {
   it('1.1 实算的参考实现失败数据仍然成立（回归基线）', () => {
     const at = (id: string, contrast: number) => referenceDerive({ ...REFERENCE_PRESETS[id], contrast })
-    expect(referenceContrast(at('graphite', 1).text3, at('graphite', 1).selected)).toBeCloseTo(4.33, 2)
+    // 记录 010 的实算基于当时的石墨种子（2026-10-07 用户把石墨调亮到 base 0.2、tint 0.003 之前）。
+    const graphite010 = referenceDerive({ ...REFERENCE_PRESETS.graphite, tint: 0.006, base: 0.17, contrast: 1 })
+    expect(referenceContrast(graphite010.text3, graphite010.selected)).toBeCloseTo(4.33, 2)
     expect(referenceContrast(at('ocean', 1).text3, at('ocean', 1).selected)).toBeCloseTo(4.42, 2)
     expect(referenceContrast(at('paper', 1).text3, at('paper', 1).selected)).toBeCloseTo(4.03, 2)
     for (const id of THEME_PRESET_IDS) {

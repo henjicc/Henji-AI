@@ -59,8 +59,8 @@ exports[`themeEngine 与设计稿参考实现对照 > 被修正令牌的取值�
     "dangerHi": "#D03739",
     "dangerTint": "rgba(203,49,53,0.16)",
     "onAccent": "#FFFFFF",
-    "text2": "#B7B9BC",
-    "text3": "#919497",
+    "text2": "#BDBEBF",
+    "text3": "#97999A",
   },
   "graphite/standard": {
     "accent": "#3266D6",
@@ -74,8 +74,8 @@ exports[`themeEngine 与设计稿参考实现对照 > 被修正令牌的取值�
     "dangerHi": "#D03739",
     "dangerTint": "rgba(203,49,53,0.16)",
     "onAccent": "#FFFFFF",
-    "text2": "#B9BBBE",
-    "text3": "#939699",
+    "text2": "#BFC0C2",
+    "text3": "#9A9B9C",
   },
   "graphite/strong": {
     "accent": "#3266D6",
@@ -89,8 +89,8 @@ exports[`themeEngine 与设计稿参考实现对照 > 被修正令牌的取值�
     "dangerHi": "#D03739",
     "dangerTint": "rgba(203,49,53,0.16)",
     "onAccent": "#FFFFFF",
-    "text2": "#BCBEC1",
-    "text3": "#96999C",
+    "text2": "#C3C4C6",
+    "text3": "#9D9FA0",
   },
   "ocean/soft": {
     "accent": "#3D86E8",
