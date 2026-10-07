@@ -51,6 +51,16 @@ it('显式自动发送沿正式入口只提交一次，保留点击时上下文�
   expect(useAssistantUiStore.getState().pendingGoal).toBeNull()
 })
 
+it('标注批次在真实提交前开放，附件和固定上下文随消息发送；拒绝提交恢复草稿', async () => {
+  const beforeSend = vi.fn(); const onRejected = vi.fn(); const onTextSubmitted = vi.fn()
+  const attachment = { schemaVersion: 'agent-attachment/v1' as const, mediaRef: 'asset:frame', modality: 'image' as const, displayName: '局部.png', mimeType: 'image/png', sizeBytes: 10, dataClass: 'C1' as const, lifecycle: 'asset_library' as const, sourceStatus: 'ready' as const }
+  mocks.prompt.mockRejectedValue(new Error('拒绝提交'))
+  openAssistant('处理标注', { autoSend: true, context: '固定剪辑上下文', attachments: [{ attachment, previewSrc: 'frame-preview' }], beforeSend, onRejected, onTextSubmitted })
+  render(<EmbeddedConversation />)
+  await waitFor(() => expect(onRejected).toHaveBeenCalledOnce())
+  expect(beforeSend).toHaveBeenCalledOnce(); expect(onTextSubmitted).toHaveBeenCalledWith('处理标注'); expect(mocks.prompt.mock.calls[0][0]).toMatchObject({ context: '固定剪辑上下文', attachments: [attachment] }); expect(mocks.prompt).toHaveBeenCalledOnce()
+})
+
 it('未配置模型时保留指令为草稿并显示配置入口，不自动调用', async () => {
   mocks.models.mockResolvedValue([])
   openAssistant('请优化工程', { autoSend: true })

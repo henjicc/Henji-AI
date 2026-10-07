@@ -1,3 +1,4 @@
+import { mapVideoEditAnnotationTime } from './annotations'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { adjustVideoEditClip, splitVideoEditClip, videoEditClipMedia, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
@@ -21,6 +22,7 @@ export interface VideoEditClipboard {
   captions?: VideoEditCaption[]
   transitions?: VideoEditTransition[]
   tracks?: Array<{ index: number; kind: 'video' | 'audio' }>
+  annotationTrackIndices?: Record<string, number>
 }
 /**
  * `linked` (default true) extends clip edits to linked and grouped partners. Callers that already
@@ -140,10 +142,11 @@ function splitClips(sequence: VideoEditSequence, ids: string[], frame: number): 
 function shiftAnnotations(sequence: VideoEditSequence, clips: VideoEditClip[]): VideoEditAnnotation[] {
   const before = new Map(sequence.clips.map(clip => [clip.id, clip])); const after = new Map(clips.map(clip => [clip.id, clip]))
   return sequence.annotations.flatMap(mark => {
-    const previous = before.get(mark.clipId); const current = after.get(mark.clipId)
+    if (!mark.clipId) return [mark]
+    const previous = before.get(mark.clipId ?? ''); const current = after.get(mark.clipId ?? '')
     if (!previous || !current) return []
     const frame = mark.frame + current.start - previous.start
-    return [{ ...mark, frame }]
+    return [mapVideoEditAnnotationTime(mark, value => value + frame - mark.frame)]
   })
 }
 function synchronizedTracks(sequence: VideoEditSequence, targets: readonly number[]): Set<number> {
@@ -163,7 +166,7 @@ function intervals(clips: readonly VideoEditClip[]): Array<{ from: number; to: n
 export function copyVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: string[], linked: VideoEditRelations = true): VideoEditClipboard {
   const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditSelection(sequence, clipIds, linked))
   if (!ids.size) throw new Error('请先选择要复制的片段。')
-  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => ids.has(mark.clipId)), markers: (sequence.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), transitions: (sequence.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id))), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
+  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => Boolean(mark.clipId && ids.has(mark.clipId)) || mark.target.kind === 'range' && Boolean(mark.target.clipIds?.some(id => ids.has(id)))), annotationTrackIndices: Object.fromEntries(sequence.tracks.map(track => [track.id, track.index])), markers: (sequence.markers ?? []).filter(mark => mark.clipId && Boolean(mark.clipId && ids.has(mark.clipId))), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), transitions: (sequence.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id))), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
 }
 
 /** Vertical dragging moves the selected lanes of the primary kind; linked audio keeps its lane. */
@@ -285,7 +288,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
     assertNewInternalOverlap(clips, adjusted)
     assertTargets(sequence, adjusted); assertNoOverlap(sequence.clips.filter(clip => !selected.has(clip.id)), adjusted)
     const byId = new Map(adjusted.map(clip => [clip.id, clip])); const next = sequence.clips.map(clip => byId.get(clip.id) ?? clip)
-    const annotations = edit.mode === 'move' ? shiftAnnotations(sequence, next) : sequence.annotations.filter(mark => { const clip = byId.get(mark.clipId); return !clip || (mark.frame >= clip.start && mark.frame < clip.start + clip.duration) })
+    const annotations = edit.mode === 'move' ? shiftAnnotations(sequence, next) : sequence.annotations.filter(mark => { const clip = byId.get(mark.clipId ?? ''); return !clip || (mark.frame >= clip.start && mark.frame < clip.start + clip.duration) })
     const origins = new Map(adjusted.map(clip => [clip.id, { originalId: clip.id, shift: edit.mode === 'move' ? clip.start - sequence.clips.find(value => value.id === clip.id)!.start : 0 }]))
     return retimeVideoEditContent(sequence, { ...sequence, clips: next, annotations }, origins)
   }
@@ -393,13 +396,21 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     const rightById = new Map(rightPieces.map(clip => [clip.id, clip]))
     for (const [id, pieces] of fragments) fragments.set(id, pieces.map(clip => rightById.get(clip.id) ?? clip))
     kept = retimeVideoEditContent(sequence, { ...sequence, clips: sequence.clips.flatMap(clip => fragments.get(clip.id) ?? [clip]), annotations: sequence.annotations.flatMap(mark => {
-      const pieces = fragments.get(mark.clipId)
+      const pieces = fragments.get(mark.clipId ?? '')
       if (!pieces) return [mark]
       const piece = pieces.find(clip => mark.frame >= clip.start && mark.frame < clip.start + clip.duration)
       return piece ? [{ ...mark, clipId: piece.id }] : []
     }) }, origins, true)
   }
-  const annotations = edit.clipboard.annotations.map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId)!, frame: edit.frame + convert(mark.frame) }))
+  const annotations = edit.clipboard.annotations.map(mark => {
+    const mapped = mapVideoEditAnnotationTime(mark, value => edit.frame + convert(value))
+    const target = mapped.target.kind === 'range' ? { ...mapped.target, clipIds: mapped.target.clipIds?.flatMap(id => ids.has(id) ? [ids.get(id)!] : []), trackIds: mapped.target.trackIds?.map(id => {
+      const index = edit.clipboard.annotationTrackIndices?.[id]; const destination = index !== undefined && sequence.tracks.find(value => value.index === (edit.trackMap?.[index] ?? index))
+      if (!destination) throw new Error('标注轨道已移除，请重新复制片段。')
+      return destination.id
+    }) } : mapped.target
+    return { ...mapped, target, id: crypto.randomUUID(), ...(mark.clipId ? { clipId: ids.get(mark.clipId)! } : {}), status: mark.status === 'draft' ? 'draft' as const : 'open' as const, addressedBy: undefined }
+  })
   const markers = (edit.clipboard.markers ?? []).map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId!)!, frame: edit.frame + convert(mark.frame) }))
   const captions = (edit.clipboard.captions ?? []).map(caption => ({ ...caption, id: crypto.randomUUID(), clipId: ids.get(caption.clipId!)!, start: edit.frame + convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) }))
   const transitions = (edit.clipboard.transitions ?? []).map(transition => {

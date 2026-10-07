@@ -1,8 +1,10 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { codeElementAtSource } from '@/core/videoEdit/codeElementSelection'
+import { selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames } from '../application/videoEditCodeElements'
 import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading, UiTextAreaField } from '@/components/ui'
 import { commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate, prepareVideoEditCodeCandidate, type VideoEditCodeApplyScope, type VideoEditCodeCandidate } from '../application/videoEditCodeCandidates'
 import type { VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
-import { requireVideoEditInstance } from '../application/videoEditService'
+import { requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision } from '../application/videoEditService'
 import { videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 
 function CandidatePreview({ candidate, onError }: { candidate: VideoEditCodeCandidate; onError: (reason: unknown) => void }): React.ReactElement {
@@ -23,7 +25,9 @@ function CandidatePreview({ candidate, onError }: { candidate: VideoEditCodeCand
 }
 
 function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.ReactElement {
+  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const owner = requireVideoEditInstance(editor.target.projectId)
+  const sourceInput = useRef<HTMLTextAreaElement>(null)
   const document = owner.document
   const mounted = useRef(true)
   const pending = useRef<{ controller: AbortController; baseline: typeof document }>()
@@ -34,6 +38,21 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const selected = !editor.target.effectId && draft === editor.source ? selectedVideoEditCodeElement(owner) : undefined
+  const span = selected?.entry.clip.id === editor.target.clipId ? selected.element.sourceSpan : undefined
+  useLayoutEffect(() => {
+    const input = sourceInput.current
+    if (!input || !span) return
+    if (input.ownerDocument.activeElement !== input) input.setSelectionRange(span.start, span.end)
+    const lineHeight = Number.parseFloat(input.ownerDocument.defaultView!.getComputedStyle(input).lineHeight) || 20
+    input.scrollTop = Math.max(0, (span.startLine - 2) * lineHeight)
+  }, [span, selected?.element.elementId])
+  const locateCursor = (): void => {
+    if (editor.target.effectId || draft !== editor.source || !sourceInput.current) return
+    const entry = videoEditCodeElementFrames(owner).get(editor.target.clipId)
+    const element = entry && codeElementAtSource(entry.index, sourceInput.current.selectionStart)
+    selectVideoEditCodeElement(owner, editor.target.clipId, element?.elementId ?? null)
+  }
   const release = useCallback((): void => {
     const job = pending.current; pending.current = undefined
     job?.controller.abort()
@@ -73,7 +92,8 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
     } finally { disposeVideoEditCodeCandidate(current); job?.controller.abort() }
   }
   return <UiGroup gap="row" data-video-edit-code-source-editor={editor.target.clipId}>
-    <UiFormRow density="compact" label="源码"><UiTextAreaField aria-label="代码素材源码" className="font-mono" rows={12} value={draft} spellCheck={false} onChange={event => changeDraft(event.target.value)} textHistory={{ onValueChange: changeDraft }} /></UiFormRow>
+    {span && <div aria-label="选中元素源码" className="max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-xs"><mark className="bg-accent/15 text-text1">{draft.slice(span.start, span.end)}</mark></div>}
+    <UiFormRow density="compact" label="源码"><UiTextAreaField ref={sourceInput} aria-label="代码素材源码" className="font-mono" rows={12} wrap="off" value={draft} spellCheck={false} onClick={locateCursor} onKeyUp={locateCursor} onChange={event => changeDraft(event.target.value)} textHistory={{ onValueChange: changeDraft }} /></UiFormRow>
     <UiFormRow density="compact" label="应用范围"><Dropdown<VideoEditCodeApplyScope> ariaLabel="源码应用范围" value={scope} options={[{ value: 'single', label: '此片段' }, { value: 'matching', label: '相同原版本的所有片段' }]} onSelect={value => { if (value !== scope) { invalidate(); setScope(value); setError(null) } }} /></UiFormRow>
     <div className="flex flex-wrap items-center gap-2">
       <UiButton variant="secondary" disabled={busy} onClick={() => { void check() }}>检查并预览</UiButton>

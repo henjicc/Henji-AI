@@ -153,7 +153,7 @@ it('锁定任一链接伙伴整组拒绝，通用提交也保护标注、新增�
   expect(() => apply(next, { kind: 'adjust', clipIds: ['a'], mode: 'move', delta: 1 })).toThrow('锁定')
   for (const update of [
     (value: typeof next) => { value.sequences[0].clips.find(clip => clip.kind === 'audio')!.volume = .2 },
-    (value: typeof next) => { const clip = value.sequences[0].clips.find(clip => clip.kind === 'audio')!; value.sequences[0].annotations.push({ id: 'mark', clipId: clip.id, frame: 12, kind: 'point', space: 'composition-normalized', x: .5, y: .5, width: 0, height: 0, text: '' }) },
+    (value: typeof next) => { const clip = value.sequences[0].clips.find(clip => clip.kind === 'audio')!; value.sequences[0].annotations.push({ id: 'mark', clipId: clip.id, frame: 12, target: { kind: 'point', x: .5, y: .5 }, space: 'composition-normalized', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-08T00:00:00.000Z', thread: [], text: '检查' }) },
     (value: typeof next) => { value.sequences[0].tracks[0].locked = false; value.sequences[0].clips = value.sequences[0].clips.filter(clip => clip.kind !== 'audio') },
   ]) { const candidate = structuredClone(next); update(candidate); expect(() => assertVideoEditLockedTracks(next, candidate)).toThrow('锁定') }
   const unlocked = structuredClone(next); unlocked.sequences[0].tracks[0].locked = false; unlocked.sequences[0].tracks[0].height = 96
@@ -161,7 +161,7 @@ it('锁定任一链接伙伴整组拒绝，通用提交也保护标注、新增�
 })
 it('复制粘贴重新映射链接与标注，换帧率按绝对边界换算且不连接原片段', () => {
   const { document } = fixture(); let next = apply(document, { kind: 'separate_audio', clipIds: ['a'], audioTrack: 0 })
-  next.sequences[0].annotations.push({ id: 'm', clipId: 'a', frame: 25, kind: 'point', space: 'composition-normalized', x: .5, y: .5, width: 0, height: 0, text: '保留' })
+  next.sequences[0].annotations.push({ id: 'm', clipId: 'a', frame: 25, target: { kind: 'point', x: .5, y: .5 }, space: 'composition-normalized', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-08T00:00:00.000Z', thread: [], text: '保留' })
   const clipboard = copyVideoEditClips(next, next.sequences[0].id, ['a'])
   next.sequences[0].frameRate = { numerator: 30, denominator: 1 }
   next = apply(next, { kind: 'place', clipboard, frame: 200, mode: 'paste' })

@@ -11,8 +11,8 @@ export function assertVideoEditLockedTracks(before: VideoEditDocument, after: Vi
       const content = (value: VideoEditSequence): string => {
         const clips = value.clips.filter(clip => clip.track === track.index).sort((a, b) => a.id.localeCompare(b.id))
         const ids = new Set(clips.map(clip => clip.id))
-        const annotations = value.annotations.filter(mark => ids.has(mark.clipId)).sort((a, b) => a.id.localeCompare(b.id))
-        const markers = (value.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)).sort((a, b) => a.id.localeCompare(b.id))
+        const annotations = value.annotations.filter(mark => Boolean(mark.clipId && ids.has(mark.clipId))).sort((a, b) => a.id.localeCompare(b.id))
+        const markers = (value.markers ?? []).filter(mark => mark.clipId && Boolean(mark.clipId && ids.has(mark.clipId))).sort((a, b) => a.id.localeCompare(b.id))
         const captions = (value.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)).sort((a, b) => a.id.localeCompare(b.id))
         const transitions = (value.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id))).sort((a, b) => a.id.localeCompare(b.id))
         return JSON.stringify({ clips, annotations, markers, captions, transitions })

@@ -12,7 +12,7 @@ export const VIDEO_EDIT_PROGRAM_BUTTONS = [
   'add_marker', 'mark_in', 'mark_out', 'clear_in_out', 'go_in', 'go_out',
   'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end',
   'go_prev_edit', 'go_next_edit', 'lift', 'extract', 'export_frame',
-  'toggle_proxies', 'mode_select', 'mode_move', 'mode_point', 'mode_region',
+  'toggle_proxies', 'mode_select', 'mode_move', 'mode_point', 'mode_region', 'mode_stroke',
 ] as const
 /** 源监视器可用按钮；`drag_*` 是只能拖动的“拖入画面／声音／链接音画”。 */
 export const VIDEO_EDIT_SOURCE_BUTTONS = [

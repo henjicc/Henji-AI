@@ -22,7 +22,7 @@ export const navigationApplicationDomain: ApplicationDomainModule = {
     return { workspace: parsed.workspaceId }
   })
 
-  registrar.registerHandler(getCurrentApplicationContextCapability.id, () => {
+  registrar.registerHandler(getCurrentApplicationContextCapability.id, (_input, context) => {
     const snapshot = createHostContextSnapshot()
     return {
       surface: snapshot.surface ?? {
@@ -31,6 +31,7 @@ export const navigationApplicationDomain: ApplicationDomainModule = {
         focusedRef: null,
         selectedRefs: [],
       },
+      ...((!context.callerGrant || context.callerGrant.permissions.includes('video_edit:read')) && snapshot.videoEdit ? { videoEdit: snapshot.videoEdit } : {}),
       catalogRevision: snapshot.catalogRevision ?? 0,
       ready: snapshot.uiReady,
       revision: snapshot.revision,

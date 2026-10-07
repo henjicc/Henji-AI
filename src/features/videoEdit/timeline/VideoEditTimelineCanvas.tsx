@@ -1,3 +1,5 @@
+import { VideoEditAnnotationMarks } from './VideoEditAnnotationMarks'
+import { useVideoEditAnnotationRange } from './useVideoEditAnnotationRange'
 import { VideoEditReframeDialog } from '../panels/VideoEditReframeDialog'
 import { createLogger } from '@/core/logging'
 import { VideoEditTimelineKeyframes } from './VideoEditTimelineKeyframes'
@@ -80,6 +82,7 @@ const TRANSITION_DROP_CENTER = 8
 const FADE_HANDLE_MIN_WIDTH = 28
 interface TransitionDropHint { kind: VideoEditTransitionKind; pair: VideoEditTransitionPair; alignment: VideoEditTransitionAlignment; track: number; start: number; duration: number }
 export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true }: Props): React.ReactElement {
+  const annotationRange = useVideoEditAnnotationRange(instance, pixels, TIMELINE_HEADER_WIDTH, onError)
   const projectId = instance.document.id
   const [nestTarget, setNestTarget] = useState<VideoEditNestTarget | null>(null)
   const fps = videoEditFps(sequence.frameRate)
@@ -489,9 +492,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         } catch (error) { fail(error) }
       }}>
       <div className="relative" style={{ width, height: Math.max(view.height, TIMELINE_RULER_HEIGHT) }} data-video-edit-timeline-content>
-        <div className="sticky top-0 z-sticky flex h-7 border-b border-line bg-panel" data-video-edit-ruler>
+        <div className="sticky top-0 z-sticky flex h-7 border-b border-line bg-panel" data-video-edit-ruler onPointerDownCapture={annotationRange.onPointerDownCapture} onPointerMove={annotationRange.onPointerMove} onPointerUp={annotationRange.onPointerUp} onPointerCancel={annotationRange.onPointerCancel}>
           <div className="sticky left-0 z-sticky flex shrink-0 items-center border-r border-gap bg-panel px-2.5 text-2xs text-text3" style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header>轨道</div>
           <VideoEditTimelinePosition instance={instance}>
+            <VideoEditAnnotationMarks instance={instance} sequence={sequence} pixels={pixels} left={view.left} width={view.width} onError={onError} />
+            {annotationRange.range && <div className="pointer-events-none absolute inset-y-0 bg-selected-accent ring-1 ring-accent-ring" style={{ left: Math.min(annotationRange.range.from, annotationRange.range.to) * pixels, width: Math.max(1, Math.abs(annotationRange.range.to - annotationRange.range.from) * pixels) }} />}
             {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute bottom-0 top-1 border-l border-line-strong pl-1 font-mono text-2xs tabular-nums text-text3" style={{ left: index * majorWidth }}>{timelineTimecode(index * ruler.major, fps)}</span>)}
             {minorPerMajor > 1 && Array.from({ length: Math.max(0, tickEnd - tickStart) * minorPerMajor }, (_, index) => tickStart * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1.5 border-l border-line" style={{ left: index * ruler.minor * pixels }} />)}
             <VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} />

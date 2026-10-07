@@ -36,9 +36,9 @@ it('文字工具接管原标注模式，退出文字后节目工具可继续切�
   await act(async () => { await Promise.resolve() })
   const openMenu = (): void => { const button = view.getByRole('button', { name: '更多节目操作' }); if (button.getAttribute('aria-expanded') !== 'true') fireEvent.click(button) }
   openMenu(); fireEvent.click(view.getByRole('button', { name: '点标注' }))
-  expect(view.getByLabelText('标注文字')).toBeTruthy()
+  expect(view.getByLabelText('画面标注层').className).toContain('cursor-crosshair')
   act(() => setVideoEditTimelineView(instance.document.id, { tool: 'type' }))
-  expect(view.getByLabelText('节目文字工具')).toBeTruthy(); expect(view.queryByLabelText('标注文字')).toBeNull()
+  expect(view.getByLabelText('节目文字工具')).toBeTruthy(); expect(view.queryByLabelText('这里要改什么？')).toBeNull()
   openMenu(); fireEvent.click(view.getByRole('button', { name: '移动画面' }))
   expect(instance.tool).toBe('select'); expect(view.queryByLabelText('节目文字工具')).toBeNull()
   act(() => setVideoEditTimelineView(instance.document.id, { tool: 'type' }))
@@ -48,7 +48,7 @@ it('画面标注捕获原选区和时间，后续定位及指针取消不标注�
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   const onError = vi.fn(); const view = render(<VideoEditPreview instance={instance} onError={onError} />)
   await act(async () => { await Promise.resolve() })
-  const canvas = view.getByLabelText('剪辑画面'); const host = canvas.parentElement!
+  const host = view.getByLabelText('画面标注层'); const canvas = host
   Object.defineProperty(host, 'setPointerCapture', { value: vi.fn() })
   vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 180, right: 320, width: 320, height: 180, toJSON: () => ({}) })
   fireEvent.click(view.getByRole('button', { name: '更多节目操作' })); fireEvent.click(view.getByRole('button', { name: '点标注' }))
@@ -57,7 +57,9 @@ it('画面标注捕获原选区和时间，后续定位及指针取消不标注�
   down(); act(() => { setVideoEditView(instance.document.id, { frame: 5 }); setVideoEditView(instance.document.id, { frame: 0 }) }); up()
   expect(getActiveVideoEditSequence(instance).annotations).toHaveLength(0)
   down(); fireEvent.pointerCancel(host); up(); expect(getActiveVideoEditSequence(instance).annotations).toHaveLength(0)
-  down(); up(); expect(getActiveVideoEditSequence(instance).annotations).toMatchObject([{ clipId: instance.selection, frame: 0, x: .1, y: .2 }])
+  down(); up(); expect(getActiveVideoEditSequence(instance).annotations).toHaveLength(0)
+  fireEvent.change(view.getByLabelText('这里要改什么？'), { target: { value: '改这里' } }); fireEvent.click(view.getByRole('button', { name: '加入待发送' }))
+  expect(getActiveVideoEditSequence(instance).annotations).toMatchObject([{ clipId: instance.selection, frame: 0, status: 'draft', target: { x: .1, y: .2 } }])
   expect(onError).not.toHaveBeenCalled(); view.unmount()
 })
 it('同向播放中定位重建时钟，旧取帧回执不能覆盖新目标', async () => {

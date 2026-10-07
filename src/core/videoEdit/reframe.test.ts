@@ -77,7 +77,7 @@ it('序列复制重新分配所有序列内引用；媒体共享，音轨、字�
   sequence.clips = sequence.clips.map(clip => ({ ...clip, track: sequence.tracks.find(track => track.kind === 'video')!.index }))
   sequence.clips.push({ ...clip(), id: 'sound', kind: 'audio', sourceComponent: 'audio', track: sequence.tracks.find(track => track.kind === 'audio')!.index, linkId: 'pair' })
   sequence.transitions = [{ id: 'transition', kind: 'cross_dissolve', leftClipId: 'clip', rightClipId: 'next', durationFrames: 10 }]
-  sequence.annotations = [{ id: 'note', clipId: 'clip', frame: 40, space: 'composition-normalized', kind: 'point', x: .5, y: .5, width: 0, height: 0, text: '主体' }]
+  sequence.annotations = [{ id: 'note', clipId: 'clip', frame: 40, space: 'composition-normalized', target: { kind: 'point', x: .5, y: .5 }, status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-08T00:00:00.000Z', thread: [], text: '主体' }]
   sequence.markers = [{ id: 'marker', clipId: 'clip', frame: 40, name: '镜头' }]
   sequence.captions = [{ id: 'caption', clipId: 'clip', start: 40, duration: 20, text: '字幕' }]
   const copy = copyVideoEditSequence(sequence)

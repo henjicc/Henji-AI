@@ -1,9 +1,10 @@
+import { retimeVideoEditAnnotation } from './annotations'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { adjustVideoEditClip, videoEditClipSourceDuration, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { videoEditFps } from './time'
-import { advanceVideoEditClipSource, videoEditClipContentShift, videoEditClipHeadRoom } from './clipSpeed'
+import { advanceVideoEditClipSource, videoEditClipHeadRoom } from './clipSpeed'
 import { retimeVideoEditContent } from './timedContent'
 import { sliceVideoEditClipKeyframes } from './keyframes'
 
@@ -70,11 +71,11 @@ function assertNoTrackOverlap(clips: readonly VideoEditClip[], message: string):
 export function retimeVideoEditAnnotations(before: VideoEditSequence, clips: readonly VideoEditClip[], fps: number): VideoEditAnnotation[] {
   const prior = new Map(before.clips.map(clip => [clip.id, clip])); const after = new Map(clips.map(clip => [clip.id, clip]))
   return before.annotations.flatMap(mark => {
-    const previous = prior.get(mark.clipId); const current = after.get(mark.clipId)
+    if (!mark.clipId) return [mark]
+    const previous = prior.get(mark.clipId ?? ''); const current = after.get(mark.clipId ?? '')
     if (!previous || !current) return []
-    const shift = videoEditClipContentShift(previous, current, fps)
-    const frame = mark.frame + shift
-    return frame >= current.start && frame < end(current) ? [{ ...mark, frame }] : []
+    const mapped = retimeVideoEditAnnotation(mark, previous, current, fps)
+    return mapped ? [mapped] : []
   })
 }
 

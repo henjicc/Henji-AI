@@ -42,7 +42,7 @@ export function videoEditClipTransferSnapshot(document: VideoEditDocument, seque
   const kind = clip.kind === 'audio' || clip.sourceComponent === 'audio' ? 'audio' : ['image', 'text', 'graphic'].includes(clip.kind) ? 'image' : 'video'
   const snapshot = structuredClone({ ...sequence, clips,
     tracks: sequence.tracks.map(track => ({ ...track, enabled: true, muted: false, solo: false })),
-    annotations: sequence.annotations.filter(value => ids.has(value.clipId)),
+    annotations: sequence.annotations.filter(value => Boolean(value.clipId && ids.has(value.clipId))),
     captions: (sequence.captions ?? []).filter(value => Boolean(value.clipId) && ids.has(value.clipId!)),
     transitions: (sequence.transitions ?? []).filter(value => (!value.leftClipId || ids.has(value.leftClipId)) && (!value.rightClipId || ids.has(value.rightClipId))),
   })

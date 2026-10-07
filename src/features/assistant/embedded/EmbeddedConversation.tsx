@@ -6,7 +6,7 @@ import { createEmptyPromptDocument, createPlainTextPromptDocument } from '@/core
 import type { EmbeddedAgentModel, EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 import { getPlatform } from '@/platform/runtime'
 import { useUiStore } from '@/stores/uiStore'
-import { useAssistantUiStore } from '../store/assistantUiStore'
+import { useAssistantUiStore, type AssistantGoalOptions } from '../store/assistantUiStore'
 import { createHostContextSnapshot } from '../../application-control/hostContext/hostContext'
 import { EmbeddedTranscript, EmbeddedUserMessage } from './EmbeddedTranscript'
 import { useConversationAutoScroll } from '../conversation/useConversationAutoScroll'
@@ -29,6 +29,7 @@ export function EmbeddedConversation(): JSX.Element {
   const access = useAssistantUiStore(store => store.embeddedAccess)
   const setAccess = useAssistantUiStore(store => store.setEmbeddedAccess)
   const [submitting, setSubmitting] = useState(false)
+  const [preparedRequest, setPreparedRequest] = useState<AssistantGoalOptions | undefined>()
   const [attachments, setAttachments] = useState<AssistantAttachmentDraft[]>([])
   const [importing, setImporting] = useState(false)
   const scroll = useConversationAutoScroll(state.sessionId)
@@ -54,8 +55,10 @@ export function EmbeddedConversation(): JSX.Element {
     }
     previousSession.current = state.sessionId
   }, [state.sessionId, busy])
-  const send = useCallback((text: string, submittedAttachments: AgentAttachment[], request?: { context?: string }): void => {
+  const send = useCallback((text: string, submittedAttachments: AgentAttachment[], request?: AssistantGoalOptions): void => {
     if (!text || !selectedModel || submitting) return
+    const prepared = request ?? preparedRequest
+    try { prepared?.beforeSend?.(); prepared?.onTextSubmitted?.(text) } catch (error) { reportEmbeddedAgentError(error); return }
     setSubmitting(true)
     const clientMessageId = crypto.randomUUID()
     setOptimistic({ id: clientMessageId, text, attachments: submittedAttachments })
@@ -65,13 +68,15 @@ export function EmbeddedConversation(): JSX.Element {
     if (!request) { setDocument(createEmptyPromptDocument()); setAttachments([]) }
     const context = createHostContextSnapshot()
     void getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
-      context: request?.context ?? JSON.stringify({ workspace: context.workspace, canvas: context.canvas, surface: context.surface, ...(context.videoEdit ? { videoEdit: context.videoEdit } : {}) }), attachments: submittedAttachments, delivery: request || switching ? 'wait' : delivery })
+      context: prepared?.context ?? JSON.stringify({ workspace: context.workspace, canvas: context.canvas, surface: context.surface, ...(context.videoEdit ? { videoEdit: context.videoEdit } : {}) }), attachments: submittedAttachments, delivery: request || switching ? 'wait' : delivery })
+      .then(() => { setPreparedRequest(undefined) })
       .catch(error => {
+        try { prepared?.onRejected?.() } catch (rollbackError) { reportEmbeddedAgentError(rollbackError) }
         if (!request) { setDocument(sentDocument); setAttachments(sentAttachments) }
         reportEmbeddedAgentError(error)
       })
       .finally(() => { setOptimistic(null); setSubmitting(false) })
-  }, [access, attachments, delivery, document, scroll, selectedModel, submitting, switching])
+  }, [access, attachments, delivery, document, preparedRequest, scroll, selectedModel, submitting, switching])
   useEffect(() => {
     if (!pendingGoal || !modelsLoaded || submitting) return
     const pending = useAssistantUiStore.getState()
@@ -79,8 +84,8 @@ export function EmbeddedConversation(): JSX.Element {
     const options = pending.pendingGoalOptions
     // Consume before submission: StrictMode and snapshot updates must not resend.
     pending.setPendingGoal(null)
-    if (options?.autoSend && selectedModel) send(pendingGoal, [], { context: options.context })
-    else setDocument(createPlainTextPromptDocument(pendingGoal))
+    if (options?.autoSend && selectedModel) send(pendingGoal, (options.attachments ?? []).map(item => item.attachment), options)
+    else { setDocument(createPlainTextPromptDocument(pendingGoal)); setAttachments(options?.attachments ?? []); setPreparedRequest(options ?? undefined) }
   }, [modelsLoaded, pendingGoal, selectedModel, send, submitting])
   const isEmpty = !state.messages.length && !state.sendingMessage && !optimistic && !state.pendingMessages?.length
   const needsModel = modelsLoaded && models.length === 0

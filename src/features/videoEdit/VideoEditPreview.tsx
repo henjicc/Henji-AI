@@ -1,9 +1,15 @@
+import ContextMenu from '@/components/ContextMenu'
+import { useContextMenu } from '@/hooks/useContextMenu'
+import { VideoEditAnnotationQueueButton } from './panels/VideoEditAnnotationsPanel'
+import { VideoEditAnnotationOverlay, type VideoEditAnnotationMode } from './VideoEditAnnotationOverlay'
+import { VideoEditCodeElementOverlay } from './VideoEditCodeElementOverlay'
+import { registerVideoEditAnnotationMonitor, askAssistantAtVideoEditFrame } from './application/videoEditAnnotations'
 import { VideoEditMulticamView } from './panels/VideoEditMulticamView'
 import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { autoSwitchVideoEditMulticam, switchVideoEditMulticam, videoEditProgramMulticam } from './application/videoEditMulticam'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from './application/videoEditProxy'
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton,  UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -12,7 +18,7 @@ import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { isDomNode } from '@/utils/crossRealmDom'
-import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, findActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, getActiveVideoEditSequence, findActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
@@ -50,7 +56,7 @@ const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 656
 /** 收进“更多”时的常用显示比例（完整等级在显示比例下拉里）。 */
 const PROGRAM_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适合' }, { value: 'actual' as const, label: '100%' }]
 /** 节目监视器的工具模式：选中态开关（不是动作按钮），名称与标注逻辑不变；默认不在按钮栏，不在栏里时从“更多”切换。 */
-const PROGRAM_MODES = [{ id: 'select', title: '选择', Icon: MousePointer2 }, { id: 'move', title: '移动画面', Icon: Move }, { id: 'point', title: '点标注', Icon: MapPin }, { id: 'region', title: '区域标注', Icon: SquareDashed }] as const
+const PROGRAM_MODES = [{ id: 'select', title: '选择', Icon: MousePointer2 }, { id: 'move', title: '移动画面', Icon: Move }, { id: 'point', title: '点标注', Icon: MapPin }, { id: 'region', title: '区域标注', Icon: SquareDashed }, { id: 'stroke', title: '画笔标注', Icon: PenLine }] as const
 /** 节目按钮栏里走剪辑命令的按钮（名称、快捷键与启用状态来自正式命令）。 */
 const PROGRAM_COMMAND_BUTTONS = ['add_marker', 'mark_in', 'mark_out', 'clear_in_out', 'go_in', 'go_out', 'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end', 'go_prev_edit', 'go_next_edit', 'lift', 'extract'] as const satisfies readonly (VideoEditProgramButtonId & VideoEditCommandId)[]
 const PROGRAM_COMMAND_ICONS: Record<Exclude<typeof PROGRAM_COMMAND_BUTTONS[number], 'play_pause'>, LucideIcon> = {
@@ -95,13 +101,14 @@ const DISPLAY_PERIOD_REFRESH_MS = 5000
 const PLAY_PREMIXED_LEAD_SECONDS = 0.03
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 function VideoEditPreviewContent({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
+  const annotationMenu = useContextMenu()
   const [multicamView, setMulticamView] = useState(false)
   const multicam = videoEditProgramMulticam(instance)
   const [canvasSend, setCanvasSend] = useState<VideoEditCanvasSendRequest | null>(null)
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
-  const [mode, setMode] = useState<'select' | 'move' | 'point' | 'region'>('select')
+  const [mode, setMode] = useState<VideoEditAnnotationMode>('select')
   const programToolbarRef = useRef<HTMLDivElement>(null)
   const [compactProgramToolbar, setCompactProgramToolbar] = useState(false)
   useEffect(() => {
@@ -115,13 +122,18 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   }, [])
   const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
   const picture = useVideoEditPictureGesture(instance, visible && mode === 'move', onError)
-  const [label, setLabel] = useState('')
-  const pointer = useRef<{ x: number; y: number; document: VideoEditInstance['document']; sequenceId: string; clipId: string; frame: number; command: object; selection: string[] } | null>(null)
-  useEffect(() => { if (instance.tool === 'type') { pointer.current = null; setMode('select') } }, [instance.tool])
-  const changeMode = (next: typeof mode): void => {
+  useEffect(() => { if (instance.tool === 'type') setMode('select') }, [instance.tool])
+  const changeMode = useCallback((next: VideoEditAnnotationMode): void => {
     if (instance.tool === 'type') setVideoEditTimelineView(instance.document.id, { tool: 'select' })
-    pointer.current = null; setMode(next)
-  }
+    setVideoEditView(instance.document.id, { playing: false }); setMode(next)
+  }, [instance])
+  useEffect(() => {
+    if (!visible) return
+    return registerVideoEditAnnotationMonitor(instance.document.id, action => {
+      if (action === 'ask') void askAssistantAtVideoEditFrame(instance.document.id).catch(onError)
+      else changeMode(action)
+    })
+  }, [instance, visible, onError, changeMode])
   const [preparing, setPreparing] = useState(false)
   const [retry, setRetry] = useState(0)
   const [effectFailure, setEffectFailure] = useState<string | null>(null)
@@ -498,29 +510,24 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       }}>
       {visible && multicamView && <div className="flex w-1/2 min-w-0 shrink-0 flex-col pr-3"><VideoEditMulticamView instance={instance} onError={onError} /></div>}
       <div className={`relative ${zoom.boxClass} ${multicamView ? 'min-w-0 flex-1' : ''}`} style={zoom.boxStyle} data-monitor-zoom-box data-video-edit-program-display={display === 'fit' ? 'fit' : 'zoom'}>
-        <div ref={host} className="h-full w-full"
-          onPointerDown={event => { if (mode === 'move') { picture.down(event); return } if (mode === 'select' || !instance.selection) return; const rect = event.currentTarget.getBoundingClientRect(); pointer.current = { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height, document: instance.document, sequenceId: instance.activeSequenceId, clipId: instance.selection, frame: instance.frame, command: videoEditProgramCommandIdentity(instance.document.id), selection: instance.selectedClipIds }; event.currentTarget.setPointerCapture(event.pointerId) }}
-          onPointerMove={picture.move}
-          onPointerCancel={() => { pointer.current = null; picture.cancel() }} onLostPointerCapture={() => { pointer.current = null; picture.cancel() }}
-          onPointerUp={event => {
-            if (mode === 'move') { picture.up(event); return }
-            const start = pointer.current; pointer.current = null
-            if (!start || instance.document !== start.document || instance.activeSequenceId !== start.sequenceId || instance.selection !== start.clipId || instance.selectedClipIds !== start.selection || instance.frame !== start.frame || videoEditProgramCommandIdentity(instance.document.id) !== start.command) return
-            const rect = event.currentTarget.getBoundingClientRect(); const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)); const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
-            try { editVideoSequence(instance.document.id, start.sequenceId, draft => ({ ...draft, annotations: [...draft.annotations, { id: crypto.randomUUID(), clipId: start.clipId, frame: start.frame, space: 'composition-normalized', kind: mode === 'region' ? 'region' : 'point', x: Math.min(start.x, x), y: Math.min(start.y, y), width: mode === 'region' ? Math.abs(x - start.x) : 0, height: mode === 'region' ? Math.abs(y - start.y) : 0, text: label }] })) } catch (error) { onError(error) }
-          }} />
-        {document.annotations.filter(mark => mark.frame === instance.frame).map(mark => <div key={mark.id} className={`pointer-events-none absolute border border-on-media text-xs text-on-media ${mark.kind === 'point' ? 'h-2 w-2' : ''}`} style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%`, ...(mark.kind === 'point' ? {} : { width: `${mark.width * 100}%`, height: `${mark.height * 100}%` }) }}><span className="absolute bottom-full whitespace-nowrap bg-media-scrim px-1">{mark.text}</span></div>)}
+        <div ref={host} className="h-full w-full" onContextMenu={event => {
+          const rect = event.currentTarget.getBoundingClientRect(); const point = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height))) }
+          annotationMenu.showMenu(event, [{ id: 'ask', label: '让助手改这里', icon: <PenLine size={14} />, disabled: instance.playing, onClick: () => { void askAssistantAtVideoEditFrame(instance.document.id, point).catch(onError) } }])
+        }}
+          onPointerDown={event => { if (mode === 'move') picture.down(event) }} onPointerMove={picture.move}
+          onPointerCancel={picture.cancel} onLostPointerCapture={picture.cancel} onPointerUp={event => { if (mode === 'move') picture.up(event) }} />
         <VideoEditMaskOverlay instance={instance} onError={onError} />
         <VideoEditTrackingOverlay instance={instance} onError={onError} />
         <VideoEditTextOverlay instance={instance} onError={onError} enabled={visible && mode === 'select'} />
+        <VideoEditAnnotationOverlay instance={instance} mode={mode} onError={onError} />
+        <VideoEditCodeElementOverlay instance={instance} enabled={visible && mode === 'select'} onError={onError} />
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
-      {(mode === 'point' || mode === 'region' || preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
-        {(mode === 'point' || mode === 'region') && <div className="w-44 shrink-0"><UiInput aria-label="标注文字" size="sm" value={label} onChange={event => setLabel(event.target.value)} placeholder="标注文字" /></div>}
+      {(preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
       </div>}
-      {(renderFailure || effectFailure || (mode !== 'select' && !instance.selection)) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
+      {(renderFailure || effectFailure || (mode === 'move' && !instance.selection)) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
         <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
           {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : effectFailure ? <UiError title="部分效果已跳过" message={effectFailure} /> : <UiEmpty size="xs" title="请先选择要编辑的片段" />}
         </UiPanel>
@@ -538,6 +545,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线工具栏有同一读数），
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
     <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
+      <VideoEditAnnotationQueueButton instance={instance} />
+      <ContextMenu surface="glass" visible={annotationMenu.menuVisible} items={annotationMenu.menuItems} position={annotationMenu.menuPosition} onClose={annotationMenu.hideMenu} />
+      <PanelTrigger label="标注" display={PROGRAM_MODES.find(item => item.id === mode)?.title ?? '选择'} appearance="quiet" panelWidth="content" closeOnPanelClick renderPanel={() => <div role="group" aria-label="标注工具">{PROGRAM_MODES.map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" active={mode === id} onClick={() => changeMode(id)}><Icon size={14} />{title}</UiOptionButton>)}<UiOptionButton variant="menu" onClick={() => { void askAssistantAtVideoEditFrame(instance.document.id).catch(onError) }}>让助手改这里</UiOptionButton></div>} />
       {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13" />}
       {compactProgramToolbar ? null : <VideoEditInOutDuration instance={instance} className="px-1.5 text-xs" />}
       <UiOverflowRow

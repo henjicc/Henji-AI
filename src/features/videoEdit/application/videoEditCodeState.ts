@@ -6,7 +6,7 @@ import type { CodeMaterialMetadata, CodeMaterialMetadataReader } from '@/core/vi
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 
-interface Checked { definitionId: string; source: string; apiVersion: number; languageVersion: number; metadata: CodeMaterialMetadata; bytes: number }
+interface Checked { definitionId: string; source: string; apiVersion: number; languageVersion: number; metadata: CodeMaterialMetadata; program: CodeMaterialProgram; bytes: number }
 export type VideoEditCodeMetadata = Map<string, Checked>
 const states = new WeakMap<object, VideoEditCodeMetadata>()
 let compiler: VideoEditCodeCompiler | undefined
@@ -34,6 +34,11 @@ export function rememberVideoEditCodeMetadata(owner: object, definitionId: strin
   put(metadata, definitionId, version, program)
 }
 export function forgetVideoEditCodeMetadata(owner: object, versionId: string): void { states.get(owner)?.delete(versionId) }
+/** Reuse the worker-checked IR; monitor picking never recompiles author source. */
+export function readVideoEditCodeProgram(owner: object, document: VideoEditDocument, instance: Parameters<CodeMaterialMetadataReader>[0]): CodeMaterialProgram {
+  readVideoEditCodeMetadata(owner, document)(instance)
+  return states.get(owner)!.get(instance.versionId)!.program
+}
 export async function ensureVideoEditCodeDocumentMetadata(owner: object, document: VideoEditDocument, signal?: AbortSignal): Promise<void> {
   const references = videoEditCodeReferences(document)
   for (const instance of references) if (!states.get(owner)?.has(instance.versionId)) {
@@ -50,9 +55,9 @@ function put(entries: VideoEditCodeMetadata, definitionId: string, version: Code
   if (existing) return
   const { name, kind, mode, width, height, durationSeconds, seed, parameters } = program
   const metadata = { name, kind, mode, width, height, durationSeconds, seed, parameters }
-  const bytes = new TextEncoder().encode(JSON.stringify(metadata)).byteLength + new TextEncoder().encode(version.source).byteLength
+  const bytes = new TextEncoder().encode(JSON.stringify(program)).byteLength + new TextEncoder().encode(version.source).byteLength
   if (entries.size >= 4096 || [...entries.values()].reduce((sum, entry) => sum + entry.bytes, 0) + bytes > 32 * 1024 ** 2) throw new CodeMaterialError('BUDGET', '剪辑已检查的代码版本超出会话预算；保存并重新打开剪辑可释放历史版本。')
-  entries.set(version.id, { definitionId, source: version.source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, metadata, bytes })
+  entries.set(version.id, { definitionId, source: version.source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, metadata, program, bytes })
 }
 /** Rebuild only default/referenced declarations. Unused historical source is
  * checked when explicitly requested; it is never executed or trusted as IR. */

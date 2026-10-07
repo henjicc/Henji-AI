@@ -1,3 +1,4 @@
+import type { AssistantAttachmentDraft } from '../conversation/assistantAttachments'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
@@ -8,6 +9,10 @@ export type AssistantDockMode = 'left' | 'right' | 'floating'
 export interface AssistantGoalOptions {
   autoSend?: boolean
   context?: string
+  attachments?: AssistantAttachmentDraft[]
+  beforeSend?: () => void
+  onRejected?: () => void
+  onTextSubmitted?: (text: string) => void
 }
 
 export interface AssistantPanelPosition {
