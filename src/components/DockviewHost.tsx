@@ -16,6 +16,7 @@ import { forwardRef, useEffect, useRef, type ReactNode } from 'react'
  * 5. 激活面板组的强调色描边（PR 式）画在宿主里一层独立的框上，跟踪 `.dv-active-group` 的位置：面板内容层
  *    `.dv-render-overlay` 按 dockview 每帧缓存的内容区矩形定位，会盖住组自身的边框或组内伪元素，CSS 描边不可靠。
  *    这层框在内容层（z 1）之上、分隔条（z 99）之下，用 z-raised，不接收指针。
+ * 6. 顶部留一道与面板间隙同宽同色的空隙（`.dockview-host`，index.css），面板组不贴着上方命令带。
  */
 function ActiveGroupOutline({ host }: { host: React.RefObject<HTMLDivElement> }): React.ReactElement {
   const outline = useRef<HTMLDivElement>(null)
@@ -52,7 +53,7 @@ export const DockviewHost = forwardRef<HTMLDivElement, { className?: string; chi
   return (
     <div
       ref={element => { host.current = element; if (typeof ref === 'function') ref(element); else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = element }}
-      className={`relative isolate ${className}`}
+      className={`dockview-host relative isolate ${className}`}
       onPointerDownCapture={(event) => {
         sashPress.current = event.target instanceof Element && event.target.closest('.dv-sash') !== null
       }}

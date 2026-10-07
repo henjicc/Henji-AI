@@ -1087,6 +1087,14 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   --dv-separator-border: transparent;
 }
 
+/* 停靠宿主顶部与命令带之间也留一道间隙，宽度与 dockviewHostTheme 的 gap（4px）一致、底色同间隙；
+ * box-sizing 让 h-full 的宿主连同这道空隙一起占满，dockview 只拿到余下的高度。 */
+.dockview-host {
+  box-sizing: border-box;
+  padding-top: 4px;
+  background: linear-gradient(var(--shade), var(--shade)), rgb(var(--gap-rgb));
+}
+
 /* 激活面板组描边（DockviewHost 的 ActiveGroupOutline）：与选中标签底部强调线同粗（1.5px）、同色。 */
 .dock-active-outline {
   border: 1.5px solid rgb(var(--accent-rgb));
