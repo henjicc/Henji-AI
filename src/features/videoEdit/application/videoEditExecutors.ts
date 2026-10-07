@@ -1,3 +1,4 @@
+import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditSequenceSchema } from '@/core/videoEdit/document'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference } from './videoEditProxy'
 import type { VideoEditProxyPreference } from '@/core/videoEdit/proxy'
@@ -306,7 +307,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             refs.push({ kind: this.entityType, id: `${before.id}:${created}` }); continue
           }
           switch (this.entityType) {
-            case 'video_edit.sequence': document.sequences.push({ ...createVideoEditSequence(), ...values, id } as ReturnType<typeof createVideoEditSequence>); break
+            case 'video_edit.sequence': document.sequences.push({ ...createVideoEditSequence(), ...useSettingsStore.getState().videoEditSequenceDefaults, ...values, id } as ReturnType<typeof createVideoEditSequence>); break
             case 'video_edit.bin': document.bins.push(videoEditBinSchema.parse({ id, ...values })); break
             case 'video_edit.item': {
               if (values.kind === 'graphic') {

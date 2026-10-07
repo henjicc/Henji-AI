@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../features/videoEdit/application/videoEditDocumentTestKit'
 import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 // @vitest-environment jsdom
@@ -17,7 +18,7 @@ import { registerPersistedImageEditTestSession } from './imageEditPersistenceTes
 import { loadRealModelsIntoRegistry } from './loadRealModels';
 import { harnessDocumentStore, installHarnessNativeStorage, registerHarnessAudioEditProject, uninstallHarnessNativeStorage } from './harnessNativeStorage';
 import { createApplicationHarness } from './applicationHarness';
-import { closeVideoEditProject, createVideoEditProject } from '@/features/videoEdit/application/videoEditService';
+import { closeVideoEditProject } from '@/features/videoEdit/application/videoEditService';
 import { savedVideoEdit } from '@/features/videoEdit/application/videoEditDocumentTestKit';
 
 beforeAll(async () => { installHarnessNativeStorage(); await loadRealModelsIntoRegistry() })

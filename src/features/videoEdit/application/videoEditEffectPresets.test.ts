@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -6,7 +7,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { videoEditEffectsRegistry } from '@/core/videoEdit/effectsRegistry'
 import { makeVideoEditBuiltinEffect, applyVideoEditBuiltinEffect } from './videoEditCompositing'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { createVideoEditEffectLibraryStore, filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditUserPresetEntries, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY } from './videoEditEffectPresets'
 import { videoEditEffectDropClips } from '../panels/videoEditEffectDrag'
 

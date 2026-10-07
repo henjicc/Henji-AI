@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
@@ -5,7 +6,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { VideoEditLumetriPanel } from '../panels/VideoEditLumetriPanel'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, createVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { analyzeVideoEditLumetri, editVideoEditLumetri } from './videoEditLumetri'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 

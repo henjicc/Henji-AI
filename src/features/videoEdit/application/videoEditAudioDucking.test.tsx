@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
@@ -11,7 +12,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { generateVideoEditAudioDucking, setVideoEditAudioRoles } from './videoEditAudioDucking'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, subscribeVideoEditView, undoVideoEdit, videoEditViewRevision } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, subscribeVideoEditView, undoVideoEdit, videoEditViewRevision } from './videoEditService'
 import { updateVideoEditClipKeyframes } from './videoEditClipProperties'
 import { VideoEditBasicSoundPanel } from '../panels/VideoEditBasicSoundPanel'
 import { useSyncExternalStore } from 'react'

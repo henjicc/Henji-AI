@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { useSyncExternalStore } from 'react'
 import { VirtuosoMockContext } from 'react-virtuoso'
@@ -6,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances, saveVideoEdit, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { appendVideoEditSequence, closeVideoEditProject, editVideoProject, listVideoEditInstances, saveVideoEdit, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { createVideoEditCaption, updateVideoEditTimedContent } from '../application/videoEditTimedContent'
 import { VideoEditTimedContentPanel } from './VideoEditTimedContentPanel'
 import { reopenVideoEdit } from '../application/videoEditDocumentTestKit'

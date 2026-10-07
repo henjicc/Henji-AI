@@ -1,3 +1,4 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 /** @vitest-environment jsdom */
 import React from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -5,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditInstance } from '@/features/videoEdit/application/videoEditService'
 import type { CodeAsset } from '@/core/videoEdit/codeAsset'
-import { createVideoEditDocument } from '@/core/videoEdit/document'
+
 import { AssetPreviewOverlay } from './AssetPreviewOverlay'
 
 const mocks = vi.hoisted(() => ({

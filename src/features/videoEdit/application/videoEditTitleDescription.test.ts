@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { llmChatStream, llmCancelTask } from '@/commands/llmRuntime'
@@ -6,7 +7,7 @@ import { DEFAULT_LLM_CAPABILITIES } from '@/core/llm/defaults'
 import { APP_ACCENT_HEX } from '@/core/theme/colorTokens'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createVideoEditProject, editVideoSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
+import { editVideoSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
 import { closeAllVideoEdits } from './videoEditDocumentTestKit'
 import { generateTitleFromDescription, confirmTitleFromDescription } from './videoEditTitleDescription'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'

@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest'
@@ -6,7 +7,7 @@ import { getPlatform } from '@/platform/runtime'
 import type { SmartRegionProgressEvent, SmartRegionRequest, SmartRegionStatus } from '@/platform/contracts/smartRegions'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './videoEditCompositing'
 import { VideoEditSmartRegionControls } from '../panels/VideoEditSmartRegionControls'
 import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions, videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'

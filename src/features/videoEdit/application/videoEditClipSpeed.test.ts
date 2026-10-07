@@ -1,10 +1,11 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances } from './videoEditService'
 
 // 任务 4.13 片段速度：助手经通用实体属性读写速度、倒放与保持音调，与“速度/持续时间”同一领域入口。
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {

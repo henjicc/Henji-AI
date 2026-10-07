@@ -3,10 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DocumentOperations } from '@/features/documents/documentOperations'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, fakeKindOf, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
-import {
-  appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, collectVideoEditMedia, createVideoEditProject, leaveVideoEditProject,
-  listVideoEditInstances, openVideoEditProject, releaseVideoEditDocument, saveVideoEdit, setVideoEditDocumentServicesForTests, undoVideoEdit,
-} from './videoEditService'
+import { createVideoEditProject, appendVideoEditSequence, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, collectVideoEditMedia, leaveVideoEditProject, listVideoEditInstances, openVideoEditProject, releaseVideoEditDocument, saveVideoEdit, setVideoEditDocumentServicesForTests, undoVideoEdit } from './videoEditService'
 
 /*
  * 3.1 剪辑接入：项目 = 文件夹 + 主剪辑，打开 / 自动保存 / 离开全部走通用文档会话。
@@ -48,6 +45,7 @@ describe('新建项目与离开', () => {
 
   it('有内容时询问：取消留在剪辑里；保存时起名，主剪辑随项目改名；保存过的项目再离开不询问', async () => {
     const instance = await createVideoEditProject(); const id = instance.document.id; const projectId = containerOf(id)
+    appendVideoEditSequence(id, { frameRate: { numerator: 30, denominator: 1 } })
     appendVideoEditClip(id)
     prompter.leaveChoices.push('cancel')
     expect(await leaveVideoEditProject(id)).toBe('cancelled')
@@ -66,6 +64,7 @@ describe('新建项目与离开', () => {
 
   it('不保存：整个项目文件夹移到回收站', async () => {
     const instance = await createVideoEditProject(); const projectId = containerOf(instance.document.id)
+    appendVideoEditSequence(instance.document.id, { frameRate: { numerator: 30, denominator: 1 } })
     appendVideoEditClip(instance.document.id)
     prompter.leaveChoices.push('discard')
     expect(await leaveVideoEditProject(instance.document.id)).toBe('discarded')
@@ -74,6 +73,7 @@ describe('新建项目与离开', () => {
 
   it('编辑静默自动保存进剪辑文件，撤销同样写回', async () => {
     const instance = await createVideoEditProject(); const id = instance.document.id
+    appendVideoEditSequence(id, { frameRate: { numerator: 30, denominator: 1 } })
     appendVideoEditClip(id)
     await saveVideoEdit(id)
     expect((commands.stored(id)!.content as { sequences: Array<{ clips: unknown[] }> }).sequences[0].clips).toHaveLength(1)

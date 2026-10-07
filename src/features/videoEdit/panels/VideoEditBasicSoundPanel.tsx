@@ -10,7 +10,7 @@ import { getActiveVideoEditSequence, type VideoEditInstance } from '../applicati
 
 const roles: { value: VideoEditAudioRole; label: string }[] = [{ value: 'dialogue', label: '对话' }, { value: 'music', label: '音乐' }, { value: 'sound_effect', label: '音效' }, { value: 'ambience', label: '环境' }]
 /** Lives inside the registered Effects dock/popout; it owns no business state. */
-export function VideoEditBasicSoundPanel({ instance, onError }: { instance: VideoEditInstance; onError: (reason: unknown) => void }): React.ReactElement | null {
+function VideoEditBasicSoundPanelContent({ instance, onError }: { instance: VideoEditInstance; onError: (reason: unknown) => void }): React.ReactElement | null {
   const sequence = getActiveVideoEditSequence(instance); const projectId = instance.document.id
   const selected = sequence.clips.filter(clip => (instance.selectedClipIds.length ? instance.selectedClipIds : [instance.selection]).includes(clip.id))
   const composition = videoEditComposition(instance.document, sequence.id)
@@ -44,4 +44,8 @@ export function VideoEditBasicSoundPanel({ instance, onError }: { instance: Vide
       {busy && <UiLoading size="xs" message="正在分析目标声音…" />}
     </UiGroup>}
   </UiGroup>
+}
+
+export function VideoEditBasicSoundPanel(props: Parameters<typeof VideoEditBasicSoundPanelContent>[0]): React.ReactElement | null {
+  return props.instance.activeSequenceId ? <VideoEditBasicSoundPanelContent {...props} /> : null
 }

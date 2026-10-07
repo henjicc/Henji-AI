@@ -1,9 +1,10 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { closeVideoEditProject, createVideoEditProject, listVideoEditInstances } from './videoEditService'
+import { closeVideoEditProject, listVideoEditInstances } from './videoEditService'
 import { getVideoEditPlaybackResolution, resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
 import type { ApplicationPlannedStep } from '@/core/application-control'

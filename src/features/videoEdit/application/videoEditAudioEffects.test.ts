@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
@@ -8,7 +9,7 @@ import { activeVideoEditAudioEffects, activeVideoEditEffects } from '@/core/vide
 import { videoEditEffectsRegistry } from '@/core/videoEdit/effectsRegistry'
 import { videoEditAudioTransitionGains } from '@/core/videoEdit/transitions'
 import { applyVideoEditBuiltinEffect, makeVideoEditBuiltinEffect, updateVideoEditBuiltinEffect, updateVideoEditTransition, reorderVideoEditEffects, deleteVideoEditEffects } from './videoEditCompositing'
-import { appendVideoEditClip, appendVideoEditMedia, beginVideoEditGesture, closeVideoEditProject, createVideoEditProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, beginVideoEditGesture, closeVideoEditProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { videoEditEffectDropClips } from '../panels/videoEditEffectDrag'
 
 // 任务 4.7c 音频效果与音频过渡、过渡种类切换与助手单侧过渡：试渲染只替换像素边界，其余都是正式领域实现。

@@ -195,7 +195,12 @@ export function requireVideoEditInstance(id: string): VideoEditInstance { const 
 export function publishVideoEdit(changed = false): void { revision++; if (changed) { domainRevision++; for (const listener of domainListeners) listener() } for (const listener of listeners) listener(); publishView() }
 export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); if (activeId && activeId !== id) { const previous = instances.get(activeId); if (previous) cancelVideoEditGesture(previous) } activeId = id; publishVideoEdit() }
 const compositions = new WeakMap<VideoEditDocument, Map<string, VideoEditComposition>>()
+/** 空项目不制造隐形序列；界面与查询先检查这个可选入口。 */
+export function findActiveVideoEditSequence(instance: VideoEditInstance): VideoEditComposition | undefined {
+  return instance.activeSequenceId ? getActiveVideoEditSequence(instance) : undefined
+}
 export function getActiveVideoEditSequence(instance: VideoEditInstance): VideoEditComposition {
+  if (!instance.activeSequenceId) throw new Error('没有序列，请先新建序列。')
   let cache = compositions.get(instance.document)
   if (!cache) { cache = new Map(); compositions.set(instance.document, cache) }
   let composition = cache.get(instance.activeSequenceId)
@@ -204,21 +209,22 @@ export function getActiveVideoEditSequence(instance: VideoEditInstance): VideoEd
 }
 function reconcileSequenceView(instance: VideoEditInstance): void {
   if (!instance.document.sequences.some(sequence => sequence.id === instance.activeSequenceId)) {
-    instance.activeSequenceId = instance.document.sequences[0].id
-    Object.assign(instance, instance.sequenceViews.get(instance.activeSequenceId) ?? defaultSequenceView(getActiveVideoEditSequence(instance)))
+    instance.activeSequenceId = instance.document.sequences[0]?.id ?? ''
+    Object.assign(instance, instance.sequenceViews.get(instance.activeSequenceId) ?? defaultSequenceView(findActiveVideoEditSequence(instance)))
     instance.playing = false; instance.scrubbing = false
   }
-  const sequence = getActiveVideoEditSequence(instance)
-  instance.selectedClipIds = instance.selectedClipIds.filter(id => sequence.clips.some(clip => clip.id === id))
+  const sequence = findActiveVideoEditSequence(instance)
+  if (!sequence) { Object.assign(instance, defaultSequenceView()); instance.playing = false; instance.scrubbing = false; instance.openSequenceIds = [] }
+  instance.selectedClipIds = instance.selectedClipIds.filter(id => sequence?.clips.some(clip => clip.id === id))
   if (!instance.selectedClipIds.includes(instance.selection ?? '')) instance.selection = instance.selectedClipIds[0] ?? null
-  instance.targetTrackIds = instance.targetTrackIds.filter(id => sequence.tracks.some(track => track.id === id))
+  instance.targetTrackIds = instance.targetTrackIds.filter(id => sequence?.tracks.some(track => track.id === id))
   instance.selectedItemIds = instance.selectedItemIds.filter(id => instance.document.items.some(item => item.id === id))
   if (instance.selectedBinId && !instance.document.bins.some(bin => bin.id === instance.selectedBinId)) instance.selectedBinId = ''
   instance.openSequenceIds = instance.openSequenceIds.filter(id => instance.document.sequences.some(sequence => sequence.id === id))
-  if (!instance.openSequenceIds.includes(instance.activeSequenceId)) instance.openSequenceIds.push(instance.activeSequenceId)
+  if (instance.activeSequenceId && !instance.openSequenceIds.includes(instance.activeSequenceId)) instance.openSequenceIds.push(instance.activeSequenceId)
 }
-function defaultSequenceView(sequence: VideoEditSequence): VideoEditTimelineView & { selection: string | null; frame: number } {
-  return { selectedClipIds: [], targetTrackIds: ['video', 'audio'].flatMap(kind => { const track = sequence.tracks.find(track => track.kind === kind && !track.locked); return track ? [track.id] : [] }), tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, linkedSelection: true, selection: null, frame: 0 }
+function defaultSequenceView(sequence?: VideoEditSequence): VideoEditTimelineView & { selection: string | null; frame: number } {
+  return { selectedClipIds: [], targetTrackIds: ['video', 'audio'].flatMap(kind => { const track = sequence?.tracks.find(track => track.kind === kind && !track.locked); return track ? [track.id] : [] }), tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, linkedSelection: true, selection: null, frame: 0 }
 }
 function rescaleSequenceViews(instance: VideoEditInstance, before: VideoEditDocument): void {
   for (const sequence of instance.document.sequences) {
@@ -238,7 +244,7 @@ export function switchVideoEditSequence(projectId: string, sequenceId: string): 
   instance.sequenceViews.set(instance.activeSequenceId, { ...getVideoEditTimelineView(projectId), selection: instance.selection, frame: instance.frame })
   instance.activeSequenceId = sequenceId
   if (!instance.openSequenceIds.includes(sequenceId)) instance.openSequenceIds.push(sequenceId)
-  Object.assign(instance, structuredClone(instance.sequenceViews.get(sequenceId) ?? defaultSequenceView(getActiveVideoEditSequence(instance))))
+  Object.assign(instance, structuredClone(instance.sequenceViews.get(sequenceId) ?? defaultSequenceView(findActiveVideoEditSequence(instance))))
   instance.playing = false; instance.playbackDirection = 1; instance.scrubbing = false; programCommands.set(instance, {}); reconcileSequenceView(instance); publishVideoEdit(true)
 }
 export function editVideoSequence(projectId: string, sequenceId: string, update: (sequence: VideoEditSequence) => VideoEditSequence): VideoEditDocument {
@@ -248,7 +254,7 @@ export function editVideoSequence(projectId: string, sequenceId: string, update:
   })
 }
 export function appendVideoEditSequence(projectId: string, settings: Partial<Omit<VideoEditSequence, 'id' | 'clips' | 'annotations' | 'tracks'>> = {}): string {
-  const sequence = { ...createVideoEditSequence(`序列 ${requireVideoEditInstance(projectId).document.sequences.length + 1}`), ...settings }
+  const sequence = { ...createVideoEditSequence(`序列 ${requireVideoEditInstance(projectId).document.sequences.length + 1}`), ...useSettingsStore.getState().videoEditSequenceDefaults, ...settings }
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] }))
   return sequence.id
 }
@@ -259,7 +265,7 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] })); return sequence.id
 }
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {
-  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('剪辑至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
+  editVideoProject(projectId, document => { const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
 }
 export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null }): void {
   const { name, binId, ...timing } = settings
@@ -317,8 +323,9 @@ export function undoVideoEdit(id: string, redo = false): void {
 type VideoEditProgramControl = Partial<Pick<VideoEditInstance, 'frame' | 'playing' | 'playbackDirection'>>
 export function validateVideoEditProgramControl(id: string, values: VideoEditProgramControl): void {
   const instance = requireVideoEditInstance(id)
+  if (!instance.activeSequenceId && (values.frame !== undefined && values.frame !== 0 || values.playing === true)) throw new Error('没有序列，请先新建序列。')
   if (values.frame !== undefined && (!Number.isSafeInteger(values.frame) || values.frame < 0)) throw new Error('播放位置必须为非负整数帧。')
-  if (values.frame !== undefined && values.frame > Math.floor(getActiveVideoEditSequence(instance).fps * 1800)) throw new Error('播放位置超出序列范围。')
+  if (values.frame !== undefined && values.frame > Math.floor((findActiveVideoEditSequence(instance)?.fps ?? 60) * 1800)) throw new Error('播放位置超出序列范围。')
   if (values.playbackDirection !== undefined && values.playbackDirection !== 1 && values.playbackDirection !== -1) throw new Error('播放方向无效。')
   if (values.playing !== undefined && typeof values.playing !== 'boolean') throw new Error('播放状态无效。')
 }
@@ -327,7 +334,7 @@ export function validateVideoEditProgramControl(id: string, values: VideoEditPro
  * 只改视图选区，不进撤销历史。调用方显式指定选区、或正在拖动参数时不覆盖。
  */
 function followPlayheadSelection(instance: VideoEditInstance, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing' | 'scrubbing' | 'playbackDirection'>>): typeof values {
-  if (values.frame === undefined || values.selection !== undefined || gestures.has(instance) || !useSettingsStore.getState().videoEditSelectionFollowsPlayhead) return values
+  if (!instance.activeSequenceId || values.frame === undefined || values.selection !== undefined || gestures.has(instance) || !useSettingsStore.getState().videoEditSelectionFollowsPlayhead) return values
   const selection = videoEditClipUnderPlayhead(getActiveVideoEditSequence(instance), values.frame)
   return selection === instance.selection ? values : { ...values, selection }
 }
@@ -404,11 +411,11 @@ export function setVideoEditProjectView(id: string, values: Partial<VideoEditPro
   const next = { ...getVideoEditProjectView(id), ...values }
   if (next.selectedItemIds.some(itemId => !instance.document.items.some(item => item.id === itemId)) || next.selectedItemIds.length > 500) throw new Error('素材选区包含无效素材项。')
   if (next.selectedBinId && !instance.document.bins.some(bin => bin.id === next.selectedBinId)) throw new Error('目标素材箱不存在。')
-  if (!next.openSequenceIds.length || next.openSequenceIds.some(sequenceId => !instance.document.sequences.some(sequence => sequence.id === sequenceId))) throw new Error('请至少保留一个有效的序列标签。')
+  if (instance.document.sequences.length && !next.openSequenceIds.length || next.openSequenceIds.some(sequenceId => !instance.document.sequences.some(sequence => sequence.id === sequenceId))) throw new Error('请至少保留一个有效的序列标签。')
   next.selectedItemIds = [...new Set(next.selectedItemIds)]; next.openSequenceIds = [...new Set(next.openSequenceIds)]
   if (JSON.stringify(next) === JSON.stringify(getVideoEditProjectView(id))) return
   Object.assign(instance, next)
-  if (!next.openSequenceIds.includes(instance.activeSequenceId)) switchVideoEditSequence(id, next.openSequenceIds.at(-1)!)
+  if (next.openSequenceIds.length && !next.openSequenceIds.includes(instance.activeSequenceId)) switchVideoEditSequence(id, next.openSequenceIds.at(-1)!)
   publishVideoEdit(true)
 }
 const VIDEO_EDIT_SAVE_FAILED = '剪辑未能保存到磁盘：修改仍保留在当前剪辑，并会自动重试。请检查项目文件夹是否只读、被其他程序占用或磁盘空间不足。'
@@ -482,7 +489,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   if (session.isEnded) throw new Error('剪辑在打开期间已关闭。')
   const view = defaultSequenceView(document.sequences[0])
   const instance = {
-    document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id],
+    document, activeSequenceId: document.sequences[0]?.id ?? '', sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: document.sequences.slice(0, 1).map(sequence => sequence.id),
     session, past: [], future: [], ...view, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0,
   } as unknown as VideoEditInstance
   Object.defineProperties(instance, {

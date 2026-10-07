@@ -7,7 +7,7 @@ import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, 
 import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { DockviewApi } from 'dockview-react'
-import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, getActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditProject, openVideoEditProjectFolder, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, findActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditProject, openVideoEditProjectFolder, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { cancelVideoEditExport, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
@@ -55,7 +55,7 @@ function toggleMaximizedGroup(api: DockviewApi | null, hovered: Element | null):
 function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const { t } = useTranslation('ui')
-  const sequence = getActiveVideoEditSequence(instance); const projectId = instance.document.id
+  const sequence = findActiveVideoEditSequence(instance); const projectId = instance.document.id
   const task = videoEditExportTask(projectId)
   const marked = instance.inFrame !== null || instance.outFrame !== null ? (() => { try { return videoEditExportRange(instance) } catch { return undefined } })() : undefined
   const [collecting, setCollecting] = useState(false)
@@ -68,7 +68,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
   const undo = presentation('undo'); const redo = presentation('redo'); const exporting = presentation('export')
   const others = listVideoEditInstances().filter(item => item !== instance)
   return <UiToolbar variant="command" trailing={<>
-    {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence.fps)}</span>}
+    {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence!.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence!.fps)}</span>}
     <UiIconButton aria-label="撤销" title={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2 size={16} /></UiIconButton>
     <UiIconButton aria-label="重做" title={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2 size={16} /></UiIconButton>
     <VideoEditLayoutMenu api={api} />
@@ -98,7 +98,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
         <span className="truncate" data-observation-sensitive>{instance.document.name}</span><ChevronDown size={14} className="shrink-0 text-text3" />
       </UiButton>}
     </PanelTrigger>
-    <span className="shrink-0 truncate text-xs tabular-nums text-text3">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))} fps</span>
+    {sequence && <span className="shrink-0 truncate text-xs tabular-nums text-text3">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))} fps</span>}
     <VideoEditShortcutDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
   </UiToolbar>
 }
@@ -121,7 +121,6 @@ export default function VideoEditApp(): React.ReactElement {
   }
   const projectId = instance?.document.id
   const audioDialog = useVideoEditAudioDialog(projectId)
-  const sequence = instance ? getActiveVideoEditSequence(instance) : undefined
   const focusPanel = (target: EventTarget | null): void => {
     const panel = target instanceof HTMLElement ? target.closest<HTMLElement>('[data-video-edit-panel]')?.dataset.videoEditPanel : undefined
     if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content', 'lumetri'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
@@ -138,7 +137,7 @@ export default function VideoEditApp(): React.ReactElement {
     const panel = FOCUS_COMMANDS[binding.id]
     run(async () => { await executeVideoEditCommand(context, binding.id); if (panel) focusPanelElement(panel) })
   }}>
-    {instance && sequence ? <>
+    {instance ? <>
       <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={onNotice} />
       <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
     </> : <div className="min-h-0 flex-1">

@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -13,7 +14,7 @@ import { videoEditTrackerBox } from '../engine/videoEditTrackResults'
 import { analyzeVideoEditReframeOffThread } from './videoEditReframeWorkerClient'
 import { reframeVideoEdit } from './videoEditReframe'
 import { executeVideoEditReframeCapability, queueVideoEditReframe } from './videoEditReframeCapability'
-import { createVideoEditProject, editVideoProject, saveVideoEdit, undoVideoEdit } from './videoEditService'
+import { editVideoProject, saveVideoEdit, undoVideoEdit } from './videoEditService'
 import { closeAllVideoEdits, failVideoEditSaves, reopenVideoEdit, savedVideoEdit } from './videoEditDocumentTestKit'
 import { updateVideoEditClipKeyframes } from './videoEditClipProperties'
 import { detectVideoEditScenes } from './videoEditSceneDetection'

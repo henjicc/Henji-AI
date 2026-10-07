@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument, videoEditDocumentSchema, type VideoEditClip } from './document'
+import { videoEditDocumentSchema, type VideoEditClip } from './document'
 import { copyVideoEditSequence } from './sequenceCopy'
 import { evaluateVideoEditKeyframes, isVideoEditReframeKeyframe, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, writeVideoEditClipKeyframes } from './keyframes'
 import { generateVideoEditReframeKeyframes, smoothVideoEditAttention, videoEditReframeViewport, type VideoEditAttentionBox } from './reframe'

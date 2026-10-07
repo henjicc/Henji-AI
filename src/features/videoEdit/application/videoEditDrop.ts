@@ -1,8 +1,9 @@
+import { useSettingsStore } from '@/stores/settingsStore'
 import { HENJI_DRAG_DATA_MIME, readHenjiDragData } from '@/contexts/dragDataTransfer'
 import { getPlatform } from '@/platform/runtime'
 import { importVideoEditSources, type VideoEditImportSource } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, setVideoEditView } from './videoEditService'
-import { placeVideoEditItems, videoEditSequenceFromItem, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
+import { placeVideoEditItems, makeVideoEditItemSequence, videoEditSequenceFromItem, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from '@/core/videoEdit/document'
 import { applyVideoEditTimelineEditResult } from '@/core/videoEdit/timelineEdits'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
@@ -112,7 +113,8 @@ export interface VideoEditDropPlacement { frame: number; track?: number; newTrac
 export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: VideoEditDropPlacement, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void } = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()
-  const sequenceId = options.sequenceId ?? owner.activeSequenceId
+  let sequenceId = options.sequenceId ?? owner.activeSequenceId
+  const createSequence = Boolean(placement && !owner.document.sequences.length)
   if (input.kind === 'title_template') {
     if (!placement) throw new Error('请把标题模板拖到时间线或节目监视器。')
     return applyTitleTemplate(projectId, sequenceId, input.templateId, {}, placement)
@@ -126,6 +128,15 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前剪辑，不能跨剪辑引用素材项。')
   const apply = (source: VideoEditDocument, ids: string[]): VideoEditDocument => {
     if (!placement || !ids.length) return source
+    if (createSequence) {
+      if (source.sequences.length) throw new Error('已有新序列，请重新拖入。')
+      const first = source.items.find(item => item.id === ids[0])
+      const defaults = useSettingsStore.getState().videoEditSequenceDefaults
+      const settings = first?.kind === 'audio' ? { ...defaults, ...options.sequenceSettings } : { pixelAspectRatio: defaults.pixelAspectRatio, sampleRate: defaults.sampleRate, channels: defaults.channels, ...options.sequenceSettings }
+      const sequence = makeVideoEditItemSequence(source, ids, settings, readVideoEditCodeMetadata(owner, source))
+      sequenceId = sequence.id; selectedClip = sequence.clips.at(-1)?.id
+      return { ...source, sequences: [sequence] }
+    }
     const result = placeVideoEditDrop(source, ids, sequenceId, placement, { targetTrackIds, matchEmptySequence: Boolean(options.createSequenceWhenEmpty), ...(options.sequenceSettings ? { sequenceSettings: options.sequenceSettings } : {}), codeMetadata: readVideoEditCodeMetadata(owner, source) })
     selectedClip = result.selectedClip
     return result.document

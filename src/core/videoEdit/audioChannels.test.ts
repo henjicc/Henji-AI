@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { createVideoEditDocument, videoEditDocumentSchema, type VideoEditDocument, type VideoEditMedia } from './document'
+import { videoEditDocumentSchema, type VideoEditDocument, type VideoEditMedia } from './document'
 import {
   videoEditAudioMixReads, videoEditAudioPresetLayout, videoEditAudioPresetOf, videoEditAudioSourceLabel, videoEditClipAudioFormat, videoEditDefaultAudioGains,
   videoEditFileAudioLayout, videoEditIsDefaultAudioMapping, videoEditItemAudioLayout, videoEditSequentialAudioLayout, type VideoEditAudioMapping, type VideoEditAudioStream,

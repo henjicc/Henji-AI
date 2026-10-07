@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../features/videoEdit/application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { createCanvasTestProject, readCanvasTestProject, setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -11,7 +12,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { addCanvasNode, undoCanvasChange } from '@/features/canvas/application/canvasApplicationService'
-import { appendVideoEditMedia, appendVideoEditClip, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances, requireVideoEditInstance, setVideoEditView } from '@/features/videoEdit/application/videoEditService'
+import { appendVideoEditMedia, appendVideoEditClip, closeVideoEditProject, editVideoProject, listVideoEditInstances, requireVideoEditInstance, setVideoEditView } from '@/features/videoEdit/application/videoEditService'
 import { publishVideoEditOutput, type VideoEditOutputReceipt } from '@/features/videoEdit/application/videoEditOutputs'
 import type { VideoEditExportOptions } from '@/features/videoEdit/application/videoEditExport'
 import { sendVideoEditToCanvas, videoEditClipTransferSnapshot } from './workspaceTransfer'

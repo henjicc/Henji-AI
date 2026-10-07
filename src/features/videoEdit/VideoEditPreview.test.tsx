@@ -1,9 +1,10 @@
+import { createVideoEditTestProject as createVideoEditProject } from './application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { act, render, cleanup, fireEvent } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit } from './application/videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit } from './application/videoEditService'
 import { VideoEditPreview } from './VideoEditPreview'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
@@ -414,4 +415,18 @@ it('回放分辨率（4.9）：暂停也用 1/8 时，设为封面先按完整�
   await act(async () => { await vi.advanceTimersByTimeAsync(10) })
   expect(pixel.scale).toHaveBeenLastCalledWith(8)
   expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+
+it('删除唯一空序列时已挂载节目会话安全退出，撤销后可重新挂载', async () => {
+  const owner = await createVideoEditProject(); const id = owner.document.id; const onError = vi.fn()
+  const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => { await Promise.resolve() })
+  await act(async () => { deleteVideoEditSequence(id, owner.activeSequenceId); view.rerender(<VideoEditPreview instance={owner} onError={onError} />) })
+  expect(view.getByText('没有序列')).toBeTruthy()
+  await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+  expect(pixel.dispose).toHaveBeenCalled()
+  expect(onError).not.toHaveBeenCalled()
+  await act(async () => { undoVideoEdit(id); view.rerender(<VideoEditPreview instance={owner} onError={onError} />) })
+  expect(view.getByLabelText('剪辑画面')).toBeTruthy()
+  expect(onError).not.toHaveBeenCalled()
 })

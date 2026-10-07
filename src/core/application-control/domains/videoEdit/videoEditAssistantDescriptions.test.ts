@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../videoEdit/testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument } from '../../../videoEdit/document'
+
 import { makeVideoEditItemClip } from '../../../videoEdit/projectItems'
 import { planVideoEditInPlaceGeneration } from '../../../videoEdit/inPlaceGeneration'
 import { applyVideoEditTrim } from '../../../videoEdit/timelineTrims'

@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { createVideoEditDocument, videoEditDocumentSchema, type VideoEditClip, type VideoEditDocument } from './document'
+import { videoEditDocumentSchema, type VideoEditClip, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip, placeVideoEditItem } from './projectItems'
 import { landVideoEditInPlaceResult, planVideoEditInPlaceGeneration, switchVideoEditClipTake, videoEditTrackGap } from './inPlaceGeneration'
 import { videoEditSourceSeconds } from './time'

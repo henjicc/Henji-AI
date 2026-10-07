@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { createVideoEditDocument, changeVideoEditSequenceSettings, videoEditDocumentSchema, type VideoEditDocument } from './document'
+import { changeVideoEditSequenceSettings, videoEditDocumentSchema, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
 import { applyVideoEditTransitionPairs, dragVideoEditTransition, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount, videoEditTransitionRender, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS } from './transitions'

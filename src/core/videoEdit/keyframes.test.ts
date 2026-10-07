@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument, videoEditComposition, videoEditDocumentSchema, splitVideoEditClip, changeVideoEditSequenceSettings, type VideoEditClip } from './document'
+import { videoEditComposition, videoEditDocumentSchema, splitVideoEditClip, changeVideoEditSequenceSettings, type VideoEditClip } from './document'
 import { evaluateVideoEditClip, evaluateVideoEditKeyframes, sliceVideoEditCurves, videoEditKeyframesSchema, type VideoEditKeyframes } from './keyframes'
 import { videoEditClipCenterPosition, videoEditClipToFrame, videoEditFrameToClip } from './clipGeometry'
 import { applyVideoEditRateStretch } from './clipSpeedEdits'

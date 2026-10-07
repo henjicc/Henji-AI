@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
@@ -5,7 +6,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
-import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, listVideoEditInstances, setVideoEditProjectView, subscribeVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { appendVideoEditMedia, closeVideoEditProject, listVideoEditInstances, setVideoEditProjectView, subscribeVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { createVideoEditBin, updateVideoEditItems } from '../application/videoEditProjectItems'
 import { readVideoEditSource, registerVideoEditSourcePresenter } from '../application/videoEditSource'
 import { VideoEditProjectPanel } from './VideoEditProjectPanel'
@@ -81,13 +82,13 @@ it('双击素材请求正式源会话，双击空白使用当前箱导入，资�
   } finally { off() }
 })
 
-it('可变帧率素材通过真实序列服务创建，缺少帧率选择不会写入', async () => {
+it('可变帧率素材默认60帧，确认前可选择有理帧率且不会提前写入', async () => {
   const view = render(<View />)
   fireEvent.contextMenu(view.getByRole('button', { name: 'B原视频' }))
   fireEvent.click(view.getByText('按此素材新建序列'))
   await waitFor(() => expect(view.getByRole('dialog')).toBeTruthy())
   const history = instance.past.length
-  await act(async () => fireEvent.click(view.getByRole('button', { name: '确定' })))
+  expect(view.getByLabelText('帧率')).toHaveProperty('value', '60/1')
   expect(instance.document.sequences).toHaveLength(1); expect(instance.past).toHaveLength(history)
   fireEvent.change(view.getByLabelText('帧率'), { target: { value: '30000/1001' } })
   await act(async () => fireEvent.click(view.getByRole('button', { name: '确定' })))

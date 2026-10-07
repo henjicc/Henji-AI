@@ -1,8 +1,9 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
 import { compileCodeMaterial } from './codeMaterial/compiler'
 import { codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from './codeMaterialVersions'
-import { createVideoEditDocument, videoEditDocumentSchema } from './document'
+import { videoEditDocumentSchema } from './document'
 
 const compile = async (source: string) => compileCodeMaterial(source)
 const source = (defaultValue = .5) => `export default {apiVersion:1,name:"原生素材",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{amount:{type:"number",title:"数量",default:${defaultValue},min:0,max:1,step:.01}},render(ctx){return [rect({x:ctx.time,y:0,width:100,height:100,fill:[1,0,0,ctx.params.amount]})];}}`

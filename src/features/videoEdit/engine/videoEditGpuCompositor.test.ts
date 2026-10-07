@@ -1,6 +1,7 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { createVideoEditDocument, videoEditComposition } from '@/core/videoEdit/document'
+import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import type { VideoSample } from 'mediabunny'

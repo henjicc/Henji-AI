@@ -6,10 +6,7 @@ import { DocumentOperations } from '@/features/documents/documentOperations'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, fakeKindOf, FakeDocumentCommands } from '@/features/documents/documentSessionTestKit'
 import { getEmbeddedHost, resetEmbeddedHostsForTests, returnFromEmbedded } from '@/features/documents/embeddedDocuments'
-import {
-  appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances,
-  setVideoEditDocumentServicesForTests, undoVideoEdit, type VideoEditInstance,
-} from './videoEditService'
+import { createVideoEditProject, appendVideoEditSequence, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, listVideoEditInstances, setVideoEditDocumentServicesForTests, undoVideoEdit, type VideoEditInstance } from './videoEditService'
 import {
   bringDocumentIntoVideoEditProject, createDocumentInVideoEdit, listVideoEditReferencedDocuments, openVideoEditClipSource, relocateVideoEditClipSource,
 } from './videoEditComposition'
@@ -59,7 +56,7 @@ function placeClip(instance: VideoEditInstance, source: VideoEditCreativeSource)
 
 describe('嵌入模式与回到来源', () => {
   it('回到来源以嵌入模式打开来源文档并定位部位；返回时走工具的离开流程再回到剪辑', async () => {
-    const instance = await createVideoEditProject()
+    const instance = await createEditingProject()
     const voice = commands.seed({ kind: 'audio_edit', name: '片头口播', content: {} })
     const opener = vi.fn()
     operations.registerOpener('audio_edit', opener)
@@ -82,7 +79,7 @@ describe('嵌入模式与回到来源', () => {
   })
 
   it('来源文档找不到：给出重新定位所需的类型；重新定位后本剪辑里引用它的片段一起改指向，一次撤销恢复', async () => {
-    const instance = await createVideoEditProject()
+    const instance = await createEditingProject()
     const gone = { docId: 'gone-voice', path: 'D:/作品/口播/已删除.henji-audio' }
     const first = placeClip(instance, { type: 'document', docRef: gone })
     const second = placeClip(instance, { type: 'document', docRef: gone, revision: 2 })
@@ -102,7 +99,7 @@ describe('嵌入模式与回到来源', () => {
   })
 
   it('生成记录来源打开生成页并定位记录；记录被删时如实报告，不能重新定位', async () => {
-    const instance = await createVideoEditProject()
+    const instance = await createEditingProject()
     const clipId = placeClip(instance, { type: 'generation', recordId: 'history-1', outputIndex: 0 })
     navigation.readGeneration.mockResolvedValueOnce({ mediaType: 'image', source: 'D:/a.png', name: 'a' })
     expect(await openVideoEditClipSource(instance.document.id, clipId)).toEqual({ status: 'opened', kind: 'generation' })
@@ -114,7 +111,7 @@ describe('嵌入模式与回到来源', () => {
 
 describe('在剪辑里新建、移进与复制进项目', () => {
   it('新建的文档建在剪辑所在项目里（按序列画面尺寸），以嵌入模式打开；取消时什么都不留', async () => {
-    const instance = await createVideoEditProject()
+    const instance = await createEditingProject()
     const container = { kind: 'project' as const, projectId: projectIdOf(instance) }
     const creator = vi.fn(async (target: DocumentContainerRef): Promise<DocumentMeta> => { if (target.kind !== 'project') throw new Error('应建在项目里'); return commands.seed({ kind: 'camera_stage', name: '新镜头', content: {}, projectId: target.projectId, folder: commands.projects.get(target.projectId)!.path }) })
     operations.registerCreator('camera_stage', creator)
@@ -128,7 +125,7 @@ describe('在剪辑里新建、移进与复制进项目', () => {
   })
 
   it('别处的文档可移进或复制进本项目；片段引用的别处文档标为来自其他位置', async () => {
-    const instance = await createVideoEditProject()
+    const instance = await createEditingProject()
     const projectId = projectIdOf(instance)
     const moving = commands.seed({ kind: 'canvas', name: '要移的画布', content: { items: [] } })
     const copying = commands.seed({ kind: 'canvas', name: '要复制的画布', content: { items: [] } })
@@ -146,3 +143,10 @@ describe('在剪辑里新建、移进与复制进项目', () => {
     expect(commands.stored(copying.id)!.meta.container).toEqual({ kind: 'user' })
   })
 })
+
+/** 此套测试使用独立文档仓库，显式通过正式集合建立测试时间线。 */
+async function createEditingProject(): Promise<VideoEditInstance> {
+  const owner = await createVideoEditProject()
+  appendVideoEditSequence(owner.document.id, { frameRate: { numerator: 30, denominator: 1 } })
+  return owner
+}

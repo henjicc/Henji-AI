@@ -111,6 +111,7 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setVideoEditMonitorButtons: property('video_edit.monitor_buttons'),
     setVideoEditTrackHeaderButtons: property('video_edit.track_header_buttons'),
     setVideoEditDefaultTransition: property('video_edit.default_transitions'),
+    setVideoEditSequenceDefaults: property('video_edit.sequence_defaults'),
     setVideoEditSelectionFollowsPlayhead: property('video_edit.selection_follows_playhead'),
   },
 }

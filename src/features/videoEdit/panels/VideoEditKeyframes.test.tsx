@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
@@ -6,7 +7,7 @@ import path from 'node:path'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { appendVideoEditClip, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, subscribeVideoEdit, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { appendVideoEditClip, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, subscribeVideoEdit, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { applyVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 import { VideoEditEffectsPanel } from './VideoEditEffectsPanel'
 import { addVideoEditTextClipAt } from '../application/videoEditTimeline'

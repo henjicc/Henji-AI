@@ -1,3 +1,4 @@
+import { useSettingsStore } from '@/stores/settingsStore'
 import type { VideoEditLabel } from '@/core/videoEdit/labels'
 import { videoEditBinSchema, videoEditItemSchema, type VideoEditItem } from '@/core/videoEdit/document'
 import { placeVideoEditItems, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, videoEditItemUsage, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
@@ -17,7 +18,7 @@ export function makeVideoEditGraphicItem(input: VideoEditGraphicItemInput, dimen
 export function createVideoEditGraphicItem(projectId: string, input: VideoEditGraphicItemInput): string {
   const owner = requireVideoEditInstance(projectId)
   const sequence = owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId)!
-  const item = makeVideoEditGraphicItem(input, sequence)
+  const item = makeVideoEditGraphicItem(input, sequence ?? useSettingsStore.getState().videoEditSequenceDefaults)
   editVideoProject(projectId, document => ({ ...document, items: [...document.items, item] })); return item.id
 }
 export function createVideoEditAdjustmentItem(projectId: string, input: { name?: string; binId?: string } = {}): string {

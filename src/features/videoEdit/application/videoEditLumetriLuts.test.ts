@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto'
 import { resolve, sep } from 'node:path'
@@ -9,7 +10,7 @@ import { videoEditContentSchema } from '@/core/documents/kinds/videoEdit'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { createLocationCodec } from '@/core/storage/locationCodec'
 import { importVideoEditLumetriLut, readVideoEditLumetriLut } from './videoEditLumetriLuts'
-import { appendVideoEditClip, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit, videoEditDocumentContent, videoEditDocumentFromContent } from './videoEditService'
+import { appendVideoEditClip, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit, videoEditDocumentContent, videoEditDocumentFromContent } from './videoEditService'
 import { editVideoEditLumetri } from './videoEditLumetri'
 vi.mock('./videoEditCodeTrial', async original => ({ ...await original<typeof import('./videoEditCodeTrial')>(), trialVideoEditCodeDocument: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('./videoEditLumetriLutClient', async () => ({ decodeVideoEditLutOffThread: (await import('../engine/videoEditLumetriLutSource')).decodeVideoEditLut }))

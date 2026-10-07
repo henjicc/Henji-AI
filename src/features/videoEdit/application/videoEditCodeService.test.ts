@@ -1,3 +1,4 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
@@ -12,7 +13,7 @@ import { prepareVideoEditCodeCandidate, commitVideoEditCodeCandidate, disposeVid
 import { bindVideoEditCodeImage, chooseVideoEditCodeImage } from './videoEditCodeImages'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { videoEditComposition, createVideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { duplicateVideoEditSequence, editVideoSequence } from './videoEditService'
 import { createVideoEditEffect, updateVideoEditEffect, reorderVideoEditEffects, copyVideoEditEffects, deleteVideoEditEffects, createVideoEditTransition, updateVideoEditTransition, deleteVideoEditTransition } from './videoEditCompositing'

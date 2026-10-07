@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -7,7 +8,7 @@ import { getPlatform } from '@/platform/runtime'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditAudioOffset } from '@/core/videoEdit/multicamSync'
 import { createVideoEditMulticamCapability } from '@/core/application-control/domains/videoEdit/videoEditMulticamCapabilities'
-import { createVideoEditProject, editVideoProject, requireVideoEditInstance, undoVideoEdit, setVideoEditView } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, undoVideoEdit, setVideoEditView } from './videoEditService'
 import { closeAllVideoEdits, savedVideoEdit } from './videoEditDocumentTestKit'
 import { autoSwitchVideoEditMulticam, createVideoEditMulticamSource, switchVideoEditMulticam, videoEditProgramMulticam } from './videoEditMulticam'
 import { VideoEditMulticamView } from '../panels/VideoEditMulticamView'

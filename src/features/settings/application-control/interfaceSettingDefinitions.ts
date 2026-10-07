@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_SEQUENCE_DEFAULTS, videoEditSequenceDefaultsSchema } from '@/core/videoEdit/sequenceDefaults'
 import { THEME_PRESET_IDS, type ThemeContrastLevel } from '@/core/theme/themeEngine'
 import {
   THEME_CONTRAST_LEVEL_IDS,
@@ -34,6 +35,12 @@ function writeThemePreset(preset: ThemeSelectionPreset): void {
 }
 
 export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
+  storeSetting({
+    id: 'video_edit.sequence_defaults', title: '新建序列默认规格', description: '手动新建序列与仅拖入音频时使用的宽高、帧率、像素长宽比、音频采样率和声道。初始为1920×1080、60帧；图片按原尺寸和60帧，可靠视频按原尺寸和帧率。',
+    aliases: ['序列默认值', '序列默认规格', '默认分辨率', '默认帧率'], schema: videoEditSequenceDefaultsSchema, defaultValue: VIDEO_EDIT_SEQUENCE_DEFAULTS,
+    target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().videoEditSequenceDefaults,
+  value => useSettingsStore.getState().setVideoEditSequenceDefaults(value)),
   storeSetting({
     id: 'video_edit.shortcuts', title: '剪辑快捷键', description: '设置剪辑命令的键位；同一面板作用域的冲突会被拒绝，空配置恢复默认。',
     aliases: ['剪辑快捷键', '改键', '时间线键位', 'shortcuts'], schema: videoEditShortcutOverridesSchema, defaultValue: {},

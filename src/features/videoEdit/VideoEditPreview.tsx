@@ -12,7 +12,7 @@ import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { isDomNode } from '@/utils/crossRealmDom'
-import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, findActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
@@ -94,7 +94,7 @@ const DISPLAY_PERIOD_REFRESH_MS = 5000
 /** 第一块声音已混好时的起播提前量：只够把它排进声音时钟。 */
 const PLAY_PREMIXED_LEAD_SECONDS = 0.03
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
-export function VideoEditPreview({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
+function VideoEditPreviewContent({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   const [multicamView, setMulticamView] = useState(false)
   const multicam = videoEditProgramMulticam(instance)
   const [canvasSend, setCanvasSend] = useState<VideoEditCanvasSendRequest | null>(null)
@@ -155,7 +155,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     const renderer = new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen(), undefined, instance.document.id); session.current = renderer
     const unsubscribe = subscribeVideoEditDomain(() => {
       if (stopped) return
-      if (getActiveVideoEditSequence(instance) !== appliedDocument) { stopAudio(); setLevels([]) }
+      if (findActiveVideoEditSequence(instance) !== appliedDocument) { stopAudio(); setLevels([]) }
       renderer.invalidateDocument(instance.document.revision)
     })
     const unsubscribeView = subscribeVideoEditView(() => {
@@ -251,7 +251,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       try {
         const current = requireVideoEditInstance(instance.document.id)
         const command = videoEditProgramCommandIdentity(instance.document.id)
-        const document = getActiveVideoEditSequence(current)
+        const document = findActiveVideoEditSequence(current)
+        if (!document) { stopAudio(); return }
         requestCommand = command; requestDocument = document
         if (failedDocument) {
           if (failedDocument === document && failedFrame === current.frame && Date.now() < failedRetryAt) { timer = setTimeout(() => { void loop() }, 250); return }
@@ -292,7 +293,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           const initialResult = await renderer.present(initialFrame, direction === 1)
           if (stopped) return
           if (initialResult.presented === true) recordPresentation(initialFrame, initialResult, requestedAt, false, document.revision)
-          if (!current.playing || !listVideoEditInstances().includes(instance) || getActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
+          if (!current.playing || !listVideoEditInstances().includes(instance) || findActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented === false) { lastFrame = -1; lastRequested = -1; wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented !== true) recordPresentation(initialFrame, initialResult, requestedAt, false, document.revision)
           const phaseFirst = performance.now()
@@ -301,7 +302,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           if (audioReady) {
             await audioReady
             if (stopped) return
-            if (!current.playing || !listVideoEditInstances().includes(instance) || getActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
+            if (!current.playing || !listVideoEditInstances().includes(instance) || findActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
             if (audio) meter ??= createVideoEditAudioMeter(audio, document.channels)
           }
           if (stopped) return
@@ -314,7 +315,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           const clockNow = performance.now(); const audioNow = audio?.currentTime ?? 0
           const clockAt = vsync !== undefined && displayPeriod ? alignVideoEditClockToDisplay(clockNow + lead * 1000, vsync, displayPeriod) : clockNow + lead * 1000
           clockStart = audioNow + (clockAt - clockNow) / 1000; startFrame = initialFrame; audioScheduler.start(initialFrame / document.fps)
-          if (!current.playing || getActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
+          if (!current.playing || findActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           clockPerformanceStart = clockAt
           surface.dataset.playStartPhases = JSON.stringify({ at: phaseStart, yieldMs: phaseYield - phaseStart, firstFrameMs: phaseFirst - phaseYield, audioMs: clockNow - phaseFirst })
           surface.dataset.playClockStartAt = String(clockPerformanceStart)
@@ -332,7 +333,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
                 const block = firstBlock; firstBlock = undefined
                 return block?.document === document && block.from === from && block.duration === duration ? block.buffer : (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration)
               },
-              isCurrent: () => !stopped && listVideoEditInstances().includes(instance) && getActiveVideoEditSequence(instance) === document && videoEditProgramCommandIdentity(instance.document.id) === command,
+              isCurrent: () => !stopped && listVideoEditInstances().includes(instance) && findActiveVideoEditSequence(instance) === document && videoEditProgramCommandIdentity(instance.document.id) === command,
               onError: error => { setVideoEditView(instance.document.id, { playing: false }, true); onError(error) },
             })
           }
@@ -357,7 +358,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
             // A completed seek is useful while the pointer keeps moving. Only a different
             // document/lifetime invalidates it; the next iteration reads the latest target.
             if (stopped || !listVideoEditInstances().includes(instance)) return
-            if (getActiveVideoEditSequence(current) !== document) {
+            if (findActiveVideoEditSequence(current) !== document) {
               // An already submitted draw cannot be undone by a later parameter edit.
               // Report that same-surface fact without advancing the new document's clock.
               if (result.presented === true) recordPresentation(target, result, requestedAt, scrubbing, document.revision)
@@ -390,7 +391,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         if (!stopped && !scheduled) timer = setTimeout(() => { void loop() }, current.playing ? 0 : 2)
       } catch (error) {
         if (stopped || !listVideoEditInstances().includes(instance)) return
-        if (getActiveVideoEditSequence(instance) !== requestDocument || videoEditProgramCommandIdentity(instance.document.id) !== requestCommand) { timer = setTimeout(() => { void loop() }, 0); return }
+        if (findActiveVideoEditSequence(instance) !== requestDocument || videoEditProgramCommandIdentity(instance.document.id) !== requestCommand) { timer = setTimeout(() => { void loop() }, 0); return }
         setVideoEditView(instance.document.id, { playing: false }, true)
         // Shown on the program monitor itself and cleared by the next presented frame.
         logger.warn('节目画面渲染失败', { event: 'video_edit.preview.render_failed', error, context: { projectId: instance.document.id, revision: requestDocument.revision, cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined } })
@@ -574,4 +575,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     </div>
     {canvasSend && <VideoEditCanvasSendDialog request={canvasSend} onClose={() => setCanvasSend(null)} />}
   </div>
+}
+
+export function VideoEditPreview(props: Parameters<typeof VideoEditPreviewContent>[0]): React.ReactElement {
+  return props.instance.activeSequenceId ? <VideoEditPreviewContent {...props} /> : <UiEmpty className="h-full" title="没有序列" />
 }

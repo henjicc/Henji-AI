@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { createVideoEditDocument, type VideoEditClip, type VideoEditDocument } from '@/core/videoEdit/document'
+import { type VideoEditClip, type VideoEditDocument } from '@/core/videoEdit/document'
 import { updateVideoEditProjectCover, videoEditCoverSource, videoEditFrameSourceAt } from './videoEditProjectCover'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 

@@ -83,7 +83,7 @@ function LumetriEditor({ target, clip, selectedId, onError }: { target: VideoEdi
 }
 
 /** Dock and native popout use this same body. Selection follows the existing primary selected clip. */
-export function VideoEditLumetriPanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
+function VideoEditLumetriPanelContent({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
   const sequence = getActiveVideoEditSequence(instance); const clip = sequence.clips.find(value => value.id === instance.selection)
   const [choice, setChoice] = useState<{ clipId: string; effectId: string }>()
   const effects = clip?.effects?.filter(effect => effect.builtin?.id === VIDEO_EDIT_LUMETRI.id) ?? []
@@ -94,4 +94,8 @@ export function VideoEditLumetriPanel({ instance, onError, visible = true }: { i
     {effects.length > 1 && <Dropdown ariaLabel="编辑 Lumetri 效果" value={selectedId || effects[0].id} options={effects.map((effect, i) => ({ value: effect.id, label: `${effect.name} ${i + 1}` }))} onSelect={effectId => setChoice({ clipId: clip.id, effectId })} />}
     {visible && <LumetriEditor key={`${instance.document.id}:${sequence.id}:${clip.id}:${selectedId}`} target={{ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }} clip={clip} selectedId={selectedId} onError={onError} />}
   </div>
+}
+
+export function VideoEditLumetriPanel(props: Parameters<typeof VideoEditLumetriPanelContent>[0]): React.ReactElement {
+  return props.instance.activeSequenceId ? <VideoEditLumetriPanelContent {...props} /> : <UiEmpty className="h-full" title="没有序列" />
 }

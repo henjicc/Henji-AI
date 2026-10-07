@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument, type VideoEditDocument } from './document'
+import { type VideoEditDocument } from './document'
 import { removeVideoEditItems } from './projectItems'
 
 it('删除图片素材项保留代码图片引用，随后移除最后代码素材项回收原媒体', () => {

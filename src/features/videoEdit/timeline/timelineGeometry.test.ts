@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
+import { type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { TIMELINE_NEW_TRACK_ZONE, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineWheelAction } from './timelineGeometry'
 

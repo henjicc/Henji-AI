@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -8,7 +9,7 @@ import { BLACK_HEX } from '@/core/theme/colorTokens'
 import { videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 import { layoutVideoEditText } from '@/core/videoEdit/text'
 import { defaultVideoEditTextStyle } from '@/core/videoEdit/text'
-import { appendVideoEditClip, appendVideoEditSequence, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from '../application/videoEditService'
+import { appendVideoEditClip, appendVideoEditSequence, editVideoSequence, getActiveVideoEditSequence, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from '../application/videoEditService'
 import { closeAllVideoEdits, reopenVideoEdit } from '../application/videoEditDocumentTestKit'
 import { setVideoEditMaskEditing } from '../application/videoEditMaskEditing'
 import { setVideoEditTrackingEditing } from '../application/videoEditTrackingEditing'

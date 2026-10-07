@@ -1,6 +1,8 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
-import { createVideoEditDocument, videoEditDocumentSchema } from '@/core/videoEdit/document'
+import { videoEditDocumentSchema } from '@/core/videoEdit/document'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import type { CodeMaterialKeyframe } from '@/core/videoEdit/codeMaterialAnimation'
@@ -8,7 +10,7 @@ import { validateVideoEditGraphicTextBudget } from './videoEditGraphicTextBudget
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditProject, closeVideoEditProject, editVideoProject, listVideoEditInstances, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition, type VideoEditInstance } from './videoEditService'
+import { closeVideoEditProject, editVideoProject, listVideoEditInstances, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition, type VideoEditInstance } from './videoEditService'
 import { appendVideoEditItems, createVideoEditGraphicItem } from './videoEditProjectItems'
 import { renameVideoEditGraphicObject } from './videoEditGraphics'
 import { setVideoEditCodeParameter } from './videoEditCodeParameters'

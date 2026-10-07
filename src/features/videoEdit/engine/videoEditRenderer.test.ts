@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
+import { createVideoEditSequence, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'

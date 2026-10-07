@@ -9,7 +9,7 @@ import { getVideoEditTrackingEditing, setVideoEditTrackingEditing, subscribeVide
 import { runVideoEditTracking, stopVideoEditTracking, subscribeVideoEditTracking, videoEditTrackingFailureText, videoEditTrackingRequest, videoEditTrackingRevision, videoEditTrackingStatus, videoEditTrackingStatusText } from '../application/videoEditTracking'
 import { updateVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 
-export function VideoEditTrackingPanel({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
+function VideoEditTrackingPanelContent({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   useSyncExternalStore(subscribeVideoEditTracking, videoEditTrackingRevision)
@@ -79,4 +79,8 @@ export function VideoEditTrackingPanel({ instance, onError }: { instance: VideoE
       </UiGroup>
     </>}
   </div>
+}
+
+export function VideoEditTrackingPanel(props: Parameters<typeof VideoEditTrackingPanelContent>[0]): React.ReactElement {
+  return props.instance.activeSequenceId ? <VideoEditTrackingPanelContent {...props} /> : <UiEmpty className="h-full" title="没有序列" />
 }

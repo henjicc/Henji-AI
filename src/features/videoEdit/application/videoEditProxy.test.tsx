@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
@@ -5,7 +6,7 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances } from './videoEditService'
+import { appendVideoEditMedia, closeVideoEditProject, editVideoProject, listVideoEditInstances } from './videoEditService'
 import { autoCreateVideoEditProxies, cancelVideoEditProxy, createVideoEditProxy, getVideoEditProxyPreference, getVideoEditProxySources, readVideoEditProxyState, refreshVideoEditProxies, resetVideoEditProxyPreferenceCache, setVideoEditProxyPreference, verifiedVideoEditProxySources } from './videoEditProxy'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'

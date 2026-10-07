@@ -6,7 +6,7 @@ import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { applyVideoEditTimelineEdit, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { videoEditSyncCorrections } from '@/core/videoEdit/linkSync'
-import { appendVideoEditSequence, createVideoEditProject, focusVideoEditPanel, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, videoEditProgramCommandIdentity, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
+import { appendVideoEditSequence, createVideoEditProject, focusVideoEditPanel, findActiveVideoEditSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, videoEditProgramCommandIdentity, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
 import { chooseVideoEditMedia } from './videoEditMedia'
 import { openVideoEditAudioGainDialog, openVideoEditExportDialog } from './videoEditAudioDialogs'
 import { videoEditClipHasSound } from './videoEditLoudness'
@@ -47,7 +47,7 @@ const contexts = new WeakMap<VideoEditCommandContext, ContextState>()
  */
 export function captureVideoEditCommandContext(projectId: string | undefined, scope: VideoEditCommandScope, options: { clipIds?: string[]; linked?: VideoEditRelations; itemIds?: string[]; frame?: number; includeClipboard?: boolean } = {}): VideoEditCommandContext {
   const owner = projectId ? requireVideoEditInstance(projectId) : undefined
-  const sequence = owner && getActiveVideoEditSequence(owner)
+  const sequence = owner && findActiveVideoEditSequence(owner)
   let clipIds: string[] = []
   if (sequence && owner) clipIds = options.clipIds ? expandVideoEditSelection(sequence, options.clipIds, options.linked ?? false) : owner.selectedClipIds.slice()
   const context = Object.freeze({ projectId, sequenceId: owner?.activeSequenceId, scope, clipIds: Object.freeze(clipIds), itemIds: Object.freeze(options.itemIds?.slice() ?? owner?.selectedItemIds.slice() ?? []), frame: options.frame ?? owner?.frame ?? 0 })
@@ -167,17 +167,21 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     const { owner, source } = stateOf(context)
     if (id === 'new_project') return { enabled: true }
     if (!owner) return { enabled: false, reason: '请先打开剪辑。' }
-    const sequence = getActiveVideoEditSequence(owner)
     if (id === 'undo' || id === 'redo') return { enabled: Boolean(id === 'undo' ? owner.past.length : owner.future.length), reason: '没有可恢复的编辑。' }
+    if (id in FOCUS_PANELS || id === 'maximize_panel' || id === 'save' || id === 'import') return { enabled: true }
+    if (id === 'new_sequence') return { enabled: owner.document.sequences.length < 32, reason: '序列数量已达上限。' }
+    if (id === 'new_bin') return { enabled: owner.document.bins.length < 200, reason: '素材箱数量已达上限。' }
+    if (id === 'open_in_source') return { enabled: owner.document.items.some(item => context.itemIds.includes(item.id) && item.mediaId), reason: '请先选择有源文件的素材项。' }
+    if (id === 'deselect_all' && context.scope === 'project') return { enabled: true }
+    const sequence = findActiveVideoEditSequence(owner)
+    if (!sequence) return { enabled: false, reason: '没有序列，请先新建序列。' }
     if (isVideoEditToolCommand(id)) return { enabled: true, checked: owner.tool === VIDEO_EDIT_TOOL_COMMANDS[id] }
     if (id === 'match_frame' || id === 'reverse_match_frame') { const reason = videoEditMatchFrameUnavailable(owner, id, context.clipIds, context.frame, context.scope); return { enabled: !reason, ...(reason ? { reason } : {}) } }
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
     if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
     if (id === 'export') return { enabled: sequence.clips.length > 0, reason: '序列没有可导出的片段。' }
-    if (id in FOCUS_PANELS || id === 'maximize_panel' || id === 'deselect_all') return { enabled: true }
+    if (id === 'deselect_all') return { enabled: true }
     if (PROJECT_PANEL_COMMANDS.has(id)) return { enabled: false, reason: '请在素材面板中使用。' }
-    if (id === 'new_bin') return { enabled: owner.document.bins.length < 200, reason: '素材箱数量已达上限。' }
-    if (id === 'open_in_source') return { enabled: owner.document.items.some(item => context.itemIds.includes(item.id) && item.mediaId), reason: '请先选择有源文件的素材项。' }
     if (NAVIGATIONS.has(id)) { const target = navigationTarget(context, id); return { enabled: target.frame !== undefined, reason: target.reason } }
     if (id === 'mark_clip' || id === 'select_clip_at_playhead') return { enabled: targetClipsAtFrame(context).length > 0, reason: '播放头处的目标轨道没有片段。' }
     if (id === 'add_marker') return { enabled: (sequence.markers?.length ?? 0) < 500, reason: '序列最多500个标记。' }
@@ -251,7 +255,18 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   if (!available.enabled) throw new Error(available.reason ?? '此命令当前不可用。')
   const { owner, source } = stateOf(context)
   if (id === 'new_project') { await createVideoEditProject(); return }
-  const projectId = owner!.document.id; const sequenceId = context.sequenceId!; const sequence = getActiveVideoEditSequence(owner!)
+  const projectId = owner!.document.id
+  // 项目级命令在零时间线时仍可用，先于所有时间线计算执行。
+  if (id === 'undo' || id === 'redo') { undoVideoEdit(projectId, id === 'redo'); return }
+  if (id === 'save') { await saveVideoEdit(projectId); return }
+  if (id === 'import') { await chooseVideoEditMedia(projectId, owner!.selectedBinId || undefined); return }
+  if (id === 'new_sequence') { switchVideoEditSequence(projectId, appendVideoEditSequence(projectId)); return }
+  if (id in FOCUS_PANELS) { focusVideoEditPanel(projectId, FOCUS_PANELS[id as keyof typeof FOCUS_PANELS]); return }
+  if (id === 'maximize_panel') return
+  if (id === 'new_bin') { const binId = createVideoEditBin(projectId, `素材箱 ${owner!.document.bins.length + 1}`, owner!.selectedBinId || undefined); setVideoEditProjectView(projectId, { selectedBinId: binId, selectedItemIds: [] }); return }
+  if (id === 'open_in_source') { await updateVideoEditSource(projectId, { itemId: owner!.document.items.find(item => context.itemIds.includes(item.id) && item.mediaId)!.id }); focusVideoEditPanel(projectId, 'source'); return }
+  if (id === 'deselect_all' && context.scope === 'project') { setVideoEditProjectView(projectId, { selectedItemIds: [] }); return }
+  const sequenceId = context.sequenceId!; const sequence = getActiveVideoEditSequence(owner!)
   const transitionRequest = TRANSITION_COMMANDS[id]
   if (transitionRequest) { await applyVideoEditDefaultTransitions(projectId, sequenceId, videoEditDefaultTransitionTargets(owner!, transitionRequest, context.clipIds, context.frame)); return }
   const transitionId = (id === 'delete' || id === 'ripple_delete') && !context.clipIds.length ? selectedVideoEditTransitionId(owner!) : undefined
@@ -259,21 +274,14 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   const intent = timelineIntent(context, id)
   if (intent) { executeVideoEditTimelineEdit(projectId, sequenceId, intent); if (intent.kind === 'place') focusVideoEditPanel(projectId, 'timeline'); return }
   switch (id) {
-    case 'new_sequence': { const id = appendVideoEditSequence(projectId); switchVideoEditSequence(projectId, id); return }
-    case 'import': await chooseVideoEditMedia(projectId, owner!.selectedBinId || undefined); return
-    case 'save': await saveVideoEdit(projectId); return
-    case 'undo': case 'redo': undoVideoEdit(projectId, id === 'redo'); return
     case 'export': openVideoEditExportDialog(projectId); return
     case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'rate_stretch_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'pen_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return
     case 'match_frame': await matchVideoEditFrame(projectId, [...context.clipIds], context.frame); return
     case 'reverse_match_frame': reverseMatchVideoEditFrame(projectId); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
     case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
-    case 'focus_project': case 'focus_source': case 'focus_timeline': case 'focus_program': case 'focus_effects': focusVideoEditPanel(projectId, FOCUS_PANELS[id]); return
     // 面板组最大化属于布局，由剪辑页拿着停靠区执行；素材视图属于素材面板。命令层无事可做。
-    case 'maximize_panel': case 'project_list_view': case 'project_icon_view': case 'project_toggle_view': return
-    case 'new_bin': { const binId = createVideoEditBin(projectId, `素材箱 ${owner!.document.bins.length + 1}`, owner!.selectedBinId || undefined); setVideoEditProjectView(projectId, { selectedBinId: binId, selectedItemIds: [] }); return }
-    case 'open_in_source': await updateVideoEditSource(projectId, { itemId: owner!.document.items.find(item => context.itemIds.includes(item.id) && item.mediaId)!.id }); focusVideoEditPanel(projectId, 'source'); return
+    case 'project_list_view': case 'project_icon_view': case 'project_toggle_view': return
     case 'go_prev_edit': case 'go_next_edit': case 'go_prev_edit_any': case 'go_next_edit_any': case 'go_start': case 'go_end': case 'go_in': case 'go_out': case 'next_marker': case 'prev_marker':
       setVideoEditView(projectId, { frame: navigationTarget(context, id).frame!, playing: false }); return
     case 'mark_clip': { const clips = targetClipsAtFrame(context); setVideoEditTimelineView(projectId, { inFrame: Math.min(...clips.map(clip => clip.start)), outFrame: Math.max(...clips.map(clip => clip.start + clip.duration)) }); return }

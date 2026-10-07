@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, it, expect } from 'vitest'
-import { createVideoEditDocument, videoEditDocumentSchema, changeVideoEditSequenceSettings, videoEditDuration } from './document'
+import { videoEditDocumentSchema, changeVideoEditSequenceSettings, videoEditDuration } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
 import { assertVideoEditLockedTracks } from './lockedTracks'

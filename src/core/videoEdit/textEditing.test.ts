@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { createVideoEditDocument, videoEditComposition, videoEditDocumentSchema, type VideoEditClip } from './document'
+import { videoEditComposition, videoEditDocumentSchema, type VideoEditClip } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { addLegacyVideoEditTracks } from './testFixtures'
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, mapVideoEditTextRange, resolveVideoEditTextRanges, videoEditTranscriptWords } from './textTranscript'

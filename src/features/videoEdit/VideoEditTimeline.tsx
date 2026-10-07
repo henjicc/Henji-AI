@@ -1,3 +1,4 @@
+import { VideoEditEmptyTimeline } from './panels/VideoEditEmptyTimeline'
 import { Link, Magnet, Minus, Plus, Scissors, SquareSplitHorizontal, Trash2 } from 'lucide-react'
 import { UiIconButton, UiRangeInput } from '@/components/ui'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
@@ -17,7 +18,7 @@ const ZOOM_MAX = 20
  * 时间线（界面重设计 3.5，设计稿 VideoEdit）：只有一条工具栏——序列标签 ｜ 工具（模式，选中态，按 PR 工具面板分组）· 唯一一条分隔线 ·
  * 链接选择、吸附（开关）与拆分、删除（动作）｜ 缩放。文字由文字工具（T）在轨道上单击添加。播放控制在节目监视器。
  */
-export function VideoEditTimeline({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
+function VideoEditTimelineContent({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   const sequence = getActiveVideoEditSequence(instance)
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const context = captureVideoEditCommandContext(instance.document.id, 'timeline')
@@ -51,4 +52,8 @@ export function VideoEditTimeline({ instance, onError, visible = true }: { insta
     </div>
     <VideoEditTimelineCanvas key={JSON.stringify([instance.document.id, sequence.id])} instance={instance} sequence={sequence} pixels={60 * instance.zoom / sequence.fps} onError={onError} visible={visible} />
   </div>
+}
+
+export function VideoEditTimeline(props: Parameters<typeof VideoEditTimelineContent>[0]): React.ReactElement {
+  return props.instance.activeSequenceId ? <VideoEditTimelineContent {...props} /> : <VideoEditEmptyTimeline instance={props.instance} onError={props.onError} />
 }

@@ -1,6 +1,7 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
 import { CODE_ASSET_LIMITS, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from './codeAsset'
-import { createVideoEditDocument, videoEditDocumentSchema } from './document'
+import { videoEditDocumentSchema } from './document'
 
 const content = { sizeBytes: 123, fileModifiedAt: 456, contentIdentity: 'a'.repeat(64) }
 const fixture = (): CodeAsset => ({ format: 'henji-code-asset', version: 1, name: '透明标题', sourceVersion: { apiVersion: 1, languageVersion: 2, source: 'source' }, parameters: { label: '中文', size: 20, tint: [1, 0, 0, 1], image: { kind: 'image', mediaId: 'old-image' } }, curves: { size: [{ id: 'key', sourceInUs: 1, sourceRemainder: { numerator: 1, denominator: 3 }, value: 21, interpolation: 'ease' }] }, images: [{ id: 'old-image', path: 'D:/original.png', content, assetId: 'original' }] })

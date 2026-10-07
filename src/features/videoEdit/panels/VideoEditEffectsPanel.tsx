@@ -33,7 +33,7 @@ function ClipNameHeader({ clip, onRename }: { clip: VideoEditClip; onRename: (na
  * 效果控件（对齐 PR）：片段名 → 片段固有效果（运动 / 不透明度 / 颜色 / 音频，可折叠、逐项重置）→ 代码参数或图形 →
  * 附加效果链 → 过渡 → 标注。时间与轨道读数属于时间线，不在这里重复。
  */
-export function VideoEditEffectsPanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
+function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const errorHandler = useRef(onError); errorHandler.current = onError
   const reportError = useCallback((reason: unknown): void => errorHandler.current(reason), [])
@@ -61,4 +61,8 @@ export function VideoEditEffectsPanel({ instance, onError, visible = true }: { i
         <UiIconButton tone="danger" aria-label="删除标注" title="删除标注" onClick={() => run(() => editVideoSequence(projectId, sequence.id, draft => ({ ...draft, annotations: draft.annotations.filter(item => item.id !== mark.id) })))}><Trash2 size={14} /></UiIconButton></div>)}
     </UiGroup>}
   </div>
+}
+
+export function VideoEditEffectsPanel(props: Parameters<typeof VideoEditEffectsPanelContent>[0]): React.ReactElement {
+  return props.instance.activeSequenceId ? <VideoEditEffectsPanelContent {...props} /> : <UiEmpty className="h-full" title="没有序列" />
 }

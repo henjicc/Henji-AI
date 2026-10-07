@@ -1,12 +1,14 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditDocument } from '@/core/videoEdit/document'
+
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { insertVideoEditTracks, removeVideoEditTracks, videoEditEdgeTracks, videoEditTrackCodes } from '@/core/videoEdit/tracks'
-import { closeVideoEditProject, createVideoEditProject, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { closeVideoEditProject, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { addVideoEditTracks, deleteVideoEditTracks } from './videoEditTimeline'
 
 beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/tracks.henji-video') })

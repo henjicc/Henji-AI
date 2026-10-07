@@ -39,7 +39,7 @@ export const videoEditContentSchema = z.object({
   media: z.array(z.looseObject({ id: z.string().min(1), path: z.string().min(1) })),
   bins: z.array(identified),
   items: z.array(identified),
-  sequences: z.array(sequenceSchema).min(1),
+  sequences: z.array(sequenceSchema),
   codeMaterials: z.array(identified).optional(),
   posterFrame: z.looseObject({ sequenceId: z.string().min(1), frame: z.number() }).optional(),
   inPlaceGenerations: videoEditInPlaceRecordsSchema.optional(),
@@ -91,36 +91,9 @@ function summarizeVideoEdit(content: VideoEditDocumentContent): { clips: number;
   }
 }
 
-/** 新剪辑的空内容：一条 1920×1080、30 fps 的空序列（一条视频轨、一条音频轨，同 PR），与剪辑工具新建时相同。 */
+/** 新剪辑只有素材集合，时间线由用户新建或首次拖入素材时建立。 */
 function createEmptyVideoEditContent(): VideoEditDocumentContent {
-  const track = (index: number) => ({
-    id: crypto.randomUUID(),
-    name: index === 0 ? '音频 1' : '视频 1',
-    index,
-    kind: index === 0 ? 'audio' : 'video',
-    locked: false,
-    enabled: true,
-    muted: false,
-    solo: false,
-  })
-  return {
-    media: [],
-    bins: [],
-    items: [],
-    sequences: [{
-      id: crypto.randomUUID(),
-      name: '序列 1',
-      width: 1920,
-      height: 1080,
-      frameRate: { numerator: 30, denominator: 1 },
-      pixelAspectRatio: { numerator: 1, denominator: 1 },
-      sampleRate: 48000,
-      channels: 2,
-      tracks: Array.from({ length: 2 }, (_, index) => track(index)),
-      clips: [],
-      annotations: [],
-    }],
-  }
+  return { media: [], bins: [], items: [], sequences: [] }
 }
 
 export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentContent> = {

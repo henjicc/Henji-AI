@@ -1,9 +1,10 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
 import { compileCodeMaterial } from './codeMaterial/compiler'
 import { evaluateCodeMaterial } from './codeMaterial/evaluate'
 import { codeMaterialContextForFrame } from './codeMaterialTiming'
 import { codeMaterialSource, validateCodeMaterialDocument } from './codeMaterialDocument'
-import { createVideoEditDocument, videoEditDocumentSchema, videoEditComposition, splitVideoEditClip, adjustVideoEditClip } from './document'
+import { videoEditDocumentSchema, videoEditComposition, splitVideoEditClip, adjustVideoEditClip } from './document'
 import { makeVideoEditItemClip, makeVideoEditItemSequence } from './projectItems'
 
 const source = (mode = 'dynamic') => `export default {apiVersion:1,name:"原创透明形状",kind:"generator",mode:"${mode}",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{amount:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}},render(ctx){return [rect({x:${mode === 'dynamic' ? 'ctx.time*10' : '10'},y:10,width:100,height:100,fill:[1,0,0,ctx.params.amount]})];}}`

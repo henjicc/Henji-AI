@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { createVideoEditDocument, splitVideoEditClip, videoEditDocumentSchema, type VideoEditClip } from './document'
+import { splitVideoEditClip, videoEditDocumentSchema, type VideoEditClip } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit } from './timelineEdits'
 import { applyVideoEditTrim } from './timelineTrims'

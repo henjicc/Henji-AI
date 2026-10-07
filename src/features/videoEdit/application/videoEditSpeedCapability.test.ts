@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -7,7 +8,7 @@ import { createApplicationCapabilitySession } from '@/features/application-contr
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
 import { closeAllVideoEdits, savedVideoEdit } from './videoEditDocumentTestKit'
-import { createVideoEditProject, editVideoProject, getActiveVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
+import { editVideoProject, getActiveVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}

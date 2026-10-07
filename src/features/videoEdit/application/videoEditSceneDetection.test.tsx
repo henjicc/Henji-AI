@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react'
@@ -8,7 +9,7 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditSceneCutFrames } from '@/core/videoEdit/sceneEdits'
 import { VideoEditSceneDetectionDialog } from '../panels/VideoEditSceneDetectionDialog'
 import { detectVideoEditScenes, applyVideoEditScenes } from './videoEditSceneDetection'
-import { createVideoEditProject, editVideoProject, getActiveVideoEditSequence, undoVideoEdit } from './videoEditService'
+import { editVideoProject, getActiveVideoEditSequence, undoVideoEdit } from './videoEditService'
 import { closeAllVideoEdits, savedVideoEdit, failVideoEditSaves } from './videoEditDocumentTestKit'
 import { appendVideoEditItems } from './videoEditProjectItems'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './videoEditSource'

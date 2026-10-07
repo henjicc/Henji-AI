@@ -256,7 +256,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
         selectedRefs,
       }
     : navigation.activeWorkspace === 'videoEdit'
-      ? { id: 'workspace.video_edit', kind: 'workspace' as const, focusedRef: videoEdit ? `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}` : null, selectedRefs }
+      ? { id: 'workspace.video_edit', kind: 'workspace' as const, focusedRef: videoEdit?.activeSequenceId ? `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}` : null, selectedRefs }
     : navigation.activeWorkspace === 'tools' && navigation.activeToolId
       ? {
           id: navigation.activeToolId === 'imageMark'
@@ -320,7 +320,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     generation: { commandReady: generationReady },
     ...(videoEdit ? { videoEdit: {
       documentRef: `video_edit.document:${videoEdit.document.id}`,
-      sequenceRef: `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}`,
+      sequenceRef: videoEdit.activeSequenceId ? `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}` : null,
       frame: videoEdit.frame, playing: videoEdit.playing, inFrame: videoEdit.inFrame, outFrame: videoEdit.outFrame, focusedPanel: videoEdit.activePanel,
       selectedClipRefs: videoEdit.selectedClipIds.slice(0, 48).map(id => `video_edit.clip:${videoEdit.document.id}:${id}`),
       targetTrackRefs: videoEdit.targetTrackIds.slice(0, 32).map(id => `video_edit.track:${videoEdit.document.id}:${id}`),

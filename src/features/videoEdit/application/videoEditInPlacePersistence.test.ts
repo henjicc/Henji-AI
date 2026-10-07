@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -5,7 +6,7 @@ import { getPlatform } from '@/platform/runtime'
 import { videoEditContentSchema, videoEditDocumentKind } from '@/core/documents/kinds/videoEdit'
 import { landVideoEditInPlaceResult, planVideoEditInPlaceGeneration } from '@/core/videoEdit/inPlaceGeneration'
 import type { VideoEditInPlaceRecord } from '@/core/videoEdit/inPlacePersistence'
-import { appendVideoEditClip, beginVideoEditGesture, createVideoEditProject, editVideoProject, finishVideoEditGesture, saveVideoEdit, undoVideoEdit, updateVideoEditInPlaceMetadata, updateVideoEditPicturePosition } from './videoEditService'
+import { appendVideoEditClip, beginVideoEditGesture, editVideoProject, finishVideoEditGesture, saveVideoEdit, undoVideoEdit, updateVideoEditInPlaceMetadata, updateVideoEditPicturePosition } from './videoEditService'
 import { closeAllVideoEdits, reopenVideoEdit, savedVideoEdit } from './videoEditDocumentTestKit'
 import { readVideoEditInPlaceJob, resetVideoEditInPlaceJobsForTest } from './videoEditInPlaceGeneration'
 

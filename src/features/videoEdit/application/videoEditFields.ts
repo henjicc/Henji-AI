@@ -36,7 +36,7 @@ export const VIDEO_EDIT_COMPOSITE_CASCADES = (['create', 'update', 'delete'] as 
 export const VIDEO_EDIT_SOURCE_PROGRAM_CASCADE = { declarationId: 'video_edit.source_foreground_program_pause', effect: 'update' as const, entityType: 'video_edit.document', propertyIds: ['video_edit.document.program_playback'], revisionScopes: ['video_edit'] }
 export const VIDEO_EDIT_PROGRAM_SOURCE_CASCADE = { declarationId: 'video_edit.program_foreground_source_pause', effect: 'update' as const, entityType: 'video_edit.source', propertyIds: ['video_edit.source.playing'], revisionScopes: ['video_edit'] }
 const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
-  'video_edit.document': { name: z.string().min(1).max(200), frame: z.number().int().nonnegative(), selection: z.string(), activeSequenceId: z.string(), dirty: z.boolean(), selectedItemIds: z.array(z.string().min(1)).max(500), selectedBinId: z.string().max(100), openSequenceIds: z.array(z.string().min(1)).min(1).max(32) },
+  'video_edit.document': { name: z.string().min(1).max(200), frame: z.number().int().nonnegative(), selection: z.string(), activeSequenceId: z.string(), dirty: z.boolean(), selectedItemIds: z.array(z.string().min(1)).max(500), selectedBinId: z.string().max(100), openSequenceIds: z.array(z.string().min(1)).max(32) },
   // 速度（4.13）以 speed_percent 百分比公开（见下），不公开内部有理数。
   'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => !['id', 'sourceRemainder', 'speed', 'curves'].includes(key))),
   'video_edit.annotation': Object.fromEntries(Object.entries(videoEditAnnotationSchema.shape).filter(([key]) => key !== 'id' && key !== 'sourceRemainder')),
@@ -163,6 +163,7 @@ const descriptions: Record<string, string> = {
   'video_edit.effect.curves': '代码滤镜的参数关键帧（源时间微秒）；内置效果使用 parameters.<参数名>.keyframes（片段内整数帧），这里保持空对象。',
   'video_edit.transition.kind': '过渡种类，可改成同一媒介的其他种类（改种类时没写的参数回到新种类的默认值）。视频：cross_dissolve 交叉溶解、dip_to_black 黑场、dip_to_white 白场、wipe 擦除、push 推动、slide 滑动、cross_zoom 缩放过渡、blur_dissolve 模糊过渡、flash 闪光、iris_round 圆形划像；音频：constant_power 恒定功率、constant_gain 恒定增益、exponential_fade 指数淡化。每种的用途与参数见 video_edit.builtin_effect 里的 transition:<种类>。',
   'video_edit.transition.parameters': '带参数过渡（wipe、push、slide、cross_zoom、blur_dissolve、flash、iris_round）的参数，键与范围见 video_edit.builtin_effect 的 transition:<种类> 的 params（方向用选项值，羽化、边框等按画面高度比例，与分辨率无关）。写入是整体替换：只存写入的键，没写的键按默认值（只改一项时先读出再整体写回）；空对象表示全部默认；越界或未知键会报错并列出可用范围。其余种类没有参数，保持空对象。',
+  'video_edit.document.active_sequence_id': '当前序列 ID；空字符串表示没有序列。新项目不含任何序列，可在 video_edit.document 下通过 video_edit.sequence 集合创建（name 与可选 width/height/frame_rate），再放入素材。',
   'video_edit.document.proxy_preference': '代理看片偏好。enabled=true 节目与源监视器用已有低分辨率代理，false用原片；声音、导出、选帧、跟踪与智能区域分析始终用原片。没有代理的素材仍用原片。autoCreate=true 导入超过1920×1080的视频时自动后台创建720p代理；本机按剪辑记住，不改内容，可事务撤销。',
   'video_edit.media.proxy_state': '代理状态，只读：none无代理、generating后台创建中、ready已有；progress为0–1，error为失败原因。代理创建使用generate_video_edit_proxy，切换使用video_edit.document.proxy_preference。',
   'video_edit.document.playback_resolution': '节目监视器的回放分辨率（只影响看片时的流畅度与清晰度，不改剪辑内容，不进剪辑历史）。resolution：full 完整、half 1/2、quarter 1/4、eighth 1/8（按序列宽高各缩小到该比例渲染，素材多、效果重、播放卡顿时调低）。fullWhenPaused：true 暂停时自动回到完整分辨率（默认，便于看清细节），false 暂停时也用所选分辨率。导出、选帧加入资产库、设为项目封面始终按完整分辨率，与此无关。按剪辑记住。',

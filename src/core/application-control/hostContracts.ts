@@ -62,7 +62,7 @@ export const hostContextSnapshotSchema = z.object({
   /** Present only while the edit workspace is in front; refs use the public catalog format. */
   videoEdit: z.object({
     documentRef: z.string().min(1).max(500),
-    sequenceRef: z.string().min(1).max(500),
+    sequenceRef: z.string().min(1).max(500).nullable(),
     frame: z.number().int().nonnegative(),
     playing: z.boolean(),
     inFrame: z.number().int().nonnegative().nullable(),

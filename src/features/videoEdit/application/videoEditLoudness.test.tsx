@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
@@ -10,7 +11,7 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { applyVideoEditAudioGain, measureVideoEditClips } from './videoEditLoudness'
 import { VideoEditAudioGainDialog } from '../panels/VideoEditAudioGainDialog'
 import { cancelVideoEditExport, exportVideoEdit, videoEditExportTask } from './videoEditExport'

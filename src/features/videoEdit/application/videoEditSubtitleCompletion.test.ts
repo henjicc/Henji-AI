@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -10,7 +11,7 @@ import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
-import { createVideoEditProject, closeVideoEditProject, listVideoEditInstances, undoVideoEdit, videoEditBusyReason, type VideoEditInstance } from './videoEditService'
+import { closeVideoEditProject, listVideoEditInstances, undoVideoEdit, videoEditBusyReason, type VideoEditInstance } from './videoEditService'
 import { createVideoEditCaption, updateVideoEditTimedContent } from './videoEditTimedContent'
 import { createVideoEditSubtitleLibraryStore, useVideoEditSubtitleLibraryStore, applyVideoEditSubtitlePreset, VIDEO_EDIT_SUBTITLE_LIBRARY_STORAGE_KEY } from './videoEditSubtitlePresets'
 import { generateVideoEditBilingualSubtitles, confirmVideoEditBilingualSubtitles } from './videoEditBilingualSubtitles'

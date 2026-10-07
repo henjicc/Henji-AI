@@ -22,6 +22,7 @@ export function VideoEditExportDialog({ projectId, onClose }: { projectId: strin
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const canExport = Boolean(owner.document.sequences.find(sequence => sequence.id === sequenceId)?.clips.length)
   const patch = (values: Partial<VideoEditExportSettings>): void => setSettings(previous => ({ ...previous, ...values }))
   const selectPreset = (id: string): void => { const value = presets.find(value => value.id === id); if (value) { setPresetId(id); setSettings(value.settings) } }
   const selectSequence = (id: string): void => { setSequenceId(id); try { setRange(videoEditExportRange(owner, id)); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }
@@ -42,7 +43,7 @@ export function VideoEditExportDialog({ projectId, onClose }: { projectId: strin
     try { const value = videoEditExportPresetLibrary.save(name, settings); setPresetId(value.id); setName(''); setNotice('自定义预设已保存。'); setError('') }
     catch (reason) { setError(videoEditUserErrorMessage(reason)) }
   }
-  return <UiModal isOpen title="导出" onClose={() => { if (!busy) onClose() }} footer={<><UiButton disabled={busy} onClick={onClose}>关闭</UiButton><UiButton variant="secondary" disabled={busy} onClick={() => void submit(false)}>加入队列</UiButton><UiButton variant="primary" disabled={busy} onClick={() => void submit(true)}>{busy ? '正在处理…' : '立即导出'}</UiButton></>}>
+  return <UiModal isOpen title="导出" onClose={() => { if (!busy) onClose() }} footer={<><UiButton disabled={busy} onClick={onClose}>关闭</UiButton><UiButton variant="secondary" disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton variant="primary" disabled={busy || !canExport} onClick={() => void submit(true)}>{busy ? '正在处理…' : '立即导出'}</UiButton></>}>
     <UiGroup>
       <UiFormRow label="序列" inline><UiSelect aria-label="导出序列" value={sequenceId} disabled={busy} onChange={event => selectSequence(event.target.value)}>{owner.document.sequences.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</UiSelect></UiFormRow>
       <UiFormRow label="预设" inline><UiSelect aria-label="导出预设" value={presetId} disabled={busy} onChange={event => selectPreset(event.target.value)}>{presets.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</UiSelect></UiFormRow>

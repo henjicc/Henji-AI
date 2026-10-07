@@ -159,6 +159,12 @@ async function latestVideoEditDocument(page) {
  */
 async function adoptNewVideoEditProject(page, fixtureFile) {
   await button(page, '关闭项目').waitFor({ state: 'visible', timeout: 30000 })
+  // 这些既有剪辑场景需要时间线；通过正式界面显式建立，并维持夹具约定的30帧。
+  await button(page, '新建序列').click()
+  await page.getByRole('dialog').waitFor({ state: 'visible' })
+  await page.getByLabel('帧率', { exact: true }).selectOption('30/1')
+  await button(page, '确定').click()
+  await page.getByRole('dialog').waitFor({ state: 'hidden' })
   const latest = await latestVideoEditDocument(page)
   await page.evaluate(async ({ projectId }) => {
     const documents = window.henjiNative.documents

@@ -1,8 +1,9 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 // @vitest-environment jsdom
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DockviewApi } from 'dockview-react'
-import { createVideoEditDocument } from '@/core/videoEdit/document'
+
 import type { VideoEditInstance } from '../application/videoEditService'
 import { VideoEditDock } from './VideoEditDock'
 import { dockVideoEditPanel, resetVideoEditLayout, saveVideoEditLayout, showVideoEditPanel } from './videoEditDockLayout'

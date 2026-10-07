@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument } from '@/core/videoEdit/document'
+
 import { selectVideoEditProjectItems, videoEditBinPath, videoEditProjectColumns, videoEditProjectRows } from './videoEditProjectModel'
 
 const byName = { key: 'name', direction: 'asc' } as const

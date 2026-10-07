@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
@@ -9,7 +10,7 @@ import { resetFilmstripFramesForTests } from '@/services/videoFilmstrip/filmstri
 import type { WaveformSourceRef, WaveformState } from '@/hooks/useWaveformData'
 import type { WaveformViewProps } from '@/components/waveform/WaveformView'
 import { VideoEditTimeline } from '../VideoEditTimeline'
-import { closeVideoEditProject, createVideoEditProject, editVideoProject, setVideoEditTimelineView, subscribeVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { closeVideoEditProject, editVideoProject, setVideoEditTimelineView, subscribeVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 // 固定源峰值；断言宿主传给统一绘制器的源范围与方向，不重复测试波形聚合算法。

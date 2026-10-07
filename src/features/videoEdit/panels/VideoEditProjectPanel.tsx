@@ -122,7 +122,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const menu = useContextMenu()
   const binId = instance.selectedBinId
   const activeSequence = instance.document.sequences.find(sequence => sequence.id === instance.activeSequenceId)
-  const fallbackFps = activeSequence ? videoEditFps(activeSequence.frameRate) : 30
+  const fallbackFps = activeSequence ? videoEditFps(activeSequence.frameRate) : 60
   const rows = useMemo(() => videoEditProjectRows(instance.document, binId, keyword, sort, view === 'grid' ? NO_EXPANDED : expanded, fallbackFps), [instance.document, binId, keyword, sort, view, expanded, fallbackFps])
   const entries = useMemo(() => rows.map(row => row.entry), [rows])
   const binPath = videoEditBinPath(instance.document.bins, binId)
@@ -188,7 +188,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     if (entry.kind === 'sequence') return [
       { id: 'open', label: '打开序列', icon: <Play size={16} />, onClick: () => run(() => switchVideoEditSequence(projectId, entry.value.id)) },
       { id: 'settings', label: '序列设置与重命名', icon: <Settings2 size={16} />, onClick: () => setSequenceDialog({ kind: 'edit', id: entry.value.id, settings: entry.value }) },
-      { id: 'delete', label: '移除空序列', icon: <Trash2 size={16} />, disabled: instance.document.sequences.length <= 1 || !!entry.value.clips.length || !!entry.value.annotations.length, onClick: () => run(() => deleteVideoEditSequence(projectId, entry.value.id)) },
+      { id: 'delete', label: '移除空序列', icon: <Trash2 size={16} />, disabled: !!entry.value.clips.length || !!entry.value.annotations.length, onClick: () => run(() => deleteVideoEditSequence(projectId, entry.value.id)) },
       labelItem({ itemIds: [], binIds: [], sequenceIds: [entry.value.id] }, entry.value.label),
     ]
     const item = entry.value
@@ -203,7 +203,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       { id: 'create_proxy', label: '创建代理…', icon: <ProxyIcon size={16} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => setProxyMediaIds(proxyIds) },
       { id: 'cancel_proxy', label: '取消创建代理', icon: <RefreshCw size={16} />, disabled: !proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => proxyIds.forEach(id => cancelVideoEditProxy(projectId, id)) },
       { id: 'preview', label: '打开源素材', icon: <Play size={16} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
-      { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, icon: <Plus size={16} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
+      { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, disabled: !activeSequence, icon: <Plus size={16} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
       { id: 'sequence', label: item.kind === 'adjustment' ? '调整图层请添加到现有序列' : '按此素材新建序列', icon: <SequenceIcon size={16} />, disabled: ids.length !== 1 || item.kind === 'adjustment', onClick: () => createFromItem(item.id) },
       { id: 'edit', label: '重命名、标签与移动', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'items', items }) },
       labelItem({ itemIds: items.map(value => value.id), binIds: [], sequenceIds: [] }, items.length === 1 ? item.label : undefined),
@@ -406,7 +406,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       else if (edit.kind === 'bin') updateVideoEditBin(projectId, edit.bin.id, { name: values.name, parentId: values.binId || null })
       else updateVideoEditItems(projectId, edit.items.map(item => item.id), { ...(values.name !== undefined ? { name: values.name } : {}), binId: values.binId || null, ...(values.tags !== undefined ? { tags: values.tags } : {}) })
     }} />}
-    {sequenceDialog && <VideoEditSequenceDialog title={sequenceDialog.kind === 'edit' ? '序列设置' : sequenceDialog.kind === 'fromItem' ? '按素材新建序列' : '新建序列'} initial={sequenceDialog.settings} bins={instance.document.bins} requireFrameRate={sequenceDialog.requireFrameRate} onClose={() => setSequenceDialog(null)} onSubmit={settings => {
+    {sequenceDialog && <VideoEditSequenceDialog title={sequenceDialog.kind === 'edit' ? '序列设置' : sequenceDialog.kind === 'fromItem' ? '按素材新建序列' : '新建序列'} saveDefaults={sequenceDialog.kind !== 'edit'} initial={sequenceDialog.settings} bins={instance.document.bins} requireFrameRate={sequenceDialog.requireFrameRate} onClose={() => setSequenceDialog(null)} onSubmit={settings => {
       if (sequenceDialog.kind === 'edit') updateVideoEditSequenceSettings(projectId, sequenceDialog.id!, settings)
       else if (sequenceDialog.kind === 'fromItem') createVideoEditSequenceFromItem(projectId, sequenceDialog.id!, settings)
       else switchVideoEditSequence(projectId, appendVideoEditSequence(projectId, { ...settings, binId: settings.binId || undefined }))

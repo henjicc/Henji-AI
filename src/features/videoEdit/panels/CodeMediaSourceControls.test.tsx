@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
@@ -13,7 +14,7 @@ import { commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate, prepareVid
 import { readVideoEditCodeEditor, setVideoEditCodeParameter } from '../application/videoEditCodeParameters'
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { VIDEO_EDIT_ITEM_DRAG_MIME } from '../application/videoEditDrop'
-import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, subscribeVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, subscribeVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { CodeImageParameterControl } from './CodeImageParameterControl'
 import { VideoEditEffectsPanel } from './VideoEditEffectsPanel'
 

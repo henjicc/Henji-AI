@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -5,7 +6,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { buildVideoEditTextTranscription } from '@/core/videoEdit/textTranscript'
 import { videoEditComposition } from '@/core/videoEdit/document'
-import { createVideoEditProject, editVideoProject, undoVideoEdit } from './videoEditService'
+import { editVideoProject, undoVideoEdit } from './videoEditService'
 import { editVideoEditText } from './videoEditTextEditing'
 import { closeAllVideoEdits, savedVideoEdit, reopenVideoEdit, failVideoEditSaves } from './videoEditDocumentTestKit'
 import { handleVideoEditTextCapability } from './videoEditTextCapability'

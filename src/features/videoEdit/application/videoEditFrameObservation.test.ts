@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { Blob as NativeBlob } from 'node:buffer'
@@ -6,7 +7,7 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { appendVideoEditMedia, appendVideoEditClip, closeVideoEditProject, createVideoEditProject, listVideoEditInstances, setVideoEditView } from './videoEditService'
+import { appendVideoEditMedia, appendVideoEditClip, closeVideoEditProject, listVideoEditInstances, setVideoEditView } from './videoEditService'
 
 // The production renderer is the replaced pixel boundary; composition building, scaling,
 // library collection and the public capability are real.

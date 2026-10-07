@@ -1,10 +1,11 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { applyVideoEditTransitionToSelection, updateVideoEditTransitionParams } from './videoEditTransitions'
-import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, createVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, undoVideoEdit } from './videoEditService'
 import { endVideoEditEffectDrag, handleVideoEditEffectDragOver, VIDEO_EDIT_EFFECT_DRAG_TYPE, videoEditEffectDropClips, videoEditEffectDropTarget } from '../panels/videoEditEffectDrag'
 
 // 任务 4.7 视频过渡与效果拖放落点：试渲染只替换像素边界；领域校验、事务、注册与读回都是正式实现。

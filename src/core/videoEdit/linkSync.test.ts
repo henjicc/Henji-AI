@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument, videoEditDocumentSchema, type VideoEditDocument } from './document'
+import { videoEditDocumentSchema, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips, type VideoEditTimelineEdit } from './timelineEdits'
 import { expandVideoEditSelection, selectVideoEditRegion, videoEditPickRelations } from './timelineSelection'

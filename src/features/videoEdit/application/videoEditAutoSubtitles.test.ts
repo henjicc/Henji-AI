@@ -1,9 +1,10 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditProject, closeVideoEditProject, listVideoEditInstances, editVideoProject, undoVideoEdit, videoEditBusyReason, setVideoEditTimelineView, videoEditDocumentOperations, type VideoEditInstance } from './videoEditService'
+import { closeVideoEditProject, listVideoEditInstances, editVideoProject, undoVideoEdit, videoEditBusyReason, setVideoEditTimelineView, videoEditDocumentOperations, type VideoEditInstance } from './videoEditService'
 import { loadAudioEditProject, resetAudioEditProjectInstancesForTests } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles, styleVideoEditSubtitles, subtitleRange } from './videoEditAutoSubtitles'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'

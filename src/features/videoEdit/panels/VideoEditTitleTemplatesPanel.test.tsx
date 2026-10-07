@@ -1,8 +1,9 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { createVideoEditProject, undoVideoEdit } from '../application/videoEditService'
+import { undoVideoEdit } from '../application/videoEditService'
 import { closeAllVideoEdits } from '../application/videoEditDocumentTestKit'
 import { useTitleTemplateLibrary } from '../application/videoEditTitleTemplateLibrary'
 import { VideoEditTitleTemplatesPanel } from './VideoEditTitleTemplatesPanel'

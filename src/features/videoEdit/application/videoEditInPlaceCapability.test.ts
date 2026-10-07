@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createVideoEditDocument, type VideoEditDocument } from '@/core/videoEdit/document'
+import { type VideoEditDocument } from '@/core/videoEdit/document'
 import { landVideoEditInPlaceResult, planVideoEditInPlaceGeneration } from '@/core/videoEdit/inPlaceGeneration'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'

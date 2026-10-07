@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
@@ -6,7 +7,7 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import path from 'node:path'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditSequence } from '@/core/videoEdit/document'
-import { createVideoEditProject, listVideoEditInstances, closeVideoEditProject, editVideoProject, switchVideoEditSequence, undoVideoEdit, saveVideoEdit, subscribeVideoEditDomain } from './videoEditService'
+import { listVideoEditInstances, closeVideoEditProject, editVideoProject, switchVideoEditSequence, undoVideoEdit, saveVideoEdit, subscribeVideoEditDomain } from './videoEditService'
 import { VideoEditCollectionExecutor } from './videoEditExecutors'
 import { captureVideoEditResultTarget, commitVideoEditCreativeResult, type VideoEditCreativeResult } from './videoEditResultTarget'
 import { VIDEO_EDIT_FIELDS } from './videoEditFields'

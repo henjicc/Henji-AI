@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
@@ -7,7 +8,7 @@ import { registry } from '@/core/ModelRegistry'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, subscribeVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, subscribeVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { resetVideoEditInPlaceJobsForTest, startVideoEditInPlaceGeneration } from '../application/videoEditInPlaceGeneration'
 import { VideoEditTimeline } from '../VideoEditTimeline'
 import { resetFilmstripFramesForTests } from '@/services/videoFilmstrip/filmstripFrameService'

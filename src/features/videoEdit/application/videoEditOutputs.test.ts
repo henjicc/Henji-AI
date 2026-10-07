@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { Blob as NativeBlob } from 'node:buffer'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -10,7 +11,7 @@ import { createApplicationCapabilitySession } from '@/features/application-contr
 import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { resetCanvasApplicationStateForTests } from '@/features/canvas/application/canvasApplicationService'
-import { closeVideoEditProject, createVideoEditProject, editVideoSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView } from './videoEditService'
+import { closeVideoEditProject, editVideoSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView } from './videoEditService'
 import { appendVideoEditCaptionText, exportVideoEditSubtitles } from './videoEditTimedContent'
 import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './videoEditProgramCapture'
 import { collectVideoEditOutput, publishVideoEditOutput } from './videoEditOutputs'

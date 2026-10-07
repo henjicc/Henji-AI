@@ -1,8 +1,9 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditProject, appendVideoEditMedia, listVideoEditInstances, closeVideoEditProject, undoVideoEdit, getActiveVideoEditSequence, editVideoProject } from './videoEditService'
+import { appendVideoEditMedia, listVideoEditInstances, closeVideoEditProject, undoVideoEdit, getActiveVideoEditSequence, editVideoProject } from './videoEditService'
 import { updateVideoEditSource, registerVideoEditSourcePresenter } from './videoEditSource'
 import { captureVideoEditSourceRange, placeVideoEditSourceRange } from './videoEditSourceRange'
 beforeEach(() => {

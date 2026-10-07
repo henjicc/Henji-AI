@@ -201,7 +201,7 @@ function Panel({ instance, sequenceId, visible = true, onError }: PanelProps): R
   const ownerKey = useMemo(() => `${instance.document.id}:${crypto.randomUUID()}`, [instance])
   if (!visible || !listVideoEditInstances().includes(instance)) return null
   const sequence = instance.document.sequences.find(value => value.id === (sequenceId ?? instance.activeSequenceId))
-  return sequence ? <ContentWorkspace key={`${ownerKey}:${sequence.id}`} instance={instance} sequence={sequence} onError={onError} /> : <UiEmpty title="原序列已移除" />
+  return sequence ? <ContentWorkspace key={`${ownerKey}:${sequence.id}`} instance={instance} sequence={sequence} onError={onError} /> : <UiEmpty title={instance.document.sequences.length ? "原序列已移除" : "没有序列"} />
 }
 
 // Program frame observations mutate the instance but do not rebuild this list.

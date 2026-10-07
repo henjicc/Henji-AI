@@ -10,7 +10,7 @@ import { listTitleTemplates, requireTitleTemplate, useTitleTemplateLibrary } fro
 import { applyTitleTemplate, editTitleTemplateSelection, saveTitleTemplateSelection, writeTitleTemplateDrag } from '../application/videoEditTitleTemplates'
 import { confirmTitleFromDescription } from '../application/videoEditTitleDescription'
 
-export function VideoEditTitleTemplatesPanel({ instance, onError }: { instance: VideoEditInstance; visible?: boolean; onError: (error: unknown) => void }): React.ReactElement {
+function VideoEditTitleTemplatesPanelContent({ instance, onError }: { instance: VideoEditInstance; visible?: boolean; onError: (error: unknown) => void }): React.ReactElement {
   const templates = useTitleTemplateLibrary(state => state.templates); const loadError = useTitleTemplateLibrary(state => state.error)
   const [query, setQuery] = useState(''); const [selected, setSelected] = useState('title:lower_third'); const [parameters, setParameters] = useState(titleTemplateParametersSchema.parse({ text: '姓名', subtitle: '身份 / 职务' }))
   const [changes, setChanges] = useState<Partial<TitleTemplateParameters>>({}); const [name, setName] = useState('我的标题'); const [description, setDescription] = useState(() => parseLegacyPromptString('')); const [busy, setBusy] = useState(false)
@@ -50,4 +50,8 @@ export function VideoEditTitleTemplatesPanel({ instance, onError }: { instance: 
     <UiGroup title="另存为模板" titleTone="compact"><UiFormRow label="名称" density="compact"><UiInput aria-label="模板名称" size="sm" value={name} onChange={event => setName(event.target.value)} /></UiFormRow><UiButton size="sm" disabled={!instance.selectedClipIds.length || Boolean(loadError) || templates.length >= 128} onClick={() => run(() => { const saved = saveTitleTemplateSelection(projectId, sequence.id, instance.selectedClipIds, name); choose(saved.id) })}>保存所选文字 / 图形组合</UiButton></UiGroup>
     <UiGroup title="描述生成" titleTone="compact"><PromptEditor preset="plain" layout="fill-scroll" ariaLabel="标题动画描述" value={description} onChange={setDescription} placeholder="科技感蓝色的人名条，左侧滑入" editorClassName="min-h-24 max-h-60" /><div className="flex gap-2"><UiButton size="sm" disabled={busy || !toPromptPlainText(description).trim()} onClick={() => { void generate() }}>{busy ? '生成中…' : '生成并添加'}</UiButton>{busy && <UiButton size="sm" onClick={() => abort.current?.abort()}>取消</UiButton>}</div></UiGroup>
   </div>
+}
+
+export function VideoEditTitleTemplatesPanel(props: Parameters<typeof VideoEditTitleTemplatesPanelContent>[0]): React.ReactElement {
+  return props.instance.activeSequenceId ? <VideoEditTitleTemplatesPanelContent {...props} /> : <UiEmpty className="h-full" title="没有序列" />
 }

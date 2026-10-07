@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
@@ -8,7 +9,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { VIDEO_EDIT_EXPORT_PRESETS } from '@/core/videoEdit/exportPresets'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { appendVideoEditClip, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange } from './videoEditService'
+import { appendVideoEditClip, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange } from './videoEditService'
 import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'

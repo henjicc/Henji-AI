@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_SEQUENCE_DEFAULTS, videoEditSequenceDefaultsSchema, type VideoEditSequenceDefaults } from '@/core/videoEdit/sequenceDefaults';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { parseVideoEditShortcutOverrides, sanitizeVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
@@ -97,6 +98,8 @@ interface SettingsState {
   assetDragEdgeDelayMs: number;
   assetCardSize: number;
   assetThumbnailFit: AssetThumbnailFit;
+  videoEditSequenceDefaults: VideoEditSequenceDefaults;
+  setVideoEditSequenceDefaults: (value: VideoEditSequenceDefaults) => void;
   videoEditShortcuts: VideoEditShortcutOverrides;
   /** 剪辑节目／源监视器按钮栏（按钮编辑器）；只存改过的那一侧。 */
   videoEditMonitorButtons: VideoEditMonitorButtonLayouts;
@@ -241,6 +244,8 @@ export const useSettingsStore = create<SettingsState>()(
       assetDragEdgeDelayMs: 180,
       assetCardSize: 180,
       assetThumbnailFit: 'cover',
+      videoEditSequenceDefaults: structuredClone(VIDEO_EDIT_SEQUENCE_DEFAULTS),
+      setVideoEditSequenceDefaults: (value) => set({ videoEditSequenceDefaults: videoEditSequenceDefaultsSchema.parse(value) }),
       videoEditShortcuts: {},
       videoEditMonitorButtons: {},
       videoEditTrackHeaderButtons: {},
@@ -345,7 +350,7 @@ export const useSettingsStore = create<SettingsState>()(
       // 剪辑快捷键：默认键位随版本对齐 PR 时，旧改键里不认识或与新默认冲突的部分在恢复时让出，避免读设置失败。
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<SettingsState>;
-        return { ...currentState, ...persisted, videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons), videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(persisted.videoEditDefaultTransitions) };
+        return { ...currentState, ...persisted, videoEditSequenceDefaults: videoEditSequenceDefaultsSchema.parse(persisted.videoEditSequenceDefaults ?? VIDEO_EDIT_SEQUENCE_DEFAULTS), videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons), videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(persisted.videoEditDefaultTransitions) };
       },
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;

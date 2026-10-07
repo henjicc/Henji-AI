@@ -1,6 +1,7 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
 import { videoEditAudioContent } from './audioContent'
-import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditDocument } from './document'
+import { createVideoEditSequence, videoEditComposition, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { nestVideoEditClips } from './nestedSequences'
 

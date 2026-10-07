@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument, videoEditComposition, videoEditDocumentSchema } from './document'
+import { videoEditComposition, videoEditDocumentSchema } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTrim } from './timelineTrims'
 import { applyVideoEditMulticamCuts, changeVideoEditMulticamCamera, createVideoEditMulticam, suggestVideoEditMulticamCuts, videoEditMulticamComposition } from './multicam'

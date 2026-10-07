@@ -1,4 +1,4 @@
-import type { VideoEditDocument } from '@/core/videoEdit/document'
+import { createVideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { closeVideoEditProject, createVideoEditProject, listVideoEditInstances, openVideoEditDocument, videoEditDocumentContent, type VideoEditInstance } from './videoEditService'
@@ -66,9 +66,18 @@ export async function openSeededVideoEdit(document: VideoEditDocument): Promise<
  * 需要多条视频轨的用例用它，打开后没有编辑历史、磁盘内容即八条轨道。
  */
 export async function createLegacyTrackVideoEditProject(): Promise<VideoEditInstance> {
-  const created = await createVideoEditProject()
+  const created = await createVideoEditTestProject()
   const document = structuredClone(created.document)
   addLegacyVideoEditTracks(document.sequences[0])
   replaceSavedVideoEdit(document.id, document)
   return await reopenVideoEdit(document.id)
+}
+
+/** 编辑测试显式建时间线；先存入夹具仓库再重开，初始无编辑历史。 */
+export async function createVideoEditTestProject(): Promise<VideoEditInstance> {
+  const created = await createVideoEditProject()
+  const document = structuredClone(created.document)
+  document.sequences.push(createVideoEditSequence())
+  replaceSavedVideoEdit(created.document.id, document)
+  return reopenVideoEdit(created.document.id)
 }

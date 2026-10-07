@@ -1,3 +1,4 @@
+import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -9,7 +10,7 @@ import { videoEditEffectMaskSchema } from '@/core/videoEdit/effectMasks'
 import type { TrackingDefinition, TrackingProgressEvent, TrackingRange, TrackingRunOptions, TrackingStatus } from '@/platform/contracts/tracking'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
 import { editVideoEditTracker } from './videoEditTrackingEdits'
 import { nestVideoEditSelection } from './videoEditNesting'
 import * as trackingEdits from './videoEditTrackingEdits'

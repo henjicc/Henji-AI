@@ -91,7 +91,7 @@ export const videoEditSequenceSchema = z.object({
 export const videoEditDocumentSchema = z.object({
   lumetriLuts: z.array(lumetriLutAssetSchema).max(200).optional(),
   format: z.literal('henji-video-project'), version: z.literal(2), id: identifier, name, revision: z.number().int().nonnegative(),
-  media: z.array(videoEditMediaSchema).max(200), bins: z.array(videoEditBinSchema).max(200), items: z.array(videoEditItemSchema).max(500), sequences: z.array(videoEditSequenceSchema).min(1).max(32),
+  media: z.array(videoEditMediaSchema).max(200), bins: z.array(videoEditBinSchema).max(200), items: z.array(videoEditItemSchema).max(500), sequences: z.array(videoEditSequenceSchema).max(32),
   codeMaterials: codeMaterialDefinitionsSchema.optional(),
   /** 用户指定的封面帧（“设为项目封面”）；没有时自动取第一条序列约 1/3 处的画面。 */
   posterFrame: z.object({ sequenceId: identifier, frame: z.number().int().nonnegative() }).strict().optional(),
@@ -220,7 +220,7 @@ export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {
     tracks: Array.from({ length: 2 }, (_, index) => ({ id: crypto.randomUUID(), name: index === 0 ? '音频 1' : '视频 1', index, kind: index === 0 ? 'audio' : 'video', locked: false, enabled: true, muted: false, solo: false })), clips: [], annotations: [] }
 }
 export function createVideoEditDocument(name: string): VideoEditDocument {
-  return { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name, revision: 0, media: [], bins: [], items: [], sequences: [createVideoEditSequence()] }
+  return { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name, revision: 0, media: [], bins: [], items: [], sequences: [] }
 }
 export function videoEditComposition(document: VideoEditDocument, sequenceId: string): VideoEditComposition {
   const sequence = document.sequences.find(item => item.id === sequenceId)

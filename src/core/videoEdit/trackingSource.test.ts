@@ -1,5 +1,6 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
-import { createVideoEditDocument, createVideoEditSequence, type VideoEditClip } from './document'
+import { createVideoEditSequence, type VideoEditClip } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { videoEditSequenceTrackingSource, videoEditTrackingSequenceFrame } from './trackingSource'
 import { videoEditClipSourceSecondsAt } from './clipSpeed'

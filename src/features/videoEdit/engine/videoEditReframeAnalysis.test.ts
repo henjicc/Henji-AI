@@ -1,9 +1,10 @@
+import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { deflateRawSync } from 'node:zlib'
 import { afterEach, expect, it, vi } from 'vitest'
 import { encodeSmartRegionSegment, type SmartRegionSegmentHeader } from '@/core/videoEdit/smartRegions'
 import { setVideoEditSmartRegionSegments, videoEditSmartRegionAttentionBox } from './videoEditSmartRegionMasks'
 import { analyzeVideoEditReframe } from './videoEditReframeAnalysis'
-import { createVideoEditDocument, videoEditComposition } from '@/core/videoEdit/document'
+import { videoEditComposition } from '@/core/videoEdit/document'
 import { evaluateVideoEditKeyframes } from '@/core/videoEdit/keyframes'
 
 afterEach(() => { setVideoEditSmartRegionSegments({}); vi.unstubAllGlobals() })
