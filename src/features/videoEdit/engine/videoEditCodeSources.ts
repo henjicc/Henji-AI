@@ -27,6 +27,7 @@ import { videoEditEffectMask } from './videoEditEffectMasks'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { DEFAULT_STYLE_TOKENS, resolveVideoEditStyleKit, styleKitRenderKey } from '@/core/videoEdit/styleKit'
 import { bindCodeMaterialStyle } from '@/core/videoEdit/codeMaterial/style'
+import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
 
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
@@ -183,7 +184,9 @@ export class VideoEditCodeSources {
         const { parameters, context, transitionHandles } = animated(clip, clip.code, program)
         const imageSources = [...codeMaterialImageIds(clip.code)].map(id => { const media = document.media.find(media => media.id === id && media.kind === 'image'); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
         const styleKey = styleKitRenderKey(resolveVideoEditStyleKit(document, document, clip))
-        const target = program.mode === 'static' ? `code:static:${JSON.stringify([key, parameters, imageSources, styleKey, documentFontRevision()])}` : `code:dynamic:${clip.id}`
+        const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionHandles && program.mode === 'static')
+        const overrideValues = clip.elementOverrides ? Object.fromEntries(Object.entries(clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
+        const target = program.mode === 'static' ? `code:static:${JSON.stringify([key, parameters, imageSources, styleKey, documentFontRevision(), overrideValues])}` : `code:dynamic:${clip.id}`
         keys.add(target)
         plans.push({ clip, key: target, static: program.mode === 'static', program, parameters, context, transitionHandles })
       }
@@ -213,7 +216,7 @@ export class VideoEditCodeSources {
                 if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
                 picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws)
               }
-            } else picture = await this.runtime!.generator(plan.key, plan.program!, plan.context, plan.parameters, inputs, plan.transitionHandles)
+            } else picture = await this.runtime!.generator(plan.key, plan.program!, plan.context, plan.parameters, inputs, plan.transitionHandles, plan.clip.elementOverrides ? { elementOverrides: plan.clip.elementOverrides, sourceTime: videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static') } : undefined)
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)
           }

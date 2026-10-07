@@ -6,6 +6,7 @@ import { isVideoEditSequenceSize, videoEditSequenceSizeFields } from './sequence
 import { rescaleVideoEditFrame, videoEditFps, videoEditRatioSchema, VIDEO_EDIT_FRAME_RATES } from './time'
 import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipHeadRoom, videoEditClipSourceSecondsAt, videoEditClipSpeedSchema, videoEditClipSpeedSupported, videoEditClipSpeedValue, videoEditClipTailRoom, videoEditClipWithinSource } from './clipSpeed'
 import { codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './codeMaterialPersistence'
+import { codeElementOverridesSchema } from './codeElementOverrides'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent } from './timedContent'
 import { videoEditGraphicSchema } from './graphics'
@@ -43,7 +44,7 @@ export const videoEditMediaSchema = z.object({
 }).strict()
 export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional(), label: videoEditLabelSchema.optional(), sourceFolderPath: z.string().min(1).optional() }).strict()
 export const videoEditItemSourceRangeSchema = z.object({ inUs: z.number().int().nonnegative(), outUs: z.number().int().positive() }).strict().refine(value => value.outUs > value.inUs, '子剪辑出点须晚于入点。')
-export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), sequenceId: identifier.optional(), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional(), sourceRange: videoEditItemSourceRangeSchema.optional() }).strict()
+export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), sequenceId: identifier.optional(), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), elementOverrides: codeElementOverridesSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional(), sourceRange: videoEditItemSourceRangeSchema.optional() }).strict()
 export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional() }).strict()
 export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './creativeResult'
 /**
@@ -56,6 +57,7 @@ const videoEditClipStateSchema = z.object({
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
   follow: videoEditClipFollowSchema.optional(),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
+  elementOverrides: codeElementOverridesSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).optional(), adjustment: videoEditAdjustmentSchema.optional(),
   effectsEnabled: z.boolean().optional(),
   disabledIntrinsicSections: z.array(videoEditIntrinsicSectionSchema).refine(values => new Set(values).size === values.length, '固有分区不能重复。').optional(),
@@ -134,6 +136,7 @@ export const videoEditDocumentSchema = z.object({
     for (const id of chain) checkedBins.add(id)
   }
   for (const item of document.items) {
+    if (item.elementOverrides && item.kind !== 'code') issue('初始元素覆盖只能用于代码素材项。')
     if (item.kind === 'sequence') {
       if (!sequencesById.has(item.sequenceId!) || item.mediaId || item.sourceRange) issue(`序列素材“${item.name}”必须引用现有序列，不能引用文件或固定子剪辑范围。`)
     } else if (item.sequenceId) issue('只有序列素材可以引用序列。')
@@ -167,6 +170,7 @@ export const videoEditDocumentSchema = z.object({
     if (Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator) > 8192) issue('等效画面宽度超出导出范围。')
     if (new Set(sequence.tracks.map(track => track.index)).size !== sequence.tracks.length) issue('序列轨道编号重复。')
     for (const clip of sequence.clips) {
+      if (clip.elementOverrides && clip.kind !== 'code') issue('元素覆盖只能用于代码生成片段。')
       if (clip.textStyle && clip.kind !== 'text') issue('文字样式只能用于文字片段。')
       try {
         assertVideoEditKeyframeTimes(clip.curves, clip.duration, `片段“${clip.name}”`)

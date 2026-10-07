@@ -2,6 +2,7 @@ import { getAudioEditRevision } from '@/features/audioEdit/application/audioEdit
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
+import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementEditing'
 import { styleKitHostSummary } from '@/features/videoEdit/application/videoEditStyleKits'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
@@ -327,6 +328,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       frame: videoEdit.frame, playing: videoEdit.playing, inFrame: videoEdit.inFrame, outFrame: videoEdit.outFrame, focusedPanel: videoEdit.activePanel,
       selectedClipRefs: videoEdit.selectedClipIds.slice(0, 48).map(id => `video_edit.clip:${videoEdit.document.id}:${id}`),
       selectedCodeElement: videoEditSelectedCodeElementContext(videoEdit),
+      elementOverrides: videoEditCodeElementHostSummary(videoEdit.document.id),
       currentStyleKit: styleKitHostSummary(videoEdit.document.id, videoEdit.activeSequenceId),
       targetTrackRefs: videoEdit.targetTrackIds.slice(0, 32).map(id => `video_edit.track:${videoEdit.document.id}:${id}`),
     } } : {}),

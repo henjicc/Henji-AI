@@ -4,7 +4,7 @@ import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import type { VideoEditDocument, VideoEditMedia } from '@/core/videoEdit/document'
+import type { VideoEditDocument, VideoEditMedia, VideoEditClip } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import type { AssetFileContent, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
@@ -31,9 +31,9 @@ async function checkImage(image: CodeAsset['images'][number], signal?: AbortSign
   signal?.throwIfAborted()
   if (!sameContent(actual, image.content)) throw new Error('代码素材引用的原图片已改变，请恢复原图片后重新导入。')
 }
-function binding(owner: VideoEditInstance, target: VideoEditCodeAssetTarget): { code: CodeMaterialInstance; name: string; sequenceId: string } {
+function binding(owner: VideoEditInstance, target: VideoEditCodeAssetTarget): { code: CodeMaterialInstance; name: string; sequenceId: string; elementOverrides?: VideoEditClip['elementOverrides'] } {
   const document = owner.document
-  if (target.kind === 'item') { const item = document.items.find(item => item.id === target.itemId); if (item?.code) return { code: item.code, name: item.name, sequenceId: owner.activeSequenceId } }
+  if (target.kind === 'item') { const item = document.items.find(item => item.id === target.itemId); if (item?.code) return { code: item.code, name: item.name, sequenceId: owner.activeSequenceId, ...(item.elementOverrides ? { elementOverrides: item.elementOverrides } : {}) } }
   if (target.kind === 'definition') {
     const definition = document.codeMaterials?.find(definition => definition.id === target.definitionId)
     if (definition) return { code: { definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} }, name: definition.name, sequenceId: owner.activeSequenceId }
@@ -42,7 +42,7 @@ function binding(owner: VideoEditInstance, target: VideoEditCodeAssetTarget): { 
     const clip = document.sequences.find(sequence => sequence.id === target.sequenceId)?.clips.find(clip => clip.id === target.clipId)
     const effect = target.effectId ? clip?.effects?.find(effect => effect.id === target.effectId) : undefined
     const code = target.effectId ? effect?.code : clip?.code
-    if (code && clip) return { code, name: effect?.name ?? clip.name, sequenceId: target.sequenceId }
+    if (code && clip) return { code, name: effect?.name ?? clip.name, sequenceId: target.sequenceId, ...(!target.effectId && clip.elementOverrides ? { elementOverrides: clip.elementOverrides } : {}) }
   }
   throw new Error('请选择原剪辑中的代码素材或代码效果。')
 }
@@ -86,7 +86,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
       assertOwner(owner, baseline, signal)
       images.push({ id, path: media.path, content, ...(media.assetId ? { assetId: media.assetId } : {}) })
     }
-    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, source: source.source }, parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), images })
+    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, source: source.source }, parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
     const bytes = encodeCodeAsset(manifest); const platform = getPlatform()
     const path = options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
     assertOwner(owner, baseline, signal)

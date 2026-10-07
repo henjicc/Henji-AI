@@ -95,7 +95,12 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
         }
         initial = { parameters, ...(publication.asset.curves ? { curves: structuredClone(publication.asset.curves) } : {}) }
       }
-      candidates.push(candidate(definition, program, publication && program.kind === 'filter' ? { name: input.name } : input, initial))
+      const checked = candidate(definition, program, publication && program.kind === 'filter' ? { name: input.name } : input, initial)
+      if (publication?.asset.elementOverrides) {
+        if (program.kind !== 'generator' || program.languageVersion !== 3) throw new Error('元素覆盖需要第三版代码生成素材。')
+        checked.item.elementOverrides = structuredClone(publication.asset.elementOverrides)
+      }
+      candidates.push(checked)
       rememberVideoEditCodeMetadata(owner, definition.id, definition.versions[0], program)
     }
     if (owner.document !== baseline) throw new Error('源码检查期间剪辑已修改，请重新检查候选。')

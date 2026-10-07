@@ -40,6 +40,23 @@ function changedVersion(document: VideoEditComposition, id: string): VideoEditCo
 }
 
 describe('可见代码源与固定内容复用', () => {
+  it('静态v3生成器覆盖动画使用源时间，缓存按求值结果复用，覆盖修改后不复用旧画面', async () => {
+    const document = fixture(source().replace('apiVersion:1,', 'apiVersion:1,languageVersion:3,').replace('rect({x:', 'rect({id:"box",x:'))
+    document.codeMaterials![0].versions[0].languageVersion = 3
+    const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
+    document.clips[0].elementOverrides = { box: { curves: { dx: [{ id: 'first', ...time(0), value: 0, interpolation: 'linear' }, { id: 'last', ...time(1e6), value: 100, interpolation: 'linear' }] } } }
+    const boundary = boundaries(document)
+    try {
+      await boundary.sources.prepare(document, document.clips, 0, () => true)
+      await boundary.sources.prepare(document, document.clips, 15, () => true)
+      expect(boundary.generator).toHaveBeenCalledTimes(2)
+      expect(boundary.generator.mock.calls[0][0]).not.toBe(boundary.generator.mock.calls[1][0])
+      expect((boundary.generator.mock.calls[1] as unknown[])[6]).toMatchObject({ elementOverrides: document.clips[0].elementOverrides, sourceTime: time(500000) })
+      await boundary.sources.prepare(document, document.clips, 15, () => true); expect(boundary.generator).toHaveBeenCalledTimes(2)
+      const next = { ...document, clips: [{ ...document.clips[0], elementOverrides: { box: { fill: [0,1,0,1] as [number, number, number, number] } } }] }
+      boundary.sources.updateDocument(next); await boundary.sources.prepare(next, next.clips, 15, () => true); expect(boundary.generator).toHaveBeenCalledTimes(3)
+    } finally { await boundary.sources.dispose() }
+  })
   it('滤镜编译失败可跳过并报告，保留后续内置效果；未声明兜底的检查路径仍失败', async () => {
     const document = fixture(source('static', '坏滤镜', 'filter'))
     document.clips = [{ ...document.clips[0], kind: 'image', code: undefined, effects: [

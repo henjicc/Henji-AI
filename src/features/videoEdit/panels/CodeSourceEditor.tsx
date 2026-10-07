@@ -6,6 +6,7 @@ import { commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate, prepareVid
 import type { VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
 import { requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision } from '../application/videoEditService'
 import { videoEditParameterTargetIdentity } from './useCodeParameterGesture'
+import { registerVideoEditCodeSourceOpener } from '../application/videoEditCodeElementEditing'
 
 function CandidatePreview({ candidate, onError }: { candidate: VideoEditCodeCandidate; onError: (reason: unknown) => void }): React.ReactElement {
   const host = useRef<HTMLCanvasElement>(null)
@@ -119,6 +120,7 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
 
 export function CodeSourceEditor({ editor }: { editor: VideoEditCodeEditorState }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
+  useLayoutEffect(() => registerVideoEditCodeSourceOpener(editor.target, () => setExpanded(true)), [editor.target])
   return <UiGroup divided titleTone="compact" title={<UiButton size="sm" className="-ml-2" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收起源码编辑' : '查看与编辑源码'}</UiButton>}>
     {expanded && <SourceDraft key={videoEditParameterTargetIdentity(editor.target)} editor={editor} />}
   </UiGroup>

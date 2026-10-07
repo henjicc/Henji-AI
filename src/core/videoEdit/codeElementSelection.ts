@@ -3,6 +3,8 @@ import { evaluateCodeMaterialBounds } from './codeMaterial/evaluate'
 import { hitCodeCommands, type CodeElementBounds } from './codeMaterial/geometry'
 import type { CodeDrawCommand, CodeMaterialContext, CodeMaterialProgram, CodeTextMeasurer, CodeExpression } from './codeMaterial/contract'
 import { z } from 'zod'
+import type { CodeElementOverrides } from './codeElementOverrides'
+import type { VideoEditSourceTime } from './time'
 
 export const videoEditSelectedCodeElementContextSchema = z.object({
   clipRef: z.string().min(1), elementId: z.string().min(1),
@@ -14,12 +16,8 @@ export interface VideoEditCodeElementSelection { sequenceId: string; clipId: str
 export interface CodeElementIndex { bounds: CodeElementBounds[]; byId: Map<string, CodeElementBounds>; ancestors: Map<CodeElementBounds, CodeElementBounds[]>; parameters: Map<string, string[]> }
 
 /** The index belongs to one evaluated frame. Queries first reject AABBs, then use the shared exact geometry. */
-export function prepareCodeElementIndex(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, measureText: CodeTextMeasurer): CodeElementIndex {
-  const evaluated = evaluateCodeMaterialBounds(program, context, values, { measureText })
-  const counts = new Map<string, number>()
-  for (const bound of evaluated) counts.set(bound.elementId, (counts.get(bound.elementId) ?? 0) + 1)
-  // t62 preserves aliases as separate output paths, but their author/source IDs may coincide.
-  const bounds = evaluated.map(bound => counts.get(bound.elementId)! > 1 ? { ...bound, elementId: `${bound.elementId}@${JSON.stringify(bound.elementPath)}` } : bound)
+export function prepareCodeElementIndex(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, measureText: CodeTextMeasurer, options: { elementOverrides?: CodeElementOverrides; sourceTime?: VideoEditSourceTime } = {}): CodeElementIndex {
+  const bounds = evaluateCodeMaterialBounds(program, context, values, { measureText, ...options })
   const byPath = new Map(bounds.map(bound => [bound.elementPath.join('|'), bound]))
   const ancestors = new Map(bounds.map(bound => [bound, bound.elementPath.slice(0, -1).flatMap((_part, i) => {
     const ancestor = byPath.get(bound.elementPath.slice(0, i + 1).join('|'))
@@ -65,7 +63,7 @@ export function codeElementAtSource(index: CodeElementIndex, offset: number): Co
   return index.bounds.filter(bound => bound.sourceSpan && bound.sourceSpan.start <= offset && offset < bound.sourceSpan.end && bound.opacity >= .01 && bound.width > 0 && bound.height > 0).sort((a, b) => (a.sourceSpan!.end - a.sourceSpan!.start) - (b.sourceSpan!.end - b.sourceSpan!.start))[0]
 }
 export function codeElementLabel(bound: CodeElementBounds): string {
-  const originalId = bound.command.elementId ?? bound.elementId
+  const originalId = bound.command.authorElementId ?? bound.command.elementId ?? bound.elementId
   const id = originalId.replace(/:\d+(?:\.\d+)*$/, '')
   if (!/^(call:|draw:)/.test(originalId)) return id
   const command = bound.command

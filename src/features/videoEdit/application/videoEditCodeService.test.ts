@@ -1,4 +1,5 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
+import { resolve as resolvePath, sep as pathSeparator } from 'node:path'
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
@@ -613,6 +614,22 @@ it('代码资产原始参数和有理源曲线一次发布、保存重开、单�
   const next = await createVideoEditCodeAssetInstance(id, importPublication())
   expect(reopened.document.items).toHaveLength(2); undoVideoEdit(id)
   expect(reopened.document.items.some(item => item.id === next.itemId)).toBe(false); expect(reopened.document.items[0].code).toEqual(code)
+})
+it('v3片段元素覆盖收录并导入为素材初始值，新片段独立复制且保存重开不丢失', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  const code = source.replace('apiVersion:1,', 'apiVersion:1,languageVersion:3,').replace('ellipse({x:', 'ellipse({id:"circle",x:')
+  const asset = { ...codeAssetFixture(code), sourceVersion: { source: code, apiVersion: 1 as const, languageVersion: 3 as const }, elementOverrides: { circle: { dx: 20, fill: [1,0,0,1] as [number, number, number, number] } } }
+  const created = await createVideoEditCodeAssetInstance(id, importPublication(asset))
+  const [first, second] = appendVideoEditItems(id, [created.itemId!, created.itemId!], owner.activeSequenceId)
+  editVideoProject(id, document => { document.sequences[0].clips.find(clip => clip.id === first)!.elementOverrides!.circle.dx = 90; return document })
+  expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === second)!.elementOverrides!.circle.dx).toBe(20)
+  expect(owner.document.items.find(item => item.id === created.itemId)!.elementOverrides!.circle.dx).toBe(20)
+  const filePath = resolvePath(pathSeparator, 'element-overrides.henji-code')
+  const { bytes, platform } = collectionBoundary(); vi.mocked(platform.system.dialog.save).mockResolvedValue(filePath)
+  await collectVideoEditCodeAsset(id, { kind: 'clip', sequenceId: owner.activeSequenceId, clipId: first })
+  expect(decodeCodeAsset(bytes.get(filePath)!).elementOverrides?.circle.dx).toBe(90)
+  await saveVideoEdit(id); const reopened = await reopenVideoEdit(id)
+  expect(getActiveVideoEditSequence(reopened).clips.find(clip => clip.id === first)!.elementOverrides!.circle.dx).toBe(90)
 })
 it('代码资产图片局部ID重映射和依赖媒体在同一次历史提交中发布', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id

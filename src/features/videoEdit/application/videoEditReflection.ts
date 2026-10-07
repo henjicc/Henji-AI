@@ -111,9 +111,11 @@ class VideoEditProvider implements ApplicationEntityProvider {
     return propertyIds.map(propertyId => {
       const field = VIDEO_EDIT_FIELDS[this.entityType].find(item => item.propertyId === propertyId)
       if (!field) throw new Error(`未知属性 ${propertyId}，可用属性：${VIDEO_EDIT_FIELDS[this.entityType].map(item => item.propertyId).join('、')}`)
-      const absent = ['video_edit.clip.code_parameters', 'video_edit.clip.code_curves', 'video_edit.clip.code_version_id'].includes(propertyId) && !data.code
+      const absent = ['video_edit.clip.code_parameters', 'video_edit.clip.code_curves', 'video_edit.clip.code_version_id', 'video_edit.clip.element_overrides'].includes(propertyId) && !data.code
       const wrongKind = propertyId === 'video_edit.graphic_object.text_style' && data.kind !== 'text' || propertyId === 'video_edit.clip.text_style' && data.kind !== 'text' || propertyId === 'video_edit.clip.graphic_object_ids' && data.kind !== 'graphic' || propertyId === 'video_edit.clip.adjustment_from_track' && data.kind !== 'adjustment'
       const { projectId, childId } = splitVideoEditRef(ref); const document = requireVideoEditInstance(projectId).document
+      const binding = data.code && typeof data.code === 'object' && !Array.isArray(data.code) ? data.code : undefined
+      const overrideUnsupported = propertyId.endsWith('.element_overrides') && document.codeMaterials?.find(definition => definition.id === binding?.definitionId)?.versions.find(version => version.id === binding?.versionId)?.languageVersion !== 3
       const noTimeline = !document.sequences.length && ['video_edit.document.timeline_view', 'video_edit.document.program_playback'].includes(propertyId)
       const multicamUnsupported = propertyId === 'video_edit.sequence.multicam' && !data.multicam || propertyId === 'video_edit.clip.multicam_camera_id' && !document.sequences.some(sequence => sequence.multicam && sequence.id === document.items.find(item => item.id === data.itemId)?.sequenceId)
       const roleOwner = propertyId === 'video_edit.clip.audio_role' ? document.sequences.flatMap(sequence => sequence.clips.map(clip => ({ clip, sequence }))).find(value => value.clip.id === childId) : undefined
@@ -124,8 +126,8 @@ class VideoEditProvider implements ApplicationEntityProvider {
       const builtin = childOwner?.kind === 'effect' ? childOwner.effect.builtin : undefined
       const curveReason = curveKey && this.entityType === 'video_edit.effect' && (!builtin || !requireVideoEditBuiltinEffect(builtin.id).params.some(param => param.key === curveKey)) ? '此内置效果没有该参数；代码滤镜请用 curves 源时间曲线。' : curveKey && this.entityType === 'video_edit.clip' && (data.kind === 'adjustment' && curveKey !== 'opacity' || data.kind === 'audio' && curveKey !== 'volume') ? '此片段类型不支持该动画参数。' : undefined
       const locked = childOwner ? childOwner.clipIds.some(id => childOwner.sequence.tracks.find(track => track.index === childOwner.sequence.clips.find(clip => clip.id === id)?.track)?.locked) : false
-      const reasons = noTimeline ? ['没有序列，请先通过序列集合新建序列。'] : multicamUnsupported ? ['请选择多机位源序列或多机位片段。'] : roleUnsupported ? ['只有带声音的音视频片段可以标注声音类型。'] : curveReason ? [curveReason] : absent ? ['此片段没有代码实例参数。'] : wrongKind ? ['此片段类型不支持该操作。'] : locked ? ['所属轨道已锁定。'] : field.writer ? [] : [field.descriptor.readOnlyReason!]
-      return { propertyId, readable: true, writable: Boolean(field.writer) && !noTimeline && !absent && !wrongKind && !locked && !curveReason && !roleUnsupported && !multicamUnsupported, reasons, requiredPermissions: ['video_edit:read'], revisions: { video_edit: videoEditRevision() } }
+      const reasons = overrideUnsupported ? ['元素覆盖需要第三版代码生成素材。'] : noTimeline ? ['没有序列，请先通过序列集合新建序列。'] : multicamUnsupported ? ['请选择多机位源序列或多机位片段。'] : roleUnsupported ? ['只有带声音的音视频片段可以标注声音类型。'] : curveReason ? [curveReason] : absent ? ['此片段没有代码实例参数。'] : wrongKind ? ['此片段类型不支持该操作。'] : locked ? ['所属轨道已锁定。'] : field.writer ? [] : [field.descriptor.readOnlyReason!]
+      return { propertyId, readable: true, writable: Boolean(field.writer) && !overrideUnsupported && !noTimeline && !absent && !wrongKind && !locked && !curveReason && !roleUnsupported && !multicamUnsupported, reasons, requiredPermissions: ['video_edit:read'], revisions: { video_edit: videoEditRevision() } }
     })
   }
   async getCollectionAvailability(parent: ApplicationRef) {

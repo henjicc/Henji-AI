@@ -27,7 +27,7 @@ const preparing = new WeakMap<VideoEditInstance, number>()
 
 /** The candidate is an opaque proof of the exact checked source and document;
  * its public display fields cannot be used to forge a publication. */
-export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget, source: string, scope: VideoEditCodeApplyScope = 'single', signal?: AbortSignal): Promise<VideoEditCodeCandidate> {
+export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget, source: string, scope: VideoEditCodeApplyScope = 'single', signal?: AbortSignal, options: { clearElementOverrides?: readonly string[] } = {}): Promise<VideoEditCodeCandidate> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
   if ((active.get(owner)?.size ?? 0) + (preparing.get(owner) ?? 0) >= 2) throw new Error('请先关闭或提交现有源码候选。')
@@ -80,7 +80,12 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
       if (!selected || !clip.code) return clip
       const migration = proposeCodeMaterialMigration(read(clip.code), appended.program, clip.code, appended.versionId)
       count++; selectedIds.add(clip.id); impacts.push(...migration.impacts.map(impact => ({ ...impact, sequenceName: value.name, clipName: clip.name })))
-      return { ...clip, code: migration.instance }
+      const elementOverrides = { ...clip.elementOverrides }
+      if (scope === 'single') for (const id of options.clearElementOverrides ?? []) delete elementOverrides[id]
+        const next = { ...clip, code: migration.instance }
+        if (Object.keys(elementOverrides).length) next.elementOverrides = elementOverrides
+        else delete next.elementOverrides
+        return next
     }) })) })
     validateCodeMaterialDocument(document, readVideoEditCodeMetadata(owner, document))
     const requested = owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? original.start

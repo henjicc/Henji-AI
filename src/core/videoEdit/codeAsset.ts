@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from './codeMaterialPersistence'
 import { CODE_MATERIAL_LIMITS } from './codeMaterial/contract'
+import { codeElementOverridesSchema } from './codeElementOverrides'
 
 /** A source has at most 32 typed parameter slots (compiler contract), hence at most 32 distinct image dependencies. Bytes bound a single serialized source manifest. */
 export const CODE_ASSET_LIMITS = Object.freeze({ bytes: 512 * 1024, images: 32 })
@@ -15,6 +16,7 @@ export const codeAssetSchema = z.object({
   sourceVersion: codeMaterialVersionSchema.omit({ id: true, assetOrigin: true }),
   parameters: codeMaterialInstanceSchema.shape.parameters,
   curves: codeMaterialInstanceSchema.shape.curves,
+  elementOverrides: codeElementOverridesSchema.optional(),
   images: z.array(image).max(CODE_ASSET_LIMITS.images),
 }).strict().superRefine((value, context) => {
   if (new TextEncoder().encode(value.sourceVersion.source).byteLength > CODE_MATERIAL_LIMITS.sourceBytes) context.addIssue({ code: 'custom', message: '代码素材源码最多64KiB。' })

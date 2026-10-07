@@ -19,9 +19,10 @@ export interface VideoEditTypographyPanelProps {
   projectFonts?: readonly string[]
   fontLabel?: string
   transform?: ReactNode
+  fields?: 'all' | 'code-element'
 }
 /** All four hosts edit this schema; placement is supplied only by hosts that support it. */
-export function VideoEditTypographyPanel({ style, onChange, onError, onBegin, onEnd, onFontPreview, projectFonts, fontLabel = '文字字体', transform }: VideoEditTypographyPanelProps): React.ReactElement {
+export function VideoEditTypographyPanel({ style, onChange, onError, onBegin, onEnd, onFontPreview, projectFonts, fontLabel = '文字字体', transform, fields = 'all' }: VideoEditTypographyPanelProps): React.ReactElement {
   const library = useSyncExternalStore(subscribeFontLibrary, fontLibrarySnapshot)
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   const styleRef = useRef(style); styleRef.current = style
@@ -53,9 +54,20 @@ export function VideoEditTypographyPanel({ style, onChange, onError, onBegin, on
   const selectedFace = faces.find(face => face.fullName === style.fontFamily) ?? faces.find(face => face.weight === style.fontWeight && face.italic === (style.fontStyle !== 'normal')) ?? currentFont
   const presets = videoEditTextPresetLibrary.list()
   const selectedPreset = presets.find(preset => preset.id === presetId)
+  const fontPicker = <UiFontPicker size="sm" ariaLabel={fontLabel} value={style.fontFamily} projectFonts={projectFonts} onPreview={face => onFontPreview?.(face?.fullName ?? null)} onSelect={fontFamily => { onEnd?.(false); write({ fontFamily, fontWeight: 400, fontStyle: 'normal' }) }} />
+  // The v3 author model exposes this finite subset. Do not offer controls that the command stream cannot store.
+  if (fields === 'code-element') return <UiGroup title="文字" titleTone="compact">
+    {row('字体', fontPicker)}
+    {row('字重', number('文字字重', style.fontWeight, fontWeight => write({ fontWeight }), 1, 1000))}
+    {row('字号', number('文字字号', style.fontSize, fontSize => write({ fontSize }), 1, 1024))}
+    {row('颜色', color('文字填充颜色', style.fill.color, value => write({ fill: { ...style.fill, color: value } })))}
+    {row('字距', number('字距', style.tracking, tracking => write({ tracking }), -1000, 10000))}
+    {row('行距', number('行距', style.leading, leading => write({ leading }), 1))}
+    {style.strokes.length > 0 && row('描边颜色', color('文字描边颜色', style.strokes[0].color, color => write({ strokes: [{ ...style.strokes[0], color }] })))}
+  </UiGroup>
   return <div className="flex min-w-0 flex-col gap-3" data-video-edit-typography>
     <UiGroup title="文本" titleTone="compact" actions={<PanelTrigger panelWidth="content" renderPanel={() => <UiButton size="sm" onClick={() => write(defaultVideoEditTextStyle(style.fontSize * 15))}>重置文字样式</UiButton>}>{({ togglePanel, open }) => <UiIconButton size="sm" aria-label="文本设置" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Wrench size={14} /></UiIconButton>}</PanelTrigger>}>
-      {row('字体', <UiFontPicker size="sm" ariaLabel={fontLabel} value={style.fontFamily} projectFonts={projectFonts} onPreview={face => onFontPreview?.(face?.fullName ?? null)} onSelect={fontFamily => { onEnd?.(false); write({ fontFamily, fontWeight: 400, fontStyle: 'normal' }) }} />)}
+      {row('字体', fontPicker)}
       {row('字形样式', faces.length ? <Dropdown size="sm" ariaLabel="字形样式" value={selectedFace?.fullName ?? style.fontFamily} options={faces.map(face => ({ value: face.fullName, label: face.style }))} onSelect={value => {
         const face = faces.find(face => face.fullName === value); if (!face) return
         const epoch = ++fontEpoch.current; const baseline = styleRef.current

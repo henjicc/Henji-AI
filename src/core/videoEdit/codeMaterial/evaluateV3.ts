@@ -32,6 +32,7 @@ export function codeTextRequest(fields: Record<string, unknown>): CodeTextMeasur
 }
 function metadata(fields: Record<string, unknown>): CodeDrawMetadata {
   const value: CodeDrawMetadata = { opacity: bounded(fields.opacity ?? 1, 0, 1, 'opacity'), rotation: bounded(fields.rotation ?? 0, -32768, 32768, 'rotation'), scaleX: bounded(fields.scaleX ?? fields.scale ?? 1, -1024, 1024, 'scaleX'), scaleY: bounded(fields.scaleY ?? fields.scale ?? 1, -1024, 1024, 'scaleY'), anchorX: bounded(fields.anchorX ?? 0, -32768, 32768, 'anchorX'), anchorY: bounded(fields.anchorY ?? 0, -32768, 32768, 'anchorY') }
+  value.authorAnchor = fields.anchorX !== undefined || fields.anchorY !== undefined
   if (fields.blend !== undefined) { const blend = string(fields.blend); if (!['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken'].includes(blend)) throw new CodeMaterialError('TYPE', '未知 blend。'); value.blend = blend as CodeDrawMetadata['blend'] }
   if (fields.fill !== undefined) value.paint = paint(fields.fill)
   if (fields.stroke !== undefined) value.stroke = paint(fields.stroke)

@@ -30,6 +30,10 @@ export function collectVideoEditFonts(document: VideoEditDocument | VideoEditCom
     for (const clip of sequence.clips) {
       const owner = `${sequence.id}:clip:${clip.id}`
       if (clip.kind === 'text') add(clip.textStyle?.fontFamily ?? 'sans-serif', owner, clip.name)
+      for (const [id, value] of Object.entries(clip.elementOverrides ?? {})) {
+        add(value.fontFamily, `${owner}:element:${id}`, clip.name)
+        for (const point of value.curves?.fontFamily ?? []) add(point.value, `${owner}:element:${id}:key:${point.id}`, `${clip.name}（关键帧）`)
+      }
       graphic(clip.graphic, owner, clip.name); code(clip.code, owner, clip.name)
       for (const [index, effect] of videoEditEffectCodes(clip.effects).entries()) code(effect, `${owner}:effect:${index}`, `${clip.name} / 代码效果`)
     }
@@ -38,6 +42,10 @@ export function collectVideoEditFonts(document: VideoEditDocument | VideoEditCom
   for (const item of document.items) {
     const owner = `item:${item.id}`
     if (item.kind === 'text') add('sans-serif', owner, item.name)
+    for (const [id, value] of Object.entries(item.elementOverrides ?? {})) {
+      add(value.fontFamily, `${owner}:element:${id}`, item.name)
+      for (const point of value.curves?.fontFamily ?? []) add(point.value, `${owner}:element:${id}:key:${point.id}`, `${item.name}（关键帧）`)
+    }
     graphic(item.graphic, owner, item.name); code(item.code, owner, item.name)
   }
   return uses

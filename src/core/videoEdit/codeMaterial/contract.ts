@@ -44,6 +44,8 @@ export interface CodeTextLayout { width: number; height: number; lines: string[]
 export interface CodeTextMeasureRequest { text: string; fontFamily: string; fontWeight: number; fontStyle: string; fontSize: number; letterSpacing: number; lineHeight: number; maxWidth: number; wrap: boolean; maxLines: number }
 export type CodeTextMeasurer = (request: CodeTextMeasureRequest) => CodeTextLayout
 export interface CodeDrawMetadata {
+  /** Host-only evaluated correction; never accepted by the author language. */
+  elementTransform?: CodeMatrix; authorAnchor?: boolean; authorElementId?: string
   elementId?: string; sourceSpan?: CodeSourceSpan; elementPath?: string[]
   opacity?: number; rotation?: number; scaleX?: number; scaleY?: number; anchorX?: number; anchorY?: number; blend?: CodeBlend
   paint?: CodePaint; stroke?: CodePaint; strokeWidth?: number; lineCap?: 'butt' | 'round' | 'square'; lineJoin?: 'miter' | 'round' | 'bevel'; dash?: number[]; trimStart?: number; trimEnd?: number

@@ -31,6 +31,7 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
   }
   for (const definition of document.codeMaterials ?? []) read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })
   for (const item of document.items) if (item.code) {
+    if (item.elementOverrides && codeMaterialSource(document, item.code).languageVersion !== 3) throw new CodeMaterialError('TYPE', '元素覆盖需要第三版代码生成素材。')
     const program = read(item.code)
     if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜应作为附加效果使用，不能直接创建生成素材项。')
     validate(item.code, program)
@@ -38,6 +39,7 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
   for (const sequence of document.sequences) {
     for (const clip of sequence.clips) {
       if (clip.code) {
+        if (clip.elementOverrides && codeMaterialSource(document, clip.code).languageVersion !== 3) throw new CodeMaterialError('TYPE', '元素覆盖需要第三版代码生成素材。')
         const program = read(clip.code)
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '代码片段需要生成素材。')
         validate(clip.code, program)

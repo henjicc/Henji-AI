@@ -14,7 +14,8 @@ export function codeTransform(command: CodeDrawCommand): CodeMatrix {
   const x = command.kind === 'group' ? command.x : 0; const y = command.kind === 'group' ? command.y : 0
   const ax = (command.anchorX ?? 0) + (command.kind !== 'group' && 'x' in command ? command.x : 0)
   const ay = (command.anchorY ?? 0) + (command.kind !== 'group' && 'y' in command ? command.y : 0)
-  return [c * sx, s * sx, -s * sy, c * sy, x + ax - c * sx * ax + s * sy * ay, y + ay - s * sx * ax - c * sy * ay]
+  const base: CodeMatrix = [c * sx, s * sx, -s * sy, c * sy, x + ax - c * sx * ax + s * sy * ay, y + ay - s * sx * ax - c * sy * ay]
+  return command.elementTransform ? codeMultiply(command.elementTransform, base) : base
 }
 const paths = new Map<string, { value: CodePoint[][]; bytes: number }>(); let pathBytes = 0
 /** A deliberately small SVG grammar. Absolute M/L/C/Q/Z only; curves flatten identically for paint and hit tests. */

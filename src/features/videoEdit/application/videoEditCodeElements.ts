@@ -12,6 +12,7 @@ import type { VideoEditAnnotation, VideoEditAnnotationTarget } from '@/core/vide
 import { measureCodeText } from '../videoEditGlyphMetrics'
 import { readVideoEditCodeProgram } from './videoEditCodeState'
 import { getActiveVideoEditSequence, setVideoEditView, type VideoEditInstance } from './videoEditService'
+import { DEFAULT_STYLE_TOKENS, resolveVideoEditStyleKit } from '@/core/videoEdit/styleKit'
 
 export interface VideoEditCodeElementFrame { clip: VideoEditClip; index: CodeElementIndex; picture: { width: number; height: number }; source: string }
 interface FrameCache { document: object; sequenceId: string; frame: number; fontGeneration?: number; elements: Map<string, VideoEditCodeElementFrame> }
@@ -30,8 +31,9 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
     const program = readVideoEditCodeProgram(instance, instance.document, raw.code)
     if (program.languageVersion !== 3) continue
     const context = codeMaterialContextForFrame(raw, frame, sequence.frameRate, program)
+    context.style = resolveVideoEditStyleKit(instance.document, sequence, raw)?.tokens ?? DEFAULT_STYLE_TOKENS
     const parameters = evaluateCodeMaterialParameters(prepareCodeMaterialParameters(program, raw.code), videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate))
-    elements.set(raw.id, { clip, picture: { width: context.width, height: context.height }, index: prepareCodeElementIndex(program, context, parameters, measureCodeText), source: codeMaterialSource(instance.document, raw.code).source })
+    elements.set(raw.id, { clip, picture: { width: context.width, height: context.height }, index: prepareCodeElementIndex(program, context, parameters, measureCodeText, { elementOverrides: raw.elementOverrides, sourceTime: videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate) }), source: codeMaterialSource(instance.document, raw.code).source })
   }
   frames.set(instance, { document: instance.document, sequenceId, frame, fontGeneration: elements.size ? fontGeneration() : undefined, elements }); return elements
 }

@@ -4,6 +4,7 @@ import { hitVideoEditCodeElement, selectedVideoEditCodeElement, selectVideoEditC
 import { getActiveVideoEditSequence, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from './application/videoEditService'
 import { getVideoEditMaskEditing, subscribeVideoEditMaskEditing, videoEditMaskEditingRevision } from './application/videoEditMaskEditing'
 import { getVideoEditTrackingEditing, subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision } from './application/videoEditTrackingEditing'
+import { VideoEditCodeElementEditOverlay } from './VideoEditCodeElementEditOverlay'
 
 export function VideoEditCodeElementOverlay({ instance, enabled, onError }: { instance: VideoEditInstance; enabled: boolean; onError: (error: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
@@ -29,7 +30,7 @@ export function VideoEditCodeElementOverlay({ instance, enabled, onError }: { in
     const down = (event: PointerEvent): void => {
       if (instance.playing || instance.tool !== 'select' || event.button !== 0) return
       const target = event.target as Element | null
-      if (target?.closest?.('button,input,textarea,[role="textbox"]')) return
+      if (target?.closest?.('button,input,textarea,[role="textbox"],[data-code-element-edit]')) return
       try {
         const at = point(event); const old = last.current
         const repeated = Boolean(old && old.document === instance.document && old.frame === instance.frame && old.sequenceId === instance.activeSequenceId && Math.hypot(old.x - event.clientX, old.y - event.clientY) <= 4)
@@ -59,12 +60,13 @@ export function VideoEditCodeElementOverlay({ instance, enabled, onError }: { in
     return () => { host.removeEventListener('pointerdown', down, true); host.removeEventListener('pointermove', move, true); host.removeEventListener('pointerleave', leave) }
   }, [instance, available])
   const entry = hover ? entries.get(hover.clipId) : undefined; const hovered = entry?.index.byId.get(hover?.elementId ?? '')
-  const shapes = [...(selected ? [{ entry: selected.entry, element: selected.element, selected: true }] : []), ...(entry && hovered && hovered !== selected?.element ? [{ entry, element: hovered, selected: false }] : [])]
+  const shapes = entry && hovered && hovered !== selected?.element ? [{ entry, element: hovered }] : []
   return <div ref={root} aria-label="代码元素选择层" className="pointer-events-none absolute inset-0">
+    {available && selected && !instance.playing && <VideoEditCodeElementEditOverlay key={`${selected.entry.clip.id}:${selected.element.elementId}`} instance={instance} selected={selected} onError={onError} />}
     {/* icon-token-allow: 元素选框是作者画布几何经片段变换后的轮廓，不是界面图标。 */}
     <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className="absolute inset-0 h-full w-full" fill="none" aria-hidden>
-      {shapes.map(shape => <polygon key={`${shape.entry.clip.id}:${shape.element.elementId}:${shape.selected}`} data-code-element-selected={shape.selected || undefined} data-code-element-hover={!shape.selected || undefined} points={codeElementFramePolygon(shape.element, shape.entry.clip, shape.entry.picture, sequence).map(point => `${point.x * 1000},${point.y * 1000}`).join(' ')} className={shape.selected ? 'stroke-accent' : 'stroke-accent opacity-40'} strokeWidth={2} vectorEffect="non-scaling-stroke" />)}
+      {shapes.map(shape => <polygon key={`${shape.entry.clip.id}:${shape.element.elementId}`} data-code-element-hover points={codeElementFramePolygon(shape.element, shape.entry.clip, shape.entry.picture, sequence).map(point => `${point.x * 1000},${point.y * 1000}`).join(' ')} className="stroke-accent opacity-40" strokeWidth={2} vectorEffect="non-scaling-stroke" />)}
     </svg>
-    {selected && (() => { const point = codeElementFramePolygon(selected.element, selected.entry.clip, selected.entry.picture, sequence)[0]; return <span className="absolute max-w-full truncate rounded-control bg-media-scrim px-1.5 py-0.5 text-xs text-on-media" style={{ left: `${Math.max(0, Math.min(.85, point.x)) * 100}%`, top: `${Math.max(0, Math.min(.9, point.y)) * 100}%` }}>{codeElementLabel(selected.element)}</span> })()}
+    {selected && (() => { const point = codeElementFramePolygon(selected.element, selected.entry.clip, selected.entry.picture, sequence)[0]; return <span data-code-element-label className="absolute max-w-full truncate rounded-control bg-media-scrim px-1.5 py-0.5 text-xs text-on-media" style={{ left: `${Math.max(0, Math.min(.85, point.x)) * 100}%`, top: `${Math.max(0, Math.min(.9, point.y)) * 100}%` }}>{codeElementLabel(selected.element)}</span> })()}
   </div>
 }

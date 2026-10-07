@@ -266,8 +266,8 @@ export class VideoEditCodeGpu {
   private v3(): VideoEditCodeGpuV3 {
     return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes } }, undefined, new TrustedShaderLibraryRenderer(this.builtins()))
   }
-  async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false): Promise<VideoEditCodePicture> {
-    const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, measureText: measureCodeText, onDiagnostic: diagnostic => {
+  async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false, overrides?: Pick<import('@/core/videoEdit/codeMaterial/evaluate').CodeMaterialEvaluationOptions, 'elementOverrides' | 'sourceTime'>): Promise<VideoEditCodePicture> {
+    const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, ...overrides, measureText: measureCodeText, onDiagnostic: diagnostic => {
       if (!this.missingFonts.has(diagnostic.fontFamily)) { this.missingFonts.add(diagnostic.fontFamily); codeLogger.warn('代码文字缺少字体，使用无衬线字体', { event: 'video_edit.code.font.missing', context: { fontFamily: diagnostic.fontFamily } }) }
     } })
     if (program.languageVersion === 3) {
