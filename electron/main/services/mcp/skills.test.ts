@@ -62,15 +62,29 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     expect(f.hostCalls).toHaveLength(0)
   })
 
-  it('按需读取主文件与单份参考，内容带信任标记，不经渲染宿主', async () => {
+  it('按需读取主文件与全部设计及接口参考，内容带信任标记，不经渲染宿主', async () => {
     const f = await fixture()
     const main = await f.call({ name: 'video-edit-code-creation', reason: '为剪辑写新的代码素材' })
     expect(main.isError, main.text).toBe(false)
     expect(main.body.data).toMatchObject({ name: 'video-edit-code-creation', path: null, source: 'builtin' })
-    expect(main.body.data!.referencePaths).toEqual(['references/author-api.md', 'references/examples.md', 'references/parameters-curves.md', 'references/timeline-check.md'])
+    const referencePaths = [
+      'references/author-api.md', 'references/brief-concept.md', 'references/color-texture.md',
+      'references/examples.md', 'references/layout.md', 'references/motion.md',
+      'references/parameters-curves.md', 'references/preferences.md', 'references/review.md',
+      'references/structure.md', 'references/styles.md', 'references/templates.md',
+      'references/timeline-check.md', 'references/type.md',
+    ]
+    expect(main.body.data!.referencePaths).toEqual(referencePaths)
     expect(main.body.data!.content).toContain('trust=builtin')
     // 主文件只做路由，作者接口细节不随首轮正文下发。
     expect(main.body.data!.content).not.toContain('smoothstep')
+    for (const relativePath of referencePaths) {
+      const reference = await f.call({ name: 'video-edit-code-creation', path: relativePath, reason: '按当前创作阶段读取参考' })
+      expect(reference.isError, reference.text).toBe(false)
+      expect(reference.body.data).toMatchObject({ path: relativePath, source: 'builtin' })
+      expect(reference.body.data!.content).toContain('trust=builtin')
+      expect(reference.body.data!.bytes).toBeGreaterThan(0)
+    }
     const api = await f.call({ name: 'video-edit-code-creation', path: 'references/author-api.md', reason: '写源码' })
     expect(api.isError, api.text).toBe(false)
     expect(api.body.data).toMatchObject({ path: 'references/author-api.md' })

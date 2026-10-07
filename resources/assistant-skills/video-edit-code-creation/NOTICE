@@ -1,0 +1,8 @@
+本技能的导演流程、设计尺度和审查方法参考用户自有 frameflow 导演手册，重新适配痕迹AI的受限作者语言、正式实体读写、剪辑时间线与媒体观察。
+参考位置：AEPR控制测试/packages/knowledge/guides/（index、direct、design、motion、recipes 等）。不捆绑其执行脚本或 Adobe 专属接口。
+
+设计思想同时参考 HyperFrames 的 hyperframes、hyperframes-creative、motion-graphics、hyperframes-animation、DESIGN.md 与 frame-presets。
+来源：https://github.com/heygen-com/hyperframes
+许可证：Apache License 2.0，见 LICENSE.hyperframes。
+采用内容：按需读取、品牌规则与画面尺度分开、资产先行、语义动词、可重复取帧与原地返修。
+改写说明：中文独立表述，未复制上游段落或代码；不采用其 CLI、HTML/GSAP 运行时、多代理流程、下载及渲染审批规则。背景持续运动、双焦点与强制装饰数量等建议未采用。
