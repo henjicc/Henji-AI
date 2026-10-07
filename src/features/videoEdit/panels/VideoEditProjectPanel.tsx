@@ -176,7 +176,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'import_folder', label: '导入文件夹', icon: <FolderInput size={16} />, onClick: chooseFolders },
     { id: 'assets', label: '从资产库拖入', icon: <AssetLibraryIcon size={16} />, onClick: () => openAssetLibrary('floating') },
     { id: 'bin', label: '新建素材箱', icon: <FolderPlus size={16} />, onClick: () => setEdit({ kind: 'createBin', parentId: binId }) },
-    { id: 'sequence', label: '新建素材项 → 序列', icon: <SequenceIcon size={16} />, onClick: newSequence },
+    { id: 'sequence', label: '新建序列…', icon: <SequenceIcon size={16} />, onClick: newSequence },
     { id: 'code', label: '新建代码素材', icon: <Code2 size={16} />, onClick: () => setCreatingCode(true) },
     ...graphicMenu(),
   ]
