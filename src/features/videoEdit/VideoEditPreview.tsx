@@ -17,7 +17,8 @@ import { yieldVideoEditSource } from './application/videoEditSource'
 import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
-import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
+import { VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
+import { alignVideoEditClockToDisplay, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame } from './engine/videoEditDisplayClock'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
 import { VideoEditMaskOverlay } from './panels/VideoEditMaskOverlay'
@@ -83,6 +84,10 @@ function programDropZoneAt(event: React.DragEvent<HTMLElement>): VideoEditDropMo
 }
 
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
+/** 暂停画面停稳这么久后才做起播预热，连续点击、拖动定位期间不为每个中间位置解码。 */
+const PLAY_ARM_IDLE_MS = 250
+/** 第一块声音已混好时的起播提前量：只够把它排进声音时钟。 */
+const PLAY_PREMIXED_LEAD_SECONDS = 0.03
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 export function VideoEditPreview({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   const [multicamView, setMulticamView] = useState(false)
@@ -167,6 +172,14 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     let wasPlaying = false
     let direction: 1 | -1 = 1
     let activeCommand: object | undefined
+    let armedDocument: VideoEditComposition | undefined
+    let armedFrame = -1
+    /** 已提交给 GPU、结果还没回来的正向播放帧（两帧流水，见下方 present）。 */
+    let submittedFrame = -1
+    let playbackInFlight = 0
+    // 起播预热时提前混好的第一块声音：起播时钟不必再留 100ms 等混音。
+    let displayPeriod: number | undefined
+    let firstBlock: { document: VideoEditComposition; from: number; duration: number; buffer: Promise<AudioBuffer> } | undefined
     // 回放分辨率（4.9）：播放用所选分辨率，暂停默认回到完整；选帧、设封面期间强制完整。
     let appliedDivisor: VideoEditRenderDivisor = 1
     let captureFull = 0
@@ -257,30 +270,47 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         }
         if (current.playing && (!wasPlaying || direction !== current.playbackDirection || activeCommand !== command)) {
           stopAudio(); direction = current.playbackDirection
+          const phaseStart = performance.now()
           await yieldVideoEditSource(instance.document.id)
+          const phaseYield = performance.now()
           if (stopped || !current.playing || videoEditProgramCommandIdentity(instance.document.id) !== command) { if (!stopped) timer = setTimeout(() => { void loop() }, 0); return }
           const initialFrame = current.frame
           const requestedAt = performance.now()
+          // 声音设备与第一帧并行准备：AudioContext 启动（Windows 首次可达上百毫秒）不再排在第一帧之后。
+          const audioReady = direction === 1 && audibleVideoEditClips(document).length ? (async (): Promise<void> => {
+            audio ??= new AudioContext({ sampleRate: document.sampleRate }); await audio.resume()
+            const before = audio.currentTime; const waiting = performance.now()
+            while (audio.currentTime === before && performance.now() - waiting < 1000 && !stopped) await new Promise(resolve => setTimeout(resolve, 2))
+          })() : undefined
+          audioReady?.catch(() => undefined)
           const initialResult = await renderer.present(initialFrame, direction === 1)
           if (stopped) return
           if (initialResult.presented === true) recordPresentation(initialFrame, initialResult, requestedAt, false, document.revision)
           if (!current.playing || !listVideoEditInstances().includes(instance) || getActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented === false) { lastFrame = -1; lastRequested = -1; wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented !== true) recordPresentation(initialFrame, initialResult, requestedAt, false, document.revision)
-          lastFrame = initialFrame; lastScrubbing = false
+          const phaseFirst = performance.now()
+          lastFrame = initialFrame; lastScrubbing = false; submittedFrame = -1
           lastRequested = initialFrame; activeCommand = command
-          if (direction === 1 && audibleVideoEditClips(document).length) {
-            audio ??= new AudioContext({ sampleRate: document.sampleRate }); await audio.resume()
+          if (audioReady) {
+            await audioReady
             if (stopped) return
             if (!current.playing || !listVideoEditInstances().includes(instance) || getActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
-            meter ??= createVideoEditAudioMeter(audio, document.channels)
-            const before = audio.currentTime; const waiting = performance.now()
-            while (audio.currentTime === before && performance.now() - waiting < 1000 && !stopped) await new Promise(resolve => setTimeout(resolve, 2))
+            if (audio) meter ??= createVideoEditAudioMeter(audio, document.channels)
           }
           if (stopped) return
-          clockStart = (audio?.currentTime ?? 0) + 0.1; startFrame = initialFrame; audioScheduler.start(initialFrame / document.fps)
+          const premixed = firstBlock?.document === document && firstBlock.from === initialFrame / document.fps ? await firstBlock.buffer.then(() => true, () => false) : false
+          if (stopped) return
+          const lead = premixed ? PLAY_PREMIXED_LEAD_SECONDS : 0.1
+          // 起点放在两次刷新正中间，避免每帧呈现时刻贴着刷新边界来回跳（见 videoEditDisplayClock）。
+          const vsync = displayPeriod ? await nextVideoEditDisplayFrame() : undefined
+          if (stopped) return
+          const clockNow = performance.now(); const audioNow = audio?.currentTime ?? 0
+          const clockAt = vsync !== undefined && displayPeriod ? alignVideoEditClockToDisplay(clockNow + lead * 1000, vsync, displayPeriod) : clockNow + lead * 1000
+          clockStart = audioNow + (clockAt - clockNow) / 1000; startFrame = initialFrame; audioScheduler.start(initialFrame / document.fps)
           if (!current.playing || getActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
-          clockPerformanceStart = performance.now() + 100
+          clockPerformanceStart = clockAt
+          surface.dataset.playStartPhases = JSON.stringify({ at: phaseStart, yieldMs: phaseYield - phaseStart, firstFrameMs: phaseFirst - phaseYield, audioMs: clockNow - phaseFirst })
           surface.dataset.playClockStartAt = String(clockPerformanceStart)
           surface.dataset.playStartFrame = String(startFrame)
         }
@@ -292,22 +322,31 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           if (direction === 1 && audio && meter && audibleVideoEditClips(document).length) {
             audioScheduler.pump({
               context: audio, destination: meter.input, origin: clockStart - startFrame / document.fps, timelineTime, endTime: videoEditDuration(document) / document.fps,
-              mix: (from, duration) => (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration),
+              mix: (from, duration) => {
+                const block = firstBlock; firstBlock = undefined
+                return block?.document === document && block.from === from && block.duration === duration ? block.buffer : (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration)
+              },
               isCurrent: () => !stopped && listVideoEditInstances().includes(instance) && getActiveVideoEditSequence(instance) === document && videoEditProgramCommandIdentity(instance.document.id) === command,
               onError: error => { setVideoEditView(instance.document.id, { playing: false }, true); onError(error) },
             })
           }
         }
         const playing = current.playing
-        const target = playing ? direction === 1 ? Math.max(startFrame, Math.min(videoEditDuration(document) - 1, lastFrame + 1)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
+        const target = playing ? direction === 1 ? Math.max(startFrame, Math.min(videoEditDuration(document) - 1, Math.max(lastFrame, submittedFrame) + 1)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
         if (target !== lastRequested || (!!current.scrubbing !== lastScrubbing && !current.scrubbing)) {
           const scrubbing = !!current.scrubbing
           const requestedAt = performance.now()
           const deadline = playing ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps * 1000 : undefined
           lastRequested = target
-          const result = await renderer.present(target, playing && direction === 1, scrubbing, deadline, scrubbing ? () => {
+          // 正向播放与拖动一样两帧流水：这一帧一提交给 GPU 就去准备下一帧，不等它画完再往返一趟，
+          // 否则每帧都赶不上下一次刷新，画面成对出现（一帧晚、下一帧紧跟着补上，前一帧根本没显示）。
+          const pipelined = playing && direction === 1
+          if (pipelined) playbackInFlight++
+          const result = await renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
+            if (pipelined) { submittedFrame = target; if (playbackInFlight >= 2) return }
             if (!stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
-          } : undefined)
+          } : undefined).finally(() => { if (pipelined) playbackInFlight-- })
+          if (submittedFrame === target) submittedFrame = -1
           {
             // A completed seek is useful while the pointer keeps moving. Only a different
             // document/lifetime invalidates it; the next iteration reads the latest target.
@@ -324,6 +363,22 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
             lastFrame = target; lastScrubbing = scrubbing
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
           }
+        }
+        // 起播预热：暂停画面停稳后，在后台把前向解码定位到播放头（从关键帧解到当前帧），按下播放即可直接出下一帧。
+        if (!playing && !current.scrubbing && lastFrame === current.frame && current.frame === lastRequested && (armedDocument !== document || armedFrame !== current.frame) && performance.now() - lastPresentation > PLAY_ARM_IDLE_MS && captureFull === 0) {
+          armedDocument = document; armedFrame = current.frame
+          // 声音设备一并提前打开（首次创建 AudioContext 在 Windows 上要几百毫秒）。
+          firstBlock = undefined
+          if (audibleVideoEditClips(document).length && (!audio || audio.sampleRate === document.sampleRate)) {
+            audio ??= new AudioContext({ sampleRate: document.sampleRate }); void audio.resume().catch(() => undefined)
+            const from = current.frame / document.fps; const duration = Math.min(VIDEO_EDIT_AUDIO_BLOCK_SECONDS, videoEditDuration(document) / document.fps - from)
+            if (duration > 0) { firstBlock = { document, from, duration, buffer: (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration) }; firstBlock.buffer.catch(() => undefined) }
+          }
+          await renderer.armPlayback(current.frame)
+          if (stopped) return
+          // 刷新周期在后台量，不挡住紧接着的起播。
+          void measureVideoEditDisplayPeriod().then(period => { if (period) displayPeriod = period })
+          if (stopped) return
         }
         if (!stopped && !scheduled) timer = setTimeout(() => { void loop() }, current.playing ? 0 : 2)
       } catch (error) {

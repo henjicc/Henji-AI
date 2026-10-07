@@ -21,7 +21,7 @@ export class VideoEditProxyFrames implements VideoEditFrameBackend {
     const ready = video.ready.then(source => { live(); return ({
       codec: source.codec,
       clipFrames: () => source.clipFrames(),
-      schedule: (times: readonly number[]) => source.schedule(times),
+      schedule: (times: readonly number[], signal?: AbortSignal) => source.schedule(times, signal),
       clipAudio: (stream?: number) => media.hasAudio === false ? undefined : {
         async *chunks(start: number, end: number, sampleRate?: number) {
           live()

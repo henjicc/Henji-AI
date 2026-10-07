@@ -86,6 +86,8 @@ export class VideoEditRenderSession {
   async updateDocument(document: VideoEditComposition, original = false): Promise<void> { await this.ready; await this.selectProxies(original); await this.content.check(document); await this.authorizeLuts(document); await this.request({ kind: 'update', document: this.mediaDocument(document), localPaths: this.localPaths(document), proxies: this.proxySources() }); this.document = document }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
+  /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */
+  async armPlayback(frame: number): Promise<void> { await this.ready; await this.request({ kind: 'arm', frame }) }
   /** 智能区域（4.7d）：已分析好的段落交给 Worker，下一次渲染即使用。 */
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }

@@ -21,6 +21,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'invalidate'; revision: number }
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
   | { kind: 'scale'; divisor: number }
+  | { kind: 'arm'; frame: number }
   /** 已分析好的智能区域段落（4.7d），按素材地址与分析种类；不进渲染队列，下一次渲染即生效。 */
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
@@ -110,10 +111,14 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
           const bitmap = rgb || direct || !result.presented ? undefined : result.canvas.transferToImageBitmap()
           self.postMessage({ id: request.id, bitmap, rgb, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : [] })
         }
-        if (direct && request.scrubbing) {
+        // 拖动与正向播放：提交后先回执，下一帧不必等这一帧的 GPU 完成（节目监视器两帧流水）。
+        if (direct && (request.scrubbing || (request.sequential && request.deadline !== undefined))) {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)
           void finish().catch(error => self.postMessage({ id: request.id, error: String(error) } satisfies RenderResponse))
         } else await finish()
+      } else if (request.kind === 'arm') {
+        if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        await renderer.armPlayback(request.frame); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'scale') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         renderer.setRenderDivisor(request.divisor); self.postMessage({ id: request.id } satisfies RenderResponse)

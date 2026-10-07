@@ -302,9 +302,9 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     return createVideoEditNativeClipAudio(sampleRate => this.owner.openSound(this.media, this.path, sampleRate, audioStream))
   }
 
-  async *schedule(timestamps: readonly number[]): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
+  async *schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
     if (this.media.kind !== 'video') return
-    yield* (await this.session('playback')).run({ times: timestamps })
+    yield* (await this.session('playback')).run({ times: timestamps }, signal)
   }
 
   private async *frames(start: number): AsyncGenerator<VideoEditNativePicture, void, unknown> {

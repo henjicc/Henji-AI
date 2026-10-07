@@ -28,6 +28,8 @@ import { isVideoEditRenderDivisor, videoEditRenderSize, type VideoEditRenderDivi
 
 interface PlaybackStream {
   demux: string
+  /** Stops the decode when the schedule is dropped, so a seek does not wait for an armed GOP decode to finish. */
+  abort: AbortController
   entries: Array<{ frame: number; clipId: string }>
   cursor: number
   samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
@@ -70,6 +72,8 @@ export class VideoEditRenderer {
   private readonly sources = new Map<string, Promise<VideoSource>>()
   private playback?: PlaybackSchedule
   private lastForwardFrame?: number
+  /** The paused frame a playback schedule was built for ahead of play (see `armPlayback`). */
+  private armedFrame?: number
   private readonly images = new Map<string, { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean }>()
   private imageLoads = 0
   private readonly imageQueue: Array<() => void> = []
@@ -238,16 +242,31 @@ export class VideoEditRenderer {
         entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps)))
       }
       const demux = this.frames.open(group.media)
-      const samples = (async function* (ready: Promise<VideoEditFrameSource>) { yield* (await ready).schedule(timestamps) })(demux.ready)
+      const abort = new AbortController()
+      const samples = (async function* (ready: Promise<VideoEditFrameSource>) { yield* (await ready).schedule(timestamps, abort.signal) })(demux.ready)
       const primed = samples.next(); primed.catch(() => undefined)
-      const stream: PlaybackStream = { demux: demux.key, entries, cursor: 0, samples, primed, tail: Promise.resolve() }
+      const stream: PlaybackStream = { demux: demux.key, abort, entries, cursor: 0, samples, primed, tail: Promise.resolve() }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
     }
     this.playback = { document, endFrame, streams, byClip }
   }
+  /**
+   * Builds the forward playback schedule at the paused frame before play is pressed: the decoder positions on the GOP
+   * and decodes up to the playhead while the user is not waiting, so the first played frame is already decoded. Kept
+   * while the same paused frame is re-presented; any other frame or document drops it like a seek.
+   */
+  async armPlayback(frame: number): Promise<void> {
+    if (this.disposed || !this.previewWidth) return
+    if (this.playback && this.armedFrame === frame && this.playback.document === this.document) return
+    if (this.playback) await this.disposePlayback()
+    this.buildPlayback(this.document, frame, videoEditVisibleTracks(this.document))
+    this.armedFrame = frame; this.lastForwardFrame = frame - 1
+  }
   private async disposePlayback(): Promise<void> {
+    this.armedFrame = undefined
     const playback = this.playback; this.playback = undefined
     if (!playback) return
+    for (const stream of playback.streams) stream.abort.abort()
     await Promise.allSettled(playback.streams.map(async stream => {
       await stream.tail.catch(() => undefined)
       const primed = stream.primed; stream.primed = undefined
@@ -315,8 +334,8 @@ export class VideoEditRenderer {
       // of long-GOP 4K material). A sequential frame before the previous one is not playback: it keeps the seek path
       // and its frame cache.
       if (!this.playback && !(this.lastForwardFrame !== undefined && frame < this.lastForwardFrame)) this.buildPlayback(document, frame, visible)
-      this.lastForwardFrame = frame
-    } else { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
+      this.lastForwardFrame = frame; this.armedFrame = undefined
+    } else if (this.armedFrame !== frame || this.playback?.document !== document) { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
     const rawTransitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
     // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
     const candidates = new Map(activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio').map(clip => [clip.id, clip]))

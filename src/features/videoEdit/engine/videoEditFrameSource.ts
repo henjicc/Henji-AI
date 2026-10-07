@@ -78,9 +78,10 @@ export interface VideoEditFrameSource {
   /**
    * Forward playback through one long-lived decoder: exactly one picture or null per requested source time, in
    * request order (the picture is the last one starting at or before that time). Null makes the caller use its
-   * regular path for that frame. Ends immediately when the file has no picture stream.
+   * regular path for that frame. Ends immediately when the file has no picture stream. Aborting `signal` stops the
+   * decode at once where the backend supports it (native), instead of after the picture being decoded.
    */
-  schedule(timestamps: readonly number[]): AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
+  schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
   /** Whether this backend decodes every stream of the file; only asked when choosing a backend for it. */
   decodable?(): Promise<boolean>
 }

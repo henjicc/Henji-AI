@@ -356,7 +356,7 @@ class RoutedFileSource implements VideoEditFrameSource {
     }
   }
 
-  async *schedule(timestamps: readonly number[]): AsyncGenerator<VideoEditDecodedPicture | null, void, unknown> {
+  async *schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditDecodedPicture | null, void, unknown> {
     const { router, decision, media } = this
     let backend = router.current(decision)
     // One answer per time: a recovered plan continues with the times not answered yet.
@@ -364,7 +364,7 @@ class RoutedFileSource implements VideoEditFrameSource {
     for (let attempt = 0; ;) {
       try {
         let returning = false
-        for await (const picture of (await this.source(backend)).schedule(index ? timestamps.slice(index) : timestamps)) {
+        for await (const picture of (await this.source(backend)).schedule(index ? timestamps.slice(index) : timestamps, signal)) {
           index++
           if (picture) router.succeeded(decision, media, backend)
           yield picture
@@ -374,6 +374,7 @@ class RoutedFileSource implements VideoEditFrameSource {
         router.succeeded(decision, media, backend)
         return
       } catch (error) {
+        if (signal?.aborted) return
         const recovery = await router.recover(decision, media, backend, error, attempt++)
         if ('error' in recovery) throw recovery.error
         backend = recovery.retry

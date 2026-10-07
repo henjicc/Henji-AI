@@ -507,6 +507,33 @@ it('正向播放从第一帧起按文件建立一条解码计划：同文件剪�
     expect(boundary.scheduled[1].timestamps[0]).toBe(videoEditPictureSeconds(1 + 40 / 60))
   } finally { await renderer.dispose() }
 })
+it('暂停时预热起播：计划在按下播放前定位到播放头，重画同一暂停帧保留，起播直接取用，换位置即释放', async () => {
+  boundary.scheduled = []
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))
+  document.clips = [{ ...document.clips[0], duration: 120, sourceInUs: 0 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  const internals = renderer as unknown as { playback?: unknown }
+  try {
+    await (await renderer.render(30, false)).completion
+    await renderer.armPlayback(30)
+    expect(boundary.scheduled).toHaveLength(1); expect(boundary.scheduled[0].timestamps[0]).toBe(videoEditPictureSeconds(30 / 60))
+    // The paused frame drawn again (an overlay or region update) keeps the armed schedule; arming again is a no-op.
+    await (await renderer.render(30, false)).completion; await renderer.armPlayback(30)
+    expect(internals.playback).toBeDefined(); expect(boundary.scheduled).toHaveLength(1)
+    // Play takes the armed schedule from its first frame, no second positioning.
+    for (let frame = 30; frame <= 33; frame++) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(us(result.sourceTimestamps)).toEqual(us([frame / 60]))
+    }
+    expect(boundary.scheduled).toHaveLength(1)
+    // Seeking elsewhere drops an armed schedule like any playback schedule.
+    await renderer.armPlayback(70); expect(boundary.scheduled).toHaveLength(2)
+    await (await renderer.render(10, false)).completion
+    expect(internals.playback).toBeUndefined()
+  } finally { await renderer.dispose() }
+})
+
 it('源文件缺失时给出可操作的提示，失败不缓存；重新定位到同一素材后立即恢复画面', async () => {
   const base = fixture()
   const missing = { ...base, media: base.media.map(media => media.id === 'A' ? { ...media, path: 'D:/missing.mp4' } : media) }
