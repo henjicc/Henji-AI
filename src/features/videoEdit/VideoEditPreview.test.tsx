@@ -135,7 +135,7 @@ it('参数修改更新同一渲染会话，旧文档结果不覆盖新内容且�
   const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
   await act(async () => { await Promise.resolve() })
   const canvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
-  act(() => { editVideoSequence(instance.document.id, instance.activeSequenceId, document => ({ ...document, clips: document.clips.map(clip => ({ ...clip, brightness: .5 })) })) })
+  act(() => { editVideoSequence(instance.document.id, instance.activeSequenceId, document => ({ ...document, clips: document.clips.map(clip => ({ ...clip, opacity: .5 })) })) })
   await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0], presented: false }) })
   expect(canvas.dataset.presentedFrame).toBeUndefined()
   await act(async () => { await vi.advanceTimersByTimeAsync(1) })

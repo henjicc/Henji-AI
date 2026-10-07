@@ -30,7 +30,7 @@ function createVideoEditFilmstripScene() {
       const durationSeconds = Number(probe.duration)
       const clips = Array.from({ length: 120 }, (_, index) => {
         const track = 1 + Math.floor(index / 30); const slot = index % 30
-        return { id: `strip-${index}`, mediaId: 'source', name: `4K60 片段 ${index + 1}`, kind: 'video', track, start: slot * 60, duration: 60, sourceInUs: ((index * 7) % 18) * 1_000_000, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: '' }
+        return { id: `strip-${index}`, mediaId: 'source', name: `4K60 片段 ${index + 1}`, kind: 'video', track, start: slot * 60, duration: 60, sourceInUs: ((index * 7) % 18) * 1_000_000, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
       })
       const fixture = { id: 'filmstrip-4k60', name: '缩略图条验证', revision: 0, width: 3840, height: 2160, fps: 60, media: [{ id: 'source', name: path.basename(source), path: source, kind: 'video', durationSeconds, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, hasAudio: false }], clips, annotations: [] }
       const project = require('./uiInspectionSceneVideoEditProbe.cjs').videoEditFixtureProject(fixture)

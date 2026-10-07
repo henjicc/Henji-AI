@@ -53,7 +53,7 @@ const videoEditClipStateSchema = z.object({
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(0.01).max(4), rotation: z.number().min(-360).max(360),
   anchorX: z.number().min(0).max(1).optional(), anchorY: z.number().min(0).max(1).optional(), curves: videoEditClipCurvesSchema.optional(),
-  opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), audioRole: videoEditAudioRoleSchema.optional(), brightness: z.number().min(0).max(2), text: z.string().max(2000),
+  opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), audioRole: videoEditAudioRoleSchema.optional(), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
   fadeInFrames: z.number().int().min(1).max(108_000).optional(), fadeOutFrames: z.number().int().min(1).max(108_000).optional(),

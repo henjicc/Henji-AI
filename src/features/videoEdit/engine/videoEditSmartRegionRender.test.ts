@@ -15,7 +15,7 @@ const picture = (width = 1920, height = 1080): VideoEditCodePicture => new Video
 
 function clip(patch: Partial<VideoEditClip> = {}): VideoEditClip {
   return { id: 'c', itemId: 'i', name: 'c', kind: 'video', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 },
-    x: 0.2, y: -0.1, scale: 0.5, rotation: 15, opacity: 0.8, brightness: 1.2, volume: 1, text: '',
+    x: 0.2, y: -0.1, scale: 0.5, rotation: 15, opacity: 0.8, volume: 1, text: '',
     effects: [{ id: 'e', name: '马赛克', enabled: true, amount: 0.75, builtin: { id: 'mosaic', params: {} }, mask: { regionId: 'face' } }], ...patch }
 }
 
@@ -45,10 +45,10 @@ describe('智能区域：合成场景', () => {
     const result = await renderVideoEditCompositeScene(document, nodes, new Map([['c', picture()]]), prepared, compositor, 0, () => true)
     await result.completion
     expect(calls).toEqual(['target:composite:clip:c:0', 'builtin:composite:clip:c:1', 'upload:composite:mask:source:512x288', 'target:composite:mask:document', 'maskedMix:composite:clip:c:2:0.75'])
-    // 第二次绘制就是蒙版：同一片段的位置、缩放、旋转，不带亮度与不透明度，画进序列尺寸的蒙版画面。
+    // 第二次绘制就是蒙版：同一片段的位置、缩放、旋转，不带不透明度，画进序列尺寸的蒙版画面。
     const regionDraw = draws[1]
     expect(regionDraw.target).toBe(targets.get('composite:mask:document'))
-    expect(regionDraw.clips[0]).toMatchObject({ x: 0.2, y: -0.1, scale: 0.5, rotation: 15, brightness: 1, opacity: 1 })
+    expect(regionDraw.clips[0]).toMatchObject({ x: 0.2, y: -0.1, scale: 0.5, rotation: 15, opacity: 1 })
   })
 })
 

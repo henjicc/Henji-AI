@@ -96,7 +96,7 @@ export function videoEditCaptionClips(sequence: VideoEditSequence, frame: number
   return (sequence.captions ?? []).filter(caption => frame >= caption.start && frame < caption.start + caption.duration).map((caption, index) => ({
     id: `caption:${caption.id}`, itemId: '', name: '字幕', kind: 'text', track: 31,
     start: caption.start, duration: caption.duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 },
-    x: 0, y: caption.style ? index === 0 ? 0 : -index * 0.1 : 0.35 - index * 0.1, scale: caption.style ? 1 : 0.65, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: captionDisplayText(caption),
+    x: 0, y: caption.style ? index === 0 ? 0 : -index * 0.1 : 0.35 - index * 0.1, scale: caption.style ? 1 : 0.65, rotation: 0, opacity: 1, volume: 0, text: captionDisplayText(caption),
     ...(caption.style ? { kind: 'graphic' as const, graphic: graphicForCaption(caption, sequence) } : {}),
   }))
 }

@@ -49,13 +49,13 @@ function ramp(levels: number, format: Format): Texture {
   return source
 }
 /** One layer drawn with the compositor's image shader over the opaque black clear, as `VideoEditGpuCompositor.draw()`. */
-function compose(source: Texture, width: number, format: Format, brightness = 1, opacity = 1): Texture {
+function compose(source: Texture, width: number, format: Format, opacity = 1): Texture {
   const target = texture(width, format, RENDER_ATTACHMENT | TEXTURE_BINDING | TEXTURE_COPY_SRC)
   const module = device.createShaderModule({ code: videoEditLayerShader(false) })
   const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
   const pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format, blend }] }, primitive: { topology: 'triangle-list' } })
   const uniform = device.createBuffer({ size: 96, usage: BUFFER_UNIFORM | BUFFER_COPY_DST })
-  device.queue.writeBuffer(uniform, 0, new Float32Array([1, 1, 1, 0, 0, 0, brightness, opacity, ROWS / width, width / ROWS, 0, 0, ...new Array<number>(12).fill(0)]))
+  device.queue.writeBuffer(uniform, 0, new Float32Array([1, 1, 1, 0, 0, 0, opacity, 0, ROWS / width, width / ROWS, 0, 0, ...new Array<number>(12).fill(0)]))
   const encoder = device.createCommandEncoder()
   const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }] })
   pass.setPipeline(pipeline)
@@ -121,15 +121,15 @@ describe('剪辑合成高位深管线（真实设备）', () => {
     }
   }, 30_000)
 
-  it('8 位画面进入高精度帧：未变换时逐像素不变，带亮度与透明度时差异不超过一级', async () => {
+  it('8 位画面进入高精度帧：未变换时逐像素不变，带透明度时差异不超过一级', async () => {
     const source = ramp(256, 'rgba8unorm')
     for (let row = 0; row < ROWS; row++) {
       const direct = await read8(compose(source, 256, 'rgba8unorm'), 256, row)
       const throughPrecise = await read8(present(compose(source, 256, 'rgba16float'), 256), 256, row)
       expect([...throughPrecise]).toEqual([...direct])
     }
-    const direct = await read8(compose(source, 256, 'rgba8unorm', 0.8, 0.5), 256, 0)
-    const throughPrecise = await read8(present(compose(source, 256, 'rgba16float', 0.8, 0.5), 256), 256, 0)
+    const direct = await read8(compose(source, 256, 'rgba8unorm', 0.5), 256, 0)
+    const throughPrecise = await read8(present(compose(source, 256, 'rgba16float', 0.5), 256), 256, 0)
     for (let index = 0; index < direct.length; index++) expect(Math.abs(throughPrecise[index] - direct[index])).toBeLessThanOrEqual(1)
   }, 30_000)
 })

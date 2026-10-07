@@ -4,7 +4,7 @@ import { invertVideoEditSilence, replaceVideoEditDuckingKeyframes, videoEditActi
 import { claimVideoEditManualKeyframes, evaluateVideoEditKeyframes, isVideoEditDuckingKeyframe, rescaleVideoEditClipKeyframes, sliceVideoEditClipKeyframes } from './keyframes'
 
 function music(patch: Partial<VideoEditClip> = {}): VideoEditClip {
-  return { id: 'm', itemId: 'i', name: '音乐', kind: 'audio', track: 0, start: 30, duration: 300, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0.8, brightness: 1, text: '', audioRole: 'music', ...patch }
+  return { id: 'm', itemId: 'i', name: '音乐', kind: 'audio', track: 0, start: 30, duration: 300, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0.8, text: '', audioRole: 'music', ...patch }
 }
 const settings = videoEditDuckingSettingsSchema.parse({ reductionDb: 20, fadeSeconds: 0.5 })
 it('静音反向区间覆盖开头/末尾/全静音/全有声与重叠；敏感度越高门限越低', () => {

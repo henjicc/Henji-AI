@@ -4,7 +4,7 @@ import { findVideoEditReplaceTarget, resolveVideoEditDropMode } from './dropPlac
 
 function clip(id: string, track: number, patch: Partial<VideoEditClip> = {}): VideoEditClip {
   return { id, itemId: `item-${id}`, name: id, kind: 'video', track, start: 0, duration: 120, sourceInUs: 0,
-    sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '', ...patch }
+    sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', ...patch }
 }
 const track = (index: number, kind: 'video' | 'audio', id = `t${index}`) => ({ id, name: id, index, kind, locked: false, enabled: true, muted: false, solo: false })
 function sequence(clips: VideoEditClip[]): VideoEditSequence {

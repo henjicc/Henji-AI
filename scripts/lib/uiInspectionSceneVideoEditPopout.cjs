@@ -12,7 +12,7 @@ const PROJECT_ID = 'video-edit-popout'
 
 function fixture() {
   const track = (index, kind, name) => ({ id: `${kind[0]}${index}`, name, index, kind, locked: false, enabled: true, muted: false, solo: false })
-  const clip = (id, start) => ({ id, itemId: 'original-item', name: id === 'a' ? '片头A' : '片头B', kind: 'video', track: 1, start, duration: 180, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' })
+  const clip = (id, start) => ({ id, itemId: 'original-item', name: id === 'a' ? '片头A' : '片头B', kind: 'video', track: 1, start, duration: 180, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' })
   return { format: 'henji-video-project', version: 2, id: PROJECT_ID, name: '独立浮窗验收', revision: 0,
     media: [{ id: 'original', name: '原4K60片头', path: ORIGINAL, kind: 'video', durationSeconds: 7, width: 3840, height: 2160, hasAudio: false, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' }],
     bins: [], items: [{ id: 'original-item', name: '原4K60片头', kind: 'video', mediaId: 'original' }],

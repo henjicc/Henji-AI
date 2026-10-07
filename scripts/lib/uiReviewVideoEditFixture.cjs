@@ -22,7 +22,7 @@ function normalizeSeedVideoEdit(value) {
 }
 
 function buildProject({ id, name, source, captions }) {
-  const base = { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }
+  const base = { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   const tracks = (prefix) => [...Array.from({ length: 4 }, (_, index) => ({ id: `${prefix}-track-${index}`, name: index ? `视频 ${index}` : '音频 1', index, kind: index ? 'video' : 'audio', locked: false, enabled: true, muted: false, solo: false })),
     { id: `${prefix}-track-4`, name: '音频 2', index: 4, kind: 'audio', locked: false, enabled: true, muted: false, solo: false }]
   const captionTexts = ['大家好，这是第一条字幕', '第二条字幕稍长一些，用来看列表里的截断效果是否正常', '第三条', '锚定在画面片段上的字幕', '结尾前的一句', '最后一条字幕']

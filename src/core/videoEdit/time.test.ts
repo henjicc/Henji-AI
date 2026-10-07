@@ -15,7 +15,7 @@ it('混合帧率换算以绝对边界求值', () => {
   const ntsc = { numerator: 30000, denominator: 1001 }
   expect(rescaleVideoEditFrame(30000, ntsc, { numerator: 60, denominator: 1 })).toBe(60060)
   const sequence = createVideoEditSequence()
-  sequence.clips = [{ id: 'clip', itemId: 'item', name: 'clip', kind: 'video', track: 1, start: 13, duration: 33, sourceInUs: 123456, sourceRemainder: { numerator: 1, denominator: 3 }, x: .2, y: .3, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }]
+  sequence.clips = [{ id: 'clip', itemId: 'item', name: 'clip', kind: 'video', track: 1, start: 13, duration: 33, sourceInUs: 123456, sourceRemainder: { numerator: 1, denominator: 3 }, x: .2, y: .3, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }]
   const updated = changeVideoEditSequenceSettings(sequence, { frameRate: ntsc, width: 2160, height: 3840, sampleRate: 44100, channels: 1 })
   const clip = updated.clips[0]
   expect(clip.start).toBe(rescaleVideoEditFrame(13, sequence.frameRate, ntsc))

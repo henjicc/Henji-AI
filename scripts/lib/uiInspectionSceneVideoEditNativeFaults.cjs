@@ -33,7 +33,7 @@ function project(id, name, media, clips, extraTracks = 0) {
   for (let index = 0; index < extraTracks; index++) sequence.tracks.push({ id: `${id}-track-x${index}`, name: `视频 ${8 + index}`, index: 8 + index, kind: 'video', locked: false, enabled: true, muted: false, solo: false })
   return fixture
 }
-const clip = (id, mediaId, track, extra = {}) => ({ id, mediaId, name: id, kind: 'video', track, start: 0, duration: FRAMES, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: '', ...extra })
+const clip = (id, mediaId, track, extra = {}) => ({ id, mediaId, name: id, kind: 'video', track, start: 0, duration: FRAMES, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '', ...extra })
 /** The same file back to back on one track (cuts within one file, as in real edits). */
 const repeated = (id, mediaId, track, extra = {}) => Array.from({ length: REPEATS }, (_, index) => clip(`${id}-${index}`, mediaId, track, { ...extra, start: index * FRAMES }))
 const media = (id, file) => ({ id, name: path.basename(file), path: file, kind: 'video', durationSeconds: FRAMES / FPS, width: 1920, height: 1080, hasAudio: false, frameRate: { numerator: FPS, denominator: 1 }, frameRateMode: 'sampled-constant' })

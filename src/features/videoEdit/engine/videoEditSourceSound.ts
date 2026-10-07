@@ -27,7 +27,7 @@ export function videoEditSourceSoundComposition(media: VideoEditMedia, layout?: 
     items: [{ id: itemId, name: media.name, kind: media.kind, mediaId: media.id }],
     tracks: [{ id: crypto.randomUUID(), name: media.name, index: 0, kind: 'audio', locked: false, enabled: true, muted: false, solo: false }],
     clips: (layout?.length ? layout : [undefined]).map(mapping => ({ id: crypto.randomUUID(), itemId, name: media.name, kind: 'audio' as const, sourceComponent: 'audio' as const, track: 0, start: 0, duration: Math.max(1, Math.ceil(media.durationSeconds * fps - 1e-6)),
-      sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '', ...(mapping ? { audioMapping: structuredClone(mapping) } : {}) })),
+      sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', ...(mapping ? { audioMapping: structuredClone(mapping) } : {}) })),
     annotations: [],
   }
 }

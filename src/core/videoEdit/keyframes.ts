@@ -10,7 +10,7 @@ export const videoEditKeyframeSchema = codeMaterialKeyframeSchema.omit({ id: tru
 export const videoEditKeyframesSchema = z.array(videoEditKeyframeSchema).max(256).superRefine((points, ctx) => {
   if (points.some((point, i) => i > 0 && point.time <= points[i - 1].time)) ctx.addIssue({ code: 'custom', message: '关键帧 time 必须按片段内帧升序排列，不能重复。' })
 })
-export const VIDEO_EDIT_ANIMATABLE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume', 'brightness'] as const
+export const VIDEO_EDIT_ANIMATABLE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume'] as const
 export type VideoEditAnimatableKey = typeof VIDEO_EDIT_ANIMATABLE_KEYS[number]
 export type VideoEditKeyframe = z.infer<typeof videoEditKeyframeSchema>
 export type VideoEditKeyframes = VideoEditKeyframe[]

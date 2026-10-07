@@ -119,7 +119,7 @@ function createVideoEditLayoutScene() {
       const root = path.resolve('node_modules/.cache/video-edit-layout'); fs.mkdirSync(root, { recursive: true })
       const file = path.join(root, 'layout.henji-video')
       const project = videoEditFixtureProject({ id: 'reality-video-layout', name: '剪辑布局验收', revision: 0, width: 3840, height: 2160, fps: 60, media: [], annotations: [],
-        clips: [{ id: 'layout-title', name: '布局验收文字', kind: 'text', track: 1, start: 0, duration: 360, sourceInUs: 0, x: 0, y: 0, scale: 0.8, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: 'Henji · 4K60 布局验收' }] })
+        clips: [{ id: 'layout-title', name: '布局验收文字', kind: 'text', track: 1, start: 0, duration: 360, sourceInUs: 0, x: 0, y: 0, scale: 0.8, rotation: 0, opacity: 1, volume: 0, text: 'Henji · 4K60 布局验收' }] })
       const originalSource = process.env.HENJI_VIDEO_EDIT_LAYOUT_SOURCE
       if (originalSource) {
         const source = path.resolve(originalSource); assert.ok(fs.existsSync(source))

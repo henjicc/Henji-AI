@@ -35,7 +35,7 @@ it('真实缓存读取到正式求值，生成运动关键帧；时间和几何�
   const document = createVideoEditDocument('采访'); const sequence = document.sequences[0]
   document.media = [{ id: 'm', path: 'media', name: '采访', kind: 'video', width: 1920, height: 1080, durationSeconds: 3 }]
   document.items = [{ id: 'item', name: '采访', kind: 'video', mediaId: 'm' }]
-  sequence.clips = [{ id: 'clip', itemId: 'item', name: '采访', kind: 'video', track: sequence.tracks.find(track => track.kind === 'video')!.index, start: 0, duration: 90, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }]
+  sequence.clips = [{ id: 'clip', itemId: 'item', name: '采访', kind: 'video', track: sequence.tracks.find(track => track.kind === 'video')!.index, start: 0, duration: 90, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }]
   const result = await analyzeVideoEditReframe({ composition: videoEditComposition(document, sequence.id), clipId: 'clip', target: { width: 1080, height: 1920 }, settings: { attention: 'face', motion: 'default' }, segments: { media: { face: [{ url: 'henji-media://cache/result', startUs: 0, endUs: 3000000, still: false }] } }, tracks: {}, cuts: [] })
   expect(result.missingFrames).toBe(0)
   expect(evaluateVideoEditKeyframes(result.clip.curves!.scale, 45, 1)).toBeCloseTo(256 / 81)

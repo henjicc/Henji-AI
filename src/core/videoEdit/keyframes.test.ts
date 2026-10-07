@@ -8,9 +8,17 @@ const curve = (interpolation: 'linear' | 'hold' | 'ease'): VideoEditKeyframes =>
 function fixture(): ReturnType<typeof createVideoEditDocument> {
   const document = createVideoEditDocument('关键帧')
   document.items.push({ id: 'item', kind: 'text', name: '标题' })
-  document.sequences[0].clips.push({ id: 'clip', itemId: 'item', kind: 'text', name: '标题', start: 0, duration: 101, track: document.sequences[0].tracks.find(track => track.kind === 'video')!.index, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1, volume: 0, text: '标题', curves: { opacity: curve('ease') } })
+  document.sequences[0].clips.push({ id: 'clip', itemId: 'item', kind: 'text', name: '标题', start: 0, duration: 101, track: document.sequences[0].tracks.find(track => track.kind === 'video')!.index, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '标题', curves: { opacity: curve('ease') } })
   return document
 }
+it('文档拒绝片段固有亮度及其关键帧，内置亮度效果仍可保存', () => {
+  const document = fixture(); const clip = document.sequences[0].clips[0]
+  const withClip = (value: unknown) => ({ ...document, sequences: [{ ...document.sequences[0], clips: [value] }] })
+  expect(videoEditDocumentSchema.safeParse(withClip({ ...clip, brightness: 1 })).success).toBe(false)
+  expect(videoEditDocumentSchema.safeParse(withClip({ ...clip, curves: { brightness: curve('linear') } })).success).toBe(false)
+  clip.effects = [{ id: 'brightness-effect', name: '亮度与对比度', enabled: true, amount: 1, builtin: { id: 'brightness_contrast', params: { brightness: 25 } } }]
+  expect(videoEditDocumentSchema.parse(document).sequences[0].clips[0].effects![0].builtin!.params.brightness).toBe(25)
+})
 it('集中插值支持边界、线性、定格、固定三次贝塞尔；拒绝乱序/重复', () => {
   for (const interpolation of ['linear', 'hold', 'ease'] as const) {
     expect(evaluateVideoEditKeyframes(curve(interpolation), -5, 5)).toBe(0)

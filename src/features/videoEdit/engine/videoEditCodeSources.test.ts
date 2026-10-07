@@ -17,7 +17,7 @@ function fixture(code = source(), count = 1): VideoEditComposition {
   const document = createVideoEditDocument('代码源生命周期')
   document.codeMaterials = [{ id: 'definition', name: '图形', defaultVersionId: 'v0', versions: Array.from({ length: count }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, source: count === 1 ? code : source('static', `版本${index}`) })) }]
   document.items = [{ id: 'item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'v0', parameters: {} } }]
-  const clip: VideoEditClip = { id: 'clip', itemId: 'item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'v0', parameters: {} }, track: 1, start: 0, duration: 90, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }
+  const clip: VideoEditClip = { id: 'clip', itemId: 'item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'v0', parameters: {} }, track: 1, start: 0, duration: 90, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   document.sequences[0].clips = [clip]
   return videoEditComposition(document, document.sequences[0].id)
 }

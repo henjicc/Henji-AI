@@ -122,7 +122,7 @@ async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
   const fixture = videoEditFixtureProject({ id: 'reality-video-layout-restart', name: '剪辑冷启动布局验收', revision: 0,
     width: 3840, height: 2160, fps: 60, media: [], annotations: [],
     clips: [{ id: 'restart-title', name: '重启验收文字', kind: 'text', track: 1, start: 0, duration: 360,
-      sourceInUs: 0, x: 0, y: 0, scale: 0.8, rotation: 0, opacity: 1, volume: 0, brightness: 1,
+      sourceInUs: 0, x: 0, y: 0, scale: 0.8, rotation: 0, opacity: 1, volume: 0,
       text: 'Henji · 4K60 冷启动布局恢复' }] })
   const originalJson = JSON.stringify(fixture)
   fs.mkdirSync(outDir, { recursive: true })

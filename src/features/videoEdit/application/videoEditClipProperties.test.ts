@@ -26,27 +26,27 @@ async function project() {
 
 it('一次拖动只记一步撤销：连续预览后撤销回到拖动前的值，取消则不进历史', async () => {
   const { owner, id, sequenceId, clipId } = await project()
-  const brightness = () => getActiveVideoEditSequence(owner).clips[0].brightness
+  const volume = () => getActiveVideoEditSequence(owner).clips[0].volume
   const history = owner.past.length
   const drag = beginVideoEditGesture(id)
-  for (const value of [1.1, 1.2, 1.3, 1.5]) updateVideoEditClipProperties(id, sequenceId, clipId, { brightness: value }, drag)
-  expect(brightness()).toBe(1.5); expect(owner.past).toHaveLength(history)
+  for (const value of [1.1, 1.2, 1.3, 1.5]) updateVideoEditClipProperties(id, sequenceId, clipId, { volume: value }, drag)
+  expect(volume()).toBe(1.5); expect(owner.past).toHaveLength(history)
   finishVideoEditGesture(drag)
   expect(owner.past).toHaveLength(history + 1)
-  undoVideoEdit(id); expect(brightness()).toBe(1)
+  undoVideoEdit(id); expect(volume()).toBe(1)
 
   const cancelled = beginVideoEditGesture(id)
-  updateVideoEditClipProperties(id, sequenceId, clipId, { brightness: .4 }, cancelled)
+  updateVideoEditClipProperties(id, sequenceId, clipId, { volume: .4 }, cancelled)
   finishVideoEditGesture(cancelled, false)
-  expect(brightness()).toBe(1); expect(owner.past).toHaveLength(history)
+  expect(volume()).toBe(1); expect(owner.past).toHaveLength(history)
 })
 
 it('数值按文档 schema 边界夹取，超范围输入不会变成校验错误', async () => {
   const { owner, id, sequenceId, clipId } = await project()
-  expect(videoEditClipPropertyBounds('brightness')).toEqual({ min: 0, max: 2 })
+  expect(videoEditClipPropertyBounds('volume')).toEqual({ min: 0, max: 2 })
   expect(videoEditClipPropertyBounds('scale')).toEqual({ min: .01, max: 4 })
-  updateVideoEditClipProperties(id, sequenceId, clipId, { brightness: 7, opacity: -1, x: 9 })
-  expect(getActiveVideoEditSequence(owner).clips[0]).toMatchObject({ brightness: 2, opacity: 0, x: 2 })
+  updateVideoEditClipProperties(id, sequenceId, clipId, { volume: 7, opacity: -1, x: 9 })
+  expect(getActiveVideoEditSequence(owner).clips[0]).toMatchObject({ volume: 2, opacity: 0, x: 2 })
   expect(() => updateVideoEditClipProperties(id, sequenceId, clipId, { rotation: Number.NaN })).toThrow('数值无效')
   expect(() => updateVideoEditClipProperties(id, sequenceId, clipId, { name: '  ' })).toThrow('名称不能为空')
 })

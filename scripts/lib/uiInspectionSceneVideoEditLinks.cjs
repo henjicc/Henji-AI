@@ -56,7 +56,7 @@ function fixture() {
     const { ffmpegPath } = require('./mediaBinaries.cjs')
     execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `testsrc2=size=1280x720:rate=${FPS}`, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '6', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', source], { windowsHide: true })
   }
-  const base = { start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '', itemId: 'links-item', linkId: 'links-take' }
+  const base = { start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', itemId: 'links-item', linkId: 'links-take' }
   const project = {
     format: 'henji-video-project', version: 2, id: 'reality-video-links', name: '链接剪辑验收', revision: 0,
     media: [{ id: 'links-media', name: '同期音画', path: source, kind: 'video', width: 1280, height: 720, durationSeconds: 6, hasAudio: true, frameRate: { numerator: FPS, denominator: 1 } }],

@@ -285,7 +285,7 @@ it('助手通用实体在嵌套层新建/纠错/绑定，子序列变化停止�
     await waitFor(() => expect(status.mock.calls.at(-1)![0].prompts).toHaveLength(2))
     const corrected = status.mock.calls.at(-1)![0]
     await waitFor(() => expect(run).toHaveBeenCalledWith(corrected, expect.anything(), { direction: 'both' }))
-    editVideoSequence(id, nested.sequence.id, sequence => { sequence.clips[0].brightness = .5; return sequence })
+    editVideoSequence(id, nested.sequence.id, sequence => { sequence.clips[0].opacity = .5; return sequence })
     await waitFor(() => expect(status.mock.calls.at(-1)![0].source).not.toEqual(corrected.source))
     expect(getPlatform().tracking.stop).toHaveBeenCalledWith(corrected)
     progress({ definition: corrected, status: { state: 'ready', result: result() } })

@@ -32,7 +32,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 function fixture(tiles) {
   const track = { id: 'v1', name: '视频 1', index: 1, kind: 'video', locked: false, enabled: true, muted: false, solo: false }
-  const base = { kind: 'video', track: 1, duration: TILE, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }
+  const base = { kind: 'video', track: 1, duration: TILE, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   return { format: 'henji-video-project', version: 2, id: PROJECT_ID, name: '原生解码长时资源曲线', revision: 0,
     media: [{ id: 'source', name: path.basename(SOURCE), path: SOURCE, kind: 'video', durationSeconds: 7, width: 3840, height: 2160, hasAudio: false, frameRate: { numerator: FPS, denominator: 1 }, frameRateMode: 'sampled-constant' }],
     bins: [], items: [{ id: 'source-item', name: path.basename(SOURCE), kind: 'video', mediaId: 'source' }],

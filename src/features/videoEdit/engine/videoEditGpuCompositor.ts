@@ -345,7 +345,7 @@ export class VideoEditGpuCompositor {
         const center = videoEditClipCenterPosition(clip, { width, height }, document)
         const quad=videoEditClipTrackingQuad(clip); const h=quad ? videoEditCornerPinMatrix(quad) : undefined
         const warp=h ? [h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0] : new Array<number>(12).fill(0)
-        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), center.x * 2, center.y * 2, clip.brightness, clip.opacity, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0, ...warp]))
+        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), center.x * 2, center.y * 2, clip.opacity, 0, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0, ...warp]))
         const pipeline = code ? pipelines?.codeImage ?? this.codeImage : external ? pipelines?.video ?? this.video : cachedVideo && picture.chroma ? pipelines?.cachedVideo ?? this.cachedVideo : pipelines?.image ?? this.image
         pass.setPipeline(pipeline)
         pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] }))

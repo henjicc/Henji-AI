@@ -115,7 +115,7 @@ function composition(id, revision, clips, transitions) {
     media: media.filter((item, index) => media.findIndex(other => other.id === item.id) === index),
     items: clips.map(({ sample }, index) => ({ id: `i${index}`, name: sample.file, kind: 'video', mediaId: `m-${sample.file}` })),
     tracks: [{ id: 'v1', name: '视频 1', index: 1, kind: 'video', locked: false, enabled: true, muted: false, solo: false }],
-    clips: clips.map(({ sample, start, duration }, index) => ({ id: `c${index}`, itemId: `i${index}`, name: sample.file, kind: 'video', track: 1, start, duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' })),
+    clips: clips.map(({ sample, start, duration }, index) => ({ id: `c${index}`, itemId: `i${index}`, name: sample.file, kind: 'video', track: 1, start, duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' })),
     ...(transitions ? { transitions } : {}),
     annotations: [],
   }

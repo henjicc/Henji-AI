@@ -168,7 +168,7 @@ function composition(sample, revision) {
       media: [{ id: 'm', name: sample.file, path: url, kind: sample.kind, width: video ? video.width : 0, height: video ? video.height : 0, durationSeconds: sample.durationSeconds, hasAudio: true, ...(video ? { frameRate: { numerator: FPS, denominator: 1 } } : {}) }],
       items: [{ id: 'i', name: sample.file, kind: sample.kind, mediaId: 'm' }],
       tracks: [{ id: 't', name: 'A1', index: 0, kind: 'audio', locked: false, enabled: true, muted: false, solo: false }],
-      clips: [{ id: 'c', itemId: 'i', name: sample.file, kind: 'audio', sourceComponent: 'audio', track: 0, start: CLIP.startFrame, duration: CLIP.durationFrames, sourceInUs: CLIP.sourceInUs, sourceRemainder: CLIP.remainder, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }],
+      clips: [{ id: 'c', itemId: 'i', name: sample.file, kind: 'audio', sourceComponent: 'audio', track: 0, start: CLIP.startFrame, duration: CLIP.durationFrames, sourceInUs: CLIP.sourceInUs, sourceRemainder: CLIP.remainder, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }],
       annotations: [],
     },
   }

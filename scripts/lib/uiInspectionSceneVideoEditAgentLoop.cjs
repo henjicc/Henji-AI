@@ -20,7 +20,7 @@ function fixture() {
     bins: [], items: [{ id: 'original-item', name: '原4K60片头', kind: 'video', mediaId: 'original' }],
     sequences: [{ id: 'main', name: '序列 1', width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
       tracks: [track(0, 'audio', '音频 1'), track(1, 'video', '视频 1'), track(2, 'video', '视频 2')],
-      clips: [{ id: 'base', itemId: 'original-item', name: '原4K60片头', kind: 'video', track: 1, start: 0, duration: 420, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }], annotations: [] }] }
+      clips: [{ id: 'base', itemId: 'original-item', name: '原4K60片头', kind: 'video', track: 1, start: 0, duration: 420, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }], annotations: [] }] }
 }
 // 3.1：剪辑是项目里的文档文件，按旧工程形状读出（项目内相对写法换回绝对路径）
 const readProject = readVideoEditFile

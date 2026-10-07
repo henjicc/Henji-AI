@@ -18,8 +18,7 @@ type Frame = Pick<VideoEditComposition, 'width' | 'height'> & { playhead: number
  */
 interface PropertyView { key: VideoEditClipPropertyKey; label: string; tooltip: string; unit?: string; step: number; precision: number; toDisplay: (value: number, frame: Frame) => number; fromDisplay: (value: number, frame: Frame) => number }
 const percent = { toDisplay: (value: number) => value * 100, fromDisplay: (value: number) => value / 100, unit: '%', step: 1, precision: 1 }
-type VisiblePropertyKey = Exclude<VideoEditClipPropertyKey, 'brightness'>
-const VIEWS: Record<VisiblePropertyKey, PropertyView> = {
+const VIEWS: Record<VideoEditClipPropertyKey, PropertyView> = {
   x: { key: 'x', label: '水平位置', tooltip: '运动锚点的水平像素位置；序列宽度的一半是居中。', step: 1, precision: 1, toDisplay: (value, frame) => frame.width / 2 + value * frame.width, fromDisplay: (value, frame) => (value - frame.width / 2) / frame.width },
   y: { key: 'y', label: '垂直位置', tooltip: '运动锚点的垂直像素位置；序列高度的一半是居中。', step: 1, precision: 1, toDisplay: (value, frame) => frame.height / 2 + value * frame.height, fromDisplay: (value, frame) => (value - frame.height / 2) / frame.height },
   scale: { key: 'scale', label: '缩放', tooltip: '画面大小，100% 为原始适配大小。', ...percent },
@@ -56,7 +55,7 @@ function resetPatch(clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey
 }
 const isDefault = (clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): boolean => keys.every(key => (clip[key] ?? 0.5) === videoEditClipPropertyDefault(clip, key) && !clip.curves?.[key]?.length)
 
-function SingleProperty({ property, clip, frame, gesture }: { property: VisiblePropertyKey; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
+function SingleProperty({ property, clip, frame, gesture }: { property: VideoEditClipPropertyKey; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
   const view = VIEWS[property]
   const value = videoEditClipValue(clip, property, frame.playhead)
   return <PropertyRow label={view.label} tooltip={view.tooltip} resetLabel={`重置${view.label}`} resetDisabled={value === videoEditClipPropertyDefault(clip, property)} onReset={() => gesture.commit(resetPatch(clip, [property]))}
@@ -65,7 +64,7 @@ function SingleProperty({ property, clip, frame, gesture }: { property: VisibleP
   </PropertyRow>
 }
 
-const MOTION: readonly VisiblePropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY']
+const MOTION: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY']
 
 /** 片段固有效果（PR 的“运动 / 不透明度 / 音量”）：按片段类型只出现能生效的几节。 */
 export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {

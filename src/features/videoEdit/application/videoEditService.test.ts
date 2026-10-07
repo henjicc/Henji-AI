@@ -179,9 +179,12 @@ it('公共修改与手动编辑共用历史并可保存重开', async () => {
   const app = createApplicationHarness()
   try {
     const ref = { kind: 'video_edit.clip', id: `${instance.document.id}:${clip.id}` }
-    const result = await app.change(ref, { 'video_edit.clip.text': '助手修改', 'video_edit.clip.brightness': 0.7 })
+    const properties = (await app.read(ref)).properties
+    expect(properties).not.toHaveProperty(['video_edit.clip.brightness'])
+    expect(properties).not.toHaveProperty(['video_edit.clip.brightness.keyframes'])
+    const result = await app.change(ref, { 'video_edit.clip.text': '助手修改', 'video_edit.clip.opacity': 0.7 })
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
-    expect((await app.read(ref, ['video_edit.clip.text', 'video_edit.clip.brightness'])).properties).toMatchObject({ 'video_edit.clip.text': '助手修改', 'video_edit.clip.brightness': 0.7 })
+    expect((await app.read(ref, ['video_edit.clip.text', 'video_edit.clip.opacity'])).properties).toMatchObject({ 'video_edit.clip.text': '助手修改', 'video_edit.clip.opacity': 0.7 })
     expect(instance.past).toHaveLength(2)
     undoVideoEdit(instance.document.id)
     expect(getActiveVideoEditSequence(instance).clips[0].text).toBe('输入文字')

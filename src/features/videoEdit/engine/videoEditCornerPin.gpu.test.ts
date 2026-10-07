@@ -13,7 +13,7 @@ it('正式图层 WGSL 在真实设备将 UV 像素透视贴到平面，三角形
     for(let y=0;y<size;y++)for(let x=0;x<size;x++)pixels.set([Math.round(x*255/(size-1)),Math.round(y*255/(size-1)),0,255],(y*size+x)*4)
     device.queue.writeTexture({texture:source},pixels,{bytesPerRow:size*4},[size,size])
     const quad:VideoEditTrackQuad=[[.1,.15],[.85,.25],[.8,.85],[.3,.75]];const h=videoEditCornerPinMatrix(quad);const inverse=invertVideoEditTrackMatrix(h)
-    device.queue.writeBuffer(uniform,0,new Float32Array([1,1,1,0,0,0,1,1,1,1,0,0,h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0]))
+    device.queue.writeBuffer(uniform,0,new Float32Array([1,1,1,0,0,0,1,0,1,1,0,0,h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0]))
     const module=device.createShaderModule({code:videoEditLayerShader(false)})
     const pipeline=device.createRenderPipeline({layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:'rgba8unorm'}]},primitive:{topology:'triangle-list'}})
     const encoder=device.createCommandEncoder();const pass=encoder.beginRenderPass({colorAttachments:[{view:target.createView(),clearValue:{r:0,g:0,b:0,a:0},loadOp:'clear',storeOp:'store'}]})

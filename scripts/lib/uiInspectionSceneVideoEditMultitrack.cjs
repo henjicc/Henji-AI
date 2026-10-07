@@ -430,7 +430,7 @@ function createVideoEditMultitrackScene() {
           bins: [], items: [{ id: 'legacy-item', name: samples.mxf.file, kind: 'video', mediaId: 'legacy-media' }],
           sequences: [{ id: 'legacy-sequence', name: '序列 1', width: 1280, height: 720, frameRate: { numerator: 30, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
             tracks: Array.from({ length: 8 }, (_, index) => ({ id: `legacy-track-${index}`, name: index ? `视频 ${index}` : '音频 1', index, kind: index ? 'video' : 'audio', locked: false, enabled: true, muted: false, solo: false })),
-            clips: [{ id: 'legacy-clip', itemId: 'legacy-item', name: samples.mxf.file, kind: 'video', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }], annotations: [] }],
+            clips: [{ id: 'legacy-clip', itemId: 'legacy-item', name: samples.mxf.file, kind: 'video', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }], annotations: [] }],
         }
         fs.writeFileSync(legacyFile, JSON.stringify(legacy)); const legacyHash = hash(legacyFile)
         await dialogs(app, [legacyFile], legacyFile); await openVideoEditFile(page, legacyFile); await presented(page, 0)

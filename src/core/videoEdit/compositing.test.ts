@@ -7,7 +7,7 @@ import { videoEditTransitionWindow } from './transitions'
 
 function clip(id: string, track: number, patch: Partial<VideoEditClip> = {}): VideoEditClip {
   return { id, itemId: `item-${id}`, name: id, kind: 'image', track, start: 0, duration: 120, sourceInUs: 0,
-    sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: '', ...patch }
+    sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '', ...patch }
 }
 const adjustment = (id: string, ownTrack: number, fromTrack: number, patch: Partial<VideoEditClip> = {}): VideoEditClip => clip(id, ownTrack, { kind: 'adjustment', adjustment: { fromTrack }, ...patch })
 function shape(nodes: readonly VideoEditCompositeNode[]): unknown[] {
@@ -79,7 +79,7 @@ describe('调整图层的半开合成范围与唯一转场节点', () => {
   })
   it('拒绝调整层非法几何、缺失范围和自身/上方范围，opacity仍为正式可调属性', () => {
     const base = adjustment('band', 4, 0)
-    for (const patch of [{ x: .1 }, { y: .1 }, { scale: .5 }, { rotation: 10 }, { brightness: .5 }, { volume: 1 }, { text: '文字' }]) {
+    for (const patch of [{ x: .1 }, { y: .1 }, { scale: .5 }, { rotation: 10 }, { volume: 1 }, { text: '文字' }]) {
       expect(() => validateVideoEditAdjustmentRanges({ clips: [{ ...base, ...patch }] })).toThrow('作用范围')
     }
     const missing = { ...base }; delete missing.adjustment

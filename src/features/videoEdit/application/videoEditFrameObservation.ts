@@ -37,7 +37,7 @@ function sourceComposition(document: VideoEditDocument, itemId: string, timeUs: 
   return {
     id: `observe-source-${item.id}`, name: item.name, width, height, frameRate, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
     tracks: [{ id: 'observe-picture', name: '画面', index: 1, kind: 'video', locked: false, enabled: true, muted: true, solo: false }],
-    clips: [{ id: 'observe-clip', itemId: item.id, name: item.name, kind: media.kind, track: 1, start: 0, duration: 1, sourceInUs: media.kind === 'video' ? timeUs : 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: '' }],
+    clips: [{ id: 'observe-clip', itemId: item.id, name: item.name, kind: media.kind, track: 1, start: 0, duration: 1, sourceInUs: media.kind === 'video' ? timeUs : 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }],
     annotations: [], media: [media], items: [item], revision: document.revision, fps: videoEditFps(frameRate),
   }
 }

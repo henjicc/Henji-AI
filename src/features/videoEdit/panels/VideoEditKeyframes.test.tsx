@@ -12,7 +12,7 @@ import { VideoEditEffectsPanel } from './VideoEditEffectsPanel'
 import { addVideoEditTextClipAt } from '../application/videoEditTimeline'
 import { VideoEditTimelineKeyframes } from '../timeline/VideoEditTimelineKeyframes'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
-import { evaluateVideoEditClip, videoEditClipValue } from '@/core/videoEdit/keyframes'
+import { videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 import { useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
@@ -54,20 +54,12 @@ function Pen({ owner }: { owner: VideoEditInstance }): React.ReactElement {
   const sequence = getActiveVideoEditSequence(owner)
   return <VideoEditTimelineKeyframes projectId={owner.document.id} sequenceId={sequence.id} clip={sequence.clips[0]} pen={owner.tool === 'pen'} width={200} height={60} pixels={2} onError={error => { throw error }} />
 }
-it('固有效果不展示颜色和亮度，已有亮度与关键帧仍保留并按原值求值', async () => {
-  const { owner, id, clip } = await project()
-  const points = [{ time: 0, value: .6, interpolation: 'linear' as const }, { time: 20, value: 1.4, interpolation: 'linear' as const }]
-  editVideoProject(id, document => { document.sequences[0].clips[0].brightness = .7; document.sequences[0].clips[0].curves = { brightness: points }; return document })
+it('固有效果不展示颜色和亮度', async () => {
+  const { owner } = await project()
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
   expect(panel.container.querySelector('[data-video-edit-effect-section="color"]')).toBeNull()
   expect(ui.queryByRole('spinbutton', { name: '亮度' })).toBeNull()
   expect(ui.queryByRole('button', { name: '启用亮度关键帧' })).toBeNull()
-  expect(clip().brightness).toBe(.7)
-  expect(clip().curves?.brightness).toEqual(points)
-  expect(evaluateVideoEditClip(clip(), clip().start + 10).brightness).toBeCloseTo(1)
-  fireEvent.click(ui.getByRole('button', { name: '增加缩放' }))
-  expect(clip().brightness).toBe(.7)
-  expect(clip().curves?.brightness).toEqual(points)
 })
 
 it('从附加效果标题打开预设面板，默认全选，按链顺序只保存勾选子集', async () => {

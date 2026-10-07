@@ -8,7 +8,7 @@ import { videoEditClipToFrame } from './clipGeometry'
 const picture = { width: 1920, height: 1080 }; const target = { width: 1080, height: 1920 }
 const settings = { motion: 'default', attention: 'face' } as const
 function clip(duration = 90): VideoEditClip {
-  return { id: 'clip', itemId: 'item', name: '采访', kind: 'video', track: 0, start: 30, duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1, volume: 1, text: '' }
+  return { id: 'clip', itemId: 'item', name: '采访', kind: 'video', track: 0, start: 30, duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
 }
 const box = (x: number): VideoEditAttentionBox => ({ x, y: .2, width: .08, height: .25 })
 it('各运动速度按强度平滑；每帧主体四角在画幅内且四个画幅角没有黑边', () => {

@@ -19,7 +19,7 @@ function createVideoEditPlayStartScene() {
       const { ffmpegPath } = require('./mediaBinaries.cjs')
       const source = path.join(root, '1080p60-gop240-aac.mp4')
       if (!fs.existsSync(source)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=60', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '20', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '240', '-keyint_min', '240', '-sc_threshold', '0', '-bf', '2', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', source], { windowsHide: true })
-      const clip = { id: 'v', mediaId: 'source', name: '画面', kind: 'video', track: 1, start: 0, duration: 1200, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }
+      const clip = { id: 'v', mediaId: 'source', name: '画面', kind: 'video', track: 1, start: 0, duration: 1200, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
       const project = videoEditFixtureProject({ id: 'play-start', name: '起播验证', revision: 0, width: 1920, height: 1080, fps: 60, media: [{ id: 'source', name: path.basename(source), path: source, kind: 'video', durationSeconds: 20, width: 1920, height: 1080, hasAudio: true }], clips: [clip, { ...clip, id: 'a', name: '声音', kind: 'audio', sourceComponent: 'audio', track: 0 }], annotations: [] })
       const file = path.join(root, 'play-start.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)

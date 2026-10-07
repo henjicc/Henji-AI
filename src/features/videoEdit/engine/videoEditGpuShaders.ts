@@ -5,7 +5,7 @@
 
 /** Layer geometry: 24 floats (96 bytes), including optional corner-pin homography. */
 export const VIDEO_EDIT_LAYER_VERTEX = `
-struct Params { size: vec2f, rotation: vec2f, position: vec2f, brightness: f32, opacity: f32, aspect: vec2f, padding: vec2f, warp0: vec4f, warp1: vec4f, warp2: vec4f }
+struct Params { size: vec2f, rotation: vec2f, position: vec2f, opacity: f32, alignment: f32, aspect: vec2f, padding: vec2f, warp0: vec4f, warp1: vec4f, warp2: vec4f }
 @group(0) @binding(2) var<uniform> p: Params;
 struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 @vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
@@ -36,7 +36,7 @@ export function videoEditLayerShader(external: boolean, premultiplied = false): 
 @group(0) @binding(0) var t: ${external ? 'texture_external' : 'texture_2d<f32>'};
 @fragment fn fs(v: Vertex) -> @location(0) vec4f {
  let c = ${sample}; let alpha = c.a * p.opacity;
- return vec4f(${premultiplied ? 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(c.a)) * p.opacity' : 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(1)) * alpha'}, alpha);
+ return vec4f(${premultiplied ? 'clamp(c.rgb, vec3f(0), vec3f(c.a)) * p.opacity' : 'clamp(c.rgb, vec3f(0), vec3f(1)) * alpha'}, alpha);
 }`
 }
 
@@ -48,7 +48,7 @@ export const VIDEO_EDIT_CACHED_YUV_SHADER = VIDEO_EDIT_LAYER_VERTEX + `
  let luma = textureSample(y, s, v.uv).r;
  let chroma = textureSample(uv, s, v.uv).rg - 0.5;
  let rgb = vec3f(luma + 1.5748 * chroma.y, luma - 0.187324 * chroma.x - 0.468124 * chroma.y, luma + 1.8556 * chroma.x);
- return vec4f(clamp(rgb * p.brightness, vec3f(0), vec3f(1)) * p.opacity, p.opacity);
+ return vec4f(clamp(rgb, vec3f(0), vec3f(1)) * p.opacity, p.opacity);
 }`
 
 /** Snapshot copies of a decoder frame into owned memory; `rgba` writes either `rgba8unorm` or `rgba16float`. */

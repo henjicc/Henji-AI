@@ -11,7 +11,7 @@ afterEach(() => { vi.unstubAllGlobals(); setVideoEditTrackResults({}) })
 it('平面 Range 记录插值驱动角点贴合；丢失帧不外推，定义不被渲染改写',async()=> {
   const quad:VideoEditTrackQuad=[[.1,.2],[.8,.1],[.9,.8],[.2,.9]]
   const tracker={id:'plane',name:'屏幕',method:'planar' as const,prompts:[{timeUs:0,quad}]}
-  const source:VideoEditClip={id:'source',itemId:'video',kind:'video',name:'原片',text:'',track:1,start:0,duration:30,sourceInUs:0,sourceRemainder:{numerator:0,denominator:1},x:0,y:0,scale:1,rotation:0,opacity:1,brightness:1,volume:0,trackers:[tracker]}
+  const source:VideoEditClip={id:'source',itemId:'video',kind:'video',name:'原片',text:'',track:1,start:0,duration:30,sourceInUs:0,sourceRemainder:{numerator:0,denominator:1},x:0,y:0,scale:1,rotation:0,opacity:1,volume:0,trackers:[tracker]}
   const pinned:VideoEditClip={...source,id:'replacement',track:2,trackers:undefined,follow:{clipId:source.id,trackerId:tracker.id,offsetX:0,offsetY:0,mode:'corner_pin'}}
   const document:VideoEditComposition={...createVideoEditSequence(),width:100,height:100,fps:30,revision:0,media:[{id:'media',name:'视频',path:'video',kind:'video',durationSeconds:3,width:100,height:100}],items:[{id:'video',mediaId:'media',name:'视频',kind:'video'}],clips:[source,pinned]}
   const next=quad.map(p=>[p[0]+.05,p[1]]) as VideoEditTrackQuad
@@ -72,7 +72,7 @@ it('手绘遮罩跟随参考框移动与缩放，缺少绑定结果时跳过效�
 })
 it('Worker 片段跟随按来源片段几何换算并保持自身缩放基值；静态图片、源时钟与落空引用', async () => {
   const tracker = { id: 't1', name: '物体', method: 'box' as const, prompts: [{ timeUs: 0, box: [0, 0, 1, 1] as [number, number, number, number] }] }
-  const source: VideoEditClip = { id: 'source', itemId: 'video', kind: 'video', name: '视频', text: '', track: 1, start: 0, duration: 30, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0.1, y: 0, scale: 0.5, rotation: 0, opacity: 1, brightness: 1, volume: 0, trackers: [tracker] }
+  const source: VideoEditClip = { id: 'source', itemId: 'video', kind: 'video', name: '视频', text: '', track: 1, start: 0, duration: 30, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0.1, y: 0, scale: 0.5, rotation: 0, opacity: 1, volume: 0, trackers: [tracker] }
   const title: VideoEditClip = { ...source, id: 'title', itemId: 'text', kind: 'text', scale: 2, x: 0.3, trackers: undefined, follow: { clipId: 'source', trackerId: 't1', offsetX: 0.1, offsetY: 0.2 } }
   const sequence = createVideoEditSequence()
   const document: VideoEditComposition = { ...sequence, width: 100, height: 100, fps: 30, revision: 0, media: [{ id: 'media', name: '视频', path: 'video', kind: 'video', durationSeconds: 3, width: 100, height: 100 }], items: [{ id: 'video', mediaId: 'media', name: '视频', kind: 'video' }, { id: 'text', name: '标题', kind: 'text' }], clips: [source, title] }

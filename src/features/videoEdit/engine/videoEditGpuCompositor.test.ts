@@ -81,7 +81,7 @@ describe('全尺寸离屏合成与迟到校验', () => {
     const { compositor, device } = copyFixture(async () => {}); const { document, clip } = composition()
     const code = await compositor.code(); const input = await code.target('input', 3840, 2160); const target = await code.target('target', 3840, 2160)
     const before = device.createRenderPipeline.mock.calls.length
-    const transformed = { ...clip, x: .1, y: -.2, scale: .5, rotation: 90, brightness: .8, opacity: .25 }
+    const transformed = { ...clip, x: .1, y: -.2, scale: .5, rotation: 90, opacity: .25 }
     await (await compositor.draw(document, [transformed], [input], () => true, undefined, target)).completion
     const rgba = device.createRenderPipeline.mock.calls.slice(before).map(([descriptor]) => (descriptor as { fragment: { targets: Array<{ format: string }> } }).fragment.targets[0].format)
     expect(rgba).toEqual(['rgba8unorm', 'rgba8unorm', 'rgba8unorm', 'rgba8unorm'])
@@ -90,12 +90,12 @@ describe('全尺寸离屏合成与迟到校验', () => {
     expect(device.createCommandEncoder.mock.results.at(-1)!.value.beginRenderPass).toHaveBeenCalledWith(expect.objectContaining({ colorAttachments: [expect.objectContaining({ clearValue: { r: 0, g: 0, b: 0, a: 0 } })] }))
     const values = device.queue.writeBuffer.mock.lastCall?.[2] as Float32Array
     expect(values[0]).toBe(.5); expect(values[2]).toBeCloseTo(0); expect(values[3]).toBe(1)
-    expect([...values.slice(4, 8)]).toEqual([Math.fround(.2), Math.fround(-.4), Math.fround(.8), .25])
+    expect([...values.slice(4, 8)]).toEqual([Math.fround(.2), Math.fround(-.4), .25, 0])
     const compiles = device.createRenderPipeline.mock.calls.length
     await (await compositor.draw(document, [clip], [input], () => true, undefined, target)).completion
     expect(device.createRenderPipeline).toHaveBeenCalledTimes(compiles)
-    await (await compositor.draw(document, [{ ...clip, x: 0, y: 0, scale: 1, rotation: 0, brightness: 1, opacity: 1 }], [target], () => true)).completion
-    expect([...device.queue.writeBuffer.mock.lastCall![2] as Float32Array].slice(0, 8)).toEqual([1, 1, 1, 0, 0, 0, 1, 1])
+    await (await compositor.draw(document, [{ ...clip, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }], [target], () => true)).completion
+    expect([...device.queue.writeBuffer.mock.lastCall![2] as Float32Array].slice(0, 8)).toEqual([1, 1, 1, 0, 0, 0, 1, 0])
     expect(device.createCommandEncoder.mock.results.at(-1)!.value.beginRenderPass).toHaveBeenCalledWith(expect.objectContaining({ colorAttachments: [expect.objectContaining({ clearValue: { r: 0, g: 0, b: 0, a: 1 } })] }))
     await expect(compositor.draw(document, [clip], [target], () => true, undefined, target)).rejects.toThrow('同一纹理')
     await compositor.dispose(); expect(code.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })

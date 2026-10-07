@@ -22,7 +22,7 @@ export const titleTemplateOverridesSchema = z.object({
   entrance: titleTemplateParametersSchema.shape.entrance.removeDefault().optional(), countFrom: titleTemplateParametersSchema.shape.countFrom.removeDefault().optional(), countTo: titleTemplateParametersSchema.shape.countTo.removeDefault().optional(),
 }).strict()
 // Only self-contained title data crosses the local-library boundary. No media, code, tracker or effect references.
-const contentClipSchema = videoEditClipSchema.pick({ name: true, kind: true, track: true, start: true, duration: true, sourceInUs: true, sourceRemainder: true, x: true, y: true, scale: true, rotation: true, anchorX: true, anchorY: true, opacity: true, volume: true, brightness: true, text: true, textStyle: true, graphic: true, curves: true }).strip().superRefine((clip, ctx) => {
+const contentClipSchema = videoEditClipSchema.pick({ name: true, kind: true, track: true, start: true, duration: true, sourceInUs: true, sourceRemainder: true, x: true, y: true, scale: true, rotation: true, anchorX: true, anchorY: true, opacity: true, volume: true, text: true, textStyle: true, graphic: true, curves: true }).strip().superRefine((clip, ctx) => {
   if (clip.kind !== 'graphic' && clip.kind !== 'text' || clip.kind === 'graphic' && !clip.graphic) ctx.addIssue({ code: 'custom', message: '标题模板只接受文字或图形片段。' })
 })
 export const titleTemplateContentSchema = z.object({ width: z.number().int().min(16).max(8192), height: z.number().int().min(16).max(8192), fps: z.number().finite().positive().max(120), clips: z.array(contentClipSchema).min(1).max(8) }).strict()
@@ -72,7 +72,7 @@ export function captureTitleTemplate(name: string, sequence: VideoEditSequence, 
 export function instantiateTitleTemplate(template: TitleTemplate, parameters: Partial<TitleTemplateParameters>, sequence: VideoEditSequence): Array<z.infer<typeof contentClipSchema>> {
   const checked = titleTemplateSchema.parse(template); const p = titleTemplateParametersSchema.parse({ ...checked.parameters, ...parameters }); const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
   const frames = Math.max(2, Math.round(p.durationSeconds * fps)); const seconds = (frames - 1) / fps
-  if (checked.kind) return [{ name: checked.name, kind: 'graphic', graphic: builtinGraphic(checked, p, sequence.width, sequence.height, seconds), track: 0, start: 0, duration: frames, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }]
+  if (checked.kind) return [{ name: checked.name, kind: 'graphic', graphic: builtinGraphic(checked, p, sequence.width, sequence.height, seconds), track: 0, start: 0, duration: frames, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }]
   const content = checked.content!; const total = Math.max(...content.clips.map(clip => clip.start + clip.duration)); const factor = frames / total
   const sy = sequence.height / content.height; let textIndex = 0
   const textValue = (): string | undefined => { const index = textIndex++; return index === 0 ? parameters.text : index === 1 ? parameters.subtitle : undefined }

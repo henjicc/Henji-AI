@@ -58,7 +58,7 @@ export class VideoEditSourceFrames {
       items: [{ id: itemId, name: media.name, kind: 'video', mediaId: media.id }],
       tracks: [{ id: crypto.randomUUID(), name: media.name, index: 0, kind: 'video', locked: false, enabled: true, muted: true, solo: false }],
       clips: [{ id: crypto.randomUUID(), itemId, name: media.name, kind: 'video', sourceComponent: 'video', track: 0, start: 0, duration: 1,
-        sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: '' }],
+        sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }],
       annotations: [],
     }
     surface.width = media.width; surface.height = media.height

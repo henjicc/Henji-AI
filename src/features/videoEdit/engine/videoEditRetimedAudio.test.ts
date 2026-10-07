@@ -25,7 +25,7 @@ function sound(clip: Partial<VideoEditClip> = {}): VideoEditComposition {
   document.media = [{ id: 'm', name: '对白', path: 'D:/dialog.wav', kind: 'audio', width: 0, height: 0, durationSeconds: 10, hasAudio: true }]
   document.items = [{ id: 'i', name: '对白', kind: 'audio', mediaId: 'm' }]
   const track = document.sequences[0].tracks.find(value => value.kind === 'audio')!.index
-  document.sequences[0].clips = [{ id: 'c', itemId: 'i', name: '对白', kind: 'audio', track, start: 15, duration: 60, sourceInUs: 2_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '', ...clip }]
+  document.sequences[0].clips = [{ id: 'c', itemId: 'i', name: '对白', kind: 'audio', track, start: 15, duration: 60, sourceInUs: 2_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', ...clip }]
   return videoEditComposition(document, document.sequences[0].id)
 }
 async function mix(composition: VideoEditComposition, blocks: number[], start = 0): Promise<Float32Array[]> {

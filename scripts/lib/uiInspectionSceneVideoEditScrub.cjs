@@ -21,7 +21,7 @@ function createVideoEditScrubScene() {
       const mediaProbe = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-of', 'json', source], { windowsHide: true, encoding: 'utf8' }))
       const videoTrack = mediaProbe.streams.find(stream => stream.codec_type === 'video')
       assert.equal(videoTrack.width, 3840); assert.equal(videoTrack.height, 2160); assert.equal(videoTrack.avg_frame_rate, '60/1')
-      const clip = { id: 'base', mediaId: 'source', name: '4K60 主画面', kind: 'video', track: 1, start: 0, duration: 360, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: '' }
+      const clip = { id: 'base', mediaId: 'source', name: '4K60 主画面', kind: 'video', track: 1, start: 0, duration: 360, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
       const fixture = { format: 'henji-video-project', version: 1, id: 'scrub-4k60', name: '4K60 连续拖动验证', revision: 0, width: 3840, height: 2160, fps: 60, media: [{ id: 'source', name: path.basename(source), path: source, kind: 'video', durationSeconds: Number(videoTrack.duration), width: 3840, height: 2160 }], clips: [clip, { ...clip, id: 'overlay', name: '4K60 叠加', track: 2, sourceInUs: 1000000, x: .3, y: .3, scale: .3 }, { ...clip, id: 'text', mediaId: undefined, name: '文字', kind: 'text', track: 3, text: '4K60', y: -.35, scale: .5 }], annotations: [] }
       const project = require('./uiInspectionSceneVideoEditProbe.cjs').videoEditFixtureProject(fixture)
       const file = path.join(root, 'scrub.henji-video'); fs.writeFileSync(file, JSON.stringify(project))

@@ -56,7 +56,7 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
     captions: (parent.captions ?? []).filter(anchored).map(value => ({ ...value, start: value.start - start })), transitions: movedTransitions,
   }
   const item = { id: crypto.randomUUID(), kind: 'sequence' as const, name, sequenceId: child.id }
-  const clip: VideoEditClip = { id: crypto.randomUUID(), itemId: item.id, kind: 'sequence', name, track, start, duration: end - start, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1, volume: 1, text: '' }
+  const clip: VideoEditClip = { id: crypto.randomUUID(), itemId: item.id, kind: 'sequence', name, track, start, duration: end - start, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   const next = { ...parent, clips: [...parent.clips.filter(clip => !ids.has(clip.id)), clip], annotations: parent.annotations.filter(value => !anchored(value)),
     ...(parent.markers ? { markers: parent.markers.filter(value => !anchored(value)) } : {}), ...(parent.captions ? { captions: parent.captions.filter(value => !anchored(value)) } : {}), ...(parent.transitions ? { transitions: parent.transitions.filter(value => !movedTransitions.includes(value)) } : {}),
   }

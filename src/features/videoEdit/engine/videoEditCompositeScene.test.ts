@@ -16,7 +16,7 @@ import type { VideoEditGpuCompositor, VideoEditPicture } from './videoEditGpuCom
 
 function clip(id: string, track = 1, patch: Partial<VideoEditClip> = {}): VideoEditClip {
   return { id, itemId: `item-${id}`, name: id, kind: 'image', track, start: 0, duration: 120, sourceInUs: 1e6,
-    sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1, volume: 0, text: '', ...patch }
+    sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '', ...patch }
 }
 function composition(clips: VideoEditClip[]): VideoEditComposition {
   return { ...createVideoEditSequence(), width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, fps: 60, clips, media: [], items: [], revision: 0 }
@@ -97,8 +97,8 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
       let output: CodeColor = destination ? [0, 0, 0, 0] : [0, 0, 0, 1]
       clips.forEach((clip, index) => {
         const input = pixel(pictures[index])
-        const transformed: CodeColor = [Math.min(input[3], input[0] * clip.brightness) * clip.opacity,
-          Math.min(input[3], input[1] * clip.brightness) * clip.opacity, Math.min(input[3], input[2] * clip.brightness) * clip.opacity, input[3] * clip.opacity]
+        const transformed: CodeColor = [Math.min(input[3], input[0]) * clip.opacity,
+          Math.min(input[3], input[1]) * clip.opacity, Math.min(input[3], input[2]) * clip.opacity, input[3] * clip.opacity]
         output = over(output, transformed)
       })
       draws.push({ target: destination ? keys.get(destination.texture) : undefined, clips: structuredClone(clips),
@@ -134,7 +134,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     }
     expect(boundary.draws[0].clips[0]).toEqual(original)
     expect(boundary.draws.at(-1)!.clips[0]).not.toHaveProperty('trackingQuad')
-    expect(boundary.draws.at(-1)!.clips[0]).toMatchObject({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1 })
+    expect(boundary.draws.at(-1)!.clips[0]).toMatchObject({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 })
     expect(boundary.draws[0].deadline).toBeUndefined(); expect(boundary.draws.at(-1)!.deadline).toBe(1234)
     expect(owner).toEqual(original); expect(reserved.size).toBe(3); expect(boundary.targets.size).toBe(3)
   })

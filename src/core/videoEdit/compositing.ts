@@ -66,7 +66,7 @@ export function validateVideoEditAdjustmentRanges(sequence: Pick<VideoEditSequen
   const adjustments = sequence.clips.filter(clip => clip.kind === 'adjustment')
   for (const [index, clip] of adjustments.entries()) {
     if (!clip.adjustment || clip.adjustment.fromTrack >= clip.track) throw new Error('调整图层的作用范围必须在自身轨道下方。')
-    if (clip.x !== 0 || clip.y !== 0 || clip.scale !== 1 || clip.rotation !== 0 || clip.brightness !== 1 || clip.volume !== 0 || clip.text !== '') throw new Error('调整图层只处理下方画面，请通过作用范围、不透明度和效果设置调整。')
+    if (clip.x !== 0 || clip.y !== 0 || clip.scale !== 1 || clip.rotation !== 0 || clip.volume !== 0 || clip.text !== '') throw new Error('调整图层只处理下方画面，请通过作用范围、不透明度和效果设置调整。')
     for (const earlier of adjustments.slice(0, index)) {
       if (earlier.start >= clip.start + clip.duration || earlier.start + earlier.duration <= clip.start) continue
       const a = earlier.adjustment!.fromTrack; const b = earlier.track; const c = clip.adjustment.fromTrack; const d = clip.track

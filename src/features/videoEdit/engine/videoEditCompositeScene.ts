@@ -34,7 +34,7 @@ export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditComposite
   nodes.forEach(visit); return keys
 }
 /** Render-only full-canvas layer; original persisted geometry and clocks stay unchanged. */
-function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditTrackedClip = { ...clip, x: 0, y: 0, anchorX: 0.5, anchorY: 0.5, scale: 1, rotation: 0, brightness: 1, opacity: 1 }; delete result.trackingQuad; return result }
+function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditTrackedClip = { ...clip, x: 0, y: 0, anchorX: 0.5, anchorY: 0.5, scale: 1, rotation: 0, opacity: 1 }; delete result.trackingQuad; return result }
 
 /**
  * `document` carries the size the frame is drawn at; `logical` is the sequence's own size. They differ only at a reduced
@@ -73,7 +73,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
         // 区域蒙版按片段自己的位置、缩放、旋转画到序列尺寸，与片段画面逐像素对齐；只在区域内混入效果。
         const source = await runtime.uploadMask(MASK_SOURCE, plan.mask.width, plan.mask.height, plan.mask.data)
         const region = await runtime.target(MASK_DOCUMENT, document.width, document.height); current()
-        const drawn = await compositor.draw(document, [{ ...clip, brightness: 1, opacity: 1 }], [source], shouldPresent, undefined, region)
+        const drawn = await compositor.draw(document, [{ ...clip, opacity: 1 }], [source], shouldPresent, undefined, region)
         watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
         result = await runtime.maskedMix(free[1], result, filtered, region, plan.effect.amount); key = free[1]; current()
       } else if (plan.effect.amount === 1) { result = filtered; key = free[0] }

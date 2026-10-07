@@ -170,7 +170,7 @@ function createVideoEditProbeScene() {
         const clips = original.sequences[0].clips.map(item => ({ kind: 'video_edit.clip', id: `${original.id}:${item.id}` }))
         // Stack the appended clips at frame 0 in one public transaction: pictures on their own tracks, the first
         // video's sound at half volume, the second video's sound silent, the tone at a quarter.
-        const changes = [{ duration: 60, track: 1 }, { duration: 60, track: 0, volume: 0.5 }, { duration: 60, track: 2, scale: 0.35, x: 0.25, y: -0.25, brightness: 0.6 }, { duration: 60, track: 0, volume: 0 }, { duration: 60, track: 3, scale: 0.18, x: -0.3, y: -0.3 }, { duration: 60, track: 0, volume: 0.25 }, { duration: 60, track: 4, text: 'Henji · 本地剪辑', y: 0.3 }]
+        const changes = [{ duration: 60, track: 1 }, { duration: 60, track: 0, volume: 0.5 }, { duration: 60, track: 2, scale: 0.35, x: 0.25, y: -0.25 }, { duration: 60, track: 0, volume: 0 }, { duration: 60, track: 3, scale: 0.18, x: -0.3, y: -0.3 }, { duration: 60, track: 0, volume: 0.25 }, { duration: 60, track: 4, text: 'Henji · 本地剪辑', y: 0.3 }]
           .map((values, index) => ({ kind: 'set_properties', entityType: 'video_edit.clip', target: clips[index], properties: Object.fromEntries(Object.entries({ start: 0, ...values }).map(([key, value]) => [`video_edit.clip.${key}`, value])) }))
         const baselines = []
         for (const ref of clips) baselines.push(await callTool(client, 'read_application_entity', { ref, propertyIds: ['video_edit.clip.start', 'video_edit.clip.duration', 'video_edit.clip.scale'] }))
@@ -228,10 +228,10 @@ function createVideoEditProbeScene() {
           const pixel = () => canvas.evaluate(canvas => canvas.toDataURL('image/png'))
           await page.getByTitle('1920-30.mp4', { exact: true }).first().click()
           const originalPixel = await pixel(); const effectStart = performance.now()
-          await page.getByLabel('亮度', { exact: true }).fill('70'); await page.getByLabel('亮度', { exact: true }).press('Enter')
+          await page.getByLabel('不透明度', { exact: true }).fill('70'); await page.getByLabel('不透明度', { exact: true }).press('Enter')
           await page.waitForFunction(previous => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas.toDataURL('image/png') !== previous }, originalPixel)
           const effectMs = performance.now() - effectStart
-          await page.getByLabel('亮度', { exact: true }).fill('100'); await page.getByLabel('亮度', { exact: true }).press('Enter'); await presented(page, 0)
+          await page.getByLabel('不透明度', { exact: true }).fill('100'); await page.getByLabel('不透明度', { exact: true }).press('Enter'); await presented(page, 0)
           for (const frame of [spec.fps + 3, 4, spec.fps - 1, spec.fps, 4]) { const start = performance.now(); await seek(page, frame, spec.fps); seeks.push({ frame, milliseconds: performance.now() - start }) }
           const rulerBox = await page.getByRole('slider', { name: '剪辑时间定位' }).boundingBox()
           await page.mouse.move(rulerBox.x + 6, rulerBox.y + 12); await page.mouse.down()

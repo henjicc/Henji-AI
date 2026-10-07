@@ -37,7 +37,7 @@ const FILTER = 'export default {apiVersion:1,name:"受控暖色",kind:"filter",m
 
 function fixture(audioPath) {
   const track = (index, kind, name) => ({ id: `${kind[0]}${index}`, name, index, kind, locked: false, enabled: true, muted: false, solo: false })
-  const base = { kind: 'video', track: 1, duration: TILE, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }
+  const base = { kind: 'video', track: 1, duration: TILE, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   return { format: 'henji-video-project', version: 2, id: PROJECT_ID, name: '标准4K60性能负载', revision: 0,
     media: [{ id: 'original', name: '原4K60片头', path: ORIGINAL, kind: 'video', ...LAYOUT.media, hasAudio: false },
       { id: 'music', name: '63秒立体声', path: audioPath, kind: 'audio', durationSeconds: 63, width: 0, height: 0, hasAudio: true }],

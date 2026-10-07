@@ -10,7 +10,7 @@ vi.mock('@/commands/documents', () => ({ saveDocumentCover: save }))
 vi.mock('@/features/documents/documentCovers', () => ({ notifyDocumentCoverChanged: vi.fn() }))
 
 function clip(patch: Partial<VideoEditClip> & Pick<VideoEditClip, 'id' | 'itemId' | 'kind' | 'track' | 'start'>): VideoEditClip {
-  return { name: patch.id, duration: 30, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '', ...patch } as VideoEditClip
+  return { name: patch.id, duration: 30, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', ...patch } as VideoEditClip
 }
 function withClips(clips: VideoEditClip[]): VideoEditDocument {
   const document = createVideoEditDocument('短片'); addLegacyVideoEditTracks(document.sequences[0])

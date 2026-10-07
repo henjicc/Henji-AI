@@ -6,8 +6,8 @@ import { writeVideoEditClipKeyframes, putVideoEditKeyframe, type VideoEditAnimat
 export type VideoEditClipPropertyKey = VideoEditAnimatableKey
 export type VideoEditClipPropertyPatch = Partial<Pick<VideoEditClip, VideoEditClipPropertyKey | 'name' | 'text' | 'textStyle'>>
 
-const PROPERTY_KEYS: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'brightness', 'volume']
-const DEFAULTS: Record<VideoEditClipPropertyKey, number> = { x: 0, y: 0, scale: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5, opacity: 1, brightness: 1, volume: 1 }
+const PROPERTY_KEYS: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume']
+const DEFAULTS: Record<VideoEditClipPropertyKey, number> = { x: 0, y: 0, scale: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5, opacity: 1, volume: 1 }
 
 /** 取值范围只来自文档 schema：界面夹取与写入校验用同一组边界，拖动、步进和输入都产生不了非法值。 */
 export function videoEditClipPropertyBounds(key: VideoEditClipPropertyKey): { min: number; max: number } {
