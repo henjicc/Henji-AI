@@ -21,7 +21,7 @@ import { getDocumentSessionRegistry, parentFolderOf, type DocumentSessionRegistr
 import type { DocumentContentAdapter, DocumentLeaveOutcome } from '@/features/documents/documentSessionTypes'
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
 import { ensureVideoEditCodeDocumentMetadata, installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
-import { validateVideoEditGraphicTextBudget } from './videoEditGraphicTextBudget'
+import { validateVideoEditFontChanges } from './videoEditFonts'
 import { videoEditClipUnderPlayhead } from './videoEditPlayheadSelection'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { updateVideoEditProjectCover } from './videoEditProjectCover'
@@ -41,6 +41,7 @@ export interface VideoEditTimelineView {
   linkedSelection?: boolean
 }
 export interface VideoEditInstance extends VideoEditTimelineView {
+  selectedCodeElement?: import('@/core/videoEdit/codeElementSelection').VideoEditCodeElementSelection | null
   document: VideoEditDocument
   activeSequenceId: string
   sequenceViews: Map<string, VideoEditTimelineView & { selection: string | null; frame: number }>
@@ -296,15 +297,18 @@ export function switchVideoEditSequence(projectId: string, sequenceId: string): 
   cancelVideoEditGesture(instance)
   instance.sequenceViews.set(instance.activeSequenceId, { ...getVideoEditTimelineView(projectId), selection: instance.selection, frame: instance.frame })
   instance.activeSequenceId = sequenceId
+  instance.selectedCodeElement = null
   if (!instance.openSequenceIds.includes(sequenceId)) instance.openSequenceIds.push(sequenceId)
   Object.assign(instance, structuredClone(instance.sequenceViews.get(sequenceId) ?? defaultSequenceView(findActiveVideoEditSequence(instance))))
   instance.playing = false; instance.playbackDirection = 1; instance.scrubbing = false; programCommands.set(instance, {}); reconcileSequenceView(instance); publishVideoEdit(true)
 }
-export function editVideoSequence(projectId: string, sequenceId: string, update: (sequence: VideoEditSequence) => VideoEditSequence): VideoEditDocument {
-  return editVideoProject(projectId, document => {
+export function editVideoSequence(projectId: string, sequenceId: string, update: (sequence: VideoEditSequence) => VideoEditSequence, gesture?: VideoEditGesture): VideoEditDocument {
+  const change = (document: VideoEditDocument): VideoEditDocument => {
     if (!document.sequences.some(sequence => sequence.id === sequenceId)) throw new Error('目标序列不存在。')
     return { ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? update(sequence) : sequence) }
-  })
+  }
+  if (gesture) { if (gesture.projectId !== projectId) throw new Error('字体预览不属于此剪辑。'); return updateVideoEditGesture(gesture, change) }
+  return editVideoProject(projectId, change)
 }
 export function appendVideoEditSequence(projectId: string, settings: Partial<Omit<VideoEditSequence, 'id' | 'clips' | 'annotations' | 'tracks'>> = {}): string {
   const sequence = { ...createVideoEditSequence(`序列 ${requireVideoEditInstance(projectId).document.sequences.length + 1}`), ...useSettingsStore.getState().videoEditSequenceDefaults, ...settings }
@@ -435,11 +439,11 @@ function applyVideoEditDocument(instance: VideoEditInstance, update: (document: 
   const next = videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
+  if (!restoring) validateVideoEditFontChanges(instance.document, next, readVideoEditCodeMetadata(instance, instance.document), readVideoEditCodeMetadata(instance, next))
   if (JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
   return publishVideoEditDocument(instance, next, recordHistory)
 }
 function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean): VideoEditDocument {
-  validateVideoEditGraphicTextBudget(next, instance.document)
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
@@ -483,20 +487,22 @@ function followPlayheadSelection(instance: VideoEditInstance, values: Partial<Pi
   const selection = videoEditClipUnderPlayhead(getActiveVideoEditSequence(instance), values.frame)
   return selection === instance.selection ? values : { ...values, selection }
 }
-export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing' | 'scrubbing' | 'playbackDirection'>>, observation = false): object {
+export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing' | 'scrubbing' | 'playbackDirection' | 'selectedCodeElement'>>, observation = false): object {
   const instance = requireVideoEditInstance(id)
   validateVideoEditProgramControl(id, values)
   values = followPlayheadSelection(instance, values)
   if (Object.entries(values).every(([key, value]) => instance[key as keyof VideoEditInstance] === value)) return videoEditProgramCommandIdentity(id)
   const selectionChanged = values.selection !== undefined && values.selection !== instance.selection
+  const elementSelectionChanged = values.selectedCodeElement !== undefined && JSON.stringify(values.selectedCodeElement) !== JSON.stringify(instance.selectedCodeElement)
   const selectedClipIds = values.selection !== undefined ? values.selection ? expandVideoEditSelection(getActiveVideoEditSequence(instance), [values.selection], videoEditPickRelations(instance.linkedSelection !== false)) : [] : instance.selectedClipIds
   const programCommand = !observation && ['frame', 'playing', 'playbackDirection'].some(key => Object.prototype.hasOwnProperty.call(values, key))
   if (programCommand) programCommands.set(instance, {})
   const command = videoEditProgramCommandIdentity(id)
   if (selectionChanged) cancelVideoEditGesture(instance)
+  if (selectionChanged && values.selectedCodeElement === undefined) instance.selectedCodeElement = null
   Object.assign(instance, values)
   instance.selectedClipIds = selectedClipIds
-  if (selectionChanged) publishVideoEdit(programCommand)
+  if (selectionChanged || elementSelectionChanged) publishVideoEdit(programCommand)
   else { if (programCommand) domainRevision++; publishView() }
   return command
 }
@@ -539,11 +545,12 @@ export function setVideoEditTimelineView(id: string, values: Partial<VideoEditTi
   if (JSON.stringify(next.selectedClipIds) !== JSON.stringify(instance.selectedClipIds) || primary !== instance.selection) cancelVideoEditGesture(instance)
   Object.assign(instance, next)
   instance.selection = primary
+  if (instance.selectedCodeElement?.clipId !== primary) instance.selectedCodeElement = null
   publishVideoEdit(true)
 }
 export function focusVideoEditPanel(id: string, panel: VideoEditInstance['activePanel']): void {
   const instance = requireVideoEditInstance(id)
-  if (!['project', 'source', 'program', 'timeline', 'effects', 'content', 'tracking', 'lumetri', 'title_templates'].includes(panel)) throw new Error('剪辑面板不存在。')
+  if (!['project', 'source', 'program', 'timeline', 'effects', 'content', 'tracking', 'lumetri', 'title_templates', 'annotations'].includes(panel)) throw new Error('剪辑面板不存在。')
   instance.activePanel = panel; instance.panelFocusVersion = (instance.panelFocusVersion ?? 0) + 1; publishView()
 }
 export type VideoEditProjectView = Pick<VideoEditInstance, 'selectedItemIds' | 'selectedBinId' | 'openSequenceIds'>
@@ -630,7 +637,6 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const root = projectRootOf(session)
   const detached = root ? detachProjectMediaAssets(loaded, root) : null
   const document = detached ?? loaded
-  validateVideoEditGraphicTextBudget(document)
   const codeMetadata = await prepareVideoEditCodeMetadata(document)
   if (session.isEnded) throw new Error('剪辑在打开期间已关闭。')
   const view = defaultSequenceView(document.sequences[0])
@@ -863,6 +869,7 @@ export function videoEditBusyReason(id: string): string | null {
   if (!instance) return null
   if (instance.busy) return '请等待导出完成或取消导出。'
   if ([...activities.get(instance) ?? []].some(value => value.startsWith('export:'))) return '仍有待导出的项目，请等待完成或在导出列表取消。'
+  if ([...activities.get(instance) ?? []].some(value => value.startsWith('code-image-generation:'))) return '请等待图片生成完成，或在图片参数处取消生成。'
   if (activities.get(instance)?.size) return '请等待字幕处理完成或在字幕面板取消。'
   if (gestures.has(instance)) return '请先完成当前参数调整。'
   return null

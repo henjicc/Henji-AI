@@ -3,6 +3,8 @@ import type { CodeColor, CodeDrawCommand, CodeDrawMetadata, CodeExpression, Code
 import { validateCodeMaterialParameters } from './parameters'
 import { CODE_EASE_NAMES, codeCubicBezier, codeEase, codeNoise, codeProgress } from './motion'
 import { parseCodePath } from './geometry'
+import { readCodeStyleToken, validatedCodeStyle } from './style'
+import { codeShaderParams, codeShaderTime } from './shaders'
 
 const n = (value: unknown): number => finiteCodeNumber(value, '表达式结果')
 const array = (value: unknown): unknown[] => { if (!Array.isArray(value)) throw new CodeMaterialError('TYPE', '需要数组。'); return value }
@@ -56,8 +58,9 @@ function rgbaFromHsv(h: number, s: number, v: number, alpha: number): CodeColor 
   return codeColor([...rgb.map(channel => channel + m), alpha], 'HSV 结果')
 }
 export interface CodeEvaluationOptions { measureText?: CodeTextMeasurer; onDiagnostic?: (diagnostic: { code: 'MISSING_FONT'; fontFamily: string; elementId?: string }) => void }
-export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}): CodeDrawCommand[] {
+function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}, root?: CodeExpression): unknown {
   const parameters = validateCodeMaterialParameters(program, values); const bindings: unknown[] = []; const locals = new Map<number, unknown>()
+  const style = validatedCodeStyle(context.style)
   let operations = 0; let draws = 0; let characters = 0; const indices: number[] = []
   const charge = (cost = 1): void => { operations += cost; if (operations > CODE_V3_LIMITS.cpuOperations) throw new CodeMaterialError('BUDGET', '本次求值超出 v3 CPU 操作预算。') }
   const measure = (fields: Record<string, unknown>): ReturnType<CodeTextMeasurer> => {
@@ -87,7 +90,7 @@ export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: Co
       case 'literal': return expression.value
       case 'context': { if (['u', 'v'].includes(expression.key)) throw new CodeMaterialError('TYPE', 'CPU 生成器不能读像素坐标。'); return context[expression.key as keyof CodeMaterialContext] }
       case 'parameter': return parameters[expression.key]
-      case 'binding': { if (expression.slot < 0 || expression.slot >= bindings.length) throw new CodeMaterialError('TYPE', '无效 const 绑定。'); return bindings[expression.slot] }
+      case 'binding': { if (expression.slot < 0 || expression.slot >= program.bindings.length) throw new CodeMaterialError('TYPE', '无效 const 绑定。'); if (!(expression.slot in bindings)) bindings[expression.slot] = next(program.bindings[expression.slot].expression); return bindings[expression.slot] }
       case 'local': { if (!locals.has(expression.slot)) throw new CodeMaterialError('TYPE', '无效 repeat/字符索引。'); return locals.get(expression.slot) }
       case 'color': {
         const cached = literalColors.get(expression); if (cached) return cached
@@ -96,6 +99,7 @@ export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: Co
         if (expression.values.every(value => value.kind === 'literal')) literalColors.set(expression, color)
         return color
       }
+      case 'style': return readCodeStyleToken(style, expression.path)
       case 'array': return expression.values.map(next)
       case 'object': return Object.fromEntries(Object.entries(expression.properties).map(([key, value]) => [key, next(value)]))
       case 'component': return channels(next(expression.value))[expression.index]
@@ -185,6 +189,7 @@ export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: Co
           const coordinate = (key: string): number => bounded(fields[key] ?? 0, -32768, 32768, key)
           const size = (key: string): number => bounded(fields[key], 0, 32768, key)
           const fill = fields.fill === undefined ? [0, 0, 0, 0] as CodeColor : Array.isArray(fields.fill) ? codeColor(fields.fill, 'fill') : [1, 1, 1, 1] as CodeColor
+          if (expression.shape === 'shader') return { ...meta, kind: 'shader', name: string(fields.name), params: codeShaderParams(fields.name, 'background', fields.params), time: codeShaderTime(fields.time), x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height') }
           if (expression.shape === 'group') {
             let clip: { x: number; y: number; width: number; height: number } | undefined
             if (fields.clip !== undefined) { const raw = object(fields.clip); keys(raw, ['x', 'y', 'width', 'height']); clip = { x: n(raw.x), y: n(raw.y), width: bounded(raw.width, 0, 32768, 'clip.width'), height: bounded(raw.height, 0, 32768, 'clip.height') } }
@@ -225,12 +230,14 @@ export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: Co
     }
     throw new CodeMaterialError('TYPE', '未知 IR。')
   }
-  for (const binding of program.bindings) bindings.push(evaluate(binding.expression))
+  if (root) return evaluate(root)
+  program.bindings.forEach((binding, index) => { if (!(index in bindings)) bindings[index] = evaluate(binding.expression) })
   const output = array(evaluate(program.result)) as CodeDrawCommand[]
-  let actual = 0; let textCharacters = 0
+  let actual = 0; let textCharacters = 0; let shaderLayers = 0
   const assign = (commands: CodeDrawCommand[], path: string[]): void => commands.forEach((command, index) => {
     actual += command.kind === 'text' && command.perChar ? Math.max(1, command.layout!.glyphs.length) : 1
     if (actual > CODE_V3_LIMITS.draws) throw new CodeMaterialError('BUDGET', '本帧图形超过 4096。', command.sourceSpan)
+    if (command.kind === 'shader' && ++shaderLayers > CODE_V3_LIMITS.shaderLayers) throw new CodeMaterialError('BUDGET', '本帧着色器层超出预算。', command.sourceSpan)
     command.elementPath = [...path, `${command.elementId}/${index}`]
     if (command.kind === 'text') textCharacters += command.text.length
     if (textCharacters > CODE_V3_LIMITS.textCharacters) throw new CodeMaterialError('BUDGET', '本帧文本字符总数超过 8192。', command.sourceSpan)
@@ -240,4 +247,12 @@ export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: Co
   const clone = (commands: CodeDrawCommand[]): CodeDrawCommand[] => commands.filter(Boolean).map(command => command.kind === 'group' ? { ...command, children: clone(command.children) } : { ...command })
   const commands = clone(output); assign(commands, [])
   return commands
+}
+
+export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}): CodeDrawCommand[] {
+  return evaluateV3(program, context, values, options) as CodeDrawCommand[]
+}
+/** Used only for compiler-checked, pixel-independent uniforms of trusted filter passes. */
+export function evaluateCodeFrameExpression(program: CodeMaterialProgram, expression: CodeExpression, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>): unknown {
+  return evaluateV3(program, context, values, {}, expression)
 }

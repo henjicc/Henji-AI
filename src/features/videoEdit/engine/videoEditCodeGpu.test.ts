@@ -5,6 +5,8 @@ import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { createVideoEditGraphic, evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
+import * as glyphMetrics from '../videoEditGlyphMetrics'
+import * as fonts from '@/platform/fonts'
 
 const context = { time: 1, localTime: 1, sequenceTime: 1, width: 3840, height: 2160, frame: 60, fps: 60 }
 const source = (body: string, kind = 'generator', parameters = '{}'): string => `export default {apiVersion:1,name:"实验",kind:"${kind}",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:${parameters},render(ctx){${body}}}`
@@ -374,4 +376,17 @@ describe('代码GPU会话复用与资源边界', () => {
     expect(runtime.diagnostics()).toMatchObject({ surfaces: 15, residentBytes: 3840 * 2160 * (8 * 8 + 4 * 7) })
     await runtime.dispose(); expect(runtime.diagnostics().residentBytes).toBe(0)
   })
+})
+
+it('字体库加载/导入后的revision变化使代码度量失效，宿主释放订阅', async () => {
+  const initial = fonts.fontLibrarySnapshot(); let revision = initial.revision; let listener: (() => void) | undefined
+  const stop = vi.fn(); const invalidate = vi.spyOn(glyphMetrics, 'invalidateCodeTextMetrics')
+  const snapshot = vi.spyOn(fonts, 'fontLibrarySnapshot').mockImplementation(() => ({ ...initial, revision }))
+  const subscribe = vi.spyOn(fonts, 'subscribeFontLibrary').mockImplementation(callback => { listener = callback; return stop })
+  const host = new VideoEditCodeGpu(gpu().device)
+  try {
+    expect(invalidate).toHaveBeenCalledTimes(1)
+    listener!(); expect(invalidate).toHaveBeenCalledTimes(1)
+    revision++; listener!(); expect(invalidate).toHaveBeenCalledTimes(2)
+  } finally { await host.dispose(); expect(stop).toHaveBeenCalledTimes(1); invalidate.mockRestore(); snapshot.mockRestore(); subscribe.mockRestore() }
 })

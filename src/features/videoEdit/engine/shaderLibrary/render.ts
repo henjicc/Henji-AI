@@ -4,6 +4,9 @@ import { normalizeVideoEditBuiltinParams, type VideoEditBuiltinParams } from '..
 import { normalizeVideoEditTransitionParams } from '../../../../core/videoEdit/transitionParams'
 import type { VideoEditBuiltinEffectsGpu } from '../videoEditBuiltinEffectsGpu'
 import type { ShaderLibraryClock } from './planner'
+import { createLogger } from '../../../../core/logging'
+
+const logger = createLogger('features.videoEdit.shaderLibrary')
 
 export interface ShaderLibraryRenderRequest {
   name: string
@@ -23,6 +26,17 @@ export interface ShaderLibraryRenderRequest {
 export class TrustedShaderLibraryRenderer {
   constructor(private readonly host: Pick<VideoEditBuiltinEffectsGpu, 'render' | 'renderTransition'>) {}
   async render(request: ShaderLibraryRenderRequest): Promise<void> {
+    const context = { name: request.name, width: request.width, height: request.height }
+    logger.debug('可信着色器渲染开始', { event: 'video_edit.shader.render.start', context })
+    try {
+      await this.renderValidated(request)
+      logger.debug('可信着色器渲染完成', { event: 'video_edit.shader.render.completed', context })
+    } catch (error) {
+      logger.warn('可信着色器渲染失败', { event: 'video_edit.shader.render.failed', context, error })
+      throw error
+    }
+  }
+  private async renderValidated(request: ShaderLibraryRenderRequest): Promise<void> {
     const { name, timeSeconds, width, height, format, input, output } = request
     if (!Number.isFinite(timeSeconds)) throw new Error('着色器需要有限的剪辑秒时间。')
     if (![width, height].every(value => Number.isSafeInteger(value) && value > 0)) throw new Error('着色器需要有效的目标尺寸。')

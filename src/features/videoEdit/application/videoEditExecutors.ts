@@ -1,3 +1,7 @@
+import { assertVideoEditAnnotationTransition } from '@/core/videoEdit/annotations'
+import { loadFontLibrary } from '@/platform/fonts'
+import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
+import { changedVideoEditFonts } from './videoEditFonts'
 import { videoEditIntroducesCodeEffects } from '@/core/videoEdit/compositing'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditSequenceSchema } from '@/core/videoEdit/document'
@@ -53,7 +57,7 @@ function cascades(before: VideoEditDocument, after: VideoEditDocument): Applicat
     const previous = before.sequences.find(item => item.id === sequence.id)
     if (!previous || previous.frameRate.numerator * sequence.frameRate.denominator === sequence.frameRate.numerator * previous.frameRate.denominator) continue
     const clips = sequence.clips.filter(clip => previous.clips.some(item => item.id === clip.id && (clip.start !== item.start || clip.duration !== item.duration || JSON.stringify(clip.curves) !== JSON.stringify(item.curves))))
-    const marks = sequence.annotations.filter(mark => previous.annotations.some(item => item.id === mark.id && mark.frame !== item.frame))
+    const marks = sequence.annotations.filter(mark => previous.annotations.some(item => item.id === mark.id && (mark.frame !== item.frame || mark.endFrame !== item.endFrame || JSON.stringify(mark.target) !== JSON.stringify(item.target))))
     const markers = (sequence.markers ?? []).filter(mark => previous.markers?.some(item => item.id === mark.id && mark.frame !== item.frame))
     const captions = (sequence.captions ?? []).filter(caption => previous.captions?.some(item => item.id === caption.id && (caption.start !== item.start || caption.duration !== item.duration)))
     // 回执与静态声明共用属性表，避免新增重映射属性后仍返回旧的时间字段。
@@ -162,6 +166,14 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
     const data = readVideoEditData(step.target)
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
+    if (this.entityType === 'video_edit.annotation') {
+      const prior = before.sequences.flatMap(sequence => sequence.annotations).find(mark => mark.id === childId)!
+      if (data.status === 'addressed' && prior.status !== 'addressed') data.addressedBy = { transactionId: context?.requestId ?? crypto.randomUUID(), revision: before.revision + 1 }
+      if (data.status === 'open') delete data.addressedBy
+      const next = videoEditAnnotationSchema.parse(data)
+      assertVideoEditAnnotationTransition(prior, next, context?.exposure === 'ui' ? 'user' : 'agent')
+      if (context?.exposure !== 'ui' && next.thread.slice(prior.thread.length).some(message => message.author.kind === 'user')) throw new Error('Agent回复不能冒充用户。')
+    }
     if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('剪辑或浏览会话已有后续修改，请重读当前状态。')
     if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => mutation.propertyId === 'video_edit.clip.source_in_us')) data.sourceRemainder = { numerator: 0, denominator: 1 }
     if (this.entityType === 'video_edit.item') for (const key of ['graphicKind', 'graphicWidth', 'graphicHeight']) delete data[key]
@@ -194,7 +206,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
             if (!sequence.multicam || value.cameras.length !== sequence.multicam.cameras.length || value.cameras.some((camera, index) => camera.id !== sequence.multicam!.cameras[index].id || camera.clipId !== sequence.multicam!.cameras[index].clipId)) throw new Error('只能修改现有机位名称、说话人和主音频，请保留机位引用和顺序。')
           }
           const next = changeVideoEditSequenceSettings(sequence, { width: Number(data.width), height: Number(data.height), frameRate: data.frameRate as typeof sequence.frameRate, pixelAspectRatio: data.pixelAspectRatio as typeof sequence.pixelAspectRatio, sampleRate: data.sampleRate as typeof sequence.sampleRate, channels: data.channels as typeof sequence.channels })
-          return { ...next, ...(keys.includes('video_edit.sequence.multicam') ? { multicam: videoEditSequenceSchema.shape.multicam.unwrap().parse(data.multicam) } : {}), name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
+          return { ...next, ...(keys.includes('video_edit.sequence.multicam') ? { multicam: videoEditSequenceSchema.shape.multicam.unwrap().parse(data.multicam) } : {}), ...(keys.includes('video_edit.sequence.style_kit_id') ? { styleKitId: data.styleKitId ? String(data.styleKitId) : undefined } : {}), name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
         }
         // 速度属性（4.13）与其余属性一起写：速度改动交给速度编辑换算时长与内容。
         if (this.entityType === 'video_edit.clip' && sequence.clips.some(clip => clip.id === childId)) {
@@ -227,6 +239,12 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
         assertVideoEditLockedTracks(before, next)
         await trialVideoEditCodeDocument(owner, before, next, sequence.id, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)), context?.signal, [{ sequenceId: sequence.id, clipId: childId }])
       }
+    }
+    const fontCandidate = update(structuredClone(before))
+    if (changedVideoEditFonts(before, fontCandidate, readVideoEditCodeMetadata(owner, before), readVideoEditCodeMetadata(owner, fontCandidate)).some(use => !GENERIC_FONT_FACES.some(face => face.family === use.font))) {
+      await loadFontLibrary(true)
+      context?.signal?.throwIfAborted()
+      if (requireVideoEditInstance(projectId) !== owner || owner.document !== before) throw new Error('剪辑已有后续修改，请重读当前状态。')
     }
     let sourcePause: VideoEditSourcePause | undefined
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback') && (data.programPlayback as ProjectViewSnapshot['program']).playing) {
@@ -337,7 +355,12 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
               }
               sequence!.clips.push(videoEditClipSchema.parse({ ...clip, ...values, id })); break
             }
-            case 'video_edit.annotation': sequence!.annotations.push(videoEditAnnotationSchema.parse({ id, frame: 0, kind: 'point', space: 'composition-normalized', x: 0.5, y: 0.5, width: 0, height: 0, ...values })); break
+            case 'video_edit.annotation': {
+              if (values.addressedBy || values.author || values.createdAt) throw new Error('创建标注的作者、时间与撤销关联由宿主维护。')
+              const mark = videoEditAnnotationSchema.parse({ id, frame: 0, space: 'composition-normalized', status: 'open', author: { kind: context?.exposure === 'ui' ? 'user' : context?.exposure === 'assistant' ? 'assistant' : 'external', name: context?.exposure === 'ui' ? '我' : context?.exposure === 'assistant' ? '助手' : 'Agent' }, createdAt: new Date().toISOString(), thread: [], ...values })
+              assertVideoEditAnnotationTransition(undefined, mark, context?.exposure === 'ui' ? 'user' : 'agent')
+              sequence!.annotations.push(mark); break
+            }
             case 'video_edit.marker': (sequence!.markers ??= []).push(videoEditMarkerSchema.parse({ id, ...values })); break
             case 'video_edit.caption': (sequence!.captions ??= []).push(videoEditCaptionSchema.parse({ id, ...values })); break
             case 'video_edit.track': {
@@ -365,7 +388,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             document.codeMaterials = document.codeMaterials?.filter(definition => !ids.includes(definition.id)); break
           case 'video_edit.clip':
             if (ids.some(id => !sequence!.clips.some(clip => clip.id === id))) throw new Error('片段不属于目标序列。')
-            if (sequence!.annotations.some(mark => ids.includes(mark.clipId))) throw new Error('片段仍有标注，请先移除标注，再删除片段。')
+            if (sequence!.annotations.some(mark => Boolean(mark.clipId && ids.includes(mark.clipId)))) throw new Error('片段仍有标注，请先移除标注，再删除片段。')
             sequence!.clips = sequence!.clips.filter(clip => !ids.includes(clip.id)); break
           case 'video_edit.annotation':
             if (ids.some(id => !sequence!.annotations.some(mark => mark.id === id))) throw new Error('标注不属于目标序列。')

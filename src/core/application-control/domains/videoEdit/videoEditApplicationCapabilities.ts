@@ -1,5 +1,6 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '../../../videoEdit/time'
 import { VIDEO_EDIT_MULTICAM_CAPABILITIES } from './videoEditMulticamCapabilities'
+import { VIDEO_EDIT_STYLE_KIT_CAPABILITIES } from './videoEditStyleKitCapabilities'
 import { VIDEO_EDIT_TITLE_TEMPLATE_CAPABILITIES } from './videoEditTitleTemplateCapabilities'
 import { generateVideoEditProxyCapability } from './videoEditProxyCapability'
 import { reframeVideoEditCapability } from './videoEditReframeCapability'
@@ -19,6 +20,7 @@ import { VIDEO_EDIT_SCENE_CAPABILITIES } from './videoEditSceneCapabilities'
 import { generateVideoEditAudioDuckingCapability } from './videoEditAudioDuckingCapability'
 
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
+const clipRef = applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict()
 const input = z.object({ documentRef, clipRef: applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict().optional(), frame: z.number().int().nonnegative().optional(), assetRef: applicationRefSchema.extend({ kind: z.literal('asset') }).strict().optional() }).strict()
 const output = z.object({ resultRef: documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: documentRef }) }).strict()
 const libraryRef = applicationRefSchema.extend({ kind: z.literal('asset.library') }).strict()
@@ -102,12 +104,12 @@ const observeTarget = z.discriminatedUnion('kind', [
 const observeOutput = z.object({ resultRef: assetRef, documentRef, target: observeTarget, width: z.number().int().positive(), height: z.number().int().positive(), sourceWidth: z.number().int().positive(), sourceHeight: z.number().int().positive(), documentRevision: z.number().int().nonnegative(), message: z.string(),
   verification: z.object({ verified: z.boolean(), condition: z.string(), target: assetRef }) }).strict()
 export const observeVideoEditFrameCapability = defineApplicationCapability({
-  id: 'observe_video_edit_frame', title: '观察剪辑指定画面', description: '按当前剪辑版本离屏渲染序列指定整数帧的最终合成画面（含代码素材、滤镜、转场与字幕），或素材项源素材指定微秒时间的原始画面，保存为资产库图片并返回assetRef；用 read_application_media 读取图片内容。不改变用户的播放头、选区和节目画面。默认宽度1920，可设256到3840。',
+  id: 'observe_video_edit_frame', title: '观察剪辑指定画面', description: '按当前剪辑版本离屏渲染序列指定整数帧的最终合成画面（含代码素材、滤镜、转场与字幕），或素材项源素材指定微秒时间的原始画面，保存为资产库图片并返回assetRef；用 read_application_media 读取图片内容。不改变用户的播放头、选区和节目画面。默认宽度1920，可设256到3840。overlayAnnotations=true叠加当前帧未关闭的标注及列表编号；annotationIds指定标注（包括已通过）；cropAnnotationId按点/矩形/笔画/元素region裁切放大。时间段没有画面区域，不能裁切。highlightElement={clipRef,elementId}可高亮指定当前帧代码元素；标注与元素选项只支持program帧。',
   version: 1, domain: 'video_edit', aliases: ['查看剪辑帧', '取合成帧', '取源帧', '检查画面'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.item'], producesRefs: ['asset'],
   successEvidence: ['返回固定剪辑版本渲染的资产图片；画面内容需经模型读取后才能判断是否符合预期。'],
   failureRecovery: ['帧超出范围或素材项没有画面时按提示修正；渲染队列已满时稍后重试。'],
-  inputSchema: z.object({ documentRef, target: observeTarget, maxWidth: z.number().int().min(256).max(3840).optional() }).strict(), outputSchema: observeOutput,
+  inputSchema: z.object({ documentRef, target: observeTarget, maxWidth: z.number().int().min(256).max(3840).optional(), overlayAnnotations: z.boolean().optional(), annotationIds: z.array(z.string().min(1)).optional(), cropAnnotationId: z.string().min(1).optional(), highlightElement: z.object({ clipRef, elementId: z.string().min(1) }).strict().optional() }).strict(), outputSchema: observeOutput,
   concurrencyKey: 'video_edit_observe', resolveConcurrencyKey: parsed => `video_edit_observe:${parsed.documentRef.id}`,
   resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: () => [],
   control: capabilityControl('observe', ['video_edit.document', 'asset'], { cancelable: true, revisionScopes: ['video_edit'] }), summarize: result => result.message,
@@ -151,4 +153,4 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), ...VIDEO_EDIT_EXPORT_CAPABILITIES, ...VIDEO_EDIT_WORKSPACE_TRANSFER_CAPABILITIES, analyzeVideoEditLumetriCapability, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability, ...VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES, ...VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability, ...VIDEO_EDIT_SUBTITLE_CAPABILITIES, ...VIDEO_EDIT_LOUDNESS_CAPABILITIES, ...VIDEO_EDIT_SCENE_CAPABILITIES, generateVideoEditProxyCapability]
+})), ...VIDEO_EDIT_STYLE_KIT_CAPABILITIES, ...VIDEO_EDIT_EXPORT_CAPABILITIES, ...VIDEO_EDIT_WORKSPACE_TRANSFER_CAPABILITIES, analyzeVideoEditLumetriCapability, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability, ...VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES, ...VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability, ...VIDEO_EDIT_SUBTITLE_CAPABILITIES, ...VIDEO_EDIT_LOUDNESS_CAPABILITIES, ...VIDEO_EDIT_SCENE_CAPABILITIES, generateVideoEditProxyCapability]

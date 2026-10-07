@@ -9,6 +9,9 @@ import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
 import type { VideoEditTrackResults } from './videoEditTrackResults'
 import type { VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
 import { videoEditMaskUpdateTime } from '../application/videoEditMaskEditing'
+import { prepareVideoEditFonts } from '../application/videoEditFonts'
+import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
+import { loadDocumentFont, pinDocumentFonts, releaseDocumentFonts } from '@/platform/fontFaces'
 
 const logger = createLogger('features.videoEdit.render')
 
@@ -26,6 +29,31 @@ export class VideoEditRenderSession {
   get previewPreparationMs(): number { return 0 }
   get previewBytes(): number { return 0 }
   private readonly lutRoots = new Set<string>()
+  private fontsRevision = -1
+  private fontIds = new Set<string>()
+  private stopFonts?: () => void
+  private fontSync = Promise.resolve()
+  private lastPresentedFrame?: number
+  private hasPresentationSurface = false
+  private syncFonts(document: VideoEditComposition): Promise<void> {
+    const result = this.fontSync.catch(() => undefined).then(() => this.applyFonts(document))
+    this.fontSync = result
+    return result
+  }
+  private async applyFonts(document: VideoEditComposition): Promise<void> {
+    const fonts = await prepareVideoEditFonts(document)
+    if (this.disposed) return
+    pinDocumentFonts(this, fonts.map(payload => payload.face.id))
+    await Promise.all(fonts.map(loadDocumentFont))
+    const revision = fontLibrarySnapshot().revision
+    const changed = revision !== this.fontsRevision
+    const additions = fonts.filter(payload => changed || !this.fontIds.has(payload.face.id))
+    const usedIds = new Set(fonts.map(payload => payload.face.id))
+    const removed = [...this.fontIds].some(id => !usedIds.has(id))
+    if (additions.length || removed || changed && this.fontsRevision >= 0) await this.request({ kind: 'fonts', fonts: additions, availableIds: [...usedIds], reset: changed && this.fontsRevision >= 0 })
+    this.fontsRevision = revision
+    this.fontIds = usedIds
+  }
   private async authorizeLuts(document: VideoEditComposition): Promise<void> {
     for (const asset of document.lumetriLuts ?? []) {
       if (this.lutRoots.has(asset.path)) continue
@@ -64,6 +92,7 @@ export class VideoEditRenderSession {
     }
   }
   constructor(private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private readonly proxyProjectId?: string, private readonly exportProxies = false) {
+    this.hasPresentationSurface = Boolean(surface)
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
     this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage>) => {
@@ -75,7 +104,9 @@ export class VideoEditRenderSession {
       if (value.error) pending.reject(new Error(value.error)); else pending.resolve(value)
     }
     this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
-    this.ready = Promise.all([this.selectProxies(), this.content.check(document), this.connectNative(), this.authorizeLuts(document)]).then(([, , decode]) => this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : []))
+    // Verify original media before dependent code/font preparation or opening a decoder channel.
+    this.ready = this.content.check(document).then(() => Promise.all([this.selectProxies(), this.connectNative(), this.authorizeLuts(document), this.syncFonts(document)])).then(([, decode]) => this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : []))
+    this.stopFonts = subscribeFontLibrary(() => { if (!this.disposed && fontLibrarySnapshot().revision !== this.fontsRevision) void this.ready.then(async () => { await this.syncFonts(this.document); if (this.hasPresentationSurface && this.lastPresentedFrame !== undefined && !this.disposed) { const result = await this.present(this.lastPresentedFrame); result.bitmap?.close() } }).catch(error => logger.warn('剪辑字体更新失败', { event: 'video_edit.fonts.update.failed', error })) })
     void this.ready.catch(() => undefined)
   }
   private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
@@ -84,7 +115,7 @@ export class VideoEditRenderSession {
     const id = ++this.nextId
     return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject, submitted }); this.worker.postMessage({ ...request, id }, transfer) })
   }
-  async updateDocument(document: VideoEditComposition, original = false): Promise<void> { await this.ready; await this.selectProxies(original); await this.content.check(document); await this.authorizeLuts(document); await this.request({ kind: 'update', document: this.mediaDocument(document), localPaths: this.localPaths(document), proxies: this.proxySources() }); this.document = document }
+  async updateDocument(document: VideoEditComposition, original = false): Promise<void> { await this.ready; await this.selectProxies(original); await this.content.check(document); await this.authorizeLuts(document); await this.syncFonts(document); await this.request({ kind: 'update', document: this.mediaDocument(document), localPaths: this.localPaths(document), proxies: this.proxySources() }); this.document = document }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */
@@ -97,6 +128,7 @@ export class VideoEditRenderSession {
     await this.ready
     const document = this.document
     const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, ...(readRgb ? { readRgb } : {}) }, [], submitted)
+    if (result.presented) this.lastPresentedFrame = frame
     const at = result.presented ? videoEditMaskUpdateTime(document.id, document.revision) : undefined
     if (at !== undefined && result.presented) {
       const durationMs = performance.now() - at
@@ -126,6 +158,8 @@ export class VideoEditRenderSession {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    this.stopFonts?.()
+    releaseDocumentFonts(this)
     this.content.dispose()
     for (const pending of this.pending.values()) pending.reject(new Error('剪辑渲染已关闭。'))
     this.pending.clear()

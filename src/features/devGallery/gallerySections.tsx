@@ -23,6 +23,7 @@ import {
   UiErrorBoundary,
   UiFieldLayoutContext,
   UiFieldTrigger,
+  UiFontPicker,
   UiFormRow,
   UiGroup,
   UiIconButton,
@@ -108,14 +109,17 @@ export function ButtonSection(): JSX.Element {
 }
 
 export function FieldSection(): JSX.Element {
+  const [font, setFont] = useState('sans-serif')
   const [date, setDate] = useState('2026-10-05')
   return (
+    // t63: font selector is a distinct value/preview interaction, using the same field surface.
     <GallerySection title="字段">
       <GalleryMatrix
         rows={[
           { label: '输入', render: (state) => <UiInput size="sm" aria-label="名称" defaultValue="镜头 01" disabled={disabledAt(state)} /> },
           { label: '搜索', render: (state) => <UiSearchInput size="sm" aria-label="搜索" placeholder="搜索" disabled={disabledAt(state)} /> },
           { label: '触发器', render: (state) => <UiFieldTrigger size="sm" disabled={disabledAt(state)}>16:9</UiFieldTrigger> },
+          { label: '字体', render: (state) => <UiFontPicker value={font} onSelect={setFont} size="sm" disabled={disabledAt(state)} /> },
         ]}
       />
       <GalleryRow label="数值">

@@ -8,22 +8,26 @@ import { importVideoEditSources } from './videoEditMedia'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 
 export type VideoEditCodeImageBinding = { kind: 'media'; mediaId: string } | { kind: 'file'; path: string } | { kind: 'asset'; assetId: string } | null
+/** 现有图片选择与生成结果导入共用的候选文档检查；调用方负责一次提交。 */
+export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarget, key: string, document: VideoEditDocument, mediaId: string | null, baseline: VideoEditDocument, signal?: AbortSignal): Promise<VideoEditDocument> {
+  signal?.throwIfAborted()
+  const owner = requireVideoEditInstance(target.projectId)
+  const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
+  const clip = sequence?.clips.find(clip => clip.id === target.clipId)
+  const code = target.effectId ? clip?.effects?.find(effect => effect.id === target.effectId)?.code : clip?.code
+  if (!code || !clip || !sequence || code.versionId !== target.versionId) throw new Error('原代码片段或源码版本已改变，请重新选择。')
+  const declaration = readVideoEditCodeMetadata(owner, document)(code).parameters.find(parameter => parameter.key === key)
+  if (!declaration || declaration.type !== 'image') throw new Error('此参数不是图片引用。')
+  if (mediaId && !document.media.some(media => media.id === mediaId && media.kind === 'image')) throw new Error('请选择此剪辑中的图片。')
+  code.parameters[key] = validateCodeMaterialParameterValue(declaration, mediaId ? { kind: 'image', mediaId } : null)
+  const frame = Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? clip.start))
+  await trialVideoEditCodeDocument(owner, baseline, document, sequence.id, frame, signal, [{ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: [target.effectId] } : {}) }])
+  return document
+}
 export async function bindVideoEditCodeImage(target: VideoEditCodeTarget, key: string, input: VideoEditCodeImageBinding, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
-  const bind = async (document: VideoEditDocument, mediaId: string | null): Promise<VideoEditDocument> => {
-    const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
-    const clip = sequence?.clips.find(clip => clip.id === target.clipId)
-    const code = target.effectId ? clip?.effects?.find(effect => effect.id === target.effectId)?.code : clip?.code
-    if (!code || !clip || !sequence || code.versionId !== target.versionId) throw new Error('原代码片段或源码版本已改变，请重新选择。')
-    const declaration = readVideoEditCodeMetadata(owner, document)(code).parameters.find(parameter => parameter.key === key)
-    if (!declaration || declaration.type !== 'image') throw new Error('此参数不是图片引用。')
-    if (mediaId && !document.media.some(media => media.id === mediaId && media.kind === 'image')) throw new Error('请选择此剪辑中的图片。')
-    code.parameters[key] = validateCodeMaterialParameterValue(declaration, mediaId ? { kind: 'image', mediaId } : null)
-    const frame = Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? clip.start))
-    await trialVideoEditCodeDocument(owner, baseline, document, sequence.id, frame, signal, [{ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: [target.effectId] } : {}) }])
-    return document
-  }
+  const bind = (document: VideoEditDocument, mediaId: string | null): Promise<VideoEditDocument> => prepareVideoEditCodeImageBinding(target, key, document, mediaId, baseline, signal)
   if (!input || input.kind === 'media') {
     const document = await bind(structuredClone(baseline), input?.mediaId ?? null)
     signal?.throwIfAborted()

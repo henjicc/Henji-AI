@@ -6,11 +6,15 @@ import { CODE_MATERIAL_LIMITS, CodeMaterialError } from '@/core/videoEdit/codeMa
 import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand, CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
+import { codeShaderFilterPasses, codeShaderParams } from '@/core/videoEdit/codeMaterial/shaders'
+import { evaluateCodeFrameExpression } from '@/core/videoEdit/codeMaterial/evaluateV3'
+import { TrustedShaderLibraryRenderer } from './shaderLibrary/render'
 import { codeFilterRadius, codeMaterialFilterPasses } from './videoEditCodeCompilerFilterV3'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
-import { measureCodeText, measureVideoEditGlyph } from '../videoEditGlyphMetrics'
+import { invalidateCodeTextMetrics, measureCodeText, measureVideoEditGlyph } from '../videoEditGlyphMetrics'
+import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
 import { VideoEditCodeGpuV3 } from './videoEditCodeGpuV3'
 import { createLogger } from '@/core/logging'
 import { videoEditGpuBytesPerPixel, VIDEO_EDIT_PRECISE_FORMAT, type VideoEditGpuColorFormat } from './videoEditGpuFrame'
@@ -114,7 +118,17 @@ export class VideoEditCodeGpu {
   private readonly ready: Promise<void>
   private pending: Promise<void> = Promise.resolve()
   private readonly counts = { pipelineCompiles: 0, textureAllocations: 0, externalCopies: 0, generatorFrames: 0, filterFrames: 0, mixFrames: 0, builtinFrames: 0 }
-  constructor(private readonly device: GpuDevice) { this.ready = this.initialize() }
+  private readonly stopFonts: () => void
+  constructor(private readonly device: GpuDevice) {
+    // Worker font resets recreate this host after t63 loads/imports the new FontFace payloads.
+    invalidateCodeTextMetrics()
+    let revision = fontLibrarySnapshot().revision
+    this.stopFonts = subscribeFontLibrary(() => {
+      const next = fontLibrarySnapshot().revision
+      if (next !== revision) { revision = next; invalidateCodeTextMetrics() }
+    })
+    this.ready = this.initialize()
+  }
   private async initialize(): Promise<void> {
     this.device.pushErrorScope('validation')
     const module = this.device.createShaderModule({ code: shapeShader })
@@ -166,7 +180,7 @@ export class VideoEditCodeGpu {
       let pipeline: GpuRenderPipeline
       try {
         const module = this.device.createShaderModule({ code })
-        pipeline = this.device.createRenderPipeline({ layout: this.fixedFilterLayout(codeMaterialFilterPasses(program).length), vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+        pipeline = this.device.createRenderPipeline({ layout: this.fixedFilterLayout(codeMaterialFilterPasses(program).length + codeShaderFilterPasses(program).length), vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
       } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
       const error = await this.device.popErrorScope()
       if (error) throw new Error(`代码滤镜编译失败：${error.message}`)
@@ -250,7 +264,7 @@ export class VideoEditCodeGpu {
     this.device.queue.submit([encoder.finish()]); this.pending = this.device.queue.onSubmittedWorkDone()
   }
   private v3(): VideoEditCodeGpuV3 {
-    return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes } })
+    return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes } }, undefined, new TrustedShaderLibraryRenderer(this.builtins()))
   }
   async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false): Promise<VideoEditCodePicture> {
     const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, measureText: measureCodeText, onDiagnostic: diagnostic => {
@@ -347,16 +361,32 @@ export class VideoEditCodeGpu {
     program.parameters.forEach((parameter, index) => { const value = values[parameter.key]; if (Array.isArray(value)) packed.set(value, (index + 2) * 4); else if (typeof value === 'number' || typeof value === 'boolean') packed[(index + 2) * 4] = Number(value) })
     packed[34 * 4] = 1
     this.device.queue.writeBuffer(target.filterBuffer, 0, packed)
+    const shaderPasses = codeShaderFilterPasses(program)
+    const shaderTextures: GpuTexture[] = []
+    const shaderResults = new Map<GpuTexture, Map<string, GpuTexture>>()
+    const releaseShader = (texture: GpuTexture): void => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes; if (this.preciseTextures.has(texture)) this.preciseBytes -= bytes }
     const blurred: { texture: GpuTexture; release: () => void }[] = []
     try {
       for (const primitive of codeMaterialFilterPasses(program)) blurred.push(await this.v3().filterBlur(input.texture, input.width, input.height, codeFilterRadius(program, primitive.radius, values), primitive.threshold ? codeFilterRadius(program, primitive.threshold, values) : undefined))
+      for (const primitive of shaderPasses) {
+        let params: Record<string, number | string>
+        try { params = codeShaderParams(primitive.name, 'filter', evaluateCodeFrameExpression(program, primitive.params, context, values)) }
+        catch (error) { if (error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, primitive.expression.sourceSpan); throw error }
+        const source = primitive.input === undefined ? input.texture : shaderTextures[primitive.input]
+        const signature = JSON.stringify([primitive.name, Object.entries(params).sort(([a], [b]) => a.localeCompare(b))])
+        let results = shaderResults.get(source); if (!results) { results = new Map(); shaderResults.set(source, results) }
+        const cached = results.get(signature)
+        if (cached) { shaderTextures.push(cached); continue }
+        const output = this.texture(input.width, input.height, format); shaderTextures.push(output); results.set(signature, output)
+        await new TrustedShaderLibraryRenderer(this.builtins()).render({ name: `shader_${primitive.name}`, params, timeSeconds: shaderTime, width: input.width, height: input.height, format, input: source, output })
+      }
     const encoder = this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
     pass.setPipeline(pipeline)
-    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: input.texture.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: target.filterBuffer } }, ...blurred.map((value, index) => ({ binding: index + 3, resource: value.texture.createView() }))] }))
+    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: input.texture.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: target.filterBuffer } }, ...blurred.map((value, index) => ({ binding: index + 3, resource: value.texture.createView() })), ...shaderTextures.map((value, index) => ({ binding: index + 3 + blurred.length, resource: value.createView() }))] }))
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.filterFrames++
     return target.picture
-    } finally { blurred.forEach(value => value.release()) }
+    } finally { blurred.forEach(value => value.release()); new Set(shaderTextures).forEach(releaseShader) }
   }
   /**
    * All generated, filtered and composition targets share the resident budget of their format: `rgba16float` targets
@@ -537,6 +567,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     return { ...this.counts, pipelineCompiles: this.counts.pipelineCompiles + (v3?.pipelines ?? 0), externalCopies: this.counts.externalCopies + (this.v3Runtime?.counts.uploads ?? 0), residentBytes: this.bytes, surfaces: this.surfaces.size, glyphs: this.glyphs.size + (v3?.glyphs ?? 0), pipelines: this.disposed ? 0 : [...this.filters.values()].reduce((sum, filter) => sum + filter.pipelines.size, 0) + 2 + Number(!!this.image) + this.mixPipelines.size + (v3?.pipelines ?? 0) }
   }
   async dispose(): Promise<void> {
+    this.stopFonts()
     this.disposed = true; await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled([...this.mixReady.values(), ...this.maskedMixPipelines.values()])
     await Promise.allSettled([...this.filterCompiles.values()].map(value => value.pending)); await this.pending.catch(() => {})
     this.releaseUnused(new Set()); await this.v3Runtime?.dispose(); this.v3Runtime = undefined; this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }

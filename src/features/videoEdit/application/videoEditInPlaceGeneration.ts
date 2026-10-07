@@ -259,7 +259,7 @@ function message(error: unknown): string { return error instanceof Error ? error
 function aborted(signal: AbortSignal): boolean { return signal.aborted }
 
 /** 等生成任务到终态；进度由界面直接订阅生成进度。 */
-async function waitTask(taskId: string, signal: AbortSignal, recovering = false): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function waitVideoEditGenerationTask(taskId: string, signal: AbortSignal, recovering = false, onProgress?: (progress: number) => void): Promise<{ ok: true } | { ok: false; error: string }> {
   return await new Promise((resolve, reject) => {
     let checking = false
     let checkAgain = false
@@ -272,6 +272,7 @@ async function waitTask(taskId: string, signal: AbortSignal, recovering = false)
       try {
         let task: ReturnType<typeof generationApplicationService.getTask> | undefined
         try { task = generationApplicationService.getTask(taskId) } catch { task = undefined }
+        if (task) onProgress?.(task.progress ?? 0)
         // 恢复优先读持久历史，防止生成页尚未刷新时用旧内存状态盖掉关闭期间的结果。
         if (recovering || !task) {
           const record = await databaseService.getHistoryById(taskId)
@@ -338,7 +339,7 @@ async function complete(job: VideoEditInPlaceJob, taskId: string, signal: AbortS
     await saveVideoEdit(job.projectId)
     return
   }
-  const outcome = await waitTask(taskId, signal, recovering)
+  const outcome = await waitVideoEditGenerationTask(taskId, signal, recovering)
   signal.throwIfAborted()
   if (!outcome.ok) throw new Error(outcome.error)
   update(job.id, { status: 'placing', error: undefined })

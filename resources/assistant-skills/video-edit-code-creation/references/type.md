@@ -4,7 +4,15 @@
 
 ## 先查询可用字体
 
-开工先“查询可用字体”，从本机实际可用结果选择家族与字重，不猜显示名、内部名或安装情况。这里的“查询可用字体”是待接入的能力名称占位，不是可直接调用的工具名；当前目录未提供时说明缺口，使用作者接口明确允许的字体类型，不能冒称选中了某款字体。
+用 `list_application_entities` 列举只读全局 `font` 实体，无需 parent；limit/cursor 分页。where 支持属性等值过滤，例如：
+
+```json
+{"entityType":"font","limit":40,"where":{"font.category":"sans-serif","font.supports_cjk":true}}
+```
+
+category 可选 serif/sans-serif/monospace/handwriting/unknown；还可按 font.family、font.localized_name、font.name、font.imported 等值筛选，不能把模糊搜索词当作精确家族名。使用返回 nextCursor 继续，不把一页结果当整个字体库。
+
+对返回的 ref 调 `read_application_entity`，propertyIds 取 font.name/family/localized_name/style/weight/category/supports_cjk/imported。按返回 name（精确样式）或 family 写入文字 fontFamily；用真实 weight/style，不猜字体名称或安装情况。代码当前没有 font 参数类型，可用 text/choice 字符串传字体名。目录只读，不能通用创建/删除 font；字体导入由用户的本地文件选择器维护。
 
 查询安装情况不能证明字形覆盖。样张包含实际中文、数字、英文及 g／y／p，下伸字母和多笔画中文都取帧检查；缺字的符号改用图形表达。字体不是越陌生越好，同家族粗细对照也能建立层级。
 

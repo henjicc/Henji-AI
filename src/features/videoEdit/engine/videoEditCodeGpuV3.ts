@@ -3,6 +3,8 @@ import { CodeMaterialError, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial
 import type { CodeBlend, CodeColor, CodeDrawCommand, CodeMatrix, CodePaint } from '@/core/videoEdit/codeMaterial/contract'
 import { CODE_IDENTITY, codeElementBounds, codeLocalBounds, codeMultiply, codeTextBaseBounds, codeTransform, trimCodePath } from '@/core/videoEdit/codeMaterial/geometry'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
+import { TrustedShaderLibraryRenderer } from './shaderLibrary/render'
+import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import diffusionSource from '@/core/imageEdit/shaders/diffusion.wgsl?raw'
 import { renderScatterPyramid } from '@/core/imageEdit/webgpu/scatterPyramidRenderer'
 
@@ -138,8 +140,9 @@ export class VideoEditCodeGpuV3 {
   private cachedBytes = 0; private uniformIndex = 0
   private module: unknown; private sampler: unknown; private ready: Promise<void>
   private disposed = false
+  private ownShaderRuntime?: VideoEditBuiltinEffectsGpu
   readonly counts = { uploads: 0, allocations: 0, submissions: 0, passes: 0 }
-  constructor(private readonly device: GpuDevice, private readonly allocator: Allocator, private readonly rasterize: (command: CodeDrawCommand, image: Omit<Image, 'texture'>) => OffscreenCanvas | Promise<OffscreenCanvas> = rasterizeCodeShape) {
+  constructor(private readonly device: GpuDevice, private readonly allocator: Allocator, private readonly rasterize: (command: CodeDrawCommand, image: Omit<Image, 'texture'>) => OffscreenCanvas | Promise<OffscreenCanvas> = rasterizeCodeShape, private shaders?: TrustedShaderLibraryRenderer) {
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' })
     this.ready = this.prepare()
   }
@@ -292,6 +295,13 @@ export class VideoEditCodeGpuV3 {
       this.cached.set(key, raw); this.cachedBytes += raw.bytes; return raw
     } catch (error) { this.release(raw); throw error }
   }
+  private shaderRenderer(): TrustedShaderLibraryRenderer {
+    if (!this.shaders) {
+      this.ownShaderRuntime = new VideoEditBuiltinEffectsGpu(this.device, this.sampler, { allocate: (width, height) => this.allocator.allocate(width, height), release: texture => this.allocator.release(texture) })
+      this.shaders = new TrustedShaderLibraryRenderer(this.ownShaderRuntime)
+    }
+    return this.shaders
+  }
   private simple(command: CodeDrawCommand): command is Extract<CodeDrawCommand, { kind: 'rect' | 'ellipse' }> {
     return ['rect', 'ellipse'].includes(command.kind) && !command.shadow && !command.glow && !command.blur && (!command.paint || Array.isArray(command.paint)) && !(command.stroke && command.strokeWidth) && !(command.kind === 'rect' && command.radii)
   }
@@ -308,7 +318,8 @@ export class VideoEditCodeGpuV3 {
   async render(texture: GpuTexture, width: number, height: number, commands: readonly CodeDrawCommand[], images?: ReadonlyMap<string, VideoEditCodeImageInput>): Promise<void> {
     await this.ready; if (this.disposed) throw new CodeMaterialError('CONTEXT', 'v3 渲染器已释放。')
     this.uniformIndex = 0; this.instanceIndex = 0; this.cached.forEach(value => { value.used = false }); this.layers.forEach(value => { value.used = false })
-    const target: Image = { texture, width, height, x: 0, y: 0 }; let encoder = this.device.createCommandEncoder(); this.clear(encoder, target); let count = 0
+    const target: Image = { texture, width, height, x: 0, y: 0 }; let encoder = this.device.createCommandEncoder(); this.clear(encoder, target); let count = 0; let shaderCount = 0
+    const shaderResults = new Map<string, Image>()
     let batchTarget: Image | undefined
     const batch: { command: Extract<CodeDrawCommand, { kind: 'rect' | 'ellipse' }>; matrix: CodeMatrix; opacity: number }[] = []
     const flushBatch = (): void => { if (batchTarget && batch.length) { this.instances(encoder, batchTarget, batch); batch.length = 0; batchTarget = undefined } }
@@ -349,6 +360,22 @@ export class VideoEditCodeGpuV3 {
         } else await composite(image, target, matrix, opacity, command.blend ?? 'normal', key)
         return
       }
+      if (command.kind === 'shader') {
+        if (++shaderCount > CODE_V3_LIMITS.shaderLayers) throw new CodeMaterialError('BUDGET', 'GPU 着色器层超出单帧预算。', command.sourceSpan)
+        if (!command.width || !command.height) return
+        const width = Math.max(1, Math.ceil(command.width)); const height = Math.max(1, Math.ceil(command.height))
+        const signature = JSON.stringify([command.name, Object.entries(command.params).sort(([a], [b]) => a.localeCompare(b)), command.time, width, height])
+        let image = shaderResults.get(signature)
+        if (!image) {
+          flush()
+          const input = this.layer('shader:transparent', 1, 1); this.clear(encoder, input); flush()
+          const output = this.layer(`shader:result:${shaderResults.size}`, width, height)
+          await this.shaderRenderer().render({ name: `shader_${command.name}`, params: command.params, timeSeconds: command.time, width, height, format: 'rgba8unorm', input: input.texture, output: output.texture })
+          image = output; shaderResults.set(signature, output)
+        }
+        await composite({ ...image, x: command.x, y: command.y, width: command.width, height: command.height }, target, matrix, opacity, command.blend ?? 'normal', key)
+        return
+      }
       if (command.kind === 'image') {
         const image = images?.get(command.source.mediaId)
         if (!image || image.owner !== this.device || image.texture === texture) throw new CodeMaterialError('CONTEXT', '图片输入缺失、设备不一致或输入输出重叠。')
@@ -371,9 +398,10 @@ export class VideoEditCodeGpuV3 {
     try { for (const command of commands) await draw(command, target, CODE_IDENTITY); flush() }
     finally {
       for (const [key, layer] of this.layers) if (!layer.used || key.startsWith('raster:')) { this.release(layer); this.layers.delete(key) }
+      this.ownShaderRuntime?.releaseIdle()
       // Buffers are reusable until the next render. Texture ownership remains with the parent's resident-byte budget.
     }
   }
   diagnostics(): { cachedBytes: number; cachedImages: number; glyphs: number; layers: number; uniformBytes: number; pipelines: number } { return { cachedBytes: this.cachedBytes, cachedImages: this.cached.size, glyphs: [...this.cached.values()].filter(image => image.glyph).length, layers: this.layers.size, uniformBytes: this.uniforms.length * 112 + this.instanceBuffers.reduce((sum, entry) => sum + entry.data.byteLength, 0), pipelines: this.pipelines.size } }
-  async dispose(): Promise<void> { this.disposed = true; await this.ready.catch(() => {}); await this.device.queue.onSubmittedWorkDone().catch(() => {}); this.cached.forEach(value => this.release(value)); this.layers.forEach(value => this.release(value)); this.scratch.forEach(value => this.release(value)); this.scratch.length = 0; this.uniforms.forEach(buffer => buffer.destroy()); this.instanceBuffers.forEach(entry => entry.buffer.destroy()); this.cached.clear(); this.layers.clear(); this.cachedBytes = 0 }
+  async dispose(): Promise<void> { this.disposed = true; await this.ready.catch(() => {}); await this.device.queue.onSubmittedWorkDone().catch(() => {}); this.cached.forEach(value => this.release(value)); this.layers.forEach(value => this.release(value)); this.scratch.forEach(value => this.release(value)); this.scratch.length = 0; this.uniforms.forEach(buffer => buffer.destroy()); this.instanceBuffers.forEach(entry => entry.buffer.destroy()); this.cached.clear(); this.layers.clear(); this.cachedBytes = 0; this.ownShaderRuntime?.dispose() }
 }

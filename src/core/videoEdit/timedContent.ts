@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { VideoEditClip, VideoEditSequence, VideoEditDocument } from './document'
 import { videoEditFps, type VideoEditRatio } from './time'
 import { videoEditClipContentShift } from './clipSpeed'
+import { retimeVideoEditAnnotation } from './annotations'
 import { buildSubtitleText, parseSubtitleText } from '../media/subtitleFormat'
 import { retimeVideoEditTransitions } from './transitions'
 import { subtitleGraphic, videoEditSubtitleStyleSchema } from './subtitleStyle'
@@ -14,8 +15,8 @@ export const videoEditMarkerSchema = z.object({ id, clipId: id.optional(), frame
 export const videoEditCaptionSchema = z.object({ id, clipId: id.optional(), start: frame, duration: frame.min(1), text: z.string().trim().min(1).max(2000),
   translation: z.string().trim().max(2000).optional().describe('第二语言字幕，显示在原文下方；空字符串清除翻译。'),
   // Reflection's shared unset-value convention is the empty string; make it a valid schema value.
-  style: z.union([videoEditSubtitleStyleSchema, z.literal('')]).optional().describe('字幕样式：fontFamily 为 sans-serif/serif/monospace；fontSize 为1080p参考字号（12–200）；outline 描边、background 底框、bottomMargin 底部安全区比例（0.05–0.4）。整体写入，可多行同事务修改；空字符串恢复默认样式。'),
-}).strict().refine(value => !value.style || captionDisplayText(value).split('\n').length <= 3, '带样式字幕最多三行，请先拆分长句。')
+  style: z.union([videoEditSubtitleStyleSchema, z.literal('')]).optional().describe('共享文字样式，空间量以1080p为参考，bottomMargin为底部安全区比例0–1；空字符串恢复默认。'),
+}).strict()
 export type VideoEditMarker = z.infer<typeof videoEditMarkerSchema>
 export type VideoEditCaption = z.infer<typeof videoEditCaptionSchema>
 const subtitleGraphics = new WeakMap<VideoEditCaption, { key: string; graphic: VideoEditGraphic }>()
@@ -67,11 +68,30 @@ export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEd
 export function reconcileVideoEditTimedContent(before: VideoEditDocument, requested: VideoEditDocument, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   return { ...requested, sequences: requested.sequences.map(sequence => {
     const previous = before.sequences.find(value => value.id === sequence.id)
-    if (!previous || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator || JSON.stringify(previous.clips) === JSON.stringify(sequence.clips)) return sequence
+    if (!previous || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator) return sequence
+    const annotations = sequence.annotations.flatMap(mark => {
+      const prior = previous.annotations.find(value => value.id === mark.id)
+      if (!prior) return [mark]
+      let mapped = mark
+      if (mark.clipId && prior.clipId === mark.clipId && prior.frame === mark.frame && prior.endFrame === mark.endFrame && JSON.stringify(prior.target) === JSON.stringify(mark.target)) {
+        const beforeClip = previous.clips.find(clip => clip.id === mark.clipId); const afterClip = sequence.clips.find(clip => clip.id === mark.clipId)
+        if (beforeClip && !afterClip) return []
+        if (beforeClip && afterClip && !preserveProgramAnchors.includes(mark.clipId) && beforeClip.itemId === afterClip.itemId) {
+          const result = retimeVideoEditAnnotation(mark, beforeClip, afterClip, videoEditFps(sequence.frameRate)); if (!result) return []; mapped = result
+        }
+      }
+      if (mapped.target.kind === 'range' && prior.target.kind === 'range' && JSON.stringify(prior.target.clipIds) === JSON.stringify(mapped.target.clipIds) && JSON.stringify(prior.target.trackIds) === JSON.stringify(mapped.target.trackIds)) {
+        const clipIds = mapped.target.clipIds?.filter(id => sequence.clips.some(clip => clip.id === id)); const trackIds = mapped.target.trackIds?.filter(id => sequence.tracks.some(track => track.id === id))
+        if (mapped.target.clipIds?.length && !clipIds?.length || mapped.target.trackIds?.length && !trackIds?.length) return []
+        mapped = { ...mapped, target: { ...mapped.target, ...(clipIds ? { clipIds } : {}), ...(trackIds ? { trackIds } : {}) } }
+      }
+      return [mapped]
+    })
+    if (JSON.stringify(previous.clips) === JSON.stringify(sequence.clips)) return { ...sequence, annotations }
     // Replacing a clip's source preserves its program anchors; it is not an in-trim.
     const replacementOrigins = new Map(sequence.clips.filter(clip => preserveProgramAnchors.includes(clip.id) || previous.clips.some(prior => prior.id === clip.id && prior.itemId !== clip.itemId)).map(clip => [clip.id, { originalId: clip.id, shift: 0 }]))
     const mapped = retimeVideoEditContent(previous, sequence, replacementOrigins)
-    return { ...sequence, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}), ...(JSON.stringify(previous.transitions) === JSON.stringify(sequence.transitions) && mapped.transitions ? { transitions: mapped.transitions } : {}) }
+    return { ...sequence, annotations, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}), ...(JSON.stringify(previous.transitions) === JSON.stringify(sequence.transitions) && mapped.transitions ? { transitions: mapped.transitions } : {}) }
   }) }
 }
 

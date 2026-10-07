@@ -1,3 +1,5 @@
+import { VideoEditAnnotationsPanel } from '../panels/VideoEditAnnotationsPanel'
+import { VideoEditStyleKitsPanel } from '../panels/VideoEditStyleKitsPanel'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IWatermarkPanelProps, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
@@ -41,7 +43,9 @@ const VIDEO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-vi
 function TrackingBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="tracking"><VideoEditTrackingPanel {...useDock()} visible={visible} /></div> }
 function LumetriBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="lumetri"><VideoEditLumetriPanel {...useDock()} visible={visible} /></div> }
 function TitleTemplatesBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="title_templates"><VideoEditTitleTemplatesPanel {...useDock()} visible={visible} /></div> }
-const BODIES: Record<VideoEditPanelId, PanelBody> = { title_templates: TitleTemplatesBody, lumetri: LumetriBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
+function AnnotationsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="annotations"><VideoEditAnnotationsPanel {...useDock()} visible={visible} /></div> }
+function StyleKitsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="style_kits"><VideoEditStyleKitsPanel {...useDock()} visible={visible} /></div> }
+const BODIES: Record<VideoEditPanelId, PanelBody> = { style_kits: StyleKitsBody, annotations: AnnotationsBody, title_templates: TitleTemplatesBody, lumetri: LumetriBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {
   return function DockPanel({ api }: IDockviewPanelProps): React.ReactElement {
     const [visible, setVisible] = useState(api.isVisible)
@@ -124,7 +128,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     const event = api.onDidLayoutChange(() => { clearTimeout(timer); timer = setTimeout(save, 200) })
     const focus = api.onDidActivePanelChange(value => {
       const panel = value.panel?.id
-      if (panel && ['project', 'source', 'program', 'timeline', 'effects', 'content', 'lumetri', 'title_templates'].includes(panel) && instance.activePanel !== panel && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'])
+      if (panel && ['project', 'source', 'program', 'timeline', 'effects', 'content', 'lumetri', 'title_templates', 'style_kits'].includes(panel) && instance.activePanel !== panel && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'])
     })
     disposeRef.current = () => { event.dispose(); focus.dispose(); unbindGestures(); if (timer !== undefined) save() }
   }, [onApiChange, onError, instance])

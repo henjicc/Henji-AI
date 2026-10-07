@@ -61,7 +61,7 @@ function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataRead
 }
 /** Creation is an algorithmic collection operation: raw source is checked,
  * trial-rendered, then becomes one atomic domain edit. It never executes JS. */
-async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication): Promise<Candidate[]> {
+async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication, afterCreate?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument): Promise<Candidate[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的代码素材。')
   const owner = requireVideoEditInstance(projectId)
@@ -116,9 +116,10 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       filterTrial = videoEditCodeValidationFrames(candidateDocument, [{ ...target, effectIds: [effect.id] }], { sequenceId: sequence.id, frame: Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)) })
     }
     if (publication?.afterImport) candidateDocument = videoEditDocumentSchema.parse(publication.afterImport(candidateDocument, items.map(item => item.id)))
+    if (afterCreate) candidateDocument = videoEditDocumentSchema.parse(afterCreate(candidateDocument, items.map(item => item.id)))
     const read = readVideoEditCodeMetadata(owner, candidateDocument)
     validateCodeMaterialDocument(candidateDocument, read)
-    const placements = publication ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
+    const placements = publication || afterCreate ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
     const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication))
     await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal)
     if (publication) await publication.beforePublish()
@@ -136,6 +137,10 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
 }
 export async function createVideoEditCodeItems(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal): Promise<string[]> {
   return (await createCheckedMaterials(projectId, inputs, 'generator', signal)).map(candidate => candidate.item.id)
+}
+/** Domain composition: creation and placement share the source trial and one undo boundary. */
+export async function createVideoEditPlacedCodeItems(projectId: string, inputs: VideoEditCodeInput[], afterCreate: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument, signal?: AbortSignal): Promise<string[]> {
+  return (await createCheckedMaterials(projectId, inputs, 'generator', signal, undefined, afterCreate)).map(candidate => candidate.item.id)
 }
 /** General source creation publishes trusted generator or filter definitions. */
 export async function createVideoEditCodeMaterials(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal): Promise<string[]> {

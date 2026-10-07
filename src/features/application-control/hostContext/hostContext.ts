@@ -1,6 +1,8 @@
 import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
+import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
+import { styleKitHostSummary } from '@/features/videoEdit/application/videoEditStyleKits'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
   hostContextSnapshotSchema,
@@ -319,10 +321,13 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     },
     generation: { commandReady: generationReady },
     ...(videoEdit ? { videoEdit: {
+      openAnnotations: (() => { const marks = videoEdit.document.sequences.flatMap(sequence => sequence.annotations.filter(mark => mark.status === 'open').map(mark => ({ id: mark.id, ref: `video_edit.annotation:${videoEdit.document.id}:${mark.id}`, text: mark.text, frame: mark.frame, sequenceRef: `video_edit.sequence:${videoEdit.document.id}:${sequence.id}` }))); return { count: marks.length, items: marks.slice(0, 12) } })(),
       documentRef: `video_edit.document:${videoEdit.document.id}`,
       sequenceRef: videoEdit.activeSequenceId ? `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}` : null,
       frame: videoEdit.frame, playing: videoEdit.playing, inFrame: videoEdit.inFrame, outFrame: videoEdit.outFrame, focusedPanel: videoEdit.activePanel,
       selectedClipRefs: videoEdit.selectedClipIds.slice(0, 48).map(id => `video_edit.clip:${videoEdit.document.id}:${id}`),
+      selectedCodeElement: videoEditSelectedCodeElementContext(videoEdit),
+      currentStyleKit: styleKitHostSummary(videoEdit.document.id, videoEdit.activeSequenceId),
       targetTrackRefs: videoEdit.targetTrackIds.slice(0, 32).map(id => `video_edit.track:${videoEdit.document.id}:${id}`),
     } } : {}),
     assets: {

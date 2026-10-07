@@ -43,7 +43,7 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
   const movedTransitions = (parent.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id)))
   if ((parent.transitions ?? []).some(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id)) && !videoEditTransitionClipIds(transition).every(id => ids.has(id)))) throw new Error('过渡两侧片段必须一起嵌套，请扩大选区或先移除边界过渡。')
   const anchored = (value: { clipId?: string }): boolean => Boolean(value.clipId && ids.has(value.clipId))
-  const child: VideoEditSequence = { ...createVideoEditSequence(name), width: parent.width, height: parent.height, frameRate: parent.frameRate, pixelAspectRatio: parent.pixelAspectRatio, sampleRate: parent.sampleRate, channels: parent.channels,
+  const child: VideoEditSequence = { ...createVideoEditSequence(name), ...(parent.styleKitId ? { styleKitId: parent.styleKitId } : {}), width: parent.width, height: parent.height, frameRate: parent.frameRate, pixelAspectRatio: parent.pixelAspectRatio, sampleRate: parent.sampleRate, channels: parent.channels,
     tracks: parent.tracks.map(track => ({ ...track, id: crypto.randomUUID(), locked: false })),
     clips: selected.map(clip => {
       const moved = { ...clip, start: clip.start - start }

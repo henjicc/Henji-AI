@@ -1,7 +1,8 @@
-/** Closed author languages v1/v2. These data structures contain no executable host values. */
+import type { StyleTokens } from '../styleKit'
+/** Closed author languages. These data structures contain no executable host values. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes: 8192, depth: 64, cpuOperations: 20000, draws: 256, parameters: 32, filterScalarOperations: 128, filterSamples: 4, stringLength: 4096, textCharacters: 8192 })
 /** Work ceilings for the explicit v3 language; resident pixels remain separately budgeted by the GPU host. */
-export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 200000, draws: 4096, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
+export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 200000, draws: 4096, shaderLayers: 4, shaderFilterPasses: 4, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
 export type CodeColor = [number, number, number, number]
 export interface CodeImageReference { kind: 'image'; mediaId: string }
 export type CodeParameterValue = number | boolean | string | CodeColor | CodeImageReference | null
@@ -17,7 +18,7 @@ export type CodeParameterDeclaration = ParameterBase & (
 )
 export type CodeValueType = 'number' | 'boolean' | 'string' | 'color' | 'image' | 'draw' | 'draws' | 'array' | 'object' | 'paint'
 export type CodeContextKey = 'time' | 'localTime' | 'sequenceTime' | 'width' | 'height' | 'frame' | 'fps' | 'u' | 'v'
-export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number }
+export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; style?: StyleTokens }
 export const CODE_CONTEXT_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps', 'u', 'v']
 export const CODE_TIME_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'frame', 'fps']
 export const CODE_BUILTINS = ['sin', 'cos', 'abs', 'floor', 'ceil', 'round', 'min', 'max', 'clamp', 'mix', 'smoothstep', 'random', 'rgba', 'sample'] as const
@@ -33,7 +34,7 @@ export type CodeBinaryOperator = '+' | '-' | '*' | '/' | '%' | '<' | '<=' | '>' 
 /** JS remainder lowers to divide, truncation, multiplication and subtraction on the GPU. */
 export function codeBinaryCost(op: CodeBinaryOperator): number { return op === '%' ? 4 : 1 }
 export function codeConditionalCost(type: CodeValueType): number { return type === 'color' ? 4 : 1 }
-export type CodeDrawKind = 'rect' | 'ellipse' | 'line' | 'text' | 'image' | 'group' | 'path'
+export type CodeDrawKind = 'rect' | 'ellipse' | 'line' | 'text' | 'image' | 'group' | 'path' | 'shader'
 export interface CodeSourceSpan { start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
 export type CodeBlend = 'normal' | 'multiply' | 'screen' | 'overlay' | 'add' | 'lighten' | 'darken'
 export interface CodeGradient { kind: 'linearGradient' | 'radialGradient'; x1?: number; y1?: number; x2?: number; y2?: number; cx?: number; cy?: number; r?: number; stops: [number, CodeColor][] }
@@ -52,6 +53,7 @@ export type CodeExpression = { type: CodeValueType } & (
   | { kind: 'literal'; value: number | boolean | string }
   | { kind: 'color'; values: CodeExpression[] }
   | { kind: 'context'; key: CodeContextKey }
+  | { kind: 'style'; path: string[] }
   | { kind: 'parameter'; key: string }
   | { kind: 'binding'; slot: number }
   | { kind: 'component'; value: CodeExpression; index: 0 | 1 | 2 | 3 }
@@ -84,6 +86,7 @@ export type CodeDrawCommand = CodeDrawMetadata & (
   | { kind: 'image'; source: CodeImageReference; x: number; y: number; width: number; height: number; opacity: number }
   | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; clip?: { x: number; y: number; width: number; height: number } }
   | { kind: 'path'; points: [number, number][][]; closed: boolean; fill: CodeColor }
+  | { kind: 'shader'; name: string; params: Record<string, number | string>; time: number; x: number; y: number; width: number; height: number }
 )
 export type CodeMaterialErrorCode = 'SOURCE_LIMIT' | 'SYNTAX' | 'TYPE' | 'BUDGET' | 'PARAMETERS' | 'COMPATIBILITY' | 'CONTEXT' | 'NON_FINITE'
 export class CodeMaterialError extends Error {

@@ -1,3 +1,4 @@
+import { hostContextSnapshotSchema } from './hostContracts'
 import { z } from 'zod'
 
 import {
@@ -57,14 +58,14 @@ export const getCurrentApplicationContextCapability = defineCapability({
   id: 'get_current_application_context',
   version: 1,
   title: '读取当前应用位置',
-  description: '读取用户当前所在页面、打开的工具或设置分区，以及当前焦点对象。',
+  description: '读取用户当前所在页面、打开的工具或设置分区，以及当前焦点对象。已授权video_edit:read且当前在剪辑时返回videoEdit上下文，包括openAnnotations待处理标注数量与前12条摘要；更多标注走分页list_application_entities及read_application_entity。',
   domain: 'application',
   aliases: ['当前页面', '这里', '当前工具', '当前位置', 'current page', 'surface'],
   side: 'frontend',
   readOnly: true,
   control: capabilityControl('observe', ['application.surface', 'application.entity']),
   risk: 'R0',
-  dataClasses: ['C0'],
+  dataClasses: ['C0', 'C1'],
   permission: 'application:read',
   idempotent: true,
   destructive: false,
@@ -85,6 +86,7 @@ export const getCurrentApplicationContextCapability = defineCapability({
       focusedRef: z.string().nullable(),
       selectedRefs: z.array(z.string()),
     }),
+    videoEdit: hostContextSnapshotSchema.shape.videoEdit,
     catalogRevision: z.number().int().nonnegative(),
     ready: z.boolean(),
     revision: z.number().int().nonnegative(),

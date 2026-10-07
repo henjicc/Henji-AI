@@ -324,3 +324,17 @@ export const VIDEO_EDIT_LABEL_COLOR_HEX = {
   violet: '#A990DD', iris: '#9095F2', caribbean: '#1DC09F', lavender: '#E384E3', cerulean: '#1EA7DC', forest: '#5BA33F', rose: '#E86C8F', mango: '#EDA530',
   purple: '#9440DB', blue: '#4253D9', teal: '#2D8C8C', magenta: '#C1269A', tan: '#C2A07B', green: '#2B9D3C', brown: '#8C5A32', yellow: '#E6D84A',
 } as const;
+
+/** t68: 可移植的画面风格内容色，不随应用主题变化。 */
+const stylePaletteColor = (r: number, g: number, b: number): [number, number, number, number] => [r / 255, g / 255, b / 255, 1]
+/** Content palettes, independent of the application's UI theme. */
+export const VIDEO_EDIT_STYLE_PALETTES = [
+  [stylePaletteColor(11, 13, 18), stylePaletteColor(24, 28, 35), stylePaletteColor(242, 244, 247), stylePaletteColor(159, 169, 182), stylePaletteColor(163, 192, 220), stylePaletteColor(204, 184, 147)],
+  [stylePaletteColor(12, 21, 33), stylePaletteColor(22, 36, 52), stylePaletteColor(233, 243, 250), stylePaletteColor(139, 165, 184), stylePaletteColor(83, 210, 224), stylePaletteColor(156, 180, 245)],
+  [stylePaletteColor(245, 243, 238), stylePaletteColor(233, 230, 222), stylePaletteColor(34, 43, 49), stylePaletteColor(92, 105, 115), stylePaletteColor(35, 113, 146), stylePaletteColor(169, 108, 45)],
+  [stylePaletteColor(39, 31, 55), stylePaletteColor(59, 43, 74), stylePaletteColor(255, 246, 229), stylePaletteColor(195, 179, 205), stylePaletteColor(255, 208, 64), stylePaletteColor(255, 121, 145)],
+  [stylePaletteColor(73, 24, 26), stylePaletteColor(101, 33, 32), stylePaletteColor(255, 246, 226), stylePaletteColor(233, 179, 163), stylePaletteColor(255, 192, 69), stylePaletteColor(255, 115, 58)],
+  [stylePaletteColor(237, 226, 207), stylePaletteColor(225, 212, 189), stylePaletteColor(57, 53, 43), stylePaletteColor(115, 107, 89), stylePaletteColor(113, 104, 68), stylePaletteColor(154, 96, 73)],
+]
+
+export const VIDEO_EDIT_STYLE_STATUS_COLORS = { positive: stylePaletteColor(46, 137, 108), negative: stylePaletteColor(197, 68, 73) }

@@ -221,7 +221,7 @@ it('公共集合新增标注并拒绝跨剪辑引用', async () => {
   try {
     const ref = { kind: 'video_edit.sequence', id: `${instance.document.id}:${instance.activeSequenceId}` }
     const baseline = await app.read(ref)
-    const result = await app.call('change_application_entities', { summary: '添加时间标注', changes: [{ kind: 'create_items', entityType: 'video_edit.annotation', parent: ref, items: [{ properties: { 'video_edit.annotation.clip_id': getActiveVideoEditSequence(instance).clips[0].id, 'video_edit.annotation.text': '检查此处' } }] }] }, baseline.revisions as Record<string, number>)
+    const result = await app.call('change_application_entities', { summary: '添加时间标注', changes: [{ kind: 'create_items', entityType: 'video_edit.annotation', parent: ref, items: [{ properties: { 'video_edit.annotation.target': { kind: 'point', x: .5, y: .5 }, 'video_edit.annotation.frame': 0, 'video_edit.annotation.clip_id': getActiveVideoEditSequence(instance).clips[0].id, 'video_edit.annotation.text': '检查此处' } }] }] }, baseline.revisions as Record<string, number>)
     expect(result).toMatchObject({ ok: true }); expect(getActiveVideoEditSequence(instance).annotations[0].text).toBe('检查此处')
     const mark = getActiveVideoEditSequence(instance).annotations[0]
     const rejected = await app.change({ kind: 'video_edit.annotation', id: `${instance.document.id}:${mark.id}` }, { 'video_edit.annotation.clip_id': 'another-project-clip' })

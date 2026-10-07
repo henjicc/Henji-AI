@@ -1,3 +1,4 @@
+import { requestVideoEditAnnotationMonitor, askAssistantAtVideoEditFrame } from './videoEditAnnotations'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { placeVideoEditItems } from '@/core/videoEdit/projectItems'
@@ -176,6 +177,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'deselect_all' && context.scope === 'project') return { enabled: true }
     const sequence = findActiveVideoEditSequence(owner)
     if (!sequence) return { enabled: false, reason: '没有序列，请先新建序列。' }
+    if (id.startsWith('annotation_')) return { enabled: id !== 'annotation_ask' || !owner.playing, reason: '请暂停后再让助手改这里。' }
     if (isVideoEditToolCommand(id)) return { enabled: true, checked: owner.tool === VIDEO_EDIT_TOOL_COMMANDS[id] }
     if (id === 'match_frame' || id === 'reverse_match_frame') { const reason = videoEditMatchFrameUnavailable(owner, id, context.clipIds, context.frame, context.scope); return { enabled: !reason, ...(reason ? { reason } : {}) } }
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
@@ -257,6 +259,9 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   const { owner, source } = stateOf(context)
   if (id === 'new_project') { await createVideoEditProject(); return }
   const projectId = owner!.document.id
+  if (id === 'annotation_ask') { await askAssistantAtVideoEditFrame(projectId); return }
+  if (id === 'annotation_stroke' || id === 'annotation_point' || id === 'annotation_region' || id === 'annotation_select') { requestVideoEditAnnotationMonitor(projectId, id === 'annotation_select' ? 'select' : id === 'annotation_stroke' ? 'stroke' : id === 'annotation_point' ? 'point' : 'region'); return }
+  if (id === 'select_tool' && context.scope === 'program') requestVideoEditAnnotationMonitor(projectId, 'select')
   // 项目级命令在零时间线时仍可用，先于所有时间线计算执行。
   if (id === 'undo' || id === 'redo') { undoVideoEdit(projectId, id === 'redo'); return }
   if (id === 'save') { await saveVideoEdit(projectId); return }

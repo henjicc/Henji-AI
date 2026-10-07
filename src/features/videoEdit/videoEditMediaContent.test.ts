@@ -79,6 +79,7 @@ it.each(['image', 'code_image'] as const)('%s在节目/导出Worker初始化前�
   }
   const session = new VideoEditRenderSession(document)
   await expect(session.present(0)).rejects.toThrow('重新定位')
+  expect(getPlatform().videoDecoder.status).not.toHaveBeenCalled()
   expect(workers[0].messages).toEqual([])
   await session.dispose(); expect(workers[0].terminate).toHaveBeenCalledOnce()
 })

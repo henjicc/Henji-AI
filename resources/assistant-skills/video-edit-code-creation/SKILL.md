@@ -40,6 +40,9 @@ description: 在剪辑里设计、编写或修改原生代码素材（动态图�
 | 换字自适应、量字、压力测试 | [模板](references/templates.md) |
 | 开工读口味、用户明确评价后记偏好 | [用户偏好](references/preferences.md) |
 | 写或修改源码：语法、图形与预算 | [作者接口](references/author-api.md) |
+| 文字排版、量字、逐字与动效函数 | [文字与动效接口](references/author-text-motion.md) |
+| 着色器背景、滤镜原语与效果目录 | [着色器接口](references/author-shaders.md) |
+| 处理用户标注/批注 | [标注处理协议](references/annotations.md) |
 | 参数声明、实例值、关键帧、新版本绑定 | [参数与曲线](references/parameters-curves.md) |
 | 定位目标、插入、时间换算、撤销与恢复 | [时间线契约](references/timeline-check.md) |
 | 需要完整可对照的提交写法 | [接口样例](references/examples.md) |

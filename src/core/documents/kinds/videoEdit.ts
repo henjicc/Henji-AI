@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
 import { lumetriLutAssetSchema } from '../../videoEdit/lumetriLutAsset'
+import { styleKitSchema } from '../../videoEdit/styleKit'
 
 /*
  * 剪辑（`.henji-video`，3.1 剪辑接入）：项目的主文档，始终放在项目里（可以在项目之间移动）。
@@ -35,6 +36,7 @@ const sequenceSchema = z.looseObject({
 })
 
 export const videoEditContentSchema = z.object({
+  styleKits: z.array(styleKitSchema).optional(),
   lumetriLuts: z.array(lumetriLutAssetSchema).max(200).optional(),
   media: z.array(z.looseObject({ id: z.string().min(1), path: z.string().min(1) })),
   bins: z.array(identified),

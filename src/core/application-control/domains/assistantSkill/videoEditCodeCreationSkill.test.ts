@@ -3,11 +3,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { CODE_BUILTINS, CODE_CONTEXT_KEYS } from '@/core/videoEdit/codeMaterial/contract'
-import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
-import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
-import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import { createVideoEditRegistrations } from '@/features/videoEdit/application/videoEditReflection'
 import { PROTOCOL_TOOL_SPECS } from '../../../../../electron/main/services/application-runtime/toolCatalog'
 
@@ -31,8 +27,8 @@ const knownNames = new Set([
   ...(piDisclosureSource.includes("name: 'load_application_tools'") ? ['load_application_tools'] : []),
   'create_items', 'set_properties', 'remove_items', 'mutate_properties',
 ])
-function blocks(language: 'ts' | 'json'): string[] {
-  return [...text(path.join(SKILL_DIR, 'references/examples.md')).matchAll(new RegExp('```' + language + '\\n([\\s\\S]*?)```', 'g'))].map(match => match[1])
+function blocks(language: 'json'): string[] {
+  return [...text(path.join(SKILL_DIR, 'references/examples.md')).matchAll(new RegExp('```' + language + '\\r?\\n([\\s\\S]*?)```', 'g'))].map(match => match[1])
 }
 
 describe('剪辑代码素材技能只引用真实契约', () => {
@@ -46,53 +42,53 @@ describe('剪辑代码素材技能只引用真实契约', () => {
     expect(ids.filter(id => properties.has(id)).length).toBeGreaterThan(20)
   })
 
-  it('作者接口列出的 ctx 字段与内置函数与编译器白名单一致', () => {
+  it('作者接口包含基础 ctx 与内置函数，v3 扩展按职责分流', () => {
     const api = text(path.join(SKILL_DIR, 'references/author-api.md'))
-    for (const key of CODE_CONTEXT_KEYS) expect(api).toContain(`\`${key}\``)
-    expect(api).toContain(`\`${CODE_BUILTINS.join(' ')}\``)
+    const motion = text(path.join(SKILL_DIR, 'references/author-text-motion.md'))
+    const shaders = text(path.join(SKILL_DIR, 'references/author-shaders.md'))
+    for (const key of CODE_CONTEXT_KEYS) expect(api).toContain(key)
+    for (const name of CODE_BUILTINS) expect([api, motion, shaders].join('\n')).toContain(name)
+    expect(api).toContain('languageVersion: 3')
+    expect(motion).toContain('perChar')
+    expect(shaders).toContain('shaderFilter')
   })
 
-  it('两个样例源码能通过正式编译与求值，参数和关键帧满足正式校验', () => {
-    const [generatorSource, filterSource] = blocks('ts')
-    const generator = compileCodeMaterial(generatorSource)
-    const filter = compileCodeMaterial(filterSource)
-    expect([generator.kind, filter.kind]).toEqual(['generator', 'filter'])
-    const [clipPayload, effectPayload] = blocks('json').map(raw => JSON.parse(raw) as { changes: Array<{ kind: string; entityType: string; items: Array<{ properties: Record<string, unknown> }> }> })
+  it('全部样例调用满足正式事务 schema、可写属性与集合必填契约', () => {
+    // 源码编译、多个源时刻与调参求值由 skillExamples.test.ts 直接读取 Markdown 验证。
+    const payloads = blocks('json').map(raw => JSON.parse(raw) as {
+      changes: Array<{ kind: string; entityType: string; properties?: Record<string, unknown>; items?: Array<{ properties: Record<string, unknown> }> }>
+    })
+    expect(payloads).toHaveLength(8)
     const change = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('change_application_entities')!
-    for (const payload of [clipPayload, effectPayload]) {
+    for (const payload of payloads) {
       expect(change.inputSchema.safeParse(payload).success).toBe(true)
       for (const step of payload.changes) {
         const registration = registrations.find(item => item.entity.id === step.entityType)!
-        expect(registration.entity.collectionWrite?.creatable).toBe(true)
-        for (const item of step.items) {
-          for (const required of registration.entity.collectionWrite!.requiredPropertyIds) expect(item.properties).toHaveProperty([required])
-          for (const id of Object.keys(item.properties)) {
+        const dictionaries = step.kind === 'create_items' ? step.items!.map(item => item.properties) : [step.properties!]
+        if (step.kind === 'create_items') expect(registration.entity.collectionWrite?.creatable).toBe(true)
+        for (const dictionary of dictionaries) {
+          if (step.kind === 'create_items') {
+            for (const required of registration.entity.collectionWrite!.requiredPropertyIds) expect(dictionary).toHaveProperty([required])
+          }
+          for (const id of Object.keys(dictionary)) {
             const found = properties.get(id)
             expect(found?.entityType, id).toBe(step.entityType)
             const writable = !found!.property.readOnlyReason && found!.property.requiredPermissions.write.length > 0
-            expect(writable || registration.entity.collectionWrite!.requiredPropertyIds.includes(id), id).toBe(true)
+            expect(writable || step.kind === 'create_items' && registration.entity.collectionWrite!.requiredPropertyIds.includes(id), id).toBe(true)
           }
         }
       }
     }
-    const clip = clipPayload.changes[0].items[0].properties
-    const prepared = prepareCodeMaterialParameters(generator, { parameters: clip['video_edit.clip.code_parameters'] as never, curves: clip['video_edit.clip.code_curves'] as never })
-    const at = (seconds: number): ReturnType<typeof evaluateCodeMaterialParameters> => evaluateCodeMaterialParameters(prepared, { sourceInUs: seconds * 1e6, sourceRemainder: { numerator: 0, denominator: 1 } })
-    const draw = (program: CodeMaterialProgram, seconds: number) => evaluateCodeMaterial(program, { time: seconds, localTime: seconds, sequenceTime: 4 + seconds, width: program.width, height: program.height, frame: 120 + seconds * 30, fps: 30 }, at(seconds))
-    expect(at(0).slide).toBe(0)
-    expect(at(1).slide).toBe(1)
-    expect(draw(generator, 0)[0]).toMatchObject({ kind: 'rect', x: -900 })
-    expect(draw(generator, 1)[2]).toMatchObject({ kind: 'text', x: 168, text: '第一章 出发', color: [1, 1, 1, 1] })
-    const effect = effectPayload.changes[0].items[0].properties
-    expect(() => prepareCodeMaterialParameters(filter, { parameters: effect['video_edit.effect.parameters'] as never })).not.toThrow()
-    expect(filter.metrics.samples).toBeLessThanOrEqual(4)
   })
 
   it('主文件与每份参考保持有界，主文件链接与实际参考一致', () => {
     const main = text(path.join(SKILL_DIR, 'SKILL.md'))
-    expect(Buffer.byteLength(main, 'utf8')).toBeLessThan(5000)
+    expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(6 * 1024)
     const links = [...main.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1]).sort()
     expect(links).toEqual(fs.readdirSync(path.join(SKILL_DIR, 'references')).map(name => `references/${name}`).sort())
-    for (const file of files.slice(1)) expect(Buffer.byteLength(text(file), 'utf8'), file).toBeLessThan(4500)
+    for (const file of files.slice(1)) {
+      const limit = path.basename(file) === 'examples.md' ? 16 * 1024 : 8 * 1024
+      expect(Buffer.byteLength(text(file), 'utf8'), file).toBeLessThanOrEqual(limit)
+    }
   })
 })

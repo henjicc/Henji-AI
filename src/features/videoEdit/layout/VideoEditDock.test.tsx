@@ -16,7 +16,7 @@ import * as compositing from '../application/videoEditCompositing'
 
 const lifetime = vi.hoisted(() => ({ created: 0, live: 0, peak: 0, disposed: 0 }))
 const effectScroll = vi.hoisted(() => vi.fn())
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/contexts/NotificationContext', () => ({ useNotification: () => ({ showNotification: vi.fn() }) }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
@@ -25,6 +25,9 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   async dispose() {}
 } }))
 vi.mock('../panels/VideoEditProjectPanel', () => ({ VideoEditProjectPanel: () => <div>素材面板</div> }))
+vi.mock('../panels/VideoEditStyleKitsPanel', () => ({ VideoEditStyleKitsPanel: () => <div>风格面板</div> }))
+vi.mock('../panels/VideoEditAnnotationsPanel', () => ({ VideoEditAnnotationsPanel: () => <div>批注面板</div> }))
+vi.mock('../panels/VideoEditTitleTemplatesPanel', () => ({ VideoEditTitleTemplatesPanel: () => <div>基本图形面板</div> }))
 vi.mock('../panels/VideoEditEffectsPanel', async () => {
   const { useState } = await import('react')
   const { UiButton } = await import('@/components/ui')

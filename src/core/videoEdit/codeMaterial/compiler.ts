@@ -5,7 +5,7 @@ import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, Cod
 import { parseCodeMaterialParameters } from './parameters'
 import { codeSourceSpan, compileCodeMaterialV3 } from './compilerV3'
 
-const shapeFields: Record<Exclude<CodeDrawKind, 'group' | 'path'>, Record<string, CodeValueType>> = {
+const shapeFields: Record<Exclude<CodeDrawKind, 'group' | 'path' | 'shader'>, Record<string, CodeValueType>> = {
   rect: { x: 'number', y: 'number', width: 'number', height: 'number', fill: 'color', radius: 'number' },
   ellipse: { x: 'number', y: 'number', width: 'number', height: 'number', fill: 'color' },
   line: { x1: 'number', y1: 'number', x2: 'number', y2: 'number', width: 'number', color: 'color' },

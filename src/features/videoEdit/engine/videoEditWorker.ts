@@ -11,6 +11,8 @@ import { setVideoEditTrackResults, type VideoEditTrackResults } from './videoEdi
 import { setVideoEditSmartRegionSegments, type VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
 import { readVideoEditTrackingRgb } from './videoEditTrackingPixels'
 import { setVideoEditMaskTimingObserver } from './videoEditEffectMasks'
+import { LoadedFontFaces } from '@/platform/fontFaces'
+import type { FontPayload } from '@/platform/fonts'
 
 /**
  * Decoding settings of one render session. `localPaths` maps each media item's fetchable URL (its path in the worker)
@@ -18,6 +20,7 @@ import { setVideoEditMaskTimingObserver } from './videoEditEffectMasks'
  */
 export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
 export type RenderRequest = { id: number } & (
+  { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
   { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'invalidate'; revision: number }
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
@@ -40,6 +43,7 @@ export type NativeFramesRequest =
   | { kind: 'nativeFrames.diagnose'; id: number; request: NativeFrameDiagnosticsRequest }
 export type NativeFramesResponse = { id: number; nativeFrames?: NativeFrameDiagnosticsResult; error?: string }
 let renderer: VideoEditRenderer | undefined
+let fonts: LoadedFontFaces | undefined
 let direct = false
 let revision = 0
 let queue = Promise.resolve()
@@ -92,10 +96,20 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
   queue = queue.then(async () => {
     try {
       if (request.kind === 'dispose') {
+        fonts?.dispose(); fonts = undefined
         await disposeRenderer(); const codeResources = renderer?.codeDiagnostics(); renderer = undefined
         // Every borrowed native frame goes back before the session may terminate this worker (record 002).
         await nativeFrames?.dispose(); nativeFrames = undefined; nativeDiagnostics = undefined
         self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
+      } else if (request.kind === 'fonts') {
+        if (request.fonts.length) {
+          fonts ??= new LoadedFontFaces((self as unknown as { fonts: FontFaceSet }).fonts)
+          fonts.retainIds(request.availableIds)
+          for (const payload of request.fonts) await fonts.load(payload)
+        }
+        fonts?.retainIds(request.availableIds)
+        if (request.reset) await renderer?.invalidateFontResources()
+        self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
         await disposeRenderer(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode)); direct = !!request.surface
         self.postMessage({ id: request.id } satisfies RenderResponse)

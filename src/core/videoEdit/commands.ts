@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export type VideoEditCommandScope = 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'lumetri' | 'title_templates' | 'mask'
+export type VideoEditCommandScope = 'annotations' | 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'lumetri' | 'title_templates' | 'style_kits' | 'mask'
 export interface VideoEditShortcut { code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
 const key = (code: string, ctrl = false, shift = false, alt = false): VideoEditShortcut => ({ code, ctrl, shift, alt, meta: false })
 const editScopes: VideoEditCommandScope[] = ['timeline', 'program']
@@ -11,6 +11,11 @@ const monitorScopes: VideoEditCommandScope[] = ['timeline', 'program', 'source']
  */
 function command<const T extends string>(id: T, title: string, scopes: VideoEditCommandScope[], shortcut?: VideoEditShortcut, repeat = false, alternates: readonly VideoEditShortcut[] = []) { return { id, title, scopes, shortcut, repeat, alternates } }
 export const VIDEO_EDIT_COMMANDS = [
+  command('annotation_stroke', '画笔标注', ['program'], key('KeyD', false, false, true)),
+  command('annotation_point', '评论钉', ['program'], key('KeyC')),
+  command('annotation_region', '矩形标注', ['program'], key('KeyR', false, false, true)),
+  command('annotation_ask', '让助手改这里', ['program'], key('KeyA')),
+  command('annotation_select', '退出标注', ['program'], key('Escape')),
   command('mask_transform', '变换选中遮罩', ['mask'], key('KeyT', true)),
   command('new_project', '新建项目', ['global'], key('KeyN', true, false, true)),
   command('new_sequence', '新建序列', ['global'], key('KeyN', true)),

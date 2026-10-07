@@ -174,3 +174,91 @@ describe('v3 真实 GPU 像素与工作预算', () => {
     expect(codeFont({ text: '', fontFamily: 'sans-serif', fontWeight: 400, fontStyle: 'normal', fontSize: 50, letterSpacing: 0, lineHeight: 1.2, maxWidth: 0, maxLines: 0, wrap: false })).toContain('50px')
   }, 120_000)
 })
+
+
+describe('t74 作者语言着色器GPU接线', () => {
+  it('真实编译渲染极光逐字标题、光束产品卡；旋转裁切与帧内复用有像素证据', async () => {
+    const aurora = 'shader({id:"sky",name:"aurora",params:{color_b:[.1,.8,.6,1]},x:0,y:0,width:64,height:64})'
+    const sky = await run(`return [${aurora}];`)
+    const title = await run(`return [${aurora},text({x:5,y:30,text:"AI",fontSize:22,color:[1,1,1,1],perChar:(i,n)=>({y:tween(ctx.time,stagger(i,.04),.3,8,0,"expoOut"),opacity:progress(ctx.time,stagger(i,.04),.3)})})];`)
+    expect(sky.some((v,i)=>i%4!==3 && v>10)).toBe(true)
+    expect(title.filter((v,i)=>i%4!==3 && v>200).length).toBeGreaterThan(sky.filter((v,i)=>i%4!==3 && v>200).length)
+    const card = await run('return [rect({x:0,y:0,width:64,height:64,fill:[.1,.1,.1,1]}),group({x:32,y:10,rotation:15,opacity:.8,clip:{x:0,y:0,width:24,height:40}},[rect({x:0,y:0,width:24,height:40,radius:3,fill:[.2,.2,.3,1]}),shader({name:"beam",params:{direction:ctx.time*60},x:0,y:0,width:24,height:40,blend:"add"})])];')
+    expect(card.some((v,i)=>i%4!==3 && v>80)).toBe(true); expect(pixel(card,0,0)[0]).toBeCloseTo(26,-1)
+    const clipped = await run('return [group({x:32,y:32,rotation:90,clip:{x:0,y:0,width:16,height:16}},[shader({name:"linear_gradient",params:{color_a:[1,0,0,1],color_b:[0,0,1,1]},x:0,y:0,width:32,height:32})])];')
+    expect(pixel(clipped,24,40)[3]).toBe(255); expect(pixel(clipped,8,40)[3]).toBe(0)
+    const before = runtime.counts.allocations
+    await run(`return [${aurora},${aurora}];`)
+    const allocations = runtime.counts.allocations-before
+    // Changing element position/id does not allocate another shader-result layer in the same frame.
+    const before2 = runtime.counts.allocations
+    await run(`return [${aurora},${aurora.replace('id:"sky"','id:"copy"').replace('x:0','x:4')}];`)
+    expect(runtime.counts.allocations-before2).toBe(0); expect(allocations).toBeLessThanOrEqual(1)
+  }, 30000)
+  it('色差+颗粒串接，玻璃与原画/模糊组合，透明/同帧缓存与失败释放', async () => {
+    const host = new VideoEditCodeGpu(wrapped); const input = await host.target('t74:input',W,H)
+    const data = new Uint8Array(W*H*4)
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++) data.set([x<32?220:20,y<32?140:50,80,x<4?0:255],(y*W+x)*4)
+    device.queue.writeTexture({texture:input.texture as never},data,{bytesPerRow:W*4},[W,H])
+    try {
+      let index=0
+      for(const body of ['const a=shaderFilter("chromatic",{strength:90}); return shaderFilter("grain",{strength:70,speed:ctx.time/2},a);','return clamp(mix(shaderFilter("glass",{scale:20}),blur(2),.5),0,1);']) {
+        const program=compileCodeMaterial(source(body,'filter')); device.pushErrorScope('validation')
+        const output=await host.filter('t74:output',`t74:${index++}`,program,context,{},input)
+        const pixels=await read(output.texture); expect(await device.popErrorScope()).toBeNull()
+        expect(pixels.some((v,i)=>i%4!==3 && v>100)).toBe(true); expect(pixels).not.toEqual(data)
+        if(index===1) expect(pixel(pixels,0,20)[3]).toBe(0)
+      }
+      const repeated=compileCodeMaterial(source('return clamp(mix(shaderFilter("grain",{}),shaderFilter("grain",{speed:1}),.5),0,1);','filter'))
+      const allocation=host.diagnostics().textureAllocations
+      const one=await host.filter('t74:output','t74:repeated',repeated,context,{},input); const pixels=await read(one.texture)
+      expect(host.diagnostics().textureAllocations-allocation).toBe(1)
+      const again=await host.filter('t74:output','t74:repeated',repeated,context,{},input); expect(await read(again.texture)).toEqual(pixels)
+      const bad=compileCodeMaterial(source('return shaderFilter("grain",{speed:ctx.time},shaderFilter("chromatic",{}));','filter'))
+      const resident=host.diagnostics().residentBytes
+      await expect(host.filter('t74:output','t74:bad',bad,{...context,time:5}, {},input)).rejects.toMatchObject({code:'PARAMETERS',sourceSpan:expect.objectContaining({startLine:1})})
+      expect(host.diagnostics().residentBytes).toBe(resident)
+    } finally {await host.dispose()}
+  },30000)
+  it('五种类别至少一个真实像素输出',async()=>{
+    for(const name of ['linear_gradient','aurora','beam']) {
+      const pixels=await run(`return [shader({name:"${name}",x:0,y:0,width:64,height:64})];`)
+      expect(pixels.some((v,i)=>i%4!==3 && v>20),name).toBe(true)
+    }
+    // Style and optical categories are covered above by grain/chromatic and glass.
+  },30000)
+  it('4K四层/四工序边界与旋转开销实测（显式启用）',async()=>{
+    if(process.env.HENJI_CODE_SHADER_BENCH!=='1') return
+    const width=3840;const height=2160;const target=texture(width,height)
+    const frame={...context,width,height}; const report:Record<string,unknown>={adapter:gpu.device.adapterInfo, width,height,method:'CPU evaluate + queue completion, warmup3, frames20'}
+    const measure=async(name:string,render:(frame:number)=>Promise<void>):Promise<void>=>{
+      for(let i=0;i<3;i++){await render(i);await device.queue.onSubmittedWorkDone()}
+      const times:number[]=[]
+      for(let i=0;i<20;i++){const start=performance.now();await render(i+3);await device.queue.onSubmittedWorkDone();times.push(performance.now()-start)}
+      times.sort((a,b)=>a-b);report[name]={medianMs:times[10],p95Ms:times[18],maxMs:times[19]}
+    }
+    try {
+      for(const rotation of [0,15]) {
+        const program=compileCodeMaterial(source(`return [group({rotation:${rotation}},repeat(4,i=>shader({name:"aurora",params:{direction:i*20},time:ctx.time+i,x:0,y:0,width:ctx.width,height:ctx.height,opacity:.3})))];`))
+        await measure(`layers4_rotation${rotation}`, async i=>{const ctx={...frame,time:i/60};await runtime.render(target,width,height,evaluateCodeMaterial(program,ctx))})
+      }
+      let peakResidentBytes = 0
+      const measuredDevice = new Proxy(wrapped, { get(target, key) {
+        if (key === 'createCommandEncoder') return () => { peakResidentBytes = Math.max(peakResidentBytes, host?.diagnostics().residentBytes ?? 0); return target.createCommandEncoder() }
+        const value = Reflect.get(target, key) as unknown; return value instanceof Function ? value.bind(target) : value
+      } })
+      const host=new VideoEditCodeGpu(measuredDevice)
+      try {
+        const input=await host.target('t74:bench:input',width,height)
+        const data = new Uint8Array(width * height * 4)
+        for(let y=0;y<height;y++) for(let x=0;x<width;x++) data.set([Math.round(x/width*255),Math.round(y/height*255),x%120<60?255:40,255],(y*width+x)*4)
+        device.queue.writeTexture({texture:input.texture as never},data,{bytesPerRow:width*4},[width,height])
+        const program=compileCodeMaterial(source('return shaderFilter("glow_pro",{},shaderFilter("zoom_blur",{},shaderFilter("grain",{},shaderFilter("chromatic",{}))));','filter'))
+        await measure('filters4_heavy',async i=>{await host!.filter('t74:bench:out','t74:bench:filter',program,{...frame,time:i/60}, {},input)})
+        report.filterResidentBytes=host.diagnostics().residentBytes; report.filterPeakResidentBytes=peakResidentBytes
+        expect(peakResidentBytes).toBeLessThanOrEqual(256 * 1024 ** 2)
+      } finally{await host?.dispose()}
+      const fs=await import('node:fs/promises');await fs.mkdir('node_modules/.cache/t74',{recursive:true});await fs.writeFile('node_modules/.cache/t74/performance.json',JSON.stringify(report,null,2))
+    } finally{target.destroy()}
+  },120000)
+})

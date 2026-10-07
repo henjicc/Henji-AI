@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, within, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -25,6 +25,16 @@ let clipIds: string[]
 function View({ visible = true }: { visible?: boolean }): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditEffectsPanel instance={owner} onError={onError} visible={visible} /> }
 const editor = (index = 0) => readVideoEditCodeEditor(owner.document.id, sequenceId, clipIds[index])
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
+it('基本图形文字对象用统一字体选择器预览、提交和撤销', async () => {
+  const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'text' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 })
+  setVideoEditView(id, { selection: clipId, frame: 0 }); const view = render(<View />)
+  const font = () => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].textStyle?.fontFamily
+  const original = font(); const history = owner.past.length
+  fireEvent.click(view.getByLabelText('文字字体')); const option = await view.findByRole('option', { name: /系统衬线/ })
+  fireEvent.pointerEnter(option.parentElement!); await waitFor(() => expect(font()).toBe('serif')); expect(owner.past).toHaveLength(history)
+  fireEvent.click(option); await waitFor(() => expect(owner.past).toHaveLength(history + 1))
+  act(() => { undoVideoEdit(id) }); expect(font()).toBe(original); expect(onError).not.toHaveBeenCalled()
+})
 
 it('原生对象切换取消参数草稿，层序与删除空态消费同一对象树，NTSC关键帧保留余数', () => {
   const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 })
@@ -80,10 +90,10 @@ it('效果控件拖动数值只记一步撤销，Esc 回到拖动前，读数夹
 })
 it('原生参数隐藏时回滚草稿，调整图层只呈现合法画面属性', () => {
   const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'text' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 }); setVideoEditView(id, { selection: clipId })
-  const view = render(<View />); const number = within(view.container.querySelector('[data-video-edit-code-parameter="fontSize"]') as HTMLElement).getByRole('spinbutton', { name: '字号' })
-  const original = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].parameters.fontSize
+  const view = render(<View />); const number = within(view.container.querySelector('[data-video-edit-code-parameter="x"]') as HTMLElement).getByRole('spinbutton', { name: '水平位置' })
+  const original = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].parameters.x
   const history = owner.past.length; fireEvent.focus(number); fireEvent.change(number, { target: { value: '200' } }); view.rerender(<View visible={false} />); fireEvent.blur(number)
-  expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].parameters.fontSize).toBe(original); expect(owner.past).toHaveLength(history)
+  expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].parameters.x).toBe(original); expect(owner.past).toHaveLength(history)
   const adjustment = createVideoEditAdjustmentItem(id); const [adjustmentClip] = appendVideoEditItems(id, [adjustment], sequenceId, { frame: 0, track: 2 })
   act(() => setVideoEditView(id, { selection: adjustmentClip })); view.rerender(<View />)
   for (const label of ['水平位置', '垂直位置', '缩放', '旋转', '亮度', '音量']) expect(view.queryByRole('spinbutton', { name: label })).toBeNull()

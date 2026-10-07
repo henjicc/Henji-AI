@@ -1,3 +1,5 @@
+import { videoEditAnnotationSchema, mapVideoEditAnnotationTime } from './annotations'
+export { videoEditAnnotationSchema } from './annotations'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
 import { z } from 'zod'
 import { isVideoEditSequenceSize, videoEditSequenceSizeFields } from './sequenceSize'
@@ -10,6 +12,7 @@ import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia } from './compositing'
 import { videoEditTransitionSchema, validateVideoEditTransitions } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
+import { videoEditCodeImageGenerationSchema } from './codeImageGeneration'
 import { videoEditLabelSchema } from './labels'
 import { videoEditTrackerSchema, videoEditClipFollowSchema, VIDEO_EDIT_MAX_TRACKERS } from './tracking'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from './audioChannels'
@@ -21,6 +24,7 @@ import { videoEditAudioRoleSchema } from './audioDucking'
 import { assertVideoEditSequenceGraph } from './sequenceGraph'
 import { videoEditTextTranscriptionSchema } from './textTranscript'
 import { videoEditMulticamSchema } from './multicamSchema'
+import { styleKitSchema } from './styleKit'
 
 const frame = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const identifier = z.string().min(1).max(100)
@@ -31,6 +35,7 @@ const sourceRemainder = z.object({ numerator: z.number().int().nonnegative().max
 export const videoEditMediaSchema = z.object({
   id: identifier, name, path: z.string().min(1).max(32768).regex(/^(?:[A-Za-z]:[\\/]|\\\\|\/)/, '素材必须引用本地绝对路径。'),
   kind: z.enum(['video', 'audio', 'image']), durationSeconds: z.number().finite().nonnegative(),
+  codeImageGeneration: videoEditCodeImageGenerationSchema.optional(),
   width: z.number().int().nonnegative(), height: z.number().int().nonnegative(),
   assetId: identifier.optional(), assetContent: z.object({ sizeBytes: z.number().int().nonnegative(), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: identifier.optional() }).strict().optional(), sourceRevision: identifier.optional(), hasAudio: z.boolean().optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
   /** Sound streams in file order (task 2.6); absent on media imported before, which plays its first stream. */
@@ -46,6 +51,7 @@ export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './c
  * 可以随时切回。只记引用，不校验素材项是否还在（素材从项目移除后切回时如实拒绝），不参与渲染。
  */
 const videoEditClipStateSchema = z.object({
+  styleKitId: identifier.optional(),
   multicamCameraId: identifier.optional(),
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
   follow: videoEditClipFollowSchema.optional(),
@@ -78,11 +84,8 @@ export const videoEditClipTakeSchema = z.object({
 export const videoEditClipSchema = videoEditClipStateSchema.extend({
   takes: z.array(videoEditClipTakeSchema).optional(),
 })
-export const videoEditAnnotationSchema = z.object({
-  id: identifier, clipId: identifier, frame, space: z.literal('composition-normalized'), kind: z.enum(['point', 'region']),
-  x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().min(0).max(1), height: z.number().min(0).max(1), text: z.string().max(2000),
-}).strict()
 export const videoEditSequenceSchema = z.object({
+  styleKitId: identifier.optional(),
   multicam: videoEditMulticamSchema.optional(),
   textTranscription: videoEditTextTranscriptionSchema.optional(),
   id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), ...videoEditSequenceSizeFields,
@@ -94,6 +97,7 @@ export const videoEditSequenceSchema = z.object({
   transitions: z.array(videoEditTransitionSchema).optional(),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
 export const videoEditDocumentSchema = z.object({
+  styleKits: z.array(styleKitSchema).optional(),
   lumetriLuts: z.array(lumetriLutAssetSchema).optional(),
   format: z.literal('henji-video-project'), version: z.literal(2), id: identifier, name, revision: z.number().int().nonnegative(),
   media: z.array(videoEditMediaSchema), bins: z.array(videoEditBinSchema), items: z.array(videoEditItemSchema), sequences: z.array(videoEditSequenceSchema),
@@ -109,10 +113,13 @@ export const videoEditDocumentSchema = z.object({
   const itemsById = new Map(document.items.map(value => [value.id, value]))
   const sequencesById = new Map(document.sequences.map(value => [value.id, value]))
   const definitionsById = new Map(document.codeMaterials?.map(value => [value.id, value]))
+  const styleIds = new Set(document.styleKits?.map(value => value.id))
+  if (styleIds.size !== (document.styleKits?.length ?? 0)) issue('工程风格包标识不能重复。')
+  for (const sequence of document.sequences) for (const value of [sequence, ...sequence.clips]) if (value.styleKitId && !styleIds.has(value.styleKitId)) issue('序列或片段的风格包引用不存在。')
   const lutsById = new Set(document.lumetriLuts?.map(value => value.id))
   for (const media of document.media) if (media.assetContent && !media.assetId && !media.assetContent.contentIdentity) issue('原文件内容快照需要固定内容身份。')
   const ids = new Set<string>()
-  for (const item of [...(document.lumetriLuts ?? []), ...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
+  for (const item of [...(document.styleKits ?? []), ...(document.lumetriLuts ?? []), ...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
     if (ids.has(item.id)) issue('剪辑包含重复标识。')
     ids.add(item.id)
   }
@@ -203,7 +210,14 @@ export const videoEditDocumentSchema = z.object({
       if ((clip.speed || clip.reverse || clip.preservePitch) && !videoEditClipSpeedSupported(clip.kind)) issue(`片段 ${clip.name} 不能改速度或倒放。`)
       if (media && media.kind !== 'image' && !videoEditClipWithinSource(clip, fps, media.durationSeconds, Math.max(1, videoEditClipSpeedValue(clip)) / fps)) issue(`片段 ${clip.name} 超出源素材范围。`)
     }
-    for (const annotation of sequence.annotations) if (!clipsById.has(annotation.clipId)) issue('标注的片段不属于此序列。')
+    for (const annotation of sequence.annotations) {
+      if (annotation.clipId && !clipsById.has(annotation.clipId)) issue('标注的片段不属于此序列。')
+      if (annotation.target.kind === 'element' && clipsById.get(annotation.clipId!)?.kind !== 'code') issue('元素标注必须引用代码片段。')
+      if (annotation.target.kind === 'range') {
+        if (annotation.target.clipIds?.some(id => !clipsById.has(id))) issue('时间段标注的片段不属于此序列。')
+        if (annotation.target.trackIds?.some(id => !sequence.tracks.some(track => track.id === id))) issue('时间段标注的轨道不属于此序列。')
+      }
+    }
     for (const marker of sequence.markers ?? []) {
       const clip = clipsById.get(marker.clipId ?? '')
       if (marker.frame >= Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) || marker.clipId && (!clip || marker.frame < clip.start || marker.frame >= clip.start + clip.duration)) issue('标记须位于序列或所属片段的半开范围内。')
@@ -229,7 +243,7 @@ export type VideoEditMedia = z.infer<typeof videoEditMediaSchema>
 export type VideoEditItem = z.infer<typeof videoEditItemSchema>
 export type VideoEditBin = z.infer<typeof videoEditBinSchema>
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
-export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'lumetriLuts'> & { fps: number; sequences?: VideoEditSequence[] }
+export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'lumetriLuts' | 'styleKits'> & { fps: number; sequences?: VideoEditSequence[] }
 export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {
   return { id: crypto.randomUUID(), name, width: 1920, height: 1080, frameRate: { numerator: 30, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
     // 新序列与 PR 一样只有一条视频轨（V1）和一条音频轨（A1）；需要更多轨道时拖到轨道外或用轨道头菜单添加。
@@ -241,7 +255,7 @@ export function createVideoEditDocument(name: string): VideoEditDocument {
 export function videoEditComposition(document: VideoEditDocument, sequenceId: string): VideoEditComposition {
   const sequence = document.sequences.find(item => item.id === sequenceId)
   if (!sequence) throw new Error('目标序列不存在。')
-  return { ...sequence, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.lumetriLuts ? { lumetriLuts: document.lumetriLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
+  return { ...sequence, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styleKits ? { styleKits: document.styleKits } : {}), ...(document.lumetriLuts ? { lumetriLuts: document.lumetriLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
 }
 export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' | 'items'>, clip: VideoEditClip): VideoEditMedia | undefined {
   const item = document.items.find(item => item.id === clip.itemId)
@@ -337,7 +351,12 @@ export function splitVideoEditClip(sequence: VideoEditSequence, id: string, at: 
   // 淡入留在左半段开头、淡出留在右半段结尾（PR 拆分后淡化手柄跟着原片段的首尾）。
   delete right.fadeInFrames
   const leftPart = { ...sliceVideoEditClipKeyframes(clip, 0, left), duration: left }; delete leftPart.fadeOutFrames
-  const next = { ...sequence, clips: sequence.clips.flatMap(item => item.id === id ? [leftPart, right] : [item]), annotations: sequence.annotations.map(item => item.clipId === id && item.frame >= at ? { ...item, clipId: right.id } : item) }
+  const next = { ...sequence, clips: sequence.clips.flatMap(item => item.id === id ? [leftPart, right] : [item]), annotations: sequence.annotations.flatMap(item => {
+    const spansSplit = item.frame < at && (item.endFrame ?? item.frame) >= at
+    if (item.clipId === id && spansSplit && item.target.kind === 'element') return [{ ...item, endFrame: at - 1 }, { ...item, id: crypto.randomUUID(), clipId: right.id, frame: at, status: item.status === 'draft' ? 'draft' as const : 'open' as const, addressedBy: undefined }]
+    const target = item.target.kind === 'range' && (item.target.clipIds?.includes(id) || item.clipId === id && spansSplit) ? { ...item.target, clipIds: [...new Set((item.target.clipIds ?? [id]).flatMap(value => value !== id ? [value] : item.frame >= at ? [right.id] : spansSplit ? [id, right.id] : [id]))] } : item.target
+    return [{ ...item, target, ...(item.clipId === id ? item.frame >= at ? { clipId: right.id } : spansSplit && item.target.kind !== 'element' ? { clipId: undefined } : {} : {}) }]
+  }) }
   const origins = new Map([[right.id, { originalId: id, shift: 0 }], [id, { originalId: id, shift: 0 }]])
   return retimeVideoEditContent(sequence, next, origins)
 }
@@ -347,7 +366,7 @@ export function changeVideoEditSequenceSettings(sequence: VideoEditSequence, set
   if (sequence.clips.some(clip => convert(clip.start + clip.duration) <= convert(clip.start))) throw new Error('新帧率会使部分片段短于一帧。请先调整这些片段的长度，再修改帧率。')
   return videoEditSequenceSchema.parse({ ...sequence, ...settings,
     clips: sequence.clips.map(clip => ({ ...rescaleVideoEditClipKeyframes(clip, time => convert(clip.start + time) - convert(clip.start), convert(clip.start + clip.duration) - convert(clip.start)), start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start), ...(clip.fadeInFrames ? { fadeInFrames: Math.max(1, convert(clip.fadeInFrames)) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.max(1, convert(clip.fadeOutFrames)) } : {}) })),
-    annotations: sequence.annotations.map(mark => ({ ...mark, frame: convert(mark.frame) })),
+    annotations: sequence.annotations.map(mark => mapVideoEditAnnotationTime(mark, convert)),
     ...(sequence.markers ? { markers: sequence.markers.map(mark => ({ ...mark, frame: convert(mark.frame) })) } : {}),
     ...(sequence.captions ? { captions: sequence.captions.map(caption => ({ ...caption, start: convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) })) } : {}),
     ...(sequence.transitions ? { transitions: sequence.transitions.map(transition => ({ ...transition, durationFrames: convert(transition.durationFrames), ...(transition.framesBeforeCut !== undefined ? { framesBeforeCut: Math.min(convert(transition.durationFrames), convert(transition.framesBeforeCut)) } : {}) })) } : {}),

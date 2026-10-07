@@ -2,10 +2,12 @@ import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from 
 import { CodeMaterialError, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeExpression, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { emitCodeV3FilterCall, CODE_V3_FILTER_HELPERS, codeMaterialFilterPasses } from './videoEditCodeCompilerFilterV3'
+import { codeShaderFilterPasses, unwrapCodeShaderExpression } from '@/core/videoEdit/codeMaterial/shaders'
+import { bindCodeMaterialStyle } from '@/core/videoEdit/codeMaterial/style'
 
 export interface Range { min: number; max: number; integer: boolean }
 export type Bounds = Range | Range[] | null
-export interface Value { code: string; bounds: Bounds; items?: Value[]; text?: string }
+export interface Value { code: string; bounds: Bounds; items?: Value[]; text?: string; fields?: Record<string, Value> }
 const float = new Float32Array(1)
 const bits = new Uint32Array(float.buffer)
 const MIN_NORMAL = 1.1754943508222875e-38
@@ -61,6 +63,8 @@ const contextCode: Record<string, string> = { time: 'p.context0.x', localTime: '
 /** Emit only checked scalar/color IR. Conservative range analysis rejects unsafe
  * denominators and overflow before a pipeline reaches the GPU; no author WGSL. */
 export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionHandles = false): string {
+  program = bindCodeMaterialStyle(program)
+  const shaders = codeShaderFilterPasses(program)
   const limits = program.languageVersion === 3 ? CODE_V3_LIMITS : CODE_MATERIAL_LIMITS
   if (program.kind !== 'filter' || ![1, 3].includes(program.languageVersion) || program.parameters.length > 32 || program.metrics.samples > limits.filterSamples || program.metrics.scalarOperations > limits.filterScalarOperations) throw new CodeMaterialError('BUDGET', '滤镜版本或资源预算无效。')
   const bindings: Value[] = []; const locals = new Map<number, Value>(); const passes = codeMaterialFilterPasses(program); let nodes = 0
@@ -80,6 +84,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
       case 'color': { const values = expression.values.map(next); return { code: `vec4f(${values.map(value => value.code).join(',')})`, bounds: values.map(scalar) } }
       case 'local': { const value = locals.get(expression.slot); if (!value) throw new CodeMaterialError('TYPE', '无效滤镜展开索引。'); return value }
       case 'array': return { code: '', bounds: null, items: expression.values.map(next) }
+      case 'object': return { code: '', bounds: null, fields: Object.fromEntries(Object.entries(expression.properties).map(([key, value]) => [key, next(value)])) }
       case 'repeat': {
         const count = scalar(next(expression.count))
         if (count.min !== count.max || !count.integer || count.min < 1 || count.max > 64) throw new CodeMaterialError('BUDGET', '滤镜 repeat 次数须为 1–64 的编译期整数常量。')
@@ -93,8 +98,13 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
         if (!value.items || index.min !== index.max || !index.integer || index.min < 0 || index.max >= value.items.length) throw new CodeMaterialError('TYPE', '滤镜表索引须为预算内静态整数。')
         return value.items[index.min]
       }
-      case 'field': { const value = next(expression.value); if (expression.key === 'length' && value.items) return { code: `${value.items.length}.0`, bounds: range(value.items.length) }; throw new CodeMaterialError('TYPE', '滤镜不支持此字段。') }
+      case 'field': { const value = next(expression.value); if (value.fields?.[expression.key]) return value.fields[expression.key]; if (expression.key === 'length' && value.items) return { code: `${value.items.length}.0`, bounds: range(value.items.length) }; throw new CodeMaterialError('TYPE', '滤镜不支持此字段。') }
       case 'v3call': {
+        if (expression.op === 'shaderFilter') {
+          const index = shaders.findIndex(pass => pass.expression === unwrapCodeShaderExpression(program, expression))
+          if (index < 0) throw new CodeMaterialError('TYPE', '缺少可信着色器工序。', expression.sourceSpan)
+          return { code: `codeUnpremultiply(textureSampleLevel(codeShader${index},inputSampler,uv,0.0))`, bounds: Array.from({ length: 4 }, () => range(0, 1, false)) }
+        }
         try { return emitCodeV3FilterCall(expression, expression.args.map(next), passes, { range, scalar, colors, union, multiply, divide, operationRange }) }
         catch (error) { if (error instanceof CodeMaterialError && !error.sourceSpan && expression.sourceSpan) throw new CodeMaterialError(error.code, error.message, expression.sourceSpan); throw error }
       }
@@ -114,7 +124,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
       case 'binding': {
         const value = bindings[expression.slot]
         if (!value) throw new CodeMaterialError('TYPE', '滤镜绑定不存在。')
-        return value.items ? value : { code: `b${expression.slot}`, bounds: value.bounds, text: value.text }
+        return value.items || value.fields ? value : { code: `b${expression.slot}`, bounds: value.bounds, text: value.text }
       }
       case 'component': { const value = next(expression.value); return { code: `(${value.code})[${expression.index}]`, bounds: colors(value)[expression.index] } }
       case 'unary': {
@@ -211,8 +221,20 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
       default: throw new CodeMaterialError('TYPE', '滤镜不得输出图形或其他宿主值。')
     }
   }
+  // Frame uniforms are evaluated on CPU. Do not range-prove/emit unused host-only bindings per pixel.
+  const pixelBindings = new Set<number>()
+  const pixelUse = (value: CodeExpression): void => {
+    if (value.kind === 'v3call' && value.op === 'shaderFilter') return
+    if (value.kind === 'binding') { if (!pixelBindings.has(value.slot)) { pixelBindings.add(value.slot); pixelUse(program.bindings[value.slot].expression) } return }
+    for (const item of Object.values(value)) {
+      if (Array.isArray(item)) item.forEach(child => { if (child && typeof child === 'object' && 'kind' in child) pixelUse(child as CodeExpression) })
+      else if (item && typeof item === 'object' && 'kind' in item) pixelUse(item as CodeExpression)
+    }
+    if (value.kind === 'object') Object.values(value.properties).forEach(pixelUse)
+  }
+  pixelUse(program.result)
   const declarations: string[] = []
-  for (const binding of program.bindings) { const value = emit(binding.expression); if (!value.items && value.text === undefined) declarations.push(`let b${bindings.length} = ${value.code};`); bindings.push(value) }
+  for (const binding of program.bindings) { const value = pixelBindings.has(bindings.length) ? emit(binding.expression) : { code: '', bounds: null, text: '' }; if (!value.items && !value.fields && value.text === undefined) declarations.push(`let b${bindings.length} = ${value.code};`); bindings.push(value) }
   const result = emit(program.result)
   if (colors(result).some(channel => channel.min < -1e-5 || channel.max > 1 + 1e-5)) throw new CodeMaterialError('PARAMETERS', '滤镜输出必须始终位于0到1；请在可能越界的颜色通道显式使用clamp。')
   return `
@@ -221,6 +243,7 @@ struct Params { context0:vec4f, context1:vec3f, seed:u32, parameters:array<vec4f
 @group(0) @binding(1) var inputSampler: sampler;
 @group(0) @binding(2) var<uniform> p: Params;
 ${passes.map((_, i) => `@group(0) @binding(${3 + i}) var codeBlur${i}:texture_2d<f32>;`).join('\n')}
+${shaders.map((_, i) => `@group(0) @binding(${3 + passes.length + i}) var codeShader${i}:texture_2d<f32>;`).join('\n')}
 struct Vertex { @builtin(position) position: vec4f }
 @vertex fn vs(@builtin(vertex_index) i:u32)->Vertex {
  let q = array<vec2f,3>(vec2f(0,0),vec2f(0,2),vec2f(2,0))[i];

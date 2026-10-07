@@ -1,3 +1,4 @@
+import { documentFontRevision } from '@/platform/fontFaces'
 import { createLogger } from '@/core/logging'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
@@ -13,6 +14,7 @@ import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } fro
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
+import { paintVideoEditGraphic } from './videoEditGraphicSurface'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
@@ -23,6 +25,8 @@ import type { VideoEditSmartRegionMask } from './videoEditSmartRegionMasks'
 import { videoEditTrackerKey } from '@/core/videoEdit/tracking'
 import { videoEditEffectMask } from './videoEditEffectMasks'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
+import { DEFAULT_STYLE_TOKENS, resolveVideoEditStyleKit, styleKitRenderKey } from '@/core/videoEdit/styleKit'
+import { bindCodeMaterialStyle } from '@/core/videoEdit/codeMaterial/style'
 
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
@@ -36,7 +40,7 @@ export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance; mask?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
-export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
+export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
 export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
 function freezeProgram(program: CodeMaterialProgram): CodeMaterialProgram {
@@ -53,7 +57,7 @@ export class VideoEditCodeSources {
   private knownBytes = 0
   private readonly programs = new Map<string, CachedProgram>()
   private programBytes = 0
-  private readonly staticPictures = new Map<string, VideoEditCodePicture>()
+  private readonly staticPictures = new Map<string, VideoEditCodePicture | ImageBitmap>()
   private readonly parameters = new WeakMap<CodeMaterialInstance, { program: CodeMaterialProgram; prepared: PreparedCodeMaterialParameters }>()
   private readonly graphics = new WeakMap<VideoEditGraphic, PreparedVideoEditGraphic>()
   private runtime?: CodeRuntime
@@ -64,7 +68,7 @@ export class VideoEditCodeSources {
   private gpuWork: Promise<void> = Promise.resolve()
   private releaseUnused(keys: ReadonlySet<string>): void {
     this.runtime?.releaseUnused(keys)
-    for (const key of this.staticPictures.keys()) if (!keys.has(key)) this.staticPictures.delete(key)
+    for (const [key, picture] of this.staticPictures) if (!keys.has(key)) { if (typeof ImageBitmap !== 'undefined' && picture instanceof ImageBitmap) picture.close(); this.staticPictures.delete(key) }
   }
   constructor(private document: VideoEditComposition, private readonly acquireRuntime: () => Promise<CodeRuntime>, private readonly compiler: Compiler = new VideoEditCodeCompiler()) { this.checkVersions(document) }
   private checkVersions(document: VideoEditComposition): void {
@@ -128,6 +132,7 @@ export class VideoEditCodeSources {
       if (!animation || animation.program !== program) { animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation) }
       const window = transitionByClip.get(clip.id)
       const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window) : codeMaterialContextForFrame(clip, frame, document.frameRate, program)
+      context.style = resolveVideoEditStyleKit(document, document, clip)?.tokens ?? DEFAULT_STYLE_TOKENS
       const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
       return { context, parameters, transitionHandles: Boolean(window) }
     }
@@ -148,7 +153,9 @@ export class VideoEditCodeSources {
             const key = identity(effect.code.definitionId, effect.code.versionId)
             const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
             if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
-            chain.push({ effect, version: key, program, ...animated(clip, effect.code, program) })
+            const animation = animated(clip, effect.code, program)
+            const styleKey = styleKitRenderKey(resolveVideoEditStyleKit(document, document, clip))
+            chain.push({ effect, version: JSON.stringify([key, styleKey]), program: bindCodeMaterialStyle(program, animation.context.style), ...animation })
           } catch (error) {
             assertCurrent()
             if (!options.onEffectError) throw error
@@ -162,7 +169,7 @@ export class VideoEditCodeSources {
           if (!prepared) { prepared = prepareVideoEditGraphic(clip.graphic); this.graphics.set(clip.graphic, prepared) }
           const time = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionByClip.has(clip.id))
           const draws = evaluateVideoEditGraphic(prepared, time)
-          const target = `graphic:static:${JSON.stringify([prepared.width, prepared.height, draws])}`
+          const target = `graphic:static:${JSON.stringify([prepared.width, prepared.height, draws, draws.some(draw => draw.textStyle) ? documentFontRevision() : 0])}`
           keys.add(target)
           plans.push({ clip, key: target, static: true, draws, parameters: {}, transitionHandles: transitionByClip.has(clip.id), context: { width: prepared.width, height: prepared.height, time: time.sourceInUs / 1e6 + time.sourceRemainder.numerator / time.sourceRemainder.denominator / 1e6, localTime: (frame - clip.start) / document.fps, sequenceTime: frame / document.fps, frame, fps: document.fps } })
           continue
@@ -175,18 +182,19 @@ export class VideoEditCodeSources {
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
         const { parameters, context, transitionHandles } = animated(clip, clip.code, program)
         const imageSources = [...codeMaterialImageIds(clip.code)].map(id => { const media = document.media.find(media => media.id === id && media.kind === 'image'); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
-        const target = program.mode === 'static' ? `code:static:${JSON.stringify([key, parameters, imageSources])}` : `code:dynamic:${clip.id}`
+        const styleKey = styleKitRenderKey(resolveVideoEditStyleKit(document, document, clip))
+        const target = program.mode === 'static' ? `code:static:${JSON.stringify([key, parameters, imageSources, styleKey, documentFontRevision()])}` : `code:dynamic:${clip.id}`
         keys.add(target)
         plans.push({ clip, key: target, static: program.mode === 'static', program, parameters, context, transitionHandles })
       }
-      if (keys.size > 16) throw new CodeMaterialError('BUDGET', '代码素材同时最多16个渲染目标。')
+      if (plans.filter(plan => !plan.draws).length > 16) throw new CodeMaterialError('BUDGET', '代码素材同时最多16个渲染目标。')
       assertCurrent(); this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0 }
       // Serialize GPU mutations, including a generator whose readiness resolves after cancellation.
       const work = this.gpuWork.then(async () => {
         assertCurrent()
         if (plans.length || effects.size || keys.size) { this.runtime ??= await this.acquireRuntime(); assertCurrent() }
-        this.runtime?.retainProgramVersions?.(new Set(this.programs.keys()))
+        this.runtime?.retainProgramVersions?.(new Set([...this.programs.keys(), ...[...effects.values()].flatMap(chain => chain.flatMap(effect => effect.builtin ? [] : [effect.version]))]))
         const outcome = (await imageOutcome)?.[0]
         if (outcome?.status === 'rejected') throw outcome.reason
         const inputs = outcome?.status === 'fulfilled' ? outcome.value : undefined; assertCurrent()
@@ -197,8 +205,14 @@ export class VideoEditCodeSources {
           if (picture) result.cacheHits++
           else {
             if (plan.draws) {
-              if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
-              picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws)
+              if (plan.draws.some(draw => draw.textStyle)) {
+                const surface = new OffscreenCanvas(plan.context.width, plan.context.height)
+                paintVideoEditGraphic(surface.getContext('2d')!, plan.draws, surface.width, surface.height)
+                picture = surface.transferToImageBitmap()
+              } else {
+                if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
+                picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws)
+              }
             } else picture = await this.runtime!.generator(plan.key, plan.program!, plan.context, plan.parameters, inputs, plan.transitionHandles)
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)
@@ -226,6 +240,6 @@ export class VideoEditCodeSources {
     this.disposed = true; this.cancel(); this.compiler.dispose(); this.protectedKeys.clear()
     await Promise.allSettled([this.gpuWork])
     try { this.runtime?.releaseUnused(new Set()) }
-    finally { this.programs.clear(); this.programBytes = 0; this.staticPictures.clear(); this.known.clear(); this.knownBytes = 0 }
+    finally { for (const picture of this.staticPictures.values()) if (typeof ImageBitmap !== 'undefined' && picture instanceof ImageBitmap) picture.close(); this.programs.clear(); this.programBytes = 0; this.staticPictures.clear(); this.known.clear(); this.knownBytes = 0 }
   }
 }

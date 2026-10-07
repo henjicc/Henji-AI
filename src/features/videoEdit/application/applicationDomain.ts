@@ -1,6 +1,9 @@
+import { VideoEditTextPresetExecutor, VideoEditTextPresetMutationExecutor } from './videoEditTextPresetReflection'
+import { VideoEditStyleKitCollectionExecutor, VideoEditStyleKitMutationExecutor, STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY } from './videoEditStyleKitReflection'
+import { handleVideoEditStyleKitCapability } from './videoEditStyleKitCapabilities'
 import { handleVideoEditMulticamCapability } from './videoEditMulticamCapability'
 import { handleTitleTemplateCapability } from './videoEditTitleTemplateCapability'
-import { TitleTemplateCollectionExecutor } from './videoEditTitleTemplateReflection'
+import { TitleTemplateCollectionExecutor, TitleTemplateMutationExecutor } from './videoEditTitleTemplateReflection'
 import { handleVideoEditProxyCapability } from './videoEditProxyCapability'
 import { reframeVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditReframeCapability'
 import { handleVideoEditTextCapability } from './videoEditTextCapability'
@@ -61,7 +64,11 @@ let stopSmartRegions: (() => void) | null = null
 export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
+    for (const type of [STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY] as const) { engine.registerCollectionExecutor(new VideoEditStyleKitCollectionExecutor(type)); engine.registerMutationExecutor(new VideoEditStyleKitMutationExecutor(type)) }
+    engine.registerCollectionExecutor(new VideoEditTextPresetExecutor())
+    engine.registerMutationExecutor(new VideoEditTextPresetMutationExecutor())
     engine.registerCollectionExecutor(new TitleTemplateCollectionExecutor())
+    engine.registerMutationExecutor(new TitleTemplateMutationExecutor())
     engine.registerCollectionExecutor(new VideoEditExportPresetExecutor())
     engine.registerMutationExecutor(new VideoEditExportPresetMutationExecutor())
     for (const entityType of ['video_edit.document', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
@@ -90,6 +97,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      const styleKit = await handleVideoEditStyleKitCapability(definition.id, raw, context)
+      if (styleKit !== undefined) return styleKit
       const title = await handleTitleTemplateCapability(definition.id, raw, context.signal)
       if (title !== undefined) return title
       const multicam = await handleVideoEditMulticamCapability(definition.id, raw, context.signal)
@@ -127,7 +136,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (definition.id === observeVideoEditFrameCapability.id) {
         const input = observeVideoEditFrameCapability.inputSchema.parse(raw); const id = input.documentRef.id
         const child = (ref: { kind: string; id: string }): string => { const value = splitVideoEditRef(ref); if (value.projectId !== id || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑。`); return value.childId }
-        const observed = await observeVideoEditFrame(id, input.target.kind === 'program' ? { kind: 'program', frame: input.target.frame, ...(input.target.sequenceRef ? { sequenceId: child(input.target.sequenceRef) } : {}) } : { kind: 'source', itemId: child(input.target.itemRef), timeUs: input.target.timeUs }, input.maxWidth, context.signal)
+        const observed = await observeVideoEditFrame(id, input.target.kind === 'program' ? { kind: 'program', frame: input.target.frame, ...(input.target.sequenceRef ? { sequenceId: child(input.target.sequenceRef) } : {}) } : { kind: 'source', itemId: child(input.target.itemRef), timeUs: input.target.timeUs }, input.maxWidth, context.signal, undefined, { overlayAnnotations: input.overlayAnnotations, annotationIds: input.annotationIds, cropAnnotationId: input.cropAnnotationId, ...(input.highlightElement ? { highlightElement: { clipId: child(input.highlightElement.clipRef), elementId: input.highlightElement.elementId } } : {}) })
         const resultRef = { kind: 'asset' as const, id: observed.asset.id }
         return { resultRef, documentRef: input.documentRef, target: input.target, width: observed.width, height: observed.height, sourceWidth: observed.sourceWidth, sourceHeight: observed.sourceHeight, documentRevision: observed.documentRevision,
           message: `已按剪辑版本 ${observed.documentRevision} 渲染${input.target.kind === 'program' ? `序列帧 ${input.target.frame}` : '源素材画面'}（${observed.width}×${observed.height}），用 read_application_media 读取该资产查看画面。`,
@@ -240,7 +249,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     })
   },
   resolvePersistenceParticipants(steps) {
-    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.title_template', 'video_edit.style_preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template', 'video_edit.text_preset', 'video_edit.style_preset'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
     return [...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)

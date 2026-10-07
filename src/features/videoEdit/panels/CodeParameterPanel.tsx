@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import { RotateCcw } from 'lucide-react'
-import { Dropdown, UiButton, UiColorInput, UiError, UiFormRow, UiGroup, UiIconButton, UiRangeInput, UiSwitch, UiTextAreaField } from '@/components/ui'
+import { Dropdown, UiButton, UiColorInput, UiError, UiFormRow, UiGroup, UiIconButton, UiRangeInput, UiSwitch, UiTextAreaField, UiFontPicker } from '@/components/ui'
 import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
@@ -15,6 +15,9 @@ import { CodeKeyframePanel } from './CodeKeyframePanel'
 import { useCodeParameterGesture, videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 import { CodeImageParameterControl } from './CodeImageParameterControl'
 import { CodeSourceEditor } from './CodeSourceEditor'
+import { selectedVideoEditCodeElement } from '../application/videoEditCodeElements'
+import { useVideoEditFontPreview } from './useVideoEditFontPreview'
+import { collectVideoEditFonts } from '@/core/videoEdit/fonts'
 
 type ScalarParameter = Exclude<CodeParameterDeclaration, { type: 'image' }>
 interface ScalarProps {
@@ -32,6 +35,7 @@ function colorFromHex(hex: string, alpha: number): CodeColor { return [parseInt(
 /** Only author-declared scalar values; both instance and keyframe controls use this view. */
 function CodeScalarControl({ target, parameter, value, label, time, onError, onWrite }: ScalarProps): React.ReactElement {
   const gesture = useCodeParameterGesture(target, onError, time)
+  const fontPreview = useVideoEditFontPreview(target.projectId, `${videoEditParameterTargetIdentity(target)}:${parameter.key}`, onError, (name, handle) => onWrite(name, handle, time))
   const touched = useRef(false)
   const write = (next: CodeParameterValue): void => gesture.write((handle, at) => onWrite(next, handle, at))
   const writeAtomic = (next: CodeParameterValue): void => gesture.atomic((handle, at) => onWrite(next, handle, at))
@@ -51,6 +55,7 @@ function CodeScalarControl({ target, parameter, value, label, time, onError, onW
   }} /></div>
 
   let control: React.ReactElement
+  if (String(parameter.type) === 'font' || 'objectId' in target && parameter.key === 'fontFamily') return <UiFontPicker ariaLabel={label} value={value as string} projectFonts={collectVideoEditFonts(requireVideoEditInstance(target.projectId).document).map(use => use.font)} onPreview={face => fontPreview(face?.fullName ?? null)} onSelect={writeAtomic} />
   switch (parameter.type) {
     case 'number':
       control = <div className="flex flex-col gap-1">
@@ -72,15 +77,20 @@ function CodeScalarControl({ target, parameter, value, label, time, onError, onW
     case 'boolean': control = <UiSwitch aria-label={label} checked={value as boolean} onCheckedChange={writeAtomic} />; break
     case 'choice': control = <Dropdown ariaLabel={label} value={value as string} options={parameter.options.map(option => ({ label: option, value: option }))} onSelect={writeAtomic} />; break
     case 'text': control = <UiTextAreaField key={gesture.epoch} aria-label={label} rows={2} maxLength={parameter.maxLength} value={value as string} onChange={event => write(event.target.value)} textHistory={{ onValueChange: write, onEditStart: gesture.begin, onEditEnd: gesture.finish }} />; break
+    default: throw new Error('此参数类型尚未提供界面控件。')
   }
   return <div onKeyDownCapture={event => { if (event.key === 'Escape' && gesture.active()) { event.preventDefault(); event.stopPropagation(); touched.current = false; gesture.cancel() } }}>{control}</div>
 }
 
 export function VideoEditParameterFields({ editor, onError }: { editor: VideoEditParameterEditorState; onError: (reason: unknown) => void }): React.ReactElement {
+  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  const selected = 'code' in editor && !editor.target.effectId ? selectedVideoEditCodeElement(requireVideoEditInstance(editor.target.projectId)) : undefined
+  const chosen = selected?.entry.clip.id === editor.target.clipId ? selected : undefined
   const identity = videoEditParameterTargetIdentity(editor.target)
   const title = 'code' in editor ? editor.target.effectId ? '效果参数' : '代码参数' : '对象参数'
   return <UiGroup title={title} titleTone="compact" divided data-video-edit-code-parameters={editor.target.clipId}>
-    {editor.metadata.parameters.map(parameter => parameter.type === 'image' ? 'code' in editor ? <UiFormRow density="compact" key={`${identity}:${parameter.key}`} label={parameter.title} info={parameter.description || undefined} data-video-edit-code-parameter={parameter.key}><CodeImageParameterControl target={editor.target} parameterKey={parameter.key} title={parameter.title} value={editor.parameters[parameter.key] as CodeImageReference | null} /></UiFormRow> : null : <UiGroup key={`${identity}:${parameter.key}`} gap="row" data-video-edit-code-parameter={parameter.key}>
+    {chosen && <div className="text-xs text-accent" aria-label="已选元素">已选元素：{chosen.label}</div>}
+    {editor.metadata.parameters.map(parameter => parameter.type === 'image' ? 'code' in editor ? <UiFormRow density="compact" key={`${identity}:${parameter.key}`} label={parameter.title} info={parameter.description || undefined} data-video-edit-code-parameter={parameter.key} data-code-element-parameter={chosen?.parameterKeys.includes(parameter.key) || undefined} className={chosen?.parameterKeys.includes(parameter.key) ? "bg-accent/10" : undefined}><CodeImageParameterControl target={editor.target} parameterKey={parameter.key} title={parameter.title} value={editor.parameters[parameter.key] as CodeImageReference | null} /></UiFormRow> : null : <UiGroup key={`${identity}:${parameter.key}`} gap="row" data-video-edit-code-parameter={parameter.key} data-code-element-parameter={chosen?.parameterKeys.includes(parameter.key) || undefined} className={chosen?.parameterKeys.includes(parameter.key) ? "bg-accent/10" : undefined}>
       <UiFormRow density="compact" label={<span className="flex items-center gap-2"><span>{parameter.title}</span><UiIconButton size="sm" title={`重置${parameter.title}${editor.curves[parameter.key]?.length ? '（含关键帧）' : ''}`} aria-label={`重置${parameter.title}`} onClick={() => { try { resetVideoEditCodeParameter(editor.target, parameter.key) } catch (error) { onError(error) } }}><RotateCcw className="h-3.5 w-3.5" /></UiIconButton></span>} info={parameter.description || undefined}>
         <CodeScalarControl target={editor.target} parameter={parameter} value={editor.parameters[parameter.key]} label={parameter.title} time={editor.sourceTime} onError={onError} onWrite={(value, gesture, at) => setVideoEditCodeParameter(editor.target, parameter.key, value, { gesture, time: at })} />
       </UiFormRow>

@@ -47,7 +47,9 @@ describe('剪辑面板布局', () => {
     expect(api.getPanel('timeline')).toBe(timeline)
     expect(created.program).toBe(1)
     expect(disposed.program).toBeUndefined()
-    expect(api.totalPanels).toBe(6)
+    expect(api.totalPanels).toBe(7)
+    expect(api.groups).toHaveLength(4)
+    expect(api.getPanel('style_kits')!.group).toBe(api.getPanel('effects')!.group)
   })
 
   it('保存并恢复关闭与浮动状态，全部关闭后仍能按单实例恢复', () => {
@@ -70,6 +72,36 @@ describe('剪辑面板布局', () => {
     const restored = showVideoEditPanel(api, 'program')
     expect(showVideoEditPanel(api, 'program')).toBe(restored)
     expect(api.totalPanels).toBe(1)
+  })
+
+  it.each(['annotations', 'content', 'tracking', 'lumetri', 'title_templates', 'effects_library', 'style_kits'] as const)('%s 打开、重开及浮动贴回都作为检查器标签，不增加默认分组', id => {
+    resetVideoEditLayout(api)
+    const effects = api.getPanel('effects')!
+    const assertGrouped = (): void => {
+      expect(api.getPanel(id)!.group).toBe(effects.group)
+      expect(api.groups).toHaveLength(4)
+    }
+    showVideoEditPanel(api, id); assertGrouped()
+    api.getPanel(id)!.api.close()
+    const panel = showVideoEditPanel(api, id); assertGrouped()
+    api.addFloatingGroup(panel)
+    dockVideoEditPanel(api, panel); assertGrouped()
+    api.addFloatingGroup(panel)
+    dockVideoEditGroup(api, panel.group); assertGrouped()
+  })
+
+  it('效果控件关闭后仍沿现有检查器组打开和贴回，恢复效果控件也不另开一列', () => {
+    resetVideoEditLayout(api)
+    const group = api.getPanel('title_templates')!.group
+    api.getPanel('effects')!.api.close()
+    api.getPanel('style_kits')!.api.close()
+    const style = showVideoEditPanel(api, 'style_kits')
+    expect(style.group).toBe(group)
+    api.addFloatingGroup(style)
+    dockVideoEditPanel(api, style)
+    expect(style.group).toBe(group)
+    expect(showVideoEditPanel(api, 'effects').group).toBe(group)
+    expect(api.groups).toHaveLength(4)
   })
 
   it('浮动的时间线贴回时回到节目画面下方，不变成右侧窄竖列（5.8）', () => {
@@ -122,7 +154,8 @@ describe('剪辑面板布局', () => {
     expect(() => parseVideoEditLayout(JSON.stringify(popout))).toThrow('不支持')
     localStorage.setItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY, '{broken')
     restoreVideoEditLayout(api)
-    expect(api.totalPanels).toBe(6)
+    expect(api.totalPanels).toBe(7)
+    expect(api.groups).toHaveLength(4)
     expect(created.program).toBe(1)
   })
 })
