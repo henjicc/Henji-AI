@@ -10,7 +10,7 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
 const STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 const WINDOW_SIZE = { width: 1440, height: 900 }
 const button = (page, name) => page.getByRole('button', { name, exact: true })
-const group = (page, title) => page.locator('.dv-groupview').filter({ has: button(page, `关闭${title}`) })
+const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 
 /** Keep geometry and group membership; active tabs and floating positions must survive restart too. */
 function layoutSnapshot(layout) {

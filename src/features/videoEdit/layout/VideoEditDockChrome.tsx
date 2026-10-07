@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { Check, LayoutGrid, Maximize2, Menu, Minimize2, RotateCcw, X } from 'lucide-react'
+import { Check, LayoutGrid, Maximize2, Menu, Minimize2, RotateCcw } from 'lucide-react'
 import type { DockviewApi, DockviewGroupPanel, IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
 import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -30,13 +30,11 @@ export function VideoEditDockTab({ api, containerApi }: IDockviewPanelHeaderProp
     return () => event.dispose()
   }, [api, group])
   // 文字色交给 dockview 的标签色变量（选中主要文字、其余辅助文字，见 index.css 面板标签映射）
-  // 关闭按钮只在悬停标签或键盘聚焦时出现（设计稿面板头为纯文字标签），命中区始终保留，不改变标签宽度。
-  // 面板菜单与 PR 一致：紧跟在组内当前标签的标题后面，始终显示（剪辑对齐 PR 2.5）。
-  return <span className="group/dock-tab flex h-full items-center gap-1.5 pl-2 pr-1 text-xs">
+  // 与 PR 一致：标签只有标题和紧跟其后的面板菜单（关闭在菜单里），选中线只到菜单为止。
+  // 非当前标签也占住菜单的位置（不可见），切换叠放面板时各标签文字位置不动。
+  return <span className="flex h-full items-center gap-1 text-xs" data-dock-tab={api.id} data-dock-tab-title={title}>
     <span>{title}</span>
-    {active && <VideoEditPanelMenu containerApi={containerApi} group={group} />}
-    <UiIconButton size="xs" className="opacity-0 transition-opacity duration-120 focus-visible:opacity-100 group-hover/dock-tab:opacity-100" title={`关闭${title}`} aria-label={`关闭${title}`}
-      onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); api.close() }}><X size={12} /></UiIconButton>
+    {active ? <VideoEditPanelMenu containerApi={containerApi} group={group} /> : <span aria-hidden="true" className="invisible flex"><UiIconButton size="xs" tabIndex={-1}><Menu size={12} /></UiIconButton></span>}
   </span>
 }
 

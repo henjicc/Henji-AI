@@ -1101,6 +1101,11 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   border-radius: var(--radius-control);
 }
 
+/* 剪辑面板标签右侧紧贴面板菜单（PR）：收窄标签右内边距，选中线到菜单图标为止。 */
+.henji-videoEdit-dock.dockview-theme-abyss .dv-tab {
+  padding-right: 0.25rem;
+}
+
 /* 剪辑工作区：面板头右侧的“最大化／恢复”平时隐藏，悬停该面板组或键盘聚焦时出现（面板菜单在当前标签标题旁，始终显示）。
  * 只用 opacity：按钮始终占位、可被键盘与自动化命中，标签条不因显隐抖动。 */
 .henji-videoEdit-dock [data-video-edit-dock-actions] {

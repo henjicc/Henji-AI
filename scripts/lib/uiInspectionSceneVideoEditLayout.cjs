@@ -7,8 +7,8 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
 
 const STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 const button = (page, name) => page.getByRole('button', { name, exact: true })
-const tab = (page, title) => page.locator('.dv-tab').filter({ has: button(page, `关闭${title}`) })
-const group = (page, title) => page.locator('.dv-groupview').filter({ has: button(page, `关闭${title}`) })
+const tab = (page, title) => page.locator('.dv-tab').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
+const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 
 async function pointerDrag(page, source, target, position) {
   const from = await source.boundingBox(); const to = await target.boundingBox()

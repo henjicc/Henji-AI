@@ -7,7 +7,7 @@ const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspection
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
-const group = (page, title) => page.locator('.dv-groupview').filter({ has: button(page, `关闭${title}`) })
+const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 const ORIGINAL = process.env.HENJI_PERF_SOURCE || 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
 const PROJECT_ID = 'video-edit-performance'
 /**

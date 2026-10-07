@@ -6,7 +6,7 @@ const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspection
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
-const group = (page, title) => page.locator('.dv-groupview').filter({ has: button(page, `关闭${title}`) })
+const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
 const PROJECT_ID = 'video-edit-popout'
 
@@ -57,7 +57,7 @@ function createVideoEditPopoutScene() {
       let mainWindowId = null; let foreignWindowIds = []
       const windows = async () => (await allWindows()).filter(window => !foreignWindowIds.includes(window.id)).map(window => ({ ...window, main: window.id === mainWindowId }))
       const popOut = async (title) => {
-        await group(page, title).locator('.dv-tab').filter({ has: button(page, `关闭${title}`) }).click()
+        await group(page, title).locator('.dv-tab').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) }).click()
         const opened = app.waitForEvent('window', { timeout: 30000 })
         await group(page, title).getByRole('button', { name: '面板菜单', exact: true }).click()
         await button(page, '浮动面板').click()
@@ -225,7 +225,7 @@ function createVideoEditDockGesturesScene() {
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const phase = name => { evidence.currentPhase = name; store() }
       const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
-      const tab = title => group(page, title).locator('.dv-tab').filter({ has: button(page, `关闭${title}`) })
+      const tab = title => group(page, title).locator('.dv-tab').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
       const center = box => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
       const popoutWindows = () => app.evaluate(({ BrowserWindow, screen }) => BrowserWindow.getAllWindows().filter(window => window.getTitle().startsWith('痕迹AI · ')).map(window => ({ id: window.id, title: window.getTitle(), bounds: window.getBounds(), maximized: window.isMaximized(), workArea: screen.getDisplayMatching(window.getBounds()).workArea })))
       const popoutBounds = async title => (await popoutWindows()).find(window => window.title === title)?.bounds
