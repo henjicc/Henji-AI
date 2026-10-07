@@ -1,5 +1,5 @@
 import { getPlatform } from './runtime'
-import { GENERIC_FONT_FACES, fontMatchesName, type FontCatalog, type FontFaceInfo, type FontPreferences } from '../core/fonts/catalog'
+import { GENERIC_FONT_FACES, fontMatchesName, normalizeFontFace, type FontCatalog, type FontFaceInfo, type FontPreferences } from '../core/fonts/catalog'
 import { createLogger } from '../core/logging'
 const logger = createLogger('services.fonts')
 export interface FontLibrarySnapshot extends FontCatalog { loading: boolean; error: string; preferences: FontPreferences }
@@ -22,7 +22,7 @@ function publish(value: Partial<FontLibrarySnapshot>): FontLibrarySnapshot { sna
 function adopt(catalog: FontCatalog): void {
   const available = new Set(catalog.faces.map(face => face.id))
   for (const [id] of facesLoaded) if (!available.has(id)) { facesLoaded.delete(id); payloadSizes.delete(id) }
-  publish({ ...catalog, faces: [...GENERIC_FONT_FACES, ...catalog.faces], loading: false, error: '' })
+  publish({ ...catalog, faces: [...GENERIC_FONT_FACES, ...catalog.faces.flatMap(face => normalizeFontFace(face) ?? [])], loading: false, error: '' })
   loaded = true
 }
 export function loadFontLibrary(refresh = false): Promise<FontLibrarySnapshot> {

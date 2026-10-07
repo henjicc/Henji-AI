@@ -16,6 +16,18 @@ export interface FontFaceInfo {
   variation?: Record<string, number>
 }
 export interface FontCatalog { faces: FontFaceInfo[]; revision: number }
+/**
+ * Font name tables are untrusted: fontkit returns null for absent records (postscriptName is often missing).
+ * Every name crosses this boundary as a trimmed string; a face with no usable name is dropped, never half-kept.
+ */
+export function normalizeFontFace<T extends Omit<FontFaceInfo, 'id' | 'imported'>>(face: T): T | null {
+  const text = (value: unknown): string => typeof value === 'string' ? value.trim() : ''
+  const family = text(face.family) || text(face.fullName) || text(face.postscriptName)
+  if (!family) return null
+  const fullName = text(face.fullName) || family
+  return { ...face, family, localizedFamily: text(face.localizedFamily) || family, fullName, postscriptName: text(face.postscriptName), style: text(face.style) || 'Regular',
+    aliases: [...new Set((Array.isArray(face.aliases) ? face.aliases : []).map(text).filter(Boolean))] }
+}
 export interface FontPreferences { favorites: string[]; recent: string[] }
 export type FontFilter = 'all' | 'cjk' | 'latin' | 'serif' | 'sans-serif' | 'monospace' | 'handwriting' | 'imported' | 'favorites' | 'recent' | 'project'
 export const GENERIC_FONT_FACES: FontFaceInfo[] = (['sans-serif', 'serif', 'monospace'] as const).map(family => ({

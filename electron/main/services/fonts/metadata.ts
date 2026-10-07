@@ -1,5 +1,5 @@
 import { create, type Font } from 'fontkit'
-import type { FontFaceInfo } from '../../../../src/core/fonts/catalog'
+import { normalizeFontFace, type FontFaceInfo } from '../../../../src/core/fonts/catalog'
 
 type NameRecords = Record<string, Record<string, string>>
 type FontTables = { name?: { records?: NameRecords }; post?: { isFixedPitch?: number }; namedVariations?: Record<string, Record<string, number>> }
@@ -36,7 +36,7 @@ export function parseFontFile(bytes: Buffer): ParsedFontFace[] {
       if (style === base.style) continue
       result.push({ index, face: { ...base, style, fullName: `${base.family} ${style}`, postscriptName: base.postscriptName, weight: variation.wght ?? base.weight, italic: variation.ital === 1 || Boolean(variation.slnt) || base.italic, variation, aliases: base.aliases.filter(alias => alias !== base.fullName) } })
     }
-    return result
+    return result.flatMap(entry => { const face = normalizeFontFace(entry.face); return face ? [{ ...entry, face }] : [] })
   })
 }
 
