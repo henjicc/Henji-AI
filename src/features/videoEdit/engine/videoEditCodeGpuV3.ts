@@ -67,7 +67,7 @@ const blendNames: CodeBlend[] = ['normal', 'multiply', 'screen', 'overlay', 'add
 // Trusted instancing variant shares the exact geometry/SDF with the single-quad path.
 const instanceShader = shader.slice(0, shader.indexOf('@group(0) @binding(1)'))
   .replace('@group(0) @binding(0) var<uniform> p:P;', '@group(0) @binding(0) var<storage,read> instances:array<P>;')
-  .replace('@location(0) uv:vec2f }', '@location(0) uv:vec2f, @location(1) @interpolate(flat) instance:u32 }')
+  .replace('@location(0) uv:vec2f }', '@location(0) uv:vec2f, @location(1) @interpolate(flat, either) instance:u32 }')
   .replace('fn vs(@builtin(vertex_index) i:u32)', 'fn vs(@builtin(vertex_index) i:u32,@builtin(instance_index) instance:u32)')
   .replace('let uv=array', 'let p=instances[instance]; let uv=array')
   .replace('),uv);', '),uv,instance);')
