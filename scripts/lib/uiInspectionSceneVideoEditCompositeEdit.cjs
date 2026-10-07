@@ -128,22 +128,19 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         assert.equal((await read(objectEntity.ref, ['video_edit.graphic_object.parameters'])).data.properties['video_edit.graphic_object.parameters'].rotation, 25)
         await set(objectEntity.ref, { 'video_edit.graphic_object.parameters': { ...document.sequences[0].clips.find(clip => clip.id === graphicClip.id).graphic.objects[0].parameters, rotation: 15, opacity: .65, width: 800, height: 600, x: 1500, y: 500 } })
         assert.equal(Number(await objectControls.getByLabel('旋转', { exact: true }).inputValue()), 15)
-        await create('video_edit.graphic_object', graphicRef, [{ 'video_edit.graphic_object.name': '上层椭圆 · Agent', 'video_edit.graphic_object.kind': 'ellipse', 'video_edit.graphic_object.parameters': { x: 1800, y: 700, width: 500, height: 300, fill: [.1, .9, .2, .7] } }, { 'video_edit.graphic_object.name': '原生文字 · Agent', 'video_edit.graphic_object.kind': 'text', 'video_edit.graphic_object.parameters': { text: '原生对象 · 可编辑', x: 1950, y: 600, fontSize: 100 } }])
+        await create('video_edit.graphic_object', graphicRef, [{ 'video_edit.graphic_object.name': '上层椭圆 · Agent', 'video_edit.graphic_object.kind': 'ellipse', 'video_edit.graphic_object.parameters': { x: 1800, y: 700, width: 500, height: 300, fill: [.1, .9, .2, .7] } }, { 'video_edit.graphic_object.name': '原生文字 · Agent', 'video_edit.graphic_object.kind': 'text', 'video_edit.graphic_object.parameters': { text: '原生对象 · 可编辑', x: 1950, y: 600 }, 'video_edit.graphic_object.text_style': { fontSize: 100 } }])
         document = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).graphic.objects.length === 3)
         const objects = document.sequences[0].clips.find(clip => clip.id === graphicClip.id).graphic.objects
         const textEntity = (await list('video_edit.graphic_object')).find(item => item.properties['video_edit.graphic_object.name'] === '原生文字 · Agent')
         assert.ok(textEntity?.ref)
-        const beforeUnsafe = readFile(file)
-        // The archived public rejection proves the MCP boundary. Exercise the
-        // same guard through the actual UI here; a deliberate capability failure
-        // is logged as an application error by the formal nominal-tour collector.
+        // Long text is legal now: graphic text renders into the graphic canvas, so there is no per-glyph texture budget to refuse.
         await button(page, '选择图形对象原生文字 · Agent').click()
-        await objectControls.getByLabel('文字', { exact: true }).fill('W'.repeat(2000))
-        await page.getByText(/标题字形超出8192宽或四百万像素/).waitFor({ state: 'visible' })
-        await objectControls.getByLabel('文字', { exact: true }).blur()
-        assert.deepEqual(readFile(file), beforeUnsafe)
-        assert.equal(await objectControls.getByLabel('文字', { exact: true }).inputValue(), objects.find(object => object.kind === 'text').parameters.text)
-        evidence.nativeBudgetRefusal = { textRef: textEntity.ref, channel: 'real UI shared publication guard', preservedDocument: true }
+        const textField = objectControls.getByLabel('文字', { exact: true })
+        const originalText = await textField.inputValue()
+        await textField.fill('W'.repeat(2000)); await textField.blur()
+        await page.waitForFunction(() => !document.body.innerText.includes('标题字形超出'))
+        await textField.fill(originalText); await textField.blur()
+        evidence.longGraphicText = { textRef: textEntity.ref, characters: 2000, refused: false }
         const objectRows = await page.locator('[data-video-edit-graphic-object]').evaluateAll(nodes => nodes.map(node => node.dataset.videoEditGraphicObject))
         assert.deepEqual(objectRows, objects.map(object => object.id).reverse())
         await set(graphicRef, { 'video_edit.clip.graphic_object_ids': [objects[1].id, objects[0].id, objects[2].id] })
