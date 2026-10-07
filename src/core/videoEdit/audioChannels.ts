@@ -14,8 +14,6 @@ import { z } from 'zod'
  *   sequence is the average of its two channels.
  */
 
-/** Layout count is dynamic; retain only the JS safe-integer bound used by NumberInput and index arithmetic. */
-export const VIDEO_EDIT_MAX_AUDIO_CLIPS = Number.MAX_SAFE_INTEGER
 export const videoEditAudioStreamSchema = z.object({ channels: z.number().int().min(1).max(64), sampleRate: z.number().int().min(1).max(768_000).optional() }).strict()
 export type VideoEditAudioStream = z.infer<typeof videoEditAudioStreamSchema>
 export const videoEditAudioStreamsSchema = z.array(videoEditAudioStreamSchema).min(1)
@@ -37,7 +35,7 @@ export function videoEditSourceChannels(streams: readonly VideoEditAudioStream[]
 }
 /** "Use File": one mono clip per mono stream, one stereo clip (front left/right) per other stream. */
 export function videoEditFileAudioLayout(streams: readonly VideoEditAudioStream[]): VideoEditAudioMapping[] {
-  return streams.slice(0, VIDEO_EDIT_MAX_AUDIO_CLIPS).map((stream, index) => stream.channels === 1
+  return streams.map((stream, index) => stream.channels === 1
     ? { format: 'mono', sources: [{ stream: index, channel: 0 }] }
     : { format: 'stereo', sources: [{ stream: index, channel: 0 }, { stream: index, channel: 1 }] })
 }
@@ -50,7 +48,7 @@ export function videoEditSequentialAudioLayout(streams: readonly VideoEditAudioS
   const sources = videoEditSourceChannels(streams)
   if (!sources.length) throw new Error('此素材没有可映射的源声道。')
   const width = videoEditAudioWidth(format)
-  const clips = Math.max(1, Math.min(VIDEO_EDIT_MAX_AUDIO_CLIPS, Math.floor(count)))
+  const clips = Math.max(1, Math.floor(count))
   return Array.from({ length: clips }, (_, clip) => ({ format, sources: Array.from({ length: width }, (_, channel) => ({ ...sources[Math.min(clip * width + channel, sources.length - 1)] })) }))
 }
 /** Premiere's presets: Use File, Mono (one clip per source channel) and Stereo (consecutive channel pairs). */

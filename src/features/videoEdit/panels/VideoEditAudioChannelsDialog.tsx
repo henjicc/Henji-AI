@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { UiButton, UiError, UiFormRow, UiGroup, UiLoading, UiModal, UiSelect } from '@/components/ui'
 import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import {
-  VIDEO_EDIT_MAX_AUDIO_CLIPS, videoEditAudioFormatLabel, videoEditAudioPresetLayout, videoEditAudioPresetOf, videoEditAudioSourceLabel, videoEditAudioWidth,
+  videoEditAudioFormatLabel, videoEditAudioPresetLayout, videoEditAudioPresetOf, videoEditAudioSourceLabel, videoEditAudioWidth,
   videoEditFileAudioLayout, videoEditIsDefaultAudioMapping, videoEditSequentialAudioLayout, videoEditSourceChannels,
   type VideoEditAudioFormat, type VideoEditAudioMapping, type VideoEditAudioPreset, type VideoEditAudioSource, type VideoEditAudioStream,
 } from '@/core/videoEdit/audioChannels'
@@ -67,7 +67,8 @@ export function VideoEditAudioChannelsDialog({ projectId, target, onClose }: { p
           {(['mono', 'stereo'] as const).map(value => <option key={value} value={value}>{videoEditAudioFormatLabel(value)}</option>)}
         </UiSelect></div></UiFormRow>
         <UiFormRow label="音频片段数量" inline><div className={SELECT_WIDTH}><UiSelect aria-label="音频片段数量" value={layout.length} onChange={event => reshape(format, Number(event.target.value))}>
-          {Array.from({ length: VIDEO_EDIT_MAX_AUDIO_CLIPS }, (_, index) => <option key={index} value={index + 1}>{index + 1}</option>)}
+          {/* 片段数最多到源声道总数（再多只是重复声道），当前布局更多时保留当前值 */}
+          {Array.from({ length: Math.max(layout.length, streams.reduce((total, stream) => total + stream.channels, 0)) }, (_, index) => <option key={index} value={index + 1}>{index + 1}</option>)}
         </UiSelect></div></UiFormRow>
       </>}
       {streams && target.kind === 'clip' && <UiFormRow label="片段声道格式" inline><span className={UI_TEXT_META_CLASS}>{videoEditAudioFormatLabel(format)}</span></UiFormRow>}
