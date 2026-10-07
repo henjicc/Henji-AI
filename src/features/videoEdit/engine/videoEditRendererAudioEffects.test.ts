@@ -14,6 +14,16 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: 
 beforeAll(() => { (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope ??= class {} })
 
 const RATE = 48000
+it('固有音频停用后恢复默认音量，附加音频总开关跳过效果，预览导出一致且原参数保留', async () => {
+  const composition = sound({ volume: 0, disabledIntrinsicSections: ['audio'], effectsEnabled: false, effects: [builtin('gain_balance', { gain: 12 })] })
+  const before = structuredClone(composition.clips[0])
+  const preview = await mix(composition, [.5, .5, .5])
+  const exported = await mix(composition, Array.from({ length: 45 }, () => 1 / 30))
+  expect(preview).toEqual(exported)
+  const sample = RATE + 13
+  expect(preview[0][sample]).toBeCloseTo(original(0, sample), 7)
+  expect(composition.clips[0]).toEqual(before)
+})
 it('生成回避进入真实混音函数，淡化逐样本平滑且预览块与导出帧块完全一致', async () => {
   const composition = sound(); const clip = composition.clips[0]
   clip.curves = { volume: replaceVideoEditDuckingKeyframes(clip, [{ startSeconds: 1.5, endSeconds: 2 }], composition.fps, videoEditDuckingSettingsSchema.parse({ reductionDb: 20, fadeSeconds: .5 })) }

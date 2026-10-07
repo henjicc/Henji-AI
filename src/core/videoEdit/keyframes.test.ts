@@ -4,6 +4,7 @@ import { videoEditComposition, videoEditDocumentSchema, splitVideoEditClip, chan
 import { evaluateVideoEditClip, evaluateVideoEditKeyframes, sliceVideoEditCurves, videoEditKeyframesSchema, type VideoEditKeyframes } from './keyframes'
 import { videoEditClipCenterPosition, videoEditClipToFrame, videoEditFrameToClip } from './clipGeometry'
 import { applyVideoEditRateStretch } from './clipSpeedEdits'
+import { defaultVideoEditTextStyle } from './text'
 
 const curve = (interpolation: 'linear' | 'hold' | 'ease'): VideoEditKeyframes => [{ time: 0, value: 0, interpolation }, { time: 100, value: 1, interpolation }]
 function fixture(): ReturnType<typeof createVideoEditDocument> {
@@ -12,6 +13,19 @@ function fixture(): ReturnType<typeof createVideoEditDocument> {
   document.sequences[0].clips.push({ id: 'clip', itemId: 'item', kind: 'text', name: '标题', start: 0, duration: 101, track: document.sequences[0].tracks.find(track => track.kind === 'video')!.index, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '标题', curves: { opacity: curve('ease') } })
   return document
 }
+
+it('停用固有分区按默认渲染，保存参数和关键帧，再打开恢复', () => {
+  const clip = fixture().sequences[0].clips[0]
+  Object.assign(clip, { x: .4, y: .2, scale: 2, rotation: 45, anchorX: .1, anchorY: .9, opacity: .5, volume: .2, disabledIntrinsicSections: ['motion', 'opacity', 'audio', 'text', 'textStyle'] })
+  clip.textStyle = { ...defaultVideoEditTextStyle(1080), fontSize: 100 }
+  const before = structuredClone(clip)
+  const evaluated = evaluateVideoEditClip(clip, 25)
+  expect(evaluated).toMatchObject({ x: 0, y: 0, scale: 1, rotation: 0, anchorX: .5, anchorY: .5, opacity: 1, volume: 1, text: '' })
+  expect(evaluated.textStyle).toBeUndefined(); expect(clip).toEqual(before)
+  const restored = evaluateVideoEditClip({ ...clip, disabledIntrinsicSections: [] }, 25)
+  expect(restored.x).toBe(.4); expect(restored.opacity).toBe(.15625); expect(restored.text).toBe('标题')
+  expect(restored.textStyle?.fontSize).toBe(100)
+})
 it('文档拒绝片段固有亮度及其关键帧，内置亮度效果仍可保存', () => {
   const document = fixture(); const clip = document.sequences[0].clips[0]
   const withClip = (value: unknown) => ({ ...document, sequences: [{ ...document.sequences[0], clips: [value] }] })

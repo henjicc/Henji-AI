@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { UiIconButton, UiInput, UiTooltipText } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
-import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
+import type { VideoEditClip, VideoEditComposition, VideoEditIntrinsicSection } from '@/core/videoEdit/document'
 import { videoEditClipPropertyBounds, videoEditClipPropertyDefault, type VideoEditClipPropertyKey } from '../application/videoEditClipProperties'
 import { VideoEditEffectSection } from './VideoEditEffectSection'
 import type { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
@@ -39,7 +39,7 @@ function PropertyRow({ label, tooltip, children, resetLabel, resetDisabled, onRe
 
 /** 一个数值读数：拖动期间实时预览，松手只记一步撤销，Esc 回到拖动前；输入与步进各算一步。 */
 function PropertyNumber({ view, clip, frame, gesture }: { view: PropertyView; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
-  const value = view.toDisplay(videoEditClipValue(clip, view.key, frame.playhead), frame)
+  const value = view.toDisplay(videoEditClipValue({ ...clip, disabledIntrinsicSections: [] }, view.key, frame.playhead), frame)
   const bounds = videoEditClipPropertyBounds(view.key)
   const factor = 10 ** view.precision
   return <span className="flex shrink-0 items-center gap-1">
@@ -57,7 +57,7 @@ const isDefault = (clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[
 
 function SingleProperty({ property, clip, frame, gesture }: { property: VideoEditClipPropertyKey; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
   const view = VIEWS[property]
-  const value = videoEditClipValue(clip, property, frame.playhead)
+  const value = videoEditClipValue({ ...clip, disabledIntrinsicSections: [] }, property, frame.playhead)
   return <PropertyRow label={view.label} tooltip={view.tooltip} resetLabel={`重置${view.label}`} resetDisabled={value === videoEditClipPropertyDefault(clip, property)} onReset={() => gesture.commit(resetPatch(clip, [property]))}
     animation={<VideoEditKeyframeControls label={view.label} points={clip.curves?.[property]} value={value} time={frame.playhead - clip.start} duration={clip.duration} onChange={points => gesture.keyframes(property, points)} onSeek={time => gesture.seek(clip.start + time)} onDisable={() => { gesture.begin(); gesture.keyframes(property, []); gesture.commit({ [property]: value }); gesture.finish() }} />}>
     <PropertyNumber view={view} clip={clip} frame={frame} gesture={gesture} />
@@ -71,8 +71,9 @@ export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: 
   const picture = clip.kind !== 'audio'
   const motion = picture && clip.kind !== 'adjustment'
   const sound = clip.kind === 'video' || clip.kind === 'audio'
+  const switchProps = (section: VideoEditIntrinsicSection) => ({ enabled: !clip.disabledIntrinsicSections?.includes(section), onEnabledChange: (enabled: boolean): void => { gesture.finish(); gesture.commit({ disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== section) : [...(clip.disabledIntrinsicSections ?? []), section] }) } })
   return <>
-    {clip.kind === 'text' && <VideoEditEffectSection id="text" title="文字">
+    {clip.kind === 'text' && <VideoEditEffectSection id="text" title="文字" {...switchProps('text')}>
       <div className="pl-5">
         <UiInput aria-label="画面文字" size="sm" value={clip.text}
           onChange={event => { gesture.begin(); gesture.commit({ text: event.target.value }) }}
@@ -80,14 +81,14 @@ export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: 
           onKeyDown={event => { if (event.key === 'Escape' && gesture.active()) { event.preventDefault(); event.stopPropagation(); gesture.cancel(); event.currentTarget.blur() } else if (event.key === 'Enter') event.currentTarget.blur() }} />
       </div>
     </VideoEditEffectSection>}
-    {motion && <VideoEditEffectSection id="motion" title="运动" info="画面的位置、大小与旋转。也可以在节目监视器里直接拖动画面。"
+    {motion && <VideoEditEffectSection id="motion" title="运动" {...switchProps('motion')} info="画面的位置、大小与旋转。也可以在节目监视器里直接拖动画面。"
       actions={<UiIconButton size="xs" aria-label="重置运动" title="重置运动" disabled={isDefault(clip, MOTION)} onClick={() => gesture.commit(resetPatch(clip, MOTION))}><RotateCcw size={12} /></UiIconButton>}>
       {MOTION.map(key => <SingleProperty key={key} property={key} clip={clip} frame={frame} gesture={gesture} />)}
     </VideoEditEffectSection>}
-    {picture && <VideoEditEffectSection id="opacity" title="不透明度" info="片段与下方画面叠加时的透明程度。">
+    {picture && <VideoEditEffectSection id="opacity" title="不透明度" {...switchProps('opacity')} info="片段与下方画面叠加时的透明程度。">
       <SingleProperty property="opacity" clip={clip} frame={frame} gesture={gesture} />
     </VideoEditEffectSection>}
-    {sound && <VideoEditEffectSection id="audio" title="音频" info="片段的音量。">
+    {sound && <VideoEditEffectSection id="audio" title="音频" {...switchProps('audio')} info="片段的音量。">
       <SingleProperty property="volume" clip={clip} frame={frame} gesture={gesture} />
     </VideoEditEffectSection>}
   </>

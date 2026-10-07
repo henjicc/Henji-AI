@@ -73,7 +73,7 @@ export class VideoEditCodePicture {
     this.highPrecision = textureFormat === VIDEO_EDIT_PRECISE_FORMAT
   }
 }
-interface Surface { picture: VideoEditCodePicture; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer }
+interface Surface { picture: VideoEditCodePicture; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer; maskData?: Uint8Array; maskRgba?: Uint8Array }
 /** A filter version's compiled pipelines, one per output format. */
 interface CompiledFilter { program: CodeMaterialProgram; pipelines: Map<VideoEditGpuColorFormat, GpuRenderPipeline>; transitionHandles: boolean }
 interface Glyph { texture: GpuTexture; width: number; height: number; bytes: number }
@@ -201,7 +201,7 @@ export class VideoEditCodeGpu {
     this.counts.textureAllocations++
     return texture
   }
-  private surface(key: string, width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm'): Surface {
+  private surface(key: string, width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm', retainMask = false): Surface {
     let surface = this.surfaces.get(key)
     if (surface && (surface.picture.width !== width || surface.picture.height !== height || surface.picture.textureFormat !== format)) { this.releaseSurface(key); surface = undefined }
     if (!surface) {
@@ -210,6 +210,7 @@ export class VideoEditCodeGpu {
       surface = { picture: new VideoEditCodePicture(texture, width, height, this.device, format), bytes: width * height * videoEditGpuBytesPerPixel(format), buffers: [] }
       this.surfaces.set(key, surface)
     }
+    if (!retainMask) surface.maskData = undefined
     return surface
   }
   private glyph(command: Extract<CodeDrawCommand, { kind: 'text' }>, protectedKeys: ReadonlySet<string>): Glyph {
@@ -397,11 +398,13 @@ struct Mix { amount:vec4f, color:vec4f }
   async uploadMask(key: string, width: number, height: number, data: Uint8Array): Promise<VideoEditCodePicture> {
     if (data.length !== width * height) throw new CodeMaterialError('CONTEXT', '智能区域蒙版尺寸不符。')
     await this.ready; this.assertLive()
-    const target = this.surface(key, width, height, 'rgba8unorm')
-    const rgba = new Uint8Array(width * height * 4)
+    const target = this.surface(key, width, height, 'rgba8unorm', true)
+    if (target.maskData === data) return target.picture
+    const rgba = target.maskRgba ??= new Uint8Array(width * height * 4)
     for (let index = 0; index < data.length; index++) { const value = data[index]; rgba[index * 4] = value; rgba[index * 4 + 1] = value; rgba[index * 4 + 2] = value; rgba[index * 4 + 3] = value }
     const queue = this.device.queue as GpuDevice['queue'] & { writeTexture(destination: unknown, data: ArrayBufferView, layout: unknown, size: unknown): void }
     queue.writeTexture({ texture: target.picture.texture }, rgba, { bytesPerRow: width * 4, rowsPerImage: height }, [width, height])
+    target.maskData = data
     return target.picture
   }
   private async prepareMaskedMix(format: VideoEditGpuColorFormat): Promise<GpuRenderPipeline> {

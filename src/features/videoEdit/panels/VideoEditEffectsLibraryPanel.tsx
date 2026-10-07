@@ -8,9 +8,10 @@ import { ICON_MEDIA_AUDIO, ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons
 import { VIDEO_EDIT_EFFECT_CATEGORIES, videoEditEffectsRegistry } from '@/core/videoEdit/effectsRegistry'
 import { videoEditDefaultTransitionKind, videoEditTransitionMedium } from '@/core/videoEdit/transitions'
 import { useSettingsStore } from '@/stores/settingsStore'
-import type { VideoEditInstance } from '../application/videoEditService'
+import { useNotification } from '@/contexts/NotificationContext'
+import { setVideoEditTimelineView, type VideoEditInstance } from '../application/videoEditService'
 import { endVideoEditTransitionDrag, startVideoEditTransitionDrag } from './videoEditTransitionDrag'
-import { endVideoEditEffectDrag, startVideoEditEffectDrag } from './videoEditEffectDrag'
+import { endVideoEditEffectDrag, startVideoEditEffectDrag, videoEditEffectDropClips } from './videoEditEffectDrag'
 import { applyVideoEditTransitionToSelection } from '../application/videoEditTransitions'
 import { applyVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 import { filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditUserPresetEntries, type VideoEditLibraryEntry } from '../application/videoEditEffectPresets'
@@ -21,7 +22,8 @@ import { VideoEditEffectPresetDialog } from './VideoEditEffectPresetDialog'
  * （`@/core/videoEdit/effectsRegistry`）。过渡拖到时间线上两个片段相接处：落在切点上居中，左侧终点对齐切点、右侧起点对齐切点；
  * 右键“设为默认过渡”决定 Ctrl+D／Ctrl+Shift+D／Shift+D 用哪一个（标“默认”）。
  */
-export function VideoEditEffectsLibraryPanel({ instance, onError }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
+export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean; onEffectsAdded?: (effectIds: readonly string[]) => void }): React.ReactElement {
+  const { showNotification } = useNotification()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
@@ -46,10 +48,27 @@ export function VideoEditEffectsLibraryPanel({ instance, onError }: { instance: 
   const TransitionIcon = ICON_VIDEO_EDIT_TRANSITION
   const AudioIcon = ICON_MEDIA_AUDIO
   // PR：选中片段后双击效果，加到所有选中的同媒介片段（画面效果加画面片段、音频效果加声音片段；一步撤销）。
-  const applyToSelection = (templateRef: string): void => {
+  const applyEntry = (entry: VideoEditLibraryEntry): void => {
+    if (!entry.templateRef) {
+      if (entry.transitionKind) void applyVideoEditTransitionToSelection(instance.document.id, entry.transitionKind).catch(onError)
+      return
+    }
+    if (!instance.selectedClipIds.length) { showNotification('请先在时间线上选中片段。', 'error'); return }
     try {
-      if (!instance.selectedClipIds.length) throw new Error('先在时间线上选中片段，再双击效果；也可以把效果直接拖到片段上。')
-      applyVideoEditBuiltinEffect(instance.document.id, instance.activeSequenceId, instance.selectedClipIds, templateRef)
+      const sequence = instance.document.sequences.find(value => value.id === instance.activeSequenceId)
+      if (!sequence) throw new Error('原序列已移除。')
+      // 与拖放预览共用媒介、素材与锁定轨道判定；预期的不可用选区只给短提示。
+      const targets = videoEditEffectDropClips(sequence, instance.selectedClipIds[0], instance.selectedClipIds, entry.templateRef)
+      if (!targets.length) {
+        showNotification('所选片段无法添加此效果，请检查片段类型和轨道锁定。', 'error')
+        return
+      }
+      const effectIds = applyVideoEditBuiltinEffect(instance.document.id, instance.activeSequenceId, instance.selectedClipIds, entry.templateRef)
+      if (effectIds.length) {
+        // 混合媒介多选时保持整个选区，只将控件所查看的主片段切到实际添加成功的片段。
+        if (!targets.includes(instance.selection ?? '')) setVideoEditTimelineView(instance.document.id, {}, targets[0])
+        onEffectsAdded?.(effectIds)
+      }
     } catch (error) { onError(error) }
   }
   return <div className="flex h-full min-h-0 flex-col gap-2 px-3 py-2.5" aria-label="效果" data-video-edit-effects-library>
@@ -73,7 +92,8 @@ export function VideoEditEffectsLibraryPanel({ instance, onError }: { instance: 
               <UiOptionButton variant="menu" size="sm" className="w-full min-w-0 justify-start gap-2" role="treeitem" aria-selected={false} draggable={entry.kind === 'transition' || Boolean(entry.templateRef)} data-video-edit-effects-entry={entry.id}
                 onDragStart={event => { if (entry.transitionKind) startVideoEditTransitionDrag(event.dataTransfer, instance.document.id, entry.transitionKind); else if (entry.templateRef) startVideoEditEffectDrag(event.dataTransfer, instance.document.id, entry.templateRef) }}
                 onDragEnd={() => { endVideoEditTransitionDrag(); endVideoEditEffectDrag() }}
-                onDoubleClick={() => { if (entry.templateRef) applyToSelection(entry.templateRef); else if (entry.transitionKind) void applyVideoEditTransitionToSelection(instance.document.id, entry.transitionKind).catch(onError) }}
+                onDoubleClick={() => applyEntry(entry)}
+                onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); if (!event.repeat && !event.nativeEvent.isComposing) applyEntry(entry) } }}
                 onContextMenu={event => {
                   const kind = entry.transitionKind
                   const preset = presets.find(preset => `preset:${preset.id}` === entry.id)

@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { resolve, sep } from 'node:path'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest } from './videoEditWorker'
+import { recordVideoEditMaskUpdate } from '../application/videoEditMaskEditing'
 
 const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
 vi.mock('../application/videoEditProxy', () => ({ verifiedVideoEditProxySources: async () => proxyState.sources }))
@@ -16,7 +17,7 @@ const platform = vi.hoisted(() => ({
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect }, media: { allowRoot: platform.allowRoot }, system: { paths: { dirname: platform.dirname } } }) }))
 vi.mock('@/services/imageSource', () => ({ toFetchableMediaUrl: (path: string) => `url:${path}`, isLikelyLocalImagePath: (path: string) => /^[A-Z]:/.test(path) }))
 vi.mock('../videoEditMediaContent', () => ({ VideoEditMediaContentVerifier: class { async check() {} dispose() {} } }))
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: (message: string, meta: unknown) => platform.logs.push({ level: 'info', message, meta }), warn: (message: string, meta: unknown) => platform.logs.push({ level: 'warn', message, meta }) }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: (message: string, meta: unknown) => platform.logs.push({ level: 'debug', message, meta }), info: (message: string, meta: unknown) => platform.logs.push({ level: 'info', message, meta }), warn: (message: string, meta: unknown) => platform.logs.push({ level: 'warn', message, meta }) }) }))
 
 const workers: FakeWorker[] = []
 class FakeWorker {
@@ -51,6 +52,24 @@ beforeEach(() => {
   platform.connect.mockReset().mockResolvedValue({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })
   platform.disconnect.mockReset()
   platform.allowRoot.mockClear(); platform.dirname.mockClear()
+})
+
+it('遮罩更新按序列与版本关联首次出画，日志给出帧延迟，后续重画不重复计延迟', async () => {
+  const document = composition(); const session = new VideoEditRenderSession(document,1280)
+  await session.present(0)
+  const updated = {...document,revision:1}
+  recordVideoEditMaskUpdate(updated.id,updated.revision,performance.now()-12)
+  await session.updateDocument(updated)
+  await session.present(0)
+  const events=platform.logs.filter(value=>value.level==='debug')
+  expect(events).toHaveLength(1)
+  const context=(events[0].meta as {context:{durationMs:number;displayFrames:number;revision:number}}).context
+  expect(context.durationMs).toBeGreaterThanOrEqual(12)
+  expect(context.displayFrames).toBeCloseTo(context.durationMs*60/1000)
+  expect(context.revision).toBe(1)
+  await session.present(1)
+  expect(platform.logs.filter(value=>value.level==='debug')).toHaveLength(1)
+  await session.dispose()
 })
 
 it('离屏跟踪RGB尺寸进入既有渲染Worker请求，不开启第二条渲染路径', async () => {

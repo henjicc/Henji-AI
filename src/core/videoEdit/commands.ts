@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export type VideoEditCommandScope = 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'lumetri' | 'title_templates'
+export type VideoEditCommandScope = 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'lumetri' | 'title_templates' | 'mask'
 export interface VideoEditShortcut { code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
 const key = (code: string, ctrl = false, shift = false, alt = false): VideoEditShortcut => ({ code, ctrl, shift, alt, meta: false })
 const editScopes: VideoEditCommandScope[] = ['timeline', 'program']
@@ -11,6 +11,7 @@ const monitorScopes: VideoEditCommandScope[] = ['timeline', 'program', 'source']
  */
 function command<const T extends string>(id: T, title: string, scopes: VideoEditCommandScope[], shortcut?: VideoEditShortcut, repeat = false, alternates: readonly VideoEditShortcut[] = []) { return { id, title, scopes, shortcut, repeat, alternates } }
 export const VIDEO_EDIT_COMMANDS = [
+  command('mask_transform', '变换选中遮罩', ['mask'], key('KeyT', true)),
   command('new_project', '新建项目', ['global'], key('KeyN', true, false, true)),
   command('new_sequence', '新建序列', ['global'], key('KeyN', true)),
   command('import', '导入素材', ['global'], key('KeyI', true)),
@@ -69,6 +70,7 @@ export const VIDEO_EDIT_COMMANDS = [
   command('split', '在播放头拆分', editScopes, key('KeyK', true)),
   command('split_tracks', '拆分全部目标轨道', editScopes, key('KeyK', true, true)),
   command('delete', '删除片段', editScopes, key('Delete'), false, [key('Backspace')]),
+  command('delete_effect', '删除所选效果', ['effects'], key('Delete'), false, [key('Backspace')]),
   command('ripple_delete', '波纹删除', editScopes, key('Delete', false, true), false, [key('Backspace', false, false, true)]),
   command('lift', '提升', editScopes, key('Semicolon')),
   command('extract', '提取', editScopes, key('Quote')),

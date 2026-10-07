@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildVideoEditCompositePlan, validateVideoEditAdjustmentRanges, videoEditAdjustmentSchema, videoEditEffectSchema } from './compositing'
+import { activeVideoEditAudioEffects, activeVideoEditEffects, videoEditIntroducesCodeEffects, buildVideoEditCompositePlan, validateVideoEditAdjustmentRanges, videoEditAdjustmentSchema, videoEditEffectSchema } from './compositing'
 import type { VideoEditCompositeNode } from './compositing'
 import { videoEditClipSchema } from './document'
 import type { VideoEditClip } from './document'
@@ -17,6 +17,30 @@ function shape(nodes: readonly VideoEditCompositeNode[]): unknown[] {
 function leaves(nodes: readonly VideoEditCompositeNode[]): string[] {
   return nodes.flatMap(node => node.kind === 'adjustment' ? leaves(node.children) : node.kind === 'transition' ? [node.window.left.id, node.window.right.id] : [node.clip.id])
 }
+
+it('片段附加效果总开关对画面与声音都生效，保留各效果自己的状态', () => {
+  const picture = clip('picture', 0, { effectsEnabled: false, effects: [{ id: 'a', name: '滤镜', enabled: true, amount: 1, code: { definitionId: 'd', versionId: 'v', parameters: {} } }] })
+  const audio = clip('audio', 1, { kind: 'audio', effectsEnabled: false, effects: [{ id: 'b', name: '增益', enabled: true, amount: 1, builtin: { id: 'gain_balance', params: {} } }] })
+  expect(activeVideoEditEffects(picture)).toEqual([]); expect(activeVideoEditAudioEffects(audio)).toEqual([])
+  expect(activeVideoEditEffects({ ...picture, effectsEnabled: true })).toHaveLength(1)
+  expect(activeVideoEditAudioEffects({ ...audio, effectsEnabled: true })).toHaveLength(1)
+  expect(picture.effects![0].enabled).toBe(true); expect(audio.effects![0].enabled).toBe(true)
+})
+
+it('只检查基线不存在的代码输入；复制、排序、删除、名称、开关、强度、范围与过渡免检', () => {
+  const effect = { id: 'a', name: '代码', enabled: true, amount: 1, code: { definitionId: 'd', versionId: 'v', parameters: { gain: .5, other: true } } }
+  const baseline = { sequences: [{ clips: [clip('a', 0, { effects: [effect] })] }] }
+  const draft = structuredClone(baseline)
+  draft.sequences[0].clips.push(clip('copy', 2, { effects: [{ ...structuredClone(effect), id: 'copy', name: '复制', enabled: false, amount: .4 }] }))
+  draft.sequences[0].clips[0].effects = []
+  expect(videoEditIntroducesCodeEffects(baseline, draft)).toBe(false)
+  draft.sequences[0].clips[1].effects![0].code!.parameters = { other: true, gain: .5 }
+  expect(videoEditIntroducesCodeEffects(baseline, draft)).toBe(false)
+  draft.sequences[0].clips[1].effects![0].code!.parameters.gain = .7
+  expect(videoEditIntroducesCodeEffects(baseline, draft)).toBe(true)
+  const version = structuredClone(baseline); version.sequences[0].clips[0].effects![0].code!.versionId = 'new'
+  expect(videoEditIntroducesCodeEffects(baseline, version)).toBe(true)
+})
 
 describe('调整图层的半开合成范围与唯一转场节点', () => {
   it('只替换指定下方画面范围，自身轨道、其他画面和声音不误纳入', () => {

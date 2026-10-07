@@ -11,6 +11,7 @@ const { createVideoEditProjectSourceScene } = require('./uiInspectionSceneVideoE
 const { createVideoEditCodeScene } = require('./uiInspectionSceneVideoEditCode.cjs')
 const { createVideoEditCompositeScene } = require('./uiInspectionSceneVideoEditComposite.cjs')
 const { createVideoEditCompositeEditScene } = require('./uiInspectionSceneVideoEditCompositeEdit.cjs')
+const { createVideoEditMaskScene } = require('./uiInspectionSceneVideoEditMask.cjs')
 const { createVideoEditAssetReferencesScene } = require('./uiInspectionSceneVideoEditAssetReferences.cjs')
 const { createVideoEditOutputsScene } = require('./uiInspectionSceneVideoEditOutputs.cjs')
 const { createVideoEditCodeAssetsScene } = require('./uiInspectionSceneVideoEditCodeAssets.cjs')
@@ -113,6 +114,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditCompositeScene(),
     createVideoEditCompositeEditScene(),
     createVideoEditCompositeEditScene({ pressureOnly: true }),
+    createVideoEditMaskScene(),
     createVideoEditAssetReferencesScene(),
     createVideoEditOutputsScene(context),
     createVideoEditCodeAssetsScene(),

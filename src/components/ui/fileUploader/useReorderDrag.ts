@@ -19,6 +19,8 @@ interface UseReorderDragParams {
   layout?: 'horizontal' | 'vertical' | 'grid'
   dragBoundaryRef?: RefObject<HTMLElement | null>
   allowButtonTarget?: boolean
+  /** 按下后移动多少像素才算开始拖动；默认 25 适合缩略图卡片，紧凑的行列表（行距小于 25）要传小值，否则拖到相邻一行永远不会开始拖动。 */
+  dragThreshold?: number
   onReorder?: (from: number, to: number) => void
   onDragStateChange?: (isDragging: boolean) => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
@@ -43,12 +45,16 @@ export function useReorderDrag(params: UseReorderDragParams) {
     layout = 'horizontal',
     dragBoundaryRef,
     allowButtonTarget = false,
+    dragThreshold = 25,
     onReorder,
     onDragStateChange,
     onImageClick
   } = params
   const [dragState, setDragState] = useState<FilePreviewDragState>(INITIAL_DRAG_STATE)
   const dragStateRef = useRef(dragState)
+  /** 本次拖动越过阈值后是否收到过移动（监听随回调变化会重建，不能放在闭包里）。 */
+  const sawDragMoveRef = useRef(false)
+  const dropTimer = useRef<ReturnType<typeof setTimeout>>()
   const itemRefs = useRef<(HTMLDivElement | null)[]>([])
   // 拖拽开始那一刻（尚未有任何让位位移）缓存的原始几何，命中判定全程用这份快照而不是实时 rect。
   // 否则一旦目标项被视觉上让位位移过，它的实时 rect 已经偏离自己的原始槛位，
@@ -70,6 +76,9 @@ export function useReorderDrag(params: UseReorderDragParams) {
   dragStateRef.current = dragState
 
   const resetDragState = useCallback(() => {
+    clearTimeout(dropTimer.current)
+    dropTimer.current = undefined
+    dragStateRef.current = INITIAL_DRAG_STATE
     dragBoundaryRectRef.current = null
     setDragState(INITIAL_DRAG_STATE)
   }, [])
@@ -97,8 +106,10 @@ export function useReorderDrag(params: UseReorderDragParams) {
 
   useEffect(() => {
     if (!dragState.isDragging) return
+    const eventWindow = itemRefs.current[dragState.fromIndex ?? 0]?.ownerDocument.defaultView ?? window
 
-    const handleMouseMove = (e: MouseEvent) => {
+    // 按鼠标位置求目标槛位；越过阈值后还没收到移动就松手（快速短距拖动，移动早于监听挂上）时按松手位置算。
+    const update = (e: MouseEvent): void => {
       const from = dragStateRef.current.fromIndex
       const oldTo = dragStateRef.current.toIndex
       if (from === null || oldTo === null) return
@@ -153,27 +164,20 @@ export function useReorderDrag(params: UseReorderDragParams) {
         : layout === 'vertical'
           ? draggingOriginal.height
           : 28
-      if (minDist < threshold && newToIndex !== oldTo) {
-        setDragState({
-          ...dragStateRef.current,
-          currentX,
-          currentY,
-          toIndex: newToIndex
-        })
-      } else {
-        setDragState({
-          ...dragStateRef.current,
-          currentX,
-          currentY
-        })
-      }
+      const next = minDist < threshold && newToIndex !== oldTo
+        ? { ...dragStateRef.current, currentX, currentY, toIndex: newToIndex }
+        : { ...dragStateRef.current, currentX, currentY }
+      dragStateRef.current = next
+      setDragState(next)
     }
+    const handleMouseMove = (e: MouseEvent) => { sawDragMoveRef.current = true; update(e) }
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!sawDragMoveRef.current) update(e)
       const { fromIndex, toIndex } = dragStateRef.current
       if (fromIndex !== null && toIndex !== null && fromIndex !== toIndex) {
         setDragState((prev) => ({ ...prev, isDragging: false, isDropping: true }))
-        setTimeout(() => {
+        dropTimer.current = setTimeout(() => {
           onReorder?.(fromIndex, toIndex)
           resetDragState()
         }, 150)
@@ -182,13 +186,26 @@ export function useReorderDrag(params: UseReorderDragParams) {
       }
     }
 
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
+    eventWindow.addEventListener('mousemove', handleMouseMove)
+    eventWindow.addEventListener('mouseup', handleMouseUp)
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
+      eventWindow.removeEventListener('mousemove', handleMouseMove)
+      eventWindow.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [dragState.isDragging, layout, onReorder, resetDragState])
+  }, [dragState.isDragging, dragState.fromIndex, layout, onReorder, resetDragState])
+
+  useEffect(() => {
+    if (dragState.fromIndex === null) return
+    const eventWindow = itemRefs.current[dragState.fromIndex]?.ownerDocument.defaultView ?? window
+    const cancel = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault(); event.stopPropagation(); resetDragState()
+    }
+    eventWindow.addEventListener('keydown', cancel, true)
+    return () => eventWindow.removeEventListener('keydown', cancel, true)
+  }, [dragState.fromIndex, resetDragState])
+  useEffect(() => () => { clearTimeout(dropTimer.current) }, [])
+  useEffect(() => { if (disabled) resetDragState() }, [disabled, resetDragState])
 
   useEffect(() => {
     onDragStateChange?.(dragState.isDragging || dragState.isDropping)
@@ -196,6 +213,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
 
   useEffect(() => {
     if (dragState.fromIndex === null || dragState.isDragging || dragState.isDropping) return
+    const eventWindow = itemRefs.current[dragState.fromIndex]?.ownerDocument.defaultView ?? window
 
     let moved = false
     const startX = dragState.startX
@@ -205,10 +223,10 @@ export function useReorderDrag(params: UseReorderDragParams) {
       const deltaX = Math.abs(e.clientX - startX)
       const deltaY = Math.abs(e.clientY - startY)
       const crossedDragThreshold = layout === 'vertical'
-        ? deltaY > 25
+        ? deltaY > dragThreshold
         : layout === 'horizontal'
-          ? deltaX > 25
-          : deltaX > 25 || deltaY > 25
+          ? deltaX > dragThreshold
+          : deltaX > dragThreshold || deltaY > dragThreshold
       if (crossedDragThreshold) {
         // 此刻还没有任何让位位移发生，是缓存"原始槛位"几何的唯一安全时机
         originalRectsRef.current = itemRefs.current.map((el) =>
@@ -230,6 +248,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
         } else {
           dragBoundaryRectRef.current = null
         }
+        sawDragMoveRef.current = false
         setDragState((prev) => ({ ...prev, isDragging: true }))
         moved = true
       }
@@ -243,16 +262,16 @@ export function useReorderDrag(params: UseReorderDragParams) {
         }
         resetDragState()
       }
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
+      eventWindow.removeEventListener('mousemove', handleMouseMove)
+      eventWindow.removeEventListener('mouseup', handleMouseUp)
     }
 
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
+    eventWindow.addEventListener('mousemove', handleMouseMove)
+    eventWindow.addEventListener('mouseup', handleMouseUp)
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
+      eventWindow.removeEventListener('mousemove', handleMouseMove)
+      eventWindow.removeEventListener('mouseup', handleMouseUp)
     }
   }, [
     dragState.fromIndex,
@@ -263,6 +282,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
     dragBoundaryRef,
     files,
     layout,
+    dragThreshold,
     onImageClick,
     resetDragState
   ])

@@ -5,7 +5,7 @@ import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import {
   createVideoEditMaskShape, isShapesMask, videoEditMaskShapeName, VIDEO_EDIT_MASK_DEFAULTS, VIDEO_EDIT_MASK_MODE_LABELS, VIDEO_EDIT_MASK_MODES, VIDEO_EDIT_MASK_OPACITY_RANGE,
-  VIDEO_EDIT_MAX_MASK_SHAPES, type VideoEditMaskMode, type VideoEditMaskShape,
+  type VideoEditMaskMode, type VideoEditMaskShape,
 } from '@/core/videoEdit/effectMasks'
 import { SMART_REGION_EXPAND_RANGE, SMART_REGION_FEATHER_RANGE } from '@/core/videoEdit/smartRegions'
 import type { VideoEditCompositeTarget } from '../application/videoEditCompositing'
@@ -31,7 +31,6 @@ function Row({ label, tooltip, children, reset }: { label: string; tooltip: stri
 export function VideoEditMaskCreateButtons({ target, effect, gesture }: { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; gesture: VideoEditBuiltinParamGesture }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditMaskEditing, videoEditMaskEditingRevision)
   const shapes = isShapesMask(effect.mask) ? effect.mask.shapes : []
-  const full = shapes.length >= VIDEO_EDIT_MAX_MASK_SHAPES
   const editing = getVideoEditMaskEditing()
   const penOn = Boolean(editing?.pen && editing.effectId === effect.id && editing.clipId === target.clipId)
   const create = (kind: 'rect' | 'ellipse'): void => {
@@ -39,11 +38,10 @@ export function VideoEditMaskCreateButtons({ target, effect, gesture }: { target
     gesture.commit({ mask: { regionId: 'shapes', shapes: [...shapes, shape] } })
     setVideoEditMaskEditing({ ...target, effectId: effect.id, shapeId: shape.id })
   }
-  const fullTip = `一个效果最多 ${VIDEO_EDIT_MAX_MASK_SHAPES} 个遮罩`
   return <span className="flex shrink-0 items-center gap-0.5" role="group" aria-label="创建遮罩">
-    <UiIconButton size="sm" aria-label="创建椭圆遮罩" title={full ? fullTip : '创建椭圆遮罩'} disabled={full} onClick={() => create('ellipse')}><Circle size={14} /></UiIconButton>
-    <UiIconButton size="sm" aria-label="创建矩形遮罩" title={full ? fullTip : '创建矩形遮罩'} disabled={full} onClick={() => create('rect')}><Square size={14} /></UiIconButton>
-    <UiIconButton size="sm" aria-label="钢笔遮罩" title={full ? fullTip : '钢笔遮罩：在节目画面上逐点绘制，按住拖出曲线，点回起点或按 Enter 闭合'} disabled={full} on={penOn} aria-pressed={penOn}
+    <UiIconButton size="sm" aria-label="创建椭圆遮罩" title="创建椭圆遮罩" onClick={() => create('ellipse')}><Circle size={14} /></UiIconButton>
+    <UiIconButton size="sm" aria-label="创建矩形遮罩" title="创建矩形遮罩" onClick={() => create('rect')}><Square size={14} /></UiIconButton>
+    <UiIconButton size="sm" aria-label="钢笔遮罩" title="钢笔遮罩：在节目画面上逐点绘制，按住拖出曲线，点回起点或按 Enter 闭合" on={penOn} aria-pressed={penOn}
       onClick={() => setVideoEditMaskEditing(penOn ? { ...target, effectId: effect.id, pen: false } : { ...target, effectId: effect.id, pen: true })}><PenTool size={14} /></UiIconButton>
   </span>
 }

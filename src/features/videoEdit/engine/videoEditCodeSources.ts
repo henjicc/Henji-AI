@@ -37,7 +37,7 @@ export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance; mask?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
-export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string> }
+export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
 function freezeProgram(program: CodeMaterialProgram): CodeMaterialProgram {
   const seen = new WeakSet<object>()
@@ -144,10 +144,16 @@ export class VideoEditCodeSources {
             continue
           }
           if (!effect.code) continue
-          const key = identity(effect.code.definitionId, effect.code.versionId)
-          const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
-          if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
-          chain.push({ effect, version: key, program, ...animated(clip, effect.code, program) })
+          try {
+            const key = identity(effect.code.definitionId, effect.code.versionId)
+            const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
+            if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
+            chain.push({ effect, version: key, program, ...animated(clip, effect.code, program) })
+          } catch (error) {
+            assertCurrent()
+            if (!options.onEffectError) throw error
+            options.onEffectError(effect, error)
+          }
         }
         if (chain.length) effects.set(clip.id, chain)
         if (clip.kind === 'graphic') {

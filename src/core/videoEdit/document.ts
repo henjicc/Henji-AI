@@ -25,6 +25,8 @@ import { videoEditMulticamSchema } from './multicamSchema'
 const frame = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const identifier = z.string().min(1).max(100)
 const name = z.string().trim().min(1).max(200)
+export const videoEditIntrinsicSectionSchema = z.enum(['motion', 'opacity', 'audio', 'text', 'textStyle'])
+export type VideoEditIntrinsicSection = z.infer<typeof videoEditIntrinsicSectionSchema>
 const sourceRemainder = z.object({ numerator: z.number().int().nonnegative().max(1_000_000), denominator: z.number().int().positive().max(1_000_000) }).strict().refine(value => value.numerator < value.denominator, '源时间分数必须小于一微秒。')
 export const videoEditMediaSchema = z.object({
   id: identifier, name, path: z.string().min(1).max(32768).regex(/^(?:[A-Za-z]:[\\/]|\\\\|\/)/, '素材必须引用本地绝对路径。'),
@@ -49,6 +51,8 @@ const videoEditClipStateSchema = z.object({
   follow: videoEditClipFollowSchema.optional(),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).optional(), adjustment: videoEditAdjustmentSchema.optional(),
+  effectsEnabled: z.boolean().optional(),
+  disabledIntrinsicSections: z.array(videoEditIntrinsicSectionSchema).refine(values => new Set(values).size === values.length, '固有分区不能重复。').optional(),
   linkId: identifier.optional(), groupId: identifier.optional(), sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(), audioMapping: videoEditAudioMappingSchema.optional(),
   start: frame, duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
@@ -292,7 +296,7 @@ export function activeVideoEditClips(document: VideoEditComposition, at: number)
   return document.clips.filter(clip => at >= clip.start && at < clip.start + clip.duration && visible.has(clip.track)).sort((a, b) => a.track - b.track)
 }
 export function audibleVideoEditClips(document: VideoEditComposition): VideoEditClip[] {
-  let candidates = document.clips.filter(clip => ['video', 'audio', 'sequence'].includes(clip.kind) && clip.sourceComponent !== 'video' && (clip.volume > 0 || clip.curves?.volume?.some(point => typeof point.value === 'number' && point.value > 0)))
+  let candidates = document.clips.filter(clip => ['video', 'audio', 'sequence'].includes(clip.kind) && clip.sourceComponent !== 'video' && (clip.disabledIntrinsicSections?.includes('audio') || clip.volume > 0 || clip.curves?.volume?.some(point => typeof point.value === 'number' && point.value > 0)))
   // Source-sequence audition/export uses the same chosen master as placed multicamera segments.
   if (document.multicam && candidates.some(clip => document.multicam!.cameras.some(camera => camera.clipId === clip.id))) {
     const master = document.multicam.cameras.find(camera => camera.id === document.multicam!.audioCameraId)

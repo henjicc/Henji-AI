@@ -1,6 +1,6 @@
 import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSchema, sliceVideoEditCurves, type VideoEditCurves } from '@/core/videoEdit/keyframes'
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
-import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
+import { videoEditIntroducesCodeEffects, videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
 import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
 import { assertVideoEditMaskTrackers } from './videoEditTrackingEdits'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
@@ -10,7 +10,7 @@ import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransit
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, type VideoEditGesture } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, updateVideoEditMaskGesture, type VideoEditGesture } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import type { VideoEditGraphicClipTarget as VideoEditCompositeTarget } from './videoEditGraphics'
@@ -27,8 +27,7 @@ function requireEffectClip(sequence: VideoEditSequence, clipId: string): VideoEd
   if (!clip) throw new Error('原片段已移除。')
   return clip
 }
-/** All structural effect/range/transition edits prove the exact draft before one
- * shared history/save publication. Scalars still use the established gestures. */
+/** Trial only a newly introduced code execution input; structural edits publish once. */
 export async function editComposite(projectId: string, sequenceId: string, endpointIds: string[], change: (sequence: VideoEditSequence) => void, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document
@@ -39,7 +38,7 @@ export async function editComposite(projectId: string, sequenceId: string, endpo
   clipIds.forEach(id => requireClip(sequence, id)); change(sequence)
   const next = videoEditDocumentSchema.parse(draft)
   assertVideoEditLockedTracks(baseline, next)
-  if (!clipIds.length) { editVideoProject(projectId, () => next); return }
+  if (!clipIds.length || !videoEditIntroducesCodeEffects(baseline, next)) { signal?.throwIfAborted(); editVideoProject(projectId, () => next); return }
   const requested = owner.activeSequenceId === sequenceId ? owner.frame : owner.sequenceViews.get(sequenceId)?.frame ?? 0
   const active = clipIds.some(id => { const clip = requireClip(sequence, id); return requested >= clip.start && requested < clip.start + clip.duration }) || videoEditTransitionsAt(sequence, requested).some(window => clipIds.includes(window.left.id) || clipIds.includes(window.right.id))
   const frame = active ? requested : requireClip(sequence, clipIds[0]).start
@@ -157,6 +156,11 @@ export interface VideoEditBuiltinEffectChanges { name?: string; enabled?: boolea
  * 数值先夹进登记的范围（界面拖动、步进产生不了非法值）；未知参数与错类型仍报错。
  */
 export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, effectId: string, changes: VideoEditBuiltinEffectChanges, gesture?: VideoEditGesture): void {
+  if (gesture && Object.keys(changes).length === 1 && changes.mask !== undefined) {
+    if (gesture.projectId !== target.projectId) throw new Error('原遮罩调整已结束，请重新编辑。')
+    updateVideoEditMaskGesture(gesture, target.sequenceId, target.clipId, effectId, changes.mask)
+    return
+  }
   editBuiltin(target, clip => {
     const effect = clip.effects?.find(effect => effect.id === effectId)
     if (!effect?.builtin) throw new Error('原内置效果已移除。')

@@ -1,3 +1,5 @@
+import { createLogger } from '@/core/logging'
+import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { videoEditClipMedia, videoEditNestedComposition, videoEditDuration, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditNestedFrame } from '@/core/videoEdit/nestedSequences'
@@ -45,6 +47,7 @@ interface NestedRender { context: NestedFrameContext; key: string; path: string[
  * Rounding edge of nearest-sample reads: half a sample plus a margin far above floating-point noise, so a clip whose
  * phase lies exactly half-way between two samples picks the same neighbour in every mix block.
  */
+const logger = createLogger('features.videoEdit.effects')
 const NEAREST_SAMPLE_EDGE = 0.5 + 1e-6
 /** Separates a clip id from the sound stream number in a mapped clip's sound source key (`audio:<clip>\0<stream>`). */
 const AUDIO_STREAM_KEY = '\u0000'
@@ -317,7 +320,7 @@ export class VideoEditRenderer {
    * picture at its source time or the frame fails (`videoEditExportPictures.ts`); `singleFrameReads` counts the layers
    * a single-frame read decided because the sequential reader's picture was not exact.
    */
-  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender): Promise<{ canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; completion: Promise<void> }> {
+  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender): Promise<{ canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; completion: Promise<void> }> {
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
     const nestedContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), bytes: 0 }
@@ -351,6 +354,12 @@ export class VideoEditRenderer {
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
     if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    const effectErrors: string[] = []
+    const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
+      const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`
+      if (!effectErrors.includes(message)) effectErrors.push(message)
+      logger.warn(message, { event: 'video_edit.effect.render_failed', error, context: { sequenceId: document.id, effectId: effect.id, frame } })
+    }
     const decodeStart = performance.now()
     if (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length)) this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
     const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
@@ -365,7 +374,7 @@ export class VideoEditRenderer {
     const imagesSettled = Promise.allSettled([imagesReady])
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
-    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { transitions, surfaceKeys })
+    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { transitions, surfaceKeys, onEffectError })
     const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
       const media = videoEditClipMedia(document, clip)
@@ -404,6 +413,7 @@ export class VideoEditRenderer {
           picture = entry.tail.catch(() => undefined).then(async () => {
             const result = await renderer.render(childFrame, sequential && !clip.reverse, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: childKey })
             if (!result.presented || !result.nestedPicture) throw new DOMException('旧嵌套画面已取消。', 'AbortError')
+            effectErrors.push(...(result.effectErrors ?? []))
             timestamps.push(...result.sourceTimestamps); blankPictures += result.blankPictures; singleFrameReads += result.singleFrameReads
             return result.nestedPicture
           })
@@ -506,7 +516,7 @@ export class VideoEditRenderer {
     const nestedPicture = nestedRender ? await (await this.compositor.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, 'rgba16float') : undefined
     try {
       const drawn = this.drawDocument(document)
-      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline, document, nestedPicture) : await this.compositor.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
+      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline, document, nestedPicture, onEffectError) : await this.compositor.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
     } catch (error) {
       if (canPresent()) throw error
       result = { presented: false, completion: Promise.resolve() }
@@ -525,7 +535,7 @@ export class VideoEditRenderer {
       if (!nestedContext.keys.has(id)) { this.nestedPictures.delete(id); await entry.renderer.dispose() }
       else (await entry.renderer.compositor?.code())?.releaseNestedFrames(nestedContext.keys.get(id)!)
     }
-    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
+    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, effectErrors, completion }
   }
   /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
   private readonly audioChains = new Map<string, VideoEditAudioEffectChain>()
@@ -648,7 +658,7 @@ export class VideoEditRenderer {
       const effects = activeVideoEditAudioEffects(clip)
       // 变速保持音调（4.13）：重采样让音调随速度升降，效果链最前面按 1/速度 补偿回来。
       const pitchCompensation = retimed && clip.preservePitch ? 1 / videoEditClipSpeedValue(clip) : 1
-      if (!effects.length && pitchCompensation === 1) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : clip.volume); continue }
+      if (!effects.length && pitchCompensation === 1) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : videoEditClipValue(clip, 'volume', from * fps)); continue }
       // 音频效果（4.7c）：片段音量在效果之前（限幅器的上限不被音量推高），淡化与过渡在效果之后；效果链有延迟时多读后面的素材抵消，
       // 块不连续时从前面预读一段让状态稳定。预览与导出都走这里，连续播放时与分块方式无关、逐样本一致。
       let chain = this.audioChains.get(clip.id)

@@ -8,6 +8,7 @@ import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, Render
 import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
 import type { VideoEditTrackResults } from './videoEditTrackResults'
 import type { VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
+import { videoEditMaskUpdateTime } from '../application/videoEditMaskEditing'
 
 const logger = createLogger('features.videoEdit.render')
 
@@ -94,7 +95,14 @@ export class VideoEditRenderSession {
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }): Promise<RenderResponse> {
     await this.ready
-    return this.request({ kind: 'render', frame, sequential, scrubbing, deadline, ...(readRgb ? { readRgb } : {}) }, [], submitted)
+    const document = this.document
+    const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, ...(readRgb ? { readRgb } : {}) }, [], submitted)
+    const at = result.presented ? videoEditMaskUpdateTime(document.id, document.revision) : undefined
+    if (at !== undefined && result.presented) {
+      const durationMs = performance.now() - at
+      logger.debug('遮罩更新出画', { event: 'video_edit.mask.present.completed', context: { sequenceId: document.id, revision: document.revision, frame, durationMs, displayFrames: durationMs * document.fps / 1000, gpuMs: result.gpuMs } })
+    }
+    return result
   }
   async renderBitmap(frame: number, sequential = false, scrubbing = false): Promise<RenderResponse & { bitmap: ImageBitmap }> {
     const result = await this.present(frame, sequential, scrubbing)

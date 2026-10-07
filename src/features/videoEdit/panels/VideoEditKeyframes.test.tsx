@@ -1,7 +1,7 @@
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import path from 'node:path'
 import { getPlatform } from '@/platform/runtime'
@@ -17,6 +17,7 @@ import { videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 import { useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
+import * as codeTrial from '../application/videoEditCodeTrial'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/textMeasurement', () => ({ measureElementTextWidth: () => 30 }))
@@ -204,4 +205,90 @@ it('选中在文字与画面片段间来回切换，效果控件顶部始终只�
   const panel = render(<Panel owner={owner} />)
   for (const selection of [textId, clipId, textId, clipId]) act(() => setVideoEditView(id, { selection }))
   expect(panel.container.querySelectorAll('[data-video-edit-effects-clip-name]')).toHaveLength(1)
+})
+
+it('效果头部只选中，箭头单独折叠；强度最后，无源码不显示添加行；Delete只删效果并选择相邻项', async () => {
+  const { owner, id, sequenceId, clipId, clip } = await project()
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'sharpen')
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
+  const trial = vi.spyOn(codeTrial, 'trialVideoEditCodeDocument').mockRejectedValue(new Error('不应试渲染'))
+  const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
+  expect(ui.queryByRole('button', { name: '添加到片段' })).toBeNull()
+  expect(ui.queryByText('暂无滤镜源码')).toBeNull()
+  const [first, second] = clip().effects!
+  const header = ui.getByRole('group', { name: `效果${first.name}` })
+  const editor = () => panel.container.querySelector(`[data-video-edit-effect-editor="${first.id}"]`)
+  expect(editor()).toBeTruthy()
+  fireEvent.click(header); fireEvent.click(header)
+  expect(header.getAttribute('data-selected')).toBe('true'); expect(editor()).toBeTruthy()
+  const rows = editor()!.querySelectorAll('[data-video-edit-builtin-param]')
+  expect(rows[rows.length - 1].getAttribute('data-video-edit-builtin-param')).toBe('amount')
+  fireEvent.click(ui.getByRole('button', { name: `收起效果${first.name}` }))
+  expect(editor()).toBeNull()
+  fireEvent.click(header); expect(editor()).toBeNull()
+  fireEvent.click(ui.getByRole('button', { name: `展开效果${first.name}` }))
+  expect(editor()).toBeTruthy()
+  const count = owner.past.length
+  fireEvent.keyDown(ui.getAllByRole('spinbutton', { name: '效果强度' })[0], { code: 'Delete', key: 'Delete' })
+  expect(clip().effects).toHaveLength(2)
+  fireEvent.keyDown(ui.getByLabelText('效果控件'), { code: 'Delete', key: 'Delete' })
+  expect(ui.queryByText('正在检查混合画面')).toBeNull()
+  await waitFor(() => expect(clip().effects).toHaveLength(1))
+  expect(ui.getByRole('group', { name: `效果${second.name}` }).getAttribute('data-selected')).toBe('true')
+  expect(getActiveVideoEditSequence(owner).clips).toHaveLength(1)
+  expect(owner.past).toHaveLength(count + 1); expect(trial).not.toHaveBeenCalled()
+  fireEvent.keyDown(ui.getByLabelText('效果控件'), { code: 'Backspace', key: 'Backspace' })
+  await waitFor(() => expect(clip().effects).toHaveLength(0))
+})
+
+it('拖动效果头部显示插入位置、一次撤销；Esc取消不提交', async () => {
+  const { owner, id, sequenceId, clipId, clip } = await project()
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'sharpen')
+  const order = clip().effects!.map(effect => effect.id)
+  const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
+  const headers = () => ui.getAllByRole('group', { name: /^效果/ }).filter(element => element.hasAttribute('data-selected'))
+  const geometry = (): void => { headers().forEach((element, index) => { element.getBoundingClientRect = () => ({ top: index * 100, left: 0, width: 300, height: 28, right: 300, bottom: index * 100 + 28, x: 0, y: index * 100, toJSON: () => ({}) }) }) }
+  geometry()
+  fireEvent.mouseDown(headers()[0], { button: 0, clientX: 50, clientY: 14 })
+  fireEvent.mouseMove(window, { clientX: 50, clientY: 45 })
+  fireEvent.mouseMove(window, { clientX: 50, clientY: 114 })
+  expect(panel.container.querySelector('[data-video-edit-effect-insertion]')).toBeTruthy()
+  const count = owner.past.length
+  fireEvent.mouseUp(window)
+  await waitFor(() => expect(clip().effects!.map(effect => effect.id)).toEqual(order.slice().reverse()))
+  expect(owner.past).toHaveLength(count + 1)
+  act(() => undoVideoEdit(id)); expect(clip().effects!.map(effect => effect.id)).toEqual(order)
+  geometry()
+  fireEvent.mouseDown(headers()[0], { button: 0, clientX: 50, clientY: 14 })
+  fireEvent.mouseMove(window, { clientX: 50, clientY: 45 })
+  fireEvent.mouseMove(window, { clientX: 50, clientY: 114 })
+  fireEvent.keyDown(window, { key: 'Escape' }); fireEvent.mouseUp(window)
+  expect(clip().effects!.map(effect => effect.id)).toEqual(order)
+  expect(owner.past).toHaveLength(count)
+})
+
+it('分区开关保留效果状态和固有参数关键帧；助手通用读写同字段', async () => {
+  const { owner, id, sequenceId, clipId, clip } = await project()
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
+  editVideoProject(id, draft => { const item = draft.sequences[0].clips[0]; item.effects![0].enabled = false; item.x = .3; item.curves = { x: [{ time: 0, value: .4, interpolation: 'linear' }] }; return draft })
+  const original = structuredClone(clip())
+  const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
+  const count = owner.past.length
+  fireEvent.click(ui.getByRole('button', { name: '停用附加效果分区' }))
+  expect(clip().effectsEnabled).toBe(false); expect(clip().effects).toEqual(original.effects)
+  expect(owner.past).toHaveLength(count + 1)
+  fireEvent.click(ui.getByRole('button', { name: '启用附加效果分区' }))
+  expect(clip().effects).toEqual(original.effects)
+  fireEvent.click(ui.getByRole('button', { name: '停用运动分区' }))
+  expect(videoEditClipValue(clip(), 'x', clip().start)).toBe(0)
+  expect(clip().x).toBe(.3); expect(clip().curves).toEqual(original.curves)
+  const app = createApplicationHarness(); const ref = { kind: 'video_edit.clip', id: `${id}:${clipId}` }
+  try {
+    expect((await app.read(ref, ['video_edit.clip.effects_enabled', 'video_edit.clip.disabled_intrinsic_sections'])).properties).toEqual({ 'video_edit.clip.effects_enabled': true, 'video_edit.clip.disabled_intrinsic_sections': ['motion'] })
+    const changed = await app.change(ref, { 'video_edit.clip.effects_enabled': false, 'video_edit.clip.disabled_intrinsic_sections': [] })
+    expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
+    expect(clip().effectsEnabled).toBe(false); expect(videoEditClipValue(clip(), 'x', clip().start)).toBe(.4)
+    expect(clip().effects).toEqual(original.effects); expect(clip().curves).toEqual(original.curves)
+  } finally { app.dispose() }
 })

@@ -1,3 +1,4 @@
+import { createVideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -76,14 +77,14 @@ it('共享智能区域失败时清空单个效果再写回不会重试；状态�
 it('手绘遮罩经通用实体创建、修改与清空；错误形状被拒，修正后可继续且领域状态一致', async () => {
   const { app, owner, createEffects, readProperties } = await fixture()
   try {
-    const mask = { regionId: 'shapes', shapes: [{ id: 'subject', kind: 'ellipse', box: [0.3, 0.3, 0.4, 0.4] }] }
+    const mask = { regionId: 'shapes', shapes: [createVideoEditMaskShape('ellipse','subject')] }
     const [ref] = await createEffects(1, mask)
     const read = async () => (await readProperties(ref, ['video_edit.effect.mask']))['video_edit.effect.mask']
     expect(await read()).toEqual(mask)
     expect(getActiveVideoEditSequence(owner).clips[0].effects![0].mask).toEqual(mask)
     const invalid = await app.change(ref, { 'video_edit.effect.mask': { regionId: 'shapes', shapes: [{ id: 'subject', kind: 'path', box: [0.3, 0.3, 0.4, 0.4] }] } })
     expect(invalid.ok).toBe(false)
-    expect(JSON.stringify(invalid)).toContain('钢笔遮罩写 points')
+    expect(JSON.stringify(invalid)).toContain('points')
     expect(await read()).toEqual(mask)
     const path = { regionId: 'shapes', shapes: [{ id: 'subject', kind: 'path', points: [[0.2, 0.2, 0, 0, 0, 0], [0.8, 0.2, 0, 0, 0, 0], [0.5, 0.8, 0, 0, 0, 0]], mode: 'subtract', opacity: 70 }] }
     expect((await app.change(ref, { 'video_edit.effect.mask': path })).ok).toBe(true)

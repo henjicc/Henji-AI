@@ -68,17 +68,30 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const set = (target, properties) => change([{ kind: 'set_properties', entityType: target.kind, target, properties }])
         const create = (entityType, parent, properties) => change([{ kind: 'create_items', entityType, parent, items: properties.map(properties => ({ properties })) }])
         const focus = async target => { const result = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: target })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
+        // 画面已显示到最新保存的版本：编辑不再先试渲染，保存可能晚于读取，故两边都反复读取直到一致。
+        // 画面已显示到不早于已保存的版本，且 0.5 秒内不再变化。已保存文件的版本号与内存版本号是两套计数
+        // （重新打开后内存从 0 计、保存回声也会让内存多一版），所以按打开时的差值对齐、只要求不落后。
+        const revisionOffsets = new Map()
+        const presentedSaved = async (target, label) => {
+          let saved; let shown; let stable = 0; let previous
+          for (let attempt = 0; attempt < 900; attempt++) {
+            saved = readFile(target).revision - (revisionOffsets.get(target) ?? 0)
+            shown = Number(await page.evaluate(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedRevision))
+            stable = shown === previous ? stable + 1 : 0; previous = shown
+            if (shown >= saved && stable >= 5) return
+            await page.waitForTimeout(100)
+          }
+          throw new Error(`节目画面没有显示到最新版本（${label}，${evidence.currentPhase}）：已保存 ${saved}，已显示 ${shown}`)
+        }
         const seek = async (target, frame, playing = false, playbackDirection = 1) => {
           await set(target, { 'video_edit.document.program_playback': { frame, playing, playbackDirection } })
           if (!playing) {
             await presented(page, frame)
-            const revision = readFile(target.id === mixed.id ? file : pressureFile).revision
-            await page.waitForFunction(revision => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedRevision === String(revision), revision, { timeout: 90000 })
+            await presentedSaved(target.id === mixed.id ? file : pressureFile, `定位到第 ${frame} 帧`)
           }
         }
         const pixels = async name => {
-          const revision = readFile(file).revision
-          await page.waitForFunction(revision => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedRevision === String(revision), revision, { timeout: 90000 })
+          await presentedSaved(file, name)
           return png(page, path.join(root, name))
         }
         const selected = async clip => { await focus(ref('video_edit.clip', mixed.id, clip.id)); await page.locator('[data-video-edit-panel="effects"]').first().waitFor({ state: 'visible' }) }
@@ -191,12 +204,23 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         await create('video_edit.effect', graphicRef, [{ 'video_edit.effect.definition_id': definition.id, 'video_edit.effect.version_id': fixed.versionId, 'video_edit.effect.name': '第二真实处理', 'video_edit.effect.amount': .25 }])
         document = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects?.length === 2)
         const secondId = document.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[1].id
-        await page.locator(`[data-video-edit-effect="${secondId}"]`).click(); await button(page, '上移效果').click()
+        // 效果控件：按住头部拖动排序、头部开关 / 重置、点头部选中后 Delete 删除（都不再“检查混合画面”）。
+        const firstEffect = document.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0]
+        const header = id => page.locator(`[data-video-edit-effect="${id}"] > [role="group"]`)
+        // 展开的效果参数很长，先收起两项（PR 里也是收起后拖），保证两个头部都在视口内
+        for (const name of [firstEffect.name, '第二真实处理']) await button(page, `收起效果${name}`).click()
+        await header(firstEffect.id).scrollIntoViewIfNeeded()
+        const from = await header(secondId).boundingBox(); const to = await header(firstEffect.id).boundingBox()
+        await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down()
+        for (let step = 1; step <= 20; step++) { await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 + (to.y + to.height / 2 - from.y - from.height / 2) * step / 20); await page.waitForTimeout(16) }
+        evidence.effectDrag = { from, to, insertion: await page.locator('[data-video-edit-effect-insertion]').count(), dimmed: await header(secondId).evaluate(node => node.className.includes('opacity-50')), selected: await header(secondId).getAttribute('data-selected') }; store()
+        await page.mouse.up()
         await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0].id === secondId)
-        await page.getByRole('switch', { name: '启用所选效果', exact: true }).click(); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0].enabled === false)
-        await button(page, '重置效果与关键帧').click(); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0].enabled === true && value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0].amount === 1)
-        await button(page, '删除所选效果').click(); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects.length === 1)
-        await button(page, '重置效果与关键帧').click()
+        await button(page, '停用效果第二真实处理').click(); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0].enabled === false)
+        await button(page, '重置效果第二真实处理').click(); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0].enabled === true && value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0].amount === 1)
+        assert.equal(await page.getByText('正在检查混合画面').count(), 0)
+        await header(secondId).click(); await page.keyboard.press('Delete'); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects.length === 1)
+        await button(page, `重置效果${firstEffect.name}`).click()
         await saved(page, file, value => { const effect = value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0]; return effect.enabled && effect.amount === 1 })
         // A short native card precedes the title transition; all code, image,
         // original video and audio clips keep their real three-second range.
@@ -209,15 +233,15 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         await page.getByLabel('调整图层起始画面轨道', { exact: true }).click(); await page.getByRole('option', { name: sequence.tracks.find(track => track.index === 3).name, exact: true }).click()
         await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === adjustmentClip.id).adjustment.fromTrack === 3)
         const pair = sequence.clips.filter(clip => clip.kind === 'code' && clip.track === 5).sort((a, b) => a.start - b.start)
-        assert.equal(pair.length, 2); await selected(pair[0]); await page.getByLabel('交叉溶解时长帧', { exact: true }).fill('12'); await button(page, '添加交叉溶解').click()
+        assert.equal(pair.length, 2); await create('video_edit.transition', sequenceRef, [{ 'video_edit.transition.kind': 'cross_dissolve', 'video_edit.transition.left_clip_id': pair[0].id, 'video_edit.transition.right_clip_id': pair[1].id, 'video_edit.transition.duration_frames': 12 }])
         document = await saved(page, file, value => value.sequences[0].transitions?.length === 1)
         const transition = document.sequences[0].transitions[0]; const transitionRef = ref('video_edit.transition', mixed.id, transition.id)
-        await set(transitionRef, { 'video_edit.transition.duration_frames': 16 }); assert.equal(Number(await page.getByLabel('交叉溶解时长帧', { exact: true }).inputValue()), 16)
+        await set(transitionRef, { 'video_edit.transition.duration_frames': 16 }); assert.equal((await read(transitionRef, ['video_edit.transition.duration_frames'])).data.properties['video_edit.transition.duration_frames'], 16)
         const preview = new Map()
         for (const frame of [60, 81, 82, 89, 90, 97, 98, 120]) { await seek(projectRef, frame); preview.set(frame, await pixels(`preview-${frame}.png`)) }
         const snapshot = readFile(file); evidence.trackBanks = { mixed: await trackBanks(page) }
         await shot('composite-mixed-transition-4k'); await button(page, '关闭项目').click(); await waitReleased(page); await open(file)
-        assert.deepEqual(readFile(file), snapshot); await seek(projectRef, 90)
+        assert.deepEqual(readFile(file), snapshot); revisionOffsets.set(file, snapshot.revision); await seek(projectRef, 90)
         const reopened = await pixels('reopened-90.png'); assert.ok((await pixelDifference(reopened.file, preview.get(90).file)).equal)
         evidence.savedReopened = true; evidence.public = { effectRef, fixedVersion: fixed.versionId, transitionRef, graphicRef, adjustmentRef }
         phase('真实4K60音画图形代码滤镜转场MP4导出回读')

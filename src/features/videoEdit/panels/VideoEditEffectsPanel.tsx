@@ -44,7 +44,7 @@ function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { i
   const projectId = instance.document.id
   const gesture = useVideoEditClipPropertyGesture(projectId, sequence.id, selected?.id ?? '', reportError)
   const run = (operation: () => unknown): void => { try { operation() } catch (error) { onError(error) } }
-  return <div className="flex h-full min-h-0 flex-col gap-3 overflow-auto px-3 py-2.5" aria-label="效果控件">
+  return <div className="flex h-full min-h-0 flex-col gap-3 overflow-auto px-3 py-2.5" aria-label="效果控件" data-video-edit-panel="effects" tabIndex={-1} onMouseDown={event => { if (!(event.target as HTMLElement).closest('button,input,textarea,select,[contenteditable]')) event.currentTarget.focus() }}>
     {selected ? <div className="flex flex-col">
       <ClipNameHeader key={`name:${selected.id}`} clip={selected} onRename={name => run(() => updateVideoEditClipProperties(projectId, sequence.id, selected.id, { name }))} />
       {speedReadout && <div className={`pb-2 ${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_NUMERIC_CLASS}`} data-video-edit-effects-clip-speed>{speedReadout}</div>}

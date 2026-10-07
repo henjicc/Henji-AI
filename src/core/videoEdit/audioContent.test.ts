@@ -14,6 +14,21 @@ function fixture(): VideoEditDocument {
 }
 function sound(document: VideoEditDocument): string { return videoEditAudioContent(videoEditComposition(document, document.sequences[0].id)) }
 
+it('音频分区与附加效果开关改变实际声音签名，停用期间编辑保留参数不改变混音签名', () => {
+  const document = fixture(); const clip = document.sequences[0].clips[0]
+  Object.assign(clip, { kind: 'audio', track: 0, volume: .2, effects: [{ id: 'gain', name: '增益', enabled: true, amount: 1, builtin: { id: 'gain_balance', params: { gain: 6 } } }] })
+  const wet = sound(document)
+  clip.effectsEnabled = false
+  const dry = sound(document); expect(dry).not.toBe(wet)
+  clip.disabledIntrinsicSections = ['audio']
+  const bypassed = sound(document); expect(bypassed).not.toBe(dry)
+  clip.volume = 0; clip.effects![0].amount = .3
+  clip.curves = { volume: [{ time: 0, value: .5, interpolation: 'linear' }] }
+  expect(sound(document)).toBe(bypassed)
+  clip.disabledIntrinsicSections = []; clip.effectsEnabled = true
+  expect(sound(document)).not.toBe(bypassed)
+})
+
 it('字幕/标记回填、画面编辑、无关序列/素材与对象键顺序不改变声音签名', () => {
   const document = fixture(); const before = sound(document); const sequence = document.sequences[0]
   document.revision++

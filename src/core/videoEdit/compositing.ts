@@ -35,6 +35,14 @@ export function isVideoEditCodeEffect(effect: VideoEditEffect): effect is VideoE
 export function isVideoEditBuiltinEffect(effect: VideoEditEffect): effect is VideoEditBuiltinEffect { return Boolean(effect.builtin) }
 /** 效果链里的代码滤镜源码实例（内置效果没有源码）。 */
 export function videoEditEffectCodes(effects: readonly VideoEditEffect[] | undefined): Array<NonNullable<VideoEditEffect['code']>> { return (effects ?? []).flatMap(effect => effect.code ? [effect.code] : []) }
+/** Identity excludes presentation and IDs; reordered/copied approved code keeps its proof. */
+export function videoEditIntroducesCodeEffects(baseline: { sequences: Array<{ clips: VideoEditClip[] }> }, draft: { sequences: Array<{ clips: VideoEditClip[] }> }): boolean {
+  const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => [key, canonical(entry)])) : value
+  const identity = (code: NonNullable<VideoEditEffect['code']>): string => JSON.stringify(canonical({ definitionId: code.definitionId, versionId: code.versionId, parameters: code.parameters, curves: code.curves ?? {} }))
+  const codes = (document: typeof baseline): Array<NonNullable<VideoEditEffect['code']>> => document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => videoEditEffectCodes(clip.effects)))
+  const known = new Set(codes(baseline).map(identity))
+  return codes(draft).some(code => !known.has(identity(code)))
+}
 export function orderVideoEditEffects(effects: VideoEditEffect[], ids: string[]): VideoEditEffect[] {
   if (ids.length !== effects.length || new Set(ids).size !== effects.length || ids.some(id => !effects.some(effect => effect.id === id))) throw new Error('请使用完整、无重复的效果顺序。')
   return ids.map(id => effects.find(effect => effect.id === id)!)
@@ -44,12 +52,14 @@ export function videoEditEffectMedia(effect: Pick<VideoEditEffect, 'builtin'>): 
 /** 片段能不能挂这种效果：音频效果只挂声音片段，画面效果只挂画面片段（与过渡的媒介规则一致）。 */
 export function videoEditEffectAccepts(media: VideoEditBuiltinMedia, clip: Pick<VideoEditClip, 'kind'>): boolean { return media === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' }
 /** Disabled effects remain editable/persisted, but consume no render resources. 只返回画面效果（音频效果由混音处理）。 */
-export function activeVideoEditEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'opacity'>): VideoEditEffect[] {
-  if (clip.kind === 'adjustment' && clip.opacity <= 0) return []
+export function activeVideoEditEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'opacity' | 'effectsEnabled' | 'disabledIntrinsicSections'>): VideoEditEffect[] {
+  if (clip.effectsEnabled === false) return []
+  if (clip.kind === 'adjustment' && clip.opacity <= 0 && !clip.disabledIntrinsicSections?.includes('opacity')) return []
   return (clip.effects ?? []).filter(effect => effect.enabled && effect.amount > 0 && videoEditEffectMedia(effect) === 'video')
 }
 /** 声音片段上生效的音频效果（按效果链顺序处理声音）。 */
-export function activeVideoEditAudioEffects(clip: Pick<VideoEditClip, 'effects' | 'kind'>): VideoEditBuiltinEffect[] {
+export function activeVideoEditAudioEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'effectsEnabled'>): VideoEditBuiltinEffect[] {
+  if (clip.effectsEnabled === false) return []
   if (clip.kind !== 'audio') return []
   return (clip.effects ?? []).filter((effect): effect is VideoEditBuiltinEffect => effect.enabled && effect.amount > 0 && isVideoEditBuiltinEffect(effect) && videoEditEffectMedia(effect) === 'audio')
 }

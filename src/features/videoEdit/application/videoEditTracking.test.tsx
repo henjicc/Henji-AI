@@ -131,7 +131,7 @@ it('schema 拒绝非媒体跟踪、重复 ID、无提示；保存容许剪切后
   expect(videoEditClipSchema.safeParse({ ...video, trackers: [{ ...tracker, prompts: [] }] }).success).toBe(false)
   expect(videoEditClipSchema.safeParse({ ...text, follow: { clipId: 'removed', trackerId: 'gone', offsetX: 0, offsetY: 0 } }).success).toBe(true)
   expect(videoEditEffectMaskSchema.safeParse({ regionId: 'tracker', trackerId: '' }).success).toBe(false)
-  expect(videoEditEffectMaskSchema.parse({ regionId: 'shapes', shapes: [{ id: 's1', kind: 'rect', box: [0, 0, 1, 1], follow: { trackerId: 'gone', reference: [0, 0, 1, 1] } }] }).regionId).toBe('shapes')
+  expect(videoEditEffectMaskSchema.parse({ regionId: 'shapes', shapes: [{ id: 's1', kind: 'rect', points: [[0,0,0,0,0,0],[1,0,0,0,0,0],[1,1,0,0,0,0],[0,1,0,0,0,0]], follow: { trackerId: 'gone', reference: [0, 0, 1, 1] } }] }).regionId).toBe('shapes')
 })
 it('新定义先查缓存、缺结果开始跟踪；同定义多片段合并素材范围，旧查询不复活删除的跟踪', async () => {
   const { owner, id, sequenceId, video } = await project()

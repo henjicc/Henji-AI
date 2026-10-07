@@ -2,6 +2,18 @@
 import { expect, it } from 'vitest'
 import { videoEditKeyboardCommand } from './videoEditKeyboard'
 const event = (target: EventTarget | null, code: string, ctrlKey = false) => ({ target, code, key: code, ctrlKey, metaKey: false, altKey: false, shiftKey: false, repeat: false, isComposing: false, defaultPrevented: false })
+it('效果控件Delete和Backspace作用于效果，时间线作用于片段，输入与自定义键位遵守注册表', () => {
+  const panel = document.createElement('div'); panel.dataset.videoEditPanel = 'effects'
+  const header = document.createElement('div'); panel.append(header)
+  for (const code of ['Delete', 'Backspace']) expect(videoEditKeyboardCommand(event(header, code), 'timeline', {})).toEqual({ id: 'delete_effect', scope: 'effects' })
+  const config = { delete_effect: { code: 'F9', ctrl: false, alt: false, shift: false, meta: false } }
+  expect(videoEditKeyboardCommand(event(header, 'Delete'), 'timeline', config)).toBeUndefined()
+  expect(videoEditKeyboardCommand(event(header, 'F9'), 'timeline', config)).toEqual({ id: 'delete_effect', scope: 'effects' })
+  const input = document.createElement('input'); panel.append(input)
+  expect(videoEditKeyboardCommand(event(input, 'F9'), 'timeline', config)).toBeUndefined()
+  panel.dataset.videoEditPanel = 'timeline'
+  expect(videoEditKeyboardCommand(event(header, 'Delete'), 'effects', config)).toEqual({ id: 'delete', scope: 'timeline' })
+})
 it('节目画面 T/V 切换文字和选择，纯文本就地编辑保留 T/V 输入', () => {
   const panel = document.createElement('div'); panel.dataset.videoEditPanel = 'program'
   const picture = document.createElement('div'); panel.append(picture)

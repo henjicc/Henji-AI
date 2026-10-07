@@ -10,6 +10,7 @@ import { VideoEditFrameRouter, type VideoEditDecodeSettings } from './videoEditF
 import { setVideoEditTrackResults, type VideoEditTrackResults } from './videoEditTrackResults'
 import { setVideoEditSmartRegionSegments, type VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
 import { readVideoEditTrackingRgb } from './videoEditTrackingPixels'
+import { setVideoEditMaskTimingObserver } from './videoEditEffectMasks'
 
 /**
  * Decoding settings of one render session. `localPaths` maps each media item's fetchable URL (its path in the worker)
@@ -30,9 +31,9 @@ export type RenderRequest = { id: number } & (
   | { kind: 'audio'; start: number; duration: number }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
-export interface RenderLogMessage { kind: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
+export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
 export type NativeFramesRequest =
   | { kind: 'nativeFrames.attach'; port: MessagePort }
@@ -46,11 +47,13 @@ let nativeFrames: VideoEditNativeFrameReceiver | undefined
 let nativeDiagnostics: NativeFrameDiagnostics | undefined
 let nativeBackend: VideoEditNativeFrames | undefined
 let router: VideoEditFrameRouter | undefined
+let effectWarnings = new Set<string>()
 const proxies = new Map<string, VideoProxyResult>()
 function setProxies(values: Record<string, VideoProxyResult> | undefined): void { proxies.clear(); for (const [id, result] of Object.entries(values ?? {})) proxies.set(id, result) }
 const localPaths = new Map<string, string>()
 function setLocalPaths(paths: Record<string, string> | undefined): void { if (!paths) return; localPaths.clear(); for (const [url, path] of Object.entries(paths)) localPaths.set(url, path) }
 const log = (level: RenderLogMessage['level'], message: string, event: string, context: Record<string, unknown>): void => { self.postMessage({ kind: 'log', level, message, event, context } satisfies RenderLogMessage) }
+setVideoEditMaskTimingObserver(context => log('debug', '遮罩栅格化', 'video_edit.mask.raster.completed', context))
 /** The renderer's decoding: the browser backend, plus native decoding when the frame channel is attached. */
 function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFrames {
   setProxies(decode?.proxies)
@@ -106,10 +109,12 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
         const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline)
         const finish = async (): Promise<void> => {
           const start = performance.now()
+          for (const message of result.effectErrors ?? []) if (!effectWarnings.has(message)) log('warn', message, 'video_edit.effect.skipped', { sequenceId: renderer?.document.id, frame: request.frame })
+          effectWarnings = new Set(result.effectErrors)
           await result.completion
           const rgb = request.readRgb && result.presented ? readVideoEditTrackingRgb(result.canvas, request.readRgb) : undefined
           const bitmap = rgb || direct || !result.presented ? undefined : result.canvas.transferToImageBitmap()
-          self.postMessage({ id: request.id, bitmap, rgb, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : [] })
+          self.postMessage({ id: request.id, bitmap, rgb, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : [] })
         }
         // 拖动与正向播放：提交后先回执，下一帧不必等这一帧的 GPU 完成（节目监视器两帧流水）。
         if (direct && (request.scrubbing || (request.sequential && request.deadline !== undefined))) {

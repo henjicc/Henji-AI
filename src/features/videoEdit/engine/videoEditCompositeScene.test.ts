@@ -112,6 +112,19 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
 }
 
 describe('正式合成场景的预乘RGBA编排与有界目标', () => {
+  it('代码效果执行失败跳过该项并报告，后续效果继续，保留整帧与原链', async () => {
+    const owner = clip('visual')
+    const effects = [plan('bad', [1, 0, 0, 1], owner, 0), plan('good', [0, .5, 0, 1], owner, 0)]
+    owner.effects = effects.map(value => value.effect)
+    const document = composition([owner]); const nodes = buildVideoEditCompositePlan(document.clips)
+    let calls = 0
+    const boundary = pixels(document, videoEditCompositeSurfaceKeys(nodes), { onFilter: () => { if (++calls === 1) throw new Error('着色器执行失败') } })
+    const failures: string[] = []
+    const result = await renderVideoEditCompositeScene(document, nodes, new Map([[owner.id, boundary.picture('raw', [.2, .1, 0, 1])]]), new Map([[owner.id, effects]]), boundary.compositor, 0, () => true, undefined, document, undefined, (effect, error) => { failures.push(effect.name); expect(String(error)).toContain('着色器') })
+    await result.completion
+    expect(result.presented).toBe(true); expect(failures).toEqual(['bad']); expect(calls).toBe(2)
+    expectPixel(boundary.canvas(), [0, .5, 0, 1]); expect(owner.effects).toHaveLength(2)
+  })
   it('四个不同有效/关闭/零强度效果按原顺序处理，原几何和透明度只归一化一次', async () => {
     const owner = clip('visual', 1, { start: 10, x: .2, y: -.1, scale: .5, rotation: 30, opacity: .5 })
     const effects = [plan('red', [1, 0, 0, .8], owner, 30, .5), plan('disabled', [0, 1, 0, 1], owner, 30, 1, false),

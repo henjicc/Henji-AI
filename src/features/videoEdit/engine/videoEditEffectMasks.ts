@@ -1,4 +1,4 @@
-import { isShapesMask, isSmartRegionMask, rasterizeVideoEditMaskShapes, videoEditShapeMaskSize, transformVideoEditMaskShape, VIDEO_EDIT_TRACKER_MASK_DEFAULTS, type VideoEditEffectMask, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
+import { isShapesMask, isSmartRegionMask, rasterizeVideoEditMaskShapes, videoEditShapeMaskSize, transformVideoEditMaskShape, VideoEditMaskRasterCache, VIDEO_EDIT_TRACKER_MASK_DEFAULTS, type VideoEditEffectMask, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 import { videoEditFollowShapeMap } from '@/core/videoEdit/tracking'
 import { videoEditTrackerBox, videoEditTrackerMask } from './videoEditTrackResults'
 import type { VideoEditSize } from '@/core/videoEdit/clipGeometry'
@@ -11,16 +11,22 @@ import { videoEditSmartRegionMask, type VideoEditSmartRegionMask } from './video
 
 const MAX_SHAPE_MASKS = 12
 const shapeMasks = new Map<string, VideoEditSmartRegionMask>()
+const shapeRasters = new VideoEditMaskRasterCache()
+let timing: ((context: Record<string, unknown>) => void) | undefined
+/** 渲染 Worker 经已有日志消息通道回传，不建立第二个日志入口。 */
+export function setVideoEditMaskTimingObserver(observer: (context: Record<string, unknown>) => void): void { timing = observer }
 
 /** 手绘遮罩：同一组形状、同一尺寸只栅格化一次（暂停时反复重画同一帧不重复计算）。 */
 export function videoEditShapeMask(shapes: readonly VideoEditMaskShape[], picture: VideoEditSize): VideoEditSmartRegionMask {
+  const started = performance.now()
   const size = videoEditShapeMaskSize(picture.width, picture.height)
   const key = `${size.width}x${size.height}\u0000${JSON.stringify(shapes)}`
   const cached = shapeMasks.get(key)
-  if (cached) { shapeMasks.delete(key); shapeMasks.set(key, cached); return cached }
-  const mask = { ...size, data: rasterizeVideoEditMaskShapes(shapes, size.width, size.height) }
+  if (cached) { shapeMasks.delete(key); shapeMasks.set(key, cached); timing?.({ regionId: 'shapes', cacheHit: true, durationMs: performance.now() - started, ...size }); return cached }
+  const mask = { ...size, data: rasterizeVideoEditMaskShapes(shapes, size.width, size.height, shapeRasters) }
   shapeMasks.set(key, mask)
   while (shapeMasks.size > MAX_SHAPE_MASKS) shapeMasks.delete(shapeMasks.keys().next().value as string)
+  timing?.({ regionId: 'shapes', cacheHit: false, durationMs: performance.now() - started, ...size })
   return mask
 }
 

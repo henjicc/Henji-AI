@@ -18,15 +18,12 @@ export const VIDEO_EDIT_MASK_MODE_LABELS: Readonly<Record<VideoEditMaskMode, str
 export const VIDEO_EDIT_MASK_SHAPE_KINDS = ['rect', 'ellipse', 'path'] as const
 export type VideoEditMaskShapeKind = (typeof VIDEO_EDIT_MASK_SHAPE_KINDS)[number]
 export const VIDEO_EDIT_MASK_SHAPE_LABELS: Readonly<Record<VideoEditMaskShapeKind, string>> = { rect: '矩形遮罩', ellipse: '椭圆遮罩', path: '钢笔遮罩' }
-/** Per-effect rasterization budget: up to 8 matte combines and 64 path vertices bound full-resolution per-frame geometry work; independent of project size. */
-export const VIDEO_EDIT_MAX_MASK_SHAPES = 8
-export const VIDEO_EDIT_MAX_MASK_POINTS = 64
 /** 不透明度 0–100（%）。羽化、扩展与智能区域同一量纲：100 ≈ 画面高度的 10%。 */
 export const VIDEO_EDIT_MASK_OPACITY_RANGE = { min: 0, max: 100 } as const
 export const VIDEO_EDIT_MASK_DEFAULTS = { feather: 5, expand: 0, opacity: 100 } as const
 
-const coordinate = z.number().finite().min(-2).max(3)
-const offset = z.number().finite().min(-4).max(4)
+const coordinate = z.number().finite()
+const offset = z.number().finite()
 const feather = z.number().finite().min(SMART_REGION_FEATHER_RANGE.min).max(SMART_REGION_FEATHER_RANGE.max)
 const expand = z.number().finite().min(SMART_REGION_EXPAND_RANGE.min).max(SMART_REGION_EXPAND_RANGE.max)
 /** 框：左上角 x、y 与宽、高（片段画面归一化）。 */
@@ -39,18 +36,14 @@ export type VideoEditMaskPoint = z.infer<typeof videoEditMaskPointSchema>
 export const videoEditMaskShapeSchema = z.object({
   id: z.string().min(1).max(64),
   kind: z.enum(VIDEO_EDIT_MASK_SHAPE_KINDS),
-  /** 矩形、椭圆：外接框。 */
-  box: videoEditMaskBoxSchema.optional(),
-  /** 钢笔：闭合路径的顶点（至少 3 个）。 */
-  points: z.array(videoEditMaskPointSchema).min(3).max(VIDEO_EDIT_MAX_MASK_POINTS).optional(),
+  /** 所有形状都是闭合贝塞尔路径；kind 只用于创建来源的名称。 */
+  points: z.array(videoEditMaskPointSchema).min(3),
   mode: z.enum(VIDEO_EDIT_MASK_MODES).optional(),
   feather: feather.optional(), expand: expand.optional(),
   opacity: z.number().finite().min(VIDEO_EDIT_MASK_OPACITY_RANGE.min).max(VIDEO_EDIT_MASK_OPACITY_RANGE.max).optional(),
   invert: z.boolean().optional(),
   follow: z.object({ trackerId: z.string().min(1).max(100), reference: videoEditMaskBoxSchema }).strict().optional(),
-}).strict().superRefine((shape, ctx) => {
-  if (shape.kind === 'path' ? !shape.points || shape.box : !shape.box || shape.points) ctx.addIssue({ code: 'custom', message: '矩形、椭圆遮罩写 box（左上角 x、y 与宽、高），钢笔遮罩写 points（至少 3 个顶点）。' })
-})
+}).strict()
 export type VideoEditMaskShape = z.infer<typeof videoEditMaskShapeSchema>
 
 /** 智能区域（4.7d）。 */
@@ -58,7 +51,7 @@ export const videoEditSmartMaskSchema = z.object({
   regionId: z.enum(VIDEO_EDIT_SMART_REGION_IDS), invert: z.boolean().optional(), feather: feather.optional(), expand: expand.optional(),
 }).strict()
 export const videoEditShapesMaskSchema = z.object({
-  regionId: z.literal('shapes'), shapes: z.array(videoEditMaskShapeSchema).min(1).max(VIDEO_EDIT_MAX_MASK_SHAPES),
+  regionId: z.literal('shapes'), shapes: z.array(videoEditMaskShapeSchema).min(1),
 }).strict().superRefine((mask, ctx) => {
   if (new Set(mask.shapes.map(shape => shape.id)).size !== mask.shapes.length) ctx.addIssue({ code: 'custom', message: '遮罩 ID 重复。' })
 })
@@ -76,12 +69,20 @@ export function isSmartRegionMask(mask: VideoEditEffectMask | undefined | null):
 export function isShapesMask(mask: VideoEditEffectMask | undefined | null): mask is VideoEditShapesMask {
   return mask?.regionId === 'shapes'
 }
+/** 快速手势与普通效果编辑共用跟踪引用校验，不依赖宿主或渲染管线。 */
+export function assertVideoEditMaskTrackers(clip: { trackers?: readonly { id: string }[] }, mask: VideoEditEffectMask | undefined): void {
+  const ids = mask?.regionId === 'tracker' ? [mask.trackerId] : isShapesMask(mask) ? mask.shapes.flatMap(shape => shape.follow ? [shape.follow.trackerId] : []) : []
+  for (const id of ids) if (!clip.trackers?.some(tracker => tracker.id === id)) throw new Error('跟踪器不属于此片段，请先在该片段下创建 video_edit.tracker。')
+}
 
 // ==================== 默认形状 ====================
 
 /** 新建矩形 / 椭圆：画面中央、占 40% 的框（PR 新建遮罩的默认大小）。 */
 export function createVideoEditMaskShape(kind: 'rect' | 'ellipse', id: string = crypto.randomUUID()): VideoEditMaskShape {
-  return { id, kind, box: [0.3, 0.3, 0.4, 0.4] }
+  const k = 0.2 * KAPPA
+  return { id, kind, points: kind === 'rect'
+    ? [[0.3, 0.3, 0, 0, 0, 0], [0.7, 0.3, 0, 0, 0, 0], [0.7, 0.7, 0, 0, 0, 0], [0.3, 0.7, 0, 0, 0, 0]]
+    : [[0.5, 0.3, -k, 0, k, 0], [0.7, 0.5, 0, -k, 0, k], [0.5, 0.7, k, 0, -k, 0], [0.3, 0.5, 0, k, 0, -k]] }
 }
 
 /** 遮罩的显示名：按种类与序号（“椭圆遮罩 2”）。 */
@@ -92,27 +93,19 @@ export function videoEditMaskShapeName(shapes: readonly VideoEditMaskShape[], sh
 
 // ==================== 编辑 ====================
 
-/** 节目监视器上拖动遮罩的方式：整体移动、顶点、进入 / 离开控制柄、矩形与椭圆的角。 */
-export type VideoEditMaskDragKind = 'move' | 'vertex' | 'in' | 'out' | 'corner'
+/** 节目监视器上拖动遮罩的方式：整体移动、顶点、单侧或对称控制柄。 */
+export type VideoEditMaskDragKind = 'move' | 'vertex' | 'in' | 'out' | 'symmetric'
 /** 按拖动方式改一个遮罩（片段画面坐标的位移 du、dv 与指针位置 point）。 */
-export function editVideoEditMaskShape(shape: VideoEditMaskShape, kind: VideoEditMaskDragKind, index: number, du: number, dv: number, point: { u: number; v: number }): VideoEditMaskShape {
+export function editVideoEditMaskShape(shape: VideoEditMaskShape, kind: VideoEditMaskDragKind, index: number, du: number, dv: number, point: { u: number; v: number }, breakSymmetry = false): VideoEditMaskShape {
   if (kind === 'move') {
-    if (shape.box) return { ...shape, box: [shape.box[0] + du, shape.box[1] + dv, shape.box[2], shape.box[3]] }
-    return { ...shape, points: shape.points!.map(entry => [entry[0] + du, entry[1] + dv, entry[2], entry[3], entry[4], entry[5]]) }
+    return { ...shape, points: shape.points.map(entry => [entry[0] + du, entry[1] + dv, entry[2], entry[3], entry[4], entry[5]]) }
   }
-  if (kind === 'corner' && shape.box) {
-    const [x, y, width, height] = shape.box
-    const corners: Array<[number, number]> = [[x, y], [x + width, y], [x + width, y + height], [x, y + height]]
-    const [ax, ay] = corners[(index + 2) % 4]
-    const minWidth = 0.002
-    return { ...shape, box: [Math.min(ax, point.u), Math.min(ay, point.v), Math.max(minWidth, Math.abs(point.u - ax)), Math.max(minWidth, Math.abs(point.v - ay))] }
-  }
-  if (!shape.points) return shape
   return { ...shape, points: shape.points.map((entry, at): VideoEditMaskPoint => {
     if (at !== index) return entry
     if (kind === 'vertex') return [entry[0] + du, entry[1] + dv, entry[2], entry[3], entry[4], entry[5]]
     // 控制柄：拖哪一侧，另一侧保持共线（平滑顶点，与 PR 钢笔一致）。
     const dx = point.u - entry[0]; const dy = point.v - entry[1]
+    if (breakSymmetry && kind !== 'symmetric') return kind === 'in' ? [entry[0], entry[1], dx, dy, entry[4], entry[5]] : [entry[0], entry[1], entry[2], entry[3], dx, dy]
     return kind === 'in' ? [entry[0], entry[1], dx, dy, -dx, -dy] : [entry[0], entry[1], -dx, -dy, dx, dy]
   }) }
 }
@@ -121,32 +114,87 @@ export function editVideoEditMaskShape(shape: VideoEditMaskShape, kind: VideoEdi
 
 /** 椭圆转成 4 段三次贝塞尔（控制柄长度 0.5523 × 半轴，误差 < 0.03%）。 */
 const KAPPA = 0.5522847498
-export function videoEditMaskShapePoints(shape: Pick<VideoEditMaskShape, 'kind' | 'box' | 'points'>): VideoEditMaskPoint[] {
-  if (shape.kind === 'path') return shape.points ?? []
-  const [x, y, width, height] = shape.box!
-  if (shape.kind === 'rect') return [[x, y, 0, 0, 0, 0], [x + width, y, 0, 0, 0, 0], [x + width, y + height, 0, 0, 0, 0], [x, y + height, 0, 0, 0, 0]]
-  const rx = width / 2; const ry = height / 2; const cx = x + rx; const cy = y + ry
-  const kx = rx * KAPPA; const ky = ry * KAPPA
-  return [[cx, y, -kx, 0, kx, 0], [x + width, cy, 0, -ky, 0, ky], [cx, y + height, kx, 0, -kx, 0], [x, cy, 0, ky, 0, -ky]]
+export function videoEditMaskShapePoints(shape: Pick<VideoEditMaskShape, 'points'>): VideoEditMaskPoint[] {
+  return shape.points
 }
 
-/** 路径的外接框（含控制柄的贝塞尔曲线近似：按展平后的折线取）。 */
-export function videoEditMaskShapeBounds(shape: Pick<VideoEditMaskShape, 'kind' | 'box' | 'points'>): VideoEditMaskBox {
-  if (shape.box) return shape.box
-  const polygon = flattenVideoEditMaskPath(videoEditMaskShapePoints(shape), 1, 1)
+/** 路径的精确外接框：解每段贝塞尔各轴的导数极值。 */
+export function videoEditMaskShapeBounds(shape: Pick<VideoEditMaskShape, 'points'>): VideoEditMaskBox {
   let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity
-  for (let index = 0; index < polygon.length; index += 2) {
-    minX = Math.min(minX, polygon[index]); maxX = Math.max(maxX, polygon[index]); minY = Math.min(minY, polygon[index + 1]); maxY = Math.max(maxY, polygon[index + 1])
-  }
+  shape.points.forEach((a, index) => {
+    const b = shape.points[(index + 1) % shape.points.length]
+    for (const axis of [0, 1] as const) {
+      const p0 = a[axis]; const p1 = p0 + a[axis + 4]; const p3 = b[axis]; const p2 = p3 + b[axis + 2]
+      const qa = -p0 + 3*p1 - 3*p2 + p3; const qb = 2*(p0 - 2*p1 + p2); const qc = p1 - p0
+      const roots: number[] = []
+      if (Math.abs(qa) < 1e-12) { if (Math.abs(qb) >= 1e-12) roots.push(-qc/qb) }
+      else { const discriminant = qb*qb - 4*qa*qc; if (discriminant >= 0) { const d = Math.sqrt(discriminant); roots.push((-qb+d)/(2*qa),(-qb-d)/(2*qa)) } }
+      const values = [p0, p3, ...roots.filter(t => t > 0 && t < 1).map(t => { const u = 1-t; return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3 })]
+      if (axis === 0) { minX = Math.min(minX, ...values); maxX = Math.max(maxX, ...values) }
+      else { minY = Math.min(minY, ...values); maxY = Math.max(maxY, ...values) }
+    }
+  })
   return [minX, minY, Math.max(0.001, maxX - minX), Math.max(0.001, maxY - minY)]
 }
 
-/** 平移、按中心缩放形状（遮罩跟随与拖动共用）：所有顶点与外接框一起变换，控制柄按比例缩放。 */
-export function transformVideoEditMaskShape<T extends Pick<VideoEditMaskShape, 'kind' | 'box' | 'points'>>(shape: T, map: { fromX: number; fromY: number; toX: number; toY: number; scale: number }): T {
+/** 跟随跟踪区域平移、均匀缩放路径：顶点与手柄一并变换。 */
+export function transformVideoEditMaskShape<T extends Pick<VideoEditMaskShape, 'points'>>(shape: T, map: { fromX: number; fromY: number; toX: number; toY: number; scale: number }): T {
   const x = (value: number): number => map.toX + (value - map.fromX) * map.scale
   const y = (value: number): number => map.toY + (value - map.fromY) * map.scale
-  if (shape.box) return { ...shape, box: [x(shape.box[0]), y(shape.box[1]), shape.box[2] * map.scale, shape.box[3] * map.scale] }
   return { ...shape, points: shape.points!.map(point => [x(point[0]), y(point[1]), point[2] * map.scale, point[3] * map.scale, point[4] * map.scale, point[5] * map.scale]) }
+}
+
+/** 仿射变换 [a,b,c,d,tx,ty]：顶点带平移，手柄只用线性部分。 */
+export function affineVideoEditMaskShape(shape: VideoEditMaskShape, matrix: readonly [number, number, number, number, number, number]): VideoEditMaskShape {
+  const [a, b, c, d, tx, ty] = matrix
+  return { ...shape, points: shape.points.map(([x, y, ix, iy, ox, oy]) => [a*x+c*y+tx, b*x+d*y+ty, a*ix+c*iy, b*ix+d*iy, a*ox+c*oy, b*ox+d*oy]) }
+}
+
+export function removeVideoEditMaskPoint(shape: VideoEditMaskShape, index: number): VideoEditMaskShape {
+  if (shape.points.length <= 3) throw new Error('闭合遮罩至少需要三个顶点。')
+  return { ...shape, points: shape.points.filter((_, at) => at !== index) }
+}
+export function toggleVideoEditMaskPoint(shape: VideoEditMaskShape, index: number): VideoEditMaskShape {
+  return { ...shape, points: shape.points.map((point, at): VideoEditMaskPoint => {
+    if (at !== index) return point
+    if (point.slice(2).some(Boolean)) return [point[0], point[1], 0, 0, 0, 0]
+    const before = shape.points[(at - 1 + shape.points.length) % shape.points.length]; const after = shape.points[(at + 1) % shape.points.length]
+    const dx = (after[0] - before[0]) / 6; const dy = (after[1] - before[1]) / 6
+    return [point[0], point[1], -dx, -dy, dx, dy]
+  }) }
+}
+
+/** de Casteljau 分割，保留原曲线包括相邻顶点的另一侧手柄。 */
+export function insertVideoEditMaskPoint(shape: VideoEditMaskShape, index: number, t: number): VideoEditMaskShape {
+  const points = shape.points.map(point => [...point] as VideoEditMaskPoint)
+  const a = points[index]; const b = points[(index + 1) % points.length]
+  const mix = (p: readonly number[], q: readonly number[]): [number, number] => [p[0] + (q[0] - p[0])*t, p[1] + (q[1] - p[1])*t]
+  const p = mix(a, [a[0]+a[4], a[1]+a[5]]); const q = mix([a[0]+a[4], a[1]+a[5]], [b[0]+b[2], b[1]+b[3]]); const r = mix([b[0]+b[2], b[1]+b[3]], b)
+  const s = mix(p, q); const v = mix(q, r); const m = mix(s, v)
+  a[4] = p[0]-a[0]; a[5] = p[1]-a[1]; b[2] = r[0]-b[0]; b[3] = r[1]-b[1]
+  points.splice(index+1, 0, [m[0], m[1], s[0]-m[0], s[1]-m[1], v[0]-m[0], v[1]-m[1]])
+  return { ...shape, points }
+}
+
+/** 点到路径最近的三次曲线参数；以显示像素距离度量，再局部细化。 */
+export function nearestVideoEditMaskSegment(shape: VideoEditMaskShape, point: { u: number; v: number }, width: number, height: number): { index: number; t: number; distance: number } {
+  let best = { index: 0, t: 0, distance: Infinity }
+  shape.points.forEach((a, index) => {
+    const b = shape.points[(index+1)%shape.points.length]
+    const distance = (t: number): number => {
+      const u = 1-t
+      const x = u*u*u*a[0]+3*u*u*t*(a[0]+a[4])+3*u*t*t*(b[0]+b[2])+t*t*t*b[0]
+      const y = u*u*u*a[1]+3*u*u*t*(a[1]+a[5])+3*u*t*t*(b[1]+b[3])+t*t*t*b[1]
+      return Math.hypot((x-point.u)*width, (y-point.v)*height)
+    }
+    let at = 0; let minimum = Infinity
+    for (let step = 0; step <= 32; step++) { const value = distance(step/32); if (value < minimum) { minimum = value; at = step/32 } }
+    let lo = Math.max(0, at-1/32); let hi = Math.min(1, at+1/32)
+    for (let iteration = 0; iteration < 18; iteration++) { const l = lo+(hi-lo)/3; const r = hi-(hi-lo)/3; if (distance(l) < distance(r)) hi=r; else lo=l }
+    const t = (lo+hi)/2; const value = distance(t)
+    if (value < best.distance) best = { index, t, distance: value }
+  })
+  return best
 }
 
 /**
@@ -178,7 +226,9 @@ const ROW_SAMPLES = 4
  * 闭合折线按非零环绕规则填充成 0–255 覆盖度（扫描线：每像素行取 4 条采样线，横向按像素精确累计覆盖比例）。
  */
 export function fillVideoEditMaskPolygon(polygon: Float64Array, width: number, height: number): Uint8Array {
-  const coverage = new Float32Array(width * height)
+  const output = new Uint8Array(width * height)
+  // 每条采样线只写跨度的两端，前缀和恢复覆盖；不再逐像素累加四次。
+  const coverage = new Float32Array(width + 1)
   const count = polygon.length / 2
   if (count < 3) return new Uint8Array(width * height)
   let minY = Infinity; let maxY = -Infinity
@@ -186,6 +236,7 @@ export function fillVideoEditMaskPolygon(polygon: Float64Array, width: number, h
   const firstRow = Math.max(0, Math.floor(minY)); const lastRow = Math.min(height - 1, Math.ceil(maxY))
   const crossings: Array<{ x: number; winding: number }> = []
   for (let row = firstRow; row <= lastRow; row++) {
+    coverage.fill(0)
     for (let sample = 0; sample < ROW_SAMPLES; sample++) {
       const sy = row + (sample + 0.5) / ROW_SAMPLES
       crossings.length = 0
@@ -203,17 +254,17 @@ export function fillVideoEditMaskPolygon(polygon: Float64Array, width: number, h
         if (!winding) continue
         const x0 = Math.max(0, crossings[index].x); const x1 = Math.min(width, crossings[index + 1].x)
         if (x1 <= x0) continue
-        const base = row * width
-        const start = Math.floor(x0); const end = Math.min(width - 1, Math.floor(x1))
-        if (start === end) { coverage[base + start] += (x1 - x0) / ROW_SAMPLES; continue }
-        coverage[base + start] += (start + 1 - x0) / ROW_SAMPLES
-        for (let x = start + 1; x < end; x++) coverage[base + x] += 1 / ROW_SAMPLES
-        if (end < width) coverage[base + end] += (x1 - end) / ROW_SAMPLES
+        const start = Math.floor(x0); const end = Math.floor(x1)
+        if (start === end) { const value = (x1-x0)/ROW_SAMPLES; coverage[start] += value; coverage[start+1] -= value; continue }
+        const left = (start+1-x0)/ROW_SAMPLES; const right = (x1-end)/ROW_SAMPLES
+        coverage[start] += left; coverage[start+1] += 1/ROW_SAMPLES-left
+        coverage[end] += right-1/ROW_SAMPLES
+        if (end < width) coverage[end+1] -= right
       }
     }
+    let value = 0
+    for (let x = 0; x < width; x++) { value += coverage[x]; output[row*width+x] = Math.round(Math.min(1, value)*255) }
   }
-  const output = new Uint8Array(width * height)
-  for (let index = 0; index < output.length; index++) output[index] = Math.round(Math.min(1, coverage[index]) * 255)
   return output
 }
 
@@ -223,23 +274,92 @@ export function videoEditShapeMaskSize(pictureWidth: number, pictureHeight: numb
   return { width: Math.max(1, Math.round(pictureWidth * scale)), height: Math.max(1, Math.round(pictureHeight * scale)) }
 }
 
+interface MaskRaster { data: Uint8Array; x: number; y: number; width: number; height: number }
+/** 只限制临时像素缓存的内存，不限制工程的形状或顶点数量。 */
+export class VideoEditMaskRasterCache {
+  private readonly entries = new Map<string, MaskRaster>()
+  private bytes = 0
+  constructor(private readonly budgetBytes = 16 * 1024 ** 2) {}
+  get(key: string): MaskRaster | undefined {
+    const value = this.entries.get(key)
+    if (value) { this.entries.delete(key); this.entries.set(key, value) }
+    return value
+  }
+  put(key: string, value: MaskRaster): void {
+    const previous = this.entries.get(key)
+    if (previous) { this.bytes -= previous.data.byteLength + key.length * 2; this.entries.delete(key) }
+    const bytes = value.data.byteLength + key.length * 2
+    if (bytes > this.budgetBytes) return
+    this.entries.set(key, value); this.bytes += bytes
+    while (this.bytes > this.budgetBytes) {
+      const first = this.entries.keys().next().value!
+      this.bytes -= this.entries.get(first)!.data.byteLength + first.length * 2; this.entries.delete(first)
+    }
+  }
+}
+
 /**
  * 把一组手绘遮罩画成一张 0–255 的蒙版：每个形状先填充，再按自己的扩展、羽化、反转处理（与智能区域同一套 O(n) 处理），
  * 乘以不透明度，然后按模式依次合成——相加 a + m(1 − a)，相减 a(1 − m)，交叉 a·m。
  * 第一个形状是相减或交叉时，从“整个画面”开始（与 AE / PR 一致：单独一个相减遮罩 = 挖掉这块）。
  */
-export function rasterizeVideoEditMaskShapes(shapes: readonly VideoEditMaskShape[], width: number, height: number): Uint8Array {
+export function rasterizeVideoEditMaskShapes(shapes: readonly VideoEditMaskShape[], width: number, height: number, cache?: VideoEditMaskRasterCache): Uint8Array {
+  // 羽化与扩展只消费路径附近的像素。截取所有控制点的保守包围盒，加上两个模糊 pass 与膨胀的完整支持半径。
+  const local = (shape: VideoEditMaskShape): MaskRaster => {
+    const key = cache && JSON.stringify([width, height, shape.points, shape.feather ?? VIDEO_EDIT_MASK_DEFAULTS.feather, shape.expand ?? VIDEO_EDIT_MASK_DEFAULTS.expand])
+    const cached = key && cache?.get(key)
+    if (cached) return cached
+    const polygon = flattenVideoEditMaskPath(shape.points, width, height)
+    const expand = Math.round(Math.abs(shape.expand ?? VIDEO_EDIT_MASK_DEFAULTS.expand)/100*0.1*height)
+    const feather = Math.round((shape.feather ?? VIDEO_EDIT_MASK_DEFAULTS.feather)/100*0.1*height/2)
+    const padding = expand + (feather ? 2*Math.max(1, Math.round(feather/2)) : 0) + 2
+    let minX = width; let minY = height; let maxX = 0; let maxY = 0
+    for (let index = 0; index < polygon.length; index += 2) { minX=Math.min(minX,polygon[index]); minY=Math.min(minY,polygon[index+1]); maxX=Math.max(maxX,polygon[index]); maxY=Math.max(maxY,polygon[index+1]) }
+    const x = Math.max(0, Math.min(width-1, Math.floor(minX)-padding)); const y = Math.max(0, Math.min(height-1, Math.floor(minY)-padding))
+    const w = Math.max(1, Math.min(width, Math.ceil(maxX)+padding)-x); const h = Math.max(1, Math.min(height, Math.ceil(maxY)+padding)-y)
+    for (let index = 0; index < polygon.length; index += 2) { polygon[index]-=x; polygon[index+1]-=y }
+    const filled = fillVideoEditMaskPolygon(polygon, w, h)
+    const data = processSmartRegionMatte(filled, w, h, { feather: (shape.feather ?? VIDEO_EDIT_MASK_DEFAULTS.feather)*height/h, expand: (shape.expand ?? VIDEO_EDIT_MASK_DEFAULTS.expand)*height/h, invert: false })
+    const result = { data, x, y, width: w, height: h }
+    if (key) cache?.put(key, result)
+    return result
+  }
+  if (shapes.length === 1) {
+    const shape = shapes[0]; const crop = local(shape); const output = new Uint8Array(width*height)
+    const opacity = (shape.opacity ?? 100)/100
+    const inverse = Boolean(shape.invert); const subtract = shape.mode === 'subtract'
+    const outside = Math.round((subtract ? 1-(inverse ? opacity : 0) : inverse ? opacity : 0)*255)
+    if (outside) output.fill(outside)
+    for (let y = 0; y < crop.height; y++) {
+      if (!inverse && !subtract && opacity === 1) output.set(crop.data.subarray(y*crop.width,(y+1)*crop.width), (y+crop.y)*width+crop.x)
+      else for (let x = 0; x < crop.width; x++) { const raw = crop.data[y*crop.width+x]/255; const value = (inverse ? 1-raw : raw)*opacity; output[(y+crop.y)*width+x+crop.x] = Math.round((subtract ? 1-value : value)*255) }
+    }
+    return output
+  }
   const accumulator = new Float32Array(width * height)
   if (shapes.length && (shapes[0].mode ?? 'add') !== 'add') accumulator.fill(1)
   for (const shape of shapes) {
-    const filled = fillVideoEditMaskPolygon(flattenVideoEditMaskPath(videoEditMaskShapePoints(shape), width, height), width, height)
-    const processed = processSmartRegionMatte(filled, width, height, { feather: shape.feather ?? VIDEO_EDIT_MASK_DEFAULTS.feather, expand: shape.expand ?? VIDEO_EDIT_MASK_DEFAULTS.expand, invert: Boolean(shape.invert) })
+    const crop = local(shape)
     const opacity = (shape.opacity ?? VIDEO_EDIT_MASK_DEFAULTS.opacity) / 100
     const mode = shape.mode ?? 'add'
-    for (let index = 0; index < accumulator.length; index++) {
-      const value = processed[index] / 255 * opacity; const current = accumulator[index]
-      accumulator[index] = mode === 'add' ? current + value * (1 - current) : mode === 'subtract' ? current * (1 - value) : current * value
+    const outside = shape.invert ? opacity : 0
+    const applyOutside = (start: number, end: number): void => {
+      if (outside === 0) { if (mode === 'intersect') accumulator.fill(0,start,end); return }
+      if (outside === 1) { if (mode !== 'intersect') accumulator.fill(mode === 'add' ? 1 : 0,start,end); return }
+      for (let index = start; index < end; index++) { const value=accumulator[index]; accumulator[index]=mode === 'add' ? value+outside*(1-value) : mode === 'subtract' ? value*(1-outside) : value*outside }
     }
+    applyOutside(0,crop.y*width)
+    for (let y = 0; y < crop.height; y++) {
+      const base=(y+crop.y)*width
+      applyOutside(base,base+crop.x)
+      for (let x = 0; x < crop.width; x++) {
+        const index=base+crop.x+x; const raw=crop.data[y*crop.width+x]/255
+        const value=(shape.invert ? 1-raw : raw)*opacity; const current=accumulator[index]
+        accumulator[index]=mode === 'add' ? current+value*(1-current) : mode === 'subtract' ? current*(1-value) : current*value
+      }
+      applyOutside(base+crop.x+crop.width,base+width)
+    }
+    applyOutside((crop.y+crop.height)*width,accumulator.length)
   }
   const output = new Uint8Array(width * height)
   for (let index = 0; index < output.length; index++) output[index] = Math.round(accumulator[index] * 255)

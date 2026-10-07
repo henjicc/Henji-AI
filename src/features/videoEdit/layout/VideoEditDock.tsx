@@ -20,11 +20,11 @@ import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { VideoEditDockHeaderActions, VideoEditDockTab } from './VideoEditDockChrome'
 import { dockVideoEditGroup, restoreVideoEditLayout, saveVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
-import { bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, focusVideoEditPopoutPanel, isVideoEditPanelPoppedOut, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
+import { bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, focusVideoEditPopoutPanel, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
 import { VideoEditPopoutPortals } from './popout/VideoEditPopoutPortals'
 
 const logger = createLogger('features.videoEdit.layout')
-interface DockContext { instance: VideoEditInstance; onError: (reason: unknown) => void }
+interface DockContext { instance: VideoEditInstance; onError: (reason: unknown) => void; onEffectsAdded?: (effectIds: readonly string[]) => void }
 const Context = createContext<DockContext | null>(null)
 function useDock(): DockContext { const value = useContext(Context); if (!value) throw new Error('剪辑面板宿主尚未就绪'); return value }
 type PanelBody = (props: { visible: boolean }) => React.ReactElement
@@ -59,6 +59,32 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
   const apiRef = useRef<DockviewApi | null>(null)
   const hostRef = useRef<HTMLDivElement | null>(null)
   const disposeRef = useRef<() => void>(() => {})
+  const [addedEffects, setAddedEffects] = useState<readonly string[]>([])
+  const onEffectsAdded = useCallback((effectIds: readonly string[]): void => {
+    const popout = listVideoEditPopouts().find(entry => entry.panels.includes('effects'))
+    if (popout) {
+      if (!popout.visible || popout.active !== 'effects') focusVideoEditPopoutPanel('effects')
+    } else if (apiRef.current && !apiRef.current.getPanel('effects')?.api.isVisible) {
+      showVideoEditPanel(apiRef.current, 'effects')
+    }
+    setAddedEffects(effectIds)
+  }, [])
+  useEffect(() => {
+    if (!addedEffects.length) return
+    // 等面板激活与领域更新提交到 DOM；只滚动内容，不改变已可见面板的焦点或停靠位置。
+    let frame = requestAnimationFrame(() => {
+      const root = listVideoEditPopouts().find(entry => entry.panels.includes('effects'))?.popout.container ?? hostRef.current
+      const panel = root?.querySelector('[data-video-edit-panel="effects"]')
+      const section = panel?.querySelector('[data-video-edit-effect-section="effects"]')
+      const collapsedSection = Array.from(section?.querySelectorAll<HTMLElement>('button[aria-expanded="false"]') ?? []).find(item => !item.closest('[data-video-edit-effect-chain]'))
+      collapsedSection?.click()
+      frame = requestAnimationFrame(() => {
+        const effect = Array.from(panel?.querySelectorAll<HTMLElement>('[data-video-edit-effect]') ?? []).find(item => addedEffects.includes(item.dataset.videoEditEffect ?? ''))
+        effect?.scrollIntoView({ block: 'nearest' })
+      })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [addedEffects])
   useEffect(() => {
     let previous = instance.panelFocusVersion ?? 0
     return subscribeVideoEditView(() => {
@@ -103,7 +129,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     disposeRef.current = () => { event.dispose(); focus.dispose(); unbindGestures(); if (timer !== undefined) save() }
   }, [onApiChange, onError, instance])
   useEffect(() => () => { bindVideoEditPopoutDock(null); disposeRef.current(); apiRef.current = null; onApiChange(null) }, [onApiChange])
-  return <Context.Provider value={{ instance, onError }}>
+  return <Context.Provider value={{ instance, onError, onEffectsAdded }}>
     {/* 层叠隔离与分隔条拖动保护见 DockviewHost（与 3D 镜头参考共用） */}
     <DockviewHost ref={hostRef} className="h-full min-h-0 w-full">
       <DockviewReact className="henji-cameraStage-dock henji-videoEdit-dock dockview-theme-abyss h-full min-h-0 w-full" theme={VIDEO_EDIT_DOCK_THEME} components={COMPONENTS}

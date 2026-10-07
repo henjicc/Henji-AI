@@ -1,5 +1,6 @@
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditCompositeNode } from '@/core/videoEdit/compositing'
+import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
 import { videoEditTransitionRender } from '@/core/videoEdit/transitions'
 import type { PreparedVideoEditEffect } from './videoEditCodeSources'
@@ -47,7 +48,7 @@ function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditT
  * playback resolution (task 4.9): code filters then still read the sequence size (a `1/width` offset stays the same
  * fraction of the picture) and built-in effects learn the scale for the few amounts that cannot shrink below a pixel.
  */
-export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document, target?: VideoEditCodePicture): Promise<{ presented: boolean; completion: Promise<void> }> {
+export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document, target?: VideoEditCodePicture, onEffectError?: (effect: VideoEditEffect, error: unknown) => void): Promise<{ presented: boolean; completion: Promise<void> }> {
   const renderScale = document.height / logical.height
   let runtime: VideoEditCodeGpu | undefined
   const submissions: Array<Promise<PromiseSettledResult<void>>> = []
@@ -68,22 +69,30 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     const runtime = await gpu(); const targets = slots(clip); const preserve = clip.kind === 'adjustment' && clip.opacity < 1
     let result = input; let key = targets[0]
     for (const plan of effects.get(clip.id) ?? []) {
-      if (!plan.effect.enabled || plan.effect.amount <= 0) continue
+      if (clip.effectsEnabled === false || !plan.effect.enabled || plan.effect.amount <= 0) continue
       current()
       const free = targets.filter(target => target !== key && (!preserve || target !== targets[0]))
-      const filtered = plan.builtin
-        ? await runtime.builtin(free[0], plan.builtin, result, frame, renderScale, document.lumetriLuts)
-        : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: logical.width, height: logical.height }, plan.parameters, result, plan.transitionHandles)
-      current()
-      if (plan.builtin && plan.mask) {
-        // 区域蒙版按片段自己的位置、缩放、旋转画到序列尺寸，与片段画面逐像素对齐；只在区域内混入效果。
-        const source = await runtime.uploadMask(MASK_SOURCE, plan.mask.width, plan.mask.height, plan.mask.data)
-        const region = await runtime.target(MASK_DOCUMENT, document.width, document.height); current()
-        const drawn = await compositor.draw(document, [{ ...clip, opacity: 1 }], [source], shouldPresent, undefined, region)
-        watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
-        result = await runtime.maskedMix(free[1], result, filtered, region, plan.effect.amount); key = free[1]; current()
-      } else if (plan.effect.amount === 1) { result = filtered; key = free[0] }
-      else { result = await runtime.mix(free[1], result, filtered, plan.effect.amount); key = free[1]; current() }
+      const previous = result; const previousKey = key
+      try {
+        const filtered = plan.builtin
+          ? await runtime.builtin(free[0], plan.builtin, result, frame, renderScale, document.lumetriLuts)
+          : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: logical.width, height: logical.height }, plan.parameters, result, plan.transitionHandles)
+        current()
+        if (plan.builtin && plan.mask) {
+          // 区域蒙版按片段自己的位置、缩放、旋转画到序列尺寸，与片段画面逐像素对齐；只在区域内混入效果。
+          const source = await runtime.uploadMask(MASK_SOURCE, plan.mask.width, plan.mask.height, plan.mask.data)
+          const region = await runtime.target(MASK_DOCUMENT, document.width, document.height); current()
+          const drawn = await compositor.draw(document, [{ ...clip, opacity: 1 }], [source], shouldPresent, undefined, region)
+          watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
+          result = await runtime.maskedMix(free[1], result, filtered, region, plan.effect.amount); key = free[1]; current()
+        } else if (plan.effect.amount === 1) { result = filtered; key = free[0] }
+        else { result = await runtime.mix(free[1], result, filtered, plan.effect.amount); key = free[1]; current() }
+      } catch (error) {
+        current()
+        if (plan.builtin || !onEffectError) throw error
+        result = previous; key = previousKey
+        onEffectError(plan.effect, error)
+      }
     }
     if (preserve && result !== input) {
       const target = targets.find(target => target !== key && target !== targets[0])!

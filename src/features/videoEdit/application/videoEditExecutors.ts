@@ -1,3 +1,4 @@
+import { videoEditIntroducesCodeEffects } from '@/core/videoEdit/compositing'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditSequenceSchema } from '@/core/videoEdit/document'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference } from './videoEditProxy'
@@ -213,7 +214,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       const next = videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before))))
       assertVideoEditLockedTracks(before, next)
       const target = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) ? videoEditCompositeOwner(next, this.entityType as VideoEditCompositeEntityType, childId) : { sequence: next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!, clipIds: [childId] }
-      await trialVideoEditCodeDocument(owner, before, next, target.sequence.id, target.sequence.clips.find(clip => clip.id === target.clipIds[0])!.start, context?.signal, target.clipIds.map(clipId => ({ sequenceId: target.sequence.id, clipId })))
+      if (videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(owner, before, next, target.sequence.id, target.sequence.clips.find(clip => clip.id === target.clipIds[0])!.start, context?.signal, target.clipIds.map(clipId => ({ sequenceId: target.sequence.id, clipId })))
     } else if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => ['video_edit.clip.code_version_id', 'video_edit.clip.code_parameters'].includes(mutation.propertyId))) {
       const next = videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before))))
       const sequence = next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!
@@ -393,7 +394,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       const sequence = next.sequences.find(sequence => this.entityType === 'video_edit.transition' ? sequence.id === parsed.childId : sequence.clips.some(clip => clip.id === parsed.childId))!
       // 音频过渡两端是声音片段，不做画面试渲染。
       const pictured = clipIds.filter(clipId => sequence.clips.find(clip => clip.id === clipId)?.kind !== 'audio')
-      if (pictured.length) await trialVideoEditCodeDocument(instance, before, next, sequence.id, sequence.clips.find(clip => clip.id === pictured[0])!.start, context?.signal, pictured.map(clipId => ({ sequenceId: sequence.id, clipId })))
+      if (pictured.length && videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(instance, before, next, sequence.id, sequence.clips.find(clip => clip.id === pictured[0])!.start, context?.signal, pictured.map(clipId => ({ sequenceId: sequence.id, clipId })))
     }
     if (this.entityType === 'video_edit.clip' && step.operation.kind === 'create') {
       const sequence = next.sequences.find(sequence => sequence.id === parsed.childId)!

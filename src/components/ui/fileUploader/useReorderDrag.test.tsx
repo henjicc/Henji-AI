@@ -70,6 +70,41 @@ describe('useReorderDrag grid layout', () => {
     vi.useRealTimers();
   });
 
+  it('Esc取消拖动及尚未提交的落位，不调用排序', () => {
+    vi.useFakeTimers()
+    const onReorder = vi.fn()
+    const view = render(<Harness onReorder={onReorder} />)
+    for (const dropping of [false, true]) {
+      fireEvent.mouseDown(view.getByTestId('first'), { button: 0, clientX: 50, clientY: 50 })
+      fireEvent.mouseMove(window, { clientX: 50, clientY: 90 })
+      fireEvent.mouseMove(window, { clientX: 50, clientY: 170 })
+      if (dropping) fireEvent.mouseUp(window)
+      fireEvent.keyDown(window, { key: 'Escape' })
+      fireEvent.mouseUp(window)
+      act(() => vi.runAllTimers())
+      expect(onReorder).not.toHaveBeenCalled()
+      expect(view.getByTestId('drag-state').getAttribute('data-dragging')).toBe('false')
+    }
+  })
+  it('浮窗中的排序和Esc监听目标所属窗口', () => {
+    vi.useFakeTimers()
+    const frame = document.createElement('iframe'); document.body.append(frame)
+    const onReorder = vi.fn()
+    const view = render(<Harness onReorder={onReorder} />, { container: frame.contentDocument!.body })
+    const owner = frame.contentWindow!
+    try {
+      fireEvent.mouseDown(view.getByTestId('first'), { button: 0, clientX: 50, clientY: 50 })
+      fireEvent.mouseMove(owner, { clientX: 50, clientY: 90 })
+      fireEvent.mouseMove(owner, { clientX: 50, clientY: 170 })
+      fireEvent.keyDown(owner, { key: 'Escape' }); fireEvent.mouseUp(owner)
+      act(() => vi.runAllTimers()); expect(onReorder).not.toHaveBeenCalled()
+      fireEvent.mouseDown(view.getByTestId('first'), { button: 0, clientX: 50, clientY: 50 })
+      fireEvent.mouseMove(owner, { clientX: 50, clientY: 90 })
+      fireEvent.mouseMove(owner, { clientX: 50, clientY: 170 }); fireEvent.mouseUp(owner)
+      act(() => vi.runAllTimers()); expect(onReorder).toHaveBeenCalledWith(0, 1)
+    } finally { view.unmount(); frame.remove() }
+  })
+
   it('跨行拖到目标卡片后提交新的同类顺序', () => {
     vi.useFakeTimers();
     const onReorder = vi.fn();
@@ -79,6 +114,19 @@ describe('useReorderDrag grid layout', () => {
     fireEvent.mouseMove(window, { clientX: 50, clientY: 80 });
     fireEvent.mouseMove(window, { clientX: 50, clientY: 170 });
     fireEvent.mouseUp(window);
+    act(() => vi.advanceTimersByTime(150));
+
+    expect(onReorder).toHaveBeenCalledWith(0, 1);
+  });
+
+  it('越过拖动阈值后直接在目标上松手，按松手位置落位', () => {
+    vi.useFakeTimers();
+    const onReorder = vi.fn();
+    const rendered = render(<Harness onReorder={onReorder} />);
+
+    fireEvent.mouseDown(rendered.getByTestId('first'), { button: 0, clientX: 50, clientY: 50 });
+    fireEvent.mouseMove(window, { clientX: 50, clientY: 80 });
+    fireEvent.mouseUp(window, { clientX: 50, clientY: 170 });
     act(() => vi.advanceTimersByTime(150));
 
     expect(onReorder).toHaveBeenCalledWith(0, 1);

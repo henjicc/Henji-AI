@@ -85,7 +85,7 @@ describe('剪辑智能区域混合（真实设备）', () => {
       plans.push({ effect: { id: `code-${index}`, name: '旋转通道', enabled: true, amount: 1, code: { definitionId: 'rotate', versionId: `v${index}`, parameters: {} } }, version: `v${index}`, program, parameters: {}, context, transitionHandles: false })
       if (index % 2 === 0) {
         const masked = index % 4 === 0
-        plans.push({ effect: { id: `invert-${index}`, name: '反相', enabled: true, amount: .25, builtin: { id: 'invert', params: {} }, ...(masked ? { mask: { regionId: 'shapes', shapes: [{ id: 'left', kind: 'rect', box: [0, 0, .5, 1] }] } } : {}) }, builtin: { id: 'invert', params: {} }, ...(masked ? { mask: { width: W, height: H, data: mask } } : {}) })
+        plans.push({ effect: { id: `invert-${index}`, name: '反相', enabled: true, amount: .25, builtin: { id: 'invert', params: {} }, ...(masked ? { mask: { regionId: 'shapes', shapes: [{ id: 'left', kind: 'rect', points: [[0,0,0,0,0,0],[.5,0,0,0,0,0],[.5,1,0,0,0,0],[0,1,0,0,0,0]] }] } } : {}) }, builtin: { id: 'invert', params: {} }, ...(masked ? { mask: { width: W, height: H, data: mask } } : {}) })
       }
     }
     // Disabled and zero-strength effects must not alter either pixels or resource count.

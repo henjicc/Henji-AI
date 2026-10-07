@@ -34,7 +34,7 @@ export function videoEditAudioContent(snapshot: VideoEditComposition): string {
         return {
           start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder,
           speed: clip.speed ?? { numerator: 1, denominator: 1 }, reverse: clip.reverse ?? false, preservePitch: clip.preservePitch ?? false,
-          volume: clip.volume, volumeCurve: points(clip.curves?.volume), fadeInFrames: clip.fadeInFrames ?? 0, fadeOutFrames: clip.fadeOutFrames ?? 0,
+          volume: clip.disabledIntrinsicSections?.includes('audio') ? 1 : clip.volume, volumeCurve: points(clip.disabledIntrinsicSections?.includes('audio') ? undefined : clip.curves?.volume), fadeInFrames: clip.fadeInFrames ?? 0, fadeOutFrames: clip.fadeOutFrames ?? 0,
           audioMapping: clip.audioMapping,
           effects: activeVideoEditAudioEffects(clip).map(effect => ({ id: effect.builtin.id, amount: effect.amount, params: effect.builtin.params,
             curves: Object.fromEntries(Object.entries(effect.builtin.curves ?? {}).map(([key, values]) => [key, points(values)])) })),

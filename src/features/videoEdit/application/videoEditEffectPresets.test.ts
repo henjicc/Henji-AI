@@ -78,10 +78,10 @@ it('保存参数强度开关与作用区域；手绘形状可选保存，跟踪�
   const library = createVideoEditEffectLibraryStore(storage()).getState()
   const effect = { ...makeVideoEditBuiltinEffect('mosaic'), enabled: false, amount: .45, mask: { regionId: 'face' as const, invert: true, feather: 25, expand: 10 } }
   expect(library.savePreset('人脸处理', [effect]).effects[0]).toMatchObject(effect)
-  const shapes = { ...effect, mask: { regionId: 'shapes' as const, shapes: [{ id: 'shape', kind: 'rect' as const, box: [.2, .1, .3, .4] as [number, number, number, number], follow: { trackerId: 'original', reference: [0, 0, 1, 1] as [number, number, number, number] } }] } }
+  const shapes = { ...effect, mask: { regionId: 'shapes' as const, shapes: [{ id: 'shape', kind: 'rect' as const, points: [[.2,.1,0,0,0,0],[.5,.1,0,0,0,0],[.5,.5,0,0,0,0],[.2,.5,0,0,0,0]] as import('@/core/videoEdit/effectMasks').VideoEditMaskPoint[], follow: { trackerId: 'original', reference: [0, 0, 1, 1] as [number, number, number, number] } }] } }
   expect(library.savePreset('不含形状', [shapes]).effects[0].mask).toBeUndefined()
   const saved = library.savePreset('含形状', [shapes], true)
-  expect(saved.effects[0].mask).toEqual({ regionId: 'shapes', shapes: [{ id: 'shape', kind: 'rect', box: [.2, .1, .3, .4] }] })
+  expect(saved.effects[0].mask).toEqual({ regionId: 'shapes', shapes: [{ id: 'shape', kind: 'rect', points: [[.2,.1,0,0,0,0],[.5,.1,0,0,0,0],[.5,.5,0,0,0,0],[.2,.5,0,0,0,0]] }] })
   expect(shapes.mask.shapes[0].follow).toBeDefined()
   expect(() => library.savePreset('混合媒介', [effect, makeVideoEditBuiltinEffect('high_pass')])).toThrow('同媒介')
 })

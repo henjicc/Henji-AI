@@ -10,6 +10,8 @@ export interface VideoEditMaskEditingTarget extends VideoEditCompositeTarget {
   effectId: string
   /** 选中的遮罩（显示控制柄）；没有时只显示路径。 */
   shapeId?: string
+  /** 顶点选区只属于监视器视图，不进文档与撤销。 */
+  pointIndex?: number
   /** 钢笔：在节目监视器上逐点画一条新路径。 */
   pen?: boolean
 }
@@ -17,6 +19,14 @@ export interface VideoEditMaskEditingTarget extends VideoEditCompositeTarget {
 let current: VideoEditMaskEditingTarget | null = null
 let revision = 0
 const listeners = new Set<() => void>()
+let lastUpdate: { sequenceId: string; revision: number; at: number } | undefined
+/** 性能诊断时间戳，不属于产品状态；一次只保留最近的遮罩更新。 */
+export function recordVideoEditMaskUpdate(sequenceId: string, revision: number, at = performance.now()): void { lastUpdate = { sequenceId, revision, at } }
+export function videoEditMaskUpdateTime(sequenceId: string, revision: number): number | undefined {
+  if (lastUpdate?.sequenceId !== sequenceId || lastUpdate.revision !== revision) return
+  const at = lastUpdate.at; lastUpdate = undefined
+  return at
+}
 
 export function getVideoEditMaskEditing(): VideoEditMaskEditingTarget | null { return current }
 export function videoEditMaskEditingRevision(): number { return revision }

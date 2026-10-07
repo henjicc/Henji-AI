@@ -1,7 +1,7 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { memo, useSyncExternalStore } from 'react'
 import { Trash2 } from 'lucide-react'
-import { UiButton, UiFormRow, UiGroup, UiLoading } from '@/components/ui'
+import { UiButton, UiFormRow, UiGroup } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
 import NumberInput from '@/components/ui/NumberInput'
 import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
@@ -41,7 +41,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
   const preset = videoEditTransitionPreset(transition.kind)
   const fps = videoEditFps(sequence.frameRate)
   const before = videoEditTransitionFramesBeforeCut(transition)
-  const update = (changes: Parameters<typeof updateVideoEditTransition>[3]): void => { void action.run(signal => updateVideoEditTransition(projectId, sequence.id, transition.id, changes, signal)) }
+  const update = (changes: Parameters<typeof updateVideoEditTransition>[3]): void => { void action.run(signal => updateVideoEditTransition(projectId, sequence.id, transition.id, changes, signal), undefined, false) }
   const Icon = ICON_VIDEO_EDIT_TRANSITION
   return <UiGroup title="过渡" titleTone="compact" divided data-video-edit-transition-panel={transition.id}>
     <div className="flex min-w-0 items-center gap-2 px-1">
@@ -72,8 +72,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
       <VideoEditBuiltinParamRows params={params} values={resolveVideoEditTransitionParams(transition.kind, transition.parameters)} gesture={gesture} />
     </div>}
     <div className="flex items-center gap-2">
-      <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null)) }}><Trash2 size={14} aria-hidden="true" />删除过渡</UiButton>
-      {action.busy && <><UiLoading size="xs" message="正在检查过渡画面" /><UiButton size="sm" onClick={action.cancel}>取消</UiButton></>}
+      <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null), false) }}><Trash2 size={14} aria-hidden="true" />删除过渡</UiButton>
     </div>
   </UiGroup>
 })

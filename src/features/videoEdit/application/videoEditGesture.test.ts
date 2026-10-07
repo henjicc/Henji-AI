@@ -86,3 +86,12 @@ it('关闭保存期间拒绝新的手势和写入，合并并发关闭，失败�
   const handle = beginVideoEditGesture(id); finishVideoEditGesture(handle)
   expect(listVideoEditInstances()).toContain(reopened)
 })
+
+it('没有任何预览写入的手势取消或提交都不产生新版本，画面版本不会领先已保存版本', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  appendVideoEditClip(id); await saveVideoEdit(id)
+  const revision = owner.document.revision; const history = owner.past.length
+  finishVideoEditGesture(beginVideoEditGesture(id), false)
+  finishVideoEditGesture(beginVideoEditGesture(id))
+  expect(owner.document.revision).toBe(revision); expect(owner.past).toHaveLength(history)
+})

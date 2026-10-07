@@ -40,6 +40,22 @@ function changedVersion(document: VideoEditComposition, id: string): VideoEditCo
 }
 
 describe('可见代码源与固定内容复用', () => {
+  it('滤镜编译失败可跳过并报告，保留后续内置效果；未声明兜底的检查路径仍失败', async () => {
+    const document = fixture(source('static', '坏滤镜', 'filter'))
+    document.clips = [{ ...document.clips[0], kind: 'image', code: undefined, effects: [
+      { id: 'bad', name: '坏滤镜', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: 'v0', parameters: {} } },
+      { id: 'good', name: '锐化', enabled: true, amount: 1, builtin: { id: 'sharpen', params: {} } },
+    ] }]
+    const boundary = boundaries(document)
+    boundary.compiler.compile.mockRejectedValue(new Error('编译失败'))
+    const failures = vi.fn()
+    try {
+      const prepared = await boundary.sources.prepare(document, document.clips, 0, () => true, undefined, { onEffectError: failures })
+      expect(prepared.effects.get(document.clips[0].id)?.map(plan => plan.effect.id)).toEqual(['good'])
+      expect(failures).toHaveBeenCalledWith(document.clips[0].effects![0], expect.any(Error))
+      await expect(boundary.sources.prepare(document, document.clips, 0, () => true)).rejects.toThrow('编译失败')
+    } finally { await boundary.sources.dispose() }
+  })
   it('40份不同代码滤镜同帧保留，下一帧不重新编译，缩短链后闲置缓存回落', async () => {
     const document = fixture(source(), 40)
     document.codeMaterials![0].versions.forEach((version, index) => { version.source = source('static', `滤镜${index}`, 'filter') })

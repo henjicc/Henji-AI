@@ -60,6 +60,8 @@ export function writeVideoEditClipKeyframes(clip: VideoEditClip, key: VideoEditA
   return { ...clip, curves }
 }
 export function videoEditClipValue(clip: VideoEditClip, key: VideoEditAnimatableKey, timelineFrame: number): number {
+  const section = key === 'volume' ? 'audio' : key === 'opacity' ? 'opacity' : 'motion'
+  if (clip.disabledIntrinsicSections?.includes(section)) return key === 'scale' || key === 'opacity' ? 1 : key === 'volume' ? (clip.kind === 'adjustment' ? 0 : 1) : key === 'anchorX' || key === 'anchorY' ? 0.5 : 0
   return evaluateVideoEditKeyframes(clip.curves?.[key], timelineFrame - clip.start, clip[key] ?? 0.5)
 }
 export function evaluateVideoEditEffect(effect: VideoEditEffect, time: number): VideoEditEffect {
@@ -75,11 +77,15 @@ export function evaluateVideoEditBuiltinParameters(builtin: { id: string; params
 /** Applied after tracking: animated x/y offset its live base; scale multiplies it. */
 export function evaluateVideoEditClip(clip: VideoEditClip, timelineFrame: number): VideoEditClip {
   const values: Partial<Record<VideoEditAnimatableKey, number>> = {}
-  for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) if (clip.curves?.[key]?.length) {
+  for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) if (clip.disabledIntrinsicSections?.includes(key === 'volume' ? 'audio' : key === 'opacity' ? 'opacity' : 'motion') || clip.curves?.[key]?.length) {
     const value = videoEditClipValue(clip, key, timelineFrame)
-    values[key] = clip.follow && (key === 'x' || key === 'y') ? clip[key] + value : clip.follow && key === 'scale' ? clip.scale * value : value
+    values[key] = !clip.disabledIntrinsicSections?.includes('motion') && clip.follow && (key === 'x' || key === 'y') ? clip[key] + value : !clip.disabledIntrinsicSections?.includes('motion') && clip.follow && key === 'scale' ? clip.scale * value : value
   }
-  return { ...clip, ...values, ...(clip.effects ? { effects: clip.effects.map(effect => evaluateVideoEditEffect(effect, timelineFrame - clip.start)) } : {}) }
+  const result = { ...clip, ...values, ...(clip.effects ? { effects: clip.effects.map(effect => evaluateVideoEditEffect(effect, timelineFrame - clip.start)) } : {}) }
+  if (clip.disabledIntrinsicSections?.includes('text')) result.text = ''
+  if (clip.disabledIntrinsicSections?.includes('textStyle')) delete result.textStyle
+  if (clip.disabledIntrinsicSections?.includes('motion')) { delete result.follow; delete (result as VideoEditClip & { trackingQuad?: unknown }).trackingQuad }
+  return result
 }
 export function assertVideoEditKeyframeTimes(curves: VideoEditCurves | undefined, duration: number, title: string): void {
   for (const [key, points] of Object.entries(curves ?? {})) for (const point of points) if (point.time >= duration) throw new Error(`${title} ${key}.keyframes 的 time 越界：允许片段内 0–${duration - 1} 帧。`)

@@ -1,6 +1,6 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 // @vitest-environment jsdom
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DockviewApi } from 'dockview-react'
 
@@ -11,11 +11,31 @@ import { activateVideoEditPopoutPanel, dockVideoEditPopout, dockVideoEditPopoutW
 import { VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY } from './popout/videoEditPopoutLayout'
 import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
 import { createPopoutTestHost } from './popout/videoEditPopout.testSupport'
+import { videoEditClipSchema } from '@/core/videoEdit/document'
+import * as compositing from '../application/videoEditCompositing'
 
 const lifetime = vi.hoisted(() => ({ created: 0, live: 0, peak: 0, disposed: 0 }))
+const effectScroll = vi.hoisted(() => vi.fn())
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }))
+vi.mock('@/contexts/NotificationContext', () => ({ useNotification: () => ({ showNotification: vi.fn() }) }))
+vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  setTracks() {}
+  async updateDocument() {}
+  async present() { return { presented: true, bitmap: { close() {} } } }
+  async dispose() {}
+} }))
 vi.mock('../panels/VideoEditProjectPanel', () => ({ VideoEditProjectPanel: () => <div>素材面板</div> }))
-vi.mock('../panels/VideoEditEffectsPanel', () => ({ VideoEditEffectsPanel: () => <div>效果控件</div> }))
+vi.mock('../panels/VideoEditEffectsPanel', async () => {
+  const { useState } = await import('react')
+  const { UiButton } = await import('@/components/ui')
+  return { VideoEditEffectsPanel: function EffectsPanel(): React.ReactElement {
+    const [open, setOpen] = useState(true)
+    return <div>效果控件<div data-video-edit-effect-section="effects">
+      <UiButton aria-label="折叠附加效果" aria-expanded={open} onClick={() => setOpen(!open)}>附加效果</UiButton>
+      {open && <div data-video-edit-effect-chain="clip"><div data-video-edit-effect="added-effect" ref={element => { if (element) element.scrollIntoView = effectScroll }}>新效果</div></div>}
+    </div></div>
+  } }
+})
 vi.mock('../VideoEditTimeline', () => ({ VideoEditTimeline: () => <div>时间线</div> }))
 vi.mock('../VideoEditPreview', async () => {
   const { useEffect } = await import('react')
@@ -30,6 +50,7 @@ vi.mock('../VideoEditPreview', async () => {
 
 beforeEach(() => {
   localStorage.clear(); lifetime.created = 0; lifetime.live = 0; lifetime.peak = 0; lifetime.disposed = 0
+  effectScroll.mockClear()
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} })
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1440, 860))
 })
@@ -128,6 +149,52 @@ const makeInstance = (name: string): VideoEditInstance => {
   return { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
 }
 const savedPopouts = (): unknown => JSON.parse(localStorage.getItem(VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY) ?? 'null')
+
+it.each(['closed', 'stacked', 'visible', 'collapsed', 'popout_stacked', 'popout_visible'] as const)('双击添加后恢复效果控件（%s），已可见时保留原焦点与布局，滚动到新效果', async state => {
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0))
+  vi.stubGlobal('cancelAnimationFrame', (handle: number) => window.clearTimeout(handle))
+  vi.spyOn(compositing, 'applyVideoEditBuiltinEffect').mockReturnValue(['added-effect'])
+  const instance = makeInstance('效果库应用')
+  const clip = videoEditClipSchema.parse({ id: 'clip', itemId: 'item', name: '画面', kind: 'text', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '画面' })
+  instance.document.sequences[0].clips.push(clip)
+  instance.selectedClipIds = [clip.id]; instance.selection = clip.id
+  let api: DockviewApi | null = null
+  const onError = vi.fn()
+  const view = render(<VideoEditDock instance={instance} onError={onError} onApiChange={value => { api = value }} />)
+  const dock = api as unknown as DockviewApi
+  const { host, opened } = createPopoutTestHost()
+  act(() => {
+    dock.layout(1440, 860)
+    dock.getPanel('effects_library')!.api.moveTo({ group: dock.getPanel('project')!.group, position: 'center' })
+    if (state === 'closed') dock.getPanel('effects')!.api.close()
+    else if (state === 'stacked') dock.getPanel('title_templates')!.api.setActive()
+    else if (state.startsWith('popout')) {
+      popOutVideoEditPanel(dock, 'effects', host)
+      Object.defineProperty(opened[0].child.document, 'visibilityState', { configurable: true, value: 'visible' })
+      opened[0].child.document.dispatchEvent(new Event('visibilitychange'))
+      if (state === 'popout_stacked') floatVideoEditDockSource(dock, { kind: 'panel', panel: dock.getPanel('title_templates')! }, { x: 2900, y: 300 }, host)
+    } else dock.getPanel('effects')!.api.setActive()
+    dock.getPanel('program')!.api.setActive()
+  })
+  if (state === 'collapsed') fireEvent.click(view.container.querySelector('[data-video-edit-effect-section="effects"] button')!)
+  const groups = dock.groups.map(group => group.id)
+  if (opened.length) opened[0].child.focus.mockClear()
+  fireEvent.doubleClick(view.container.querySelector('[data-video-edit-effects-entry="effect:gaussian_blur"]')!)
+  if (opened.length) {
+    expect(dock.getPanel('effects')).toBeUndefined()
+    expect(listVideoEditPopouts()[0].active).toBe('effects')
+    if (state === 'popout_visible') expect(opened[0].child.focus).not.toHaveBeenCalled()
+    else expect(opened[0].child.focus).toHaveBeenCalledOnce()
+  } else {
+    const panel = dock.getPanel('effects')!
+    expect(panel.api.isVisible).toBe(true)
+    expect(panel.group.activePanel?.id).toBe('effects')
+  }
+  if (state !== 'closed') expect(dock.groups.map(group => group.id)).toEqual(groups)
+  if (state === 'visible' || state === 'collapsed') expect(dock.activePanel?.id).toBe('program')
+  await waitFor(() => expect(effectScroll).toHaveBeenCalledWith({ block: 'nearest' }))
+  expect(onError).not.toHaveBeenCalled()
+})
 
 it('节目面板可浮出（重挂载一次、不并存两份）；浮窗记录随工作区卸载/主窗口退出保留并在 Dock 就绪后恢复，用户关闭即关闭面板并移除记录', () => {
   const { opened, open } = createPopoutTestHost()

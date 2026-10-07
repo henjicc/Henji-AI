@@ -1,6 +1,6 @@
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditComposition, videoEditVisibleTracks, type VideoEditDocument } from '@/core/videoEdit/document'
-import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { ensureVideoEditCodeDocumentMetadata } from './videoEditCodeState'
 import { listVideoEditInstances, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { videoEditTransitionClipIds, videoEditTransitionWindow } from '@/core/videoEdit/transitions'
@@ -42,7 +42,7 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
     const targetTracks = new Set(actual.clips.filter(clip => ids.has(clip.id)).map(clip => clip.track))
     const forced: VideoEditComposition = { ...actual,
       tracks: actual.tracks.map(track => ({ ...track, enabled: visible.has(track.index) || targetTracks.has(track.index), solo: false })),
-      clips: actual.clips.filter(clip => visible.has(clip.track) || ids.has(clip.id)).map(clip => clip.id === target.clipId ? { ...clip, opacity: 1, effects: clip.effects?.map(effect => !target.effectIds || target.effectIds.includes(effect.id) ? { ...effect, enabled: true, amount: 1 } : effect) } : clip),
+      clips: actual.clips.filter(clip => visible.has(clip.track) || ids.has(clip.id)).map(clip => clip.id === target.clipId ? { ...clip, opacity: 1, effectsEnabled: true, effects: clip.effects?.map(effect => !target.effectIds || target.effectIds.includes(effect.id) ? { ...effect, enabled: true, amount: 1 } : effect) } : clip),
       transitions: actual.transitions?.filter(transition => videoEditTransitionClipIds(transition).every(id => actual.clips.some(clip => clip.id === id && (visible.has(clip.track) || ids.has(clip.id))))),
     }
     for (const input of videoEditCodeTrialFrames(document, [target])) frames.push({ document: forced, frame: input.frame })
@@ -77,13 +77,14 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
       clearTimeout(timer)
       timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
       if (renderer && sequenceId !== input.document.id) { await renderer.dispose(); renderer = undefined }
-      if (!renderer) { renderer = new VideoEditRenderSession(input.document); sequenceId = input.document.id }
+      if (!renderer) { const { VideoEditRenderSession } = await import('../engine/videoEditRenderSession'); signal.throwIfAborted(); renderer = new VideoEditRenderSession(input.document); sequenceId = input.document.id }
       else await Promise.race([renderer.updateDocument(input.document), deadline])
       const result = await Promise.race([renderer.present(input.frame).then(result => {
         if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
         return result
       }), deadline])
       bitmap?.close(); bitmap = result.bitmap
+      if (result.effectErrors?.length) throw new Error(result.effectErrors.join('\n'))
       if (!result.presented || !bitmap) throw new Error('源码候选没有生成可用画面。')
     }
     signal.throwIfAborted()

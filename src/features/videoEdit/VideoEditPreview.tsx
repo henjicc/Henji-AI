@@ -124,6 +124,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   }
   const [preparing, setPreparing] = useState(false)
   const [retry, setRetry] = useState(0)
+  const [effectFailure, setEffectFailure] = useState<string | null>(null)
   const [renderFailure, setRenderFailure] = useState<string | null>(null)
   const [collecting, setCollecting] = useState(false)
   /** 正在拖入时指针所在的落点区；替换区在播放头下没有片段时不可用。 */
@@ -138,7 +139,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   useEffect(() => {
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
-    setRenderFailure(null)
+    setRenderFailure(null); setEffectFailure(null)
     let stopped = false
     let stopCurrent: () => void = () => {}
     const stop = (): void => { stopped = true; stopCurrent() }
@@ -291,6 +292,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           })() : undefined
           audioReady?.catch(() => undefined)
           const initialResult = await renderer.present(initialFrame, direction === 1)
+          if (!stopped) setEffectFailure(initialResult.effectErrors?.join('\n') ?? null)
           if (stopped) return
           if (initialResult.presented === true) recordPresentation(initialFrame, initialResult, requestedAt, false, document.revision)
           if (!current.playing || !listVideoEditInstances().includes(instance) || findActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
@@ -367,6 +369,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             }
             if (result.presented === false) { lastFrame = -1; lastRequested = -1; if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             if (!recordPresentation(target, result, requestedAt, scrubbing, document.revision)) { if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
+            setEffectFailure(result.effectErrors?.join('\n') ?? null)
             lastFrame = target; lastScrubbing = scrubbing
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
           }
@@ -517,9 +520,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
       </div>}
-      {(renderFailure || (mode !== 'select' && !instance.selection)) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
+      {(renderFailure || effectFailure || (mode !== 'select' && !instance.selection)) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
         <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
-          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiEmpty size="xs" title="请先选择要编辑的片段" />}
+          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : effectFailure ? <UiError title="部分效果已跳过" message={effectFailure} /> : <UiEmpty size="xs" title="请先选择要编辑的片段" />}
         </UiPanel>
       </div>}
       {dropZone && <div className="pointer-events-none absolute grid grid-cols-4 grid-rows-5 bg-media-scrim" style={dropZone.frame} aria-hidden>

@@ -16,14 +16,14 @@ export function useVideoEditCompositeAction(owner: VideoEditInstance, scope: str
       observe.current?.(); observe.current = undefined
     }
   }, [owner, scope])
-  const run = async <T,>(operation: (signal: AbortSignal) => Promise<T>, onDone?: (value: T) => void): Promise<void> => {
+  const run = async <T,>(operation: (signal: AbortSignal) => Promise<T>, onDone?: (value: T) => void, checking = true): Promise<void> => {
     if (!mounted.current || pending.current || identity.current.owner !== owner || identity.current.scope !== scope) return
     const controller = new AbortController()
     try {
       if (requireVideoEditInstance(owner.document.id) !== owner) return
       const projectId = owner.document.id; const sequenceId = owner.activeSequenceId; const selection = owner.selection
       const foreground = activeVideoEditInstance() === owner
-      pending.current = controller; setBusy(true)
+      pending.current = controller; if (checking) setBusy(true)
       observe.current = subscribeVideoEditView(() => {
         try {
           if (requireVideoEditInstance(projectId) !== owner || owner.activeSequenceId !== sequenceId || owner.selection !== selection || foreground && activeVideoEditInstance() !== owner) controller.abort(new Error('已切换片段，检查不会修改原选区。'))

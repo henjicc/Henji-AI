@@ -63,7 +63,7 @@ it('形状跟踪真实 Range + deflate 读取；框与形状结果经同一路�
 it('手绘遮罩跟随参考框移动与缩放，缺少绑定结果时跳过效果', async () => {
   serve({ box: encodeSmartRegionSegment(header({ frameCount: 1, boxes: [[0.5, 0.5, 0.4, 0.4, 1]] })) })
   setVideoEditTrackResults({ box: { url: 'box', version: '1' } })
-  const setting = { regionId: 'shapes' as const, shapes: [{ id: 's1', kind: 'rect' as const, box: [0.1, 0.1, 0.2, 0.2] as [number, number, number, number], feather: 0, follow: { trackerId: 't1', reference: [0.1, 0.1, 0.2, 0.2] as [number, number, number, number] } }] }
+  const setting = { regionId: 'shapes' as const, shapes: [{ id: 's1', kind: 'rect' as const, points: [[.1,.1,0,0,0,0],[.3,.1,0,0,0,0],[.3,.3,0,0,0,0],[.1,.3,0,0,0,0]] as import('@/core/videoEdit/effectMasks').VideoEditMaskPoint[], feather: 0, follow: { trackerId: 't1', reference: [0.1, 0.1, 0.2, 0.2] as [number, number, number, number] } }] }
   const context = { timeUs: 0, picture: { width: 64, height: 64 }, trackerKeys: { t1: 'box' } }
   const mask = (await videoEditEffectMask(setting, context))!
   expect(mask.data[Math.floor(mask.height * 0.7) * mask.width + Math.floor(mask.width * 0.7)]).toBe(255)

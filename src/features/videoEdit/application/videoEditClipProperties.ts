@@ -4,7 +4,7 @@ import { writeVideoEditClipKeyframes, putVideoEditKeyframe, type VideoEditAnimat
 
 /** 效果控件里可直接调的片段固有属性（PR 的“运动 / 不透明度 / 音量”等固定效果）。 */
 export type VideoEditClipPropertyKey = VideoEditAnimatableKey
-export type VideoEditClipPropertyPatch = Partial<Pick<VideoEditClip, VideoEditClipPropertyKey | 'name' | 'text' | 'textStyle'>>
+export type VideoEditClipPropertyPatch = Partial<Pick<VideoEditClip, VideoEditClipPropertyKey | 'name' | 'text' | 'textStyle' | 'effectsEnabled' | 'disabledIntrinsicSections'>>
 
 const PROPERTY_KEYS: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume']
 const DEFAULTS: Record<VideoEditClipPropertyKey, number> = { x: 0, y: 0, scale: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5, opacity: 1, volume: 1 }

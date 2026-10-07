@@ -28,6 +28,28 @@ function mockTextCanvas(): void {
   })
 }
 describe('代码GPU会话复用与资源边界', () => {
+  it('所有区域蒙版复用 RGBA 缓冲，同一不可变蒙版不重传；替换、目标改写、尺寸变化与释放重新上传', async () => {
+    const {device} = gpu(); const writeTexture = vi.fn()
+    Object.assign(device.queue,{writeTexture})
+    const runtime = new VideoEditCodeGpu(device)
+    const data = new Uint8Array([0,128,255,64])
+    const first = await runtime.uploadMask('mask',2,2,data)
+    const rgba = writeTexture.mock.calls[0][1]
+    expect([...rgba]).toEqual([0,0,0,0,128,128,128,128,255,255,255,255,64,64,64,64])
+    expect(await runtime.uploadMask('mask',2,2,data)).toBe(first)
+    expect(writeTexture).toHaveBeenCalledTimes(1)
+    await runtime.uploadMask('mask',2,2,new Uint8Array([255,0,128,64]))
+    expect(writeTexture.mock.calls[1][1]).toBe(rgba)
+    await runtime.target('mask',2,2)
+    await runtime.uploadMask('mask',2,2,data)
+    expect(writeTexture).toHaveBeenCalledTimes(3)
+    await runtime.uploadMask('mask',1,4,data)
+    expect(writeTexture.mock.calls[3][1]).not.toBe(rgba)
+    runtime.releaseUnused(new Set())
+    expect(await runtime.uploadMask('mask',2,2,data)).not.toBe(first)
+    expect(writeTexture).toHaveBeenCalledTimes(5)
+    await runtime.dispose()
+  })
   it('常量和仅参数滤镜复用完整固定绑定，作者不采样也不缩减宿主layout', async () => {
     const { device, compiled } = gpu(); const runtime = new VideoEditCodeGpu(device)
     const input = await runtime.target('input', 3840, 2160)

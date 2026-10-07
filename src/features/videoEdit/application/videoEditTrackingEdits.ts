@@ -1,6 +1,6 @@
 import { videoEditComposition, videoEditClipMedia, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditTrackerSchema, normalizeVideoEditTracker, VIDEO_EDIT_MAX_TRACKERS, videoEditFollowBinding, type VideoEditTracker, type VideoEditTrackPrompt } from '@/core/videoEdit/tracking'
-import { isShapesMask, type VideoEditEffectMask, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
+import { assertVideoEditMaskTrackers, isShapesMask, videoEditMaskShapeBounds, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { editVideoSequence, requireVideoEditInstance } from './videoEditService'
 import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditClipTracker, videoEditTrackerBox, videoEditTrackerGeometry } from '../engine/videoEditTrackResults'
@@ -20,10 +20,7 @@ export function putVideoEditTracker(document: VideoEditDocument, clip: VideoEdit
   clip.trackers = existing ? clip.trackers!.map(entry => entry.id === tracker.id ? tracker : entry) : [...clip.trackers ?? [], tracker]
   return tracker
 }
-export function assertVideoEditMaskTrackers(clip: VideoEditClip, mask: VideoEditEffectMask | undefined): void {
-  const ids = mask?.regionId === 'tracker' ? [mask.trackerId] : isShapesMask(mask) ? mask.shapes.flatMap(shape => shape.follow ? [shape.follow.trackerId] : []) : []
-  for (const id of ids) if (!clip.trackers?.some(tracker => tracker.id === id)) throw new Error('跟踪器不属于此片段，请先在该片段下创建 video_edit.tracker。')
-}
+export { assertVideoEditMaskTrackers }
 export function assertVideoEditClipFollow(sequence: VideoEditSequence, clip: VideoEditClip): void {
   if (!clip.follow) return
   if (clip.kind === 'audio' || clip.kind === 'adjustment') throw new Error('片段跟随只用于画面、文字或图形片段。')
@@ -65,8 +62,7 @@ export function trackVideoEditMask(target: VideoEditCompositeTarget, effectId: s
     const shape = effect.mask.shapes.find(shape => shape.id === shapeId)
     if (!shape) throw new Error('遮罩已移除。')
     if (shape.follow) { delete shape.follow; return sequence }
-    const xs = shape.points?.map(point => point[0]); const ys = shape.points?.map(point => point[1])
-    const bounds = shape.box ?? [Math.min(...xs!), Math.min(...ys!), Math.max(...xs!) - Math.min(...xs!), Math.max(...ys!) - Math.min(...ys!)]
+    const bounds = videoEditMaskShapeBounds(shape)
     const x = Math.max(0, bounds[0]); const y = Math.max(0, bounds[1]); const width = Math.min(1, bounds[0] + bounds[2]) - x; const height = Math.min(1, bounds[1] + bounds[3]) - y
     if (width < 0.002 || height < 0.002) throw new Error('遮罩需要覆盖画面内的物体才能跟踪。')
     const reference: [number, number, number, number] = [x, y, width, height]

@@ -113,8 +113,14 @@ it('公共图形效果转场实体原子增改删、精确回执、锁定与保�
     const stable = owner.document; const history = owner.past.length
     for (const [ref, properties] of [[clipRef, { 'video_edit.clip.effects': [] }], [sequenceRef, { 'video_edit.sequence.transitions': [] }], [objectRef, { 'video_edit.graphic_object.kind': 'text' }], [effectRef, { 'video_edit.effect.version_id': 'foreign' }], [transitionRef, { 'video_edit.transition.duration_frames': 500 }]] as const) expect((await app.change(ref, properties)).ok).toBe(false)
     expect(owner.document).toBe(stable); expect(owner.past).toHaveLength(history)
-    boundary.failTrial = true; expect((await app.change(effectRef, { 'video_edit.effect.amount': .6 })).ok).toBe(false); boundary.failTrial = false
-    expect(owner.document).toBe(stable); expect(owner.past).toHaveLength(history)
+    boundary.failTrial = true
+    const trials = boundary.trialCalls
+    expect((await app.change(effectRef, { 'video_edit.effect.amount': .6 })).ok).toBe(true)
+    expect(boundary.trialCalls).toBe(trials); expect(owner.past).toHaveLength(history + 1)
+    const scalarBaseline = owner.document
+    expect((await app.change(effectRef, { 'video_edit.effect.parameters': { gain: .9 } })).ok).toBe(false)
+    expect(owner.document).toBe(scalarBaseline); expect(owner.past).toHaveLength(history + 1)
+    boundary.failTrial = false
     editVideoSequence(id, seq, sequence => { sequence.tracks.find(track => track.index === 1)!.locked = true; return sequence })
     expect((await app.change(objectRef, { 'video_edit.graphic_object.name': '不应写入' })).ok).toBe(false)
     editVideoSequence(id, seq, sequence => { sequence.tracks.find(track => track.index === 1)!.locked = false; return sequence })
@@ -123,7 +129,7 @@ it('公共图形效果转场实体原子增改删、精确回执、锁定与保�
     expect(retimed.ok && retimed.data.effects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.transition', origin: { kind: 'cascade', declarationId: 'video_edit.transition_update' } })]))
     await saveVideoEdit(id); const saved = structuredClone(owner.document); await closeVideoEditProject(id)
     const reopened = await reopenVideoEdit(owner.document.id); expect(reopened.document).toEqual({ ...saved, revision: 0 })
-    expect(((await app.read(effectRef, ['video_edit.effect.amount'])).properties as Record<string, unknown>)['video_edit.effect.amount']).toBe(.4)
+    expect(((await app.read(effectRef, ['video_edit.effect.amount'])).properties as Record<string, unknown>)['video_edit.effect.amount']).toBe(.6)
     const removed = await app.requireResult('change_application_entities', { summary: '移除图形片段及关联内容', changes: [{ kind: 'remove_items', entityType: 'video_edit.clip', parent: sequenceRef, targets: [clipRef] }] }, (await app.read(sequenceRef)).revisions as Record<string, number>)
     expect(getActiveVideoEditSequence(reopened).clips.some(clip => clip.id === left)).toBe(false); expect(getActiveVideoEditSequence(reopened).transitions).toEqual([])
     expect(removed.effects).toEqual(expect.arrayContaining(['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition'].map(entityType => expect.objectContaining({ entityType, effect: 'delete', origin: { kind: 'cascade', declarationId: `${entityType}_delete` } }))))
@@ -163,13 +169,14 @@ it('滤镜创作入口在发布前拒绝生成源码，检查通过后只新增�
   expect(owner.document.codeMaterials!.map(definition => definition.id)).toEqual([id]); expect(owner.document.items).toEqual([])
   expect(owner.past).toHaveLength(history + 1); expect(boundary.activeRenderers).toBe(0)
 })
-it('效果链排序开关复制同源提交，转场检查首末和窗口边界，失败不留下状态', async () => {
+it('已验证效果的排序开关强度复制删除和转场直接提交，新代码参数检查失败不留下状态', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
   const itemId = createVideoEditGraphicItem(projectId, { kind: 'rect' }); const [leftClipId, rightClipId] = appendVideoEditItems(projectId, [itemId, itemId], sequenceId)
   const [definitionId] = await createVideoEditCodeMaterials(projectId, [{ source: filterSource }])
   const target = { projectId, sequenceId, clipId: leftClipId }; const history = owner.past.length
   const first = await createVideoEditEffect(target, { definitionId }); const second = await createVideoEditEffect(target, { definitionId, name: '第二效果' })
   expect(owner.past).toHaveLength(history + 2)
+  const trialCount = boundary.trialCalls; boundary.failTrial = true
   await reorderVideoEditEffects(target, [second, first]); await updateVideoEditEffect(target, second, { enabled: false, amount: .25 })
   expect(getActiveVideoEditSequence(owner).clips[0].effects).toMatchObject([{ id: second, enabled: false, amount: .25 }, { id: first }])
   await copyVideoEditEffects({ ...target, clipId: rightClipId }, target)
@@ -178,7 +185,7 @@ it('效果链排序开关复制同源提交，转场检查首末和窗口边界�
   expect(right.effects!.map(effect => effect.id)).not.toContain(first); expect(right.effects![1].code).not.toBe(getActiveVideoEditSequence(owner).clips[0].effects![1].code)
   boundary.presentedFrames = []
   const transitionId = await createVideoEditTransition(projectId, sequenceId, { leftClipId, rightClipId, durationFrames: 10 })
-  expect(new Set(boundary.presentedFrames)).toEqual(new Set([0, 89, 90, 179, 85, 94]))
+  expect(boundary.presentedFrames).toEqual([])
   await updateVideoEditTransition(projectId, sequenceId, transitionId, 8)
   expect(getActiveVideoEditSequence(owner).transitions![0].durationFrames).toBe(8)
   const stable = owner.document; const past = owner.past.length
@@ -186,10 +193,13 @@ it('效果链排序开关复制同源提交，转场检查首末和窗口边界�
   await expect(createVideoEditEffect(target, { definitionId: 'missing' })).rejects.toThrow('不属于')
   await expect(updateVideoEditTransition(projectId, sequenceId, transitionId, 500)).rejects.toThrow('窗口')
   boundary.failTrial = true
-  await expect(updateVideoEditEffect(target, first, { amount: .5 })).rejects.toThrow('GPU trial')
+  await expect(updateVideoEditEffect(target, first, { parameters: { gain: .9 } })).rejects.toThrow('GPU trial')
   expect(owner.document).toBe(stable); expect(owner.past).toHaveLength(past); expect(boundary.activeRenderers).toBe(0)
-  boundary.failTrial = false
+  await updateVideoEditEffect(target, first, { amount: .5 })
+  const callsBeforeDelete = boundary.trialCalls
   await deleteVideoEditEffects(target, [first]); await deleteVideoEditTransition(projectId, sequenceId, transitionId)
+  expect(boundary.trialCalls).toBe(callsBeforeDelete); expect(callsBeforeDelete).toBeGreaterThan(trialCount)
+  boundary.failTrial = false
   expect(getActiveVideoEditSequence(owner).transitions).toEqual([])
   undoVideoEdit(projectId); expect(getActiveVideoEditSequence(owner).transitions).toHaveLength(1)
 })
@@ -285,6 +295,13 @@ it('候选返回前渲染器释放失败时仍关闭候选画面并释放试渲�
   expect(close).toHaveBeenCalledOnce(); expect(boundary.activeRenderers).toBe(0)
   await expect(trialVideoEditCodeFrames(input, new AbortController().signal)).resolves.toBeUndefined()
   expect(boundary.activeRenderers).toBe(0)
+})
+it('运行时跳过失败代码效果的画面不能让新增代码试渲染误通过', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const close = vi.fn()
+  vi.spyOn(VideoEditRenderSession.prototype, 'present').mockResolvedValueOnce({ id: 1, presented: true, bitmap: { width: 1, height: 1, close }, effectErrors: ['效果无法应用，已跳过'] })
+  const input = [{ document: videoEditComposition(owner.document, owner.activeSequenceId), frame: 0 }]
+  await expect(trialVideoEditCodeFrames(input, new AbortController().signal)).rejects.toThrow('效果无法应用')
+  expect(close).toHaveBeenCalledOnce(); expect(boundary.activeRenderers).toBe(0)
 })
 
 it('公共集合提交新源码、实例参数独立、保存重开只保存源码版本，手动与工具共用撤销', async () => {
