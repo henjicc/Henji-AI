@@ -21,8 +21,6 @@ const exportVideoEdit: typeof exportWithSettings = (id, target, background, sign
 
 const boundary = vi.hoisted(() => ({ mixes: vi.fn(), encoded: [] as number[], normalized: false }))
 vi.mock('mediabunny', () => ({
-  canEncodeVideo: async () => true,
-  canEncodeAudio: async () => true,
   ALL_FORMATS: [], Input: class {}, UrlSource: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} async finalize() {} async cancel() {} },
   CanvasSource: class { async add() {} }, AudioBufferSource: class { async add(buffer: AudioBuffer) { boundary.encoded.push(buffer.getChannelData(0)[0]) } },
@@ -40,6 +38,8 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 const peak = (volume: number): VideoEditLoudnessMeasurement => ({ integratedLufs: volume > 0 ? -20 + 20 * Math.log10(volume) : null, shortTermLufs: -20, truePeakDbtp: volume > 0 ? -12 + 20 * Math.log10(volume) : null, samplePeakDbfs: volume > 0 ? -13 + 20 * Math.log10(volume) : null, durationSeconds: 4 })
 const pcm = new Map<string, number>()
 beforeEach(() => {
+  vi.stubGlobal('VideoEncoder', { isConfigSupported: async () => ({ supported: true }) })
+  vi.stubGlobal('AudioEncoder', { isConfigSupported: async () => ({ supported: true }) })
   installHarnessNativeStorage(); pcm.clear(); boundary.encoded = []; boundary.normalized = false; boundary.mixes.mockClear()
   vi.stubGlobal('OffscreenCanvas', class { constructor(readonly width: number, readonly height: number) {} getContext() { return { fillRect() {}, drawImage() {}, fillStyle: '' } } })
   const platform = getPlatform()

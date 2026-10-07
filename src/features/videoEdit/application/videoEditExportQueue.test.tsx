@@ -1,7 +1,6 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
-import { canEncodeAudio, canEncodeVideo } from 'mediabunny'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
@@ -22,8 +21,6 @@ import { exportVideoEdit } from './videoEditExport'
 
 const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][] }))
 vi.mock('mediabunny', () => ({
-  canEncodeVideo: vi.fn(async () => true),
-  canEncodeAudio: vi.fn(async () => true),
   ALL_FORMATS: [], Input: class { dispose() {} async getPrimaryVideoTrack() { return { codec: 'avc', displayWidth: 1920, displayHeight: 1080, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 4, bestGuessFrameRate: 30, frameRateIsConstant: true }) } } async getPrimaryAudioTrack() { return { codec: 'aac', numberOfChannels: 2, sampleRate: 48000, canDecode: async () => true } } async getAudioTracks() { return [await this.getPrimaryAudioTrack()] } async computeDuration() { return .2 } }, UrlSource: class {},
   Mp4OutputFormat: class { constructor() { encoding.formats.push('mp4') } }, AdtsOutputFormat: class { constructor() { encoding.formats.push('aac') } }, WavOutputFormat: class { constructor() { encoding.formats.push('wav') } }, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoding.finalize; async cancel() {} },
@@ -40,7 +37,11 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 } }))
 const file = (name: string): string => path.resolve(path.sep, 'fixture', name)
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail }); return { promise, resolve, reject } }
+const canEncodeVideo = vi.fn(async (_config: VideoEncoderConfig): Promise<boolean> => true)
+const canEncodeAudio = vi.fn(async (_config: AudioEncoderConfig): Promise<boolean> => true)
 beforeEach(() => {
+  vi.stubGlobal('VideoEncoder', { isConfigSupported: async (config: VideoEncoderConfig) => ({ config, supported: await canEncodeVideo(config) }) })
+  vi.stubGlobal('AudioEncoder', { isConfigSupported: async (config: AudioEncoderConfig) => ({ config, supported: await canEncodeAudio(config) }) })
   vi.mocked(canEncodeVideo).mockReset().mockResolvedValue(true)
   vi.mocked(canEncodeAudio).mockReset().mockResolvedValue(true)
   installHarnessNativeStorage(); encoding.rendered = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.audioOptions = []; encoding.pictures = []; encoding.rendererOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
@@ -218,7 +219,7 @@ it('8K120帧母版导出实际选HEVC并保持120帧时钟', async () => {
   const jobs = await enqueueVideoEditExports([{ projectId: owner.document.id, presetId: 'builtin:master', path: file('8k.mp4') }])
   const job = await videoEditExportQueue.wait(jobs[0].id)
   expect(job.state).toBe('completed')
-  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 80_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' }])
+  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 80_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware', fullCodecString: 'hev1.1.6.H180.B0', latencyMode: 'quality', alpha: 'discard' }])
   expect(encoding.videoTimes).toEqual([0, 1 / 120, 2 / 120, 3 / 120])
 })
 it('导出面板对设备不支持的8K120帧禁用动作并给出降低规格的恢复方式', async () => {
@@ -268,7 +269,7 @@ it('仅音频WAV不编码视频，关闭响度不创建PCM标准化会话；显�
   expect(encoding.rendererOptions[0].slice(-2)).toEqual([owner.document.id, true])
 })
 it('默认按设备切到H264软件；手动选择HEVC后禁用不支持的CBR', async () => {
-  const owner = await project(); vi.mocked(canEncodeVideo).mockImplementation(async (codec, config) => codec === 'hevc' ? config?.bitrateMode !== 'constant' : config?.hardwareAcceleration === 'prefer-software')
+  const owner = await project(); vi.mocked(canEncodeVideo).mockImplementation(async config => config.codec.startsWith('hev1') ? config?.bitrateMode !== 'constant' : config?.hardwareAcceleration === 'prefer-software')
   const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
   await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
   expect(view.getByRole('button', { name: '编码性能' }).textContent).toContain('软件编码')
@@ -279,6 +280,40 @@ it('默认按设备切到H264软件；手动选择HEVC后禁用不支持的CBR',
   fireEvent.click(view.getByRole('button', { name: '码率模式' })); expect(view.getByRole('option', { name: 'CBR' })).toHaveProperty('disabled', true)
   fireEvent.click(view.getByRole('option', { name: 'VBR' })); await select(view, '编码性能', '软件编码')
   expect(view.getByRole('button', { name: '导出预设' }).textContent).toContain('自定义')
+})
+
+it('4K60硬件拒绝：面板禁用硬件并说明原因，AAC禁用64/256/320；助手仅传mp4适配软件后完成', async () => {
+  const owner = await project()
+  editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, sampleRate: 44100, channels: 1 }))
+  canEncodeVideo.mockImplementation(async config => config.hardwareAcceleration === 'prefer-software')
+  canEncodeAudio.mockImplementation(async config => [96000, 128000, 160000, 192000].includes(config.bitrate!))
+  vi.mocked(getPlatform().audioEdit.loudness.read).mockImplementation(async (_id, _start, frames) => [new Float32Array(frames)])
+  const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
+  expect(view.getByRole('button', { name: '导出格式' }).textContent).toContain('H.264')
+  expect(view.getByRole('button', { name: '编码性能' }).textContent).toContain('软件编码')
+  fireEvent.click(view.getByRole('button', { name: '编码性能' }))
+  const hardware = view.getByRole('option', { name: '硬件加速' })
+  expect(hardware).toHaveProperty('disabled', true)
+  expect(view.getByRole('option', { name: '软件编码' })).toHaveProperty('disabled', false)
+  fireEvent.mouseEnter(hardware.parentElement!)
+  await waitFor(() => expect(view.getByRole('tooltip').textContent).toContain('当前设备不支持此规格'))
+  fireEvent.mouseLeave(hardware.parentElement!)
+  fireEvent.click(view.getByRole('option', { name: '软件编码' }))
+  fireEvent.click(view.getByRole('button', { name: '音频' }))
+  fireEvent.click(view.getByRole('button', { name: '音频码率' }))
+  for (const bitrate of [64, 256, 320]) expect(view.getByRole('option', { name: `${bitrate} kbps` })).toHaveProperty('disabled', true)
+  for (const bitrate of [96, 128, 160, 192]) expect(view.getByRole('option', { name: `${bitrate} kbps` })).toHaveProperty('disabled', false)
+  cleanup()
+  const app = createApplicationHarness()
+  try {
+    await app.requireResult('export_video_edit', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, format: 'mp4' })
+    const job = await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id)
+    expect(job.error).toBeUndefined()
+    expect(job.state).toBe('completed')
+    expect(job.settings).toMatchObject({ codec: 'avc', encoderPreference: 'software', width: 3840, height: 2160, fps: 60, sampleRate: 44100, channels: 1, audioBitrateKbps: 192 })
+    expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'avc', hardwareAcceleration: 'prefer-software', latencyMode: 'quality' })
+  } finally { app.dispose() }
 })
 
 it('无资产写授权拒绝自动收录；显式关闭后仍能通过正式公共能力导出', async () => {
@@ -306,7 +341,7 @@ it('开关从实际面板提交仅音频，字幕烧录改为SRT，响度关闭�
 })
 
 it('设备仅支持HEVC软件CBR时默认自动适配并保留预设名称', async () => {
-  const owner = await project(); vi.mocked(canEncodeVideo).mockImplementation(async (codec, config) => codec === 'hevc' && config?.bitrateMode === 'constant' && config?.hardwareAcceleration === 'prefer-software')
+  const owner = await project(); vi.mocked(canEncodeVideo).mockImplementation(async config => config.codec.startsWith('hev1') && config?.bitrateMode === 'constant' && config?.hardwareAcceleration === 'prefer-software')
   const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
   await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
   expect(view.getByRole('button', { name: '导出格式' }).textContent).toContain('HEVC')
@@ -317,7 +352,7 @@ it('设备仅支持HEVC软件CBR时默认自动适配并保留预设名称', asy
 
 it('音频码率按设备禁用并提示；高码率预设自动回落，采样率和声道变化重新判断', async () => {
   const owner = await project()
-  vi.mocked(canEncodeAudio).mockImplementation(async (_codec, config) => Number(config?.bitrate) <= (config?.numberOfChannels === 1 ? 96000 : config?.sampleRate === 44100 ? 128000 : 192000))
+  vi.mocked(canEncodeAudio).mockImplementation(async config => Number(config?.bitrate) <= (config?.numberOfChannels === 1 ? 96000 : config?.sampleRate === 44100 ? 128000 : 192000))
   const high = videoEditExportPresetLibrary.save('高码率', { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), audioBitrateKbps: 320 })
   const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
   fireEvent.click(view.getByRole('button', { name: '音频' }))
@@ -338,18 +373,18 @@ it('音频码率按设备禁用并提示；高码率预设自动回落，采样�
   await waitFor(() => expect(view.getByText(/此设备的 AAC 编码不支持 192 kbps/)).toBeTruthy())
   expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)
   await select(view, '音频码率', '128 kbps')
-  expect(canEncodeAudio).toHaveBeenCalledWith('aac', { sampleRate: 44100, numberOfChannels: 2, bitrate: 192000 })
+  expect(canEncodeAudio).toHaveBeenCalledWith(expect.objectContaining({ sampleRate: 44100, numberOfChannels: 2, bitrate: 192000 }))
   fireEvent.click(view.getByRole('button', { name: '声道跟随序列' }))
   await select(view, '音频声道', '单声道')
   await waitFor(() => expect(view.getByText(/此设备的 AAC 编码不支持 128 kbps/)).toBeTruthy())
   await select(view, '音频码率', '96 kbps')
-  expect(canEncodeAudio).toHaveBeenCalledWith('aac', { sampleRate: 44100, numberOfChannels: 1, bitrate: 128000 })
+  expect(canEncodeAudio).toHaveBeenCalledWith(expect.objectContaining({ sampleRate: 44100, numberOfChannels: 1, bitrate: 128000 }))
   await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
 })
 
 it('跟随序列的声音规格变化会重新探测；AAC全不可用时阻止提交，改WAV可恢复', async () => {
   const owner = await project()
-  vi.mocked(canEncodeAudio).mockImplementation(async (codec, config) => codec === 'pcm-s24' || config?.sampleRate === 48000 && Number(config?.bitrate) <= 192000)
+  vi.mocked(canEncodeAudio).mockImplementation(async config => config?.sampleRate === 48000 && Number(config?.bitrate) <= 192000)
   const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
   await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
   act(() => editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, sampleRate: 44100, channels: 1 })))
@@ -362,7 +397,7 @@ it('跟随序列的声音规格变化会重新探测；AAC全不可用时阻止�
 
 it('立即导出、队列和助手在文件选择与写入前拒绝不支持的AAC；修正码率后可完成', async () => {
   const owner = await project(); const snapshot = getActiveVideoEditSequence(owner)
-  vi.mocked(canEncodeAudio).mockImplementation(async (_codec, config) => Number(config?.bitrate) <= 192000)
+  vi.mocked(canEncodeAudio).mockImplementation(async config => Number(config?.bitrate) <= 192000)
   const settings = { ...videoEditSequenceExportSettings(snapshot), audioBitrateKbps: 320, addToLibrary: false, loudness: null }
   const message = '此设备的 AAC 编码不支持 320 kbps（48 kHz，立体声），请改用 192 kbps 或更低。'
   await expect(exportVideoEdit(owner.document.id, undefined, false, undefined, undefined, { snapshot, range: videoEditExportRange(owner), settings })).rejects.toThrow(message)
@@ -396,27 +431,26 @@ it('探测后底层意外拒绝AAC时任务错误仍为中文，失败文件被�
 it('4K60面板默认回落HEVC且保留与序列一致，提交的完整配置通过同一探测并导出成功', async () => {
   const owner = await project()
   editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 } }))
-  vi.mocked(canEncodeVideo).mockImplementation(async codec => codec === 'hevc')
+  vi.mocked(canEncodeVideo).mockImplementation(async config => config.codec.startsWith('hev1'))
   const onClose = vi.fn(); const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={onClose} />)
   expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)
   await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
   expect(view.getByRole('button', { name: '导出预设' }).textContent).toContain('与序列一致')
   expect(view.getByRole('button', { name: '导出格式' }).textContent).toContain('HEVC')
   expect(view.getByText(/HEVC · 3840 × 2160 · 60 帧 · 50 Mbps/)).toBeTruthy()
-  const panelConfig = { width: 3840, height: 2160, frameRate: 60, bitrate: 50_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' }
-  expect(canEncodeVideo).toHaveBeenCalledWith('hevc', panelConfig)
-  vi.mocked(canEncodeVideo).mockClear()
+  const panelConfig = { width: 3840, height: 2160, framerate: 60, bitrate: 50_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' }
+  expect(canEncodeVideo).toHaveBeenCalledWith(expect.objectContaining(panelConfig))
   await act(async () => fireEvent.click(view.getByRole('button', { name: '导出' })))
   const job = videoEditExportQueue.list()[0]
   await act(async () => { await videoEditExportQueue.wait(job.id) })
   expect(job.state).toBe('completed'); expect(onClose).toHaveBeenCalledOnce()
   expect(job.settings).toMatchObject({ codec: 'hevc', width: 3840, height: 2160, fps: 60, videoBitrateMbps: 50 })
-  expect(canEncodeVideo).toHaveBeenCalledWith('hevc', panelConfig)
+  expect(canEncodeVideo).toHaveBeenCalledWith(expect.objectContaining(panelConfig))
   expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'hevc', bitrate: 50_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' })
 })
 it('序列从1080p变为4K60会重新适配；手动把码率调到不可用时禁用导出且不静默替换', async () => {
   const owner = await project()
-  vi.mocked(canEncodeVideo).mockImplementation(async (codec, config) => Number(config?.bitrate) <= 50_000_000 && (config?.width === 1920 || codec === 'hevc'))
+  vi.mocked(canEncodeVideo).mockImplementation(async config => Number(config?.bitrate) <= 50_000_000 && (config?.width === 1920 || config.codec.startsWith('hev1')))
   const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
   await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
   expect(view.getByRole('button', { name: '导出格式' }).textContent).toContain('H.264')
@@ -438,7 +472,7 @@ it('序列从1080p变为4K60会重新适配；手动把码率调到不可用时�
 it('助手完整settings严格拒绝不支持H264且不选路径；只传预设则同源回落HEVC并完成', async () => {
   const owner = await project()
   editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 } }))
-  vi.mocked(canEncodeVideo).mockImplementation(async codec => codec === 'hevc')
+  vi.mocked(canEncodeVideo).mockImplementation(async config => config.codec.startsWith('hev1'))
   const app = createApplicationHarness(); const documentRef = { kind: 'video_edit.document', id: owner.document.id }
   try {
     const settings = videoEditSequenceExportSettings(getActiveVideoEditSequence(owner))

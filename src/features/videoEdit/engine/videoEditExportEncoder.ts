@@ -1,15 +1,32 @@
-import { canEncodeAudio, canEncodeVideo } from 'mediabunny'
 import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { createLogger } from '@/core/logging'
+import { videoEditExportAudioEncoderConfig, videoEditExportVideoEncoderConfig, type VideoEditExportAudioEncoderSpec, type VideoEditExportEncoderSpec } from './videoEditExportEncoderConfig'
+export { videoEditExportAudioOptions, videoEditExportVideoOptions } from './videoEditExportEncoderConfig'
+export type { VideoEditExportAudioEncoderSpec, VideoEditExportEncoderSpec } from './videoEditExportEncoderConfig'
 
 const logger = createLogger('features.videoEdit.exportEncoder')
-export const VIDEO_EDIT_EXPORT_AUDIO_BITRATES = [320, 256, 192, 160, 128, 96] as const
+export const VIDEO_EDIT_EXPORT_AUDIO_BITRATES = [320, 256, 192, 160, 128, 96, 64] as const
 type AudioSettings = Pick<VideoEditExportSettings, 'audioEnabled' | 'audioCodec' | 'sampleRate' | 'channels' | 'audioBitrateKbps'>
-export interface VideoEditExportAudioEncoderSpec { codec: 'aac' | 'pcm-s24'; sampleRate: number; numberOfChannels: number; bitrate?: number }
-/** Mediabunny caches the full encoder configuration, including concurrent probes, and handles PCM itself. */
+const nativeSupportCache = new WeakMap<object, Map<string, Promise<boolean>>>()
+/** The only native support predicate: cache the complete config, sharing concurrent probes.
+ * Failed native calls are not cached, so a transient device failure can be retried.
+ */
+async function supportsEncoderConfig<C extends VideoEncoderConfig | AudioEncoderConfig>(encoder: { isConfigSupported: (config: C) => Promise<{ supported?: boolean }> } | undefined, config: C): Promise<boolean> {
+  if (!encoder) return false
+  let cache = nativeSupportCache.get(encoder)
+  if (!cache) { cache = new Map(); nativeSupportCache.set(encoder, cache) }
+  const key = JSON.stringify(config)
+  let pending = cache.get(key)
+  if (!pending) {
+    pending = encoder.isConfigSupported(config).then(result => result.supported === true).catch(error => { cache.delete(key); throw error })
+    cache.set(key, pending)
+  }
+  return pending
+}
+/** PCM is encoded by Mediabunny itself; it does not use AudioEncoder. */
 export async function canEncodeVideoEditExportAudio(spec: VideoEditExportAudioEncoderSpec): Promise<boolean> {
-  const { codec, ...options } = spec
-  return canEncodeAudio(codec, options)
+  if (spec.codec === 'pcm-s24') return Number.isInteger(spec.sampleRate) && spec.sampleRate > 0 && Number.isInteger(spec.numberOfChannels) && spec.numberOfChannels > 0
+  return supportsEncoderConfig(typeof AudioEncoder === 'undefined' ? undefined : AudioEncoder, videoEditExportAudioEncoderConfig(spec))
 }
 export async function probeVideoEditExportAudioBitrates(settings: AudioSettings): Promise<Record<number, boolean>> {
   const bitrates = [...new Set([settings.audioBitrateKbps, ...VIDEO_EDIT_EXPORT_AUDIO_BITRATES])]
@@ -42,26 +59,21 @@ export function videoEditExportAudioUserError(error: unknown, settings: AudioSet
   return error
 }
 
-export interface VideoEditExportEncoderSpec { width: number; height: number; frameRate: number; bitrate: number; codec?: 'avc' | 'hevc'; bitrateMode?: 'vbr' | 'cbr'; encoderPreference?: 'hardware' | 'software'; keyframeInterval?: VideoEditExportSettings['keyframeInterval'] }
-export function videoEditExportVideoOptions(settings: Pick<VideoEditExportSettings, 'codec' | 'videoBitrateMbps' | 'bitrateMode' | 'encoderPreference' | 'keyframeInterval'>) {
-  return { codec: settings.codec, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000), bitrateMode: settings.bitrateMode === 'cbr' ? 'constant' as const : 'variable' as const,
-    hardwareAcceleration: settings.encoderPreference === 'software' ? 'prefer-software' as const : 'prefer-hardware' as const,
-    ...(settings.keyframeInterval === 'auto' ? {} : { keyFrameInterval: settings.keyframeInterval }) }
-}
 export async function canEncodeVideoEditExport(spec: VideoEditExportEncoderSpec & { codec: 'avc' | 'hevc' }): Promise<boolean> {
-  const { codec, bitrateMode, encoderPreference, keyframeInterval, ...geometry } = spec
-  return canEncodeVideo(codec, { ...geometry, ...(bitrateMode ? { bitrateMode: bitrateMode === 'cbr' ? 'constant' : 'variable' } : {}), ...(encoderPreference ? { hardwareAcceleration: encoderPreference === 'software' ? 'prefer-software' : 'prefer-hardware' } : {}), ...(keyframeInterval === undefined || keyframeInterval === 'auto' ? {} : { keyFrameInterval: keyframeInterval }) })
+  // H.264/HEVC require even coded dimensions in Mediabunny's actual encoder path.
+  if (![spec.width, spec.height].every(value => Number.isInteger(value) && value > 0 && value % 2 === 0)) return false
+  return supportsEncoderConfig(typeof VideoEncoder === 'undefined' ? undefined : VideoEncoder, videoEditExportVideoEncoderConfig(spec))
 }
 
 /** Resolved settings only: the same configuration identifies panel results and submission checks.
  * Keyframe spacing is scheduled by Mediabunny rather than a native encoder field, but must still
- * invalidate the panel's configuration snapshot. Native encoder memoization remains Mediabunny's.
+ * invalidate the panel's configuration snapshot; it is not a VideoEncoderConfig field.
  */
 export function videoEditExportProbeKey(settings: VideoEditExportSettings): string {
-  return JSON.stringify({ format: settings.format, videoEnabled: settings.videoEnabled, codec: settings.codec,
-    width: settings.width, height: settings.height, frameRate: settings.fps, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000),
-    bitrateMode: settings.bitrateMode, keyframeInterval: settings.keyframeInterval, encoderPreference: settings.encoderPreference,
-    audioEnabled: settings.audioEnabled, audioCodec: settings.audioCodec, sampleRate: settings.sampleRate, channels: settings.channels, audioBitrate: settings.audioBitrateKbps * 1000 })
+  return JSON.stringify({ format: settings.format, videoEnabled: settings.videoEnabled,
+    video: videoEditExportVideoEncoderConfig({ ...settings, frameRate: settings.fps ?? 0, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000) }), keyframeInterval: settings.keyframeInterval,
+    audioEnabled: settings.audioEnabled, audioCodec: settings.audioCodec,
+    audio: videoEditExportAudioEncoderConfig({ codec: settings.audioCodec === 'wav' ? 'pcm-s24' : 'aac', sampleRate: settings.sampleRate, numberOfChannels: settings.channels, bitrate: settings.audioBitrateKbps * 1000 }) })
 }
 export interface VideoEditExportSupport { supported: boolean; videoSupported: boolean; audioSupported: boolean; reason: string }
 /** One complete probe for the panel, queue, direct pipeline and assistant. No implicit replacement. */

@@ -9,7 +9,7 @@ import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessSettings, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { spoolVideoEditAudio } from './videoEditLoudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditExportAudioUserError, videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
+import { adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditExportAudioUserError, videoEditExportVideoOptions, videoEditExportAudioOptions } from '../engine/videoEditExportEncoder'
 import { getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { importVideoEditSources } from './videoEditMedia'
@@ -109,7 +109,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     const geometry = videoEditExportGeometry(document.width, document.height, settings)
     task.controller.signal.throwIfAborted()
     const video = videoCodec ? new CanvasSource(adapted ?? renderer.canvas, videoEditExportVideoOptions(settings)) : undefined
-    const audio = settings.audioEnabled ? new AudioBufferSource({ codec: encoding.audioCodec, ...(settings.audioCodec === 'wav' ? {} : { bitrate: encoding.audioBitrate }), transform: { sampleRate: settings.sampleRate, numberOfChannels: settings.channels } }) : undefined
+    const audio = settings.audioEnabled ? new AudioBufferSource(videoEditExportAudioOptions(settings)) : undefined
     if (video) output.addVideoTrack(video, { frameRate: encoding.fps })
     if (audio) output.addAudioTrack(audio)
     await output.start()

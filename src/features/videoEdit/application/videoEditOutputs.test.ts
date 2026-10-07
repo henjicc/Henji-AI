@@ -29,8 +29,6 @@ const exportVideoEdit: typeof exportWithSettings = async (id, target, background
 // capability permission/registration, collection and project persistence are real.
 const encoder = vi.hoisted(() => ({ finalize: vi.fn(), cancel: vi.fn(), render: vi.fn(), mix: vi.fn(), dispose: vi.fn(), failConstructor: false, videoTimestamps: [] as number[] }))
 vi.mock('mediabunny', () => ({
-  canEncodeVideo: async () => true,
-  canEncodeAudio: async () => true,
   ALL_FORMATS: [], UrlSource: class {}, Input: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoder.finalize; cancel = encoder.cancel },
   CanvasSource: class { async add(timestamp: number) { encoder.videoTimestamps.push(timestamp) } }, AudioBufferSource: class { async add() {} },
@@ -49,6 +47,8 @@ function record(path: string, kind: 'image' | 'video'): AssetRecord {
   return { id: 'published-output', filePath: path, mediaType: kind, displayName: '输出', displayUrl: 'henji-media://local/output', source: 'video-edit', mimeType: kind === 'image' ? 'image/png' : 'video/mp4', ...content, width: 3840, height: 2160, durationSeconds: kind === 'video' ? 1 : 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, createdAt: 1, updatedAt: 2, lastUsedAt: null, tags: [], libraryIds: [] }
 }
 beforeEach(() => {
+  vi.stubGlobal('VideoEncoder', { isConfigSupported: async () => ({ supported: true }) })
+  vi.stubGlobal('AudioEncoder', { isConfigSupported: async () => ({ supported: true }) })
   installHarnessNativeStorage(); resetCanvasApplicationStateForTests(); vi.stubGlobal('Blob', NativeBlob); files.clear(); media.clear(); assets.clear(); encoder.failConstructor = false; encoder.videoTimestamps = []
   encoder.finalize.mockReset().mockResolvedValue(undefined); encoder.cancel.mockReset().mockResolvedValue(undefined); encoder.render.mockReset().mockResolvedValue({ singleFrameReads: 0 }); encoder.mix.mockReset().mockResolvedValue({}); encoder.dispose.mockReset().mockResolvedValue(undefined)
   vi.stubGlobal('OffscreenCanvas', class { constructor(readonly width: number, readonly height: number) {} getContext() { return { fillRect() {}, drawImage() {}, fillStyle: '' } } })
