@@ -335,6 +335,9 @@ export const UI_COVER_FRAME_CLASS = 'ui-cover-frame';
 /** 单选选中（菜单项）：淡强调底 + 主要文字（勾用强调色），玻璃内自适应；网格/格子在组件里改强调文字。 */
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `border-transparent ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-text1`;
+/** 明确要求实底的单选表单；普通菜单和导航继续使用各自选中态。 */
+export const UI_OPTION_SOLID_ACTIVE_CLASS =
+  `border-transparent ${UI_COLOR_ACCENT_FILL_TEXT_CLASS} hover:bg-accent-hover active:bg-accent-pressed`;
 
 /**
  * 居中弹窗的统一响应式尺寸。

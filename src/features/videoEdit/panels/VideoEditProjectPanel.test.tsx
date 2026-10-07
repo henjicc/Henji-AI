@@ -88,10 +88,10 @@ it('可变帧率素材默认60帧，确认前可选择有理帧率且不会提�
   fireEvent.click(view.getByText('按此素材新建序列'))
   await waitFor(() => expect(view.getByRole('dialog')).toBeTruthy())
   const history = instance.past.length
-  expect(view.getByLabelText('帧率')).toHaveProperty('value', '60/1')
+  expect(view.getByRole('button', { name: '60 帧' }).getAttribute('aria-pressed')).toBe('true')
   expect(instance.document.sequences).toHaveLength(1); expect(instance.past).toHaveLength(history)
-  fireEvent.change(view.getByLabelText('帧率'), { target: { value: '30000/1001' } })
-  await act(async () => fireEvent.click(view.getByRole('button', { name: '确定' })))
+  fireEvent.click(view.getByRole('button', { name: '29.97 帧' }))
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '新建' })))
   const sequence = instance.document.sequences[1]
   expect(sequence.frameRate).toEqual({ numerator: 30000, denominator: 1001 })
   expect(sequence.clips[0].itemId).toBe(instance.document.items[1].id)

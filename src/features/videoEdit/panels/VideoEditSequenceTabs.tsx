@@ -36,6 +36,6 @@ export function VideoEditSequenceTabs({ instance, onError }: { instance: VideoEd
     <UiIconButton disabled={!instance.activeSequenceId} size="sm" aria-label="序列设置" title="序列设置" onClick={() => setSettings(instance.document.sequences.find(item => item.id === instance.activeSequenceId)!)}><Settings2 size={14} /></UiIconButton>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
     {reframe && <VideoEditReframeDialog target={{ projectId: id, sequenceId: reframe }} onClose={() => setReframe(null)} />}
-    {settings && <VideoEditSequenceDialog title="序列设置" saveDefaults={false} initial={settings} bins={instance.document.bins} onClose={() => setSettings(null)} onSubmit={values => updateVideoEditSequenceSettings(id, settings.id, values)} />}
+    {settings && <VideoEditSequenceDialog title="序列设置" mode="edit" initial={settings} bins={instance.document.bins} onClose={() => setSettings(null)} onSubmit={values => updateVideoEditSequenceSettings(id, settings.id, values)} />}
   </div>
 }

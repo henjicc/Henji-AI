@@ -3,10 +3,12 @@ import { z } from 'zod'
 export const videoEditRatioSchema = z.object({ numerator: z.number().int().positive().max(1_000_000), denominator: z.number().int().positive().max(1_000_000) }).strict()
 export type VideoEditRatio = z.infer<typeof videoEditRatioSchema>
 export const VIDEO_EDIT_FRAME_RATES: VideoEditRatio[] = [
-  { numerator: 24, denominator: 1 }, { numerator: 24000, denominator: 1001 },
-  { numerator: 25, denominator: 1 }, { numerator: 30, denominator: 1 },
-  { numerator: 30000, denominator: 1001 }, { numerator: 50, denominator: 1 },
-  { numerator: 60, denominator: 1 }, { numerator: 60000, denominator: 1001 },
+  { numerator: 24000, denominator: 1001 }, { numerator: 24, denominator: 1 },
+  { numerator: 25, denominator: 1 }, { numerator: 30000, denominator: 1001 },
+  { numerator: 30, denominator: 1 }, { numerator: 48, denominator: 1 },
+  { numerator: 50, denominator: 1 }, { numerator: 60000, denominator: 1001 },
+  { numerator: 60, denominator: 1 }, { numerator: 100, denominator: 1 },
+  { numerator: 120000, denominator: 1001 }, { numerator: 120, denominator: 1 },
 ]
 export function videoEditFps(rate: VideoEditRatio): number { return rate.numerator / rate.denominator }
 /** Round once from an absolute boundary; never accumulate rounded frame durations. */

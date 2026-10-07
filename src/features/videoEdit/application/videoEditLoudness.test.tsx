@@ -18,6 +18,7 @@ import { cancelVideoEditExport, exportVideoEdit, videoEditExportTask } from './v
 
 const boundary = vi.hoisted(() => ({ mixes: vi.fn(), encoded: [] as number[], normalized: false }))
 vi.mock('mediabunny', () => ({
+  canEncodeVideo: async () => true,
   ALL_FORMATS: [], Input: class {}, UrlSource: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} async finalize() {} async cancel() {} },
   CanvasSource: class { async add() {} }, AudioBufferSource: class { async add(buffer: AudioBuffer) { boundary.encoded.push(buffer.getChannelData(0)[0]) } },

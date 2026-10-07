@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isVideoEditSequenceSize, videoEditSequenceSizeFields } from './sequenceSize'
 import { rescaleVideoEditFrame, videoEditFps, videoEditRatioSchema, VIDEO_EDIT_FRAME_RATES } from './time'
 import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipHeadRoom, videoEditClipSourceSecondsAt, videoEditClipSpeedSchema, videoEditClipSpeedSupported, videoEditClipSpeedValue, videoEditClipTailRoom, videoEditClipWithinSource } from './clipSpeed'
 import { codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './codeMaterialPersistence'
@@ -80,14 +81,14 @@ export const videoEditAnnotationSchema = z.object({
 export const videoEditSequenceSchema = z.object({
   multicam: videoEditMulticamSchema.optional(),
   textTranscription: videoEditTextTranscriptionSchema.optional(),
-  id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), width: z.number().int().min(16).max(4096), height: z.number().int().min(16).max(4096),
+  id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), ...videoEditSequenceSizeFields,
   frameRate: videoEditRatioSchema.refine(rate => VIDEO_EDIT_FRAME_RATES.some(value => value.numerator * rate.denominator === rate.numerator * value.denominator), '请选择支持的序列帧率。'),
   pixelAspectRatio: videoEditRatioSchema.refine(ratio => ratio.numerator / ratio.denominator >= 0.25 && ratio.numerator / ratio.denominator <= 4, '像素长宽比超出范围。'),
   sampleRate: z.union([z.literal(44100), z.literal(48000)]), channels: z.union([z.literal(1), z.literal(2)]),
   tracks: z.array(videoEditTrackSchema).min(1).max(32), clips: z.array(videoEditClipSchema).max(500), annotations: z.array(videoEditAnnotationSchema).max(500),
   markers: z.array(videoEditMarkerSchema).max(500).optional(), captions: z.array(videoEditCaptionSchema).max(500).optional(),
   transitions: z.array(videoEditTransitionSchema).max(500).optional(),
-}).strict()
+}).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
 export const videoEditDocumentSchema = z.object({
   lumetriLuts: z.array(lumetriLutAssetSchema).max(200).optional(),
   format: z.literal('henji-video-project'), version: z.literal(2), id: identifier, name, revision: z.number().int().nonnegative(),

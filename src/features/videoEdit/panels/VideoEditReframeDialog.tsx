@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_SEQUENCE_LIMITS } from '@/core/videoEdit/sequenceSize'
 import { useEffect, useRef, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInput, UiLoading, UiModal, UiTooltipText } from '@/components/ui'
@@ -45,7 +46,7 @@ export function VideoEditReframeDialog({ target, onClose }: { target: VideoEditR
         {!target.clipId && <>
           <UiFormRow label="新序列名称"><UiInput aria-label="新序列名称" value={name} disabled={busy} placeholder="按原序列自动命名" maxLength={200} onChange={event => setName(event.target.value)} /></UiFormRow>
           <UiFormRow label="目标画幅"><Dropdown value={ratio} disabled={busy} options={[...Object.keys(VIDEO_EDIT_REFRAME_SIZES).map(value => ({ value, label: value })), { value: 'custom', label: '自定义' }]} onSelect={value => { setRatio(value); setExportPreset(''); if (value in VIDEO_EDIT_REFRAME_SIZES) setSize(VIDEO_EDIT_REFRAME_SIZES[value as keyof typeof VIDEO_EDIT_REFRAME_SIZES]) }} /></UiFormRow>
-          {ratio === 'custom' && <div className="grid grid-cols-2 gap-3">{(['width', 'height'] as const).map((key, i) => <UiFormRow key={key} label={i ? '高度' : '宽度'}><UiInput aria-label={i ? '高度' : '宽度'} type="number" value={size[key]} min={16} max={4096} disabled={busy} onChange={event => { setSize(value => ({ ...value, [key]: Number(event.target.value) })); setExportPreset('') }} /></UiFormRow>)}</div>}
+          {ratio === 'custom' && <div className="grid grid-cols-2 gap-3">{(['width', 'height'] as const).map((key, i) => <UiFormRow key={key} label={i ? '高度' : '宽度'}><UiInput aria-label={i ? '高度' : '宽度'} type="number" value={size[key]} min={16} max={VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension} disabled={busy} onChange={event => { setSize(value => ({ ...value, [key]: Number(event.target.value) })); setExportPreset('') }} /></UiFormRow>)}</div>}
         </>}
         <UiFormRow label="运动速度"><Dropdown value={settings.motion} disabled={busy} options={[{ value: 'slow', label: '慢' }, { value: 'default', label: '默认' }, { value: 'fast', label: '快' }]} onSelect={motion => setSettings(value => ({ ...value, motion: motion as VideoEditReframeSettings['motion'] }))} /></UiFormRow>
         <UiFormRow label={<UiTooltipText tooltip="自动优先人物；人物放不下时按最大人脸构图。未检出主体的画面保持构图，完成后请检查。">关注主体</UiTooltipText>}><Dropdown value={settings.attention} disabled={busy} options={[{ value: 'auto', label: '自动（人物 / 人脸）' }, { value: 'person', label: '人物' }, { value: 'face', label: '最大人脸' }, { value: 'tracker', label: '跟随指定跟踪器' }]} onSelect={attention => setSettings(value => ({ ...value, attention: attention as VideoEditReframeSettings['attention'] }))} /></UiFormRow>

@@ -68,3 +68,17 @@ it('轨道公开只读轨道号与类型，供按整数轨道号落片段；公�
     expect(owner.document.sequences[0].tracks.find(value => value.id === track.id)!.index).toBe(track.index)
   } finally { app.dispose() }
 })
+
+it('源素材观察保留横竖8K与120帧，超大源等比缩至序列预算', async () => {
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  const app = createApplicationHarness()
+  try {
+    for (const [index, width, height, expectedWidth, expectedHeight] of [[0, 7680, 4320, 7680, 4320], [1, 4320, 7680, 4320, 7680], [2, 15360, 8640, 7680, 4320]]) {
+      const mediaId = `media-${index}`
+      appendVideoEditMedia(id, { id: mediaId, name: '原片', path: `/fixture/${index}.mp4`, kind: 'video', width, height, durationSeconds: 1, frameRate: { numerator: 120, denominator: 1 }, frameRateMode: 'sampled-constant' })
+      const item = owner.document.items.find(value => value.mediaId === mediaId)!
+      await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, timeUs: 0 } })
+      expect(render.calls.at(-1)?.document).toMatchObject({ width: expectedWidth, height: expectedHeight, fps: 120 })
+    }
+  } finally { app.dispose() }
+})

@@ -32,7 +32,10 @@ export const videoEditNativeMediaProbe = {
 }
 
 export function matchVideoEditFrameRate(fps: number): VideoEditRatio | undefined {
-  return Number.isFinite(fps) && fps > 0 ? VIDEO_EDIT_FRAME_RATES.find(rate => Math.abs(videoEditFps(rate) / fps - 1) < 0.001) : undefined
+  if (!Number.isFinite(fps) || fps <= 0) return undefined
+  // 整数帧率与 NTSC 分数相差不足容差，选最近值，不能依赖选项排列顺序。
+  return VIDEO_EDIT_FRAME_RATES.filter(rate => Math.abs(videoEditFps(rate) / fps - 1) < 0.001)
+    .reduce<VideoEditRatio | undefined>((best, rate) => !best || Math.abs(videoEditFps(rate) - fps) < Math.abs(videoEditFps(best) - fps) ? rate : best, undefined)
 }
 function nativeStreams(probe: VideoEditNativeProbe): { video?: VideoEditNativeStream; audio?: VideoEditNativeStream } {
   const video = probe.streams.find(stream => stream.index === probe.primaryVideoStreamIndex && stream.kind === 'video' && stream.video && !stream.isAttachedPicture)

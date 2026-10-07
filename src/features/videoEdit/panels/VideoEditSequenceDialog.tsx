@@ -1,41 +1,125 @@
+import { useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditSequenceDefaultsSchema } from '@/core/videoEdit/sequenceDefaults'
-import { useState } from 'react'
-import { UiButton, UiError, UiFormRow, UiInput, UiModal, UiSelect } from '@/components/ui'
+import { VIDEO_EDIT_SEQUENCE_LIMITS, isVideoEditSequenceSize } from '@/core/videoEdit/sequenceSize'
+import { VIDEO_EDIT_SEQUENCE_RATIOS, VIDEO_EDIT_SEQUENCE_TIERS, inferVideoEditSequencePreset, videoEditSequencePresetSize, type VideoEditSequenceRatio, type VideoEditSequenceTier } from '@/core/videoEdit/sequencePresets'
+import { UiButton, UiError, UiFormRow, UiGroup, UiInput, UiModal, UiOptionButton, UiSelect, UI_SECTION_STACK_CLASS, UI_TEXT_TIMECODE_CLASS } from '@/components/ui'
+import NumberInput from '@/components/ui/NumberInput'
+import Tooltip from '@/components/ui/Tooltip'
 import type { VideoEditBin } from '@/core/videoEdit/document'
-import { VIDEO_EDIT_FRAME_RATES } from '@/core/videoEdit/time'
+import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from '@/core/videoEdit/time'
 import type { VideoEditSequenceSettings } from '../application/videoEditProjectItems'
 
-const PRESETS = [{ name: '1080P 横屏', width: 1920, height: 1080 }, { name: '1080P 竖屏', width: 1080, height: 1920 }, { name: '4K 横屏', width: 3840, height: 2160 }, { name: '4K 竖屏', width: 2160, height: 3840 }]
-export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate = false, saveDefaults = true, onClose, onSubmit }: {
-  title: string; initial: VideoEditSequenceSettings; bins: VideoEditBin[]; requireFrameRate?: boolean; saveDefaults?: boolean; onClose: () => void; onSubmit: (settings: VideoEditSequenceSettings) => void | Promise<unknown>
+const PREVIEW_HINT = '预览可能较吃力，可在节目监视器降低回放分辨率'
+const PIXEL_ASPECT_RATIOS = [
+  { label: '方形像素 1.0', numerator: 1, denominator: 1 },
+  { label: 'HD 变形宽银幕 1.33', numerator: 4, denominator: 3 },
+  { label: '变形宽银幕 2.0', numerator: 2, denominator: 1 },
+]
+function FrameShape({ width, height }: { width: number; height: number }): React.ReactElement {
+  const edge = Math.max(1, width, height)
+  return <span aria-hidden className="block border border-line-strong bg-control" style={{ width: `${width / edge * 100}%`, height: `${height / edge * 100}%` }} />
+}
+export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate = false, mode = 'create', onClose, onSubmit }: {
+  title: string; initial: VideoEditSequenceSettings; bins: VideoEditBin[]; requireFrameRate?: boolean; mode?: 'create' | 'edit'; onClose: () => void; onSubmit: (settings: VideoEditSequenceSettings) => void | Promise<unknown>
 }): React.ReactElement {
   const defaults = useSettingsStore(state => state.videoEditSequenceDefaults)
-  const [values, updateValues] = useState({ name: initial.name ?? '新序列', binId: initial.binId ?? '', width: initial.width ?? defaults.width, height: initial.height ?? defaults.height,
-    frameRate: initial.frameRate ?? (requireFrameRate ? { numerator: 60, denominator: 1 } : defaults.frameRate), pixelAspectRatio: initial.pixelAspectRatio ?? defaults.pixelAspectRatio, sampleRate: initial.sampleRate ?? defaults.sampleRate, channels: initial.channels ?? defaults.channels })
+  const [values, updateValues] = useState(() => ({ name: initial.name ?? '新序列', binId: initial.binId ?? '', width: initial.width ?? defaults.width, height: initial.height ?? defaults.height,
+    frameRate: requireFrameRate ? { numerator: 60, denominator: 1 } : initial.frameRate ?? defaults.frameRate, pixelAspectRatio: initial.pixelAspectRatio ?? defaults.pixelAspectRatio, sampleRate: initial.sampleRate ?? defaults.sampleRate, channels: initial.channels ?? defaults.channels }))
+  const [preset, setPreset] = useState(() => inferVideoEditSequencePreset(values))
+  const [tier, setTier] = useState<VideoEditSequenceTier>(() => inferVideoEditSequencePreset(values)?.tier ?? '1080p')
+  const [frameRateConfirmed, setFrameRateConfirmed] = useState(!requireFrameRate)
+  const [advanced, setAdvanced] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [defaultsSaved, setDefaultsSaved] = useState(false)
-  const setValues = (next: typeof values): void => { updateValues(next); setDefaultsSaved(false) }
+  const setValues = (next: typeof values): void => {
+    setError('')
+    if (JSON.stringify(next) === JSON.stringify(values)) return
+    updateValues(next); setDefaultsSaved(false)
+  }
+  const specification = (): ReturnType<typeof videoEditSequenceDefaultsSchema.parse> => {
+    if (!frameRateConfirmed) throw new Error('请点击帧率选项确认剪辑帧率。')
+    if (!isVideoEditSequenceSize(values)) throw new Error(`宽高须为 ${VIDEO_EDIT_SEQUENCE_LIMITS.minDimension}–${VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension} 的整数，且画面总像素不超过 8K 上限。`)
+    const { name: _name, binId: _binId, ...settings } = values
+    return videoEditSequenceDefaultsSchema.parse(settings)
+  }
   const saveAsDefaults = (): void => {
-    try { const { name: _name, binId: _binId, ...specification } = values; useSettingsStore.getState().setVideoEditSequenceDefaults(videoEditSequenceDefaultsSchema.parse(specification)); setDefaultsSaved(true); setError('') } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+    try { useSettingsStore.getState().setVideoEditSequenceDefaults(specification()); setDefaultsSaved(true); setError('') }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
   }
   const submit = async (): Promise<void> => {
     if (!values.name.trim()) { setError('请输入序列名称。'); return }
     setBusy(true); setError('')
-    try { await onSubmit({ ...values, name: values.name.trim(), binId: values.binId || null }); onClose() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } finally { setBusy(false) }
+    try { const settings = specification(); await onSubmit({ ...settings, name: values.name.trim(), binId: values.binId || null }); onClose() }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+    finally { setBusy(false) }
   }
-  const field = (name: 'width' | 'height', label: string): React.ReactElement => <UiFormRow label={label}><UiInput aria-label={label} className="w-full" type="number" min={16} max={4096} value={values[name]} onChange={event => setValues({ ...values, [name]: Number(event.target.value) })} /></UiFormRow>
-  return <UiModal isOpen title={title} contentClassName="overflow-y-auto px-4 py-4" onClose={() => { if (!busy) onClose() }} footer={<>{saveDefaults && <UiButton disabled={busy} onClick={saveAsDefaults}>{defaultsSaved ? '已保存为默认值' : '保存为默认值'}</UiButton>}<UiButton disabled={busy} onClick={onClose}>取消</UiButton><UiButton variant="primary" disabled={busy} onClick={() => { void submit() }}>{busy ? '正在保存…' : '确定'}</UiButton></>}>
-    <div className="space-y-3">
-      <UiFormRow label="名称"><UiInput aria-label="序列名称" className="w-full" value={values.name} maxLength={200} onChange={event => setValues({ ...values, name: event.target.value })} /></UiFormRow>
-      <UiFormRow label="素材箱"><UiSelect aria-label="序列素材箱" className="w-full" value={values.binId ?? ''} onChange={event => setValues({ ...values, binId: event.target.value })}><option value="">素材根目录</option>{bins.map(bin => <option key={bin.id} value={bin.id}>{bin.name}</option>)}</UiSelect></UiFormRow>
-      <UiFormRow label="画幅预设"><UiSelect aria-label="画幅预设" className="w-full" value={PRESETS.find(preset => preset.width === values.width && preset.height === values.height)?.name ?? ''} onChange={event => { const preset = PRESETS.find(item => item.name === event.target.value); if (preset) setValues({ ...values, width: preset.width, height: preset.height }) }}><option value="">自定义</option>{PRESETS.map(preset => <option key={preset.name} value={preset.name}>{preset.name}</option>)}</UiSelect></UiFormRow>
-      <div className="grid grid-cols-2 gap-3">{field('width', '宽度')}{field('height', '高度')}</div>
-      <UiFormRow label="帧率"><UiSelect aria-label="帧率" className="w-full" value={(() => { const rate = VIDEO_EDIT_FRAME_RATES.find(rate => rate.numerator * values.frameRate.denominator === values.frameRate.numerator * rate.denominator); return rate ? `${rate.numerator}/${rate.denominator}` : '' })()} onChange={event => { if (event.target.value) { const [numerator, denominator] = event.target.value.split('/').map(Number); setValues({ ...values, frameRate: { numerator, denominator } }) } }}><option value="">自定义分数</option>{VIDEO_EDIT_FRAME_RATES.map(rate => <option key={`${rate.numerator}/${rate.denominator}`} value={`${rate.numerator}/${rate.denominator}`}>{Number((rate.numerator / rate.denominator).toFixed(3))} fps</option>)}</UiSelect></UiFormRow>
-      <div className="grid grid-cols-2 gap-3">{(['numerator', 'denominator'] as const).map((part, index) => <UiFormRow key={part} label={`帧率${index ? '分母' : '分子'}`}><UiInput aria-label={`帧率${index ? '分母' : '分子'}`} className="w-full" type="number" min={1} max={1000000} value={values.frameRate[part]} onChange={event => { setValues({ ...values, frameRate: { ...values.frameRate, [part]: Number(event.target.value) } }) }} /></UiFormRow>)}</div>
-      <div className="grid grid-cols-2 gap-3">{(['numerator', 'denominator'] as const).map((part, index) => <UiFormRow key={part} label={`像素长宽比${index ? '分母' : '分子'}`}><UiInput aria-label={`像素长宽比${index ? '分母' : '分子'}`} className="w-full" type="number" min={1} max={1000000} value={values.pixelAspectRatio[part]} onChange={event => setValues({ ...values, pixelAspectRatio: { ...values.pixelAspectRatio, [part]: Number(event.target.value) } })} /></UiFormRow>)}</div>
-      <div className="grid grid-cols-2 gap-3"><UiFormRow label="音频采样率"><UiSelect aria-label="音频采样率" className="w-full" value={values.sampleRate} onChange={event => setValues({ ...values, sampleRate: Number(event.target.value) as 44100 | 48000 })}><option value={48000}>48000 Hz</option><option value={44100}>44100 Hz</option></UiSelect></UiFormRow><UiFormRow label="声道"><UiSelect aria-label="声道" className="w-full" value={values.channels} onChange={event => setValues({ ...values, channels: Number(event.target.value) as 1 | 2 })}><option value={2}>立体声</option><option value={1}>单声道</option></UiSelect></UiFormRow></div>
+  const choosePreset = (ratio: VideoEditSequenceRatio, nextTier: VideoEditSequenceTier): void => {
+    const size = videoEditSequencePresetSize(ratio, nextTier)
+    if (!isVideoEditSequenceSize(size)) return
+    setPreset({ ratio, tier: nextTier }); setTier(nextTier); setValues({ ...values, ...size })
+  }
+  const chooseRatio = (ratio: VideoEditSequenceRatio): void => {
+    const nextTier = isVideoEditSequenceSize(videoEditSequencePresetSize(ratio, tier)) ? tier : '4K'
+    choosePreset(ratio, nextTier)
+  }
+  const rateLabel = Number(videoEditFps(values.frameRate).toFixed(3))
+  const parKey = `${values.pixelAspectRatio.numerator}/${values.pixelAspectRatio.denominator}`
+  const par = PIXEL_ASPECT_RATIOS.find(value => value.numerator * values.pixelAspectRatio.denominator === values.pixelAspectRatio.numerator * value.denominator)
+  return <UiModal isOpen size="form" title={title} contentClassName="overflow-y-auto px-4 py-4" onClose={() => { if (!busy) onClose() }} footer={<>
+    <UiButton variant="quiet" className="mr-auto" disabled={busy || defaultsSaved} onClick={saveAsDefaults}>{defaultsSaved ? '已保存为默认值' : '保存为默认值'}</UiButton>
+    <UiButton disabled={busy} onClick={onClose}>取消</UiButton>
+    <UiButton variant="primary" disabled={busy} onClick={() => { void submit() }}>{mode === 'edit' ? '保存' : '新建'}</UiButton>
+  </>}>
+    <div className={UI_SECTION_STACK_CLASS}>
+      <div className="grid grid-cols-3 gap-3">
+        <UiFormRow label="名称" className="col-span-2"><UiInput aria-label="序列名称" className="w-full" disabled={busy} value={values.name} maxLength={200} onChange={event => setValues({ ...values, name: event.target.value })} /></UiFormRow>
+        <UiFormRow label="素材箱"><UiSelect aria-label="序列素材箱" className="w-full" disabled={busy} value={values.binId} onChange={event => setValues({ ...values, binId: event.target.value })}><option value="">素材根目录</option>{bins.map(bin => <option key={bin.id} value={bin.id}>{bin.name}</option>)}</UiSelect></UiFormRow>
+      </div>
+      <div className="flex items-center gap-3" aria-label="序列预览">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center"><FrameShape width={values.width} height={values.height} /></div>
+        <span className={UI_TEXT_TIMECODE_CLASS}>{values.width} × {values.height} · {rateLabel} 帧</span>
+      </div>
+      <UiGroup title="画面比例" titleTone="compact">
+        <div className="flex flex-wrap gap-1" role="group" aria-label="画面比例">
+          {[...VIDEO_EDIT_SEQUENCE_RATIOS, '自定义' as const].map(ratio => {
+            const shape = ratio === '自定义' ? values : (() => { const [width, height] = ratio.split(':').map(Number); return { width, height } })()
+            const active = ratio === '自定义' ? !preset : preset?.ratio === ratio
+            return <UiOptionButton key={ratio} variant="choice" size="lg" className="flex-col justify-center gap-1 min-h-14" active={active} aria-pressed={active} disabled={busy} onClick={() => { if (ratio === '自定义') setPreset(null); else chooseRatio(ratio) }}>
+              <span className="flex h-6 w-6 items-center justify-center"><FrameShape {...shape} /></span><span>{ratio}</span>
+            </UiOptionButton>
+          })}
+        </div>
+      </UiGroup>
+      <UiGroup title="分辨率" titleTone="compact">
+        {preset ? <>
+          <div className="flex flex-wrap gap-1" role="group" aria-label="分辨率档位">{VIDEO_EDIT_SEQUENCE_TIERS.map(({ label }) => {
+            const enabled = isVideoEditSequenceSize(videoEditSequencePresetSize(preset.ratio, label))
+            const option = <UiOptionButton variant="choice" size="md" active={tier === label} aria-pressed={tier === label} disabled={busy || !enabled} onClick={() => choosePreset(preset.ratio, label)}>{label}</UiOptionButton>
+            return !enabled || label === '8K' ? <Tooltip key={label} content={enabled ? PREVIEW_HINT : '超过 8K 上限'}><span tabIndex={enabled ? undefined : 0}>{option}</span></Tooltip> : <span key={label}>{option}</span>
+          })}</div>
+          <div className={`mt-2 ${UI_TEXT_TIMECODE_CLASS}`} aria-label="序列分辨率">{values.width} × {values.height}</div>
+        </> : <div className="grid grid-cols-2 gap-3">{(['width', 'height'] as const).map((key, index) => <NumberInput key={key} label={index ? '高度' : '宽度'} ariaLabel={index ? '高度' : '宽度'} disabled={busy} value={values[key]} min={VIDEO_EDIT_SEQUENCE_LIMITS.minDimension} max={VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension} step={1} commitOnChange widthClassName="w-full" onChange={value => setValues({ ...values, [key]: value })} />)}</div>}
+      </UiGroup>
+      <UiGroup title="帧率" titleTone="compact" info={requireFrameRate ? '素材帧率不可靠，请点击帧率选项确认。' : undefined}>
+        <div className="flex flex-wrap gap-1" role="group" aria-label="帧率">{VIDEO_EDIT_FRAME_RATES.map(rate => {
+          const label = Number(videoEditFps(rate).toFixed(3)); const active = rate.numerator * values.frameRate.denominator === values.frameRate.numerator * rate.denominator
+          const option = <UiOptionButton variant="choice" size="md" active={active} aria-pressed={active} aria-label={`${label} 帧`} disabled={busy} onClick={() => { setFrameRateConfirmed(true); setValues({ ...values, frameRate: rate }) }}>{label}</UiOptionButton>
+          return label > 60 ? <Tooltip key={label} content={PREVIEW_HINT}>{option}</Tooltip> : <span key={label}>{option}</span>
+        })}</div>
+      </UiGroup>
+      <div>
+        <UiButton aria-expanded={advanced} disabled={busy} onClick={() => setAdvanced(value => !value)}>{advanced ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}更多设置</UiButton>
+        {advanced && <UiGroup className="mt-3">
+          <UiFormRow label="像素长宽比"><UiSelect aria-label="像素长宽比" className="w-full" disabled={busy} value={par ? `${par.numerator}/${par.denominator}` : parKey} onChange={event => { const [numerator, denominator] = event.target.value.split('/').map(Number); setValues({ ...values, pixelAspectRatio: { numerator, denominator } }) }}>
+            {PIXEL_ASPECT_RATIOS.map(value => <option key={value.label} value={`${value.numerator}/${value.denominator}`}>{value.label}</option>)}
+            {!par && <option value={parKey}>素材像素 {Number((values.pixelAspectRatio.numerator / values.pixelAspectRatio.denominator).toFixed(3))}</option>}
+          </UiSelect></UiFormRow>
+          <div className="grid grid-cols-2 gap-3"><UiFormRow label="音频采样率"><UiSelect aria-label="音频采样率" className="w-full" disabled={busy} value={values.sampleRate} onChange={event => setValues({ ...values, sampleRate: Number(event.target.value) as 44100 | 48000 })}><option value={48000}>48000 Hz</option><option value={44100}>44100 Hz</option></UiSelect></UiFormRow><UiFormRow label="声道"><UiSelect aria-label="声道" className="w-full" disabled={busy} value={values.channels} onChange={event => setValues({ ...values, channels: Number(event.target.value) as 1 | 2 })}><option value={2}>立体声</option><option value={1}>单声道</option></UiSelect></UiFormRow></div>
+        </UiGroup>}
+      </div>
       {error && <UiError size="xs" align="start" title={error} message="" />}
     </div>
   </UiModal>

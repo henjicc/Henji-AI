@@ -58,8 +58,8 @@ it('空态按钮按内置默认新建，一步撤销；保存默认值后下一�
   const owner = await createVideoEditProject(); const id = owner.document.id
   const view = render(<VideoEditEmptyTimeline instance={owner} onError={vi.fn()} />)
   fireEvent.click(view.getByRole('button', { name: '新建序列' }))
-  expect(view.getByLabelText('帧率')).toHaveProperty('value', '60/1')
-  fireEvent.click(view.getByRole('button', { name: '确定' }))
+  expect(view.getByRole('button', { name: '60 帧' }).getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(view.getByRole('button', { name: '新建' }))
   await waitFor(() => expect(owner.document.sequences).toHaveLength(1))
   expect(getActiveVideoEditSequence(owner)).toMatchObject({ width: 1920, height: 1080, fps: 60 })
   expect(owner.past).toHaveLength(1)
@@ -68,14 +68,13 @@ it('空态按钮按内置默认新建，一步撤销；保存默认值后下一�
   cleanup()
   const next = render(<VideoEditEmptyTimeline instance={owner} onError={vi.fn()} />)
   fireEvent.click(next.getByRole('button', { name: '新建序列' }))
-  fireEvent.change(next.getByLabelText('宽度'), { target: { value: '1280' } })
-  fireEvent.change(next.getByLabelText('高度'), { target: { value: '720' } })
-  fireEvent.change(next.getByLabelText('帧率'), { target: { value: '24/1' } })
+  fireEvent.click(next.getByRole('button', { name: '720p' }))
+  fireEvent.click(next.getByRole('button', { name: '24 帧' }))
   fireEvent.click(next.getByRole('button', { name: '保存为默认值' }))
   fireEvent.click(next.getByRole('button', { name: '取消' }))
   fireEvent.click(next.getByRole('button', { name: '新建序列' }))
-  expect(next.getByLabelText('宽度')).toHaveProperty('value', '1280')
-  fireEvent.click(next.getByRole('button', { name: '确定' }))
+  expect(next.getByLabelText('序列分辨率').textContent).toBe('1280 × 720')
+  fireEvent.click(next.getByRole('button', { name: '新建' }))
   await waitFor(() => expect(owner.document.sequences).toHaveLength(1))
   expect(getActiveVideoEditSequence(owner)).toMatchObject({ width: 1280, height: 720, fps: 24 })
   expect(owner.past).toHaveLength(1)
@@ -137,11 +136,12 @@ it('不可靠视频拖入通过现有规格面板确认，默认60帧且取消�
   const itemIds = owner.document.items.map(item => item.id)
   fireEvent.drop(view.getByRole('region'), { dataTransfer: { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: id, itemIds }) } })
   await waitFor(() => expect(view.getByRole('dialog')).toBeTruthy())
-  expect(view.getByLabelText('帧率')).toHaveProperty('value', '60/1')
+  expect(view.getByRole('button', { name: '60 帧' }).getAttribute('aria-pressed')).toBe('true')
   fireEvent.click(view.getByRole('button', { name: '取消' })); expect(owner.document.sequences).toEqual([])
   fireEvent.drop(view.getByRole('region'), { dataTransfer: { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: id, itemIds }) } })
   await waitFor(() => expect(view.getByRole('dialog')).toBeTruthy())
-  fireEvent.click(view.getByRole('button', { name: '确定' }))
+  fireEvent.click(view.getByRole('button', { name: '60 帧' }))
+  fireEvent.click(view.getByRole('button', { name: '新建' }))
   await waitFor(() => expect(owner.document.sequences).toHaveLength(1))
   expect(getActiveVideoEditSequence(owner).fps).toBe(60); expect(onError).not.toHaveBeenCalled()
 })
@@ -166,4 +166,22 @@ it('通用实体读取没有序列、创建时间线使用应用默认，删除�
   expect(settings.properties['video_edit.sequence_defaults']).toEqual(defaults)
   expect(useSettingsStore.getState().videoEditSequenceDefaults).toEqual(defaults)
   app.dispose()
+})
+
+it('通用实体创建并读回8K120序列，超像素上限写入原子拒绝', async () => {
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  const app = createApplicationHarness()
+  try {
+    const parent = { kind: 'video_edit.document', id }
+    const read = await app.read(parent, ['video_edit.document.active_sequence_id']) as { revisions: Record<string, number> }
+    const created = await app.call('change_application_entities', { summary: '新建8K序列', changes: [{ kind: 'create_items', entityType: 'video_edit.sequence', parent, items: [{ properties: { 'video_edit.sequence.name': '8K主序列', 'video_edit.sequence.width': 7680, 'video_edit.sequence.height': 4320, 'video_edit.sequence.frame_rate': { numerator: 120, denominator: 1 } } }] }] }, read.revisions)
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    const sequence = owner.document.sequences[0]
+    const ref = { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }
+    const result = await app.read(ref, ['video_edit.sequence.width', 'video_edit.sequence.height', 'video_edit.sequence.frame_rate']) as { properties: Record<string, unknown> }
+    expect(result.properties).toMatchObject({ 'video_edit.sequence.width': 7680, 'video_edit.sequence.height': 4320, 'video_edit.sequence.frame_rate': { numerator: 120, denominator: 1 } })
+    const rejected = await app.change(ref, { 'video_edit.sequence.height': 4321 })
+    expect(rejected).toMatchObject({ ok: false })
+    expect(owner.document.sequences[0].height).toBe(4320)
+  } finally { app.dispose() }
 })

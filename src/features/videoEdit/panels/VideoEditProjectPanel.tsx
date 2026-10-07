@@ -406,7 +406,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       else if (edit.kind === 'bin') updateVideoEditBin(projectId, edit.bin.id, { name: values.name, parentId: values.binId || null })
       else updateVideoEditItems(projectId, edit.items.map(item => item.id), { ...(values.name !== undefined ? { name: values.name } : {}), binId: values.binId || null, ...(values.tags !== undefined ? { tags: values.tags } : {}) })
     }} />}
-    {sequenceDialog && <VideoEditSequenceDialog title={sequenceDialog.kind === 'edit' ? '序列设置' : sequenceDialog.kind === 'fromItem' ? '按素材新建序列' : '新建序列'} saveDefaults={sequenceDialog.kind !== 'edit'} initial={sequenceDialog.settings} bins={instance.document.bins} requireFrameRate={sequenceDialog.requireFrameRate} onClose={() => setSequenceDialog(null)} onSubmit={settings => {
+    {sequenceDialog && <VideoEditSequenceDialog title={sequenceDialog.kind === 'edit' ? '序列设置' : sequenceDialog.kind === 'fromItem' ? '按素材新建序列' : '新建序列'} mode={sequenceDialog.kind === 'edit' ? 'edit' : 'create'} initial={sequenceDialog.settings} bins={instance.document.bins} requireFrameRate={sequenceDialog.requireFrameRate} onClose={() => setSequenceDialog(null)} onSubmit={settings => {
       if (sequenceDialog.kind === 'edit') updateVideoEditSequenceSettings(projectId, sequenceDialog.id!, settings)
       else if (sequenceDialog.kind === 'fromItem') createVideoEditSequenceFromItem(projectId, sequenceDialog.id!, settings)
       else switchVideoEditSequence(projectId, appendVideoEditSequence(projectId, { ...settings, binId: settings.binId || undefined }))

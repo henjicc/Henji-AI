@@ -8,6 +8,7 @@ import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessSettings, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { spoolVideoEditAudio } from './videoEditLoudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import { selectVideoEditExportEncoder } from '../engine/videoEditExportEncoder'
 import { getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
@@ -93,7 +94,9 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     const encoding = settings ? videoEditExportEncoding(settings, document.fps) : { fps: document.fps, videoBitrate: 8_000_000, audioBitrate: 192_000, audioCodec: 'aac' as const }
     const adapted = settings && format === 'mp4' ? new OffscreenCanvas(settings.width, settings.height) : undefined
     const geometry = settings ? videoEditExportGeometry(document.width, document.height, settings) : undefined
-    const video = format === 'mp4' ? new CanvasSource(adapted ?? renderer.canvas, { codec: 'avc', bitrate: encoding.videoBitrate }) : undefined
+    const videoCodec = format === 'mp4' ? await selectVideoEditExportEncoder({ width: adapted?.width ?? document.width, height: adapted?.height ?? document.height, frameRate: encoding.fps, bitrate: encoding.videoBitrate }) : undefined
+    task.controller.signal.throwIfAborted()
+    const video = videoCodec ? new CanvasSource(adapted ?? renderer.canvas, { codec: videoCodec, bitrate: encoding.videoBitrate }) : undefined
     const audio = new AudioBufferSource({ codec: encoding.audioCodec, ...(format === 'wav' ? {} : { bitrate: encoding.audioBitrate }) })
     if (video) output.addVideoTrack(video, { frameRate: encoding.fps })
     output.addAudioTrack(audio)

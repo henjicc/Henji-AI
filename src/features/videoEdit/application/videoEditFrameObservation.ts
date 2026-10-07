@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { videoEditComposition, type VideoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
+import { clampVideoEditSequenceSize } from '@/core/videoEdit/sequenceSize'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { getPlatform } from '@/platform/runtime'
 import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
@@ -33,7 +34,7 @@ function sourceComposition(document: VideoEditDocument, itemId: string, timeUs: 
   if (media.kind === 'audio') throw new Error('声音素材没有画面，请改为读取波形或片段属性。')
   if (!Number.isSafeInteger(timeUs) || timeUs < 0 || media.kind === 'video' && timeUs >= Math.round(media.durationSeconds * 1e6)) throw new Error('源时间必须是素材时长内的非负整数微秒。')
   const frameRate = media.frameRate ?? { numerator: 60, denominator: 1 }
-  const width = Math.max(16, Math.min(4096, media.width)); const height = Math.max(16, Math.min(4096, media.height))
+  const { width, height } = clampVideoEditSequenceSize(media)
   return {
     id: `observe-source-${item.id}`, name: item.name, width, height, frameRate, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
     tracks: [{ id: 'observe-picture', name: '画面', index: 1, kind: 'video', locked: false, enabled: true, muted: true, solo: false }],

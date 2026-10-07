@@ -1,6 +1,7 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
+import { canEncodeVideo } from 'mediabunny'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
@@ -16,6 +17,7 @@ import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'
 
 const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[] }))
 vi.mock('mediabunny', () => ({
+  canEncodeVideo: vi.fn(async () => true),
   ALL_FORMATS: [], Input: class {}, UrlSource: class {},
   Mp4OutputFormat: class { constructor() { encoding.formats.push('mp4') } }, AdtsOutputFormat: class { constructor() { encoding.formats.push('aac') } }, WavOutputFormat: class { constructor() { encoding.formats.push('wav') } }, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoding.finalize; async cancel() {} },
@@ -31,6 +33,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 const file = (name: string): string => path.resolve(path.sep, 'fixture', name)
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail }); return { promise, resolve, reject } }
 beforeEach(() => {
+  vi.mocked(canEncodeVideo).mockReset().mockResolvedValue(true)
   installHarnessNativeStorage(); encoding.rendered = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
   videoEditExportQueue.clearFinished(); videoEditExportPresetLibrary.replace([])
   const platform = getPlatform()
@@ -175,4 +178,26 @@ it('助手通用集合保存/删除自定义预设，内置删除拒绝，回读
     const builtin = await app.read({ kind: 'video_edit.export_preset', id: 'builtin:douyin' }, ['video_edit.export_preset.name'])
     expect((await app.call('change_application_entities', { summary: '不能删除内置模板', changes: [{ kind: 'remove_items', entityType: 'video_edit.export_preset', parent: { kind: 'video_edit.document', id: owner.document.id }, targets: [{ kind: 'video_edit.export_preset', id: 'builtin:douyin' }] }] }, builtin.revisions as Record<string, number>)).ok).toBe(false)
   } finally { app.dispose() }
+})
+
+it('8K120帧母版导出实际选HEVC并保持120帧时钟', async () => {
+  const owner = await project()
+  editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 7680, height: 4320, frameRate: { numerator: 120, denominator: 1 } }))
+  const jobs = await enqueueVideoEditExports([{ projectId: owner.document.id, presetId: 'builtin:master', path: file('8k.mp4') }])
+  const job = await videoEditExportQueue.wait(jobs[0].id)
+  expect(job.state).toBe('completed')
+  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 80_000_000 }])
+  expect(encoding.videoTimes).toEqual([0, 1 / 120, 2 / 120, 3 / 120])
+})
+it('导出面板对设备不支持的8K120帧禁用动作并给出降低规格的恢复方式', async () => {
+  const owner = await project()
+  editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 7680, height: 4320, frameRate: { numerator: 120, denominator: 1 } }))
+  vi.mocked(canEncodeVideo).mockResolvedValue(false)
+  const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  fireEvent.change(view.getByLabelText('导出预设'), { target: { value: 'builtin:master' } })
+  await waitFor(() => expect(view.getByText('当前设备无法导出 7680 × 4320 · 120 帧视频。请降低导出分辨率或帧率后重试。')).toBeTruthy())
+  expect(view.getByRole('button', { name: '立即导出' })).toHaveProperty('disabled', true)
+  expect(view.getByRole('button', { name: '加入队列' })).toHaveProperty('disabled', true)
+  fireEvent.change(view.getByLabelText('导出预设'), { target: { value: 'builtin:bilibili' } })
+  expect(view.getByRole('button', { name: '立即导出' })).toHaveProperty('disabled', false)
 })

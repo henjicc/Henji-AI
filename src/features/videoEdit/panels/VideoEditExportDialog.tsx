@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInput, UiLoading, UiModal, UiSelect } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
@@ -8,6 +8,7 @@ import { requireVideoEditInstance, subscribeVideoEdit, videoEditExportRange, vid
 import { VideoEditLoudnessFields } from './VideoEditLoudnessFields'
 import { VideoEditExportQueueList } from './VideoEditExportQueueList'
 import { videoEditUserErrorMessage } from '../application/videoEditUserError'
+import { selectVideoEditExportEncoder } from '../engine/videoEditExportEncoder'
 
 export function VideoEditExportDialog({ projectId, onClose }: { projectId: string; onClose: () => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
@@ -22,7 +23,24 @@ export function VideoEditExportDialog({ projectId, onClose }: { projectId: strin
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const canExport = Boolean(owner.document.sequences.find(sequence => sequence.id === sequenceId)?.clips.length)
+  const sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)
+  const outputWidth = settings.keepSequenceSize && sequence ? Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator) : settings.width
+  const outputHeight = settings.keepSequenceSize && sequence ? sequence.height : settings.height
+  const outputFps = settings.fps ?? (sequence ? sequence.frameRate.numerator / sequence.frameRate.denominator : 60)
+  const needsProbe = settings.format === 'mp4' && (Math.max(outputWidth, outputHeight) > 4096 || outputFps > 60)
+  const probeKey = needsProbe ? `${outputWidth}/${outputHeight}/${outputFps}/${settings.videoBitrateMbps}` : ''
+  const [encoderSupport, setEncoderSupport] = useState({ key: '', error: '' })
+  useEffect(() => {
+    if (!probeKey) return
+    let active = true
+    void selectVideoEditExportEncoder({ width: outputWidth, height: outputHeight, frameRate: outputFps, bitrate: settings.videoBitrateMbps * 1_000_000 }).then(
+      () => { if (active) setEncoderSupport({ key: probeKey, error: '' }) },
+      reason => { if (active) setEncoderSupport({ key: probeKey, error: videoEditUserErrorMessage(reason) }) },
+    )
+    return () => { active = false }
+  }, [probeKey, outputWidth, outputHeight, outputFps, settings.videoBitrateMbps])
+  const encoderError = probeKey && encoderSupport.key === probeKey ? encoderSupport.error : ''
+  const canExport = Boolean(sequence?.clips.length) && (!probeKey || encoderSupport.key === probeKey && !encoderError)
   const patch = (values: Partial<VideoEditExportSettings>): void => setSettings(previous => ({ ...previous, ...values }))
   const selectPreset = (id: string): void => { const value = presets.find(value => value.id === id); if (value) { setPresetId(id); setSettings(value.settings) } }
   const selectSequence = (id: string): void => { setSequenceId(id); try { setRange(videoEditExportRange(owner, id)); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }
@@ -67,7 +85,7 @@ export function VideoEditExportDialog({ projectId, onClose }: { projectId: strin
       </UiGroup>}
       {notice && <p role="status" className="text-xs text-text2">{notice}</p>}
       {busy && <UiLoading size="xs" message="正在处理导出…" />}
-      {error && <UiError message={error} />}
+      {(error || encoderError) && <UiError message={error || encoderError} />}
     </UiGroup>
     <VideoEditExportQueueList />
   </UiModal>

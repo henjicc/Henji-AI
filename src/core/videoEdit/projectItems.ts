@@ -1,6 +1,7 @@
 import { createVideoEditSequence, videoEditComposition, videoEditDuration, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import { videoEditIsDefaultAudioMapping, videoEditItemAudioLayout, type VideoEditAudioMapping } from './audioChannels'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from './time'
+import { clampVideoEditSequenceSize } from './sequenceSize'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { codeMaterialImageIds } from './codeMaterialResources'
 
@@ -142,8 +143,8 @@ export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: s
   const sourceRate = media?.frameRate
   const nested = item.kind === 'sequence' ? document.sequences.find(sequence => sequence.id === item.sequenceId) : undefined
   const supportedRate = nested?.frameRate ?? (sourceRate && VIDEO_EDIT_FRAME_RATES.find(rate => Math.abs(videoEditFps(rate) - videoEditFps(sourceRate)) < 0.01))
-  if (media?.kind === 'video' && (!supportedRate || media.frameRateMode !== 'sampled-constant') && !settings.frameRate) throw new VideoEditSequenceFrameRateRequired({ name: item.name, width: media.width, height: media.height, ...(item.binId ? { binId: item.binId } : {}) })
-  return { ...createVideoEditSequence(item.name), ...(nested ? { width: nested.width, height: nested.height, pixelAspectRatio: nested.pixelAspectRatio, sampleRate: nested.sampleRate, channels: nested.channels } : program ? { width: Math.max(16, program.width), height: Math.max(16, program.height) } : item.graphic ? { width: item.graphic.width, height: item.graphic.height } : media && media.width >= 16 && media.height >= 16 ? { width: media.width, height: media.height } : {}), ...(supportedRate ? { frameRate: supportedRate } : media?.kind === 'image' ? { frameRate: { numerator: 60, denominator: 1 } } : {}), ...(item.binId ? { binId: item.binId } : {}), ...sequenceSettings, ...(binId !== undefined ? { binId: binId || undefined } : {}) }
+  if (media?.kind === 'video' && (!supportedRate || media.frameRateMode !== 'sampled-constant') && !settings.frameRate) throw new VideoEditSequenceFrameRateRequired({ name: item.name, ...clampVideoEditSequenceSize(media), ...(item.binId ? { binId: item.binId } : {}) })
+  return { ...createVideoEditSequence(item.name), ...(nested ? { width: nested.width, height: nested.height, pixelAspectRatio: nested.pixelAspectRatio, sampleRate: nested.sampleRate, channels: nested.channels } : program ? clampVideoEditSequenceSize(program) : item.graphic ? clampVideoEditSequenceSize(item.graphic) : media && media.width >= 16 && media.height >= 16 ? clampVideoEditSequenceSize(media) : {}), ...(supportedRate ? { frameRate: supportedRate } : media?.kind === 'image' ? { frameRate: { numerator: 60, denominator: 1 } } : {}), ...(item.binId ? { binId: item.binId } : {}), ...sequenceSettings, ...(binId !== undefined ? { binId: binId || undefined } : {}) }
 }
 export function makeVideoEditItemSequence(document: VideoEditDocument, itemIds: string[], settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
   if (!itemIds.length) throw new Error('请选择至少一个素材项。')

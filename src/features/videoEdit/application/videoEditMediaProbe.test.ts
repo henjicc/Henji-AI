@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { videoEditMediaSchema } from '@/core/videoEdit/document'
-import { resolveVideoEditMediaInspection, videoEditFieldsFromNativeProbe, videoEditNativeFormatLabel, type VideoEditBrowserInspection, type VideoEditNativeProbe, type VideoEditNativeProbeOutcome, type VideoEditNativeStream } from './videoEditMediaProbe'
+import { matchVideoEditFrameRate, resolveVideoEditMediaInspection, videoEditFieldsFromNativeProbe, videoEditNativeFormatLabel, type VideoEditBrowserInspection, type VideoEditNativeProbe, type VideoEditNativeProbeOutcome, type VideoEditNativeStream } from './videoEditMediaProbe'
 
 type VideoInfo = NonNullable<VideoEditNativeStream['video']>
 function videoStream(codec: string, profile: string | null, video: Partial<VideoInfo> = {}, decodable = true): VideoEditNativeStream {
@@ -104,4 +104,11 @@ it('原生探测按文件顺序列出全部声音流（2.6）：多条单声道 
   const broken = { ...mxf.probe, streams: [...mxf.probe.streams.slice(0, 2), { ...audioStream('pcm_s16le', 5), audio: undefined }] }
   expect(videoEditFieldsFromNativeProbe(broken).audioStreams).toBeUndefined()
   expect(videoEditFieldsFromNativeProbe((probe([videoStream('h264', 'High')]) as { probe: VideoEditNativeProbe }).probe)).not.toHaveProperty('audioStreams')
+})
+
+it.each([24, 30, 60, 100, 120, 120000 / 1001])('素材探测支持高帧率 %s', fps => {
+  expect(matchVideoEditFrameRate(fps)).toEqual(fps === 120000 / 1001 ? { numerator: 120000, denominator: 1001 } : { numerator: fps, denominator: 1 })
+  const inspected = probe([videoStream('hevc', null, { width: 7680, height: 4320, avgFrameRate: fps === 120000 / 1001 ? { num: 120000, den: 1001 } : { num: fps, den: 1 }, realFrameRate: fps === 120000 / 1001 ? { num: 120000, den: 1001 } : { num: fps, den: 1 } })])
+  if (inspected.status !== 'probed') throw new Error('fixture')
+  expect(videoEditFieldsFromNativeProbe(inspected.probe)).toMatchObject({ width: 7680, height: 4320, frameRate: matchVideoEditFrameRate(fps), frameRateMode: 'sampled-constant' })
 })

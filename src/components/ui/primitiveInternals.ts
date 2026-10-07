@@ -178,7 +178,8 @@ export interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElem
    * - `cover`：封面内容卡（画布项目、3D 工程）：按钮本身无底无框，纵向排列“封面 + 文字”；悬停、键盘焦点与
    *   选中（`active`）只画在子元素 `UI_COVER_FRAME_CLASS` 封面框上（悬停发丝线、焦点环、选中强调描边，界面重设计 3.3）。
    */
-  variant?: 'default' | 'card' | 'flat' | 'menu' | 'grid' | 'segment' | 'tile' | 'swatch' | 'cover'
+  /** choice：静息无边框无底，选中实底，用于明确要求实底的单选表单。 */
+  variant?: 'default' | 'card' | 'flat' | 'menu' | 'choice' | 'grid' | 'segment' | 'tile' | 'swatch' | 'cover'
   /**
    * 高度与字号档（default / card / flat / menu / grid）：不传时高度随内容（上下 8px 内边距，字号 13）；
    * sm / md / lg 是最小高度 28 / 32 / 36（字号 12 / 13 / 13），多行内容仍可撑高。segment / tile / swatch 尺寸固定。

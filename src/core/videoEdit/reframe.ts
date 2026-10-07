@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { videoEditSequenceSizeSchema } from './sequenceSize'
 import type { VideoEditClip } from './document'
 import type { VideoEditSize } from './clipGeometry'
 import { evaluateVideoEditKeyframes, isVideoEditReframeKeyframe, writeVideoEditClipKeyframes, type VideoEditKeyframe } from './keyframes'
@@ -9,7 +10,7 @@ export const videoEditReframeSettingsSchema = z.object({
 }).strict()
 export type VideoEditReframeSettings = z.infer<typeof videoEditReframeSettingsSchema>
 export const VIDEO_EDIT_REFRAME_SIZES = { '9:16': { width: 1080, height: 1920 }, '1:1': { width: 1080, height: 1080 }, '4:5': { width: 1080, height: 1350 }, '16:9': { width: 1920, height: 1080 } } as const
-export const videoEditReframeSizeSchema = z.object({ width: z.number().int().min(16).max(4096), height: z.number().int().min(16).max(4096) }).strict()
+export const videoEditReframeSizeSchema = videoEditSequenceSizeSchema
 /** Normalized source-picture bounds. null means no subject detected in this frame. */
 export interface VideoEditAttentionBox { x: number; y: number; width: number; height: number }
 export interface VideoEditReframeSample { x: number; y: number; scale: number }
