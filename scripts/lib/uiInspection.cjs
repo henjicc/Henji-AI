@@ -12,9 +12,9 @@ const UI_INSPECTION_CANVAS_PROJECT_ID = '__henji_ui_inspection_canvas_fixture__'
 const UI_INSPECTION_CANVAS_PROJECT_NAME = '__Henji UI Inspection Canvas Fixture__'
 const UI_INSPECTION_QUICK_PROJECT_NAME = '回归-拖放连接与提示词换行'
 
+// 默认只跑一个尺寸（testing.md「GUI 默认只跑一个故障尺寸」）；响应式、尺寸相关问题才显式传 --size 960x640 或多档。
 const DEFAULT_WINDOW_SIZES = Object.freeze([
   Object.freeze({ width: 1440, height: 900 }),
-  Object.freeze({ width: 960, height: 640 }),
 ])
 
 /*

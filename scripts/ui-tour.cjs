@@ -45,7 +45,7 @@ function printHelp() {
   npm run ui:tour -- --steps scripts/ui-review/generation-seedance-kie.json --matrix review --contrast
 
 参数：
-  --size <宽x高>  指定窗口尺寸；可重复或用逗号分隔，默认 1440x900、960x640
+  --size <宽x高>  指定窗口尺寸；可重复或用逗号分隔，默认只跑 1440x900；尺寸相关问题再加 960x640
   --only <关键词> 只运行 id、界面或场景名包含关键词的场景
   --out <目录>    输出目录，默认 .ui-tour
   --profile <模式> temporary（默认，隔离临时数据）或 real（复用真实工程、配置与密钥）

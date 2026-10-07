@@ -172,7 +172,7 @@ test('0.9页面缩放分别核对外框、CSS、effective DPR与native scale，�
   assert.throws(() => assertInspectionWindowEvidence(requested, badCss, badCss), /尺寸发生漂移/)
 })
 
-test('默认覆盖两档项目窗口尺寸', () => {
+test('默认只跑一个窗口尺寸', () => {
   const options = parseUiInspectionArgs([], '.ui-tour')
   assert.deepEqual(options.sizes, DEFAULT_WINDOW_SIZES)
   assert.equal(options.outDir, '.ui-tour')
