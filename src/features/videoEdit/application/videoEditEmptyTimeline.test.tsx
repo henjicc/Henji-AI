@@ -107,7 +107,7 @@ it.each(['paths', 'asset'] as const)('零时间线从%s导入图片后直接落�
     vi.spyOn(platform.system.fs, 'readDir').mockRejectedValue(new Error('文件'))
     vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)
     vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue(resolve('fixture'))
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Blob())))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Uint8Array())))
     vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 1280, height: 720, close: vi.fn() }))
   } else {
     const asset: AssetRecord = { id: 'fresh-image', mediaType: 'image', displayName: '原图', filePath: path, displayUrl: '', source: 'imported', mimeType: 'image/png', sizeBytes: 100, width: 1280, height: 720, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }

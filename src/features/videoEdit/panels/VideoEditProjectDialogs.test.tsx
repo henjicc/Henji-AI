@@ -4,11 +4,10 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { VideoEditSequenceDialog } from './VideoEditSequenceDialog'
 import { VideoEditProjectEditDialog } from './VideoEditProjectEditDialog'
 afterEach(cleanup)
-it('未知或可变源帧率不会默许默认 30，主动选择后保留有理帧率和清根设置', async () => {
+it('未知或可变源帧率预选 60 帧，改选后保留有理帧率和清根设置', async () => {
   const submit = vi.fn(); const close = vi.fn()
   const view = render(<VideoEditSequenceDialog title="按素材新建序列" initial={{ name: '素材序列' }} bins={[]} requireFrameRate onClose={close} onSubmit={submit} />)
-  await act(async () => fireEvent.click(view.getByRole('button', { name: '确定' })))
-  expect(submit).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled()
+  expect((view.getByLabelText('帧率') as HTMLSelectElement).value).toBe('60/1')
   fireEvent.change(view.getByLabelText('帧率'), { target: { value: '60000/1001' } })
   await act(async () => fireEvent.click(view.getByRole('button', { name: '确定' })))
   expect(submit).toHaveBeenCalledWith(expect.objectContaining({ frameRate: { numerator: 60000, denominator: 1001 }, binId: null }))

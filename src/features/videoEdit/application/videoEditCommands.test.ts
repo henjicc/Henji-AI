@@ -61,7 +61,7 @@ it('复制后菜单固定原剪贴板及目标轨道，跨序列按同类轨道�
     current.clips[1].track = 3; return document
   })
   copyVideoEditTimeline(id, sequence.id, [first, second])
-  const next = appendVideoEditSequence(id); switchVideoEditSequence(id, next)
+  const next = appendVideoEditSequence(id, { frameRate: sequence.frameRate }); switchVideoEditSequence(id, next)
   editVideoProject(id, document => { const current = document.sequences.find(value => value.id === next)!; current.tracks = [{ ...current.tracks[0], index: 0 }, { ...current.tracks[1], index: 1 }, { ...current.tracks[1], id: 'target-3', index: 3 }]; return document })
   const context = captureVideoEditCommandContext(id, 'timeline', { frame: 100 })
   const current = getActiveVideoEditSequence(owner)
