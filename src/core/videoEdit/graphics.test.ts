@@ -11,6 +11,12 @@ const rect = (parameters: VideoEditGraphicObject['parameters'] = {}): VideoEditG
 const draw = (graphic: VideoEditGraphic, sourceInUs = 0) => evaluateVideoEditGraphic(prepareVideoEditGraphic(graphic), time(sourceInUs))[0]
 
 describe('正式结构化图形模型与共用曲线求值', () => {
+  it('文字外观误写进 parameters 时，错误指向文字样式 text_style', () => {
+    const graphic = createVideoEditGraphic('text', 1920, 1080)
+    const result = videoEditGraphicSchema.safeParse({ ...graphic, objects: [{ ...graphic.objects[0], parameters: { ...graphic.objects[0].parameters, fontSize: 100 } }] })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0]?.message).toContain('text_style')
+  })
   it('创建可读回的纯色、矩形、椭圆和文字，保留独立稳定标识', () => {
     const created = (['solid', 'rect', 'ellipse', 'text'] as const).map(kind => createVideoEditGraphic(kind, 3840, 2160))
     expect(new Set(created.map(graphic => graphic.objects[0].id)).size).toBe(4)

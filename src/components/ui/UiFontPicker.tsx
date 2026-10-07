@@ -45,6 +45,9 @@ function FontRow({ face, active, selected, favorite, onPreview, onSelect, onErro
 }
 
 /** One font selection interaction for all workspaces; PanelTrigger owns its surface and overlay lifecycle. */
+/** react-virtuoso's root inline height:100% beats a class; inside an auto-height popover that resolved to 0 and hid every row. */
+const FONT_LIST_STYLE = { height: 288 } as const
+
 export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', disabled, projectFonts = [], onSelect, onPreview }: UiFontPickerProps): React.ReactElement {
   const library = useSyncExternalStore(subscribeFontLibrary, fontLibrarySnapshot)
   const [open, setOpen] = useState(false)
@@ -111,7 +114,7 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
       {(error || library.error) && <UiError size="xs" message={error || library.error} onRetry={() => { setError(''); void loadFontLibrary(true).catch(report) }} />}
       {library.loading && <UiLoading size="xs" message="正在读取本机字体…" />}
       {familyRows.length ? <div role="listbox" aria-label="字体列表" aria-activedescendant={active >= 0 ? `${optionPrefix}-${active}` : undefined} onPointerLeave={restore}>
-        <Virtuoso ref={list} className="h-72" data={familyRows} computeItemKey={(_index, face) => face.id} initialItemCount={Math.min(8, familyRows.length)} itemContent={(index, face) => <FontRow face={face} optionId={`${optionPrefix}-${index}`} active={active === index} selected={current?.family === face.family} favorite={library.preferences.favorites.includes(face.family)} onPreview={() => { setActive(index); showPreview(face) }} onSelect={() => choose(face)} onError={report} /> } />
+        <Virtuoso ref={list} style={FONT_LIST_STYLE} data={familyRows} computeItemKey={(_index, face) => face.id} initialItemCount={Math.min(8, familyRows.length)} itemContent={(index, face) => <FontRow face={face} optionId={`${optionPrefix}-${index}`} active={active === index} selected={current?.family === face.family} favorite={library.preferences.favorites.includes(face.family)} onPreview={() => { setActive(index); showPreview(face) }} onSelect={() => choose(face)} onError={report} /> } />
       </div> : !library.loading && <UiEmpty size="xs" title="没有匹配的字体" action={<UiButton size="sm" disabled={busy} onClick={() => { void perform(importFonts) }}>导入字体</UiButton>} />}
       {current?.imported && <UiButton variant="danger" size="sm" disabled={busy} onClick={() => { void perform(() => removeFont(current.id)) }}><Trash2 className="h-3.5 w-3.5" />删除此导入字体</UiButton>}
     </div>}>

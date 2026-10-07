@@ -64,7 +64,9 @@ export const videoEditGraphicSchema = graphicSchema.superRefine((graphic, contex
     try { prepareCodeMaterialParameters(videoEditGraphicObjectMetadata(graphic, object), object) }
     catch (error) {
       if (!(error instanceof CodeMaterialError) && !(error instanceof z.ZodError)) throw error
-      context.addIssue({ code: 'custom', path: ['objects', index], message: error.message })
+      // Appearance moved to the shared text style; point writers (people and agents) at the right field instead of a bare "undeclared".
+      const styleKeys = object.kind === 'text' ? Object.keys(object.parameters).filter(key => key in videoEditTextStyleSchema.shape) : []
+      context.addIssue({ code: 'custom', path: ['objects', index], message: styleKeys.length ? `文字外观（${styleKeys.join('、')}）写在文字样式 text_style 里，不在 parameters 里。` : error.message })
     }
   }
 })
