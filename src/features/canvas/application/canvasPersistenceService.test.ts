@@ -44,6 +44,19 @@ describe('共享画布保存完成屏障', () => {
     expect(useProjectStore.getState().persistenceError).toBeNull()
   })
 
+  it('批内任一操作失败时整批回滚：前面已加的节点、撤销历史与已保存文档都不变', async () => {
+    const before = useCanvasStore.getState()
+    await expect(applyCanvasOperationsAtomically(projectId, [
+      { kind: 'add_node', nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' } },
+      { kind: 'disconnect_edge', edgeId: '不存在的连线' },
+    ])).rejects.toThrow()
+    const after = useCanvasStore.getState()
+    expect(after.nodes).toEqual(before.nodes)
+    expect(after.edges).toEqual(before.edges)
+    expect(after.history.past).toHaveLength(before.history.past.length)
+    expect(readCanvasTestProject(projectId)!.nodes).toEqual([])
+  })
+
   it('同一批多项写入只保存最终节点与合并后的历史', async () => {
     const save = canvasSaveSpy()
     await applyCanvasOperationsAtomically(projectId, [
