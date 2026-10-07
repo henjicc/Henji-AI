@@ -65,8 +65,12 @@ export function timelineNewTrackZone(layout: TimelineLayout, y: number): Timelin
 export function timelineTrackAt(rows: readonly TimelineTrackRow[], y: number): TimelineTrackRow | undefined {
   return rows.find(row => y >= Math.max(row.top, row.clipTop) && y < Math.min(row.top + row.height, row.clipBottom))
 }
+/** 轨道头与片段共用几何；上下各缓冲约两条默认轨道，正在编辑或聚焦的轨道保留挂载。 */
+export function timelineVisibleTrackRows(rows: readonly TimelineTrackRow[], retained: readonly (string | null | undefined)[] = [], overscan = 64): TimelineTrackRow[] {
+  return rows.filter(row => retained.includes(row.track.id) || row.top + row.height > row.clipTop - overscan && row.top < row.clipBottom + overscan)
+}
 export function timelineVisibleClips(clips: readonly VideoEditClip[], rows: readonly TimelineTrackRow[], viewport: Pick<TimelineViewport, 'left' | 'width'>, pixels: number): VideoEditClip[] {
-  const tracks = new Set(rows.filter(row => row.top + row.height > row.clipTop && row.top < row.clipBottom).map(row => row.track.index))
+  const tracks = new Set(timelineVisibleTrackRows(rows, [], 0).map(row => row.track.index))
   const from = Math.max(0, (viewport.left - 32) / pixels)
   const to = Math.max(0, (viewport.left + viewport.width - TIMELINE_HEADER_WIDTH + 32) / pixels)
   return clips.filter(clip => tracks.has(clip.track) && clip.start < to && clip.start + clip.duration > from)

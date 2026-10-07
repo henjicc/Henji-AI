@@ -60,5 +60,5 @@ export function useTrackHeaderMenu(instance: VideoEditInstance, sequence: VideoE
       renderPanel={() => <VideoEditButtonBarEditorPanel specs={videoEditTrackHeaderButtonSpecs(editorTrack, instance.targetTrackIds.includes(editorTrack.id), () => undefined, () => undefined)} saved={videoEditTrackHeaderButtons(layouts, dialog.trackKind)} defaults={VIDEO_EDIT_TRACK_HEADER_BUTTON_DEFAULTS[dialog.trackKind]}
         onSave={ids => useSettingsStore.getState().setVideoEditTrackHeaderButtons(dialog.trackKind, ids)} onClose={() => setDialog(null)} />} />}
   </>
-  return { show, renaming, rename, startRename: setRenaming, elements }
+  return { show, renaming, rename, startRename: setRenaming, retainedTrackId: dialog?.kind === 'buttons' ? dialog.trackId : null, elements }
 }

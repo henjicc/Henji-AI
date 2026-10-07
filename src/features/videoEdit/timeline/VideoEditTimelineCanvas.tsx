@@ -41,7 +41,7 @@ import type { VideoEditSceneTarget } from '../application/videoEditSceneDetectio
 import { closeVideoEditSpeedDialog, useVideoEditSpeedDialogRequest } from '../application/videoEditSpeedDialog'
 import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import { useTrackHeaderMenu } from './useTrackHeaderMenu'
 import { VideoEditTimelineZoomBar } from './VideoEditTimelineZoomBar'
@@ -89,6 +89,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   // PR：视频区与音频区各自纵向滚动，中间的分隔条可拖动调整两区比例（只是视图状态，不进文档）。
   const [split, setSplit] = useState(TIMELINE_DEFAULT_SPLIT)
   const [regionScroll, setRegionScroll] = useState<Record<TimelineRegionKind, number>>({ video: 0, audio: 0 })
+  const [focusedTrackId, setFocusedTrackId] = useState<string | null>(null)
   const [wheelHeights, setWheelHeights] = useState<ReadonlyMap<string, number> | null>(null)
   const heightsOf = (value: VideoEditSequence): VideoEditSequence => wheelHeights ? { ...value, tracks: value.tracks.map(track => wheelHeights.has(track.id) ? { ...track, height: wheelHeights.get(track.id)! } : track) } : value
   const layoutInput = { viewportHeight: view.height, split, scroll: regionScroll }
@@ -128,6 +129,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   latestLayout.current = layout
   const rows = layout.rows
   const trackMenu = useTrackHeaderMenu(instance, sequence, onError)
+  const headerRows = timelineVisibleTrackRows(rows, [focusedTrackId, trackMenu.renaming, trackMenu.retainedTrackId, pointer.resized?.trackId])
   const duration = videoEditDuration(displayed)
   const width = Math.max(view.width, TIMELINE_HEADER_WIDTH + (duration + fps * 5) * pixels)
   const visibleClips = timelineVisibleClips(displayed.clips, rows, view, pixels)
@@ -401,6 +403,19 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     {nestTarget && <VideoEditNestDialog target={nestTarget} onClose={() => setNestTarget(null)} />}
     <div ref={pointer.viewport} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport data-video-edit-tool={instance.tool} className={`video-edit-timeline-viewport relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent ${pointer.failure ? 'cursor-not-allowed' : ''}`}
       onScroll={readViewport}
+      onFocusCapture={event => {
+        const target = elementOfEventTarget(event.target)
+        const id = target?.closest('[data-video-edit-track-header]')?.getAttribute('data-video-edit-track-header') ?? null
+        setFocusedTrackId(id)
+        const row = latestLayout.current.rows.find(value => value.track.id === id)
+        if (!row || !target) return
+        // 只滚入聚焦的控件：轨道可能比本区更高，整行无法同时露出。
+        const host = event.currentTarget; const rect = target.getBoundingClientRect()
+        const origin = host.getBoundingClientRect().top - host.scrollTop
+        if (rect.top - origin < row.clipTop) scrollRegion(row.region, rect.top - origin - row.clipTop)
+        else if (rect.bottom - origin > row.clipBottom) scrollRegion(row.region, rect.bottom - origin - row.clipBottom)
+      }}
+      onBlurCapture={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) setFocusedTrackId(null) }}
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
       onDoubleClick={event => {
         // 双击记着来源的片段：回到来源继续编辑（图片文档片段打开图片编辑，4.1）；其余有源文件的片段按 Premiere 在源监视器打开。
@@ -467,7 +482,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           const region = layout.regions[kind]
           // 每一区单独裁切：滚出本区的轨道与片段不显示（overflow-y: clip 不建立滚动容器，轨道头仍能横向吸附在左侧）。
           return <div key={kind} className="absolute left-0 right-0 overflow-y-clip" style={{ top: region.top, height: region.height }} data-video-edit-track-region={kind}>
-            {rows.filter(row => row.region === kind).map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-gap bg-window" style={{ top: row.top - region.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
+            {headerRows.filter(row => row.region === kind).map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-gap bg-window" style={{ top: row.top - region.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
               <VideoEditTrackHeader row={row} code={trackCodes.get(row.track.id) ?? ''} targeted={instance.targetTrackIds.includes(row.track.id)} renaming={trackMenu.renaming === row.track.id} onRename={name => trackMenu.rename(row.track.id, name)} onStartRename={() => trackMenu.startRename(row.track.id)}
                 onContextMenu={event => trackMenu.show(event, row.track.id)}
                 onTarget={() => run(() => setVideoEditTimelineView(projectId, { targetTrackIds: instance.targetTrackIds.includes(row.track.id) ? instance.targetTrackIds.filter(id => id !== row.track.id) : [...instance.targetTrackIds, row.track.id] }))}

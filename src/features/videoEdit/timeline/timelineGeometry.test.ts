@@ -2,7 +2,7 @@ import { createVideoEditTestDocument as createVideoEditDocument } from '../../..
 import { expect, it } from 'vitest'
 import { type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { TIMELINE_NEW_TRACK_ZONE, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineWheelAction } from './timelineGeometry'
+import { TIMELINE_NEW_TRACK_ZONE, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction } from './timelineGeometry'
 
 function fixture(): VideoEditSequence {
   const document = createVideoEditDocument('轨道几何')
@@ -22,6 +22,20 @@ function fixture(): VideoEditSequence {
 }
 
 const input = (scroll: Partial<Record<'video' | 'audio', number>> = {}, viewportHeight = 300) => ({ viewportHeight, split: 0.5, scroll: { video: 0, audio: 0, ...scroll } })
+
+it('轨道头裁剪沿用两区可变行高几何，缓冲边界为半开区间，交互中的离屏轨道保留', () => {
+  const sequence = fixture()
+  const rows = timelineLayout(sequence, input()).rows
+  expect(timelineVisibleTrackRows(rows, [], 0).map(row => row.track.index)).toEqual([3, 1, 0, 2])
+  expect(timelineVisibleTrackRows(rows).map(row => row.track.index)).toEqual([3, 1, 0, 2])
+  expect(timelineVisibleTrackRows(rows, [], 128).map(row => row.track.index)).toEqual([4, 3, 1, 0, 2])
+  const scrolled = timelineLayout(sequence, input({ video: 148 })).rows
+  expect(timelineVisibleTrackRows(scrolled, [], 0).map(row => row.track.index)).toEqual([4, 3, 0, 2])
+  expect(timelineVisibleTrackRows(scrolled, ['video-1'], 0).map(row => row.track.index)).toEqual([4, 3, 1, 0, 2])
+  const row = rows[0]
+  expect(timelineVisibleTrackRows([{ ...row, top: row.clipTop - 64 - row.height }])).toEqual([])
+  expect(timelineVisibleTrackRows([{ ...row, top: row.clipBottom + 64 }])).toEqual([])
+})
 
 it('PR 两区：视频区在上、音频区在下，V1 贴分隔条上方、A1 贴下方，画面按叠加层级逆序，原轨道对象不变', () => {
   const sequence = fixture()

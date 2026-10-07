@@ -363,6 +363,7 @@ export function useTimelinePointer(options: Options) {
     if (event.button !== 0) return
     event.preventDefault(); event.stopPropagation()
     capture({ ...base(event), kind: 'height', origin: { x: event.clientX, y: event.clientY }, trackId: row.track.id, height: row.height, next: row.height })
+    setResized({ trackId: row.track.id, height: row.height })
   }
   useLayoutEffect(() => {
     if (pointer.current && !valid(pointer.current)) cancel()

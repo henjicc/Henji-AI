@@ -374,7 +374,8 @@ it('时间线浮出到系统窗口（另一 realm 文档）后仍可点选、拖
 it('高度只在释放提交一次，实际32轨道与高度用于纵向命中', () => {
   editVideoProject(owner.document.id, document => { const track = document.sequences[0].tracks[1]; document.sequences[0].tracks = Array.from({ length: 32 }, (_, index) => ({ ...track, id: `track-${index}`, index, kind: index === 0 ? 'audio' as const : 'video' as const, name: `轨道${index}` })); return document })
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const history = owner.past.length
-  expect(view.container.querySelectorAll('[data-video-edit-track]')).toHaveLength(32)
+  expect(current().tracks).toHaveLength(32)
+  expect(view.container.querySelectorAll('[data-video-edit-track]').length).toBeLessThan(20)
   const resizeY = trackClientY() + 15
   fireEvent.pointerDown(view.getByRole('separator', { name: '调整轨道1高度' }), event(100, resizeY)); fireEvent.pointerMove(host, event(100, resizeY + 40))
   expect(current().tracks[1].height).toBeUndefined(); expect(owner.past).toHaveLength(history)
@@ -562,8 +563,9 @@ it('交错32轨道与500片段分成音画两区，各自纵向滚动，DOM仍�
   })
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   const displayedTracks = [...view.container.querySelectorAll('[data-video-edit-track]')]
-  expect(displayedTracks).toHaveLength(32)
-  expect(displayedTracks.map(row => Number(row.getAttribute('data-track-index')))).toEqual([...Array.from({ length: 16 }, (_, index) => 31 - index * 2), ...Array.from({ length: 16 }, (_, index) => index * 2)])
+  expect(displayedTracks.length).toBeLessThan(20)
+  const mounted = new Set(displayedTracks.map(row => Number(row.getAttribute('data-track-index'))))
+  expect(displayedTracks.map(row => Number(row.getAttribute('data-track-index')))).toEqual([...Array.from({ length: 16 }, (_, index) => 31 - index * 2), ...Array.from({ length: 16 }, (_, index) => index * 2)].filter(index => mounted.has(index)))
   expect(current().tracks).toEqual(tracks)
   // 初次即见底层画面（V1 贴分隔条上方）与首条声音（A1 贴下方）
   const divider = view.getByRole('separator', { name: '画面与声音轨道分界' }) as HTMLElement
@@ -763,7 +765,7 @@ it('轨道头右键：添加／删除单个轨道各一步撤销，重命名，�
   await waitFor(() => expect(count('video')).toBe(8)); expect(owner.past).toHaveLength(history + 1)
   // 新轨道紧贴在 V1 之上，原 V2 及以上顺延为 V3…
   const codes = [...view.container.querySelectorAll('[data-video-edit-track-code]')].map(node => node.textContent)
-  expect(codes.filter(code => code?.startsWith('V'))).toEqual(['V8', 'V7', 'V6', 'V5', 'V4', 'V3', 'V2', 'V1'])
+  expect(codes.filter(code => code?.startsWith('V'))).toEqual(['V7', 'V6', 'V5', 'V4', 'V3', 'V2', 'V1'])
   expect(current().clips.every(clip => current().tracks.some(track => track.index === clip.track))).toBe(true)
   act(() => undoVideoEdit(owner.document.id)); expect(count('video')).toBe(7)
   fireEvent.contextMenu(headerOf(v1.id), { clientX: 40, clientY: 100 }); fireEvent.click(await view.findByText('重命名'))
