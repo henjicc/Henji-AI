@@ -49,7 +49,7 @@ const ObjectsPanel: React.FC<IDockviewPanelProps> = () => <ObjectListPanel />
 const PropertiesPanel: React.FC<IDockviewPanelProps> = () => <PropertyPanel />
 const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => <StateKeyframeTimelinePanel />
 
-const CAMERA_STAGE_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock', 6)
+const CAMERA_STAGE_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock', 4)
 const DOCK_COMPONENTS = {
   viewport: ViewportPanel,
   objects: ObjectsPanel,

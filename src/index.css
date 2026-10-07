@@ -1057,29 +1057,21 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   visibility: hidden;
 }
 
-/* 停靠面板组的间隙与激活描边（剪辑与 3D 镜头参考共用，2026-10-07 按用户参照 PR）：
- * - 面板组之间的间隙宽度由 dockviewHostTheme 的 gap 决定；间隙底色在间隙色上再压一层 shade，比面板底明显更深。
- * - 激活描边画在面板组自身的 1px 边框上（所有组都留 1px 透明边，切换激活时布局不动）。不能用伪元素叠在组上：
- *   defaultRenderer="always" 时面板内容渲染在 dockview 根部的 .dv-render-overlay 里（z-index 1），会盖住组内的一切；
- *   边框在内容区之外，overlay 按内容区定位，天然不会压住它。 */
+/* 停靠面板组的间隙（剪辑与 3D 镜头参考共用，2026-10-07 按用户参照 PR）：
+ * 间隙宽度由 dockviewHostTheme 的 gap 决定；间隙底色在间隙色上再压一层 shade，比面板底明显更深。
+ * dockview 默认给 .dv-dockview 铺面板底色会把间隙涂成面板色，这里改透明，面板组自带底色不受影响。
+ * 激活面板组的描边不在这里画，见 DockviewHost 的 ActiveGroupOutline（面板内容层会盖住组上的 CSS 描边）。 */
 .henji-cameraStage-dock.dockview-theme-abyss {
   background: linear-gradient(var(--shade), var(--shade)), rgb(var(--gap-rgb));
 }
 
-/* dockview 默认给 .dv-dockview 铺面板底色，会把间隙涂成面板色；去掉后间隙露出上面的深色底，面板组自带底色不受影响。 */
 .henji-cameraStage-dock .dv-dockview {
   background-color: transparent;
 }
 
 .henji-cameraStage-dock .dv-groupview {
-  box-sizing: border-box;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   overflow: hidden;
-}
-
-.henji-cameraStage-dock .dv-groupview.dv-active-group {
-  border-color: rgb(var(--accent-rgb));
 }
 
 /* 剪辑工作区：分隔线与间隙同色（不画发丝线），
