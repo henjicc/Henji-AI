@@ -65,13 +65,21 @@ struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 }`
 const blendNames: CodeBlend[] = ['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken']
 // Trusted instancing variant shares the exact geometry/SDF with the single-quad path.
-const instanceShader = shader.slice(0, shader.indexOf('@group(0) @binding(1)'))
-  .replace('@group(0) @binding(0) var<uniform> p:P;', '@group(0) @binding(0) var<storage,read> instances:array<P>;')
-  .replace('@location(0) uv:vec2f }', '@location(0) uv:vec2f, @location(1) @interpolate(flat, either) instance:u32 }')
-  .replace('fn vs(@builtin(vertex_index) i:u32)', 'fn vs(@builtin(vertex_index) i:u32,@builtin(instance_index) instance:u32)')
-  .replace('let uv=array', 'let p=instances[instance]; let uv=array')
-  .replace('),uv);', '),uv,instance);')
-  .replace('let half=p.box.zw', 'let p=instances[v.instance]; let half=p.box.zw')
+const shapeBody = shader.slice(shader.indexOf('@fragment fn shape(v:V)->@location(0) vec4f {') + '@fragment fn shape(v:V)->@location(0) vec4f {'.length, shader.indexOf('\n}\n@group(0) @binding(1)'))
+// Per-instance data arrives as vertex attributes, not a vertex-stage storage buffer: compatibility-mode WebGPU allows none there.
+const instanceShader = `
+struct P { box:vec4f, color:vec4f, canvas:vec4f, matrix0:vec4f, matrix1:vec4f, stroke:vec4f, extra:vec4f }
+struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f, @location(1) @interpolate(flat, either) box:vec4f, @location(2) @interpolate(flat, either) color:vec4f, @location(3) @interpolate(flat, either) canvas:vec4f, @location(4) @interpolate(flat, either) stroke:vec4f, @location(5) @interpolate(flat, either) extra:vec4f }
+@vertex fn vs(@builtin(vertex_index) i:u32,@location(0) box:vec4f,@location(1) color:vec4f,@location(2) canvas:vec4f,@location(3) matrix0:vec4f,@location(4) matrix1:vec4f,@location(5) stroke:vec4f,@location(6) extra:vec4f)->V {
+ let uv=array<vec2f,6>(vec2f(0,0),vec2f(0,1),vec2f(1,0),vec2f(1,0),vec2f(0,1),vec2f(1,1))[i];
+ let local=box.xy+uv*box.zw;
+ let q=vec2f(matrix0.x*local.x+matrix0.z*local.y+matrix1.x,matrix0.y*local.x+matrix0.w*local.y+matrix1.y)/canvas.xy;
+ return V(vec4f(q.x*2-1,1-q.y*2,0,1),uv,box,color,canvas,stroke,extra);
+}
+@fragment fn shape(v:V)->@location(0) vec4f {
+ let p=P(v.box,v.color,v.canvas,vec4f(0),vec4f(0),v.stroke,v.extra);${shapeBody}
+}`
+const INSTANCE_LAYOUT = { arrayStride: 112, stepMode: 'instance', attributes: Array.from({ length: 7 }, (_, index) => ({ shaderLocation: index, offset: index * 16, format: 'float32x4' })) }
 function cssColor(color: CodeColor): string { return `rgba(${color[0] * 255},${color[1] * 255},${color[2] * 255},${color[3]})` }
 function canvasPaint(context: OffscreenCanvasRenderingContext2D, paint: CodePaint): string | CanvasGradient {
   if (Array.isArray(paint)) return cssColor(paint)
@@ -141,7 +149,7 @@ export class VideoEditCodeGpuV3 {
       this.module = this.device.createShaderModule({ code: shader })
       for (const entry of ['shape', 'textured', 'composite', 'effects', 'tint', 'bright']) this.pipelines.set(entry, this.device.createRenderPipeline({ layout: 'auto', vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format: 'rgba8unorm', ...(['shape', 'textured', 'tint'].includes(entry) ? { blend: normalBlend } : {}) }] }, primitive: { topology: 'triangle-list' } }))
       const instanced = this.device.createShaderModule({ code: instanceShader })
-      this.pipelines.set('instances', this.device.createRenderPipeline({ layout: 'auto', vertex: { module: instanced, entryPoint: 'vs' }, fragment: { module: instanced, entryPoint: 'shape', targets: [{ format: 'rgba8unorm', blend: normalBlend }] }, primitive: { topology: 'triangle-list' } }))
+      this.pipelines.set('instances', this.device.createRenderPipeline({ layout: 'auto', vertex: { module: instanced, entryPoint: 'vs', buffers: [INSTANCE_LAYOUT] }, fragment: { module: instanced, entryPoint: 'shape', targets: [{ format: 'rgba8unorm', blend: normalBlend }] }, primitive: { topology: 'triangle-list' } }))
       const diffusion = this.device.createShaderModule({ code: diffusionSource })
       for (const entry of ['fragment_scatter_downsample', 'fragment_scatter_upsample']) this.pipelines.set(entry, this.device.createRenderPipeline({ layout: 'auto', vertex: { module: diffusion, entryPoint: 'vertex_main' }, fragment: { module: diffusion, entryPoint: entry, targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } }))
     } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
@@ -192,7 +200,7 @@ export class VideoEditCodeGpuV3 {
     const index = this.instanceIndex++; let entry = this.instanceBuffers[index]
     if (!entry || entry.data.length < shapes.length * 28) {
       entry?.buffer.destroy(); const data = new Float32Array(2 ** Math.ceil(Math.log2(shapes.length)) * 28)
-      entry = { buffer: this.device.createBuffer({ size: data.byteLength, usage: 0x08 | 0x80 }), data }; this.instanceBuffers[index] = entry
+      entry = { buffer: this.device.createBuffer({ size: data.byteLength, usage: 0x08 | 0x20 }), data }; this.instanceBuffers[index] = entry
     }
     shapes.forEach(({ command, matrix, opacity }, i) => {
       const color = Array.isArray(command.paint) ? command.paint : command.fill
@@ -200,8 +208,9 @@ export class VideoEditCodeGpuV3 {
     })
     this.device.queue.writeBuffer(entry.buffer, 0, entry.data.subarray(0, shapes.length * 28))
     const pipeline = this.pipelines.get('instances')!; const pass = this.pass(encoder, target)
-    pass.setPipeline(pipeline); pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: entry.buffer } }] }))
-    ;(pass as unknown as { draw(vertices: number, instances: number): void }).draw(6, shapes.length)
+    pass.setPipeline(pipeline)
+    const instancedPass = pass as unknown as { setVertexBuffer(slot: number, buffer: GpuBuffer): void; draw(vertices: number, instances: number): void }
+    instancedPass.setVertexBuffer(0, entry.buffer); instancedPass.draw(6, shapes.length)
   }
   private async blur(source: Image, radius: number): Promise<{ image: Image; release: () => void }> {
     if (radius <= 0) return { image: source, release: () => {} }
