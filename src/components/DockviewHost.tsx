@@ -43,7 +43,7 @@ function ActiveGroupOutline({ host }: { host: React.RefObject<HTMLDivElement> })
     schedule()
     return () => { mutations.disconnect(); resize.disconnect() }
   }, [host])
-  return <div ref={outline} aria-hidden="true" data-dock-active-outline className="pointer-events-none absolute z-raised rounded-control border border-accent" style={{ display: 'none' }} />
+  return <div ref={outline} aria-hidden="true" data-dock-active-outline className="dock-active-outline pointer-events-none absolute z-raised" style={{ display: 'none' }} />
 }
 
 export const DockviewHost = forwardRef<HTMLDivElement, { className?: string; children: ReactNode }>(function DockviewHost({ className = '', children }, ref) {

@@ -1074,13 +1074,27 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   overflow: hidden;
 }
 
-/* 剪辑工作区：分隔线与间隙同色（不画发丝线），
- * 面板头右侧的“最大化／恢复”平时隐藏，悬停该面板组或键盘聚焦时出现（面板菜单在当前标签标题旁，始终显示）。
- * 只用 opacity：按钮始终占位、可被键盘与自动化命中，标签条不因显隐抖动。 */
-.henji-videoEdit-dock.dockview-theme-abyss {
-  --dv-separator-border: rgb(var(--gap-rgb));
+/* 面板内容层不在组元素里（defaultRenderer="always"），组的圆角裁不到它：内容层自己圆下边两个角，
+ * 否则有底色的面板（时间线）下角是直角，与圆角的组和描边对不上（dockview 自带的 spaced 主题同样处理）。 */
+.henji-cameraStage-dock .dv-render-overlay {
+  border-bottom-left-radius: var(--radius-control);
+  border-bottom-right-radius: var(--radius-control);
+  overflow: hidden;
 }
 
+/* 有间隙后不再需要分隔线：dockview 在每个非首视图的起始边画一条 --dv-separator-border 的线，会在深色间隙里留下一道浅线。 */
+.henji-cameraStage-dock.dockview-theme-abyss {
+  --dv-separator-border: transparent;
+}
+
+/* 激活面板组描边（DockviewHost 的 ActiveGroupOutline）：与选中标签底部强调线同粗（1.5px）、同色。 */
+.dock-active-outline {
+  border: 1.5px solid rgb(var(--accent-rgb));
+  border-radius: var(--radius-control);
+}
+
+/* 剪辑工作区：面板头右侧的“最大化／恢复”平时隐藏，悬停该面板组或键盘聚焦时出现（面板菜单在当前标签标题旁，始终显示）。
+ * 只用 opacity：按钮始终占位、可被键盘与自动化命中，标签条不因显隐抖动。 */
 .henji-videoEdit-dock [data-video-edit-dock-actions] {
   opacity: 0;
   transition: opacity 120ms ease-out;
