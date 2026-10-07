@@ -4,6 +4,7 @@ import { Dropdown, UiButton, UiCheckbox, UiFormRow, UiGroup, UiIconButton, UiRan
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { VIDEO_EDIT_SEQUENCE_LIMITS } from '@/core/videoEdit/sequenceSize'
+import { VIDEO_EDIT_EXPORT_AUDIO_BITRATES } from '../engine/videoEditExportEncoder'
 
 export type ExportSection = 'video' | 'audio' | 'loudness' | 'captions' | 'general'
 const expansion = new WeakMap<object, ExportSection[]>()
@@ -15,8 +16,9 @@ interface Props {
   patch: (patch: Partial<VideoEditExportSettings>) => void; matchSequence: () => void
   support: (codec: VideoEditExportSettings['codec'], preference: VideoEditExportSettings['encoderPreference'], mode: VideoEditExportSettings['bitrateMode']) => boolean
   probing: boolean
+  audioSupport: (bitrate: number) => boolean; audioProbing: boolean
 }
-export function VideoEditExportFields({ viewer, settings: s, busy, hasProxies, patch, matchSequence, support, probing }: Props): React.ReactElement {
+export function VideoEditExportFields({ viewer, settings: s, busy, hasProxies, patch, matchSequence, support, probing, audioSupport, audioProbing }: Props): React.ReactElement {
   const [expanded, setExpanded] = useState<ExportSection[]>(() => expansion.get(viewer) ?? ['video'])
   const resolutions = [{ value: '7680x4320', label: '7680 × 4320' }, { value: '3840x2160', label: '3840 × 2160' }, { value: '2560x1440', label: '2560 × 1440' }, { value: '1920x1080', label: '1920 × 1080' }, { value: '1280x720', label: '1280 × 720' }, { value: '1080x1920', label: '1080 × 1920' }]
   const [customSize, setCustomSize] = useState(false)
@@ -44,7 +46,7 @@ export function VideoEditExportFields({ viewer, settings: s, busy, hasProxies, p
       <VideoEditExportField label="编码">{select('音频编码', s.audioCodec, [{ value: 'aac', label: 'AAC' }, { value: 'wav', label: 'WAV (PCM)' }], audioCodec => patch({ audioCodec }))}</VideoEditExportField>
       <VideoEditExportField label="采样率" lock={follow('sampleRate')}>{select('音频采样率', s.sampleRate, [48000, 44100].map(value => ({ value, label: `${value} Hz` })), value => patch({ sampleRate: value as 44100 | 48000 }), s.followSequence.sampleRate)}</VideoEditExportField>
       <VideoEditExportField label="声道" lock={follow('channels')}>{select('音频声道', s.channels, [{ value: 2, label: '立体声' }, { value: 1, label: '单声道' }], value => patch({ channels: value as 1 | 2 }), s.followSequence.channels)}</VideoEditExportField>
-      {s.audioCodec === 'aac' && <VideoEditExportField label="码率">{select('音频码率', s.audioBitrateKbps, [...new Set([s.audioBitrateKbps, 320, 256, 192, 128])].map(value => ({ value, label: `${value} kbps` })), audioBitrateKbps => patch({ audioBitrateKbps }))}</VideoEditExportField>}
+      {s.audioCodec === 'aac' && <VideoEditExportField label="码率">{select('音频码率', s.audioBitrateKbps, [...new Set([s.audioBitrateKbps, ...VIDEO_EDIT_EXPORT_AUDIO_BITRATES])].sort((a, b) => b - a).map(value => ({ value, label: `${value} kbps`, disabled: audioProbing || !audioSupport(value), tooltip: audioProbing ? '正在检查设备支持…' : !audioSupport(value) ? '此设备不支持该码率' : undefined })), audioBitrateKbps => patch({ audioBitrateKbps }))}</VideoEditExportField>}
     </>, s.audioEnabled, audioEnabled => patch({ audioEnabled }), !s.videoEnabled)}
     {section('loudness', '响度', <>
       <VideoEditExportField label="目标">{select('响度目标', s.loudness?.targetLufs ?? -14, [{ value: -14, label: '-14 LUFS（流媒体）' }, { value: -16, label: '-16 LUFS' }, { value: -23, label: '-23 LUFS（广播）' }], targetLufs => patch({ loudness: { targetLufs, truePeakDbtp: s.loudness!.truePeakDbtp } }))}</VideoEditExportField>

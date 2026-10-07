@@ -9,7 +9,7 @@ import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessSettings, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { spoolVideoEditAudio } from './videoEditLoudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { selectVideoEditExportEncoder, videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
+import { assertVideoEditExportAudioSupported, selectVideoEditExportEncoder, videoEditExportAudioUserError, videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
 import { getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { importVideoEditSources } from './videoEditMedia'
@@ -44,6 +44,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   const loudness = settings.audioEnabled ? loudnessSettings === undefined ? settings.loudness ?? undefined : videoEditLoudnessSettingsSchema.parse(loudnessSettings) : undefined
   const format = settings.format
   if (instance.busy) throw new Error('该剪辑已有导出任务。')
+  await assertVideoEditExportAudioSupported(settings)
+  submissionSignal?.throwIfAborted()
   const platform = getPlatform()
   const path = requestedPath ?? await platform.system.dialog.save({ defaultPath: `${instance.document.name}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
   submissionSignal?.throwIfAborted()
@@ -186,10 +188,11 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     await output?.cancel().catch(() => undefined)
     if (created) await platform.system.fs.remove(path).catch(cleanupError => logger.warn('清理未完成导出失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }))
     if (captionCreated && captionPath) await platform.system.fs.remove(captionPath).catch(cleanupError => logger.warn('清理未完成字幕失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }))
-    task.state = task.controller.signal.aborted ? 'cancelled' : 'failed'; task.error = error instanceof Error ? error.message : '导出失败'
+    const userError = videoEditExportAudioUserError(error, settings)
+    task.state = task.controller.signal.aborted ? 'cancelled' : 'failed'; task.error = userError instanceof Error ? userError.message : '导出失败'
     if (task.controller.signal.aborted) logger.info('剪辑导出已取消', { event: 'video_edit.export.cancelled', context: { projectId, taskId: task.id } })
     else logger.error('剪辑导出失败', error, { event: 'video_edit.export.failed', context: { projectId, taskId: task.id, ...(failedFrame !== undefined ? { frame: failedFrame } : {}), singleFrameReads, elapsedMs: Math.round(performance.now() - started) } })
-    if (!task.controller.signal.aborted) throw error
+    if (!task.controller.signal.aborted) throw userError
     return null
   } finally {
     task.controller.signal.removeEventListener('abort', cancelSound)

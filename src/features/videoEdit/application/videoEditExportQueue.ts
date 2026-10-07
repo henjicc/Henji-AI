@@ -8,6 +8,7 @@ import { exportVideoEdit, videoEditExportTask, type VideoEditExportTask } from '
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { holdVideoEditActivity, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, videoEditExportRange, type VideoEditInstance } from './videoEditService'
 import { videoEditMediaPathKey } from './videoEditMedia'
+import { assertVideoEditExportAudioSupported } from '../engine/videoEditExportEncoder'
 
 const logger = createLogger('features.videoEdit.exportQueue')
 export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string }
@@ -111,6 +112,10 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
       const release = holdVideoEditActivity(request.projectId, 'export'); releases.push(release)
       return { id: crypto.randomUUID(), owner, name: snapshot.name, presetName: preset?.name ?? '自定义导出', snapshot, settings, range, path: request.path ?? '', state: 'queued' as const, controller: new AbortController(), release }
     })
+    for (const job of jobs) {
+      signal?.throwIfAborted()
+      await assertVideoEditExportAudioSupported(job.settings)
+    }
     const platform = getPlatform()
     const paths = new Set<string>()
     for (const [index, job] of jobs.entries()) {

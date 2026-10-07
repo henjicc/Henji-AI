@@ -1,7 +1,7 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
-import { canEncodeVideo } from 'mediabunny'
+import { canEncodeAudio, canEncodeVideo } from 'mediabunny'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
@@ -18,10 +18,12 @@ import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, re
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'
+import { exportVideoEdit } from './videoEditExport'
 
 const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][] }))
 vi.mock('mediabunny', () => ({
   canEncodeVideo: vi.fn(async () => true),
+  canEncodeAudio: vi.fn(async () => true),
   ALL_FORMATS: [], Input: class { dispose() {} async getPrimaryVideoTrack() { return { codec: 'avc', displayWidth: 1920, displayHeight: 1080, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 4, bestGuessFrameRate: 30, frameRateIsConstant: true }) } } async getPrimaryAudioTrack() { return { codec: 'aac', numberOfChannels: 2, sampleRate: 48000, canDecode: async () => true } } async getAudioTracks() { return [await this.getPrimaryAudioTrack()] } async computeDuration() { return .2 } }, UrlSource: class {},
   Mp4OutputFormat: class { constructor() { encoding.formats.push('mp4') } }, AdtsOutputFormat: class { constructor() { encoding.formats.push('aac') } }, WavOutputFormat: class { constructor() { encoding.formats.push('wav') } }, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoding.finalize; async cancel() {} },
@@ -40,6 +42,7 @@ const file = (name: string): string => path.resolve(path.sep, 'fixture', name)
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail }); return { promise, resolve, reject } }
 beforeEach(() => {
   vi.mocked(canEncodeVideo).mockReset().mockResolvedValue(true)
+  vi.mocked(canEncodeAudio).mockReset().mockResolvedValue(true)
   installHarnessNativeStorage(); encoding.rendered = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.audioOptions = []; encoding.pictures = []; encoding.rendererOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
   videoEditExportQueue.clearFinished(); videoEditExportPresetLibrary.replace([])
   const platform = getPlatform()
@@ -292,6 +295,7 @@ it('开关从实际面板提交仅音频，字幕烧录改为SRT，响度关闭�
   expect(view.getByRole('switch', { name: '启用音频' })).toHaveProperty('disabled', true)
   const files = new Map<string, Uint8Array>(); vi.mocked(getPlatform().system.fs.writeFile).mockImplementation(async (path, bytes) => { files.set(path, bytes) }); vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => new TextDecoder().decode(files.get(path)))
   vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('only-audio.aac'))
+  await waitFor(() => expect(view.getByRole('button', { name: '加入队列' })).toHaveProperty('disabled', false))
   await act(async () => fireEvent.click(view.getByRole('button', { name: '加入队列' })))
   const job = videoEditExportQueue.list()[0]; await act(async () => { await videoEditExportQueue.wait(job.id) })
   expect(job.settings).toMatchObject({ videoEnabled: false, audioEnabled: true, loudness: null, captionMode: 'srt', format: 'aac' }); expect(job.state).toBe('completed')
@@ -306,6 +310,81 @@ it('设备仅支持HEVC软件CBR时仍能从无效默认组合恢复；修改明
   await select(view, '导出格式', 'MP4 · HEVC (H.265)')
   expect(view.getByRole('button', { name: '编码性能' }).textContent).toContain('软件编码'); expect(view.getByRole('button', { name: '码率模式' }).textContent).toContain('CBR')
   expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false)
+})
+
+it('音频码率按设备禁用并提示；高码率预设自动回落，采样率和声道变化重新判断', async () => {
+  const owner = await project()
+  vi.mocked(canEncodeAudio).mockImplementation(async (_codec, config) => Number(config?.bitrate) <= (config?.numberOfChannels === 1 ? 96000 : config?.sampleRate === 44100 ? 128000 : 192000))
+  const high = videoEditExportPresetLibrary.save('高码率', { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), audioBitrateKbps: 320 })
+  const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  fireEvent.click(view.getByRole('button', { name: '音频' }))
+  await select(view, '导出预设', high.name)
+  await waitFor(() => expect(view.getByRole('button', { name: '音频码率' }).textContent).toContain('192 kbps'))
+  expect(view.getByRole('button', { name: '导出预设' }).textContent).toContain('自定义')
+  fireEvent.click(view.getByRole('button', { name: '音频码率' }))
+  const unsupported = view.getByRole('option', { name: '320 kbps' })
+  expect(unsupported).toHaveProperty('disabled', true)
+  expect(view.getByRole('option', { name: '256 kbps' })).toHaveProperty('disabled', true)
+  expect(view.getByRole('option', { name: '192 kbps' })).toHaveProperty('disabled', false)
+  fireEvent.mouseEnter(unsupported.parentElement!)
+  await waitFor(() => expect(view.getByRole('tooltip').textContent).toBe('此设备不支持该码率'))
+  fireEvent.mouseLeave(unsupported.parentElement!)
+  fireEvent.click(view.getByRole('option', { name: '192 kbps' }))
+  fireEvent.click(view.getByRole('button', { name: '采样率跟随序列' }))
+  await select(view, '音频采样率', '44100 Hz')
+  await waitFor(() => expect(view.getByRole('button', { name: '音频码率' }).textContent).toContain('128 kbps'))
+  expect(canEncodeAudio).toHaveBeenCalledWith('aac', { sampleRate: 44100, numberOfChannels: 2, bitrate: 192000 })
+  fireEvent.click(view.getByRole('button', { name: '声道跟随序列' }))
+  await select(view, '音频声道', '单声道')
+  await waitFor(() => expect(view.getByRole('button', { name: '音频码率' }).textContent).toContain('96 kbps'))
+  expect(canEncodeAudio).toHaveBeenCalledWith('aac', { sampleRate: 44100, numberOfChannels: 1, bitrate: 128000 })
+  await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
+})
+
+it('跟随序列的声音规格变化会重新探测；AAC全不可用时阻止提交，改WAV可恢复', async () => {
+  const owner = await project()
+  vi.mocked(canEncodeAudio).mockImplementation(async (codec, config) => codec === 'pcm-s24' || config?.sampleRate === 48000 && Number(config?.bitrate) <= 192000)
+  const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
+  act(() => editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, sampleRate: 44100, channels: 1 })))
+  await waitFor(() => expect(view.getByText(/此设备的 AAC 编码不支持/)).toBeTruthy())
+  expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)
+  expect(view.getByRole('button', { name: '加入队列' })).toHaveProperty('disabled', true)
+  await select(view, '导出格式', '音频 · WAV')
+  await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
+})
+
+it('立即导出、队列和助手在文件选择与写入前拒绝不支持的AAC；修正码率后可完成', async () => {
+  const owner = await project(); const snapshot = getActiveVideoEditSequence(owner)
+  vi.mocked(canEncodeAudio).mockImplementation(async (_codec, config) => Number(config?.bitrate) <= 192000)
+  const settings = { ...videoEditSequenceExportSettings(snapshot), audioBitrateKbps: 320, addToLibrary: false, loudness: null }
+  const message = '此设备的 AAC 编码不支持 320 kbps（48 kHz，立体声），请改用 192 kbps 或更低。'
+  await expect(exportVideoEdit(owner.document.id, undefined, false, undefined, undefined, { snapshot, range: videoEditExportRange(owner), settings })).rejects.toThrow(message)
+  await expect(enqueueVideoEditExports([{ projectId: owner.document.id, settings }])).rejects.toThrow(message)
+  const app = createApplicationHarness()
+  try {
+    const result = await app.call('export_video_edit', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, settings })
+    expect(result.ok).toBe(false); expect(JSON.stringify(result)).toContain(message)
+    expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
+    expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled()
+    expect(videoEditExportQueue.list()).toHaveLength(0); expect(owner.busy).toBe(false)
+    const recovered = await app.call('export_video_edit', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, settings: { ...settings, audioBitrateKbps: 192 } })
+    expect(recovered.ok).toBe(true)
+    const job = await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id)
+    expect(job.state).toBe('completed')
+    expect(encoding.audioOptions.at(-1)).toMatchObject({ bitrate: 192000 })
+  } finally { app.dispose() }
+})
+
+it('探测后底层意外拒绝AAC时任务错误仍为中文，失败文件被清理', async () => {
+  const owner = await project()
+  encoding.finalize.mockRejectedValueOnce(new Error('This specific encoder configuration (mp4a.40.2, 192000 bps, 2 channels, 48000 Hz) is not supported in this environment.'))
+  const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('native-rejection.mp4') }])
+  await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('failed')
+  expect(job.error).toContain('此设备的 AAC 编码不支持 192 kbps')
+  expect(job.task?.error).toBe(job.error); expect(job.error).not.toContain('mp4a.40.2')
+  expect(getPlatform().system.fs.remove).toHaveBeenCalledWith(file('native-rejection.mp4'))
 })
 
 it('导出后导入复用正式素材导入并只进素材箱，可撤销；不追加时间线片段', async () => {

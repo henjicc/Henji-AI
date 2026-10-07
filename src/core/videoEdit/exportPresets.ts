@@ -38,13 +38,13 @@ const preset = (id: string, name: string, width: number, height: number, videoBi
 })
 export const VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID = 'builtin:sequence'
 export const VIDEO_EDIT_EXPORT_PRESETS: readonly VideoEditExportPreset[] = [
-  { ...preset('sequence', '与序列一致', 1920, 1080, 12, 'mp4', null), settings: { ...preset('sequence', '', 1920, 1080).settings, fps: null, audioBitrateKbps: 320, followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } } },
+  { ...preset('sequence', '与序列一致', 1920, 1080, 12, 'mp4', null), settings: { ...preset('sequence', '', 1920, 1080).settings, fps: null, followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } } },
   preset('douyin', '抖音 · 竖版 1080p', 1080, 1920), preset('channels', '视频号 · 竖版 1080p', 1080, 1920),
   preset('bilibili', 'B 站 · 横版 1080p', 1920, 1080), preset('bilibili-4k', 'B 站 · 横版 4K', 3840, 2160, 45),
   preset('youtube', 'YouTube · 横版 1080p', 1920, 1080), preset('youtube-4k', 'YouTube · 横版 4K', 3840, 2160, 45),
   preset('instagram', 'Instagram · 方形', 1080, 1080), preset('aac', '仅音频 · AAC', 1920, 1080, 12, 'aac', null),
   { ...preset('wav', '仅音频 · WAV 无损', 1920, 1080, 12, 'wav', null), settings: { ...preset('wav', '', 1920, 1080, 12, 'wav', null).settings, loudness: null } },
-  { ...preset('master', '高质量母版 · 原画幅', 1920, 1080, 80, 'mp4', null), settings: { ...preset('master', '', 1920, 1080, 80, 'mp4', null).settings, codec: 'hevc', audioBitrateKbps: 320, loudness: null, followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } } },
+  { ...preset('master', '高质量母版 · 原画幅', 1920, 1080, 80, 'mp4', null), settings: { ...preset('master', '', 1920, 1080, 80, 'mp4', null).settings, codec: 'hevc', loudness: null, followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } } },
 ]
 export interface VideoEditExportSequenceSpec { width: number; height: number; fps: number; sampleRate: number; channels: number }
 export function resolveVideoEditExportSettings(input: VideoEditExportSettings, sequence: VideoEditExportSequenceSpec): VideoEditExportSettings {

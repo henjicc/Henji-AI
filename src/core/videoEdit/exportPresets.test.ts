@@ -10,7 +10,10 @@ it('导出沿共享序列边界接受8192单边，保持8K总像素上限与120�
 })
 
 it('平台预设包含画幅、帧率、码率与响度；编码单位准确，母版与WAV保持原始声音', () => {
-  for (const value of VIDEO_EDIT_EXPORT_PRESETS) expect(videoEditExportSettingsSchema.safeParse(value.settings).success).toBe(true)
+  for (const value of VIDEO_EDIT_EXPORT_PRESETS) {
+    expect(videoEditExportSettingsSchema.safeParse(value.settings).success).toBe(true)
+    expect(value.settings.audioBitrateKbps).toBe(192)
+  }
   expect(videoEditExportEncoding(VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:douyin')!.settings, 60)).toEqual({ fps: 30, videoBitrate: 12000000, audioBitrate: 192000, audioCodec: 'aac' })
   const master = VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:master')!.settings
   expect(master).toMatchObject({ followSequence: { resolution: true, fps: true }, fps: null, loudness: null })
@@ -31,7 +34,7 @@ it('横版到竖版：适合与黑边完整缩放；填充按中心裁切且保�
 it('默认与序列一致：4K60和声音规格跟随；每条锁链解锁后保留自己的值', () => {
   const sequence = { width: 3840, height: 2160, fps: 60, sampleRate: 44100, channels: 1 }
   const settings = videoEditSequenceExportSettings(sequence)
-  expect(settings).toMatchObject({ width: 3840, height: 2160, fps: 60, sampleRate: 44100, channels: 1, codec: 'avc', videoBitrateMbps: 50, addToLibrary: true })
+  expect(settings).toMatchObject({ width: 3840, height: 2160, fps: 60, sampleRate: 44100, channels: 1, codec: 'avc', videoBitrateMbps: 50, audioBitrateKbps: 192, addToLibrary: true })
   const changed = { width: 1920, height: 1080, fps: 24, sampleRate: 48000, channels: 2 }
   expect(resolveVideoEditExportSettings(settings, changed)).toMatchObject(changed)
   for (const key of ['resolution', 'fps', 'sampleRate', 'channels'] as const) {

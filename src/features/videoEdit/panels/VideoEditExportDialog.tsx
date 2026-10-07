@@ -11,7 +11,7 @@ import { videoEditExportPresetLibrary } from '../application/videoEditExportPres
 import { requireVideoEditInstance, subscribeVideoEdit, videoEditExportRange, videoEditRevision } from '../application/videoEditService'
 import { readVideoEditProxyState, refreshVideoEditProxies } from '../application/videoEditProxy'
 import { videoEditUserErrorMessage } from '../application/videoEditUserError'
-import { canEncodeVideoEditExport } from '../engine/videoEditExportEncoder'
+import { canEncodeVideoEditExport, probeVideoEditExportAudioBitrates, videoEditExportAudioUnsupportedMessage } from '../engine/videoEditExportEncoder'
 import { VideoEditExportField, VideoEditExportFields } from './VideoEditExportFields'
 import { VideoEditExportPreview } from './VideoEditExportPreview'
 import { VideoEditExportQueueList } from './VideoEditExportQueueList'
@@ -59,6 +59,30 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
     )
     return () => { active = false }
   }, [probeKey, settings.width, settings.height, settings.fps, settings.videoBitrateMbps])
+  const audioProbeKey = `${settings.audioEnabled}/${settings.audioCodec}/${settings.sampleRate}/${settings.channels}/${settings.audioBitrateKbps}`
+  const [audioProbe, setAudioProbe] = useState<{ key: string; supported: Record<number, boolean>; error?: string }>({ key: '', supported: {} })
+  useEffect(() => {
+    if (!settings.audioEnabled || settings.audioCodec !== 'aac') return
+    let active = true
+    void probeVideoEditExportAudioBitrates(settings).then(
+      supported => { if (active) setAudioProbe({ key: audioProbeKey, supported }) },
+      reason => {
+        logger.warn('导出音频支持检查失败', { event: 'video_edit.export.audio_probe_failed', error: reason })
+        if (active) setAudioProbe({ key: audioProbeKey, supported: {}, error: '无法检查此设备的音频编码支持，请重试或改用 WAV。' })
+      },
+    )
+    return () => { active = false }
+  }, [audioProbeKey, settings])
+  const audioProbing = settings.audioEnabled && settings.audioCodec === 'aac' && audioProbe.key !== audioProbeKey
+  const audioSupport = (bitrate: number): boolean => audioProbe.key === audioProbeKey && Boolean(audioProbe.supported[bitrate])
+  useEffect(() => {
+    if (!settings.audioEnabled || settings.audioCodec !== 'aac' || audioProbe.key !== audioProbeKey || audioProbe.supported[settings.audioBitrateKbps]) return
+    const supported = Object.keys(audioProbe.supported).map(Number).filter(value => audioProbe.supported[value])
+    if (supported.length) {
+      setRaw(previous => ({ ...previous, audioBitrateKbps: Math.max(...supported) }))
+      setPresetId('custom')
+    }
+  }, [audioProbe, audioProbeKey, settings.audioEnabled, settings.audioCodec, settings.audioBitrateKbps])
   useEffect(() => { let active = true; void refreshVideoEditProxies(projectId).catch(reason => { if (active) setError(videoEditUserErrorMessage(reason)) }); return () => { active = false } }, [projectId])
   const support = (codec: VideoEditExportSettings['codec'], preference: VideoEditExportSettings['encoderPreference'], mode: VideoEditExportSettings['bitrateMode']): boolean => probe.key === probeKey && Boolean(probe.supported[`${codec}/${preference}/${mode}`])
   const probing = probe.key !== probeKey
@@ -71,7 +95,8 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
     return undefined
   }
   const encoderError = settings.videoEnabled && !probing && !support(settings.codec, settings.encoderPreference, settings.bitrateMode) ? probe.error ?? `当前设备不支持所选编码设置。${settings.codec === 'avc' ? '请尝试 HEVC，或' : '请'}降低规格、切换性能或码率模式。` : ''
-  const canExport = !settingsError && duration > 0 && Boolean(fileName.trim()) && !/[\\/:*?"<>|]/.test(fileName) && !/^\.+$/.test(fileName) && (!settings.videoEnabled || !probing && !encoderError)
+  const audioError = settings.audioEnabled && settings.audioCodec === 'aac' && !audioProbing && !audioSupport(settings.audioBitrateKbps) ? audioProbe.error ?? videoEditExportAudioUnsupportedMessage(settings, audioProbe.supported) : ''
+  const canExport = !settingsError && !audioProbing && !audioError && duration > 0 && Boolean(fileName.trim()) && !/[\\/:*?"<>|]/.test(fileName) && !/^\.+$/.test(fileName) && (!settings.videoEnabled || !probing && !encoderError)
   const patch = (values: Partial<VideoEditExportSettings>): void => {
     try {
       const next = resolveVideoEditExportSettings(patchVideoEditExportSettings(settings, values), composition); setRaw(next); setPresetId('custom'); setError(''); setSettingsError('')
@@ -122,12 +147,12 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
               { value: 'aac', label: '音频 · AAC' }, { value: 'wav', label: '音频 · WAV' },
             ]} onSelect={value => value === 'avc' || value === 'hevc' ? patch({ format: 'mp4', ...codecChoice(value) }) : patch({ format: value as 'aac' | 'wav' })} /></VideoEditExportField>
           </div>
-          <VideoEditExportFields viewer={owner} settings={settings} busy={busy} hasProxies={hasProxies} patch={patch} probing={probing} support={support} matchSequence={() => patch({ followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } })} />
+          <VideoEditExportFields viewer={owner} settings={settings} busy={busy} hasProxies={hasProxies} patch={patch} probing={probing} support={support} audioProbing={audioProbing} audioSupport={audioSupport} matchSequence={() => patch({ followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } })} />
           <div className="space-y-2 px-3 pb-3">
             {notice && <p role="status" className="text-xs text-text2">{notice}</p>}
             {(notice || busy || error) && videoEditExportQueue.list().length > 0 && <UiButton size="sm" onClick={() => setShowQueue(true)}>查看导出队列</UiButton>}
             {busy && <UiLoading size="xs" message="正在处理导出…" />}
-            {(error || settingsError || encoderError) && <UiError size="xs" message={error || settingsError || encoderError} />}
+            {(error || settingsError || encoderError || audioError) && <UiError size="xs" message={error || settingsError || encoderError || audioError} />}
           </div>
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-3">

@@ -2,10 +2,12 @@ const assert = require('node:assert/strict')
 
 // Existing picture/audio comparisons explicitly retain burned captions and unnormalized sound.
 // Check the new default before applying those scene-specific choices.
-async function confirmVideoEditExport(page) {
+async function confirmVideoEditExport(page, onOpen) {
   await page.getByRole('button', { name: '导出视频', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '导出', exact: true })
   await dialog.waitFor({ state: 'visible' })
+  // 可选：面板打开后留一张截图，供目视核对布局。
+  if (onOpen) await onOpen(dialog)
   assert.match(await dialog.getByRole('button', { name: '导出预设', exact: true }).textContent(), /与序列一致/)
   const loudness = dialog.getByRole('switch', { name: '启用响度', exact: true })
   if (await loudness.getAttribute('aria-checked') === 'true') await loudness.click()

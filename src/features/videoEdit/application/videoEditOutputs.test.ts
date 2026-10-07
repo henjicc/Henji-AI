@@ -30,6 +30,7 @@ const exportVideoEdit: typeof exportWithSettings = async (id, target, background
 const encoder = vi.hoisted(() => ({ finalize: vi.fn(), cancel: vi.fn(), render: vi.fn(), mix: vi.fn(), dispose: vi.fn(), failConstructor: false, videoTimestamps: [] as number[] }))
 vi.mock('mediabunny', () => ({
   canEncodeVideo: async () => true,
+  canEncodeAudio: async () => true,
   ALL_FORMATS: [], UrlSource: class {}, Input: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoder.finalize; cancel = encoder.cancel },
   CanvasSource: class { async add(timestamp: number) { encoder.videoTimestamps.push(timestamp) } }, AudioBufferSource: class { async add() {} },

@@ -440,7 +440,7 @@ function createVideoEditMonitorScene() {
           const output = path.join(root, `caption-4k60-${settings.rate}-${settings.channels}-${Date.now()}.mp4`)
           await dialogs(app, [file], output)
           const startedAt = performance.now()
-          if (settings.rate === 48000) await confirmVideoEditExport(page)
+          if (settings.rate === 48000) await confirmVideoEditExport(page, () => shot('monitor-export-dialog'))
           else { const result = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, exports: [{ settings: { ...(await read({ kind: 'video_edit.export_preset', id: 'builtin:sequence' }, ['video_edit.export_preset.settings'])).data.properties['video_edit.export_preset.settings'], loudness: null, captionMode: 'burn' } }] })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
           const task = await poll(page, () => callTool(client, 'query_video_edit_export', { documentRef: projectRef }), value => ['completed', 'failed', 'cancelled'].includes(value.data.task?.state), '正式视频导出没有结束', 2400)
           assert.equal(task.data.task.state, 'completed', JSON.stringify(task))
