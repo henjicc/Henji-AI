@@ -8,7 +8,7 @@ const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { installNativeMixHarness } = require('./uiInspectionSceneVideoEditNativeAudio.cjs')
-const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 多音轨展开与声道类型（2.6，参照 Premiere Pro“使用文件 / 修改音频声道”）在真实 Electron 中的端到端验收：
@@ -418,7 +418,7 @@ function createVideoEditMultitrackScene() {
         evidence.sourceMonitor = { audioSessions: sessions, levels: await page.locator('[aria-label="源播放电平"] [data-video-edit-level-channel]').evaluateAll(nodes => nodes.map(node => ({ peak: Number(node.dataset.peak), rms: Number(node.dataset.rms) }))) }
         await shot('multitrack-source-monitor')
         assert.ok(sessions >= 4, `源监视器应为 MXF 的四条声音流各开一个原生声音会话，实际 ${sessions}`)
-        await button(sourcePanel, '停止').click(); await button(page, '关闭源监视器').click()
+        await button(sourcePanel, '停止').click(); await closeVideoEditDockPanel(page, '源监视器')
         evidence.phases.push('源监视器读取全部四条声音流并出声'); store()
 
         phase('旧工程：无声音流清单、画面声音合一片段')

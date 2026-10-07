@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 const button = (page, name) => page.getByRole('button', { name, exact: true })
@@ -233,7 +233,7 @@ function createVideoEditLayoutScene() {
         assert.equal(beforeCloseWorkers.workers.length, 1 + rebuiltSessions, '移动、隐藏和重置整个过程只在节目面板不可见再显示时重建会话')
         assert.equal(beforeCloseWorkers.live, 1, '重建后只保留一个真实渲染 Worker')
 
-        await button(page, '关闭节目画面').click(); await waitReleased(page)
+        await closeVideoEditDockPanel(page, '节目画面'); await waitReleased(page)
         assert.equal(await page.getByLabel('剪辑画面', { exact: true }).count(), 0, '关闭节目面板卸载画面')
         const released = await workerSnapshot(page)
         assert.ok(released.workers[0].disposedAt && released.workers[0].terminatedAt, '关闭面板等待资源释放回执并终止 Worker')
@@ -245,13 +245,13 @@ function createVideoEditLayoutScene() {
         await capture('video-layout-reopened')
 
         // Persist a deliberately non-default layout, then exercise the actual workspace unmount/remount.
-        await button(page, '关闭效果控件').click()
+        await closeVideoEditDockPanel(page, '效果控件')
         const beforeRoundTrip = await savedLayout(page); evidence.restoration.before = layoutSignature(beforeRoundTrip)
         await button(page, '生成').click(); await waitReleased(page)
         assert.equal(await page.getByLabel('剪辑画面', { exact: true }).count(), 0)
         await button(page, '剪辑').click(); await presented(page, 120)
         await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
-        assert.equal(await button(page, '关闭效果控件').count(), 0, '页面往返保持关闭的效果面板')
+        assert.equal(await videoEditDockTab(page, '效果控件').count(), 0, '页面往返保持关闭的效果面板')
         const afterRoundTrip = await savedLayout(page); evidence.restoration.after = layoutSignature(afterRoundTrip)
         assert.deepEqual(evidence.restoration.after, evidence.restoration.before)
         // Restore the effects view so the selected clip can be observed again.

@@ -5,7 +5,7 @@ const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.c
 const { setInspectionWindowSize } = require('./uiInspection.cjs')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 const { createRuntimeEvidenceCollector, queryApplicationLogs } = require('./runtimeEvidence.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 const WINDOW_SIZE = { width: 1440, height: 900 }
@@ -155,7 +155,7 @@ async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
     await limited(() => openProject(current, file), 30000, '第一次打开剪辑工程')
     openedJson = JSON.stringify(readVideoEditFile(file))
     currentRun.initialRender = await renderState(current.page)
-    await button(current.page, '关闭效果控件').click()
+    await closeVideoEditDockPanel(current.page, '效果控件')
     await group(current.page, '素材').getByRole('button', { name: '面板菜单', exact: true }).click()
     await button(current.page, '浮动面板').click()
     await current.page.waitForTimeout(450)
@@ -198,7 +198,7 @@ async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
     await current.page.waitForTimeout(450)
     const restored = await readLayout(current.page)
     assertLayoutRestored(saved.value, restored.value)
-    assert.equal(await button(current.page, '关闭效果控件').count(), 0, '重启后效果面板仍须关闭')
+    assert.equal(await videoEditDockTab(current.page, '效果控件').count(), 0, '重启后效果面板仍须关闭')
     assert.equal(await group(current.page, '素材').count(), 1, '浮动面板只能恢复一份')
     assert.equal(await group(current.page, '节目画面').count(), 1)
     currentRun.floatingBounds = await floatingProjectState(current.page)

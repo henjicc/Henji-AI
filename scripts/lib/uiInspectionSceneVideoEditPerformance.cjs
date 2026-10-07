@@ -6,7 +6,7 @@ const { startGpuSampler } = require('./uiInspectionGpuSampler.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile, readVideoEditFile, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 const ORIGINAL = process.env.HENJI_PERF_SOURCE || 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -128,7 +128,7 @@ async function memoryInfraSnapshot(app, root, label) {
  */
 async function videoEditResourceCycle(page, app, file, frame) {
   await button(page, '生成').click(); await button(page, '剪辑').first().click(); await presented(page, frame)
-  await group(page, '节目画面').locator('.dv-tab').filter({ has: button(page, '关闭节目画面') }).click()
+  await videoEditDockTab(group(page, '节目画面'), '节目画面').click()
   const opened = app.waitForEvent('window', { timeout: 30000 })
   await group(page, '节目画面').getByRole('button', { name: '面板菜单', exact: true }).click(); await page.getByText('在独立窗口打开', { exact: true }).click()
   const child = await opened; await child.waitForFunction(value => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(value), frame, { timeout: 60000 })

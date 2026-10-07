@@ -5,7 +5,7 @@ const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true })
@@ -187,7 +187,7 @@ function createVideoEditProjectSourceScene() {
         assert.equal(await page.getByLabel('源监视器', { exact: true }).locator('audio').count(), native ? 0 : 1, '受控音频控件不得另建解码器')
         await capture('video-project-source-audio'); await button(page, '关闭源素材').click()
         await entry(page, imageId).dblclick(); await ready(page, 'image'); await capture('video-project-source-image')
-        await button(page, '关闭源监视器').click(); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
+        await closeVideoEditDockPanel(page, '源监视器'); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
         assert.equal(await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'), programmeFrame)
         assert.equal(JSON.stringify(readVideoEditFile(file)), savedBeforePreview, '源预览不写工程或改变节目会话')
         evidence.previewIsolation = { programmeFrame, projectUnchanged: true, audioDecoders: 1, hiddenSourceReleased: true }

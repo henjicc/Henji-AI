@@ -194,7 +194,20 @@ async function savedVideoEdit(page, file, matches, message = '剪辑没有保存
   throw new Error(message)
 }
 
+/** 停靠面板标签（按标题定位，标签不再带关闭按钮，见 VideoEditDockTab 的 data-dock-tab-title）。 */
+const videoEditDockTab = (scope, title) => scope.locator(`[data-dock-tab-title="${title}"]`)
+/** 与 PR 一致：关闭面板走面板菜单。先点标签让它成为组内当前标签（菜单只挂在当前标签上），再选“关闭面板”。 */
+async function closeVideoEditDockPanel(page, title) {
+  const tab = videoEditDockTab(page, title).first()
+  await tab.click()
+  await tab.getByRole('button', { name: '面板菜单', exact: true }).click()
+  await page.getByRole('menuitem', { name: '关闭面板', exact: true }).click()
+  await videoEditDockTab(page, title).first().waitFor({ state: 'detached', timeout: 10000 })
+}
+
 module.exports = {
+  closeVideoEditDockPanel,
+  videoEditDockTab,
   adoptNewVideoEditProject,
   chooseVideoEditImportFiles,
   latestVideoEditDocument,

@@ -4,7 +4,7 @@ const path = require('node:path')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -271,7 +271,7 @@ function createVideoEditDockGesturesScene() {
         evidence.ctrlFloat = { releaseScreen, bounds: await popoutBounds('痕迹AI · 效果控件') }
         assert.ok(evidence.ctrlFloat.bounds, '应浮出效果控件独立窗口')
         assert.ok(Math.abs(evidence.ctrlFloat.bounds.x - (releaseScreen.x - 48)) <= 12 && Math.abs(evidence.ctrlFloat.bounds.y - (releaseScreen.y - 16)) <= 12, `浮出窗口应放在松开处：${JSON.stringify(evidence.ctrlFloat)}`)
-        assert.equal(await button(page, '关闭效果控件').count(), 0, '浮出后主窗口不再有效果控件')
+        assert.equal(await videoEditDockTab(page, '效果控件').count(), 0, '浮出后主窗口不再有效果控件')
         assert.equal(await effects.locator('[data-window-titlebar="panel"]').count(), 1, '独立窗口使用自绘标题栏')
         await effects.screenshot({ path: path.join(root, 'child-titlebar.png') })
         evidence.phases.push('Ctrl 拖动：无停靠指示、有浮动预览，松开在松开处浮出独立窗口（自绘标题栏）')
@@ -324,7 +324,7 @@ function createVideoEditDockGesturesScene() {
         await titleDrag(effects, { moves: [target] }, true)
         for (let attempt = 0; attempt < 50 && (await popoutWindows()).length; attempt++) await page.waitForTimeout(100)
         assert.equal((await popoutWindows()).length, 0, '停靠后独立窗口关闭')
-        await group(page, '节目画面').getByRole('button', { name: '关闭效果控件', exact: true }).waitFor({ state: 'attached', timeout: 10000 })
+        await videoEditDockTab(group(page, '节目画面'), '效果控件').waitFor({ state: 'attached', timeout: 10000 })
         assert.equal(await page.locator('[data-dock-drop-zone]:not(.hidden)').count(), 0, '停靠后指示消失')
         evidence.phases.push('拖标题栏回主窗口：主窗口显示停靠指示、窗口收成标题条，松开叠进目标组')
 
@@ -361,7 +361,7 @@ function createVideoEditDockGesturesScene() {
         await timeline.locator('[data-window-titlebar="panel"]').getByRole('button', { name: '关闭时间线', exact: true }).click()
         for (let attempt = 0; attempt < 50 && (await popoutWindows()).length; attempt++) await page.waitForTimeout(100)
         assert.equal((await popoutWindows()).length, 0, '关闭按钮关闭独立窗口')
-        assert.equal(await button(page, '关闭时间线').count(), 0, '关闭独立窗口即关闭其中的面板')
+        assert.equal(await videoEditDockTab(page, '时间线').count(), 0, '关闭独立窗口即关闭其中的面板')
         evidence.phases.push('拖到停靠区域外松开浮出；关闭独立窗口即关闭面板')
 
         await page.getByRole('button', { name: '面板', exact: true }).click(); await button(page, '重置布局').click()

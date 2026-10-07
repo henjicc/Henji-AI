@@ -7,7 +7,7 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { observeNativeWaveforms, nativeWaveformSnapshot, waitNativeWaveformsReleased, restoreNativeWaveformObservers } = require('./uiInspectionSceneVideoEditMonitorResources.cjs')
-const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const panel = (page, id) => page.locator(`[data-video-edit-panel="${id}"]`).first()
@@ -315,7 +315,7 @@ function createVideoEditMonitorScene() {
             await page.mouse.move(box.x + box.width / 2, component === 'audio' ? box.y + box.height - 24 : box.y + 48)
             await page.keyboard.down('Control'); await page.mouse.wheel(0, where === 'down' ? 80 : -80); await page.keyboard.up('Control'); await page.waitForTimeout(30)
           }
-          const offset = await viewport.evaluate((host, { track, headerWidth }) => { const row = host.querySelector(`[data-track-index="${track}"]`); return { x: headerWidth + 0.1 - host.scrollLeft, y: row.getBoundingClientRect().top - host.getBoundingClientRect().top + 16 } }, { track, headerWidth: VIDEO_EDIT_TRACK_HEADER_WIDTH })
+          const offset = await viewport.evaluate((host, { track, headerWidth }) => { const row = host.querySelector(`[data-track-index="${track}"]`); return { x: headerWidth + 2 - host.scrollLeft, y: row.getBoundingClientRect().top - host.getBoundingClientRect().top + 16 } }, { track, headerWidth: VIDEO_EDIT_TRACK_HEADER_WIDTH })
           // 记录真实原生拖放链路，区分 dragTo 完成与浏览器实际派发 drop。
           // dragover 只读 types，不尝试读取保护模式下的载荷。
           await page.evaluate(() => {
@@ -365,7 +365,7 @@ function createVideoEditMonitorScene() {
           await frame(0)
         }
         await button(page, '关闭源素材').click(); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
-        await button(page, '关闭源监视器').click()
+        await closeVideoEditDockPanel(page, '源监视器')
         evidence.phases.push('真实范围波形、电平静音独奏、音视频节目互斥和源分量一次撤销'); store()
         evidence.currentPhase = '字幕面板、公共属性、保存重开和字幕文件'; store()
         const bareFrames = new Map()
@@ -397,11 +397,11 @@ function createVideoEditMonitorScene() {
         document = await saved(page, file, value => value.sequences[0].markers.length === 1)
         const marker = document.sequences[0].markers[0]; const markerRef = { kind: 'video_edit.marker', id: `${project.id}:${marker.id}` }; const captionRef = { kind: 'video_edit.caption', id: `${project.id}:${caption.id}` }
         await change(markerRef, { 'video_edit.marker.name': 'Agent 标记回环', 'video_edit.marker.frame': 46 }); await change(captionRef, { 'video_edit.caption.text': 'Agent 字幕 · 中文验收' })
-        await button(page, '关闭字幕与标记').click(); await focus(markerRef); await content.waitFor({ state: 'visible' }); await presented(page, 46)
+        await closeVideoEditDockPanel(page, '字幕与标记'); await focus(markerRef); await content.waitFor({ state: 'visible' }); await presented(page, 46)
         await focus(captionRef); await presented(page, 32); await content.getByRole('tab', { name: '字幕', exact: true }).click()
         assert.equal((await read(captionRef, ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.text'])).data.properties['video_edit.caption.text'], 'Agent 字幕 · 中文验收')
         const beforeDraft = readProject(file)
-        await button(content, '新增字幕').click(); await content.getByLabel('字幕文字', { exact: true }).fill('隐藏面板不得提交此草稿'); await button(page, '关闭字幕与标记').click(); await focus(captionRef); await content.waitFor({ state: 'visible' })
+        await button(content, '新增字幕').click(); await content.getByLabel('字幕文字', { exact: true }).fill('隐藏面板不得提交此草稿'); await closeVideoEditDockPanel(page, '字幕与标记'); await focus(captionRef); await content.waitFor({ state: 'visible' })
         assert.equal(await content.getByLabel('字幕文字', { exact: true }).count(), 0)
         assert.deepEqual(readProject(file), beforeDraft)
         await content.locator(`[data-video-edit-timed-entry="${caption.id}"]`).click(); await button(content, '定位').click(); await presented(page, 32); await button(content, '取消').click()
@@ -414,7 +414,7 @@ function createVideoEditMonitorScene() {
           else assert.ok(difference.equal, '半开字幕范围的前一帧和出点帧不能残留字幕')
         }
         const srtOutput = path.join(root, 'captions.srt'); const vttOutput = path.join(root, 'captions.vtt')
-        await dialogs(app, [file], srtOutput); await button(content, '导入或导出字幕').click(); await page.getByRole('menuitem', { name: '导出 SRT', exact: true }).click()
+        await dialogs(app, [file], srtOutput); await button(content, '导入或导出字幕').click(); await page.getByRole('menuitem', { name: '导出 SRT（序列时间）', exact: true }).click()
         await poll(page, async () => fs.existsSync(srtOutput) ? fs.readFileSync(srtOutput, 'utf8') : '', value => value.includes('Agent 字幕 · 中文验收'), '手动SRT导出未写出')
         await dialogs(app, [file], vttOutput)
         const subtitleExport = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, format: 'vtt' }))
@@ -481,7 +481,7 @@ function createVideoEditMonitorScene() {
         evidence.visibleClipCount = await page.locator('[data-video-edit-clip]').count(); assert.ok(evidence.visibleClipCount > 0 && evidence.visibleClipCount < 20, '500片段只挂视口内DOM且默认能看到底层画面')
         await focus({ kind: 'video_edit.caption', id: `${pressure.id}:monitor-caption-0` }); await panel(page, 'content').waitFor({ state: 'visible' })
         evidence.visibleCaptionCount = await page.locator('[data-video-edit-timed-entry]').count(); assert.ok(evidence.visibleCaptionCount > 0 && evidence.visibleCaptionCount < 40, '500字幕须有界DOM')
-        await button(page, '关闭字幕与标记').click(); await pressureFrame(0); await presented(page, 0)
+        await closeVideoEditDockPanel(page, '字幕与标记'); await pressureFrame(0); await presented(page, 0)
         await pressureFrame(179); await presented(page, 179); await pressureFrame(0); await presented(page, 0)
         evidence.cachedFrame = await canvas.evaluate(canvas => ({ ...canvas.dataset })); evidence.playback = []
         for (const direction of [1, -1]) {

@@ -5,7 +5,7 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks, quantile } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, closeVideoEditDockPanel, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 // 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
 const readFile = readVideoEditFile
@@ -263,7 +263,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         await page.locator('[data-video-edit-timed-entry]').first().waitFor({ state: 'visible' })
         evidence.visibleCaptionCount = await page.locator('[data-video-edit-timed-entry]').count()
         assert.ok(evidence.visibleCaptionCount > 0 && evidence.visibleCaptionCount < 40)
-        await button(page, '关闭字幕与标记').click()
+        await closeVideoEditDockPanel(page, '字幕与标记')
         const canvas = page.getByLabel('剪辑画面', { exact: true }); await seek(pressureRef, 179); await seek(pressureRef, 0)
         evidence.cachedFrame = await canvas.evaluate(canvas => ({ ...canvas.dataset })); evidence.playback = []
         for (const direction of [1, -1]) {
