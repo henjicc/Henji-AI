@@ -12,7 +12,7 @@ const sizes = [
   [[1920, 1080], [1080, 1920], [1080, 1080], [1440, 1080], [1080, 1440], [2560, 1080]],
   [[2560, 1440], [1440, 2560], [1440, 1440], [1920, 1440], [1440, 1920], [3440, 1440]],
   [[3840, 2160], [2160, 3840], [2160, 2160], [2880, 2160], [2160, 2880], [5120, 2160]],
-  [[7680, 4320], [4320, 7680], [4320, 4320], [5760, 4320], [4320, 5760], [10240, 4320]],
+  [[7680, 4320], [4320, 7680], [4320, 4320], [5760, 4320], [4320, 5760], [7680, 3200]],
 ]
 it('预设比例与档位取行业常用尺寸（按短边定档，21:9 用超宽屏规格）；自定义比例按总像素换算', () => {
   VIDEO_EDIT_SEQUENCE_TIERS.forEach(({ label }, i) => VIDEO_EDIT_SEQUENCE_RATIOS.forEach((ratio, j) => {
@@ -30,9 +30,9 @@ it('反推精确组合优先；仅比例误差小于0.5%时保留比例，档位
   expect(inferVideoEditSequencePreset({ width: 1787, height: 1000 })).toEqual({ ratio: '自定义', tier: '自定义' })
   expect(inferVideoEditSequencePreset({ width: 0, height: 0 })).toEqual({ ratio: '自定义', tier: '自定义' })
 })
-it('档位禁用按最终尺寸校验单边与总像素；只有超宽 8K 因单边超限禁用', () => {
+it('档位禁用按最终尺寸校验单边与总像素；预设档位全部在上限内', () => {
   for (const ratio of VIDEO_EDIT_SEQUENCE_RATIOS) for (const { label } of VIDEO_EDIT_SEQUENCE_TIERS) {
-    expect(isVideoEditSequenceSize(videoEditSequencePresetSize(ratio, label))).toBe(label !== '8K' || ratio !== '21:9')
+    expect(isVideoEditSequenceSize(videoEditSequencePresetSize(ratio, label))).toBe(true)
   }
   expect(isVideoEditSequenceSize(videoEditSequenceTierSize(10, '4K'))).toBe(false)
 })
