@@ -1057,7 +1057,28 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   visibility: hidden;
 }
 
-/* 剪辑工作区（界面重设计 3.5，设计稿 VideoEdit）：面板之间只露 1px 间隙色（不再画发丝线），
+/* 剪辑工作区（界面重设计 3.5，设计稿 VideoEdit；2026-10-07 按用户参照 PR 加宽间隙）：面板组之间露 4px 间隙色
+ * （宽度由 VideoEditDock 的 dockview 主题 gap 决定），面板组小圆角；当前激活的面板组描 1px 强调色边，
+ * 用叠在最上层、不接收指针的伪元素画，不占布局、不被面板内容盖住。 */
+.henji-videoEdit-dock .dv-groupview {
+  position: relative;
+  isolation: isolate;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.henji-videoEdit-dock .dv-groupview.dv-active-group::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgb(var(--accent-rgb));
+  border-radius: inherit;
+  pointer-events: none;
+  /* 与 z-sticky 同档（tailwind zIndex.sticky）：组内已隔离层叠，压过面板内的局部覆盖层与粘性头部 */
+  z-index: 20;
+}
+
+/* 剪辑工作区：分隔线与间隙同色（不画发丝线），
  * 面板头右侧的“最大化／恢复”平时隐藏，悬停该面板组或键盘聚焦时出现（面板菜单在当前标签标题旁，始终显示）。
  * 只用 opacity：按钮始终占位、可被键盘与自动化命中，标签条不因显隐抖动。 */
 .henji-videoEdit-dock.dockview-theme-abyss {
