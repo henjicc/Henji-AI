@@ -69,7 +69,7 @@ export const THEME_PRESETS: Record<ThemePresetId, ThemePreset> = {
   graphite: {
     id: 'graphite',
     name: { zh: '石墨', en: 'Graphite' },
-    seed: { mode: 'dark', hue: 260, tint: 0.003, base: 0.2, contrast: 1, accent: SEED_ACCENT_HEX.blue },
+    seed: { mode: 'dark', hue: 260, tint: 0, base: 0.2238, contrast: 1, accent: SEED_ACCENT_HEX.blue },
   },
   ocean: {
     id: 'ocean',
@@ -531,7 +531,8 @@ export function solveSelectedAccentAlpha(options: {
     alpha = Math.round((alpha + step) * 100) / 100;
   }
   let hoverAlpha = Math.round((alpha + (hoverBase - base)) * 100) / 100;
-  while (!hoverOk(alpha, hoverAlpha) && hoverAlpha + step <= SELECTED_ACCENT_ALPHA_MAX + (hoverBase - base) + 1e-9) {
+  // 选中淡底已顶到上限时（无彩度强调色 + 高层级对比度），悬停档仍需与选中可分，允许继续往上找到不透明为止。
+  while (!hoverOk(alpha, hoverAlpha) && hoverAlpha + step <= 1 + 1e-9) {
     hoverAlpha = Math.round((hoverAlpha + step) * 100) / 100;
   }
   return { alpha, hoverAlpha };
