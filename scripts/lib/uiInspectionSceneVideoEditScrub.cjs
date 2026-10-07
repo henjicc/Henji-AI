@@ -2,9 +2,10 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
-const { execFileSync, execFile } = require('node:child_process')
+const { execFileSync } = require('node:child_process')
+const { startGpuSampler } = require('./uiInspectionGpuSampler.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))] ?? 0
 
@@ -40,11 +41,9 @@ function createVideoEditScrubScene() {
       evidence.firstFrame = await canvas.evaluate(canvas => ({ renderMs: Number(canvas.dataset.renderMs), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs), cacheHits: Number(canvas.dataset.cacheHits), cacheBytes: Number(canvas.dataset.cacheBytes), timestamps: canvas.dataset.sourceTimestamps }))
       evidence.cacheDirectory = path.join(await app.evaluate(({ app }) => app.getPath('userData')), 'cache', 'video-edit-preview')
       evidence.gpuReadings = []
-      let sampling = false
-      const gpuTimer = setInterval(() => {
-        if (sampling) return; sampling = true
-        execFile('nvidia-smi', ['--query-gpu=utilization.gpu,utilization.decoder,memory.used', '--format=csv,noheader,nounits'], { windowsHide: true, timeout: 3000 }, (error, stdout) => { sampling = false; if (!error) evidence.gpuReadings.push({ at: Date.now(), values: stdout.trim() }) })
-      }, 500)
+      const tracePath = process.env.HENJI_VIDEO_EDIT_SCRUB_TRACE
+      if (tracePath) await app.evaluate(({ contentTracing }) => contentTracing.startRecording({ included_categories: ['devtools.timeline', 'v8', 'gpu', 'blink.user_timing', 'disabled-by-default-v8.gc'], recording_mode: 'record-as-much-as-possible' }))
+      const stopGpuSampler = await startGpuSampler({ onReading: reading => evidence.gpuReadings.push(reading), onError: error => { evidence.gpuSamplingError = error.message } })
       try {
       const ruler = page.getByRole('slider', { name: '剪辑时间定位' })
       const waitPresented = async (frame, label) => {
@@ -83,6 +82,7 @@ function createVideoEditScrubScene() {
         await waitPresented(from, `${name}-captured-position-failed`)
         await canvas.evaluate(canvas => {
           window.__scrub = { targets: [], frames: [], start: performance.now() }
+          performance.mark('video-edit-scrub-start')
           const ruler = document.querySelector('[aria-label="剪辑时间定位"]')
           window.__scrubTarget = new MutationObserver(() => window.__scrub.targets.push({ at: performance.now(), frame: Number(ruler.getAttribute('aria-valuenow')) }))
           window.__scrubTarget.observe(ruler, { attributes: true, attributeFilter: ['aria-valuenow'] })
@@ -99,7 +99,7 @@ function createVideoEditScrubScene() {
         const ended = await page.evaluate(() => performance.now()); await page.mouse.up()
         try { await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, to, { timeout: 90000 }) }
         catch (error) { console.error(`${name}-settle-failed`, { pixels, to, ruler: await ruler.getAttribute('aria-valuenow'), box }, await canvas.evaluate(canvas => ({ ...canvas.dataset }))); await capture(`${name}-settle-failed`); throw error }
-        const data = await page.evaluate(() => { window.__scrubTarget.disconnect(); window.__scrubFrame.disconnect(); return window.__scrub })
+        const data = await page.evaluate(() => { performance.mark('video-edit-scrub-end'); window.__scrubTarget.disconnect(); window.__scrubFrame.disconnect(); return window.__scrub })
         const during = data.frames.filter(frame => frame.at <= ended)
         const gaps = during.map((frame, index) => frame.at - (index ? during[index - 1].at : data.start))
         const lags = during.map(frame => { const target = [...data.targets].reverse().find(target => target.at <= frame.at); return target ? Math.abs(frame.frame - target.frame) * duration / Math.abs(to - from) : 0 })
@@ -110,6 +110,11 @@ function createVideoEditScrubScene() {
           assert.ok(exact, `${name}：第 ${frame.frame} 帧画出的源时间为 ${frame.timestamps}（应为 ${frame.frame / 60} 与 ${1 + frame.frame / 60}）`)
         }
         const result = { name, durationMs: ended - data.start, inputs: data.targets.length, presentationsDuringDrag: during.length, submittedFramesPerSecond: during.length * 1000 / (ended - data.start), gapP95Ms: quantile(gaps, .95), gapMaxMs: Math.max(...gaps, ended - (during.at(-1)?.at ?? data.start)), pointerLagP95Ms: quantile(lags, .95), settleMs: Math.max(0, data.frames.at(-1).at - ended), renderP95Ms: quantile(during.map(frame => frame.renderMs), .95), decodeP95Ms: quantile(during.map(frame => frame.decodeMs), .95), gpuP95Ms: quantile(during.map(frame => frame.gpuMs), .95), cacheHits: during.reduce((sum, frame) => sum + (frame.cacheHits || 0), 0), samples: data }
+        result.gapsOver25Ms = during.flatMap((frame, index) => gaps[index] > 25 ? [{ atMs: frame.at - data.start, gapMs: gaps[index], frame: frame.frame, decodeMs: frame.decodeMs, gpuMs: frame.gpuMs, renderMs: frame.renderMs, cacheHits: frame.cacheHits }] : [])
+        result.inputGapsOver25Ms = data.targets.flatMap((target, index) => {
+          const gapMs = target.at - (index ? data.targets[index - 1].at : data.start)
+          return gapMs > 25 ? [{ atMs: target.at - data.start, gapMs }] : []
+        })
         evidence.cases.push(result)
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       }
@@ -154,8 +159,9 @@ function createVideoEditScrubScene() {
       assert.deepEqual(evidence.playback.missing, [], '4K60 全帧率预览不能跳过时间线视频帧')
       assert.ok(evidence.playback.videoDurationMs < 6100, '4K60 不能通过减慢时钟实现全帧率')
       for (const result of evidence.cases) {
-        assert.ok(result.submittedFramesPerSecond >= (['fast-forward', 'warm-reverse'].includes(result.name) ? 57 : 27), `${result.name} 拖动期间只有 ${result.submittedFramesPerSecond.toFixed(1)} 次画面更新/秒`)
-        assert.ok(result.gapMaxMs < 500, `${result.name} 拖动期间停顿 ${result.gapMaxMs.toFixed(0)}ms`)
+        const fast = ['fast-forward', 'warm-reverse'].includes(result.name)
+        assert.ok(result.submittedFramesPerSecond >= (fast ? 58 : 27), `${result.name} 拖动期间只有 ${result.submittedFramesPerSecond.toFixed(1)} 次画面更新/秒`)
+        assert.ok(result.gapMaxMs < (fast ? 50 : 500), `${result.name} 拖动期间停顿 ${result.gapMaxMs.toFixed(0)}ms`)
         assert.ok(result.settleMs < 100, `${result.name} 松手后定位耗时 ${result.settleMs.toFixed(0)}ms`)
       }
       await button(page, '关闭项目').click(); await waitReleased(page)
@@ -164,7 +170,8 @@ function createVideoEditScrubScene() {
       assert.ok(evidence.resources.workers.every(worker => worker.disposedAt && worker.terminatedAt), '原视频预览资源必须完成释放并终止')
       evidence.completed = true
       } finally {
-        clearInterval(gpuTimer)
+        await stopGpuSampler()
+        if (tracePath) evidence.tracePath = await app.evaluate(({ contentTracing }, file) => contentTracing.stopRecording(file), path.resolve(tracePath))
         evidence.resources = await workerSnapshot(page).catch(() => evidence.resources)
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
         await page.evaluate(() => { window.__videoLayoutObservers.forEach(observer => observer.disconnect()); window.Worker = window.__videoLayoutNativeWorker }).catch(() => {})

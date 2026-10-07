@@ -1,11 +1,12 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { execFile, execFileSync } = require('node:child_process')
+const { execFileSync } = require('node:child_process')
+const { startGpuSampler } = require('./uiInspectionGpuSampler.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 const ORIGINAL = process.env.HENJI_PERF_SOURCE || 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -196,11 +197,12 @@ function createVideoEditPerformanceScene() {
         await playback(traceStart, true); await page.waitForTimeout(500)
         // Recorded per run (task 3.2): native service CPU (Get-Process seconds) and whole-card GPU readings (nvidia-smi).
         const nativeCpu = () => { try { const output = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', "(Get-Process -Name 'henji-video-decoder' -ErrorAction SilentlyContinue | Measure-Object -Property CPU -Sum).Sum"], { windowsHide: true, encoding: 'utf8', timeout: 30000 }).trim(); return output && Number.isFinite(Number(output)) ? Number(output) : null } catch { return null } }
-        const gpuReadings = []; let sampling = false
-        const gpuTimer = setInterval(() => { if (sampling) return; sampling = true; execFile('nvidia-smi', ['--query-gpu=utilization.gpu,utilization.decoder,memory.used', '--format=csv,noheader,nounits'], { windowsHide: true, timeout: 3000 }, (error, stdout) => { sampling = false; if (!error) { const [gpu, decoder, memory] = stdout.trim().split(',').map(Number); gpuReadings.push({ gpu, decoder, memoryMiB: memory }) } }) }, 1000)
+        const gpuReadings = []
+        const stopGpuSampler = await startGpuSampler({ intervalMs: 1000, onReading: ({ values }) => { const [gpu, decoder, memory] = values.split(',').map(Number); gpuReadings.push({ gpu, decoder, memoryMiB: memory }) }, onError: error => { evidence.gpuSamplingError = error.message } })
         const cpuBefore = nativeCpu(); const cpuStartedAt = performance.now()
-        const frames = await measure(page, tracing ? Number(process.env.HENJI_PERF_TRACE_SECONDS ?? 6) : 60)
-        clearInterval(gpuTimer)
+        let frames
+        try { frames = await measure(page, tracing ? Number(process.env.HENJI_PERF_TRACE_SECONDS ?? 6) : 60) }
+        finally { await stopGpuSampler() }
         const cpuAfter = nativeCpu(); const cpuSeconds = (performance.now() - cpuStartedAt) / 1000
         const mean = values => values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 10) / 10 : null
         evidence.playbackResources = { nativeCores: cpuBefore === null || cpuAfter === null ? null : Math.round((cpuAfter - cpuBefore) / cpuSeconds * 100) / 100, gpuSamples: gpuReadings.length, gpuUtilizationMean: mean(gpuReadings.map(value => value.gpu)), decoderUtilizationMean: mean(gpuReadings.map(value => value.decoder)), cardMemoryMiBMax: gpuReadings.length ? Math.max(...gpuReadings.map(value => value.memoryMiB)) : null, cardMemoryMiBMean: mean(gpuReadings.map(value => value.memoryMiB)) }
