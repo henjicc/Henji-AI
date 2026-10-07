@@ -4,10 +4,13 @@ import { videoEditTrackerKey, type VideoEditTracker } from '@/core/videoEdit/tra
 import { videoEditFps } from '@/core/videoEdit/time'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
 import { videoEditReachableSequences } from '@/core/videoEdit/sequenceGraph'
+import { videoEditSequenceTrackingSource, videoEditTrackingSourceId, type TrackingDocument } from '@/core/videoEdit/trackingSource'
+import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
-import { trackingDefinitionKey, type TrackingDefinition, type TrackingFailureReason, type TrackingRange, type TrackingRunOptions, type TrackingStatus } from '@/platform/contracts/tracking'
+import { trackingDefinitionKey, type TrackingDefinition, type TrackingFailureReason, type TrackingRange, type TrackingRunOptions, type TrackingStatus, type TrackingSequenceSource } from '@/platform/contracts/tracking'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import { listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
+import { VideoEditTrackingFrames } from './videoEditTrackingFrames'
 
 /*
  * 跟踪器协调（任务 4.10，渲染层）：打开着的剪辑里每个跟踪器，按片段用到的素材范围在后台跟踪（主进程缓存、去重）；
@@ -22,19 +25,45 @@ interface Entry { definition: TrackingDefinition; status: TrackingStatus; versio
 const entries = new Map<string, Entry>()
 const listeners = new Set<() => void>()
 const exportRequests = new Map<object, Map<string, Request>>()
+const sequenceSources = new Map<string, VideoEditComposition>()
+const preparing = new Map<string, AbortController>()
 let revision = 0
 
 function publish(): void { revision++; for (const listener of listeners) listener() }
 export function subscribeVideoEditTracking(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function videoEditTrackingRevision(): number { return revision }
 
-/** 片段上的一个跟踪器对应的跟踪定义与范围；片段不是视频或图片时为 undefined。 */
-export function videoEditTrackingRequest(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, tracker: Pick<VideoEditTracker, 'method' | 'prompts'>): { definition: TrackingDefinition; range: TrackingRange } | undefined {
+/** 片段上的一个跟踪器对应的跟踪定义与范围；支持视频、图片和嵌套合成。 */
+export function videoEditTrackingRequest(document: TrackingDocument, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, tracker: Pick<VideoEditTracker, 'method' | 'prompts'>): { definition: TrackingDefinition; range: TrackingRange } | undefined {
   const media = videoEditClipMedia(document, clip)
-  if (!media || (media.kind !== 'video' && media.kind !== 'image')) return undefined
+  const nested = videoEditSequenceTrackingSource(document, clip)
+  if (!nested && (!media || (media.kind !== 'video' && media.kind !== 'image'))) return undefined
+  if (nested) sequenceSources.set(nested.source.signature, nested.composition)
   const sourceRange = videoEditClipSourceRange(clip, videoEditFps(frameRate))
   const startUs = Math.max(0, Math.floor(sourceRange.from * 1e6)); const endUs = Math.max(startUs + 1, Math.ceil(sourceRange.to * 1e6))
-  return { definition: { source: media.path, method: tracker.method, prompts: [...tracker.prompts].sort((a, b) => a.timeUs - b.timeUs) }, range: { startUs, endUs } }
+  return { definition: { source: nested?.source ?? media!.path, method: tracker.method, prompts: [...tracker.prompts].sort((a, b) => a.timeUs - b.timeUs) }, range: { startUs, endUs } }
+}
+
+function sequenceComposition(source: TrackingSequenceSource): VideoEditComposition {
+  const composition = sequenceSources.get(source.signature)
+  if (!composition) throw new Error('嵌套序列内容已改变，请重新建立跟踪。')
+  return composition
+}
+
+/** 候选也使用与自动跟踪相同的取帧源，不能改跟内部的单个媒体。 */
+export async function videoEditTrackingCandidates(document: TrackingDocument, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, prompt: { timeUs: number; points: Array<[number, number, 0 | 1]> }): Promise<import('@/platform/contracts/tracking').TrackingCandidates> {
+  const request = videoEditTrackingRequest(document, frameRate, clip, { method: 'shape', prompts: [prompt] })
+  if (!request) throw new Error('片段没有可跟踪的画面。')
+  await prepareSequenceTracking(request.definition)
+  return getPlatform().tracking.candidates({ source: request.definition.source, ...prompt })
+}
+async function prepareSequenceTracking(definition: TrackingDefinition, signal?: AbortSignal): Promise<void> {
+  if (typeof definition.source === 'string') return
+  const composition = sequenceComposition(definition.source)
+  // 先跟完子图依赖再提交父跟踪，避免单队列上的父取帧反过来等待排在其后的子推理。
+  await waitVideoEditTracking(composition, composition, signal)
+  const { waitVideoEditSmartRegions } = await import('./videoEditSmartRegions')
+  await waitVideoEditSmartRegions(composition, composition, signal)
 }
 
 function record(definition: TrackingDefinition, status: TrackingStatus): void {
@@ -58,16 +87,19 @@ export function runVideoEditTracking(definition: TrackingDefinition, range: Trac
   const current = entries.get(key)?.status
   record(definition, { state: 'tracking', progress: 0, direction: options.direction, ...(current?.result ? { result: current.result } : {}) })
   const operation = {}; entries.get(key)!.operation = operation
-  void Promise.resolve().then(() => getPlatform().tracking.run(definition, range, options)).then(status => {
+  const controller = new AbortController(); preparing.get(key)?.abort(); preparing.set(key, controller)
+  void Promise.resolve().then(async () => { await prepareSequenceTracking(definition, controller.signal); controller.signal.throwIfAborted(); return getPlatform().tracking.run(definition, range, options) }).then(status => {
     // A progress event can finish before IPC returns its initial tracking state.
     const entry = entries.get(key)
     if (entry?.operation !== operation || entry.status.state !== 'tracking') return
     if (status.state === 'idle') failed(definition, new Error('跟踪没有开始。'), 'video_edit.tracking.run_failed')
     else record(definition, status)
-  }, (error: unknown) => { if (entries.get(key)?.operation === operation) failed(definition, error, 'video_edit.tracking.run_failed') })
+  }, (error: unknown) => { if (!controller.signal.aborted && entries.get(key)?.operation === operation) failed(definition, error, 'video_edit.tracking.run_failed') }).finally(() => { if (preparing.get(key) === controller) preparing.delete(key) })
 }
 
 export function stopVideoEditTracking(definition: TrackingDefinition): void {
+  const key = trackingDefinitionKey(definition); const controller = preparing.get(key)
+  if (controller) { controller.abort(); preparing.delete(key); if (entries.has(key)) record(definition, { state: 'idle' }) }
   void Promise.resolve().then(() => getPlatform().tracking.stop(definition)).catch((error: unknown) => logger.warn('停止跟踪失败', { event: 'video_edit.tracking.stop_failed', error }))
 }
 
@@ -78,16 +110,21 @@ function neededTrackers(): Map<string, { definition: TrackingDefinition; range: 
     const request = videoEditTrackingRequest(instance.document, sequence.frameRate, clip, tracker)
     if (request) mergeRequest(needed, request)
   }
-  for (const requests of exportRequests.values()) for (const request of requests.values()) mergeRequest(needed, request)
+  for (const requests of exportRequests.values()) for (const request of requests.values()) {
+    if (typeof request.definition.source !== 'string' && request.composition) sequenceSources.set(request.definition.source.signature, request.composition)
+    mergeRequest(needed, request)
+  }
   return needed
 }
 
-type Request = { definition: TrackingDefinition; range: TrackingRange }
+type Request = { definition: TrackingDefinition; range: TrackingRange; composition?: VideoEditComposition }
 function mergeRequest(requests: Map<string, Request>, request: Request): void {
   const key = trackingDefinitionKey(request.definition); const previous = requests.get(key)
-  requests.set(key, previous ? { definition: request.definition, range: { startUs: Math.min(previous.range.startUs, request.range.startUs), endUs: Math.max(previous.range.endUs, request.range.endUs) } } : request)
+  const composition = request.composition ?? (typeof request.definition.source !== 'string' ? sequenceSources.get(request.definition.source.signature) : undefined)
+  requests.set(key, { ...request, ...(composition ? { composition } : {}), ...(previous ? { range: { startUs: Math.min(previous.range.startUs, request.range.startUs), endUs: Math.max(previous.range.endUs, request.range.endUs) } } : {}) })
 }
 function reconcile(): void {
+  sequenceSources.clear()
   const needed = neededTrackers()
   for (const [key, request] of needed) {
     if (entries.has(key)) continue
@@ -114,14 +151,21 @@ let stop: (() => void) | undefined
 export function startVideoEditTracking(): () => void {
   if (stop) return stop
   let stopProgress = (): void => undefined
+  let stopFrames = (): void => undefined
+  const frames = new VideoEditTrackingFrames(sequenceComposition, reply => getPlatform().tracking.replyFrames(reply), async (renderer, composition) => {
+    renderer.setTracks(videoEditTrackResults(composition))
+    const { videoEditSmartRegionSegments } = await import('./videoEditSmartRegions')
+    renderer.setSmartRegions(videoEditSmartRegionSegments())
+  })
   try {
     stopProgress = getPlatform().tracking.onProgress(({ definition, status }) => { if (entries.has(trackingDefinitionKey(definition))) record(definition, status) })
+    stopFrames = getPlatform().tracking.onFrameRequest(event => frames.handle(event))
   } catch (error) {
     logger.debug('跟踪不可用', { event: 'video_edit.tracking.unavailable', error })
   }
   const stopDomain = subscribeVideoEditDomain(reconcile)
   reconcile()
-  stop = () => { stopProgress(); stopDomain(); stop = undefined }
+  stop = () => { stopProgress(); stopFrames(); stopDomain(); frames.dispose(); for (const controller of preparing.values()) controller.abort(); preparing.clear(); stop = undefined }
   return stop
 }
 
@@ -150,7 +194,7 @@ export function videoEditTrackingFailureText(reason: TrackingFailureReason): str
 
 /** 给助手读的状态文字：ready:<覆盖率>%、tracking:<进度>%、stopped:<覆盖率>%、failed:<说明>、idle。 */
 export function videoEditTrackingStatusText(status: TrackingStatus | undefined, range: TrackingRange | undefined): string {
-  if (!status || !range) return 'failed:片段不是视频或图片，跟踪不会生效。'
+  if (!status || !range) return 'failed:片段没有可跟踪的画面。'
   const coverage = (): number => {
     const result = status.result
     if (!result) return 0
@@ -168,12 +212,12 @@ export function videoEditTrackResults(snapshot?: Pick<VideoEditDocument, 'media'
   const result: Record<string, { url: string; version: string }> = {}
   const sources = snapshot ? [{ document: snapshot, sequences: videoEditReachableSequences<{ clips: readonly VideoEditClip[]; frameRate: { numerator: number; denominator: number } }>(snapshot, snapshot) }] : listVideoEditInstances().map(instance => ({ document: instance.document, sequences: instance.document.sequences }))
   for (const source of sources) for (const sequence of source.sequences) for (const clip of sequence.clips) for (const tracker of clip.trackers ?? []) {
-    const media = videoEditClipMedia(source.document, clip)
+    const sourceId = videoEditTrackingSourceId(source.document, clip)
     const request = videoEditTrackingRequest(source.document, sequence.frameRate, clip, tracker)
     const entry = request && entries.get(trackingDefinitionKey(request.definition))
     const status = entry?.status
     // 续跟会原地更新同一个结果文件：版本（覆盖范围）变了 Worker 就重新读。
-    if (media && status?.result) result[videoEditTrackerKey(media.id, tracker)] = { url: toFetchableMediaUrl(status.result.path), version: String(entry?.version ?? 0) }
+    if (sourceId && status?.result) result[videoEditTrackerKey(sourceId, tracker)] = { url: toFetchableMediaUrl(status.result.path), version: String(entry?.version ?? 0) }
   }
   return result
 }
@@ -181,7 +225,7 @@ export function videoEditTrackResults(snapshot?: Pick<VideoEditDocument, 'media'
 /** 导出前：这条序列用到的跟踪（效果作用区域、遮罩跟随、片段跟随）都跟满片段范围；有失败时以用户语言报错。 */
 export async function waitVideoEditTracking(document: Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences'>>, sequence: { frameRate: { numerator: number; denominator: number }; clips: readonly VideoEditClip[] }, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
-  const requests = new Map<string, { definition: TrackingDefinition; range: TrackingRange }>()
+  const requests = new Map<string, Request>()
   for (const reachable of videoEditReachableSequences(document, sequence)) {
   const used = new Set<string>()
   for (const clip of reachable.clips) {
@@ -233,4 +277,4 @@ export async function waitVideoEditTracking(document: Pick<VideoEditDocument, 'm
 }
 
 /** 仅供测试：清空状态。 */
-export function resetVideoEditTrackingForTests(): void { stop?.(); entries.clear(); exportRequests.clear(); revision = 0 }
+export function resetVideoEditTrackingForTests(): void { stop?.(); entries.clear(); exportRequests.clear(); sequenceSources.clear(); revision = 0 }

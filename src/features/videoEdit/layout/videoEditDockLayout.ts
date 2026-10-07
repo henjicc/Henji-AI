@@ -15,6 +15,7 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'lumetri', title: 'Lumetri 颜色' },
   // PR“效果”面板：视频／音频过渡与效果的预设库，拖到时间线编辑点或片段上（4.3）。
   { id: 'effects_library', title: '效果' },
+  { id: 'title_templates', title: '基本图形' },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
 
@@ -30,7 +31,7 @@ export function defaultVideoEditLayout(): SerializedDockview {
           { type: 'leaf', size: 540, data: { id: 'program-group', views: ['program'], activeView: 'program' } },
           { type: 'leaf', size: 320, data: { id: 'timeline-group', views: ['timeline'], activeView: 'timeline' } },
         ] },
-        { type: 'leaf', size: 280, data: { id: 'effects-group', views: ['effects', 'effects_library'], activeView: 'effects' } },
+        { type: 'leaf', size: 280, data: { id: 'effects-group', views: ['effects', 'effects_library', 'title_templates'], activeView: 'effects' } },
       ] },
     }, panels, activeGroup: 'program-group',
   }
@@ -113,7 +114,7 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
   const definition = VIDEO_EDIT_PANELS.find(panel => panel.id === id)!
   // 字幕与标记是和效果控件同类的侧栏检查器：作为标签并入效果控件那一组，不再在节目画面右侧另开一列——
   // 960 窗口下另开的一列只剩约 120px，标签与列表都被挤成竖排（界面重设计 5.5 第三批）。
-  const inspector = (id === 'content' || id === 'tracking' || id === 'lumetri') ? api.getPanel('effects') : undefined
+  const inspector = (id === 'content' || id === 'tracking' || id === 'lumetri' || id === 'title_templates') ? api.getPanel('effects') : undefined
   if (inspector && inspector.api.location.type === 'grid') {
     return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', position: { referencePanel: inspector, direction: 'within' } })
   }
@@ -137,7 +138,7 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
  */
 function defaultDockTarget(api: DockviewApi, id: string, own: DockviewGroupPanel): { group: DockviewGroupPanel; position: 'left' | 'right' | 'bottom' | 'center' } | null {
   const isGridGroup = (group: DockviewGroupPanel | undefined): group is DockviewGroupPanel => Boolean(group && group !== own && group.api.location.type === 'grid')
-  const inspector = (id === 'content' || id === 'tracking') ? api.getPanel('effects')?.group : undefined
+  const inspector = (id === 'content' || id === 'tracking' || id === 'title_templates') ? api.getPanel('effects')?.group : undefined
   if (isGridGroup(inspector)) return { group: inspector, position: 'center' }
   const program = api.getPanel('program')?.group
   const reference = isGridGroup(program) ? program : api.groups.find(isGridGroup)

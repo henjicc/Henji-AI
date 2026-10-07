@@ -3,13 +3,11 @@ import { UiButton, UiLoading, UiOptionButton } from '@/components/ui'
 import { videoEditClipPictureSize, videoEditClipToFrame, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
 import { VIDEO_EDIT_TRACK_METHOD_LABELS, type VideoEditTrackBox, type VideoEditTrackPrompt } from '@/core/videoEdit/tracking'
 import { createLogger } from '@/core/logging'
-import { getPlatform } from '@/platform/runtime'
 import { getActiveVideoEditSequence, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { correctVideoEditTracker, editVideoEditTracker, readVideoEditTrackingBox, readVideoEditTrackingPlacement } from '../application/videoEditTrackingEdits'
 import { getVideoEditTrackingEditing, setVideoEditTrackingEditing, subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision, type VideoEditTrackingEditing } from '../application/videoEditTrackingEditing'
-import { subscribeVideoEditTracking, videoEditTrackingRevision } from '../application/videoEditTracking'
+import { subscribeVideoEditTracking, videoEditTrackingRevision, videoEditTrackingCandidates } from '../application/videoEditTracking'
 import { videoEditClipSourceTimeUs } from '../engine/videoEditTrackResults'
-import { videoEditClipMedia } from '@/core/videoEdit/document'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { parseColor } from '@/core/theme/themeColor'
@@ -100,9 +98,8 @@ function VideoEditSubjectTrackingOverlay({ instance, onError }: { instance: Vide
       const points: Array<[number, number, 0 | 1]> = [...previous?.points ?? [], [end.u, end.v, event.altKey ? 0 : 1]]
       const prompt = { timeUs, points }
       if (points.length > 1 || event.altKey) { try { commit(prompt) } catch (error) { onError(error) } return }
-      const media = videoEditClipMedia(sequence, clip); if (!media) return
       setPending(true)
-      void getPlatform().tracking.candidates({ source: media.path, timeUs, points }).then(result => {
+      void videoEditTrackingCandidates(document, sequence.frameRate, clip, { timeUs, points }).then(result => {
         if (instance.document === document && instance.frame === frame && instance.selection === clip.id && instance.activeSequenceId === sequence.id && getVideoEditTrackingEditing() === editing) setVideoEditTrackingEditing({ ...editing, candidates: { result, prompt, preview: 0, document, frame } })
       }, (error: unknown) => { logger.warn('跟踪候选生成失败', { event: 'video_edit.tracking.candidates_failed', error }); onError(error) }).finally(() => setPending(false))
     } else {

@@ -46,8 +46,8 @@ export function getTrackingService(): TrackingService {
     ffmpegPath: loadFfmpegPath,
     // 形状跟踪每帧约 5–15KB（压缩后），10 分钟约 100MB；超过 2GB 按最久未用清理。
     results: createContentDiskCache({ directory: () => getProgramStoreDir('smartRegions'), extension: '.htrk', budgetBytes: 2 * 1024 ** 3, pruneIntervalMs: 60_000, onError: (event, error) => logger.warn('跟踪结果缓存操作失败', { event: `tracking.cache.${event}`, error }) }),
-    track: (job, progress) => inference.track(job, progress),
-    candidates: job => inference.candidates(job),
+    track: (job, progress, frames) => inference.track(job, progress, frames),
+    candidates: (job, frames) => inference.candidates(job, frames),
     cancel: id => inference.cancel(id),
     readHead,
     providers: executionProviderOrder(process.platform),

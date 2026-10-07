@@ -22,6 +22,8 @@ import { VideoEditTrackingOverlay } from '../panels/VideoEditTrackingOverlay'
 import { createVideoEditTrackHeader } from '@/core/videoEdit/tracking'
 import type { VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 import { encodeSmartRegionSegment } from '@/core/videoEdit/smartRegions'
+import { videoEditTrackingSourceId } from '@/core/videoEdit/trackingSource'
+import { videoEditTrackerKey } from '@/core/videoEdit/tracking'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
@@ -40,6 +42,7 @@ beforeEach(() => {
   vi.spyOn(getPlatform().tracking, 'run').mockImplementation(run)
   vi.spyOn(getPlatform().tracking, 'stop').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().tracking, 'onProgress').mockImplementation(handler => { progress = handler; return () => {} })
+  vi.spyOn(getPlatform().tracking, 'onFrameRequest').mockImplementation(() => () => {})
   startVideoEditTracking()
 })
 afterEach(async () => {
@@ -221,8 +224,10 @@ it('导出等待保留原定义：用户删除跟踪不取消等待，结果仍�
   expect(Object.keys(videoEditTrackResults())).toHaveLength(0)
   expect(Object.keys(videoEditTrackResults(snapshot))).toHaveLength(1)
 })
-it('面板点选三候选后建立跟踪，按钮续跟/单步/停止，删除与撤销共用领域历史', async () => {
-  const { owner, id, sequenceId, video } = await project(); setVideoEditView(id, { frame: 0, selection: video.id })
+it.each([false, true])('面板点选三候选后建立跟踪（嵌套=%s），按钮续跟/单步/停止，删除与撤销共用领域历史', async nested => {
+  const { owner, id, sequenceId, video: original } = await project()
+  const video = nested ? nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '合成层').clip : original
+  setVideoEditView(id, { frame: 0, selection: video.id })
   const maskEditing = { projectId: id, sequenceId, clipId: video.id, effectId: 'mask-effect', pen: true }
   setVideoEditMaskEditing(maskEditing)
   vi.stubGlobal('PointerEvent', MouseEvent)
@@ -241,15 +246,51 @@ it('面板点选三候选后建立跟踪，按钮续跟/单步/停止，删除�
   const stored = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!.trackers![0]
   expect(stored.prompts[0]).toEqual({ timeUs: 0, points: [[0.5, 0.5, 1]], candidate: 3 })
   expect(getVideoEditTrackingEditing()?.trackerId).toBe(stored.id)
+  expect(getPlatform().tracking.candidates).toHaveBeenCalledWith(expect.objectContaining({ source: nested ? expect.objectContaining({ kind: 'sequence' }) : expect.any(String) }))
   fireEvent.click(view.getByLabelText('停止跟踪')); await act(flush); expect(getPlatform().tracking.stop).toHaveBeenCalled()
   const definition = status.mock.calls.at(-1)![0]; act(() => progress({ definition, status: { state: 'ready', result: result() } }))
-  fireEvent.click(view.getByLabelText('向后一帧')); await act(flush); expect(run).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), { direction: 'backward', limit: 1 })
+  fireEvent.click(view.getByLabelText('向后一帧')); await act(flush); await waitFor(() => expect(run).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), { direction: 'backward', limit: 1 }))
   act(() => progress({ definition, status: { state: 'ready', result: result() } }))
-  fireEvent.click(view.getByLabelText('向前跟踪')); await act(flush); expect(run).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), { direction: 'forward' })
+  fireEvent.click(view.getByLabelText('向前跟踪')); await act(flush); await waitFor(() => expect(run).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), { direction: 'forward' }))
   fireEvent.click(view.getByLabelText(`删除${stored.name}`)); expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!.trackers).toEqual([])
   act(() => { undoVideoEdit(id) }); expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!.trackers?.length).toBe(1)
   expect(onError).not.toHaveBeenCalled()
   act(() => setVideoEditMaskEditing(maskEditing)); expect(getVideoEditTrackingEditing()).toBeNull()
+})
+
+it('助手通用实体在嵌套层新建/纠错/绑定，子序列变化停止旧定义且Worker不再取旧结果', async () => {
+  const { owner, id, sequenceId } = await project()
+  const nested = nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '跟踪合成')
+  appendVideoEditClip(id)
+  const text = getActiveVideoEditSequence(owner).clips.find(clip => clip.kind === 'text')!
+  const app = createApplicationHarness(); const clipRef = { kind: 'video_edit.clip', id: `${id}:${nested.clip.id}` }
+  try {
+    const baseline = await app.read(clipRef)
+    const created = await app.call('change_application_entities', { summary: '跟踪合成层', changes: [{ kind: 'create_items', entityType: 'video_edit.tracker', parent: clipRef, items: [{ properties: { 'video_edit.tracker.name': tracker.name, 'video_edit.tracker.method': tracker.method, 'video_edit.tracker.prompts': tracker.prompts } }] }] }, baseline.revisions as Record<string, number>)
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.objectContaining({ source: expect.objectContaining({ kind: 'sequence' }) }), expect.anything(), { direction: 'both' }))
+    const stored = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === nested.clip.id)!.trackers![0]
+    const ref = { kind: 'video_edit.tracker', id: `${id}:${videoEditTrackerEntityId(nested.clip.id, stored.id)}` }
+    expect((await app.read(ref, ['video_edit.tracker.method'])).properties).toEqual({ 'video_edit.tracker.method': 'box' })
+    const first = status.mock.calls.at(-1)![0]
+    progress({ definition: first, status: { state: 'ready', result: result() } })
+    const key = videoEditTrackerKey(videoEditTrackingSourceId(owner.document, nested.clip)!, stored)
+    expect(videoEditTrackResults()[key]).toBeDefined()
+    const bytes = encodeSmartRegionSegment(createVideoEditTrackHeader({ method: 'box', model: 'double', fps: 30, firstFrame: 0, frameCount: 1, sourceWidth: 1920, sourceHeight: 1080, promptFrames: [0], boxes: [[.1, .1, .2, .3, 1]], summary: { tracked: 1, lost: 0 } }))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(bytes).buffer)))
+    await trackingEdits.bindVideoEditTracking(id, sequenceId, nested.clip.id, stored.id, { clipId: text.id, scale: true })
+    expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === text.id)!.follow?.clipId).toBe(nested.clip.id)
+    const prompts = [...stored.prompts, { timeUs: 333333, box: [.3, .2, .2, .3] }]
+    expect(await app.change(ref, { 'video_edit.tracker.prompts': prompts })).toMatchObject({ ok: true })
+    await waitFor(() => expect(status.mock.calls.at(-1)![0].prompts).toHaveLength(2))
+    const corrected = status.mock.calls.at(-1)![0]
+    await waitFor(() => expect(run).toHaveBeenCalledWith(corrected, expect.anything(), { direction: 'both' }))
+    editVideoSequence(id, nested.sequence.id, sequence => { sequence.clips[0].brightness = .5; return sequence })
+    await waitFor(() => expect(status.mock.calls.at(-1)![0].source).not.toEqual(corrected.source))
+    expect(getPlatform().tracking.stop).toHaveBeenCalledWith(corrected)
+    progress({ definition: corrected, status: { state: 'ready', result: result() } })
+    expect(videoEditTrackResults()[key]).toBeUndefined()
+  } finally { app.dispose() }
 })
 
 it('框选建立物体跟踪，拖框纠错只增加当前帧提示；绑定片段保持位置并可撤销', async () => {

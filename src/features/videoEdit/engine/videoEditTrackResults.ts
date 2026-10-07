@@ -6,6 +6,7 @@ import {
 } from '@/core/videoEdit/tracking'
 import { videoEditClipPictureSize, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
+import { videoEditTrackingSourceId } from '@/core/videoEdit/trackingSource'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import { fetchRange, inflate, type VideoEditSmartRegionMask } from './videoEditSmartRegionMasks'
@@ -127,8 +128,8 @@ export function videoEditClipSourceTimeUs(document: VideoEditComposition, clip: 
 
 export function videoEditClipTracker(document: VideoEditComposition, clip: VideoEditClip, trackerId: string): { key: string; tracker: VideoEditTracker } | undefined {
   const tracker = clip.trackers?.find(entry => entry.id === trackerId)
-  const media = videoEditClipMedia(document, clip)
-  return tracker && media ? { key: videoEditTrackerKey(media.id, tracker), tracker } : undefined
+  const source = videoEditTrackingSourceId(document, clip)
+  return tracker && source ? { key: videoEditTrackerKey(source, tracker), tracker } : undefined
 }
 
 /**

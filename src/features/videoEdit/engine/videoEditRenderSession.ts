@@ -90,9 +90,9 @@ export class VideoEditRenderSession {
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
-  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void): Promise<RenderResponse> {
+  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }): Promise<RenderResponse> {
     await this.ready
-    return this.request({ kind: 'render', frame, sequential, scrubbing, deadline }, [], submitted)
+    return this.request({ kind: 'render', frame, sequential, scrubbing, deadline, ...(readRgb ? { readRgb } : {}) }, [], submitted)
   }
   async renderBitmap(frame: number, sequential = false, scrubbing = false): Promise<RenderResponse & { bitmap: ImageBitmap }> {
     const result = await this.present(frame, sequential, scrubbing)

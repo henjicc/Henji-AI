@@ -7,6 +7,7 @@ import { closeAllVideoEdits, savedVideoEdit } from './videoEditDocumentTestKit'
 import { createVideoEditProject, editVideoProject, undoVideoEdit } from './videoEditService'
 import { nestVideoEditSelection, openVideoEditNestedClip } from './videoEditNesting'
 import { placeVideoEditDrop } from './videoEditDrop'
+import { nestVideoEditClipsCapability } from '@/core/application-control/domains/videoEdit/videoEditNestCapability'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {} async updateDocument() {} async present() { return { presented: true, bitmap: { close() {} } } } async dispose() {}
@@ -42,6 +43,19 @@ it('正式能力嵌套保存回读，通用属性能读写序列片段，拒绝�
   try {
     const result = await app.call('nest_video_edit_clips', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, clipRefs: [{ kind: 'video_edit.clip', id: `${owner.document.id}:a` }], name: '助手嵌套' })
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true, data: { verification: { verified: true } } })
+    if (!result.ok) throw new Error('嵌套失败')
+    const input = nestVideoEditClipsCapability.inputSchema.parse({ documentRef: { kind: 'video_edit.document', id: owner.document.id }, clipRefs: [{ kind: 'video_edit.clip', id: `${owner.document.id}:a` }], name: '助手嵌套' })
+    const output = nestVideoEditClipsCapability.outputSchema.parse(result.data)
+    const effects = nestVideoEditClipsCapability.resolveObservedEffects!(input, output)
+    expect(effects.map(effect => [effect.effect, effect.entityTypes, effect.count])).toEqual([
+      ['execute', ['video_edit.document'], 1], ['create', ['video_edit.sequence'], 1], ['create', ['video_edit.item'], 1], ['create', ['video_edit.clip'], 1], ['update', ['video_edit.sequence'], 1], ['update', ['video_edit.clip'], 2],
+    ])
+    for (const effect of effects) {
+      expect(effect.verified).toBe(true)
+      expect(nestVideoEditClipsCapability.control.impacts.some(impact => impact.effect === effect.effect && effect.entityTypes.every(type => impact.entityTypes.includes(type)))).toBe(true)
+    }
+    expect(output.parentSequenceRef.id).toBe(`${owner.document.id}:${owner.document.sequences[0].id}`)
+    expect(output.movedClipRefs.map(ref => ref.id)).toEqual(['a', 'sound'].map(id => `${owner.document.id}:${id}`))
     const clip = owner.document.sequences[0].clips[0]
     expect(savedVideoEdit(owner).sequences).toEqual(owner.document.sequences)
     expect((await app.read({ kind: 'video_edit.clip', id: `${owner.document.id}:${clip.id}` }, ['video_edit.clip.kind', 'video_edit.clip.speed_percent'])).properties).toMatchObject({ 'video_edit.clip.kind': 'sequence', 'video_edit.clip.speed_percent': 100 })

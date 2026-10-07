@@ -16,9 +16,10 @@ import { rescaleVideoEditFrame, type VideoEditRatio } from '@/core/videoEdit/tim
 import { resolveVideoEditDropMode, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { ensureVideoEditSequenceItem } from '@/core/videoEdit/nestedSequences'
 import { assertVideoEditSequenceGraph } from '@/core/videoEdit/sequenceGraph'
+import { applyTitleTemplate, TITLE_TEMPLATE_DRAG_MIME, titleTemplateDragSchema } from './videoEditTitleTemplates'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
-export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
+export type VideoEditDropInput = { kind: 'title_template'; templateId: string } | { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
 /**
  * 正在从素材面板拖出的素材项。拖动经过时间线时浏览器不让读拖拽数据（只能读类型），
  * 时间线按这份记录预演落点、画出片段虚影（所见即所得）；松手或取消后清空。
@@ -31,6 +32,7 @@ export function writeVideoEditItemDrag(transfer: DataTransfer, projectId: string
 export function endVideoEditItemDrag(): void { activeItemDrag = null }
 export function readActiveVideoEditItemDrag(): { projectId: string; itemIds: readonly string[] } | null { return activeItemDrag }
 export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
+  if (transfer.types.includes(TITLE_TEMPLATE_DRAG_MIME)) return titleTemplateDragSchema.parse(JSON.parse(transfer.getData(TITLE_TEMPLATE_DRAG_MIME)))
   if (transfer.types.includes(CODE_ASSET_DRAG_MIME)) { const assetId = readCodeAssetDrag(transfer); if (!assetId) throw new Error('代码资产引用无效。'); return { kind: 'code_asset', assetId } }
   if (transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME)) return videoEditSourceRangeSchema.parse(JSON.parse(transfer.getData(VIDEO_EDIT_SOURCE_DRAG_MIME)))
   if (transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME)) {
@@ -45,6 +47,7 @@ export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
 }
 
 export function acceptsVideoEditDrop(transfer: DataTransfer): boolean {
+  if (transfer.types.includes(TITLE_TEMPLATE_DRAG_MIME)) return true
   return transfer.types.includes(CODE_ASSET_DRAG_MIME) || transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME) || transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME) || transfer.types.includes(HENJI_DRAG_DATA_MIME) || transfer.types.includes('Files')
 }
 export function videoEditDropPaths(transfer: DataTransfer): string[] {
@@ -110,6 +113,10 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()
   const sequenceId = options.sequenceId ?? owner.activeSequenceId
+  if (input.kind === 'title_template') {
+    if (!placement) throw new Error('请把标题模板拖到时间线或节目监视器。')
+    return applyTitleTemplate(projectId, sequenceId, input.templateId, {}, placement)
+  }
   const filterTarget = owner.selection ? { sequenceId, clipId: owner.selection } : undefined
   if (input.kind === 'source_range') {
     if (!placement) throw new Error('请把源范围拖入时间线或节目监视器。')

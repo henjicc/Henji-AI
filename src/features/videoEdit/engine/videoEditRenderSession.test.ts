@@ -53,6 +53,13 @@ beforeEach(() => {
   platform.allowRoot.mockClear(); platform.dirname.mockClear()
 })
 
+it('离屏跟踪RGB尺寸进入既有渲染Worker请求，不开启第二条渲染路径', async () => {
+  const session = new VideoEditRenderSession(composition(), 1280)
+  await session.present(60, false, false, undefined, undefined, { width: 512, height: 512 })
+  expect(workers[0].messages.at(-1)?.message).toMatchObject({ kind: 'render', frame: 60, sequential: false, readRgb: { width: 512, height: 512 } })
+  await session.dispose()
+})
+
 it('预览与导出 Worker 接收完整嵌套图，子序列保持原始尺寸/PAR，媒体仅在共同入口转换', async () => {
   const root = composition(); const child = { ...root, id: 'child', name: '子序列', pixelAspectRatio: { numerator: 2, denominator: 1 } }
   const document = { ...root, sequences: [root, child], items: [{ id: 'nested-item', name: '嵌套', kind: 'sequence' as const, sequenceId: 'child' }] }

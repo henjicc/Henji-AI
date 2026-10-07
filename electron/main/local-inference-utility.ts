@@ -6,6 +6,7 @@ import { LocalModelSessions, loadOnnxRuntime } from './services/local-inference/
 import type { LocalInferenceEvent, LocalInferenceRequest, SmartRegionAnalysisJob } from './services/local-inference/protocol'
 import { runTracking, runTrackingCandidates, TrackingError, type TrackFrameRequest } from './services/local-inference/tracking/trackJob'
 import type { TrackingCandidatesJob, TrackingJob } from './services/local-inference/tracking/trackingProtocol'
+import { RenderedTrackingFrames } from './services/local-inference/tracking/renderedFrames'
 
 /*
  * 本地推理后台进程（重要记录 003、任务 4.7d）：onnxruntime-node 原生推理与取帧都在这里，主进程只协调。
@@ -16,6 +17,7 @@ const port = process.parentPort
 if (!port) throw new Error('本地推理进程缺少宿主连接')
 const post = (event: LocalInferenceEvent): void => port.postMessage(event)
 const log = (level: 'info' | 'warn', message: string, event: string, context: Record<string, unknown>): void => post({ type: 'log', level, message, event, context })
+const renderedFrames = new RenderedTrackingFrames((id, requestId, request) => post({ type: 'frames', id, requestId, request }))
 
 let sessions: Promise<LocalModelSessions> | undefined
 type QueuedJob = { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob }
@@ -24,7 +26,8 @@ const controllers = new Map<string, AbortController>()
 let running = false
 
 /** 跟踪取帧：帧网格第 first 帧起 count 帧（素材绝对时钟换成相对容器起点交给 FFmpeg）。 */
-function trackFrames(job: { ffmpegPath: string; source: string; containerStartUs: number; fps: number }, request: TrackFrameRequest, signal: AbortSignal): AsyncIterable<Uint8Array> {
+function trackFrames(job: TrackingJob | TrackingCandidatesJob, request: TrackFrameRequest, signal: AbortSignal): AsyncIterable<Uint8Array> {
+  if (typeof job.source !== 'string') return renderedFrames.frames(job.id, request, signal)
   const startUs = request.first * 1e6 / job.fps - job.containerStartUs
   return ffmpegFrames(job.ffmpegPath, { source: job.source, seekSeconds: Math.max(0, startUs / 1e6), durationSeconds: (request.count + 0.5) / job.fps, fps: job.fps } as SmartRegionAnalysisJob, request, signal)
 }
@@ -102,6 +105,7 @@ async function drain(): Promise<void> {
 
 port.on('message', (event) => {
   const request = event.data as LocalInferenceRequest
+  if (request.type === 'frames') { renderedFrames.reply(request.id, request.reply); return }
   if (request.type === 'analyze' || request.type === 'track' || request.type === 'candidates') { queue.push(request as QueuedJob); void drain() }
   else if (request.type === 'cancel') {
     const index = queue.findIndex(entry => entry.job.id === request.id)

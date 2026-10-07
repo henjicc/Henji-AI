@@ -7,8 +7,8 @@ import type { VideoEditTrackMethod, VideoEditTrackPrompt } from '../../core/vide
 
 /** 一个跟踪定义：素材 + 方式 + 提示（结果按这三样缓存；提示改了就是另一份结果）。 */
 export interface TrackingDefinition {
-  /** 素材的本地绝对路径（必须已授权）。 */
-  source: string
+  /** 已授权素材路径，或渲染器提供的嵌套合成内容身份。 */
+  source: TrackingSource
   method: VideoEditTrackMethod
   /** 按时间排序的提示（坐标是片段画面的归一化坐标，时间是素材绝对时钟的微秒）。 */
   prompts: VideoEditTrackPrompt[]
@@ -47,7 +47,7 @@ export type TrackingStatus =
 export interface TrackingProgressEvent { definition: TrackingDefinition; status: TrackingStatus }
 
 /** 点选候选：在 timeUs 这一帧点了 points，返回 3 个候选掩码（size × size 的 int8 logit，× 4）与可信度。 */
-export interface TrackingCandidatesRequest { source: string; timeUs: number; points: Array<[number, number, 0 | 1]> }
+export interface TrackingCandidatesRequest { source: TrackingSource; timeUs: number; points: Array<[number, number, 0 | 1]> }
 export interface TrackingCandidates { size: number; candidates: Array<{ logits: Int8Array; score: number }> }
 
 export function trackingDefinitionKey(definition: TrackingDefinition): string {
@@ -60,6 +60,8 @@ export const TRACKING_IPC_CHANNELS = {
   stop: 'tracking:stop',
   candidates: 'tracking:candidates',
   progress: 'tracking:progress',
+  frames: 'tracking:frames',
+  framesReply: 'tracking:frames-reply',
 } as const
 
 export interface TrackingPlatform {
@@ -71,4 +73,32 @@ export interface TrackingPlatform {
   stop(definition: TrackingDefinition): Promise<void>
   candidates(request: TrackingCandidatesRequest): Promise<TrackingCandidates>
   onProgress(handler: (event: TrackingProgressEvent) => void): () => void
+  onFrameRequest(handler: (event: TrackingFrameEvent) => void): () => void
+  replyFrames(reply: TrackingFrameReply): Promise<void>
+}
+
+/** 文件源保留已授权裸路径；合成源以内容签名标识，绝不伪装成文件路径。 */
+export interface TrackingSequenceSource { kind: 'sequence'; signature: string; fps: number; width: number; height: number }
+export type TrackingSource = string | TrackingSequenceSource
+export interface TrackingFrameRequest { first: number; count: number; width: number; height: number }
+export type TrackingFrameEvent =
+  | { kind: 'frames'; id: string; jobId: string; source: TrackingSequenceSource; request: TrackingFrameRequest }
+  | { kind: 'release'; jobId: string }
+export interface TrackingFrameReply { id: string; frames: Uint8Array[]; error?: string }
+export type TrackingFrameProvider = (jobId: string, request: TrackingFrameRequest, signal: AbortSignal) => Promise<Uint8Array[]>
+export const TRACKING_FRAME_MAX_BYTES = 16 * 1024 ** 2
+export const TRACKING_FRAME_MAX_COUNT = 8
+export const TRACKING_FRAME_MAX_PENDING = 4
+
+export function trackingFrameBatchCount(width: number, height: number): number {
+  if (![width, height].every(value => Number.isSafeInteger(value) && value > 0 && value <= 1280)) throw new Error('跟踪帧尺寸无效。')
+  return Math.min(TRACKING_FRAME_MAX_COUNT, Math.floor(TRACKING_FRAME_MAX_BYTES / (width * height * 3)))
+}
+export function assertTrackingFrameRequest(request: TrackingFrameRequest): void {
+  const max = trackingFrameBatchCount(request.width, request.height)
+  if (!Number.isSafeInteger(request.first) || request.first < 0 || !Number.isSafeInteger(request.count) || request.count < 1 || request.count > max || request.first + request.count > 1800 * 30 + 1) throw new Error('跟踪帧批次超出范围。')
+}
+export function assertTrackingFrames(request: TrackingFrameRequest, frames: Uint8Array[]): void {
+  assertTrackingFrameRequest(request)
+  if (frames.length !== request.count || frames.some(frame => !(frame instanceof Uint8Array) || frame.byteLength !== request.width * request.height * 3)) throw new Error('跟踪帧批次不完整或尺寸不符。')
 }

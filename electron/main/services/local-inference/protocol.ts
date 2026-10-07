@@ -2,6 +2,7 @@ import type { SmartRegionAnalysisKind, SmartRegionSummary } from '../../../../sr
 import type { LocalExecutionProvider } from './providers'
 import type { OnnxExtraOutput } from './tracking/onnxGraphOutputs'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
+import type { TrackingFrameReply, TrackingFrameRequest } from '../../../../src/platform/contracts/tracking'
 
 /*
  * 主进程 ↔ 本地推理后台进程（utility process）的消息。主进程负责解析素材、准备模型与缓存位置，
@@ -47,6 +48,7 @@ export type LocalInferenceRequest =
   | { type: 'track'; job: TrackingJob }
   | { type: 'candidates'; job: TrackingCandidatesJob }
   | { type: 'cancel'; id: string }
+  | { type: 'frames'; id: string; reply: TrackingFrameReply }
 
 export interface SmartRegionAnalysisResult {
   model: LocalInferenceModelName
@@ -60,6 +62,7 @@ export interface SmartRegionAnalysisResult {
 }
 
 export type LocalInferenceEvent =
+  | { type: 'frames'; id: string; requestId: string; request: TrackingFrameRequest }
   | { type: 'progress'; id: string; done: number; total: number }
   | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult }
   | { type: 'failed'; id: string; code: LocalInferenceFailureCode; message: string }

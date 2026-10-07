@@ -152,7 +152,7 @@ export const videoEditDocumentSchema = z.object({
         for (const effect of clip.effects ?? []) assertVideoEditKeyframeTimes(effect.builtin?.curves, clip.duration, `效果“${effect.name}”`)
         if (clip.kind === 'adjustment' && Object.keys(clip.curves ?? {}).some(key => key !== 'opacity')) issue('调整图层只允许不透明度关键帧。')
       } catch (error) { issue(error instanceof Error ? error.message : '片段关键帧无效。') }
-      if (clip.trackers?.length && !['video', 'image'].includes(clip.kind)) issue('跟踪器只能放在视频或图片片段上；嵌套序列请进入子序列建立跟踪。')
+      if (clip.trackers?.length && !['video', 'image', 'sequence'].includes(clip.kind)) issue('跟踪器只能放在视频、图片或嵌套序列片段上。')
       if (new Set(clip.trackers?.map(tracker => tracker.id)).size !== (clip.trackers?.length ?? 0)) issue(`片段“${clip.name}”的跟踪器 ID 重复。`)
       const item = document.items.find(item => item.id === clip.itemId)
       const media = document.media.find(media => media.id === item?.mediaId)

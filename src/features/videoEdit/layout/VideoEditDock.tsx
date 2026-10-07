@@ -13,6 +13,7 @@ import { VideoEditEffectsPanel } from '../panels/VideoEditEffectsPanel'
 import { VideoEditSourcePanel } from '../panels/VideoEditSourcePanel'
 import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
 import { VideoEditEffectsLibraryPanel } from '../panels/VideoEditEffectsLibraryPanel'
+import { VideoEditTitleTemplatesPanel } from '../panels/VideoEditTitleTemplatesPanel'
 import { readVideoEditSource, subscribeVideoEditSource } from '../application/videoEditSource'
 import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
@@ -38,7 +39,8 @@ function SourceBody({ visible }: { visible: boolean }): React.ReactElement { ret
 const VIDEO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock')
 function TrackingBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="tracking"><VideoEditTrackingPanel {...useDock()} visible={visible} /></div> }
 function LumetriBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="lumetri"><VideoEditLumetriPanel {...useDock()} visible={visible} /></div> }
-const BODIES: Record<VideoEditPanelId, PanelBody> = { lumetri: LumetriBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
+function TitleTemplatesBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="title_templates"><VideoEditTitleTemplatesPanel {...useDock()} visible={visible} /></div> }
+const BODIES: Record<VideoEditPanelId, PanelBody> = { title_templates: TitleTemplatesBody, lumetri: LumetriBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {
   return function DockPanel({ api }: IDockviewPanelProps): React.ReactElement {
     const [visible, setVisible] = useState(api.isVisible)
@@ -95,7 +97,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     const event = api.onDidLayoutChange(() => { clearTimeout(timer); timer = setTimeout(save, 200) })
     const focus = api.onDidActivePanelChange(value => {
       const panel = value.panel?.id
-      if (panel && ['project', 'source', 'program', 'timeline', 'effects', 'content', 'lumetri'].includes(panel) && instance.activePanel !== panel && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'])
+      if (panel && ['project', 'source', 'program', 'timeline', 'effects', 'content', 'lumetri', 'title_templates'].includes(panel) && instance.activePanel !== panel && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'])
     })
     disposeRef.current = () => { event.dispose(); focus.dispose(); unbindGestures(); if (timer !== undefined) save() }
   }, [onApiChange, onError, instance])

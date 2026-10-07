@@ -4,9 +4,12 @@ import { clipSourceSeconds } from './document'
 import { videoEditTransitionClipIds } from './transitions'
 
 /** Shared by matching frames, preview and export (floor selects the child's half-open frame). */
+export function videoEditSequenceFrameAtSeconds(seconds: number, fps: number): number {
+  return Math.max(0, Math.min(Math.floor(fps * 1800) - 1, Math.floor(seconds * fps + 1e-7)))
+}
 export function videoEditNestedFrame(parent: Pick<VideoEditComposition, 'fps'>, clip: VideoEditClip, child: Pick<VideoEditComposition, 'fps'>, frame: number): number {
   // A child may be shortened after nesting. Keep the parent's edit and source clock; its now-empty tail is transparent.
-  return Math.max(0, Math.min(Math.floor(child.fps * 1800) - 1, Math.floor(clipSourceSeconds(clip, frame, parent.fps) * child.fps + 1e-7)))
+  return videoEditSequenceFrameAtSeconds(clipSourceSeconds(clip, frame, parent.fps), child.fps)
 }
 /** Existing sequence rows are a projection; create a persisted item only when it is actually placed. */
 export function ensureVideoEditSequenceItem(document: VideoEditDocument, sequenceId: string): { document: VideoEditDocument; itemId: string } {

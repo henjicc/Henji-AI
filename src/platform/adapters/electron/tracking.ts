@@ -14,5 +14,7 @@ export function createElectronTracking(): TrackingPlatform {
     stop: (definition) => native().stop(definition),
     candidates: (request) => native().candidates(request),
     onProgress: (handler) => native().onProgress(handler),
+    onFrameRequest: handler => native().onFrameRequest(handler),
+    replyFrames: reply => native().replyFrames(reply),
   }
 }

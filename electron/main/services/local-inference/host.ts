@@ -1,5 +1,6 @@
 import type { LocalInferenceEvent, LocalInferenceFailureCode, LocalInferenceRequest, SmartRegionAnalysisJob, SmartRegionAnalysisResult } from './protocol'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
+import { assertTrackingFrames, type TrackingFrameProvider } from '../../../../src/platform/contracts/tracking'
 
 /*
  * 主进程侧的本地推理宿主：按需启动后台进程（utility process），派发分析、转发进度与日志、取消；
@@ -23,7 +24,7 @@ export interface LocalInferenceHostOptions {
   idleMs?: number
 }
 
-interface Pending { resolve(value: unknown): void; reject(error: Error): void; progress(done: number, total: number): void }
+interface Pending { resolve(value: unknown): void; reject(error: Error): void; progress(done: number, total: number): void; frames?: TrackingFrameProvider; controller: AbortController; framePending: boolean }
 
 export class LocalInferenceHost {
   private child?: LocalInferenceChild
@@ -41,8 +42,23 @@ export class LocalInferenceHost {
       if (message.type === 'log') { this.options.log(message.level, message.message, message.event, message.context); return }
       const entry = this.pending.get(message.id)
       if (!entry) return
+      if (message.type === 'frames') {
+        void (async () => {
+          let frames: Uint8Array[] = []; let error: string | undefined; let ownsFrameRequest = false
+          try {
+            if (!entry.frames || entry.framePending) throw new Error('跟踪取帧来源不可用或请求过多。')
+            entry.framePending = true; ownsFrameRequest = true
+            frames = await entry.frames(message.id, message.request, entry.controller.signal)
+            assertTrackingFrames(message.request, frames)
+          } catch (failure) { error = failure instanceof Error ? failure.message.slice(0, 300) : '跟踪取帧失败。' }
+          finally { if (ownsFrameRequest) entry.framePending = false }
+          if (this.child === child && this.pending.get(message.id) === entry) child.postMessage({ type: 'frames', id: message.id, reply: { id: message.requestId, frames: error ? [] : frames, ...(error ? { error } : {}) } })
+        })()
+        return
+      }
       if (message.type === 'progress') { entry.progress(message.done, message.total); return }
       this.pending.delete(message.id)
+      entry.controller.abort()
       if (message.type === 'done') entry.resolve(message.result)
       else entry.reject(new LocalInferenceFailure(message.code, message.message))
       this.scheduleIdle()
@@ -51,7 +67,7 @@ export class LocalInferenceHost {
       if (this.child !== child) return
       this.child = undefined
       const interrupted = [...this.pending.values()]; this.pending.clear()
-      for (const entry of interrupted) entry.reject(new LocalInferenceFailure('inference', '本地推理进程意外退出。'))
+      for (const entry of interrupted) { entry.controller.abort(); entry.reject(new LocalInferenceFailure('inference', '本地推理进程意外退出。')) }
       if (interrupted.length) this.options.log('error', '本地推理进程意外退出', 'local_inference.process.exited', { code, interrupted: interrupted.length })
     })
     return child
@@ -73,30 +89,30 @@ export class LocalInferenceHost {
   }
 
   /** 跟踪（4.10）：与分析同一个后台进程、同一个队列（显卡与解码都是独占负载）。 */
-  track(job: TrackingJob, progress: (done: number, total: number) => void = () => undefined): Promise<TrackingJobResult> {
-    return this.send<TrackingJobResult>({ type: 'track', job }, job.id, progress)
+  track(job: TrackingJob, progress: (done: number, total: number) => void = () => undefined, frames?: TrackingFrameProvider): Promise<TrackingJobResult> {
+    return this.send<TrackingJobResult>({ type: 'track', job }, job.id, progress, frames)
   }
 
-  candidates(job: TrackingCandidatesJob): Promise<TrackingCandidatesResult> {
-    return this.send<TrackingCandidatesResult>({ type: 'candidates', job }, job.id, () => undefined)
+  candidates(job: TrackingCandidatesJob, frames?: TrackingFrameProvider): Promise<TrackingCandidatesResult> {
+    return this.send<TrackingCandidatesResult>({ type: 'candidates', job }, job.id, () => undefined, frames)
   }
 
-  private send<T>(request: LocalInferenceRequest, id: string, progress: (done: number, total: number) => void): Promise<T> {
+  private send<T>(request: LocalInferenceRequest, id: string, progress: (done: number, total: number) => void, frames?: TrackingFrameProvider): Promise<T> {
     if (this.disposed) return Promise.reject(new LocalInferenceFailure('cancelled', '本地推理已关闭。'))
     clearTimeout(this.idleTimer)
     const child = this.ensureChild()
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: value => resolve(value as T), reject, progress })
+      this.pending.set(id, { resolve: value => resolve(value as T), reject, progress, frames, controller: new AbortController(), framePending: false })
       child.postMessage(request)
     })
   }
 
-  cancel(id: string): void { if (this.pending.has(id)) this.child?.postMessage({ type: 'cancel', id }) }
+  cancel(id: string): void { const entry = this.pending.get(id); if (entry) { entry.controller.abort(); this.child?.postMessage({ type: 'cancel', id }) } }
 
   dispose(): void {
     this.disposed = true
     clearTimeout(this.idleTimer)
-    for (const entry of this.pending.values()) entry.reject(new LocalInferenceFailure('cancelled', '本地推理已关闭。'))
+    for (const entry of this.pending.values()) { entry.controller.abort(); entry.reject(new LocalInferenceFailure('cancelled', '本地推理已关闭。')) }
     this.pending.clear()
     this.child?.kill(); this.child = undefined
   }

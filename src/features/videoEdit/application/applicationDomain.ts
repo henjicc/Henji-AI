@@ -1,4 +1,6 @@
 import { handleVideoEditMulticamCapability } from './videoEditMulticamCapability'
+import { handleTitleTemplateCapability } from './videoEditTitleTemplateCapability'
+import { TitleTemplateCollectionExecutor } from './videoEditTitleTemplateReflection'
 import { handleVideoEditProxyCapability } from './videoEditProxyCapability'
 import { reframeVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditReframeCapability'
 import { handleVideoEditTextCapability } from './videoEditTextCapability'
@@ -57,6 +59,7 @@ let stopSmartRegions: (() => void) | null = null
 export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
+    engine.registerCollectionExecutor(new TitleTemplateCollectionExecutor())
     engine.registerCollectionExecutor(new VideoEditExportPresetExecutor())
     for (const entityType of ['video_edit.document', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
     engine.registerMutationExecutor(new VideoEditSourceExecutor())
@@ -84,6 +87,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      const title = await handleTitleTemplateCapability(definition.id, raw, context.signal)
+      if (title !== undefined) return title
       const multicam = await handleVideoEditMulticamCapability(definition.id, raw, context.signal)
       if (multicam !== undefined) return multicam
       const textEdit = await handleVideoEditTextCapability(definition.id, raw, context.signal)
@@ -211,7 +216,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     })
   },
   resolvePersistenceParticipants(steps) {
-    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && step.target.kind !== 'video_edit.source' ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && step.entityType !== 'video_edit.export_preset' && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && step.target.kind !== 'video_edit.source' ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
     return [...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)

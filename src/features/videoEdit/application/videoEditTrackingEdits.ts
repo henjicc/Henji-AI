@@ -9,7 +9,8 @@ import type { VideoEditCompositeTarget } from './videoEditCompositing'
 
 export function assertVideoEditTrackerClip(document: VideoEditDocument, clip: VideoEditClip): void {
   const media = videoEditClipMedia(document, clip)
-  if (!media || (clip.kind !== 'video' && clip.kind !== 'image')) throw new Error('请选择视频或图片片段建立跟踪。')
+  if (clip.kind === 'sequence' && document.sequences.some(sequence => sequence.id === document.items.find(item => item.id === clip.itemId)?.sequenceId)) return
+  if (!media || (clip.kind !== 'video' && clip.kind !== 'image')) throw new Error('请选择视频、图片或嵌套序列片段建立跟踪。')
 }
 export function putVideoEditTracker(document: VideoEditDocument, clip: VideoEditClip, value: unknown): VideoEditTracker {
   assertVideoEditTrackerClip(document, clip)

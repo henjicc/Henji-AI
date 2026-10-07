@@ -1,4 +1,4 @@
-import { TRACKING_IPC_CHANNELS, type TrackingPlatform, type TrackingProgressEvent } from '../../src/platform/contracts/tracking'
+import { TRACKING_IPC_CHANNELS, type TrackingPlatform, type TrackingProgressEvent, type TrackingFrameEvent } from '../../src/platform/contracts/tracking'
 
 type NativeInvoke = <T>(channel: string, payload?: unknown) => Promise<T>
 type Subscribe = (channel: string, listener: (payload: unknown) => void) => () => void
@@ -12,5 +12,7 @@ export function createTrackingApi(invoke: NativeInvoke, subscribe: Subscribe): T
     stop: (definition) => invoke(c.stop, definition),
     candidates: (request) => invoke(c.candidates, request),
     onProgress: (handler) => subscribe(c.progress, (payload) => handler(payload as TrackingProgressEvent)),
+    onFrameRequest: handler => subscribe(c.frames, payload => handler(payload as TrackingFrameEvent)),
+    replyFrames: reply => invoke(c.framesReply, reply),
   }
 }

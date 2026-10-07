@@ -9,6 +9,7 @@ import { VideoEditNativeFrames } from './videoEditNativeFrameSource'
 import { VideoEditFrameRouter, type VideoEditDecodeSettings } from './videoEditFrameRouter'
 import { setVideoEditTrackResults, type VideoEditTrackResults } from './videoEditTrackResults'
 import { setVideoEditSmartRegionSegments, type VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
+import { readVideoEditTrackingRgb } from './videoEditTrackingPixels'
 
 /**
  * Decoding settings of one render session. `localPaths` maps each media item's fetchable URL (its path in the worker)
@@ -24,11 +25,11 @@ export type RenderRequest = { id: number } & (
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
   | { kind: 'dispose' }
-  | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
+  | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number; readRgb?: { width: number; height: number } }
   | { kind: 'audio'; start: number; duration: number }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -105,8 +106,9 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
         const finish = async (): Promise<void> => {
           const start = performance.now()
           await result.completion
-          const bitmap = direct || !result.presented ? undefined : result.canvas.transferToImageBitmap()
-          self.postMessage({ id: request.id, bitmap, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: bitmap ? [bitmap] : [] })
+          const rgb = request.readRgb && result.presented ? readVideoEditTrackingRgb(result.canvas, request.readRgb) : undefined
+          const bitmap = rgb || direct || !result.presented ? undefined : result.canvas.transferToImageBitmap()
+          self.postMessage({ id: request.id, bitmap, rgb, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : [] })
         }
         if (direct && request.scrubbing) {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)

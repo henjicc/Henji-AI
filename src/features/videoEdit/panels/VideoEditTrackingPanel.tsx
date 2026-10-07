@@ -20,8 +20,7 @@ export function VideoEditTrackingPanel({ instance, onError }: { instance: VideoE
   const [pointCount, setPointCount] = useState('1')
   const sequence = getActiveVideoEditSequence(instance)
   const clip = sequence.clips.find(clip => clip.id === instance.selection)
-  if (clip?.kind === 'sequence') return <UiEmpty title="在子序列中建立跟踪" description="双击嵌套片段进入子序列，在其中的视频或图片片段上点选或框住要跟踪的物体。" />
-  if (!clip || (clip.kind !== 'video' && clip.kind !== 'image')) return <UiEmpty title="选择视频或图片片段" description="在节目画面上点选或框住要跟踪的物体。" />
+  if (!clip || !['video', 'image', 'sequence'].includes(clip.kind)) return <UiEmpty title="选择视频、图片或嵌套片段" description="在节目画面上点选或框住要跟踪的物体。" />
   const projectId = instance.document.id; const sequenceId = sequence.id
   const editing = getVideoEditTrackingEditing()
   const selectedEditing = editing?.projectId === projectId && editing.sequenceId === sequenceId && editing.clipId === clip.id ? editing : null

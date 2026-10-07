@@ -1,6 +1,7 @@
 import type { LocalInferenceModelFile } from '../protocol'
 import type { LocalExecutionProvider } from '../providers'
 import type { VideoEditTrackMethod, VideoEditTrackQuad, VideoEditTrackPrompt } from '../../../../../src/core/videoEdit/tracking'
+import type { TrackingSource } from '../../../../../src/platform/contracts/tracking'
 
 /*
  * 跟踪任务（任务 4.10）：主进程准备参数（素材、模型、帧网格、已有结果），本地推理后台进程取帧、推理、写结果文件。
@@ -21,7 +22,7 @@ export interface TrackingJob {
   method: VideoEditTrackMethod
   models: LocalInferenceModelFile[]
   ffmpegPath: string
-  source: string
+  source: TrackingSource
   /** 容器起点（微秒）：帧网格是素材绝对时钟，交给 FFmpeg 定位前要减去。 */
   containerStartUs: number
   fps: number
@@ -60,7 +61,7 @@ export interface TrackingCandidatesJob {
   id: string
   models: LocalInferenceModelFile[]
   ffmpegPath: string
-  source: string
+  source: TrackingSource
   containerStartUs: number
   fps: number
   frame: number

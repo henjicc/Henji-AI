@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { LocalModelId } from '../../../../src/platform/contracts/localModels'
 import {
   trackingDefinitionKey, type TrackingCandidates, type TrackingCandidatesRequest, type TrackingDefinition, type TrackingFailureReason,
-  type TrackingProgressEvent, type TrackingRange, type TrackingResultRef, type TrackingRunOptions, type TrackingStatus,
+  type TrackingProgressEvent, type TrackingRange, type TrackingResultRef, type TrackingRunOptions, type TrackingStatus, type TrackingFrameProvider,
 } from '../../../../src/platform/contracts/tracking'
 import { decodeSmartRegionLayout, smartRegionLayoutBytes } from '../../../../src/core/videoEdit/smartRegions'
 import { normalizeVideoEditTracker, videoEditTrackerSchema, videoEditTrackFps, videoEditTrackFrame, videoEditTrackFrameTime, type VideoEditTrackHeader } from '../../../../src/core/videoEdit/tracking'
@@ -27,8 +27,8 @@ export interface TrackingServiceDependencies {
   ensureModel(id: LocalModelId): Promise<Array<{ name: string; path: string }>>
   ffmpegPath(): Promise<string>
   results: ContentDiskCache
-  track(job: TrackingJob, progress: (done: number, total: number) => void): Promise<TrackingJobResult>
-  candidates(job: TrackingCandidatesJob): Promise<TrackingCandidatesResult>
+  track(job: TrackingJob, progress: (done: number, total: number) => void, frames?: TrackingFrameProvider): Promise<TrackingJobResult>
+  candidates(job: TrackingCandidatesJob, frames?: TrackingFrameProvider): Promise<TrackingCandidatesResult>
   cancel(id: string): void
   readHead(path: string, bytes: number): Promise<Uint8Array>
   providers: LocalExecutionProvider[]
@@ -73,6 +73,11 @@ export class TrackingService {
     let pending = this.prepared.get(definitionKey)
     if (!pending) {
       pending = (async () => {
+        if (typeof definition.source !== 'string') {
+          const source = definition.source
+          const fps = videoEditTrackFps(source.fps)
+          return { identity: source.signature, probe: { width: source.width, height: source.height, fps: source.fps, startSeconds: 0, durationSeconds: 1800 }, fps, key: digest(['tracking', TRACKING_RESULT_VERSION, source, definition.method, definition.prompts, fps]) }
+        }
         const { identity } = await this.deps.identity(definition.source)
         let probe: SmartRegionSourceProbe
         try { probe = await this.deps.probe(definition.source) } catch (error) { throw new TrackingFailure('decode', `素材读取失败：${error instanceof Error ? error.message : String(error)}`) }
@@ -108,7 +113,7 @@ export class TrackingService {
     return found ? { state: 'ready', result: found.result } : { state: 'idle' }
   }
 
-  async run(input: TrackingDefinition, range: TrackingRange, options: TrackingRunOptions): Promise<TrackingStatus> {
+  async run(input: TrackingDefinition, range: TrackingRange, options: TrackingRunOptions, frames?: TrackingFrameProvider): Promise<TrackingStatus> {
     const definition = this.normalize(input)
     const definitionKey = trackingDefinitionKey(definition)
     const running = this.jobs.get(definitionKey)
@@ -117,7 +122,7 @@ export class TrackingService {
     if (this.jobs.has(definitionKey)) return this.jobs.get(definitionKey)!.status
     const found = await this.existing(prepared)
     const job: Job = { id: randomUUID(), definition, status: { state: 'tracking', progress: 0, direction: options.direction, ...(found ? { result: found.result } : {}) }, stopped: false, done: Promise.resolve({ state: 'idle' }) }
-    job.done = this.execute(job, prepared, range, options, found).then(
+    job.done = this.execute(job, prepared, range, options, found, frames).then(
       (result): TrackingStatus => ({ state: 'ready', result: result.ref, ...(result.stopped ? { stopped: true } : {}) }),
       (error: unknown): TrackingStatus => {
         // 停止（含还在下载模型、排队时就停）不算失败：回到已有结果。
@@ -157,14 +162,14 @@ export class TrackingService {
     this.deps.cancel(job.id)
   }
 
-  async candidates(request: TrackingCandidatesRequest): Promise<TrackingCandidates> {
+  async candidates(request: TrackingCandidatesRequest, frames?: TrackingFrameProvider): Promise<TrackingCandidates> {
     const prepared = await this.prepare({ source: request.source, method: 'shape', prompts: [{ timeUs: request.timeUs, points: request.points }] })
     const job: TrackingCandidatesJob = {
       id: randomUUID(), models: await this.models('shape'), ffmpegPath: await this.deps.ffmpegPath(), source: request.source,
       containerStartUs: Math.round(prepared.probe.startSeconds * 1e6), fps: prepared.fps, frame: videoEditTrackFrame(request.timeUs, prepared.fps),
       points: request.points, providers: this.deps.providers,
     }
-    const result = await this.deps.candidates(job)
+    const result = await this.deps.candidates(job, frames)
     return { size: result.size, candidates: result.candidates }
   }
 
@@ -188,7 +193,7 @@ export class TrackingService {
     this.deps.emit({ definition: job.definition, status })
   }
 
-  private async execute(job: Job, prepared: Prepared, range: TrackingRange, options: TrackingRunOptions, found: { path: string } | undefined): Promise<{ ref: TrackingResultRef; stopped: boolean }> {
+  private async execute(job: Job, prepared: Prepared, range: TrackingRange, options: TrackingRunOptions, found: { path: string } | undefined, frames?: TrackingFrameProvider): Promise<{ ref: TrackingResultRef; stopped: boolean }> {
     const { definition } = job
     const started = Date.now()
     this.deps.log('info', '跟踪开始', 'tracking.run.start', { method: definition.method, prompts: definition.prompts.length, direction: options.direction, limit: options.limit ?? null, resume: Boolean(found) })
@@ -204,7 +209,7 @@ export class TrackingService {
       range: { first: videoEditTrackFrame(range.startUs, fps), last: Math.max(videoEditTrackFrame(range.startUs, fps), Math.ceil(range.endUs * fps / 1e6) - 1) },
       direction: options.direction, ...(options.limit ? { limit: options.limit } : {}), ...(found ? { existingPath: found.path } : {}), outputPath: output, providers: this.deps.providers,
     }
-    const result = await this.deps.track(trackingJob, (done, total) => { if (!this.disposed) this.publish(job, { ...job.status, state: 'tracking', progress: Math.min(0.99, done / Math.max(1, total)), direction: options.direction } as TrackingStatus) })
+    const result = await this.deps.track(trackingJob, (done, total) => { if (!this.disposed) this.publish(job, { ...job.status, state: 'tracking', progress: Math.min(0.99, done / Math.max(1, total)), direction: options.direction } as TrackingStatus) }, frames)
     let path: string
     try { path = await this.deps.results.adopt(prepared.key, output) } catch (error) { throw new TrackingFailure('disk', `跟踪结果写入缓存失败：${error instanceof Error ? error.message : String(error)}`) }
     this.deps.log('info', result.stopped ? '跟踪已停止（保留已跟踪的部分）' : '跟踪完成', result.stopped ? 'tracking.run.stopped' : 'tracking.run.completed', {
