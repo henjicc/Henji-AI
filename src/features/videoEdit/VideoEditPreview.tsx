@@ -84,8 +84,13 @@ function programDropZoneAt(event: React.DragEvent<HTMLElement>): VideoEditDropMo
 }
 
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
-/** 暂停画面停稳这么久后才做起播预热，连续点击、拖动定位期间不为每个中间位置解码。 */
-const PLAY_ARM_IDLE_MS = 250
+/**
+ * 起播预热的时机：点击定位、松手后画面一出来就预热（人从松手到按空格至少一两百毫秒，正好用来解码）；
+ * 拖动中指针停住这么久也预热，再动一下即中止（取消原生解码很便宜）。
+ */
+const PLAY_ARM_SCRUB_REST_MS = 120
+/** 刷新周期每隔这么久才重新量一次（窗口可能被拖到另一块显示器）。 */
+const DISPLAY_PERIOD_REFRESH_MS = 5000
 /** 第一块声音已混好时的起播提前量：只够把它排进声音时钟。 */
 const PLAY_PREMIXED_LEAD_SECONDS = 0.03
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
@@ -179,7 +184,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     let playbackInFlight = 0
     // 起播预热时提前混好的第一块声音：起播时钟不必再留 100ms 等混音。
     let displayPeriod: number | undefined
-    let firstBlock: { document: VideoEditComposition; from: number; duration: number; buffer: Promise<AudioBuffer> } | undefined
+    let displayMeasuredAt = -Infinity
+    let firstBlock: { document: VideoEditComposition; from: number; duration: number; buffer: Promise<AudioBuffer>; ready: boolean } | undefined
     // 回放分辨率（4.9）：播放用所选分辨率，暂停默认回到完整；选帧、设封面期间强制完整。
     let appliedDivisor: VideoEditRenderDivisor = 1
     let captureFull = 0
@@ -299,8 +305,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
             if (audio) meter ??= createVideoEditAudioMeter(audio, document.channels)
           }
           if (stopped) return
-          const premixed = firstBlock?.document === document && firstBlock.from === initialFrame / document.fps ? await firstBlock.buffer.then(() => true, () => false) : false
-          if (stopped) return
+          // 预热还没混完（刚定位就按空格）不等它：照常留 100ms，晚到的那块由声音排程从中途接上。
+          const premixed = firstBlock?.document === document && firstBlock.from === initialFrame / document.fps && firstBlock.ready
           const lead = premixed ? PLAY_PREMIXED_LEAD_SECONDS : 0.1
           // 起点放在两次刷新正中间，避免每帧呈现时刻贴着刷新边界来回跳（见 videoEditDisplayClock）。
           const vsync = displayPeriod ? await nextVideoEditDisplayFrame() : undefined
@@ -364,20 +370,21 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
           }
         }
-        // 起播预热：暂停画面停稳后，在后台把前向解码定位到播放头（从关键帧解到当前帧），按下播放即可直接出下一帧。
-        if (!playing && !current.scrubbing && lastFrame === current.frame && current.frame === lastRequested && (armedDocument !== document || armedFrame !== current.frame) && performance.now() - lastPresentation > PLAY_ARM_IDLE_MS && captureFull === 0) {
+        // 起播预热：暂停画面一出来，就在后台把前向解码定位到播放头（从关键帧解到当前帧），按下播放即可直接出下一帧。
+        if (!playing && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && (!current.scrubbing || performance.now() - lastPresentation > PLAY_ARM_SCRUB_REST_MS) && captureFull === 0) {
           armedDocument = document; armedFrame = current.frame
           // 声音设备一并提前打开（首次创建 AudioContext 在 Windows 上要几百毫秒）。
           firstBlock = undefined
           if (audibleVideoEditClips(document).length && (!audio || audio.sampleRate === document.sampleRate)) {
             audio ??= new AudioContext({ sampleRate: document.sampleRate }); void audio.resume().catch(() => undefined)
             const from = current.frame / document.fps; const duration = Math.min(VIDEO_EDIT_AUDIO_BLOCK_SECONDS, videoEditDuration(document) / document.fps - from)
-            if (duration > 0) { firstBlock = { document, from, duration, buffer: (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration) }; firstBlock.buffer.catch(() => undefined) }
+            if (duration > 0) { const block = { document, from, duration, buffer: (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration), ready: false }; firstBlock = block; block.buffer.then(() => { block.ready = true }, () => undefined) }
           }
-          await renderer.armPlayback(current.frame)
+          // 预热只是提速：失败不影响画面，起播时照常从头定位。
+          await Promise.resolve().then(() => renderer.armPlayback(current.frame)).catch(error => logger.debug('起播预热未完成', { event: 'video_edit.preview.arm_failed', error, context: { projectId: instance.document.id } }))
           if (stopped) return
           // 刷新周期在后台量，不挡住紧接着的起播。
-          void measureVideoEditDisplayPeriod().then(period => { if (period) displayPeriod = period })
+          if (performance.now() - displayMeasuredAt > DISPLAY_PERIOD_REFRESH_MS) { displayMeasuredAt = performance.now(); void measureVideoEditDisplayPeriod().then(period => { if (period) displayPeriod = period }) }
           if (stopped) return
         }
         if (!stopped && !scheduled) timer = setTimeout(() => { void loop() }, current.playing ? 0 : 2)

@@ -18,6 +18,7 @@ vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: clas
   dispose = pixel.dispose
   mixAudio = pixel.mixAudio
   setRenderDivisor = pixel.scale
+  armPlayback = vi.fn(async () => undefined)
   setSmartRegions = vi.fn()
   present(frame: number, sequential?: boolean, _scrubbing?: boolean, _deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, resolve, reject, submitted })) }
 } }))
