@@ -486,6 +486,11 @@
       }
     },
     "videoEdit": {
+      "binsFirstLabel": "名称排序时素材箱优先",
+      "folderBinsLabel": "导入时按文件夹建素材箱",
+      "duplicatePolicyLabel": "重复文件",
+      "duplicateSkip": "跳过",
+      "duplicateImport": "仍导入一份",
       "selectionFollowsPlayheadLabel": "播放头自动选中片段",
       "selectionFollowsPlayheadInfo": "对应 PR 的“选择跟随播放指示器”：播放或拖动播放头时，自动选中当前帧最上面的可见片段，效果控件随之显示它的参数。"
     },

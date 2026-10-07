@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { videoEditUserErrorMessage } from './application/videoEditUserError'
-import { cancelVideoEditImport, videoEditImportTask } from './application/videoEditImportTask'
+import { subscribeVideoEditImportCompletion } from './application/videoEditImportTask'
+import { VideoEditImportProgress } from './panels/VideoEditImportProgress'
 import { VideoEditProjectsPage } from './VideoEditProjectsPage'
 import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, Redo2, Undo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -58,7 +59,6 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
   const { t } = useTranslation('ui')
   const sequence = findActiveVideoEditSequence(instance); const projectId = instance.document.id
   const task = videoEditExportTask(projectId)
-  const importing = videoEditImportTask(projectId)
   const marked = instance.inFrame !== null || instance.outFrame !== null ? (() => { try { return videoEditExportRange(instance) } catch { return undefined } })() : undefined
   const [collecting, setCollecting] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -83,7 +83,6 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
       } finally { setCollecting(false) }
     })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
     {task?.state === 'running' && <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton>}
-    {importing && <UiButton aria-label="取消导入素材" onClick={() => cancelVideoEditImport(projectId)}>{importing.phase === 'enumerating' ? `正在查找素材 ${importing.total}` : `正在导入 ${importing.completed} / ${importing.total}`} · 取消</UiButton>}
     <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download size={15} />导出</UiButton>
   </>}>
     <UiIconButton size="lg" aria-label={t('videoEditProject.back')} title={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft size={18} /></UiIconButton>
@@ -114,8 +113,9 @@ export default function VideoEditApp(): React.ReactElement {
   const { showNotification } = useNotification()
   const [dockApi, setDockApi] = useState<DockviewApi | null>(null)
   // The project's own save status is shown once and clears itself when the retry succeeds.
-  const onError = useCallback((reason: unknown): void => { const message = videoEditUserErrorMessage(reason); if (message !== activeVideoEditInstance()?.error) showNotification(message, 'error') }, [showNotification])
+  const onError = useCallback((reason: unknown): void => { if ((reason instanceof Error || reason instanceof DOMException) && reason.name === 'AbortError') return; const message = videoEditUserErrorMessage(reason); if (message !== activeVideoEditInstance()?.error) showNotification(message, 'error') }, [showNotification])
   const onNotice = useCallback((message: string | null): void => { if (message) showNotification(message, 'success') }, [showNotification])
+  useEffect(() => subscribeVideoEditImportCompletion((_projectId, imported, skipped) => { if (skipped) onNotice(`已导入 ${imported.toLocaleString()} 个文件，跳过 ${skipped.toLocaleString()} 个`) }), [onNotice])
   const run = (operation: () => unknown | Promise<unknown>): void => { void Promise.resolve().then(operation).catch(onError) }
   const chooseProjectFolder = async (): Promise<void> => {
     const selected = await openDialog({ directory: true, multiple: false })
@@ -141,6 +141,7 @@ export default function VideoEditApp(): React.ReactElement {
     run(async () => { await executeVideoEditCommand(context, binding.id); if (panel) focusPanelElement(panel) })
   }}>
     {instance ? <>
+      <VideoEditImportProgress projectId={instance.document.id} />
       <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={onNotice} />
       <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
     </> : <div className="min-h-0 flex-1">

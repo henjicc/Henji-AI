@@ -1,6 +1,5 @@
 import { createLogger } from '@/core/logging'
 import { videoEditComposition, type VideoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
-import { VIDEO_EDIT_MAX_EFFECTS } from '@/core/videoEdit/compositing'
 import { VIDEO_EDIT_LUMETRI } from '@/core/videoEdit/lumetri'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, type VideoEditGesture } from './videoEditService'
@@ -31,7 +30,6 @@ export function editVideoEditLumetri(target: VideoEditCompositeTarget, changes: 
   if (effect) { updateVideoEditBuiltinEffect(target, effect.id, changes, gesture); return }
   assertVideoEditClipsEditable(sequence, [clip.id])
   if (clip.kind === 'audio') throw new Error('请选择画面片段。')
-  if ((clip.effects?.length ?? 0) >= VIDEO_EDIT_MAX_EFFECTS) throw new Error(`片段最多只能放${VIDEO_EDIT_MAX_EFFECTS}项效果，请先删除不用的效果。`)
   const created = makeVideoEditBuiltinEffect(VIDEO_EDIT_LUMETRI.id, changes.params)
   if (changes.curves) created.builtin!.curves = changes.curves
   const update = (document: typeof owner.document): typeof owner.document => ({ ...document, sequences: document.sequences.map(value => value.id === sequence.id ? { ...value, clips: value.clips.map(value => value.id === clip.id ? { ...value, effects: [...(value.effects ?? []), created] } : value) } : value) })

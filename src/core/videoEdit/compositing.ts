@@ -35,8 +35,6 @@ export function isVideoEditCodeEffect(effect: VideoEditEffect): effect is VideoE
 export function isVideoEditBuiltinEffect(effect: VideoEditEffect): effect is VideoEditBuiltinEffect { return Boolean(effect.builtin) }
 /** 效果链里的代码滤镜源码实例（内置效果没有源码）。 */
 export function videoEditEffectCodes(effects: readonly VideoEditEffect[] | undefined): Array<NonNullable<VideoEditEffect['code']>> { return (effects ?? []).flatMap(effect => effect.code ? [effect.code] : []) }
-/** Per-clip render budget: each active effect can retain full-resolution intermediate GPU targets / audio processors. Independent of project cardinality. */
-export const VIDEO_EDIT_MAX_EFFECTS = 8
 export function orderVideoEditEffects(effects: VideoEditEffect[], ids: string[]): VideoEditEffect[] {
   if (ids.length !== effects.length || new Set(ids).size !== effects.length || ids.some(id => !effects.some(effect => effect.id === id))) throw new Error('请使用完整、无重复的效果顺序。')
   return ids.map(id => effects.find(effect => effect.id === id)!)

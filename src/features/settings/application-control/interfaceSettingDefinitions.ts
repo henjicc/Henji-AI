@@ -36,6 +36,21 @@ function writeThemePreset(preset: ThemeSelectionPreset): void {
 
 export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
   storeSetting({
+    id: 'video_edit.bins_first', title: '名称排序时素材箱优先', description: '按名称排序时素材箱统一排在素材和序列前面，升序和降序都生效。默认开启。',
+    aliases: ['名称排序时素材箱优先'], schema: z.boolean(), defaultValue: true,
+    target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().videoEditBinsFirst, value => useSettingsStore.getState().setVideoEditBinsFirst(value)),
+  storeSetting({
+    id: 'video_edit.import_folder_bins', title: '导入时按文件夹建素材箱', description: '导入目录时保留目录结构；关闭后所有素材平铺到当前素材箱。默认开启。',
+    aliases: ['导入时按文件夹建素材箱'], schema: z.boolean(), defaultValue: true,
+    target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().videoEditImportFolderBins, value => useSettingsStore.getState().setVideoEditImportFolderBins(value)),
+  storeSetting({
+    id: 'video_edit.duplicate_policy', title: '重复文件处理', description: '同一素材箱重复导入源文件时，skip 跳过已有文件，import 仍导入一份。按同一父素材箱和源文件夹真实路径复用素材箱，补入新增文件。默认 skip。',
+    aliases: ['重复文件处理'], schema: z.enum(['skip', 'import']), defaultValue: 'skip',
+    target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().videoEditDuplicatePolicy, value => useSettingsStore.getState().setVideoEditDuplicatePolicy(value)),
+  storeSetting({
     id: 'video_edit.sequence_defaults', title: '新建序列默认规格', description: '手动新建序列与仅拖入音频时使用的宽高、帧率、像素长宽比、音频采样率和声道。初始为1920×1080、60帧；图片按原尺寸和60帧，可靠视频按原尺寸和帧率。',
     aliases: ['序列默认值', '序列默认规格', '默认分辨率', '默认帧率'], schema: videoEditSequenceDefaultsSchema, defaultValue: VIDEO_EDIT_SEQUENCE_DEFAULTS,
     target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,

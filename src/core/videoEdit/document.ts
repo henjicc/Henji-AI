@@ -7,7 +7,7 @@ import { codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './cod
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent } from './timedContent'
 import { videoEditGraphicSchema } from './graphics'
-import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia, VIDEO_EDIT_MAX_EFFECTS } from './compositing'
+import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia } from './compositing'
 import { videoEditTransitionSchema, validateVideoEditTransitions } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
 import { videoEditLabelSchema } from './labels'
@@ -34,7 +34,7 @@ export const videoEditMediaSchema = z.object({
   /** Sound streams in file order (task 2.6); absent on media imported before, which plays its first stream. */
   audioStreams: videoEditAudioStreamsSchema.optional(),
 }).strict()
-export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional(), label: videoEditLabelSchema.optional() }).strict()
+export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional(), label: videoEditLabelSchema.optional(), sourceFolderPath: z.string().min(1).optional() }).strict()
 export const videoEditItemSourceRangeSchema = z.object({ inUs: z.number().int().nonnegative(), outUs: z.number().int().positive() }).strict().refine(value => value.outUs > value.inUs, '子剪辑出点须晚于入点。')
 export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), sequenceId: identifier.optional(), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional(), sourceRange: videoEditItemSourceRangeSchema.optional() }).strict()
 export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional() }).strict()
@@ -48,7 +48,7 @@ const videoEditClipStateSchema = z.object({
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
   follow: videoEditClipFollowSchema.optional(),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
-  graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).max(VIDEO_EDIT_MAX_EFFECTS).optional(), adjustment: videoEditAdjustmentSchema.optional(),
+  graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).optional(), adjustment: videoEditAdjustmentSchema.optional(),
   linkId: identifier.optional(), groupId: identifier.optional(), sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(), audioMapping: videoEditAudioMappingSchema.optional(),
   start: frame, duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),

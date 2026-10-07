@@ -112,6 +112,9 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setVideoEditTrackHeaderButtons: property('video_edit.track_header_buttons'),
     setVideoEditDefaultTransition: property('video_edit.default_transitions'),
     setVideoEditSequenceDefaults: property('video_edit.sequence_defaults'),
+    setVideoEditBinsFirst: property('video_edit.bins_first'),
+    setVideoEditImportFolderBins: property('video_edit.import_folder_bins'),
+    setVideoEditDuplicatePolicy: property('video_edit.duplicate_policy'),
     setVideoEditSelectionFollowsPlayhead: property('video_edit.selection_follows_playhead'),
   },
 }

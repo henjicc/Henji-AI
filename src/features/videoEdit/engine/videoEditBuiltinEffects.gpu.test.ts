@@ -52,6 +52,41 @@ async function run(id: string, params: Record<string, unknown> = {}, frame = 0):
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.subarray((y * W + x) * 4, (y * W + x) * 4 + 4)]
 
 describe('剪辑内置效果（真实设备）', () => {
+  it('24个多工序模糊复用中间纹理，24份不同调色曲线跨帧不重复上传或编译', async () => {
+    let allocations = 0; let compiles = 0; let scratchAllocations = 0
+    const counted = new Proxy(device, { get: (target, key) => {
+      if (key === 'createTexture') return (descriptor: Parameters<Device['createTexture']>[0]) => { allocations++; return target.createTexture(descriptor) }
+      if (key === 'createRenderPipeline') return (descriptor: Parameters<Device['createRenderPipeline']>[0]) => { compiles++; return target.createRenderPipeline(descriptor) }
+      const value = Reflect.get(target, key) as unknown
+      return value instanceof Function ? value.bind(target) : value
+    } })
+    const local = new VideoEditBuiltinEffectsGpu(counted as unknown as GpuDevice, device.createSampler({ magFilter: 'linear', minFilter: 'linear' }), {
+      allocate: (width, height, format) => { scratchAllocations++; return counted.createTexture({ size: [width, height], format: format as 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT }) as unknown as GpuTexture },
+      release: texture => texture.destroy(),
+    })
+    const source = input(); const first = output(); const second = output()
+    const blur = { id: 'gaussian_blur', params: { strength: 100 } }
+    const draw = async (instance: Parameters<typeof local.render>[0], from: GpuTexture, to: GpuTexture): Promise<void> => local.render(instance, { texture: from, width: W, height: H, format: 'rgba8unorm' }, to, 0)
+    try {
+      await draw(blur, source, first)
+      const oneEffect = { allocations, compiles, scratchAllocations }
+      let current = first
+      for (let index = 0; index < 24; index++) { const next = current === first ? second : first; await draw(blur, current, next); current = next }
+      expect({ allocations, compiles, scratchAllocations }).toEqual(oneEffect)
+      const curves = Array.from({ length: 24 }, (_, index) => ({ id: 'lumetri_color', params: { curve_master_2: 51 + index } }))
+      let warm: { allocations: number; compiles: number; scratchAllocations: number } | undefined
+      for (let frame = 0; frame < 2; frame++) {
+        local.releaseIdle()
+        for (const curve of curves) { const next = current === first ? second : first; await draw(curve, current, next); current = next }
+        const count = { allocations, compiles, scratchAllocations }
+        if (warm) expect(count).toEqual(warm)
+        else warm = count
+      }
+      // One blur scratch and Lumetri's two ping-pong textures, shared across all instances.
+      expect(scratchAllocations).toBe(2)
+      expect(pixel(await read(current), W / 2, H / 2)[3]).toBe(255)
+    } finally { local.dispose(); source.destroy(); first.destroy(); second.destroy() }
+  }, 60_000)
   it('全部效果的着色器在设备上编译，默认参数出画面且不透明区域保持不透明', async () => {
     for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio')) {
       const pixels = await run(definition.id, videoEditBuiltinDefaults(definition))

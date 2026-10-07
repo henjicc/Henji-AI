@@ -149,7 +149,6 @@ export class VideoEditCodeGpu {
       if (pipeline) return pipeline
     }
     if (compiling) { await compiling.pending; return this.prepareFilter(version, program, transitionHandles, format) }
-    if (this.filterCompiles.size >= 32) throw new CodeMaterialError('BUDGET', '代码滤镜同时最多32份编译。')
     const code = emitCodeMaterialFilter(program, transitionHandles)
     const pending = (async (): Promise<GpuRenderPipeline> => {
       this.device.pushErrorScope('validation')
@@ -164,7 +163,8 @@ export class VideoEditCodeGpu {
       const entry = this.filters.get(version)
       if (entry && entry.program === program) { entry.pipelines.set(format, pipeline); entry.transitionHandles ||= transitionHandles }
       else {
-        if (this.filters.size >= 32) this.filters.delete(this.filters.keys().next().value!)
+        // CodeSources retires unused program versions at the frame boundary. Keep all live
+        // versions so a long effect chain never recompiles its pipelines on every frame.
         this.filters.set(version, { program, pipelines: new Map([[format, pipeline]]), transitionHandles })
       }
       this.counts.pipelineCompiles++

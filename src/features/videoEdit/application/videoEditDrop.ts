@@ -128,8 +128,7 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前剪辑，不能跨剪辑引用素材项。')
   const apply = (source: VideoEditDocument, ids: string[]): VideoEditDocument => {
     if (!placement || !ids.length) return source
-    if (createSequence) {
-      if (source.sequences.length) throw new Error('已有新序列，请重新拖入。')
+    if (createSequence && !source.sequences.length) {
       const first = source.items.find(item => item.id === ids[0])
       const defaults = useSettingsStore.getState().videoEditSequenceDefaults
       const settings = first?.kind === 'audio' ? { ...defaults, ...options.sequenceSettings } : { pixelAspectRatio: defaults.pixelAspectRatio, sampleRate: defaults.sampleRate, channels: defaults.channels, ...options.sequenceSettings }
@@ -137,6 +136,8 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
       sequenceId = sequence.id; selectedClip = sequence.clips.at(-1)?.id
       return { ...source, sequences: [sequence] }
     }
+    // A preceding queued drop may have created the first sequence while this request was waiting.
+    if (createSequence) sequenceId = owner.activeSequenceId
     const result = placeVideoEditDrop(source, ids, sequenceId, placement, { targetTrackIds, matchEmptySequence: Boolean(options.createSequenceWhenEmpty), ...(options.sequenceSettings ? { sequenceSettings: options.sequenceSettings } : {}), codeMetadata: readVideoEditCodeMetadata(owner, source) })
     selectedClip = result.selectedClip
     return result.document
@@ -146,7 +147,7 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   else if (input.kind === 'code_asset') { const result = await importVideoEditCodeAsset(projectId, input.assetId, { binId, filterTarget, afterImport: apply }); ids = result.itemId ? [result.itemId] : [] }
   else if (input.sources.every(source => source.path && !source.assetId)) {
     // 本地路径可能是文件夹（Premiere：拖入文件夹即按层级建素材箱）。
-    const result = await importVideoEditPathsAndFolders(projectId, input.sources.map(source => source.path!), binId, apply, { signal: options.signal })
+    const result = await importVideoEditPathsAndFolders(projectId, input.sources.map(source => source.path!), binId, placement ? apply : undefined, { signal: options.signal })
     ids = result.itemIds
     if (result.skipped) options.onSkipped?.(result.skipped)
   } else ids = await importVideoEditSources(projectId, input.sources, binId, options.signal, apply)

@@ -486,6 +486,11 @@
       }
     },
     "videoEdit": {
+      "binsFirstLabel": "Bins first when sorting by name",
+      "folderBinsLabel": "Create bins from imported folders",
+      "duplicatePolicyLabel": "Duplicate files",
+      "duplicateSkip": "Skip",
+      "duplicateImport": "Import another copy",
       "selectionFollowsPlayheadLabel": "Selection follows playhead",
       "selectionFollowsPlayheadInfo": "Same as Premiere Pro's Selection Follows Playhead: while playing or moving the playhead, the topmost visible clip at the current frame is selected and Effect Controls shows it."
     },

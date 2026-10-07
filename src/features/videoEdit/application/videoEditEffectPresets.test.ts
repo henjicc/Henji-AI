@@ -86,7 +86,7 @@ it('保存参数强度开关与作用区域；手绘形状可选保存，跟踪�
   expect(() => library.savePreset('混合媒介', [effect, makeVideoEditBuiltinEffect('high_pass')])).toThrow('同媒介')
 })
 
-it('预设组合拖放/双击共用应用入口，跨片段全部一步撤销；媒介与效果上限失败不留下部分修改', async () => {
+it('预设组合拖放/双击共用应用入口，长链跨片段一步撤销；媒介不匹配拒绝', async () => {
   const { owner, id, sequenceId, pictures, sound } = await project()
   const preset = useVideoEditEffectLibraryStore.getState().savePreset('画面组合', [makeVideoEditBuiltinEffect('gaussian_blur', { strength: 65 }), { ...makeVideoEditBuiltinEffect('mosaic'), amount: .3, enabled: false }])
   const templateRef = `preset:${preset.id}`
@@ -102,15 +102,17 @@ it('预设组合拖放/双击共用应用入口，跨片段全部一步撤销；
   expect(() => applyVideoEditBuiltinEffect(id, sequenceId, pictures, `preset:${audio.id}`)).toThrow('声音片段')
   applyVideoEditBuiltinEffect(id, sequenceId, [sound, ...pictures], `preset:${audio.id}`)
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === sound)?.effects?.[0].builtin?.id).toBe('high_pass')
-  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === pictures[1] ? { ...clip, effects: Array.from({ length: 7 }, () => makeVideoEditBuiltinEffect('mosaic')) } : clip) })) }))
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === pictures[1] ? { ...clip, effects: Array.from({ length: 40 }, () => makeVideoEditBuiltinEffect('mosaic')) } : clip) })) }))
   const baseline = owner.document; const history = owner.past.length
-  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, pictures, templateRef)).toThrow('8项')
-  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
+  expect(applyVideoEditBuiltinEffect(id, sequenceId, pictures, templateRef)).toHaveLength(4)
+  expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[1])?.effects).toHaveLength(42)
+  expect(owner.past).toHaveLength(history + 1)
+  undoVideoEdit(id); expect(owner.document).toEqual({ ...baseline, revision: owner.document.revision })
 })
 
 it('助手正式目录可读预设，并经现有效果集合写入整组；与手动入口结果相同且一步撤销', async () => {
   const { owner, id, pictures } = await project()
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('颜色组合', [makeVideoEditBuiltinEffect('brightness_contrast'), makeVideoEditBuiltinEffect('vignette')])
+  const preset = useVideoEditEffectLibraryStore.getState().savePreset('颜色组合', Array.from({ length: 24 }, (_, index) => makeVideoEditBuiltinEffect(index % 2 ? 'vignette' : 'brightness_contrast')))
   expect(filterVideoEditLibraryEntries(videoEditUserPresetEntries([preset]), '颜色组合 视频预设')).toHaveLength(1)
   const app = createApplicationHarness()
   try {
@@ -124,6 +126,14 @@ it('助手正式目录可读预设，并经现有效果集合写入整组；与�
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
     expect(owner.past).toHaveLength(history + 1)
     expect(getActiveVideoEditSequence(owner).clips[0].effects?.map(effect => effect.builtin)).toEqual(preset.effects.map(effect => effect.builtin))
+    const after = await app.read(parent)
+    expect(await app.call('change_application_entities', { summary: '再次添加整组效果', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent, items: properties['video_edit.effect_preset.creation_items'] }] }, after.revisions as Record<string, number>)).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).clips[0].effects).toHaveLength(48)
+    undoVideoEdit(id)
+    const ids = getActiveVideoEditSequence(owner).clips[0].effects!.map(effect => effect.id).reverse()
+    expect(await app.change(parent, { 'video_edit.clip.effect_ids': ids })).toMatchObject({ ok: true })
+    expect((await app.read(parent, ['video_edit.clip.effect_ids'])).properties).toMatchObject({ 'video_edit.clip.effect_ids': ids })
+    undoVideoEdit(id)
     undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].effects ?? []).toEqual([])
   } finally { app.dispose() }
 })

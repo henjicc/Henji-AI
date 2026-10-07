@@ -194,4 +194,28 @@ describe('设置的正式反射结果', () => {
       'generation.default_image_model': 'auto',
     })
   })
+  it.each([
+    ['video_edit.bins_first', 'videoEditBinsFirst', false],
+    ['video_edit.import_folder_bins', 'videoEditImportFolderBins', false],
+    ['video_edit.duplicate_policy', 'videoEditDuplicatePolicy', 'import'],
+  ] as const)('剪辑导入设置 %s 通过通用实体写入、持久化读回与恢复', async (id, field, value) => {
+    const before = useSettingsStore.getState()[field]
+    try {
+      const result = await change(id, value)
+      expect(result).toMatchObject({ status: 'completed' })
+      expect(useSettingsStore.getState()[field]).toBe(value)
+      const definition = INTERFACE_APPLICATION_SETTING_DEFINITIONS.find(entry => entry.id === id)!
+      expect(definition.read()).toBe(value)
+      const snapshot = await applicationReflectionHandlers.readEntity({ ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: [id] }, context(`read-${id}`))
+      expect(snapshot.properties[id]).toBe(value)
+      expect(JSON.parse(localStorage.getItem('settings-storage') ?? '{}').state[field]).toBe(value)
+      await change(id, before)
+      expect(useSettingsStore.getState()[field]).toBe(before)
+    } finally {
+      if (field === 'videoEditBinsFirst') useSettingsStore.getState().setVideoEditBinsFirst(before as boolean)
+      if (field === 'videoEditImportFolderBins') useSettingsStore.getState().setVideoEditImportFolderBins(before as boolean)
+      if (field === 'videoEditDuplicatePolicy') useSettingsStore.getState().setVideoEditDuplicatePolicy(before as 'skip' | 'import')
+    }
+  })
+
 })

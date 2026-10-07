@@ -42,7 +42,7 @@ export function videoEditProjectColumns(document: VideoEditDocument, entry: Vide
   return timed(fps, Math.round(durationSeconds * fps), rateText(fps), fps, label, Math.round(startSeconds * fps))
 }
 
-function compare(document: VideoEditDocument, sort: VideoEditProjectSort, fallbackFps: number): (left: VideoEditProjectEntry, right: VideoEditProjectEntry) => number {
+function compare(document: VideoEditDocument, sort: VideoEditProjectSort, fallbackFps: number, binsFirst: boolean): (left: VideoEditProjectEntry, right: VideoEditProjectEntry) => number {
   const columns = new Map<VideoEditProjectEntry, VideoEditProjectColumns>()
   const mediaById = new Map(document.media.map(media => [media.id, media]))
   const of = (entry: VideoEditProjectEntry): VideoEditProjectColumns => { let value = columns.get(entry); if (!value) { value = videoEditProjectColumns(document, entry, fallbackFps, mediaById); columns.set(entry, value) } return value }
@@ -55,6 +55,7 @@ function compare(document: VideoEditDocument, sort: VideoEditProjectSort, fallba
   }
   const direction = sort.direction === 'asc' ? 1 : -1
   return (left, right) => {
+    if (sort.key === 'name' && binsFirst && (left.kind === 'bin') !== (right.kind === 'bin')) return left.kind === 'bin' ? -1 : 1
     if (sort.key === 'frameRate' || sort.key === 'duration' || sort.key === 'mediaStart' || sort.key === 'mediaEnd') return numeric(sort.key === 'mediaStart' ? 'mediaStartSeconds' : sort.key === 'mediaEnd' ? 'mediaEndSeconds' : sort.key)(left, right) || byName(left, right)
     if (sort.key === 'kind') return kindOf(left).localeCompare(kindOf(right)) * direction || byName(left, right)
     return byName(left, right) * direction
@@ -65,9 +66,9 @@ function compare(document: VideoEditDocument, sort: VideoEditProjectSort, fallba
  * 素材面板的行（PR 列表视图）：当前素材箱里的素材箱、素材项与序列按所选列排序，展开的素材箱把内容缩进列在下面。
  * 有搜索词时跨全部素材箱平铺匹配的素材项与序列（匹配名称与标签文字）。
  */
-export function videoEditProjectRows(document: VideoEditDocument, binId: string, keyword: string, sort: VideoEditProjectSort, expanded: ReadonlySet<string>, fallbackFps = 30): VideoEditProjectRow[] {
+export function videoEditProjectRows(document: VideoEditDocument, binId: string, keyword: string, sort: VideoEditProjectSort, expanded: ReadonlySet<string>, fallbackFps = 30, binsFirst = true): VideoEditProjectRow[] {
   const query = keyword.trim().toLocaleLowerCase()
-  const order = compare(document, sort, fallbackFps)
+  const order = compare(document, sort, fallbackFps, binsFirst)
   if (query) {
     const entries: VideoEditProjectEntry[] = [...document.items.filter(value => value.kind !== 'sequence').map(value => ({ kind: 'item' as const, value })), ...document.sequences.map(value => ({ kind: 'sequence' as const, value }))]
     return entries.filter(entry => `${entry.value.name} ${entry.kind === 'item' ? entry.value.tags?.join(' ') ?? '' : '序列'}`.toLocaleLowerCase().includes(query)).sort(order).map(entry => ({ entry, depth: 0, expandable: false, expanded: false }))

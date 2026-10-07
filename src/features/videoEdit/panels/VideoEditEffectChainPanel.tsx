@@ -4,7 +4,7 @@ import { ICON_ASSET_CODE } from '@/core/theme/icons'
 import { Dropdown, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
-import { isVideoEditBuiltinEffect, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect } from '@/core/videoEdit/compositing'
+import { isVideoEditBuiltinEffect, type VideoEditEffect } from '@/core/videoEdit/compositing'
 import { copyVideoEditEffects, createVideoEditEffect, deleteVideoEditEffects, listVideoEditFilterDefinitions, reorderVideoEditEffects, resetVideoEditEffect, updateVideoEditAdjustmentRange, updateVideoEditBuiltinEffect, updateVideoEditEffect } from '../application/videoEditCompositing'
 import { requireVideoEditInstance, type VideoEditInstance } from '../application/videoEditService'
 import { CodeParameterPanel } from './CodeParameterPanel'
@@ -74,7 +74,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const CodeIcon = ICON_ASSET_CODE
   return <>
     {clip.kind === 'adjustment' && <AdjustmentRange target={target} sequence={sequence} clip={clip} action={action} />}
-    <VideoEditEffectSection id="effects" title={sound ? '音频效果' : '附加效果'} info={`效果从上到下依次处理，最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。`}
+    <VideoEditEffectSection id="effects" title={sound ? '音频效果' : '附加效果'} info="效果从上到下依次处理。"
       actions={<><UiIconButton size="xs" aria-label="保存为预设" title="保存为预设" disabled={action.busy || !savableEffects.length} onClick={() => setSavingPreset(structuredClone(savableEffects))}><Save size={13} /></UiIconButton>{!sound && <UiIconButton size="xs" aria-label="编写新滤镜源码" title="编写新滤镜源码" disabled={action.busy} onClick={() => setCreatingFilter(true)}><CodeIcon size={13} /></UiIconButton>}</>}>
       <div className="flex flex-col gap-1" data-video-edit-effect-chain={clipId}>
         {effects.length ? effects.map((effect, index) => {
@@ -98,7 +98,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
         }) : <UiEmpty size="xs" title="尚未添加效果" />}
         {!sound && <div className="flex items-center gap-1 pt-1">
           <div className="min-w-0 flex-1"><Dropdown ariaLabel="选择剪辑滤镜" value={definition?.id} display={definitions.items.length ? undefined : '暂无滤镜源码'} options={definitions.options} disabled={action.busy || !definitions.items.length} onSelect={setDefinitionId} buttonClassName="w-full" /></div>
-          <UiButton variant="secondary" size="sm" className="shrink-0" disabled={action.busy || !definition || effects.length >= VIDEO_EDIT_MAX_EFFECTS} onClick={() => { if (definition) void action.run(signal => createVideoEditEffect(target, { definitionId: definition.id, versionId: definition.versionId }, signal), setSelectedId) }}>添加到片段</UiButton>
+          <UiButton variant="secondary" size="sm" className="shrink-0" disabled={action.busy || !definition} onClick={() => { if (definition) void action.run(signal => createVideoEditEffect(target, { definitionId: definition.id, versionId: definition.versionId }, signal), setSelectedId) }}>添加到片段</UiButton>
         </div>}
         {createdFilter && <p className="text-2xs text-text3">滤镜源码已创建，选择“添加到片段”检查并应用。</p>}
         {!sound && definitions.error ? <UiError size="xs" message={definitions.error instanceof Error ? definitions.error.message : '剪辑滤镜暂不可用。'} /> : null}

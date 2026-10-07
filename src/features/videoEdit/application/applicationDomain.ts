@@ -35,7 +35,8 @@ import { videoEditQueuedExportTask } from './videoEditExportQueue'
 import { VideoEditExportPresetExecutor } from './videoEditExportPresetReflection'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
-import { chooseVideoEditFolders } from './videoEditFolderImport'
+import { chooseVideoEditFolders, VideoEditPartialImportFailure } from './videoEditFolderImport'
+import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
 import { collectVideoEditOutput } from './videoEditOutputs'
 import { captureVideoEditProgramFrame } from './videoEditProgramCapture'
 import { collectVideoEditCodeAsset, importVideoEditCodeAsset, type VideoEditCodeAssetTarget } from './videoEditCodeAssets'
@@ -180,8 +181,20 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       switch (definition.id) {
         case 'import_video_edit_folder': {
           const baseline = owner.document
-          const result = await chooseVideoEditFolders(id, undefined, { signal: context.signal })
-          if (owner.document === baseline) throw new Error('未导入素材，用户取消选择或所选目录无法读取。')
+          let result
+          try { result = await chooseVideoEditFolders(id, undefined, { signal: context.signal }) }
+          catch (error) {
+            if (!(error instanceof VideoEditPartialImportFailure)) throw error
+            if (requireVideoEditInstance(id) !== owner) throw new Error('原剪辑已关闭，未写入重新打开的剪辑。', { cause: error })
+            try { await saveVideoEdit(id) } catch (saveError) {
+              throw new ApplicationPersistenceFailure('已导入部分保留在剪辑里，但保存未确认。请重试保存，不要重复导入。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: input.documentRef, replayMutation: false } }, saveError)
+            }
+            throw new ApplicationTransactionFailure({ status: 'failed', code: 'EXECUTION_FAILED', message: `${error.message}已保留 ${error.imported} 个素材，可读回当前剪辑或撤销本次导入。`, recoverable: false,
+              resultRefs: [input.documentRef], effects: [{ effect: 'execute', entityType: 'video_edit.document', refs: [input.documentRef], propertyIds: [], origin: { kind: 'direct' } }],
+              partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] },
+            })
+          }
+          if (owner.document === baseline && !result.skipped) throw new Error('未导入素材，用户取消选择或所选目录无法读取。')
           await saveVideoEdit(id)
           const current = requireVideoEditInstance(id)
           const verified = await verifyVideoEditSaved(id, current.document)

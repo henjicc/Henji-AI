@@ -7,7 +7,7 @@ import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } 
 import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon, ICON_VIDEO_EDIT_PROXY as ProxyIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
-import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiSwitch, UiToast } from '@/components/ui'
+import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiSwitch } from '@/components/ui'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { chooseVideoEditFolders } from '../application/videoEditFolderImport'
@@ -70,6 +70,7 @@ type SequenceDialog = { kind: 'create' | 'edit' | 'fromItem'; settings: VideoEdi
 
 export function VideoEditProjectPanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
   const [keyword, setKeyword] = useState('')
+  const binsFirst = useSettingsStore(state => state.videoEditBinsFirst)
   const [sort, setSort] = useState<VideoEditProjectSort>({ key: 'name', direction: 'asc' })
   const [view, setView] = useState<'list' | 'grid'>('list')
   // PR 列表视图：素材箱是可展开的树（三角展开），没有单独的素材箱侧栏。
@@ -123,7 +124,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const binId = instance.selectedBinId
   const activeSequence = instance.document.sequences.find(sequence => sequence.id === instance.activeSequenceId)
   const fallbackFps = activeSequence ? videoEditFps(activeSequence.frameRate) : 60
-  const rows = useMemo(() => videoEditProjectRows(instance.document, binId, keyword, sort, view === 'grid' ? NO_EXPANDED : expanded, fallbackFps), [instance.document, binId, keyword, sort, view, expanded, fallbackFps])
+  const rows = useMemo(() => videoEditProjectRows(instance.document, binId, keyword, sort, view === 'grid' ? NO_EXPANDED : expanded, fallbackFps, binsFirst), [instance.document, binId, keyword, sort, view, expanded, fallbackFps, binsFirst])
   const entries = useMemo(() => rows.map(row => row.entry), [rows])
   const binPath = videoEditBinPath(instance.document.bins, binId)
   const media = useMemo(() => new Map(instance.document.media.map(value => [value.id, value])), [instance.document.media])
@@ -134,10 +135,6 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     onError(error)
   }) }
   const choose = (): void => run(() => chooseVideoEditMedia(projectId, binId || undefined))
-  // 导入结果提示：文件夹导入跳过了不支持或读不出的文件时告诉用户跳过几个（Premiere 同样只导入能用的文件）。
-  const [notice, setNotice] = useState<string | null>(null)
-  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(null), 4000); return () => clearTimeout(timer) }, [notice])
-  const reportSkipped = (skipped: number): void => { if (skipped) setNotice(`已跳过 ${skipped} 项不支持、无法读取或重复的素材及目录`) }
   /** 文件夹的素材进了新建的子素材箱：当前素材箱只选中直接放进来的素材项。 */
   const selectImported = (targetBin: string, ids: string[]): void => {
     const items = new Map(instance.document.items.map(item => [item.id, item]))
@@ -146,7 +143,6 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const chooseFolders = (): void => run(async () => {
     const result = await chooseVideoEditFolders(projectId, binId || undefined)
     if (result.itemIds.length) selectImported(binId, result.itemIds)
-    reportSkipped(result.skipped)
   })
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const listRef = useRef<VirtuosoHandle>(null); const gridRef = useRef<VirtuosoGridHandle>(null)
@@ -224,8 +220,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     try {
       const input = readVideoEditDrop(event.dataTransfer)
       run(async () => {
-        let skipped = 0
-        const ids = await dropVideoEditInput(projectId, input, undefined, targetBin || undefined, { onSkipped: count => { skipped = count } })
+        const ids = await dropVideoEditInput(projectId, input, undefined, targetBin || undefined)
         if (input.kind === 'items') {
           const sequenceIds = ids.filter(id => instance.document.sequences.some(sequence => sequence.id === id))
           for (const id of sequenceIds) updateVideoEditSequenceSettings(projectId, id, { binId: targetBin || null })
@@ -234,7 +229,6 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
           setVideoEditProjectView(projectId, { selectedBinId: targetBin, selectedItemIds: itemIds })
         }
         else selectImported(targetBin, ids)
-        reportSkipped(skipped)
       })
     } catch (error) { onError(error) }
   }
@@ -393,7 +387,6 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
           </div>}
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
-    {notice && <UiToast message={notice} tone="success" placement="container" />}
     {labelPicker && <PanelTrigger anchor={labelPicker.anchor} open onOpenChange={open => { if (!open) setLabelPicker(null) }} panelWidth={200} zIndex={Z_LAYERS.dropdown} panelPadding="content" closeOnPanelClick
       renderPanel={() => <div className="flex flex-col gap-2" aria-label="颜色标签">
         <div className="grid grid-cols-6 gap-1">

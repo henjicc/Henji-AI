@@ -279,6 +279,98 @@ export function editVideoProject(id: string, update: (document: VideoEditDocumen
   if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
   return applyVideoEditDocument(instance, update, true, false, preserveProgramAnchors)
 }
+/** Streaming imports keep one undo boundary per request. Later edits keep their own boundaries.
+ * Each deterministic additive import update is also applied to snapshots AFTER that boundary,
+ * so undoing an intervening edit does not discard files that arrived later. */
+export interface VideoEditImportEditGroup { owner: VideoEditInstance; boundary?: VideoEditDocument; future?: VideoEditDocument[] }
+const importEditGroups = new WeakMap<VideoEditInstance, Set<VideoEditImportEditGroup>>()
+export function finishVideoEditImportGroup(group: VideoEditImportEditGroup): void {
+  const { owner, boundary } = group
+  if (boundary) {
+    const index = owner.past.indexOf(boundary)
+    if (index >= 0 && sameDocumentContent(boundary, owner.past[index + 1] ?? owner.document)) owner.past.splice(index, 1)
+  }
+  importEditGroups.get(owner)?.delete(group)
+}
+/** Rejecting placement removes only this request's additions from the document and later undo snapshots. */
+export async function rollbackVideoEditImportGroup(group: VideoEditImportEditGroup, update: (document: VideoEditDocument) => VideoEditDocument): Promise<void> {
+  const { owner } = group
+  if (!listVideoEditInstances().includes(owner) || !group.boundary || !owner.past.includes(group.boundary)) return
+  await waitVideoEditImportEdit(owner)
+  editVideoEditImportGroup(group, update)
+  // With no intervening content edits, keep the original document identity as well as its content.
+  if (sameDocumentContent(owner.document, group.boundary)) {
+    owner.document = group.boundary
+    owner.future = group.future ?? []
+    publishVideoEdit(true); notifyVideoEditContent(owner)
+  }
+  finishVideoEditImportGroup(group)
+}
+/** Wait for a user's current parameter gesture without blocking their edit or delaying cancellation. */
+export async function waitVideoEditImportEdit(owner: VideoEditInstance, signal?: AbortSignal): Promise<void> {
+  for (let gesture = gestures.get(owner); gesture; gesture = gestures.get(owner)) {
+    signal?.throwIfAborted()
+    await new Promise<void>((resolve, reject) => {
+      const abort = (): void => { signal?.removeEventListener('abort', abort); reject(signal?.reason) }
+      signal?.addEventListener('abort', abort, { once: true })
+      void gesture!.finished.then(() => { signal?.removeEventListener('abort', abort); resolve() })
+    })
+  }
+  signal?.throwIfAborted()
+  if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原剪辑已关闭。')
+}
+/** Apply only the import's changes to an older undo snapshot, preserving unrelated fields. */
+export function mergeVideoEditImportDocument(target: VideoEditDocument, before: VideoEditDocument, after: VideoEditDocument): VideoEditDocument {
+  function merge(value: unknown, previous: unknown, next: unknown): unknown {
+    if (JSON.stringify(previous) === JSON.stringify(next)) return value
+    if (Array.isArray(previous) && Array.isArray(next) && Array.isArray(value) && [...previous, ...next].every(entry => typeof entry === 'object' && entry !== null && 'id' in entry)) {
+      const id = (entry: unknown): unknown => (entry as { id: unknown }).id
+      const old = new Map(previous.map(entry => [id(entry), entry])); const added = new Map(next.map(entry => [id(entry), entry]))
+      const result = value.filter(entry => !old.has(id(entry)) || added.has(id(entry))).map(entry => old.has(id(entry)) && added.has(id(entry)) ? merge(entry, old.get(id(entry)), added.get(id(entry))) : entry)
+      const present = new Set(result.map(id))
+      return [...result, ...next.filter(entry => !old.has(id(entry)) && !present.has(id(entry)))]
+    }
+    if (previous && next && value && typeof previous === 'object' && typeof next === 'object' && typeof value === 'object' && !Array.isArray(previous) && !Array.isArray(next) && !Array.isArray(value)) {
+      const old = previous as Record<string, unknown>; const changed = next as Record<string, unknown>; const result = { ...value } as Record<string, unknown>
+      for (const key of new Set([...Object.keys(old), ...Object.keys(changed)])) {
+        if (!(key in changed)) delete result[key]
+        else result[key] = merge(result[key], old[key], changed[key])
+      }
+      return result
+    }
+    return next
+  }
+  return merge(target, before, after) as VideoEditDocument
+}
+export function editVideoEditImportGroup(group: VideoEditImportEditGroup, update: (document: VideoEditDocument) => VideoEditDocument): VideoEditDocument {
+  const { owner } = group
+  if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原剪辑已关闭。')
+  if (!group.boundary) {
+    const before = owner.document
+    const future = owner.future
+    const next = editVideoProject(before.id, update)
+    if (next !== before) {
+      group.boundary = before
+      group.future = future
+      const groups = importEditGroups.get(owner) ?? new Set<VideoEditImportEditGroup>()
+      groups.add(group); importEditGroups.set(owner, groups)
+    }
+    return next
+  }
+  const boundary = owner.past.indexOf(group.boundary)
+  if (boundary < 0) throw new Error('此次导入已被撤销，剩余文件不会写入。')
+  assertApplicationWritesAllowed(); assertVideoEditWritable(owner)
+  if (gestures.has(owner)) throw new Error('请先完成当前参数调整。')
+  const rebased = owner.past.map((snapshot, index) => index > boundary ? videoEditDocumentSchema.parse(update(structuredClone(snapshot))) : snapshot)
+  const next = applyVideoEditDocument(owner, update, false)
+  for (const other of importEditGroups.get(owner) ?? []) if (other.boundary) {
+    const index = owner.past.indexOf(other.boundary)
+    if (index >= 0) other.boundary = rebased[index]
+  }
+  owner.past = rebased; owner.future = []
+  notifyVideoEditContent(owner)
+  return next
+}
 /** Used only by verified transaction receipts; a rollback restores the whole edit, including locks. */
 export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument, snapshot: VideoEditDocument): VideoEditDocument {
   assertApplicationWritesAllowed()

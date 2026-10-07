@@ -11,7 +11,7 @@ import { codeMaterialCurvesSchema } from '@/core/videoEdit/codeMaterialAnimation
 import { videoEditTimelineViewSchema, videoEditProgramPlaybackSchema } from '@/core/videoEdit/timelineSelection'
 import { videoEditPlaybackResolutionSchema } from '@/core/videoEdit/playbackResolution'
 import { videoEditMarkerSchema, videoEditCaptionSchema } from '@/core/videoEdit/timedContent'
-import { videoEditEffectSchema, videoEditBuiltinEffectInstanceSchema, videoEditEffectMaskSchema, videoEditAdjustmentSchema, VIDEO_EDIT_MAX_EFFECTS } from '@/core/videoEdit/compositing'
+import { videoEditEffectSchema, videoEditBuiltinEffectInstanceSchema, videoEditEffectMaskSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
 import { videoEditTransitionSchema } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from '@/core/videoEdit/audioChannels'
@@ -44,7 +44,7 @@ const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   'video_edit.sequence': Object.fromEntries(Object.entries(videoEditSequenceSchema.shape).filter(([key]) => !['id', 'clips', 'annotations', 'tracks', 'markers', 'captions', 'textTranscription'].includes(key))),
   'video_edit.marker': { ...Object.fromEntries(Object.entries(videoEditMarkerSchema.shape).filter(([key]) => key !== 'id')), clipId: z.string().max(100) },
   'video_edit.caption': { ...Object.fromEntries(Object.entries(videoEditCaptionSchema.shape).filter(([key]) => key !== 'id')), clipId: z.string().max(100) },
-  'video_edit.bin': Object.fromEntries(Object.entries(videoEditBinSchema.shape).filter(([key]) => key !== 'id')),
+  'video_edit.bin': Object.fromEntries(Object.entries(videoEditBinSchema.shape).filter(([key]) => !['id', 'sourceFolderPath'].includes(key))),
   'video_edit.item': Object.fromEntries(Object.entries(videoEditItemSchema.shape).filter(([key]) => key !== 'id')),
   // index/kind are read-only: clips are placed by the integer track index, so agents must be able to read it.
   'video_edit.track': Object.fromEntries(Object.entries(videoEditTrackSchema.shape).filter(([key]) => key !== 'id')),
@@ -76,7 +76,7 @@ schemas['video_edit.item'].sequenceId = z.string().max(100)
 // 颜色标签：读出 null 表示按类型默认，写 null 恢复默认（3.2）。
 for (const type of ['video_edit.item', 'video_edit.bin', 'video_edit.sequence'] as const) schemas[type].label = videoEditLabelSchema.nullable()
 schemas['video_edit.clip'].graphicObjectIds = z.array(z.string().min(1).max(100))
-schemas['video_edit.clip'].effectIds = z.array(z.string().min(1).max(100)).max(VIDEO_EDIT_MAX_EFFECTS)
+schemas['video_edit.clip'].effectIds = z.array(z.string().min(1).max(100))
 schemas['video_edit.clip'].adjustmentFromTrack = videoEditAdjustmentSchema.shape.fromTrack.nullable()
 schemas['video_edit.item'].graphicKind = z.enum(['solid', 'rect', 'ellipse', 'text']).nullable()
 schemas['video_edit.item'].graphicWidth = z.number().int().min(16).max(8192).nullable()
@@ -84,7 +84,7 @@ schemas['video_edit.item'].graphicHeight = z.number().int().min(16).max(8192).nu
 schemas['video_edit.effect'].parameters = codeMaterialInstanceSchema.shape.parameters.or(videoEditBuiltinEffectInstanceSchema.shape.params.refine(value => Object.keys(value).length <= 128, '内置效果参数最多128个。'))
 schemas['video_edit.document'].lumetriLuts = z.array(z.object({ id: z.string(), name: z.string() }).strict())
 schemas['video_edit.document'].timelineView = videoEditTimelineViewSchema
-schemas['video_edit.document'].mediaImport = z.object({ phase: z.enum(['enumerating', 'probing']), completed: z.number().int().nonnegative(), total: z.number().int().nonnegative() }).strict().nullable()
+schemas['video_edit.document'].mediaImport = z.object({ phase: z.enum(['enumerating', 'probing']), completed: z.number().int().nonnegative(), total: z.number().int().nonnegative(), totalKnown: z.boolean(), discovered: z.number().int().nonnegative(), queued: z.number().int().nonnegative(), requests: z.number().int().nonnegative(), imported: z.number().int().nonnegative(), skipped: z.number().int().nonnegative() }).strict().nullable()
 schemas['video_edit.document'].programPlayback = videoEditProgramPlaybackSchema
 // 回放分辨率（4.9）：节目监视器的视图偏好，按剪辑记在本机，不进剪辑文件与撤销栈。
 schemas['video_edit.document'].proxyPreference = z.object({ enabled: z.boolean(), autoCreate: z.boolean() }).strict()
@@ -137,7 +137,7 @@ Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静�
 labels.multicamCameraId = '机位'
 labels.multicam = '多机位源（机位与说话人、主音频）'
 const descriptions: Record<string, string> = {
-  'video_edit.document.media_import': '当前素材导入进度，只读；null 表示没有导入。enumerating 正在递归查找文件，probing 正在读取素材；completed/total 为已检查与待检查文件数。通过导入能力或界面发起，取消走原操作取消或界面取消按钮。完成才一次写入文档。',
+  'video_edit.document.media_import': '当前素材导入队列，只读；null 表示没有导入。enumerating 正在查找文件，probing 正在读取素材。completed/total 为整队已处理与已发现文件数，totalKnown=false 时仍在枚举，discovered 是已发现数量。queued 为等待处理的请求数，requests 为本队列请求总数，imported/skipped 为已导入与跳过数。追加请求会排队；目录即时建素材箱，素材分批出现，每个请求一步撤销。取消整队保留已完成部分，清理本次新建且仍为空的素材箱。',
   'video_edit.clip.multicam_camera_id': '此段使用的机位ID，从源序列multicam.cameras读取；空字符串恢复机位1。仅多机位序列片段可写，保留源入点与固定主音频，可一步撤销。切点用滚动编辑或start/duration/source_in_us通用属性调整。',
   'video_edit.sequence.multicam': '多机位源定义：cameras含机位id/name/clipId与可选speaker说话人；audioCameraId为固定主音频机位。只能编辑现有源的机位名称、说话人和主音频，保留id与clipId；创建请用create_video_edit_multicam，普通序列读null。',
   'video_edit.item.sequence_id': '序列素材引用的原始 sequence ID（从 video_edit.sequence 完整引用的子 ID 取得）；仅 kind=sequence 可设置。创建序列素材需 name、kind=sequence、sequence_id，然后通过 video_edit.clip 集合放入父序列。循环引用或超过八层会整组拒绝；普通媒体留空。',
@@ -170,7 +170,7 @@ const descriptions: Record<string, string> = {
   'video_edit.document.proxy_preference': '代理看片偏好。enabled=true 节目与源监视器用已有低分辨率代理，false用原片；声音、导出、选帧、跟踪与智能区域分析始终用原片。没有代理的素材仍用原片。autoCreate=true 导入超过1920×1080的视频时自动后台创建720p代理；本机按剪辑记住，不改内容，可事务撤销。',
   'video_edit.media.proxy_state': '代理状态，只读：none无代理、generating后台创建中、ready已有；progress为0–1，error为失败原因。代理创建使用generate_video_edit_proxy，切换使用video_edit.document.proxy_preference。',
   'video_edit.document.playback_resolution': '节目监视器的回放分辨率（只影响看片时的流畅度与清晰度，不改剪辑内容，不进剪辑历史）。resolution：full 完整、half 1/2、quarter 1/4、eighth 1/8（按序列宽高各缩小到该比例渲染，素材多、效果重、播放卡顿时调低）。fullWhenPaused：true 暂停时自动回到完整分辨率（默认，便于看清细节），false 暂停时也用所选分辨率。导出、选帧加入资产库、设为项目封面始终按完整分辨率，与此无关。按剪辑记住。',
-  'video_edit.clip.effect_ids': `效果执行顺序（从上到下依次处理画面；声音片段上是音频效果，依次处理声音），一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。`,
+  'video_edit.clip.effect_ids': '效果执行顺序（从上到下依次处理画面；声音片段上是音频效果，依次处理声音）。',
   'video_edit.transition.left_clip_id': '过渡左侧（前一段）的片段 ID，创建后不可改。两个片段在同一轨道首尾相接时两端都写；只写 left_clip_id 是挂在该片段出点的单侧过渡（后面是空白，淡出）。视频过渡挂画面片段，音频过渡挂声音片段。',
   'video_edit.transition.right_clip_id': '过渡右侧（后一段）的片段 ID，创建后不可改。只写 right_clip_id 是挂在该片段入点的单侧过渡（前面是空白，淡入）。两端都不写会被拒绝；写错时错误信息会列出该序列可放这种过渡的编辑点。',
 }

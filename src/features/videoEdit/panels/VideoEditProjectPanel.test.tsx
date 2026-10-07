@@ -133,7 +133,7 @@ it('列表视图按 PR：素材箱三角展开显示缩进的内容，表头点�
   // 帧速率列：A 60 fps；B 是可变帧率没有帧率
   expect(view.getByRole('button', { name: 'A原视频' }).querySelector('[data-video-edit-project-column="frameRate"]')!.textContent).toBe('60 fps')
   fireEvent.click(view.getByRole('button', { name: '名称' }))
-  expect(names()[0]).toBe('A原视频')
+  expect(names()[0]).toBe('镜头')
   // 颜色标签：视频默认鸢尾花色，右键设为黄色
   const target = view.getByRole('button', { name: 'A原视频' })
   expect(target.querySelector('[data-video-edit-label]')!.getAttribute('data-video-edit-label')).toBe('iris')

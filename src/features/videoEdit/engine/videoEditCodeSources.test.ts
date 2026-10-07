@@ -40,6 +40,26 @@ function changedVersion(document: VideoEditComposition, id: string): VideoEditCo
 }
 
 describe('可见代码源与固定内容复用', () => {
+  it('40份不同代码滤镜同帧保留，下一帧不重新编译，缩短链后闲置缓存回落', async () => {
+    const document = fixture(source(), 40)
+    document.codeMaterials![0].versions.forEach((version, index) => { version.source = source('static', `滤镜${index}`, 'filter') })
+    document.clips = [{ ...document.clips[0], kind: 'image', code: undefined,
+      effects: Array.from({ length: 40 }, (_, index) => ({ id: `fx-${index}`, name: '效果', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: `v${index}`, parameters: {} } })) }]
+    const boundary = boundaries(document)
+    try {
+      for (const frame of [0, 1]) {
+        const prepared = await boundary.sources.prepare(document, document.clips, frame, () => true)
+        expect(prepared.effects.get('clip')).toHaveLength(40)
+      }
+      expect(boundary.compiler.compile).toHaveBeenCalledTimes(40)
+      expect(boundary.sources.diagnostics().programs).toBe(40)
+      const next = { ...document, clips: [{ ...document.clips[0], effects: document.clips[0].effects!.slice(0, 1) }], codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'new', apiVersion: 1 as const, languageVersion: 1 as const, source: source('static', '新滤镜', 'filter') }] }] }
+      next.clips[0].effects.push({ id: 'new', name: '效果', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: 'new', parameters: {} } })
+      boundary.sources.updateDocument(next)
+      await boundary.sources.prepare(next, next.clips, 2, () => true)
+      expect(boundary.sources.diagnostics().programs).toBe(32)
+    } finally { await boundary.sources.dispose() }
+  })
   it('全透明调整层不准备四项效果，九层原范围继续透传且零GPU资源', async () => {
     const document = fixture(source(), 36)
     document.codeMaterials![0].versions.forEach((version, index) => { version.source = source('static', `调整滤镜${index}`, 'filter') })

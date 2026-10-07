@@ -132,20 +132,34 @@ it('保存的默认规格序列化到应用设置，重新读取仍使用保存�
   expect(useSettingsStore.getState().videoEditSequenceDefaults).toEqual(defaults)
 })
 
-it('不可靠视频拖入通过现有规格面板确认，默认60帧且取消不写入时间线', async () => {
+it.each(['items', 'files'] as const)('不可靠视频从%s拖入通过现有规格面板确认，取消回到拖入前，确认整体一步撤销', async source => {
   const owner = await createVideoEditProject(); const id = owner.document.id
   appendVideoEditMedia(id, media('video', { frameRateMode: 'variable' }))
+  const before = owner.document; const history = owner.past.length
+  if (source === 'files') {
+    vi.spyOn(getPlatform().system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))
+    vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+    vi.spyOn(getPlatform().media, 'getPathForFile').mockImplementation(file => resolve('fixture', file.name))
+    vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue(resolve('fixture'))
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(new Uint8Array())))
+    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 1280, height: 720, close: vi.fn() }))
+  }
   const onError = vi.fn(); const view = render(<VideoEditEmptyTimeline instance={owner} onError={onError} />)
   const itemIds = owner.document.items.map(item => item.id)
-  fireEvent.drop(view.getByRole('region'), { dataTransfer: { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: id, itemIds }) } })
-  await waitFor(() => expect(view.getByRole('dialog')).toBeTruthy())
+  const dataTransfer = source === 'files' ? { types: ['Files'], files: [new File([], 'video.mp4'), new File([], 'fresh.png')], getData: () => '' } : { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: id, itemIds }) }
+  fireEvent.drop(view.getByRole('region'), { dataTransfer })
+  await waitFor(() => { expect(onError.mock.calls).toEqual([]); expect(view.getByRole('dialog')).toBeTruthy() })
+  expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
   expect(view.getByRole('button', { name: '帧率' }).textContent).toBe('60 帧')
-  fireEvent.click(view.getByRole('button', { name: '取消' })); expect(owner.document.sequences).toEqual([])
-  fireEvent.drop(view.getByRole('region'), { dataTransfer: { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: id, itemIds }) } })
-  await waitFor(() => expect(view.getByRole('dialog')).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: '取消' }))
+  expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
+  fireEvent.drop(view.getByRole('region'), { dataTransfer })
+  await waitFor(() => { expect(onError.mock.calls).toEqual([]); expect(view.getByRole('dialog')).toBeTruthy() })
   fireEvent.click(view.getByRole('button', { name: '新建' }))
   await waitFor(() => expect(owner.document.sequences).toHaveLength(1))
   expect(getActiveVideoEditSequence(owner).fps).toBe(60); expect(onError).not.toHaveBeenCalled()
+  expect(owner.document.items).toHaveLength(source === 'files' ? 2 : 1); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(id)); expect({ ...owner.document, revision: before.revision }).toEqual(before)
 })
 
 it('通用实体读取没有序列、创建时间线使用应用默认，删除最后一条空序列后回到零条', async () => {

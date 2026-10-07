@@ -9,6 +9,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { analyzeVideoEditLumetri, editVideoEditLumetri } from './videoEditLumetri'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
+import { makeVideoEditBuiltinEffect } from './videoEditCompositing'
 
 vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditCodeTrial')>(), trialVideoEditCodeFrames: vi.fn(), trialVideoEditCodeDocument: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('./videoEditLumetriLutClient', async () => {
@@ -34,6 +35,15 @@ async function setup() {
   appendVideoEditClip(id); const sequence = getActiveVideoEditSequence(owner)
   return { owner, target: { projectId: id, sequenceId: sequence.id, clipId: sequence.clips[0].id } }
 }
+it('已有24项效果时仍可创建Lumetri，保留整条链且一步撤销', async () => {
+  const { owner, target } = await setup()
+  editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, effects: Array.from({ length: 24 }, () => makeVideoEditBuiltinEffect('invert')) })) })) }))
+  const before = owner.document; const history = owner.past.length
+  editVideoEditLumetri(target, { params: { exposure: .5 } })
+  expect(getActiveVideoEditSequence(owner).clips[0].effects).toHaveLength(25)
+  expect(owner.past).toHaveLength(history + 1)
+  undoVideoEdit(target.projectId); expect(owner.document).toEqual({ ...before, revision: owner.document.revision })
+})
 it('首次拖动创建效果：连续预览不增历史，松手一步；Esc 连同创建撤销；锁轨拒绝', async () => {
   const { owner, target } = await setup(); const history = owner.past.length
   const clip = () => getActiveVideoEditSequence(owner).clips[0]

@@ -11,6 +11,9 @@ import type { VideoEditTrackedClip } from './videoEditTrackResults'
 interface Layer { clip: VideoEditClip; picture: VideoEditPicture }
 const effective = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).length > 0
 const slot = (clip: VideoEditClip, index: number): string => `composite:clip:${clip.id}:${index}`
+// Chain length never determines target count. The current picture and filtered output
+// ping-pong; fractional strength/masks need a third target to read both originals.
+// A translucent adjustment layer keeps one additional unchanged band for its final mix.
 const slots = (clip: VideoEditClip): string[] => Array.from({ length: effective(clip) ? clip.kind === 'adjustment' && clip.opacity < 1 ? 4 : 3 : 1 }, (_, index) => slot(clip, index))
 /**
  * 智能区域（4.7d）共用的两张画面：上传的低分辨率蒙版、按片段位置画到序列尺寸的蒙版。每个带区域的效果依次使用，
@@ -28,7 +31,10 @@ export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditComposite
       keys.add(`composite:transition:${node.window.transition.id}`)
     } else {
       node.children.forEach(visit)
-      if (effective(node.clip) && node.clip.opacity > 0) slots(node.clip).forEach(key => keys.add(key))
+      if (effective(node.clip) && node.clip.opacity > 0) {
+        slots(node.clip).forEach(key => keys.add(key))
+        if (masked(node.clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT)
+      }
     }
   }
   nodes.forEach(visit); return keys

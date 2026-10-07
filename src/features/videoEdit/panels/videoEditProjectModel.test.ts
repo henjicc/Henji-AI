@@ -27,12 +27,12 @@ function project() {
   return document
 }
 
-it('列表是可展开的树：当前素材箱里素材箱与素材项同列排序，展开的素材箱缩进列出内容；搜索跨箱平铺且不修改剪辑', () => {
+it('列表是可展开的树：当前素材箱里素材箱优先排序，展开的素材箱缩进列出内容；搜索跨箱平铺且不修改剪辑', () => {
   const document = project(); const snapshot = JSON.stringify(document)
   const rows = (expanded: string[], binId = '') => videoEditProjectRows(document, binId, '', byName, new Set(expanded)).map(row => [row.entry.value.id, row.depth, row.expandable, row.expanded])
   // zh-CN 排序：中文名“序列 1”排在拉丁字母名之前
-  expect(rows([])).toEqual([[document.sequences[0].id, 0, false, false], ['a', 0, true, false], ['first', 0, false, false], ['b', 0, true, false], ['sound', 0, false, false]])
-  expect(rows(['a', 'nested']).slice(1, 5)).toEqual([['a', 0, true, true], ['nested', 1, true, true], ['second', 2, false, false], ['first', 0, false, false]])
+  expect(rows([])).toEqual([['a', 0, true, false], ['b', 0, true, false], [document.sequences[0].id, 0, false, false], ['first', 0, false, false], ['sound', 0, false, false]])
+  expect(rows(['a', 'nested']).slice(0, 3)).toEqual([['a', 0, true, true], ['nested', 1, true, true], ['second', 2, false, false]])
   expect(rows([], 'a')).toEqual([['nested', 0, true, false]])
   expect(videoEditProjectRows(document, '', '片头', byName, new Set()).map(row => row.entry.value.id)).toEqual(['second'])
   expect(videoEditBinPath(document.bins, 'nested').map(bin => bin.id)).toEqual(['a', 'nested'])
@@ -48,7 +48,7 @@ it('列内容按素材帧率给出时间码，音频显示采样率；颜色标�
   expect(videoEditProjectColumns(document, entry('b'), 30).label).toBe('mango')
   expect(videoEditProjectRows(document, '', '', { key: 'duration', direction: 'desc' }, new Set()).map(row => row.entry.value.id).slice(0, 2)).toEqual(['first', 'sound'])
   expect(videoEditProjectRows(document, '', '', { key: 'duration', direction: 'asc' }, new Set()).map(row => row.entry.value.id).slice(0, 3)).toEqual([document.sequences[0].id, 'sound', 'first'])
-  expect(videoEditProjectRows(document, '', '', { key: 'name', direction: 'desc' }, new Set()).map(row => row.entry.value.id)[0]).toBe('sound')
+  expect(videoEditProjectRows(document, '', '', { key: 'name', direction: 'desc' }, new Set()).map(row => row.entry.value.id)[0]).toBe('b')
 })
 
 it('Ctrl 切换与 Shift 范围依据当前过滤排序，不混入隐藏素材项', () => {
@@ -65,4 +65,11 @@ it('子剪辑展示并排序源范围，持续时间不沿用整段素材', () =
   const ids = (key: 'mediaStart' | 'mediaEnd') => videoEditProjectRows(document, '', '', { key, direction: 'desc' }, new Set()).map(row => row.entry.value.id)
   expect(ids('mediaStart')[0]).toBe('shot')
   expect(ids('mediaEnd').slice(0, 2)).toEqual(['first', 'shot'])
+})
+
+it.each(['asc', 'desc'] as const)('名称%s排序默认素材箱优先，关闭后素材箱与素材混排', direction => {
+  const document = project()
+  const rows = (binsFirst: boolean) => videoEditProjectRows(document, '', '', { key: 'name', direction }, new Set(), 30, binsFirst).map(row => row.entry)
+  expect(rows(true).slice(0, 2).map(entry => entry.kind)).toEqual(['bin', 'bin'])
+  expect(rows(false)[0].kind).not.toBe('bin')
 })

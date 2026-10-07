@@ -109,6 +109,12 @@ interface SettingsState {
   videoEditDefaultTransitions: VideoEditDefaultTransitionPreferences;
   /** 剪辑：播放头移动时自动选中该帧最上面的可见片段（PR“选择跟随播放指示器”，默认关）。 */
   videoEditSelectionFollowsPlayhead: boolean;
+  videoEditBinsFirst: boolean;
+  videoEditImportFolderBins: boolean;
+  videoEditDuplicatePolicy: 'skip' | 'import';
+  setVideoEditBinsFirst: (enabled: boolean) => void;
+  setVideoEditImportFolderBins: (enabled: boolean) => void;
+  setVideoEditDuplicatePolicy: (policy: 'skip' | 'import') => void;
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
@@ -251,6 +257,9 @@ export const useSettingsStore = create<SettingsState>()(
       videoEditTrackHeaderButtons: {},
       videoEditDefaultTransitions: {},
       videoEditSelectionFollowsPlayhead: false,
+      videoEditBinsFirst: true,
+      videoEditImportFolderBins: true,
+      videoEditDuplicatePolicy: 'skip',
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         set((state) => ({
@@ -337,6 +346,9 @@ export const useSettingsStore = create<SettingsState>()(
       setVideoEditMonitorButtons: (kind, ids) => set((state) => ({ videoEditMonitorButtons: withVideoEditMonitorButtons(state.videoEditMonitorButtons, kind, ids) })),
       setVideoEditTrackHeaderButtons: (kind, ids) => set((state) => ({ videoEditTrackHeaderButtons: withVideoEditTrackHeaderButtons(state.videoEditTrackHeaderButtons, kind, ids) })),
       setVideoEditDefaultTransition: (medium, kind) => set((state) => { const next = { ...state.videoEditDefaultTransitions }; if (kind) next[medium] = kind; else delete next[medium]; return { videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(next) }; }),
+      setVideoEditBinsFirst: (videoEditBinsFirst) => set({ videoEditBinsFirst }),
+      setVideoEditImportFolderBins: (videoEditImportFolderBins) => set({ videoEditImportFolderBins }),
+      setVideoEditDuplicatePolicy: (videoEditDuplicatePolicy) => set({ videoEditDuplicatePolicy }),
       setVideoEditSelectionFollowsPlayhead: (videoEditSelectionFollowsPlayhead) => set({ videoEditSelectionFollowsPlayhead }),
     }),
     {

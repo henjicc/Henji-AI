@@ -1,6 +1,6 @@
 import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSchema, sliceVideoEditCurves, type VideoEditCurves } from '@/core/videoEdit/keyframes'
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
-import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
+import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
 import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
 import { assertVideoEditMaskTrackers } from './videoEditTrackingEdits'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
@@ -142,7 +142,6 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     if (!targets.size) throw new Error(media === 'audio' ? '请选择声音片段：音频效果只能加到声音片段，锁定轨道上的片段不能修改。' : '请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。')
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
-      if ((clip.effects?.length ?? 0) + templates.length > VIDEO_EDIT_MAX_EFFECTS) throw new Error(`片段“${clip.name}”最多只能放${VIDEO_EDIT_MAX_EFFECTS}项效果，请先删除不用的效果。`)
       const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditCurves(template.builtin.curves, 0, clip.duration) } } : {}) }))
       created.push(...effects.map(effect => effect.id))
       return { ...clip, effects: [...(clip.effects ?? []), ...effects] }

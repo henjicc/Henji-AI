@@ -32,7 +32,7 @@ export class VideoEditBuiltinEffectsGpu {
   private layout?: unknown
   private module?: unknown
   private fallbackLut?: GpuTexture
-  private readonly lookups = new Map<string, { texture: GpuTexture; cube?: CubeLut }>()
+  private readonly lookups = new Map<string, { texture: GpuTexture; cube?: CubeLut; used: boolean }>()
   private disposed = false
   passes = 0
   constructor(private readonly device: GpuDevice, private readonly sampler: unknown, private readonly allocator: VideoEditBuiltinScratchAllocator, private readonly lutLoader: VideoEditLutLoader = loadLut) {}
@@ -102,7 +102,6 @@ export class VideoEditBuiltinEffectsGpu {
     const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, format)))
     if (this.disposed) throw new Error('原调色渲染已关闭。')
     // Resolve all resources before recording, so missing LUT never silently becomes identity.
-    const used = new Set<string>()
     const lookups: Array<{ texture: GpuTexture; cube?: CubeLut } | undefined> = []
     for (const pass of plan.passes) {
       const lookup = pass.lookup
@@ -110,19 +109,19 @@ export class VideoEditBuiltinEffectsGpu {
       const asset = lookup.kind === 'cube' ? luts.find(asset => asset.id === lookup.ref) : undefined
       if (lookup.kind === 'cube' && !asset) throw new Error('项目中找不到此 LUT，请重新导入或移除引用。')
       const key = lookup.kind === 'curve' ? `curve:${Array.from(lookup.data).join(',')}` : `cube:${asset!.path}:${asset!.contentIdentity}`
-      used.add(key)
       let resource = this.lookups.get(key)
       if (!resource) {
         if (lookup.kind === 'curve') {
           const rgba = new Float32Array(lookup.data.length * 4); lookup.data.forEach((value, i) => rgba.set([value, value, value, 1], i * 4))
-          resource = { texture: this.upload(rgba, lookup.data.length) }
+          resource = { texture: this.upload(rgba, lookup.data.length), used: true }
         } else {
           const cube = await this.lutLoader(asset!)
           if (this.disposed) throw new Error('原调色渲染已关闭。')
-          resource = { cube, texture: this.upload(cube.data, cube.kind === '3d' ? cube.size : Math.min(1024, cube.size), cube.kind === '3d' ? cube.size : 1, cube.kind === '3d') }
+          resource = { cube, texture: this.upload(cube.data, cube.kind === '3d' ? cube.size : Math.min(1024, cube.size), cube.kind === '3d' ? cube.size : 1, cube.kind === '3d'), used: true }
         }
         this.lookups.set(key, resource)
       }
+      resource.used = true
       lookups.push(resource)
     }
     this.fallbackLut ??= this.upload(new Float32Array([0, 0, 0, 1]), 1, 1, true)
@@ -149,12 +148,16 @@ export class VideoEditBuiltinEffectsGpu {
       target.draw(3); target.end()
     })
     this.device.queue.submit([encoder.finish()])
-    // Bounded across animated curves/effect switches; resources in this command remain alive through submission.
-    if (this.lookups.size > 12) for (const [key, value] of this.lookups) { if (!used.has(key)) { value.texture.destroy(); this.lookups.delete(key) } }
     this.passes += plan.passes.length
   }
   /** 释放自上次调用以来没有用到的中间纹理。 */
   releaseIdle(): void {
+    // Sweep at the frame boundary, not between effects: every curve/LUT in a long
+    // chain stays warm. Animated or removed lookups survive at most one idle frame.
+    for (const [key, value] of this.lookups) {
+      if (value.used) value.used = false
+      else { value.texture.destroy(); this.lookups.delete(key) }
+    }
     for (let index = this.scratch.length - 1; index >= 0; index--) {
       const entry = this.scratch[index]
       if (entry.used) { entry.used = false; continue }

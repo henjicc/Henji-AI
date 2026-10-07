@@ -5,7 +5,6 @@ import { videoEditClipMedia, type VideoEditDocument } from '@/core/videoEdit/doc
 import { videoEditClipSpeedData } from './videoEditClipSpeed'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditTranscriptWords, resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
-import { VIDEO_EDIT_MAX_EFFECTS } from '@/core/videoEdit/compositing'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEditTransitionClipIds, VIDEO_EDIT_TRANSITION_PRESETS, VIDEO_EDIT_TRANSITION_REF_PREFIX } from '@/core/videoEdit/transitions'
 import { listVideoEditInstances, requireVideoEditInstance, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
@@ -45,7 +44,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
 }
 export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
-  if (ref.kind === 'video_edit.document') return { mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, lumetriLuts: (instance.document.lumetriLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
+  if (ref.kind === 'video_edit.document') return { mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total, totalKnown: task.totalKnown ?? false, discovered: task.discovered ?? task.total, queued: task.queued, requests: task.requests, imported: task.imported, skipped: task.skipped } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, lumetriLuts: (instance.document.lumetriLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === ref.kind)) return videoEditCompositeData(instance.document, ref.kind as VideoEditCompositeEntityType, childId)
   if (ref.kind === 'video_edit.builtin_effect') {
@@ -150,7 +149,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
         if (!['video', 'image', 'sequence'].includes(clip.kind)) createReason = '请选择视频、图片或嵌套序列片段。'
         else if ((clip.trackers?.length ?? 0) >= 8) createReason = '片段已有 8 个跟踪器，请先删除不用的跟踪器。'
         if (!clip.trackers?.length) removeReason = '没有可移除的跟踪器。'
-      } else { if ((clip.effects?.length ?? 0) >= VIDEO_EDIT_MAX_EFFECTS) createReason = `片段已达到${VIDEO_EDIT_MAX_EFFECTS}项效果上限，请先移除不用的效果。`; if (!clip.effects?.length) removeReason = '片段没有可移除的效果。' }
+      } else { if (!clip.effects?.length) removeReason = '片段没有可移除的效果。' }
     }
     if (createReason) availability.create = { ...availability.create, available: false, reasons: [createReason] }
     if (removeReason) availability.remove = { ...availability.remove, available: false, reasons: [removeReason] }

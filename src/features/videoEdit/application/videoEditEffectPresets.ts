@@ -2,7 +2,7 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import { createJSONStorage } from 'zustand/middleware'
 import { z } from 'zod'
 import { createLogger } from '@/core/logging'
-import { videoEditEffectSchema, VIDEO_EDIT_MAX_EFFECTS, videoEditEffectMedia, type VideoEditEffect } from '@/core/videoEdit/compositing'
+import { videoEditEffectSchema, videoEditEffectMedia, type VideoEditEffect } from '@/core/videoEdit/compositing'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPresets'
 import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
@@ -12,7 +12,7 @@ const logger = createLogger('features.videoEdit.presets')
 const nameSchema = z.string().trim().min(1, '请填写预设名称。').max(200, '预设名称最多 200 字。')
 export const videoEditEffectPresetSchema = z.object({
   id: z.string().min(1).max(100), name: nameSchema, media: z.enum(['video', 'audio']),
-  effects: z.array(videoEditEffectSchema).min(1).max(VIDEO_EDIT_MAX_EFFECTS),
+  effects: z.array(videoEditEffectSchema).min(1),
 }).strict().superRefine((preset, context) => {
   if (preset.effects.some(effect => !effect.builtin || videoEditEffectMedia(effect) !== preset.media || effect.mask?.regionId === 'tracker' || effect.mask?.regionId === 'shapes' && effect.mask.shapes.some(shape => shape.follow))) context.addIssue({ code: 'custom', message: '预设只保存同媒介的内置效果，不能保存原片段的跟踪绑定；代码滤镜请保存为代码素材。' })
 })

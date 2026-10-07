@@ -25,7 +25,8 @@ import { videoEditEffectMask } from './videoEditEffectMasks'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 
 const logger = createLogger('features.videoEdit.codeSources')
-const MAX_PROGRAMS = 32; const MAX_PROGRAM_BYTES = 16 * 1024 ** 2
+/** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
+const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
 type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'retainProgramVersions'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'compile' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
@@ -100,9 +101,9 @@ export class VideoEditCodeSources {
       const program = await this.compiler.compile(version.source, signal); signal.throwIfAborted()
       if (program.apiVersion !== version.apiVersion || program.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '代码源码协议与固定版本声明不一致。')
       const bytes = new TextEncoder().encode(version.source).byteLength + new TextEncoder().encode(JSON.stringify(program)).byteLength
-      while (this.programs.size >= MAX_PROGRAMS || this.programBytes + bytes > MAX_PROGRAM_BYTES) {
+      while (this.programs.size >= CACHED_PROGRAMS || this.programBytes + bytes > CACHED_PROGRAM_BYTES) {
         const oldest = [...this.programs].find(([key]) => !pinned.has(key))
-        if (!oldest) throw new CodeMaterialError('BUDGET', '本帧源码编译缓存超过32份或16MiB预算。')
+        if (!oldest) break
         this.programs.delete(oldest[0]); this.programBytes -= oldest[1].bytes
       }
       this.programs.set(key, { source: version.source, program: freezeProgram(program), bytes }); this.programBytes += bytes
