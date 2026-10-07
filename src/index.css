@@ -1101,9 +1101,12 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   border-radius: var(--radius-control);
 }
 
-/* 剪辑面板标签右侧紧贴面板菜单（PR）：收窄标签右内边距，选中线到菜单图标为止。 */
+/* 剪辑面板标签（PR）：选中线到菜单图标为止。左内边距 16 与 3D 镜头参考的纯文字标签一致；
+ * 标题与菜单间隔 6（加上图标按钮自带的 4，文字到图标 10），右内边距 6（图标到边缘同为 10），
+ * 选中标签里“左留白 | 标题 | 菜单 | 右留白”左右匀称；非当前标签占住同一宽度，切换时文字不动。 */
 .henji-videoEdit-dock.dockview-theme-abyss .dv-tab {
-  padding-right: 0.25rem;
+  padding-left: 1rem;
+  padding-right: 0.375rem;
 }
 
 /* 剪辑工作区：面板头右侧的“最大化／恢复”平时隐藏，悬停该面板组或键盘聚焦时出现（面板菜单在当前标签标题旁，始终显示）。
