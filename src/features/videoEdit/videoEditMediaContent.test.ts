@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { videoEditNativeMediaProbe } from './application/videoEditMediaProbe'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditDocument, videoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
@@ -38,6 +39,10 @@ function composition() {
 }
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear(); workers.length = 0
+  // 测试环境没有原生解码服务：按“不可用”走后备探测，而不是让替身抛错再记一条探测异常。
+  vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
+  vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
+  vi.spyOn(getPlatform().videoDecoder, 'status').mockResolvedValue({ available: false, forcedBackend: null })
   vi.stubGlobal('Worker', WorkerBoundary)
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/saved-content.henji-video')

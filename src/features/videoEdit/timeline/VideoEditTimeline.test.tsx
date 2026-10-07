@@ -160,6 +160,8 @@ function layoutClock() {
 
 beforeEach(async () => {
   installHarnessNativeStorage(); onError = vi.fn()
+  // 缩略帧不是这些用例的对象：取帧一直“进行中”直到用例结束被中止，不再因替身缺 video 命名空间刷失败日志。
+  vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation((_request, signal) => new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('用例结束', 'AbortError')))))
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/fixture/timeline-ui.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.stubGlobal('PointerEvent', class extends MouseEvent { readonly pointerId: number; constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1 } })

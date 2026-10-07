@@ -6,6 +6,7 @@ import type {
   CreateDocumentRequest,
   CreateProjectRequest,
   DocumentContainerRef,
+  DocumentCoverResult,
   DocumentKindId,
   DocumentIndexScanReport,
   DocumentLink,
@@ -35,6 +36,7 @@ import type {
   ProjectSummary,
   RenameDocumentRequest,
   RenameProjectRequest,
+  SaveDocumentCoverRequest,
   SaveDocumentRequest,
   SetProjectMainDocumentRequest,
 } from '@/core/documents/types'
@@ -113,6 +115,8 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   readonly documents = new Map<string, StoredDocument>()
   readonly projects = new Map<string, ProjectSummary>()
   readonly trashed: string[] = []
+  /** 每份文档最近一次保存封面时的来源（只记录，不生成图片）。 */
+  readonly covers = new Map<string, SaveDocumentCoverRequest['sources']>()
   readonly calls: string[] = []
   /** 真正写进文件的次数（unchanged 不计）。 */
   writes = 0
@@ -195,6 +199,13 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
 
   stored(id: string): StoredDocument | undefined {
     return this.documents.get(id)
+  }
+
+  async saveDocumentCover(request: SaveDocumentCoverRequest): Promise<DocumentCoverResult> {
+    this.calls.push('saveDocumentCover')
+    this.require(request.docId)
+    this.covers.set(request.docId, structuredClone(request.sources))
+    return { docId: request.docId, coverPath: request.sources.length ? `covers/${request.docId}.webp` : null }
   }
 
   async readDocument(target: DocumentTarget): Promise<DocumentReadResult> {
@@ -315,7 +326,7 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
         missing: this.missingIds.has(meta.id),
         fileModifiedAt: meta.updatedAt,
         sizeBytes: 1,
-        coverPath: null,
+        coverPath: this.covers.get(meta.id)?.length ? `covers/${meta.id}.webp` : null,
         summary: this.summaryOf(meta.kind, content),
         lastOpenedAt: this.openedAt.get(meta.id) ?? null,
       }))

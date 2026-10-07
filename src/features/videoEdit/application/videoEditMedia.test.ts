@@ -34,6 +34,9 @@ function deferred<T>() {
 }
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
+  // 测试环境没有原生解码服务：按“不可用”走后备探测，而不是让替身抛错再记一条探测异常。
+  vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
+  vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
   Object.assign(video, { duration: 3, fps: 60, hasAudio: false, decodable: true })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/asset-reference.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, content) => { files.set(path, content) })
