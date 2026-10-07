@@ -17,6 +17,7 @@ import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtil
 import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvider, useHasOpenModalUiOverlayDescendant, useUiOverlayLayer } from './overlayOwnership'
 import { measureElementTextWidth } from './textMeasurement'
 import { Check } from 'lucide-react'
+import Tooltip from './Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
@@ -26,6 +27,7 @@ export type DropdownOption<T extends string | number | boolean> = {
   label: string
   value: T
   disabled?: boolean
+  tooltip?: string
 }
 
 type DropdownProps<T extends string | number | boolean> = {
@@ -382,7 +384,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     >
       {(options || []).map((option, index) => {
         const selected = isSelectedOption(option.value)
-        return (
+        const button = (
           <UiOptionButton
             key={String(option.value)}
             id={`${panelId}-option-${index}`}
@@ -403,6 +405,9 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             {selected ? <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent-text" /> : null}
           </UiOptionButton>
         )
+        return option.tooltip
+          ? <div key={String(option.value)} className="flex flex-col"><Tooltip content={option.tooltip}><span tabIndex={option.disabled ? 0 : undefined}>{button}</span></Tooltip></div>
+          : button
       })}
     </div>
   )

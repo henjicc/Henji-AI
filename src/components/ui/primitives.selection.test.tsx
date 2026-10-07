@@ -18,7 +18,6 @@ import {
   UI_NAV_ITEM_ACTIVE_CLASS,
   UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
-  UI_OPTION_SOLID_ACTIVE_CLASS,
 } from './styleTokens';
 import {
   UiCheckbox,
@@ -313,13 +312,3 @@ describe('UiOptionButton variant="cover"（封面内容卡，界面重设计 3.3
     }
   });
 });
-
-it('实底单选表单：静息透明、选中实底，点击回调和禁用语义保留', () => {
-  const choose = vi.fn()
-  const view = render(<><UiOptionButton variant="choice" active onClick={choose}>4K</UiOptionButton><UiOptionButton variant="choice" disabled>8K</UiOptionButton></>)
-  const selected = view.getByRole('button', { name: '4K' })
-  expectClasses(selected, UI_OPTION_SOLID_ACTIVE_CLASS)
-  expectClasses(view.getByRole('button', { name: '8K' }), `border-transparent ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`)
-  fireEvent.click(selected); expect(choose).toHaveBeenCalledOnce()
-  expect(view.getByRole('button', { name: '8K' })).toHaveProperty('disabled', true)
-})

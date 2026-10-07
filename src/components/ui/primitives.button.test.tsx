@@ -3,8 +3,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { UiButton, UiIconButton, UiWindowControl } from './primitives';
 import { UI_BUTTON_VARIANT_CLASS } from './primitiveInternals';
@@ -67,6 +67,20 @@ describe('UiButton 档位与尺寸（重要记录 003）', () => {
 });
 
 describe('UiIconButton 默认静默、on 与 tone', () => {
+  it('bare 始终透明无边框，开启与悬停只换图标色，保留焦点和开关语义', () => {
+    const click = vi.fn();
+    const view = render(<><UiIconButton tone="bare" on aria-label="锁定" onClick={click} /><UiIconButton tone="bare" on={false} disabled aria-label="未锁定" /></>);
+    const button = view.getByRole('button', { name: '锁定' });
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.className).toContain('text-accent-text');
+    expect(button.className).toContain('hover:text-text1');
+    expect(button.className).toContain('bg-transparent');
+    expect(button.className).toContain('border-0');
+    expect(button.className).not.toMatch(/ui-btn-(quiet|on)|hover:bg-|active:bg-/);
+    button.focus(); expect(document.activeElement).toBe(button);
+    fireEvent.click(button); expect(click).toHaveBeenCalledOnce();
+    expect(view.getByRole('button', { name: '未锁定' })).toHaveProperty('disabled', true);
+  });
   it('默认静默（quiet 皮肤）、md 28、圆角控件档', () => {
     const view = render(<UiIconButton aria-label="撤销" />);
     const button = view.getByRole('button', { name: '撤销' });

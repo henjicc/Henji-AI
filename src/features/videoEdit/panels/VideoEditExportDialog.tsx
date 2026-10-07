@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInput, UiLoading, UiModal, UiSelect } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import { VIDEO_EDIT_SEQUENCE_LIMITS } from '@/core/videoEdit/sequenceSize'
 import { enqueueVideoEditExports, videoEditExportQueue } from '../application/videoEditExportQueue'
 import { videoEditExportPresetLibrary } from '../application/videoEditExportPresets'
 import { requireVideoEditInstance, subscribeVideoEdit, videoEditExportRange, videoEditRevision } from '../application/videoEditService'
@@ -72,7 +73,7 @@ export function VideoEditExportDialog({ projectId, onClose }: { projectId: strin
         <UiFormRow label="格式" inline><UiSelect aria-label="导出格式" value={settings.format} onChange={event => patch({ format: event.target.value as VideoEditExportSettings['format'] })}><option value="mp4">MP4 视频</option><option value="aac">AAC 音频</option><option value="wav">WAV 音频</option></UiSelect></UiFormRow>
         {settings.format === 'mp4' && <>
           <UiFormRow label="保持序列画幅" inline><UiCheckbox checked={settings.keepSequenceSize ?? false} onCheckedChange={keepSequenceSize => patch({ keepSequenceSize })} /></UiFormRow>
-          {!settings.keepSequenceSize && <UiFormRow label="分辨率"><div className="flex flex-wrap items-center gap-2"><NumberInput ariaLabel="导出宽度" value={settings.width} min={16} max={7680} step={2} widthClassName="w-24" onChange={width => patch({ width })} /><span>×</span><NumberInput ariaLabel="导出高度" value={settings.height} min={16} max={7680} step={2} widthClassName="w-24" onChange={height => patch({ height })} /></div></UiFormRow>}
+          {!settings.keepSequenceSize && <UiFormRow label="分辨率"><div className="flex flex-wrap items-center gap-2"><NumberInput ariaLabel="导出宽度" value={settings.width} min={VIDEO_EDIT_SEQUENCE_LIMITS.minDimension} max={VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension} step={2} widthClassName="w-24" onChange={width => patch({ width })} /><span>×</span><NumberInput ariaLabel="导出高度" value={settings.height} min={VIDEO_EDIT_SEQUENCE_LIMITS.minDimension} max={VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension} step={2} widthClassName="w-24" onChange={height => patch({ height })} /></div></UiFormRow>}
           <UiFormRow label="帧率"><div className="flex flex-wrap items-center gap-2"><UiCheckbox checked={settings.fps === null} onCheckedChange={checked => patch({ fps: checked ? null : 30 })} aria-label="保持序列帧率" /><span>保持序列</span>{settings.fps !== null && <NumberInput ariaLabel="导出帧率" value={settings.fps} min={1} max={120} step={1} widthClassName="w-24" onChange={fps => patch({ fps })} />}</div></UiFormRow>
           <UiFormRow label="视频码率 Mbps" inline><NumberInput ariaLabel="视频码率 Mbps" value={settings.videoBitrateMbps} min={.1} max={200} step={1} precision={1} widthClassName="w-24" onChange={videoBitrateMbps => patch({ videoBitrateMbps })} /></UiFormRow>
         </>}

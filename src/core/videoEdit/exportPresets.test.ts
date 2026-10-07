@@ -1,6 +1,14 @@
 import { expect, it } from 'vitest'
 import { VIDEO_EDIT_EXPORT_PRESETS, videoEditExportEncoding, videoEditExportGeometry, videoEditExportSettingsSchema } from './exportPresets'
 
+it('导出沿共享序列边界接受8192单边，保持8K总像素上限与120帧支持', () => {
+  const settings = VIDEO_EDIT_EXPORT_PRESETS[0].settings
+  expect(videoEditExportSettingsSchema.safeParse({ ...settings, width: 8192, height: 4000, fps: 120 }).success).toBe(true)
+  expect(videoEditExportSettingsSchema.safeParse({ ...settings, width: 4000, height: 8192, fps: 120 }).success).toBe(true)
+  expect(videoEditExportSettingsSchema.safeParse({ ...settings, width: 8194 }).success).toBe(false)
+  expect(videoEditExportSettingsSchema.safeParse({ ...settings, width: 6000, height: 6000 }).success).toBe(false)
+})
+
 it('平台预设包含画幅、帧率、码率与响度；编码单位准确，母版与WAV保持原始声音', () => {
   for (const value of VIDEO_EDIT_EXPORT_PRESETS) expect(videoEditExportSettingsSchema.safeParse(value.settings).success).toBe(true)
   expect(videoEditExportEncoding(VIDEO_EDIT_EXPORT_PRESETS[0].settings, 60)).toEqual({ fps: 30, videoBitrate: 12000000, audioBitrate: 192000, audioCodec: 'aac' })

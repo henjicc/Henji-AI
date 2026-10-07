@@ -49,8 +49,9 @@ export type IconButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
  * - `media`：压在图片/视频/画布画面上（半透明深底 + 白色图标，不随主题）；
  * - `accent`：圆形材质主动作（如生成），一个表面最多一个；
  * - `danger`：静息静默、悬停显红（删除、移除）。
+ * - `bare`：始终无底无边框，开关与悬停只改变图标颜色。
  */
-export type IconButtonTone = 'default' | 'media' | 'accent' | 'danger'
+export type IconButtonTone = 'default' | 'media' | 'accent' | 'danger' | 'bare'
 
 export interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** 开关开启（选中底 + 强调色图标），同时写出 `aria-pressed`。只表达“功能是否开启”，不是动作层级。 */
@@ -178,8 +179,7 @@ export interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElem
    * - `cover`：封面内容卡（画布项目、3D 工程）：按钮本身无底无框，纵向排列“封面 + 文字”；悬停、键盘焦点与
    *   选中（`active`）只画在子元素 `UI_COVER_FRAME_CLASS` 封面框上（悬停发丝线、焦点环、选中强调描边，界面重设计 3.3）。
    */
-  /** choice：静息无边框无底，选中实底，用于明确要求实底的单选表单。 */
-  variant?: 'default' | 'card' | 'flat' | 'menu' | 'choice' | 'grid' | 'segment' | 'tile' | 'swatch' | 'cover'
+  variant?: 'default' | 'card' | 'flat' | 'menu' | 'grid' | 'segment' | 'tile' | 'swatch' | 'cover'
   /**
    * 高度与字号档（default / card / flat / menu / grid）：不传时高度随内容（上下 8px 内边距，字号 13）；
    * sm / md / lg 是最小高度 28 / 32 / 36（字号 12 / 13 / 13），多行内容仍可撑高。segment / tile / swatch 尺寸固定。
@@ -307,7 +307,9 @@ export function resolveIconButtonClass({
 }): string {
   const entry = UI_ICON_BUTTON_SIZE_CLASS[size]
   const radius = tone === 'accent' || shape === 'circle' ? 'rounded-full' : entry.radius
-  const skin = tone === 'accent'
+  const skin = tone === 'bare'
+    ? `border-0 bg-transparent disabled:opacity-50 ${on ? 'text-accent-text hover:text-text1' : 'text-text2 hover:text-text1'}`
+    : tone === 'accent'
     ? UI_BUTTON_VARIANT_CLASS.primary
     : tone === 'media'
       ? `${UI_BUTTON_VARIANT_CLASS.media}${on ? ' ui-btn-media-on' : ''}`

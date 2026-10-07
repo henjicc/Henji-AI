@@ -3,7 +3,7 @@
  * 不在这里改任何外观；新增共享组件时在这里补一个样本（uiGalleryCoverage.test 会提醒）。
  */
 import { useState } from 'react'
-import { Bold, Check, Image as ImageIcon, Italic, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Bold, Check, Image as ImageIcon, Italic, Link, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -90,6 +90,7 @@ export function ButtonSection(): JSX.Element {
         rows={[
           { label: '图标', render: (state) => <UiIconButton aria-label="加粗" disabled={disabledAt(state)}><Bold className="h-4 w-4" /></UiIconButton> },
           { label: '开启', render: (state) => <UiIconButton aria-label="斜体" on disabled={disabledAt(state)}><Italic className="h-4 w-4" /></UiIconButton> },
+          { label: '无底', render: (state) => <UiIconButton aria-label="锁定比例" tone="bare" on disabled={disabledAt(state)}><Link className="h-4 w-4" /></UiIconButton> },
           { label: '强调', render: (state) => <UiIconButton aria-label="生成" tone="accent" disabled={disabledAt(state)}><Sparkles className="h-4 w-4" /></UiIconButton> },
           { label: '危险', render: (state) => <UiIconButton aria-label="删除" tone="danger" disabled={disabledAt(state)}><Trash2 className="h-4 w-4" /></UiIconButton> },
         ]}

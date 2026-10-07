@@ -27,7 +27,6 @@ import {
   UI_NAV_ITEM_ACTIVE_CLASS,
   UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
-  UI_OPTION_SOLID_ACTIVE_CLASS,
   UI_OPTION_ITEM_CLASS,
   UI_RADIUS_CLASS,
 } from './styleTokens';
@@ -392,7 +391,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
     }
 
     // 单选：菜单项标签保持主要文字（勾用强调色）；网格/卡片格用强调文字（重要记录 012，任务 4.3）
-    const singleActiveClass = variant === 'choice' ? UI_OPTION_SOLID_ACTIVE_CLASS : variant === 'grid' || variant === 'card'
+    const singleActiveClass = variant === 'grid' || variant === 'card'
       ? `border-transparent ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text`
       : UI_OPTION_ITEM_ACTIVE_CLASS;
     const activeClass = selection === 'multiple' ? UI_MULTISELECT_ITEM_ACTIVE_CLASS : singleActiveClass;
@@ -401,7 +400,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
     // 默认变体是纯文字 chip 组，保留一圈发丝线。
     const highlightClass = highlighted ? ' ui-option-highlighted' : '';
     const restClass = (() => {
-      if (variant === 'menu' || variant === 'choice') {
+      if (variant === 'menu') {
         return `border-transparent text-text1 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}${highlightClass}`;
       }
       if (variant === 'grid' || variant === 'card' || variant === 'flat') {

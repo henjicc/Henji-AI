@@ -1,16 +1,17 @@
 import { z } from 'zod'
 import { videoEditLoudnessSettingsSchema } from './loudness'
+import { videoEditSequenceSizeFields, isVideoEditSequenceSize } from './sequenceSize'
 
 export const videoEditExportSettingsSchema = z.object({
   format: z.enum(['mp4', 'aac', 'wav']),
-  width: z.number().int().min(16).max(7680).refine(value => value % 2 === 0, '宽度必须是偶数。'),
-  height: z.number().int().min(16).max(7680).refine(value => value % 2 === 0, '高度必须是偶数。'),
+  width: videoEditSequenceSizeFields.width.refine(value => value % 2 === 0, '宽度必须是偶数。'),
+  height: videoEditSequenceSizeFields.height.refine(value => value % 2 === 0, '高度必须是偶数。'),
   fps: z.number().min(1).max(120).nullable().describe('null 表示保持序列帧率。'),
   videoBitrateMbps: z.number().min(.1).max(200), audioBitrateKbps: z.number().int().min(32).max(512),
   fit: z.enum(['fit', 'fill', 'letterbox']).describe('fit 适合：保持完整画面并居中；fill 填充：按中心裁切铺满；letterbox 留黑边：保持完整画面并明确补黑边。适合与留黑边在不透明成片中相同。'),
   loudness: videoEditLoudnessSettingsSchema.nullable(),
   keepSequenceSize: z.boolean().optional(),
-}).strict()
+}).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
 export type VideoEditExportSettings = z.infer<typeof videoEditExportSettingsSchema>
 export const videoEditExportPresetSchema = z.object({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), settings: videoEditExportSettingsSchema }).strict()
 export type VideoEditExportPreset = z.infer<typeof videoEditExportPresetSchema>

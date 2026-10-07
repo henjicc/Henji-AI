@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const VIDEO_EDIT_SEQUENCE_LIMITS = Object.freeze({ minDimension: 16, maxDimension: 7680, maxPixels: 7680 * 4320 })
+export const VIDEO_EDIT_SEQUENCE_LIMITS = Object.freeze({ minDimension: 16, maxDimension: 8192, maxPixels: 7680 * 4320 })
 export interface VideoEditSequenceSize { width: number; height: number }
 export const videoEditSequenceSizeFields = {
   width: z.number().int().min(VIDEO_EDIT_SEQUENCE_LIMITS.minDimension).max(VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension),
