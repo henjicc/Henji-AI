@@ -12,9 +12,10 @@ import { VideoEditEffectsPanel } from './VideoEditEffectsPanel'
 import { addVideoEditTextClipAt } from '../application/videoEditTimeline'
 import { VideoEditTimelineKeyframes } from '../timeline/VideoEditTimelineKeyframes'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
-import { videoEditClipValue } from '@/core/videoEdit/keyframes'
+import { evaluateVideoEditClip, videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
+import { useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/textMeasurement', () => ({ measureElementTextWidth: () => 30 }))
@@ -25,6 +26,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   async dispose(): Promise<void> {}
 } }))
 beforeEach(() => {
+  useVideoEditEffectLibraryStore.setState({ favorites: [], presets: [] })
   installHarnessNativeStorage()
   vi.stubGlobal('PointerEvent', class extends MouseEvent { readonly pointerId: number; constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1 } })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'keyframes.henji-video'))
@@ -34,6 +36,7 @@ afterEach(async () => {
   cleanup()
   for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id)
   vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage()
+  localStorage.clear()
 })
 async function project() {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
@@ -51,6 +54,50 @@ function Pen({ owner }: { owner: VideoEditInstance }): React.ReactElement {
   const sequence = getActiveVideoEditSequence(owner)
   return <VideoEditTimelineKeyframes projectId={owner.document.id} sequenceId={sequence.id} clip={sequence.clips[0]} pen={owner.tool === 'pen'} width={200} height={60} pixels={2} onError={error => { throw error }} />
 }
+it('固有效果不展示颜色和亮度，已有亮度与关键帧仍保留并按原值求值', async () => {
+  const { owner, id, clip } = await project()
+  const points = [{ time: 0, value: .6, interpolation: 'linear' as const }, { time: 20, value: 1.4, interpolation: 'linear' as const }]
+  editVideoProject(id, document => { document.sequences[0].clips[0].brightness = .7; document.sequences[0].clips[0].curves = { brightness: points }; return document })
+  const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
+  expect(panel.container.querySelector('[data-video-edit-effect-section="color"]')).toBeNull()
+  expect(ui.queryByRole('spinbutton', { name: '亮度' })).toBeNull()
+  expect(ui.queryByRole('button', { name: '启用亮度关键帧' })).toBeNull()
+  expect(clip().brightness).toBe(.7)
+  expect(clip().curves?.brightness).toEqual(points)
+  expect(evaluateVideoEditClip(clip(), clip().start + 10).brightness).toBeCloseTo(1)
+  fireEvent.click(ui.getByRole('button', { name: '增加缩放' }))
+  expect(clip().brightness).toBe(.7)
+  expect(clip().curves?.brightness).toEqual(points)
+})
+
+it('从附加效果标题打开预设面板，默认全选，按链顺序只保存勾选子集', async () => {
+  const { owner, id, sequenceId, clipId } = await project()
+  const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
+  expect(ui.getByRole('button', { name: '保存为预设' }).hasAttribute('disabled')).toBe(true)
+  act(() => {
+    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
+    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'brightness_contrast')
+    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'lumetri_color')
+  })
+  expect(ui.queryByRole('checkbox')).toBeNull()
+  expect(ui.queryByText('保存所选效果为预设…')).toBeNull()
+  const save = ui.getByRole('button', { name: '保存为预设' })
+  expect(save.closest('[data-video-edit-effect-section="effects"]')).toBeTruthy()
+  fireEvent.click(save)
+  const modal = within(within(document.body).getByRole('dialog', { name: '保存为预设' }))
+  const checkboxes = modal.getAllByRole('checkbox')
+  expect(checkboxes).toHaveLength(3)
+  for (const checkbox of checkboxes) expect(checkbox.getAttribute('aria-checked')).toBe('true')
+  fireEvent.click(modal.getByRole('checkbox', { name: '保存效果：亮度与对比度' }))
+  fireEvent.change(modal.getByRole('textbox', { name: '预设名称' }), { target: { value: '柔化调色' } })
+  fireEvent.click(modal.getByRole('button', { name: '保存' }))
+  const presets = useVideoEditEffectLibraryStore.getState().presets
+  expect(presets).toHaveLength(1)
+  expect(presets[0].name).toBe('柔化调色')
+  expect(presets[0].effects.map(effect => effect.builtin?.id)).toEqual(['gaussian_blur', 'lumetri_color'])
+  expect(within(document.body).queryByRole('dialog')).toBeNull()
+})
+
 it('效果控件秒表/当前帧自动加点/导航/删除/关闭；拖动和取消共用一步撤销', async () => {
   const { owner, id, clip } = await project()
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)

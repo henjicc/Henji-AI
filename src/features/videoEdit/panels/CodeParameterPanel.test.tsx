@@ -50,20 +50,20 @@ it('效果控件拖动数值只记一步撤销，Esc 回到拖动前，读数夹
   const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 })
   setVideoEditView(id, { selection: clipId })
   const view = render(<View />); const clip = () => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!
-  const brightness = view.getByRole('spinbutton', { name: '亮度' }) as HTMLInputElement
+  const scale = view.getByRole('spinbutton', { name: '缩放' }) as HTMLInputElement
   const history = owner.past.length
-  fireEvent.pointerDown(brightness, { pointerId: 1, button: 0, clientX: 0 })
-  fireEvent.pointerMove(brightness, { pointerId: 1, clientX: 20 }); expect(clip().brightness).toBeCloseTo(1.1)
-  fireEvent.pointerMove(brightness, { pointerId: 1, clientX: 5000 }); expect(clip().brightness).toBe(2)
+  fireEvent.pointerDown(scale, { pointerId: 1, button: 0, clientX: 0 })
+  fireEvent.pointerMove(scale, { pointerId: 1, clientX: 20 }); expect(clip().scale).toBeCloseTo(1.1)
+  fireEvent.pointerMove(scale, { pointerId: 1, clientX: 5000 }); expect(clip().scale).toBe(4)
   expect(videoEditGestureActive(id)).toBe(true); expect(owner.past).toHaveLength(history)
-  fireEvent.pointerUp(brightness, { pointerId: 1, clientX: 5000 })
+  fireEvent.pointerUp(scale, { pointerId: 1, clientX: 5000 })
   expect(videoEditGestureActive(id)).toBe(false); expect(owner.past).toHaveLength(history + 1)
-  act(() => undoVideoEdit(id)); expect(clip().brightness).toBe(1)
+  act(() => undoVideoEdit(id)); expect(clip().scale).toBe(1)
 
-  fireEvent.pointerDown(brightness, { pointerId: 2, button: 0, clientX: 0 })
-  fireEvent.pointerMove(brightness, { pointerId: 2, clientX: -40 }); expect(clip().brightness).toBeCloseTo(.8)
+  fireEvent.pointerDown(scale, { pointerId: 2, button: 0, clientX: 0 })
+  fireEvent.pointerMove(scale, { pointerId: 2, clientX: -40 }); expect(clip().scale).toBeCloseTo(.8)
   fireEvent.keyDown(window, { key: 'Escape' })
-  expect(clip().brightness).toBe(1); expect(videoEditGestureActive(id)).toBe(false); expect(owner.past).toHaveLength(history)
+  expect(clip().scale).toBe(1); expect(videoEditGestureActive(id)).toBe(false); expect(owner.past).toHaveLength(history)
 
   fireEvent.click(view.getByRole('button', { name: '增加缩放' })); expect(clip().scale).toBeCloseTo(1.01); expect(owner.past).toHaveLength(history + 1)
   fireEvent.click(view.getByRole('button', { name: '重置缩放' })); expect(clip().scale).toBe(1)

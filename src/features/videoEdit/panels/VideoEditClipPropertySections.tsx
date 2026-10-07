@@ -13,12 +13,13 @@ type Gesture = ReturnType<typeof useVideoEditClipPropertyGesture>
 type Frame = Pick<VideoEditComposition, 'width' | 'height'> & { playhead: number }
 
 /**
- * 读数按 PR 的单位显示：位置是序列像素（画面中心为宽高的一半），缩放 / 不透明度 / 亮度 / 音量是百分比，旋转是度。
+ * 读数按 PR 的单位显示：位置是序列像素（画面中心为宽高的一半），缩放 / 不透明度 / 音量是百分比，旋转是度。
  * 文档里存的仍是归一化数值，换算只发生在界面上。
  */
 interface PropertyView { key: VideoEditClipPropertyKey; label: string; tooltip: string; unit?: string; step: number; precision: number; toDisplay: (value: number, frame: Frame) => number; fromDisplay: (value: number, frame: Frame) => number }
 const percent = { toDisplay: (value: number) => value * 100, fromDisplay: (value: number) => value / 100, unit: '%', step: 1, precision: 1 }
-const VIEWS: Record<VideoEditClipPropertyKey, PropertyView> = {
+type VisiblePropertyKey = Exclude<VideoEditClipPropertyKey, 'brightness'>
+const VIEWS: Record<VisiblePropertyKey, PropertyView> = {
   x: { key: 'x', label: '水平位置', tooltip: '运动锚点的水平像素位置；序列宽度的一半是居中。', step: 1, precision: 1, toDisplay: (value, frame) => frame.width / 2 + value * frame.width, fromDisplay: (value, frame) => (value - frame.width / 2) / frame.width },
   y: { key: 'y', label: '垂直位置', tooltip: '运动锚点的垂直像素位置；序列高度的一半是居中。', step: 1, precision: 1, toDisplay: (value, frame) => frame.height / 2 + value * frame.height, fromDisplay: (value, frame) => (value - frame.height / 2) / frame.height },
   scale: { key: 'scale', label: '缩放', tooltip: '画面大小，100% 为原始适配大小。', ...percent },
@@ -26,7 +27,6 @@ const VIEWS: Record<VideoEditClipPropertyKey, PropertyView> = {
   anchorX: { key: 'anchorX', label: '锚点水平', tooltip: '旋转和缩放的支点，50% 为画面中心。', ...percent },
   anchorY: { key: 'anchorY', label: '锚点垂直', tooltip: '旋转和缩放的支点，50% 为画面中心。', ...percent },
   opacity: { key: 'opacity', label: '不透明度', tooltip: '0% 完全透明，100% 完全不透明。', ...percent },
-  brightness: { key: 'brightness', label: '亮度', tooltip: '画面明暗，100% 为原样，低于 100% 变暗，最高 200%。', ...percent },
   volume: { key: 'volume', label: '音量', tooltip: '片段音量，100% 为原始音量，0% 静音，最高 200%。', ...percent },
 }
 
@@ -56,7 +56,7 @@ function resetPatch(clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey
 }
 const isDefault = (clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): boolean => keys.every(key => (clip[key] ?? 0.5) === videoEditClipPropertyDefault(clip, key) && !clip.curves?.[key]?.length)
 
-function SingleProperty({ property, clip, frame, gesture }: { property: VideoEditClipPropertyKey; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
+function SingleProperty({ property, clip, frame, gesture }: { property: VisiblePropertyKey; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
   const view = VIEWS[property]
   const value = videoEditClipValue(clip, property, frame.playhead)
   return <PropertyRow label={view.label} tooltip={view.tooltip} resetLabel={`重置${view.label}`} resetDisabled={value === videoEditClipPropertyDefault(clip, property)} onReset={() => gesture.commit(resetPatch(clip, [property]))}
@@ -65,7 +65,7 @@ function SingleProperty({ property, clip, frame, gesture }: { property: VideoEdi
   </PropertyRow>
 }
 
-const MOTION: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY']
+const MOTION: readonly VisiblePropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY']
 
 /** 片段固有效果（PR 的“运动 / 不透明度 / 音量”）：按片段类型只出现能生效的几节。 */
 export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
@@ -87,9 +87,6 @@ export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: 
     </VideoEditEffectSection>}
     {picture && <VideoEditEffectSection id="opacity" title="不透明度" info="片段与下方画面叠加时的透明程度。">
       <SingleProperty property="opacity" clip={clip} frame={frame} gesture={gesture} />
-    </VideoEditEffectSection>}
-    {motion && <VideoEditEffectSection id="color" title="颜色" info="片段画面的明暗。更多调色可在下方“附加效果”添加滤镜。">
-      <SingleProperty property="brightness" clip={clip} frame={frame} gesture={gesture} />
     </VideoEditEffectSection>}
     {sound && <VideoEditEffectSection id="audio" title="音频" info="片段的音量。">
       <SingleProperty property="volume" clip={clip} frame={frame} gesture={gesture} />

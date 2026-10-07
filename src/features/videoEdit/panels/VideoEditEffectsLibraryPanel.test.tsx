@@ -57,3 +57,33 @@ it('保存入口允许选择是否保留手绘遮罩；保存副本参数不随�
   expect(close).toHaveBeenCalledOnce()
   expect(useVideoEditEffectLibraryStore.getState().presets[0].effects[0]).toMatchObject({ builtin: { params: { strength: 60 } }, mask: source.mask })
 })
+
+it('取消勾选全部效果或清空名称时禁用保存，Enter 也不会写入；取消不保存', () => {
+  const close = vi.fn()
+  render(<VideoEditEffectPresetDialog effects={[effect()]} initialName="柔化" onClose={close} />)
+  const checkbox = screen.getByRole('checkbox', { name: '保存效果：高斯模糊' })
+  const name = screen.getByRole('textbox', { name: '预设名称' })
+  fireEvent.click(checkbox)
+  expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(true)
+  fireEvent.keyDown(name, { key: 'Enter' })
+  expect(close).not.toHaveBeenCalled()
+  expect(useVideoEditEffectLibraryStore.getState().presets).toEqual([])
+  fireEvent.click(checkbox)
+  fireEvent.change(name, { target: { value: '  ' } })
+  fireEvent.keyDown(name, { key: 'Enter' })
+  expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(true)
+  expect(useVideoEditEffectLibraryStore.getState().presets).toEqual([])
+  fireEvent.click(screen.getByRole('button', { name: '取消' }))
+  expect(close).toHaveBeenCalledOnce()
+  expect(useVideoEditEffectLibraryStore.getState().presets).toEqual([])
+})
+
+it('只选择无手绘遮罩的效果时不再显示遮罩选项，并且只保存它', () => {
+  const masked = { ...effect(), id: 'masked', name: '局部柔化', mask: { regionId: 'shapes' as const, shapes: [{ id: 'shape', kind: 'rect' as const, box: [0, 0, .5, .5] as [number, number, number, number] }] } }
+  render(<VideoEditEffectPresetDialog effects={[masked, effect()]} initialName="柔化" onClose={vi.fn()} />)
+  expect(screen.getByRole('switch', { name: '保存手绘遮罩' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('checkbox', { name: '保存效果：局部柔化' }))
+  expect(screen.queryByRole('switch', { name: '保存手绘遮罩' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '保存' }))
+  expect(useVideoEditEffectLibraryStore.getState().presets[0].effects.map(effect => effect.id)).toEqual(['effect'])
+})
