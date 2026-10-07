@@ -7,7 +7,7 @@ const { createHash } = require('node:crypto')
 const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
@@ -82,7 +82,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
       await observeWorkers(page)
       try {
         await button(page, '剪辑').click(); await dialogs(app, [video, picture, audio], file); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, file)
-        await button(page, '导入').click()
+        await chooseVideoEditImportFiles(page)
         let document = await saved(page, file, document => document.media.length === 3)
         const projectRef = { kind: 'video_edit.document', id: document.id }
         const sequenceRef = { kind: 'video_edit.sequence', id: `${document.id}:${document.sequences[0].id}` }

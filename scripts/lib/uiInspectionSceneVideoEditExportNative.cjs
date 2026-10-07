@@ -5,7 +5,7 @@ const { execFileSync } = require('node:child_process')
 const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 导出接入与预览一致性（2.4）在真实 Electron 中的闭环：
@@ -266,7 +266,7 @@ function createVideoEditExportNativeScene() {
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         const importFile = path.join(ROOT, `import-${Date.now()}.henji-video`)
         await dialogs(app, Object.values(samples).map(sample => sample.path), importFile)
-        await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, importFile); await button(page, '导入').click()
+        await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, importFile); await chooseVideoEditImportFiles(page)
         const imported = await saved(page, importFile, value => value.media.length === Object.keys(samples).length, '样本未全部导入')
         const identity = await authorizeMcpConnection(page, { name: '导出验收', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji export Reality')

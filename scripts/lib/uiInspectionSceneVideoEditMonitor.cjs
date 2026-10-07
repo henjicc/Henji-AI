@@ -7,7 +7,7 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { observeNativeWaveforms, nativeWaveformSnapshot, waitNativeWaveformsReleased, restoreNativeWaveformObservers } = require('./uiInspectionSceneVideoEditMonitorResources.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const panel = (page, id) => page.locator(`[data-video-edit-panel="${id}"]`).first()
@@ -194,7 +194,7 @@ function createVideoEditMonitorScene() {
           return state
         }
         evidence.currentPhase = '真实导入、范围波形和混音电平'; store()
-        await dialogs(app, [controls.stereo, controls.audiovisual], file); await button(page, '导入').click()
+        await dialogs(app, [controls.stereo, controls.audiovisual], file); await chooseVideoEditImportFiles(page)
         let document = await saved(page, file, value => value.media.some(media => media.path === controls.stereo) && value.media.some(media => media.path === controls.audiovisual))
         const stereoMedia = document.media.find(media => media.path === controls.stereo); const avMedia = document.media.find(media => media.path === controls.audiovisual)
         assert.equal(avMedia.hasAudio, true); assert.deepEqual(avMedia.frameRate, { numerator: 60, denominator: 1 }); assert.equal(avMedia.width, 3840); assert.equal(avMedia.height, 2160)
@@ -305,8 +305,16 @@ function createVideoEditMonitorScene() {
         evidence.rangeDrops = []
         for (const component of ['video', 'audio', 'linked']) {
           const track = component === 'audio' ? 7 : 6; const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
-          await page.locator(`[data-video-edit-track="monitor-track-${track}"]`).scrollIntoViewIfNeeded()
           await viewport.evaluate(host => { host.scrollLeft = 0 })
+          // 轨道头只挂载视口内的轨道，不能靠 scrollIntoView；像用户一样在对应分区（画面在上、声音在下）按住 Ctrl 滚轮滚到目标轨道。
+          for (let attempt = 0; ; attempt++) {
+            const where = await viewport.evaluate((host, track) => { const row = host.querySelector(`[data-track-index="${track}"]`); if (!row) return 'missing'; const box = host.getBoundingClientRect(); const rect = row.getBoundingClientRect(); return rect.top < box.top + 40 ? 'up' : rect.bottom > box.bottom - 8 ? 'down' : 'ok' }, track)
+            if (where === 'ok') break
+            assert.ok(attempt < 60, `时间线滚不到轨道 ${track}（${where}）`)
+            const box = await viewport.boundingBox()
+            await page.mouse.move(box.x + box.width / 2, component === 'audio' ? box.y + box.height - 24 : box.y + 48)
+            await page.keyboard.down('Control'); await page.mouse.wheel(0, where === 'down' ? 80 : -80); await page.keyboard.up('Control'); await page.waitForTimeout(30)
+          }
           const offset = await viewport.evaluate((host, { track, headerWidth }) => { const row = host.querySelector(`[data-track-index="${track}"]`); return { x: headerWidth + 0.1 - host.scrollLeft, y: row.getBoundingClientRect().top - host.getBoundingClientRect().top + 16 } }, { track, headerWidth: VIDEO_EDIT_TRACK_HEADER_WIDTH })
           await button(panel(page, 'source'), name).dragTo(viewport, { targetPosition: offset })
           const count = component === 'linked' ? 2 : 1

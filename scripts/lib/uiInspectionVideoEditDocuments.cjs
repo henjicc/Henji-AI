@@ -9,6 +9,12 @@ const path = require('node:path')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 
+/** 工具栏“导入”只展开菜单；选择“导入文件”才经过正式文件选择与导入链路。 */
+async function chooseVideoEditImportFiles(page) {
+  await button(page, '导入').click()
+  await button(page, '导入文件').click()
+}
+
 /*
  * 旧场景之间靠缓存目录里的 `.henji-video` 夹具串联（上游场景保存的结果是下游场景的夹具）。
  * 现在剪辑存在作品目录的项目里：openVideoEditFile 第一次打开某个夹具文件时经正式接口造一个项目，
@@ -190,6 +196,7 @@ async function savedVideoEdit(page, file, matches, message = '剪辑没有保存
 
 module.exports = {
   adoptNewVideoEditProject,
+  chooseVideoEditImportFiles,
   latestVideoEditDocument,
   leaveVideoEditProject,
   openVideoEditFile,

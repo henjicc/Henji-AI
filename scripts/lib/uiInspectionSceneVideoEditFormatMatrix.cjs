@@ -5,7 +5,7 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const matrix = require('./videoEditFormatMatrix.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 专业格式矩阵（任务 3.2）在真实 Electron 中逐格验收。样本由 scripts/lib/videoEditFormatMatrix.cjs 生成（帧号条码、BT.709
@@ -199,7 +199,7 @@ function createVideoEditFormatMatrixScene() {
             await page.waitForTimeout(300)
             const before = JSON.stringify(readVideoEditFile(importFile))
             const importedAt = new Date().toISOString()
-            await dialogs(app, [sample.path], importFile); await button(page, '导入').click()
+            await dialogs(app, [sample.path], importFile); await chooseVideoEditImportFiles(page)
             let media
             for (let attempt = 0; attempt < 400 && !media; attempt++) {
               media = readProject(importFile).media.find(item => same(item.path, sample.path))
@@ -497,7 +497,7 @@ function createVideoEditFormatMatrixScene() {
           await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), TRIPO)
           await dialogs(app, [], tripoFile); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, tripoFile); await saved(page, tripoFile, () => true, 'Tripo 工程未保存')
           const importedAt = Date.now()
-          await dialogs(app, files, tripoFile); await button(page, '导入').click()
+          await dialogs(app, files, tripoFile); await chooseVideoEditImportFiles(page)
           const project = await saved(page, tripoFile, value => value.media.length === files.length, `Tripo 素材未全部导入（${files.length} 个）`, 2400)
           evidence.tripo = { files: files.length, importMs: Date.now() - importedAt, items: [] }
           for (const file of files) {

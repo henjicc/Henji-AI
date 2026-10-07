@@ -8,7 +8,7 @@ const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { installNativeMixHarness } = require('./uiInspectionSceneVideoEditNativeAudio.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 多音轨展开与声道类型（2.6，参照 Premiere Pro“使用文件 / 修改音频声道”）在真实 Electron 中的端到端验收：
@@ -219,7 +219,7 @@ function createVideoEditMultitrackScene() {
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await dialogs(app, Object.values(samples).map(sample => sample.path), file)
-        await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, file); await button(page, '导入').click()
+        await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, file); await chooseVideoEditImportFiles(page)
         let project = await saved(page, file, value => value.media.length === 4, '四个多音轨样本未全部导入')
         const itemOf = key => { const media = project.media.find(media => path.resolve(media.path).toLowerCase() === path.resolve(samples[key].path).toLowerCase()); return project.items.find(item => item.mediaId === media.id) }
         const items = Object.fromEntries(SAMPLES.map(sample => [sample.key, itemOf(sample.key)]))

@@ -21,7 +21,7 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 const ROOT = path.resolve('node_modules/.cache/video-edit-media-probe')
 const SAMPLES = path.resolve('node_modules/.cache/native-decode')
 const FFPROBE = path.join(require('./mediaBinaries.cjs').binDir, 'ffprobe.exe')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const TRIPO_4444 = 'D:/视频制作/2026-09-19_Tripo/素材/010_荷花_高细节_独立透明缓转_v2.mov'
 const PROFESSIONAL = [
   { file: path.join(SAMPLES, 'prores422hq.mov'), label: 'Apple ProRes HQ，10 位 4:2:2' },
@@ -181,7 +181,7 @@ function createVideoEditMediaProbeScene() {
         for (const sample of samples) {
           const before = snapshot()
           const startedAt = new Date().toISOString()
-          await dialogs(app, [sample.file], projectPath); await button(page, '导入').click()
+          await dialogs(app, [sample.file], projectPath); await chooseVideoEditImportFiles(page)
           if (forced === 'browser') {
             // The log carries this import's own message; the banner may still show the previous one until replaced.
             const events = await logEvents(page, startedAt, ['video_edit.media.inspect.undecodable'])
@@ -222,7 +222,7 @@ function createVideoEditMediaProbeScene() {
           store()
         }
         const startedAt = new Date().toISOString()
-        await dialogs(app, [CONTROL], projectPath); await button(page, '导入').click()
+        await dialogs(app, [CONTROL], projectPath); await chooseVideoEditImportFiles(page)
         for (let index = 0; index < 200 && !project().media.some((media) => media.path === CONTROL); index++) await page.waitForTimeout(50)
         const media = project().media.find((item) => item.path === CONTROL)
         assert.ok(media, 'H.264+AAC 对照样本应能导入')

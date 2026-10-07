@@ -2,6 +2,46 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 const { WINDOWS_MAX_FRAME_INSET_DIP, maximizedFrameInsets } = require('./uiInspectionSceneWindowStartup.cjs')
 const { SELECTION_MIN_CONTRAST, averageColor, contrastRatio } = require('./uiInspectionSceneGenerationVideoViewer.cjs')
+const { chooseVideoEditImportFiles } = require('./uiInspectionVideoEditDocuments.cjs')
+
+test('剪辑文件导入要选择菜单动作，展开工具栏不会导入文件', async () => {
+  let menuOpen = false
+  let fileDialogs = 0
+  let folderDialogs = 0
+  const page = {
+    getByRole(role, { name, exact }) {
+      assert.equal(role, 'button')
+      assert.equal(exact, true)
+      return {
+        async click() {
+          if (name === '导入') { menuOpen = !menuOpen; return }
+          assert.equal(menuOpen, true, '菜单动作必须在展开后可见')
+          if (name === '导入文件') fileDialogs++
+          else if (name === '导入文件夹') folderDialogs++
+          else assert.fail(`未知导入动作：${name}`)
+          menuOpen = false
+        },
+      }
+    },
+  }
+  await page.getByRole('button', { name: '导入', exact: true }).click()
+  assert.equal(fileDialogs, 0)
+  await page.getByRole('button', { name: '导入', exact: true }).click()
+  await chooseVideoEditImportFiles(page)
+  assert.equal(fileDialogs, 1)
+  assert.equal(folderDialogs, 0)
+  assert.equal(menuOpen, false)
+})
+
+test('导入菜单选择失败必须传播，不能继续报告保存断言', async () => {
+  const unavailable = new Error('导入文件菜单不可见')
+  const page = {
+    getByRole(_role, { name }) {
+      return { async click() { if (name === '导入文件') throw unavailable } }
+    },
+  }
+  await assert.rejects(chooseVideoEditImportFiles(page), error => error === unavailable)
+})
 
 test('窗口最大化外框：Windows 不可见缩放边在上限内，macOS 必须为 0（侵入菜单栏会被抓到）', () => {
   // 2026-10-04 副屏 150% 实测
