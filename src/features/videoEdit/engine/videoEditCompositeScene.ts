@@ -74,8 +74,10 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       const free = targets.filter(target => target !== key && (!preserve || target !== targets[0]))
       const previous = result; const previousKey = key
       try {
+        // Render-only sequence clock crosses the existing runtime unchanged; never persisted as a parameter.
+        const builtin = plan.builtin && { ...plan.builtin, shaderTimeSeconds: frame / document.fps }
         const filtered = plan.builtin
-          ? await runtime.builtin(free[0], plan.builtin, result, frame, renderScale, document.lumetriLuts)
+          ? await runtime.builtin(free[0], builtin!, result, frame, renderScale, document.lumetriLuts)
           : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: logical.width, height: logical.height }, plan.parameters, result, plan.transitionHandles)
         current()
         if (plan.builtin && plan.mask) {

@@ -10,20 +10,21 @@ import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS } from './audioEffectDefinitions'
 import { VIDEO_EDIT_LUMETRI } from './lumetri'
 import { parseLumetriCurve } from './lumetriCurves'
+import { SHADER_EFFECT_DEFINITIONS } from './shaderLibrary/catalog'
 
 export type VideoEditBuiltinParamValue = number | boolean | string
 export type VideoEditBuiltinParams = Record<string, VideoEditBuiltinParamValue>
 /** 数值单位：strength 为 0–100 的无量纲强度，percent 为百分比，degrees 为角度，stops 为曝光档；音频效果另有 dB、Hz 与半音。 */
-export type VideoEditBuiltinUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibels' | 'hertz' | 'semitones'
-interface ParamBase { key: string; name: string; tooltip: string; description: string }
+export type VideoEditBuiltinUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibels' | 'hertz' | 'semitones' | 'multiplier'
+interface ParamBase { key: string; name: string; tooltip: string; description: string; animatable?: boolean }
 export type VideoEditBuiltinParam =
   | ParamBase & { type: 'number'; unit: VideoEditBuiltinUnit; min: number; max: number; step: number; default: number }
   | ParamBase & { type: 'color'; default: string }
   | ParamBase & { type: 'enum'; options: ReadonlyArray<{ value: string; label: string }>; default: string }
   | ParamBase & { type: 'boolean'; default: boolean }
   | ParamBase & { type: 'curve' | 'lut'; default: string }
-export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level'
-export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道' }
+export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level' | 'shader_background' | 'shader_filter' | 'shader_light'
+export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道', shader_background: '着色器背景与纹理', shader_filter: '着色器滤镜与扭曲', shader_light: '着色器光效' }
 /** 内置效果作用于画面还是声音：画面效果只加到画面片段，音频效果只加到声音片段。 */
 export type VideoEditBuiltinMedia = 'video' | 'audio'
 export interface VideoEditBuiltinEffectDefinition {
@@ -36,8 +37,10 @@ export interface VideoEditBuiltinEffectDefinition {
   /** 给助手的语义说明：作用、适用场景、常用取值。 */
   description: string
   params: readonly VideoEditBuiltinParam[]
+  /** Thumbnail recipe, rendered by the trusted library on the existing host device. */
+  cover?: { kind: 'render'; timeSeconds: number }
 }
-export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = { strength: '', percent: '%', degrees: '°', stops: '档', decibels: 'dB', hertz: 'Hz', semitones: '半音' }
+export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = { strength: '', percent: '%', degrees: '°', stops: '档', decibels: 'dB', hertz: 'Hz', semitones: '半音', multiplier: '倍' }
 
 const strength = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: 0, max: 100, step: 1, default: fallback, tooltip, description })
 const signed = (key: string, name: string, tooltip: string, description: string, fallback = 0): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: fallback, tooltip, description })
@@ -133,7 +136,7 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
   VIDEO_EDIT_LUMETRI,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
-export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
+export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, ...SHADER_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
 
 const definitions = new Map(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => [definition.id, definition]))
 export function videoEditBuiltinEffect(id: string): VideoEditBuiltinEffectDefinition | undefined { return definitions.get(id) }
@@ -208,6 +211,7 @@ export function normalizeVideoEditParamSet(owner: string, params: readonly Video
 export function describeVideoEditParams(params: readonly VideoEditBuiltinParam[]): Array<Record<string, string | number | boolean | string[]>> {
   return params.map(param => ({
     key: param.key, name: param.name, type: param.type, default: param.default, description: param.description,
+    ...(param.animatable !== undefined ? { animatable: param.animatable } : {}),
     ...(param.type === 'number' ? { min: param.min, max: param.max, unit: param.unit } : {}),
     ...(param.type === 'enum' ? { options: param.options.map(option => option.value) } : {}),
   }))

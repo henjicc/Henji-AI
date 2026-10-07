@@ -6,6 +6,7 @@ import { videoEditSourceSeconds } from './time'
 import { advanceVideoEditClipSource, videoEditClipHeadRoom, videoEditClipTailRoom } from './clipSpeed'
 import { describeVideoEditTransitionParams, isVideoEditBuiltinTransitionKind, resolveVideoEditTransitionParams, videoEditTransitionParamsIssue, type VideoEditBuiltinTransitionKind } from './transitionParams'
 import type { VideoEditBuiltinParams } from './builtinEffects'
+import { SHADER_TRANSITION_DEFINITIONS } from './shaderLibrary/catalog'
 
 /**
  * 过渡预设（PR“效果”面板的视频过渡／音频过渡）：只列引擎能真实渲染的种类。
@@ -13,6 +14,7 @@ import type { VideoEditBuiltinParams } from './builtinEffects'
  * （参数登记在 `transitionParams.ts`）；音频：恒定功率、恒定增益、指数淡化（交叉淡化，单侧时为淡入或淡出）。
  */
 export const VIDEO_EDIT_TRANSITION_PRESETS = [
+  ...SHADER_TRANSITION_DEFINITIONS.map(preset => ({ ...preset, medium: 'video' as const, tooltip: preset.description })),
   { kind: 'cross_dissolve', medium: 'video', name: '交叉溶解', tooltip: '前一段画面逐渐溶入后一段', description: '交叉溶解：两段画面按时长线性互溶，最常用的柔和转场。' },
   { kind: 'dip_to_black', medium: 'video', name: '黑场过渡', tooltip: '前一段淡出到黑色，再从黑色淡入后一段', description: '黑场过渡：前半段淡出到黑色、后半段从黑色淡入，表示时间流逝或段落结束。' },
   { kind: 'dip_to_white', medium: 'video', name: '白场过渡', tooltip: '前一段淡出到白色，再从白色淡入后一段', description: '白场过渡：前半段淡到白色、后半段从白色淡入，常用于回忆、闪回或明亮的段落切换。' },

@@ -33,7 +33,7 @@ const over = (below: CodeColor, above: CodeColor): CodeColor => above.map((value
 
 /** Only the GPU/texture boundary is replaced. Inputs are uniform premultiplied fields;
  * the real scene chooses nodes, contexts, destinations and presentation order. */
-function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, options: { onFilter?: () => void; offscreenCompletion?: Promise<void>; declineFinal?: boolean } = {}) {
+function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, options: { onFilter?: () => void; onBuiltin?: (instance: import('@/core/videoEdit/compositing').VideoEditBuiltinEffectInstance & import('./shaderLibrary/planner').ShaderLibraryClock) => void; offscreenCompletion?: Promise<void>; declineFinal?: boolean } = {}) {
   const device = {} as GpuDevice
   const data = new WeakMap<GpuTexture, CodeColor>(); const keys = new WeakMap<GpuTexture, string>()
   const targets = new Map<string, VideoEditCodePicture>()
@@ -68,7 +68,8 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
     }) as CodeColor
     return [values[0] * values[3], values[1] * values[3], values[2] * values[3], values[3]]
   }
-  const runtime: Pick<VideoEditCodeGpu, 'target' | 'filter' | 'mix'> = {
+  const runtime: Pick<VideoEditCodeGpu, 'target' | 'filter' | 'mix' | 'builtin'> = {
+    builtin: async (key, instance, input) => { options.onBuiltin?.(instance); const destination = target(key, input.width, input.height); data.set(destination.texture, pixel(input)); return destination },
     target: async (key, width, height, format = 'rgba8unorm') => { formats.set(key, format); return target(key, width, height) },
     filter: async (key, version, program, context, parameters, input, transitionHandles = false) => {
       const destination = target(key, input.width, input.height)
@@ -112,6 +113,21 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
 }
 
 describe('正式合成场景的预乘RGBA编排与有界目标', () => {
+  it('t66按序列秒时间传入着色器，24/60fps同一秒相同且不改持久参数', async () => {
+    for (const fps of [24, 60]) {
+      const builtin = { id: 'shader_wave', params: { strength: 50, speed: 2 } }
+      const effect = { id: 'wave', name: '波浪', amount: 1, enabled: true, builtin }
+      const owner = clip('visual', 1, { effects: [effect] })
+      const document = { ...composition([owner]), fps, frameRate: { numerator: fps, denominator: 1 } }
+      const nodes = buildVideoEditCompositePlan(document.clips)
+      let time: number | undefined
+      const boundary = pixels(document, videoEditCompositeSurfaceKeys(nodes), { onBuiltin: instance => { time = instance.shaderTimeSeconds } })
+      const result = await renderVideoEditCompositeScene(document, nodes, new Map([[owner.id, boundary.picture('raw', [.2, .1, 0, 1])]]), new Map([[owner.id, [{ effect, builtin }]]]), boundary.compositor, fps, () => true)
+      await result.completion
+      expect(time).toBe(1)
+      expect(builtin).toEqual({ id: 'shader_wave', params: { strength: 50, speed: 2 } })
+    }
+  })
   it('代码效果执行失败跳过该项并报告，后续效果继续，保留整帧与原链', async () => {
     const owner = clip('visual')
     const effects = [plan('bad', [1, 0, 0, 1], owner, 0), plan('good', [0, .5, 0, 1], owner, 0)]

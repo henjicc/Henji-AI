@@ -7,9 +7,10 @@
 import { WHITE_HEX } from '../theme/colorTokens'
 import { describeVideoEditParams, normalizeVideoEditParamSet, videoEditPercentParam as percent, videoEditStrengthParam as strength, type VideoEditBuiltinParam, type VideoEditBuiltinParams } from './builtinEffects'
 import type { VideoEditTransitionKind } from './transitions'
+import { SHADER_TRANSITION_NAMES, SHADER_TRANSITION_PARAM_DEFINITIONS } from './shaderLibrary/catalog'
 
 /** 走内置效果着色器的视频过渡种类（顺序即效果面板顺序）。 */
-export const VIDEO_EDIT_BUILTIN_TRANSITION_KINDS = ['wipe', 'push', 'slide', 'cross_zoom', 'blur_dissolve', 'flash', 'iris_round'] as const
+export const VIDEO_EDIT_BUILTIN_TRANSITION_KINDS = ['wipe', 'push', 'slide', 'cross_zoom', 'blur_dissolve', 'flash', 'iris_round', ...SHADER_TRANSITION_NAMES] as const
 export type VideoEditBuiltinTransitionKind = typeof VIDEO_EDIT_BUILTIN_TRANSITION_KINDS[number]
 
 const EDGES = [
@@ -27,6 +28,7 @@ const centerY = percent('center_y', '中心垂直位置', 50, '中心点在画�
 const movingDirection = (tooltip: string): VideoEditBuiltinParam => ({ key: 'direction', name: '方向', type: 'enum', default: 'from_right', options: EDGES, tooltip, description: '后一段画面从哪一侧进入：from_left 从左侧（向右运动）、from_right（默认）从右侧、from_top 从顶部、from_bottom 从底部。' })
 
 export const VIDEO_EDIT_TRANSITION_PARAMS: Readonly<Record<VideoEditBuiltinTransitionKind, readonly VideoEditBuiltinParam[]>> = {
+  ...SHADER_TRANSITION_PARAM_DEFINITIONS,
   wipe: [
     { key: 'direction', name: '方向', type: 'enum', default: 'from_left', options: [...EDGES, ...CORNERS], tooltip: '擦除从画面哪一边或哪个角开始', description: '擦除的起点：from_left（默认）从左向右擦，from_right 从右向左，from_top 从上往下，from_bottom 从下往上；from_top_left 等四个值从对应角斜向擦过。' },
     feather(10), border, borderColor,

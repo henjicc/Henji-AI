@@ -1,4 +1,5 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
+import { SHADER_EFFECT_DEFINITIONS, SHADER_TRANSITION_DEFINITIONS } from '@/core/videoEdit/shaderLibrary/catalog'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
@@ -30,6 +31,33 @@ async function project() {
   const sequence = getActiveVideoEditSequence(owner)
   return { owner, id, sequenceId: sequence.id, clipIds: sequence.clips.map(clip => clip.id) }
 }
+
+it('t66着色器目录通过正式通用实体可读；助手创建滤镜、修改参数与手动撤销共用历史', async () => {
+  const { id, clipIds, owner } = await project()
+  const app = createApplicationHarness()
+  try {
+    for (const definition of SHADER_EFFECT_DEFINITIONS) {
+      const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:${definition.id}` }, ['video_edit.builtin_effect.name', 'video_edit.builtin_effect.params'])
+      expect(catalog.properties).toMatchObject({ 'video_edit.builtin_effect.name': definition.name, 'video_edit.builtin_effect.params': expect.arrayContaining([expect.objectContaining({ key: 'strength', min: 0, max: 100, animatable: true })]) })
+    }
+    for (const definition of SHADER_TRANSITION_DEFINITIONS) {
+      const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:transition:${definition.kind}` }, ['video_edit.builtin_effect.name'])
+      expect(catalog.properties).toMatchObject({ 'video_edit.builtin_effect.name': definition.name })
+    }
+    const clipRef = { kind: 'video_edit.clip', id: `${id}:${clipIds[0]}` }
+    const baseline = await app.read(clipRef)
+    const history = owner.past.length
+    const created = await app.call('change_application_entities', { summary: '波浪扭曲', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:shader_wave', 'video_edit.effect.parameters': { strength: 45, speed: 0 } } }] }] }, baseline.revisions as Record<string, number>)
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    expect(owner.past).toHaveLength(history + 1)
+    const effect = getActiveVideoEditSequence(owner).clips[0].effects![0]
+    const changed = await app.change({ kind: 'video_edit.effect', id: `${id}:${effect.id}` }, { 'video_edit.effect.parameters': { strength: 70, direction: 45 } })
+    expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.strength).toBe(70)
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.strength).toBe(45)
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].effects ?? []).toEqual([])
+  } finally { app.dispose() }
+})
 
 it('效果面板拖放或双击：同一效果加到所选全部画面片段，默认参数，整体一步撤销；锁定轨道与声音片段跳过', async () => {
   const { owner, id, sequenceId, clipIds } = await project()

@@ -41,6 +41,7 @@ export interface VideoEditEffectsRegistryEntry {
   params?: readonly VideoEditBuiltinParam[]
   /** 内置效果在文件夹里的小分组（模糊与锐化、颜色……）。 */
   group?: string
+  cover?: { kind: 'render'; timeSeconds: number }
 }
 /**
  * 内置效果：来自 `VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS`（参数、范围、语义说明与 GPU 实现都在那里登记），
@@ -48,7 +49,7 @@ export interface VideoEditEffectsRegistryEntry {
  */
 export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({
   id: videoEditBuiltinRefId(definition.id), name: definition.name, category: definition.media === 'audio' ? 'audio_effect' : 'video_effect', kind: 'effect', media: definition.media ?? 'video',
-  description: definition.description, tooltip: definition.tooltip, builtinId: definition.id, templateRef: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], aliases: [definition.id, definition.id.replaceAll('_', ' ')],
+  description: definition.description, tooltip: definition.tooltip, builtinId: definition.id, templateRef: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], aliases: [definition.id, definition.id.replaceAll('_', ' ')], ...(definition.cover ? { cover: definition.cover } : {}),
 }))
 /** 智能文件夹（4.7d）：内置效果 + 作用区域的一键预设，加到视频、图片片段上后在效果控件里微调。 */
 export const VIDEO_EDIT_SMART_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_SMART_PRESETS.map(preset => ({

@@ -252,7 +252,14 @@ function generate(options) {
     }
   }
 
-  const runtime = [...electronRuntime(textTable)]
+  // Trusted shader algorithms are vendored, so they do not appear in npm ls.
+  // Register with the same notice table used by About and the distributed THIRD-PARTY-NOTICES.
+  const shaderLicense = readTextIfExists(path.join(REFERENCE_DIR, 'shaders-MIT.txt'))
+  if (!shaderLicense) missing.push('shaders：缺少移植着色器 MIT 许可原文')
+  const runtime = [...electronRuntime(textTable), ...(shaderLicense ? [{
+    id: 'vendored:shaders', name: 'shaders (trusted shader library)', version: 'dbfd42abe341e7a6ea0b8ea1f5bab018b8e8439a', license: 'MIT', ecosystem: 'runtime',
+    homepage: 'https://github.com/shader-effects-inc/shaders', textIds: [textTable.add(shaderLicense)], textOrigin: 'package',
+  }] : [])]
   const ffmpeg = ffmpegRuntime(options, textTable, referenceTexts)
   if (ffmpeg) runtime.push(ffmpeg)
   else if (options.platform === 'win32') missing.push('FFmpeg：未找到已就绪的 FFmpeg 包（先运行 npm run build:video-decoder）')
