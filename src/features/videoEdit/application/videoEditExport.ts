@@ -9,7 +9,7 @@ import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessSettings, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { spoolVideoEditAudio } from './videoEditLoudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { assertVideoEditExportAudioSupported, selectVideoEditExportEncoder, videoEditExportAudioUserError, videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
+import { adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditExportAudioUserError, videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
 import { getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { importVideoEditSources } from './videoEditMedia'
@@ -40,11 +40,12 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   const instance = requireVideoEditInstance(projectId)
   const snapshot = structuredClone(options?.snapshot ?? getActiveVideoEditSequence(instance))
   const range = options?.range ?? videoEditExportRange(instance)
-  const settings = resolveVideoEditExportSettings(options?.settings ?? videoEditSequenceExportSettings(snapshot), snapshot)
+  const resolved = resolveVideoEditExportSettings(options?.settings ?? videoEditSequenceExportSettings(snapshot), snapshot)
+  const settings = options?.settings ? resolved : await adaptVideoEditExportPreset(resolved)
   const loudness = settings.audioEnabled ? loudnessSettings === undefined ? settings.loudness ?? undefined : videoEditLoudnessSettingsSchema.parse(loudnessSettings) : undefined
   const format = settings.format
   if (instance.busy) throw new Error('该剪辑已有导出任务。')
-  await assertVideoEditExportAudioSupported(settings)
+  await assertVideoEditExportSupported(settings)
   submissionSignal?.throwIfAborted()
   const platform = getPlatform()
   const path = requestedPath ?? await platform.system.dialog.save({ defaultPath: `${instance.document.name}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
@@ -83,7 +84,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   logger.info('开始导出剪辑', { event: 'video_edit.export.start', context: { projectId, taskId: task.id, ...range } })
   try {
     const encoding = videoEditExportEncoding(settings, document.fps)
-    const videoCodec = settings.videoEnabled ? await selectVideoEditExportEncoder({ width: settings.width, height: settings.height, frameRate: encoding.fps, bitrate: encoding.videoBitrate, codec: settings.codec, bitrateMode: settings.bitrateMode, encoderPreference: settings.encoderPreference }) : undefined
+    const videoCodec = settings.videoEnabled ? settings.codec : undefined
     task.controller.signal.throwIfAborted()
     // 智能区域（4.7d）：导出用到的区域先全部分析完成，导出画面与预览同一份蒙版。
     await waitVideoEditSmartRegions(document, document, task.controller.signal)

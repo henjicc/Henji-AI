@@ -7,7 +7,22 @@ async function confirmVideoEditExport(page, onOpen) {
   const dialog = page.getByRole('dialog', { name: '导出', exact: true })
   await dialog.waitFor({ state: 'visible' })
   // 可选：面板打开后留一张截图，供目视核对布局。
-  if (onOpen) await onOpen(dialog)
+  if (onOpen) {
+    // The dialog wrapper itself is opaque; its panel and scrim carry the fade transition.
+    await dialog.evaluate(async node => {
+      const surfaces = [...node.children]
+      await new Promise((resolve, reject) => {
+        const deadline = performance.now() + 5000
+        const settled = () => {
+          if (surfaces.every(surface => getComputedStyle(surface).opacity === '1' && !surface.getAnimations().some(animation => animation.playState === 'running'))) resolve()
+          else if (performance.now() > deadline) reject(new Error('导出弹窗淡入未完成，不能截取中途画面。'))
+          else requestAnimationFrame(settled)
+        }
+        requestAnimationFrame(settled)
+      })
+    })
+    await onOpen(dialog)
+  }
   assert.match(await dialog.getByRole('button', { name: '导出预设', exact: true }).textContent(), /与序列一致/)
   const loudness = dialog.getByRole('switch', { name: '启用响度', exact: true })
   if (await loudness.getAttribute('aria-checked') === 'true') await loudness.click()

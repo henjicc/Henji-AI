@@ -5,8 +5,9 @@ import { enqueueVideoEditExports, retryVideoEditExportJob, videoEditExportQueue,
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
 import { requireVideoEditInstance } from './videoEditService'
-import { patchVideoEditExportSettings, videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
+import { patchVideoEditExportSettings, resolveVideoEditExportSettings, videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import { videoEditComposition } from '@/core/videoEdit/document'
+import { adaptVideoEditExportPreset } from '../engine/videoEditExportEncoder'
 
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
   return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, range: job.range, settings: job.settings,
@@ -36,16 +37,18 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
       context.signal?.throwIfAborted(); retryVideoEditExportJob(job.id); message = '失败项已重新加入队列。'
       submitted = [job]
     } else {
-      const requests = input.exports ? input.exports.map(value => {
+      const requests = input.exports ? await Promise.all(input.exports.map(async value => {
         const projectId = value.documentRef?.id ?? documentRef.id
         const sequenceId = value.sequenceRef?.id
         if (sequenceId && !sequenceId.startsWith(`${projectId}:`)) throw new Error('sequenceRef 必须属于该项 documentRef，请使用完整序列引用。')
         const target = requireVideoEditInstance(projectId)
         const preset = value.presetRef ? videoEditExportPresetLibrary.list().find(preset => preset.id === value.presetRef!.id) : undefined
         if (value.presetRef && !preset) throw new Error('预设不存在，请列出 video_edit.export_preset 重新选择。')
-        const settings = value.settings ?? preset?.settings ?? videoEditSequenceExportSettings(videoEditComposition(target.document, sequenceId?.slice(projectId.length + 1) ?? target.activeSequenceId))
+        const composition = videoEditComposition(target.document, sequenceId?.slice(projectId.length + 1) ?? target.activeSequenceId)
+        const base = value.settings ?? (preset && preset.id !== 'builtin:sequence' ? preset.settings : videoEditSequenceExportSettings(composition))
+        const settings = value.settings ? base : await adaptVideoEditExportPreset(resolveVideoEditExportSettings(base, composition))
         return { projectId, sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings }
-      }) : [{ projectId: documentRef.id, range: input.range, settings: input.settings ?? patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) }) }]
+      })) : [{ projectId: documentRef.id, range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })) }]
       if (context.callerGrant && requests.some(value => value.settings.addToLibrary) && !context.callerGrant.permissions.includes('assets:write')) throw new Error('加入资产库需要 assets:write 授权；请在导出 settings 中设 addToLibrary=false，或调整连接授权后重试。')
       const jobs = await enqueueVideoEditExports(requests, context.signal)
       submitted = jobs

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { canEncodeAudio, canEncodeVideo } from 'mediabunny'
-import { assertVideoEditExportAudioSupported, canEncodeVideoEditExportAudio, selectVideoEditExportEncoder, videoEditExportAudioUserError, videoEditExportVideoOptions } from './videoEditExportEncoder'
+import { adaptVideoEditExportPreset, assertVideoEditExportSupported, assertVideoEditExportAudioSupported, canEncodeVideoEditExportAudio, probeVideoEditExport, selectVideoEditExportEncoder, videoEditExportAudioUserError, videoEditExportProbeKey, videoEditExportVideoOptions } from './videoEditExportEncoder'
+import { videoEditSequenceExportSettings, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 vi.mock('mediabunny', () => ({ canEncodeAudio: vi.fn(), canEncodeVideo: vi.fn() }))
 const spec = { width: 7680, height: 4320, frameRate: 120, bitrate: 80_000_000 }
-beforeEach(() => { vi.mocked(canEncodeVideo).mockReset(); vi.mocked(canEncodeAudio).mockReset() })
+beforeEach(() => { vi.mocked(canEncodeVideo).mockReset(); vi.mocked(canEncodeAudio).mockReset().mockResolvedValue(true) })
 afterEach(() => { vi.unstubAllGlobals() })
 it('8K/120与竖屏优先探测HEVC并使用实际尺寸、帧率、码率', async () => {
   vi.mocked(canEncodeVideo).mockResolvedValue(true)
@@ -64,4 +65,38 @@ it('探测异常与底层AAC拒绝不向用户暴露英文，保留原始cause�
   await expect(assertVideoEditExportAudioSupported(settings)).rejects.toThrow('无法检查此设备的音频编码支持')
   expect(videoEditExportAudioUserError(nativeError, settings)).toMatchObject({ message: expect.stringContaining('此设备的 AAC 编码不支持 320 kbps'), cause: nativeError })
   const other = new Error('disk refused'); expect(videoEditExportAudioUserError(other, settings)).toBe(other)
+})
+
+const fourK = (): VideoEditExportSettings => videoEditSequenceExportSettings({ width: 3840, height: 2160, fps: 60, sampleRate: 48000, channels: 2 })
+it('面板快照键包含全部编码字段，完整探测与实际编码使用相同的舍入码率和关键帧', async () => {
+  const settings = { ...fourK(), videoBitrateMbps: 50.1234567, keyframeInterval: 2 as const }
+  const key = videoEditExportProbeKey(settings)
+  const patches: Partial<VideoEditExportSettings>[] = [
+    { codec: 'hevc' }, { width: 1920 }, { height: 1080 }, { fps: 30 }, { videoBitrateMbps: 45 }, { bitrateMode: 'cbr' }, { keyframeInterval: 'auto' }, { encoderPreference: 'software' },
+    { audioEnabled: false }, { audioCodec: 'wav' }, { sampleRate: 44100 }, { channels: 1 }, { audioBitrateKbps: 128 }, { videoEnabled: false }, { format: 'wav' },
+  ]
+  for (const patch of patches) expect(videoEditExportProbeKey({ ...settings, ...patch })).not.toBe(key)
+  vi.mocked(canEncodeVideo).mockResolvedValue(true)
+  expect((await probeVideoEditExport(settings)).supported).toBe(true)
+  const { codec, ...options } = videoEditExportVideoOptions(settings)
+  expect(canEncodeVideo).toHaveBeenCalledWith(codec, { ...options, width: 3840, height: 2160, frameRate: 60 })
+  expect(canEncodeAudio).toHaveBeenCalledWith('aac', { sampleRate: 48000, numberOfChannels: 2, bitrate: 192000 })
+})
+it('预设先试H264硬件/软件，再HEVC硬件/软件；切换模式后仍不可用才降低到推荐码率', async () => {
+  vi.mocked(canEncodeVideo).mockImplementation(async (_codec, options) => Number(options?.bitrate) <= 45_000_000 && options?.bitrateMode === 'constant' && options?.hardwareAcceleration === 'prefer-software')
+  const adapted = await adaptVideoEditExportPreset(fourK())
+  expect(adapted).toMatchObject({ codec: 'avc', encoderPreference: 'software', bitrateMode: 'cbr', videoBitrateMbps: 45 })
+  const calls = vi.mocked(canEncodeVideo).mock.calls
+  expect(calls.slice(1, 9).map(([codec, options]) => [codec, options?.hardwareAcceleration, options?.bitrateMode])).toEqual([
+    ['avc', 'prefer-hardware', 'variable'], ['avc', 'prefer-hardware', 'constant'], ['avc', 'prefer-software', 'variable'], ['avc', 'prefer-software', 'constant'],
+    ['hevc', 'prefer-hardware', 'variable'], ['hevc', 'prefer-hardware', 'constant'], ['hevc', 'prefer-software', 'variable'], ['hevc', 'prefer-software', 'constant'],
+  ])
+  expect(calls.slice(0, 9).every(([, options]) => options?.bitrate === 50_000_000)).toBe(true)
+})
+it('完整设置严格拒绝H264；同份预设可适配为HEVC，全部不可用时保持失败', async () => {
+  vi.mocked(canEncodeVideo).mockImplementation(async codec => codec === 'hevc')
+  await expect(assertVideoEditExportSupported(fourK())).rejects.toThrow('当前设备不支持所选编码设置')
+  expect(await adaptVideoEditExportPreset(fourK())).toMatchObject({ codec: 'hevc', encoderPreference: 'hardware', bitrateMode: 'vbr', videoBitrateMbps: 50 })
+  vi.mocked(canEncodeVideo).mockResolvedValue(false)
+  await expect(adaptVideoEditExportPreset(fourK())).rejects.toThrow('3840 × 2160')
 })

@@ -11,7 +11,7 @@ import { videoEditExportPresetLibrary } from '../application/videoEditExportPres
 import { requireVideoEditInstance, subscribeVideoEdit, videoEditExportRange, videoEditRevision } from '../application/videoEditService'
 import { readVideoEditProxyState, refreshVideoEditProxies } from '../application/videoEditProxy'
 import { videoEditUserErrorMessage } from '../application/videoEditUserError'
-import { canEncodeVideoEditExport, probeVideoEditExportAudioBitrates, videoEditExportAudioUnsupportedMessage } from '../engine/videoEditExportEncoder'
+import { adaptVideoEditExportPreset, probeVideoEditExport, probeVideoEditExportAudioBitrates, videoEditExportProbeKey, type VideoEditExportSupport } from '../engine/videoEditExportEncoder'
 import { VideoEditExportField, VideoEditExportFields } from './VideoEditExportFields'
 import { VideoEditExportPreview } from './VideoEditExportPreview'
 import { VideoEditExportQueueList } from './VideoEditExportQueueList'
@@ -33,6 +33,23 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   const [presetId, setPresetId] = useState(VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID)
   const [raw, setRaw] = useState(() => videoEditSequenceExportSettings(composition))
   const settings = useMemo(() => resolveVideoEditExportSettings(raw, composition), [raw, composition])
+  const presetDefaults = useMemo(() => {
+    if (presetId === 'custom') return undefined
+    const preset = videoEditExportPresetLibrary.list().find(value => value.id === presetId)
+    return presetId === VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID ? videoEditSequenceExportSettings(composition) : preset && resolveVideoEditExportSettings(preset.settings, composition)
+  }, [presetId, composition])
+  const adaptationKey = presetDefaults ? `${presetId}/${videoEditExportProbeKey(presetDefaults)}` : ''
+  const [adaptation, setAdaptation] = useState({ key: '', error: '' })
+  useEffect(() => {
+    if (!presetDefaults) return
+    let active = true
+    void adaptVideoEditExportPreset(presetDefaults).then(
+      next => { if (active) { setRaw(next); setAdaptation({ key: adaptationKey, error: '' }) } },
+      reason => { if (active) { setRaw(presetDefaults); setAdaptation({ key: adaptationKey, error: videoEditUserErrorMessage(reason) }) } },
+    )
+    return () => { active = false }
+  }, [presetDefaults, adaptationKey])
+  const adapting = Boolean(presetDefaults && adaptation.key !== adaptationKey)
   const [fileName, setFileName] = useState(`${composition.name.replace(/[\\/:*?"<>|]/g, '-')}.mp4`)
   const [directory, setDirectory] = useState('')
   const [rangeMode, setRangeMode] = useState('sequence')
@@ -48,17 +65,24 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   const [presetAction, setPresetAction] = useState<'save' | 'rename' | null>(null)
   const [presetName, setPresetName] = useState('')
   const [showQueue, setShowQueue] = useState(false)
-  const probeKey = `${settings.width}/${settings.height}/${settings.fps}/${settings.videoBitrateMbps}`
-  const [probe, setProbe] = useState<{ key: string; supported: Record<string, boolean>; error?: string }>({ key: '', supported: {} })
+  const probeKey = videoEditExportProbeKey(settings)
+  const [probe, setProbe] = useState<{ key: string; supported: Record<string, boolean>; current?: VideoEditExportSupport; error?: string }>({ key: '', supported: {} })
   useEffect(() => {
     let active = true
     const combinations = (['avc', 'hevc'] as const).flatMap(codec => (['hardware', 'software'] as const).flatMap(encoderPreference => (['vbr', 'cbr'] as const).map(bitrateMode => ({ codec, encoderPreference, bitrateMode }))))
-    void Promise.all(combinations.map(async value => [`${value.codec}/${value.encoderPreference}/${value.bitrateMode}`, await canEncodeVideoEditExport({ ...value, width: settings.width, height: settings.height, frameRate: settings.fps!, bitrate: settings.videoBitrateMbps * 1_000_000 })] as const)).then(
-      values => { if (active) setProbe({ key: probeKey, supported: Object.fromEntries(values) }) },
+    void Promise.all([probeVideoEditExport(settings), Promise.all(combinations.map(async value => [`${value.codec}/${value.encoderPreference}/${value.bitrateMode}`, (await probeVideoEditExport({ ...settings, ...value })).videoSupported] as const)),
+      Promise.all((['auto', 1, 2] as const).map(async keyframeInterval => [`keyframe:${keyframeInterval}`, (await probeVideoEditExport({ ...settings, keyframeInterval })).videoSupported] as const)),
+    ]).then(
+      ([current, values, keyframes]) => {
+        if (active) {
+          logger.debug('导出面板编码检查完成', { event: 'video_edit.export.panel_probe_completed', context: { configuration: probeKey, supported: current.supported, reason: current.reason } })
+          setProbe({ key: probeKey, current, supported: Object.fromEntries([...values, ...keyframes]) })
+        }
+      },
       reason => { if (active) setProbe({ key: probeKey, supported: {}, error: videoEditUserErrorMessage(reason) }) },
     )
     return () => { active = false }
-  }, [probeKey, settings.width, settings.height, settings.fps, settings.videoBitrateMbps])
+  }, [probeKey, settings])
   const audioProbeKey = `${settings.audioEnabled}/${settings.audioCodec}/${settings.sampleRate}/${settings.channels}/${settings.audioBitrateKbps}`
   const [audioProbe, setAudioProbe] = useState<{ key: string; supported: Record<number, boolean>; error?: string }>({ key: '', supported: {} })
   useEffect(() => {
@@ -75,17 +99,10 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   }, [audioProbeKey, settings])
   const audioProbing = settings.audioEnabled && settings.audioCodec === 'aac' && audioProbe.key !== audioProbeKey
   const audioSupport = (bitrate: number): boolean => audioProbe.key === audioProbeKey && Boolean(audioProbe.supported[bitrate])
-  useEffect(() => {
-    if (!settings.audioEnabled || settings.audioCodec !== 'aac' || audioProbe.key !== audioProbeKey || audioProbe.supported[settings.audioBitrateKbps]) return
-    const supported = Object.keys(audioProbe.supported).map(Number).filter(value => audioProbe.supported[value])
-    if (supported.length) {
-      setRaw(previous => ({ ...previous, audioBitrateKbps: Math.max(...supported) }))
-      setPresetId('custom')
-    }
-  }, [audioProbe, audioProbeKey, settings.audioEnabled, settings.audioCodec, settings.audioBitrateKbps])
   useEffect(() => { let active = true; void refreshVideoEditProxies(projectId).catch(reason => { if (active) setError(videoEditUserErrorMessage(reason)) }); return () => { active = false } }, [projectId])
   const support = (codec: VideoEditExportSettings['codec'], preference: VideoEditExportSettings['encoderPreference'], mode: VideoEditExportSettings['bitrateMode']): boolean => probe.key === probeKey && Boolean(probe.supported[`${codec}/${preference}/${mode}`])
-  const probing = probe.key !== probeKey
+  const keyframeSupport = (interval: VideoEditExportSettings['keyframeInterval']): boolean => probe.key === probeKey && Boolean(probe.supported[`keyframe:${interval}`])
+  const probing = adapting || probe.key !== probeKey
   const codecChoice = (codec: VideoEditExportSettings['codec']): Pick<VideoEditExportSettings, 'codec' | 'encoderPreference' | 'bitrateMode'> | undefined => {
     for (const encoderPreference of [settings.encoderPreference, settings.encoderPreference === 'hardware' ? 'software' as const : 'hardware' as const]) {
       for (const bitrateMode of [settings.bitrateMode, settings.bitrateMode === 'vbr' ? 'cbr' as const : 'vbr' as const]) {
@@ -94,9 +111,8 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
     }
     return undefined
   }
-  const encoderError = settings.videoEnabled && !probing && !support(settings.codec, settings.encoderPreference, settings.bitrateMode) ? probe.error ?? `当前设备不支持所选编码设置。${settings.codec === 'avc' ? '请尝试 HEVC，或' : '请'}降低规格、切换性能或码率模式。` : ''
-  const audioError = settings.audioEnabled && settings.audioCodec === 'aac' && !audioProbing && !audioSupport(settings.audioBitrateKbps) ? audioProbe.error ?? videoEditExportAudioUnsupportedMessage(settings, audioProbe.supported) : ''
-  const canExport = !settingsError && !audioProbing && !audioError && duration > 0 && Boolean(fileName.trim()) && !/[\\/:*?"<>|]/.test(fileName) && !/^\.+$/.test(fileName) && (!settings.videoEnabled || !probing && !encoderError)
+  const encoderError = !probing ? probe.error ?? (presetDefaults && adaptation.error || probe.current?.reason) ?? '' : ''
+  const canExport = !settingsError && !probing && probe.current?.supported && !encoderError && duration > 0 && Boolean(fileName.trim()) && !/[\\/:*?"<>|]/.test(fileName) && !/^\.+$/.test(fileName)
   const patch = (values: Partial<VideoEditExportSettings>): void => {
     try {
       const next = resolveVideoEditExportSettings(patchVideoEditExportSettings(settings, values), composition); setRaw(next); setPresetId('custom'); setError(''); setSettingsError('')
@@ -112,6 +128,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
     try { const selected = await getPlatform().system.dialog.open({ directory: true, multiple: false }); const path = Array.isArray(selected) ? selected[0] : selected; if (path) setDirectory(path); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) }
   }
   const submit = async (wait: boolean): Promise<void> => {
+    if (busy || !canExport) return
     setBusy(true); setError(''); setNotice('')
     try {
       const name = `${fileName.replace(/\.(mp4|aac|wav)$/i, '')}.${settings.format}`
@@ -131,7 +148,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   const estimated = bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${(bytes / 1e6).toFixed(1)} MB`
   const customPreset = presets.some(value => value.id === presetId && !value.id.startsWith('builtin:'))
   return <>
-    <UiModal isOpen title="导出" size="editor" contentClassName="overflow-hidden" onClose={onClose} footer={<><UiButton variant="secondary" disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton variant="primary" disabled={busy || !canExport} onClick={() => void submit(true)}>{busy ? '正在导出…' : '导出'}</UiButton></>}>
+    <UiModal isOpen title="导出" size="editor" contentClassName="overflow-hidden" onClose={onClose} footer={<>{(settingsError || encoderError) && <p role="alert" className="mr-auto self-center text-xs text-text2">{settingsError || encoderError}</p>}<UiButton variant="secondary" disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton variant="primary" disabled={busy || !canExport} onClick={() => void submit(true)}>{busy ? '正在导出…' : '导出'}</UiButton></>}>
       <div className="flex min-h-0 flex-1">
         <div className="w-80 shrink-0 overflow-y-auto border-r border-line">
           <div className="space-y-2 px-3 py-3">
@@ -147,12 +164,12 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
               { value: 'aac', label: '音频 · AAC' }, { value: 'wav', label: '音频 · WAV' },
             ]} onSelect={value => value === 'avc' || value === 'hevc' ? patch({ format: 'mp4', ...codecChoice(value) }) : patch({ format: value as 'aac' | 'wav' })} /></VideoEditExportField>
           </div>
-          <VideoEditExportFields viewer={owner} settings={settings} busy={busy} hasProxies={hasProxies} patch={patch} probing={probing} support={support} audioProbing={audioProbing} audioSupport={audioSupport} matchSequence={() => patch({ followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } })} />
+          <VideoEditExportFields viewer={owner} settings={settings} busy={busy} hasProxies={hasProxies} patch={patch} probing={probing} support={support} keyframeSupport={keyframeSupport} audioProbing={audioProbing} audioSupport={audioSupport} matchSequence={() => patch({ followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } })} />
           <div className="space-y-2 px-3 pb-3">
             {notice && <p role="status" className="text-xs text-text2">{notice}</p>}
             {(notice || busy || error) && videoEditExportQueue.list().length > 0 && <UiButton size="sm" onClick={() => setShowQueue(true)}>查看导出队列</UiButton>}
             {busy && <UiLoading size="xs" message="正在处理导出…" />}
-            {(error || settingsError || encoderError || audioError) && <UiError size="xs" message={error || settingsError || encoderError || audioError} />}
+            {error && <UiError size="xs" message={error} />}
           </div>
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-3">

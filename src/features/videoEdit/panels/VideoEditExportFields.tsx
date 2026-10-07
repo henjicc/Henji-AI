@@ -16,9 +16,10 @@ interface Props {
   patch: (patch: Partial<VideoEditExportSettings>) => void; matchSequence: () => void
   support: (codec: VideoEditExportSettings['codec'], preference: VideoEditExportSettings['encoderPreference'], mode: VideoEditExportSettings['bitrateMode']) => boolean
   probing: boolean
+  keyframeSupport: (interval: VideoEditExportSettings['keyframeInterval']) => boolean
   audioSupport: (bitrate: number) => boolean; audioProbing: boolean
 }
-export function VideoEditExportFields({ viewer, settings: s, busy, hasProxies, patch, matchSequence, support, probing, audioSupport, audioProbing }: Props): React.ReactElement {
+export function VideoEditExportFields({ viewer, settings: s, busy, hasProxies, patch, matchSequence, support, probing, keyframeSupport, audioSupport, audioProbing }: Props): React.ReactElement {
   const [expanded, setExpanded] = useState<ExportSection[]>(() => expansion.get(viewer) ?? ['video'])
   const resolutions = [{ value: '7680x4320', label: '7680 × 4320' }, { value: '3840x2160', label: '3840 × 2160' }, { value: '2560x1440', label: '2560 × 1440' }, { value: '1920x1080', label: '1920 × 1080' }, { value: '1280x720', label: '1280 × 720' }, { value: '1080x1920', label: '1080 × 1920' }]
   const [customSize, setCustomSize] = useState(false)
@@ -39,7 +40,7 @@ export function VideoEditExportFields({ viewer, settings: s, busy, hasProxies, p
         <VideoEditExportField label="性能">{select('编码性能', s.encoderPreference, ([{ value: 'hardware', label: '硬件加速' }, { value: 'software', label: '软件编码' }] as const).map(value => ({ ...value, disabled: probing || !support(s.codec, value.value, s.bitrateMode), tooltip: probing ? '正在检查设备支持…' : !support(s.codec, value.value, s.bitrateMode) ? '当前设备不支持此规格；请调整格式、分辨率或码率模式。' : value.value === 'hardware' ? '优先使用硬件加速，最终方式取决于设备支持。' : '优先使用软件编码，最终方式取决于设备支持。' })), encoderPreference => patch({ encoderPreference }))}</VideoEditExportField>
         <VideoEditExportField label="码率模式">{select('码率模式', s.bitrateMode, (['vbr', 'cbr'] as const).map(value => ({ value, label: value.toUpperCase(), disabled: probing || !support(s.codec, s.encoderPreference, value), tooltip: !support(s.codec, s.encoderPreference, value) ? '当前设备不支持所选规格的此码率模式。' : undefined })), bitrateMode => patch({ bitrateMode }))}</VideoEditExportField>
         <VideoEditExportField label="目标码率" info="按码率和时长估算大小；VBR 实际大小随画面变化。"><div className="flex min-w-0 items-center gap-1"><UiRangeInput aria-label="目标码率滑杆" min={.1} max={200} step={.1} value={s.videoBitrateMbps} disabled={busy} className="min-w-0 flex-1" onChange={event => patch({ videoBitrateMbps: Number(event.target.value) })} /><NumberInput size="sm" ariaLabel="目标码率 Mbps" value={s.videoBitrateMbps} min={.1} max={200} precision={1} step={1} disabled={busy} widthClassName="w-16" onChange={videoBitrateMbps => patch({ videoBitrateMbps })} /><span className="text-xs text-text2">Mbps</span></div></VideoEditExportField>
-        <VideoEditExportField label="关键帧间隔">{select('关键帧间隔', String(s.keyframeInterval), [{ value: 'auto', label: '自动' }, { value: '1', label: '1 秒' }, { value: '2', label: '2 秒' }], value => patch({ keyframeInterval: value === 'auto' ? 'auto' : Number(value) as 1 | 2 }))}</VideoEditExportField>
+        <VideoEditExportField label="关键帧间隔">{select('关键帧间隔', String(s.keyframeInterval), (['auto', 1, 2] as const).map(interval => ({ value: String(interval), label: interval === 'auto' ? '自动' : `${interval} 秒`, disabled: probing || !keyframeSupport(interval), tooltip: probing ? '正在检查设备支持…' : !keyframeSupport(interval) ? '当前设备不支持所选规格的此关键帧间隔。' : undefined })), value => patch({ keyframeInterval: value === 'auto' ? 'auto' : Number(value) as 1 | 2 }))}</VideoEditExportField>
       </UiGroup>
     </>, s.videoEnabled, videoEnabled => patch({ videoEnabled }))}
     {section('audio', '音频', <>
