@@ -28,15 +28,33 @@ export function videoEditSequenceSizeForPixels(pixels: number, aspect: number): 
   }
   return size
 }
+/**
+ * 预设比例 × 档位用行业常用尺寸（按短边定档）：16:9 / 9:16 为标准电视规格，4:3 为 640×480、1440×1080、2880×2160 一系，
+ * 21:9 为超宽屏常用的 2560×1080、3440×1440、5120×2160（实际约 2.37:1）。自定义比例才走总像素公式。
+ */
+const LANDSCAPE: Record<'16:9' | '1:1' | '4:3' | '21:9', Record<VideoEditSequenceTier, readonly [number, number]>> = {
+  '16:9': { '480p': [854, 480], '720p': [1280, 720], '1080p': [1920, 1080], '2K': [2560, 1440], '4K': [3840, 2160], '8K': [7680, 4320] },
+  '1:1': { '480p': [480, 480], '720p': [720, 720], '1080p': [1080, 1080], '2K': [1440, 1440], '4K': [2160, 2160], '8K': [4320, 4320] },
+  '4:3': { '480p': [640, 480], '720p': [960, 720], '1080p': [1440, 1080], '2K': [1920, 1440], '4K': [2880, 2160], '8K': [5760, 4320] },
+  '21:9': { '480p': [1120, 480], '720p': [1680, 720], '1080p': [2560, 1080], '2K': [3440, 1440], '4K': [5120, 2160], '8K': [10240, 4320] },
+}
+const PORTRAIT = { '9:16': '16:9', '3:4': '4:3' } as const
+function standardVideoEditSequenceSize(ratio: VideoEditSequenceRatio, tier: VideoEditSequenceTier): VideoEditSequenceSize {
+  if (ratio === '9:16' || ratio === '3:4') { const [height, width] = LANDSCAPE[PORTRAIT[ratio]][tier]; return { width, height } }
+  const [width, height] = LANDSCAPE[ratio][tier]
+  return { width, height }
+}
 export function videoEditSequenceRatioValue(ratio: VideoEditSequenceRatio): number {
   const [width, height] = ratio.split(':').map(Number)
   return width / height
 }
 export function videoEditSequenceTierSize(aspect: number, tier: VideoEditSequenceTier): VideoEditSequenceSize {
+  const ratio = VIDEO_EDIT_SEQUENCE_RATIOS.find(value => Math.abs(aspect / videoEditSequenceRatioValue(value) - 1) < .005)
+  if (ratio) return standardVideoEditSequenceSize(ratio, tier)
   return videoEditSequenceSizeForPixels(VIDEO_EDIT_SEQUENCE_TIERS.find(value => value.label === tier)!.pixels, aspect)
 }
 export function videoEditSequencePresetSize(ratio: VideoEditSequenceRatio, tier: VideoEditSequenceTier): VideoEditSequenceSize {
-  return videoEditSequenceTierSize(videoEditSequenceRatioValue(ratio), tier)
+  return standardVideoEditSequenceSize(ratio, tier)
 }
 export function inferVideoEditSequencePreset(size: VideoEditSequenceSize): VideoEditSequencePreset {
   for (const ratio of VIDEO_EDIT_SEQUENCE_RATIOS) for (const { label: tier } of VIDEO_EDIT_SEQUENCE_TIERS) {
@@ -45,7 +63,7 @@ export function inferVideoEditSequencePreset(size: VideoEditSequenceSize): Video
   }
   const aspect = size.width / size.height
   const ratio = Number.isFinite(aspect) && aspect > 0
-    ? VIDEO_EDIT_SEQUENCE_RATIOS.find(value => Math.abs(aspect / videoEditSequenceRatioValue(value) - 1) < .005)
+    ? VIDEO_EDIT_SEQUENCE_RATIOS.find(value => Math.abs(aspect / videoEditSequenceRatioValue(value) - 1) < .005 || value === '21:9' && VIDEO_EDIT_SEQUENCE_TIERS.some(({ label }) => { const size = standardVideoEditSequenceSize(value, label); return Math.abs(aspect / (size.width / size.height) - 1) < .002 }))
     : undefined
   return { ratio: ratio ?? '自定义', tier: '自定义' }
 }
