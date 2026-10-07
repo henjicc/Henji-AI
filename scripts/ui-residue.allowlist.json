@@ -232,6 +232,11 @@
   ],
   "cssClasses": [
     {
+      "definedIn": "src/index.css",
+      "names": ["dockview-host", "dock-active-outline"],
+      "reason": "停靠宿主顶部间隙要与 dockview 主题 gap 同宽，并叠用 shade 与间隙色两层底；激活面板组描边要与选中标签底线同为 1.5px 且跟随圆角令牌，标准类表达不了这两种组合"
+    },
+    {
       "definedIn": "src/features/canvas/storyboard.css",
       "names": [
         "canvas-lod-low",
