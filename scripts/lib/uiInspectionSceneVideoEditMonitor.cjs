@@ -316,7 +316,36 @@ function createVideoEditMonitorScene() {
             await page.keyboard.down('Control'); await page.mouse.wheel(0, where === 'down' ? 80 : -80); await page.keyboard.up('Control'); await page.waitForTimeout(30)
           }
           const offset = await viewport.evaluate((host, { track, headerWidth }) => { const row = host.querySelector(`[data-track-index="${track}"]`); return { x: headerWidth + 0.1 - host.scrollLeft, y: row.getBoundingClientRect().top - host.getBoundingClientRect().top + 16 } }, { track, headerWidth: VIDEO_EDIT_TRACK_HEADER_WIDTH })
-          await button(panel(page, 'source'), name).dragTo(viewport, { targetPosition: offset })
+          // 记录真实原生拖放链路，区分 dragTo 完成与浏览器实际派发 drop。
+          // dragover 只读 types，不尝试读取保护模式下的载荷。
+          await page.evaluate(() => {
+            const events = []; const types = ['dragstart', 'dragover', 'drop', 'dragend']
+            const entries = new WeakMap()
+            const afterHandlers = event => {
+              const entry = entries.get(event)
+              if (!entry) return
+              entry.defaultPrevented = event.defaultPrevented
+              entry.types = Array.from(event.dataTransfer?.types ?? [])
+              entry.dropEffect = event.dataTransfer?.dropEffect
+              entry.effectAllowed = event.dataTransfer?.effectAllowed
+            }
+            const record = event => {
+              const target = event.target instanceof Element ? event.target : null
+              const host = document.querySelector('[data-video-edit-timeline-viewport]')
+              const rect = host?.getBoundingClientRect()
+              const entry = { type: event.type, clientX: event.clientX, clientY: event.clientY, types: Array.from(event.dataTransfer?.types ?? []), effectAllowed: event.dataTransfer?.effectAllowed, dropEffect: event.dataTransfer?.dropEffect, sourceStatus: document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus, button: target?.closest('button')?.getAttribute('aria-label'), inTimeline: Boolean(target?.closest('[data-video-edit-timeline-viewport]')), track: target?.closest('[data-track-index]')?.getAttribute('data-track-index'), viewport: rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, scrollLeft: host.scrollLeft } : null }
+              events.push(entry); entries.set(event, entry)
+              // drop 会 stopPropagation，仍在整次派发结束后记录是否被接收；载荷类型保留事件内的快照。
+              setTimeout(() => { entry.defaultPrevented = event.defaultPrevented }, 0)
+            }
+            for (const type of types) { document.addEventListener(type, record, true); document.addEventListener(type, afterHandlers) }
+            window.__monitorRangeDragEvidence = { events, remove: () => { for (const type of types) { document.removeEventListener(type, record, true); document.removeEventListener(type, afterHandlers) } } }
+          })
+          try { await button(panel(page, 'source'), name).dragTo(viewport, { targetPosition: offset }) }
+          finally {
+            evidence.lastRangeDrag = { component, targetTrack: track, offset, events: await page.evaluate(() => { const trace = window.__monitorRangeDragEvidence; trace.remove(); delete window.__monitorRangeDragEvidence; return trace.events }) }
+            store()
+          }
           const count = component === 'linked' ? 2 : 1
           document = await saved(page, file, value => value.sequences[0].clips.length === beforeRange.length + count)
           const added = document.sequences[0].clips.filter(clip => !beforeRange.some(prior => prior.id === clip.id))
