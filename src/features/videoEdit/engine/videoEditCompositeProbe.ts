@@ -49,7 +49,8 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     const nodes = buildVideoEditCompositePlan(active, windows)
     await compositor.prepareImages(new Map(), () => true, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
     const prepared = await sources.prepare(composition, active, frame, () => true, undefined, { transitions: windows, surfaceKeys: videoEditCompositeSurfaceKeys(nodes) })
-    const device = inspect ? prepared.pictures.values().next().value?.owner : undefined
+    const inspected = prepared.pictures.values().next().value
+    const device = inspect && inspected && 'owner' in inspected ? inspected.owner : undefined
     device?.pushErrorScope('validation')
     let validationError: { message?: string } | null | undefined
     try {

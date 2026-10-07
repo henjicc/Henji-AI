@@ -19,7 +19,7 @@ export function addVideoEditProgramText(instance: VideoEditInstance, point: { x:
   const item = { id: crypto.randomUUID(), name: '文字', kind: 'text' as const }
   const candidate = { ...instance.document, items: [...instance.document.items, item], sequences: instance.document.sequences.map(value => value.id === sequence.id ? { ...value, tracks: [...value.tracks, ...added] } : value) }
   const clip = { ...makeVideoEditItemClip(candidate, item.id, sequence.id, { frame, track: track.index, duration: Math.max(1, Math.min(Math.round(sequence.frameRate.numerator / sequence.frameRate.denominator * 3), nextFrame - frame)) }),
-    text: '', x: point.x - .5, y: point.y - .5, textStyle: { ...defaultVideoEditTextStyle(sequence.height), align: 'left' as const, anchor: 'top' as const, boxWidth } }
+    text: '', x: point.x - .5, y: point.y - .5, textStyle: { ...defaultVideoEditTextStyle(sequence.height), align: 'left' as const, verticalAlign: 'top' as const, boxWidth } }
   editVideoProject(instance.document.id, document => ({ ...document, items: [...document.items, item], sequences: document.sequences.map(value => value.id === sequence.id ? { ...value, tracks: [...value.tracks, ...added], clips: [...value.clips, clip] } : value) }))
   setVideoEditTimelineView(instance.document.id, { selectedClipIds: [clip.id] }, clip.id)
   logger.info('节目文字已放置', { event: 'video_edit.program.text.completed', context: { projectId: instance.document.id, sequenceId: sequence.id, paragraph: boxWidth > 0 } })

@@ -4,7 +4,7 @@ import { createLogger } from '@/core/logging'
 import { buildAutoSubtitles, autoSubtitleOptionsSchema, type AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
 import { videoEditComposition, videoEditDuration, audibleVideoEditClips, type VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditAudioContent } from '@/core/videoEdit/audioContent'
-import { videoEditCaptionSchema, captionDisplayText, type VideoEditCaption } from '@/core/videoEdit/timedContent'
+import { videoEditCaptionSchema, type VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/core/videoEdit/subtitleStyle'
 import { videoEditClipSchema } from '@/core/videoEdit/document'
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, videoEditTextMediaIdentity, type VideoEditTextTranscription } from '@/core/videoEdit/textTranscript'
@@ -143,7 +143,7 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     if (!audio.document.transcript.length) await transcribeAudioEdit({ projectId: audioDocumentId, modelId, language, requestId })
     else await flushAudioEditProject(audioDocumentId)
     await assertTarget()
-    const captions = manifest.captions ?? buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings).map(caption => ({ ...caption, ...(caption.text.split('\n').length <= 3 ? { style: videoEditSubtitleStyleSchema.parse({}) } : {}) }))
+    const captions = manifest.captions ?? buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings).map(caption => ({ ...caption, style: videoEditSubtitleStyleSchema.parse({}) }))
     if (!captions.length) throw new Error('识别结果没有可用字幕。')
     // Record planned IDs before committing, so a lost save acknowledgement cannot create a duplicate batch.
     await platform.system.fs.writeTextFile(path, JSON.stringify({ ...manifest, captions }))
@@ -185,17 +185,15 @@ export function mergeVideoEditSubtitles(projectId: string, sequenceId: string, i
     if (ids.length < 2 || selected.length !== ids.length || !first || !last || all.slice(all.indexOf(first), all.indexOf(last) + 1).length !== selected.length || selected.some(cue => cue.clipId !== first.clipId)) throw new Error('请选择相邻且跟随同一片段的字幕。')
     if (selected.some(cue => Boolean(cue.translation)) && !selected.every(cue => Boolean(cue.translation))) throw new Error('请先为这些字幕统一生成或清除第二语言，再合并。')
     const merged = videoEditCaptionSchema.parse({ ...first, text: selected.map(cue => cue.text).join('\n'), ...(first.translation ? { translation: selected.map(cue => cue.translation).join(' ') } : {}), duration: Math.max(...selected.map(cue => cue.start + cue.duration)) - first.start })
-    if (merged.style && merged.text.split('\n').length > 3) throw new Error('带样式字幕最多三行，请减少合并数量。')
     return { ...sequence, captions: sequence.captions!.flatMap(cue => cue.id === first.id ? [merged] : ids.includes(cue.id) ? [] : [cue]) }
   })
 }
-export function styleVideoEditSubtitles(projectId: string, sequenceId: string, style: VideoEditSubtitleStyle, ids?: readonly string[]): void {
+export function styleVideoEditSubtitles(projectId: string, sequenceId: string, style: VideoEditSubtitleStyle, ids?: readonly string[], gesture?: import('./videoEditService').VideoEditGesture): void {
   const parsed = videoEditSubtitleStyleSchema.parse(style)
   editVideoSequence(projectId, sequenceId, sequence => {
     if (ids && ids.some(id => !sequence.captions?.some(cue => cue.id === id))) throw new Error('原字幕已移除，请重新选择。')
-    if (sequence.captions?.some(cue => (!ids || ids.includes(cue.id)) && captionDisplayText(cue).split('\n').length > 3)) throw new Error('请先拆分超过三行的字幕，再统一样式。')
     return { ...sequence, captions: sequence.captions?.map(cue => !ids || ids.includes(cue.id) ? { ...cue, style: parsed } : cue) }
-  })
+  }, gesture)
 }
 /** Existing cues only have cue-level times; reorganizing their text estimates internal boundaries proportionally. */
 export function segmentVideoEditSubtitles(projectId: string, sequenceId: string, options: AutoSubtitleOptions, ids?: readonly string[]): { captionIds: string[]; createdIds: string[]; updatedIds: string[] } {

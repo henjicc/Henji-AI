@@ -29,6 +29,7 @@ import type { HenjiVideoDecoderApi } from './api-video-decoder'
 import type { HenjiDocumentsApi } from './api-documents'
 import type { WorkRootPlatform } from '../../src/platform/contracts/workRoot'
 import type { LocalModelsPlatform } from '../../src/platform/contracts/localModels'
+import type { FontsPlatform } from '../../src/platform/contracts/fonts'
 import type { SmartRegionsPlatform } from '../../src/platform/contracts/smartRegions'
 import type { TrackingPlatform } from '../../src/platform/contracts/tracking'
 import type { VideoProxyPlatform } from '../../src/platform/contracts/videoProxy'
@@ -91,6 +92,7 @@ export interface HenjiNativeApi {
   workRoot: WorkRootPlatform
   /** 本地模型下载与管理，接口与 PAL `LocalModelsPlatform` 相同。 */
   localModels: LocalModelsPlatform
+  fonts: FontsPlatform
   /** 剪辑智能区域分析（4.7d），接口与 PAL `SmartRegionsPlatform` 相同。 */
   smartRegions: SmartRegionsPlatform
   tracking: TrackingPlatform

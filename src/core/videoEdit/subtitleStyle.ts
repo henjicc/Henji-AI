@@ -1,36 +1,31 @@
 import { z } from 'zod'
-import type { VideoEditGraphic, VideoEditGraphicObject } from './graphics'
+import { createVideoEditGraphic, type VideoEditGraphic } from './graphics'
+import { defaultVideoEditTextStyle, scaleVideoEditTextStyle, videoEditTextStyleSchema } from './text'
+import { BLACK_HEX } from '../theme/colorTokens'
 
-export const videoEditSubtitleStyleSchema = z.object({
-  fontFamily: z.enum(['sans-serif', 'serif', 'monospace']).default('sans-serif'),
-  fontSize: z.number().min(12).max(200).default(48),
-  outline: z.boolean().default(true),
-  background: z.boolean().default(false),
-  bottomMargin: z.number().min(.05).max(.4).default(.1),
+/** Typography uses the same schema; subtitles add only their 1080p reference-frame placement. */
+export const videoEditSubtitleStyleSchema = videoEditTextStyleSchema.extend({
+  verticalAlign: videoEditTextStyleSchema.shape.verticalAlign.default('bottom'),
+  strokes: videoEditTextStyleSchema.shape.strokes.default([{ enabled: true, color: BLACK_HEX, width: 2, position: 'outside' }]),
+  fontSize: videoEditTextStyleSchema.shape.fontSize.default(48),
+  bottomMargin: z.number().finite().min(0).max(1).default(.1).describe('底部安全区占画幅高度比例，0–1；字号和空间样式按1080p参考画幅缩放。'),
 }).strict()
 export type VideoEditSubtitleStyle = z.infer<typeof videoEditSubtitleStyleSchema>
-
+const plain = videoEditSubtitleStyleSchema.parse({ strokes: [{ color: BLACK_HEX, width: 2, position: 'outside' }] })
 export const VIDEO_EDIT_SUBTITLE_PRESETS: ReadonlyArray<{ id: string; name: string; style: VideoEditSubtitleStyle }> = [
-  { id: 'builtin:plain', name: '简洁白字黑边', style: videoEditSubtitleStyleSchema.parse({}) },
-  { id: 'builtin:box', name: '底框', style: videoEditSubtitleStyleSchema.parse({ background: true, outline: false }) },
-  { id: 'builtin:variety', name: '综艺大字', style: videoEditSubtitleStyleSchema.parse({ fontSize: 80, bottomMargin: .15 }) },
-  { id: 'builtin:bilingual', name: '双语上下行', style: videoEditSubtitleStyleSchema.parse({ fontSize: 40, bottomMargin: .12 }) },
+  { id: 'builtin:plain', name: '简洁白字黑边', style: plain },
+  { id: 'builtin:box', name: '底框', style: videoEditSubtitleStyleSchema.parse({ background: { enabled: true } }) },
+  { id: 'builtin:variety', name: '综艺大字', style: { ...plain, fontSize: 80, bottomMargin: .15 } },
+  { id: 'builtin:bilingual', name: '双语上下行', style: { ...plain, fontSize: 40, bottomMargin: .12 } },
 ]
-
-/** Reuse the existing graphic text/rect commands, including content colors and full-size export. */
 export function subtitleGraphic(text: string, width: number, height: number, input: VideoEditSubtitleStyle): VideoEditGraphic {
-  const style = videoEditSubtitleStyleSchema.parse(input)
-  const fontSize = Math.min(512, Math.max(1, style.fontSize * height / 1080))
-  const lines = text.split('\n'); const step = fontSize * 1.3
-  const bottom = height * (1 - style.bottomMargin) - fontSize / 2
-  const objects: VideoEditGraphicObject[] = []
-  if (lines.length > 3) throw new Error('带样式字幕最多三行，请先拆分此长句或增大每行字数。')
-  if (style.background) objects.push({ id: 'background', name: '字幕底框', kind: 'rect', parameters: { x: width * .05, y: bottom - (lines.length - 1) * step - fontSize * .75, width: width * .9, height: lines.length * step, fill: [0, 0, 0, .7], radius: fontSize * .2 } })
-  lines.forEach((line, index) => {
-    const y = bottom - (lines.length - 1 - index) * step
-    const common = { x: width / 2, y, text: line, fontSize, fontFamily: style.fontFamily, align: 'center' }
-    if (style.outline) for (const [dx, dy] of [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]) objects.push({ id: `outline-${index}-${dx}-${dy}`, name: '字幕描边', kind: 'text', parameters: { ...common, x: width / 2 + dx * fontSize * .04, y: y + dy * fontSize * .04, color: [0, 0, 0, 1] } })
-    objects.push({ id: `text-${index}`, name: '字幕文字', kind: 'text', parameters: { ...common, color: [1, 1, 1, 1] } })
-  })
-  return { width, height, objects }
+  const checked = videoEditSubtitleStyleSchema.parse(input)
+  const { bottomMargin, ...typography } = checked
+  const style = scaleVideoEditTextStyle(typography, height / 1080)
+  const graphic = createVideoEditGraphic('text', width, height)
+  const object = graphic.objects[0]
+  object.id = 'subtitle'; object.name = '字幕文字'
+  object.parameters = { ...object.parameters, text, x: width / 2, y: height * (1 - bottomMargin) }
+  object.textStyle = { ...defaultVideoEditTextStyle(height), ...style }
+  return graphic
 }

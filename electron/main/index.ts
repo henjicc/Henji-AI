@@ -10,6 +10,7 @@ import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerLocalRecordsIpc } from './ipc/local-records'
+import { registerFontsIpc } from './ipc/fonts'
 import { registerTestFixturesIpc } from './ipc/test-fixtures'
 import { configureDatabaseMigrations } from './services/db'
 import { databaseMigrationOptions } from './services/db-locations'
@@ -109,6 +110,7 @@ app.whenReady().then(() => {
   registerClipboardIpc()
   registerCustomModelsIpc()
   registerLocalRecordsIpc()
+  registerFontsIpc()
   registerTestFixturesIpc()
   registerDocumentsIpc()
   registerWorkRootIpc()

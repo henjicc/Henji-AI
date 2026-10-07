@@ -9,7 +9,9 @@ import {
   readHarnessImageEditDocument,
   resetHarnessNativeStorage,
   uninstallHarnessNativeStorage,
+  seedHarnessFonts,
 } from './harnessNativeStorage'
+import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 
 /**
  * 替身自身的门禁。
@@ -27,6 +29,15 @@ describe('harness 内存 native 替身', () => {
     expect(isDesktopRuntime()).toBe(true)
     // 拿到的是真 createElectronPlatform() 的产物，只是它代理到的 native 是内存的。
     expect(typeof getPlatform().assetLibrary.createLibrary).toBe('function')
+  })
+  it('字体目录和字体偏好只存不解析，通过真实适配器回读副本；未实现文件选择仍拒绝', async () => {
+    seedHarnessFonts({ faces: GENERIC_FONT_FACES, revision: 7 })
+    const catalog = await getPlatform().fonts.list(); expect(catalog.revision).toBe(7)
+    catalog.faces[0].family = 'changed'; expect((await getPlatform().fonts.list()).faces[0].family).toBe('sans-serif')
+    await getPlatform().settings.set('fonts.preferences', '{"favorites":["serif"],"recent":[]}', 'json')
+    expect(await getPlatform().settings.get('fonts.preferences')).toMatchObject({ type: 'json', value: '{"favorites":["serif"],"recent":[]}' })
+    expect(() => getPlatform().fonts.importFiles()).toThrow(/没有实现/)
+    resetHarnessNativeStorage(); expect((await getPlatform().fonts.list()).faces).toEqual([]); expect(await getPlatform().settings.get('fonts.preferences')).toBeNull()
   })
 
   it('没实现的命名空间抛错，不返回空值', () => {

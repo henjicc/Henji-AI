@@ -1,12 +1,13 @@
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Trash2, Eye, EyeOff, Type } from 'lucide-react'
 import { Dropdown, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 import type { VideoEditGraphic } from '@/core/videoEdit/graphics'
 import { readVideoEditGraphicEditor, type VideoEditGraphicEditorState, type VideoEditGraphicTarget } from '../application/videoEditCodeParameters'
-import { createVideoEditGraphicObject, deleteVideoEditGraphicObjects, renameVideoEditGraphicObject, reorderVideoEditGraphicObjects, type VideoEditGraphicClipTarget } from '../application/videoEditGraphics'
-import { requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { createVideoEditGraphicObject, deleteVideoEditGraphicObjects, renameVideoEditGraphicObject, reorderVideoEditGraphicObjects, updateVideoEditGraphicObject, type VideoEditGraphicClipTarget } from '../application/videoEditGraphics'
+import { requireVideoEditInstance, subscribeVideoEditDomain, videoEditDomainRevision, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { VideoEditParameterFields } from './CodeParameterPanel'
 import { videoEditParameterTargetIdentity } from './useCodeParameterGesture'
+import { VideoEditGraphicTextStylePanel } from './VideoEditGraphicTextStylePanel'
 
 const objectKinds = { rect: '矩形', ellipse: '椭圆', text: '文字' } as const
 const objectOptions = [{ value: 'rect', label: '矩形' }, { value: 'ellipse', label: '椭圆' }, { value: 'text', label: '原生文字' }] as const
@@ -56,7 +57,7 @@ function GraphicObjects({ owner, target, graphic, onError }: { owner: VideoEditI
   }
   return <>
     <UiGroup title="图形对象" titleTone="compact" divided data-video-edit-graphic-objects={target.clipId} actions={<Dropdown<'rect' | 'ellipse' | 'text'> ariaLabel="添加图形对象" display="添加对象" options={[...objectOptions]} onSelect={kind => run(() => setSelectedId(createVideoEditGraphicObject(target, { kind })))} />}>
-      {rows.length ? <div className="flex flex-col gap-1" aria-label="图形对象层级">{rows.map(object => <UiOptionButton key={object.id} variant="menu" active={object.id === selected?.id} aria-label={`选择图形对象${object.name}`} aria-pressed={object.id === selected?.id} data-video-edit-graphic-object={object.id} size="sm" className="w-full min-w-0 justify-between gap-2" onPointerDown={event => { if (event.button === 0) setSelectedId(object.id) }} onClick={() => setSelectedId(object.id)}><span className="truncate">{object.name}</span><span className="shrink-0 text-2xs text-text3">{objectKinds[object.kind]}</span></UiOptionButton>)}</div> : <UiEmpty size="xs" title="此图形暂无对象" description="添加矩形、椭圆或文字以创作画面。" />}
+      {rows.length ? <div className="flex flex-col gap-1" aria-label="图形对象层级">{rows.map(object => <div key={object.id} className="flex items-center gap-1"><UiIconButton size="sm" aria-label={`${object.visible === false ? '显示' : '隐藏'}图层${object.name}`} onClick={() => run(() => updateVideoEditGraphicObject({ ...target, objectId: object.id }, { visible: object.visible === false }))}>{object.visible === false ? <EyeOff size={14} /> : <Eye size={14} />}</UiIconButton><UiOptionButton key={object.id} variant="menu" active={object.id === selected?.id} aria-label={`选择图形对象${object.name}`} aria-pressed={object.id === selected?.id} data-video-edit-graphic-object={object.id} size="sm" className="w-full min-w-0 justify-between gap-2" onPointerDown={event => { if (event.button === 0) setSelectedId(object.id) }} onClick={() => setSelectedId(object.id)}><span className="flex min-w-0 items-center gap-2">{object.kind === 'text' && <Type size={14} />}<span className="truncate">{object.name}</span></span><span className="shrink-0 text-2xs text-text3">{objectKinds[object.kind]}</span></UiOptionButton></div>)}</div> : <UiEmpty size="xs" title="此图形暂无对象" description="添加矩形、椭圆或文字以创作画面。" />}
       {selected && <>
         <UiFormRow density="compact" label="对象名称"><GraphicObjectName key={videoEditParameterTargetIdentity({ ...target, objectId: selected.id })} owner={owner} target={{ ...target, objectId: selected.id }} name={selected.name} onError={onError} /></UiFormRow>
         <div className="flex items-center gap-1">
@@ -66,11 +67,12 @@ function GraphicObjects({ owner, target, graphic, onError }: { owner: VideoEditI
         </div>
       </>}
     </UiGroup>
-    {editor ? <VideoEditParameterFields key={videoEditParameterTargetIdentity(editor.target)} editor={editor} onError={onError} /> : error ? <UiError title="对象参数暂不可用" message={error instanceof Error ? error.message : '请重新选择图形对象。'} /> : null}
+    {editor ? selected?.kind === 'text' && selected.textStyle ? <VideoEditGraphicTextStylePanel key={videoEditParameterTargetIdentity(editor.target)} target={editor.target} style={selected.textStyle} onError={onError} transform={<VideoEditParameterFields editor={editor} onError={onError} />} /> : <VideoEditParameterFields key={videoEditParameterTargetIdentity(editor.target)} editor={editor} onError={onError} /> : error ? <UiError title="对象参数暂不可用" message={error instanceof Error ? error.message : '请重新选择图形对象。'} /> : null}
   </>
 }
 
 export function VideoEditGraphicPanel({ projectId, sequenceId, clipId, onError }: Props): React.ReactElement {
+  useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   let owner: VideoEditInstance | undefined
   let unavailable: unknown

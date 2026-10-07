@@ -1,5 +1,7 @@
+import { documentFontRevision } from '@/platform/fontFaces'
 import { VideoSample } from 'mediabunny'
 import { paintVideoEditText } from './videoEditTextSurface'
+import { defaultVideoEditTextStyle, scaleVideoEditTextStyle } from '@/core/videoEdit/text'
 import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
 import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
 import type { VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
@@ -323,7 +325,7 @@ export class VideoEditGpuCompositor {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {
           const id = picture ? this.imageKey(picture) : `text:${clip.id}`
-          const key = picture ? id : JSON.stringify([document.width, document.height, clip.text, clip.textStyle])
+          const key = picture ? id : JSON.stringify([document.width, document.height, clip.text, clip.textStyle, documentFontRevision()])
           let cached = this.textures.get(id)
           if (cached?.key !== key) {
             let source: ImageBitmap | OffscreenCanvas
@@ -331,7 +333,8 @@ export class VideoEditGpuCompositor {
             else {
               source = new OffscreenCanvas(document.width, document.height)
               const text = source.getContext('2d')!
-              paintVideoEditText(text, clip, document.width, document.height)
+              const textClip = this.pictureDivisor === 1 ? clip : { ...clip, textStyle: scaleVideoEditTextStyle(clip.textStyle ?? defaultVideoEditTextStyle(document.height * this.pictureDivisor), 1 / this.pictureDivisor) }
+              paintVideoEditText(text, textClip, document.width, document.height)
             }
             this.texture(id, key, source); cached = this.textures.get(id)!
           }

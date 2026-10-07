@@ -6,7 +6,7 @@ import { listVideoEditSubtitlePresets, type VideoEditSubtitlePreset } from './vi
 import { videoEditDomainRevision } from './videoEditService'
 
 const entityType = 'video_edit.subtitle_preset'
-const reason = '本机字幕样式模板目录；保存与删除由字幕面板的本机预设库维护，不进入剪辑文件。应用时读取 style，在同一次通用事务中写入所选 video_edit.caption.style（一步撤销）。'
+const reason = '本机字幕样式模板目录；本机保存、改名、修改与删除统一通过 video_edit.text_preset 实体维护，不进入剪辑文件。应用时读取 style，在同一次通用事务中写入所选 video_edit.caption.style（一步撤销）。'
 const fields: ApplicationFieldDefinition<VideoEditSubtitlePreset, VideoEditSubtitlePreset>[] = (['name', 'style'] as const).map(key => ({
   propertyId: `${entityType}.${key}`, storeActions: [], read: preset => key === 'name' ? preset.name : { ...preset.style },
   descriptor: {

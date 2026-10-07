@@ -28,6 +28,8 @@
  */
 import { v4 as uuidv4 } from 'uuid'
 import { FakeDocumentCommands } from '@/features/documents/documentSessionTestKit'
+import type { FontCatalog } from '@/core/fonts/catalog'
+import type { SettingEntryDto, SettingValueType } from '@/core/localRecords/types'
 
 import type { AssetLibraryRecord, AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
@@ -158,9 +160,19 @@ const documentsStorage = Object.fromEntries(DOCUMENT_METHODS.map((method) => [
 ]))
 
 /* ── 装配与安装 ─────────────────────────────────────────────────────────── */
+let fontCatalog: FontCatalog = { faces: [], revision: 0 }
+const settings = new Map<string, SettingEntryDto>()
+/** Font metadata at the IPC boundary only; parsing and filesystem discovery remain real service tests. */
+export function seedHarnessFonts(value: FontCatalog): void { fontCatalog = wire(value) }
 
 const NAMESPACES: Record<string, object> = {
   runtimeInfo: { uiInspectionReadOnly: false },
+  fonts: { async list() { return wire(fontCatalog) }, onChanged() { return () => undefined } },
+  settings: {
+    async get(key: string) { return settings.has(key) ? wire(settings.get(key)!) : null },
+    async set(key: string, value: string, type: SettingValueType = 'string') { settings.set(key, { key, value, type }) },
+    async delete(key: string) { settings.delete(key) },
+  },
   assetLibrary: assetLibraryStorage,
   audio: audioEditStorage,
   documents: documentsStorage,
@@ -253,6 +265,8 @@ export function installHarnessNativeStorage(): void {
 
 /** 清空全部存储。用例之间必须调，否则上一条用例造的素材集合会漏进下一条。 */
 export function resetHarnessNativeStorage(): void {
+  fontCatalog = { faces: [], revision: 0 }
+  settings.clear()
   imageDocuments.clear()
   libraries.clear()
   documentStore = new FakeDocumentCommands({ realKinds: true })

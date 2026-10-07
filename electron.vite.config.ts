@@ -16,6 +16,7 @@ export default defineConfig({
           'pi-agent-utility': resolve(__dirname, 'electron/main/pi-agent-utility.ts'),
           'image-registration-worker': resolve(__dirname, 'electron/main/image-registration-worker.ts'),
           'audio-waveform-worker': resolve(__dirname, 'electron/main/services/audio/waveform-worker.ts'),
+          'font-worker': resolve(__dirname, 'electron/main/services/fonts/worker.ts'),
           // 本地模型推理后台进程（任务 4.7d，onnxruntime-node 原生推理）。
           'local-inference-utility': resolve(__dirname, 'electron/main/local-inference-utility.ts'),
         },

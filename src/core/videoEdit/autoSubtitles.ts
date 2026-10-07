@@ -6,7 +6,7 @@ import type { VideoEditCaption } from './timedContent'
 
 export const autoSubtitleOptionsSchema = z.object({
   maxCharacters: z.number().int().min(4).max(80).default(24),
-  maxLines: z.number().int().min(1).max(3).default(2).describe('每条字幕最多行数，超出时拆成多条。'),
+  maxLines: z.number().int().min(1).default(2).describe('每条字幕最多行数，超出时拆成多条。'),
   pauseSeconds: z.number().min(.1).max(2).default(.6).describe('词间停顿达到此秒数时开始下一条字幕。'),
   minDurationSeconds: z.number().min(0).max(5).default(1),
 }).strict()
@@ -46,7 +46,7 @@ export function audioTimestampToVideoFrame(sample: number, sampleRate: number, r
 
 /** Wrapping retains word boundaries; punctuation is preferred to a full cue at the line limit. */
 export function splitSubtitleText(text: string, maximum: number, maxLines: number): string[] {
-  if (!Number.isInteger(maxLines) || maxLines < 1 || maxLines > 3) throw new Error('每条字幕最多行数须为 1–3。')
+  if (!Number.isInteger(maxLines) || maxLines < 1) throw new Error('每条字幕最多行数须为正整数。')
   const lines = wrapSubtitleText(text, maximum).split('\n').filter(Boolean)
   const cues: string[] = []
   while (lines.length) {

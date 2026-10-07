@@ -1,5 +1,6 @@
 import type { JsonValue } from '@/core/application-control'
 import { videoEditClipMedia, videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
+import { videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
 import { orderVideoEditEffects, videoEditEffectAccepts, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
 import { videoEditTransitionClipIds, videoEditTransitionEditPoints, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, videoEditTransitionWindow, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
@@ -95,7 +96,7 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
   if (owner.kind === 'tracker') {
     putVideoEditTracker(document, owner.clip, { id: owner.tracker.id, name: data.name, method: data.method, prompts: data.prompts })
   } else if (owner.kind === 'graphic') {
-    Object.assign(owner.object, { name: data.name, parameters: data.parameters, curves: data.curves })
+    Object.assign(owner.object, { name: data.name, parameters: data.parameters, curves: data.curves, textStyle: data.textStyle ?? undefined, visible: data.visible })
   } else if (owner.kind === 'effect') {
     const builtin = owner.effect.builtin
     if (builtin) {
@@ -152,6 +153,8 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     if (!['rect', 'ellipse', 'text'].includes(String(values.kind))) throw new Error('图形对象需要矩形、椭圆或文字类型。')
     const object = createVideoEditGraphic(values.kind as 'rect' | 'ellipse' | 'text', clip.graphic.width, clip.graphic.height).objects[0]
     if (values.name !== undefined) object.name = String(values.name)
+    if (values.textStyle !== undefined) object.textStyle = values.textStyle === null ? undefined : videoEditTextStyleSchema.parse(values.textStyle)
+    if (values.visible !== undefined) { if (typeof values.visible !== 'boolean') throw new Error('visible须为布尔值。'); object.visible = values.visible }
     if (values.parameters !== undefined) object.parameters = { ...object.parameters, ...codeMaterialInstanceSchema.shape.parameters.parse(values.parameters) }
     if (values.curves !== undefined) object.curves = codeMaterialInstanceSchema.shape.curves.parse(values.curves)
     clip.graphic.objects.push(object); return videoEditGraphicObjectId(clip.id, object.id)

@@ -35,7 +35,8 @@ describe('自动字幕分行与节目时间', () => {
     expect(english.every(cue => Array.from(cue).length <= 14)).toBe(true)
     expect(english.join(' ')).toBe('Hello friend, today we edit subtitles together.')
     expect(splitSubtitleText('supercalifragilistic', 5, 1).join('')).toBe('supercalifragilistic')
-    expect(() => splitSubtitleText('text', 4, 4)).toThrow('1–3')
+    expect(splitSubtitleText('abcdefghijklmnop', 4, 4)).toEqual(['abcd\nefgh\nijkl\nmnop'])
+    expect(() => splitSubtitleText('text', 4, 0)).toThrow('正整数')
   })
   it('非均匀词级时刻优先于字数比例，并保留真实停顿', () => {
     const cues = buildAutoSubtitles([word('Alpha', 0, 100), word('Beta', 100, 600), word('Gamma', 800, 1000)], 1000, { numerator: 30, denominator: 1 }, { startFrame: 0, endFrame: 60 }, { maxCharacters: 5, maxLines: 1, pauseSeconds: 1, minDurationSeconds: 0 })
@@ -50,14 +51,14 @@ describe('自动字幕分行与节目时间', () => {
     expect(cues.map(cue => cue.text).join('')).toBe(text)
     expect(() => buildAutoSubtitles([{ ...word(text, 0, 20), granularity: 'segment' }], 1000, { numerator: 30, denominator: 1 }, { startFrame: 0, endFrame: 30 }, { maxCharacters: 4, maxLines: 1 })).toThrow('时长不足')
   })
-  it('三行上限和第二语言共同约束烧录与导出，译文改变淘汰图形缓存', () => {
+  it('第二语言共用多行文字烧录与导出，译文改变淘汰图形缓存', () => {
     const sequence = { ...createVideoEditSequence(), captions: [{ id: 'bilingual', start: 0, duration: 30, text: '你好', translation: 'Hello', style: videoEditSubtitleStyleSchema.parse({}) }] }
     const first = videoEditCaptionClips(sequence, 0)[0]
-    expect(first.graphic?.objects.filter(object => object.name === '字幕文字').map(object => object.parameters.text)).toEqual(['你好', 'Hello'])
+    expect(first.graphic?.objects.filter(object => object.name === '字幕文字').map(object => object.parameters.text)).toEqual(['你好\nHello'])
     expect(exportVideoEditCaptions(sequence)).toContain('你好\nHello')
     sequence.captions[0].translation = 'Hi'
     expect(videoEditCaptionClips(sequence, 0)[0].graphic).not.toBe(first.graphic)
-    expect(() => videoEditCaptionSchema.parse({ ...sequence.captions[0], text: '一\n二\n三' })).toThrow('三行')
+    expect(videoEditCaptionSchema.parse({ ...sequence.captions[0], text: '一\n二\n三' }).text).toBe('一\n二\n三')
   })
   it('有理帧率一次换算、合并秒边界并拒绝错误采样率', () => {
     expect(audioTimestampToVideoFrame(48048, 48000, { numerator: 30000, denominator: 1001 })).toBe(30)
@@ -71,15 +72,16 @@ describe('自动字幕分行与节目时间', () => {
     expect(srt).toContain('2\n00:00:03,000 --> 00:00:04,000\nSecond')
     expect(exportVideoEditCaptions(sequence, 'srt', { startFrame: 60, endFrame: 120 })).toContain('00:00:00,000 --> 00:00:01,000')
   })
-  it('带样式字幕复用合成文字与底框，正式schema拒绝超出渲染预算的长行数', () => {
-    const sequence = { ...createVideoEditSequence(), captions: [{ id: 'styled', start: 0, duration: 30, text: '一行\nTwo', style: videoEditSubtitleStyleSchema.parse({ background: true }) }] }
+  it('带样式字幕复用共享多行文字、描边和底框，不限制行数', () => {
+    const sequence = { ...createVideoEditSequence(), captions: [{ id: 'styled', start: 0, duration: 30, text: '一行\nTwo', style: videoEditSubtitleStyleSchema.parse({ background: { enabled: true } }) }] }
     const clip = videoEditCaptionClips(sequence, 0)[0]
     expect(clip).toMatchObject({ kind: 'graphic', y: 0, scale: 1 })
     expect(videoEditCaptionClips(sequence, 1)[0].graphic).toBe(clip.graphic)
     const graphic = videoEditGraphicSchema.parse(clip.graphic)
     const commands = evaluateVideoEditGraphic(prepareVideoEditGraphic(graphic), { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } })
-    expect(commands.some(value => value.command.kind === 'rect')).toBe(true)
-    expect(commands.filter(value => value.command.kind === 'text')).toHaveLength(18)
-    expect(() => videoEditCaptionSchema.parse({ ...sequence.captions[0], text: '1\n2\n3\n4' })).toThrow('三行')
+    expect(commands[0].textStyle?.background.enabled).toBe(true)
+    expect(commands.filter(value => value.command.kind === 'text')).toHaveLength(1)
+    expect(commands[0].textStyle?.strokes).toHaveLength(1)
+    expect(videoEditCaptionSchema.parse({ ...sequence.captions[0], text: '1\n2\n3\n4' }).text).toBe('1\n2\n3\n4')
   })
 })

@@ -1,24 +1,35 @@
+import { useVideoEditTypographyGesture } from './useVideoEditTypographyGesture'
+import { VideoEditTypographyPanel } from './VideoEditTypographyPanel'
 import { useEffect, useRef, useState } from 'react'
 import { VirtuosoGrid } from 'react-virtuoso'
 import { Dropdown, UiButton, UiColorInput, UiEmpty, UiError, UiFormRow, UiGroup, UiInput, UiOptionButton, UiSearchInput, UiTextArea } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { PromptEditor } from '@/components/ui/PromptEditor'
 import { parseLegacyPromptString, toPromptPlainText } from '@/core/inputs/promptDocument'
+import { scaleVideoEditTextStyle } from '@/core/videoEdit/text'
 import { titleTemplateParametersSchema, type TitleTemplateParameters } from '@/core/videoEdit/titleTemplates'
 import { getActiveVideoEditSequence, requireVideoEditInstance, type VideoEditInstance } from '../application/videoEditService'
 import { listTitleTemplates, requireTitleTemplate, useTitleTemplateLibrary } from '../application/videoEditTitleTemplateLibrary'
 import { applyTitleTemplate, editTitleTemplateSelection, saveTitleTemplateSelection, writeTitleTemplateDrag } from '../application/videoEditTitleTemplates'
 import { confirmTitleFromDescription } from '../application/videoEditTitleDescription'
+import { useVideoEditFontPreview } from './useVideoEditFontPreview'
+import { collectVideoEditFonts } from '@/core/videoEdit/fonts'
 
 function VideoEditTitleTemplatesPanelContent({ instance, onError }: { instance: VideoEditInstance; visible?: boolean; onError: (error: unknown) => void }): React.ReactElement {
-  const templates = useTitleTemplateLibrary(state => state.templates); const loadError = useTitleTemplateLibrary(state => state.error)
+  useTitleTemplateLibrary(state => state.templates); const loadError = useTitleTemplateLibrary(state => state.error)
   const [query, setQuery] = useState(''); const [selected, setSelected] = useState('title:lower_third'); const [parameters, setParameters] = useState(titleTemplateParametersSchema.parse({ text: '姓名', subtitle: '身份 / 职务' }))
   const [changes, setChanges] = useState<Partial<TitleTemplateParameters>>({}); const [name, setName] = useState('我的标题'); const [description, setDescription] = useState(() => parseLegacyPromptString('')); const [busy, setBusy] = useState(false)
   const abort = useRef<AbortController>(); const projectId = instance.document.id; const sequence = getActiveVideoEditSequence(instance)
+  const fontTargets = sequence.clips.filter(clip => instance.selectedClipIds.includes(clip.id) && (clip.kind === 'text' || clip.kind === 'graphic')).map(clip => clip.id)
+  const typographyGesture = useVideoEditTypographyGesture(projectId, `${sequence.id}:title:${JSON.stringify(fontTargets)}`, onError)
+  const typographyBaseline = useRef<{ parameters: TitleTemplateParameters; changes: Partial<TitleTemplateParameters> }>()
+  const beginTypography = (): void => { typographyBaseline.current ??= { parameters, changes }; if (fontTargets.length) typographyGesture.begin() }
+  const endTypography = (commit: boolean): void => { typographyGesture.end(commit); const baseline = typographyBaseline.current; typographyBaseline.current = undefined; if (!commit && baseline) { setParameters(baseline.parameters); setChanges(baseline.changes) } }
+  const previewFont = useVideoEditFontPreview(projectId, `${sequence.id}:title:${JSON.stringify(fontTargets)}`, onError, (font, gesture) => { if (fontTargets.length) editTitleTemplateSelection(projectId, sequence.id, fontTargets, { textStyle: { ...parameters.textStyle, fontFamily: font } }, gesture) })
   useEffect(() => () => abort.current?.abort(), [instance, sequence.id])
   const entries = listTitleTemplates().filter(template => template.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const selectedTemplate = listTitleTemplates().find(template => template.id === selected)
-  const edits = Object.fromEntries(Object.entries(changes).filter(([key]) => ['text', 'subtitle', 'color', 'textColor', 'font', 'durationSeconds'].includes(key))) as Partial<TitleTemplateParameters>
+  const edits = Object.fromEntries(Object.entries(changes).filter(([key]) => ['text', 'subtitle', 'color', 'textStyle', 'durationSeconds'].includes(key))) as Partial<TitleTemplateParameters>
   const choose = (id: string): void => { setSelected(id); setParameters(requireTitleTemplate(id).parameters); setChanges({}) }
   const change = <K extends keyof TitleTemplateParameters>(key: K, value: TitleTemplateParameters[K]): void => { setParameters(previous => ({ ...previous, [key]: value })); setChanges(previous => ({ ...previous, [key]: value })) }
   const run = (action: () => void): void => { try { if (requireVideoEditInstance(projectId) !== instance) throw new Error('原剪辑已关闭。'); action() } catch (error) { onError(error) } }
@@ -40,14 +51,13 @@ function VideoEditTitleTemplatesPanelContent({ instance, onError }: { instance: 
       <UiFormRow label="文字" density="compact"><UiTextArea aria-label="标题文字" value={parameters.text} onChange={event => change('text', event.target.value)} rows={3} /></UiFormRow>
       <UiFormRow label="副标题" density="compact"><UiInput size="sm" aria-label="标题副标题" value={parameters.subtitle} onChange={event => change('subtitle', event.target.value)} /></UiFormRow>
       <UiFormRow label="图形颜色" density="compact"><UiColorInput aria-label="标题图形颜色" value={parameters.color} onChange={event => change('color', event.target.value)} /></UiFormRow>
-      <UiFormRow label="文字颜色" density="compact"><UiColorInput aria-label="标题文字颜色" value={parameters.textColor} onChange={event => change('textColor', event.target.value)} /></UiFormRow>
-      <UiFormRow label="字体" density="compact"><Dropdown<TitleTemplateParameters['font']> ariaLabel="标题字体" value={parameters.font} size="sm" options={[{ value: 'sans-serif', label: '无衬线' }, { value: 'serif', label: '衬线' }, { value: 'monospace', label: '等宽' }]} onSelect={value => change('font', value)} /></UiFormRow>
+      <VideoEditTypographyPanel key={`${projectId}:${sequence.id}:${selected}:${JSON.stringify(fontTargets)}`} onBegin={beginTypography} onEnd={endTypography} style={scaleVideoEditTextStyle(parameters.textStyle, sequence.height / 1080)} fontLabel="标题字体" projectFonts={collectVideoEditFonts(instance.document).map(use => use.font)} onFontPreview={previewFont} onError={onError} onChange={value => { const textStyle = scaleVideoEditTextStyle(value, 1080 / sequence.height); if (fontTargets.length) editTitleTemplateSelection(projectId, sequence.id, fontTargets, { textStyle }, typographyGesture.handle.current); change('textStyle', textStyle) }} />
       <UiFormRow label="时长（秒）" density="compact"><NumberInput ariaLabel="标题时长" size="sm" value={parameters.durationSeconds} min={.5} max={60} step={.5} onChange={value => change('durationSeconds', value)} /></UiFormRow>
       {selectedTemplate?.kind && <UiFormRow label="入场" density="compact"><Dropdown<TitleTemplateParameters['entrance']> ariaLabel="标题入场" value={parameters.entrance} size="sm" options={[{ value: 'left', label: '左侧滑入' }, { value: 'up', label: '向上滑入' }, { value: 'fade', label: '淡入' }]} onSelect={value => change('entrance', value)} /></UiFormRow>}
       {selected === 'title:counter' && <><UiFormRow label="起始数字" density="compact"><NumberInput ariaLabel="起始数字" value={parameters.countFrom} min={-999999} max={999999} onChange={value => change('countFrom', Math.round(value))} /></UiFormRow><UiFormRow label="结束数字" density="compact"><NumberInput ariaLabel="结束数字" value={parameters.countTo} min={-999999} max={999999} onChange={value => change('countTo', Math.round(value))} /></UiFormRow></>}
       <div className="flex flex-wrap gap-2"><UiButton variant="primary" size="sm" disabled={Boolean(loadError) && !selected.startsWith('title:')} onClick={() => apply()}>添加到播放头</UiButton><UiButton size="sm" disabled={!instance.selectedClipIds.length || !Object.keys(edits).length} onClick={() => run(() => { editTitleTemplateSelection(projectId, sequence.id, instance.selectedClipIds, edits); setChanges({}) })}>修改所选标题</UiButton></div>
     </UiGroup>
-    <UiGroup title="另存为模板" titleTone="compact"><UiFormRow label="名称" density="compact"><UiInput aria-label="模板名称" size="sm" value={name} onChange={event => setName(event.target.value)} /></UiFormRow><UiButton size="sm" disabled={!instance.selectedClipIds.length || Boolean(loadError) || templates.length >= 128} onClick={() => run(() => { const saved = saveTitleTemplateSelection(projectId, sequence.id, instance.selectedClipIds, name); choose(saved.id) })}>保存所选文字 / 图形组合</UiButton></UiGroup>
+    <UiGroup title="另存为模板" titleTone="compact"><UiFormRow label="名称" density="compact"><UiInput aria-label="模板名称" size="sm" value={name} onChange={event => setName(event.target.value)} /></UiFormRow><UiButton size="sm" disabled={!instance.selectedClipIds.length || Boolean(loadError)} onClick={() => run(() => { const saved = saveTitleTemplateSelection(projectId, sequence.id, instance.selectedClipIds, name); choose(saved.id) })}>保存所选文字 / 图形组合</UiButton></UiGroup>
     <UiGroup title="描述生成" titleTone="compact"><PromptEditor preset="plain" layout="fill-scroll" ariaLabel="标题动画描述" value={description} onChange={setDescription} placeholder="科技感蓝色的人名条，左侧滑入" editorClassName="min-h-24 max-h-60" /><div className="flex gap-2"><UiButton size="sm" disabled={busy || !toPromptPlainText(description).trim()} onClick={() => { void generate() }}>{busy ? '生成中…' : '生成并添加'}</UiButton>{busy && <UiButton size="sm" onClick={() => abort.current?.abort()}>取消</UiButton>}</div></UiGroup>
   </div>
 }

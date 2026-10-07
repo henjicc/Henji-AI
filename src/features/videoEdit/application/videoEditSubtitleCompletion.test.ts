@@ -13,7 +13,9 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import { closeVideoEditProject, listVideoEditInstances, undoVideoEdit, videoEditBusyReason, type VideoEditInstance } from './videoEditService'
 import { createVideoEditCaption, updateVideoEditTimedContent } from './videoEditTimedContent'
-import { createVideoEditSubtitleLibraryStore, useVideoEditSubtitleLibraryStore, applyVideoEditSubtitlePreset, VIDEO_EDIT_SUBTITLE_LIBRARY_STORAGE_KEY } from './videoEditSubtitlePresets'
+import { applyVideoEditSubtitlePreset } from './videoEditSubtitlePresets'
+import { VideoEditTextPresetLibrary, videoEditTextPresetLibrary, VIDEO_EDIT_TEXT_PRESETS_KEY } from './videoEditTextPresets'
+import { videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { generateVideoEditBilingualSubtitles, confirmVideoEditBilingualSubtitles } from './videoEditBilingualSubtitles'
 import { splitVideoEditSubtitle, mergeVideoEditSubtitles, segmentVideoEditSubtitles } from './videoEditAutoSubtitles'
 import { translateVideoEditSubtitleCapability } from '@/core/application-control/domains/videoEdit/videoEditSubtitleCapabilities'
@@ -25,7 +27,7 @@ const trace = { providerId: 'fixture', modelId: 'text', startedAtMs: 0, elapsedM
 const sequence = () => owner.document.sequences[0]
 beforeEach(async () => {
   installHarnessNativeStorage(); files.clear(); vi.clearAllMocks()
-  useVideoEditSubtitleLibraryStore.setState({ presets: [], loadError: '' })
+  videoEditTextPresetLibrary.replace([])
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'caption-tests.henji-video'))
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
@@ -46,26 +48,26 @@ afterEach(async () => {
   vi.restoreAllMocks(); uninstallHarnessNativeStorage()
 })
 
-it('本机预设复用版本信封持久保存，重建恢复；存储失败和损坏数据不发布或覆盖', () => {
+it('本机共享预设持久保存，重建恢复；存储失败和损坏数据不发布或覆盖', () => {
   const saved = new Map<string, string>()
   const storage = { getItem: (key: string) => saved.get(key) ?? null, setItem: (key: string, value: string) => { saved.set(key, value) }, removeItem: (key: string) => { saved.delete(key) } }
-  const library = createVideoEditSubtitleLibraryStore(storage)
-  const style = videoEditSubtitleStyleSchema.parse({ background: true })
-  const preset = library.getState().savePreset('本机样式', style)
+  const library = new VideoEditTextPresetLibrary(storage)
+  const style = videoEditTextStyleSchema.parse({ fontSize: 48, background: { enabled: true } })
+  const preset = library.save('本机样式', style)
   style.fontSize = 99
-  expect(JSON.parse(saved.get(VIDEO_EDIT_SUBTITLE_LIBRARY_STORAGE_KEY)!)).toMatchObject({ version: 1, state: { presets: [{ name: '本机样式', style: { fontSize: 48 } }] } })
-  expect(createVideoEditSubtitleLibraryStore(storage).getState().presets).toEqual([preset])
-  const before = library.getState()
+  expect(JSON.parse(saved.get(VIDEO_EDIT_TEXT_PRESETS_KEY)!)).toMatchObject([{ name: '本机样式', style: { fontSize: 48 } }])
+  expect(new VideoEditTextPresetLibrary(storage).custom()).toEqual([preset])
+  const before = library.custom()
   storage.setItem = () => { throw new Error('存储失败') }
-  expect(() => library.getState().savePreset('失败', style)).toThrow('存储失败')
-  expect(library.getState()).toBe(before)
+  expect(() => library.save('失败', style)).toThrow('存储失败')
+  expect(library.custom()).toEqual(before)
   storage.setItem = (key, value) => { saved.set(key, value) }
-  library.getState().deletePreset(preset.id); expect(createVideoEditSubtitleLibraryStore(storage).getState().presets).toEqual([])
-  saved.set(VIDEO_EDIT_SUBTITLE_LIBRARY_STORAGE_KEY, 'corrupt')
-  const damaged = createVideoEditSubtitleLibraryStore(storage)
-  expect(damaged.getState().loadError).toContain('读取失败')
-  expect(() => damaged.getState().savePreset('不能覆盖', style)).toThrow('读取失败')
-  expect(saved.get(VIDEO_EDIT_SUBTITLE_LIBRARY_STORAGE_KEY)).toBe('corrupt')
+  library.remove(preset.id); expect(new VideoEditTextPresetLibrary(storage).custom()).toEqual([])
+  saved.set(VIDEO_EDIT_TEXT_PRESETS_KEY, 'corrupt')
+  const damaged = new VideoEditTextPresetLibrary(storage)
+  expect(damaged.loadError()).toContain('读取失败')
+  expect(() => damaged.save('不能覆盖', style)).toThrow('读取失败')
+  expect(saved.get(VIDEO_EDIT_TEXT_PRESETS_KEY)).toBe('corrupt')
 })
 
 it('内置及本机样式批量应用一笔历史，不把预设库存入剪辑；失败无部分应用', () => {
@@ -76,7 +78,7 @@ it('内置及本机样式批量应用一笔历史，不把预设库存入剪辑�
   expect(sequence().captions?.every(caption => caption.style && caption.style.fontSize === 80)).toBe(true)
   expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(owner.document.id); expect(sequence().captions?.every(caption => !caption.style)).toBe(true)
-  const preset = useVideoEditSubtitleLibraryStore.getState().savePreset('自定义底框', videoEditSubtitleStyleSchema.parse({ background: true }))
+  const preset = videoEditTextPresetLibrary.save('自定义底框', videoEditTextStyleSchema.parse({ fontSize: 48, background: { enabled: true } }))
   applyVideoEditSubtitlePreset(owner.document.id, sequence().id, preset.id, [a, b])
   expect(owner.past).toHaveLength(history + 1)
   expect(JSON.stringify(owner.document)).not.toContain('自定义底框')
@@ -88,7 +90,7 @@ it('内置及本机样式批量应用一笔历史，不把预设库存入剪辑�
 
 it('助手发现四种内置和本机预设，经通用样式事务批量应用，一步撤销与UI相同', async () => {
   const ids = [0, 30].map(start => createVideoEditCaption(owner.document.id, sequence().id, { start, duration: 30, text: '字幕' }))
-  const preset = useVideoEditSubtitleLibraryStore.getState().savePreset('保存的样式', videoEditSubtitleStyleSchema.parse({ fontSize: 64 }))
+  const preset = videoEditTextPresetLibrary.save('保存的样式', videoEditTextStyleSchema.parse({ fontSize: 64 }))
   const app = createApplicationHarness()
   try {
     const listed = await app.requireResult('list_application_entities', { entityType: 'video_edit.subtitle_preset', limit: 20 })
@@ -109,7 +111,7 @@ it('双语复用文本模型，批次全部完成才一次写入；保留原文�
   expect(llmChatStream).toHaveBeenCalledTimes(3)
   expect(owner.past).toHaveLength(history + 1)
   expect(sequence().captions![0]).toMatchObject({ start: 0, duration: 30, text: '原文0', translation: 'Translated 原文0' })
-  expect(videoEditCaptionClips(sequence(), 0)[0].graphic?.objects.filter(object => object.name === '字幕文字').map(object => object.parameters.text)).toEqual(['原文0', 'Translated 原文0'])
+  expect(videoEditCaptionClips(sequence(), 0)[0].graphic?.objects.filter(object => object.name === '字幕文字').map(object => object.parameters.text)).toEqual(['原文0\nTranslated 原文0'])
   expect(exportVideoEditCaptions(sequence())).toContain('原文0\nTranslated 原文0')
   undoVideoEdit(owner.document.id); expect(sequence().captions).toEqual(original)
 })

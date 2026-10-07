@@ -23,6 +23,7 @@ import type { VideoDecoderPlatform } from './videoDecoder'
 import type { DocumentsPlatform } from './documents'
 import type { WorkRootPlatform } from './workRoot'
 import type { LocalModelsPlatform } from './localModels'
+import type { FontsPlatform } from './fonts'
 import type { SmartRegionsPlatform } from './smartRegions'
 import type { TrackingPlatform } from './tracking'
 import type { VideoProxyPlatform } from './videoProxy'
@@ -57,6 +58,7 @@ export interface PlatformRuntime {
   documents: DocumentsPlatform
   workRoot: WorkRootPlatform
   localModels: LocalModelsPlatform
+  fonts: FontsPlatform
   smartRegions: SmartRegionsPlatform
   tracking: TrackingPlatform
   videoProxy: VideoProxyPlatform
@@ -109,5 +111,6 @@ export * from './audioEdit'
 export * from './documents'
 export * from './workRoot'
 export * from './localModels'
+export * from './fonts'
 export * from './smartRegions'
 export * from './tracking'

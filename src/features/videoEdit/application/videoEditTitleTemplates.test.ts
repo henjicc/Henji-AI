@@ -3,6 +3,7 @@ import { createVideoEditTestProject as createVideoEditProject } from './videoEdi
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
+import { videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { editVideoSequence, undoVideoEdit } from './videoEditService'
 import { closeAllVideoEdits, savedVideoEdit } from './videoEditDocumentTestKit'
 import { createTitleTemplateLibrary, TITLE_TEMPLATE_STORAGE_KEY, useTitleTemplateLibrary } from './videoEditTitleTemplateLibrary'
@@ -60,6 +61,10 @@ it('公共入口列出/读取模板，应用按文件核实，通用集合创建
     await app.requireResult('change_application_entities', { summary: '保存标题', changes: [{ kind: 'create_items', entityType: 'video_edit.title_template', parent: { kind: 'video_edit.document', id }, items: [{ properties: { 'video_edit.title_template.name': '章节副本', 'video_edit.title_template.definition': (read.properties as Record<string, unknown>)['video_edit.title_template.definition'] } }] }] })
     expect(useTitleTemplateLibrary.getState().templates).toHaveLength(1)
     const ref = { kind: 'video_edit.title_template', id: useTitleTemplateLibrary.getState().templates[0].id }
+    const definition = (read.properties as Record<string, { parameters: Record<string, unknown> }>)['video_edit.title_template.definition']
+    const changed = await app.change(ref, { 'video_edit.title_template.name': '改名章节', 'video_edit.title_template.definition': { ...definition, parameters: { ...definition.parameters, textStyle: videoEditTextStyleSchema.parse({ fontFamily: 'serif', allCaps: true, tracking: 80 }) } } })
+    expect(changed.ok, JSON.stringify(changed)).toBe(true)
+    expect(useTitleTemplateLibrary.getState().templates[0]).toMatchObject({ name: '改名章节', parameters: { textStyle: { fontFamily: 'serif', allCaps: true, tracking: 80 } } })
     const state = await app.read(ref)
     await app.requireResult('change_application_entities', { summary: '删除标题', changes: [{ kind: 'remove_items', entityType: ref.kind, parent: { kind: 'video_edit.document', id }, targets: [ref] }] }, state.revisions as Record<string, number>)
     expect(useTitleTemplateLibrary.getState().templates).toHaveLength(0)

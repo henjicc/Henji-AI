@@ -62,7 +62,7 @@ export function saveTitleTemplateSelection(projectId: string, sequenceId: string
   const library = useTitleTemplateLibrary.getState(); library.replace([...library.templates, template]); return template
 }
 /** Parameter editing retains clip/item identities and enters the same undo stack as graphic-object editing. */
-export function editTitleTemplateSelection(projectId: string, sequenceId: string, clipIds: readonly string[], parameters: Partial<TitleTemplateParameters>): void {
+export function editTitleTemplateSelection(projectId: string, sequenceId: string, clipIds: readonly string[], parameters: Partial<TitleTemplateParameters>, gesture?: import('./videoEditService').VideoEditGesture): void {
   editVideoSequence(projectId, sequenceId, sequence => {
     assertVideoEditClipsEditable(sequence, [...clipIds])
     const clips = sequence.clips.filter(clip => clipIds.includes(clip.id)); const template = captureTitleTemplate('标题', sequence, clips); const start = Math.min(...clips.map(clip => clip.start))
@@ -74,5 +74,5 @@ export function editTitleTemplateSelection(projectId: string, sequenceId: string
       return { ...clip, ...snapshot, start: start + snapshot.start, track: clip.track }
     })
     return { ...sequence, clips: sequence.clips.map(clip => edited.find(value => value.id === clip.id) ?? clip) }
-  })
+  }, gesture)
 }

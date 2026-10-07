@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, Link } from 'lucide-react'
 import { UiIconButton, UiInput, UiTooltipText } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditComposition, VideoEditIntrinsicSection } from '@/core/videoEdit/document'
@@ -8,6 +8,8 @@ import { VideoEditEffectSection } from './VideoEditEffectSection'
 import type { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
 import { videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { VideoEditKeyframeControls } from './VideoEditKeyframeControls'
+import { layoutVideoEditText } from '@/core/videoEdit/text'
+import { videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 
 type Gesture = ReturnType<typeof useVideoEditClipPropertyGesture>
 type Frame = Pick<VideoEditComposition, 'width' | 'height'> & { playhead: number }
@@ -66,10 +68,32 @@ function SingleProperty({ property, clip, frame, gesture }: { property: VideoEdi
 
 const MOTION: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY']
 
+export function VideoEditTextTransformControls({ clip, frame, gesture }: { clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
+  const align = (axis: 'x' | 'y', target: 0 | .5 | 1): void => {
+    const context = document.createElement('canvas').getContext('2d'); if (!context) return
+    const layout = layoutVideoEditText(clip, frame, (text, font) => { context.font = font; return context.measureText(text).width })
+    const evaluated = { ...clip, ...Object.fromEntries(MOTION.map(key => [key, videoEditClipValue(clip, key, frame.playhead)])) }
+    const corners = [[layout.left, layout.top], [layout.left + layout.width, layout.top], [layout.left + layout.width, layout.top + layout.height], [layout.left, layout.top + layout.height]].map(([x, y]) => videoEditClipToFrame(evaluated, frame, frame, x / frame.width, y / frame.height)[axis])
+    const edge = target === 0 ? Math.min(...corners) : target === 1 ? Math.max(...corners) : (Math.min(...corners) + Math.max(...corners)) / 2
+    gesture.commit({ [axis]: videoEditClipValue(clip, axis, frame.playhead) + target - edge })
+  }
+  const switchProps = (section: VideoEditIntrinsicSection) => ({ enabled: !clip.disabledIntrinsicSections?.includes(section), onEnabledChange: (enabled: boolean): void => { gesture.finish(); gesture.commit({ disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== section) : [...(clip.disabledIntrinsicSections ?? []), section] }) } })
+  return <>
+    <VideoEditEffectSection id="motion" title="运动" {...switchProps('motion')}>
+    <div className="flex flex-wrap gap-1">{([['x', 0, '对齐画面左边', AlignHorizontalJustifyStart], ['x', .5, '对齐画面水平中心', AlignHorizontalJustifyCenter], ['x', 1, '对齐画面右边', AlignHorizontalJustifyEnd], ['y', 0, '对齐画面顶部', AlignVerticalJustifyStart], ['y', .5, '对齐画面垂直中心', AlignVerticalJustifyCenter], ['y', 1, '对齐画面底部', AlignVerticalJustifyEnd]] as const).map(([axis, value, label, Icon]) => <UiIconButton key={label} size="sm" aria-label={label} title={label} onClick={() => align(axis, value)}><Icon size={14} /></UiIconButton>)}</div>
+    {MOTION.map(key => <SingleProperty key={key} property={key} clip={clip} frame={frame} gesture={gesture} />)}
+    <span className="flex items-center gap-1 text-xs text-text2"><Link size={14} />等比缩放</span>
+    </VideoEditEffectSection>
+    <VideoEditEffectSection id="opacity" title="不透明度" {...switchProps('opacity')}>
+    <SingleProperty property="opacity" clip={clip} frame={frame} gesture={gesture} />
+    </VideoEditEffectSection>
+  </>
+}
+
 /** 片段固有效果（PR 的“运动 / 不透明度 / 音量”）：按片段类型只出现能生效的几节。 */
 export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
   const picture = clip.kind !== 'audio'
-  const motion = picture && clip.kind !== 'adjustment'
+  const motion = picture && clip.kind !== 'adjustment' && clip.kind !== 'text'
   const sound = clip.kind === 'video' || clip.kind === 'audio'
   const switchProps = (section: VideoEditIntrinsicSection) => ({ enabled: !clip.disabledIntrinsicSections?.includes(section), onEnabledChange: (enabled: boolean): void => { gesture.finish(); gesture.commit({ disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== section) : [...(clip.disabledIntrinsicSections ?? []), section] }) } })
   return <>
@@ -85,7 +109,7 @@ export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: 
       actions={<UiIconButton size="xs" aria-label="重置运动" title="重置运动" disabled={isDefault(clip, MOTION)} onClick={() => gesture.commit(resetPatch(clip, MOTION))}><RotateCcw size={12} /></UiIconButton>}>
       {MOTION.map(key => <SingleProperty key={key} property={key} clip={clip} frame={frame} gesture={gesture} />)}
     </VideoEditEffectSection>}
-    {picture && <VideoEditEffectSection id="opacity" title="不透明度" {...switchProps('opacity')} info="片段与下方画面叠加时的透明程度。">
+    {picture && clip.kind !== 'text' && <VideoEditEffectSection id="opacity" title="不透明度" {...switchProps('opacity')} info="片段与下方画面叠加时的透明程度。">
       <SingleProperty property="opacity" clip={clip} frame={frame} gesture={gesture} />
     </VideoEditEffectSection>}
     {sound && <VideoEditEffectSection id="audio" title="音频" {...switchProps('audio')} info="片段的音量。">

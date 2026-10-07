@@ -193,13 +193,13 @@ it('字幕拆分合并、通用实体文字写入与样式一笔撤销、重开�
   mergeVideoEditSubtitles(owner.document.id, sequence().id, sequence().captions!.map(cue => cue.id))
   const app = createApplicationHarness()
   try {
-    expect(await app.change({ kind: 'video_edit.caption', id: `${owner.document.id}:caption` }, { 'video_edit.caption.style': { fontFamily: 'serif', fontSize: 48, outline: true, background: false, bottomMargin: .1 } })).toMatchObject({ ok: true })
-    expect(await app.read({ kind: 'video_edit.caption', id: `${owner.document.id}:caption` }, ['video_edit.caption.style'])).toMatchObject({ properties: { 'video_edit.caption.style': { fontFamily: 'serif', outline: true } } })
+    expect(await app.change({ kind: 'video_edit.caption', id: `${owner.document.id}:caption` }, { 'video_edit.caption.style': videoEditSubtitleStyleSchema.parse({ fontFamily: 'serif' }) })).toMatchObject({ ok: true })
+    expect(await app.read({ kind: 'video_edit.caption', id: `${owner.document.id}:caption` }, ['video_edit.caption.style'])).toMatchObject({ properties: { 'video_edit.caption.style': { fontFamily: 'serif', strokes: [{ position: 'outside' }] } } })
     undoVideoEdit(owner.document.id)
     expect(await app.change({ kind: 'video_edit.caption', id: `${owner.document.id}:caption` }, { 'video_edit.caption.text': '公共修改', 'video_edit.caption.start': 45 })).toMatchObject({ ok: true })
     expect(sequence().captions![0]).toMatchObject({ text: '公共修改', start: 45 })
-    styleVideoEditSubtitles(owner.document.id, sequence().id, videoEditSubtitleStyleSchema.parse({ background: true, fontFamily: 'serif' }))
-    expect(sequence().captions![0].style).toMatchObject({ background: true })
+    styleVideoEditSubtitles(owner.document.id, sequence().id, videoEditSubtitleStyleSchema.parse({ background: { enabled: true }, fontFamily: 'serif' }))
+    expect(sequence().captions![0].style).toMatchObject({ background: { enabled: true } })
     undoVideoEdit(owner.document.id); expect(sequence().captions![0].style).toBeUndefined()
     const reopened = await reopenVideoEdit(owner.document.id); owner = reopened
     expect(sequence().captions![0]).toMatchObject({ text: '公共修改', start: 45 })
@@ -226,11 +226,12 @@ it('费用确认取消不提交识别，取消任务保存稳定声音引用可�
   cancelSubtitleJob(owner, sequence().id); await run
   expect(readSubtitleJob(owner, sequence().id)?.state).toBe('cancelled'); expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
 })
-it('样式和通用文字写入拒绝越界行数，保护图形合成预算', () => {
+it('共享文字渲染取消字幕行数上限，文字写入可撤销', () => {
   createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 30, text: '字幕', style: videoEditSubtitleStyleSchema.parse({}) })
   const cue = sequence().captions![0]
-  expect(() => updateVideoEditTimedContent(owner.document.id, sequence().id, 'caption', cue.id, { text: '1\n2\n3\n4' })).toThrow('三行')
-  expect(cue.text).toBe('字幕')
+  updateVideoEditTimedContent(owner.document.id, sequence().id, 'caption', cue.id, { text: '1\n2\n3\n4' })
+  expect(sequence().captions![0].text).toBe('1\n2\n3\n4')
+  undoVideoEdit(owner.document.id); expect(sequence().captions![0].text).toBe('字幕')
 })
 
 it('正式公共能力准备声音、转录生成与通用回读使用同一注册和领域服务', async () => {
@@ -243,7 +244,7 @@ it('正式公共能力准备声音、转录生成与通用回读使用同一注�
     expect(generated.createdCaptionRefs).toHaveLength(1)
     expect(getPlatform().audioEdit.transcribe).toHaveBeenCalledWith(expect.objectContaining({ language: 'en' }))
     const refs = generated.captionRefs as Array<{ kind: 'video_edit.caption'; id: string }>
-    expect(await app.read(refs[0], ['video_edit.caption.text', 'video_edit.caption.style'])).toMatchObject({ properties: { 'video_edit.caption.text': 'Hello world.', 'video_edit.caption.style': { outline: true } } })
+    expect(await app.read(refs[0], ['video_edit.caption.text', 'video_edit.caption.style'])).toMatchObject({ properties: { 'video_edit.caption.text': 'Hello world.', 'video_edit.caption.style': { strokes: [{ position: 'outside' }] } } })
     const resumed = await app.requireResult('generate_video_edit_subtitles', { documentRef, sequenceRef, audioDocumentRef: prepared.audioDocumentRef })
     expect(resumed.createdCaptionRefs).toEqual([])
     expect(await app.call('prepare_video_edit_subtitle_audio', { documentRef, sequenceRef: { kind: 'video_edit.sequence', id: 'other:sequence' } })).toMatchObject({ ok: false })

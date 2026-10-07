@@ -15,6 +15,7 @@ import { adaptVideoEditExportPreset, probeVideoEditExport, probeVideoEditExportA
 import { VideoEditExportField, VideoEditExportFields } from './VideoEditExportFields'
 import { VideoEditExportPreview } from './VideoEditExportPreview'
 import { VideoEditExportQueueList } from './VideoEditExportQueueList'
+import { VideoEditFontWarnings } from './VideoEditFontWarnings'
 
 const logger = createLogger('features.videoEdit.exportDialog')
 
@@ -167,6 +168,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
           <VideoEditExportFields viewer={owner} settings={settings} busy={busy} hasProxies={hasProxies} patch={patch} probing={probing} support={support} keyframeSupport={keyframeSupport} audioProbing={audioProbing} audioSupport={audioSupport} matchSequence={() => patch({ followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } })} />
           <div className="space-y-2 px-3 pb-3">
             {notice && <p role="status" className="text-xs text-text2">{notice}</p>}
+            <VideoEditFontWarnings document={composition} />
             {(notice || busy || error) && videoEditExportQueue.list().length > 0 && <UiButton size="sm" onClick={() => setShowQueue(true)}>查看导出队列</UiButton>}
             {busy && <UiLoading size="xs" message="正在处理导出…" />}
             {error && <UiError size="xs" message={error} />}

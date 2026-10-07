@@ -1,7 +1,7 @@
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { undoVideoEdit } from '../application/videoEditService'
 import { closeAllVideoEdits } from '../application/videoEditDocumentTestKit'
@@ -29,4 +29,17 @@ it('基本图形浏览/双击应用与参数编辑/另存组合共用一步撤�
   expect(screen.getByRole('button', { name: '章节标题' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: '下三分之一人名条' })).toBeNull()
   expect(onError).not.toHaveBeenCalled()
+})
+it('所选标题的字体悬停不入历史，选中立即提交一步撤销', async () => {
+  const instance = await createVideoEditProject(); const onError = vi.fn()
+  const view = render(<VideoEditTitleTemplatesPanel instance={instance} onError={onError} />)
+  fireEvent.doubleClick(screen.getByRole('button', { name: '下三分之一人名条' }))
+  view.rerender(<VideoEditTitleTemplatesPanel instance={instance} onError={onError} />)
+  const history = instance.past.length
+  const fonts = () => instance.document.sequences[0].clips[0].graphic!.objects.filter(object => object.kind === 'text').map(object => object.textStyle?.fontFamily)
+  const original = fonts(); fireEvent.click(screen.getByLabelText('标题字体'))
+  const option = await screen.findByRole('option', { name: /系统衬线/ }); fireEvent.pointerEnter(option.parentElement!)
+  await waitFor(() => expect(fonts().every(name => name === 'serif')).toBe(true)); expect(instance.past).toHaveLength(history)
+  fireEvent.click(option); await waitFor(() => expect(instance.past).toHaveLength(history + 1))
+  undoVideoEdit(instance.document.id); expect(fonts()).toEqual(original); expect(onError).not.toHaveBeenCalled()
 })

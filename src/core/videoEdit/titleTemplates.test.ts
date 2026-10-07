@@ -1,12 +1,13 @@
 import { expect, it } from 'vitest'
+import { defaultVideoEditTextStyle } from './text'
 import { createVideoEditSequence } from './document'
-import { BUILTIN_TITLE_TEMPLATES, captureTitleTemplate, instantiateTitleTemplate, titleColor, titleTemplateOverridesSchema } from './titleTemplates'
+import { BUILTIN_TITLE_TEMPLATES, captureTitleTemplate, instantiateTitleTemplate, titleTemplateOverridesSchema } from './titleTemplates'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from './graphics'
 
 it('六类模板共享图形求值，文字/颜色/秒数转换为当前序列帧和入出场关键帧', () => {
   const sequence = createVideoEditSequence('标题'); sequence.frameRate = { numerator: 30000, denominator: 1001 }
   for (const template of BUILTIN_TITLE_TEMPLATES) {
-    const clip = instantiateTitleTemplate(template, { text: '痕迹', color: template.parameters.textColor, font: 'monospace', durationSeconds: 4 }, sequence)[0]
+    const clip = instantiateTitleTemplate(template, { text: '痕迹', color: template.parameters.textStyle.fill.color, textStyle: { ...template.parameters.textStyle, fontFamily: 'monospace' }, durationSeconds: 4 }, sequence)[0]
     expect(clip.duration).toBe(120); const graphic = clip.graphic!; const prepared = prepareVideoEditGraphic(graphic)
     const last = (119 / (30000 / 1001)) * 1e6
     expect(evaluateVideoEditGraphic(prepared, { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }).every(draw => ('color' in draw.command ? draw.command.color : 'fill' in draw.command ? draw.command.fill : [0, 0, 0, 0])[3] === 0)).toBe(true)
@@ -29,11 +30,11 @@ it('用户组合复制时重映射对象标识、缩放画幅、换算时长且�
   const original = snapshots.map((clip, i) => ({ ...clip, id: `clip-${i}`, itemId: `item-${i}`, start: 30, track: 1 }))
   const template = captureTitleTemplate('组合', sequence, original)
   const target = { ...sequence, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 } }
-  const result = instantiateTitleTemplate(template, { durationSeconds: 10, text: '新姓名', subtitle: '新职务', textColor: template.parameters.color }, target)[0]
+  const result = instantiateTitleTemplate(template, { durationSeconds: 10, text: '新姓名', subtitle: '新职务', textStyle: { ...defaultVideoEditTextStyle(1080), fill: { enabled: true, color: template.parameters.color } } }, target)[0]
   expect(result.duration).toBe(600); expect(result.graphic!.width).toBe(3840)
   const texts = result.graphic!.objects.filter(object => object.kind === 'text')
   expect(texts.map(object => object.parameters.text)).toEqual(['新姓名', '新职务'])
-  expect(texts[0].parameters.color).toEqual(titleColor(template.parameters.color))
+  expect(texts[0].textStyle?.fill.color).toBe(template.parameters.color)
   expect(result.graphic!.objects[0].id).not.toBe(original[0].graphic!.objects[0].id)
   expect(template.content?.clips[0].graphic?.objects[1].parameters.text).toBe('姓名')
 })

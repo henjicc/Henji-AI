@@ -1,3 +1,4 @@
+import { defaultVideoEditTextStyle } from './text'
 import { describe, expect, it } from 'vitest'
 import type { CodeMaterialKeyframe } from './codeMaterialAnimation'
 import { createVideoEditGraphic, evaluateVideoEditGraphic, prepareVideoEditGraphic, videoEditGraphicObjectMetadata, videoEditGraphicSchema } from './graphics'
@@ -47,7 +48,8 @@ describe('正式结构化图形模型与共用曲线求值', () => {
     expect(metadata).toMatchObject({ name: '文字', kind: 'generator', mode: 'static', width: 1920, height: 1080, durationSeconds: VIDEO_EDIT_MAX_SEQUENCE_SECONDS, seed: 0 })
     expect(metadata.parameters.every(parameter => parameter.animatable)).toBe(true)
     expect(metadata.parameters.find(parameter => parameter.key === 'text')).toMatchObject({ type: 'text', maxLength: 2000 })
-    for (const parameters of [{ text: '字'.repeat(2001) }, { fontSize: 0 }, { fontSize: 513 }, { fontFamily: 'custom' }, { align: 'justify' }, { width: 100 }]) {
+    expect(videoEditGraphicSchema.safeParse({ ...graphic, objects: [{ ...graphic.objects[0], textStyle: { ...defaultVideoEditTextStyle(1080), fontFamily: '思源黑体 Regular' } }] }).success).toBe(true)
+    for (const parameters of [{ text: '字'.repeat(2001) }, { fontSize: 0 }, { fontSize: 513 }, { fontFamily: '' }, { align: 'justify' }, { width: 100 }]) {
       expect(videoEditGraphicSchema.safeParse({ ...graphic, objects: [{ ...graphic.objects[0], parameters }] }).success).toBe(false)
     }
     graphic.objects[0].curves = { text: [point('text', 0, '新', 'linear')] }
@@ -61,8 +63,9 @@ describe('正式结构化图形模型与共用曲线求值', () => {
     expect(draw(graphic)).toEqual({ rotation: 90, pivotX: 200, pivotY: 400, command: { kind: 'rect', x: -100, y: 300, width: 600, height: 200, fill: [.2, .4, .6, .4], radius: 0 } })
     expect(graphic).toEqual(original)
     const text = createVideoEditGraphic('text', 3840, 2160)
-    Object.assign(text.objects[0].parameters, { x: 600, y: 700, rotation: -30, opacity: .25, color: [1, .5, 0, .8], align: 'right' })
-    expect(draw(text)).toMatchObject({ rotation: -30, pivotX: 600, pivotY: 700, command: { kind: 'text', x: 600, y: 700, color: [1, .5, 0, .2], align: 'right' } })
+    Object.assign(text.objects[0].parameters, { x: 600, y: 700, rotation: -30, opacity: .25 })
+    text.objects[0].textStyle = { ...text.objects[0].textStyle!, align: 'right' }
+    expect(draw(text)).toMatchObject({ rotation: -30, pivotX: 600, pivotY: 700, command: { kind: 'text', x: 600, y: 700, color: [1, 1, 1, .25], align: 'right' } })
     const ellipse = createVideoEditGraphic('ellipse', 3840, 2160)
     Object.assign(ellipse.objects[0].parameters, { x: 0, y: 0, width: 0, height: 20, rotation: 360, opacity: 0 })
     expect(draw(ellipse)).toMatchObject({ rotation: 360, pivotX: 0, pivotY: 10, command: { kind: 'ellipse', width: 0, fill: [1, 1, 1, 0] } })
@@ -95,12 +98,11 @@ describe('正式结构化图形模型与共用曲线求值', () => {
     graphic.objects[0].curves = {
       x: [point('x0', 0, 0, 'ease'), point('x1', 1e6, 100)],
       text: [point('t0', 0, '旧', 'hold'), point('t1', 1e6, '新', 'hold')],
-      fontFamily: [point('f0', 0, 'serif', 'hold'), point('f1', 1e6, 'monospace', 'hold')],
     }
     const original = structuredClone(graphic)
-    expect(draw(graphic, 250000).command).toMatchObject({ x: 15.625, text: '旧', fontFamily: 'serif' })
+    expect(draw(graphic, 250000).command).toMatchObject({ x: 15.625, text: '旧', fontFamily: 'sans-serif' })
     expect(draw(graphic, 999999).command).toMatchObject({ text: '旧' })
-    expect(draw(graphic, 1e6).command).toMatchObject({ x: 100, text: '新', fontFamily: 'monospace' })
+    expect(draw(graphic, 1e6).command).toMatchObject({ x: 100, text: '新', fontFamily: 'sans-serif' })
     expect(graphic).toEqual(original)
   })
   it('拒绝未知曲线、重复有理时刻和非法关键帧值', () => {
@@ -126,7 +128,7 @@ describe('正式结构化图形模型与共用曲线求值', () => {
   })
   it('prepared快照与求值颜色不能反向修改持久图形，对象顺序保持', () => {
     const graphic = rect({ fill: [.1, .2, .3, 1] })
-    graphic.objects.push({ id: 'second', name: '第二层', kind: 'text', parameters: { text: '上层' } })
+    graphic.objects.push({ id: 'second', name: '第二层', kind: 'text', textStyle: defaultVideoEditTextStyle(1080), parameters: { text: '上层' } })
     const prepared = prepareVideoEditGraphic(graphic)
     graphic.objects[0].parameters.fill = [1, 1, 1, 1]
     graphic.objects[1].parameters.text = '晚改'
