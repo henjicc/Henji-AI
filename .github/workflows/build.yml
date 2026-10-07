@@ -124,6 +124,15 @@ jobs:
       - name: 生成 progress seeds
         run: npm run gen:progress-seeds
 
+      # Electron 本体在首次 require 时才下载；先串行下好，避免多个测试进程同时下载互相踩踏。
+      - name: 预先下载 Electron 本体
+        run: |
+          for attempt in 1 2 3; do
+            node node_modules/electron/install.js && node -e "require('electron')" && exit 0
+            sleep $((attempt * 10))
+          done
+          exit 1
+
       - name: 普通单元测试（不依赖真实 GPU）
         run: npm run test:unit -- --shard=${{ matrix.shard }}/3 --maxWorkers=4 --minWorkers=1
 

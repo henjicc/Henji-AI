@@ -79,12 +79,10 @@ describe('画布打开反馈', () => {
     vi.spyOn(commands, 'readDocument').mockRejectedValueOnce(new Error('read failed'));
     render(<CanvasWorkspace />);
     fireEvent.click(screen.getByText('open'));
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+    expect((await screen.findByRole('alert')).textContent).toBe('project.openFailed');
     expect(screen.getByTestId('projects')).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toBe('project.openFailed');
     fireEvent.click(screen.getByText('open'));
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-    expect(screen.getByTestId('canvas')).toBeTruthy();
+    expect(await screen.findByTestId('canvas')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
