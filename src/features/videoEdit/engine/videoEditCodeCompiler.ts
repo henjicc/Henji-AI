@@ -1,7 +1,7 @@
 import { CODE_MATERIAL_LIMITS, CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
-import type { CodeMaterialProgram, CodeMaterialErrorCode } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeMaterialProgram, CodeMaterialErrorCode, CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 
-export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ program: CodeMaterialProgram } | { error: { code: CodeMaterialErrorCode; message: string } })
+export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ program: CodeMaterialProgram } | { error: { code: CodeMaterialErrorCode; message: string; sourceSpan?: CodeSourceSpan } })
 export interface CodeCompilerWorker {
   onmessage: ((event: MessageEvent<CodeCompilerResponse>) => void) | null
   onerror: ((event: ErrorEvent) => void) | null
@@ -32,7 +32,7 @@ export class VideoEditCodeCompiler {
       const pending = this.pending.get(response.id)
       if (!pending) return
       this.pending.delete(response.id); pending.clean()
-      if ('error' in response) pending.reject(new CodeMaterialError(response.error.code, response.error.message))
+      if ('error' in response) pending.reject(new CodeMaterialError(response.error.code, response.error.message, response.error.sourceSpan))
       else { if (response.cacheHit) this.cacheHits++; pending.resolve(response.program) }
     }
     worker.onerror = event => { event.preventDefault?.(); if (this.worker === worker) this.reset(new Error(`源码检查线程失败：${event.message}`)) }

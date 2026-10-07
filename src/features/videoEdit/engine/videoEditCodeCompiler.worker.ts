@@ -21,6 +21,6 @@ self.onmessage = (event: MessageEvent<{ id: number; source: string }>): void => 
     self.postMessage({ id, program, cacheHit: false } satisfies CodeCompilerResponse)
   } catch (error) {
     const failure = error instanceof CodeMaterialError ? error : new CodeMaterialError('SYNTAX', error instanceof Error ? error.message : String(error))
-    self.postMessage({ id, error: { code: failure.code, message: failure.message } } satisfies CodeCompilerResponse)
+    self.postMessage({ id, error: { code: failure.code, message: failure.message, ...(failure.sourceSpan ? { sourceSpan: failure.sourceSpan } : {}) } } satisfies CodeCompilerResponse)
   }
 }

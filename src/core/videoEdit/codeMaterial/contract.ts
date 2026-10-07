@@ -1,5 +1,7 @@
 /** Closed author languages v1/v2. These data structures contain no executable host values. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes: 8192, depth: 64, cpuOperations: 20000, draws: 256, parameters: 32, filterScalarOperations: 128, filterSamples: 4, stringLength: 4096, textCharacters: 8192 })
+/** Work ceilings for the explicit v3 language; resident pixels remain separately budgeted by the GPU host. */
+export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 200000, draws: 4096, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
 export type CodeColor = [number, number, number, number]
 export interface CodeImageReference { kind: 'image'; mediaId: string }
 export type CodeParameterValue = number | boolean | string | CodeColor | CodeImageReference | null
@@ -13,7 +15,7 @@ export type CodeParameterDeclaration = ParameterBase & (
   | { type: 'text'; default: string; maxLength: number }
   | { type: 'image'; default: null; animatable: false }
 )
-export type CodeValueType = 'number' | 'boolean' | 'string' | 'color' | 'image' | 'draw' | 'draws'
+export type CodeValueType = 'number' | 'boolean' | 'string' | 'color' | 'image' | 'draw' | 'draws' | 'array' | 'object' | 'paint'
 export type CodeContextKey = 'time' | 'localTime' | 'sequenceTime' | 'width' | 'height' | 'frame' | 'fps' | 'u' | 'v'
 export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number }
 export const CODE_CONTEXT_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps', 'u', 'v']
@@ -31,7 +33,21 @@ export type CodeBinaryOperator = '+' | '-' | '*' | '/' | '%' | '<' | '<=' | '>' 
 /** JS remainder lowers to divide, truncation, multiplication and subtraction on the GPU. */
 export function codeBinaryCost(op: CodeBinaryOperator): number { return op === '%' ? 4 : 1 }
 export function codeConditionalCost(type: CodeValueType): number { return type === 'color' ? 4 : 1 }
-export type CodeDrawKind = 'rect' | 'ellipse' | 'line' | 'text' | 'image'
+export type CodeDrawKind = 'rect' | 'ellipse' | 'line' | 'text' | 'image' | 'group' | 'path'
+export interface CodeSourceSpan { start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
+export type CodeBlend = 'normal' | 'multiply' | 'screen' | 'overlay' | 'add' | 'lighten' | 'darken'
+export interface CodeGradient { kind: 'linearGradient' | 'radialGradient'; x1?: number; y1?: number; x2?: number; y2?: number; cx?: number; cy?: number; r?: number; stops: [number, CodeColor][] }
+export type CodePaint = CodeColor | CodeGradient
+export type CodeMatrix = [number, number, number, number, number, number]
+export interface CodeTextLayout { width: number; height: number; lines: string[]; lineWidths?: number[]; baselineOffset?: number; fontSize: number; font: string; fontGeneration?: number; missingFont?: string; glyphs: { text: string; x: number; y: number; width: number }[] }
+export interface CodeTextMeasureRequest { text: string; fontFamily: string; fontWeight: number; fontStyle: string; fontSize: number; letterSpacing: number; lineHeight: number; maxWidth: number; wrap: boolean; maxLines: number }
+export type CodeTextMeasurer = (request: CodeTextMeasureRequest) => CodeTextLayout
+export interface CodeDrawMetadata {
+  elementId?: string; sourceSpan?: CodeSourceSpan; elementPath?: string[]
+  opacity?: number; rotation?: number; scaleX?: number; scaleY?: number; anchorX?: number; anchorY?: number; blend?: CodeBlend
+  paint?: CodePaint; stroke?: CodePaint; strokeWidth?: number; lineCap?: 'butt' | 'round' | 'square'; lineJoin?: 'miter' | 'round' | 'bevel'; dash?: number[]; trimStart?: number; trimEnd?: number
+  shadow?: { x: number; y: number; blur: number; color: CodeColor }; glow?: { radius: number; intensity: number; color: CodeColor }; blur?: number
+}
 export type CodeExpression = { type: CodeValueType } & (
   | { kind: 'literal'; value: number | boolean | string }
   | { kind: 'color'; values: CodeExpression[] }
@@ -43,24 +59,35 @@ export type CodeExpression = { type: CodeValueType } & (
   | { kind: 'binary'; op: CodeBinaryOperator; left: CodeExpression; right: CodeExpression }
   | { kind: 'conditional'; condition: CodeExpression; yes: CodeExpression; no: CodeExpression }
   | { kind: 'call'; op: CodeBuiltin; args: CodeExpression[] }
-  | { kind: 'draw'; shape: CodeDrawKind; properties: Record<string, CodeExpression> }
+  | { kind: 'draw'; shape: CodeDrawKind; properties: Record<string, CodeExpression>; sourceSpan?: CodeSourceSpan; children?: CodeExpression }
   | { kind: 'draws'; values: CodeExpression[] }
+  | { kind: 'array'; values: CodeExpression[] }
+  | { kind: 'object'; properties: Record<string, CodeExpression> }
+  | { kind: 'index'; value: CodeExpression; index: CodeExpression }
+  | { kind: 'field'; value: CodeExpression; key: string }
+  | { kind: 'local'; slot: number }
+  | { kind: 'repeat'; count: CodeExpression; max: number; slot: number; body: CodeExpression }
+  | { kind: 'v3call'; op: string; args: CodeExpression[]; sourceSpan?: CodeSourceSpan }
+  | { kind: 'textAnimation'; slot: number; countSlot: number; body: CodeExpression }
 )
 export interface CodeMaterialProgram {
-  apiVersion: 1; languageVersion: 1 | 2; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
+  apiVersion: 1; languageVersion: 1 | 2 | 3; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
   width: number; height: number; durationSeconds: number; seed: number
   parameters: CodeParameterDeclaration[]; bindings: { name: string; expression: CodeExpression }[]; result: CodeExpression
-  metrics: { astNodes: number; astDepth: number; cpuOperations: number; scalarOperations: number; samples: number }
+  metrics: { astNodes: number; astDepth: number; cpuOperations: number; scalarOperations: number; samples: number; draws?: number }
 }
-export type CodeDrawCommand =
-  | { kind: 'rect'; x: number; y: number; width: number; height: number; fill: CodeColor; radius: number }
+export type CodeDrawCommand = CodeDrawMetadata & (
+  | { kind: 'rect'; x: number; y: number; width: number; height: number; fill: CodeColor; radius: number; radii?: number[] }
   | { kind: 'ellipse'; x: number; y: number; width: number; height: number; fill: CodeColor }
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; width: number; color: CodeColor }
-  | { kind: 'text'; x: number; y: number; text: string; fontSize: number; color: CodeColor; fontFamily: 'sans-serif' | 'serif' | 'monospace'; align: 'left' | 'center' | 'right' }
+  | { kind: 'text'; x: number; y: number; text: string; fontSize: number; color: CodeColor; fontFamily: string; align: 'left' | 'center' | 'right'; fontWeight?: number; fontStyle?: string; baseline?: string; letterSpacing?: number; lineHeight?: number; maxWidth?: number; wrap?: boolean; maxLines?: number; layout?: CodeTextLayout; perChar?: { x: number; y: number; opacity: number; scale: number; rotation: number }[] }
   | { kind: 'image'; source: CodeImageReference; x: number; y: number; width: number; height: number; opacity: number }
+  | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; clip?: { x: number; y: number; width: number; height: number } }
+  | { kind: 'path'; points: [number, number][][]; closed: boolean; fill: CodeColor }
+)
 export type CodeMaterialErrorCode = 'SOURCE_LIMIT' | 'SYNTAX' | 'TYPE' | 'BUDGET' | 'PARAMETERS' | 'COMPATIBILITY' | 'CONTEXT' | 'NON_FINITE'
 export class CodeMaterialError extends Error {
-  constructor(readonly code: CodeMaterialErrorCode, message: string) { super(message); this.name = 'CodeMaterialError' }
+  constructor(readonly code: CodeMaterialErrorCode, message: string, readonly sourceSpan?: CodeSourceSpan) { super(message); this.name = 'CodeMaterialError' }
 }
 export function assertCodeMaterialKey(key: string): void {
   if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key) || ['__proto__', 'prototype', 'constructor', 'caller', 'callee', 'arguments'].includes(key)) throw new CodeMaterialError('SYNTAX', `不允许的名称：${key}`)

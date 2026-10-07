@@ -8,6 +8,16 @@ import { videoEditDocumentSchema } from './document'
 const compile = async (source: string) => compileCodeMaterial(source)
 const source = (defaultValue = .5) => `export default {apiVersion:1,name:"原生素材",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{amount:{type:"number",title:"数量",default:${defaultValue},min:0,max:1,step:.01}},render(ctx){return [rect({x:ctx.time,y:0,width:100,height:100,fill:[1,0,0,ctx.params.amount]})];}}`
 describe('剪辑内嵌源码契约', () => {
+  it('v3版本经过正式追加与文档保存重读，源码标签保持3且不持久化IR', async () => {
+    const v3 = source().replace('apiVersion:1,', 'apiVersion:1,languageVersion:3,')
+    const { definition } = await makeCodeMaterialDefinition(v3, compile)
+    const published = await appendCodeMaterialVersion(definition, v3.replace('width:100', 'width:120'), compile)
+    const document = createVideoEditDocument('v3保存')
+    const loaded = videoEditDocumentSchema.parse(JSON.parse(JSON.stringify({ ...document, codeMaterials: [published.definition] })))
+    expect(loaded.codeMaterials![0].versions.map(version => version.languageVersion)).toEqual([3, 3])
+    expect(loaded.codeMaterials![0].versions[1].source).toContain('width:120')
+    expect(loaded.codeMaterials![0].versions[1]).not.toHaveProperty('result')
+  })
   it('源码版本追加不可变，保存重读不跟随默认版本或保存IR', async () => {
     const { definition } = await makeCodeMaterialDefinition(source(), compile)
     const published = await appendCodeMaterialVersion(definition, source(.7), compile)

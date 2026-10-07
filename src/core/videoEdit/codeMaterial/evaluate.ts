@@ -2,6 +2,16 @@ import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '../time'
 import { CODE_MATERIAL_LIMITS, CodeMaterialError, codeBinaryCost, codeBuiltinCost, codeColor, codeConditionalCost, codeImageReference, finiteCodeNumber } from './contract'
 import type { CodeColor, CodeDrawCommand, CodeExpression, CodeMaterialContext, CodeMaterialProgram, CodeParameterValue } from './contract'
 import { validateCodeMaterialParameters } from './parameters'
+import { evaluateCodeMaterialV3, type CodeEvaluationOptions } from './evaluateV3'
+import { codeElementBounds, hitCodeCommands, type CodeElementBounds } from './geometry'
+
+/** Geometry consumes the same validated, shared-font command stream as rendering. */
+export function evaluateCodeMaterialBounds(program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>> = {}, options: CodeEvaluationOptions = {}): CodeElementBounds[] {
+  return codeElementBounds(evaluateCodeMaterial(program, context, parameters, options))
+}
+export function hitTestCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, point: { x: number; y: number }, options: CodeEvaluationOptions = {}): CodeElementBounds | undefined {
+  return hitCodeCommands(evaluateCodeMaterial(program, context, parameters, options), finiteCodeNumber(point.x, 'point.x'), finiteCodeNumber(point.y, 'point.y'))
+}
 
 type EvaluatedValue = CodeParameterValue | CodeDrawCommand | CodeDrawCommand[]
 export function codeMaterialRandom(seed: number, index: number): number {
@@ -16,7 +26,8 @@ function validateContext(context: CodeMaterialContext, transitionHandles: boolea
   if (context.time < 0 || context.localTime < (transitionHandles ? -VIDEO_EDIT_MAX_SEQUENCE_SECONDS : 0) || context.localTime > VIDEO_EDIT_MAX_SEQUENCE_SECONDS || context.sequenceTime < 0 || !Number.isSafeInteger(context.frame) || context.frame < 0 || context.fps <= 0 || context.fps > 240 || ![context.width, context.height].every(value => Number.isInteger(value) && value > 0 && value <= 8192)) throw new CodeMaterialError('CONTEXT', '时间、尺寸、帧或帧率无效。')
 }
 /** Evaluate generator IR once at an explicit source time. Filter IR stays on the trusted GPU path. */
-export function evaluateCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>> = {}, options: { transitionHandles?: boolean } = {}): CodeDrawCommand[] {
+export function evaluateCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>> = {}, options: { transitionHandles?: boolean } & CodeEvaluationOptions = {}): CodeDrawCommand[] {
+  if (program.languageVersion === 3 && program.kind === 'generator' && program.apiVersion === 1) { validateContext(context, options.transitionHandles === true); codeMaterialRandom(context.seed ?? program.seed, 0); return evaluateCodeMaterialV3(program, context, values, options) }
   if (program.kind !== 'generator' || program.apiVersion !== 1 || ![1, 2].includes(program.languageVersion)) throw new CodeMaterialError('TYPE', 'CPU 求值仅支持版本 1 或 2 的生成器；滤镜由可信 GPU emitter 消费。')
   if (program.languageVersion !== (program.parameters.some(parameter => parameter.type === 'image') ? 2 : 1)) throw new CodeMaterialError('TYPE', '图片参数与作者语言版本不一致。')
   validateContext(context, options.transitionHandles === true)

@@ -1,10 +1,11 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '../time'
 import ts from 'typescript'
-import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_MATERIAL_LIMITS, CODE_TIME_KEYS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, codeConditionalCost, finiteCodeNumber } from './contract'
+import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS, CODE_TIME_KEYS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, codeConditionalCost, finiteCodeNumber } from './contract'
 import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, CodeExpression, CodeMaterialProgram, CodeValueType } from './contract'
 import { parseCodeMaterialParameters } from './parameters'
+import { codeSourceSpan, compileCodeMaterialV3 } from './compilerV3'
 
-const shapeFields: Record<CodeDrawKind, Record<string, CodeValueType>> = {
+const shapeFields: Record<Exclude<CodeDrawKind, 'group' | 'path'>, Record<string, CodeValueType>> = {
   rect: { x: 'number', y: 'number', width: 'number', height: 'number', fill: 'color', radius: 'number' },
   ellipse: { x: 'number', y: 'number', width: 'number', height: 'number', fill: 'color' },
   line: { x1: 'number', y1: 'number', x2: 'number', y2: 'number', width: 'number', color: 'color' },
@@ -17,9 +18,9 @@ const binaryOperators = new Map<ts.SyntaxKind, CodeBinaryOperator>([
   [ts.SyntaxKind.LessThanToken, '<'], [ts.SyntaxKind.LessThanEqualsToken, '<='], [ts.SyntaxKind.GreaterThanToken, '>'], [ts.SyntaxKind.GreaterThanEqualsToken, '>='],
   [ts.SyntaxKind.EqualsEqualsEqualsToken, '==='], [ts.SyntaxKind.ExclamationEqualsEqualsToken, '!=='], [ts.SyntaxKind.AmpersandAmpersandToken, '&&'], [ts.SyntaxKind.BarBarToken, '||'],
 ])
-function fail(node: ts.Node, message: string, code: 'SYNTAX' | 'TYPE' = 'SYNTAX'): never {
+function fail(node: ts.Node, message: string, code: 'SYNTAX' | 'TYPE' | 'BUDGET' = 'SYNTAX'): never {
   const file = node.getSourceFile(); const position = file.getLineAndCharacterOfPosition(node.getStart(file))
-  throw new CodeMaterialError(code, `${message}（${position.line + 1}:${position.character + 1}）`)
+  throw new CodeMaterialError(code, `${message}（${position.line + 1}:${position.character + 1}）`, codeSourceSpan(node))
 }
 function propertyName(node: ts.PropertyName): string {
   if (!ts.isIdentifier(node) && !ts.isStringLiteral(node)) return fail(node, '字段必须使用静态名称。')
@@ -58,7 +59,7 @@ function astBudget(file: ts.SourceFile): { astNodes: number; astDepth: number } 
   const stack = [{ node: file as ts.Node, depth: 0 }]; let astNodes = 0; let astDepth = 0
   while (stack.length) {
     const current = stack.pop()!; astNodes++; astDepth = Math.max(astDepth, current.depth)
-    if (astNodes > CODE_MATERIAL_LIMITS.astNodes || astDepth > CODE_MATERIAL_LIMITS.depth) throw new CodeMaterialError('BUDGET', '源码 AST 数量或深度超出预算。')
+    if (astNodes > CODE_V3_LIMITS.astNodes || astDepth > CODE_MATERIAL_LIMITS.depth) fail(current.node, '源码 AST 数量或深度超出预算。', 'BUDGET')
     ts.forEachChild(current.node, child => { stack.push({ node: child, depth: current.depth + 1 }) })
   }
   return { astNodes, astDepth }
@@ -76,10 +77,11 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
     throw new CodeMaterialError('SYNTAX', `源码语法无效：${ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')}（${position.line + 1}:${position.character + 1}）`)
   }
   const ast = astBudget(file)
-  if (file.statements.length !== 1 || !ts.isExportAssignment(file.statements[0]) || file.statements[0].isExportEquals || !ts.isObjectLiteralExpression(file.statements[0].expression)) fail(file, '源码只能包含一个 export default 静态对象。')
-  const definition = file.statements[0].expression
+  const exported = file.statements.at(-1)
+  if (!exported || !ts.isExportAssignment(exported) || exported.isExportEquals || !ts.isObjectLiteralExpression(exported.expression)) fail(file, '源码必须以 export default 静态对象结束。')
+  const definition = exported.expression
   const metadata = new Map<string, ts.Expression>(); let render: ts.MethodDeclaration | undefined
-  const allowed = new Set(['apiVersion', 'name', 'kind', 'mode', 'width', 'height', 'durationSeconds', 'seed', 'parameters', 'render'])
+  const allowed = new Set(['apiVersion', 'languageVersion', 'name', 'kind', 'mode', 'width', 'height', 'durationSeconds', 'seed', 'parameters', 'render'])
   for (const item of definition.properties) {
     if (!ts.isPropertyAssignment(item) && !ts.isMethodDeclaration(item)) fail(item, '定义不允许展开、简写或访问器。')
     const key = propertyName(item.name)
@@ -88,18 +90,23 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   }
   const value = (key: string): unknown => { const node = metadata.get(key); if (!node) throw new CodeMaterialError('SYNTAX', `缺少定义字段：${key}`); return staticValue(node) }
   if (value('apiVersion') !== 1) throw new CodeMaterialError('SYNTAX', '仅支持 apiVersion: 1。')
+  const languageVersion = metadata.has('languageVersion') ? value('languageVersion') : undefined
+  if (languageVersion !== undefined && languageVersion !== 3) fail(metadata.get('languageVersion')!, '显式作者语言版本必须为 3。')
+  if (languageVersion !== 3 && file.statements.length !== 1) fail(file, '顶层 const 仅用于 v3 作者语言。')
+  if (languageVersion !== 3 && ast.astNodes > CODE_MATERIAL_LIMITS.astNodes) fail(file, '源码 AST 数量超出预算。', 'BUDGET')
   const kind = value('kind'); const mode = value('mode')
   if (kind !== 'generator' && kind !== 'filter') throw new CodeMaterialError('SYNTAX', 'kind 必须为 generator 或 filter。')
   if (mode !== 'static' && mode !== 'dynamic') throw new CodeMaterialError('SYNTAX', 'mode 必须为 static 或 dynamic。')
   const parameters = parseCodeMaterialParameters(value('parameters'))
   const imageParameters = parameters.some(parameter => parameter.type === 'image')
   if (imageParameters && kind !== 'generator') throw new CodeMaterialError('TYPE', '图片资源参数仅用于生成器，滤镜仍只采样当前输入。')
-  const program: CodeMaterialProgram = { apiVersion: 1, languageVersion: imageParameters ? 2 : 1, name: staticString(value('name'), 'name', 160), kind, mode,
+  const program: CodeMaterialProgram = { apiVersion: 1, languageVersion: languageVersion === 3 ? 3 : imageParameters ? 2 : 1, name: staticString(value('name'), 'name', 160), kind, mode,
     width: staticNumber(value('width'), 'width', 1, 8192, true), height: staticNumber(value('height'), 'height', 1, 8192, true), durationSeconds: staticNumber(value('durationSeconds'), 'durationSeconds', 0.000001, VIDEO_EDIT_MAX_SEQUENCE_SECONDS), seed: staticNumber(value('seed'), 'seed', 0, 4294967295, true),
     parameters, bindings: [], result: { kind: 'literal', type: 'boolean', value: false }, metrics: { ...ast, cpuOperations: 0, scalarOperations: 0, samples: 0 } }
   if (!render?.body || render.modifiers?.length || render.asteriskToken || render.questionToken || render.type || render.typeParameters?.length || render.parameters.length !== 1) fail(render ?? definition, '需要纯 render(ctx) 方法。')
   const argument = render.parameters[0]
   if (!ts.isIdentifier(argument.name) || argument.name.text !== 'ctx' || argument.type || argument.initializer || argument.questionToken || argument.dotDotDotToken || argument.modifiers?.length) fail(argument, 'render 仅允许未注解的 ctx 参数。')
+  if (languageVersion === 3) return compileCodeMaterialV3(program, file, render.body, file.statements.slice(0, -1))
   const bindings = new Map<string, number>()
   const parameterTypes = new Map(parameters.map(item => [item.key, item.type === 'number' ? 'number' : item.type === 'boolean' ? 'boolean' : item.type === 'color' ? 'color' : item.type === 'image' ? 'image' : 'string'] as const))
   const compile = (node: ts.Expression, arrayOutput = false): CodeExpression => {
@@ -160,7 +167,7 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
       const op = node.expression.text
       if (Object.prototype.hasOwnProperty.call(shapeFields, op)) {
         if (kind !== 'generator' || node.arguments.length !== 1 || !ts.isObjectLiteralExpression(node.arguments[0])) fail(node, '图形调用需要一个静态字段对象，且仅用于生成器。')
-        const shape = op as CodeDrawKind; const fields = shapeFields[shape]; const properties: Record<string, CodeExpression> = {}
+        const shape = op as keyof typeof shapeFields; const fields = shapeFields[shape]; const properties: Record<string, CodeExpression> = {}
         for (const [key, value] of objectProperties(node.arguments[0])) { if (!Object.prototype.hasOwnProperty.call(fields, key)) fail(value, `未知图形字段：${key}`); const expression = compile(value); ensureType(value, expression, fields[key]); properties[key] = expression }
         for (const key of Object.keys(fields)) if (!Object.prototype.hasOwnProperty.call(properties, key) && !optionalShapeFields.has(key)) fail(node, `缺少图形字段：${key}`)
         return { kind: 'draw', type: 'draw', shape, properties }

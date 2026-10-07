@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
-import { measureVideoEditGlyph } from './videoEditGlyphMetrics'
+import { invalidateCodeTextMetrics, measureCodeText, measureVideoEditGlyph } from './videoEditGlyphMetrics'
 
 let width: number | undefined
 let left = 0
@@ -11,7 +11,7 @@ beforeEach(() => {
     getContext() {
       return { font: '', measureText(text: string) {
         calls++
-        const measured = width ?? text.length * Number.parseFloat(this.font)
+        const measured = width ?? text.length * Number(this.font.match(/([\d.]+)px/)?.[1])
         return { width: measured, actualBoundingBoxLeft: left, actualBoundingBoxRight: right ?? measured }
       } }
     }
@@ -51,10 +51,24 @@ it('缺失2D环境、非有限测量和非法作者输入全部失败关闭', ()
   width = Number.NaN
   expect(() => measureVideoEditGlyph('坏测量', 20, 'sans-serif')).toThrow('测量结果无效')
   expect(() => measureVideoEditGlyph('字', Number.POSITIVE_INFINITY, 'sans-serif')).toThrow('有效范围')
-  expect(() => measureVideoEditGlyph('字', 20, '任意外部字体')).toThrow('有效范围')
   expect(() => measureVideoEditGlyph('字'.repeat(4097), 20, 'sans-serif')).toThrow('有效范围')
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return null } })
   expect(() => measureVideoEditGlyph('缺上下文', 20, 'sans-serif')).toThrow('无法测量')
   vi.stubGlobal('OffscreenCanvas', undefined)
   expect(() => measureVideoEditGlyph('缺环境', 20, 'sans-serif')).toThrow('无法测量')
+})
+it('v3共享布局缓存、任意字体名称与字体加载后的失效', () => {
+  const request = { text: '中文标题', fontFamily: 'Imported Font', fontWeight: 700, fontStyle: 'italic', fontSize: 20, letterSpacing: 2, lineHeight: 1.2, maxWidth: 55, wrap: true, maxLines: 2 }
+  const layout = measureCodeText(request); const before = calls
+  expect(layout.lines).toEqual(['中文', '标题']); expect(layout.font).toContain('"Imported Font"'); expect(layout.width).toBe(42)
+  expect(measureCodeText(request)).toBe(layout); expect(calls).toBe(before)
+  invalidateCodeTextMetrics(); const refreshed = measureCodeText(request); expect(refreshed).not.toBe(layout); expect(refreshed.fontGeneration).not.toBe(layout.fontGeneration); expect(calls).toBeGreaterThan(before)
+  expect(measureVideoEditGlyph('字', 20, 'Imported Font').font).toContain('Imported Font')
+})
+it('v3缺失字体显式标记并改用sans-serif，坏测量拒绝', () => {
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { return { width: text.length * (this.font.endsWith('serif') && !this.font.endsWith('sans-serif') ? 20 : 10) } } } } })
+  const request = { text: 'AB', fontFamily: 'Missing Face', fontWeight: 400, fontStyle: 'normal', fontSize: 20, letterSpacing: 0, lineHeight: 1.2, maxWidth: 0, wrap: false, maxLines: 0 }
+  expect(measureCodeText(request)).toMatchObject({ missingFont: 'Missing Face', font: 'normal 400 20px sans-serif', width: 20 })
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText() { return { width: Number.NaN } } } } })
+  expect(() => measureCodeText(request)).toThrow('度量无效')
 })

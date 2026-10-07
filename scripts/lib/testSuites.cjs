@@ -10,6 +10,7 @@ const GPU_TEST_FILES = [
   'src/features/imageEdit/v3/gpu/imageEditorGpuSparseAnnotationV3.test.ts',
   'src/core/imageEdit/testing/vgpuImpulseProbe.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditGpuPrecision.gpu.test.ts',
+  'src/features/videoEdit/engine/videoEditCodeGpuV3.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditCornerPin.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts',
   'src/features/videoEdit/engine/shaderLibrary/shaderLibrary.gpu.test.ts',

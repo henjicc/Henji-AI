@@ -1,10 +1,11 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
-import { CodeMaterialError, CODE_MATERIAL_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
+import { CodeMaterialError, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeExpression, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import { emitCodeV3FilterCall, CODE_V3_FILTER_HELPERS, codeMaterialFilterPasses } from './videoEditCodeCompilerFilterV3'
 
-interface Range { min: number; max: number; integer: boolean }
-type Bounds = Range | Range[] | null
-interface Value { code: string; bounds: Bounds }
+export interface Range { min: number; max: number; integer: boolean }
+export type Bounds = Range | Range[] | null
+export interface Value { code: string; bounds: Bounds; items?: Value[]; text?: string }
 const float = new Float32Array(1)
 const bits = new Uint32Array(float.buffer)
 const MIN_NORMAL = 1.1754943508222875e-38
@@ -60,14 +61,16 @@ const contextCode: Record<string, string> = { time: 'p.context0.x', localTime: '
 /** Emit only checked scalar/color IR. Conservative range analysis rejects unsafe
  * denominators and overflow before a pipeline reaches the GPU; no author WGSL. */
 export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionHandles = false): string {
-  if (program.kind !== 'filter' || program.languageVersion !== 1 || program.parameters.length > 32 || program.metrics.samples > 4 || program.metrics.scalarOperations > 128) throw new CodeMaterialError('BUDGET', '滤镜版本或资源预算无效。')
-  const bindings: Value[] = []; let nodes = 0
+  const limits = program.languageVersion === 3 ? CODE_V3_LIMITS : CODE_MATERIAL_LIMITS
+  if (program.kind !== 'filter' || ![1, 3].includes(program.languageVersion) || program.parameters.length > 32 || program.metrics.samples > limits.filterSamples || program.metrics.scalarOperations > limits.filterScalarOperations) throw new CodeMaterialError('BUDGET', '滤镜版本或资源预算无效。')
+  const bindings: Value[] = []; const locals = new Map<number, Value>(); const passes = codeMaterialFilterPasses(program); let nodes = 0
   const emit = (expression: CodeExpression, depth = 0): Value => {
-    if (++nodes > CODE_MATERIAL_LIMITS.astNodes || depth > CODE_MATERIAL_LIMITS.depth) throw new CodeMaterialError('BUDGET', '滤镜表达式超出预算。')
+    if (++nodes > limits.astNodes || depth > limits.depth) throw new CodeMaterialError('BUDGET', '滤镜表达式超出预算。')
     const next = (value: CodeExpression): Value => emit(value, depth + 1)
     switch (expression.kind) {
       case 'literal': {
         if (typeof expression.value === 'boolean') return { code: String(expression.value), bounds: null }
+        if (typeof expression.value === 'string' && program.languageVersion === 3) return { code: '', bounds: null, text: expression.value }
         if (typeof expression.value !== 'number') throw new CodeMaterialError('TYPE', '滤镜不支持文字。')
         const bounds = range(expression.value)
         const value = Math.fround(expression.value)
@@ -75,6 +78,26 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
         return { code, bounds }
       }
       case 'color': { const values = expression.values.map(next); return { code: `vec4f(${values.map(value => value.code).join(',')})`, bounds: values.map(scalar) } }
+      case 'local': { const value = locals.get(expression.slot); if (!value) throw new CodeMaterialError('TYPE', '无效滤镜展开索引。'); return value }
+      case 'array': return { code: '', bounds: null, items: expression.values.map(next) }
+      case 'repeat': {
+        const count = scalar(next(expression.count))
+        if (count.min !== count.max || !count.integer || count.min < 1 || count.max > 64) throw new CodeMaterialError('BUDGET', '滤镜 repeat 次数须为 1–64 的编译期整数常量。')
+        const items: Value[] = []
+        for (let i = 0; i < count.max; i++) { locals.set(expression.slot, { code: `${i}.0`, bounds: range(i) }); items.push(next(expression.body)) }
+        locals.delete(expression.slot); return { code: '', bounds: null, items }
+      }
+      case 'index': {
+        const value = next(expression.value); const index = scalar(next(expression.index))
+        if (expression.value.type === 'color' && index.min === index.max && index.integer && index.min >= 0 && index.max < 4) return { code: `(${value.code})[${index.min}]`, bounds: colors(value)[index.min] }
+        if (!value.items || index.min !== index.max || !index.integer || index.min < 0 || index.max >= value.items.length) throw new CodeMaterialError('TYPE', '滤镜表索引须为预算内静态整数。')
+        return value.items[index.min]
+      }
+      case 'field': { const value = next(expression.value); if (expression.key === 'length' && value.items) return { code: `${value.items.length}.0`, bounds: range(value.items.length) }; throw new CodeMaterialError('TYPE', '滤镜不支持此字段。') }
+      case 'v3call': {
+        try { return emitCodeV3FilterCall(expression, expression.args.map(next), passes, { range, scalar, colors, union, multiply, divide, operationRange }) }
+        catch (error) { if (error instanceof CodeMaterialError && !error.sourceSpan && expression.sourceSpan) throw new CodeMaterialError(error.code, error.message, expression.sourceSpan); throw error }
+      }
       case 'context': {
         if (!contextRanges[expression.key]) throw new CodeMaterialError('TYPE', '未知滤镜时间字段。')
         return { code: contextCode[expression.key], bounds: expression.key === 'localTime' && transitionHandles ? range(-VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, false) : contextRanges[expression.key] }
@@ -91,7 +114,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
       case 'binding': {
         const value = bindings[expression.slot]
         if (!value) throw new CodeMaterialError('TYPE', '滤镜绑定不存在。')
-        return { code: `b${expression.slot}`, bounds: value.bounds }
+        return value.items ? value : { code: `b${expression.slot}`, bounds: value.bounds, text: value.text }
       }
       case 'component': { const value = next(expression.value); return { code: `(${value.code})[${expression.index}]`, bounds: colors(value)[expression.index] } }
       case 'unary': {
@@ -189,7 +212,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
     }
   }
   const declarations: string[] = []
-  for (const binding of program.bindings) { const value = emit(binding.expression); declarations.push(`let b${bindings.length} = ${value.code};`); bindings.push(value) }
+  for (const binding of program.bindings) { const value = emit(binding.expression); if (!value.items && value.text === undefined) declarations.push(`let b${bindings.length} = ${value.code};`); bindings.push(value) }
   const result = emit(program.result)
   if (colors(result).some(channel => channel.min < -1e-5 || channel.max > 1 + 1e-5)) throw new CodeMaterialError('PARAMETERS', '滤镜输出必须始终位于0到1；请在可能越界的颜色通道显式使用clamp。')
   return `
@@ -197,6 +220,7 @@ struct Params { context0:vec4f, context1:vec3f, seed:u32, parameters:array<vec4f
 @group(0) @binding(0) var inputTexture: texture_2d<f32>;
 @group(0) @binding(1) var inputSampler: sampler;
 @group(0) @binding(2) var<uniform> p: Params;
+${passes.map((_, i) => `@group(0) @binding(${3 + i}) var codeBlur${i}:texture_2d<f32>;`).join('\n')}
 struct Vertex { @builtin(position) position: vec4f }
 @vertex fn vs(@builtin(vertex_index) i:u32)->Vertex {
  let q = array<vec2f,3>(vec2f(0,0),vec2f(0,2),vec2f(2,0))[i];
@@ -219,6 +243,7 @@ fn codeSmooth(a:f32,b:f32,x:f32)->f32 {
  let t=clamp((x-a)/(b-a),0.0,1.0);
  return clamp(t*t*(3.0-2.0*t),0.0,1.0);
 }
+${program.languageVersion === 3 ? CODE_V3_FILTER_HELPERS : ''}
 @fragment fn fs(v:Vertex)->@location(0) vec4f {
  let uv = v.position.xy/vec2f(p.context0.w,p.context1.x);
  ${declarations.join('\n')}
