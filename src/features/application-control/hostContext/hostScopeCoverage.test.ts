@@ -4,7 +4,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createHostContextSnapshot } from './hostContext'
 
 const memory = vi.hoisted(() => ({ content: '', enabled: true, revision: 1 }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ assistant: {
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ assistant: {
   getSharedMemory: async () => ({ ...memory }),
   updateSharedMemory: async (input: { content: string; expectedRevision: number }) => {
     if (input.expectedRevision !== memory.revision) throw new Error('conflict')
