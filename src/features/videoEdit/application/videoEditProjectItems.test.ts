@@ -1,5 +1,6 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
+import { VideoEditSequenceFrameRateRequired } from '@/core/videoEdit/projectItems'
 // @vitest-environment jsdom
 import { beforeEach, afterEach, it, expect, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -172,10 +173,25 @@ it('拖进空序列：不新建序列，按素材改这条序列的规格并落�
   const start = rescaleVideoEditFrame(12, originalRate, { numerator: 60000, denominator: 1001 })
   expect(getActiveVideoEditSequence(instance).clips.map(clip => clip.start)).toEqual([start, start + 179])
   undoVideoEdit(id)
-  appendVideoEditMedia(id, { id: 'vfr-drop', name: 'unknown', path: 'D:/media/unknown.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 2, frameRateMode: 'variable' })
-  const before = instance.document
-  await expect(dropVideoEditInput(id, { kind: 'sources', sources: [{ path: 'D:/media/unknown.mp4' }] }, { frame: 0, track: 1 }, undefined, { sequenceId: first, createSequenceWhenEmpty: true })).rejects.toThrow('选择剪辑帧率')
-  expect(instance.document).toBe(before)
+  // 散文件在正式目录探测中返回 ENOTDIR，之后才进入素材与帧率校验。
+  vi.spyOn(getPlatform().system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 320, height: 180, close() {} }))
+  for (const frameRateMode of ['unknown', 'variable'] as const) {
+    const path = `D:/media/${frameRateMode}.mp4`
+    appendVideoEditMedia(id, { id: `${frameRateMode}-drop`, name: frameRateMode, path, kind: 'video', width: 1920, height: 1080, durationSeconds: 2, frameRateMode, ...(frameRateMode === 'variable' ? { frameRate: { numerator: 30, denominator: 1 } } : {}) })
+    const before = instance.document; const past = instance.past.length
+    const input = { kind: 'sources' as const, sources: [{ path }] }
+    const options = { sequenceId: first, createSequenceWhenEmpty: true }
+    const batch = { ...input, sources: [...input.sources, { path: `D:/media/new-${frameRateMode}.png` }] }
+    await expect(dropVideoEditInput(id, batch, { frame: 0, track: 1 }, undefined, options)).rejects.toBeInstanceOf(VideoEditSequenceFrameRateRequired)
+    expect(instance.document).toBe(before); expect(instance.past).toHaveLength(past)
+    await dropVideoEditInput(id, input, { frame: 0, track: 1 }, undefined, { ...options, sequenceSettings: { frameRate: { numerator: 60, denominator: 1 } } })
+    expect(getActiveVideoEditSequence(instance).frameRate).toEqual({ numerator: 60, denominator: 1 })
+    expect(instance.document.sequences).toHaveLength(sequences); expect(instance.past).toHaveLength(past + 1)
+    undoVideoEdit(id)
+  }
 })
 it('重新定位只更新原剪辑引用并关闭旧源；关闭重开不会接受旧异步结果', async () => {
   const first = await fixture(); const firstId = first.document.id

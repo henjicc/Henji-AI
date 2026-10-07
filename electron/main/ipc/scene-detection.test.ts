@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { IpcMainInvokeEvent } from 'electron'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { SCENE_DETECTION_CHANNELS } from '../../../src/platform/contracts/sceneDetection'
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '../../../src/core/videoEdit/time'
 
 type Handler = (raw: unknown, event: IpcMainInvokeEvent) => Promise<unknown>
 const mocks = vi.hoisted(() => ({ handlers: new Map<string, Handler>(), trusted: vi.fn(), allowed: vi.fn(), realpath: vi.fn(), identity: vi.fn(), detect: vi.fn() }))
@@ -38,7 +39,9 @@ afterEach(() => { for (const emitter of senders.splice(0)) emitter.emit('destroy
 it('可信窗口、严格参数和真实文件授权在后台调用前检查；验证使用同一授权', async () => {
   const event = sender()
   await expect(invoke('detect', { ...request, extra: true }, event)).rejects.toThrow()
-  await expect(invoke('detect', { ...request, endSeconds: 1802 }, event)).rejects.toThrow()
+  for (const invalid of [{ endSeconds: VIDEO_EDIT_MAX_SEQUENCE_SECONDS + 1 }, { endSeconds: request.startSeconds }, { sensitivity: 101 }, { endSeconds: Infinity }]) {
+    await expect(invoke('detect', { ...request, ...invalid }, event)).rejects.toThrow()
+  }
   mocks.trusted.mockImplementationOnce(() => { throw new Error('untrusted') })
   await expect(invoke('detect', request, event)).rejects.toThrow('untrusted')
   mocks.allowed.mockReturnValueOnce(false)
@@ -46,6 +49,9 @@ it('可信窗口、严格参数和真实文件授权在后台调用前检查；�
   mocks.allowed.mockReturnValueOnce(true).mockReturnValueOnce(false)
   await expect(invoke('detect', request, event)).rejects.toThrow('实际位置')
   expect(mocks.detect).not.toHaveBeenCalled()
+  for (const endSeconds of [1802, VIDEO_EDIT_MAX_SEQUENCE_SECONDS]) {
+    await expect(invoke('detect', { ...request, endSeconds }, event)).resolves.toMatchObject({ cutsSeconds: [2] })
+  }
   await expect(invoke('validate', { source, contentIdentity: 'a'.repeat(64) }, event)).resolves.toBe(true)
   await expect(invoke('validate', { source, contentIdentity: 'b'.repeat(64) }, event)).resolves.toBe(false)
   mocks.allowed.mockReturnValueOnce(false)

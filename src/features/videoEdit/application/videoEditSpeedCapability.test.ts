@@ -7,6 +7,7 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, videoEditFps } from '@/core/videoEdit/time'
 import { closeAllVideoEdits, savedVideoEdit } from './videoEditDocumentTestKit'
 import { editVideoProject, getActiveVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
 
@@ -99,11 +100,11 @@ it('锁定链接音轨、越界、混合文档引用、冲突基线和超长波�
     expect(await app.call('ripple_video_edit_clip_speed', input(owner, { speedPercent: 0 }))).toMatchObject({ ok: false })
     expect(await app.call('ripple_video_edit_clip_speed', input(owner, { clipRefs: [{ kind: 'video_edit.clip', id: 'other:a' }] }))).toMatchObject({ ok: false })
     const baseline = await app.read(input(owner).documentRef)
-    editVideoProject(owner.document.id, document => { document.sequences[0].tracks.find(track => track.kind === 'audio')!.locked = false; document.sequences[0].clips.find(clip => clip.id === 'c')!.start = 53940; return document })
+    editVideoProject(owner.document.id, document => { document.sequences[0].tracks.find(track => track.kind === 'audio')!.locked = false; document.sequences[0].clips.find(clip => clip.id === 'c')!.start = Math.floor(videoEditFps(document.sequences[0].frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) - 60; return document })
     expect(await app.call('ripple_video_edit_clip_speed', input(owner), baseline.revisions as Record<string, number>)).toMatchObject({ ok: false })
     const longBefore = owner.document; const longPast = owner.past.length
     const overflow = await app.call('ripple_video_edit_clip_speed', input(owner))
-    expect(overflow).toMatchObject({ ok: false }); expect(JSON.stringify(overflow)).toContain('30 分钟')
+    expect(overflow).toMatchObject({ ok: false }); expect(JSON.stringify(overflow)).toContain('24 小时')
     expect(owner.document).toBe(longBefore); expect(owner.past).toHaveLength(longPast)
   } finally { app.dispose() }
 })

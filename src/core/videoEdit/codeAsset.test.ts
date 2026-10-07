@@ -31,7 +31,11 @@ describe('可编辑代码资产文件契约', () => {
     expect(() => encodeCodeAsset({ ...input, sourceVersion: { ...input.sourceVersion, source: '汉'.repeat(30_000) } })).toThrow()
     expect(() => decodeCodeAsset(new Uint8Array(CODE_ASSET_LIMITS.bytes + 1))).toThrow()
     expect(() => encodeCodeAsset({ ...input, parameters: Object.fromEntries(Array.from({ length: 33 }, (_, index) => [`p${index}`, index])) })).toThrow()
-    expect(() => encodeCodeAsset({ ...input, curves: { size: Array.from({ length: 257 }, (_, index) => ({ ...input.curves!.size[0], id: `key${index}` })) } })).toThrow()
+    const curves = { size: Array.from({ length: 257 }, (_, index) => ({ ...input.curves!.size[0], id: `key${index}`, sourceInUs: index })) }
+    expect(decodeCodeAsset(encodeCodeAsset({ ...input, curves })).curves).toEqual(curves)
+    // 曲线数量无限制，单份资产仍须满足真实的序列化字节预算。
+    const oversizedCurves = { size: Array.from({ length: Math.floor(CODE_ASSET_LIMITS.bytes / 256) + 1 }, (_, index) => ({ ...input.curves!.size[0], id: `key${index}`, sourceInUs: index, value: 'x'.repeat(256) })) }
+    expect(() => encodeCodeAsset({ ...input, curves: oversizedCurves })).toThrow('512KiB')
   })
   it('拒绝无效UTF-8、JSON和文件版本', () => {
     for (const bytes of [new Uint8Array(), new Uint8Array([255]), new TextEncoder().encode('{'), new TextEncoder().encode(JSON.stringify({ ...fixture(), version: 2 }))]) expect(() => decodeCodeAsset(bytes)).toThrow()

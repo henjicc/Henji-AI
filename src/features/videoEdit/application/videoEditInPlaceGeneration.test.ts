@@ -2,6 +2,7 @@ import { createVideoEditTestDocument as createVideoEditDocument } from '../../..
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type VideoEditDocument } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, videoEditFps } from '@/core/videoEdit/time'
 
 /*
  * 原地生成的执行编排：生成链路、取帧、收录与导入都换成替身，只验证编排本身——
@@ -101,7 +102,9 @@ describe('原地生成执行', () => {
     expect((await service.prepareVideoEditInPlace({ ...replace, referenceRoles: [] })).references).toEqual([])
     expect((await service.prepareVideoEditInPlace({ ...request(), referenceFrame: 0 })).references.map(value => value.role)).toEqual(['previous_tail', 'next_head'])
     await expect(service.startVideoEditInPlaceGeneration({ ...request(), referenceRoles: ['replaced_head'] })).rejects.toThrow('可用来源：previous_tail、next_head')
-    await expect(service.startVideoEditInPlaceGeneration({ ...request(), referenceFrame: 54000 })).rejects.toThrow('0 到 53999')
+    const frameLimit = Math.floor(videoEditFps(state.document.sequences[0].frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
+    for (const referenceFrame of [54000, frameLimit - 1]) expect((await service.prepareVideoEditInPlace({ ...request(), referenceRoles: [], referenceFrame })).references).toEqual([{ role: 'specified_time', sequenceId: request().sequenceId, frame: referenceFrame }])
+    await expect(service.startVideoEditInPlaceGeneration({ ...request(), referenceFrame: frameLimit })).rejects.toThrow(`0 到 ${frameLimit - 1}`)
     await expect(service.startVideoEditInPlaceGeneration({ ...request(), modelId: 'test-audio', intent: { action: 'generate_audio', frame: 0 }, referenceFrame: 0 })).rejects.toThrow('声音生成不接受参考画面')
     expect(observe).not.toHaveBeenCalled(); expect(generation.submit).not.toHaveBeenCalled(); expect(service.listVideoEditInPlaceJobs()).toEqual([])
   })
