@@ -1,4 +1,5 @@
 import { VideoEditReframeDialog } from '../panels/VideoEditReframeDialog'
+import { createLogger } from '@/core/logging'
 import { VideoEditTimelineKeyframes } from './VideoEditTimelineKeyframes'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { VideoEditDropPlacement } from '../application/videoEditDrop'
@@ -58,6 +59,7 @@ import { VideoEditNestDialog } from '../panels/VideoEditNestDialog'
 import { openVideoEditNestedClip, type VideoEditNestTarget } from '../application/videoEditNesting'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean }
+const dropLogger = createLogger('features.videoEdit.timeline.drop')
 /** 片段底色与描边（设计稿素材片段令牌）：画面、声音、文字/代码/图形/调整各一组；选中改强调描边。 */
 const CLIP_SURFACE = { video: { fill: 'bg-clip-video', line: 'border-clip-video-line' }, audio: { fill: 'bg-clip-audio', line: 'border-clip-audio-line' }, title: { fill: 'bg-clip-title', line: 'border-clip-title-line' } } as const
 const CLIP_SELECTED_LINE = 'border-accent-ring ring-1 ring-accent-ring'
@@ -445,24 +447,46 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       }}
       onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) { setHint(null); setTransitionHint(null); clearVideoEditEffectDropTarget() } }}
       onDrop={event => {
-        if (handleVideoEditEffectDrop(event, projectId, sequence.id, instance.selectedClipIds, onError)) return
-        const transitionKind = readVideoEditTransitionDrag(event.dataTransfer, projectId)
-        if (transitionKind) {
-          event.preventDefault(); event.stopPropagation(); setTransitionHint(null)
-          const at = transitionDrop(event, transitionKind)
-          if (at) void placeVideoEditTransition(projectId, sequence.id, at.pair, at.kind, at.alignment).then(id => { focusVideoEditPanel(projectId, 'timeline'); selectVideoEditTransition(projectId, id) }).catch(onError)
-          return
+        const requestId = crypto.randomUUID()
+        const context = { projectId, sequenceId: sequence.id }
+        const fail = (error: unknown): void => {
+          dropLogger.error('拖入时间线失败', error, { event: 'video_edit.drop.failed', requestId, context })
+          onError(error)
         }
-        if (!acceptsVideoEditDrop(event.dataTransfer)) return
-        event.preventDefault(); event.stopPropagation(); setHint(null)
-        const at = placement(event); if (!at) return
+        dropLogger.debug('时间线收到拖放', { event: 'video_edit.drop.received', requestId, context: { ...context, types: Array.from(event.dataTransfer.types), clientX: event.clientX, clientY: event.clientY } })
         try {
+          if (handleVideoEditEffectDrop(event, projectId, sequence.id, instance.selectedClipIds, fail)) {
+            dropLogger.debug('拖放交给效果处理', { event: 'video_edit.drop.routed', requestId, context: { ...context, kind: 'effect' } }); return
+          }
+          const transitionKind = readVideoEditTransitionDrag(event.dataTransfer, projectId)
+          if (transitionKind) {
+            event.preventDefault(); event.stopPropagation(); setTransitionHint(null)
+            const at = transitionDrop(event, transitionKind)
+            if (!at) throw new Error('请把过渡拖到未锁定轨道的片段边缘。')
+            dropLogger.debug('拖放交给过渡处理', { event: 'video_edit.drop.routed', requestId, context: { ...context, kind: 'transition' } })
+            void placeVideoEditTransition(projectId, sequence.id, at.pair, at.kind, at.alignment).then(id => { focusVideoEditPanel(projectId, 'timeline'); selectVideoEditTransition(projectId, id) }).catch(fail)
+            return
+          }
+          if (!acceptsVideoEditDrop(event.dataTransfer)) {
+            dropLogger.debug('时间线忽略不支持的拖放', { event: 'video_edit.drop.ignored', requestId, context }); return
+          }
+          event.preventDefault(); event.stopPropagation(); setHint(null)
+          const host = pointer.viewport.current
+          const rect = host?.getBoundingClientRect()
+          const at = placement(event)
+          dropLogger.debug('时间线拖放落点解析', { event: 'video_edit.drop.placement', requestId, context: { ...context, placement: at ?? null, left: rect?.left, top: rect?.top, scrollLeft: host?.scrollLeft, pixels, videoScroll: regionScroll.video, audioScroll: regionScroll.audio, viewportHeight: view.height } })
+          if (!at) throw new Error('拖入位置不在可用轨道上，请把素材拖到时间线轨道内。')
           const input = readVideoEditDrop(event.dataTransfer); const owner = instance; const sequenceId = sequence.id
-          void dropVideoEditInput(projectId, input, at, undefined, { sequenceId, createSequenceWhenEmpty: !sequence.clips.length }).catch(error => {
-            if (error instanceof VideoEditSequenceFrameRateRequired && listVideoEditInstances().includes(owner)) setPendingSequence({ owner, input, placement: at, sequenceId, settings: error.settings })
-            else onError(error)
+          dropLogger.debug('时间线拖放载荷解析完成', { event: 'video_edit.drop.parsed', requestId, context: { ...context, kind: input.kind } })
+          void dropVideoEditInput(projectId, input, at, undefined, { sequenceId, createSequenceWhenEmpty: !sequence.clips.length, requestId }).then(ids => {
+            dropLogger.debug('时间线拖放完成', { event: 'video_edit.drop.completed', requestId, context: { ...context, kind: input.kind, count: ids.length } })
+          }).catch(error => {
+            if (error instanceof VideoEditSequenceFrameRateRequired && listVideoEditInstances().includes(owner)) {
+              dropLogger.debug('拖放等待序列设置确认', { event: 'video_edit.drop.confirmation', requestId, context })
+              setPendingSequence({ owner, input, placement: at, sequenceId, settings: error.settings })
+            } else fail(error)
           })
-        } catch (error) { onError(error) }
+        } catch (error) { fail(error) }
       }}>
       <div className="relative" style={{ width, height: Math.max(view.height, TIMELINE_RULER_HEIGHT) }} data-video-edit-timeline-content>
         <div className="sticky top-0 z-sticky flex h-7 border-b border-line bg-panel" data-video-edit-ruler>

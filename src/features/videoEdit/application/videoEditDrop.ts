@@ -1,9 +1,10 @@
 import { useSettingsStore } from '@/stores/settingsStore'
+import { createLogger } from '@/core/logging'
 import { HENJI_DRAG_DATA_MIME, readHenjiDragData } from '@/contexts/dragDataTransfer'
 import { getPlatform } from '@/platform/runtime'
 import { importVideoEditSources, type VideoEditImportSource } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, setVideoEditView } from './videoEditService'
-import { placeVideoEditItems, makeVideoEditItemSequence, videoEditSequenceFromItem, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
+import { placeVideoEditItems, makeVideoEditItemSequence, videoEditSequenceFromItem, VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from '@/core/videoEdit/document'
 import { applyVideoEditTimelineEditResult } from '@/core/videoEdit/timelineEdits'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
@@ -20,6 +21,7 @@ import { assertVideoEditSequenceGraph } from '@/core/videoEdit/sequenceGraph'
 import { applyTitleTemplate, TITLE_TEMPLATE_DRAG_MIME, titleTemplateDragSchema } from './videoEditTitleTemplates'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
+const logger = createLogger('features.videoEdit.drop')
 export type VideoEditDropInput = { kind: 'title_template'; templateId: string } | { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
 /**
  * 正在从素材面板拖出的素材项。拖动经过时间线时浏览器不让读拖拽数据（只能读类型），
@@ -110,7 +112,22 @@ export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly stri
 /** `newTrack`: dropped above the top video track / below the bottom audio track — a new track of that kind is created (PR). */
 /** `mode`：落点方式，替换／放在顶层／添加到末尾来自节目监视器的拖放区（见 `VideoEditDropMode`）。 */
 export interface VideoEditDropPlacement { frame: number; track?: number; newTrack?: 'video' | 'audio'; mode?: VideoEditDropMode }
-export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: VideoEditDropPlacement, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void; signal?: AbortSignal } = {}): Promise<string[]> {
+interface VideoEditDropOptions { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void; signal?: AbortSignal; requestId?: string }
+export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: VideoEditDropPlacement, binId?: string, options: VideoEditDropOptions = {}): Promise<string[]> {
+  const requestId = options.requestId ?? crypto.randomUUID()
+  const context = { projectId, sequenceId: options.sequenceId, kind: input.kind, placement }
+  logger.debug('开始处理剪辑拖放', { event: 'video_edit.drop.apply.start', requestId, context })
+  try {
+    const ids = await applyVideoEditDropInput(projectId, input, placement, binId, { ...options, requestId })
+    logger.debug('剪辑拖放已写入', { event: 'video_edit.drop.apply.completed', requestId, context: { ...context, count: ids.length } })
+    return ids
+  } catch (error) {
+    if (error instanceof VideoEditSequenceFrameRateRequired) logger.debug('剪辑拖放需要确认序列设置', { event: 'video_edit.drop.apply.confirmation', requestId, context })
+    else logger.error('处理剪辑拖放失败', error, { event: 'video_edit.drop.apply.failed', requestId, context })
+    throw error
+  }
+}
+async function applyVideoEditDropInput(projectId: string, input: VideoEditDropInput, placement: VideoEditDropPlacement | undefined, binId: string | undefined, options: VideoEditDropOptions): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()
   let sequenceId = options.sequenceId ?? owner.activeSequenceId
@@ -122,7 +139,11 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   const filterTarget = owner.selection ? { sequenceId, clipId: owner.selection } : undefined
   if (input.kind === 'source_range') {
     if (!placement) throw new Error('请把源范围拖入时间线或节目监视器。')
-    return placeVideoEditSourceRange(projectId, input, sequenceId, placement)
+    logger.debug('源范围直接进入时间线编辑', { event: 'video_edit.drop.source_range.start', requestId: options.requestId, context: { projectId, sequenceId, component: input.component, inUs: input.inUs, outUs: input.outUs, placement } })
+    const ids = placeVideoEditSourceRange(projectId, input, sequenceId, placement)
+    if (!ids.length) throw new Error('源范围未生成片段，请检查源选区和目标轨道后重新拖入。')
+    logger.debug('源范围片段已提交', { event: 'video_edit.drop.source_range.completed', requestId: options.requestId, context: { projectId, sequenceId, count: ids.length } })
+    return ids
   }
   let selectedClip: string | undefined
   if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前剪辑，不能跨剪辑引用素材项。')

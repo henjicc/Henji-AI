@@ -2,6 +2,9 @@
 import React from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { resolve } from 'node:path'
+import { getPlatform } from '@/platform/runtime'
+import { clearLogEvents, getLogEvents } from '@/core/logging'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditTestProject } from '../application/videoEditDocumentTestKit'
 import { appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, undoVideoEdit, type VideoEditInstance } from '../application/videoEditService'
@@ -9,9 +12,22 @@ import { registerVideoEditSourcePresenter, updateVideoEditSource } from '../appl
 import { writeVideoEditSourceDrag } from '../application/videoEditSourceRange'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from '../application/videoEditDrop'
 import { VideoEditTimelineCanvas } from './VideoEditTimelineCanvas'
+import { chooseVideoEditMedia } from '../application/videoEditMedia'
+import { videoEditNativeMediaProbe } from '../application/videoEditMediaProbe'
+import { videoEditImportTask } from '../application/videoEditImportTask'
 import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, timelineLayout, timelineTrackAt } from './timelineGeometry'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock('mediabunny', () => ({
+  ALL_FORMATS: [], UrlSource: class {},
+  Input: class {
+    async getPrimaryVideoTrack() { return { codec: 'h264', displayWidth: 1920, displayHeight: 1080, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 256, bestGuessFrameRate: 60, frameRateIsConstant: true }) } }
+    async getPrimaryAudioTrack() { return { codec: 'aac', canDecode: async () => true } }
+    async getAudioTracks() { return [{ numberOfChannels: 2, sampleRate: 48000 }] }
+    async computeDuration() { return 10 }
+    dispose() {}
+  },
+}))
 
 /** dragover 的保护模式只能读 types；drop 才能读载荷。 */
 function sourceTransfer() {
@@ -22,9 +38,53 @@ function sourceTransfer() {
   return { transfer, getData, protect: (value: boolean) => { protectedMode = value } }
 }
 
+async function timelineSourceDrop(transfer: DataTransfer, header = false): Promise<ReturnType<typeof vi.fn>> {
+  const sequence = getActiveVideoEditSequence(owner); const onError = vi.fn()
+  const view = render(<VideoEditTimelineCanvas instance={owner} sequence={sequence} pixels={2} onError={onError} />)
+  const host = view.getByRole('region', { name: '时间线编辑区域' })
+  fireEvent.wheel(host, { deltaY: -80, ctrlKey: true, clientX: 500, clientY: 98 })
+  const row = timelineLayout(sequence, { viewportHeight: 300, split: TIMELINE_DEFAULT_SPLIT, scroll: { video: 80, audio: 0 } }).rows.find(value => value.track.index === 6)!
+  await act(async () => { fireEvent.drop(host, { clientX: 100 + (header ? 1 : TIMELINE_HEADER_WIDTH + 0.1), clientY: 50 + row.top + row.height / 2, dataTransfer: transfer }) })
+  return onError
+}
+
+it('先经导入文件对话框与实际探测链路导入，再从该源监视器拖入轨道6', async () => {
+  const path = resolve('fixture', 'monitor-control.mp4')
+  vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue([path])
+  vi.spyOn(getPlatform().system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue(resolve('fixture'))
+  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
+  vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
+  const probe = vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
+  const ids = await chooseVideoEditMedia(owner.document.id)
+  expect(probe).toHaveBeenCalledWith(path, expect.any(AbortSignal))
+  expect(ids).toHaveLength(1); expect(videoEditImportTask(owner.document.id)).toBeUndefined()
+  await updateVideoEditSource(owner.document.id, { itemId: ids[0], inUs: 500000, outUs: 1250000 })
+  const { transfer } = sourceTransfer(); writeVideoEditSourceDrag(transfer, owner.document.id, 'linked')
+  const onError = await timelineSourceDrop(transfer)
+  expect(onError).not.toHaveBeenCalled()
+  expect(getActiveVideoEditSequence(owner).clips).toMatchObject([{ track: 6, duration: 45, sourceInUs: 500000 }, { track: 7, duration: 45, sourceInUs: 500000 }])
+  const events = getLogEvents().filter(event => event.event.startsWith('video_edit.drop.'))
+  expect(events.map(event => event.event)).toEqual(['video_edit.drop.received', 'video_edit.drop.placement', 'video_edit.drop.parsed', 'video_edit.drop.apply.start', 'video_edit.drop.source_range.start', 'video_edit.drop.source_range.completed', 'video_edit.drop.apply.completed', 'video_edit.drop.completed'])
+  expect(new Set(events.map(event => event.requestId)).size).toBe(1)
+})
+
+it.each(['payload', 'locked', 'placement'] as const)('源拖放%s失败必须显示并记录错误，不能静默', async failure => {
+  const { transfer } = sourceTransfer(); writeVideoEditSourceDrag(transfer, owner.document.id, 'video')
+  if (failure === 'payload') transfer.setData('application/x-henji-video-edit-source-range', '{')
+  if (failure === 'locked') editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, tracks: sequence.tracks.map(track => track.index === 6 ? { ...track, locked: true } : track) })) }))
+  const onError = await timelineSourceDrop(transfer, failure === 'placement')
+  expect(onError).toHaveBeenCalledOnce()
+  expect(onError.mock.calls[0][0]).toBeInstanceOf(Error)
+  expect(getActiveVideoEditSequence(owner).clips).toEqual([])
+  expect(getLogEvents().some(event => event.event === 'video_edit.drop.failed' && event.level === 'error')).toBe(true)
+})
+
 let owner: VideoEditInstance
 let unregister: () => void
 beforeEach(async () => {
+  clearLogEvents()
   installHarnessNativeStorage()
   vi.stubGlobal('DragEvent', class extends MouseEvent {
     readonly dataTransfer: DataTransfer | null

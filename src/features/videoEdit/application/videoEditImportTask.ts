@@ -12,7 +12,14 @@ const progressListeners = new Set<() => void>()
 let progressRevision = 0
 export function subscribeVideoEditImport(listener: () => void): () => void { progressListeners.add(listener); return () => { progressListeners.delete(listener) } }
 export function videoEditImportRevision(): number { return progressRevision }
-function publishProgress(): void { progressRevision++; for (const listener of progressListeners) listener() }
+function publishProgress(): void {
+  progressRevision++
+  for (const listener of progressListeners) {
+    try { listener() } catch (error) {
+      logger.error('素材导入进度通知失败', error, { event: 'video_edit.media.queue.progress_notification_failed' })
+    }
+  }
+}
 const logger = createLogger('features.videoEdit.importQueue')
 export function subscribeVideoEditImportCompletion(listener: (projectId: string, imported: number, skipped: number) => void): () => void { completedListeners.add(listener); return () => { completedListeners.delete(listener) } }
 export function videoEditImportTask(projectId: string): VideoEditImportTask | undefined { return tasks.get(requireVideoEditInstance(projectId))?.task }
@@ -63,7 +70,11 @@ async function drain(queue: Queue): Promise<void> {
     tasks.delete(queue.owner); queue.dispose(); publishProgress()
     logger.info('素材导入队列结束', { event: 'video_edit.media.queue.completed', context: { projectId: queue.owner.document.id, requests: queue.task.requests, imported: queue.task.imported, skipped: queue.task.skipped, cancelled: queue.task.controller.signal.aborted } })
     try {
-      if (!queue.failed && !queue.task.controller.signal.aborted && listVideoEditInstances().includes(queue.owner)) for (const listener of completedListeners) listener(queue.owner.document.id, queue.task.imported, queue.task.skipped)
+      if (!queue.failed && !queue.task.controller.signal.aborted && listVideoEditInstances().includes(queue.owner)) for (const listener of completedListeners) {
+        try { listener(queue.owner.document.id, queue.task.imported, queue.task.skipped) } catch (error) {
+          logger.error('素材导入完成通知失败', error, { event: 'video_edit.media.queue.completion_notification_failed', context: { projectId: queue.owner.document.id } })
+        }
+      }
     } finally { for (const finish of finishers) finish() }
   }
 }
