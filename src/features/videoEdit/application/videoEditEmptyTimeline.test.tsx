@@ -46,7 +46,7 @@ it('新项目与保存重开允许零时间线，项目级命令仍可用，节�
   const view = render(<><VideoEditTimeline instance={owner} onError={onError} /><VideoEditPreview instance={owner} onError={onError} /><VideoEditEffectsPanel instance={owner} onError={onError} /><VideoEditLumetriPanel instance={owner} onError={onError} /><VideoEditTrackingPanel instance={owner} onError={onError} /><VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} /></>)
   expect(view.getAllByText('没有序列')).toHaveLength(4)
   expect(view.getByRole('button', { name: '新建序列' })).toBeTruthy()
-  expect(view.getByRole('button', { name: '立即导出' })).toHaveProperty('disabled', true)
+  expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)
   useNavigationStore.setState({ activeWorkspace: 'videoEdit' })
   expect(createHostContextSnapshot().videoEdit?.sequenceRef).toBeNull()
   expect(onError).not.toHaveBeenCalled()

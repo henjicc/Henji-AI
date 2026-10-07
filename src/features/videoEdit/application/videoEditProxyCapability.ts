@@ -17,5 +17,5 @@ export async function handleVideoEditProxyCapability(id: string, raw: unknown, c
   context.signal?.throwIfAborted()
   const cached = await getPlatform().videoProxy.lookup({ source: media.path, preset: input.preset })
   const verified = requireVideoEditInstance(target.projectId) === owner && owner.document.media.find(value => value.id === media.id)?.path === media.path && cached?.key === result.key && readVideoEditProxyState(target.projectId, media.id).status === 'ready'
-  return { resultRef: input.mediaRef, preset: input.preset, verified, message: '代理已创建，可开启代理看片；导出仍使用原片。' }
+  return { resultRef: input.mediaRef, preset: input.preset, verified, message: '代理已创建，可开启代理看片；导出默认用原片，可在导出设置中选择代理画面。' }
 }

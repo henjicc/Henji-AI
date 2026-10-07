@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { canEncodeVideo } from 'mediabunny'
-import { selectVideoEditExportEncoder } from './videoEditExportEncoder'
+import { selectVideoEditExportEncoder, videoEditExportVideoOptions } from './videoEditExportEncoder'
 vi.mock('mediabunny', () => ({ canEncodeVideo: vi.fn() }))
 const spec = { width: 7680, height: 4320, frameRate: 120, bitrate: 80_000_000 }
 beforeEach(() => { vi.mocked(canEncodeVideo).mockReset() })
@@ -18,4 +18,11 @@ it('普通规格保留H.264优先，设备不支持时尝试HEVC', async () => {
 it('两种编码都不支持时说明不可用规格与恢复方式', async () => {
   vi.mocked(canEncodeVideo).mockResolvedValue(false)
   await expect(selectVideoEditExportEncoder(spec)).rejects.toThrow('当前设备无法导出 7680 × 4320 · 120 帧视频。请降低导出分辨率或帧率后重试。')
+})
+
+it('显式选H264不自动换HEVC，探测完整CBR/软件配置；关键帧秒数进入编码选项', async () => {
+  vi.mocked(canEncodeVideo).mockResolvedValue(false)
+  await expect(selectVideoEditExportEncoder({ ...spec, codec: 'avc', bitrateMode: 'cbr', encoderPreference: 'software' })).rejects.toThrow('HEVC')
+  expect(canEncodeVideo).toHaveBeenCalledOnce(); expect(canEncodeVideo).toHaveBeenCalledWith('avc', { ...spec, bitrateMode: 'constant', hardwareAcceleration: 'prefer-software' })
+  expect(videoEditExportVideoOptions({ codec: 'hevc', videoBitrateMbps: 50, bitrateMode: 'cbr', encoderPreference: 'software', keyframeInterval: 2 })).toEqual({ codec: 'hevc', bitrate: 50_000_000, bitrateMode: 'constant', hardwareAcceleration: 'prefer-software', keyFrameInterval: 2 })
 })

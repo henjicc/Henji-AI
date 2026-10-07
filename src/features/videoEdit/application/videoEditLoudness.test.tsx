@@ -11,10 +11,13 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, videoEditExportRange, requireVideoEditInstance, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { applyVideoEditAudioGain, measureVideoEditClips } from './videoEditLoudness'
 import { VideoEditAudioGainDialog } from '../panels/VideoEditAudioGainDialog'
-import { cancelVideoEditExport, exportVideoEdit, videoEditExportTask } from './videoEditExport'
+import { cancelVideoEditExport, exportVideoEdit as exportWithSettings, videoEditExportTask } from './videoEditExport'
+
+import { videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
+const exportVideoEdit: typeof exportWithSettings = (id, target, background, signal, loudness) => { const owner = requireVideoEditInstance(id); const snapshot = getActiveVideoEditSequence(owner); return exportWithSettings(id, target, background, signal, loudness, { snapshot, range: videoEditExportRange(owner), settings: { ...videoEditSequenceExportSettings(snapshot), addToLibrary: false } }) }
 
 const boundary = vi.hoisted(() => ({ mixes: vi.fn(), encoded: [] as number[], normalized: false }))
 vi.mock('mediabunny', () => ({
@@ -37,6 +40,7 @@ const peak = (volume: number): VideoEditLoudnessMeasurement => ({ integratedLufs
 const pcm = new Map<string, number>()
 beforeEach(() => {
   installHarnessNativeStorage(); pcm.clear(); boundary.encoded = []; boundary.normalized = false; boundary.mixes.mockClear()
+  vi.stubGlobal('OffscreenCanvas', class { constructor(readonly width: number, readonly height: number) {} getContext() { return { fillRect() {}, drawImage() {}, fillStyle: '' } } })
   const platform = getPlatform()
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(false)

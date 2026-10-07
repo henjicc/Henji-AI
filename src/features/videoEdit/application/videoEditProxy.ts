@@ -42,19 +42,19 @@ function entry(projectId: string, mediaId: string): Entry | undefined {
 export function readVideoEditProxyState(projectId: string, mediaId: string): VideoEditProxyState {
   return { ...(entry(projectId, mediaId)?.state ?? { status: 'none', progress: 0, error: '' }) }
 }
-export function getVideoEditProxySources(projectId: string): Record<string, VideoProxyResult> {
-  if (!getVideoEditProxyPreference(projectId).enabled) return {}
+export function getVideoEditProxySources(projectId: string, forExport = false): Record<string, VideoProxyResult> {
+  if (!forExport && !getVideoEditProxyPreference(projectId).enabled) return {}
   const owner = requireVideoEditInstance(projectId)
   return Object.fromEntries(owner.document.media.flatMap(media => { const result = entry(projectId, media.id)?.result; return result ? [[media.id, result]] : [] }))
 }
 /** Before a decoder opens, recheck content identity and evicted cache files through the trusted host. */
-export async function verifiedVideoEditProxySources(projectId: string): Promise<Record<string, VideoProxyResult>> {
+export async function verifiedVideoEditProxySources(projectId: string, forExport = false): Promise<Record<string, VideoProxyResult>> {
   const owner = requireVideoEditInstance(projectId)
-  if (!getVideoEditProxyPreference(projectId).enabled) return {}
+  if (!forExport && !getVideoEditProxyPreference(projectId).enabled) return {}
   // A monitor can open without the project panel being mounted; restore its cache through the same state reader.
   for (const media of owner.document.media) if (media.kind === 'video') await ensureVideoEditProxyState(projectId, media.id)
   if (!listVideoEditInstances().includes(owner)) throw new Error('原剪辑已关闭。')
-  const sources = getVideoEditProxySources(projectId)
+  const sources = getVideoEditProxySources(projectId, forExport)
   const verified: Record<string, VideoProxyResult> = {}
   for (const [id, result] of Object.entries(sources)) {
     const current = entry(projectId, id)
@@ -65,7 +65,7 @@ export async function verifiedVideoEditProxySources(projectId: string): Promise<
     if (cached?.key === result.key) verified[id] = cached
     else { current.result = undefined; if (!current.controller) current.state = { status: 'none', progress: 0, error: '' }; publishVideoEdit() }
   }
-  return getVideoEditProxyPreference(projectId).enabled ? verified : {}
+  return forExport || getVideoEditProxyPreference(projectId).enabled ? verified : {}
 }
 export function videoEditProxySignature(projectId: string): string {
   return JSON.stringify(Object.entries(getVideoEditProxySources(projectId)).map(([id, result]) => [id, result.key]))

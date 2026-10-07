@@ -5,10 +5,12 @@ import { enqueueVideoEditExports, retryVideoEditExportJob, videoEditExportQueue,
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
 import { requireVideoEditInstance } from './videoEditService'
+import { patchVideoEditExportSettings, videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
+import { videoEditComposition } from '@/core/videoEdit/document'
 
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
   return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, range: job.range, settings: job.settings,
-    outputReady: Boolean(job.task?.output), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
+    outputReady: Boolean(job.task?.output), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
 }
 export async function handleVideoEditExportCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
   const definition = VIDEO_EDIT_EXPORT_CAPABILITIES.find(value => value.id === id)
@@ -30,6 +32,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     if (input.retryTaskId) {
       const job = videoEditExportQueue.require(input.retryTaskId)
       if (job.owner !== owner) throw new Error('导出项必须属于明确的原剪辑。')
+      if (context.callerGrant && job.settings.addToLibrary && !context.callerGrant.permissions.includes('assets:write')) throw new Error('此导出设置要求加入资产库，需要 assets:write 授权；请调整连接授权后重试。')
       context.signal?.throwIfAborted(); retryVideoEditExportJob(job.id); message = '失败项已重新加入队列。'
       submitted = [job]
     } else {
@@ -37,10 +40,13 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
         const projectId = value.documentRef?.id ?? documentRef.id
         const sequenceId = value.sequenceRef?.id
         if (sequenceId && !sequenceId.startsWith(`${projectId}:`)) throw new Error('sequenceRef 必须属于该项 documentRef，请使用完整序列引用。')
-        const preset = videoEditExportPresetLibrary.list().find(preset => preset.id === value.presetRef.id)
-        if (!preset) throw new Error('预设不存在，请列出 video_edit.export_preset 重新选择。')
-        return { projectId, sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset.id, range: value.range, ...(value.fit ? { settings: { ...preset.settings, fit: value.fit } } : {}) }
-      }) : [{ projectId: documentRef.id, ...(input.loudness ? { settings: { format: 'mp4' as const, width: owner.document.sequences.find(value => value.id === owner.activeSequenceId)!.width, height: owner.document.sequences.find(value => value.id === owner.activeSequenceId)!.height, fps: null, videoBitrateMbps: 8, audioBitrateKbps: 192, fit: 'fit' as const, loudness: input.loudness } } : {}) }]
+        const target = requireVideoEditInstance(projectId)
+        const preset = value.presetRef ? videoEditExportPresetLibrary.list().find(preset => preset.id === value.presetRef!.id) : undefined
+        if (value.presetRef && !preset) throw new Error('预设不存在，请列出 video_edit.export_preset 重新选择。')
+        const settings = value.settings ?? preset?.settings ?? videoEditSequenceExportSettings(videoEditComposition(target.document, sequenceId?.slice(projectId.length + 1) ?? target.activeSequenceId))
+        return { projectId, sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings }
+      }) : [{ projectId: documentRef.id, range: input.range, settings: input.settings ?? patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) }) }]
+      if (context.callerGrant && requests.some(value => value.settings.addToLibrary) && !context.callerGrant.permissions.includes('assets:write')) throw new Error('加入资产库需要 assets:write 授权；请在导出 settings 中设 addToLibrary=false，或调整连接授权后重试。')
       const jobs = await enqueueVideoEditExports(requests, context.signal)
       submitted = jobs
       verified = jobs.length > 0; message = verified ? `已加入 ${jobs.length} 项导出，请查询队列确认完成。` : '已取消文件选择，未加入任何导出。'

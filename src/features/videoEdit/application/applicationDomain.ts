@@ -32,7 +32,7 @@ import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, 
 import { trimVideoEditClip } from './videoEditTrimCapability'
 import { handleVideoEditExportCapability } from './videoEditExportCapability'
 import { videoEditQueuedExportTask } from './videoEditExportQueue'
-import { VideoEditExportPresetExecutor } from './videoEditExportPresetReflection'
+import { VideoEditExportPresetExecutor, VideoEditExportPresetMutationExecutor } from './videoEditExportPresetReflection'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
 import { chooseVideoEditFolders, VideoEditPartialImportFailure } from './videoEditFolderImport'
@@ -63,6 +63,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   registerExecutors(engine) {
     engine.registerCollectionExecutor(new TitleTemplateCollectionExecutor())
     engine.registerCollectionExecutor(new VideoEditExportPresetExecutor())
+    engine.registerMutationExecutor(new VideoEditExportPresetMutationExecutor())
     for (const entityType of ['video_edit.document', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
     engine.registerMutationExecutor(new VideoEditSourceExecutor())
     for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', 'video_edit.track', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
@@ -101,7 +102,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (proxy) return proxy
       const scenes = await handleVideoEditSceneCapability(definition.id, raw, context)
       if (scenes) return scenes
-      if (definition.id === reframeVideoEditCapability.id) return executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse(raw), context.signal)
+      if (definition.id === reframeVideoEditCapability.id) return executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse(raw), context.signal, context.callerGrant?.permissions)
       if (definition.id === generateVideoEditAudioDuckingCapability.id) return executeVideoEditAudioDuckingCapability(generateVideoEditAudioDuckingCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === analyzeVideoEditLumetriCapability.id) {
         const input = analyzeVideoEditLumetriCapability.inputSchema.parse(raw)
@@ -239,7 +240,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     })
   },
   resolvePersistenceParticipants(steps) {
-    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && step.target.kind !== 'video_edit.source' ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
     return [...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)

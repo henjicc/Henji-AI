@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
@@ -392,7 +393,7 @@ function createVideoEditMultitrackScene() {
         phase('导出音轨与期望互相关')
         const output = path.join(ROOT, `export-${Date.now()}.mp4`)
         await dialogs(app, [file], output)
-        await button(page, '导出视频').click()
+        await confirmVideoEditExport(page)
         await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 15000 })
         await button(page, '导出视频').waitFor({ state: 'visible', timeout: 300000 })
         const exported = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { windowsHide: true, encoding: 'utf8' }))

@@ -128,7 +128,7 @@ it('Worker 的结构化日志经会话写入应用日志，不当作请求回执
   await session.dispose()
 })
 
-it('代理只进入明确预览会话，切换或抓原片淘汰旧帧，导出不接收代理；声音保留原路径', async () => {
+it('代理进入明确预览或代理导出会话，默认导出与抓原片保持原片；声音保留原路径', async () => {
   const document = composition()
   const proxy = { path: 'D:/cache/proxy.mp4', key: 'a'.repeat(64), contentIdentity: 'b'.repeat(64), preset: '720p' as const, width: 1280, height: 720, bytes: 1024 }
   proxyState.sources = { pro: proxy }
@@ -146,5 +146,8 @@ it('代理只进入明确预览会话，切换或抓原片淘汰旧帧，导出�
   const exported = new VideoEditRenderSession(document); await exported.present(0)
   const exportInit = workers[1].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
   expect(exportInit.decode?.proxies).toEqual({}); expect(exportInit.document.media[0].sourceRevision).toBeUndefined()
-  await Promise.all([preview.dispose(), exported.dispose()])
+  const proxyExport = new VideoEditRenderSession(document, undefined, undefined, undefined, undefined, 'p', true); await proxyExport.present(0)
+  const proxyInit = workers[2].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
+  expect(proxyInit.decode?.proxies).toEqual({ pro: { ...proxy, path: 'url:' + proxy.path } }); expect(proxyInit.document.media[0].path).toBe('url:D:/prores.mov')
+  await Promise.all([preview.dispose(), exported.dispose(), proxyExport.dispose()])
 })

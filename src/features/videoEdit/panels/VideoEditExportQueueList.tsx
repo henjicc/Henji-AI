@@ -19,9 +19,10 @@ export function VideoEditExportQueueList(): React.ReactElement | null {
         <div className="min-w-0 flex-1"><p className="break-words text-sm text-text1">{job.name} · {job.presetName}</p>{job.state === 'running' ? <UiLoading size="xs" message={`正在导出 ${Math.round((job.task?.progress ?? 0) * 100)}%`} /> : <p role="status" className="text-xs text-text2">{labels[job.state]}</p>}{job.error && <UiError size="xs" align="start" message={job.error} />}</div>
         {['queued', 'running'].includes(job.state) && <UiButton size="sm" onClick={() => videoEditExportQueue.cancel(job.id)}>取消</UiButton>}
         {job.state === 'failed' && job.task?.state !== 'completed' && <UiButton size="sm" onClick={() => { try { retryVideoEditExportJob(job.id); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }}>重试</UiButton>}
-        {job.task?.output && <UiButton size="sm" disabled={collecting !== null} onClick={() => {
+        {job.task?.assetRef && <p className="text-xs text-text2">已加入资产库</p>}
+        {job.task?.output && !job.task.assetRef && <UiButton size="sm" disabled={collecting !== null} onClick={() => {
           setCollecting(job.id); setError(''); setNotice('')
-          void collectVideoEditOutput(job.task!.output!).then(() => setNotice('已加入资产库。')).catch(reason => setError(videoEditUserErrorMessage(reason))).finally(() => setCollecting(null))
+          void collectVideoEditOutput(job.task!.output!).then(asset => { job.task!.assetRef = { kind: 'asset', id: asset.id }; setNotice('已加入资产库。') }).catch(reason => setError(videoEditUserErrorMessage(reason))).finally(() => setCollecting(null))
         }}>{collecting === job.id ? '正在收录…' : '加入资产库'}</UiButton>}
       </div>)}
     </div>

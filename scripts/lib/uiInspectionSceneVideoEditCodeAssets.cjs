@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -120,7 +121,7 @@ function createVideoEditCodeAssetsScene() {
         evidence.publicFilter = checked(await callTool(client, 'import_video_edit_asset', operationEnvelope([importRead], { documentRef: project(target.id), assetRef: filterAssetRef, clipRef })))
         document = await saved(page, targetFile, value => value.sequences[0].clips.find(clip => clip.id === importedClip.id).effects?.length === 1); assert.equal(document.items.length, clipCount); assert.equal(document.media.length, mediaCount); assert.equal(document.sequences[0].clips.find(clip => clip.id === otherClip.id).effects?.length ?? 0, 0)
         await page.waitForFunction(revision => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedRevision === String(revision), document.revision)
-        const finalPreview = await png(page, path.join(root, 'final-preview-179.png')); await dialogs(app, [targetFile], output); const exportAt = performance.now(); await button(page, '导出视频').click()
+        const finalPreview = await png(page, path.join(root, 'final-preview-179.png')); await dialogs(app, [targetFile], output); const exportAt = performance.now(); await confirmVideoEditExport(page)
         let task
         for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: project(target.id) }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task)); const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs'); const metadata = mediaProbe(ffprobePath, output); const video = metadata.streams.find(stream => stream.codec_type === 'video')

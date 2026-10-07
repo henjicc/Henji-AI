@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { videoEditComposition, videoEditDuration, type VideoEditComposition } from '@/core/videoEdit/document'
-import { videoEditExportSettingsSchema, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import { resolveVideoEditExportSettings, videoEditSequenceExportSettings, videoEditExportPaths, VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { getPlatform } from '@/platform/runtime'
 import { exportVideoEdit, videoEditExportTask, type VideoEditExportTask } from './videoEditExport'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
@@ -10,7 +10,7 @@ import { holdVideoEditActivity, listVideoEditInstances, publishVideoEdit, requir
 import { videoEditMediaPathKey } from './videoEditMedia'
 
 const logger = createLogger('features.videoEdit.exportQueue')
-export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; range?: { startFrame: number; endFrame: number }; path?: string }
+export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string }
 export interface VideoEditExportJob {
   id: string; owner: VideoEditInstance; name: string; presetName: string; snapshot: VideoEditComposition; settings: VideoEditExportSettings
   range: { startFrame: number; endFrame: number }; path: string
@@ -102,10 +102,10 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
       if (!sequences) { sequences = new Map(); snapshots.set(owner, sequences) }
       let snapshot = sequences.get(sequenceId)
       if (!snapshot) { snapshot = structuredClone(videoEditComposition(owner.document, sequenceId)); sequences.set(sequenceId, snapshot) }
-      const preset = request.presetId ? videoEditExportPresetLibrary.list().find(value => value.id === request.presetId) : undefined
+      const requestedPreset = request.presetId ?? (!request.settings ? VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID : undefined)
+      const preset = requestedPreset ? videoEditExportPresetLibrary.list().find(value => value.id === requestedPreset) : undefined
       if (request.presetId && !preset) throw new Error('原预设不存在，请从 video_edit.export_preset 目录重新选择。')
-      const settings = videoEditExportSettingsSchema.parse(request.settings ?? preset?.settings ?? { format: 'mp4', width: snapshot.width, height: snapshot.height, fps: null, videoBitrateMbps: 8, audioBitrateKbps: 192, fit: 'fit', loudness: null })
-      if (settings.keepSequenceSize) { settings.width = snapshot.width; settings.height = snapshot.height; videoEditExportSettingsSchema.parse(settings) }
+      const settings = resolveVideoEditExportSettings(request.settings ?? (preset?.id === VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID ? videoEditSequenceExportSettings(snapshot) : preset!.settings), snapshot)
       const range = { ...(request.range ?? videoEditExportRange(owner, sequenceId)) }
       if (!Number.isSafeInteger(range.startFrame) || !Number.isSafeInteger(range.endFrame) || range.startFrame < 0 || range.endFrame <= range.startFrame || range.endFrame > videoEditDuration(snapshot)) throw new Error('导出范围必须是序列内有效的整数帧入出点（出点不包含）。')
       const release = holdVideoEditActivity(request.projectId, 'export'); releases.push(release)
@@ -113,26 +113,28 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
     })
     const platform = getPlatform()
     const paths = new Set<string>()
-    for (const job of jobs) {
+    for (const [index, job] of jobs.entries()) {
       signal?.throwIfAborted()
       if (!job.path) {
-        const path = await platform.system.dialog.save({ defaultPath: `${job.name} - ${job.presetName.replace(/[\\/:*?"<>|]/g, '-')}.${job.settings.format}`, filters: [{ name: job.settings.format.toUpperCase(), extensions: [job.settings.format] }] })
+        const path = await platform.system.dialog.save({ defaultPath: requests[index].fileName ?? `${job.name} - ${job.presetName.replace(/[\\/:*?"<>|]/g, '-')}.${job.settings.format}`, filters: [{ name: job.settings.format.toUpperCase(), extensions: [job.settings.format] }] })
         if (!path) { for (const release of releases) release(); return [] }
         job.path = path
       }
       if (!job.path.toLowerCase().endsWith(`.${job.settings.format}`)) throw new Error(`输出文件需要 .${job.settings.format} 扩展名。`)
-      if (await platform.system.fs.exists(job.path)) throw new Error('请选择新的文件名导出，避免覆盖已有文件。')
-      const key = videoEditMediaPathKey(job.path)
-      if (paths.has(key)) throw new Error('多个导出不能使用同一个输出文件，请选择不同文件名。')
-      paths.add(key)
+      for (const outputPath of videoEditExportPaths(job.path, job.settings)) {
+        if (await platform.system.fs.exists(outputPath)) throw new Error('请选择新的文件名导出，避免覆盖已有成片或字幕文件。')
+        const key = videoEditMediaPathKey(outputPath)
+        if (paths.has(key)) throw new Error('多个导出不能使用同一个输出文件，请选择不同文件名。')
+        paths.add(key)
+      }
     }
     for (const owner of new Set(jobs.map(job => job.owner))) await saveVideoEdit(owner.document.id)
     signal?.throwIfAborted()
     const owners = new Set(listVideoEditInstances())
     if (jobs.some(job => !owners.has(job.owner))) throw new Error('原剪辑已关闭，未加入导出。')
     assertApplicationWritesAllowed()
-    const occupied = new Set(videoEditExportQueue.list().filter(value => ['queued', 'running'].includes(value.state)).map(value => videoEditMediaPathKey(value.path)))
-    if (jobs.some(job => occupied.has(videoEditMediaPathKey(job.path)))) throw new Error('输出位置已被另一个导出占用，请选择不同文件名。')
+    const occupied = new Set(videoEditExportQueue.list().filter(value => ['queued', 'running'].includes(value.state)).flatMap(value => videoEditExportPaths(value.path, value.settings).map(videoEditMediaPathKey)))
+    if ([...paths].some(key => occupied.has(key))) throw new Error('输出位置已被另一个导出占用，请选择不同文件名。')
     videoEditExportQueue.append(jobs); return jobs
   } catch (error) { for (const release of releases) release(); throw error }
 }

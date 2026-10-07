@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -437,7 +438,7 @@ function createVideoEditFormatMatrixScene() {
             // ---- 导出
             evidence.currentPhase = `${sample.id}：导出`; store()
             const exportedAt = new Date().toISOString(); const exportCpu = nativeCpuSeconds(); const exportStart = performance.now()
-            await button(page, '导出视频').click()
+            await confirmVideoEditExport(page)
             await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 15000 })
             await button(page, '导出视频').waitFor({ state: 'visible', timeout: 600000 })
             const exportMs = performance.now() - exportStart; const exportCpuAfter = nativeCpuSeconds()

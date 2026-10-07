@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
@@ -215,7 +216,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
           await seek(page, frame)
           fs.writeFileSync(path.join(root, `preview-${frame}.png`), Buffer.from(await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => canvas.toDataURL('image/png').split(',')[1]), 'base64'))
         }
-        await dialogs(app, [file], output); const exportAt = performance.now(); await button(page, '导出视频').click()
+        await dialogs(app, [file], output); const exportAt = performance.now(); await confirmVideoEditExport(page)
         await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
         const { ffprobePath, ffmpegPath } = require('./mediaBinaries.cjs')
         const metadata = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { encoding: 'utf8', windowsHide: true }))

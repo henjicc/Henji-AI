@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -222,7 +223,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         phase('真实4K60音画图形代码滤镜转场MP4导出回读')
         const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
         const output = path.join(root, `mixed-4k60-${Date.now()}.mp4`); await dialogs(app, [file], output)
-        const began = performance.now(); await button(page, '导出视频').click()
+        const began = performance.now(); await confirmVideoEditExport(page)
         let task
         for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))

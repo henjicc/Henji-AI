@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
@@ -258,7 +259,7 @@ function createVideoEditProbeScene() {
           await button(page, '播放／暂停').click(); await page.waitForFunction(last => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(last), 2 * spec.fps - 1, { timeout: 20000 })
           const frames = await page.evaluate(() => { window.__videoObserver.disconnect(); return window.__videoEvidence })
           const output = path.join(root, `${spec.width}-${spec.fps}-export-${Date.now()}.mp4`); await dialogs(app, [file], output)
-          const exportStart = performance.now(); await button(page, '导出视频').click()
+          const exportStart = performance.now(); await confirmVideoEditExport(page)
           await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
           const exportMs = performance.now() - exportStart; const metadata = probe(output)
           assert.ok(metadata.streams.some(track => track.codec_type === 'audio')); assert.ok(Math.abs(Number(metadata.format.duration) - 2) < 0.1)
@@ -300,7 +301,7 @@ function createVideoEditProbeScene() {
           await page.locator('[data-video-edit-export-range]').waitFor({ state: 'visible' })
           const rangeLabel = await page.locator('[data-video-edit-export-range]').textContent()
           const rangeOutput = path.join(root, `range-${Date.now()}.mp4`); await dialogs(app, [], rangeOutput)
-          const startedAt = performance.now(); await button(page, '导出视频').click()
+          const startedAt = performance.now(); await confirmVideoEditExport(page)
           await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
           const rangeMs = performance.now() - startedAt; const metadata = probe(rangeOutput); const video = metadata.streams.find(track => track.codec_type === 'video')
           assert.equal(Number(video.nb_frames), 61, '入点30到出点90（含）共61帧'); assert.ok(Math.abs(Number(metadata.format.duration) - 61 / fps) < 0.05, `范围导出时长：${metadata.format.duration}`)
@@ -359,7 +360,7 @@ function createVideoEditProbeScene() {
         assert.equal(focused.executionState, 'completed', JSON.stringify(focused)); await presented(page, 0)
         await page.waitForFunction(() => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.width === 1080 && canvas.height === 1920 })
         await capture('video-edit-portrait-sequence')
-        await button(page, '导出视频').click(); await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible' }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
+        await confirmVideoEditExport(page); await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible' }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
         const fractionalMetadata = probe(fractionalOutput)
         const fractionalVideo = fractionalMetadata.streams.find(track => track.codec_type === 'video'); const monoAudio = fractionalMetadata.streams.find(track => track.codec_type === 'audio')
         assert.equal(fractionalVideo.width, 1080); assert.equal(fractionalVideo.height, 1920); assert.equal(fractionalVideo.avg_frame_rate, '30000/1001'); assert.equal(Number(fractionalVideo.nb_frames), 60)
@@ -374,7 +375,7 @@ function createVideoEditProbeScene() {
         {
           const output = path.join(root, `during-export-${Date.now()}.mp4`); await dialogs(app, [path.join(root, `${specs[0].width}-${specs[0].fps}.henji-video`)], output)
           const before = JSON.parse(projectText()).sequences[1].clips.length
-          await button(page, '导出视频').click(); await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 })
+          await confirmVideoEditExport(page); await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 })
           // 3.5: 文字 lives in the timeline toolbar; the project panel also lists a text item named 文字.
           await button(page.locator('[data-video-edit-panel="timeline"]').first(), '文字').click()
           await savedProject(page, multiPath, document => document.sequences[1].clips.length === before + 1, '导出期间编辑保存')

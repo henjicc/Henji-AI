@@ -94,3 +94,13 @@ it('解码打开前重新核对内容身份与缓存淘汰，同路径原片改�
   expect(readVideoEditProxyState(id, mediaId).status).toBe('none')
   expect(owner.document).toBe(before)
 })
+
+it('显式代理导出独立于看片开关，仍核验已有缓存；默认导出保持原片', async () => {
+  const { id, mediaId } = await fixture(); await refreshVideoEditProxies(id)
+  expect(getVideoEditProxyPreference(id).enabled).toBe(false)
+  expect(await verifiedVideoEditProxySources(id)).toEqual({})
+  expect((await verifiedVideoEditProxySources(id, true))[mediaId]).toEqual(result)
+  expect(getVideoEditProxyPreference(id).enabled).toBe(false)
+  vi.mocked(getPlatform().videoProxy.lookup).mockResolvedValueOnce(null)
+  expect(await verifiedVideoEditProxySources(id, true)).toEqual({})
+})

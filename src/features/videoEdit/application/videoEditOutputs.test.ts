@@ -11,14 +11,20 @@ import { createApplicationCapabilitySession } from '@/features/application-contr
 import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { resetCanvasApplicationStateForTests } from '@/features/canvas/application/canvasApplicationService'
-import { closeVideoEditProject, editVideoSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView } from './videoEditService'
+import { closeVideoEditProject, getActiveVideoEditSequence, videoEditExportRange, requireVideoEditInstance, editVideoSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView } from './videoEditService'
 import { appendVideoEditCaptionText, exportVideoEditSubtitles } from './videoEditTimedContent'
 import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './videoEditProgramCapture'
 import { collectVideoEditOutput, publishVideoEditOutput } from './videoEditOutputs'
-import { cancelVideoEditExport, exportVideoEdit, videoEditExportTask } from './videoEditExport'
+import { cancelVideoEditExport, exportVideoEdit as exportWithSettings, videoEditExportTask } from './videoEditExport'
+import { videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import { reopenVideoEdit } from './videoEditDocumentTestKit'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 
+// Publication tests explicitly exclude normalization/collection, which have their own boundary tests.
+const exportVideoEdit: typeof exportWithSettings = async (id, target, background, signal, loudness, options) => {
+  const owner = requireVideoEditInstance(id); const snapshot = getActiveVideoEditSequence(owner)
+  return exportWithSettings(id, target, background, signal, loudness, options ?? { snapshot, range: videoEditExportRange(owner), settings: { ...videoEditSequenceExportSettings(snapshot), loudness: null, addToLibrary: false, captionMode: 'burn' } })
+}
 // Only codec/pixel and native I/O boundaries are replaced. Services, ownership,
 // capability permission/registration, collection and project persistence are real.
 const encoder = vi.hoisted(() => ({ finalize: vi.fn(), cancel: vi.fn(), render: vi.fn(), mix: vi.fn(), dispose: vi.fn(), failConstructor: false, videoTimestamps: [] as number[] }))
@@ -44,6 +50,7 @@ function record(path: string, kind: 'image' | 'video'): AssetRecord {
 beforeEach(() => {
   installHarnessNativeStorage(); resetCanvasApplicationStateForTests(); vi.stubGlobal('Blob', NativeBlob); files.clear(); media.clear(); assets.clear(); encoder.failConstructor = false; encoder.videoTimestamps = []
   encoder.finalize.mockReset().mockResolvedValue(undefined); encoder.cancel.mockReset().mockResolvedValue(undefined); encoder.render.mockReset().mockResolvedValue({ singleFrameReads: 0 }); encoder.mix.mockReset().mockResolvedValue({}); encoder.dispose.mockReset().mockResolvedValue(undefined)
+  vi.stubGlobal('OffscreenCanvas', class { constructor(readonly width: number, readonly height: number) {} getContext() { return { fillRect() {}, drawImage() {}, fillStyle: '' } } })
   const platform = getPlatform()
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/output.henji-video')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })

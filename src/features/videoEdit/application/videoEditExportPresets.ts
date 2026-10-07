@@ -38,5 +38,15 @@ export class VideoEditExportPresetLibrary {
     const value = videoEditExportPresetSchema.parse({ id: crypto.randomUUID(), name, settings })
     this.replace([...this.presets, value]); return value
   }
+  update(id: string, patch: Partial<Pick<VideoEditExportPreset, 'name' | 'settings'>>): VideoEditExportPreset {
+    const previous = this.presets.find(value => value.id === id)
+    if (!previous) throw new Error('只能修改本机自定义预设，内置预设不可修改。')
+    const next = videoEditExportPresetSchema.parse({ ...previous, ...patch })
+    this.replace(this.presets.map(value => value.id === id ? next : value)); return next
+  }
+  remove(id: string): void {
+    if (!this.presets.some(value => value.id === id)) throw new Error('只能删除本机自定义预设，内置预设不可删除。')
+    this.replace(this.presets.filter(value => value.id !== id))
+  }
 }
 export const videoEditExportPresetLibrary = new VideoEditExportPresetLibrary()

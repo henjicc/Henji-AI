@@ -34,7 +34,7 @@ export class VideoEditRenderSession {
     }
   }
   private proxies: Record<string, VideoProxyResult> = {}
-  private async selectProxies(original = false): Promise<void> { this.proxies = this.proxyProjectId && !original ? await verifiedVideoEditProxySources(this.proxyProjectId) : {} }
+  private async selectProxies(original = false): Promise<void> { this.proxies = this.proxyProjectId && !original ? await verifiedVideoEditProxySources(this.proxyProjectId, this.exportProxies) : {} }
   private proxySources(): Record<string, VideoProxyResult> { return Object.fromEntries(Object.entries(this.proxies).map(([id, result]) => [id, { ...result, path: toFetchableMediaUrl(result.path) }])) }
   private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path), ...(this.proxies[media.id] ? { sourceRevision: `${media.sourceRevision ?? ''}:proxy:${this.proxies[media.id].key}` } : {}) })), ...(document.lumetriLuts ? { lumetriLuts: document.lumetriLuts.map(asset => ({ ...asset, path: toFetchableMediaUrl(asset.path) })) } : {}) } }
   /** The native decoder reads original local files; the worker only sees fetchable URLs, so it gets this map too. */
@@ -62,7 +62,7 @@ export class VideoEditRenderSession {
       return { nativeAvailable: false, ...(forced ? { forced } : {}) }
     }
   }
-  constructor(private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private readonly proxyProjectId?: string) {
+  constructor(private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private readonly proxyProjectId?: string, private readonly exportProxies = false) {
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
     this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage>) => {

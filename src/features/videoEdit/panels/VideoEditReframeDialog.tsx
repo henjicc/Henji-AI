@@ -36,7 +36,7 @@ export function VideoEditReframeDialog({ target, onClose }: { target: VideoEditR
     finally { if (controller.current === current) { controller.current = null; setBusy(false) } }
   }
   const outputSize = target.clipId && sequence ? sequence : size
-  const presets = videoEditExportPresetLibrary.list().filter(preset => preset.settings.format === 'mp4' && (preset.settings.keepSequenceSize || preset.settings.width * outputSize.height === preset.settings.height * outputSize.width))
+  const presets = videoEditExportPresetLibrary.list().filter(preset => preset.settings.format === 'mp4' && (preset.settings.followSequence.resolution || preset.settings.width * outputSize.height === preset.settings.height * outputSize.width))
   return <UiModal isOpen title={target.clipId ? '自动重构片段' : '自动重构序列'} onClose={close} footer={<>
     <UiButton onClick={close}>{busy ? '取消操作' : result ? '完成' : '取消'}</UiButton>
     {!result && <UiButton variant="primary" disabled={busy || !clips.length} onClick={() => { void run() }}>{target.clipId ? '生成构图' : '创建并重构'}</UiButton>}

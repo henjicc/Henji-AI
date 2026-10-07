@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -63,7 +64,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         const frameResult = await callTool(client, 'collect_video_edit_output', operationEnvelope([readFrame], { documentRef: projectRef, kind: 'frame', frame: 90 }))
         assert.equal(frameResult.executionState, 'completed', JSON.stringify(frameResult)); assert.equal(frameResult.verificationState, 'verified', JSON.stringify(frameResult)); assert.equal(frameResult.result.data.resultRef.id, selected.id)
         evidence.publicFrame = frameResult; await clickOutsideFloatingAssets(page); await page.locator('[data-asset-floating-panel]').waitFor({ state: 'hidden' })
-        await dialogs(app, [file], exportPath); const exportAt = performance.now(); await button(page, '导出视频').click()
+        await dialogs(app, [file], exportPath); const exportAt = performance.now(); await confirmVideoEditExport(page)
         let task
         for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))

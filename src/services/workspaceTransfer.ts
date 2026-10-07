@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { videoEditComposition, type VideoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
-import { VIDEO_EDIT_EXPORT_PRESETS } from '@/core/videoEdit/exportPresets'
+import { VIDEO_EDIT_EXPORT_PRESETS, patchVideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { getPlatform } from '@/platform/runtime'
@@ -90,7 +90,7 @@ export async function sendVideoEditToCanvas(input: VideoEditCanvasTransfer, sign
           const platform = getPlatform(); const folder = await outputFolder(owner)
           assertSource(); await platform.system.fs.mkdir(folder, { recursive: true }); assertSource()
           const path = await platform.system.paths.join(folder, `clip-${crypto.randomUUID()}.${prepared.kind === 'audio' ? 'wav' : 'mp4'}`)
-          const settings = { ...VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:master')!.settings, format: prepared.kind === 'audio' ? 'wav' as const : 'mp4' as const, width: prepared.snapshot.width, height: prepared.snapshot.height }
+          const settings = patchVideoEditExportSettings(VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:master')!.settings, { format: prepared.kind === 'audio' ? 'wav' : 'mp4', width: prepared.snapshot.width, height: prepared.snapshot.height, addToLibrary: false, captionMode: prepared.kind === 'audio' ? 'none' : 'burn' })
           assertSource()
           const exported = await exportVideoEdit(input.projectId, path, false, signal, undefined, { ...prepared, settings, signal })
           assertSource()

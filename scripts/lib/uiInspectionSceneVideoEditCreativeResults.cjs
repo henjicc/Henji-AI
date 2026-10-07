@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -236,7 +237,7 @@ function createVideoEditCreativeResultsScene(context) {
         await playhead(300); await presented(page, 300)
         const reopenedFrame = await png(page, path.join(root, 'program-300-reopened.png'))
         evidence.reopenDifference = await pixelDifference(afterImage.file, reopenedFrame.file); assert.ok(evidence.reopenDifference.equal)
-        const exportPath = path.join(root, `creative-${Date.now()}.mp4`); await dialogs(app, [], exportPath); at = performance.now(); await button(page, '导出视频').click()
+        const exportPath = path.join(root, `creative-${Date.now()}.mp4`); await dialogs(app, [], exportPath); at = performance.now(); await confirmVideoEditExport(page)
         let task
         for (let attempt = 0; attempt < 6000; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))

@@ -9,7 +9,7 @@ const input = z.object({ documentRef, mediaRef, preset: videoProxyPresetSchema.d
 const output = z.object({ resultRef: mediaRef, preset: videoProxyPresetSchema, verified: z.boolean(), message: z.string() }).strict()
 export const generateVideoEditProxyCapability = defineApplicationCapability({
   id: 'generate_video_edit_proxy', title: '生成视频素材的剪辑代理',
-  description: '免费本地后台转码视频素材为720p（默认）或540p的低分辨率代理，支持取消。保留原片每帧时间戳与帧率，最多一百万帧；相同原片与预设复用已有代理。只写程序缓存，不改原素材或剪辑内容。状态从video_edit.media.proxy_state读取；随后通过通用video_edit.document.proxy_preference.enabled切换节目和源监视器看片，导出、声音、跟踪与智能区域分析始终用原片。',
+  description: '免费本地后台转码视频素材为720p（默认）或540p的低分辨率代理，支持取消。保留原片每帧时间戳与帧率，最多一百万帧；相同原片与预设复用已有代理。只写程序缓存，不改原素材或剪辑内容。状态从video_edit.media.proxy_state读取；随后通过通用video_edit.document.proxy_preference.enabled切换节目和源监视器看片，导出默认用原片，可在 export_video_edit.settings.useProxies 显式选择已有代理画面；声音、跟踪与智能区域分析始终用原片。',
   version: 1, domain: 'video_edit', aliases: ['创建代理', '代理剪辑', 'create proxies'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write',
   destructive: false, supportsPreview: false, supportsUndo: false, idempotent: true, timeoutMs: 600000, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.media'], producesRefs: ['video_edit.media'],
   inputSchema: input, outputSchema: output,

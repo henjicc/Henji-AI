@@ -1,3 +1,4 @@
+const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -315,7 +316,7 @@ function createVideoEditExportNativeScene() {
         const exportUi = async (document, output, { cancelAt } = {}) => {
           const startedAt = new Date().toISOString(); const cpuBefore = nativeCpuSeconds(); const metricsBefore = await app.evaluate(({ app }) => app.getAppMetrics())
           const started = performance.now()
-          await button(page, '导出视频').click()
+          await confirmVideoEditExport(page)
           await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 15000 })
           if (cancelAt !== undefined) {
             await page.waitForFunction(percent => { const node = [...document.querySelectorAll('button')].find(button => /^取消导出/.test(button.textContent ?? '')); return node && Number(/(\d+)%/.exec(node.textContent)?.[1] ?? 0) >= percent }, cancelAt, { timeout: 120000 })

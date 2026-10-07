@@ -6,26 +6,32 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { VIDEO_EDIT_EXPORT_PRESETS } from '@/core/videoEdit/exportPresets'
+import { VIDEO_EDIT_EXPORT_PRESETS, patchVideoEditExportSettings, videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
+import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { appendVideoEditClip, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange } from './videoEditService'
+import { appendVideoEditClip, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange } from './videoEditService'
 import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
+import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'
 
-const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[] }))
+const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][] }))
 vi.mock('mediabunny', () => ({
   canEncodeVideo: vi.fn(async () => true),
-  ALL_FORMATS: [], Input: class {}, UrlSource: class {},
+  ALL_FORMATS: [], Input: class { dispose() {} async getPrimaryVideoTrack() { return { codec: 'avc', displayWidth: 1920, displayHeight: 1080, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 4, bestGuessFrameRate: 30, frameRateIsConstant: true }) } } async getPrimaryAudioTrack() { return { codec: 'aac', numberOfChannels: 2, sampleRate: 48000, canDecode: async () => true } } async getAudioTracks() { return [await this.getPrimaryAudioTrack()] } async computeDuration() { return .2 } }, UrlSource: class {},
   Mp4OutputFormat: class { constructor() { encoding.formats.push('mp4') } }, AdtsOutputFormat: class { constructor() { encoding.formats.push('aac') } }, WavOutputFormat: class { constructor() { encoding.formats.push('wav') } }, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoding.finalize; async cancel() {} },
   CanvasSource: class { constructor(_canvas: unknown, options: unknown) { encoding.videoOptions.push(options) } async add(time: number) { encoding.videoTimes.push(time) } },
-  AudioBufferSource: class { async add(buffer: AudioBuffer) { encoding.audio.push(buffer.length) } },
+  AudioBufferSource: class { constructor(options: unknown) { encoding.audioOptions.push(options) } async add(buffer: AudioBuffer) { encoding.audio.push(buffer.length) } },
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
-  canvas = {}; constructor(private composition: VideoEditComposition) {}
+  canvas = {}; constructor(private composition: VideoEditComposition, ...options: unknown[]) { encoding.pictures.push(composition); encoding.rendererOptions.push(options) }
+  updateDocument(document: VideoEditComposition) { this.composition = document }
+  async renderBitmap() { return { bitmap: { width: 640, height: 360, close() {} } } }
   setSmartRegions() {} setTracks() {} async dispose() {}
   async render(frame: number) { encoding.rendered.push([this.composition.name, frame]); return { singleFrameReads: 0 } }
   async mixAudio(_time: number, duration: number) { return new AudioBuffer({ numberOfChannels: this.composition.channels, sampleRate: this.composition.sampleRate, length: Math.round(duration * this.composition.sampleRate) }) }
@@ -34,7 +40,7 @@ const file = (name: string): string => path.resolve(path.sep, 'fixture', name)
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail }); return { promise, resolve, reject } }
 beforeEach(() => {
   vi.mocked(canEncodeVideo).mockReset().mockResolvedValue(true)
-  installHarnessNativeStorage(); encoding.rendered = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
+  installHarnessNativeStorage(); encoding.rendered = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.audioOptions = []; encoding.pictures = []; encoding.rendererOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
   videoEditExportQueue.clearFinished(); videoEditExportPresetLibrary.replace([])
   const platform = getPlatform()
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
@@ -44,6 +50,10 @@ beforeEach(() => {
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue(file('output.mp4'))
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue(file(''))
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
+  const assets = new Map<string, AssetRecord>()
+  vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => { const asset: AssetRecord = { id: crypto.randomUUID(), filePath: input.filePath, mediaType: input.mediaType, displayName: input.displayName ?? '成片', displayUrl: 'henji-media://local/output', source: 'video-edit', mimeType: 'video/mp4', sizeBytes: 5, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64), width: 1920, height: 1080, durationSeconds: 1, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, createdAt: 1, updatedAt: 1, lastUsedAt: null, tags: [], libraryIds: [] }; assets.set(asset.id, asset); return asset })
+  vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => assets.get(id)!)
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({ fillRect() {}, drawImage() {}, fillStyle: '', measureText: (text: string) => ({ width: text.length * 7 }) }) as unknown as CanvasRenderingContext2D)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 5, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64) })
   vi.stubGlobal('OffscreenCanvas', class { constructor(readonly width: number, readonly height: number) {} getContext() { return { fillStyle: '', fillRect() {}, drawImage: encoding.draw } } })
   vi.stubGlobal('AudioBuffer', class { readonly length: number; readonly numberOfChannels: number; private planes: Float32Array[]; constructor({ numberOfChannels, length }: { numberOfChannels: number; length: number }) { this.length = length; this.numberOfChannels = numberOfChannels; this.planes = Array.from({ length: numberOfChannels }, () => new Float32Array(length)) } getChannelData(channel: number) { return this.planes[channel] } })
@@ -102,8 +112,8 @@ it('全部路径与范围确认后才批量提交；取消第二次选择不产�
 })
 it('正式编码固定序列快照；输出帧率只影响画面；历史队列回执仍可收录，待处理阻止关闭', async () => {
   const owner = await project(); const projectId = owner.document.id; const gate = deferred<void>(); encoding.finalize.mockImplementationOnce(() => gate.promise)
-  const settings = { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, fps: 60, loudness: null }
-  const jobs = await enqueueVideoEditExports([{ projectId, settings, path: file('a.mp4'), range: { startFrame: 1, endFrame: 3 } }, { projectId, settings: { ...settings, format: 'wav' }, path: file('b.wav') }])
+  const settings = { ...VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:douyin')!.settings, fps: 60, loudness: null, addToLibrary: false }
+  const jobs = await enqueueVideoEditExports([{ projectId, settings, path: file('a.mp4'), range: { startFrame: 1, endFrame: 3 } }, { projectId, settings: patchVideoEditExportSettings(settings, { format: 'wav' }), path: file('b.wav') }])
   editVideoSequence(projectId, owner.activeSequenceId, sequence => ({ ...sequence, name: '后续修改' }))
   await vi.waitFor(() => expect(encoding.finalize).toHaveBeenCalledOnce())
   await expect(runApplicationCloseGuards()).rejects.toThrow('导出'); gate.resolve(); await videoEditExportQueue.wait(jobs[1].id)
@@ -134,20 +144,37 @@ it('并发提交同一个输出位置只有一项被接受；提交前取消不�
   const rejected = expect(submission).rejects.toThrow('取消选择'); cancel.abort(new Error('取消选择')); choice.resolve(file('cancelled.mp4')); await rejected
   expect(videoEditExportQueue.list()).toHaveLength(1); await expect(closeVideoEditProject(projectId)).resolves.toBeUndefined()
 })
-it('对话框选择预设、折叠高级、保存自定义并加入两份；立即导出取消文件选择保持对话框', async () => {
+async function select(view: ReturnType<typeof render>, label: string, option: string): Promise<void> {
+  fireEvent.click(view.getByRole('button', { name: label }))
+  fireEvent.click(await view.findByRole('option', { name: option }))
+}
+it('面板默认跟随、解锁变自定义，保存重命名删除；队列和立即导出使用相同设置', async () => {
   const owner = await project(); const close = vi.fn(); const ui = render(<VideoEditExportDialog projectId={owner.document.id} onClose={close} />)
-  expect(ui.queryByLabelText('导出宽度')).toBeNull()
-  fireEvent.change(ui.getByLabelText('导出预设'), { target: { value: 'builtin:douyin' } })
-  fireEvent.click(ui.getByRole('button', { name: '高级设置' })); expect((ui.getByLabelText('导出宽度') as HTMLInputElement).value).toBe('1080')
-  fireEvent.change(ui.getByLabelText('自定义预设名称'), { target: { value: '自定义竖版' } }); fireEvent.click(ui.getByRole('button', { name: '保存' })); expect(videoEditExportPresetLibrary.custom()).toHaveLength(1)
-  await act(async () => { fireEvent.click(ui.getByRole('button', { name: '加入队列' })) }); await waitFor(() => expect(videoEditExportQueue.list()).toHaveLength(1)); expect(close).not.toHaveBeenCalled()
+  expect(ui.getByRole('button', { name: '导出预设' }).textContent).toContain('与序列一致')
+  expect(ui.getByRole('button', { name: '导出分辨率' })).toHaveProperty('disabled', true)
+  fireEvent.click(ui.getByRole('button', { name: '分辨率跟随序列' }))
+  expect(ui.getByRole('button', { name: '导出预设' }).textContent).toContain('自定义')
+  await select(ui, '导出分辨率', '1080 × 1920')
+  fireEvent.click(ui.getByRole('button', { name: '管理导出预设' })); fireEvent.click(ui.getByRole('button', { name: '保存当前设置为预设' }))
+  fireEvent.change(ui.getByLabelText('自定义预设名称'), { target: { value: '自定义竖版' } }); fireEvent.click(ui.getByRole('button', { name: '保存' }))
+  expect(videoEditExportPresetLibrary.custom()[0].name).toBe('自定义竖版')
+  await waitFor(() => expect(ui.queryByRole('dialog', { name: '保存导出预设' })).toBeNull()); await new Promise(resolve => setTimeout(resolve, 200))
+  fireEvent.click(ui.getByRole('button', { name: '管理导出预设' })); fireEvent.click(await ui.findByRole('button', { name: '重命名' }))
+  fireEvent.change(ui.getByLabelText('自定义预设名称'), { target: { value: '新名称' } }); fireEvent.click(ui.getByRole('button', { name: '保存' }))
+  expect(videoEditExportPresetLibrary.custom()[0].name).toBe('新名称')
+  await waitFor(() => expect(ui.getByRole('button', { name: '加入队列' })).toHaveProperty('disabled', false))
+  await act(async () => fireEvent.click(ui.getByRole('button', { name: '加入队列' })))
   await act(async () => { await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id) })
-  fireEvent.change(ui.getByLabelText('导出预设'), { target: { value: 'builtin:bilibili' } }); vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('second.mp4'))
-  await act(async () => { fireEvent.click(ui.getByRole('button', { name: '加入队列' })) }); await act(async () => { await videoEditExportQueue.wait(videoEditExportQueue.list()[1].id) })
-  expect(videoEditExportQueue.list().map(job => [job.settings.width, job.settings.height])).toEqual([[1080, 1920], [1920, 1080]])
-  vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(null); await act(async () => { fireEvent.click(ui.getByRole('button', { name: '立即导出' })) }); expect(close).not.toHaveBeenCalled()
-  vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('immediate.mp4')); await act(async () => { fireEvent.click(ui.getByRole('button', { name: '立即导出' })) })
-  await act(async () => { await videoEditExportQueue.wait(videoEditExportQueue.list()[2].id) }); await waitFor(() => expect(close).toHaveBeenCalledOnce())
+  vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(null)
+  await act(async () => fireEvent.click(ui.getByRole('button', { name: '导出' }))); expect(close).not.toHaveBeenCalled()
+  vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('immediate.mp4'))
+  await act(async () => fireEvent.click(ui.getByRole('button', { name: '导出' })))
+  expect(videoEditExportQueue.list()).toHaveLength(2)
+  expect(videoEditExportQueue.list()[1].settings).toEqual(videoEditExportQueue.list()[0].settings)
+  expect(videoEditExportQueue.list()[1].range).toEqual(videoEditExportQueue.list()[0].range)
+  await waitFor(() => expect(close).toHaveBeenCalledOnce())
+  fireEvent.click(ui.getByRole('button', { name: '管理导出预设' })); fireEvent.click(ui.getByRole('button', { name: '删除自定义预设' }))
+  expect(videoEditExportPresetLibrary.custom()).toEqual([])
 })
 it('助手从通用目录读取预设，跨序列/剪辑一次批量提交、查询与单项取消，错误引用不部分提交', async () => {
   const first = await project(); const second = await project(); const app = createApplicationHarness(); const gate = deferred<void>(); encoding.finalize.mockImplementationOnce(() => gate.promise)
@@ -172,7 +199,9 @@ it('助手通用集合保存/删除自定义预设，内置删除拒绝，回读
   try {
     const created = await app.requireResult('change_application_entities', { summary: '保存导出模板', changes: [{ kind: 'create_items', entityType: 'video_edit.export_preset', parent: { kind: 'video_edit.document', id: owner.document.id }, items: [{ properties: { 'video_edit.export_preset.name': '助手模板', 'video_edit.export_preset.settings': VIDEO_EDIT_EXPORT_PRESETS[0].settings } }] }] })
     expect(created).toBeDefined(); const preset = videoEditExportPresetLibrary.custom()[0]; expect(preset.name).toBe('助手模板')
-    const state = await app.read({ kind: 'video_edit.export_preset', id: preset.id }, ['video_edit.export_preset.name']); expect(JSON.stringify(state)).toContain('助手模板')
+    const renamed = await app.change({ kind: 'video_edit.export_preset', id: preset.id }, { 'video_edit.export_preset.name': '助手重命名' }); if (!renamed.ok) throw new Error(JSON.stringify(renamed.error))
+    expect(videoEditExportPresetLibrary.custom()[0].name).toBe('助手重命名')
+    const state = await app.read({ kind: 'video_edit.export_preset', id: preset.id }, ['video_edit.export_preset.name']); expect(JSON.stringify(state)).toContain('助手重命名')
     await app.requireResult('change_application_entities', { summary: '删除导出模板', changes: [{ kind: 'remove_items', entityType: 'video_edit.export_preset', parent: { kind: 'video_edit.document', id: owner.document.id }, targets: [{ kind: 'video_edit.export_preset', id: preset.id }] }] }, state.revisions as Record<string, number>)
     expect(videoEditExportPresetLibrary.custom()).toEqual([]); expect(owner.past).toHaveLength(before)
     const builtin = await app.read({ kind: 'video_edit.export_preset', id: 'builtin:douyin' }, ['video_edit.export_preset.name'])
@@ -186,7 +215,7 @@ it('8K120帧母版导出实际选HEVC并保持120帧时钟', async () => {
   const jobs = await enqueueVideoEditExports([{ projectId: owner.document.id, presetId: 'builtin:master', path: file('8k.mp4') }])
   const job = await videoEditExportQueue.wait(jobs[0].id)
   expect(job.state).toBe('completed')
-  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 80_000_000 }])
+  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 80_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' }])
   expect(encoding.videoTimes).toEqual([0, 1 / 120, 2 / 120, 3 / 120])
 })
 it('导出面板对设备不支持的8K120帧禁用动作并给出降低规格的恢复方式', async () => {
@@ -194,12 +223,11 @@ it('导出面板对设备不支持的8K120帧禁用动作并给出降低规格�
   editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 7680, height: 4320, frameRate: { numerator: 120, denominator: 1 } }))
   vi.mocked(canEncodeVideo).mockResolvedValue(false)
   const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
-  fireEvent.change(view.getByLabelText('导出预设'), { target: { value: 'builtin:master' } })
-  await waitFor(() => expect(view.getByText('当前设备无法导出 7680 × 4320 · 120 帧视频。请降低导出分辨率或帧率后重试。')).toBeTruthy())
-  expect(view.getByRole('button', { name: '立即导出' })).toHaveProperty('disabled', true)
+  await waitFor(() => expect(view.getByText(/当前设备不支持所选编码设置/)).toBeTruthy())
+  expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)
   expect(view.getByRole('button', { name: '加入队列' })).toHaveProperty('disabled', true)
-  fireEvent.change(view.getByLabelText('导出预设'), { target: { value: 'builtin:bilibili' } })
-  expect(view.getByRole('button', { name: '立即导出' })).toHaveProperty('disabled', false)
+  await select(view, '导出预设', '仅音频 · AAC')
+  expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false)
 })
 
 it('导出队列接纳300项，仍串行处理而不按128项拒绝', async () => {
@@ -207,4 +235,119 @@ it('导出队列接纳300项，仍串行处理而不按128项拒绝', async () =
   const queue = new VideoEditExportQueue(async () => { peak = Math.max(peak, ++active); await Promise.resolve(); active-- })
   queue.append(Array.from({ length: 300 }, (_, index) => localJob(owner, `large-${index}`)))
   await queue.wait('large-299'); expect(queue.list()).toHaveLength(300); expect(peak).toBe(1)
+})
+
+it('4K60默认提交跟随序列；真实编码收到CBR软件关键帧与重采样声道参数', async () => {
+  const owner = await project(); editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 } }))
+  const [defaultJob] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('4k.mp4') }]); await videoEditExportQueue.wait(defaultJob.id)
+  expect(defaultJob.presetName).toBe('与序列一致'); expect(defaultJob.settings).toMatchObject({ width: 3840, height: 2160, fps: 60, videoBitrateMbps: 50 }); expect(defaultJob.task?.assetRef?.kind).toBe('asset')
+  const settings = { ...defaultJob.settings, loudness: null, encoderPreference: 'software' as const, bitrateMode: 'cbr' as const, keyframeInterval: 1 as const, sampleRate: 44100 as const, channels: 1 as const, followSequence: { ...defaultJob.settings.followSequence, sampleRate: false, channels: false } }
+  const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('cbr.mp4'), settings }]); await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('completed'); expect(encoding.videoOptions.at(-1)).toMatchObject({ bitrateMode: 'constant', hardwareAcceleration: 'prefer-software', keyFrameInterval: 1 })
+  expect(encoding.audioOptions.at(-1)).toMatchObject({ codec: 'aac', transform: { sampleRate: 44100, numberOfChannels: 1 } })
+})
+it.each(['burn', 'srt', 'vtt'] as const)('字幕%s进入正式画面或同名独立文件；关闭音频不混音不标准化', async captionMode => {
+  const owner = await project(); editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, captions: [{ id: 'caption', start: 0, duration: 3, text: '对白' }] }))
+  const files = new Map<string, Uint8Array>()
+  vi.mocked(getPlatform().system.fs.writeFile).mockImplementation(async (path, bytes) => { files.set(path, bytes) })
+  vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => new TextDecoder().decode(files.get(path)))
+  const settings = { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), audioEnabled: false, captionMode, addToLibrary: false }
+  const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('caption.mp4'), settings }]); await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('completed'); expect(encoding.audio).toEqual([]); expect(encoding.audioOptions).toEqual([]); expect(getPlatform().audioEdit.loudness.normalize).not.toHaveBeenCalled()
+  expect(encoding.pictures[0].captions?.length).toBe(captionMode === 'burn' ? 1 : 0)
+  expect(files.has(file(`caption.${captionMode}`))).toBe(captionMode !== 'burn')
+  if (captionMode !== 'burn') expect(new TextDecoder().decode(files.get(file(`caption.${captionMode}`)))).toContain('对白')
+})
+it('仅音频WAV不编码视频，关闭响度不创建PCM标准化会话；显式代理传给共同渲染入口', async () => {
+  const owner = await project(); const settings = patchVideoEditExportSettings(videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), { format: 'wav', loudness: null, useProxies: true, addToLibrary: false })
+  const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('sound.wav'), settings }]); await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('completed'); expect(encoding.videoOptions).toEqual([]); expect(encoding.rendered).toEqual([]); expect(encoding.audioOptions).toEqual([{ codec: 'pcm-s24', transform: { sampleRate: 48000, numberOfChannels: 2 } }]); expect(getPlatform().audioEdit.loudness.start).not.toHaveBeenCalled()
+  expect(encoding.rendererOptions[0].slice(-2)).toEqual([owner.document.id, true])
+})
+it('设备组合禁用HEVC的CBR；H264不可用时需明确选择HEVC，软件性能可选', async () => {
+  const owner = await project(); vi.mocked(canEncodeVideo).mockImplementation(async (codec, config) => codec === 'hevc' ? config?.bitrateMode !== 'constant' : config?.hardwareAcceleration === 'prefer-software')
+  const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  await waitFor(() => expect(view.getByText(/当前设备不支持所选编码设置/)).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: '导出格式' })); expect(view.getByRole('option', { name: 'MP4 · H.264' })).toHaveProperty('disabled', false)
+  fireEvent.click(view.getByRole('option', { name: 'MP4 · HEVC (H.265)' }))
+  await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
+  fireEvent.click(view.getByRole('button', { name: '码率模式' })); expect(view.getByRole('option', { name: 'CBR' })).toHaveProperty('disabled', true)
+  fireEvent.click(view.getByRole('option', { name: 'VBR' })); await select(view, '编码性能', '软件编码')
+  expect(view.getByRole('button', { name: '导出预设' }).textContent).toContain('自定义')
+})
+
+it('无资产写授权拒绝自动收录；显式关闭后仍能通过正式公共能力导出', async () => {
+  const owner = await project(); const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'export-only', capabilityIds: ['export_video_edit'], permissions: ['video_edit:write', 'video_edit:read'], allowWrites: true, allowDestructive: false }))
+  const input = { documentRef: { kind: 'video_edit.document', id: owner.document.id } }; const context = { requestId: crypto.randomUUID(), signal: new AbortController().signal }
+  const denied = await session.execute({ id: 'export_video_edit', version: 1, input }, context)
+  expect(denied.ok).toBe(false); expect(JSON.stringify(denied)).toContain('assets:write'); expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
+  const allowed = await session.execute({ id: 'export_video_edit', version: 1, input: { ...input, settings: { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), addToLibrary: false } } }, context)
+  expect(allowed.ok).toBe(true); await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id)
+  expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled()
+})
+it('开关从实际面板提交仅音频，字幕烧录改为SRT，响度关闭；折叠状态重新打开后保留', async () => {
+  const owner = await project(); const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  expect(view.getByRole('button', { name: '音频' }).getAttribute('aria-expanded')).toBe('false')
+  fireEvent.click(view.getByRole('button', { name: '音频' })); fireEvent.click(view.getByRole('switch', { name: '启用字幕' })); fireEvent.click(view.getByRole('switch', { name: '启用响度' })); fireEvent.click(view.getByRole('switch', { name: '启用视频' }))
+  expect(view.getByRole('switch', { name: '启用音频' })).toHaveProperty('disabled', true)
+  const files = new Map<string, Uint8Array>(); vi.mocked(getPlatform().system.fs.writeFile).mockImplementation(async (path, bytes) => { files.set(path, bytes) }); vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => new TextDecoder().decode(files.get(path)))
+  vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('only-audio.aac'))
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '加入队列' })))
+  const job = videoEditExportQueue.list()[0]; await act(async () => { await videoEditExportQueue.wait(job.id) })
+  expect(job.settings).toMatchObject({ videoEnabled: false, audioEnabled: true, loudness: null, captionMode: 'srt', format: 'aac' }); expect(job.state).toBe('completed')
+  view.unmount(); const reopened = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  expect(reopened.getByRole('button', { name: '音频' }).getAttribute('aria-expanded')).toBe('true')
+})
+
+it('设备仅支持HEVC软件CBR时仍能从无效默认组合恢复；修改明确显示实际性能模式', async () => {
+  const owner = await project(); vi.mocked(canEncodeVideo).mockImplementation(async (codec, config) => codec === 'hevc' && config?.bitrateMode === 'constant' && config?.hardwareAcceleration === 'prefer-software')
+  const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  await waitFor(() => expect(view.getByText(/当前设备不支持所选编码设置/)).toBeTruthy())
+  await select(view, '导出格式', 'MP4 · HEVC (H.265)')
+  expect(view.getByRole('button', { name: '编码性能' }).textContent).toContain('软件编码'); expect(view.getByRole('button', { name: '码率模式' }).textContent).toContain('CBR')
+  expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false)
+})
+
+it('导出后导入复用正式素材导入并只进素材箱，可撤销；不追加时间线片段', async () => {
+  const owner = await project(); const clips = getActiveVideoEditSequence(owner).clips.length; const past = owner.past.length
+  const files = new Set<string>(); vi.mocked(getPlatform().system.fs.exists).mockImplementation(async path => files.has(path)); vi.mocked(getPlatform().system.fs.writeFile).mockImplementation(async path => { files.add(path) })
+  vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')
+  const settings = { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), importToProject: true, addToLibrary: false, loudness: null }
+  const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('imported.mp4'), settings }]); await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('completed'); expect(owner.document.media.some(media => media.path === file('imported.mp4'))).toBe(true)
+  expect(getActiveVideoEditSequence(owner).clips).toHaveLength(clips); expect(owner.past.length).toBe(past + 1)
+})
+it('字幕写入失败清理未发布成片并可重试，已有字幕路径在入队前被拒绝', async () => {
+  const owner = await project(); const settings = { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), captionMode: 'srt' as const, addToLibrary: false, loudness: null }
+  vi.mocked(getPlatform().system.fs.exists).mockImplementationOnce(async () => false).mockImplementationOnce(async () => true)
+  await expect(enqueueVideoEditExports([{ projectId: owner.document.id, path: file('caption.mp4'), settings }])).rejects.toThrow('字幕文件')
+  vi.mocked(getPlatform().system.fs.writeFile).mockImplementation(async (path, _bytes, options) => { if (path.endsWith('.srt') && options?.position === 0) throw new Error('字幕位置不可写') })
+  const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('caption.mp4'), settings }]); await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('failed'); expect(job.task?.output).toBeUndefined(); expect(getPlatform().system.fs.remove).toHaveBeenCalledWith(file('caption.mp4')); expect(getPlatform().system.fs.remove).toHaveBeenCalledWith(file('caption.srt'))
+})
+
+it('面板打开后删除原序列退回空态，禁用导出而不引用另一个序列', async () => {
+  const owner = await project(); const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  act(() => { editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, clips: [], annotations: [] })); deleteVideoEditSequence(owner.document.id, owner.activeSequenceId) })
+  expect(view.getByText('请先打开序列')).toBeTruthy(); expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)
+  expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled()
+})
+
+it('响度标准化在输出44.1kHz单声道布局进行，回读PCM也用相同采样时钟', async () => {
+  const owner = await project(); const settings = { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), sampleRate: 44100 as const, channels: 1 as const, followSequence: { resolution: true, fps: true, sampleRate: false, channels: false }, addToLibrary: false }
+  vi.mocked(getPlatform().audioEdit.loudness.read).mockImplementation(async (_id, _start, frames) => [new Float32Array(frames)])
+  const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('normalized-mono.mp4'), settings, range: { startFrame: 1, endFrame: 3 } }]); await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('completed'); expect(getPlatform().audioEdit.loudness.start).toHaveBeenCalledWith(44100, 1, expect.any(String))
+  expect(encoding.pictures[0]).toMatchObject({ sampleRate: 44100, channels: 1 }); expect(encoding.audio.reduce((sum, count) => sum + count, 0)).toBe(2940)
+  expect(getPlatform().audioEdit.loudness.read).toHaveBeenCalledWith(expect.any(String), 0, 2940)
+  expect(getActiveVideoEditSequence(owner)).toMatchObject({ sampleRate: 48000, channels: 2 })
+})
+
+it('非法自定义宽高保持面板可用但禁止提交，修正后恢复导出', async () => {
+  const owner = await project(); const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  fireEvent.click(view.getByRole('button', { name: '分辨率跟随序列' })); await select(view, '导出分辨率', '自定义…')
+  fireEvent.change(view.getByLabelText('导出宽度'), { target: { value: '1919' } }); fireEvent.blur(view.getByLabelText('导出宽度'))
+  expect(view.getByText(/请使用偶数宽高/)).toBeTruthy(); expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)
+  fireEvent.change(view.getByLabelText('导出宽度'), { target: { value: '1920' } }); fireEvent.blur(view.getByLabelText('导出宽度'))
+  await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
 })
