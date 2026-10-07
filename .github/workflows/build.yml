@@ -96,11 +96,36 @@ jobs:
       - name: 测试分层完整性检查
         run: npm run test:suites
 
-      - name: 普通单元测试（不依赖真实 GPU）
-        run: npm run test:unit -- --maxWorkers=2 --minWorkers=1
-
       - name: 验证工具自检
         run: npm run test:validation-tools
+
+  # 普通单元测试分三片并行：单跑一片时间主要花在逐文件加载模块与建 jsdom 上（不是测试本身），
+  # 拆片 + 用满 4 核把这一步从约 13 分钟压到几分钟；三片合起来覆盖 test:unit 的全部文件。
+  unit-tests:
+    name: 普通单元测试 ${{ matrix.shard }}/3
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 生成 progress seeds
+        run: npm run gen:progress-seeds
+
+      - name: 普通单元测试（不依赖真实 GPU）
+        run: npm run test:unit -- --shard=${{ matrix.shard }}/3 --maxWorkers=4 --minWorkers=1
 
   gpu-tests:
     name: WebGPU 像素正确性
@@ -206,18 +231,20 @@ jobs:
   quality-gate:
     name: 质量门禁
     if: always()
-    needs: [checks, gpu-tests, image-export-tests, native-tests, video-decoder-tests]
+    needs: [checks, unit-tests, gpu-tests, image-export-tests, native-tests, video-decoder-tests]
     runs-on: ubuntu-latest
     steps:
       - name: 所有必跑检查成功才允许交付
         env:
           CHECKS_RESULT: ${{ needs.checks.result }}
+          UNIT_RESULT: ${{ needs.unit-tests.result }}
           GPU_RESULT: ${{ needs.gpu-tests.result }}
           IMAGE_EXPORT_RESULT: ${{ needs.image-export-tests.result }}
           NATIVE_RESULT: ${{ needs.native-tests.result }}
           VIDEO_DECODER_RESULT: ${{ needs.video-decoder-tests.result }}
         run: |
           test "$CHECKS_RESULT" = success
+          test "$UNIT_RESULT" = success
           test "$GPU_RESULT" = success
           test "$IMAGE_EXPORT_RESULT" = success
           test "$NATIVE_RESULT" = success
