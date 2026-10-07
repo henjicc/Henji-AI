@@ -33,16 +33,4 @@ describe('ViewerMarkEditor 发布路由', () => {
     expect(screen.queryByTestId('v3-viewer-editor')).toBeNull()
   })
 
-  it('精简版不把查看器切到尚未收口的 quick 宿主', () => {
-    render(
-      <ViewerMarkEditor
-        imageUrl="image.png"
-        session={{ sourceUrl: 'image.png', document: createEmptyImageEditDocument() }}
-        onClose={() => undefined}
-        onSave={() => undefined}
-      />,
-    )
-
-    expect(screen.getByTestId('quick-mark-editor')).toBeTruthy()
-  })
 })

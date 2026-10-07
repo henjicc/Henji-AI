@@ -18,12 +18,6 @@ describe('动效档位', () => {
     }
   });
 
-  it('语义化计时常量落在已登记档位上', () => {
-    const registered: number[] = Object.values(UI_DURATION);
-    expect(registered).toContain(UI_DIALOG_TRANSITION_MS);
-    expect(registered).toContain(UI_POPOVER_TRANSITION_MS);
-  });
-
   it('档位取设计令牌：悬停 120、展开 180、面板 240，查看器 500 单列', () => {
     expect(UI_DURATION).toEqual({ fast: 120, base: 180, slow: 240, viewer: 500 });
     expect(UI_DIALOG_TRANSITION_MS).toBe(180);

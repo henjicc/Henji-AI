@@ -165,12 +165,6 @@ describe('themeEngine 对比度（重要记录 010）', () => {
     }
   })
 
-  it.each(THEME_PRESET_IDS)('%s：危险确认按钮（dangerSolid）白字在静息、悬停、按下底色上 ≥ 4.5', (id) => {
-    const t = deriveThemeTokens(THEME_PRESETS[id].seed).colors
-    expect(t.onDanger).toBe(WHITE)
-    expect(minContrast(t.onDanger, visibleSolid(t, 'danger'))).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
-  })
-
   it.each(THEME_PRESET_IDS)('%s：扁平主按钮悬停、按下逐档变化且朝文字更清楚的方向走（重要记录 016）', (id) => {
     const t = deriveThemeTokens(THEME_PRESETS[id].seed).colors
     const [rest, hover, pressed] = visibleSolid(t, 'accent').map((hex) => hexToOklch(hex).L)

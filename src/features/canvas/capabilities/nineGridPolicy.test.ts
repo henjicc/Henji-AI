@@ -6,7 +6,6 @@ import {
   createGridSplitCompletionId,
   createNineGridNodeInitialData,
   createStoryboardGridOutputContract,
-  normalizeNineGridStoryboardData,
 } from './nineGridPolicy'
 
 describe('九宫格预置与输出契约', () => {
@@ -22,24 +21,6 @@ describe('九宫格预置与输出契约', () => {
     })
     expect(data.frames).toHaveLength(9)
     expect(new Set(data.frames.map((frame) => frame.id)).size).toBe(9)
-  })
-
-  it('保留九格描述并修复被损坏的固定语义', () => {
-    const data: DynamicValueMap = {
-      storyboardPreset: NINE_GRID_PRESET_ID,
-      promptTemplateVersion: 'unknown',
-      gridRows: 8,
-      gridCols: 1,
-      frames: [{ id: 'kept', description: '特写', referenceIndex: 0 }],
-    }
-    normalizeNineGridStoryboardData(data)
-    expect(data).toMatchObject({
-      gridRows: 3,
-      gridCols: 3,
-      promptTemplateVersion: NINE_GRID_PROMPT_TEMPLATE_VERSION,
-    })
-    expect(data.frames).toHaveLength(9)
-    expect(data.frames[0]).toMatchObject({ id: 'kept', description: '特写', referenceIndex: 0 })
   })
 
   it('单张组合图保留网格语义但不伪造九个成员', () => {

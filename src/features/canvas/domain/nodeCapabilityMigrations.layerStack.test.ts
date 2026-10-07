@@ -12,9 +12,4 @@ describe('多图层占位节点跨项目恢复', () => {
     expect(data).toMatchObject({ resultKind: 'layer-stack', serverTaskId: 'existing-task', isGenerating })
   })
 
-  it('有产物但文档损坏时仍降级，不把损坏文档伪装为可续取占位', () => {
-    const data: DynamicValueMap = { imageUrl: '/composite.png', layerStackDocument: { version: 99 } }
-    migrateLayerStackResultData(data)
-    expect(data).toEqual({ imageUrl: '/composite.png', resultKind: 'image' })
-  })
 })

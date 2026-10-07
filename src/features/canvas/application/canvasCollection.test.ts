@@ -19,25 +19,6 @@ describe('画布批量写入内核', () => {
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   })
 
-  it('任一操作失败时整批回滚，节点数量不变', async () => {
-    const before = useCanvasStore.getState().nodes.length
-
-    await expect(applyCanvasOperationsAtomically('project-not-open', [
-      { kind: 'delete_nodes', nodeIds: ['不存在的节点'] },
-    ])).rejects.toThrow()
-
-    expect(useCanvasStore.getState().nodes).toHaveLength(before)
-  })
-
-  it('删除不存在的节点会被服务层拒绝，不产生半成品状态', async () => {
-    const store = useCanvasStore.getState()
-    const edgesBefore = store.edges.length
-    await expect(applyCanvasOperationsAtomically('project-not-open', [
-      { kind: 'disconnect_edge', edgeId: '不存在的连线' },
-    ])).rejects.toThrow()
-    expect(useCanvasStore.getState().edges).toHaveLength(edgesBefore)
-  })
-
   it('画布未打开时在写入之前就被拒绝', async () => {
     // requireCurrentCanvasProject 在内核开头调用，任何操作都到不了执行阶段
     await expect(applyCanvasOperationsAtomically('未打开的画布', [

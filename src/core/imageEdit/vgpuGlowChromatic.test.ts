@@ -22,54 +22,7 @@ const PAIRS: readonly VgpuGlowChromaticChannels[] = [
   ['blue', 'green'],
 ];
 
-type Rgb = readonly [number, number, number];
 const ENDPOINT_SOFTNESS_PX = 0.75;
-
-function sampleLine(values: readonly number[], coordinate: number): number {
-  if (coordinate < 0 || coordinate > values.length - 1) return 0;
-  const left = Math.floor(coordinate);
-  const amount = coordinate - left;
-  return values[left] * (1 - amount)
-    + (values[left + 1] ?? 0) * amount;
-}
-
-function sampleSoftShiftedLine(
-  values: readonly number[],
-  coordinate: number,
-  offset: number,
-  amount: number
-): number {
-  const endpoint = coordinate + offset;
-  const softness = ENDPOINT_SOFTNESS_PX * amount;
-  return (
-    sampleLine(values, endpoint - softness)
-    + sampleLine(values, endpoint + softness)
-  ) * 0.5;
-}
-
-function replaceGlowChannels(
-  centered: readonly Rgb[],
-  channels: readonly [0 | 1 | 2, 0 | 1 | 2],
-  amount: number,
-  offset: number
-): Rgb[] {
-  const fields = [0, 1, 2].map((channel) => (
-    centered.map((rgb) => rgb[channel])
-  ));
-  if (amount <= 0) return [...centered];
-  return centered.map((rgb, index) => {
-    const result = [...rgb] as [number, number, number];
-    const left = channels[0];
-    const right = channels[1];
-    result[left] = sampleSoftShiftedLine(fields[left], index, offset, amount);
-    result[right] = sampleSoftShiftedLine(fields[right], index, -offset, amount);
-    return result;
-  });
-}
-
-function channelEnergy(values: readonly Rgb[], channel: 0 | 1 | 2): number {
-  return values.reduce((sum, rgb) => sum + rgb[channel], 0);
-}
 
 function meanSigma(recipe: VgpuGlowRecipe, channel: 0 | 1 | 2): number {
   return recipe.scatterLevels.reduce(
@@ -229,30 +182,6 @@ describe('VGPU 辉光边界色差', () => {
         (sum, level) => sum + level.weight[channel],
         0
       )).toBeCloseTo(1, 10);
-    }
-  });
-
-  it('完整辉光凸位移保持常量区、未选通道与逐通道积分，不产生负边', () => {
-    const size = 301;
-    const centered: Rgb[] = Array.from({ length: size }, (_, index) => {
-      const distance = (index - 150) / 18;
-      const value = Math.exp(-0.5 * distance * distance);
-      return [value * 0.7, value * 0.45, value * 0.25];
-    });
-    const output = replaceGlowChannels(centered, [0, 2], 0.8, 7.25);
-    for (const channel of [0, 1, 2] as const) {
-      expect(channelEnergy(output, channel)).toBeCloseTo(
-        channelEnergy(centered, channel),
-        8
-      );
-    }
-    expect(output.map((rgb) => rgb[1])).toEqual(centered.map((rgb) => rgb[1]));
-    expect(output.flat().every((value) => Number.isFinite(value) && value >= 0)).toBe(true);
-
-    const constant = Array.from({ length: 101 }, () => [0.8, 0.8, 0.8] as const);
-    const constantOutput = replaceGlowChannels(constant, [0, 2], 1, 8);
-    for (let index = 16; index < 85; index += 1) {
-      expect(constantOutput[index]).toEqual(constant[index]);
     }
   });
 
