@@ -23,6 +23,7 @@ import { videoEditClipUnderPlayhead } from './videoEditPlayheadSelection'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { updateVideoEditProjectCover } from './videoEditProjectCover'
 import { videoEditInPlaceRecordsSchema, type VideoEditInPlaceRecord } from '@/core/videoEdit/inPlacePersistence'
+import type { VideoEditFocusablePanel } from '@/core/videoEdit/panels'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -57,7 +58,7 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   playbackDirection: 1 | -1
   scrubbing?: boolean
   busy: boolean
-  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content' | 'tracking' | 'lumetri' | 'title_templates'
+  activePanel: VideoEditFocusablePanel
   panelFocusVersion?: number
   version: number
 }

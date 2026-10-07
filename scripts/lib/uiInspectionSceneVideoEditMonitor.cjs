@@ -479,7 +479,7 @@ function createVideoEditMonitorScene() {
         const pressureFrame = async (value, playing = false, direction = 1) => change(pressureRef, { 'video_edit.document.program_playback': { frame: value, playing, playbackDirection: direction } })
         evidence.firstFrame = await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset }))
         evidence.trackBanks.pressure = await trackBanks(page)
-        assert.equal(evidence.firstFrame.width, 3840); assert.equal(evidence.firstFrame.height, 2160); assert.equal(await page.locator('[data-video-edit-track]').count(), 32)
+        assert.equal(evidence.firstFrame.width, 3840); assert.equal(evidence.firstFrame.height, 2160); assert.equal(pressureSequence.tracks.length, 32); { const mounted = await page.locator('[data-video-edit-track]').count(); assert.ok(mounted > 0 && mounted < 32, `轨道头应只挂载视口内的轨道（32 轨中挂载了 ${mounted}）`) }
         evidence.visibleClipCount = await page.locator('[data-video-edit-clip]').count(); assert.ok(evidence.visibleClipCount > 0 && evidence.visibleClipCount < 20, '500片段只挂视口内DOM且默认能看到底层画面')
         await focus({ kind: 'video_edit.caption', id: `${pressure.id}:monitor-caption-0` }); await panel(page, 'content').waitFor({ state: 'visible' })
         evidence.visibleCaptionCount = await page.locator('[data-video-edit-timed-entry]').count(); assert.ok(evidence.visibleCaptionCount > 0 && evidence.visibleCaptionCount < 40, '500字幕须有界DOM')

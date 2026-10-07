@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VIDEO_EDIT_FOCUSABLE_PANELS } from '../videoEdit/panels'
 
 export const APPLICATION_HOST_CONTRACT_VERSION = 'application-host/v1' as const
 
@@ -67,7 +68,7 @@ export const hostContextSnapshotSchema = z.object({
     playing: z.boolean(),
     inFrame: z.number().int().nonnegative().nullable(),
     outFrame: z.number().int().nonnegative().nullable(),
-    focusedPanel: z.enum(['project', 'source', 'program', 'timeline', 'effects', 'content']),
+    focusedPanel: z.enum(VIDEO_EDIT_FOCUSABLE_PANELS),
     selectedClipRefs: z.array(z.string().min(1).max(500)).max(48),
     targetTrackRefs: z.array(z.string().min(1).max(500)).max(32),
   }).strict().optional(),
