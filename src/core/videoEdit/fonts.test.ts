@@ -26,3 +26,7 @@ it('文字布局生成的 Canvas font 不允许字体名注入额外族', () => 
   layoutVideoEditText({ text: '标题', textStyle: { ...defaultVideoEditTextStyle(1080), fontFamily: 'Quoted" Font' } }, { width: 1920, height: 1080 }, measure)
   expect(measure.mock.calls[0][1]).toContain('"Quoted\\" Font", sans-serif')
 })
+it('内置风格只是推荐字体并自动回退，不算缺字体；用户自建风格缺字体照常提示', () => {
+  const uses = [{ font: 'Source Han Sans SC', ownerId: 'style:builtin:style:0:display', label: '风格：克制高级' }, { font: 'Source Han Sans SC', ownerId: 'style:mine:display', label: '风格：我的' }]
+  expect(missingVideoEditFonts(uses, []).flatMap(item => item.uses.map(use => use.ownerId))).toEqual(['style:mine:display'])
+})

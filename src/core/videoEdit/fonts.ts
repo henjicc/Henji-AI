@@ -53,7 +53,8 @@ export function collectVideoEditFonts(document: VideoEditDocument | VideoEditCom
 export function missingVideoEditFonts(uses: VideoEditFontUse[], faces: readonly FontFaceInfo[]): MissingVideoEditFont[] {
   const result = new Map<string, MissingVideoEditFont>()
   const names = new Set([...GENERIC_FONT_FACES, ...faces].flatMap(face => [face.family, face.localizedFamily, face.fullName, face.postscriptName, ...face.aliases]).map(name => name.trim().toLocaleLowerCase()))
-  for (const use of uses) if (!names.has(use.font.trim().toLocaleLowerCase())) {
+  // Built-in style presets only recommend fonts and fall back automatically; the user never chose them, so they are not "missing".
+  for (const use of uses) if (!use.ownerId.startsWith('style:builtin:') && !names.has(use.font.trim().toLocaleLowerCase())) {
     const previous = result.get(use.font) ?? { font: use.font, fallback: '系统无衬线字体', uses: [] }
     previous.uses.push(use); result.set(use.font, previous)
   }

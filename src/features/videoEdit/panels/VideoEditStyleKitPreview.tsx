@@ -3,6 +3,14 @@ import { UiEmpty, UiError } from '@/components/ui'
 import { styleColorCss, type StyleKit } from '@/core/videoEdit/styleKit'
 import { renderStyleKitPreview } from '../application/videoEditStylePreview'
 
+/**
+ * The board shows at most 640 px wide; rendering the samples at the sequence size (4K) only competed with the program
+ * monitor for the shared GPU. Tokens are proportional to the canvas, so a smaller canvas previews the same design.
+ */
+function previewSize(width: number, height: number): { width: number; height: number } {
+  const scale = Math.min(1, 960 / Math.max(1, width))
+  return { width: Math.max(16, Math.round(width * scale)), height: Math.max(16, Math.round(height * scale)) }
+}
 /** Preview uses the production compiler/compositor, not a separate imitation of author code. */
 export function VideoEditStyleKitPreview({ kit, width, height, visible = true }: { kit: StyleKit; width: number; height: number; visible?: boolean }): React.ReactElement {
   const [pictures, setPictures] = useState<Array<{ id: string; name: string; url: string }>>([])
@@ -16,7 +24,7 @@ export function VideoEditStyleKitPreview({ kit, width, height, visible = true }:
     const timer = setTimeout(() => {
       void (async () => {
         for (const sample of samples) {
-          const blob = await renderStyleKitPreview(kit, sample.id, { width, height }, controller.signal)
+          const blob = await renderStyleKitPreview(kit, sample.id, previewSize(width, height), controller.signal)
           controller.signal.throwIfAborted()
           const url = URL.createObjectURL(blob); urls.push(url)
           setPictures(previous => [...previous, { id: sample.id, name: sample.name, url }])

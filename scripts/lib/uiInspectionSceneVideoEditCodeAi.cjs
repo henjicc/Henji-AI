@@ -39,6 +39,8 @@ function performanceSummary(steps, samples, longTasks) {
 
 function createVideoEditCodeAiScene() {
   return { id: 'video-edit-code-ai', surface: '剪辑', name: '剪辑-代码画面与AI协作真实回环', writesUserData: true,
+    // 第 4 步故意让 Agent 把标注写成“已通过”，能力层必须拒绝；这条拒绝记录是预期的，其余错误照常判失败。
+    expectedLogEvents: ['application.capability.execute.failed'],
     setup: async (page, app, { capture }) => {
       const { dialogs, saved, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
       const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
@@ -309,8 +311,16 @@ function createVideoEditCodeAiScene() {
           item.undoPresentation = await fresh(beforeUndo, 150)
         })
         await step('07-style-kit', '切换内置风格并重渲染代码底板', async item => {
-          await seek(25); await focus(ref('video_edit.clip', codeClip.id)); await dock('风格')
+          await seek(25); await focus(ref('video_edit.clip', codeClip.id))
           const panel = page.locator('[data-video-edit-style-kits]')
+          // 聚焦片段会异步把效果控件推到前台；切到风格后确认风格面板真的可见再操作。
+          for (let attempt = 0; attempt < 3 && !(await panel.isVisible()); attempt++) { await dock('风格'); await panel.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {}) }
+          item.dockState = await page.evaluate(() => ({
+            tabs: [...document.querySelectorAll('.dv-tab')].map(tab => ({ text: tab.textContent?.trim(), active: tab.classList.contains('dv-active-tab') })),
+            panels: [...document.querySelectorAll('[data-video-edit-panel]')].map(el => ({ id: el.getAttribute('data-video-edit-panel'), visible: !!(el.offsetWidth || el.offsetHeight), w: el.offsetWidth, h: el.offsetHeight })),
+            styleKits: [...document.querySelectorAll('[data-video-edit-style-kits]')].map(el => ({ w: el.offsetWidth, h: el.offsetHeight, text: el.textContent?.slice(0, 120) })),
+          }))
+          await panel.waitFor({ state: 'visible' })
           const before = await snapshot(); item.before = before
           await panel.getByRole('button', { name: '选择风格', exact: true }).click()
           await page.getByRole('option', { name: '科技信息', exact: true }).click()
