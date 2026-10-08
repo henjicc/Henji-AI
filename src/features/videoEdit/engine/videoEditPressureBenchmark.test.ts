@@ -15,8 +15,15 @@ import { VideoEditCodeSources } from './videoEditCodeSources'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
+import { parameterBenchmark } from './videoEditParameterBenchmark'
+
+vi.mock('./videoEditCodeCompiler', async () => {
+  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
+  return { VideoEditCodeCompiler: class { async compile(source: Parameters<typeof compileCodeMaterial>[0]) { return compileCodeMaterial(source) } dispose() {} } }
+})
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined }))
+parameterBenchmark(device => { state.device = device })
 vi.mock('@/core/imageEdit/webgpu/deviceManager', () => ({ ImageEditWebGpuDeviceManager: class {
   onDeviceLost() {}
   async acquire() { return { device: state.device!, provider: { getPreferredCanvasFormat: () => 'rgba8unorm' } } }

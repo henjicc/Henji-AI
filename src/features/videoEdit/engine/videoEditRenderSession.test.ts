@@ -3,6 +3,7 @@ import { resolve, sep } from 'node:path'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest } from './videoEditWorker'
 import { recordVideoEditMaskUpdate } from '../application/videoEditMaskEditing'
+import { videoEditClipSchema } from '@/core/videoEdit/document'
 
 const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
 vi.mock('../application/videoEditProxy', () => ({ verifiedVideoEditProxySources: async () => proxyState.sources }))
@@ -52,6 +53,22 @@ beforeEach(() => {
   platform.connect.mockReset().mockResolvedValue({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })
   platform.disconnect.mockReset()
   platform.allowRoot.mockClear(); platform.dirname.mockClear()
+})
+
+it('60 effect moves send only effect deltas, without media/source/font payloads; structural edits resync', async () => {
+  const document = composition()
+  document.clips = [videoEditClipSchema.parse({ id: 'clip', itemId: 'item', kind: 'video', name: '片段', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', effects: [{ id: 'grade', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {} } }] })]
+  const session = new VideoEditRenderSession(document, 1280)
+  await session.present(0)
+  for (let i = 1; i <= 60; i++) await session.updateDocument({ ...document, revision: i, clips: [{ ...document.clips[0], effects: [{ ...document.clips[0].effects![0], builtin: { id: 'color_grade', params: { exposure: i / 60 } } }] }] })
+  const parameters = workers[0].messages.map(value => value.message).filter(value => value.kind === 'parameters')
+  expect(parameters).toHaveLength(60)
+  expect(parameters[59]).toMatchObject({ update: { baseRevision: 59, revision: 60, patches: [{ clipId: 'clip', effects: [{ id: 'grade', value: { builtin: { params: { exposure: 1 } } } }] }] } })
+  expect(parameters.every(value => !('document' in value) && !('codeSources' in value))).toBe(true)
+  expect(workers[0].messages.filter(value => value.message.kind === 'update')).toHaveLength(0)
+  await session.updateDocument({ ...document, revision: 61, width: 3840 })
+  expect(workers[0].messages.filter(value => value.message.kind === 'update')).toHaveLength(1)
+  await session.dispose()
 })
 
 it('遮罩更新按序列与版本关联首次出画，日志给出帧延迟，后续重画不重复计延迟', async () => {
@@ -122,7 +139,8 @@ it('原生可用时先把帧通道端口交给 Worker 再初始化，并附上�
   expect(attach.message).toEqual({ kind: 'nativeFrames.attach', port: { kind: 'port' } }); expect(attach.transfer).toEqual([{ kind: 'port' }])
   expect(init.message).toMatchObject({ kind: 'init', decode: { nativeAvailable: true, localPaths: { 'url:D:/prores.mov': 'D:/prores.mov' } } })
   expect((init.message as Extract<RenderRequest, { kind: 'init' }>).document.media.map(media => media.path)).toEqual(['url:D:/prores.mov', 'url:D:/a.png', 'url:https://example.com/a.mp4'])
-  await session.updateDocument({ ...composition(), revision: 1 })
+  const replacement = composition(); replacement.media[0].sourceRevision = 'replacement'
+  await session.updateDocument({ ...replacement, revision: 1 })
   expect(workers[0].messages.at(-1)?.message).toMatchObject({ kind: 'update', localPaths: { 'url:D:/prores.mov': 'D:/prores.mov' } })
   await session.dispose()
   expect(workers[0].terminate).toHaveBeenCalledOnce(); expect(platform.disconnect).toHaveBeenCalledWith('vf-route-1')

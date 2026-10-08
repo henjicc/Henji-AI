@@ -14,6 +14,7 @@ import { videoEditMaskUpdateTime } from '../application/videoEditMaskEditing'
 import { prepareVideoEditFonts } from '../application/videoEditFonts'
 import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
 import { loadDocumentFont, pinDocumentFonts, releaseDocumentFonts } from '@/platform/fontFaces'
+import { videoEditParameterUpdate, videoEditParameterNeedsFonts } from './videoEditParameterUpdate'
 
 const logger = createLogger('features.videoEdit.render')
 
@@ -120,7 +121,17 @@ export class VideoEditRenderSession {
     return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject, submitted }); this.worker.postMessage({ ...request, id }, transfer) })
   }
   private codeSources(document: VideoEditComposition): Promise<Record<string, string>> { return collectCodeSourceTexts((document.codeMaterials ?? []).flatMap(definition => definition.versions), this.sentCodeSources) }
-  async updateDocument(document: VideoEditComposition, original = false): Promise<void> { await this.ready; await this.selectProxies(original); await this.content.check(document); await this.authorizeLuts(document); await this.syncFonts(document); const codeSources = await this.codeSources(document); await this.request({ kind: 'update', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() }); this.document = document }
+  async updateDocument(document: VideoEditComposition, original = false): Promise<void> {
+    await this.ready
+    const update = !original && videoEditParameterUpdate(this.document, document)
+    if (update) {
+      if (videoEditParameterNeedsFonts(this.document, update)) await this.syncFonts(document)
+      await this.request({ kind: 'parameters', update }); this.document = document; return
+    }
+    await this.selectProxies(original); await this.content.check(document); await this.authorizeLuts(document); await this.syncFonts(document)
+    const codeSources = await this.codeSources(document)
+    await this.request({ kind: 'update', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() }); this.document = document
+  }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */

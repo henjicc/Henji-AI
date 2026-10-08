@@ -29,6 +29,7 @@ import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
 import { readVideoEditExportPicture } from './videoEditExportPictures'
 import { isVideoEditRenderDivisor, videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
+import { applyVideoEditParameterUpdate, type VideoEditParameterUpdate } from './videoEditParameterUpdate'
 
 interface PlaybackStream {
   demux: string
@@ -214,6 +215,14 @@ export class VideoEditRenderer {
     this.document = document
     this.resizeCanvas()
     this.warmShaderGraphs()
+  }
+  /** Preserve decoder, uploaded source pictures, nested sessions and playback schedules during parameter gestures. */
+  updateParameters(update: VideoEditParameterUpdate): void {
+    this.document = applyVideoEditParameterUpdate(this.document, update)
+    if (this.playback) this.playback.document = this.document
+    this.codeSources?.updateParameters(this.document)
+    for (const entry of this.nestedPictures.values()) entry.renderer.updateParameters({ ...update, baseRevision: entry.renderer.document.revision })
+    for (const renderer of this.nestedSounds.values()) renderer.updateParameters({ ...update, baseRevision: renderer.document.revision })
   }
   /** 打开剪辑、加效果或转场后，在后台把新出现的着色器图先编译好（见 ShaderGraphCache.warm）。 */
   private warmShaderGraphs(): void {

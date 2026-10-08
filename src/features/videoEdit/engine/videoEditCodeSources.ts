@@ -95,6 +95,8 @@ export class VideoEditCodeSources {
     if (document.id !== this.document.id) throw new Error('代码素材源目标序列已改变。')
     this.checkVersions(document); this.cancel(); this.document = document
   }
+  /** The caller has established that immutable code versions and media did not change. */
+  updateParameters(document: VideoEditComposition): void { this.cancel(); this.document = document }
   cancel(): void { this.epoch++; this.controller?.abort(); this.controller = undefined }
   private async program(key: string, version: CodeMaterialVersion, signal: AbortSignal, pinned: ReadonlySet<string>): Promise<CodeMaterialProgram> {
     await loadCodeSourceReferences(version); signal.throwIfAborted()

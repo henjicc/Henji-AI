@@ -14,6 +14,7 @@ import { setVideoEditMaskTimingObserver } from './videoEditEffectMasks'
 import { LoadedFontFaces } from '@/platform/fontFaces'
 import { receiveCodeSourceTexts } from '@/core/videoEdit/codeMaterial/sources'
 import type { FontPayload } from '@/platform/fonts'
+import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
 
 /**
  * Decoding settings of one render session. `localPaths` maps each media item's fetchable URL (its path in the worker)
@@ -24,6 +25,7 @@ export type RenderRequest = { id: number } & (
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
   { kind: 'init'; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'invalidate'; revision: number }
+  | { kind: 'parameters'; update: VideoEditParameterUpdate }
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
   | { kind: 'scale'; divisor: number }
   | { kind: 'arm'; frame: number }
@@ -95,6 +97,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
   if (request.kind === 'init' || request.kind === 'update') receiveCodeSourceTexts(request.codeSources)
   if (request.kind === 'init') revision = request.document.revision
   if (request.kind === 'update') revision = Math.max(revision, request.document.revision)
+  if (request.kind === 'parameters') revision = Math.max(revision, request.update.revision)
   queue = queue.then(async () => {
     try {
       if (request.kind === 'dispose') {
@@ -120,6 +123,9 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
         setProxies(request.proxies)
         setLocalPaths(request.localPaths)
         await renderer.updateDocument(request.document); self.postMessage({ id: request.id } satisfies RenderResponse)
+      } else if (request.kind === 'parameters') {
+        if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        renderer.updateParameters(request.update); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline)

@@ -10,7 +10,7 @@ import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransit
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, updateVideoEditMaskGesture, type VideoEditGesture } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, updateVideoEditParameterGesture, updateVideoEditMaskGesture, type VideoEditGesture } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import type { VideoEditGraphicClipTarget as VideoEditCompositeTarget } from './videoEditGraphics'
@@ -104,11 +104,12 @@ function editBuiltin(target: VideoEditCompositeTarget, change: (clip: VideoEditC
     const clip: VideoEditClip = { ...original, ...(original.effects ? { effects: original.effects.map(effect => ({ ...effect })) } : {}) }
     change(clip)
     clip.effects?.forEach(effect => { videoEditEffectSchema.parse(effect) })
+    if (JSON.stringify(clip.effects) === JSON.stringify(original.effects)) return document
     return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips: sequence.clips.map(item => item === original ? clip : item) } : value) }
   }
   if (gesture) {
     if (gesture.projectId !== target.projectId) throw new Error('原参数调整已结束，请重新编辑。')
-    updateVideoEditGesture(gesture, update)
+    updateVideoEditParameterGesture(gesture, update)
   } else editVideoProject(target.projectId, update)
 }
 /**

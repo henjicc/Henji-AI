@@ -3,12 +3,12 @@ import type { CodeMaterialKeyframe } from '@/core/videoEdit/codeMaterialAnimatio
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { validateCodeMaterialParameterValue } from '@/core/videoEdit/codeMaterial/parameters'
 import { codeParameterSupportsInterpolation } from '@/core/videoEdit/codeMaterial/parameterInterpolation'
-import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditComposition, videoEditClipSchema, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditGraphicObjectMetadata } from '@/core/videoEdit/graphics'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import type { VideoEditSourceTime } from '@/core/videoEdit/time'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
-import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, updateVideoEditParameterGesture } from './videoEditService'
 import type { VideoEditGesture } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 
@@ -62,7 +62,16 @@ export function readVideoEditGraphicEditor(projectId: string, sequenceId: string
 function edit(target: VideoEditParameterTarget, change: (document: VideoEditDocument, value: ReturnType<typeof resolve>) => void, gesture?: VideoEditGesture): void {
   if (gesture && gesture.projectId !== target.projectId) throw new Error('参数调整不属于此剪辑。')
   const update = (document: VideoEditDocument): VideoEditDocument => { change(document, resolve(document, target)); return document }
-  if (gesture) updateVideoEditGesture(gesture, update)
+  if (gesture) updateVideoEditParameterGesture(gesture, document => {
+    const { sequence, clip } = resolve(document, target)
+    if (sequence.tracks.find(track => track.index === clip.track)?.locked) throw new Error('所属轨道已锁定，请先解锁。')
+    const draft = structuredClone(clip)
+    const next = { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips: sequence.clips.map(value => value === clip ? draft : value) } : value) }
+    update(next)
+    videoEditClipSchema.parse(draft)
+    if (JSON.stringify(draft) === JSON.stringify(clip)) return document
+    return next
+  })
   else editVideoProject(target.projectId, update)
 }
 function declaration(target: VideoEditParameterTarget, key: string) {

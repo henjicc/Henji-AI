@@ -4,7 +4,8 @@ import { act, render, cleanup, fireEvent } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit } from './application/videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture } from './application/videoEditService'
+import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './application/videoEditCompositing'
 import { VideoEditPreview } from './VideoEditPreview'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
@@ -165,6 +166,31 @@ it.each([false, true])('同序列参数更新期间已提交画面记录真实�
   expect(pixel.sessions).toBe(1); expect(pixel.requests[1].frame).toBe(5)
   await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [5 / 30], presented: true }) })
   expect(canvas.dataset).toMatchObject({ presentedFrame: '5', presentedRevision: String(owner.document.revision) })
+})
+
+it('parameter moves coalesce to the latest snapshot once per display period and retain one undo step', async () => {
+  const testStart = Date.now(); vi.spyOn(performance, 'now').mockImplementation(() => Date.now() - testStart)
+  const owner = (await createVideoEditProject())!; appendVideoEditClip(owner.document.id)
+  const document = getActiveVideoEditSequence(owner); const clipId = document.clips[0].id
+  const [effectId] = applyVideoEditBuiltinEffect(owner.document.id, document.id, [clipId], 'color_grade')
+  const target = { projectId: owner.document.id, sequenceId: document.id, clipId }
+  const history = owner.past.length
+  render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ presented: true, sourceTimestamps: [0] }) })
+  const gesture = beginVideoEditGesture(owner.document.id)
+  act(() => updateVideoEditBuiltinEffect(target, effectId, { params: { exposure: .1 } }, gesture))
+  await act(async () => { await vi.advanceTimersByTimeAsync(2) })
+  expect(pixel.update).toHaveBeenCalledTimes(1)
+  await act(async () => { pixel.requests[1].resolve({ presented: true, sourceTimestamps: [0] }) })
+  act(() => { for (let i = 1; i <= 60; i++) updateVideoEditBuiltinEffect(target, effectId, { params: { exposure: i / 60 } }, gesture) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.update).toHaveBeenCalledTimes(1)
+  act(() => finishVideoEditGesture(gesture))
+  await act(async () => { await vi.advanceTimersByTimeAsync(15) })
+  expect(pixel.update).toHaveBeenCalledTimes(2)
+  expect(pixel.update.mock.calls[1][0].clips[0].effects[0].builtin.params.exposure).toBe(1)
+  expect(owner.past).toHaveLength(history + 1)
 })
 
 it('较旧拖动画面的完成回执不倒写当前显示面或调度位置', async () => {

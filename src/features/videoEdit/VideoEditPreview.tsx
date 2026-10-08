@@ -15,6 +15,7 @@ import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
+import { videoEditParameterUpdate, videoEditParameterAffectsAudio } from './engine/videoEditParameterUpdate'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { isDomNode } from '@/utils/crossRealmDom'
@@ -168,8 +169,12 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const renderer = new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen(), undefined, instance.document.id); session.current = renderer
     const unsubscribe = subscribeVideoEditDomain(() => {
       if (stopped) return
-      if (findActiveVideoEditSequence(instance) !== appliedDocument) { stopAudio(); setLevels([]) }
-      renderer.invalidateDocument(instance.document.revision)
+      const next = findActiveVideoEditSequence(instance)
+      const parameters = next && videoEditParameterUpdate(appliedDocument, next)
+      if (!parameters || videoEditParameterAffectsAudio(appliedDocument, parameters)) {
+        if (next !== appliedDocument) { stopAudio(); setLevels([]) }
+        renderer.invalidateDocument(instance.document.revision)
+      }
     })
     const unsubscribeView = subscribeVideoEditView(() => {
       if (stopped) return
@@ -197,6 +202,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let playbackInFlight = 0
     // 起播预热时提前混好的第一块声音：起播时钟不必再留 100ms 等混音。
     let displayPeriod: number | undefined
+    let lastParameterUpdate = -Infinity
     let displayMeasuredAt = -Infinity
     let firstBlock: { document: VideoEditComposition; from: number; duration: number; buffer: Promise<AudioBuffer>; ready: boolean } | undefined
     // 回放分辨率（4.9）：播放用所选分辨率，暂停默认回到完整；选帧、设封面期间强制完整。
@@ -272,9 +278,17 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           failedDocument = undefined
         }
         if (appliedDocument !== document) {
-          stopAudio(); wasPlaying = false
+          const parameterUpdate = captureFull === 0 && videoEditParameterUpdate(appliedDocument, document)
+          // One latest parameter snapshot per display period. Intermediate moves never enter the Worker queue.
+          if (parameterUpdate && performance.now() - lastParameterUpdate < (displayPeriod ?? 1000 / 60)) {
+            timer = setTimeout(() => { void loop() }, Math.max(1, (displayPeriod ?? 1000 / 60) - (performance.now() - lastParameterUpdate))); return
+          }
+          if (!parameterUpdate || videoEditParameterAffectsAudio(appliedDocument, parameterUpdate)) { stopAudio(); wasPlaying = false }
+          if (parameterUpdate) renderer.invalidateDocument(document.revision)
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
-          await renderer.updateDocument(document, captureFull > 0); await audioRenderer?.updateDocument(document); appliedDocument = document; lastFrame = -1; lastRequested = -1
+          await renderer.updateDocument(document, captureFull > 0); await audioRenderer?.updateDocument(document); appliedDocument = document; lastRequested = -1
+          if (parameterUpdate) lastParameterUpdate = performance.now()
+          else lastFrame = -1
           if (stopped) return
         }
         const proxySignature = captureFull > 0 ? 'original' : videoEditProxySignature(instance.document.id)
@@ -376,6 +390,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
               // An already submitted draw cannot be undone by a later parameter edit.
               // Report that same-surface fact without advancing the new document's clock.
               if (result.presented === true) recordPresentation(target, result, requestedAt, scrubbing, document.revision)
+              const latest = findActiveVideoEditSequence(current)
+              if (result.presented === true && pipelined && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(current.document.id) === command && latest && videoEditParameterUpdate(document, latest)) lastFrame = Math.max(lastFrame, target)
               if (!scheduled) timer = setTimeout(() => { void loop() }, 0)
               return
             }

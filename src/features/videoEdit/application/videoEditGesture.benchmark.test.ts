@@ -11,6 +11,8 @@ import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditGesture, 
 import { videoEditCodeElementFrames } from './videoEditCodeElements'
 import * as fonts from './videoEditFonts'
 import * as timed from '@/core/videoEdit/timedContent'
+import { updateVideoEditBuiltinEffect } from './videoEditCompositing'
+import { writeFileSync } from 'node:fs'
 
 vi.mock('../engine/videoEditCodeCompiler', async () => {
   const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
@@ -55,6 +57,21 @@ it.skipIf(process.env.HENJI_GESTURE_BENCH !== '1')('service gestures with v3, fo
     } finally { finishVideoEditGesture(handle, false); unsubscribe() }
   }
   const results = { mask: measure('mask'), position: measure('position'), maskWithIndex: measure('mask', true), positionWithIndex: measure('position', true), generic: measure('generic') }
+  const paramGesture = beginVideoEditGesture(owner.document.id)
+  const paramTimes: number[] = []
+  const initialHistory = owner.past.length
+  for (let i = 0; i < 60; i++) {
+    const start = performance.now()
+    updateVideoEditBuiltinEffect({ projectId: owner.document.id, sequenceId: sequence.id, clipId: 'clip0' }, 'effect0', { params: { strength: i / 10 } }, paramGesture)
+    paramTimes.push(performance.now() - start)
+  }
+  expect(owner.past).toHaveLength(initialHistory)
+  const finishStart = performance.now(); finishVideoEditGesture(paramGesture)
+  expect(owner.past).toHaveLength(initialHistory + 1)
+  const paramSorted = [...paramTimes].sort((a, b) => a - b)
+  const params = { writes: 60, clips: 120, p50: paramSorted[30], p95: paramSorted[57], max: paramSorted[59], finishMs: performance.now() - finishStart, times: paramTimes }
+  if (process.env.HENJI_PARAMETER_SERVICE_OUT) writeFileSync(process.env.HENJI_PARAMETER_SERVICE_OUT, JSON.stringify(params, null, 2))
+  process.stdout.write(`${JSON.stringify(params)}\n`)
   const fontSpy = vi.spyOn(fonts, 'validateVideoEditFontChanges').mockImplementation(() => undefined)
   const withoutFonts = measure('generic'); fontSpy.mockRestore()
   const timedSpy = vi.spyOn(timed, 'reconcileVideoEditTimedContent').mockImplementation((_before, next) => next)

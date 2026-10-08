@@ -34,6 +34,22 @@ async function setup() {
   })
   return { owner, target: readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, getActiveVideoEditSequence(owner).clips[0].id).target }
 }
+
+it('60 code parameter previews only copy the target branch; cancel restores values and commit is one undo', async () => {
+  const { owner, target } = await setup(); const before = owner.document; const history = owner.past.length
+  const gesture = beginVideoEditGesture(owner.document.id)
+  for (let i = 1; i <= 60; i++) setVideoEditCodeParameter(target, 'amount', i / 10, { gesture })
+  expect(owner.document.media).toBe(before.media)
+  expect(owner.document.codeMaterials).toBe(before.codeMaterials)
+  expect(owner.past).toHaveLength(history)
+  finishVideoEditGesture(gesture, false)
+  expect(readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId).parameters.amount).toBe(5)
+  const commit = beginVideoEditGesture(owner.document.id)
+  setVideoEditCodeParameter(target, 'amount', 8, { gesture: commit }); finishVideoEditGesture(commit)
+  expect(owner.past).toHaveLength(history + 1)
+  undoVideoEdit(owner.document.id)
+  expect(readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId).parameters.amount).toBe(5)
+})
 it('v3新形状沿公共片段与素材项写入、校验、读回、撤销及保存；元数据保留组件名和显示条件', async () => {
   const owner = (await createVideoEditProject())!; const app = createApplicationHarness()
   const src = 'export default {apiVersion:1,languageVersion:3,name:"参数化灯光",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,types:{light:{title:"灯光",layout:"row",fields:{power:{type:"number",title:"强度",default:1,min:0,max:2,step:.01},position:{type:"point",title:"位置",default:{x:.5,y:.5}},font:{type:"font",title:"字体",default:"sans-serif"}}}},parameters:{enabled:{type:"boolean",title:"启用",default:true},lamp:{type:"light",title:"主光",group:"照明",advanced:true,visibleWhen:{param:"enabled",equals:true},tooltip:"调整主光",description:"主体照明",default:{power:1.4},animatable:true},curve:{type:"curve",title:"映射",default:[{x:0,y:0},{x:1,y:1}],animatable:true}},render(ctx){return [rect({x:ctx.params.lamp.position.x,y:0,width:100,height:100,fill:[1,0,0,1]})];}}'

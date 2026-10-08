@@ -33,6 +33,24 @@ async function project() {
   return { owner, id, sequenceId: sequence.id, clipIds: sequence.clips.map(clip => clip.id) }
 }
 
+it('60 parameter moves preserve unrelated branches, defer full validation/save/history, then commit one undo step', async () => {
+  const { owner, id, sequenceId, clipIds } = await project()
+  const [effectId] = applyVideoEditBuiltinEffect(id, sequenceId, [clipIds[0]], 'color_grade')
+  const before = owner.document; const history = owner.past.length; const gesture = beginVideoEditGesture(id)
+  const clone = vi.spyOn(globalThis, 'structuredClone')
+  for (let i = 1; i <= 60; i++) updateVideoEditBuiltinEffect({ projectId: id, sequenceId, clipId: clipIds[0] }, effectId, { params: { exposure: i / 60 } }, gesture)
+  expect(owner.document.media).toBe(before.media)
+  expect(owner.document.items).toBe(before.items)
+  expect(owner.document.sequences[0].clips[1]).toBe(before.sequences[0].clips[1])
+  expect(owner.past).toHaveLength(history)
+  expect(clone.mock.calls.some(([value]) => typeof value === 'object' && value !== null && 'format' in value && value.format === 'henji-video-project')).toBe(false)
+  clone.mockRestore()
+  finishVideoEditGesture(gesture); expect(owner.past).toHaveLength(history + 1)
+  expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.exposure).toBe(1)
+  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.exposure).toBe(before.sequences[0].clips[0].effects![0].builtin!.params.exposure)
+  undoVideoEdit(id, true); expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.exposure).toBe(1)
+})
+
 it('shaders 组件效果与转场通过正式通用实体可读；助手创建滤镜、修改参数与手动撤销共用历史', async () => {
   const { id, clipIds, owner } = await project()
   const app = createApplicationHarness()

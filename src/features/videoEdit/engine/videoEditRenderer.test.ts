@@ -12,6 +12,7 @@ import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './vide
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
+import { videoEditParameterUpdate } from './videoEditParameterUpdate'
 
 const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
@@ -238,12 +239,51 @@ function fixture(): ReturnType<typeof videoEditComposition> {
   document.sequences[0].clips = [clip]
   return videoEditComposition(document, document.sequences[0].id)
 }
+
+it('parameter updates keep the running decoder schedule and reuse uploaded paused pictures', async () => {
+  const document = fixture()
+  document.clips[0].effects = [{ id: 'effect', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: .2 } } }]
+  const renderer = new VideoEditRenderer(document, 1920)
+  const next = { ...document, revision: document.revision + 1, clips: [{ ...document.clips[0], effects: [{ ...document.clips[0].effects[0], builtin: { id: 'color_grade', params: { exposure: .5 } } }] }] }
+  try {
+    await renderer.render(0, true)
+    const scheduled = boundary.scheduled.length; const snapshots = boundary.snapshotCalls.length
+    renderer.updateParameters(videoEditParameterUpdate(document, next)!)
+    await renderer.render(1, true)
+    expect(boundary.scheduled).toHaveLength(scheduled)
+    expect(boundary.builtinParams.at(-1)?.exposure).toBe(.5)
+    expect(boundary.snapshotCalls.length).toBeGreaterThanOrEqual(snapshots)
+    await renderer.render(1)
+    const pausedSnapshots = boundary.snapshotCalls.length
+    const again = { ...next, revision: next.revision + 1, clips: [{ ...next.clips[0], effects: [{ ...next.clips[0].effects![0], builtin: { id: 'color_grade', params: { exposure: .8 } } }] }] }
+    renderer.updateParameters(videoEditParameterUpdate(next, again)!)
+    await renderer.render(1)
+    expect(boundary.snapshotCalls).toHaveLength(pausedSnapshots)
+    expect(boundary.builtinParams.at(-1)?.exposure).toBe(.8)
+  } finally { await renderer.dispose() }
+})
 function nestedFixture(): ReturnType<typeof videoEditComposition> {
   const child = fixture(); const parent = createVideoEditSequence('父序列'); addLegacyVideoEditTracks(parent)
   parent.width = child.width; parent.height = child.height
   parent.clips = [{ ...child.clips[0], id: 'nested', kind: 'sequence', itemId: 'nested-item', volume: .5 }]
   return { ...child, ...parent, items: [...child.items, { id: 'nested-item', name: '子序列', kind: 'sequence', sequenceId: child.id }], sequences: [...child.sequences!, parent] }
 }
+
+it('nested sequence parameter updates reuse the child renderer and its uploaded source frame', async () => {
+  const document = nestedFixture(); const child = document.sequences!.find(sequence => sequence.id !== document.id)!
+  child.clips[0].effects = [{ id: 'grade', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: .2 } } }]
+  const renderer = new VideoEditRenderer(document, 1920)
+  try {
+    await renderer.render(0)
+    const snapshots = boundary.snapshotCalls.length; const disposed = boundary.disposed.length
+    const next = { ...document, revision: document.revision + 1, sequences: document.sequences!.map(sequence => sequence === child ? { ...sequence, clips: [{ ...child.clips[0], effects: [{ ...child.clips[0].effects![0], builtin: { id: 'color_grade', params: { exposure: .8 } } }] }] } : sequence) }
+    renderer.updateParameters(videoEditParameterUpdate(document, next)!)
+    await renderer.render(0)
+    expect(boundary.builtinParams.at(-1)?.exposure).toBe(.8)
+    expect(boundary.snapshotCalls).toHaveLength(snapshots)
+    expect(boundary.disposed).toHaveLength(disposed)
+  } finally { await renderer.dispose() }
+})
 it('多机位预览与导出按机位段选择画面，返回原机位且固定主音频，同一帧不同机位缓存隔离', async () => {
   const document = nestedFixture(); const child = document.sequences![0]
   const base = child.clips[0]
