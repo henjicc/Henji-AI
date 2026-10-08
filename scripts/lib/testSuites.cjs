@@ -17,6 +17,7 @@ const GPU_TEST_FILES = [
   'src/features/videoEdit/engine/videoEditLumetri.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinTransitions.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditPlaybackResolution.gpu.test.ts',
+  'src/features/videoEdit/engine/videoEditPressureBenchmark.test.ts',
   'src/features/videoEdit/engine/videoEditSmartRegionMask.gpu.test.ts',
 ]
 const IMAGE_EXPORT_TEST_FILES = [
