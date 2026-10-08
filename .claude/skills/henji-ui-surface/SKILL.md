@@ -527,6 +527,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 音频播放 | `@/components/AudioPlayer` | 再写一个播放器 |
 | 调色曲线 / 色轮（Lumetri 曲线、三色轮等二维调色控件） | `UiToneCurve` / `UiColorWheel`（`@/components/ui`，受控值 + 拖动开始 / 结束回调，撤销交给业务手势） | 用 NumberInput 拼曲线点、自写 Canvas 色轮 |
 | 长列表 | `react-virtuoso`（已是依赖） | 全量 map 渲染上百项 |
+| 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiOptionButton variant="segment"` + `UI_SEGMENTED_TRACK_CLASS`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
 
 **新增组件的门槛**（Agent 自行判断，不需要等用户确认；四条都要做到）：
 1. 在 `@/components/ui` 与本表中确认没有可复用或可扩展的组件

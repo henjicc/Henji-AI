@@ -1,5 +1,5 @@
 import {
-  APP_ACCENT_HEX, TEXT_LIGHT_HEX, WHITE_HEX, CAMERA_STAGE_COLOR_HEX,
+  APP_ACCENT_HEX, TEXT_LIGHT_HEX, WHITE_HEX, BLACK_HEX, CAMERA_STAGE_COLOR_HEX,
   IMAGE_EDITOR_GLOW_TINT_HEX, SOCKET_TYPE_COLOR_HEX, CANVAS_GRID_ALT_HEX,
 } from '@/core/theme/colorTokens';
 
@@ -386,3 +386,24 @@ export const UI_LIGHTING_RANGE_CLASS = `rounded-full focus-visible:ring-2 focus-
   [&::-webkit-slider-thumb]:shadow-thumb-ring [&::-moz-range-thumb]:shadow-thumb-ring`
 /** Media color content: hue angle increases clockwise from red on the right. */
 export const UI_COLOR_WHEEL_BACKGROUND = 'radial-gradient(circle, rgb(var(--media-rgb) / 0.8), transparent), conic-gradient(from 90deg, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%))'
+
+/** Parameter editing graphics: semantic chrome, registered content-color spectra. */
+export const UI_PARAMETER_SURFACE_CLASS = 'relative w-full touch-none select-none rounded-control bg-control outline-none focus-visible:ring-2 focus-visible:ring-accent-ring aria-disabled:opacity-50'
+export const UI_PARAMETER_HANDLE_CLASS = 'fill-text1 stroke-control focus-visible:stroke-accent'
+export const UI_PARAMETER_HANDLE_RADIUS = { sm: 3, md: 4 } as const
+export const UI_PARAMETER_TRACK_BACKGROUND = {
+  none: 'var(--control)',
+  hue: 'linear-gradient(90deg, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%))',
+  luminance: `linear-gradient(90deg, ${BLACK_HEX}, ${WHITE_HEX})`,
+  saturation: 'linear-gradient(90deg, hsl(0 0% 50%), hsl(0 100% 50%))',
+} as const
+export const UI_GRADE_WHEEL_BACKGROUND = 'radial-gradient(circle, rgb(var(--on-media-rgb)), transparent), conic-gradient(from 90deg, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%))'
+export const UI_GRADE_LUMINANCE_BACKGROUND = `linear-gradient(0deg, ${BLACK_HEX}, ${WHITE_HEX})`
+export const UI_CURVE_CHANNEL_COLOR = { master: 'var(--text1)', red: SOCKET_TYPE_COLOR_HEX.VIDEO, green: SOCKET_TYPE_COLOR_HEX.STRING, blue: SOCKET_TYPE_COLOR_HEX.NUMBER } as const
+/** User RGBA is content, not UI chrome; all color formatting stays at the token boundary. */
+export function uiParameterRgba(color: readonly number[]): string {
+  return `rgb(${color.slice(0, 3).map(channel => Math.round(Math.max(0, Math.min(1, channel)) * 255)).join(' ')} / ${Math.max(0, Math.min(1, color[3] ?? 1))})`
+}
+export function uiParameterHex(color: readonly number[]): string {
+  return `#${color.slice(0, 3).map(channel => Math.round(Math.max(0, Math.min(1, channel)) * 255).toString(16).padStart(2, '0')).join('')}`
+}

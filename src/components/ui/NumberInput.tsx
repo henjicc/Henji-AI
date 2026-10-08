@@ -15,6 +15,8 @@ type NumberInputProps = {
   label?: string
   ariaLabel?: string
   value: number | undefined
+  /** 有传时，Home 或双击读数/标签复位；同步正在编辑的读数与 Esc 基线。 */
+  defaultValue?: number
   onChange: (next: number) => void
   min?: number
   max?: number
@@ -95,6 +97,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     label,
     ariaLabel,
     value,
+    defaultValue,
     onChange,
     min,
     max,
@@ -155,6 +158,14 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     setIsFocused(true)
     focusValueRef.current = safeValue
     setInputValue(displayValue)
+  }
+
+  const resetValue = (): void => {
+    if (disabled || defaultValue === undefined || scrubRef.current?.active) return
+    const next = clamp(defaultValue)
+    focusValueRef.current = next
+    setInputValue(formatNumber(next, effectivePrecision))
+    onChange(next)
   }
 
   useEffect(() => {
@@ -295,6 +306,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     onPointerMove: moveScrub,
     onPointerUp: endScrub,
     onPointerCancel: cancelScrub,
+    onLostPointerCapture: cancelScrub,
   })
 
   const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
@@ -308,6 +320,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
         <label
           className={`${UI_FIELD_LABEL_CLASS} select-none ${disabled ? '' : 'cursor-ew-resize'}`}
           {...scrubHandlers(false)}
+          onDoubleClick={resetValue}
         >
           {label}
         </label>
@@ -328,7 +341,13 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           onBlur={handleBlur}
           onFocus={handleFocus}
           {...scrubHandlers(true)}
+          onDoubleClick={resetValue}
           onKeyDown={(event) => {
+            if (disabled) return
+            if (event.key === 'Home' && defaultValue !== undefined) {
+              event.preventDefault()
+              resetValue()
+            }
             if (event.key === 'Enter') {
               event.currentTarget.blur()
             }
@@ -351,6 +370,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           }}
           textHistory={scopedTextHistory}
           aria-label={ariaLabel ?? label}
+          aria-valuetext={inputValue}
           placeholder={placeholder}
           // 外框已经画了字段表面与焦点环：内层输入框只负责文字，铺满高度
           frame="inner"

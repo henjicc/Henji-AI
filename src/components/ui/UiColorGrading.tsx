@@ -2,7 +2,7 @@ import { lumetriSpline, type LumetriCurvePoint } from '@/core/videoEdit/lumetriC
 import { useRef } from 'react'
 import { UI_COLOR_WHEEL_BACKGROUND } from './styleTokens'
 
-interface GestureProps { onBegin: () => void; onFinish: () => void; onCancel: () => void; disabled?: boolean }
+export interface GestureProps { onBegin: () => void; onFinish: () => void; onCancel: () => void; disabled?: boolean }
 /** Document/undo independent curve editor; legacy values remain supported by existing consumers. */
 export function UiToneCurve({ label, values, points, onChange, onPointsChange, onBegin, onFinish, onCancel, disabled }: GestureProps & { label: string; values?: readonly number[]; points?: readonly LumetriCurvePoint[]; onChange?: (point: number, value: number) => void; onPointsChange?: (points: LumetriCurvePoint[]) => void }): React.ReactElement {
   const current = points ?? (values ?? []).map((y, i) => ({ x: i * 25, y }))

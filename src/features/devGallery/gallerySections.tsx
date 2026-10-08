@@ -41,6 +41,14 @@ import {
   UiRangeInput,
   UiColorWheel,
   UiToneCurve,
+  UiAngleDial,
+  UiPointPad,
+  UiRangeSlider,
+  UiGradientEditor,
+  UiGradeWheel,
+  UiCurveEditor,
+  UiEasingEditor,
+  UiSeedInput,
   UiRegion,
   UiSearchInput,
   UiSelect,
@@ -321,6 +329,15 @@ export function FormSection(): JSX.Element {
   const [curve, setCurve] = useState<number[]>([0, 0.25, 0.5, 0.75, 1])
   const [wheel, setWheel] = useState({ hue: 30, strength: 0.4 })
   const idle = (): void => undefined
+  const gesture = { onBegin: idle, onFinish: idle, onCancel: idle }
+  const [angle, setAngle] = useState(30)
+  const [point, setPoint] = useState({ x: 0.4, y: 0.6 })
+  const [range, setRange] = useState<[number, number]>([20, 70])
+  const [stops, setStops] = useState([{ at: 0, color: [0.1, 0.2, 0.6, 1] as [number, number, number, number] }, { at: 1, color: [0.9, 0.5, 0.2, 1] as [number, number, number, number] }])
+  const [grade, setGrade] = useState({ hue: 200, strength: 0.3, luminance: 0.1 })
+  const [points, setPoints] = useState([{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }])
+  const [easing, setEasing] = useState<string | [number, number, number, number]>('ease')
+  const [seed, setSeed] = useState(42)
   return (
     <GallerySection title="表单与分组">
       <UiGroup title="基础设置">
@@ -346,6 +363,18 @@ export function FormSection(): JSX.Element {
         <div className="flex items-center gap-4">
           <div className="w-40"><UiToneCurve label="RGB 曲线" values={curve} onChange={(point, value) => setCurve(current => current.map((item, index) => index === point ? value : item))} onBegin={idle} onFinish={idle} onCancel={idle} /></div>
           <div className="w-24"><UiColorWheel label="中间调" hue={wheel.hue} strength={wheel.strength} onChange={(hue, strength) => setWheel({ hue, strength })} onBegin={idle} onFinish={idle} onCancel={idle} /></div>
+        </div>
+      </UiGroup>
+      <UiGroup divided titleTone="compact" title="参数控件">
+        <div className="grid grid-cols-2 gap-4">
+          <UiAngleDial label="方向" value={angle} onChange={setAngle} defaultValue={0} {...gesture} />
+          <UiPointPad label="中心" value={point} onChange={setPoint} aspect={16 / 9} {...gesture} />
+          <UiRangeSlider label="色相范围" value={range} onChange={setRange} min={0} max={360} track="hue" {...gesture} />
+          <UiGradientEditor label="渐变" value={stops} onChange={setStops} {...gesture} />
+          <UiGradeWheel label="中间调" value={grade} onChange={setGrade} {...gesture} />
+          <UiCurveEditor label="明暗曲线" value={points} onChange={setPoints} {...gesture} />
+          <UiEasingEditor label="缓动" value={easing} onChange={setEasing} presets={[{ value: 'ease', label: '缓入缓出', curve: [0.42, 0, 0.58, 1] }, { value: 'linear', label: '线性', curve: [0, 0, 1, 1] }]} {...gesture} />
+          <UiSeedInput label="种子" value={seed} onChange={setSeed} {...gesture} />
         </div>
       </UiGroup>
     </GallerySection>
