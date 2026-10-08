@@ -69,8 +69,6 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
   const projectList = useMemo(() => projectKey ? projectKey.split('\n') : [], [projectKey])
   useEffect(() => { const owner = fontOwner.current; pinDocumentFonts(owner, current ? [current.id] : []); return () => releaseDocumentFonts(owner) }, [current])
   const familyRows = useMemo(() => {
-    // The list exists only inside the open panel; never filter and sort hundreds of system faces while closed.
-    if (!open) return []
     const filtered = filterFonts(library.faces, query, filter, library.preferences, projectList)
     const groups = new Map<string, FontFaceInfo>()
     for (const face of filtered) {
@@ -79,7 +77,7 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
     }
     const rows = [...groups.values()]
     return filter === 'recent' ? rows.sort((a, b) => library.preferences.recent.indexOf(a.family) - library.preferences.recent.indexOf(b.family)) : rows.sort((a, b) => a.localizedFamily.localeCompare(b.localizedFamily, 'zh-CN'))
-  }, [open, library.faces, library.preferences, query, filter, projectList])
+  }, [library.faces, library.preferences, query, filter, projectList])
   const styles = useMemo(() => current ? library.faces.filter(face => face.family === current.family) : [], [current, library.faces])
   useEffect(() => { retainDocumentFonts(library.faces) }, [library.faces])
   useEffect(() => { void loadFontLibrary().catch(() => undefined) }, [])
@@ -101,7 +99,7 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
       preview.current?.(null)
       selectedCallback.current(face.fullName, face)
       rememberFont(face.family); setOpen(false)
-    }, report)
+    }).catch(report)
   }
   const perform = async (operation: () => Promise<void>): Promise<void> => { setBusy(true); setError(''); restore(); try { await operation() } catch (reason) { report(reason) } finally { setBusy(false) } }
   return <div className="flex min-w-0 flex-col gap-1" data-ui-font-picker>
@@ -123,7 +121,7 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
       </div> : !library.loading && <UiEmpty size="xs" title="没有匹配的字体" action={<UiButton size="sm" disabled={busy} onClick={() => { void perform(importFonts) }}>导入字体</UiButton>} />}
       {current?.imported && <UiButton variant="danger" size="sm" disabled={busy} onClick={() => { void perform(() => removeFont(current.id)) }}><Trash2 className="h-3.5 w-3.5" />删除此导入字体</UiButton>}
     </div>}>
-      {({ togglePanel, open: expanded }) => <UiFieldTrigger size={size} className="w-full" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={expanded} open={expanded} data-panel-trigger-button onClick={togglePanel}><span style={{ fontFamily: cssFontFamily(value) }}>{current?.localizedFamily ?? value}</span></UiFieldTrigger>}
+      {({ open: expanded }) => <UiFieldTrigger size={size} className="w-full" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={expanded} open={expanded} data-panel-trigger-button onClick={() => { if (open) { restore(); setOpen(false) } else { void loadFontLibrary(true).catch(report); setOpen(true) } }}><span style={{ fontFamily: cssFontFamily(value) }}>{current?.localizedFamily ?? value}</span></UiFieldTrigger>}
     </PanelTrigger>
     {styles.length > 1 && <Dropdown ariaLabel={`${ariaLabel}样式`} size={size} disabled={disabled} value={current?.id ?? ''} options={styles.map(face => ({ value: face.id, label: face.style }))} onSelect={id => { const face = styles.find(face => face.id === id); if (face) choose(face) }} />}
   </div>
