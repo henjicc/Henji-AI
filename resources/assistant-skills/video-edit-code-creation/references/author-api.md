@@ -30,7 +30,7 @@ name 为 1–160 个 UTF-16 单元；kind 为 generator/filter；可选 shaders 
 
 允许 export 前顶层 const、render 内 const、纯箭头辅助函数；块体只允许 const 与最后一个 return。辅助函数编译时展开，不运行任意 JS。函数参数不能带 TS 类型、默认值、解构或剩余参数。对象字段必须显式写 `x: x`，不支持简写、展开或方法。
 
-允许字面量、数组、静态字段对象，`+ - * / %`、比较、同类型标量 `=== !==`、`&& || !`、同类型两支的三元表达式。可读数组下标、允许的对象字段、颜色 `.r/.g/.b/.a`；CPU 生成器支持经过检查的动态索引，滤镜索引须静态确定。不支持 if/for/while、let/var、赋值、递归、class/new、import、模板字符串、任意方法及浏览器/Node/网络/文件访问。
+允许字面量、数组、静态字段对象，`+ - * / %`、比较、同类型标量 `=== !==`、`&& || !`、同类型两支的三元表达式。可读数组下标、允许的对象字段、颜色 `.r/.g/.b/.a`；CPU 生成器支持经过检查的动态索引，滤镜索引须静态确定。不支持 if/for/while、let/var、赋值、递归、class/new、默认导入或动态 import（具名相对导入与 @组件 导入见 [多文件与项目组件库](multifile-components.md)）、模板字符串、任意方法及浏览器/Node/网络/文件访问。
 
 ctx：time 源秒、localTime 片段内秒、sequenceTime 序列秒、frame、fps、width/height；参数为 `ctx.params.key`。u/v 仅滤镜可用，表示当前输入归一化像素坐标。关键帧按 time，不把三种时间混用；frame 由宿主提供，不假定总等于源秒乘帧率。
 

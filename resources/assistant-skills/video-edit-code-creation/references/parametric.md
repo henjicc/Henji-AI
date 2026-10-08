@@ -32,8 +32,8 @@
 ## 组件化
 
 - 把可复用的部件写成 helper 函数（输入一个属性对象，返回图形数组），主 render 只负责拼装。例如 `lowerThird({x, y, name, role, accent})`。
-- 部件多、源码长时拆成多个文件：入口 `main.ts` 负责参数和拼装，`parts/*.ts` 放部件，用 `import { card } from "./parts/card"` 引入（规则见 [作者接口](author-api.md)）。
-- 同一项目里多条素材都会用到的部件，发布到**项目组件库**，别的素材用 `import { x } from "@组件/名字"` 复用；组件更新后，素材重新保存才会用新版本。
+- 部件多、源码长时拆成多个文件：入口 `main.ts` 负责参数和拼装，`parts/*.ts` 放部件，用 `import { card } from "./parts/card"` 引入（规则见 [多文件与项目组件库](multifile-components.md)）。
+- 同一项目里多条素材都会用到的部件，发布到**项目组件库**（`video_edit.code_component`），别的素材用 `import { x } from "@组件/名字"` 复用；组件更新后，素材重新保存才会用新版本。
 - 结构重复的参数（三盏灯、五个柱子）用素材顶层 `types` 声明自定义组件类型，字段只能是基础类型，布局从 stack/row/grid/wheel 里选；界面会按统一风格渲染。
 
 ## 用户要求修改时

@@ -70,7 +70,7 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     const referencePaths = [
       'references/annotations.md', 'references/author-api.md', 'references/author-shaders.md',
       'references/author-text-motion.md', 'references/brief-concept.md', 'references/color-texture.md',
-      'references/examples.md', 'references/layout.md', 'references/motion.md',
+      'references/examples.md', 'references/layout.md', 'references/motion.md', 'references/multifile-components.md',
       'references/parameter-types.md', 'references/parameters-curves.md', 'references/parametric.md', 'references/preferences.md', 'references/review.md',
       'references/shader-components-filters.md', 'references/shader-components-shapes-2.md', 'references/shader-components-shapes.md',
       'references/shader-components-stylize.md', 'references/shader-components-textures-2.md', 'references/shader-components-textures.md',
