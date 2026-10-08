@@ -1,0 +1,46 @@
+# 着色器组件：纹理与背景
+
+由脚本从 shaders 4.0.2 生成。代码里写英文组件名；中文名是效果面板名。角色：生成=自己画；滤镜=处理之前画好的图层；转场=剪辑过渡或 layers 里的揭示。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect（effect:shaders.组件名 / transition:shaders.组件名）。
+
+- **Aurora** 极光｜生成｜Mesmerizing aurora borealis with layered curtains, vertical rays, and …｜colorA colorB colorC colorSpace balance intensity curtainCount speed⏱ waviness rayDensity height center seed
+- **Beam** 光束｜生成｜A beam of light from one point to another.｜startPosition endPosition startThickness endThickness startSoftness endSoftness insideColor outsideColor colorSpace
+- **Blob** 流体团｜生成｜Organic animated blob with 3D lighting and gradients｜origin colorA colorB stops size deformation softness highlightIntensity highlightX highlightY highlightZ highlightColor speed⏱ seed center colorSpace
+- **BlockNoise** 方块噪声｜生成｜Blocky value noise with soft cells that morph over time｜colorA colorB stops colorSpace scale contrast balance seed speed⏱
+- **BlueNoise** 蓝噪声｜生成｜High-frequency blue noise — even, grainy speckle ideal for dithering｜colorA colorB stops colorSpace grain contrast balance seed
+- **BrickPattern** 砖墙｜生成｜Classic brick wall pattern with alternating rows and mortar gaps｜colorBrick colorMortar cellsX cellsY mortar softness variation rotation speed⏱ offset speedVariance seed colorSpace
+- **Checkerboard** 棋盘格｜生成｜Classic checkerboard pattern with two alternating colors｜colorA colorB cells softness colorSpace
+- **Chevron** 人字纹｜生成｜Animated chevron / zigzag stripe pattern｜colorA colorB count angle balance softness speed⏱ offset colorSpace
+- **ColorWheel** 色轮渐变｜生成｜A directional gradient that smoothly cycles through rainbow colors or …｜mode colorA colorB colorC scale angle speed⏱ colorSpace
+- **ConicGradient** 角向渐变｜生成｜Colors sweep in a full circle around a center point, like a color wheel｜colorA colorB stops center rotation repeat colorSpace
+- **CurlNoise** 旋流噪声｜生成｜Swirling divergence-free flow field that drifts over time｜colorA colorB stops colorSpace scale contrast balance seed speed⏱
+- **DiamondGradient** 菱形渐变｜生成｜Diamond-shaped gradient radiating from a center point using Manhattan …｜colorA colorB stops center size rotation repeat roundness colorSpace
+- **DotGrid** 点阵｜生成｜Grid of dots with optional twinkling animation｜color density dotSize offset speed⏱ speedVariance twinkle
+- **ErosionNoise** 侵蚀纹｜生成｜Branching, hydraulic-erosion ridges carved into noise｜colorA colorB stops colorSpace scale contrast balance seed
+- **FallingLines** 下落线条｜生成｜Directional falling lines with a leading-to-trailing color fade｜colorA colorB colorSpace angle speed⏱ speedVariance density trailLength balance strokeWidth rounding
+- **FlowingGradient** 流动渐变｜生成｜Liquid silk gradient with organic flowing color bands｜colorA colorB colorC colorD colorSpace speed⏱ distortion seed
+- **FractalNoise** 分形噪声｜生成｜Multi-octave fractal Brownian motion noise texture with true noise evo…｜colorA colorB stops octaves detail contrast speed⏱ angle seed colorSpace
+- **GaborNoise** 指纹噪声｜生成｜Oriented sine-grain noise with a fingerprint-like flow｜colorA colorB stops colorSpace scale frequency contrast balance seed speed⏱
+- **Godrays** 体积光｜生成｜Volumetric light rays emanating from a point｜center density intensity spotty speed⏱ rayColor backgroundColor
+- **Grid** 线框网格｜生成｜Simple grid lines pattern with adjustable thickness and rotation｜color cellColor cells thickness rotation softness variation colorSpace
+- **Group** 分组｜分组｜Container for organizing and composing child effects — supports flex-l…｜
+- **HexGrid** 蜂窝网格｜生成｜Honeycomb hexagonal grid pattern｜colorA colorB cells thickness rotation softness variation colorSpace
+- **IsometricCubes** 等距立方｜生成｜Isometric tumbling-blocks tiling — a 3D cube illusion (rhombille patte…｜colorA colorB lineColor cells thickness rotation softness colorVariation colorSpace
+- **LinearGradient** 线性渐变｜生成｜Create smooth linear color gradients｜colorA colorB stops start end angle edges colorSpace
+- **Marble** 大理石｜生成｜Classic marble swirl and vein texture using noise-warped sine waves｜colorA colorB colorC scale turbulence speed⏱ seed colorSpace
+- **MeshGradient** 网格渐变｜生成｜Flowing mesh gradient of soft drifting color swaths whose seams wrap t…｜colorA colorB stops colorSpace count smoothness variation swirl drift wrapping speed⏱ seed
+- **MultiPointGradient** 多点渐变｜生成｜Five individually placed color points blended together by proximity — …｜colorA positionA colorB positionB colorC positionC colorD positionD colorE positionE colorSpace smoothness
+- **PerlinNoise** 柏林噪声｜生成｜Smooth gradient noise that morphs over time｜colorA colorB stops colorSpace scale contrast balance seed speed⏱
+- **Plasma** 等离子｜生成｜Animated effect of glowing plasma｜density speed⏱ intensity warp contrast balance colorA colorB stops colorSpace
+- **Prism** 棱镜｜生成｜A beam of light that fans out and splits into a slowly-rotating rainbo…｜position beamWidth intensity beamColor startFalloff endFalloff splitPosition spread softness saturation speed⏱
+- **RadialGradient** 径向渐变｜生成｜Radial gradient radiating from a center point｜colorA colorB stops center radius repeat aspect skewAngle colorSpace
+- **Ripples** 波纹｜生成｜Concentric animated ripples emanating from a point｜center colorA colorB speed⏱ frequency softness thickness phase
+- **Scratches** 划痕｜生成｜Fine hairline scratches, like a worn film or scratched surface｜colorA colorB scale thickness seed speed⏱
+- **SimplexNoise** 单形噪声｜生成｜Organic noise with animated movement｜colorA colorB stops colorSpace scale balance contrast seed speed⏱
+- **SineWave** 正弦波｜生成｜Animated wave with thickness and softness｜color amplitude frequency speed⏱ angle position thickness softness
+- **SolidColor** 纯色｜生成｜Fill the canvas with a single solid color｜color
+- **Spiral** 螺旋｜生成｜Rotating spiral pattern with animated movement｜colorA colorB strokeWidth strokeFalloff softness speed⏱ center scale colorSpace
+- **Strands** 光丝｜生成｜Flowing ribbons of light with a multi-color gradient｜speed⏱ amplitude frequency lineCount lineWidth softness spread pinEdges stops colorSpace colorScale colorVariance colorSpeed start end
+- **Stripes** 条纹｜生成｜Alternating colored stripes with animation｜colorA colorB angle density balance softness speed⏱ offset colorSpace
+- **StudioBackground** 影棚背景｜生成｜Multi-light studio background with ambient motion.｜color keyColor keyIntensity keySoftness fillColor fillIntensity fillSoftness fillAngle backColor backIntensity backSoftness brightness vignette center lightTarget wallCurvature ambientIntensity ambientSpeed seed
+- **SunBurst** 放射光芒｜生成｜Radial sunburst rays emanating from a center point｜color background center rayCount softness radius feather speed⏱
+- **Swirl** 旋涡｜生成｜Flowing swirl pattern with multi-layered noise｜colorA colorB stops speed⏱ detail blend colorSpace

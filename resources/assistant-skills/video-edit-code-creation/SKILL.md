@@ -41,7 +41,7 @@ description: 在剪辑里设计、编写或修改原生代码素材（动态图�
 | 开工读口味、用户明确评价后记偏好 | [用户偏好](references/preferences.md) |
 | 写或修改源码：语法、图形与预算 | [作者接口](references/author-api.md) |
 | 文字排版、量字、逐字与动效函数 | [文字与动效接口](references/author-text-motion.md) |
-| 着色器：框架组件、图层树、自己写 WGSL | [着色器接口](references/author-shaders.md)，组件目录 [shader-components](references/shader-components.md) |
+| 着色器：框架组件、图层树、自己写 WGSL | [着色器接口](references/author-shaders.md)；组件目录 [纹理](references/shader-components-textures.md)（[续](references/shader-components-textures-2.md)）、[图形材质](references/shader-components-shapes.md)（[续](references/shader-components-shapes-2.md)）、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
 | 处理用户标注/批注 | [标注处理协议](references/annotations.md) |
 | 参数声明、实例值、关键帧、新版本绑定 | [参数与曲线](references/parameters-curves.md) |
 | 定位目标、插入、时间换算、撤销与恢复 | [时间线契约](references/timeline-check.md) |

@@ -15,7 +15,8 @@ export function ensureNodeCanvasFormat(): void {
  */
 export async function initShaderGraphTestGpu(options: Parameters<typeof init>[0] = {}): ReturnType<typeof init> {
   ensureNodeCanvasFormat()
-  const attempts = [{ maxStorageBuffersInVertexStage: 8, maxStorageTexturesInVertexStage: 4 }, { maxStorageBuffersInVertexStage: 8 }]
+  const compute = { maxComputeInvocationsPerWorkgroup: 256, maxComputeWorkgroupSizeX: 256, maxComputeWorkgroupSizeY: 256 }
+  const attempts = [{ maxStorageBuffersInVertexStage: 8, maxStorageTexturesInVertexStage: 4, ...compute }, { maxStorageBuffersInVertexStage: 8, ...compute }, { maxStorageBuffersInVertexStage: 8 }]
   for (const requiredLimits of attempts) {
     try { return await init({ ...options, requiredLimits } as Parameters<typeof init>[0]) } catch { /* 适配器不认识或给不了这个上限 */ }
   }

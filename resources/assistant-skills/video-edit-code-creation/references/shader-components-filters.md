@@ -1,0 +1,48 @@
+# 着色器组件：模糊、扭曲与调色
+
+由脚本从 shaders 4.0.2 生成。代码里写英文组件名；中文名是效果面板名。角色：生成=自己画；滤镜=处理之前画好的图层；转场=剪辑过渡或 layers 里的揭示。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect（effect:shaders.组件名 / transition:shaders.组件名）。
+
+- **AngularBlur** 旋转模糊｜滤镜｜Radial motion blur rotating around a center point｜intensity center
+- **BarShift** 条带错位｜滤镜｜Slices content into parallel bars, each offset independently for a fra…｜count angle intensity seed speed⏱ edges
+- **Bend** 弯曲屏｜滤镜｜Bends the ends of the frame toward you like a curved display — content…｜strength falloff angle edges
+- **Blur** 高斯模糊（着色器）｜滤镜｜A simple Gaussian blur effect｜intensity
+- **BokehBlur** 镜头虚化｜滤镜｜Photographic lens blur where bright highlights bloom into aperture-sha…｜radius highlightGain highlightThreshold bladeShape bladeCount bladeRotation chromaticFringe
+- **BrightnessContrast** 亮度与对比度（着色器）｜滤镜｜Adjust brightness and contrast of the image｜brightness contrast
+- **Bulge** 膨胀收缩｜滤镜｜Magnify or pinch content around a center point｜center strength radius falloff edges
+- **ChannelBlur** 分通道模糊｜滤镜｜Independent blur for red, green, and blue channels｜redIntensity greenIntensity blueIntensity
+- **ConcentricSpin** 同心旋转｜滤镜｜Concentric rings that each rotate the underlying image by different am…｜intensity rings smoothness seed speed⏱ speedRandomness edges center
+- **CornerPin** 边角定位｜滤镜｜Pin each corner of the content to an arbitrary position for a free per…｜topLeft topRight bottomLeft bottomRight amount edges
+- **DiffuseBlur** 扩散模糊｜滤镜｜Grain-like pixel displacement at random｜intensity edges
+- **DisplacementMap** 置换贴图｜滤镜｜Distorts child content using another layer's pixels as a displacement …｜source amount channelMode angle edges
+- **Duotone** 双色调｜滤镜｜Map colors to two tones based on luminance｜colorA colorB blend colorSpace
+- **Exposure** 曝光（着色器）｜滤镜｜Multiplicative exposure (gain) on the child.｜exposure
+- **FilmStock** 胶片模拟｜滤镜｜Real analog film color from measured film-emulation LUTs — ten classic…｜stock strength halation halationRadius weave
+- **Flip** 翻转｜滤镜｜Mirror content horizontally, vertically, or both｜flipX flipY
+- **FlowField** 流场扭曲｜滤镜｜Fluid-like distortion with constant smooth motion｜strength detail speed⏱ evolutionSpeed seed edges
+- **FlutedGlass** 条纹玻璃｜滤镜｜Full-screen fluted glass effect — refracts content through repeating c…｜shape angle frequency softness waveAmplitude waveFrequency speed⏱ refraction aberration lightAngle highlight highlightSoftness highlightColor edges
+- **Form3D** 立体包裹｜滤镜｜Wraps child content onto a 3D raymarched shape with lighting.｜shape3d center zoom glossiness lighting uvMode speed⏱
+- **GlassTiles** 玻璃砖｜滤镜｜Refraction-like distortion in a tile grid pattern｜intensity tileCount rotation roundness
+- **Grayscale** 黑白｜滤镜｜Convert colors to black and white｜
+- **HueShift** 色相旋转｜滤镜｜Rotate hue around the color wheel｜shift
+- **Invert** 反相｜滤镜｜Invert RGB colors while preserving alpha｜
+- **Kaleidoscope** 万花筒｜滤镜｜Create a kaleidoscope effect with radial mirrored segments｜center segments angle edges
+- **LinearBlur** 方向模糊（着色器）｜滤镜｜Directional motion blur in a specific angle｜intensity angle
+- **Mirror** 镜像｜滤镜｜Mirror content across a line defined by center point and angle｜center angle edges
+- **Perspective** 透视旋转｜滤镜｜Rotate the plane in 3D space with pan and tilt｜center pan tilt fov zoom offset edges
+- **PolarCoordinates** 极坐标｜滤镜｜Convert rectangular coordinates to polar space｜center wrap radius intensity edges
+- **Posterize** 色调分离｜滤镜｜Reduce color depth to create a poster effect｜intensity
+- **ProgressiveBlur** 渐进模糊｜滤镜｜Blur that increases progressively in one direction｜intensity angle center falloff
+- **RectangularCoordinates** 直角坐标｜滤镜｜Convert polar coordinates back to rectangular space｜center scale intensity edges
+- **Repeater** 重复阵列｜滤镜｜Repeat the child content in grid, radial or linear layouts with per-in…｜mode cropLeft cropRight cropTop cropBottom columns rows gapX gapY stagger flip count radius startAngle sweep faceCenter direction spacing instanceScale instanceRotation instanceOpacity hueShift phase zOrder jitterPosition jitterRotation jitterScale jitterOpacity seed
+- **Saturation** 饱和度（着色器）｜滤镜｜Adjust color saturation intensity｜intensity
+- **Sharpness** 锐度｜滤镜｜Adjust image sharpness using a convolution kernel｜sharpness
+- **Solarize** 负感｜滤镜｜Inverts tones above a luminance threshold — a classic darkroom and pho…｜threshold strength
+- **Spherize** 球面化｜滤镜｜Map content onto a 3D sphere surface with depth distortion｜radius depth center lightPosition lightIntensity lightSoftness lightColor
+- **Stretch** 拉伸｜滤镜｜Stretch content towards a direction from a center point｜center strength angle falloff edges
+- **TiltShift** 移轴｜滤镜｜Selective focus blur mimicking tilt-shift photography｜intensity width falloff angle center
+- **Tint** 着色｜滤镜｜Apply a color tint to the image｜color amount preserveLuminosity
+- **Tritone** 三色调｜滤镜｜Map colors to three tones: shadows, midtones, highlights｜colorA colorB colorC blendMid colorSpace
+- **Twirl** 旋转扭曲｜滤镜｜Rotate and twist content around a center point｜center intensity edges
+- **Vibrance** 自然饱和度｜滤镜｜Selective saturation adjustment protecting skin tones｜intensity
+- **WaveDistortion** 波浪扭曲｜滤镜｜Wave-based distortion with multiple waveform types｜strength frequency speed⏱ angle waveType edges
+- **ZoomBlur** 缩放模糊（着色器）｜滤镜｜Radial zoom blur expanding from a center point｜intensity center

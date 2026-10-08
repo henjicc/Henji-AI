@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..')
 const CATALOG = path.join(ROOT, 'src/core/videoEdit/shaderGraph/components.generated.json')
 const LOADERS = path.join(ROOT, 'src/features/videoEdit/engine/shaderEngines/componentLoaders.generated.ts')
 const TRANSITIONS = path.join(ROOT, 'src/core/videoEdit/shaderGraph/transitionKinds.generated.ts')
-const REFERENCE = path.join(ROOT, 'resources/assistant-skills/video-edit-code-creation/references/shader-components.md')
+const REFERENCE_DIR = path.join(ROOT, 'resources/assistant-skills/video-edit-code-creation/references')
 const ZH = require('../src/core/videoEdit/shaderGraph/zh.json')
 const EXCLUSIONS = require('./shader-component-exclusions.cjs')
 
@@ -80,30 +80,32 @@ async function build() {
   ].join('\n')
   const usable = components.filter(value => !value.excluded && !value.usesPointer)
   const ROLE = { generator: '生成', filter: '滤镜', transition: '转场', group: '分组' }
-  const CATEGORY = { Textures: '纹理与背景', Shapes: '图形', 'Shape Effects': '材质（作用于形状）', Blurs: '模糊', Distortions: '扭曲变形', Adjustments: '调色', Stylize: '风格化', Transitions: '转场', Utilities: '工具' }
-  const brief = text => { const first = text.split(/(?<=[.。])\s/)[0]; return first.length > 140 ? `${first.slice(0, 137)}…` : first }
+  // 助手参考每份不超过 8KB（技能读取上限）：按用途分文件，超出时同一组再续一份。
+  const GROUPS = [
+    ['textures', '纹理与背景', ['Textures', 'Utilities']], ['shapes', '图形与材质', ['Shapes', 'Shape Effects']],
+    ['filters', '模糊、扭曲与调色', ['Blurs', 'Distortions', 'Adjustments']], ['stylize', '风格化与转场', ['Stylize', 'Transitions']],
+  ]
+  const brief = text => { const first = text.split(/(?<=[.。])\s/)[0]; return first.length > 72 ? `${first.slice(0, 70)}…` : first }
   const propList = value => value.props.filter(prop => prop.ui !== 'none').map(prop => `${prop.key}${prop.key === value.speedProp ? '⏱' : ''}`).join(' ')
-  const reference = [
-    '# 着色器组件目录',
-    '',
-    `由 scripts/generate-shader-components.cjs 从 shaders ${pkg.version} 生成，勿手改。代码里写英文组件名；中文名是效果面板里的名字。`,
-    '',
-    '角色：生成＝自己画出画面；滤镜＝处理它之前画好的图层（shader 的 layers 里放在后面，或滤镜素材里 shaderFilter）；转场＝剪辑过渡（kind 为 shaders.组件名），在 layers 里也能当遮罩式揭示用。',
-    '属性写组件原名（如 colorA），下划线写法 color_a 也认；带 ⏱ 的是速度属性（time 按“秒×速度”推进，不能做关键帧）。',
-    '每个属性的含义、默认值与范围：read_application_entity 读 video_edit.builtin_effect 的 `effect:shaders.<组件名>`（params 里的 description 写了代码属性名）；转场读 `transition:shaders.<组件名>`。',
-    '',
-    ...Object.entries(CATEGORY).flatMap(([category, zh]) => {
-      const items = usable.filter(value => value.category === category)
-      if (!items.length) return []
-      return [`## ${zh}（${category}）`, '', ...items.map(value => `- **${value.name}** ${ZH.components[value.name]?.[0] ?? ''}｜${ROLE[value.role]}｜${brief(value.description)}｜${propList(value)}`), '']
-    }),
-  ].join('\n')
+  const header = title => [`# 着色器组件：${title}`, '', `由脚本从 shaders ${pkg.version} 生成。代码里写英文组件名；中文名是效果面板名。角色：生成=自己画；滤镜=处理之前画好的图层；转场=剪辑过渡或 layers 里的揭示。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect（effect:shaders.组件名 / transition:shaders.组件名）。`, '']
+  const references = {}
+  for (const [slug, title, categories] of GROUPS) {
+    const lines = usable.filter(value => categories.includes(value.category)).map(value => `- **${value.name}** ${ZH.components[value.name]?.[0] ?? ''}｜${ROLE[value.role]}｜${brief(value.description)}｜${propList(value)}`)
+    let part = 1; let current = header(title)
+    const flush = () => { references[part === 1 ? `shader-components-${slug}.md` : `shader-components-${slug}-${part}.md`] = current.join('\n') + '\n'; part++; current = header(`${title}（续）`) }
+    for (const line of lines) {
+      if (Buffer.byteLength([...current, line].join('\n')) > 7800) flush()
+      current.push(line)
+    }
+    flush()
+  }
+  const reference = references
   return { catalog: catalogText, loaders, transitions, reference }
 }
 
 build().then(({ catalog, loaders, transitions, reference }) => {
   if (process.argv.includes('--check')) {
-    const stale = [[CATALOG, catalog], [LOADERS, loaders], [TRANSITIONS, transitions], [REFERENCE, reference]].filter(([file, text]) => !fs.existsSync(file) || fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') !== text)
+    const stale = [[CATALOG, catalog], [LOADERS, loaders], [TRANSITIONS, transitions], ...Object.entries(reference).map(([name, text]) => [path.join(REFERENCE_DIR, name), text])].filter(([file, text]) => !fs.existsSync(file) || fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') !== text)
     if (stale.length) { console.error(`着色器组件目录已过期，请运行 node scripts/generate-shader-components.cjs：${stale.map(([file]) => path.relative(ROOT, file)).join(', ')}`); process.exit(1) }
     return
   }
@@ -111,6 +113,7 @@ build().then(({ catalog, loaders, transitions, reference }) => {
   fs.writeFileSync(CATALOG, catalog)
   fs.writeFileSync(LOADERS, loaders)
   fs.writeFileSync(TRANSITIONS, transitions)
-  fs.writeFileSync(REFERENCE, reference)
+  for (const name of fs.readdirSync(REFERENCE_DIR)) if (name.startsWith('shader-components') && !(name in reference)) fs.rmSync(path.join(REFERENCE_DIR, name))
+  for (const [name, text] of Object.entries(reference)) fs.writeFileSync(path.join(REFERENCE_DIR, name), text)
   console.log('已生成着色器组件目录')
 }).catch(error => { console.error(error); process.exit(1) })
