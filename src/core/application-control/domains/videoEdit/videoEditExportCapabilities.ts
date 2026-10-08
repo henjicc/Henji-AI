@@ -19,9 +19,9 @@ export const videoEditExportInputSchema = z.object({ documentRef, format: z.enum
 export const videoEditExportJobSummarySchema = z.object({
   id: z.string(), documentRef, sequenceRef: ref('video_edit.sequence'), name: z.string(), presetName: z.string(),
   state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().min(0).max(1), range, settings: videoEditExportSettingsSchema,
-  taskId: z.string().optional(), error: z.string().optional(), outputReady: z.boolean(), assetRef: ref('asset').optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(),
+  taskId: z.string().optional(), error: z.string().optional(), notice: z.string().optional(), outputReady: z.boolean(), assetRef: ref('asset').optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(),
 }).strict()
-const task = z.object({ id: z.string(), state: z.enum(['running', 'completed', 'failed', 'cancelled']), progress: z.number(), revision: z.number(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), loudness: videoEditLoudnessSettingsSchema.optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional() }).strict()
+const task = z.object({ id: z.string(), state: z.enum(['running', 'completed', 'failed', 'cancelled']), progress: z.number(), revision: z.number(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), loudness: videoEditLoudnessSettingsSchema.optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(), notice: z.string().optional() }).strict()
 const output = z.object({ resultRef: documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: documentRef }).strict(), queue: z.array(videoEditExportJobSummarySchema), task: task.optional() }).strict()
 export const videoEditExportQuerySchema = z.object({ documentRef, taskId: z.string().min(1).optional() }).strict()
 const descriptions = {

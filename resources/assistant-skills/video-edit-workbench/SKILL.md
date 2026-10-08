@@ -21,6 +21,13 @@ description: 在痕迹AI剪辑工作台做粗剪、整理时间线、节奏、�
 6. 识别、翻译、模型生成可能计费，遵守正式审批与授权；准备不等于付费提交，不能代替用户批准。已有生成或已完成导出只复用，不重新付费。
 7. 修改后回读结构；画面用 `observe_video_edit_frame` 离屏出帧并用 `read_application_media` 真读图。静帧不能证明节奏、听感或编码成片质量；没看到或没听到就说明证据边界。
 
+## 拒绝与保存恢复
+
+- 外层 `executionState=not_executed` 或失败事实 `details.execution.notExecuted=true` 表示未提交业务修改；读原因，修正前置条件后用新 operationId 执行。无原视频的图文序列不能自动重构，应先放入视频。失败不等于 unknown。
+- `partial` 且回执说明修改已保留、保存未确认时，用 `retry_application_operation_save`：新 operationId 标识这次恢复，originalOperationId 必须是原修改调用的 operationId。它只保存并核对原产物，不重复放入或生成；不要另调被写入保护挡住的 `save_video_edit`。
+- 原操作查询到 completed 且 verificationState=verified 才解除本次恢复；媒体或落位不符仍保留保护。unknown 先查询原操作，不能换连接、换标识或重新生成绕过。
+- `prepare_generation_task.preparation.prepared=true` 只表示参数准备成功；同时检查 providerConfigured/canSubmit。供应商未配置时不能提交；可提交仍不代替付费授权。
+
 ## 路由表
 
 用 `load_assistant_skill`，name 为 video-edit-workbench，省略 path 读入口；按当前步骤读一两篇参考。

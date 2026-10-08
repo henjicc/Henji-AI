@@ -4,10 +4,11 @@ import { sendVideoEditToCanvas } from '@/services/workspaceTransfer'
 import { splitVideoEditRef } from './videoEditReflection'
 import { editVideoEditProgramFrame, readVideoEditImageReturn } from './videoEditFrameEdit'
 import { readVideoEditResultPlacement } from './videoEditResultTarget'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 function childOf(projectId: string, ref: { kind: string; id: string }): string {
   const parsed = splitVideoEditRef(ref)
-  if (parsed.projectId !== projectId || !parsed.childId) throw new Error(`${ref.kind} 必须属于来源剪辑，请使用完整引用。`)
+  if (parsed.projectId !== projectId || !parsed.childId) throw new ApplicationPreflightFailure(`${ref.kind} 必须属于来源剪辑，请使用完整引用。`)
   return parsed.childId
 }
 

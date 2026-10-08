@@ -1,8 +1,10 @@
 import type { LocalHostRequest } from '@/core/application-control/localHostContracts'
 import type { ApplicationExecutionContext } from '@/core/application-control/execution/types'
 import { openVideoEditDocument, requireVideoEditInstance, verifyVideoEditSaved } from './videoEditService'
+import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
+import { getPlatform } from '@/platform/runtime'
 
-/** 只在旧渲染会话结束后调用；身份与落位共存于同一文档提交，不从名称/参数猜执行结果。 */
+/** 保存重试与宿主会话恢复共用；身份与落位共存于文档，不从名称/参数猜执行结果。 */
 export async function recoverVideoEditPlacement(request: NonNullable<LocalHostRequest['recoveryOperation']>, context: ApplicationExecutionContext): Promise<Record<string, unknown> | undefined> {
   const proof = request.atomicPlacement
   if (!proof) return undefined
@@ -18,7 +20,12 @@ export async function recoverVideoEditPlacement(request: NonNullable<LocalHostRe
   const media = baseline.media.find(value => value.id === item?.mediaId)
   const clip = placement.clipId ? baseline.sequences.find(value => value.id === placement.sequenceId)?.clips.find(value => value.id === placement.clipId) : undefined
   // 用户之后移除/替换了结果时，不能把当前内容冒充原成功验证。
-  const retained = Boolean(item && media?.assetId === placement.assetId && (!placement.clipId || clip?.itemId === item.id))
+  let retained = Boolean(item && media && (!placement.clipId || clip?.itemId === item.id))
+  if (retained && media) {
+    const [asset, content] = await Promise.all([assetApplicationService.inspect(placement.assetId), getPlatform().assetLibrary.inspectFileContent(media.path, media.kind)])
+    // 项目内媒体重开会解除素材库绑定；实际文件内容仍须与原正式资产一致。
+    retained = asset.mediaType === media.kind && Boolean(asset.contentIdentity) && content.contentIdentity === asset.contentIdentity && content.sizeBytes === asset.sizeBytes
+  }
   const saved = await verifyVideoEditSaved(proof.documentId, baseline)
   context.signal?.throwIfAborted()
   if (!saved || requireVideoEditInstance(proof.documentId) !== owner || owner.document !== baseline) return undefined

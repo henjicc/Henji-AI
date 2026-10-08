@@ -4,12 +4,13 @@ import type { CapabilityExecutionContext } from '@/features/application-control/
 import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, segmentVideoEditSubtitles, verifyAutoSubtitles } from './videoEditAutoSubtitles'
 import { splitVideoEditRef } from './videoEditReflection'
 import { requireVideoEditInstance, saveVideoEdit } from './videoEditService'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 export async function handleVideoEditSubtitleCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
   if (![prepareVideoEditSubtitleCapability.id, generateVideoEditSubtitleCapability.id, translateVideoEditSubtitleCapability.id, segmentVideoEditSubtitleCapability.id].includes(id)) return undefined
   const child = (projectId: string, ref: { kind: string; id: string }): string => {
     const split = splitVideoEditRef(ref)
-    if (split.projectId !== projectId || !split.childId) throw new Error('序列与轨道引用须属于指定剪辑。')
+    if (split.projectId !== projectId || !split.childId) throw new ApplicationPreflightFailure('序列与轨道引用须属于指定剪辑。')
     return split.childId
   }
   if (id === prepareVideoEditSubtitleCapability.id) {

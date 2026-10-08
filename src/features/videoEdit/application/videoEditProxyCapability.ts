@@ -4,15 +4,17 @@ import { getPlatform } from '@/platform/runtime'
 import { splitVideoEditRef } from './videoEditReflection'
 import { createVideoEditProxy, readVideoEditProxyState } from './videoEditProxy'
 import { requireVideoEditInstance } from './videoEditService'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 export async function handleVideoEditProxyCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
   if (id !== generateVideoEditProxyCapability.id) return undefined
   const input = generateVideoEditProxyCapability.inputSchema.parse(raw)
   const target = splitVideoEditRef(input.mediaRef)
-  if (target.projectId !== input.documentRef.id || !target.childId) throw new Error('mediaRef 必须属于目标剪辑，请使用素材目录返回的完整引用。')
+  if (target.projectId !== input.documentRef.id || !target.childId) throw new ApplicationPreflightFailure('mediaRef 必须属于目标剪辑，请使用素材目录返回的完整引用。')
   const owner = requireVideoEditInstance(target.projectId)
   const media = owner.document.media.find(value => value.id === target.childId)
-  if (!media) throw new Error('素材已不存在，请重新读取素材目录。')
+  if (!media) throw new ApplicationPreflightFailure('素材已不存在，请重新读取素材目录。')
+  if (media.kind !== 'video') throw new ApplicationPreflightFailure('创建代理需要视频素材。')
   const result = await createVideoEditProxy(target.projectId, media.id, input.preset, context.signal)
   context.signal?.throwIfAborted()
   const cached = await getPlatform().videoProxy.lookup({ source: media.path, preset: input.preset })

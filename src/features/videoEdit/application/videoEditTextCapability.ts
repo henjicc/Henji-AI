@@ -1,4 +1,5 @@
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability } from '@/core/application-control/domains/videoEdit/videoEditTextCapabilities'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
@@ -11,9 +12,10 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
   if (!definition && id !== detectVideoEditTextSilenceCapability.id) return undefined
   const input = (definition ?? detectVideoEditTextSilenceCapability).inputSchema.parse(raw)
   const projectId = input.documentRef.id; const sequence = splitVideoEditRef(input.sequenceRef)
-  if (sequence.projectId !== projectId || !sequence.childId) throw new Error('sequenceRef 必须属于 documentRef。')
+  if (sequence.projectId !== projectId || !sequence.childId) throw new ApplicationPreflightFailure('sequenceRef 必须属于 documentRef。')
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId)
+  if (!owner.document.sequences.some(value => value.id === sequence.childId)) throw new ApplicationPreflightFailure('目标序列不存在，请重新读取剪辑序列。')
   let ranges; let resultSequenceId = sequence.childId; let changed = true
   if (definition) {
     const parsed = definition.inputSchema.parse(raw)
@@ -22,7 +24,7 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
     ranges = result.ranges; resultSequenceId = result.sequenceId; changed = result.changed
   } else {
     const audioId = videoEditComposition(owner.document, sequence.childId).textTranscription?.audioDocumentId
-    if (!audioId) throw new Error('请先转录当前序列。')
+    if (!audioId) throw new ApplicationPreflightFailure('请先转录当前序列。')
     await restoreVideoEditText(projectId, sequence.childId, audioId, true, signal)
     ranges = resolveVideoEditTextRanges(videoEditComposition(owner.document, sequence.childId), { kind: 'silence' })
   }

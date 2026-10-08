@@ -63,6 +63,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   const [error, setError] = useState('')
   const [settingsError, setSettingsError] = useState('')
   const [notice, setNotice] = useState('')
+  const [loudnessRequested, setLoudnessRequested] = useState(false)
   const [presetAction, setPresetAction] = useState<'save' | 'rename' | null>(null)
   const [presetName, setPresetName] = useState('')
   const [showQueue, setShowQueue] = useState(false)
@@ -117,6 +118,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   const patch = (values: Partial<VideoEditExportSettings>): void => {
     try {
       const next = resolveVideoEditExportSettings(patchVideoEditExportSettings(settings, values), composition); setRaw(next); setPresetId('custom'); setError(''); setSettingsError('')
+      if ('loudness' in values) setLoudnessRequested(Boolean(next.loudness))
       if (next.format !== settings.format) setFileName(value => `${value.replace(/\.[^./\\]+$/, '')}.${next.format}`)
     } catch (reason) { setSettingsError('此设置超出可导出的规格，请使用偶数宽高并保持在 8K 范围内。'); logger.warn('导出设置未接受', { event: 'video_edit.export.settings_rejected', error: reason }) }
   }
@@ -124,6 +126,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
     const value = presets.find(value => value.id === id); if (!value) return
     const next = id === VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID ? videoEditSequenceExportSettings(composition) : resolveVideoEditExportSettings(value.settings, composition)
     setPresetId(id); setRaw(next); setSettingsError(''); setFileName(name => `${name.replace(/\.[^./\\]+$/, '')}.${next.format}`)
+    setLoudnessRequested(id !== VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID && Boolean(next.loudness))
   }
   const chooseDirectory = async (): Promise<void> => {
     try { const selected = await getPlatform().system.dialog.open({ directory: true, multiple: false }); const path = Array.isArray(selected) ? selected[0] : selected; if (path) setDirectory(path); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) }
@@ -134,7 +137,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
     try {
       const name = `${fileName.replace(/\.(mp4|aac|wav)$/i, '')}.${settings.format}`
       const path = directory ? await getPlatform().system.paths.join(directory, name) : undefined
-      const jobs = await enqueueVideoEditExports([{ projectId, sequenceId, ...(presetId !== 'custom' ? { presetId } : {}), settings, range, path, fileName: name }])
+      const jobs = await enqueueVideoEditExports([{ projectId, sequenceId, ...(presetId !== 'custom' ? { presetId } : {}), settings, loudnessRequested, range, path, fileName: name }])
       if (!jobs.length) return
       if (wait) { const job = await videoEditExportQueue.wait(jobs[0].id); if (job.state === 'failed') throw new Error(job.error); if (job.state === 'completed') onClose() }
       else setNotice('已加入导出队列，可继续添加另一份。')

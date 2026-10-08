@@ -6,6 +6,7 @@ import type { CanvasNodePlacement } from '@/core/application-control/domains/can
 
 import { assetApplicationService } from './assetApplicationService'
 import type { CanvasCommitOptions } from '@/features/canvas/application/canvasPersistenceService'
+import { getPlatform } from '@/platform/runtime'
 
 export async function addAssetToCanvas(input: {
   projectId: string
@@ -22,7 +23,7 @@ export async function addAssetToCanvas(input: {
     sourceType: 'asset',
     filePath: asset.filePath,
     imageUrl: asset.displayUrl,
-    thumbnailUrl: asset.thumbnailUrl,
+    thumbnailUrl: asset.thumbnailPath ?? asset.thumbnailUrl,
     aspectRatio: asset.width && asset.height ? `${asset.width}:${asset.height}` : undefined,
     durationSeconds: asset.durationSeconds,
     displayName: asset.displayName,
@@ -37,6 +38,13 @@ export async function addAssetToCanvas(input: {
   }, options)
   const persisted = await readPersistedCanvasProjectSnapshot(input.projectId)
   const node = persisted.nodes.find(node => node.id === result.nodeId)
-  const verified = node?.type === nodeType && Object.entries(data).every(([key, value]) => JSON.stringify(node.data[key as keyof typeof node.data]) === JSON.stringify(value))
+  const media = getPlatform().media
+  const verified = node?.type === nodeType && Object.entries(data).every(([key, value]) => {
+    const actual = node.data[key as keyof typeof node.data]
+    // 文档位置编码会把本地协议 URL 回读为路径；比较同一媒体身份，而非传输写法。
+    return /url$/i.test(key) && typeof value === 'string' && typeof actual === 'string'
+      ? media.toDisplaySrc(actual) === media.toDisplaySrc(value)
+      : JSON.stringify(actual) === JSON.stringify(value)
+  })
   return { ...result, assetId: asset.id, mediaType: asset.mediaType, nodeRef: { kind: 'canvas.node', id: `${input.projectId}:${String(result.nodeId)}` }, verification: { verified, condition: '原画布已保存并回读新增节点与正式素材的媒体字段。' } }
 }

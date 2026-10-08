@@ -5,7 +5,7 @@ import { canvasFromDocumentContent, canvasHistoryFromSessionState, DEFAULT_CANVA
 import { canvasDocumentCommands } from './canvasDocumentEnvironment'
 import { listCanvasDocumentSummaries } from './canvasProjectService'
 
-import { extractCanvasNodeData } from '../domain/nodeControlRegistry'
+import { extractCanvasNodeData, parseTrustedMediaNodeData } from '../domain/nodeControlRegistry'
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
 
 function projectSummary(project: ProjectSummary): Record<string, unknown> {
@@ -33,11 +33,15 @@ function safeNodeData(node: CanvasNode, overview: boolean): Record<string, unkno
       && !normalized.includes('base64')
       && !normalized.includes('source')
   }))
+  // 可写属性不包含受信媒体字段；读取摘要仍须核对实际节点，不能把不可手写误报为不存在。
+  let media: Record<string, unknown> = {}
+  try { media = parseTrustedMediaNodeData(node.type, node.data).data } catch { /* 非媒体源节点沿既有属性投影。 */ }
+  const keys = [...new Set([...Object.keys(parsed), ...Object.keys(media)])]
   return {
     ...safe,
     ...(overview ? { displayName: String(node.data.displayName ?? '').slice(0, 160) } : {}),
-    keys: Object.keys(parsed),
-    hasMediaReference: Object.keys(parsed).some((key) => /url|path|source|media/i.test(key)),
+    keys,
+    hasMediaReference: Object.entries({ ...parsed, ...media }).some(([key, value]) => /url|path|media/i.test(key) && typeof value === 'string' && value.length > 0),
   }
 }
 

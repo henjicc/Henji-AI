@@ -24,7 +24,7 @@ const logger = createLogger('features.videoEdit.export')
 function videoEditExportFrameError(frame: number, fps: number, error: unknown): Error {
   return new Error(`导出在 ${videoEditFrameTimecode(frame, fps)} 处停止。${error instanceof Error ? error.message : String(error)}`, { cause: error })
 }
-export interface VideoEditExportTask { id: string; projectId: string; sequenceId: string; revision: number; startFrame: number; endFrame: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; controller: AbortController; output?: VideoEditOutputReceipt; assetRef?: { kind: 'asset'; id: string }; loudness?: VideoEditLoudnessSettings; loudnessMeasurement?: VideoEditLoudnessMeasurement }
+export interface VideoEditExportTask { id: string; projectId: string; sequenceId: string; revision: number; startFrame: number; endFrame: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; controller: AbortController; output?: VideoEditOutputReceipt; assetRef?: { kind: 'asset'; id: string }; loudness?: VideoEditLoudnessSettings; loudnessMeasurement?: VideoEditLoudnessMeasurement; notice?: string }
 const tasks = new WeakMap<VideoEditInstance, VideoEditExportTask>()
 export function videoEditExportTask(projectId: string): VideoEditExportTask | undefined { return tasks.get(requireVideoEditInstance(projectId)) }
 export function cancelVideoEditExport(projectId: string): void { videoEditExportTask(projectId)?.controller.abort() }
@@ -34,6 +34,7 @@ export interface VideoEditExportOptions {
   settings: VideoEditExportSettings
   signal?: AbortSignal
   onTask?: (task: VideoEditExportTask) => void
+  loudnessRequested?: boolean
 }
 export async function exportVideoEdit(projectId: string, requestedPath?: string, background = false, submissionSignal?: AbortSignal, loudnessSettings?: VideoEditLoudnessSettings, options?: VideoEditExportOptions): Promise<string | null> {
   submissionSignal?.throwIfAborted()
@@ -100,7 +101,13 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       soundSession = await spoolVideoEditAudio(renderDocument, range, task.controller.signal, renderer)
       task.controller.signal.addEventListener('abort', cancelSound, { once: true })
       task.controller.signal.throwIfAborted()
-      task.loudnessMeasurement = await loudnessApi.normalize(soundSession, loudness)
+      const measured = await loudnessApi.measure(soundSession)
+      if (measured.integratedLufs === null) {
+        if (options?.loudnessRequested ?? loudnessSettings !== undefined) throw new Error('当前导出范围没有可测量的声音（静音、低于测量门限或不足 400 毫秒），无法按要求标准化响度。请添加可听声音、扩大范围，或关闭响度标准化后重新导出。')
+        task.notice = '当前导出范围没有可测量的声音，已跳过默认响度标准化并保留原声音。'
+        task.loudness = undefined
+        logger.info('跳过无声范围的默认响度标准化', { event: 'video_edit.export.loudness_skipped', context: { projectId, taskId: task.id } })
+      } else task.loudnessMeasurement = await loudnessApi.normalize(soundSession, loudness)
       task.controller.signal.throwIfAborted()
     }
     output = new Output({ format: format === 'wav' ? new WavOutputFormat() : format === 'aac' ? new AdtsOutputFormat() : new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })

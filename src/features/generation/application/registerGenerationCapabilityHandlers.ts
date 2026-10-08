@@ -4,6 +4,7 @@ import { registry } from '@/core/ModelRegistry'
 import { createMediaGeneratorPromptReferences } from '@/components/MediaGenerator/promptState'
 import { toLegacyPromptString } from '@/core/inputs/promptDocument/index'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
+import { generationService } from '@/core/services/GenerationService'
 import { resolveGenerationMediaReferences } from '@/features/generation/application/generationMediaReferences'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -166,8 +167,11 @@ export function registerGenerationCapabilityHandlers(
   registrar.registerHandler('prepare_generation_task', async (input) => {
     const parsed = parseCapabilityInput<GenerationInput>('prepare_generation_task', input)
     const resolved = await prepareInput(parsed)
+    const preparation = generationApplicationService.prepare(resolved)
+    const providerConfigured = (await generationService.getConfiguredProviders()).includes(String(preparation.providerId))
     return {
-      preparation: generationApplicationService.prepare(resolved),
+      preparation: { ...preparation, providerConfigured, canSubmit: providerConfigured,
+        message: providerConfigured ? '参数已通过校验，供应商已配置；提交仍需费用与权限确认。' : '参数已通过校验，但供应商未配置，不能提交。请先配置该供应商凭据，或选择已配置供应商的模型。' },
     }
   })
 

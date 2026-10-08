@@ -11,7 +11,7 @@ import { videoEditMediaPathKey } from './videoEditMedia'
 import { adaptVideoEditExportPreset, assertVideoEditExportSupported } from '../engine/videoEditExportEncoder'
 
 const logger = createLogger('features.videoEdit.exportQueue')
-export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string
+export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; loudnessRequested?: boolean; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string
   /** 助手/外部智能体调用：校验通过后在此目录自动取不重名文件，不弹本机保存对话框（无人可点时会一直等待）。 */
   outputDirectory?: () => Promise<string> }
 export interface VideoEditExportJob {
@@ -19,6 +19,7 @@ export interface VideoEditExportJob {
   range: { startFrame: number; endFrame: number }; path: string
   state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; error?: string; task?: VideoEditExportTask
   controller: AbortController; release: () => void
+  loudnessRequested?: boolean
 }
 export class VideoEditExportQueue {
   private jobs: VideoEditExportJob[] = []
@@ -86,7 +87,7 @@ export const videoEditExportQueue = new VideoEditExportQueue(async job => {
   job.controller.signal.throwIfAborted()
   if (!listVideoEditInstances().includes(job.owner)) throw new Error('原剪辑已关闭，请重新加入导出。')
   const result = await exportVideoEdit(job.owner.document.id, job.path, false, job.controller.signal, job.settings.loudness ?? undefined, {
-    snapshot: job.snapshot, range: job.range, settings: job.settings, signal: job.controller.signal, onTask: task => { job.task = task },
+    snapshot: job.snapshot, range: job.range, settings: job.settings, signal: job.controller.signal, loudnessRequested: job.loudnessRequested ?? false, onTask: task => { job.task = task },
   })
   if (!result && !job.controller.signal.aborted && job.task?.state !== 'cancelled') throw new Error('导出未生成文件，请重试。')
 })
@@ -112,7 +113,7 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
       const range = { ...(request.range ?? videoEditExportRange(owner, sequenceId)) }
       if (!Number.isSafeInteger(range.startFrame) || !Number.isSafeInteger(range.endFrame) || range.startFrame < 0 || range.endFrame <= range.startFrame || range.endFrame > videoEditDuration(snapshot)) throw new Error('导出范围必须是序列内有效的整数帧入出点（出点不包含）。')
       const release = holdVideoEditActivity(request.projectId, 'export'); releases.push(release)
-      return { id: crypto.randomUUID(), owner, name: snapshot.name, presetName: preset?.name ?? '自定义导出', snapshot, settings, range, path: request.path ?? '', state: 'queued' as const, controller: new AbortController(), release }
+      return { id: crypto.randomUUID(), owner, name: snapshot.name, presetName: preset?.name ?? '自定义导出', snapshot, settings, loudnessRequested: request.loudnessRequested ?? Boolean(request.settings?.loudness || request.presetId && request.presetId !== VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID && preset?.settings.loudness), range, path: request.path ?? '', state: 'queued' as const, controller: new AbortController(), release }
     })
     for (const [index, job] of jobs.entries()) {
       signal?.throwIfAborted()

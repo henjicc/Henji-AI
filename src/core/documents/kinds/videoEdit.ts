@@ -4,6 +4,7 @@ import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
 import { styleKitSchema } from '../../videoEdit/styleKit'
+import { videoEditDocumentSchema } from '../../videoEdit/document'
 
 /*
  * 剪辑（`.henji-video`，3.1 剪辑接入）：项目的主文档，始终放在项目里（可以在项目之间移动）。
@@ -45,6 +46,7 @@ export const videoEditContentSchema = z.object({
   codeMaterials: z.array(identified).optional(),
   posterFrame: z.looseObject({ sequenceId: z.string().min(1), frame: z.number() }).optional(),
   inPlaceGenerations: videoEditInPlaceRecordsSchema.optional(),
+  creativePlacements: videoEditDocumentSchema.shape.creativePlacements,
 })
 
 export type VideoEditDocumentContent = z.infer<typeof videoEditContentSchema>

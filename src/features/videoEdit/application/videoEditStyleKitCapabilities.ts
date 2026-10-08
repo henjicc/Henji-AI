@@ -1,5 +1,6 @@
 import { extractVideoEditWorkStyleCapability, extractVideoEditReferenceStyleCapability, insertVideoEditStyleSampleCapability, styleKitTargetSchema } from '@/core/application-control/domains/videoEdit/videoEditStyleKitCapabilities'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { BUILTIN_STYLE_KITS } from '@/core/videoEdit/styleKitPresets'
 import { resolveVideoEditStyleKit, styleKitContent } from '@/core/videoEdit/styleKit'
@@ -17,7 +18,7 @@ export async function handleVideoEditStyleKitCapability(id: string, raw: unknown
   const projectId = target.documentRef.id; const owner = requireVideoEditInstance(projectId)
   const sequenceRef = target.sequenceRef
   const { projectId: parent, childId: sequenceId } = splitVideoEditRef(sequenceRef); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
-  if (parent !== projectId || !sequence) throw new Error('sequenceRef 必须属于明确的原剪辑。')
+  if (parent !== projectId || !sequence) throw new ApplicationPreflightFailure('sequenceRef 必须属于明确的原剪辑。')
   const base = resolveVideoEditStyleKit(owner.document, sequence) ?? BUILTIN_STYLE_KITS[0]
   if (id === extractVideoEditReferenceStyleCapability.id) {
     const input = extractVideoEditReferenceStyleCapability.inputSchema.parse(raw)
@@ -30,8 +31,9 @@ export async function handleVideoEditStyleKitCapability(id: string, raw: unknown
   if (id === extractVideoEditWorkStyleCapability.id) { const input = extractVideoEditWorkStyleCapability.inputSchema.parse(raw); const kit = await extractVideoEditWorkStyle(projectId, sequenceId, input.name, context.signal); return { name: kit.name, content: styleKitContent(kit), message: '已生成作品风格候选；预览确认后创建风格包并绑定序列。' } }
   const input = insertVideoEditStyleSampleCapability.inputSchema.parse(raw)
   let kit
-  if (input.styleRef.kind === 'video_edit.style_kit') { const value = splitVideoEditRef(input.styleRef); if (value.projectId !== projectId) throw new Error('工程风格包必须属于原剪辑。'); kit = projectStyleKit(owner.document, value.childId) }
-  else { kit = videoEditStyleKitLibrary.list().find(value => value.id === input.styleRef.id); if (!kit) throw new Error('风格预设不存在，请重新列出。') }
+  if (input.styleRef.kind === 'video_edit.style_kit') { const value = splitVideoEditRef(input.styleRef); if (value.projectId !== projectId) throw new ApplicationPreflightFailure('工程风格包必须属于原剪辑。'); try { kit = projectStyleKit(owner.document, value.childId) } catch (error) { throw new ApplicationPreflightFailure(error) } }
+  else { kit = videoEditStyleKitLibrary.list().find(value => value.id === input.styleRef.id); if (!kit) throw new ApplicationPreflightFailure('风格预设不存在，请重新列出。') }
+  if (!kit.samples.some(sample => sample.id === input.sampleId)) throw new ApplicationPreflightFailure('风格组件不存在，请重新读取该风格包的组件。')
   const before = owner.document
   const ids = await insertVideoEditStyleSample(projectId, sequenceId, kit, input.sampleId, { frame: input.frame, mode: 'top' }, context.signal)
   try { await saveVideoEdit(projectId) } catch (error) { throw new ApplicationPersistenceFailure('组件已保留但保存未确认，请重试保存，不要重复插入。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: input.documentRef, replayMutation: false } }, error) }

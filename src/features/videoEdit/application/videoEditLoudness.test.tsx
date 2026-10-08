@@ -11,12 +11,14 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
+import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, videoEditExportRange, requireVideoEditInstance, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { applyVideoEditAudioGain, measureVideoEditClips } from './videoEditLoudness'
 import { VideoEditAudioGainDialog } from '../panels/VideoEditAudioGainDialog'
 import { cancelVideoEditExport, exportVideoEdit as exportWithSettings, videoEditExportTask } from './videoEditExport'
 
 import { videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
+import { videoEditExportQueue } from './videoEditExportQueue'
 const exportVideoEdit: typeof exportWithSettings = (id, target, background, signal, loudness) => { const owner = requireVideoEditInstance(id); const snapshot = getActiveVideoEditSequence(owner); return exportWithSettings(id, target, background, signal, loudness, { snapshot, range: videoEditExportRange(owner), settings: { ...videoEditSequenceExportSettings(snapshot), addToLibrary: false } }) }
 
 const boundary = vi.hoisted(() => ({ mixes: vi.fn(), encoded: [] as number[], normalized: false }))
@@ -120,6 +122,32 @@ it('助手字幕导出拒绝响度设置，避免静默忽略目标', async () =
     expect(result.ok).toBe(false); expect(JSON.stringify(result)).toContain('字幕导出不包含声音')
     expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled()
   } finally { app.dispose() }
+})
+
+it('t95 D5：公共默认无声导出正常完成并说明跳过；显式标准化返回可行动错误', async () => {
+  const { id, target } = await project()
+  editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, volume: 0 })) }))
+  const platform = getPlatform()
+  vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
+  let exportedAsset: AssetRecord
+  vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
+    exportedAsset = { id: 'silent-export', filePath: input.filePath, mediaType: input.mediaType, displayName: input.displayName ?? '无声成片', displayUrl: '', source: input.source, mimeType: 'video/mp4', sizeBytes: 5, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64), width: 1920, height: 1080, durationSeconds: 8, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }
+    return exportedAsset
+  })
+  vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async () => exportedAsset)
+  const app = createApplicationHarness(); const documentRef = { kind: 'video_edit.document', id }
+  try {
+    const submitted = await app.requireResult('export_video_edit', { documentRef })
+    const jobId = (submitted.queue as Array<{ id: string }>)[0].id
+    await videoEditExportQueue.wait(jobId)
+    const queried = await app.requireResult('query_video_edit_export', { documentRef, taskId: jobId })
+    expect(queried, JSON.stringify(queried)).toMatchObject({ queue: [{ state: 'completed', outputReady: true, notice: expect.stringContaining('跳过默认响度标准化') }] })
+    expect(platform.audioEdit.loudness.normalize).not.toHaveBeenCalled()
+    const explicit = await app.requireResult('export_video_edit', { documentRef, loudness: { targetLufs: -14, truePeakDbtp: -1 } })
+    const explicitId = (explicit.queue as Array<{ id: string }>)[0].id
+    await videoEditExportQueue.wait(explicitId)
+    expect(await app.requireResult('query_video_edit_export', { documentRef, taskId: explicitId })).toMatchObject({ queue: [{ state: 'failed', error: expect.stringContaining('关闭响度标准化') }] })
+  } finally { videoEditExportQueue.clearFinished(); app.dispose() }
 })
 it('标准化期间取消不会写出导出文件，释放后台声音并解除忙碌状态', async () => {
   const { owner, id } = await project()

@@ -60,6 +60,7 @@ import { executeVideoEditAudioDuckingCapability } from './videoEditAudioDuckingC
 import { VideoEditOperationFailure } from '@/core/videoEdit/operationFailure'
 import { retryVideoEditSmartRegionCapability } from '@/core/application-control/domains/videoEdit/videoEditSmartRegionCapability'
 import { retryVideoEditSmartRegionFromCapability } from './videoEditSmartRegionCapability'
+import { guardVideoEditDocumentAlgorithm } from './videoEditDocumentAlgorithm'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 let stopImageDocumentLinks: (() => void) | null = null
@@ -68,7 +69,11 @@ let stopSmartRegions: (() => void) | null = null
 
 export const videoEditApplicationDomain: ApplicationDomainModule = {
   failure(error) {
-    if (error instanceof VideoEditOperationFailure) return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message, recoverable: true, details: { videoEdit: error.facts } } }
+    if (error instanceof VideoEditOperationFailure) {
+      // 纯规划阶段的拒绝；已提交生成或保存失败不在此名单，不能抹掉执行事实。
+      const notExecuted = ['reference_missing', 'sequence_missing', 'clip_missing', 'take_missing', 'duration_range', 'range', 'track_locked', 'slot_occupied', 'trim_boundary', 'failed_task_missing', 'recover_original'].includes(String(error.facts.reason))
+      return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message, recoverable: true, details: { videoEdit: error.facts, ...(notExecuted ? { execution: { notExecuted: true } } : {}) } } }
+    }
     return undefined
   },
   recoverOperation: recoverVideoEditPlacement,
@@ -107,7 +112,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     stopTracking ??= startVideoEditTracking()
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
-    for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+    for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, guardVideoEditDocumentAlgorithm(definition.id, async (raw, context) => {
       if (definition.id === retryVideoEditSmartRegionCapability.id) return retryVideoEditSmartRegionFromCapability(raw, context.signal)
       const styleKit = await handleVideoEditStyleKitCapability(definition.id, raw, context)
       if (styleKit !== undefined) return styleKit
@@ -260,7 +265,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const instance = requireVideoEditInstance(id)
       const verified = await verifyVideoEditSaved(id, instance.document)
       return { resultRef: input.documentRef, verification: { verified, target: input.documentRef, condition: '已从剪辑文件回读并核对编辑内容。' }, message: '操作已完成，请回读剪辑核对结果。' }
-    })
+    }))
   },
   resolvePersistenceParticipants(steps) {
     const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.title_template', 'video_edit.style_preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template', 'video_edit.text_preset', 'video_edit.style_preset'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))

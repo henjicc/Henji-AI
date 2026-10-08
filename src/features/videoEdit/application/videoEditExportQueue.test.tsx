@@ -64,6 +64,7 @@ beforeEach(() => {
   vi.stubGlobal('AudioBuffer', class { readonly length: number; readonly numberOfChannels: number; private planes: Float32Array[]; constructor({ numberOfChannels, length }: { numberOfChannels: number; length: number }) { this.length = length; this.numberOfChannels = numberOfChannels; this.planes = Array.from({ length: numberOfChannels }, () => new Float32Array(length)) } getChannelData(channel: number) { return this.planes[channel] } })
   const api = platform.audioEdit.loudness
   vi.spyOn(api, 'start').mockResolvedValue(undefined); vi.spyOn(api, 'append').mockResolvedValue(undefined); vi.spyOn(api, 'close').mockResolvedValue(undefined)
+  vi.spyOn(api, 'measure').mockResolvedValue({ integratedLufs: -20, shortTermLufs: -20, samplePeakDbfs: -2, truePeakDbtp: -1, durationSeconds: 1 })
   vi.spyOn(api, 'normalize').mockResolvedValue({ integratedLufs: -14, shortTermLufs: -14, samplePeakDbfs: -2, truePeakDbtp: -1, durationSeconds: 1 })
   vi.spyOn(api, 'read').mockImplementation(async (_id, _start, frames) => [new Float32Array(frames), new Float32Array(frames)])
 })
@@ -153,6 +154,21 @@ async function select(view: ReturnType<typeof render>, label: string, option: st
   fireEvent.click(view.getByRole('button', { name: label }))
   fireEvent.click(await view.findByRole('option', { name: option }))
 }
+it('面板完整默认设置不表示主动要求响度；用户关闭再启用后标为主动要求', async () => {
+  const owner = await project()
+  const ui = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  await waitFor(() => expect(ui.getByRole('button', { name: '加入队列' })).toHaveProperty('disabled', false))
+  await act(async () => fireEvent.click(ui.getByRole('button', { name: '加入队列' })))
+  await act(async () => { await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id) })
+  expect(videoEditExportQueue.list()[0].loudnessRequested).toBe(false)
+  fireEvent.click(ui.getByRole('button', { name: '音频' }))
+  fireEvent.click(ui.getByRole('switch', { name: '启用响度' }))
+  fireEvent.click(ui.getByRole('switch', { name: '启用响度' }))
+  vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('explicit.mp4'))
+  await act(async () => fireEvent.click(ui.getByRole('button', { name: '加入队列' })))
+  await act(async () => { await videoEditExportQueue.wait(videoEditExportQueue.list()[1].id) })
+  expect(videoEditExportQueue.list()[1].loudnessRequested).toBe(true)
+})
 it('面板默认跟随、解锁变自定义，保存重命名删除；队列和立即导出使用相同设置', async () => {
   const owner = await project(); const close = vi.fn(); const ui = render(<VideoEditExportDialog projectId={owner.document.id} onClose={close} />)
   expect(ui.getByRole('button', { name: '导出预设' }).textContent).toContain('与序列一致')

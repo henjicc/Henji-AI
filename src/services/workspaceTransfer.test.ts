@@ -7,7 +7,10 @@ import path from 'node:path'
 import { getPlatform } from '@/platform/runtime'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
-import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage, harnessDocumentStore } from '@/tests/harnessNativeStorage'
+import { createLocationCodec } from '@/core/storage/locationCodec'
+import { readPersistedCanvasProjectSnapshot, getCanvasProject } from '@/features/canvas/application/canvasQueryService'
+import { detachCanvasProject, releaseCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
@@ -87,6 +90,35 @@ it('正式助手发送完整节目帧到指定画布：裸本地引用经 PAL、
     await undoCanvasChange(canvasId, String(result.undoRef))
     expect(readCanvasTestProject(canvasId)!.nodes).toHaveLength(0)
     expect(assets.size).toBe(1) // 撤销节点不删除其他工作区可以继续使用的媒体。
+  } finally { app.dispose() }
+})
+
+it('t95 D2：带真实缩略图协议的节目帧送画布，经位置编解码后媒体可读且持久核对成功', async () => {
+  const owner = await createVideoEditProject(); const app = createApplicationHarness()
+  const store = harnessDocumentStore(); const save = store.saveDocument.bind(store)
+  const codec = createLocationCodec({ style: /^[A-Za-z]:/.test(mediaRoot) ? 'win32' : 'posix', userRoot: mediaRoot, projects: [] })
+  vi.spyOn(store, 'saveDocument').mockImplementation(async input => {
+    const result = await save(input); const stored = store.stored(input.target.id)!
+    stored.content = codec.decodeContent(codec.encodeContent(stored.content).content).content
+    return result
+  })
+  const create = getPlatform().assetLibrary.createAsset
+  const original = vi.mocked(create).getMockImplementation()!
+  vi.mocked(create).mockImplementation(async input => {
+    const result = await original(input)
+    result.thumbnailUrl = `henji-media://local/${encodeURIComponent(path.join(mediaRoot, 'thumb.png'))}`
+    assets.set(result.id, result); return result
+  })
+  try {
+    const result = await app.requireResult('send_video_edit_to_canvas', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.activeSequenceId}` }, canvasRef: { kind: 'canvas.document', id: canvasId }, selection: { kind: 'frame', frame: 210 } })
+    expect(result.verification).toMatchObject({ verified: true })
+    expect((await getCanvasProject(canvasId)).nodes).toMatchObject([{ data: { hasMediaReference: true } }])
+    // 关闭原画布会话，再从正式持久内容打开并查询，不能用原内存节点证明重开。
+    detachCanvasProject()
+    expect(await releaseCanvasProjectInstance(canvasId)).toBe(true)
+    expect((await getCanvasProject(canvasId)).nodes).toMatchObject([{ data: { hasMediaReference: true } }])
+    const reopened = await readPersistedCanvasProjectSnapshot(canvasId)
+    expect(reopened.nodes[0].data).toMatchObject({ imageUrl: path.join(mediaRoot, 'frame-1.png'), previewImageUrl: path.join(mediaRoot, 'thumb.png') })
   } finally { app.dispose() }
 })
 

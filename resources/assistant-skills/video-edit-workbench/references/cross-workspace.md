@@ -48,3 +48,5 @@ placement.mode=library 只进素材面板；replace 给 clipRef；insert/overwri
 5. 读返回 clipRef、位置、实际时长和声音；原位置被占可落新轨，说明实际位置。替换保留旧 take，需切回时读 `video_edit.clip.takes` 再 `restore_video_edit_clip_take`，takeIndex 用真实序号。
 
 免费准备／本地跨工作区处理与付费提交分开说明。未知结果先查原操作和任务，失败后不重新生成来掩盖保存或落位问题；真实审批、任务恢复与来源身份优先于任何配方。
+
+放入返回 partial 且保存未确认时，使用 `retry_application_operation_save`，将原调用 operationId 传给 originalOperationId；恢复会核对原 item、clip 和媒体文件内容并保存，成功后查原操作 completed/verified。`save_video_edit` 不是绕过原操作保护的入口。prepare 的 prepared=true 不保证供应商可用，canSubmit=false 时先配置供应商或改用已配置模型，不提交付费任务。

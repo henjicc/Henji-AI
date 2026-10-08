@@ -2,11 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  configured: vi.fn(),
   prepare: vi.fn(),
   submit: vi.fn(),
   resolveModel: vi.fn(),
   history: vi.fn(),
 }))
+vi.mock('@/core/services/GenerationService', () => ({ generationService: { getConfiguredProviders: mocks.configured } }))
 vi.mock('@/services/database/index', () => ({ databaseService: { init: vi.fn(), getHistoryById: mocks.history } }))
 vi.mock('@/commands/image', () => ({ readImageInfo: async () => ({ fileName: 'result.png' }) }))
 
@@ -67,6 +69,7 @@ function registeredHandlers(): Map<string, CapabilityHandler> {
 describe('generation capability handlers（5.4：放宽提交）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.configured.mockResolvedValue([testModel.meta.provider])
     registry.clear()
     registry.register(testModel)
     useGenerationDraftStore.setState({ draft: createEmptyGenerationDraft(), revision: 0 })
@@ -78,6 +81,15 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     registry.clear()
+  })
+
+  it('t95：未配置供应商只完成参数准备，明确不能提交；已配置仍须独立提交授权', async () => {
+    const prepare = registeredHandlers().get('prepare_generation_task')!
+    const input = { modelId: testModel.meta.id, prompt: '中文配音稿', mediaType: 'image', params: {} }
+    mocks.configured.mockResolvedValueOnce([])
+    expect(await prepare(input, context)).toMatchObject({ preparation: { prepared: true, providerConfigured: false, canSubmit: false, message: expect.stringContaining('供应商未配置，不能提交') } })
+    expect(await prepare(input, context)).toMatchObject({ preparation: { prepared: true, providerConfigured: true, canSubmit: true } })
+    expect(mocks.submit).not.toHaveBeenCalled()
   })
 
   it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 新任务省略模型时读取当前默认，而不是旧草稿', async name => {

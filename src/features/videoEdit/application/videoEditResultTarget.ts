@@ -189,7 +189,9 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       throw new ApplicationTransactionFailure({ status: 'failed', code: 'EXECUTION_FAILED', message: error instanceof Error ? error.message : String(error), recoverable: true,
         partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] } })
     }
-    if (state.committed) throw new ApplicationPersistenceFailure('创作结果已加入剪辑，但保存尚未确认。请仅重试保存，不要重复放入。', {
+    if (state.committed) throw new ApplicationPersistenceFailure(operationId
+      ? '创作结果已加入剪辑，但保存尚未确认。请使用 retry_application_operation_save，将原调用的 operationId 传给 originalOperationId；不要重复放入。'
+      : '创作结果已加入剪辑，但保存尚未确认。请仅重试保存原剪辑，不要重复放入或重新生成。', {
       memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document',
       recovery: { capabilityId: 'save_video_edit', target: { kind: 'video_edit.document', id: target.projectId }, replayMutation: false },
     }, error)

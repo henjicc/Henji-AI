@@ -3,7 +3,7 @@
   "formats": {
     "document.video_edit": {
       "version": 1,
-      "fingerprint": "8845257f4d5248314ff9d8b9ef554c2e0ee7197d0bd463be9ccb5577c8899c99",
+      "fingerprint": "054a07b7f2e30897b8a36e4de10a51fd5ea4c22614477c847b921b6cdc55748b",
       "supportedFrom": 1
     },
     "document.canvas": {
@@ -536,6 +536,15 @@
       "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
       "previousFingerprint": "e76b099b96dec71929f7f7446a0ff2e637861ed1657f1360a1c2ab77222b5be7",
       "fingerprint": "87e316a9e804baa7d525567cfa78022f51a31d6ed58a0130d3d1de438da69249",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T22:25:58.343Z",
+      "format": "document.video_edit",
+      "version": 1,
+      "reason": "t100 修复创作落位身份被文档保存 schema 剥离，开发期直接登记 creativePlacements，无旧格式迁移",
+      "previousFingerprint": "8845257f4d5248314ff9d8b9ef554c2e0ee7197d0bd463be9ccb5577c8899c99",
+      "fingerprint": "054a07b7f2e30897b8a36e4de10a51fd5ea4c22614477c847b921b6cdc55748b",
       "waivedFixtureVersions": []
     }
   ]

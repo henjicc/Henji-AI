@@ -13,7 +13,7 @@ import { adaptVideoEditExportPreset } from '../engine/videoEditExportEncoder'
 
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
   return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, range: job.range, settings: job.settings,
-    outputReady: Boolean(job.task?.output), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
+    outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
 }
 
 /** 能力调用没有人点保存对话框：默认放进剪辑所在项目的“导出”文件夹，也可指定已配置的快速下载/预设目录。 */
@@ -54,8 +54,8 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
         const composition = videoEditComposition(target.document, sequenceId?.slice(projectId.length + 1) ?? target.activeSequenceId)
         const base = value.settings ?? (preset && preset.id !== 'builtin:sequence' ? preset.settings : videoEditSequenceExportSettings(composition))
         const settings = value.settings ? base : await adaptVideoEditExportPreset(resolveVideoEditExportSettings(base, composition))
-        return { projectId, sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings, outputDirectory: () => videoEditCapabilityOutputDirectory(projectId, input.destination) }
-      })) : [{ projectId: documentRef.id, range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })), outputDirectory: () => videoEditCapabilityOutputDirectory(documentRef.id, input.destination) }]
+        return { projectId, loudnessRequested: Boolean(value.settings?.loudness || value.presetRef && value.presetRef.id !== 'builtin:sequence' && preset?.settings.loudness), sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings, outputDirectory: () => videoEditCapabilityOutputDirectory(projectId, input.destination) }
+      })) : [{ projectId: documentRef.id, loudnessRequested: Boolean(input.loudness || input.settings?.loudness), range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })), outputDirectory: () => videoEditCapabilityOutputDirectory(documentRef.id, input.destination) }]
       if (context.callerGrant && requests.some(value => value.settings.addToLibrary) && !context.callerGrant.permissions.includes('assets:write')) throw new Error('加入资产库需要 assets:write 授权；请在导出 settings 中设 addToLibrary=false，或调整连接授权后重试。')
       const jobs = await enqueueVideoEditExports(requests, context.signal)
       submitted = jobs
@@ -78,5 +78,5 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   const filterId = id === 'query_video_edit_export' && 'taskId' in parsed ? parsed.taskId : undefined
   const jobs = submitted ?? videoEditExportQueue.list().filter(job => job.owner === owner && (!filterId || job.id === filterId))
   const task = videoEditExportTask(documentRef.id)
-  return { resultRef: documentRef, queue: jobs.map(videoEditExportJobSummary), message, verification: { verified, target: documentRef, condition }, ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame, ...(task.loudness ? { loudness: task.loudness } : {}), ...(task.loudnessMeasurement ? { loudnessMeasurement: task.loudnessMeasurement } : {}) } } : {}) }
+  return { resultRef: documentRef, queue: jobs.map(videoEditExportJobSummary), message, verification: { verified, target: documentRef, condition }, ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame, ...(task.notice ? { notice: task.notice } : {}), ...(task.loudness ? { loudness: task.loudness } : {}), ...(task.loudnessMeasurement ? { loudnessMeasurement: task.loudnessMeasurement } : {}) } } : {}) }
 }

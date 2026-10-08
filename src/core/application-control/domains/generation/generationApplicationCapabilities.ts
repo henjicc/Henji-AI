@@ -194,6 +194,9 @@ const prepareGenerationTask = defineApplicationCapability({
   outputSchema: capabilityOutputSchema({
     preparation: z.object({
       prepared: z.literal(true),
+      providerConfigured: z.boolean(),
+      canSubmit: z.boolean(),
+      message: z.string().min(1),
       modelId: z.string().min(1),
       providerId: z.string().min(1),
       mediaType: z.enum(['image', 'video', 'audio']),
@@ -203,7 +206,7 @@ const prepareGenerationTask = defineApplicationCapability({
   concurrencyKey: 'generation_prepare',
   resolveConcurrencyKey: (input) => `generation_prepare:${input.modelId ?? 'draft'}`,
   resolveTargetIds: (input) => ({ modelId: input.modelId ?? 'draft' }),
-  summarize: (output) => `模型 ${output.preparation.modelId} 的生成参数已通过校验。`,
+  summarize: (output) => output.preparation.message,
 })
 
 const createVisibleGenerationTask = defineApplicationCapability({

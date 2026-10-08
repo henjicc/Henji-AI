@@ -8,7 +8,8 @@ import type { ApplicationCapabilityFailure, ApplicationCapabilityResult, HostErr
 import { createLogger } from '@/core/logging'
 
 import { ZodError } from 'zod'
-import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+import { ApplicationTransactionFailure, ApplicationPreflightFailure, ApplicationOperationNotExecutedFailure } from '@/core/application-control/execution/transactionFailure'
+import { capabilityVerificationEnvelope } from '@/core/application-control/capabilityVerification'
 import { transactionFailureFacts } from '@/core/application-control/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { applicationCallerAccess, assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
@@ -116,8 +117,8 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
       scopeRevisions: snapshot.scopeRevisions,
     }
     const enrichedOutput = definition.outputSchema.safeParse(enriched)
-    if (enrichedOutput.success) return enrichedOutput.data as Record<string, unknown>
-    return definition.outputSchema.parse(result) as Record<string, unknown>
+    const output = (enrichedOutput.success ? enrichedOutput.data : definition.outputSchema.parse(result)) as Record<string, unknown>
+    return capabilityVerificationEnvelope(definition, input, output)
   }
 }
 
@@ -171,6 +172,10 @@ const CALLER_CORRECTABLE_ERROR_CODES = new Set<HostErrorCode>([
 ])
 
 function toFailure(error: unknown): ApplicationCapabilityFailure {
+  if (error instanceof ApplicationOperationNotExecutedFailure) {
+    const failure = toFailure(error.original)
+    return { ok: false, error: { ...failure.error, recoverable: true, details: { ...failure.error.details, execution: { notExecuted: true } } } }
+  }
   for (const domain of APPLICATION_DOMAINS) {
     const failure = domain.failure?.(error, toFailure)
     if (failure) return failure
