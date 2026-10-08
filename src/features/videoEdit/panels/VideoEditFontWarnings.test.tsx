@@ -15,6 +15,7 @@ it('工程及导出共用缺字体提示，包含字体、受影响字幕和回�
   boundary.imported.mockResolvedValue({ revision: 1, faces: [{ ...GENERIC_FONT_FACES[0], id: 'import', family: 'Missing CJK', fullName: 'Missing CJK', localizedFamily: '缺失中文字体', aliases: [], imported: true }] })
   const view = render(<VideoEditFontWarnings document={document} />)
   const warning = await view.findByRole('status'); expect(warning.textContent).toContain('Missing CJK'); expect(warning.textContent).toContain('说明文字'); expect(warning.textContent).toContain('系统无衬线字体')
-  expect(boundary.warn).toHaveBeenCalledWith('工程字体缺失', expect.objectContaining({ event: 'video_edit.fonts.missing' }))
+  // 日志在提示渲染后的异步检查里写出，CI 负载下可能晚于首帧。
+  await waitFor(() => expect(boundary.warn).toHaveBeenCalledWith('工程字体缺失', expect.objectContaining({ event: 'video_edit.fonts.missing' })), { timeout: 5000 })
   fireEvent.click(view.getByRole('button', { name: '导入缺失字体' })); await waitFor(() => expect(view.queryByRole('status')).toBeNull()); expect(boundary.imported).toHaveBeenCalledTimes(1)
 })
