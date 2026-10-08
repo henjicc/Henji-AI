@@ -59,7 +59,7 @@ it('通用读回项目LUT不泄露路径；曲线/强度/引用读写与hold关�
     const points = '[{"x":0,"y":0},{"x":40,"y":70},{"x":100,"y":100}]'
     expect(await app.change(ref, { 'video_edit.effect.parameters': { input_lut: asset.id, input_lut_strength: 40, curve_master_points: points } })).toMatchObject({ ok: true })
     expect((await app.read(ref, ['video_edit.effect.parameters'])).properties).toMatchObject({ 'video_edit.effect.parameters': { input_lut: asset.id, input_lut_strength: 40, curve_master_points: points } })
-    expect(await app.change(ref, { 'video_edit.effect.parameters.curve_master_points.keyframes': [{ time: 0, value: points, interpolation: 'hold' }] })).toMatchObject({ ok: true })
+    expect(await app.change(ref, { 'video_edit.effect.frame_curves': { curve_master_points: [{ time: 0, value: points, interpolation: 'hold' }] } })).toMatchObject({ ok: true })
     expect((await app.change(ref, { 'video_edit.effect.parameters': { input_lut: 'foreign' } })).ok).toBe(false)
     expect((await app.change(ref, { 'video_edit.effect.parameters': { curve_master_points: '[]' } })).ok).toBe(false)
     const baseline = owner.document

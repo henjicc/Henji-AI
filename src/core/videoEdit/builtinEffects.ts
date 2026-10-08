@@ -11,20 +11,22 @@ import { VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS } from './audioEffectDefinitions'
 import { VIDEO_EDIT_LUMETRI } from './lumetri'
 import { parseLumetriCurve } from './lumetriCurves'
 import { SHADER_EFFECT_DEFINITIONS } from './shaderLibrary/catalog'
+import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
 
 export type VideoEditBuiltinParamValue = number | boolean | string
 export type VideoEditBuiltinParams = Record<string, VideoEditBuiltinParamValue>
-/** 数值单位：strength 为 0–100 的无量纲强度，percent 为百分比，degrees 为角度，stops 为曝光档；音频效果另有 dB、Hz 与半音。 */
-export type VideoEditBuiltinUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibels' | 'hertz' | 'semitones' | 'multiplier'
+/** 数值单位：strength 为 0–100 的无量纲强度，percent 为百分比，degrees 为角度，stops 为曝光档；音频效果另有 dB、Hz 与半音；value 为组件自带量纲的普通数值（着色器组件）。 */
+export type VideoEditBuiltinUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibels' | 'hertz' | 'semitones' | 'multiplier' | 'value'
 interface ParamBase { key: string; name: string; tooltip: string; description: string; animatable?: boolean }
 export type VideoEditBuiltinParam =
   | ParamBase & { type: 'number'; unit: VideoEditBuiltinUnit; min: number; max: number; step: number; default: number }
-  | ParamBase & { type: 'color'; default: string }
+  /** `alpha` 时可写 #rrggbbaa（着色器组件的半透明颜色）。 */
+  | ParamBase & { type: 'color'; default: string; alpha?: boolean }
   | ParamBase & { type: 'enum'; options: ReadonlyArray<{ value: string; label: string }>; default: string }
   | ParamBase & { type: 'boolean'; default: boolean }
   | ParamBase & { type: 'curve' | 'lut'; default: string }
-export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level' | 'shader_background' | 'shader_filter' | 'shader_light'
-export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道', shader_background: '着色器背景与纹理', shader_filter: '着色器滤镜与扭曲', shader_light: '着色器光效' }
+export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level' | 'shader_background' | 'shader_filter' | 'shader_light' | 'shader_texture' | 'shader_shape' | 'shader_material' | 'shader_blur' | 'shader_distort' | 'shader_adjust' | 'shader_stylize'
+export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道', shader_background: '着色器背景与纹理', shader_filter: '着色器滤镜与扭曲', shader_light: '着色器光效', shader_texture: '纹理与背景', shader_shape: '图形', shader_material: '材质', shader_blur: '着色器模糊', shader_distort: '扭曲变形', shader_adjust: '着色器调色', shader_stylize: '着色器风格化' }
 /** 内置效果作用于画面还是声音：画面效果只加到画面片段，音频效果只加到声音片段。 */
 export type VideoEditBuiltinMedia = 'video' | 'audio'
 export interface VideoEditBuiltinEffectDefinition {
@@ -40,7 +42,7 @@ export interface VideoEditBuiltinEffectDefinition {
   /** Thumbnail recipe, rendered by the trusted library on the existing host device. */
   cover?: { kind: 'render'; timeSeconds: number }
 }
-export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = { strength: '', percent: '%', degrees: '°', stops: '档', decibels: 'dB', hertz: 'Hz', semitones: '半音', multiplier: '倍' }
+export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = { strength: '', percent: '%', degrees: '°', stops: '档', decibels: 'dB', hertz: 'Hz', semitones: '半音', multiplier: '倍', value: '' }
 
 const strength = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: 0, max: 100, step: 1, default: fallback, tooltip, description })
 const signed = (key: string, name: string, tooltip: string, description: string, fallback = 0): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: fallback, tooltip, description })
@@ -136,7 +138,7 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
   VIDEO_EDIT_LUMETRI,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
-export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, ...SHADER_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
+export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, ...SHADER_EFFECT_DEFINITIONS, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
 
 const definitions = new Map(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => [definition.id, definition]))
 export function videoEditBuiltinEffect(id: string): VideoEditBuiltinEffectDefinition | undefined { return definitions.get(id) }
@@ -159,6 +161,7 @@ export function videoEditBuiltinDefaults(definition: VideoEditBuiltinEffectDefin
   return Object.fromEntries(definition.params.map(param => [param.key, param.default]))
 }
 const COLOR = /^#[0-9a-f]{6}$/
+const COLOR_ALPHA = /^#[0-9a-f]{6}([0-9a-f]{2})?$/
 function range(param: Extract<VideoEditBuiltinParam, { type: 'number' }>): string { return `${param.min}–${param.max}${VIDEO_EDIT_BUILTIN_UNIT_LABELS[param.unit]}` }
 /** 单个参数：`clamp` 时数值夹进范围（界面拖动、步进），否则超出范围直接报错（文档校验、助手写入，不静默改值）。 */
 export function videoEditBuiltinParamValue(param: VideoEditBuiltinParam, raw: unknown, clamp = false): VideoEditBuiltinParamValue {
@@ -185,7 +188,7 @@ export function videoEditBuiltinParamValue(param: VideoEditBuiltinParam, raw: un
       return raw
     case 'color': {
       const value = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
-      if (!COLOR.test(value)) throw new Error(`“${param.name}”（${param.key}）需要 #rrggbb 颜色。`)
+      if (!(param.alpha ? COLOR_ALPHA : COLOR).test(value)) throw new Error(`“${param.name}”（${param.key}）需要 ${param.alpha ? '#rrggbb 或带透明度的 #rrggbbaa' : '#rrggbb'} 颜色。`)
       return value
     }
   }

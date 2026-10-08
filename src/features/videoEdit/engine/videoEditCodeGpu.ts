@@ -12,6 +12,10 @@ import { TrustedShaderLibraryRenderer } from './shaderLibrary/render'
 import { codeFilterRadius, codeMaterialFilterPasses } from './videoEditCodeCompilerFilterV3'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
+import { isShaderGraphEffect, shaderGraphEffectProps, shaderGraphEffectSpec } from '@/core/videoEdit/shaderGraph/effects'
+import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import type { ShaderLibraryClock } from './shaderLibrary/planner'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import { invalidateCodeTextMetrics, measureCodeText, measureVideoEditGlyph } from '../videoEditGlyphMetrics'
 import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
@@ -110,6 +114,7 @@ export class VideoEditCodeGpu {
   private readonly maskedMixPipelines = new Map<VideoEditGpuColorFormat, Promise<GpuRenderPipeline>>()
   private sampler: unknown
   private builtinRuntime?: VideoEditBuiltinEffectsGpu
+  private graphCache?: ShaderGraphCache
   private v3Runtime?: VideoEditCodeGpuV3
   private readonly missingFonts = new Set<string>()
   private bytes = 0
@@ -553,10 +558,16 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     const runtime = this.builtins()
     const target = this.surface(key, input.width, input.height, input.textureFormat)
     if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
-    await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format: input.textureFormat }, target.picture.texture, frame, renderScale, luts)
+    if (isShaderGraphEffect(instance.id)) {
+      // `shaders` 组件效果：着色器图 [@input, 组件]，时间是片段内秒数（由合成场景给出）。
+      const time = (instance as ShaderLibraryClock).shaderTimeSeconds ?? 0
+      await this.shaderGraphs().render(shaderGraphEffectSpec(instance.id), { timeSeconds: time, width: input.width, height: input.height, input: input.texture, output: target.picture.texture, outputFormat: input.textureFormat, props: new Map([['fx', shaderGraphEffectProps(instance.id, resolveVideoEditBuiltinParams(instance))]]) })
+    } else await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format: input.textureFormat }, target.picture.texture, frame, renderScale, luts)
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }
+  /** 着色器图（`shaders` 框架）会话缓存：效果、转场与代码素材 shader 图层共用。 */
+  shaderGraphs(): ShaderGraphCache { return this.graphCache ??= new ShaderGraphCache(this.device) }
   private builtins(): VideoEditBuiltinEffectsGpu {
     return this.builtinRuntime ??= new VideoEditBuiltinEffectsGpu(this.device, this.sampler, {
       allocate: (width, height, format) => this.texture(width, height, format as VideoEditGpuColorFormat),
@@ -577,7 +588,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }
-  releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key); this.builtinRuntime?.releaseIdle() }
+  releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key); this.builtinRuntime?.releaseIdle(); this.graphCache?.releaseIdle() }
   /** Only evict prior nested output frames; generated/effect surfaces have their own existing owner. */
   releaseNestedFrames(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (key.startsWith('nested:frame:') && !keys.has(key)) this.releaseSurface(key) }
   /** CodeSources owns IR identity. Retired IR cannot leave an older pipeline identity behind. */
@@ -599,7 +610,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.stopFonts()
     this.disposed = true; await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled([...this.mixReady.values(), ...this.maskedMixPipelines.values()])
     await Promise.allSettled([...this.filterCompiles.values()].map(value => value.pending)); await this.pending.catch(() => {})
-    this.releaseUnused(new Set()); await this.v3Runtime?.dispose(); this.v3Runtime = undefined; this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
+    this.releaseUnused(new Set()); await this.v3Runtime?.dispose(); this.v3Runtime = undefined; this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
     this.glyphs.clear(); this.filters.clear(); this.filterLayout = undefined; this.image = undefined; this.mixPipelines.clear(); this.maskedMixPipelines.clear()
   }
 }

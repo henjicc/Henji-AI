@@ -9,7 +9,8 @@ describe('内置效果登记', () => {
       expect(definition.description.length, definition.id).toBeGreaterThan(8)
       expect(new Set(definition.params.map(param => param.key)).size).toBe(definition.params.length)
       for (const param of definition.params) {
-        expect(param.tooltip && param.description, `${definition.id}.${param.key}`).toBeTruthy()
+        // 着色器组件参数的名字已说明含义，悬停说明可空；助手语义必有（框架原文）。
+        expect(definition.id.startsWith('shaders.') ? param.description : param.tooltip && param.description, `${definition.id}.${param.key}`).toBeTruthy()
         if (param.type === 'number') { expect(param.default).toBeGreaterThanOrEqual(param.min); expect(param.default).toBeLessThanOrEqual(param.max) }
         if (param.type === 'enum') expect(param.options.map(option => option.value)).toContain(param.default)
       }

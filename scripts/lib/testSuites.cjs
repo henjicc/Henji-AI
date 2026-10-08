@@ -14,6 +14,7 @@ const GPU_TEST_FILES = [
   'src/features/videoEdit/engine/videoEditCornerPin.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts',
   'src/features/videoEdit/engine/shaderLibrary/shaderLibrary.gpu.test.ts',
+  'src/features/videoEdit/engine/shaderEngines/shaderGraph.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditLumetri.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinTransitions.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditPlaybackResolution.gpu.test.ts',

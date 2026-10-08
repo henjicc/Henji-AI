@@ -101,7 +101,7 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
     const builtin = owner.effect.builtin
     if (builtin) {
       if (data.versionId) throw new Error('内置效果没有源码版本，version_id 保持为空。')
-      if (data.curves && typeof data.curves === 'object' && Object.keys(data.curves).length) throw new Error('内置效果请写 parameters.<参数名>.keyframes，time 为片段内帧；curves 只用于代码滤镜源时间曲线。')
+      if (data.curves && typeof data.curves === 'object' && Object.keys(data.curves).length) throw new Error('内置效果的关键帧写 frame_curves（{参数键: 片段内帧序列}）；curves 只用于代码滤镜源时间曲线。')
       // 整体写入：写什么存什么（读回与写入一致），没写的键回到默认值
       const params = validateVideoEditBuiltinParams(builtin.id, (data.parameters ?? {}) as Record<string, unknown>)
       const mask = data.mask ?? undefined
@@ -111,7 +111,7 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params, ...(Object.keys(curves).length ? { curves } : {}) }, ...(mask ? { mask } : {}) })
       delete owner.effect.mask; Object.assign(owner.effect, next)
     } else {
-      if (data.frameCurves && typeof data.frameCurves === 'object' && Object.keys(data.frameCurves).length) throw new Error('代码滤镜请使用 curves 源时间曲线；parameters.<参数>.keyframes 只用于内置效果。')
+      if (data.frameCurves && typeof data.frameCurves === 'object' && Object.keys(data.frameCurves).length) throw new Error('代码滤镜请使用 curves 源时间曲线；frame_curves 只用于内置效果。')
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, code: { definitionId: owner.effect.code!.definitionId, versionId: data.versionId, parameters: data.parameters, curves: data.curves }, ...(data.mask ? { mask: data.mask } : {}) })
       Object.assign(owner.effect, next)
     }
@@ -165,7 +165,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
   if (!videoEditEffectAccepts(media, clip)) throw new Error(media === 'audio' ? `音频效果只能加到声音片段，片段“${clip.name}”不是声音片段。` : `片段“${clip.name}”是声音片段，只能加音频效果（video_edit.builtin_effect 里说明以“音频效果”开头的 effect:<ID>，如 effect:noise_reduction）。`)
   if (builtinId) {
     if (values.versionId) throw new Error('内置效果没有源码版本，请不要提供 version_id。')
-    if (values.curves && typeof values.curves === 'object' && Object.keys(values.curves).length) throw new Error('内置效果请写 parameters.<参数名>.keyframes，time 为片段内帧；curves 只用于代码滤镜源时间曲线。')
+    if (values.curves && typeof values.curves === 'object' && Object.keys(values.curves).length) throw new Error('内置效果的关键帧写 frame_curves（{参数键: 片段内帧序列}）；curves 只用于代码滤镜源时间曲线。')
     const effect = makeVideoEditBuiltinEffect(builtinId, (values.parameters ?? {}) as Record<string, unknown>, values.name !== undefined ? String(values.name) : undefined, true)
     if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
     if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)

@@ -77,6 +77,10 @@ jobs:
       - name: 项目 skill 同步检查
         run: npm run check:skill-sync
 
+      # 着色器组件目录由 shaders 包生成；升级包版本后必须重新生成。
+      - name: 着色器组件目录检查
+        run: npm run check:shader-components
+
       - name: ESLint（渲染层）
         run: npm run lint
 

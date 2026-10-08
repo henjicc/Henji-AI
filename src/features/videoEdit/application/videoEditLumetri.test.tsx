@@ -133,7 +133,7 @@ it('公共参考匹配多帧保留参考调色，隔离淡化/不透明度动画
     expect(frames.every(frame => frame.document.clips[0].fadeInFrames === 0 && frame.document.clips[0].curves?.opacity === undefined)).toBe(true)
     expect(result.parameters).toMatchObject({ faded_film: 0, curve_red_2: 50, look_lut: '' })
     const effect = getActiveVideoEditSequence(owner).clips[0].effects![0]
-    expect(await app.change(ref('video_edit.effect', effect.id), { 'video_edit.effect.parameters.faded_film.keyframes': [], 'video_edit.effect.parameters': result.parameters })).toMatchObject({ ok: true })
+    expect(await app.change(ref('video_edit.effect', effect.id), { 'video_edit.effect.frame_curves': {}, 'video_edit.effect.parameters': result.parameters })).toMatchObject({ ok: true })
     expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params).toEqual(result.parameters)
     expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.curves?.faded_film).toBeUndefined()
     undoVideoEdit(target.projectId); expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.faded_film).toBe(40)

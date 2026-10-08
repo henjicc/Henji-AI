@@ -113,18 +113,18 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
 }
 
 describe('正式合成场景的预乘RGBA编排与有界目标', () => {
-  it('t66按序列秒时间传入着色器，24/60fps同一秒相同且不改持久参数', async () => {
+  it('着色器效果按片段内秒时间求值，24/60fps同一秒相同且不改持久参数', async () => {
     for (const fps of [24, 60]) {
       const builtin = { id: 'shader_wave', params: { strength: 50, speed: 2 } }
       const effect = { id: 'wave', name: '波浪', amount: 1, enabled: true, builtin }
-      const owner = clip('visual', 1, { effects: [effect] })
+      const owner = clip('visual', 1, { effects: [effect], start: fps / 2 })
       const document = { ...composition([owner]), fps, frameRate: { numerator: fps, denominator: 1 } }
       const nodes = buildVideoEditCompositePlan(document.clips)
       let time: number | undefined
       const boundary = pixels(document, videoEditCompositeSurfaceKeys(nodes), { onBuiltin: instance => { time = instance.shaderTimeSeconds } })
       const result = await renderVideoEditCompositeScene(document, nodes, new Map([[owner.id, boundary.picture('raw', [.2, .1, 0, 1])]]), new Map([[owner.id, [{ effect, builtin }]]]), boundary.compositor, fps, () => true)
       await result.completion
-      expect(time).toBe(1)
+      expect(time).toBe(0.5)
       expect(builtin).toEqual({ id: 'shader_wave', params: { strength: 50, speed: 2 } })
     }
   })

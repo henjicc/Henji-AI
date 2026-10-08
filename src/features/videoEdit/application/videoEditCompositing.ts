@@ -76,7 +76,7 @@ export async function updateVideoEditEffect(target: VideoEditCompositeTarget, ef
     const { versionId, parameters, curves, ...presentation } = changes
     Object.assign(effect, presentation)
     if (effect.builtin) {
-      if (versionId !== undefined || curves !== undefined) throw new Error('内置效果没有源码版本；关键帧请用 parameters.<参数名>.keyframes 片内帧序列。')
+      if (versionId !== undefined || curves !== undefined) throw new Error('内置效果没有源码版本；关键帧请用 frame_curves（{参数键: 片段内帧序列}）。')
       if (parameters !== undefined) effect.builtin = { ...effect.builtin, params: normalizeVideoEditBuiltinParams(effect.builtin.id, parameters, effect.builtin.params) }
     } else effect.code = { ...effect.code!, ...(versionId !== undefined ? { versionId } : {}), ...(parameters !== undefined ? { parameters } : {}), ...(curves !== undefined ? { curves } : {}) }
   }, signal)

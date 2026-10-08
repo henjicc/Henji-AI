@@ -43,7 +43,7 @@ async function project() {
 it('搜索名称、别名、分类、分组、说明，忽略大小写与全角；清空返回完整目录', () => {
   const entries = videoEditEffectsRegistry()
   expect(filterVideoEditLibraryEntries(entries, '高斯').map(entry => entry.builtinId)).toContain('gaussian_blur')
-  expect(filterVideoEditLibraryEntries(entries, 'GAUSSIAN BLUR').map(entry => entry.builtinId)).toEqual(['gaussian_blur'])
+  expect(filterVideoEditLibraryEntries(entries, 'GAUSSIAN BLUR').map(entry => entry.builtinId)).toEqual(['gaussian_blur', 'shaders.Blur'])
   expect(filterVideoEditLibraryEntries([{ ...entries[0], aliases: ['叠化'] }], '叠化')).toHaveLength(1)
   expect(filterVideoEditLibraryEntries(entries, '音频效果').every(entry => entry.media === 'audio')).toBe(true)
   expect(filterVideoEditLibraryEntries(entries, 'gaussian_blur').map(entry => entry.builtinId)).toEqual(['gaussian_blur'])
