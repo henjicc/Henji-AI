@@ -8,6 +8,7 @@ import {
   inferProjectLocale,
   INTERNAL_FOLDER_NAME,
   parseProjectManifestText,
+  projectManifestContract,
   PROJECT_MANIFEST_FILE_NAME,
   serializeProjectManifest,
   type ProjectManifest,
@@ -19,6 +20,7 @@ import { writeBufferAtomically } from '../fs/atomic-file'
 import type { MainLogger } from '../logging/main-logger'
 import type { DocumentCatalog, IndexedProject } from './catalog'
 import { DocumentLocationError, errorCode, ProjectNotFoundError } from './errors'
+import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
 
 /*
  * 作品目录与项目容器（实施方案 2.3）：
@@ -141,7 +143,11 @@ export class DocumentWorkspace {
       if (errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR') return null
       throw error
     }
-    return parseProjectManifestText(text)
+    let raw: unknown
+    try { raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as unknown }
+    catch { return parseProjectManifestText(text) }
+    const backupPath = raw && typeof raw === 'object' && 'version' in raw ? await backupBeforePersistenceUpgrade(this.manifestPath(projectRoot), projectManifestContract(), typeof raw.version === 'number' ? raw.version : 0, text) : undefined
+    return parseProjectManifestText(text, backupPath)
   }
 
   async writeManifest(projectRoot: string, manifest: ProjectManifest): Promise<void> {

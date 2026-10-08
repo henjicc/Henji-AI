@@ -63,7 +63,7 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   // 版本 1 = 旧口播工程（audio_edit_projects.document_json）去掉 id / name / createdAt / updatedAt / revision。
   version: 1,
   contentSchema: audioEditContentSchema,
-  upgradeContent: (content) => content,
+  migrations: {},
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [], vstEnabled: false }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({

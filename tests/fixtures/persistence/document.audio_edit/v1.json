@@ -1,0 +1,44 @@
+{
+  "format": "henji-document",
+  "kind": "audio_edit",
+  "kindVersion": 1,
+  "id": "golden-audio_edit",
+  "name": "口播",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "source": {
+      "mediaType": "audio",
+      "sourcePath": "/persistence-project/素材/voice.wav",
+      "audioPath": "/persistence-project/素材/voice.wav",
+      "durationFrames": 48000,
+      "sampleRate": 48000,
+      "channels": 1
+    },
+    "referenceScript": "参考稿",
+    "transcript": [
+      {
+        "id": "word",
+        "text": "你好",
+        "startFrame": 0,
+        "endFrame": 24000,
+        "included": true,
+        "locked": false,
+        "granularity": "word"
+      }
+    ],
+    "suggestions": [],
+    "vstEnabled": false,
+    "cuts": [
+      {
+        "id": "cut",
+        "startFrame": 24000,
+        "endFrame": 48000,
+        "reason": "manual",
+        "enabled": true
+      }
+    ],
+    "processorChain": []
+  }
+}

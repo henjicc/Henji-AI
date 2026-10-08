@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "providerId": "kie",
+  "models": {
+    "image": "",
+    "video": "",
+    "audio": ""
+  }
+}

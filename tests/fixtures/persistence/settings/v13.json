@@ -1,0 +1,12 @@
+{
+  "version": 13,
+  "state": {
+    "providerKeyStatus": {
+      "kie": false
+    },
+    "uploadProvider": "kie",
+    "uploadFallbackEnabled": false,
+    "videoEditBinsFirst": true,
+    "canvasLodLevel": "balanced"
+  }
+}

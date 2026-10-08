@@ -28,7 +28,7 @@ const packageKind: DocumentKindDescriptor<TestContent> = {
   storage: 'package',
   version: 1,
   contentSchema: testContentSchema,
-  upgradeContent: (content) => content,
+  migrations: {},
   createEmptyContent: () => ({ items: [] }),
   isEmptyContent: (content) => content.items.length === 0,
   summarize: () => ({}),

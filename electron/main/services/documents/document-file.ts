@@ -16,6 +16,9 @@ import type { IndexedDocument } from './catalog'
 import { DocumentNotFoundError, DocumentUnsupportedError, errorCode } from './errors'
 import type { PackageAdapterRegistry } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
+import { assertPersistenceVersion, PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../../../../src/core/persistence/migrations'
+import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
+import { createMainLogger } from '../logging/main-logger'
 
 /** 文档文件的读取、头信息与内容换算（文档仓库与索引扫描共用）。 */
 
@@ -45,6 +48,7 @@ export interface LoadedDocumentFile {
   envelope: DocumentEnvelope | null
   /** 包类型由适配器给出摘要；JSON 类型在换算内容后计算。 */
   packageSummary: DocumentListSummary | null
+  backupPath?: string
 }
 
 export interface DocumentFileDependencies {
@@ -83,6 +87,7 @@ export async function loadDocumentFile(
     const adapter = dependencies.adapters.get(kind.id)
     if (!adapter) throw new DocumentUnsupportedError('这种文档的读写尚未接入。')
     const header = await adapter.readHeader(filePath)
+    assertPersistenceVersion(documentPersistenceContract(kind), header.kindVersion)
     return {
       kind,
       path: filePath,
@@ -100,13 +105,23 @@ export async function loadDocumentFile(
       packageSummary: header.summary,
     }
   }
-  if (stat.size > MAX_DOCUMENT_FILE_BYTES) throw new DocumentFormatError('文档文件过大，可能已损坏。')
-  const envelope = parseDocumentText(await fsp.readFile(filePath, 'utf8'))
+  if (stat.size > MAX_DOCUMENT_FILE_BYTES) throw new DocumentFormatError('文档文件超过可读取的大小。')
+  const originalText = await fsp.readFile(filePath, 'utf8')
+  const envelope = parseDocumentText(originalText)
   if (envelope.kind !== kind.id) throw new DocumentFormatError('文档类型与扩展名不一致。')
-  if (envelope.kindVersion > kind.version) {
-    throw new DocumentFormatError('这份文档由更新版本的痕迹AI创建，请升级后再打开。')
+  const contract = documentPersistenceContract(kind)
+  try {
+    assertPersistenceVersion(contract, envelope.kindVersion)
+    const backupPath = await backupBeforePersistenceUpgrade(filePath, contract, envelope.kindVersion, originalText)
+    return { kind, path: filePath, stat, header: headerFromEnvelope(envelope), envelope, packageSummary: null, backupPath }
+  } catch (error) {
+    createMainLogger('main.documents').warn('文档格式读取失败', { event: 'documents.load.failed', context: { format: contract.id, fromVersion: envelope.kindVersion, toVersion: kind.version }, error })
+    throw error
   }
-  return { kind, path: filePath, stat, header: headerFromEnvelope(envelope), envelope, packageSummary: null }
+}
+
+export function documentPersistenceContract(kind: DocumentKindDescriptor): PersistenceContract {
+  return { id: `document.${kind.id}`, name: kind.untitledNames.zh.replace('未命名', ''), version: kind.version, schema: kind.contentSchema, migrations: kind.migrations }
 }
 
 function headerFromEnvelope(envelope: DocumentEnvelope): DocumentFileHeader {
@@ -153,14 +168,18 @@ export function decodeDocumentContent(
   if (!file.envelope) throw new DocumentUnsupportedError('这种文档的内容由专用编辑器读写。')
   const codec = createLocationCodec(workspace.locationContext(container))
   const { content, report } = codec.decodeContent(file.envelope.content)
-  const upgraded = file.envelope.kindVersion < file.kind.version
-    ? file.kind.upgradeContent(content, file.envelope.kindVersion)
-    : content
-  const parsed = file.kind.contentSchema.safeParse(upgraded)
-  if (!parsed.success) {
-    throw new DocumentFormatError(`文档内容无效：${parsed.error.issues[0]?.message ?? '格式错误'}`, { cause: parsed.error })
+  const migrating = file.envelope.kindVersion < file.kind.version
+  const logger = createMainLogger('main.documents')
+  if (migrating) logger.info('开始升级文档内容', { event: 'documents.upgrade.start', context: { format: file.kind.id, fromVersion: file.envelope.kindVersion, toVersion: file.kind.version, backupPath: file.backupPath } })
+  try {
+    const upgraded = upgradePersistenceContent(documentPersistenceContract(file.kind), content, file.envelope.kindVersion, file.backupPath)
+    if (migrating) logger.info('文档内容升级完成，等待首次保存', { event: 'documents.upgrade.completed', context: { format: file.kind.id, fromVersion: file.envelope.kindVersion, toVersion: file.kind.version, backupPath: file.backupPath } })
+    return { content: upgraded, report }
+  } catch (error) {
+    const failure = error instanceof PersistenceError ? error : null
+    logger.warn('文档格式读取失败', { event: migrating ? 'documents.upgrade.failed' : 'documents.decode.failed', context: { format: failure?.formatId, fromVersion: failure?.fromVersion, toVersion: failure?.toVersion, fields: failure?.fields, backupPath: failure?.backupPath }, error })
+    throw error
   }
-  return { content: parsed.data, report }
 }
 
 export function metaFromFile(file: LoadedDocumentFile, container: ResolvedContainer): DocumentMeta {

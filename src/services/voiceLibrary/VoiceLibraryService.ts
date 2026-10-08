@@ -1,3 +1,6 @@
+import { z } from 'zod'
+import { voiceLibraryRecordSchema } from '@/core/persistence/storedSchemas'
+import { localLibraryContract, parseVersionedPersistenceJson, readStoredPersistenceJson, serializeVersionedPersistenceJson } from '@/core/persistence/versionedJson'
 import { createLogger } from '@/core/logging'
 import { databaseService } from '@/services/database/DatabaseService'
 
@@ -84,11 +87,11 @@ function normalizeRecord(value: DynamicValue): VoiceLibraryRecord | null {
 }
 
 function parseVoiceRecords(raw: string | null): VoiceLibraryRecord[] {
-  if (!raw) {
+  if (raw === null) {
     return []
   }
   try {
-    const parsed = JSON.parse(raw) as DynamicValue
+    const parsed = parseVersionedPersistenceJson(JSON.parse(raw) as unknown, localLibraryContract(VOICE_LIBRARY_SETTING_KEY, z.array(voiceLibraryRecordSchema)))
     if (!Array.isArray(parsed)) {
       return []
     }
@@ -102,7 +105,7 @@ function parseVoiceRecords(raw: string | null): VoiceLibraryRecord[] {
     return result
   } catch (error) {
     logger.warn('[VoiceLibrary] parse failed', error)
-    return []
+    throw error
   }
 }
 
@@ -138,7 +141,7 @@ function writeLocalCache(records: VoiceLibraryRecord[]): void {
     return
   }
   try {
-    window.localStorage.setItem(VOICE_LIBRARY_CACHE_KEY, JSON.stringify(records))
+    window.localStorage.setItem(VOICE_LIBRARY_CACHE_KEY, serializeVersionedPersistenceJson(localLibraryContract(VOICE_LIBRARY_SETTING_KEY, z.array(voiceLibraryRecordSchema)), records))
   } catch (error) {
     logger.warn('[VoiceLibrary] write cache failed', error)
   }
@@ -168,11 +171,15 @@ class VoiceLibraryService {
 
     this.loadingPromise = (async () => {
       const raw = await databaseService.getSetting(VOICE_LIBRARY_SETTING_KEY)
-      const records = parseVoiceRecords(raw)
+      const upgraded = raw !== null ? await readStoredPersistenceJson(raw, VOICE_LIBRARY_SETTING_KEY, localLibraryContract(VOICE_LIBRARY_SETTING_KEY, z.array(voiceLibraryRecordSchema)), {
+        getItem: key => databaseService.getSetting(key),
+        setItem: async (key, value) => { await databaseService.setSetting(key, value, 'json') },
+      }) : []
+      const records = (upgraded as VoiceLibraryRecord[]).map(record => normalizeRecord(record)).filter((record): record is VoiceLibraryRecord => record !== null)
       this.cache = records
       writeLocalCache(records)
       return records
-    })().finally(() => { this.loadingPromise = null })
+    })().catch(error => { this.cache = null; throw error }).finally(() => { this.loadingPromise = null })
 
     return this.loadingPromise
   }
@@ -180,7 +187,7 @@ class VoiceLibraryService {
   private async persist(records: VoiceLibraryRecord[]): Promise<void> {
     await databaseService.setSetting(
       VOICE_LIBRARY_SETTING_KEY,
-      JSON.stringify(records),
+      serializeVersionedPersistenceJson(localLibraryContract(VOICE_LIBRARY_SETTING_KEY, z.array(voiceLibraryRecordSchema)), records),
       'json'
     )
     this.cache = records

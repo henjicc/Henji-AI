@@ -78,6 +78,9 @@ describe('节点参数默认值', () => {
     const definition = definitions[TYPES.booleanSource]
     window.localStorage.setItem(NODE_PARAMETER_DEFAULTS_KEY, '{broken')
     expect(nodeParameterDefaults.resolve(definition, {})).toEqual({})
+    expect(() => nodeParameterDefaults.save(definition, { ...definition.createDefaultData(), value: false } as CanvasNodeData)).toThrow('损坏')
+    expect(window.localStorage.getItem(NODE_PARAMETER_DEFAULTS_KEY)).toBe('{broken')
+    window.localStorage.removeItem(NODE_PARAMETER_DEFAULTS_KEY)
     nodeParameterDefaults.save(definition, { ...definition.createDefaultData(), value: false } as CanvasNodeData)
     expect(nodeParameterDefaults.resolve(definition, {})).toMatchObject({ value: false })
     const failed = new NodeParameterDefaults(() => ({ getItem: () => null, setItem: () => { throw new Error('disk full') } }))

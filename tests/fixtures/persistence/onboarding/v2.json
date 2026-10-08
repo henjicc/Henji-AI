@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "status": "in_progress",
+  "entryReason": "fresh_install",
+  "activeStepId": "provider",
+  "completedStepIds": [
+    "welcome"
+  ],
+  "configuredProviders": [],
+  "verifiedProviders": [],
+  "shownHintIds": [],
+  "firstTaskPrepared": false,
+  "firstTaskCompleted": false,
+  "startedAt": "2026-10-09T00:00:00.000Z",
+  "completedAt": null
+}

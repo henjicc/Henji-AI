@@ -1,3 +1,9 @@
+import { backupPersistenceSnapshot } from '@/core/persistence/backup'
+import { videoEditSubtitleManifestSchema } from '@/core/persistence/storedSchemas'
+import { SUBTITLE_MANIFEST_VERSION } from '@/core/persistence/preferenceSchemas'
+import { formatMigrations } from '@/core/persistence/formatMigrations'
+import { migratePersistenceContent } from '@/core/persistence/migrations'
+export { videoEditSubtitleManifestSchema } from '@/core/persistence/storedSchemas'
 import { z } from 'zod'
 import { AudioBufferSource, Output, StreamTarget, WavOutputFormat } from 'mediabunny'
 import { createLogger } from '@/core/logging'
@@ -6,7 +12,6 @@ import { videoEditComposition, videoEditDuration, audibleVideoEditClips, type Vi
 import { videoEditAudioContent } from '@/core/videoEdit/audioContent'
 import { videoEditCaptionSchema, type VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/core/videoEdit/subtitleStyle'
-import { videoEditClipSchema } from '@/core/videoEdit/document'
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, videoEditTextMediaIdentity, type VideoEditTextTranscription } from '@/core/videoEdit/textTranscript'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
@@ -17,7 +22,7 @@ import { editVideoSequence, requireVideoEditInstance, videoEditDocumentOperation
 const logger = createLogger('features.videoEdit.autoSubtitles')
 export type SubtitleScope = 'sequence' | 'in-out' | 'selection'
 export type SubtitleTranscriptionOptions = AutoSubtitleOptions & { language?: 'zh' | 'en' }
-export const videoEditSubtitleManifestSchema = z.object({ projectId: z.string(), sequenceId: z.string(), signature: z.string(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), soundClips: z.array(videoEditClipSchema).optional(), soundIdentities: z.record(z.string(), z.string()).optional(), captions: z.array(videoEditCaptionSchema).optional(), committed: z.boolean().optional() }).strict()
+
 const manifestSchema = videoEditSubtitleManifestSchema
 type Manifest = z.infer<typeof manifestSchema>
 const active = new WeakSet<VideoEditInstance>()
@@ -88,7 +93,7 @@ export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceI
     if (requireVideoEditInstance(projectId) !== owner || await sequenceSignature(current(projectId, sequenceId)) !== signature) throw new Error('剪辑声音在准备期间已改变，请重新准备。')
     const source = await platform.audioEdit.probeSource(path)
     // Save the source identity before registering its document; a failed first write leaves no orphan draft.
-    await platform.system.fs.writeTextFile(`${path}.subtitle.json`, JSON.stringify({ projectId, sequenceId, signature, soundClips: audibleVideoEditClips(sound), soundIdentities: Object.fromEntries(audibleVideoEditClips(sound).map(clip => [clip.itemId, videoEditTextMediaIdentity(snapshot, clip.itemId)])), ...range } satisfies Manifest))
+    await platform.system.fs.writeTextFile(`${path}.subtitle.json`, JSON.stringify({ version: SUBTITLE_MANIFEST_VERSION, projectId, sequenceId, signature, soundClips: audibleVideoEditClips(sound), soundIdentities: Object.fromEntries(audibleVideoEditClips(sound).map(clip => [clip.itemId, videoEditTextMediaIdentity(snapshot, clip.itemId)])), ...range } satisfies Manifest))
     const draft = await createAudioEditDraft(source, container)
     retained = true; draft.session.markInUse(); await flushAudioEditProject(draft.document.id)
     logger.info('字幕混音准备完成', { event: 'video_edit.subtitle.prepare.completed', context: { projectId, sequenceId, audioDocumentId: draft.document.id } })
@@ -127,7 +132,13 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     signal?.throwIfAborted()
     const audio = await loadAudioEditProject(audioDocumentId)
     const path = `${audio.document.source.sourcePath}.subtitle.json`
-    const platform = getPlatform(); const manifest = manifestSchema.parse(JSON.parse(await platform.system.fs.readTextFile(path)))
+    const platform = getPlatform()
+    const text = await platform.system.fs.readTextFile(path)
+    const raw = JSON.parse(text) as unknown
+    const version = raw && typeof raw === 'object' && 'version' in raw ? raw.version : 1
+    const contract = { id: 'subtitle-manifest', name: '字幕回填记录', version: SUBTITLE_MANIFEST_VERSION, migrations: formatMigrations('subtitle-manifest') }
+    const backup = await backupPersistenceSnapshot(path, contract, typeof version === 'number' ? version : 0, new TextEncoder().encode(text), platform.system.fs)
+    const manifest = manifestSchema.parse(migratePersistenceContent(contract, raw, typeof version === 'number' ? version : 0, backup))
     if (manifest.projectId !== projectId || manifest.sequenceId !== sequenceId) throw new Error('此转录声音不属于目标剪辑序列。')
     const assertTarget = async (): Promise<void> => {
       signal?.throwIfAborted()

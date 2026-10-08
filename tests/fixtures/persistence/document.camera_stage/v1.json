@@ -1,0 +1,35 @@
+{
+  "format": "henji-document",
+  "kind": "camera_stage",
+  "kindVersion": 1,
+  "id": "golden-camera_stage",
+  "name": "镜头参考",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "objects": [
+      {
+        "id": "camera",
+        "type": "camera",
+        "name": "主摄影机",
+        "position": [
+          0,
+          1,
+          5
+        ]
+      }
+    ],
+    "activeCameraId": "camera",
+    "sceneSettings": {
+      "sky": {}
+    },
+    "stateKeyframes": [
+      {
+        "id": "key",
+        "time": 0,
+        "objects": {}
+      }
+    ]
+  }
+}

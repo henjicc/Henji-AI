@@ -1,0 +1,216 @@
+{
+  "format": "henji-document",
+  "kind": "video_edit",
+  "kindVersion": 1,
+  "id": "golden-video_edit",
+  "name": "剪辑",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "media": [],
+    "bins": [],
+    "items": [
+      {
+        "id": "code-item",
+        "name": "代码标题",
+        "kind": "code",
+        "code": {
+          "definitionId": "code-definition",
+          "versionId": "code-version",
+          "parameters": {
+            "label": "黄金样本",
+            "size": 24
+          },
+          "curves": {
+            "size": [
+              {
+                "id": "source-key",
+                "sourceInUs": 0,
+                "sourceRemainder": {
+                  "numerator": 0,
+                  "denominator": 1
+                },
+                "value": 24,
+                "interpolation": "linear"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "sequences": [
+      {
+        "id": "golden-sequence",
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "tracks": [
+          {
+            "id": "91e378c7-0202-4385-a8ad-0e06a4101176",
+            "name": "音频 1",
+            "index": 0,
+            "kind": "audio",
+            "locked": false,
+            "enabled": true,
+            "muted": false,
+            "solo": false
+          },
+          {
+            "id": "64ae53cf-8266-448c-b92e-5fbdbbc91628",
+            "name": "视频 1",
+            "index": 1,
+            "kind": "video",
+            "locked": false,
+            "enabled": true,
+            "muted": false,
+            "solo": false
+          }
+        ],
+        "clips": [
+          {
+            "id": "golden-clip",
+            "start": 0,
+            "duration": 90,
+            "itemId": "code-item",
+            "name": "代码标题",
+            "kind": "code",
+            "code": {
+              "definitionId": "code-definition",
+              "versionId": "code-version",
+              "parameters": {
+                "label": "黄金样本",
+                "size": 24
+              },
+              "curves": {
+                "size": [
+                  {
+                    "id": "source-key",
+                    "sourceInUs": 0,
+                    "sourceRemainder": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 24,
+                    "interpolation": "linear"
+                  }
+                ]
+              }
+            },
+            "track": 1,
+            "sourceInUs": 0,
+            "sourceRemainder": {
+              "numerator": 0,
+              "denominator": 1
+            },
+            "x": 0,
+            "y": 0,
+            "scale": 1,
+            "rotation": 0,
+            "opacity": 1,
+            "volume": 1,
+            "text": "",
+            "curves": {
+              "opacity": [
+                {
+                  "time": 0,
+                  "value": 0,
+                  "interpolation": "linear"
+                },
+                {
+                  "time": 20,
+                  "value": 1,
+                  "interpolation": "ease"
+                }
+              ]
+            },
+            "effects": [
+              {
+                "id": "golden-grade",
+                "name": "全能调色",
+                "enabled": true,
+                "amount": 1,
+                "builtin": {
+                  "id": "color_grade",
+                  "params": {
+                    "exposure": 0.25
+                  }
+                }
+              },
+              {
+                "id": "golden-blur",
+                "name": "高斯模糊",
+                "enabled": true,
+                "amount": 0.5,
+                "builtin": {
+                  "id": "gaussian_blur",
+                  "params": {
+                    "strength": 10
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "annotations": [],
+        "name": "序列 1",
+        "width": 1920,
+        "height": 1080,
+        "pixelAspectRatio": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "sampleRate": 48000,
+        "channels": 2,
+        "captions": [
+          {
+            "id": "golden-caption",
+            "start": 5,
+            "duration": 40,
+            "text": "字幕原文",
+            "translation": "Golden caption"
+          }
+        ],
+        "transitions": [
+          {
+            "id": "golden-transition",
+            "kind": "cross_dissolve",
+            "rightClipId": "golden-clip",
+            "durationFrames": 10
+          }
+        ],
+        "markers": [
+          {
+            "id": "golden-marker",
+            "frame": 20,
+            "name": "审查点"
+          }
+        ]
+      }
+    ],
+    "codeMaterials": [
+      {
+        "id": "code-definition",
+        "name": "代码标题",
+        "defaultVersionId": "code-version",
+        "versions": [
+          {
+            "id": "code-version",
+            "apiVersion": 1,
+            "languageVersion": 3,
+            "entry": "main.ts",
+            "files": [
+              {
+                "path": "main.ts",
+                "location": "/persistence-project/代码/标题/v1/main.ts",
+                "hash": "a9cf646e7be8f6ce4c59796d08f58f0b9691a244c88b3d518f4b09fd8f411f64"
+              }
+            ],
+            "imports": []
+          }
+        ]
+      }
+    ]
+  }
+}

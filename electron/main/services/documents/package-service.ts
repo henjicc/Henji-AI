@@ -4,9 +4,10 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
-import { z } from 'zod'
+import type { z } from 'zod'
+import { PACKAGE_FORMAT, PACKAGE_VERSION, packageManifestSchema } from '../../../../src/core/persistence/storedSchemas'
 
-import { buildDocumentEnvelope, documentIdSchema, serializeDocumentEnvelope, type DocumentEnvelope } from '../../../../src/core/documents/envelope'
+import { buildDocumentEnvelope, serializeDocumentEnvelope, type DocumentEnvelope } from '../../../../src/core/documents/envelope'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { entryNameKey, keepBothEntryName, sameEntryName } from '../../../../src/core/documents/naming'
 import { buildProjectManifest, INTERNAL_FOLDER_NAME, PROJECT_FOLDER_NAMES, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
@@ -30,6 +31,9 @@ import { DocumentFormatError, DocumentLocationError, ProjectNotFoundError } from
 import type { DocumentIndexScanner } from './index-scanner'
 import { codeGroupDestinations, sameFileContent, rewriteContentPaths } from './media-transfer'
 import { readEntryNameKeys } from './name-check'
+import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
+import { upgradePersistenceContent } from '../../../../src/core/persistence/migrations'
+import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
 import type { PackageAdapterRegistry } from './package-adapters'
 import type { ProjectService } from './projects'
 import type { DocumentRepository } from './repository'
@@ -56,31 +60,12 @@ import type { DocumentWorkspace, ResolvedContainer } from './workspace'
 
 const MANIFEST_ENTRY = 'henji-package.json'
 const CONTENT_PREFIX = 'content/'
-const PACKAGE_FORMAT = 'henji-package'
-const PACKAGE_VERSION = 1
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 const MAX_ENTRIES = 100_000
 const MAX_TOTAL_BYTES = 64 * 1024 * 1024 * 1024
 const MAX_WALK_DEPTH = 16
 /** 导出时跳过的文件：写到一半的暂存文件与系统生成的缩略图缓存。 */
 const SKIPPED_FILE = /(?:\.tmp|\.partial|\.lock)$|^(?:thumbs\.db|desktop\.ini|\.ds_store)$/i
-
-const folderNameSchema = z.string().min(1).max(120).refine((value) => isSafeRelativeSegment('win32', value) && value !== INTERNAL_FOLDER_NAME, '包里的文件夹名无效。')
-const relativePathSchema = z.string().min(1).max(4_096).refine((value) => value.split('/').every((segment) => isSafeRelativeSegment('win32', segment)), '包里的位置无效。')
-
-const packageManifestSchema = z.object({
-  format: z.literal(PACKAGE_FORMAT),
-  version: z.literal(PACKAGE_VERSION),
-  type: z.enum(['document', 'project']),
-  name: z.string().min(1).max(200),
-  exportedAt: z.string().max(64),
-  folders: z.object({ generated: folderNameSchema, materials: folderNameSchema }).strict(),
-  /** type 为 document 时的主文档（content/ 之下的相对位置）。 */
-  document: z.object({ id: documentIdSchema, path: relativePathSchema }).strict().optional(),
-  documents: z.array(z.object({ id: documentIdSchema, path: relativePathSchema }).strict()).max(MAX_ENTRIES),
-}).strict().superRefine((value, ctx) => {
-  if (value.type === 'document' && !value.document) ctx.addIssue({ code: 'custom', message: '文档包缺少主文档。' })
-})
 
 type PackageManifest = z.infer<typeof packageManifestSchema>
 
@@ -512,11 +497,11 @@ export class DocumentPackageService {
         } catch (error) {
           throw new DocumentFormatError('包说明已损坏。', { cause: error })
         }
-        if (typeof raw === 'object' && raw !== null && (raw as { format?: unknown }).format === PACKAGE_FORMAT
-          && typeof (raw as { version?: unknown }).version === 'number' && (raw as { version: number }).version > PACKAGE_VERSION) {
-          throw new DocumentFormatError('这个包由更新版本的痕迹AI导出，请升级后再导入。')
-        }
-        const parsed = packageManifestSchema.safeParse(raw)
+        const contract = { id: 'project-package', name: '项目和文档包', version: PACKAGE_VERSION, schema: packageManifestSchema, migrations: formatMigrations('project-package') }
+        const version = raw && typeof raw === 'object' && 'version' in raw ? Number(raw.version) : 0
+        const backupPath = await backupBeforePersistenceUpgrade(source, contract, version)
+        const upgraded = upgradePersistenceContent(contract, raw, version, backupPath)
+        const parsed = packageManifestSchema.safeParse(upgraded)
         if (!parsed.success) throw new DocumentFormatError(`包说明无效：${parsed.error.issues[0]?.message ?? '格式错误'}`)
         return parsed.data
       }

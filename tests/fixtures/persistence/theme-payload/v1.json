@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "themeTonePreset": "neutral",
+  "uiRadiusPreset": "default",
+  "accentColor": "#3B82F6",
+  "colors": {
+    "bg": "#171717",
+    "surface": "#262626",
+    "border": "#404040",
+    "text": "#FFFFFF",
+    "textMuted": "#A3A3A3",
+    "app": "#0A0A0A",
+    "canvas": "#0A0A0A",
+    "panel": "#171717",
+    "layer": "#404040"
+  }
+}

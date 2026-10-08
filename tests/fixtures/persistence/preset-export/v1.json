@@ -1,0 +1,9 @@
+{
+  "version": "1.0",
+  "name": "黄金生成预设",
+  "description": null,
+  "modelId": null,
+  "params": {
+    "prompt": "黄金样本"
+  }
+}

@@ -107,7 +107,7 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
   version: 1,
   contentSchema: videoEditContentSchema,
-  upgradeContent: (content) => content,
+  migrations: {},
   createEmptyContent: createEmptyVideoEditContent,
   isEmptyContent: isEmptyVideoEditContent,
   summarize: summarizeVideoEdit,

@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "content": [
+    {
+      "kind": "lower_third",
+      "parameters": {
+        "text": "姓名",
+        "subtitle": "身份 / 职务",
+        "color": "#007eff",
+        "textStyle": {
+          "fontFamily": "sans-serif",
+          "fontWeight": 400,
+          "fontStyle": "normal",
+          "fontSize": 60,
+          "fauxBold": false,
+          "fauxItalic": false,
+          "allCaps": false,
+          "smallCaps": false,
+          "superscript": false,
+          "subscript": false,
+          "underline": false,
+          "align": "center",
+          "verticalAlign": "middle",
+          "tracking": 0,
+          "kerning": "auto",
+          "leading": 0,
+          "baselineShift": 0,
+          "tsume": 0,
+          "fill": {
+            "enabled": true,
+            "color": "#ffffff"
+          },
+          "strokes": [],
+          "background": {
+            "enabled": false,
+            "color": "#000000",
+            "opacity": 0.7,
+            "padding": 12,
+            "radius": 0
+          },
+          "shadows": [],
+          "boxWidth": 0,
+          "boxHeight": 0
+        },
+        "durationSeconds": 5,
+        "entrance": "left",
+        "countFrom": 0,
+        "countTo": 100
+      },
+      "id": "golden-template",
+      "name": "黄金标题"
+    }
+  ]
+}

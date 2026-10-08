@@ -1,0 +1,26 @@
+{
+  "format": "henji-document",
+  "kind": "canvas",
+  "kindVersion": 1,
+  "id": "golden-canvas",
+  "name": "画布",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "nodes": [
+      {
+        "id": "golden-node",
+        "type": "textDisplay",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "data": {
+          "text": "黄金样本"
+        }
+      }
+    ],
+    "edges": []
+  }
+}

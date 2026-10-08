@@ -1,4 +1,13 @@
 {
+  "persistence": {
+    "newer-version": "This {{format}} was created by a newer Henji AI. Update the app to open it.",
+    "unsupported-version": "This {{format}} uses an old format that the current development build no longer supports. The original file was not changed.",
+    "migration-failed": "Could not upgrade {{format}} (step {{from}} → {{to}}). The original file was not changed. Backup: {{backup}}",
+    "invalid-content": "This {{format}} uses content that this version cannot open. The original file was not changed.",
+    "corrupt": "This {{format}} is damaged and its content cannot be parsed. The original file was not changed.",
+    "backup-unavailable": "Backup was not completed. No upgrade was attempted.",
+    "backup-failed": "Could not back up {{format}} before upgrading. No upgrade was attempted and the original file was not changed. Check folder permissions and free space."
+  },
   "title": "Errors",
   "unknown": "Unknown error",
   "network": "Network error",
@@ -7,7 +16,6 @@
   "forbidden": "Forbidden",
   "notFound": "Not found",
   "serverError": "Server error",
-
   "messages": {
     "apiKeyMissing": "API key is missing",
     "apiKeyInvalid": "API key is invalid",

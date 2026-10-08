@@ -55,7 +55,7 @@ it('本机共享预设持久保存，重建恢复；存储失败和损坏数据�
   const style = videoEditTextStyleSchema.parse({ fontSize: 48, background: { enabled: true } })
   const preset = library.save('本机样式', style)
   style.fontSize = 99
-  expect(JSON.parse(saved.get(VIDEO_EDIT_TEXT_PRESETS_KEY)!)).toMatchObject([{ name: '本机样式', style: { fontSize: 48 } }])
+  expect(JSON.parse(saved.get(VIDEO_EDIT_TEXT_PRESETS_KEY)!).content).toMatchObject([{ name: '本机样式', style: { fontSize: 48 } }])
   expect(new VideoEditTextPresetLibrary(storage).custom()).toEqual([preset])
   const before = library.custom()
   storage.setItem = () => { throw new Error('存储失败') }

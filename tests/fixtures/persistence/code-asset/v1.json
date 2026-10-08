@@ -1,0 +1,29 @@
+{
+  "format": "henji-code-asset",
+  "version": 1,
+  "name": "代码标题",
+  "sourceVersion": {
+    "apiVersion": 1,
+    "languageVersion": 3,
+    "entry": "main.ts",
+    "files": [
+      {
+        "path": "main.ts",
+        "location": "/persistence-project/代码/标题/v1/main.ts",
+        "hash": "a9cf646e7be8f6ce4c59796d08f58f0b9691a244c88b3d518f4b09fd8f411f64"
+      }
+    ],
+    "imports": []
+  },
+  "codeSources": [
+    {
+      "hash": "a9cf646e7be8f6ce4c59796d08f58f0b9691a244c88b3d518f4b09fd8f411f64",
+      "source": "export default { apiVersion: 1, languageVersion: 3, name: \"黄金代码\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 4, seed: 1, parameters: { label: { type: \"text\", title: \"标题\", default: \"黄金样本\", maxLength: 200 }, size: { type: \"number\", title: \"字号\", default: 24, min: 1, max: 72, step: 1, unit: \"px\" } }, render(ctx) { return [rect({ id: \"golden-box\", x: 0, y: 0, width: 100, height: 100, fill: [0, 0, 0, 1] })]; } };\n"
+    }
+  ],
+  "parameters": {
+    "label": "黄金样本"
+  },
+  "curves": {},
+  "images": []
+}

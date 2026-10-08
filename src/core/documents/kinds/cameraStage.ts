@@ -69,7 +69,7 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
   // 版本 1 = 旧工程场景数据第 14 版的持久字段（去掉 schemaVersion，由外壳的 kindVersion 表达）。
   version: 1,
   contentSchema: cameraStageContentSchema,
-  upgradeContent: (content) => content,
+  migrations: {},
   createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [] }),
   isEmptyContent: isEmptyCameraStageContent,
   summarize: (content) => ({

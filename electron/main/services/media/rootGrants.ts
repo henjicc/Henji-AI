@@ -1,4 +1,7 @@
+import { writeBufferAtomically } from '../fs/atomic-file'
+import { MEDIA_GRANTS_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import fs from 'node:fs'
+import { parsePersistenceJson, upgradeStoredFileSync } from '../persistence/stored-file'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -8,16 +11,16 @@ import { createMainLogger } from '../logging'
 const logger = createMainLogger('main.media')
 
 const GRANTS_FILE_NAME = 'allowed-media-roots.json'
-const MAX_PERSISTED_ROOTS = 100
 const PERSIST_DEBOUNCE_MS = 500
 
 interface PersistedGrantsFile {
-  version: 1
+  version: typeof MEDIA_GRANTS_VERSION
   roots: Array<{ path: string; grantedAt: number }>
 }
 
 const grantedAtByRoot = new Map<string, number>()
 let persistTimer: NodeJS.Timeout | null = null
+let restoreFailure: unknown
 
 function getGrantsFilePath(): string {
   return path.join(getHenjiDataDir(), GRANTS_FILE_NAME)
@@ -39,8 +42,10 @@ export function restorePersistedMediaRoots(allow: (rootPath: string) => void): v
   }
 
   try {
-    const parsed = JSON.parse(raw) as PersistedGrantsFile
-    if (parsed.version !== 1 || !Array.isArray(parsed.roots)) {
+    restoreFailure = undefined
+    const value = parsePersistenceJson(raw, 'media-grants')
+    const parsed = upgradeStoredFileSync(getGrantsFilePath(), 'media-grants', value, value && typeof value === 'object' && 'version' in value ? value.version : 0, raw) as PersistedGrantsFile
+    if (parsed.version !== MEDIA_GRANTS_VERSION || !Array.isArray(parsed.roots)) {
       return
     }
     let restored = 0
@@ -60,7 +65,8 @@ export function restorePersistedMediaRoots(allow: (rootPath: string) => void): v
       context: { restored, total: parsed.roots.length },
     })
   } catch (error) {
-    logger.warn('媒体授权目录持久化文件解析失败，忽略', {
+    restoreFailure = error
+    logger.warn('媒体授权目录持久化文件读取失败，原数据保留', {
       event: 'media.root_grants.restore.failed',
       error,
     })
@@ -78,15 +84,18 @@ function schedulePersist(): void {
 }
 
 async function flushPersist(): Promise<void> {
+  if (restoreFailure) {
+    logger.warn('无法覆盖未成功读取的媒体授权记录', { event: 'media.root_grants.persist.blocked', error: restoreFailure })
+    return
+  }
   const roots = [...grantedAtByRoot.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_PERSISTED_ROOTS)
     .map(([rootPath, grantedAt]) => ({ path: rootPath, grantedAt }))
-  const payload: PersistedGrantsFile = { version: 1, roots }
+  const payload: PersistedGrantsFile = { version: MEDIA_GRANTS_VERSION, roots }
 
   try {
     await fsp.mkdir(getHenjiDataDir(), { recursive: true })
-    await fsp.writeFile(getGrantsFilePath(), JSON.stringify(payload), 'utf8')
+    await writeBufferAtomically(getGrantsFilePath(), Buffer.from(JSON.stringify(payload), 'utf8'))
   } catch (error) {
     logger.warn('媒体授权目录持久化写入失败', {
       event: 'media.root_grants.persist.failed',

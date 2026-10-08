@@ -1,3 +1,7 @@
+import { createLogger } from '@/core/logging'
+import { ONBOARDING_VERSION, onboardingSchema } from '@/core/persistence/preferenceSchemas'
+import { guardedPlainStorage } from '@/core/persistence/stateStorage'
+import { formatMigrations } from '@/core/persistence/formatMigrations'
 import { subscribeApplicationEvent } from '@/core/events/applicationEvents'
 import {
   API_KEY_PROVIDERS,
@@ -10,8 +14,9 @@ import {
 } from '@/features/settings/modelDefaultsManager'
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
 
+const persistenceLogger = createLogger('onboarding.persistence')
 export const ONBOARDING_STORAGE_KEY = 'henji-onboarding-state'
-export const ONBOARDING_STATE_VERSION = 2
+export const ONBOARDING_STATE_VERSION = ONBOARDING_VERSION
 
 export const ONBOARDING_STEP_IDS = [
   'welcome',
@@ -169,12 +174,13 @@ export class OnboardingManager {
     private readonly defaultsManager: ModelDefaultsManager = modelDefaultsManager,
     options: OnboardingManagerOptions = {},
   ) {
-    this.state = loadState(storage)
+    this.storage = guardedPlainStorage(ONBOARDING_STORAGE_KEY, { id: 'onboarding', name: '首次引导进度', version: ONBOARDING_VERSION, schema: onboardingSchema, migrations: formatMigrations('onboarding') }, storage, error => persistenceLogger.warn('引导进度无法读取，原数据保留', { event: 'onboarding.load.failed', error: String(error) }))
+    this.state = loadState(this.storage)
     this.isOpen = options.suppressInitialOpen !== true
       && (this.state.status === 'not_started' || this.state.status === 'in_progress')
     this.snapshot = this.createSnapshot()
     this.defaultsManager.subscribe(() => this.publish())
-    this.persist()
+    if (storage.getItem(ONBOARDING_STORAGE_KEY) === null) this.persist()
   }
 
   subscribe = (listener: () => void): (() => void) => {

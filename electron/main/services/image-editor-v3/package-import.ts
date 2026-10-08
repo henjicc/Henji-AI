@@ -1,3 +1,4 @@
+import { parsePersistenceJson, upgradeStoredFile } from '../persistence/stored-file'
 import crypto from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -287,9 +288,9 @@ export async function importHenjiImagePackage(
     const staged = await stageArchive(sourcePath, stagingDir, limits, request.signal)
     const manifestEntry = staged.get(HENJI_IMAGE_PACKAGE_MANIFEST)
     if (!manifestEntry) throw new Error('.henjiimg manifest.json missing')
-    const manifest = validateHenjiImagePackageManifest(
-      JSON.parse(await fsp.readFile(manifestEntry.filePath, 'utf8')) as unknown,
-    )
+    const raw = parsePersistenceJson(await fsp.readFile(manifestEntry.filePath, 'utf8'), 'image-package')
+    const upgraded = await upgradeStoredFile(sourcePath, 'image-package', raw, raw && typeof raw === 'object' && 'packageVersion' in raw ? raw.packageVersion : 0)
+    const manifest = validateHenjiImagePackageManifest(upgraded)
     verifyManifestEntries(manifest, staged)
     const resources: ResourceDescriptor[] = []
     for (const resource of manifest.resources) {

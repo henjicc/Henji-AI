@@ -1,3 +1,6 @@
+import { STORYBOARD_METADATA_VERSION, storyboardMetadataSchema } from '../../../../src/core/persistence/preferenceSchemas'
+import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
+import { PersistenceError, upgradePersistenceContent } from '../../../../src/core/persistence/migrations'
 import type { StoryboardImageMetadataDto } from './types'
 import { loadSharp } from './sharp-loader'
 
@@ -10,11 +13,11 @@ export async function encodePngWithStoryboardMetadata(
 ): Promise<Buffer> {
   const sharp = await loadSharp()
   const png = await sharp(input).png().toBuffer()
-  const chunk = createItxtChunk(METADATA_KEY, JSON.stringify(normalizeMetadata(metadata)))
+  const chunk = createItxtChunk(METADATA_KEY, JSON.stringify({ version: STORYBOARD_METADATA_VERSION, ...normalizeMetadata(metadata) }))
   return insertChunkAfterIhdr(png, chunk)
 }
 
-export function readStoryboardMetadataFromPng(bytes: Buffer): StoryboardImageMetadataDto | null {
+export function readStoryboardMetadataPayloadFromPng(bytes: Buffer): unknown | null {
   if (!bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return null
   let offset = 8
   while (offset + 12 <= bytes.length) {
@@ -27,12 +30,21 @@ export function readStoryboardMetadataFromPng(bytes: Buffer): StoryboardImageMet
     if (type === 'iTXt' || type === 'tEXt') {
       const parsed = parseTextChunk(type, bytes.subarray(dataStart, dataEnd))
       if (parsed?.keyword === METADATA_KEY) {
-        return normalizeMetadata(JSON.parse(parsed.text) as Partial<StoryboardImageMetadataDto>)
+        try { return JSON.parse(parsed.text) as unknown }
+        catch (cause) { throw new PersistenceError('corrupt', 'storyboard-metadata', '分镜图片描述', 0, STORYBOARD_METADATA_VERSION, [], undefined, { cause }) }
       }
     }
     offset = dataEnd + 4
   }
   return null
+}
+
+export function readStoryboardMetadataFromPng(bytes: Buffer, backupPath?: string): StoryboardImageMetadataDto | null {
+  const raw = readStoryboardMetadataPayloadFromPng(bytes)
+  if (raw === null) return null
+  const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
+  const value = upgradePersistenceContent({ id: 'storyboard-metadata', name: '分镜图片描述', version: STORYBOARD_METADATA_VERSION, schema: storyboardMetadataSchema, migrations: formatMigrations('storyboard-metadata') }, raw, version, backupPath)
+  return normalizeMetadata(value as StoryboardImageMetadataDto)
 }
 
 function normalizeMetadata(metadata: Partial<StoryboardImageMetadataDto>): StoryboardImageMetadataDto {

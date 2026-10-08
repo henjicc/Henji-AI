@@ -73,7 +73,7 @@ export const testDocumentKind: DocumentKindDescriptor<TestContent> = {
   storage: 'json',
   version: 1,
   contentSchema: testContentSchema,
-  upgradeContent: (content) => content,
+  migrations: {},
   createEmptyContent: () => ({ items: [] }),
   isEmptyContent: (content) => content.items.length === 0,
   summarize: (content) => ({ items: content.items.length }),

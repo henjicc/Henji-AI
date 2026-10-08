@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "content": {
+    "imageGen": {
+      "modelId": "golden-model",
+      "params": {
+        "quality": "high"
+      }
+    }
+  }
+}

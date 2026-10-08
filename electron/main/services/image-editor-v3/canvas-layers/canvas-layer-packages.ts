@@ -1,3 +1,5 @@
+import { CANVAS_LAYER_PACKAGE_VERSION } from '../../../../../src/core/persistence/schemaVersions'
+import { parsePersistenceJson, upgradeStoredFile } from '../../persistence/stored-file'
 import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -33,7 +35,7 @@ import { readPackageDocumentHeaderBytes } from '../image-document/package-file'
 export const CANVAS_LAYER_PACKAGE_EXTENSION = '.henjilayer'
 export const CANVAS_LAYER_FOLDER_NAME = 'canvas-layers'
 const HEADER_FORMAT = 'henji-canvas-layer'
-const HEADER_VERSION = 1
+const HEADER_VERSION = CANVAS_LAYER_PACKAGE_VERSION
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 
 export interface CanvasLayerLink {
@@ -384,7 +386,8 @@ export class CanvasLayerPackageService {
     try {
       const bytes = await readPackageDocumentHeaderBytes(packagePath)
       if (!bytes) return null
-      const value = JSON.parse(bytes.toString('utf8')) as unknown
+      const raw = parsePersistenceJson(bytes.toString('utf8'), 'canvas-layer-package')
+      const value = await upgradeStoredFile(packagePath, 'canvas-layer-package', raw, isRecord(raw) ? raw.version : 0)
       if (!isRecord(value) || value.format !== HEADER_FORMAT || typeof value.documentId !== 'string') return null
       const contentRevision = value.contentRevision
       if (typeof contentRevision !== 'number' || !Number.isSafeInteger(contentRevision) || contentRevision < 0) return null

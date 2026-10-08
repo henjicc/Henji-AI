@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 import { documentIdSchema } from './envelope'
 import type { FolderLocale } from './types'
+import { formatMigrations } from '../persistence/formatMigrations'
+import { migratePersistenceContent, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
 /*
  * 项目说明 `<项目>/.henji/project.json`（实施方案 2.3）。
@@ -83,8 +85,15 @@ export function buildProjectManifest(fields: ProjectManifestFields): ProjectMani
   }
 }
 
-export function parseProjectManifest(raw: unknown): ProjectManifest {
-  const result = projectManifestSchema.safeParse(raw)
+export function projectManifestContract(): PersistenceContract {
+  return { id: 'project', name: '项目说明', version: PROJECT_MANIFEST_VERSION, schema: projectManifestSchema, migrations: formatMigrations('project') }
+}
+
+export function parseProjectManifest(raw: unknown, backupPath?: string): ProjectManifest {
+  const version = raw && typeof raw === 'object' && 'version' in raw ? Number(raw.version) : PROJECT_MANIFEST_VERSION
+  const contract = projectManifestContract()
+  const upgraded = version < contract.version ? upgradePersistenceContent(contract, raw, version, backupPath) : migratePersistenceContent(contract, raw, version, backupPath)
+  const result = projectManifestSchema.safeParse(upgraded)
   if (!result.success) {
     throw new ProjectManifestError(`项目说明无效：${result.error.issues[0]?.message ?? '格式错误'}`, { cause: result.error })
   }
@@ -92,14 +101,14 @@ export function parseProjectManifest(raw: unknown): ProjectManifest {
   return buildProjectManifest({ ...rest, draft: draft === true, mainVideoEditId })
 }
 
-export function parseProjectManifestText(text: string): ProjectManifest {
+export function parseProjectManifestText(text: string, backupPath?: string): ProjectManifest {
   let raw: unknown
   try {
     raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as unknown
   } catch (error) {
     throw new ProjectManifestError('项目说明已损坏，无法读取。', { cause: error })
   }
-  return parseProjectManifest(raw)
+  return parseProjectManifest(raw, backupPath)
 }
 
 export function serializeProjectManifest(manifest: ProjectManifest): string {

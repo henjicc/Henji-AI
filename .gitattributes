@@ -1,0 +1,2 @@
+# Persistence goldens are byte contracts; line endings must not alter source hashes.
+tests/fixtures/persistence/** -text

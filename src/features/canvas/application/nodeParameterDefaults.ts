@@ -1,3 +1,5 @@
+import { nodeDefaultsSchema } from '@/core/persistence/preferenceSchemas'
+import { localLibraryContract, readLocalPersistenceJson, serializeVersionedPersistenceJson } from '@/core/persistence/versionedJson'
 import { registry } from '@/core/ModelRegistry'
 import { createLogger } from '@/core/logging'
 import type { ParamDef } from '@/core/types'
@@ -94,8 +96,8 @@ export class NodeParameterDefaults {
     logger.info('保存节点默认参数', { event: 'canvas.node_defaults.save.start', nodeType: definition.type })
     try {
       const defaults = collectNodeParameterDefaults(definition, data)
-      const all = this.load()
-      this.storage().setItem(NODE_PARAMETER_DEFAULTS_KEY, JSON.stringify({ ...all, [definition.type]: defaults }))
+      const all = this.load(true)
+      this.storage().setItem(NODE_PARAMETER_DEFAULTS_KEY, serializeVersionedPersistenceJson(localLibraryContract(NODE_PARAMETER_DEFAULTS_KEY, nodeDefaultsSchema), { ...all, [definition.type]: defaults }))
       logger.info('节点默认参数已保存', { event: 'canvas.node_defaults.save.completed', nodeType: definition.type })
     } catch (error) {
       logger.error('保存节点默认参数失败', error, { event: 'canvas.node_defaults.save.failed', nodeType: definition.type })
@@ -113,11 +115,12 @@ export class NodeParameterDefaults {
     return mergeDefaultObjects(definition.createDefaultData(), filtered) as Partial<CanvasNodeData>
   }
 
-  private load(): Record<string, unknown> {
+  private load(forWrite = false): Record<string, unknown> {
     try {
       const value = this.storage().getItem(NODE_PARAMETER_DEFAULTS_KEY)
-      return value ? record(JSON.parse(value)) : {}
+      return value ? record(readLocalPersistenceJson(value, NODE_PARAMETER_DEFAULTS_KEY, localLibraryContract(NODE_PARAMETER_DEFAULTS_KEY, nodeDefaultsSchema), this.storage())) : {}
     } catch (error) {
+      if (forWrite) throw error
       logger.warn('节点默认参数读取失败，使用初始参数', { event: 'canvas.node_defaults.load.failed', error: String(error) })
       return {}
     }

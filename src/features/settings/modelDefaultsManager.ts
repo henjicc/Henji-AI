@@ -1,3 +1,6 @@
+import { MODEL_DEFAULTS_VERSION, modelDefaultsSchema } from '@/core/persistence/preferenceSchemas'
+import { guardedPlainStorage } from '@/core/persistence/stateStorage'
+import { formatMigrations } from '@/core/persistence/formatMigrations'
 import { registry } from '@/core/ModelRegistry'
 import { createLogger } from '@/core/logging'
 import type { ModelDefinition, ModelTag } from '@/core/types'
@@ -9,7 +12,7 @@ import {
 export type DefaultModelMediaType = 'image' | 'video' | 'audio'
 
 export const MODEL_DEFAULTS_STORAGE_KEY = 'henji-model-defaults'
-export const MODEL_DEFAULTS_STATE_VERSION = 1
+export const MODEL_DEFAULTS_STATE_VERSION = MODEL_DEFAULTS_VERSION
 
 const DEFAULT_PROVIDER: ApiKeyProvider = 'kie'
 const MEDIA_TYPES: DefaultModelMediaType[] = ['image', 'video', 'audio']
@@ -113,9 +116,10 @@ export class ModelDefaultsManager {
     private readonly storage: ModelDefaultsStorage,
     private readonly catalog: ModelDefaultsCatalog = registry,
   ) {
-    this.state = loadState(storage)
+    this.storage = guardedPlainStorage(MODEL_DEFAULTS_STORAGE_KEY, { id: 'model-defaults', name: '默认生成模型', version: MODEL_DEFAULTS_VERSION, schema: modelDefaultsSchema, migrations: formatMigrations('model-defaults') }, storage, error => logger.warn('默认模型格式无法读取，原数据保留', { event: 'model_defaults.load.failed', error: String(error) }))
+    this.state = loadState(this.storage)
     this.snapshot = this.copySnapshot()
-    this.persist()
+    if (storage.getItem(MODEL_DEFAULTS_STORAGE_KEY) === null) this.persist()
   }
 
   subscribe = (listener: () => void): (() => void) => {

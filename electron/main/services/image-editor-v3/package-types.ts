@@ -1,3 +1,4 @@
+import { IMAGE_PACKAGE_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import path from 'node:path'
 
 import type {
@@ -10,7 +11,7 @@ import { collectPersistedImageEditHistoryResourcesV3 } from './history-persisten
 import { parseResourceId } from './resource-store'
 
 export const HENJI_IMAGE_PACKAGE_FORMAT = 'henjiimg' as const
-export const HENJI_IMAGE_PACKAGE_VERSION = 1 as const
+export const HENJI_IMAGE_PACKAGE_VERSION = IMAGE_PACKAGE_VERSION
 export const HENJI_IMAGE_PACKAGE_MANIFEST = 'manifest.json' as const
 /**
  * 图片文档头（3.5）：稳定 ID、草稿标记、版本与列表摘要，单独成一个小条目，

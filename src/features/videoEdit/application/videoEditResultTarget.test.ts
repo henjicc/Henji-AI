@@ -169,7 +169,19 @@ it('损坏或字段缺失的剪辑文件给出可理解的拒绝，不向界面�
   const owner = await createVideoEditProject(); const id = owner.document.id; await closeVideoEditProject(id)
   replaceSavedVideoEdit(id, { media: [], bins: [], items: [], sequences: [{ id: 's' }] })
   const partial = reopenVideoEdit(id)
-  await expect(partial).rejects.toThrow('内容不完整或已损坏'); await expect(partial).rejects.not.toThrow('sequences')
+  await expect(partial).rejects.toThrow('内容格式不受当前版本支持'); await expect(partial).rejects.not.toThrow('sequences')
+})
+
+it('t88之前同版本内联源码明确提示旧开发格式，打开失败不改写原文件', async () => {
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  const sequences = structuredClone(owner.document.sequences)
+  await closeVideoEditProject(id)
+  replaceSavedVideoEdit(id, { media: [], bins: [], items: [], sequences, codeMaterials: [{ id: 'old-code', name: '旧代码', defaultVersionId: 'old-version', versions: [{ id: 'old-version', apiVersion: 1, languageVersion: 3, source: 'export default {}' }] }] })
+  const original = structuredClone(harnessDocumentStore().stored(id))
+  const failure = reopenVideoEdit(id)
+  await expect(failure).rejects.toThrow('这份剪辑是旧版本格式，当前开发版不再支持打开')
+  await expect(failure).rejects.not.toThrow('损坏')
+  expect(harnessDocumentStore().stored(id)).toEqual(original)
 })
 
 it('素材面板只新增素材，回执可读回；重复发送与撤销不产生片段或多余历史', async () => {

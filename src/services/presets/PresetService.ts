@@ -1,3 +1,6 @@
+import { presetExportSchema } from '@/core/persistence/auxiliarySchemas'
+import { formatMigrations } from '@/core/persistence/formatMigrations'
+import { PersistenceError, upgradePersistenceContent } from '@/core/persistence/migrations'
 /**
  * 预设管理服务
  */
@@ -127,7 +130,11 @@ export class PresetService {
    * 从 JSON 导入预设
    */
   async importPreset(json: string): Promise<Preset> {
-    const data = JSON.parse(json)
+    let raw: unknown
+    try { raw = JSON.parse(json) as unknown }
+    catch (cause) { throw new PersistenceError('corrupt', 'preset-export', '生成预设', 0, 1, [], undefined, { cause }) }
+    const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'string' && /^[1-9]\d*\.0$/.test(raw.version) ? Number.parseInt(raw.version, 10) : 0
+    const data = presetExportSchema.parse(upgradePersistenceContent({ id: 'preset-export', name: '生成预设', version: 1, schema: presetExportSchema, migrations: formatMigrations('preset-export') }, raw, version))
 
     // 验证格式
     if (!data.name || !data.params) {
@@ -136,7 +143,7 @@ export class PresetService {
 
     return await this.createPreset({
       name: data.name,
-      description: data.description,
+      description: data.description ?? undefined,
       modelId: data.modelId,
       params: data.params
     })

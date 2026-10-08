@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "projectId": "golden-video",
+  "sequenceId": "golden-sequence",
+  "signature": "golden-signature",
+  "startFrame": 0,
+  "endFrame": 90,
+  "soundClips": [],
+  "soundIdentities": {},
+  "captions": [
+    {
+      "id": "golden-caption",
+      "start": 5,
+      "duration": 40,
+      "text": "字幕原文",
+      "translation": "Golden caption"
+    }
+  ],
+  "committed": true
+}

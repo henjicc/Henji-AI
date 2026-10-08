@@ -1,0 +1,17 @@
+{
+  "format": "henji-package",
+  "version": 1,
+  "type": "project",
+  "name": "黄金项目",
+  "exportedAt": "2026-10-09T00:00:00.000Z",
+  "folders": {
+    "generated": "生成结果",
+    "materials": "素材"
+  },
+  "documents": [
+    {
+      "id": "golden-video",
+      "path": "黄金剪辑.henji-video"
+    }
+  ]
+}

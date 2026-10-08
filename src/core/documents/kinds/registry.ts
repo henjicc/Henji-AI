@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { PersistenceMigrations } from '../../persistence/migrations'
 
 import { documentNameFromFileName, normalizeEntryName, sameEntryName } from '../naming'
 import type { DocumentKindId, DocumentListSummary, FolderLocale } from '../types'
@@ -27,8 +28,8 @@ export interface DocumentKindDescriptor<TContent = unknown> {
   readonly version: number
   /** 内存形态（位置都是绝对路径）的内容 schema。 */
   readonly contentSchema: z.ZodType<TContent>
-  /** 把 fromVersion 版本的内容升级到当前版本；fromVersion 小于 version 时调用。 */
-  upgradeContent(content: unknown, fromVersion: number): unknown
+  /** Key N owns N → N+1; a missing step explicitly rejects old content. */
+  readonly migrations: PersistenceMigrations
   createEmptyContent(): TContent
   /** 草稿离开时内容为空就直接删除，不询问。 */
   isEmptyContent(content: TContent): boolean
@@ -118,7 +119,7 @@ export function defineSkeletonDocumentKind(options: SkeletonKindOptions): Docume
     ...options,
     version: 1,
     contentSchema: placeholderContentSchema,
-    upgradeContent: (content) => content,
+    migrations: {},
     createEmptyContent: () => ({}),
     isEmptyContent: (content) => Object.keys(content).length === 0,
     summarize: () => ({}),

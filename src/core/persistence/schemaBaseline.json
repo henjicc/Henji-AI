@@ -1,0 +1,479 @@
+{
+  "releasedCompatibility": false,
+  "formats": {
+    "document.video_edit": {
+      "version": 1,
+      "fingerprint": "8f493a8e4c87b9910dd01becf8f06ba39a33e3bd42aa1863401709fd61825d30",
+      "supportedFrom": 1
+    },
+    "document.canvas": {
+      "version": 1,
+      "fingerprint": "50289812848e2c636aae1e4e1f8d7380fc3dcdd6671a28b750300030d266c48c",
+      "supportedFrom": 1
+    },
+    "document.audio_edit": {
+      "version": 1,
+      "fingerprint": "ae0acd09a6924f24a63fcdb4d5fad108010689e117896d0db59071fb417eb9ac",
+      "supportedFrom": 1
+    },
+    "document.camera_stage": {
+      "version": 1,
+      "fingerprint": "19ccbfc9c4521941d9257a97c21ef56dadebb8ff1e22681336d9db7b57d1a131",
+      "supportedFrom": 1
+    },
+    "document.image_document": {
+      "version": 1,
+      "fingerprint": "5b117d2946d9506f95acb3d22d90f0cf7cb44b5d09bf4c8042774341405fe19b",
+      "supportedFrom": 1
+    },
+    "project": {
+      "version": 1,
+      "fingerprint": "288dda146a1cca701efd239342419faa11b259691731471cb6353b99a77627c1",
+      "supportedFrom": 1
+    },
+    "project-package": {
+      "version": 1,
+      "fingerprint": "cb286a2c85a32ac0cb9233cd2aa1504a2a22c5f1e33e19928f87534c47b0dfb5",
+      "supportedFrom": 1
+    },
+    "code-version": {
+      "version": 1,
+      "fingerprint": "2d0b7ae8ace0207261df34baedec228c5e6e15f0b0853b6158968664827bdd71",
+      "supportedFrom": 1
+    },
+    "code-component": {
+      "version": 1,
+      "fingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b",
+      "supportedFrom": 1
+    },
+    "code-asset": {
+      "version": 1,
+      "fingerprint": "7cabf54e0ae4239f418fc12bf1482bd365fbe37bd4841e306c57f5250d280d7c",
+      "supportedFrom": 1
+    },
+    "image-header": {
+      "version": 1,
+      "fingerprint": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5",
+      "supportedFrom": 1
+    },
+    "image-package": {
+      "version": 1,
+      "fingerprint": "036f72942ce47677a70237652eeebd6b24059838b46c8b27544aa4484f189b49",
+      "supportedFrom": 1
+    },
+    "image-working-copy": {
+      "version": 3,
+      "fingerprint": "5fac545be10637768f090c84338b401d98179901bb17112bf03f5ed357cf1a03",
+      "supportedFrom": 3
+    },
+    "settings": {
+      "version": 13,
+      "fingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
+      "supportedFrom": 13
+    },
+    "theme": {
+      "version": 1,
+      "fingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417",
+      "supportedFrom": 1
+    },
+    "style-kits": {
+      "version": 1,
+      "fingerprint": "b04966f580225450c23b9c4217a614b36e96d2853671f51e0ecf202a1884e0c1",
+      "supportedFrom": 1
+    },
+    "title-templates": {
+      "version": 1,
+      "fingerprint": "5dea6fd60f3d3114e279cdae07035b371f22075ddf7979cad9d48a6f9352d7ae",
+      "supportedFrom": 1
+    },
+    "text-presets": {
+      "version": 1,
+      "fingerprint": "b3cd97574335bfc7b82eb6498705ca5edcba06b374da18e39694bb4079c52e84",
+      "supportedFrom": 1
+    },
+    "export-presets": {
+      "version": 1,
+      "fingerprint": "a88eeccd2e6ce741d26ff1ecab677caede63c28a08dc5e9df3ced4b8c2106920",
+      "supportedFrom": 1
+    },
+    "voice-library": {
+      "version": 1,
+      "fingerprint": "8d24016258fa4cb86621a06c702003232dcb9335ed8b092af5c7fe85a71461b5",
+      "supportedFrom": 1
+    },
+    "setting-records": {
+      "version": 18,
+      "fingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
+      "supportedFrom": 18
+    },
+    "asset-records": {
+      "version": 18,
+      "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
+      "supportedFrom": 18
+    },
+    "generation-presets": {
+      "version": 18,
+      "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
+      "supportedFrom": 18
+    },
+    "sqlite": {
+      "version": 18,
+      "fingerprint": "18c5e5c3db7a828ad00b815dd386c5ba711ebd91b86bf439b3a5124c0e2e7f56",
+      "supportedFrom": 18
+    },
+    "preset-export": {
+      "version": 1,
+      "fingerprint": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839",
+      "supportedFrom": 1
+    },
+    "theme-payload": {
+      "version": 2,
+      "fingerprint": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b",
+      "supportedFrom": 1
+    },
+    "canvas-layer-package": {
+      "version": 1,
+      "fingerprint": "c57638581962d64a0dfcdf03b7bc6d066d1bd07c5e0f0fba62145c56ada1b998",
+      "supportedFrom": 1
+    },
+    "keystore": {
+      "version": 1,
+      "fingerprint": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed",
+      "supportedFrom": 1
+    },
+    "media-grants": {
+      "version": 1,
+      "fingerprint": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d",
+      "supportedFrom": 1
+    },
+    "llm-config": {
+      "version": 1,
+      "fingerprint": "d395dfe2639d1590fd6ad95db21477a2c21698cea7f5c2d8851a8ef753ef6bc5",
+      "supportedFrom": 1
+    },
+    "llm-config-journal": {
+      "version": 1,
+      "fingerprint": "dad22cbafc862e1a35f5d7452313319e28c9f608197a35a1f8d8dacae699f870",
+      "supportedFrom": 1
+    },
+    "node-defaults": {
+      "version": 1,
+      "fingerprint": "9c3e3c10f0ea4887a7cb0bf3ee987eefff77e886fd03be5e8fd3dc92f5a311f8",
+      "supportedFrom": 1
+    },
+    "model-defaults": {
+      "version": 1,
+      "fingerprint": "d3201320105f4ef9d3e376238c9accf8847d4a660ae51d003acaf8ed961acd32",
+      "supportedFrom": 1
+    },
+    "onboarding": {
+      "version": 2,
+      "fingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50",
+      "supportedFrom": 2
+    },
+    "subtitle-manifest": {
+      "version": 1,
+      "fingerprint": "e76b099b96dec71929f7f7446a0ff2e637861ed1657f1360a1c2ab77222b5be7",
+      "supportedFrom": 1
+    },
+    "storyboard-metadata": {
+      "version": 1,
+      "fingerprint": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe",
+      "supportedFrom": 1
+    }
+  },
+  "devBreaks": [
+    {
+      "at": "2026-10-08T16:48:25.821Z",
+      "format": "image-working-copy",
+      "version": 3,
+      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
+      "previousFingerprint": null,
+      "fingerprint": "50f8cb7dc55e2dc892f47b1c7d78a52bb8e00b3e6e3785c32386702069f8d9f9",
+      "waivedFixtureVersions": [
+        1,
+        2
+      ]
+    },
+    {
+      "at": "2026-10-08T16:48:25.823Z",
+      "format": "settings",
+      "version": 13,
+      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
+      "previousFingerprint": null,
+      "fingerprint": "b5d8a71c6e31101abdca3796e953da1ebc1eccb3e6259888db2bb4621f793399",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "at": "2026-10-08T16:48:25.823Z",
+      "format": "setting-records",
+      "version": 18,
+      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
+      "previousFingerprint": null,
+      "fingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ]
+    },
+    {
+      "at": "2026-10-08T16:48:25.823Z",
+      "format": "asset-records",
+      "version": 18,
+      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
+      "previousFingerprint": null,
+      "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ]
+    },
+    {
+      "at": "2026-10-08T16:48:25.823Z",
+      "format": "generation-presets",
+      "version": 18,
+      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
+      "previousFingerprint": null,
+      "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ]
+    },
+    {
+      "at": "2026-10-08T16:48:25.823Z",
+      "format": "sqlite",
+      "version": 18,
+      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
+      "previousFingerprint": null,
+      "fingerprint": "18c5e5c3db7a828ad00b815dd386c5ba711ebd91b86bf439b3a5124c0e2e7f56",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ]
+    },
+    {
+      "at": "2026-10-08T17:21:15.547Z",
+      "format": "code-component",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "c8f7d0d3cbf4995fd5b144318a72e9d7e6ef85135acd11d1884b3fdb8833cc48",
+      "fingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "settings",
+      "version": 13,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "b5d8a71c6e31101abdca3796e953da1ebc1eccb3e6259888db2bb4621f793399",
+      "fingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "theme",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "991bd148ed34a0a33b178c6aa51e9a1863563e150bcf9a94d4f633066f8706f0",
+      "fingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "style-kits",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "21a26d9fcdc4c888beed5f3575e4ad6fe46a90dffa3d4428c710287f8e59b424",
+      "fingerprint": "b04966f580225450c23b9c4217a614b36e96d2853671f51e0ecf202a1884e0c1",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "title-templates",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "f2b40808d08552d041a61c676097a5cef0d542f9ff1c82e18630f4a658cc9029",
+      "fingerprint": "5dea6fd60f3d3114e279cdae07035b371f22075ddf7979cad9d48a6f9352d7ae",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "text-presets",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "5791a793ef7a4962d2d24fb29ec6150a5e52defedb3917f6379f602800fb2333",
+      "fingerprint": "b3cd97574335bfc7b82eb6498705ca5edcba06b374da18e39694bb4079c52e84",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "export-presets",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "e0ebc035f84f60217c694c1da35bda727098ddf8b327257eff1e91a46e43e3b8",
+      "fingerprint": "a88eeccd2e6ce741d26ff1ecab677caede63c28a08dc5e9df3ced4b8c2106920",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "voice-library",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "7cd7d6d87c89d393c31f898359d6f9075151e0722e532b64149f09783060bb36",
+      "fingerprint": "8d24016258fa4cb86621a06c702003232dcb9335ed8b092af5c7fe85a71461b5",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "llm-config",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "aa6de2feedf98d644539d28ecdc006b54e5592e8d97c34da31f42498b6dd6659",
+      "fingerprint": "d395dfe2639d1590fd6ad95db21477a2c21698cea7f5c2d8851a8ef753ef6bc5",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "llm-config-journal",
+      "version": 1,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": "295b8e0e7dd35488cb1c600c00719a0f687e5e8b16d6a7167275cb0ac0704884",
+      "fingerprint": "dad22cbafc862e1a35f5d7452313319e28c9f608197a35a1f8d8dacae699f870",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:21:15.549Z",
+      "format": "onboarding",
+      "version": 2,
+      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
+      "previousFingerprint": null,
+      "fingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50",
+      "waivedFixtureVersions": [
+        1
+      ]
+    },
+    {
+      "at": "2026-10-08T17:36:59.585Z",
+      "format": "document.video_edit",
+      "version": 1,
+      "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
+      "previousFingerprint": "8f493a8e4c87b9910dd01becf8f06ba39a33e3bd42aa1863401709fd61825d30",
+      "fingerprint": "8f493a8e4c87b9910dd01becf8f06ba39a33e3bd42aa1863401709fd61825d30",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:36:59.587Z",
+      "format": "image-package",
+      "version": 1,
+      "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
+      "previousFingerprint": "207a4955960f4e364eaab3365d92a0e1162eca663e2ab83f58e95fe3ca24f1b9",
+      "fingerprint": "036f72942ce47677a70237652eeebd6b24059838b46c8b27544aa4484f189b49",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:36:59.587Z",
+      "format": "image-working-copy",
+      "version": 3,
+      "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
+      "previousFingerprint": "50f8cb7dc55e2dc892f47b1c7d78a52bb8e00b3e6e3785c32386702069f8d9f9",
+      "fingerprint": "5fac545be10637768f090c84338b401d98179901bb17112bf03f5ed357cf1a03",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T17:36:59.587Z",
+      "format": "canvas-layer-package",
+      "version": 1,
+      "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
+      "previousFingerprint": "1bb5c90527c793d956a8f0480374ae9aaf1758261f4de8dfbb80a1cbc93a5418",
+      "fingerprint": "c57638581962d64a0dfcdf03b7bc6d066d1bd07c5e0f0fba62145c56ada1b998",
+      "waivedFixtureVersions": []
+    }
+  ]
+}

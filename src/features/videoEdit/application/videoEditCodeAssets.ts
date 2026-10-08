@@ -1,6 +1,8 @@
+import { backupPersistenceSnapshot } from '@/core/persistence/backup'
+import { PersistenceError } from '@/core/persistence/migrations'
 import { componentFileReferences, documentCodeSourceResolver, loadCodeSourceReferences, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
-import { CODE_ASSET_LIMITS, codeAssetSchema, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
+import { CODE_ASSET_LIMITS, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
@@ -57,8 +59,13 @@ export async function readVideoEditCodeAsset(assetId: string, signal?: AbortSign
   const bytes = await getPlatform().system.fs.readFile(asset.filePath, { maxBytes: CODE_ASSET_LIMITS.bytes })
   signal?.throwIfAborted()
   let manifest: CodeAsset
-  try { manifest = decodeCodeAsset(bytes) }
-  catch (error) { logger.warn('代码资产清单校验失败', { event: 'video_edit.code_asset.read.failed', error, context: { assetId } }); throw new Error('代码素材清单不完整或格式无效，请检查原文件后重试。') }
+  try {
+    const raw = parseCodeAssetBytes(bytes)
+    const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
+    const backup = await backupPersistenceSnapshot(asset.filePath, codeAssetContract(), version, bytes, getPlatform().system.fs)
+    manifest = decodeCodeAsset(bytes, backup)
+  }
+  catch (error) { logger.warn('代码资产清单校验失败', { event: 'video_edit.code_asset.read.failed', error, context: { assetId } }); if (error instanceof PersistenceError) throw error; throw new Error('代码素材清单不完整或格式无效，请检查原文件后重试。') }
   if (!sameVideoEditAssetContent(asset, await assetApplicationService.inspect(assetId))) throw new Error('代码资产文件在读取期间已改变，请重新导入。')
   signal?.throwIfAborted()
   return { asset, manifest }

@@ -1,4 +1,7 @@
+import { CODE_COMPONENT_SCHEMA_VERSION } from '../../persistence/schemaVersions'
 import ts from 'typescript'
+import { migratePersistenceContent, PersistenceError } from '../../persistence/migrations'
+import { formatMigrations } from '../../persistence/formatMigrations'
 import { z } from 'zod'
 import { CodeMaterialError, CODE_V3_LIMITS } from './contract'
 import { type CodeComponentPin, type CodeMaterialFiles, type CodeSourceResolver, codeSourceHashSchema } from './sources'
@@ -7,18 +10,24 @@ export const codeComponentNameSchema = z.string().trim().min(1).max(200).refine(
 export interface CodeComponentVersion extends CodeComponentPin { source: string; exports: string[]; description: string }
 export interface CodeComponent { name: string; latestVersion: number; versions: CodeComponentVersion[] }
 const headerPrefix = '// henji-component '
-const metadataSchema = z.object({ name: codeComponentNameSchema, version: z.number().int().positive(), description: z.string(), exports: z.array(z.string()), imports: z.array(z.object({ name: codeComponentNameSchema, version: z.number().int().positive(), hash: codeSourceHashSchema }).strict()) }).strict()
-export type CodeComponentMetadata = z.infer<typeof metadataSchema>
+export const codeComponentMetadataSchema = z.object({ schemaVersion: z.literal(CODE_COMPONENT_SCHEMA_VERSION).default(CODE_COMPONENT_SCHEMA_VERSION), name: codeComponentNameSchema, version: z.number().int().positive(), description: z.string(), exports: z.array(z.string()), imports: z.array(z.object({ name: codeComponentNameSchema, version: z.number().int().positive(), hash: codeSourceHashSchema }).strict()) }).strict()
+export type CodeComponentMetadata = z.input<typeof codeComponentMetadataSchema>
 export function componentSourceMetadata(source: string): { metadata: CodeComponentMetadata; source: string } {
   if (!source.startsWith(headerPrefix)) throw new Error('项目组件说明缺失，请从项目备份恢复原组件文件。')
-  try {
-    const newline = source.indexOf('\n')
-    if (newline < 0) throw new Error('缺失源码')
-    return { metadata: metadataSchema.parse(JSON.parse(source.slice(headerPrefix.length, newline))), source: source.slice(newline + 1) }
-  } catch { throw new Error('项目组件说明损坏，请从项目备份恢复原组件文件。') }
+  const newline = source.indexOf('\n')
+  if (newline < 0) throw new PersistenceError('corrupt', 'code-component', '项目组件说明', 0, 1)
+  let raw: unknown
+  try { raw = JSON.parse(source.slice(headerPrefix.length, newline)) as unknown }
+  catch (cause) { throw new PersistenceError('corrupt', 'code-component', '项目组件说明', 0, 1, [], undefined, { cause }) }
+  const version = raw && typeof raw === 'object' && 'schemaVersion' in raw ? raw.schemaVersion : 1
+  const contract = { id: 'code-component', name: '项目组件说明', version: CODE_COMPONENT_SCHEMA_VERSION, migrations: formatMigrations('code-component') }
+  const value = migratePersistenceContent(contract, raw, typeof version === 'number' ? version : 0)
+  const parsed = codeComponentMetadataSchema.safeParse(value)
+  if (!parsed.success) throw new PersistenceError('invalid-content', contract.id, contract.name, Number(version), 1, parsed.error.issues.map(issue => issue.path.join('.')))
+  return { metadata: parsed.data, source: source.slice(newline + 1) }
 }
 /** A comment keeps all version metadata with the immutable text file during ordinary file transfers. */
-export function packageComponentSource(source: string, metadata: CodeComponentMetadata): string { return `${headerPrefix}${JSON.stringify(metadataSchema.parse(metadata))}\n${source}` }
+export function packageComponentSource(source: string, metadata: CodeComponentMetadata): string { return `${headerPrefix}${JSON.stringify(codeComponentMetadataSchema.parse(metadata))}\n${source}` }
 export function codeComponentImports(source: string, fileName = '组件.ts'): Array<{ specifier: string; name: string; version?: number }> {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS)
   return file.statements.flatMap(statement => {

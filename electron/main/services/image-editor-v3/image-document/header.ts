@@ -1,3 +1,5 @@
+import { imageDocumentKind } from '../../../../../src/core/documents/kinds/imageDocument'
+import { IMAGE_HEADER_VERSION } from '../../../../../src/core/persistence/schemaVersions'
 import crypto from 'node:crypto'
 
 import type { ImageEditDocumentEnvelope } from '../contracts'
@@ -15,9 +17,9 @@ import type { ImageEditDocumentEnvelope } from '../contracts'
  */
 
 export const IMAGE_DOCUMENT_HEADER_FORMAT = 'henji-image-document' as const
-export const IMAGE_DOCUMENT_HEADER_VERSION = 1 as const
+export const IMAGE_DOCUMENT_HEADER_VERSION = IMAGE_HEADER_VERSION
 /** 图片文档类型的内容版本（与 `src/core/documents/kinds/imageDocument.ts` 一致）。 */
-export const IMAGE_DOCUMENT_KIND_VERSION = 1
+export const IMAGE_DOCUMENT_KIND_VERSION = imageDocumentKind.version
 
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const MAX_HEADER_BYTES = 64 * 1024

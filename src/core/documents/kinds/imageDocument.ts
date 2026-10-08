@@ -42,7 +42,7 @@ export const imageDocumentKind: DocumentKindDescriptor<ImageDocumentContent> = {
   // 版本 1 = 包头格式第 1 版 + V3 图片编辑文档（V3 文档自己的格式版本写在包内清单里）。
   version: 1,
   contentSchema: imageDocumentContentSchema,
-  upgradeContent: (content) => content,
+  migrations: {},
   createEmptyContent: () => ({ workingRevision: 0, emptyUntilRevision: 0, width: 0, height: 0, layers: 0 }),
   isEmptyContent: isEmptyImageDocumentContent,
   summarize: (content) => ({ width: content.width, height: content.height, layers: content.layers }),

@@ -1,3 +1,5 @@
+import { persistenceFileContract } from '../../../../src/core/persistence/fileContracts'
+import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { OverlayOptions, Region } from 'sharp'
@@ -8,7 +10,7 @@ import {
   persistImageBytesTracked,
   rollbackPersistedImageBytes,
 } from './path-utils'
-import { encodePngWithStoryboardMetadata, readStoryboardMetadataFromPng } from './png-metadata'
+import { encodePngWithStoryboardMetadata, readStoryboardMetadataPayloadFromPng, readStoryboardMetadataFromPng } from './png-metadata'
 import {
   embedPanoramaMetadataInImage,
   readPanoramaMetadataFromImage,
@@ -85,7 +87,11 @@ export async function cropImageSource(payload: CropImageSourcePayloadDto): Promi
 export async function readStoryboardImageMetadata(source: string): Promise<StoryboardImageMetadataDto | null> {
   const { bytes, extension } = await resolveSourceBytes(source)
   if (normalizeExtension(extension) !== 'png') return null
-  return readStoryboardMetadataFromPng(bytes)
+  const raw = readStoryboardMetadataPayloadFromPng(bytes)
+  if (raw === null) return null
+  const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
+  const backup = isLocalSource(source) ? await backupBeforePersistenceUpgrade(normalizeLocalSource(source), persistenceFileContract('storyboard-metadata'), version, bytes) : undefined
+  return readStoryboardMetadataFromPng(bytes, backup)
 }
 
 export async function embedStoryboardImageMetadata(source: string, metadata: StoryboardImageMetadataDto): Promise<string> {

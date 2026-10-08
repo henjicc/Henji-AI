@@ -1,4 +1,6 @@
+import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSchemas'
 import crypto from 'node:crypto'
+import { parsePersistenceJson, upgradeStoredFile } from '../persistence/stored-file'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -137,7 +139,7 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
     normalizedPreviewRef,
     history,
   )
-  return {
+  const result: ImageEditDocumentEnvelope = {
     format: IMAGE_EDIT_DOCUMENT_FORMAT,
     formatVersion: IMAGE_EDIT_DOCUMENT_VERSION,
     documentId,
@@ -149,6 +151,8 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
     resourceRefs: refs,
     previewRef: normalizedPreviewRef,
   }
+  imageWorkingCopySchema.parse(result)
+  return result
 }
 
 function serializeEnvelope(envelope: ImageEditDocumentEnvelope): Buffer {
@@ -247,7 +251,10 @@ export class ImageEditDocumentRepository {
     if (!stats.isFile() || stats.size > this.maxDocumentBytes) {
       throw new Error(`Invalid image edit document size: ${stats.size}`)
     }
-    const envelope = validateImageEditDocumentEnvelope(JSON.parse(await fsp.readFile(targetPath, 'utf8')) as unknown)
+    const text = await fsp.readFile(targetPath, 'utf8')
+    const raw = parsePersistenceJson(text, 'image-working-copy')
+    const upgraded = await upgradeStoredFile(targetPath, 'image-working-copy', raw, isRecord(raw) ? raw.formatVersion : 0, text)
+    const envelope = validateImageEditDocumentEnvelope(upgraded)
     if (envelope.documentId !== documentId) throw new Error('Image edit document id does not match file name')
     return envelope
   }

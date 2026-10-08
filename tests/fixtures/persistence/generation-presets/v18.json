@@ -1,0 +1,11 @@
+{
+  "id": "golden-preset",
+  "name": "黄金生成预设",
+  "description": null,
+  "model_id": null,
+  "params": "{}",
+  "is_favorite": 0,
+  "use_count": 0,
+  "created_at": "2026-10-09T00:00:00.000Z",
+  "updated_at": "2026-10-09T00:00:00.000Z"
+}

@@ -1,3 +1,5 @@
+import { migratePersistenceContent } from '../persistence/migrations';
+import { formatMigrations } from '../persistence/formatMigrations';
 /**
  * 主题数据格式 v2 与 v1 → v2 迁移（纯函数）。
  *
@@ -341,17 +343,21 @@ function parseV1(input: Record<string, unknown>): ThemePayloadV2 | null {
 }
 
 /** 导入入口：接受 v1（自动迁移）或 v2；格式不对返回 null。 */
+export function migrateThemePayloadV1(input: unknown): ThemePayloadV2 {
+  if (!isRecord(input)) throw new Error('主题内容格式无效');
+  const parsed = parseV1(input);
+  if (!parsed) throw new Error('主题内容格式无效');
+  return parsed;
+}
+
 export function parseThemePayload(input: unknown): ThemePayloadV2 | null {
   if (!isRecord(input)) {
     return null;
   }
-  if (input.version === 2) {
-    return parseV2(input);
-  }
-  if (input.version === 1) {
-    return parseV1(input);
-  }
-  return null;
+  try {
+    const value = migratePersistenceContent({ id: 'theme-payload', name: '主题', version: 2, migrations: formatMigrations('theme-payload') }, input, typeof input.version === 'number' ? input.version : 0);
+    return isRecord(value) ? parseV2(value) : null;
+  } catch { return null; }
 }
 
 /** 种子的底色部分（模式、色相、倾向、窗口亮度）与某个预设相同则返回该预设，供设置界面高亮。 */

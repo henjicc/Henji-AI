@@ -1,5 +1,9 @@
+import { THEME_STORAGE_VERSION } from '@/core/persistence/schemaVersions';
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { z } from 'zod';
+import { guardedStateStorage } from '@/core/persistence/stateStorage';
+import { formatMigrations } from '@/core/persistence/formatMigrations';
 
 type Theme = 'dark' | 'light';
 
@@ -27,6 +31,8 @@ export const useThemeStore = create<ThemeState>()(
     }),
     {
       name: 'theme-storage',
+      storage: createJSONStorage(() => guardedStateStorage('theme-storage', { id: 'theme', name: '主题选择', version: THEME_STORAGE_VERSION, schema: z.object({ theme: z.enum(['dark', 'light']) }), migrations: formatMigrations('theme') }, localStorage)),
+      version: THEME_STORAGE_VERSION,
     }
   )
 );

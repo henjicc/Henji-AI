@@ -1,0 +1,60 @@
+{
+  "packageFormat": "henjiimg",
+  "packageVersion": 1,
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "document": {
+    "format": "henji-image-edit",
+    "formatVersion": 3,
+    "documentId": "golden-image",
+    "revision": 0,
+    "createdAt": "2026-10-09T00:00:00.000Z",
+    "updatedAt": "2026-10-09T00:00:00.000Z",
+    "document": {
+      "version": 3,
+      "id": "golden-image",
+      "revision": 0,
+      "geometry": {
+        "width": 64,
+        "height": 48,
+        "orientation": {
+          "rotate": 0,
+          "mirrored": false
+        },
+        "crop": null
+      },
+      "color": {
+        "workingSpace": "srgb",
+        "bitDepth": 8,
+        "transferFunction": "srgb",
+        "hdrMetadata": null,
+        "iccProfileResourceId": null
+      },
+      "layers": [
+        {
+          "id": "golden-layer",
+          "name": "空白图层",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "raster",
+          "source": {
+            "kind": "empty"
+          },
+          "tiles": {}
+        }
+      ]
+    },
+    "resourceRefs": []
+  },
+  "resources": []
+}

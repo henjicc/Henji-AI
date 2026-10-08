@@ -1,3 +1,4 @@
+import { LLM_CONFIG_VERSION, LLM_JOURNAL_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -6,12 +7,18 @@ import type { LlmConfigState } from '@henjicc/ai-sdk'
 
 import type { EncryptedKeySnapshot } from '../keystore'
 import { getProgramDataDir } from '../appPaths'
+import { llmStoredConfigSchema } from '../../../../src/core/persistence/auxiliarySchemas'
+import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
+import { parseVersionedPersistenceJson, serializeVersionedPersistenceJson } from '../../../../src/core/persistence/versionedJson'
+import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
+import { parsePersistenceJson, upgradeStoredFile } from '../persistence/stored-file'
+import { providerSettingsJournalSchema } from '../../../../src/core/persistence/auxiliarySchemas'
 
 const CONFIG_FILE_NAME = 'llm-config.json'
 const JOURNAL_FILE_NAME = '.llm-provider-settings.transaction.json'
 
 export interface ProviderSettingsJournal {
-  version: 1
+  version: typeof LLM_JOURNAL_VERSION
   configBefore: LlmConfigState | null
   credentialBefore?: EncryptedKeySnapshot
 }
@@ -30,9 +37,10 @@ function resolveDataRoot(): string {
   return getProgramDataDir()
 }
 
-async function readJson<T>(filePath: string): Promise<T | null> {
+async function readJson(filePath: string): Promise<{ raw: unknown; text: string } | null> {
   try {
-    return JSON.parse(await fs.readFile(filePath, 'utf8')) as T
+    const text = await fs.readFile(filePath, 'utf8')
+    return { raw: parsePersistenceJson(text, path.basename(filePath) === JOURNAL_FILE_NAME ? 'llm-config-journal' : 'llm-config'), text }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
     throw error
@@ -88,10 +96,24 @@ export function createProviderSettingsFileStorage(): ProviderSettingsStorage {
     }
   }
   return {
-    readConfig: async () => await readJson<LlmConfigState>(paths().config),
-    writeConfig: async config => await writeJsonAtomic(paths().config, config),
+    readConfig: async () => {
+      const stored = await readJson(paths().config)
+      if (stored === null) return null
+      const { raw, text } = stored
+      const contract = { id: 'llm-config', name: '助手模型配置', version: LLM_CONFIG_VERSION, schema: llmStoredConfigSchema, migrations: formatMigrations('llm-config') }
+      const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
+      const backupPath = version > 0 ? await backupBeforePersistenceUpgrade(paths().config, contract, version, text) : undefined
+      return parseVersionedPersistenceJson(raw, contract, backupPath) as LlmConfigState
+    },
+    writeConfig: async config => await writeJsonAtomic(paths().config, JSON.parse(serializeVersionedPersistenceJson({ id: 'llm-config', name: '助手模型配置', version: LLM_CONFIG_VERSION, schema: llmStoredConfigSchema, migrations: formatMigrations('llm-config') }, config)) as unknown),
     removeConfig: async () => await removeAtomicState(paths().config),
-    readJournal: async () => await readJson<ProviderSettingsJournal>(paths().journal),
+    readJournal: async () => {
+      const stored = await readJson(paths().journal)
+      if (stored === null) return null
+      const { raw, text } = stored
+      const upgraded = await upgradeStoredFile(paths().journal, 'llm-config-journal', raw, raw && typeof raw === 'object' && 'version' in raw ? raw.version : 0, text)
+      return providerSettingsJournalSchema.parse(upgraded) as ProviderSettingsJournal
+    },
     writeJournal: async journal => await writeJsonAtomic(paths().journal, journal),
     removeJournal: async () => await removeAtomicState(paths().journal),
   }

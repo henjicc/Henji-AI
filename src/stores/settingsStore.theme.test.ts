@@ -8,8 +8,6 @@ import { createThemePayloadV2, parseThemePayload } from '@/core/theme/themeMigra
 import { DEFAULT_THEME_SELECTION } from '@/core/theme/themeSelection'
 import { useSettingsStore } from './settingsStore'
 
-const migrate = (state: Record<string, unknown>, version: number) =>
-  useSettingsStore.persist.getOptions().migrate?.(state, version) as Record<string, unknown>
 
 const violet = THEME_ACCENT_CHOICES.find((choice) => choice.id === 'violet')!.hex!
 
@@ -90,39 +88,11 @@ describe('settingsStore 外观选择（v13）', () => {
   })
 })
 
-describe('settingsStore 外观迁移', () => {
-  it('v11：内置方案 → 石墨；改过的强调色保留；自定义九色 → 自定义底色；删除 v1 字段', () => {
-    const builtIn = migrate({ themeColors: THEME_PALETTE_PRESET_HEX[2].colors, accentColor: SETTINGS_ACCENT_HEX, themeTonePreset: 'warm' }, 11)
-    expect(builtIn.themeSelection).toEqual(DEFAULT_THEME_SELECTION)
-    expect(builtIn.themeSeed).toEqual(DEFAULT_THEME_SEED)
-    expect(builtIn).not.toHaveProperty('themeColors')
-    expect(builtIn).not.toHaveProperty('accentColor')
-    expect(builtIn).not.toHaveProperty('themeTonePreset')
-
-    const accent = ACCENT_PRESET_HEX[7]
-    expect(migrate({ themeColors: THEME_PALETTE_PRESET_HEX[0].colors, accentColor: accent }, 11).themeSelection)
-      .toMatchObject({ preset: 'graphite', accent: normalizeHex(accent), contrast: 'standard' })
-
-    const custom = migrate({ themeColors: { ...THEME_PALETTE_PRESET_HEX[3].colors, bg: THEME_PALETTE_PRESET_HEX[3].colors.panel } }, 11)
-    expect((custom.themeSelection as { preset: string }).preset).toBe('custom')
-    expect(custom.themeSeed).not.toEqual(DEFAULT_THEME_SEED)
-    expect(Object.keys(custom.themeOverrides as object).length).toBeGreaterThan(0)
-  })
-
-  it('v12：由已有种子反推选择（预设 + 强调色 + 档位），非预设种子成为自定义底色且观感不变', () => {
-    const preset = migrate({ themeSeed: { ...THEME_PRESETS.paper.seed, accent: violet, contrast: 1.35 }, themeOverrides: {} }, 12)
-    expect(preset.themeSelection).toMatchObject({ preset: 'paper', accent: violet, contrast: 'strong' })
-
-    const seed = { ...THEME_PRESETS.paper.seed, hue: 400, contrast: 1.8 }
-    const custom = migrate({ themeSeed: seed, themeOverrides: { nope: 1, line: THEME_SEED_ACCENT_HEX.teal } }, 12)
-    expect((custom.themeSelection as { preset: string }).preset).toBe('custom')
-    expect(custom.themeSeed).toEqual({ ...seed, hue: 40 })
-    expect(custom.themeOverrides).toEqual({ line: THEME_SEED_ACCENT_HEX.teal })
-  })
-
-  it('v13：已有选择只做规范化', () => {
-    const migrated = migrate({ themeSelection: { preset: 'film', accent: 'bad', contrast: 'loud' } }, 13)
-    expect(migrated.themeSelection).toEqual({ preset: 'film', accent: null, contrast: 'standard', custom: null })
-    expect(migrated.themeSeed).toEqual(THEME_PRESETS.film.seed)
+describe('settingsStore 外观持久化边界', () => {
+  it('开发期v11/v12设置迁移已显式放弃，保留可分享主题的既有迁移', () => {
+    expect(useSettingsStore.persist.getOptions().migrate).toBeUndefined()
+    const imported = parseThemePayload({ version: 1, themeTonePreset: 'warm', uiRadiusPreset: 'default', accentColor: SETTINGS_ACCENT_HEX, colors: THEME_PALETTE_PRESET_HEX[2].colors })
+    expect(imported?.version).toBe(2)
+    expect(imported?.seed).toEqual(DEFAULT_THEME_SEED)
   })
 })

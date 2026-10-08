@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "content": [
+    {
+      "id": "golden-text",
+      "name": "黄金字型",
+      "style": {
+        "fontFamily": "sans-serif",
+        "fontWeight": 400,
+        "fontStyle": "normal",
+        "fontSize": 72,
+        "fauxBold": false,
+        "fauxItalic": false,
+        "allCaps": false,
+        "smallCaps": false,
+        "superscript": false,
+        "subscript": false,
+        "underline": false,
+        "align": "center",
+        "verticalAlign": "middle",
+        "tracking": 0,
+        "kerning": "auto",
+        "leading": 0,
+        "baselineShift": 0,
+        "tsume": 0,
+        "fill": {
+          "enabled": true,
+          "color": "#ffffff"
+        },
+        "strokes": [],
+        "background": {
+          "enabled": false,
+          "color": "#000000",
+          "opacity": 0.7,
+          "padding": 12,
+          "radius": 0
+        },
+        "shadows": [],
+        "boxWidth": 0,
+        "boxHeight": 0
+      }
+    }
+  ]
+}

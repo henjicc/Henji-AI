@@ -11,6 +11,8 @@
     "packages/*"
   ],
   "scripts": {
+    "check:persistence-compat": "node scripts/check-persistence-compat.cjs",
+    "persistence:baseline": "node scripts/check-persistence-compat.cjs --write",
     "postinstall": "patch-package --error-on-fail && npm run prepare:media-binaries && npm run build:sdk",
     "prepare:media-binaries": "node scripts/ensure-media-binary-permissions.cjs",
     "dev": "npm run gen:progress-seeds && npm run gen:licenses && vite",
@@ -52,7 +54,7 @@
     "test:suites": "node --test scripts/lib/testSuites.test.cjs",
     "verify:changed": "node scripts/run-changed-verification.cjs",
     "test:ui-inspection": "node --test scripts/lib/uiInspection.test.cjs scripts/lib/uiContrastAudit.test.cjs scripts/lib/runtimeEvidence.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/canvasVisualDiff.test.cjs scripts/lib/uiReviewSteps.test.cjs scripts/lib/uiReviewMetrics.test.cjs scripts/lib/uiResidueRules.test.cjs scripts/lib/undefinedColorClasses.test.cjs scripts/lib/uiInspectionCompositedMove.test.cjs scripts/lib/uiReviewSummary.test.cjs scripts/lib/uiInspectionSceneHelpers.test.cjs",
-    "test:validation-tools": "node --test scripts/lib/assistantProductionTestPlan.test.cjs scripts/lib/uiContrastAudit.test.cjs scripts/lib/changedVerificationPlan.test.cjs scripts/lib/electronBundlePlan.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/sdkBuildFreshness.test.cjs scripts/lib/validationScripts.test.cjs scripts/lib/xyflowStoreSubscriptions.test.cjs scripts/lib/canvasBulkProbe.test.cjs scripts/lib/generationInputProbe.test.cjs scripts/lib/thirdPartyLicenses.test.cjs scripts/lib/distributionPackaging.test.cjs scripts/lib/electronLaunchTarget.test.cjs scripts/lib/symbolGlyphs.test.cjs",
+    "test:validation-tools": "node --test scripts/lib/assistantProductionTestPlan.test.cjs scripts/lib/uiContrastAudit.test.cjs scripts/lib/changedVerificationPlan.test.cjs scripts/lib/electronBundlePlan.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/sdkBuildFreshness.test.cjs scripts/lib/validationScripts.test.cjs scripts/lib/xyflowStoreSubscriptions.test.cjs scripts/lib/canvasBulkProbe.test.cjs scripts/lib/generationInputProbe.test.cjs scripts/lib/thirdPartyLicenses.test.cjs scripts/lib/distributionPackaging.test.cjs scripts/lib/electronLaunchTarget.test.cjs scripts/lib/symbolGlyphs.test.cjs scripts/check-persistence-compat.test.cjs",
     "test:reality": "node scripts/run-reality-tests.cjs",
     "test:assistant-persistence": "node scripts/test-assistant-persistence.cjs",
     "test:assistant-model-compat": "vitest run packages/ai-sdk/tests/llm/sdk/model-step.test.ts packages/ai-sdk/tests/llm/sdk/provider-error.test.ts packages/ai-sdk/tests/llm/sdk/provider-adapter.test.ts packages/ai-sdk/tests/llm/sdk/retry-policy.test.ts electron/main/services/llm/sdk/scripted-model-step.test.ts electron/main/services/llm/sdk/trace.test.ts src/services/llm/LlmConfigService.test.ts",

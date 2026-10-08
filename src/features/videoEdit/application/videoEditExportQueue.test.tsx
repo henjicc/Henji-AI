@@ -104,7 +104,7 @@ it('预设本机保存先写后发布；重开可读；写入失败与损坏输�
   const library = new VideoEditExportPresetLibrary(storage); const saved = library.save('我的竖版', VIDEO_EDIT_EXPORT_PRESETS[0].settings)
   expect(new VideoEditExportPresetLibrary(storage).list()).toContainEqual(saved)
   storage.setItem.mockImplementationOnce(() => { throw new Error('full') }); expect(() => library.save('失败', saved.settings)).toThrow('full'); expect(library.custom()).toEqual([saved])
-  values.set('video-edit-export-presets', 'broken'); const broken = new VideoEditExportPresetLibrary(storage); expect(() => broken.save('新预设', saved.settings)).toThrow('读取失败'); expect(values.get('video-edit-export-presets')).toBe('broken')
+  values.set('video-edit-export-presets', 'broken'); const broken = new VideoEditExportPresetLibrary(storage); expect(() => broken.save('新预设', saved.settings)).toThrow('损坏'); expect(values.get('video-edit-export-presets')).toBe('broken')
 })
 it('全部路径与范围确认后才批量提交；取消第二次选择不产生部分导出；范围错误不写文件', async () => {
   const owner = await project(); const projectId = owner.document.id

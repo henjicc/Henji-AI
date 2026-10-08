@@ -97,6 +97,9 @@ jobs:
       - name: 类型检查（主进程）
         run: npx tsc -p tsconfig.electron.json --noEmit
 
+      - name: 持久格式兼容门禁
+        run: npm run check:persistence-compat
+
       - name: 测试分层完整性检查
         run: npm run test:suites
 

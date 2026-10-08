@@ -1,3 +1,4 @@
+import { parsePersistenceJson, upgradeStoredFile } from '../../persistence/stored-file'
 import { ZipArchive } from 'archiver'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
@@ -84,10 +85,16 @@ export async function readPackageDocumentHeaderBytes(filePath: string): Promise<
 
 export async function readImageDocumentPackageHeader(filePath: string): Promise<ImageDocumentPackageHeaderRead> {
   const header = (await readSmallEntries(filePath, [HENJI_IMAGE_DOCUMENT_HEADER_ENTRY])).get(HENJI_IMAGE_DOCUMENT_HEADER_ENTRY)
-  if (header) return { header: parseImageDocumentHeaderBytes(header), legacy: false }
+  if (header) {
+    const raw = parsePersistenceJson(header.toString('utf8'), 'image-header')
+    const upgraded = await upgradeStoredFile(filePath, 'image-header', raw, raw && typeof raw === 'object' && 'version' in raw ? raw.version : 0)
+    return { header: parseImageDocumentHeaderBytes(Buffer.from(JSON.stringify(upgraded))), legacy: false }
+  }
   const manifest = (await readSmallEntries(filePath, [HENJI_IMAGE_PACKAGE_MANIFEST])).get(HENJI_IMAGE_PACKAGE_MANIFEST)
   if (!manifest) throw new ImageDocumentHeaderError('不是有效的图片文档：缺少内容清单')
-  const parsed = parseManifest(manifest)
+  const raw = parsePersistenceJson(manifest.toString('utf8'), 'image-package')
+  const upgraded = await upgradeStoredFile(filePath, 'image-package', raw, raw && typeof raw === 'object' && 'packageVersion' in raw ? raw.packageVersion : 0)
+  const parsed = parseManifest(Buffer.from(JSON.stringify(upgraded)))
   return { header: legacyImageDocumentHeader(parsed.document, parsed.createdAt), legacy: true }
 }
 

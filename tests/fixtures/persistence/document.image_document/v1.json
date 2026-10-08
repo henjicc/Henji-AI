@@ -1,0 +1,17 @@
+{
+  "format": "henji-document",
+  "kind": "image_document",
+  "kindVersion": 1,
+  "id": "golden-image_document",
+  "name": "图片",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "workingRevision": 0,
+    "emptyUntilRevision": 0,
+    "width": 64,
+    "height": 48,
+    "layers": 1
+  }
+}

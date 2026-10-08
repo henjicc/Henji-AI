@@ -1,9 +1,10 @@
 import { z } from 'zod'
-import { videoEditTextStyleSchema, type VideoEditTextStyle } from '@/core/videoEdit/text'
+import { videoEditTextPresetSchema } from '@/core/persistence/storedSchemas'
+import { type VideoEditTextStyle } from '@/core/videoEdit/text'
 import { publishVideoEdit } from './videoEditService'
 import { VideoEditLocalLibrary } from './videoEditLocalLibrary'
 
-export const videoEditTextPresetSchema = z.object({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), style: videoEditTextStyleSchema }).strict()
+export { videoEditTextPresetSchema } from '@/core/persistence/storedSchemas'
 export type VideoEditTextPreset = z.infer<typeof videoEditTextPresetSchema>
 export const VIDEO_EDIT_TEXT_PRESETS_KEY = 'video-edit-text-presets'
 const librarySchema = z.array(videoEditTextPresetSchema).superRefine((presets, context) => {

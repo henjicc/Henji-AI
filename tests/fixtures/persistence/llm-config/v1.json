@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "content": {
+    "providers": [],
+    "models": [],
+    "promptProfiles": [],
+    "textProcessingPromptTemplates": [],
+    "agentProfiles": [],
+    "tools": [],
+    "policy": {},
+    "memory": {}
+  }
+}

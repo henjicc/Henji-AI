@@ -1,8 +1,10 @@
 import { z } from 'zod'
+import { PersistenceError } from '@/core/persistence/migrations'
 import { createLogger } from '@/core/logging'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { VIDEO_EDIT_EXPORT_PRESETS, videoEditExportPresetSchema, type VideoEditExportPreset, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { publishVideoEdit } from './videoEditService'
+import { localLibraryContract, readLocalPersistenceJson, serializeVersionedPersistenceJson } from '@/core/persistence/versionedJson'
 
 const logger = createLogger('features.videoEdit.exportPresets')
 export const VIDEO_EDIT_EXPORT_PRESETS_KEY = 'video-edit-export-presets'
@@ -13,11 +15,11 @@ export class VideoEditExportPresetLibrary {
   constructor(private storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage) {
     try {
       const saved = storage?.getItem(VIDEO_EDIT_EXPORT_PRESETS_KEY)
-      if (saved) {
-        this.presets = librarySchema.parse(JSON.parse(saved))
+      if (saved !== null && saved !== undefined && storage) {
+        this.presets = librarySchema.parse(readLocalPersistenceJson(saved, VIDEO_EDIT_EXPORT_PRESETS_KEY, localLibraryContract(VIDEO_EDIT_EXPORT_PRESETS_KEY, librarySchema), storage))
         if (new Set(this.presets.map(value => value.id)).size !== this.presets.length || this.presets.some(value => value.id.startsWith('builtin:'))) throw new Error('预设标识重复。')
       }
-    } catch (error) { this.presets = []; this.error = '本机导出预设读取失败，原数据已保留；请重启后重试。'; logger.error('读取导出预设失败', { event: 'video_edit.export_presets.load.failed', error }) }
+    } catch (error) { this.presets = []; this.error = error instanceof PersistenceError ? error.message : '本机导出预设读取失败，原数据已保留；请重启后重试。'; logger.error('读取导出预设失败', { event: 'video_edit.export_presets.load.failed', error }) }
   }
   list(): VideoEditExportPreset[] { return structuredClone([...VIDEO_EDIT_EXPORT_PRESETS, ...this.presets]) }
   custom(): VideoEditExportPreset[] { return structuredClone(this.presets) }
@@ -29,7 +31,7 @@ export class VideoEditExportPresetLibrary {
       if (!this.storage) throw new Error('本机预设存储不可用。')
       const parsed = librarySchema.parse(values)
       if (parsed.some(value => value.id.startsWith('builtin:')) || new Set(parsed.map(value => value.id)).size !== parsed.length) throw new Error('内置预设不可覆盖，或预设标识重复。')
-      this.storage.setItem(VIDEO_EDIT_EXPORT_PRESETS_KEY, JSON.stringify(parsed))
+      this.storage.setItem(VIDEO_EDIT_EXPORT_PRESETS_KEY, serializeVersionedPersistenceJson(localLibraryContract(VIDEO_EDIT_EXPORT_PRESETS_KEY, librarySchema), parsed))
       this.presets = parsed; publishVideoEdit(true)
       logger.info('导出预设已保存', { event: 'video_edit.export_presets.save.completed', context: { count: parsed.length } })
     } catch (error) { logger.error('保存导出预设失败', { event: 'video_edit.export_presets.save.failed', error }); throw error }

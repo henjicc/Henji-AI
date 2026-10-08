@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "seed": {
+    "mode": "dark",
+    "hue": 260,
+    "tint": 0,
+    "base": 0.2238,
+    "contrast": 1,
+    "accent": "#3A6FDF"
+  },
+  "uiRadiusPreset": "default"
+}

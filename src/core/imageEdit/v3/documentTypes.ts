@@ -1,7 +1,8 @@
+import { IMAGE_WORKING_VERSION } from '../../persistence/schemaVersions'
 import type { ImageEditColorModeV3 } from './colorTypes';
 import type { ImageEditLayerV3 } from './layerTypes';
 
-export const IMAGE_EDIT_DOCUMENT_VERSION_V3 = 3 as const;
+export const IMAGE_EDIT_DOCUMENT_VERSION_V3 = IMAGE_WORKING_VERSION;
 
 export type ImageEditRotationV3 = 0 | 90 | 180 | 270;
 

@@ -1,3 +1,4 @@
+import { persistenceMessage } from '@/core/persistence/messages'
 import { pruneCodeSources, assertCodeSourcesUnchanged } from '@/core/videoEdit/codeMaterial/sources'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { copyVideoEditSequence } from '@/core/videoEdit/sequenceCopy'
@@ -103,6 +104,7 @@ export interface VideoEditGesture { readonly projectId: string; readonly token: 
 interface GestureState {
   handle: VideoEditGesture; before: VideoEditDocument; finished: Promise<void>; release: () => void
   validateFonts?: boolean
+  validateParameters?: boolean
   /** 仅遮罩手势按触及的效果判断变化；其他写入仍沿用完整文档比较。 */
   maskChanges?: Map<string, { before: string | undefined; changed: boolean }>
   /** 遮罩快速路径最近发布的文档；当前文档不是它（或手势起点）时说明有其他写入，回到完整比较。 */
@@ -164,6 +166,17 @@ export function updateVideoEditGesture(handle: VideoEditGesture, update: (docume
   gestures.get(owner)!.validateFonts = true
   return applyVideoEditDocument(owner, update, false)
 }
+/** Already validated parameter edits preserve timing/media/source structure; validate the complete graph once at commit. */
+export function updateVideoEditParameterGesture(handle: VideoEditGesture, update: (document: VideoEditDocument) => VideoEditDocument): VideoEditDocument {
+  assertApplicationWritesAllowed()
+  const owner = requireVideoEditInstance(handle.projectId); assertVideoEditWritable(owner)
+  const state = gestures.get(owner)
+  if (state?.handle !== handle) throw new Error('原参数调整已结束，请重新编辑。')
+  const next = update(owner.document)
+  if (next === owner.document) return next
+  state.maskChanges = undefined; state.validateFonts = true; state.validateParameters = true
+  return publishVideoEditDocument(owner, next, false, true)
+}
 /** 遮罩只改变目标效果：校验效果与跟踪引用，复用已校验的时间线、媒体和代码，不克隆整份文档。 */
 export function updateVideoEditMaskGesture(handle: VideoEditGesture, sequenceId: string, clipId: string, effectId: string, mask: VideoEditEffectMask | null): VideoEditDocument {
   const start = performance.now()
@@ -222,6 +235,13 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
   const owner = instances.get(handle.projectId); const state = owner && gestures.get(owner)
   if (!owner || !state || state.handle !== handle) return
   if (commit) assertApplicationWritesAllowed()
+  if (commit && state.validateParameters) {
+    try {
+      videoEditDocumentSchema.parse(owner.document)
+      assertVideoEditLockedTracks(state.before, owner.document)
+      validateCodeMaterialDocument(owner.document, readVideoEditCodeMetadata(owner, owner.document))
+    } catch (error) { finishVideoEditGesture(handle, false); throw error }
+  }
   if (commit && state.validateFonts) {
     try { validateVideoEditFontChanges(state.before, owner.document, readVideoEditCodeMetadata(owner, state.before), readVideoEditCodeMetadata(owner, owner.document)) }
     catch (error) { finishVideoEditGesture(handle, false); throw error }
@@ -610,8 +630,10 @@ export function videoEditDocumentFromContent(content: unknown, meta: { id: strin
   const parsed = videoEditDocumentSchema.safeParse(raw)
   // schema 路径是诊断信息，不是用户语言，只进日志
   if (!parsed.success) {
-    logger.warn('剪辑文件内容不完整', { event: 'video_edit.document.invalid', context: { docId: meta.id, issues: parsed.error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message })) } })
-    throw new Error('剪辑文件内容不完整或已损坏，无法打开；原文件未被修改。')
+    logger.warn('剪辑文件内容不完整', { event: 'video_edit.document.invalid', context: { docId: meta.id, format: 'document.video_edit', version: 1, issues: parsed.error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message })) } })
+    const versions: unknown[] = typeof content === 'object' && content !== null && 'codeMaterials' in content && Array.isArray(content.codeMaterials) ? content.codeMaterials.flatMap((value: unknown) => value && typeof value === 'object' && 'versions' in value && Array.isArray(value.versions) ? value.versions : []) : []
+    const oldCode = versions.some(value => value && typeof value === 'object' && 'source' in value && !('files' in value))
+    throw new Error(persistenceMessage(oldCode ? 'unsupported-version' : 'invalid-content', { format: '剪辑' }))
   }
   return parsed.data
 }

@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "content": [
+    {
+      "tokens": {
+        "palette": {
+          "bg": [
+            0.043137254901960784,
+            0.050980392156862744,
+            0.07058823529411765,
+            1
+          ],
+          "surface": [
+            0.09411764705882353,
+            0.10980392156862745,
+            0.13725490196078433,
+            1
+          ],
+          "fg": [
+            0.9490196078431372,
+            0.9568627450980393,
+            0.9686274509803922,
+            1
+          ],
+          "muted": [
+            0.6235294117647059,
+            0.6627450980392157,
+            0.7137254901960784,
+            1
+          ],
+          "accent": [
+            0.6392156862745098,
+            0.7529411764705882,
+            0.8627450980392157,
+            1
+          ],
+          "accent2": [
+            0.8,
+            0.7215686274509804,
+            0.5764705882352941,
+            1
+          ],
+          "positive": [
+            0.1803921568627451,
+            0.5372549019607843,
+            0.4235294117647059,
+            1
+          ],
+          "negative": [
+            0.7725490196078432,
+            0.26666666666666666,
+            0.28627450980392155,
+            1
+          ]
+        },
+        "fonts": {
+          "display": {
+            "family": "Source Han Sans SC",
+            "weight": 600
+          },
+          "body": {
+            "family": "Source Han Sans SC",
+            "weight": 400
+          },
+          "mono": {
+            "family": "JetBrains Mono",
+            "weight": 500
+          }
+        },
+        "typeScale": {
+          "baseSize": 0.03333333333333333,
+          "ratio": 1.333
+        },
+        "shape": {
+          "radius": 0.018,
+          "strokeWidth": 0.002,
+          "spacing1": 0.012,
+          "spacing2": 0.024,
+          "spacing3": 0.04
+        },
+        "motion": {
+          "enterDuration": 0.7,
+          "exitDuration": 0.45499999999999996,
+          "stagger": 0.08,
+          "enterEase": "expoOut",
+          "exitEase": "cubicIn",
+          "moveEase": "cubicInOut",
+          "allowOvershoot": false
+        },
+        "texture": {
+          "grain": 0.02,
+          "vignette": 0,
+          "glowIntensity": 0
+        },
+        "layout": {
+          "safeMargin": 0.08,
+          "grid": 12
+        }
+      },
+      "rules": "# 克制高级\n留白、精确对齐和粗细对比；不堆特效，落地静止，单一强调。\n\n## 做\n使用 ctx.style 的配色、字号阶梯、字体、间距和缓动；每刻一个焦点，留足阅读时间，静止阶段保持稳定。\n\n## 不做\n不硬编码另一套颜色或字体；不拉伸字体；不持续漂浮；闪烁每秒不超过三次。\n\n## 参考与字体\n参数参考 frameflow design/styles、color、type、motion/timing。推荐标题 Source Han Sans SC，正文 Source Han Sans SC，数字 JetBrains Mono，均为常见开源可商用字体；使用实际安装样式，缺失时回退可用中文字体或 sans-serif，数字回退 monospace。综艺可自行选择已安装开源圆体，避免无许可字体。",
+      "samples": [
+        {
+          "id": "title",
+          "name": "标题",
+          "kind": "title",
+          "source": "export default { apiVersion: 1, languageVersion: 3, name: \"title\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 5, seed: 42,\n  parameters: { title: { type: \"text\", title: \"标题\", default: \"让创作保持一致\", maxLength: 160 }, subtitle: { type: \"text\", title: \"说明\", default: \"一个想法，一种表达\", maxLength: 200 } },\n  render(ctx) {\n    const s = ctx.style;\n    const inset = s.shape.spacing2 * ctx.height;\n    const p = tween(ctx.time, 0.15, s.motion.enterDuration, 0, 1, s.motion.enterEase);\n    const out = tween(ctx.time, 4.2, s.motion.exitDuration, 1, 0, s.motion.exitEase);\n    const alpha = clamp(p, 0, 1) * clamp(out, 0, 1);\n    const size = s.typeScale.xl * ctx.height;\n    return [group({ id: \"component\", x: ctx.width * 0.12, y: ctx.height * 0.32 + (1 - p) * ctx.height * 0.035, opacity: alpha }, [\n      rect({ id: \"plate\", x: 0, y: 0, width: ctx.width * 0.72, height: ctx.height * .32, fill: s.palette.surface, radius: s.shape.radius * ctx.height }),\n      rect({ id: \"accent\", x: 0, y: 0, width: s.shape.strokeWidth * ctx.height * 2, height: ctx.height * .32, fill: s.palette.accent }),\n      text({ id: \"title\", x: inset, y: inset, text: ctx.params.title, fontFamily: s.fonts.display.family, fontWeight: s.fonts.display.weight, fontSize: size, color: s.palette.fg, baseline: \"top\", maxWidth: ctx.width * 0.72 - inset * 2, wrap: true, maxLines: 1 }),\n      text({ id: \"subtitle\", x: inset, y: inset + size * 1.25, text: ctx.params.subtitle, fontFamily: s.fonts.body.family, fontWeight: s.fonts.body.weight, fontSize: s.typeScale.sm * ctx.height, color: s.palette.muted, baseline: \"top\", maxWidth: ctx.width * 0.72 - inset * 2, wrap: true, maxLines: 1 })\n    ])];\n  }\n}"
+        },
+        {
+          "id": "lower_third",
+          "name": "人名条",
+          "kind": "lower_third",
+          "source": "export default { apiVersion: 1, languageVersion: 3, name: \"lower_third\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 5, seed: 42,\n  parameters: { title: { type: \"text\", title: \"标题\", default: \"林远 · 创作者\", maxLength: 160 }, subtitle: { type: \"text\", title: \"说明\", default: \"影像与设计\", maxLength: 200 } },\n  render(ctx) {\n    const s = ctx.style;\n    const inset = s.shape.spacing2 * ctx.height;\n    const p = tween(ctx.time, 0.15, s.motion.enterDuration, 0, 1, s.motion.enterEase);\n    const out = tween(ctx.time, 4.2, s.motion.exitDuration, 1, 0, s.motion.exitEase);\n    const alpha = clamp(p, 0, 1) * clamp(out, 0, 1);\n    const size = s.typeScale.lg * ctx.height;\n    return [group({ id: \"component\", x: s.layout.safeMargin * ctx.height, y: ctx.height * 0.72 + (1 - p) * ctx.height * 0.035, opacity: alpha }, [\n      rect({ id: \"plate\", x: 0, y: 0, width: ctx.width * 0.72, height: ctx.height * .2, fill: s.palette.surface, radius: s.shape.radius * ctx.height }),\n      rect({ id: \"accent\", x: 0, y: 0, width: s.shape.strokeWidth * ctx.height * 2, height: ctx.height * .2, fill: s.palette.accent }),\n      text({ id: \"title\", x: inset, y: inset, text: ctx.params.title, fontFamily: s.fonts.display.family, fontWeight: s.fonts.display.weight, fontSize: size, color: s.palette.fg, baseline: \"top\", maxWidth: ctx.width * 0.72 - inset * 2, wrap: true, maxLines: 1 }),\n      text({ id: \"subtitle\", x: inset, y: inset + size * 1.25, text: ctx.params.subtitle, fontFamily: s.fonts.body.family, fontWeight: s.fonts.body.weight, fontSize: s.typeScale.sm * ctx.height, color: s.palette.muted, baseline: \"top\", maxWidth: ctx.width * 0.72 - inset * 2, wrap: true, maxLines: 1 })\n    ])];\n  }\n}"
+        },
+        {
+          "id": "data",
+          "name": "数据卡",
+          "kind": "data",
+          "source": "export default { apiVersion: 1, languageVersion: 3, name: \"data\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 5, seed: 42,\n  parameters: { title: { type: \"text\", title: \"标题\", default: \"128\", maxLength: 160 }, subtitle: { type: \"text\", title: \"说明\", default: \"每一次进步，都看得见\", maxLength: 200 } },\n  render(ctx) {\n    const s = ctx.style;\n    const inset = s.shape.spacing2 * ctx.height;\n    const p = tween(ctx.time, 0.15, s.motion.enterDuration, 0, 1, s.motion.enterEase);\n    const out = tween(ctx.time, 4.2, s.motion.exitDuration, 1, 0, s.motion.exitEase);\n    const alpha = clamp(p, 0, 1) * clamp(out, 0, 1);\n    const size = s.typeScale.display * ctx.height;\n    return [group({ id: \"component\", x: ctx.width * 0.12, y: ctx.height * 0.32 + (1 - p) * ctx.height * 0.035, opacity: alpha }, [\n      rect({ id: \"plate\", x: 0, y: 0, width: ctx.width * 0.72, height: ctx.height * .32, fill: s.palette.surface, radius: s.shape.radius * ctx.height }),\n      rect({ id: \"accent\", x: 0, y: 0, width: s.shape.strokeWidth * ctx.height * 2, height: ctx.height * .32, fill: s.palette.accent }),\n      text({ id: \"title\", x: inset, y: inset, text: ctx.params.title, fontFamily: s.fonts.mono.family, fontWeight: s.fonts.mono.weight, fontSize: size, color: s.palette.accent, baseline: \"top\", maxWidth: ctx.width * 0.72 - inset * 2, wrap: true, maxLines: 1 }),\n      text({ id: \"subtitle\", x: inset, y: inset + size * 1.25, text: ctx.params.subtitle, fontFamily: s.fonts.body.family, fontWeight: s.fonts.body.weight, fontSize: s.typeScale.sm * ctx.height, color: s.palette.muted, baseline: \"top\", maxWidth: ctx.width * 0.72 - inset * 2, wrap: true, maxLines: 1 })\n    ])];\n  }\n}"
+        }
+      ],
+      "id": "golden-kit",
+      "name": "黄金风格",
+      "revision": 0
+    }
+  ]
+}

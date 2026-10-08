@@ -1,10 +1,11 @@
+import { IMAGE_WORKING_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import type { Readable } from 'node:stream'
 import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
 
 import type { SourceExifOrientation } from './source-orientation'
 
 export const IMAGE_EDIT_DOCUMENT_FORMAT = 'henji-image-edit' as const
-export const IMAGE_EDIT_DOCUMENT_VERSION = 3 as const
+export const IMAGE_EDIT_DOCUMENT_VERSION = IMAGE_WORKING_VERSION
 export const IMAGE_EDIT_DOCUMENT_REF_PREFIX = 'image-edit-v3:' as const
 export const IMAGE_EDIT_TILE_SIZE = 512 as const
 

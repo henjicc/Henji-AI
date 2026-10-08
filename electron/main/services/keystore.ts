@@ -1,5 +1,7 @@
+import { KEYSTORE_VERSION } from '../../../src/core/persistence/schemaVersions'
 import { safeStorage } from 'electron'
 import fs from 'node:fs'
+import { parsePersistenceJson, upgradeStoredFileSync } from './persistence/stored-file'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 
@@ -31,7 +33,7 @@ const LEGACY_LLM_KEY_NAMESPACE = 'llm'
 type KeyNamespace = string
 
 type KeystoreFile = {
-  version: 1
+  version: typeof KEYSTORE_VERSION
   keys: Record<string, string>
 }
 
@@ -57,7 +59,7 @@ function buildKey(namespace: KeyNamespace, providerId: string): string {
 }
 
 function createEmptyFile(): KeystoreFile {
-  return { version: 1, keys: {} }
+  return { version: KEYSTORE_VERSION, keys: {} }
 }
 
 function readKeystoreFile(): KeystoreFile {
@@ -67,16 +69,14 @@ function readKeystoreFile(): KeystoreFile {
   }
 
   const raw = fs.readFileSync(filePath, 'utf8')
-  if (!raw.trim()) {
-    return createEmptyFile()
-  }
 
-  const parsed = JSON.parse(raw) as Partial<KeystoreFile>
-  if (parsed.version !== 1 || typeof parsed.keys !== 'object' || parsed.keys === null) {
+  const value = parsePersistenceJson(raw, 'keystore')
+  const parsed = upgradeStoredFileSync(filePath, 'keystore', value, value && typeof value === 'object' && 'version' in value ? value.version : 0, raw) as Partial<KeystoreFile>
+  if (parsed.version !== KEYSTORE_VERSION || typeof parsed.keys !== 'object' || parsed.keys === null) {
     throw new Error('Invalid keystore file format')
   }
 
-  return { version: 1, keys: { ...parsed.keys } }
+  return { version: KEYSTORE_VERSION, keys: { ...parsed.keys } }
 }
 
 function writeKeystoreFile(data: KeystoreFile): void {

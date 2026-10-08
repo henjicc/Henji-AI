@@ -1,3 +1,4 @@
+import { SQLITE_SCHEMA_VERSION } from '../../../src/core/persistence/schemaVersions'
 import fs from 'node:fs'
 import path from 'node:path'
 import type Database from 'better-sqlite3'
@@ -86,7 +87,7 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   // 3.4 画布接入文档文件：删两张旧画布工程表（不迁移内容）；此后 henji.db 的全部表都由账本管理
   { version: 17, name: 'retire_canvas_projects', up: retireCanvasProjectsV1, backupWhen: canvasProjectsNeedBackup },
   // 作品索引记最近打开时间（只是索引元数据，可重建）
-  { version: 18, name: 'document_index_last_opened', up: addDocumentIndexLastOpenedV1 },
+  { version: SQLITE_SCHEMA_VERSION, name: 'document_index_last_opened', up: addDocumentIndexLastOpenedV1 },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

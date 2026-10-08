@@ -3,17 +3,20 @@ import { z } from 'zod'
 import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from './codeMaterialPersistence'
 import { isCodeImageReference } from './codeMaterial/contract'
 import { codeElementOverridesSchema } from './codeElementOverrides'
+import { formatMigrations } from '../persistence/formatMigrations'
+import { PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
 /** Bytes bound a serialized source manifest; image dependency count has no product ceiling. */
 export const CODE_ASSET_LIMITS = Object.freeze({ bytes: 512 * 1024 })
 export const CODE_ASSET_MIME = 'application/x-henji-code'
+export const CODE_ASSET_VERSION = 1
 export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
 const image = z.object({
   id: z.string().min(1).max(100), path: z.string().min(1).max(4096).refine(value => !value.includes('\0') && /^(?:[a-z]:[\\/]|\\\\|\/)/i.test(value), '图片依赖需要原文件绝对路径。'),
   content: codeAssetContentSchema, assetId: z.string().min(1).max(100).optional(),
 }).strict()
 export const codeAssetSchema = z.object({
-  format: z.literal('henji-code-asset'), version: z.literal(1), name: z.string().trim().min(1).max(200),
+  format: z.literal('henji-code-asset'), version: z.literal(CODE_ASSET_VERSION), name: z.string().trim().min(1).max(200),
   sourceVersion: z.object({ apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, entry: codeMaterialVersionSchema.shape.entry, files: codeMaterialVersionSchema.shape.files, imports: codeMaterialVersionSchema.shape.imports }).strict(),
   codeSources: codeSourcesSchema,
   parameters: codeMaterialInstanceSchema.shape.parameters,
@@ -38,9 +41,16 @@ export function assetCodeSourceResolver(asset: CodeAsset): CodeSourceResolver {
 export function rememberCodeAssetSources(asset: CodeAsset): void { for (const source of asset.codeSources) rememberCodeSource(source.hash, source.source) }
 
 /** A file owns source and raw instance values; executable IR is never accepted. */
-export function decodeCodeAsset(bytes: Uint8Array): CodeAsset {
+export function codeAssetContract(): PersistenceContract { return { id: 'code-asset', name: '可编辑代码资产', version: CODE_ASSET_VERSION, schema: codeAssetSchema, migrations: formatMigrations('code-asset') } }
+export function parseCodeAssetBytes(bytes: Uint8Array, backupPath?: string): unknown {
+  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown }
+  catch (cause) { throw new PersistenceError('corrupt', 'code-asset', '可编辑代码资产', 0, CODE_ASSET_VERSION, [], backupPath, { cause }) }
+}
+export function decodeCodeAsset(bytes: Uint8Array, backupPath?: string): CodeAsset {
   if (!bytes.byteLength || bytes.byteLength > CODE_ASSET_LIMITS.bytes) throw new Error('代码素材清单不能为空且最多512KiB。')
-  return codeAssetSchema.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)))
+  const raw = parseCodeAssetBytes(bytes, backupPath)
+  const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
+  return codeAssetSchema.parse(upgradePersistenceContent(codeAssetContract(), raw, version, backupPath))
 }
 export function encodeCodeAsset(input: CodeAsset): Uint8Array {
   const bytes = new TextEncoder().encode(JSON.stringify(codeAssetSchema.parse(input)))

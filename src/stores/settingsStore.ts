@@ -1,6 +1,9 @@
+import { guardedStateStorage } from '@/core/persistence/stateStorage';
+import { formatMigrations } from '@/core/persistence/formatMigrations';
+import { rendererSettingsSchema, SETTINGS_STORAGE_VERSION } from '@/core/persistence/settingsSchema';
 import { VIDEO_EDIT_SEQUENCE_DEFAULTS, videoEditSequenceDefaultsSchema, type VideoEditSequenceDefaults } from '@/core/videoEdit/sequenceDefaults';
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { parseVideoEditShortcutOverrides, sanitizeVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
 import { sanitizeVideoEditMonitorButtons, withVideoEditMonitorButtons, type VideoEditMonitorButtonLayouts, type VideoEditMonitorKind } from '@/core/videoEdit/monitorButtons';
 import { sanitizeVideoEditDefaultTransitions, type VideoEditDefaultTransitionPreferences, type VideoEditTransitionKind, type VideoEditTransitionMedium } from '@/core/videoEdit/transitions';
@@ -14,21 +17,16 @@ import { API_KEY_PROVIDER_IDS, type UploadProvider } from '@/core/config/provide
 import type { UiRadiusPreset } from '@/core/theme/runtimeTheme';
 import { normalizeHex } from '@/core/theme/themeColor';
 import {
-  normalizeThemeSeed,
   type ThemeContrastLevel,
   type ThemeSeed,
   type ThemeTokenOverrides,
 } from '@/core/theme/themeEngine';
 import {
-  migrateV1ThemeSettings,
-  normalizeThemeOverrides,
   type ThemePayloadV2,
-  type ThemeV1ColorScheme,
 } from '@/core/theme/themeMigration';
 import {
   DEFAULT_THEME_SELECTION,
   THEME_CUSTOM_PRESET,
-  normalizeThemeSelection,
   resolveThemeSelection,
   selectionFromThemeSeed,
   type ThemeSelection,
@@ -183,41 +181,9 @@ function createDefaultProviderKeyStatus(): ProviderKeyStatusMap {
   }, {});
 }
 
-function normalizeProviderKeyStatus(input: DynamicValue): ProviderKeyStatusMap {
-  const defaults = createDefaultProviderKeyStatus();
-  if (!input || typeof input !== 'object') {
-    return defaults;
-  }
 
-  const entries = Object.entries(input as DynamicValueMap);
-  entries.forEach(([providerId, configured]) => {
-    if (!providerId.trim()) return;
-    defaults[providerId] = configured === true;
-  });
 
-  return defaults;
-}
 
-function normalizeUploadProvider(input: DynamicValue): UploadProvider {
-  return input === 'fal' || input === 'kie'
-    ? input
-    : DEFAULT_UPLOAD_PROVIDER;
-}
-
-function resolveLegacyUploadProvider(): UploadProvider {
-  if (typeof localStorage === 'undefined') {
-    return DEFAULT_UPLOAD_PROVIDER;
-  }
-  return normalizeUploadProvider(localStorage.getItem('general_upload_provider'));
-}
-
-function resolveLegacyUploadFallback(): boolean {
-  if (typeof localStorage === 'undefined') {
-    return true;
-  }
-  const saved = localStorage.getItem('general_upload_fallback');
-  return saved !== 'false';
-}
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -353,10 +319,9 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      // v11：边缘唤起改为显式选择，避免旧默认值让窗口边缘成为隐藏触发区
-      // v12：主题改为种子推导；旧九色 + 强调色经 migrateV1ThemeSettings 换算（内置方案一律石墨）
-      // v13：外观改为选择式（预设 / 强调色 / 对比度 / 自定义底色）；由已有种子反推选择，删除 v1 字段
-      version: 13,
+      storage: createJSONStorage(() => guardedStateStorage('settings-storage', { id: 'settings', name: '界面设置', version: SETTINGS_STORAGE_VERSION, schema: rendererSettingsSchema, migrations: formatMigrations('settings') }, localStorage)),
+      // 接入基线为v13；接入前开发期数据的放弃已登记，不保留隐式迁移。
+      version: SETTINGS_STORAGE_VERSION,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
       // "完整捕获" 导致日志长期膨胀。
       // 剪辑快捷键：默认键位随版本对齐 PR 时，旧改键里不认识或与新默认冲突的部分在恢复时让出，避免读设置失败。
@@ -368,76 +333,7 @@ export const useSettingsStore = create<SettingsState>()(
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;
         return persisted;
       },
-      migrate: (persistedState: DynamicValue, persistedVersion) => {
-        const state = (persistedState ?? {}) as {
-          apiKey?: string;
-          apiKeys?: Record<string, string>;
-          providerKeyStatus?: ProviderKeyStatusMap;
-          uploadProvider?: UploadProvider;
-          uploadFallbackEnabled?: boolean;
-          ignoreAtTagWhenCopyingAndGenerating?: boolean;
-          themeColors?: Partial<ThemeV1ColorScheme>;
-          accentColor?: string;
-          uiRadiusPreset?: string;
-          themeSeed?: Partial<ThemeSeed>;
-          themeOverrides?: unknown;
-          themeSelection?: unknown;
-          assetEdgeTriggerEnabled?: boolean;
-          assetTriggerEdge?: AssetTriggerEdge;
-          assetEdgeDelayMs?: number;
-          assetDragEdgeDelayMs?: number;
-        };
-        // 主题：已有选择只规范化；否则由种子（v12）或 v1 九色 + 强调色（v11 及更早，内置方案一律石墨）反推
-        const legacyThemePayload = state.themeSeed && typeof state.themeSeed === 'object'
-          ? { seed: normalizeThemeSeed(state.themeSeed), overrides: normalizeThemeOverrides(state.themeOverrides) }
-          : migrateV1ThemeSettings({ themeColors: state.themeColors, accentColor: state.accentColor, uiRadiusPreset: state.uiRadiusPreset });
-        const themeState = themeSelectionState(
-          normalizeThemeSelection(state.themeSelection)
-          ?? selectionFromThemeSeed(legacyThemePayload.seed, legacyThemePayload.overrides)
-        );
-        // v1 外观字段（色调、强调色、九色）已由选择取代，不再保留在持久化状态里
-        const {
-          themeTonePreset: _themeTonePreset,
-          accentColor: _accentColor,
-          themeColors: _themeColors,
-          ...rest
-        } = (persistedState ?? {}) as Record<string, unknown>;
 
-        const migratedProviderStatus = normalizeProviderKeyStatus(state.providerKeyStatus);
-        if (state.apiKeys && typeof state.apiKeys === 'object') {
-          Object.entries(state.apiKeys).forEach(([providerId, key]) => {
-            migratedProviderStatus[providerId] = normalizeApiKey(String(key)).length > 0;
-          });
-        }
-        if (state.apiKey) {
-          migratedProviderStatus.ppio = normalizeApiKey(state.apiKey).length > 0;
-        }
-
-        const ignoreAtTagWhenCopyingAndGenerating =
-          state.ignoreAtTagWhenCopyingAndGenerating ?? true;
-        const uploadProvider = normalizeUploadProvider(
-          state.uploadProvider ?? resolveLegacyUploadProvider()
-        );
-        const uploadFallbackEnabled =
-          state.uploadFallbackEnabled ?? resolveLegacyUploadFallback();
-        const hasUntouchedLegacyEdgeTriggerDefaults =
-          persistedVersion < 11
-          && state.assetEdgeTriggerEnabled === true
-          && (state.assetTriggerEdge === undefined || state.assetTriggerEdge === 'right')
-          && (state.assetEdgeDelayMs === undefined || state.assetEdgeDelayMs === 650)
-          && (state.assetDragEdgeDelayMs === undefined || state.assetDragEdgeDelayMs === 180);
-        return {
-          ...rest,
-          providerKeyStatus: migratedProviderStatus,
-          uploadProvider,
-          uploadFallbackEnabled,
-          ignoreAtTagWhenCopyingAndGenerating,
-          ...themeState,
-          assetEdgeTriggerEnabled: hasUntouchedLegacyEdgeTriggerDefaults
-            ? false
-            : (state.assetEdgeTriggerEnabled ?? false),
-        };
-      },
     }
   )
 );

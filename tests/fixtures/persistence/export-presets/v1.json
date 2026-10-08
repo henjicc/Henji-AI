@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "content": [
+    {
+      "id": "golden-export",
+      "name": "黄金导出",
+      "settings": {
+        "format": "mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": null,
+        "videoBitrateMbps": 12,
+        "audioBitrateKbps": 192,
+        "fit": "fit",
+        "loudness": {
+          "targetLufs": -14,
+          "truePeakDbtp": -1
+        },
+        "codec": "avc",
+        "bitrateMode": "vbr",
+        "keyframeInterval": "auto",
+        "encoderPreference": "hardware",
+        "videoEnabled": true,
+        "audioEnabled": true,
+        "audioCodec": "aac",
+        "sampleRate": 48000,
+        "channels": 2,
+        "captionMode": "none",
+        "followSequence": {
+          "resolution": true,
+          "fps": true,
+          "sampleRate": true,
+          "channels": true
+        },
+        "importToProject": false,
+        "addToLibrary": true,
+        "useProxies": false
+      }
+    }
+  ]
+}

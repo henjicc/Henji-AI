@@ -1,4 +1,13 @@
 {
+  "persistence": {
+    "newer-version": "这份{{format}}由更新版本的痕迹AI创建，请升级后再打开。",
+    "unsupported-version": "这份{{format}}是旧版本格式，当前开发版不再支持打开；原文件未被修改。",
+    "migration-failed": "{{format}}升级失败（第 {{from}} → {{to}} 步）；原文件未修改。备份位置：{{backup}}",
+    "invalid-content": "这份{{format}}的内容格式不受当前版本支持；原文件未被修改。",
+    "corrupt": "这份{{format}}已损坏，无法解析文件内容；原文件未被修改。",
+    "backup-unavailable": "备份未完成，未执行升级。",
+    "backup-failed": "这份{{format}}的升级前备份失败，未执行升级，原文件未修改。请检查文件夹权限和剩余空间后重试。"
+  },
   "title": "错误",
   "unknown": "未知错误",
   "network": "网络错误",
@@ -7,7 +16,6 @@
   "forbidden": "禁止访问",
   "notFound": "未找到",
   "serverError": "服务器错误",
-
   "messages": {
     "apiKeyMissing": "API 密钥缺失",
     "apiKeyInvalid": "API 密钥无效",

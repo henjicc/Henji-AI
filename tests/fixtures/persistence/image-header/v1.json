@@ -1,0 +1,16 @@
+{
+  "format": "henji-image-document",
+  "version": 1,
+  "id": "golden-image",
+  "revision": 0,
+  "kindVersion": 1,
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "contentRevision": 0,
+  "emptyUntilRevision": 0,
+  "summary": {
+    "width": 64,
+    "height": 48,
+    "layers": 1
+  }
+}
