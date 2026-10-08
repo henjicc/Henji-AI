@@ -15,6 +15,8 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/timed.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
+  vi.spyOn(getPlatform().system.fs, 'mkdir').mockResolvedValue(undefined)
+  vi.spyOn(getPlatform().system.fs, 'exists').mockImplementation(async path => files.has(path))
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
@@ -100,7 +102,10 @@ it('手动与公共导出复用原快照/原文件回读，取消和错误不假
   try {
     const output = await app.call('export_video_edit', { documentRef: { kind: 'video_edit.document', id: projectId }, format: 'vtt' })
     expect(output, JSON.stringify(output)).toMatchObject({ ok: true, data: { verification: { verified: true } } })
-    expect(files.get('D:/subtitle.vtt')).toContain('00:00:00.500 --> 00:00:01.500'); expect(files.get('D:/subtitle.vtt')).toContain('中&lt;文&amp;字幕')
+    // 公共能力不弹保存对话框，写进项目“导出”文件夹。
+    expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
+    const vtt = [...files.keys()].find(path => /导出[\\/][^\\/]+\.vtt$/.test(path))!
+    expect(files.get(vtt)).toContain('00:00:00.500 --> 00:00:01.500'); expect(files.get(vtt)).toContain('中&lt;文&amp;字幕')
     vi.mocked(getPlatform().system.dialog.save).mockResolvedValue(null)
     expect(await exportVideoEditSubtitles(projectId, 'srt')).toEqual({ saved: false, verified: false })
     vi.mocked(getPlatform().system.dialog.save).mockResolvedValue('D:/original.henji-video')
