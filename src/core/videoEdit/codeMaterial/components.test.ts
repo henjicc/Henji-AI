@@ -49,6 +49,6 @@ describe('位置解析与固定组件依赖', () => {
     expect(renameCodeMaterialFile(files, 'main.ts', 'nested/main.ts').files['nested/main.ts']).toBe(source)
     expect(() => pinCodeComponentImports(files, [], '人名条')).toThrow('不存在')
     expect(() => pinCodeComponentImports(files, library, '人名条')).toThrow('循环')
-    expect(() => componentSourceMetadata('// henji-component broken')).toThrow('说明损坏')
+    expect(() => componentSourceMetadata('// henji-component broken')).toThrow('说明已损坏')
   })
 })

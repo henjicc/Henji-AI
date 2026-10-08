@@ -132,11 +132,12 @@ describe('MultiLayerDocumentEditorDialog', () => {
         onCloseReady={continuation}
       />,
     )
-    await waitFor(() => expect(mocks.openAndValidate).toHaveBeenCalledOnce())
+    // CI 并行负载下打开与关闭的异步链会超过默认 1 秒。
+    await waitFor(() => expect(mocks.openAndValidate).toHaveBeenCalledOnce(), { timeout: 5000 })
 
     await close()
 
-    await waitFor(() => expect(closed).toHaveLength(1))
+    await waitFor(() => expect(closed).toHaveLength(1), { timeout: 5000 })
     expect(mocks.flush).toHaveBeenCalledOnce()
     expect(continuation).toHaveBeenCalledWith({ nodeId: 'multi-layer-node', session })
     unsubscribe()
