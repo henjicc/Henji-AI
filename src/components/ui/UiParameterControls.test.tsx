@@ -118,6 +118,23 @@ describe.each(graphics)('$name 通用手势契约', test => {
 })
 
 describe('参数边界与编辑行为', () => {
+  it('可选回绕区间允许起点跨终点，读数、复位与可访问边界一致', () => {
+    const props = callbacks(); render(<UiRangeSlider {...props} label="色相" value={[340, 20]} min={0} max={360} step={1} track="hue" wrap defaultValue={[0, 360]} />)
+    const start = screen.getByRole('slider', { name: '色相起点' }); const end = screen.getByRole('slider', { name: '色相终点' })
+    expect(start.getAttribute('aria-valuemax')).toBe('360'); expect(end.getAttribute('aria-valuemin')).toBe('0')
+    fireEvent.keyDown(start, { key: 'ArrowRight' }); expect(props.onChange).toHaveBeenLastCalledWith([341, 20])
+    fireEvent.keyDown(end, { key: 'ArrowLeft' }); expect(props.onChange).toHaveBeenLastCalledWith([340, 19])
+    expect(start.getAttribute('aria-valuetext')).toContain('回绕')
+    fireEvent.keyDown(start, { key: 'Home' }); expect(props.onChange).toHaveBeenLastCalledWith([0, 360])
+    expect(props.onBegin).toHaveBeenCalledTimes(3); expect(props.onFinish).toHaveBeenCalledTimes(3)
+  })
+  it('曲线可复用领域采样器显示样条；右键删点进入原子手势且保留端点', () => {
+    const props = callbacks(); const view = render(<UiCurveEditor {...props} label="样条" value={curves} sample={x => x * x} />)
+    expect(view.container.querySelector('polyline')?.getAttribute('points')).toContain('50,75')
+    fireEvent.contextMenu(screen.getByRole('slider', { name: '样条点2' })); expect(props.onChange).toHaveBeenLastCalledWith(curvesDefault)
+    expect(props.onBegin).toHaveBeenCalledOnce(); expect(props.onFinish).toHaveBeenCalledOnce()
+    props.onChange.mockClear(); fireEvent.contextMenu(screen.getByRole('slider', { name: '样条点1' })); expect(props.onChange).not.toHaveBeenCalled()
+  })
   it('角度盘夹取自定义范围，wrap 在键盘跨边界时循环', () => {
     const props = callbacks(); const view = render(<UiAngleDial {...props} value={89} min={-90} max={90} label="角度" defaultValue={0} />)
     fireEvent.keyDown(screen.getByRole('slider'), { key: 'ArrowRight', shiftKey: true }); expect(props.onChange).toHaveBeenLastCalledWith(90)

@@ -9,8 +9,8 @@ import { reframeVideoEditCapability } from '@/core/application-control/domains/v
 import { handleVideoEditTextCapability } from './videoEditTextCapability'
 import { executeVideoEditReframeCapability } from './videoEditReframeCapability'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
-import { analyzeVideoEditLumetriCapability } from '@/core/application-control/domains/videoEdit/videoEditLumetriCapability'
-import { analyzeVideoEditLumetri } from './videoEditLumetri'
+import { analyzeVideoEditColorGradeCapability } from '@/core/application-control/domains/videoEdit/videoEditColorGradeCapability'
+import { analyzeVideoEditColorGrade } from './videoEditColorGrade'
 import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability'
 import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
 import { createVideoEditRegistrations } from './videoEditReflection'
@@ -115,14 +115,14 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (scenes) return scenes
       if (definition.id === reframeVideoEditCapability.id) return executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse(raw), context.signal, context.callerGrant?.permissions)
       if (definition.id === generateVideoEditAudioDuckingCapability.id) return executeVideoEditAudioDuckingCapability(generateVideoEditAudioDuckingCapability.inputSchema.parse(raw), context.signal)
-      if (definition.id === analyzeVideoEditLumetriCapability.id) {
-        const input = analyzeVideoEditLumetriCapability.inputSchema.parse(raw)
+      if (definition.id === analyzeVideoEditColorGradeCapability.id) {
+        const input = analyzeVideoEditColorGradeCapability.inputSchema.parse(raw)
         const sequence = splitVideoEditRef(input.sequenceRef); const clip = splitVideoEditRef(input.clipRef)
         if (sequence.projectId !== input.documentRef.id || clip.projectId !== input.documentRef.id || !sequence.childId || !clip.childId) throw new Error('序列和片段必须属于目标剪辑。')
         const reference = input.referenceClipRef ? splitVideoEditRef(input.referenceClipRef) : undefined
         if (reference && (reference.projectId !== input.documentRef.id || !reference.childId)) throw new Error('参考片段必须属于目标剪辑。')
-        const result = await analyzeVideoEditLumetri({ projectId: input.documentRef.id, sequenceId: sequence.childId, clipId: clip.childId }, input.frame, context.signal, undefined, { sampleCount: input.sampleCount, referenceClipId: reference?.childId, matchMethod: input.matchMethod })
-        return { ...result, resultRef: input.clipRef, message: '已分析自动校色建议，可写入 Lumetri 参数后观察并微调。' }
+        const result = await analyzeVideoEditColorGrade({ projectId: input.documentRef.id, sequenceId: sequence.childId, clipId: clip.childId }, input.frame, context.signal, undefined, { sampleCount: input.sampleCount, referenceClipId: reference?.childId, matchMethod: input.matchMethod })
+        return { ...result, resultRef: input.clipRef, message: '已分析自动校色建议，可写入全能调色参数后观察并微调。' }
       }
       if (definition.id === measureVideoEditLoudnessCapability.id) return executeVideoEditLoudnessCapability(measureVideoEditLoudnessCapability.inputSchema.parse(raw), false, context.signal)
       if (definition.id === normalizeVideoEditLoudnessCapability.id) return executeVideoEditLoudnessCapability(normalizeVideoEditLoudnessCapability.inputSchema.parse(raw), true, context.signal)

@@ -6,7 +6,7 @@ import { parseCodeMaterialTypes, parseCodeMaterialV3Parameters, validateCodeMate
 import type { CodeParameterValue } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditBuiltinParam } from '@/core/videoEdit/builtinEffects'
 import { BLACK_HEX } from '@/core/theme/colorTokens'
-import { LUMETRI_BASIC_PARAMS, LUMETRI_POINT_PARAMS } from '@/core/videoEdit/lumetri'
+import { COLOR_GRADE_BASIC_PARAMS, COLOR_GRADE_POINT_PARAMS } from '@/core/videoEdit/colorGrade'
 import { VideoEditBuiltinParamRows } from '../VideoEditBuiltinEffectControls'
 import { ParamField, type ParamGesture } from './ParamField'
 import { ParamList } from './ParamList'
@@ -124,10 +124,10 @@ it('相同值的内置目标切换不复用上一目标的手势和写入回调'
   expect(first).not.toHaveBeenCalled(); expect(second).toHaveBeenLastCalledWith({ params: { angle: 1 } })
 })
 
-it('Lumetri 直接调用方保留数值写入和样条曲线控件/百分比编码', () => {
-  const params = [...LUMETRI_BASIC_PARAMS.filter(param => param.key === 'exposure'), ...LUMETRI_POINT_PARAMS.filter(param => param.key === 'curve_master_points')]
+it('ColorGrade 直接调用方保留数值写入和样条曲线控件/百分比编码', () => {
+  const params = [...COLOR_GRADE_BASIC_PARAMS.filter(param => param.key === 'exposure'), ...COLOR_GRADE_POINT_PARAMS.filter(param => param.key === 'curve_master_points')]
   const commit = vi.fn(); const values = { exposure: 0, curve_master_points: '' }
-  const view = render(<VideoEditBuiltinParamRows params={params} values={values} gesture={{ identity: 'lumetri', commit, begin() {}, finish() {}, cancel() {}, active: () => false }} />)
+  const view = render(<VideoEditBuiltinParamRows params={params} values={values} gesture={{ identity: 'color_grade', commit, begin() {}, finish() {}, cancel() {}, active: () => false }} />)
   const exposure = view.getByRole('spinbutton', { name: params[0].name })
   fireEvent.focus(exposure); fireEvent.change(exposure, { target: { value: '1' } }); fireEvent.blur(exposure)
   expect(commit).toHaveBeenLastCalledWith({ params: { exposure: 1 } })

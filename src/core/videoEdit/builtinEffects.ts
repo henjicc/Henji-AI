@@ -8,8 +8,8 @@
  */
 import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS } from './audioEffectDefinitions'
-import { VIDEO_EDIT_LUMETRI } from './lumetri'
-import { parseLumetriCurve } from './lumetriCurves'
+import { VIDEO_EDIT_COLOR_GRADE } from './colorGrade'
+import { parseColorGradeCurve } from './colorGradeCurves'
 import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
 
@@ -135,7 +135,7 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
       strength('softness', '边缘柔化', 10, '透明边缘的过渡宽度', '0 硬边；10 默认；50 很柔的半透明边缘（适合头发）。'),
       strength('spill', '溢色抑制', 50, '去掉主体边缘反射的背景色', '0 不处理；50 默认；100 强力去除主体上的绿色/蓝色反光。'),
     ] },
-  VIDEO_EDIT_LUMETRI,
+  VIDEO_EDIT_COLOR_GRADE,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
 export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, GLOW_PRO_EFFECT_DEFINITION, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
@@ -167,7 +167,7 @@ function range(param: Extract<VideoEditBuiltinParam, { type: 'number' }>): strin
 export function videoEditBuiltinParamValue(param: VideoEditBuiltinParam, raw: unknown, clamp = false): VideoEditBuiltinParamValue {
   switch (param.type) {
     case 'curve': {
-      const points = parseLumetriCurve(raw)
+      const points = parseColorGradeCurve(raw)
       if (param.key.startsWith('curve_hue_') && points.length && (points[0].x !== 0 || points[points.length - 1].x !== 100 || points[0].y !== points[points.length - 1].y)) throw new Error('色相曲线必须覆盖0–100且两端输出相同，保证红色色相连续。')
       return raw as string
     }
@@ -199,7 +199,11 @@ export function videoEditBuiltinParamValue(param: VideoEditBuiltinParam, raw: un
  */
 export function normalizeVideoEditBuiltinParams(id: string, changes: Readonly<Record<string, unknown>> = {}, base?: Readonly<Record<string, unknown>>, clamp = false): VideoEditBuiltinParams {
   const definition = requireVideoEditBuiltinEffect(id)
-  return normalizeVideoEditParamSet(`内置效果“${definition.name}”`, definition.params, changes, base, clamp)
+  const values = normalizeVideoEditParamSet(`内置效果“${definition.name}”`, definition.params, changes, base, clamp)
+  if (id === VIDEO_EDIT_COLOR_GRADE.id) for (const channel of ['saturation', 'luminance']) {
+    if (Number(values[`hsl_${channel}_start`]) > Number(values[`hsl_${channel}_end`])) throw new Error(`hsl_${channel}_start 不得大于 hsl_${channel}_end；只有色相允许跨0°回绕。`)
+  }
+  return values
 }
 /** 按一组参数登记合并并校验（内置效果与过渡共用）；`owner` 只用于报错文字。 */
 export function normalizeVideoEditParamSet(owner: string, params: readonly VideoEditBuiltinParam[], changes: Readonly<Record<string, unknown>> = {}, base?: Readonly<Record<string, unknown>>, clamp = false): VideoEditBuiltinParams {

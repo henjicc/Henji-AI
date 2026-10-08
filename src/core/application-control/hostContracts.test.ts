@@ -8,7 +8,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCap
 import { VIDEO_EDIT_FOCUSABLE_PANELS } from '../videoEdit/panels'
 
 describe('application host contracts', () => {
-  it('剪辑任一可聚焦面板都能通过宿主上下文校验（曾漏 Lumetri / 标题模板 / 跟踪，导致助手读取全部失败）', () => {
+  it('剪辑任一可聚焦面板都能通过宿主上下文校验（曾漏 ColorGrade / 标题模板 / 跟踪，导致助手读取全部失败）', () => {
     const videoEdit = hostContextSnapshotSchema.shape.videoEdit.unwrap()
     for (const focusedPanel of VIDEO_EDIT_FOCUSABLE_PANELS) {
       expect(videoEdit.safeParse({ documentRef: 'video_edit.document:p', sequenceRef: null, frame: 0, playing: false, inFrame: null, outFrame: null, focusedPanel, selectedClipRefs: [], openAnnotations: { count: 0, items: [] }, targetTrackRefs: [] }).success, focusedPanel).toBe(true)

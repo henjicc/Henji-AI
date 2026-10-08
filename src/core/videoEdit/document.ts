@@ -21,7 +21,7 @@ import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioM
 import { videoEditInPlaceRecordsSchema } from './inPlacePersistence'
 import { videoEditClipCurvesSchema, assertVideoEditKeyframeTimes, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, VIDEO_EDIT_ANIMATABLE_KEYS } from './keyframes'
 import { videoEditTextStyleSchema } from './text'
-import { lumetriLutAssetSchema } from './lumetriLutAsset'
+import { colorLutAssetSchema } from './colorLutAsset'
 import { videoEditAudioRoleSchema } from './audioDucking'
 import { assertVideoEditSequenceGraph } from './sequenceGraph'
 import { videoEditTextTranscriptionSchema } from './textTranscript'
@@ -102,7 +102,7 @@ export const videoEditSequenceSchema = z.object({
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
 export const videoEditDocumentSchema = z.object({
   styleKits: z.array(styleKitSchema).optional(),
-  lumetriLuts: z.array(lumetriLutAssetSchema).optional(),
+  colorLuts: z.array(colorLutAssetSchema).optional(),
   format: z.literal('henji-video-project'), version: z.literal(2), id: identifier, name, revision: z.number().int().nonnegative(),
   media: z.array(videoEditMediaSchema), bins: z.array(videoEditBinSchema), items: z.array(videoEditItemSchema), sequences: z.array(videoEditSequenceSchema),
   codeMaterials: codeMaterialDefinitionsSchema.optional(),
@@ -126,10 +126,10 @@ export const videoEditDocumentSchema = z.object({
   const styleIds = new Set(document.styleKits?.map(value => value.id))
   if (styleIds.size !== (document.styleKits?.length ?? 0)) issue('工程风格包标识不能重复。')
   for (const sequence of document.sequences) for (const value of [sequence, ...sequence.clips]) if (value.styleKitId && !styleIds.has(value.styleKitId)) issue('序列或片段的风格包引用不存在。')
-  const lutsById = new Set(document.lumetriLuts?.map(value => value.id))
+  const lutsById = new Set(document.colorLuts?.map(value => value.id))
   for (const media of document.media) if (media.assetContent && !media.assetId && !media.assetContent.contentIdentity) issue('原文件内容快照需要固定内容身份。')
   const ids = new Set<string>()
-  for (const item of [...(document.styleKits ?? []), ...(document.lumetriLuts ?? []), ...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
+  for (const item of [...(document.styleKits ?? []), ...(document.colorLuts ?? []), ...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
     if (ids.has(item.id)) issue('剪辑包含重复标识。')
     ids.add(item.id)
   }
@@ -209,9 +209,9 @@ export const videoEditDocumentSchema = z.object({
       if (clip.kind === 'graphic' ? !clip.graphic : Boolean(clip.graphic)) issue('只有图形片段可以且必须保存结构化图形。')
       if (clip.kind === 'adjustment' ? !clip.adjustment : Boolean(clip.adjustment)) issue('只有调整图层可以且必须保存作用范围。')
       for (const effect of clip.effects ?? []) {
-        if (effect.builtin?.id === 'lumetri_color') for (const key of ['input_lut', 'look_lut']) {
+        if (effect.builtin?.id === 'color_grade') for (const key of ['input_lut', 'look_lut']) {
           const refs = [effect.builtin.params[key], ...(effect.builtin.curves?.[key] ?? []).map(point => point.value)]
-          if (refs.some(ref => ref && !lutsById.has(String(ref)))) issue('Lumetri LUT引用不属于本项目，请选择已导入的LUT。')
+            if (refs.some(ref => ref && !lutsById.has(String(ref)))) issue('全能调色 LUT引用不属于本项目，请选择已导入的LUT。')
         }
         const media = videoEditEffectMedia(effect)
         if (!videoEditEffectAccepts(media, clip)) { issue(media === 'audio' ? '音频效果只能加到声音片段。' : '画面效果不能附加到声音片段。'); break }
@@ -255,7 +255,7 @@ export type VideoEditMedia = z.infer<typeof videoEditMediaSchema>
 export type VideoEditItem = z.infer<typeof videoEditItemSchema>
 export type VideoEditBin = z.infer<typeof videoEditBinSchema>
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
-export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'codeSources' | 'lumetriLuts' | 'styleKits'> & { fps: number; sequences?: VideoEditSequence[] }
+export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'codeSources' | 'colorLuts' | 'styleKits'> & { fps: number; sequences?: VideoEditSequence[] }
 export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {
   return { id: crypto.randomUUID(), name, width: 1920, height: 1080, frameRate: { numerator: 30, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
     // 新序列与 PR 一样只有一条视频轨（V1）和一条音频轨（A1）；需要更多轨道时拖到轨道外或用轨道头菜单添加。
@@ -267,7 +267,7 @@ export function createVideoEditDocument(name: string): VideoEditDocument {
 export function videoEditComposition(document: VideoEditDocument, sequenceId: string): VideoEditComposition {
   const sequence = document.sequences.find(item => item.id === sequenceId)
   if (!sequence) throw new Error('目标序列不存在。')
-  return { ...sequence, ...(document.codeSources ? { codeSources: document.codeSources } : {}), width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styleKits ? { styleKits: document.styleKits } : {}), ...(document.lumetriLuts ? { lumetriLuts: document.lumetriLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
+  return { ...sequence, ...(document.codeSources ? { codeSources: document.codeSources } : {}), width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styleKits ? { styleKits: document.styleKits } : {}), ...(document.colorLuts ? { colorLuts: document.colorLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
 }
 export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' | 'items'>, clip: VideoEditClip): VideoEditMedia | undefined {
   const item = document.items.find(item => item.id === clip.itemId)

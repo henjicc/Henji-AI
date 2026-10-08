@@ -95,6 +95,7 @@ export function assertVideoEditBuiltinCurves(builtin: { id: string; curves?: Vid
   for (const [key, points] of Object.entries(builtin.curves ?? {})) {
     const param = definition.params.find(param => param.key === key)
     if (!param) throw new Error(`参数 ${key}.keyframes 不存在；可用：${definition.params.map(param => param.key).join('、')}。`)
+    if (param.animatable === false && points.length) throw new Error(`${param.name}（${key}）不支持关键帧，请直接修改参数。`)
     for (const point of points) {
       validateVideoEditBuiltinParams(builtin.id, { [key]: point.value })
       if ((param.type === 'boolean' || param.type === 'enum' || param.type === 'curve' || param.type === 'lut') && point.interpolation !== 'hold') throw new Error(`${param.name}.keyframes 只能用 hold 定格插值。`)

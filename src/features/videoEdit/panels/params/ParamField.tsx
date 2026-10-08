@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Dropdown, UiAngleDial, UiColorInput, UiCurveEditor, UiEasingEditor, UiFontPicker, UiGradeWheel, UiGradientEditor, UiOptionButton, UiPointPad, UiRangeInput, UiRangeSlider, UiSeedInput, UiSwitch, UiTextAreaField, UiToneCurve, UiTooltipText } from '@/components/ui'
+import { Dropdown, UiAngleDial, UiColorInput, UiCurveEditor, UiEasingEditor, UiFontPicker, UiGradeWheel, UiGradientEditor, UiOptionButton, UiPointPad, UiRangeInput, UiRangeSlider, UiSeedInput, UiSwitch, UiTextAreaField, UiTooltipText } from '@/components/ui'
+import { colorGradeSpline } from '@/core/videoEdit/colorGradeCurves'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_SEGMENTED_TRACK_CLASS, uiParameterHex } from '@/components/ui/styleTokens'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
@@ -92,6 +93,7 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
   const [cancelEpoch, setCancelEpoch] = useState(0)
   const cancel = (): void => { gesture.cancel(); setCancelEpoch(epoch => epoch + 1) }
   const shared = { 'aria-label': label, size: 'sm' as const, onBegin: gesture.begin, onFinish: gesture.finish, onCancel: cancel }
+  const curveSample = useMemo(() => field.type === 'curve' && field.curveFormat === 'color_grade' ? colorGradeSpline(value as CodePoint[]) : undefined, [field, value])
   let control: ReactNode
   switch (field.type) {
     case 'number': control = <div className="flex flex-col gap-1"><Numeric label={label} value={value as number} min={field.min} max={field.max} step={field.step} unit={field.unit} gesture={gesture} />{field.control !== 'input' && field.control !== 'knob' && <UiRangeInput aria-label={`${label}滑杆`} min={field.min} max={field.max} step={field.step} value={value as number} onFocus={gesture.begin} onBlur={gesture.finish}
@@ -99,13 +101,10 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
       onKeyDown={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.begin() }} onKeyUp={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.finish() }} onChange={event => gesture.write(Number(event.target.value))} />}{field.control === 'knob' && <UiAngleDial {...shared} min={field.min} max={field.max} step={field.step} wrap={false} value={value as number} defaultValue={field.default} onChange={gesture.write} />}</div>; break
     case 'angle': control = <UiAngleDial {...shared} min={field.min} max={field.max} step={field.step} wrap={false} value={value as number} defaultValue={field.default} onChange={gesture.write} />; break
     case 'point': control = <Point field={field} label={label} value={value} gesture={gesture} />; break
-    case 'range': control = <div className="flex items-center gap-1"><UiRangeSlider {...shared} min={field.min} max={field.max} step={field.step} value={value as CodeRange} defaultValue={field.default} onChange={gesture.write} />{field.unit && <span className="text-2xs text-text3">{field.unit}</span>}</div>; break
+    case 'range': control = <div className="flex items-center gap-1"><UiRangeSlider {...shared} min={field.min} max={field.max} step={field.step} track={field.rangeTrack} wrap={field.rangeWrap} value={value as CodeRange} defaultValue={field.default} onChange={gesture.write} />{field.unit && <span className="text-2xs text-text3">{field.unit}</span>}</div>; break
     case 'color': control = <Color field={field} value={value as CodeColor} label={label} gesture={gesture} />; break
     case 'gradient': control = <Gradient field={field} value={value} gesture={gesture} label={label} />; break
-    case 'curve': control = field.curveFormat === 'lumetri' ? <UiToneCurve {...shared} label={label} points={(value as CodePoint[]).map(point => ({ x: point.x * 100, y: point.y * 100 }))} onPointsChange={points => {
-      const before = value as CodePoint[]; const y = points[0].y / 100 !== before[0].y ? points[0].y : points[points.length - 1].y
-      gesture.write(points.map((point, index) => ({ x: point.x / 100, y: (field.kind === 'hue' && (index === 0 || index === points.length - 1) ? y : point.y) / 100 })))
-    }} /> : <UiCurveEditor {...shared} kind={field.kind} value={value as CodePoint[]} defaultValue={field.default} onChange={gesture.write} />; break
+    case 'curve': control = <UiCurveEditor {...shared} kind={field.kind} value={value as CodePoint[]} defaultValue={field.default.length ? field.default : field.kind === 'hue' || field.key.startsWith('curve_luma_') || field.key.startsWith('curve_sat_') ? [{ x: 0, y: .5 }, { x: 1, y: .5 }] : [{ x: 0, y: 0 }, { x: 1, y: 1 }]} sample={curveSample} channelColor={field.curveFormat === 'color_grade' && ['red', 'green', 'blue'].includes(field.key.slice(6, -7)) ? field.key.slice(6, -7) as 'red' | 'green' | 'blue' : 'master'} onChange={gesture.write} />; break
     case 'grade': control = <UiGradeWheel {...shared} size={field.layout === 'wheel' ? 'md' : 'sm'} value={value as CodeGrade} defaultValue={field.default} onChange={gesture.write} />; break
     case 'seed': control = <UiSeedInput {...shared} min={0} max={4294967295} value={value as number} defaultValue={field.default} onChange={gesture.write} />; break
     case 'easing': control = <div className="flex flex-col gap-2"><Dropdown size="sm" ariaLabel={label} value={Array.isArray(value) ? 'custom' : value as string} options={[...easeOptions, { value: 'custom', label: '自定义' }]} onSelect={next => gesture.atomic(next === 'custom' ? [0, 0, 1, 1] : next)} />{Array.isArray(value) && <UiEasingEditor {...shared} presets={[]} value={value as CodeColor} onChange={gesture.write} />}</div>; break
@@ -115,7 +114,7 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
     case 'font': control = <UiFontPicker ariaLabel={label} value={value as string} projectFonts={font?.projectFonts} onPreview={face => font?.onPreview(face?.fullName ?? null)} onSelect={gesture.atomic} />; break
     case 'image': control = image; break
     case 'custom': control = <Custom field={field} value={value} gesture={gesture} font={font} />; break
-    case 'lut': control = <span className="text-xs text-text3">在 Lumetri 面板选择</span>; break
+    case 'lut': control = <span className="text-xs text-text3">在 全能调色面板选择</span>; break
   }
   return <div key={`${gesture.epoch ?? 0}:${cancelEpoch}`} className="min-w-0" data-param-control={field.type} onKeyDownCapture={event => { if (event.key === 'Escape' && gesture.active()) { event.preventDefault(); event.stopPropagation(); cancel() } }}>{control}</div>
 })

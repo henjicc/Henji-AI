@@ -166,7 +166,7 @@ const makeInstance = (name: string): VideoEditInstance => {
 }
 const savedPopouts = (): unknown => JSON.parse(localStorage.getItem(VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY) ?? 'null')
 
-it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'content', 'tracking', 'lumetri'] as const)('聚焦片段后点击 %s：活动标签、always 内容与分组矩形一致，视图更新不抢回标签', async id => {
+it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'content', 'tracking', 'color_grade'] as const)('聚焦片段后点击 %s：活动标签、always 内容与分组矩形一致，视图更新不抢回标签', async id => {
   installHarnessNativeStorage()
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0))
   vi.stubGlobal('cancelAnimationFrame', (handle: number) => window.clearTimeout(handle))

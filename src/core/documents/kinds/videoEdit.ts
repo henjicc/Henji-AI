@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
-import { lumetriLutAssetSchema } from '../../videoEdit/lumetriLutAsset'
+import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
 import { styleKitSchema } from '../../videoEdit/styleKit'
 
 /*
@@ -37,7 +37,7 @@ const sequenceSchema = z.looseObject({
 
 export const videoEditContentSchema = z.object({
   styleKits: z.array(styleKitSchema).optional(),
-  lumetriLuts: z.array(lumetriLutAssetSchema).max(200).optional(),
+  colorLuts: z.array(colorLutAssetSchema).optional(),
   media: z.array(z.looseObject({ id: z.string().min(1), path: z.string().min(1) })),
   bins: z.array(identified),
   items: z.array(identified),
@@ -72,7 +72,7 @@ function sequenceHasContent(sequence: VideoEditDocumentContent['sequences'][numb
  */
 function isEmptyVideoEditContent(content: VideoEditDocumentContent): boolean {
   return content.media.length === 0
-    && (content.lumetriLuts?.length ?? 0) === 0
+    && (content.colorLuts?.length ?? 0) === 0
     && content.items.length === 0
     && content.bins.length === 0
     && (content.codeMaterials?.length ?? 0) === 0

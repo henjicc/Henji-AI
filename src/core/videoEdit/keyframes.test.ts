@@ -68,7 +68,7 @@ it('旧文件兼容；片内时间、值、内置效果参数与插值受文档�
   expect(() => videoEditDocumentSchema.parse(doc)).toThrow('0–100')
   delete clip.curves
   expect(videoEditDocumentSchema.parse(doc).sequences[0].clips[0].anchorX).toBeUndefined()
-  clip.effects = [{ id: 'lumetri', name: '调色', enabled: true, amount: 1, builtin: { id: 'lumetri_color', params: {}, curves: { exposure: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 100, value: 2, interpolation: 'ease' }] } } }]
+  clip.effects = [{ id: 'color_grade', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {}, curves: { exposure: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 100, value: 2, interpolation: 'ease' }] } } }]
   const result = evaluateVideoEditClip(clip, 50)
   expect(result.effects![0].builtin!.params.exposure).toBe(1)
   expect(clip.effects[0].builtin!.params).toEqual({})

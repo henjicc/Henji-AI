@@ -3,15 +3,15 @@ import { clampParameter, parameterKeyStep, parameterPosition, useParameterGestur
 import { UI_CURVE_CHANNEL_COLOR, UI_PARAMETER_HANDLE_CLASS, UI_PARAMETER_HANDLE_RADIUS, UI_PARAMETER_SURFACE_CLASS, UI_PARAMETER_TRACK_BACKGROUND } from './styleTokens'
 
 export interface UiCurvePoint { x: number; y: number }
-export interface UiCurveEditorProps extends ParameterControlProps<UiCurvePoint[]> { kind?: 'tone' | 'hue'; channelColor?: keyof typeof UI_CURVE_CHANNEL_COLOR }
+export interface UiCurveEditorProps extends ParameterControlProps<UiCurvePoint[]> { kind?: 'tone' | 'hue'; channelColor?: keyof typeof UI_CURVE_CHANNEL_COLOR; /** Domain sampler in normalized coordinates; omitted for piecewise linear curves. */ sample?: (x: number) => number }
 
-/** Linear segments exactly represent piecewise linear sampling; no resampling table or spline overshoot. */
+/** Linear by default; an optional domain sampler keeps the preview aligned with a spline renderer. */
 export function UiCurveEditor(props: UiCurveEditorProps) {
   const { value, onChange, defaultValue, kind = 'tone', channelColor = 'master', disabled, size = 'sm' } = props
   const label = props['aria-label'] ?? props.label ?? '曲线'
   const gesture = useParameterGesture(props)
   const drag = useRef<{ index: number; points: UiCurvePoint[]; outside: boolean } | null>(null)
-  const polyline = useMemo(() => value.map(point => `${point.x * 100},${(1 - point.y) * 100}`).join(' '), [value])
+  const polyline = useMemo(() => (props.sample ? Array.from({ length: 101 }, (_, i) => ({ x: i / 100, y: props.sample!(i / 100) })) : value).map(point => `${point.x * 100},${(1 - point.y) * 100}`).join(' '), [value, props.sample])
   const update = (points: UiCurvePoint[], index: number, point: UiCurvePoint): UiCurvePoint[] => {
     const endpoint = index === 0 || index === points.length - 1
     const candidate = clampParameter(point.x)
@@ -62,6 +62,6 @@ export function UiCurveEditor(props: UiCurveEditorProps) {
         if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); event.stopPropagation(); const next = remove(value, index); if (next !== value) gesture.atomic(() => onChange(next)); return }
         if (!delta) return
         event.preventDefault(); event.stopPropagation(); gesture.atomic(() => onChange(update(value, index, { x: point.x + (event.key === 'ArrowLeft' || event.key === 'ArrowRight' ? delta : 0), y: point.y + (event.key === 'ArrowUp' || event.key === 'ArrowDown' ? delta : 0) })))
-      }} />)}
+      }} onContextMenu={event => { event.preventDefault(); const next = remove(value, index); if (!disabled && next !== value) gesture.atomic(() => onChange(next)) }} />)}
   </svg>
 }

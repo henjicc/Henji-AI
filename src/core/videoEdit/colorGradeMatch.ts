@@ -1,7 +1,7 @@
 import { videoEditBuiltinDefaults, type VideoEditBuiltinParams } from './builtinEffects'
-import { VIDEO_EDIT_LUMETRI } from './lumetri'
-import { encodeLumetriCurve } from './lumetriCurves'
-export function lumetriSampleFrames(start: number, duration: number, count = 5): number[] {
+import { VIDEO_EDIT_COLOR_GRADE } from './colorGrade'
+import { encodeColorGradeCurve } from './colorGradeCurves'
+export function colorGradeSampleFrames(start: number, duration: number, count = 5): number[] {
   if (!Number.isInteger(count) || count < 1 || count > 9) throw new Error('采样帧数必须为1–9。')
   return [...new Set(Array.from({ length: count }, (_, i) => start + Math.min(duration - 1, Math.floor((i + .5) * duration / count))))]
 }
@@ -22,17 +22,17 @@ function stats(pixels: ArrayLike<number>, scale: number): ChannelStats[] {
   })
 }
 /** Reinhard-style per-channel moments, or robust quantile correspondence; suggestions stay in the shared curve pipeline. */
-export function suggestLumetriMatch(source: ArrayLike<number>, reference: ArrayLike<number>, method: 'moments' | 'histogram' = 'moments', scale = 255): VideoEditBuiltinParams {
+export function suggestColorGradeMatch(source: ArrayLike<number>, reference: ArrayLike<number>, method: 'moments' | 'histogram' = 'moments', scale = 255): VideoEditBuiltinParams {
   const from = stats(source, scale); const to = stats(reference, scale)
-  // Samples precede this Lumetri. Reset its previous look so applying a match does not grade twice.
-  const parameters = videoEditBuiltinDefaults(VIDEO_EDIT_LUMETRI)
+  // Samples precede this ColorGrade. Reset its previous look so applying a match does not grade twice.
+  const parameters = videoEditBuiltinDefaults(VIDEO_EDIT_COLOR_GRADE)
   ;['red', 'green', 'blue'].forEach((channel, c) => {
     const gain = from[c].deviation > .005 ? Math.min(4, to[c].deviation / from[c].deviation) : 1
     const map = (x: number): number => Math.max(0, Math.min(100, ((x - from[c].mean) * gain + to[c].mean) * 100))
     const points = method === 'moments' ? Array.from({ length: 32 }, (_, i) => ({ x: i / 31 * 100, y: map(i / 31) })) : [{ x: 0, y: map(0) }, ...from[c].quantiles.map((x, i) => ({ x: x * 100, y: to[c].quantiles[i] * 100 })).filter((point, i, all) => point.x > 0 && point.x < 100 && (!i || point.x > all[i - 1].x)), { x: 100, y: map(1) }]
     // Histogram end tails must remain ordered too; retain the first/last sampled target values.
     if (method === 'histogram' && points.length > 2) { points[0].y = Math.min(points[0].y, points[1].y); points[points.length - 1].y = Math.max(points[points.length - 1].y, points[points.length - 2].y) }
-    parameters[`curve_${channel}_points`] = encodeLumetriCurve(points)
+    parameters[`curve_${channel}_points`] = encodeColorGradeCurve(points)
   })
   return parameters
 }

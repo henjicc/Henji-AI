@@ -54,12 +54,14 @@ const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpe
   const [value, , visible, , highlighted] = JSON.parse(snapshot) as [CodeParameterValue, unknown, boolean, string, boolean]
   if (!visible) return null
   const props = store.props
+  const wheel = (field.type === 'grade' && field.layout === 'wheel') || (field.type === 'curve' && field.source === 'builtin')
   return <div className={highlighted ? 'flex flex-col gap-1 bg-selected-accent' : 'flex flex-col gap-1'} data-video-edit-code-parameter={field.source === 'code' ? field.key : undefined} data-video-edit-builtin-param={field.source === 'builtin' ? field.key : undefined} data-code-element-parameter={highlighted || undefined}>
     <div className="flex min-h-8 items-start gap-1.5">
-      <span className="w-24 shrink-0 pt-1 text-xs text-text2"><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>
-      <div className="min-w-0 flex-1">{props.renderControl(field, value)}</div>
+      <span className={wheel ? 'min-w-0 flex-1 pt-1 text-xs text-text2' : 'w-24 shrink-0 pt-1 text-xs text-text2'}><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>
+      {!wheel && <div className="min-w-0 flex-1">{props.renderControl(field, value)}</div>}
       {props.onReset && <UiIconButton size="xs" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw size={12} /></UiIconButton>}
     </div>
+    {wheel && <div className="min-w-0">{props.renderControl(field, value)}</div>}
     {field.animatable && props.renderAnimation?.(field, value)}
   </div>
 })

@@ -1,5 +1,5 @@
 import { CUBE_LUT_MAX_BYTES, parseCubeLut, type CubeLut } from '@/core/videoEdit/cubeLut'
-import type { LumetriLutAsset } from '@/core/videoEdit/lumetriLutAsset'
+import type { ColorLutAsset } from '@/core/videoEdit/colorLutAsset'
 
 /** Worker-safe: no PAL/window imports. The render-session boundary supplies an authorized URL. */
 export async function decodeVideoEditLut(bytes: Uint8Array): Promise<{ lut: CubeLut; contentIdentity: string }> {
@@ -8,7 +8,7 @@ export async function decodeVideoEditLut(bytes: Uint8Array): Promise<{ lut: Cube
   return { lut: parseCubeLut(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), contentIdentity }
 }
 
-export async function fetchVideoEditLumetriLut(asset: LumetriLutAsset): Promise<CubeLut> {
+export async function fetchVideoEditColorLut(asset: ColorLutAsset): Promise<CubeLut> {
   if (!/^henji-media:\/\//i.test(asset.path)) throw new Error('LUT Worker 需要授权的 henji-media 地址，请在 VideoEditRenderSession 边界转换本地路径。')
   try {
     const response = await fetch(asset.path)

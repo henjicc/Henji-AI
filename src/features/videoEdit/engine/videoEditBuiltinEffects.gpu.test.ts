@@ -74,7 +74,7 @@ describe('剪辑内置效果（真实设备）', () => {
       let current = first
       for (let index = 0; index < 24; index++) { const next = current === first ? second : first; await draw(blur, current, next); current = next }
       expect({ allocations, compiles, scratchAllocations }).toEqual(oneEffect)
-      const curves = Array.from({ length: 24 }, (_, index) => ({ id: 'lumetri_color', params: { curve_master_2: 51 + index } }))
+      const curves = Array.from({ length: 24 }, (_, index) => ({ id: 'color_grade', params: { curve_master_2: 51 + index } }))
       let warm: { allocations: number; compiles: number; scratchAllocations: number } | undefined
       for (let frame = 0; frame < 2; frame++) {
         local.releaseIdle()
@@ -83,7 +83,7 @@ describe('剪辑内置效果（真实设备）', () => {
         if (warm) expect(count).toEqual(warm)
         else warm = count
       }
-      // One blur scratch and Lumetri's two ping-pong textures, shared across all instances.
+      // One blur scratch and ColorGrade's two ping-pong textures, shared across all instances.
       expect(scratchAllocations).toBe(2)
       expect(pixel(await read(current), W / 2, H / 2)[3]).toBe(255)
     } finally { local.dispose(); source.destroy(); first.destroy(); second.destroy() }

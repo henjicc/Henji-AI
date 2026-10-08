@@ -7,13 +7,14 @@ import { makeVideoEditItemClip } from './projectItems'
 import { insertVideoEditTracks } from './tracks'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_FRAME_RATES, videoEditFps } from './time'
 import { videoEditTimelineViewSchema } from './timelineSelection'
+import { videoEditContentSchema } from '../documents/kinds/videoEdit'
 
 it('接受1200个素材和素材项、400个素材箱、64个序列及超过500个片段和标记', () => {
   const document = createVideoEditDocument('大型工程')
   document.bins = Array.from({ length: 400 }, (_, index) => ({ id: `bin${index}`, name: `素材箱${index}` }))
   document.media = Array.from({ length: 1200 }, (_, index) => ({ id: `media${index}`, name: `照片${index}`, kind: 'image' as const, path: `/images/${index}.png`, width: 16, height: 16, durationSeconds: 0 }))
   document.items = document.media.map((media, index) => ({ id: `item${index}`, name: media.name, kind: media.kind, mediaId: media.id, binId: document.bins[index % 400].id }))
-  document.lumetriLuts = Array.from({ length: 300 }, (_, index) => ({ id: `lut${index}`, name: `LUT${index}`, path: `/luts/${index}.cube`, contentIdentity: 'a'.repeat(64) }))
+  document.colorLuts = Array.from({ length: 300 }, (_, index) => ({ id: `lut${index}`, name: `LUT${index}`, path: `/luts/${index}.cube`, contentIdentity: 'a'.repeat(64) }))
   document.codeMaterials = Array.from({ length: 100 }, (_, index) => ({ id: `definition${index}`, name: '代码', defaultVersionId: `version${index}`, versions: [{ id: `version${index}`, apiVersion: 1, languageVersion: 1, ...testCodeManifest('', document) }] }))
   expect(sceneCutsSchema.safeParse(Array.from({ length: 1200 }, (_, index) => index)).success).toBe(true)
   document.sequences = Array.from({ length: 64 }, () => createVideoEditSequence())
@@ -25,6 +26,8 @@ it('接受1200个素材和素材项、400个素材箱、64个序列及超过500�
   sequence.clips = sequence.clips.map((clip, index) => ({ ...clip, start: index * 10, duration: 10 }))
   sequence.markers = sequence.clips.map((clip, index) => ({ id: `marker${index}`, frame: clip.start, name: '标记' }))
   expect(videoEditDocumentSchema.safeParse(document).success).toBe(true)
+  // Host persistence must retain the same unbounded LUT directory as the editor.
+  expect(videoEditContentSchema.parse(document).colorLuts).toHaveLength(300)
 })
 
 it.each(VIDEO_EDIT_FRAME_RATES)('序列边界在 $numerator/$denominator fps 下接受24小时、拒绝再多一帧', rate => {

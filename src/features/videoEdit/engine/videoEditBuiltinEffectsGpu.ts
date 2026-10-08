@@ -4,12 +4,12 @@ import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitio
 import { planVideoEditBuiltinEffect, planVideoEditBuiltinTransition, type VideoEditBuiltinPlan, type VideoEditBuiltinTexture } from './videoEditBuiltinEffectPasses'
 import { VIDEO_EDIT_BUILTIN_EFFECT_SHADER, type VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 import type { CubeLut } from '@/core/videoEdit/cubeLut'
-import type { LumetriLutAsset } from '@/core/videoEdit/lumetriLutAsset'
-import { fetchVideoEditLumetriLut } from './videoEditLumetriLutSource'
+import type { ColorLutAsset } from '@/core/videoEdit/colorLutAsset'
+import { fetchVideoEditColorLut } from './videoEditColorLutSource'
 import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 
-export type VideoEditLutLoader = (asset: LumetriLutAsset) => Promise<CubeLut>
-const loadLut: VideoEditLutLoader = fetchVideoEditLumetriLut
+export type VideoEditLutLoader = (asset: ColorLutAsset) => Promise<CubeLut>
+const loadLut: VideoEditLutLoader = fetchVideoEditColorLut
 interface UploadQueue { writeTexture(destination: unknown, data: ArrayBufferView, layout: unknown, size: unknown): void }
 function half(value: number): number {
   const bits = new Uint32Array(new Float32Array([value]).buffer)[0]; const sign = (bits >>> 16) & 0x8000; const exponent = ((bits >>> 23) & 255) - 127 + 15; const mantissa = bits & 0x7fffff
@@ -47,6 +47,7 @@ export class VideoEditBuiltinEffectsGpu {
       { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 64 } },
       { binding: 3, visibility: 2, texture: { sampleType: 'float' } },
       { binding: 4, visibility: 2, texture: { sampleType: 'float', viewDimension: '3d' } },
+      { binding: 5, visibility: 2, texture: { sampleType: 'float' } },
     ] })
     return this.layout = device.createPipelineLayout({ bindGroupLayouts: [group] })
   }
@@ -82,7 +83,7 @@ export class VideoEditBuiltinEffectsGpu {
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
   /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
-  async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly LumetriLutAsset[] = []): Promise<void> {
+  async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = []): Promise<void> {
     await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale }), input.format, input.texture, output, undefined, luts)
   }
   /**
@@ -99,7 +100,7 @@ export class VideoEditBuiltinEffectsGpu {
     ;(this.device.queue as typeof this.device.queue & UploadQueue).writeTexture({ texture }, Uint16Array.from(padded, half), { bytesPerRow: width * 8, rowsPerImage: height }, [width, height, depth])
     return texture
   }
-  private async execute(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly LumetriLutAsset[] = []): Promise<void> {
+  private async execute(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly ColorLutAsset[] = []): Promise<void> {
     const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, format)))
     if (this.disposed) throw new Error('原调色渲染已关闭。')
     // Resolve all resources before recording, so missing LUT never silently becomes identity.
@@ -145,6 +146,7 @@ export class VideoEditBuiltinEffectsGpu {
         { binding: 0, resource: texture(pass.source).createView() }, { binding: 1, resource: this.sampler },
         { binding: 2, resource: { buffer } }, { binding: 3, resource: (lookup && cube?.kind !== '3d' ? lookup.texture : texture(pass.original ?? 'input')).createView() },
         { binding: 4, resource: (cube?.kind === '3d' ? lookup!.texture : this.fallbackLut!).createView() },
+        { binding: 5, resource: texture(pass.mask ?? 'input').createView() },
       ] }))
       target.draw(3); target.end()
     })

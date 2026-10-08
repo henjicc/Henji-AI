@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { analyzeVideoEditLumetriOffThread, decodeVideoEditLutOffThread } from './videoEditLumetriLutClient'
+import { analyzeVideoEditColorGradeOffThread, decodeVideoEditLutOffThread } from './videoEditColorLutClient'
 class FakeWorker {
   static last: FakeWorker
   onmessage?: (event: MessageEvent) => void
@@ -23,7 +23,7 @@ it('导入拥有独立 Worker，转移副本不破坏 PAL 数据，成功/错误
 it('多帧统计和参考匹配转移像素给独立线程，返回同一参数契约', async () => {
   vi.stubGlobal('Worker', FakeWorker)
   const pixels = new Uint8ClampedArray(32); const reference = new Uint8ClampedArray(32)
-  const operation = analyzeVideoEditLumetriOffThread(pixels, reference, 'histogram')
+  const operation = analyzeVideoEditColorGradeOffThread(pixels, reference, 'histogram')
   expect(FakeWorker.last.postMessage).toHaveBeenCalledWith({ kind: 'analyze', pixels, reference, method: 'histogram' }, [pixels.buffer, reference.buffer])
   FakeWorker.last.onmessage?.({ data: { parameters: { exposure: 1 } } } as MessageEvent)
   expect(await operation).toEqual({ exposure: 1 }); expect(FakeWorker.last.terminate).toHaveBeenCalledOnce()

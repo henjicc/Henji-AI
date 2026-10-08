@@ -1,6 +1,6 @@
-export interface LumetriCurvePoint { x: number; y: number }
+export interface ColorGradeCurvePoint { x: number; y: number }
 /** Coordinates are percentages. Empty encoding means legacy five anchors / neutral hue curve. */
-export function parseLumetriCurve(value: unknown): LumetriCurvePoint[] {
+export function parseColorGradeCurve(value: unknown): ColorGradeCurvePoint[] {
   if (typeof value !== 'string' || value.length > 4096) throw new Error('曲线需要不超过4096字符的 {x,y} 百分比控制点 JSON 数组。')
   if (!value) return []
   const points: unknown = JSON.parse(value)
@@ -8,13 +8,13 @@ export function parseLumetriCurve(value: unknown): LumetriCurvePoint[] {
   return points.map((point: unknown, i: number) => {
     if (!point || typeof point !== 'object' || Object.keys(point).some(key => key !== 'x' && key !== 'y')) throw new Error('曲线控制点只能包含 x 和 y。')
     const { x, y } = point as Record<string, unknown>
-    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 100 || y < 0 || y > 100 || (i > 0 && x <= (points[i - 1] as LumetriCurvePoint).x)) throw new Error('曲线 x/y 必须在0–100，x 严格递增。')
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 100 || y < 0 || y > 100 || (i > 0 && x <= (points[i - 1] as ColorGradeCurvePoint).x)) throw new Error('曲线 x/y 必须在0–100，x 严格递增。')
     return { x, y }
   })
 }
-export function encodeLumetriCurve(points: readonly LumetriCurvePoint[]): string { const value = JSON.stringify(points); parseLumetriCurve(value); return value }
+export function encodeColorGradeCurve(points: readonly ColorGradeCurvePoint[]): string { const value = JSON.stringify(points); parseColorGradeCurve(value); return value }
 /** Fritsch–Carlson: limit Hermite tangents to keep every segment within its endpoints. */
-export function lumetriSpline(points: readonly LumetriCurvePoint[]): (x: number) => number {
+export function colorGradeSpline(points: readonly ColorGradeCurvePoint[]): (x: number) => number {
   const slopes = points.slice(1).map((p, i) => (p.y - points[i].y) / (p.x - points[i].x))
   const tangents = points.map((_, i) => i === 0 ? slopes[0] : i === points.length - 1 ? slopes[i - 1] : slopes[i - 1] * slopes[i] <= 0 ? 0 : (slopes[i - 1] + slopes[i]) / 2)
   slopes.forEach((slope, i) => {
@@ -32,11 +32,11 @@ export function lumetriSpline(points: readonly LumetriCurvePoint[]): (x: number)
     return (2 * t ** 3 - 3 * t ** 2 + 1) * left.y + (t ** 3 - 2 * t ** 2 + t) * h * tangents[i] + (-2 * t ** 3 + 3 * t ** 2) * right.y + (t ** 3 - t ** 2) * h * tangents[i + 1]
   }
 }
-export function lumetriCurvePoints(params: Readonly<Record<string, unknown>>, channel: string): LumetriCurvePoint[] {
-  const points = parseLumetriCurve(params[`curve_${channel}_points`] ?? '')
+export function colorGradeCurvePoints(params: Readonly<Record<string, unknown>>, channel: string): ColorGradeCurvePoint[] {
+  const points = parseColorGradeCurve(params[`curve_${channel}_points`] ?? '')
   return points.length ? points : Array.from({ length: 5 }, (_, i) => ({ x: i * 25, y: Number(params[`curve_${channel}_${i}`] ?? i * 25) }))
 }
-export function lumetriCurveLut(points: readonly LumetriCurvePoint[], size = 1024): Float32Array {
-  const evaluate = lumetriSpline(points)
+export function colorGradeCurveLut(points: readonly ColorGradeCurvePoint[], size = 1024): Float32Array {
+  const evaluate = colorGradeSpline(points)
   return Float32Array.from({ length: size }, (_, i) => evaluate(i / (size - 1) * 100) / 100)
 }

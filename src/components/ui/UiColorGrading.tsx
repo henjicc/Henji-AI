@@ -1,17 +1,17 @@
-import { lumetriSpline, type LumetriCurvePoint } from '@/core/videoEdit/lumetriCurves'
+import { colorGradeSpline, type ColorGradeCurvePoint } from '@/core/videoEdit/colorGradeCurves'
 import { useRef } from 'react'
 import { UI_COLOR_WHEEL_BACKGROUND } from './styleTokens'
 
 export interface GestureProps { onBegin: () => void; onFinish: () => void; onCancel: () => void; disabled?: boolean }
 /** Document/undo independent curve editor; legacy values remain supported by existing consumers. */
-export function UiToneCurve({ label, values, points, onChange, onPointsChange, onBegin, onFinish, onCancel, disabled }: GestureProps & { label: string; values?: readonly number[]; points?: readonly LumetriCurvePoint[]; onChange?: (point: number, value: number) => void; onPointsChange?: (points: LumetriCurvePoint[]) => void }): React.ReactElement {
+export function UiToneCurve({ label, values, points, onChange, onPointsChange, onBegin, onFinish, onCancel, disabled }: GestureProps & { label: string; values?: readonly number[]; points?: readonly ColorGradeCurvePoint[]; onChange?: (point: number, value: number) => void; onPointsChange?: (points: ColorGradeCurvePoint[]) => void }): React.ReactElement {
   const current = points ?? (values ?? []).map((y, i) => ({ x: i * 25, y }))
-  const active = useRef<{ index: number; points: LumetriCurvePoint[]; outside: boolean } | null>(null)
-  const pointAt = (event: React.PointerEvent<SVGSVGElement>): LumetriCurvePoint => {
+  const active = useRef<{ index: number; points: ColorGradeCurvePoint[]; outside: boolean } | null>(null)
+  const pointAt = (event: React.PointerEvent<SVGSVGElement>): ColorGradeCurvePoint => {
     const rect = event.currentTarget.getBoundingClientRect()
     return { x: (event.clientX - rect.left) / rect.width * 100, y: 100 - (event.clientY - rect.top) / rect.height * 100 }
   }
-  const write = (next: LumetriCurvePoint[], index: number): void => { if (onPointsChange) onPointsChange(next); else onChange?.(index, next[index].y) }
+  const write = (next: ColorGradeCurvePoint[], index: number): void => { if (onPointsChange) onPointsChange(next); else onChange?.(index, next[index].y) }
   const remove = (index: number): void => { if (!disabled && onPointsChange && current.length > 2) onPointsChange(current.filter((_, i) => i !== index)) }
   const move = (event: React.PointerEvent<SVGSVGElement>): void => {
     const drag = active.current; if (!drag) return
@@ -21,7 +21,7 @@ export function UiToneCurve({ label, values, points, onChange, onPointsChange, o
     const next = drag.points.map((p, i) => i === index ? { x, y: Math.max(0, Math.min(100, point.y)) } : p)
     drag.points = next; write(next, index)
   }
-  const evaluate = current.length >= 2 ? lumetriSpline(current) : () => 0
+  const evaluate = current.length >= 2 ? colorGradeSpline(current) : () => 0
   return <svg viewBox="0 0 100 100" aria-label={label} tabIndex={disabled ? -1 : 0} className="aspect-square w-full touch-none rounded-control bg-control"
     onPointerDown={event => {
       if (disabled || event.button !== 0 || !onPointsChange || event.target !== event.currentTarget) return

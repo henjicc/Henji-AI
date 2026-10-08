@@ -13,7 +13,7 @@ import { getPlatform } from '@/platform/runtime'
 import { VideoEditEmptyTimeline } from '../panels/VideoEditEmptyTimeline'
 import { VideoEditPreview } from '../VideoEditPreview'
 import { VideoEditEffectsPanel } from '../panels/VideoEditEffectsPanel'
-import { VideoEditLumetriPanel } from '../panels/VideoEditLumetriPanel'
+import { VideoEditColorGradePanel } from '../panels/VideoEditColorGradePanel'
 import { VideoEditTrackingPanel } from '../panels/VideoEditTrackingPanel'
 import { VideoEditTimeline } from '../VideoEditTimeline'
 import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'
@@ -43,7 +43,7 @@ it('新项目与保存重开允许零时间线，项目级命令仍可用，节�
   expect(videoEditCommandState(context, 'save').enabled).toBe(true)
   await executeVideoEditCommand(context, 'save')
   const onError = vi.fn()
-  const view = render(<><VideoEditTimeline instance={owner} onError={onError} /><VideoEditPreview instance={owner} onError={onError} /><VideoEditEffectsPanel instance={owner} onError={onError} /><VideoEditLumetriPanel instance={owner} onError={onError} /><VideoEditTrackingPanel instance={owner} onError={onError} /><VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} /></>)
+  const view = render(<><VideoEditTimeline instance={owner} onError={onError} /><VideoEditPreview instance={owner} onError={onError} /><VideoEditEffectsPanel instance={owner} onError={onError} /><VideoEditColorGradePanel instance={owner} onError={onError} /><VideoEditTrackingPanel instance={owner} onError={onError} /><VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} /></>)
   expect(view.getAllByText('没有序列')).toHaveLength(4)
   expect(view.getByRole('button', { name: '新建序列' })).toBeTruthy()
   expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)

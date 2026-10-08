@@ -71,7 +71,7 @@ it('从附加效果标题打开预设面板，默认全选，按链顺序只保�
   act(() => {
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'brightness_contrast')
-    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'lumetri_color')
+    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'color_grade')
   })
   const effects = within(panel.container.querySelector<HTMLElement>('[data-video-edit-effect-section="effects"]')!)
   expect(effects.queryByRole('checkbox')).toBeNull()
@@ -89,7 +89,7 @@ it('从附加效果标题打开预设面板，默认全选，按链顺序只保�
   const presets = useVideoEditEffectLibraryStore.getState().presets
   expect(presets).toHaveLength(1)
   expect(presets[0].name).toBe('柔化调色')
-  expect(presets[0].effects.map(effect => effect.builtin?.id)).toEqual(['gaussian_blur', 'lumetri_color'])
+  expect(presets[0].effects.map(effect => effect.builtin?.id)).toEqual(['gaussian_blur', 'color_grade'])
   expect(within(document.body).queryByRole('dialog')).toBeNull()
 })
 
@@ -165,15 +165,15 @@ it.each(['opacity', 'volume'] as const)('钢笔 P 编辑 %s：点击加点、拖
   act(() => { owner.tool = 'select'; setVideoEditView(id, { frame: 1 }) })
   expect(pen.container.querySelector('path')).toBeTruthy()
 })
-it('助手同一通用事务写运动与 Lumetri 序列、读回；越界拒绝并补偿前面的写入', async () => {
+it('助手同一通用事务写运动与 ColorGrade 序列、读回；越界拒绝并补偿前面的写入', async () => {
   const { id, sequenceId, clipId, clip } = await project()
-  const [effectId] = applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'lumetri_color')
+  const [effectId] = applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'color_grade')
   const app = createApplicationHarness()
   const ref = { kind: 'video_edit.clip', id: `${id}:${clipId}` }; const effectRef = { kind: 'video_edit.effect', id: `${id}:${effectId}` }
   const points = [{ time: 0, value: 0, interpolation: 'ease' }, { time: 30, value: .5, interpolation: 'linear' }]
   try {
-    const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:lumetri_color` }, ['video_edit.builtin_effect.params']) as { properties: Record<string, unknown> }
-    expect(catalog.properties['video_edit.builtin_effect.params']).toHaveLength(requireVideoEditBuiltinEffect('lumetri_color').params.length)
+    const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:color_grade` }, ['video_edit.builtin_effect.params']) as { properties: Record<string, unknown> }
+    expect(catalog.properties['video_edit.builtin_effect.params']).toHaveLength(requireVideoEditBuiltinEffect('color_grade').params.length)
     const baseline = await app.read(ref)
     const changed = await app.call('change_application_entities', { summary: '动画与调色', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.clip.x.keyframes': points } }, { kind: 'set_properties', entityType: effectRef.kind, target: effectRef, properties: { 'video_edit.effect.frame_curves': { exposure: points.map(point => ({ ...point, value: point.value * 2 })) } } }] }, baseline.revisions as Record<string, number>)
     expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
@@ -190,7 +190,7 @@ it('助手同一通用事务写运动与 Lumetri 序列、读回；越界拒绝�
     const wheelPoints = points.map(point => ({ ...point, value: point.value * 60 }))
     const wheels = await app.change(effectRef, { 'video_edit.effect.frame_curves': { exposure: points.map(point => ({ ...point, value: point.value * 2 })), shadow_hue: wheelPoints } })
     expect(wheels, JSON.stringify(wheels)).toMatchObject({ ok: true })
-    const create = await app.call('change_application_entities', { summary: '新建动画曝光', changes: [{ kind: 'create_items', entityType: effectRef.kind, parent: ref, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:lumetri_color', 'video_edit.effect.frame_curves': { exposure: points } } }] }] }, (await app.read(ref)).revisions as Record<string, number>)
+    const create = await app.call('change_application_entities', { summary: '新建动画曝光', changes: [{ kind: 'create_items', entityType: effectRef.kind, parent: ref, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:color_grade', 'video_edit.effect.frame_curves': { exposure: points } } }] }] }, (await app.read(ref)).revisions as Record<string, number>)
     expect(create, JSON.stringify(create)).toMatchObject({ ok: true })
     expect(clip().effects?.at(-1)?.builtin?.curves?.exposure).toEqual(points)
     const shorter = await app.change(ref, { 'video_edit.clip.duration': 20 })

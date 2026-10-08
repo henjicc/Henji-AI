@@ -128,7 +128,7 @@ export default function VideoEditApp(): React.ReactElement {
   const audioDialog = useVideoEditAudioDialog(projectId)
   const focusPanel = (target: EventTarget | null): void => {
     const panel = target instanceof HTMLElement ? target.closest<HTMLElement>('[data-video-edit-panel]')?.dataset.videoEditPanel : undefined
-    if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content', 'lumetri'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
+    if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content', 'color_grade'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const hovered = useRef<Element | null>(null)

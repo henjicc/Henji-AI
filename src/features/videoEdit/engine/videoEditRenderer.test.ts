@@ -870,10 +870,10 @@ it('变速与倒放按片段速度取帧（4.13 帧采样）：正放跳帧，�
   } finally { await renderer.dispose() }
 })
 
-it('片内运动、不透明度、Lumetri 关键帧在预览与导出同一帧求值一致', async () => {
+it('片内运动、不透明度、ColorGrade 关键帧在预览与导出同一帧求值一致', async () => {
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   const points = (from: number, to: number) => [{ time: 0, value: from, interpolation: 'ease' as const }, { time: 30, value: to, interpolation: 'linear' as const }]
-  document.clips[0] = { ...document.clips[0], curves: { x: points(0, .4), y: points(0, -.2), scale: points(1, 2), rotation: points(0, 90), anchorX: points(.5, .25), opacity: points(1, .2) }, effects: [{ id: 'animated-color', name: 'Lumetri', enabled: true, amount: 1, builtin: { id: 'lumetri_color', params: {}, curves: { exposure: points(0, 2) } } }] }
+  document.clips[0] = { ...document.clips[0], curves: { x: points(0, .4), y: points(0, -.2), scale: points(1, 2), rotation: points(0, 90), anchorX: points(.5, .25), opacity: points(1, .2) }, effects: [{ id: 'animated-color', name: 'ColorGrade', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {}, curves: { exposure: points(0, 2) } } }] }
   const preview = new VideoEditRenderer(document, 1920); const exported = new VideoEditRenderer(document)
   const read = () => ({ x: boundary.evaluatedClips[0].x, y: boundary.evaluatedClips[0].y, scale: boundary.evaluatedClips[0].scale, rotation: boundary.evaluatedClips[0].rotation, anchorX: boundary.evaluatedClips[0].anchorX, opacity: boundary.evaluatedClips[0].opacity, exposure: boundary.builtinParams.at(-1)?.exposure })
   try {

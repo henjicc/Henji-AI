@@ -77,7 +77,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
         // Render-only clip clock (seconds since the clip starts): moving a clip keeps its look. Never persisted.
         const builtin = plan.builtin && { ...plan.builtin, shaderTimeSeconds: (frame - clip.start) / document.fps }
         const filtered = plan.builtin
-          ? await runtime.builtin(free[0], builtin!, result, frame, renderScale, document.lumetriLuts)
+          ? await runtime.builtin(free[0], builtin!, result, frame, renderScale, document.colorLuts)
           : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: logical.width, height: logical.height }, plan.parameters, result, plan.transitionHandles)
         current()
         if (plan.builtin && plan.mask) {

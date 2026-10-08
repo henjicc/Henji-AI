@@ -74,7 +74,7 @@ describe('剪辑面板布局', () => {
     expect(api.totalPanels).toBe(1)
   })
 
-  it.each(['annotations', 'content', 'tracking', 'lumetri', 'title_templates', 'effects_library', 'style_kits'] as const)('%s 打开、重开及浮动贴回都作为检查器标签，不增加默认分组', id => {
+  it.each(['annotations', 'content', 'tracking', 'color_grade', 'title_templates', 'effects_library', 'style_kits'] as const)('%s 打开、重开及浮动贴回都作为检查器标签，不增加默认分组', id => {
     resetVideoEditLayout(api)
     const effects = api.getPanel('effects')!
     const assertGrouped = (): void => {

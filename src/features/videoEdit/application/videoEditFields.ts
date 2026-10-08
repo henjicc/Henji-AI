@@ -91,7 +91,7 @@ schemas['video_edit.item'].graphicKind = z.enum(['solid', 'rect', 'ellipse', 'te
 schemas['video_edit.item'].graphicWidth = z.number().int().min(16).max(8192).nullable()
 schemas['video_edit.item'].graphicHeight = z.number().int().min(16).max(8192).nullable()
 schemas['video_edit.effect'].parameters = codeMaterialInstanceSchema.shape.parameters.or(videoEditBuiltinEffectInstanceSchema.shape.params.refine(value => Object.keys(value).length <= 128, '内置效果参数最多128个。'))
-schemas['video_edit.document'].lumetriLuts = z.array(z.object({ id: z.string(), name: z.string() }).strict())
+schemas['video_edit.document'].colorLuts = z.array(z.object({ id: z.string(), name: z.string() }).strict())
 schemas['video_edit.document'].timelineView = videoEditTimelineViewSchema
 schemas['video_edit.document'].mediaImport = z.object({ phase: z.enum(['enumerating', 'probing']), completed: z.number().int().nonnegative(), total: z.number().int().nonnegative(), totalKnown: z.boolean(), discovered: z.number().int().nonnegative(), queued: z.number().int().nonnegative(), requests: z.number().int().nonnegative(), imported: z.number().int().nonnegative(), skipped: z.number().int().nonnegative() }).strict().nullable()
 schemas['video_edit.document'].programPlayback = videoEditProgramPlaybackSchema
@@ -135,7 +135,7 @@ const labels: Record<string, string> = { frameCurves: '参数关键帧', effects
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', codeParameters: '代码实例参数', codeCurves: '参数关键帧', codeVersionId: '固定源码版本', linkId: '片段链接', groupId: '片段编组', sourceComponent: '使用画面或声音', syncLocked: '同步波纹编辑', hasAudio: '已检测到音轨', timelineView: '时间线选区、工具、链接选择与范围', programPlayback: '节目播放控制', playbackResolution: '节目回放分辨率', inUs: '源入点微秒', outUs: '源出点微秒', playbackDirection: '播放方向（反向静音）' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', audioStreams: '源声音流（文件顺序，每条的声道数与采样率）', audioChannels: '放入序列时的音频声道（每项一个音频片段：单声道或立体声及其源声道；空为按文件）', audioMapping: '声道映射（单声道或立体声及其源声音流与声道；空为第一条声音流原声道）' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', label: '颜色标签（空为按类型默认）', graphic: '图形对象结构', effects: '效果链', adjustment: '调整图层范围', transitions: '序列转场' })
-Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', lumetriLuts: '项目 LUT', graphicObjectIds: '图形对象顺序（从下到上）', effectIds: '效果执行顺序', adjustmentFromTrack: '调整起始轨道', graphicKind: '创建图形类型', graphicWidth: '图形宽度', graphicHeight: '图形高度', parameters: '实例参数', curves: '参数关键帧', versionId: '固定源码版本', definitionId: '滤镜源码定义', sequenceId: '所属序列', leftClipId: '左侧片段', rightClipId: '右侧片段', durationFrames: '转场时长帧' })
+Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', colorLuts: '项目 LUT', graphicObjectIds: '图形对象顺序（从下到上）', effectIds: '效果执行顺序', adjustmentFromTrack: '调整起始轨道', graphicKind: '创建图形类型', graphicWidth: '图形宽度', graphicHeight: '图形高度', parameters: '实例参数', curves: '参数关键帧', versionId: '固定源码版本', definitionId: '滤镜源码定义', sequenceId: '所属序列', leftClipId: '左侧片段', rightClipId: '右侧片段', durationFrames: '转场时长帧' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', alignment: '过渡对齐（center 中心切点、start 起点切点即整段在切点后、end 终点切点即整段在切点前、custom 自定义起点）', framesBeforeCut: '过渡在切点之前的帧数（对齐为 custom 时生效）', fadeInFrames: '淡入帧数（0 为不淡入；画面从透明渐显，声音按恒定功率渐强）', fadeOutFrames: '淡出帧数（0 为不淡出）' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）', mask: '作用区域', regionStatus: '作用区域分析状态' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', speedPercent: '速度百分比', reverse: '倒放', preservePitch: '变速时保持音调' })
@@ -186,7 +186,7 @@ const descriptions: Record<string, string> = {
   'video_edit.clip.reverse': '倒放：用到的源内容不变，播放方向反过来（画面与声音都倒放）。',
   'video_edit.clip.preserve_pitch': '变速时保持音调（时间伸缩，速度不是 100% 时生效）；关闭时声音随速度变高或变低。',
   'video_edit.effect.definition_id': '效果来源，创建后不可改：内置效果写 effect:<ID>（画面效果如 effect:gaussian_blur 只能加到画面片段；音频效果如 effect:noise_reduction、effect:parametric_eq 只能加到声音片段；全部内置效果、适用片段及参数语义见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID（只用于画面片段）。',
-  'video_edit.document.lumetri_luts': '项目已导入LUT的id与名称，只读；在效果parameters的input_lut/look_lut写该id，强度为0–100。',
+  'video_edit.document.color_luts': '项目已导入LUT的id与名称，只读；在效果parameters的input_lut/look_lut写该id，强度为0–100。',
   'video_edit.effect.parameters': '效果参数。内置效果：键与范围见 video_edit.builtin_effect 的 params（强度多为 0–100，空间量按画面高度比例，与分辨率无关）；写入是整体替换：只存写入的键，没写的键按默认值（只改一项时先读出再整体写回）；越界或未知键会报错并列出可用范围。代码滤镜：按固定源码版本声明校验。',
   'video_edit.effect.amount': '效果与原画面（音频效果为原声）的混合比例 0–1：1 完全应用，0.5 一半强度；停用效果请写 enabled。',
   'video_edit.effect.version_id': '代码滤镜的固定源码版本；内置效果为空字符串且不可写。',

@@ -12,6 +12,7 @@ description: 在剪辑里设计、编写或修改原生代码素材（动态图�
 - **先有想法再有画面**：先说“用什么画面讲哪一句”，每个装饰都要服务它。
 - **少即是多**：每个时刻一个主焦点；元素宁少而大，信息多就分拍。
 - **运动服务信息**：动作交代看哪里、先看什么、何时读完；无理由的动作删除。
+- **参数化**：可能会改的量（文字、配色、节奏、构图、强度）开放成参数，画面从参数推导；用户要求修改时先改参数。
 - **统一胜过花样**：配色、字体、间距、曲线性格与时长刻度共用一套；局部变化要有语义。
 - **节奏要有对比**：快慢、动静、大小交替；阅读停留也属于设计。
 
@@ -33,7 +34,7 @@ description: 在剪辑里设计、编写或修改原生代码素材（动态图�
 | 定气质、参数尺度或系列统一 | [风格坐标](references/styles.md) |
 | 定构图、画幅、安全框、信息层级 | [版式](references/layout.md) |
 | 标题、字幕、花字、人名条、选字体 | [文字](references/type.md) |
-| 定配色、渐变、颗粒、投影与辉光 | [色彩与质感](references/color-texture.md) |
+| 定配色、渐变、颗粒、投影与辉光，或用全能调色的 HSL 辅助校正局部颜色 | [色彩与质感](references/color-texture.md) |
 | 曲线手感、接力、动势与转场 | [运动](references/motion.md) |
 | 全片节奏、知识讲解、声画安排 | [结构](references/structure.md) |
 | 取帧、批注、A/B、返修与交付 | [审查](references/review.md) |
@@ -43,6 +44,7 @@ description: 在剪辑里设计、编写或修改原生代码素材（动态图�
 | 文字排版、量字、逐字与动效函数 | [文字与动效接口](references/author-text-motion.md) |
 | 着色器：框架组件、图层树、自己写 WGSL | [着色器接口](references/author-shaders.md)；组件目录 [纹理](references/shader-components-textures.md)（[续](references/shader-components-textures-2.md)）、[图形材质](references/shader-components-shapes.md)（[续](references/shader-components-shapes-2.md)）、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
 | 处理用户标注/批注 | [标注处理协议](references/annotations.md) |
+| 开放哪些参数、组件化拆分、用户要求修改时怎么改 | [参数化与组件化](references/parametric.md) |
 | 参数声明、实例值、关键帧、新版本绑定 | [参数与曲线](references/parameters-curves.md) |
 | 定位目标、插入、时间换算、撤销与恢复 | [时间线契约](references/timeline-check.md) |
 | 需要完整可对照的提交写法 | [接口样例](references/examples.md) |

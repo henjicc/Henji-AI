@@ -94,14 +94,14 @@ it('预览与导出 Worker 接收完整嵌套图，子序列保持原始尺寸/P
 
 it('LUT 在预览/导出共用会话边界授权并转换，新引用更新后也转换；项目路径保持原样', async () => {
   const path = resolve(sep, 'luts', 'look.cube').replace(/\\/g, '/'); const root = resolve(sep, 'luts').replace(/\\/g, '/'); const other = resolve(sep, 'other', 'input.cube').replace(/\\/g, '/')
-  const document = { ...composition(), lumetriLuts: [{ id: 'lut', name: 'Look', path, contentIdentity: 'a'.repeat(64) }] }
+  const document = { ...composition(), colorLuts: [{ id: 'lut', name: 'Look', path, contentIdentity: 'a'.repeat(64) }] }
   const session = new VideoEditRenderSession(document); await session.present(0)
   expect(platform.allowRoot).toHaveBeenCalledWith(root)
   const init = workers[0].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
-  expect(init.document.lumetriLuts?.[0].path).toBe(`url:${path}`); expect(document.lumetriLuts[0].path).toBe(path)
-  await session.updateDocument({ ...document, lumetriLuts: [...document.lumetriLuts, { ...document.lumetriLuts[0], id: 'new', path: other }] })
+  expect(init.document.colorLuts?.[0].path).toBe(`url:${path}`); expect(document.colorLuts[0].path).toBe(path)
+  await session.updateDocument({ ...document, colorLuts: [...document.colorLuts, { ...document.colorLuts[0], id: 'new', path: other }] })
   expect(platform.allowRoot).toHaveBeenCalledTimes(2)
-  expect(workers[0].messages.at(-1)?.message).toMatchObject({ kind: 'update', document: { lumetriLuts: [{ path: `url:${path}` }, { path: `url:${other}` }] } })
+  expect(workers[0].messages.at(-1)?.message).toMatchObject({ kind: 'update', document: { colorLuts: [{ path: `url:${path}` }, { path: `url:${other}` }] } })
   await session.dispose()
 })
 

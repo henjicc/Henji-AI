@@ -14,13 +14,13 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'annotations', title: '批注' },
   { id: 'content', title: '字幕与标记' },
   { id: 'tracking', title: '跟踪' },
-  { id: 'lumetri', title: 'Lumetri 颜色' },
+  { id: 'color_grade', title: '全能调色' },
   // PR“效果”面板：视频／音频过渡与效果的预设库，拖到时间线编辑点或片段上（4.3）。
   { id: 'effects_library', title: '效果' },
   { id: 'title_templates', title: '基本图形' },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
-const INSPECTOR_PANELS: readonly string[] = ['effects', 'title_templates', 'effects_library', 'style_kits', 'annotations', 'content', 'tracking', 'lumetri']
+const INSPECTOR_PANELS: readonly string[] = ['effects', 'title_templates', 'effects_library', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade']
 
 function inspectorReference(api: DockviewApi, id: string, own?: DockviewGroupPanel): IDockviewPanel | undefined {
   if (!INSPECTOR_PANELS.includes(id)) return undefined
@@ -29,7 +29,7 @@ function inspectorReference(api: DockviewApi, id: string, own?: DockviewGroupPan
 
 /** A view-only layout: no project content, selection or transport state is serialized. */
 export function defaultVideoEditLayout(): SerializedDockview {
-  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'annotations' && panel.id !== 'source' && panel.id !== 'content' && panel.id !== 'tracking' && panel.id !== 'lumetri').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
+  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'annotations' && panel.id !== 'source' && panel.id !== 'content' && panel.id !== 'tracking' && panel.id !== 'color_grade').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
   return {
     grid: {
       width: 1440, height: 860, orientation: Orientation.HORIZONTAL,
