@@ -14,7 +14,6 @@ import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } fro
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
-import { paintVideoEditGraphic } from './videoEditGraphicSurface'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
@@ -28,6 +27,7 @@ import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { DEFAULT_STYLE_TOKENS, resolveVideoEditStyleKit, styleKitRenderKey } from '@/core/videoEdit/styleKit'
 import { bindCodeMaterialStyle } from '@/core/videoEdit/codeMaterial/style'
 import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
+import { videoEditTextResolution } from './videoEditTextSurface'
 
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
@@ -170,9 +170,10 @@ export class VideoEditCodeSources {
           if (!prepared) { prepared = prepareVideoEditGraphic(clip.graphic); this.graphics.set(clip.graphic, prepared) }
           const time = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionByClip.has(clip.id))
           const draws = evaluateVideoEditGraphic(prepared, time)
-          const target = `graphic:static:${JSON.stringify([prepared.width, prepared.height, draws, draws.some(draw => draw.textStyle) ? documentFontRevision() : 0])}`
+          const moving = prepared.objects.some(object => object.parameters.curves.size > 0)
+          const target = moving ? `graphic:dynamic:${clip.id}` : `graphic:static:${JSON.stringify([prepared.width, prepared.height, draws, draws.some(draw => draw.textStyle) ? documentFontRevision() : 0, videoEditTextResolution(Math.min(document.width / prepared.width, document.height / prepared.height) * clip.scale)])}`
           keys.add(target)
-          plans.push({ clip, key: target, static: true, draws, parameters: {}, transitionHandles: transitionByClip.has(clip.id), context: { width: prepared.width, height: prepared.height, time: time.sourceInUs / 1e6 + time.sourceRemainder.numerator / time.sourceRemainder.denominator / 1e6, localTime: (frame - clip.start) / document.fps, sequenceTime: frame / document.fps, frame, fps: document.fps } })
+          plans.push({ clip, key: target, static: !moving, draws, parameters: {}, transitionHandles: transitionByClip.has(clip.id), context: { width: prepared.width, height: prepared.height, time: time.sourceInUs / 1e6 + time.sourceRemainder.numerator / time.sourceRemainder.denominator / 1e6, localTime: (frame - clip.start) / document.fps, sequenceTime: frame / document.fps, frame, fps: document.fps } })
           continue
         }
         if (clip.kind !== 'code') continue
@@ -208,14 +209,8 @@ export class VideoEditCodeSources {
           if (picture) result.cacheHits++
           else {
             if (plan.draws) {
-              if (plan.draws.some(draw => draw.textStyle)) {
-                const surface = new OffscreenCanvas(plan.context.width, plan.context.height)
-                paintVideoEditGraphic(surface.getContext('2d')!, plan.draws, surface.width, surface.height)
-                picture = surface.transferToImageBitmap()
-              } else {
-                if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
-                picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws)
-              }
+              if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
+              picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws, undefined, Math.min(document.width / plan.context.width, document.height / plan.context.height) * plan.clip.scale)
             } else picture = await this.runtime!.generator(plan.key, plan.program!, plan.context, plan.parameters, inputs, plan.transitionHandles, plan.clip.elementOverrides ? { elementOverrides: plan.clip.elementOverrides, sourceTime: videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static') } : undefined)
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)

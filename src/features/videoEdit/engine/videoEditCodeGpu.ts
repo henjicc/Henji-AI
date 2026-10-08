@@ -2,7 +2,7 @@ import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from 
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
-import { CODE_MATERIAL_LIMITS, CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
+import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand, CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
@@ -18,6 +18,8 @@ import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
 import { VideoEditCodeGpuV3 } from './videoEditCodeGpuV3'
 import { createLogger } from '@/core/logging'
 import { videoEditGpuBytesPerPixel, VIDEO_EDIT_PRECISE_FORMAT, type VideoEditGpuColorFormat } from './videoEditGpuFrame'
+import { rasterizeVideoEditText, videoEditTextResolution } from './videoEditTextSurface'
+import { documentFontRevision } from '@/platform/fontFaces'
 
 const MAX_RESIDENT_BYTES = 256 * 1024 ** 2
 /**
@@ -26,7 +28,6 @@ const MAX_RESIDENT_BYTES = 256 * 1024 ** 2
  * 8-bit budget above is unchanged.
  */
 const MAX_PRECISE_RESIDENT_BYTES = 512 * 1024 ** 2
-const MAX_SURFACES = 16
 const codeLogger = createLogger('features.videoEdit.codeGpu')
 const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
 const shapeShader = `
@@ -84,7 +85,7 @@ export class VideoEditCodePicture {
 interface Surface { picture: VideoEditCodePicture; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer; maskData?: Uint8Array; maskRgba?: Uint8Array }
 /** A filter version's compiled pipelines, one per output format. */
 interface CompiledFilter { program: CodeMaterialProgram; pipelines: Map<VideoEditGpuColorFormat, GpuRenderPipeline>; transitionHandles: boolean }
-interface Glyph { texture: GpuTexture; width: number; height: number; bytes: number }
+interface Glyph { texture: GpuTexture; width: number; height: number; bytes: number; x?: number; y?: number }
 interface FilterLayoutDevice {
   createBindGroupLayout(descriptor: unknown): unknown
   createPipelineLayout(descriptor: unknown): unknown
@@ -230,7 +231,6 @@ export class VideoEditCodeGpu {
     let surface = this.surfaces.get(key)
     if (surface && (surface.picture.width !== width || surface.picture.height !== height || surface.picture.textureFormat !== format)) { this.releaseSurface(key); surface = undefined }
     if (!surface) {
-      if (this.surfaces.size >= MAX_SURFACES) throw new CodeMaterialError('BUDGET', '代码素材同时最多16个渲染目标。')
       const texture = this.texture(width, height, format)
       surface = { picture: new VideoEditCodePicture(texture, width, height, this.device, format), bytes: width * height * videoEditGpuBytesPerPixel(format), buffers: [] }
       this.surfaces.set(key, surface)
@@ -249,7 +249,6 @@ export class VideoEditCodeGpu {
       if (!oldest) break
       oldest[1].texture.destroy(); this.bytes -= oldest[1].bytes; this.glyphs.delete(oldest[0])
     }
-    if (this.glyphs.size >= 64) throw new CodeMaterialError('BUDGET', '同帧最多64份不同标题字形。')
     const canvas = new OffscreenCanvas(width, height); const context = canvas.getContext('2d')!
     context.font = metrics.font; context.fillStyle = 'white'; context.textBaseline = 'middle'
     context.fillText(command.text, metrics.offsetX, height / 2)
@@ -259,6 +258,26 @@ export class VideoEditCodeGpu {
     this.counts.externalCopies++
     const value = { texture, width, height, bytes: width * height * 4 }; this.glyphs.set(key, value)
     return value
+  }
+  private styledGlyphKey(draw: VideoEditGraphicDraw, width: number, height: number, scale: number): string {
+    return JSON.stringify(['styled', width, height, draw.command.kind === 'text' ? draw.command.text : '', draw.textStyle, documentFontRevision(), videoEditTextResolution((draw.scale ?? 1) * scale)])
+  }
+  private styledGlyph(draw: VideoEditGraphicDraw, width: number, height: number, scale: number, protectedKeys: ReadonlySet<string>): Glyph {
+    if (draw.command.kind !== 'text' || !draw.textStyle) throw new Error('图形文字缺少共享样式。')
+    const key = this.styledGlyphKey(draw, width, height, scale); const cached = this.glyphs.get(key)
+    if (cached) { this.glyphs.delete(key); this.glyphs.set(key, cached); return cached }
+    const raster = rasterizeVideoEditText({ text: draw.command.text, textStyle: draw.textStyle }, { width, height }, videoEditTextResolution((draw.scale ?? 1) * scale))
+    const bytes = raster.canvas.width * raster.canvas.height * 4
+    for (const [oldKey, old] of this.glyphs) {
+      if (this.bytes - this.preciseBytes + bytes <= MAX_RESIDENT_BYTES && this.glyphs.size < 64) break
+      if (protectedKeys.has(oldKey)) continue
+      old.texture.destroy(); this.bytes -= old.bytes; this.glyphs.delete(oldKey)
+    }
+    const texture = this.texture(raster.canvas.width, raster.canvas.height)
+    try { this.device.queue.copyExternalImageToTexture({ source: raster.canvas }, { texture, premultipliedAlpha: false }, [raster.canvas.width, raster.canvas.height]) }
+    catch (error) { texture.destroy(); this.bytes -= bytes; throw error }
+    this.counts.externalCopies++
+    const value = { texture, width: raster.width, height: raster.height, x: raster.x, y: raster.y, bytes }; this.glyphs.set(key, value); return value
   }
   private submit(encoder: ReturnType<GpuDevice['createCommandEncoder']>): void {
     this.device.queue.submit([encoder.finish()]); this.pending = this.device.queue.onSubmittedWorkDone()
@@ -280,12 +299,12 @@ export class VideoEditCodeGpu {
     return this.draw(key, context.width, context.height, commands.map(command => ({ command, rotation: 0, pivotX: 0, pivotY: 0 })), images)
   }
   /** Structured graphics and trusted generator IR use one drawing/glyph/cache implementation. */
-  async draw(key: string, width: number, height: number, draws: readonly VideoEditGraphicDraw[], images?: ReadonlyMap<string, VideoEditCodeImageInput>): Promise<VideoEditCodePicture> {
-    if (draws.length > CODE_MATERIAL_LIMITS.draws || draws.some(draw => !Number.isFinite(draw.rotation) || Math.abs(draw.rotation) > 360 || ![draw.pivotX, draw.pivotY].every(value => Number.isFinite(value) && Math.abs(value) <= 32768))) throw new CodeMaterialError('BUDGET', '图形数量或独立变换超出范围。')
+  async draw(key: string, width: number, height: number, draws: readonly VideoEditGraphicDraw[], images?: ReadonlyMap<string, VideoEditCodeImageInput>, rasterScale = 1): Promise<VideoEditCodePicture> {
+    // The author-language evaluator owns its execution limits. Structured graphics have no product object-count cap.
+    if (draws.some(draw => !Number.isFinite(draw.rotation) || Math.abs(draw.rotation) > 360 || ![draw.pivotX, draw.pivotY].every(value => Number.isFinite(value) && Math.abs(value) <= 32768))) throw new CodeMaterialError('BUDGET', '图形独立变换超出技术范围。')
     const commands = draws.map(draw => draw.command)
     const context = { width, height }
-    const usedGlyphs = new Set(commands.flatMap(command => command.kind === 'text' && command.text ? [JSON.stringify([command.text, command.fontSize, command.fontFamily])] : []))
-    if (usedGlyphs.size > 64) throw new CodeMaterialError('BUDGET', '同帧最多64份不同标题字形。')
+    const usedGlyphs = new Set(draws.flatMap(draw => draw.command.kind === 'text' && draw.command.text ? [draw.textStyle ? this.styledGlyphKey(draw, width, height, rasterScale) : JSON.stringify([draw.command.text, draw.command.fontSize, draw.command.fontFamily])] : []))
     await this.ready; this.assertLive()
     const inputs = new Map<string, { input: VideoEditCodeImageInput; view: unknown }>()
     for (const command of commands) if (command.kind === 'image' && !inputs.has(command.source.mediaId)) {
@@ -297,10 +316,13 @@ export class VideoEditCodeGpu {
       if (input.texture === this.surfaces.get(key)?.picture.texture) throw new CodeMaterialError('CONTEXT', '代码图片输入输出不能引用同一纹理。')
       inputs.set(command.source.mediaId, { input, view: input.texture.createView() })
     }
-    if (commands.some(command => command.kind === 'image' && command.width > 0 && command.height > 0 && command.opacity > 0)) await this.prepareImagePipeline()
+    if (draws.some(draw => draw.textStyle) || commands.some(command => command.kind === 'image' && command.width > 0 && command.height > 0 && command.opacity > 0)) await this.prepareImagePipeline()
     this.assertLive()
     for (const { input } of inputs.values()) this.assertInput(input.texture)
-    const target = this.surface(key, context.width, context.height)
+    // Preserve the higher-resolution glyph through the graphic's intermediate target when the whole clip is enlarged.
+    // The existing single-texture 8192px limit bounds this target tier; all allocations retain the resident-byte owner.
+    const outputResolution = draws.some(draw => draw.textStyle) ? Math.min(videoEditTextResolution(rasterScale), 2 ** Math.max(0, Math.floor(Math.log2(8192 / Math.max(width, height))))) : 1
+    const target = this.surface(key, context.width * outputResolution, context.height * outputResolution)
     const encoder = this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
     commands.forEach((command, index) => {
@@ -311,8 +333,13 @@ export class VideoEditCodeGpu {
         box = [command.x, command.y, command.width, command.height]; color = [1, 1, 1, command.opacity]; radius = image.input.premultiplied ? 1 : 0
       } else if (command.kind === 'text') {
         if (!command.text) return
-        glyph = this.glyph(command, usedGlyphs)
-        box = [command.x - (command.align === 'center' ? glyph.width / 2 : command.align === 'right' ? glyph.width : 0), command.y - glyph.height / 2, glyph.width, glyph.height]; color = command.color
+        if (draws[index].textStyle) {
+          glyph = this.styledGlyph(draws[index], width, height, rasterScale, usedGlyphs)
+          box = [command.x + glyph.x!, command.y + glyph.y!, glyph.width, glyph.height]; color = [1, 1, 1, draws[index].opacity ?? 1]
+        } else {
+          glyph = this.glyph(command, usedGlyphs)
+          box = [command.x - (command.align === 'center' ? glyph.width / 2 : command.align === 'right' ? glyph.width : 0), command.y - glyph.height / 2, glyph.width, glyph.height]; color = command.color
+        }
       } else if (command.kind === 'line') {
         radius = command.width / 2; kind = 2; color = command.color
         box = [Math.min(command.x1, command.x2) - radius, Math.min(command.y1, command.y2) - radius, Math.abs(command.x2 - command.x1) + command.width, Math.abs(command.y2 - command.y1) + command.width]; endpoints = [command.x1, command.y1, command.x2, command.y2]
@@ -322,8 +349,10 @@ export class VideoEditCodeGpu {
       let buffer = target.buffers[index]
       if (!buffer) { buffer = this.device.createBuffer({ size: 80, usage: 0x08 | 0x40 }); target.buffers[index] = buffer }
       const transform = draws[index]; const rotation = transform.rotation * Math.PI / 180
+      const scale = transform.scale ?? 1
+      box = [transform.pivotX + (box[0] - transform.pivotX) * scale, transform.pivotY + (box[1] - transform.pivotY) * scale, box[2] * scale, box[3] * scale]
       this.device.queue.writeBuffer(buffer, 0, new Float32Array([...box, ...color, ...endpoints, context.width, context.height, radius, kind, Math.cos(rotation), Math.sin(rotation), transform.pivotX, transform.pivotY]))
-      const pipeline = image ? this.image! : glyph ? this.text : this.shape
+      const pipeline = image || transform.textStyle ? this.image! : glyph ? this.text : this.shape
       pass.setPipeline(pipeline)
       pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer } }, ...(image || glyph ? [{ binding: 1, resource: image ? image.view : glyph!.texture.createView() }, { binding: 2, resource: this.sampler }] : [])] }))
       pass.draw(6)

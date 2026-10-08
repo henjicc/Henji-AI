@@ -1,15 +1,16 @@
-import { layoutVideoEditText, videoEditTextAdvances, videoEditTextCharacters, videoEditTextWidth, videoEditTextFont, type VideoEditTextContent } from '@/core/videoEdit/text'
+import { layoutVideoEditText, videoEditTextAdvances, videoEditTextCharacters, videoEditTextWidth, videoEditTextFont, type VideoEditTextContent, type VideoEditTextLayout } from '@/core/videoEdit/text'
 import { WHITE_HEX } from '@/core/theme/colorTokens'
 
 type Context = OffscreenCanvasRenderingContext2D
 /** Native shaping for whole runs, with individual advances only when typography changes glyphs. */
-export function paintVideoEditText(context: Context, clip: VideoEditTextContent, width: number, height: number, origin = { x: width / 2, y: height / 2 }): void {
+export function paintVideoEditText(context: Context, clip: VideoEditTextContent, width: number, height: number, origin = { x: width / 2, y: height / 2 }, prepared?: VideoEditTextLayout, resolution = 1): void {
   const measure = (text: string, font: string): number => { context.font = font; context.fontKerning = (clip.textStyle?.kerning ?? 'auto') === 'auto' ? 'normal' : 'none'; return context.measureText(text).width }
-  const layout = layoutVideoEditText(clip, { width, height }, measure)
+  const layout = prepared ? { ...prepared } : layoutVideoEditText(clip, { width, height }, measure)
   layout.left += origin.x - width / 2; layout.top += origin.y - height / 2; layout.contentTop += origin.y - height / 2
   const { style, lines, lineHeight } = layout
-  const glyphs = new OffscreenCanvas(width, height); const mask = glyphs.getContext('2d')!
-  const layer = new OffscreenCanvas(width, height); const ink = layer.getContext('2d')!
+  const glyphs = new OffscreenCanvas(Math.ceil(width * resolution), Math.ceil(height * resolution)); const mask = glyphs.getContext('2d')!
+  const layer = new OffscreenCanvas(glyphs.width, glyphs.height); const ink = layer.getContext('2d')!
+  if (resolution !== 1) { mask.scale(resolution, resolution); ink.scale(resolution, resolution) }
   const draw = (target: Context, stroke = 0): void => {
     target.save(); target.textBaseline = 'middle'; target.textAlign = 'left'; target.lineJoin = 'round'; target.fontKerning = style.kerning === 'auto' ? 'normal' : 'none'
     target.fillStyle = WHITE_HEX; target.strokeStyle = WHITE_HEX; target.lineWidth = stroke * 2
@@ -49,17 +50,65 @@ export function paintVideoEditText(context: Context, clip: VideoEditTextContent,
   for (const shadow of style.shadows) if (shadow.enabled && shadow.opacity) {
     reset(); draw(ink); if (shadow.size) draw(ink, shadow.size); tint(shadow.color)
     const radians = shadow.angle * Math.PI / 180
-    context.globalAlpha = shadow.opacity; context.filter = `blur(${shadow.blur}px)`
-    context.drawImage(layer, Math.cos(radians) * shadow.distance, Math.sin(radians) * shadow.distance)
+    context.globalAlpha = shadow.opacity; context.filter = `blur(${shadow.blur * resolution}px)`
+    context.drawImage(layer, Math.cos(radians) * shadow.distance, Math.sin(radians) * shadow.distance, width, height)
     context.filter = 'none'; context.globalAlpha = 1
   }
-  if (style.fill.enabled) { reset(); ink.drawImage(glyphs, 0, 0); tint(style.fill.color); context.drawImage(layer, 0, 0) }
+  if (style.fill.enabled) { reset(); ink.drawImage(glyphs, 0, 0, width, height); tint(style.fill.color); context.drawImage(layer, 0, 0, width, height) }
   // Widest outline first; masks preserve true interior/exterior boundaries, including holes.
   const extent = (stroke: typeof style.strokes[number]): number => stroke.position === 'inside' ? 0 : stroke.width * (stroke.position === 'center' ? .5 : 1)
   for (const stroke of style.strokes.filter(stroke => stroke.enabled && stroke.width).sort((a, b) => extent(b) - extent(a) || b.width - a.width)) {
     reset(); draw(ink, stroke.position === 'center' ? stroke.width / 2 : stroke.width)
-    if (stroke.position !== 'center') { ink.globalCompositeOperation = stroke.position === 'inside' ? 'destination-in' : 'destination-out'; ink.drawImage(glyphs, 0, 0) }
-    tint(stroke.color); context.drawImage(layer, 0, 0)
+    if (stroke.position !== 'center') { ink.globalCompositeOperation = stroke.position === 'inside' ? 'destination-in' : 'destination-out'; ink.drawImage(glyphs, 0, 0, width, height) }
+    tint(stroke.color); context.drawImage(layer, 0, 0, width, height)
   }
   context.restore()
+}
+
+/** Integer power-of-two tiers keep continuous motion out of raster identity, without undersampling magnified text. */
+export function videoEditTextResolution(scale: number): number { return 2 ** Math.max(0, Math.ceil(Math.log2(Math.max(1, scale)) - 1e-10)) }
+export interface VideoEditTextRaster { canvas: OffscreenCanvas; x: number; y: number; width: number; height: number }
+/** Bounds are relative to the text origin, including glyph overhangs, shifted baselines and all appearance layers. */
+export function rasterizeVideoEditText(clip: VideoEditTextContent, frame: { width: number; height: number }, resolution = 1): VideoEditTextRaster {
+  const probe = new OffscreenCanvas(1, 1).getContext('2d')!
+  let overhang = 0; let ascent = 0; let descent = 0
+  const measure = (text: string, font: string): number => {
+    probe.font = font; probe.textBaseline = 'middle'; probe.fontKerning = (clip.textStyle?.kerning ?? 'auto') === 'auto' ? 'normal' : 'none'
+    const metrics = probe.measureText(text)
+    overhang = Math.max(overhang, metrics.actualBoundingBoxLeft || 0, (metrics.actualBoundingBoxRight || metrics.width) - metrics.width)
+    ascent = Math.max(ascent, metrics.actualBoundingBoxAscent || 0); descent = Math.max(descent, metrics.actualBoundingBoxDescent || 0)
+    return metrics.width
+  }
+  const layout = layoutVideoEditText(clip, frame, measure)
+  const { style } = layout
+  // Negative tracking and a paragraph narrower than a single glyph can paint outside the layout box.
+  let left = layout.left; let right = layout.left + layout.width
+  layout.lines.forEach((line, row) => {
+    const characters = videoEditTextCharacters(line, style); const advances = videoEditTextAdvances(line, style, measure)
+    const natural = videoEditTextWidth(line, style, measure)
+    const justify = style.align.startsWith('justify') && (style.align === 'justify-all' || row < layout.lines.length - 1)
+    const spaces = characters.filter(character => /\s/u.test(character.text)).length; const slots = spaces || Math.max(0, characters.length - 1)
+    const extra = justify && slots ? Math.max(0, layout.width - natural) / slots : 0
+    let x = layout.left + (justify ? 0 : style.align === 'center' || style.align === 'justify-center' ? (layout.width - natural) / 2 : style.align === 'right' || style.align === 'justify-right' ? layout.width - natural : 0)
+    for (const [index, character] of characters.entries()) {
+      left = Math.min(left, x); right = Math.max(right, x + measure(character.text, videoEditTextFont(style, character.size)))
+      x += advances[index] + (spaces ? /\s/u.test(character.text) ? extra : 0 : index < characters.length - 1 ? extra : 0)
+    }
+  })
+  const glyphPad = Math.max(style.fontSize, overhang, ascent, descent) + (style.fauxItalic ? style.fontSize * .4 : 0)
+  const strokePad = Math.max(0, ...style.strokes.filter(stroke => stroke.enabled).map(stroke => stroke.position === 'inside' ? 0 : stroke.width))
+  const shadowPad = Math.max(0, ...style.shadows.filter(shadow => shadow.enabled && shadow.opacity).map(shadow => shadow.distance + shadow.size + shadow.blur * 4))
+  const pad = Math.ceil(Math.max(strokePad + shadowPad, style.background.enabled ? style.background.padding : 0) + glyphPad + 2)
+  const shift = -style.baselineShift + (style.superscript ? -style.fontSize * .35 : style.subscript ? style.fontSize * .2 : 0)
+  const x = Math.floor(left - frame.width / 2 - pad)
+  const y = Math.floor(Math.min(layout.top, layout.contentTop + shift) - frame.height / 2 - pad)
+  const width = Math.max(1, Math.ceil(right - frame.width / 2 - x + pad))
+  const height = Math.max(1, Math.ceil(Math.max(layout.top + layout.height, layout.contentTop + layout.lines.length * layout.lineHeight + shift) - frame.height / 2 - y + pad))
+  // Match the existing GPU upload limit before allocating the three temporary raster surfaces.
+  if (width * resolution > 8192 || height * resolution > 8192) throw new Error('文字栅格超过 GPU 单张纹理 8192 像素技术范围。')
+  const canvas = new OffscreenCanvas(Math.ceil(width * resolution), Math.ceil(height * resolution)); const context = canvas.getContext('2d')!
+  if (resolution !== 1) context.scale(resolution, resolution)
+  const local = { ...layout, left: layout.left - frame.width / 2 - x, top: layout.top - frame.height / 2 - y, contentTop: layout.contentTop - frame.height / 2 - y }
+  paintVideoEditText(context, clip, width, height, { x: width / 2, y: height / 2 }, local, resolution)
+  return { canvas, x, y, width, height }
 }

@@ -7,8 +7,10 @@ import { TrustedShaderLibraryRenderer } from './shaderLibrary/render'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import diffusionSource from '@/core/imageEdit/shaders/diffusion.wgsl?raw'
 import { renderScatterPyramid } from '@/core/imageEdit/webgpu/scatterPyramidRenderer'
+import { documentFontRevision } from '@/platform/fontFaces'
+import { videoEditTextResolution } from './videoEditTextSurface'
 
-interface Image { texture: GpuTexture; width: number; height: number; x: number; y: number }
+interface Image { texture: GpuTexture; width: number; height: number; x: number; y: number; resolution?: number }
 interface CachedImage extends Image { bytes: number; used: boolean; glyph?: boolean }
 interface Allocator { allocate(width: number, height: number): GpuTexture; release(texture: GpuTexture): void }
 type Encoder = ReturnType<GpuDevice['createCommandEncoder']>
@@ -90,8 +92,9 @@ function canvasPaint(context: OffscreenCanvasRenderingContext2D, paint: CodePain
 }
 /** No blur/shadow/filter is run on Canvas. Rasterization is cached and independent of animation transforms. */
 export function rasterizeCodeShape(command: CodeDrawCommand, image: Omit<Image, 'texture'>): OffscreenCanvas {
-  const canvas = new OffscreenCanvas(image.width, image.height); const context = canvas.getContext('2d')
+  const canvas = new OffscreenCanvas(Math.ceil(image.width * (image.resolution ?? 1)), Math.ceil(image.height * (image.resolution ?? 1))); const context = canvas.getContext('2d')
   if (!context) throw new CodeMaterialError('CONTEXT', '无法创建代码图形栅格环境。')
+  if ((image.resolution ?? 1) !== 1) context.scale(image.resolution!, image.resolution!)
   context.translate(-image.x, -image.y)
   context.fillStyle = canvasPaint(context, command.paint ?? ('fill' in command ? command.fill : 'color' in command ? command.color : [1, 1, 1, 1]))
   if (command.stroke) context.strokeStyle = canvasPaint(context, command.stroke)
@@ -268,31 +271,41 @@ export class VideoEditCodeGpuV3 {
       return current
     } finally { temporaries.forEach(release => release()) }
   }
-  private async raster(command: CodeDrawCommand): Promise<Image> {
+  private async raster(command: CodeDrawCommand, matrix: CodeMatrix): Promise<Image> {
+    const position = command.kind === 'text' ? { x: command.x, y: command.y } : { x: 0, y: 0 }
+    if (command.kind === 'text') {
+      const localPaint = (paint: CodePaint | undefined): CodePaint | undefined => !paint || Array.isArray(paint) ? paint : { ...paint, ...(paint.kind === 'linearGradient' ? { x1: paint.x1! - position.x, y1: paint.y1! - position.y, x2: paint.x2! - position.x, y2: paint.y2! - position.y } : { cx: paint.cx! - position.x, cy: paint.cy! - position.y }) }
+      command = { ...command, x: 0, y: 0, paint: localPaint(command.paint), stroke: localPaint(command.stroke) }
+    }
+    // Largest singular value includes nested rotation, non-uniform scale and shear.
+    const [a, b, c, d] = matrix; const trace = a * a + b * b + c * c + d * d; const determinant = a * d - b * c
+    const resolution = command.kind === 'text' ? videoEditTextResolution(Math.sqrt((trace + Math.sqrt(Math.max(0, trace * trace - 4 * determinant * determinant))) / 2)) : 1
     const box = codeLocalBounds(command)
     const padding = Math.ceil(Math.max(command.strokeWidth ?? 0, command.kind === 'line' ? command.width : 0) / 2 + Math.max(command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0)) + 2)
     const dimensions = { x: Math.floor(box.x - padding), y: Math.floor(box.y - padding), width: Math.max(1, Math.ceil(box.width + padding * 2)), height: Math.max(1, Math.ceil(box.height + padding * 2)) }
-    const { elementId: _id, elementPath: _path, sourceSpan: _span, opacity: _opacity, rotation: _rotation, scaleX: _sx, scaleY: _sy, anchorX: _ax, anchorY: _ay, blend: _blend, ...content } = command
-    void _id; void _path; void _span; void _opacity; void _rotation; void _sx; void _sy; void _ax; void _ay; void _blend
+    const { elementId: _id, elementPath: _path, sourceSpan: _span, opacity: _opacity, rotation: _rotation, scaleX: _sx, scaleY: _sy, anchorX: _ax, anchorY: _ay, blend: _blend, elementTransform: _transform, ...content } = command
+    void _id; void _path; void _span; void _opacity; void _rotation; void _sx; void _sy; void _ax; void _ay; void _blend; void _transform
     const positioned = 'x' in content && 'y' in content && (!command.paint || Array.isArray(command.paint)) && (!command.stroke || Array.isArray(command.stroke))
-    const key = JSON.stringify(positioned ? { ...content, x: 0, y: 0 } : content)
+    const key = JSON.stringify([positioned ? { ...content, x: 0, y: 0 } : content, command.kind === 'text' ? documentFontRevision() : 0, resolution])
+    const placed = (image: Image): Image => ({ ...image, width: image.width / resolution, height: image.height / resolution, x: dimensions.x + position.x, y: dimensions.y + position.y })
     const cached = this.cached.get(key)
-    if (cached) { cached.used = true; this.cached.delete(key); this.cached.set(key, cached); return { ...cached, x: dimensions.x, y: dimensions.y } }
-    const bytes = dimensions.width * dimensions.height * 4
+    if (cached) { cached.used = true; this.cached.delete(key); this.cached.set(key, cached); return placed(cached) }
+    const bytes = dimensions.width * dimensions.height * resolution * resolution * 4
     while (this.cachedBytes + bytes > 48 * 1024 ** 2 && this.cached.size) {
       const oldest = [...this.cached].find(([, value]) => !value.used); if (!oldest) break
       this.release(oldest[1]); this.cachedBytes -= oldest[1].bytes; this.cached.delete(oldest[0])
     }
-    const canvas = await this.rasterize(command, dimensions); const raw = this.image(dimensions.width, dimensions.height, dimensions.x, dimensions.y); raw.glyph = command.kind === 'text'
+    const canvas = await this.rasterize(command, { ...dimensions, resolution }); const raw = this.image(dimensions.width * resolution, dimensions.height * resolution, dimensions.x * resolution, dimensions.y * resolution); raw.glyph = command.kind === 'text'
     try {
       this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: raw.texture, premultipliedAlpha: true }, [raw.width, raw.height]); this.counts.uploads++
-      const effected = await this.effects(raw, command, `raster:${key}`)
+      const appearance = resolution === 1 ? command : { ...command, blur: (command.blur ?? 0) * resolution, ...(command.glow ? { glow: { ...command.glow, radius: command.glow.radius * resolution } } : {}), ...(command.shadow ? { shadow: { ...command.shadow, x: command.shadow.x * resolution, y: command.shadow.y * resolution, blur: command.shadow.blur * resolution } } : {}) }
+      const effected = await this.effects(raw, appearance, `raster:${key}`)
       // Cache only the final texture, never one scratch layer for every historical radius/paint value.
       if (effected !== raw) {
         const final = this.image(raw.width, raw.height, raw.x, raw.y); const encoder = this.device.createCommandEncoder(); this.clear(encoder, final); this.paint(encoder, final, { ...effected, x: 0, y: 0 }, CODE_IDENTITY, 1, 'textured'); this.submit(encoder); this.release(raw)
-        final.glyph = raw.glyph; this.cached.set(key, final); this.cachedBytes += final.bytes; return final
+        final.glyph = raw.glyph; this.cached.set(key, final); this.cachedBytes += final.bytes; return placed(final)
       }
-      this.cached.set(key, raw); this.cachedBytes += raw.bytes; return raw
+      this.cached.set(key, raw); this.cachedBytes += raw.bytes; return placed(raw)
     } catch (error) { this.release(raw); throw error }
   }
   private shaderRenderer(): TrustedShaderLibraryRenderer {
@@ -387,7 +400,7 @@ export class VideoEditCodeGpuV3 {
         this.clear(encoder, layer); this.paint(encoder, layer, { texture: image.texture, x: pad, y: pad, width: command.width, height: command.height }, CODE_IDENTITY, 1, 'textured', [1, 1, 1, 1], [0, 0, 0, image.premultiplied ? 1 : 0]); flush()
         await composite(await this.effects(layer, command, key), target, matrix, opacity, command.blend ?? 'normal', key); return
       }
-      const raster = await this.raster(command); await composite(raster, target, matrix, opacity, command.blend ?? 'normal', key)
+      const raster = await this.raster(command, matrix); await composite(raster, target, matrix, opacity, command.blend ?? 'normal', key)
     }
     const composite = async (image: Image, target: Image, matrix: CodeMatrix, opacity: number, mode: CodeBlend, key: string): Promise<void> => {
       if (mode === 'normal') { this.paint(encoder, target, image, matrix, opacity, 'textured'); return }

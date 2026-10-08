@@ -193,6 +193,36 @@ it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后�
   copies.forEach(copy => copy.close()); await compositor.dispose()
 })
 describe('合成器共享图片候选生命周期', () => {
+  it('文字/字幕/标题共享局部纹理，动画仅改变GPU几何，离屏导出写相同几何', async () => {
+    vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { save() {}, restore() {}, scale() {}, clearRect() {}, drawImage() {}, fillRect() {}, fillText() {}, strokeText() {}, measureText(text: string) { return { width: text.length * 70 } } } } })
+    const { compositor, device } = copyFixture(async () => {})
+    const project = createVideoEditDocument('局部文字'); Object.assign(project.sequences[0], { width: 3840, height: 2160 })
+    project.items.push({ id: 'text', kind: 'text', name: '文字' }); const document = videoEditComposition(project, project.sequences[0].id)
+    const clip = makeVideoEditItemClip(project, 'text', document.id, { frame: 0 }); clip.text = 'Motion'
+    try {
+      await (await compositor.draw(document, [clip], [null], () => true)).completion
+      const upload = device.queue.copyExternalImageToTexture.mock.lastCall![0] as { source: OffscreenCanvas }
+      expect(upload.source.width * upload.source.height).toBeLessThan(3840 * 2160 / 10)
+      const moved = { ...clip, x: .1, y: -.1, anchorX: .2, anchorY: .8, rotation: 40, opacity: .4, scale: .8 }
+      await (await compositor.draw(document, [moved], [null], () => true)).completion
+      const preview = new Float32Array(device.queue.writeBuffer.mock.lastCall![2] as Float32Array)
+      const target = await (await compositor.code()).target('export-text', 3840, 2160)
+      await (await compositor.draw(document, [moved], [null], () => true, undefined, target)).completion
+      expect(device.queue.writeBuffer.mock.lastCall![2]).toEqual(preview); expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(1)
+      await (await compositor.draw(document, [{ ...moved, scale: 1.1 }], [null], () => true)).completion
+      await (await compositor.draw(document, [{ ...moved, scale: 1.8 }], [null], () => true)).completion
+      expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(2)
+      const quad: VideoEditTrackQuad = [[.1,.2],[.8,.1],[.9,.8],[.2,.9]]
+      const tracked = { ...clip, trackingQuad: quad }
+      await (await compositor.draw(document, [tracked], [null], () => true)).completion
+      const values = device.queue.writeBuffer.mock.lastCall![2] as Float32Array
+      const h = videoEditCornerPinMatrix(quad)
+      // Center-aligned text has a symmetric local rectangle; its local center maps to the original source center.
+      const w = values[20] * .5 + values[21] * .5 + values[22]
+      expect((values[12] * .5 + values[13] * .5 + values[14]) / w).toBeCloseTo((h[0] * .5 + h[1] * .5 + h[2]) / (h[6] * .5 + h[7] * .5 + 1), 5)
+      expect((values[16] * .5 + values[17] * .5 + values[18]) / w).toBeCloseTo((h[3] * .5 + h[4] * .5 + h[5]) / (h[6] * .5 + h[7] * .5 + 1), 5)
+    } finally { await compositor.dispose() }
+  })
   it('代码与普通片段共享一次上传，满文字工作集切换图片先回收，不因旧预算阻塞', async () => {
     vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { save() {}, restore() {}, clearRect() {}, drawImage() {}, fillRect() {}, fillText() {}, strokeText() {}, measureText(text: string) { return { width: text.length * 10 } } } } })
     for (const [width, height, count] of [[3840, 2160, 8], [16, 16, 32]]) {

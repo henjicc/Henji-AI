@@ -10,6 +10,7 @@ import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntim
 import { VideoEditCodeGpuV3 } from './videoEditCodeGpuV3'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
+import { writeFileSync } from 'node:fs'
 
 let gpu: Gpu; let device: Gpu['gpu']; let wrapped: GpuDevice; let runtime: VideoEditCodeGpuV3
 const W = 64; const H = 64
@@ -19,7 +20,7 @@ const testMeasure: CodeTextMeasurer = request => layoutCodeText(request, (text, 
 const escape = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
 const color = (paint: number[]): string => `rgba(${paint[0] * 255},${paint[1] * 255},${paint[2] * 255},${paint[3]})`
 /** Native libvips SVG raster fixture isolates GPU compositing/effects; Canvas API/layout is tested separately. */
-async function rasterFixture(command: CodeDrawCommand, image: { x: number; y: number; width: number; height: number }): Promise<OffscreenCanvas> {
+async function rasterFixture(command: CodeDrawCommand, image: { x: number; y: number; width: number; height: number; resolution?: number }): Promise<OffscreenCanvas> {
   const definitions: string[] = []
   const paint = (value: CodePaint): string => {
     if (Array.isArray(value)) return color(value)
@@ -34,11 +35,12 @@ async function rasterFixture(command: CodeDrawCommand, image: { x: number; y: nu
   if (command.kind === 'ellipse') geometry = `<ellipse cx="${command.x + command.width / 2}" cy="${command.y + command.height / 2}" rx="${command.width / 2}" ry="${command.height / 2}" fill="${fill}" ${stroke}/>`
   if (command.kind === 'path') geometry = `<path d="${command.points.map(path => path.map(([x, y], i) => `${i ? 'L' : 'M'}${x},${y}`).join(' ') + (command.closed ? ' Z' : '')).join(' ')}" fill="${fill}" ${stroke}/>`
   if (command.kind === 'text') geometry = `<text x="${command.x}" y="${command.y + command.fontSize * .3}" font-size="${command.fontSize}" font-family="sans-serif" fill="${fill}" ${stroke}>${escape(command.text)}</text>`
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${image.width}" height="${image.height}" viewBox="${image.x} ${image.y} ${image.width} ${image.height}"><defs>${definitions.join('')}</defs>${geometry}</svg>`
+  const width = image.width * (image.resolution ?? 1); const height = image.height * (image.resolution ?? 1)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${image.x} ${image.y} ${image.width} ${image.height}"><defs>${definitions.join('')}</defs>${geometry}</svg>`
   const { data } = await sharp(Buffer.from(svg)).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   // The GPU stores premultiplied pixels, as production copyExternalImageToTexture requests.
   for (let i = 0; i < data.length; i += 4) { const a = data[i + 3] / 255; data[i] = Math.round(data[i] * a); data[i + 1] = Math.round(data[i + 1] * a); data[i + 2] = Math.round(data[i + 2] * a) }
-  return { pixels: data, width: image.width, height: image.height } as unknown as OffscreenCanvas
+  return { pixels: data, width, height } as unknown as OffscreenCanvas
 }
 beforeAll(async () => {
   gpu = await init(); device = gpu.gpu
@@ -71,6 +73,51 @@ async function run(body: string): Promise<Uint8Array> {
   } finally { target.destroy() }
 }
 describe('v3 真实 GPU 像素与工作预算', () => {
+  it('4K180帧文字加形状动画复用局部字形，分辨率分档提升且预览/导出像素一致', async () => {
+    const calls: Array<{ width: number; height: number; ms: number }> = []
+    const host = new VideoEditCodeGpuV3(wrapped, { allocate: (width, height) => texture(width, height), release: texture => texture.destroy() }, async (command, image) => {
+      const start = performance.now(); const result = await rasterFixture(command, image)
+      calls.push({ width: result.width, height: result.height, ms: performance.now() - start }); return result
+    })
+    const program = compileCodeMaterial(source('return [rect({x:900,y:500,width:800,height:600,fill:[.2,.3,.4,1]}),text({x:1200+ctx.frame*2,y:1000,text:"Motion",fontSize:144,rotation:ctx.frame/2,opacity:.3+ctx.frame/300,scale:.5+ctx.frame/360})];'))
+    const target = texture(3840, 2160); const exportTarget = texture(3840, 2160); const frames: number[] = []
+    device.pushErrorScope('validation')
+    try {
+      let commands: CodeDrawCommand[] = []
+      for (let frame = 0; frame < 180; frame++) {
+        const start = performance.now(); commands = evaluateCodeMaterial(program, { ...context, width: 3840, height: 2160, frame, time: frame / 60 }, {}, { measureText: testMeasure })
+        await host.render(target, 3840, 2160, commands); await device.queue.onSubmittedWorkDone(); frames.push(performance.now() - start)
+      }
+      expect(calls).toHaveLength(1); expect(host.counts.uploads).toBe(1); expect(calls[0].width * calls[0].height).toBeLessThan(3840 * 2160 / 10)
+      await host.render(exportTarget, 3840, 2160, commands)
+      expect(Buffer.from(await read(exportTarget, 3840, 2160)).equals(Buffer.from(await read(target, 3840, 2160)))).toBe(true)
+      const sorted = [...frames].sort((a, b) => a - b)
+      let fullFrameReference: { rasterCalls: number; uploadedPixels: number; rasterMs: number; totalMs: number; p95Ms: number } | undefined
+      if (process.env.HENJI_TYPOGRAPHY_GPU_COMPARE) {
+        // Workload reference for the removed full-frame Canvas path. Native libvips replaces Chromium Canvas;
+        // this measures the cost of repeated full-frame raster/upload, not Electron drag throughput.
+        const input = texture(3840, 2160); const referenceFrames: number[] = []; let rasterMs = 0
+        try {
+          for (let frame = 0; frame < 180; frame++) {
+            const start = performance.now(); const x = 1200 + frame * 2; const scale = .5 + frame / 360
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160"><rect x="900" y="500" width="800" height="600" fill="${color([.2,.3,.4,1])}"/><g opacity="${.3 + frame / 300}" transform="translate(${x},1000) rotate(${frame / 2}) scale(${scale})"><text x="0" y="43.2" font-size="144" font-family="sans-serif" fill="${color([1,1,1,1])}">Motion</text></g></svg>`
+            const data = await sharp(Buffer.from(svg)).ensureAlpha().raw().toBuffer(); rasterMs += performance.now() - start
+            // The reference writes unpremultiplied pixels, matching the removed compositor bitmap upload.
+            device.queue.writeTexture({ texture: input as never }, data, { bytesPerRow: 3840 * 4 }, [3840,2160])
+            await host.render(exportTarget,3840,2160,[{ kind:'image',source:{kind:'image',mediaId:'reference'},x:0,y:0,width:3840,height:2160,opacity:1 }],new Map([['reference',{texture:input,width:3840,height:2160,owner:wrapped,premultiplied:false}]]))
+            await device.queue.onSubmittedWorkDone(); referenceFrames.push(performance.now()-start)
+          }
+          const ordered = [...referenceFrames].sort((a,b)=>a-b)
+          fullFrameReference = { rasterCalls:180, uploadedPixels:3840*2160*180, rasterMs, totalMs:referenceFrames.reduce((sum,ms)=>sum+ms,0),p95Ms:ordered[171] }
+        } finally { input.destroy() }
+      }
+      if (process.env.HENJI_TYPOGRAPHY_GPU_OUT) writeFileSync(process.env.HENJI_TYPOGRAPHY_GPU_OUT, JSON.stringify({ frames: 180, rasterCalls: calls.length, rasterMs: calls[0].ms, uploads: host.counts.uploads, canvas: calls[0], frameP95Ms: sorted[171], totalMs: frames.reduce((sum, ms) => sum + ms, 0), fullFrameReference }, null, 2))
+      const text = commands[1] as Extract<CodeDrawCommand, { kind: 'text' }>
+      await host.render(target, 3840, 2160, [{ ...text, scaleX: 1.1, scaleY: 1.1 }]); expect(calls).toHaveLength(2)
+      await host.render(target, 3840, 2160, [{ ...text, scaleX: 1.8, scaleY: 1.8, rotation: 15, opacity: .5, elementTransform: [1, 0, 0, 1, 300, 200] }]); expect(calls).toHaveLength(2)
+      expect(calls[1].width).toBe(calls[0].width * 2); expect(await device.popErrorScope()).toBeNull()
+    } finally { target.destroy(); exportTarget.destroy(); await host.dispose() }
+  }, 60_000)
   it('分组旋转、不透明度与 multiply/screen/overlay/add/lighten/darken 有实际像素', async () => {
     const modes = ['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken']
     const expected = [.8, .8 * .2, .8 + .2 - .8 * .2, 2 * .8 * .2, 1, .8, .2]

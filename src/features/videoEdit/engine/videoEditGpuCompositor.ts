@@ -1,6 +1,6 @@
 import { documentFontRevision } from '@/platform/fontFaces'
 import { VideoSample } from 'mediabunny'
-import { paintVideoEditText } from './videoEditTextSurface'
+import { rasterizeVideoEditText, videoEditTextResolution, type VideoEditTextRaster } from './videoEditTextSurface'
 import { defaultVideoEditTextStyle, scaleVideoEditTextStyle } from '@/core/videoEdit/text'
 import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
 import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
@@ -52,7 +52,7 @@ export class VideoEditGpuCompositor {
   private readonly precision = { snapshots: 0, frames: 0 }
   private sampler: unknown
   private readonly uniforms = new Map<string, GpuBuffer>()
-  private readonly textures = new Map<string, { texture: GpuTexture; key: string; bytes: number }>()
+  private readonly textures = new Map<string, { texture: GpuTexture; key: string; bytes: number; textRaster?: Omit<VideoEditTextRaster, 'canvas'> }>()
   private protectedImages = new Set<string>()
   private protectedUniforms = new Set<string>()
   private imageUploads = 0
@@ -251,7 +251,7 @@ export class VideoEditGpuCompositor {
     if (cached?.key === key) return cached.texture
     const bytes = source.width * source.height * 4
     const retained = [...this.textures.values()].reduce((total, entry) => total + entry.bytes, 0) - (cached?.bytes ?? 0)
-    if (source.width < 1 || source.height < 1 || source.width > 8192 || source.height > 8192 || retained + bytes > 256 * 1024 ** 2 || !cached && this.textures.size >= 32) throw new Error('可见图片与文字超过32份或256MiB预算，请减少同时显示的素材。')
+    if (source.width < 1 || source.height < 1 || source.width > 8192 || source.height > 8192 || retained + bytes > 256 * 1024 ** 2) throw new Error('图片或文字超出 GPU 单张纹理 8192 像素或驻留 256MiB 技术预算。')
     const texture = this.device.createTexture({ size: [source.width, source.height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
     try { this.device.queue.copyExternalImageToTexture({ source }, { texture, premultipliedAlpha: false }, [source.width, source.height]) }
     catch (error) { texture.destroy(); throw error }
@@ -314,6 +314,7 @@ export class VideoEditGpuCompositor {
         const cachedVideo = picture instanceof VideoEditGpuFrame
         const code = picture instanceof VideoEditCodePicture
         let width = document.width; let height = document.height
+        let textRaster: Omit<VideoEditTextRaster, 'canvas'> | undefined
         if (external) {
           const frame = picture.toVideoFrame(); frames.push(frame)
           resource = device.importExternalTexture({ source: frame }); width = picture.displayWidth; height = picture.displayHeight
@@ -325,20 +326,22 @@ export class VideoEditGpuCompositor {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {
           const id = picture ? this.imageKey(picture) : `text:${clip.id}`
-          const key = picture ? id : JSON.stringify([document.width, document.height, clip.text, clip.textStyle, documentFontRevision()])
+          const resolution = videoEditTextResolution(clip.scale)
+          const key = picture ? id : JSON.stringify([document.width, document.height, clip.text, clip.textStyle, documentFontRevision(), resolution])
           let cached = this.textures.get(id)
           if (cached?.key !== key) {
             let source: ImageBitmap | OffscreenCanvas
             if (picture) source = picture
             else {
-              source = new OffscreenCanvas(document.width, document.height)
-              const text = source.getContext('2d')!
               const textClip = this.pictureDivisor === 1 ? clip : { ...clip, textStyle: scaleVideoEditTextStyle(clip.textStyle ?? defaultVideoEditTextStyle(document.height * this.pictureDivisor), 1 / this.pictureDivisor) }
-              paintVideoEditText(text, textClip, document.width, document.height)
+              const raster = rasterizeVideoEditText(textClip, document, resolution)
+              source = raster.canvas; textRaster = { x: raster.x, y: raster.y, width: raster.width, height: raster.height }
             }
             this.texture(id, key, source); cached = this.textures.get(id)!
+            if (textRaster) cached.textRaster = textRaster
           }
           resource = cached.texture.createView()
+          textRaster = cached.textRaster
           if (picture) { width = picture.width; height = picture.height }
         }
         let uniform = this.uniforms.get(clip.id)
@@ -346,7 +349,21 @@ export class VideoEditGpuCompositor {
         const fit = Math.min(document.width / width, document.height / height) * clip.scale
         const rotation = clip.rotation * Math.PI / 180
         const center = videoEditClipCenterPosition(clip, { width, height }, document)
-        const quad=videoEditClipTrackingQuad(clip); const h=quad ? videoEditCornerPinMatrix(quad) : undefined
+        if (textRaster) {
+          const dx = (textRaster.x + textRaster.width / 2) * fit; const dy = (textRaster.y + textRaster.height / 2) * fit
+          center.x += (dx * Math.cos(rotation) - dy * Math.sin(rotation)) / document.width
+          center.y += (dx * Math.sin(rotation) + dy * Math.cos(rotation)) / document.height
+          width = textRaster.width; height = textRaster.height
+        }
+        const quad=videoEditClipTrackingQuad(clip); let h=quad ? videoEditCornerPinMatrix(quad) : undefined
+        if (h && textRaster) {
+          // Corner pin is defined on the entire source frame, while UVs now cover only the text's local rectangle.
+          const u = .5 + textRaster.x / document.width; const v = .5 + textRaster.y / document.height
+          const sx = textRaster.width / document.width; const sy = textRaster.height / document.height
+          const denominator = h[6] * u + h[7] * v + h[8]
+          if (Math.abs(denominator) < 1e-8) throw new Error('文字区域位于透视消失点，无法呈现。')
+          h = [h[0] * sx, h[1] * sy, h[0] * u + h[1] * v + h[2], h[3] * sx, h[4] * sy, h[3] * u + h[4] * v + h[5], h[6] * sx, h[7] * sy, denominator].map(value => value / denominator) as typeof h
+        }
         const warp=h ? [h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0] : new Array<number>(12).fill(0)
         device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), center.x * 2, center.y * 2, clip.opacity, 0, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0, ...warp]))
         const pipeline = code ? pipelines?.codeImage ?? this.codeImage : external ? pipelines?.video ?? this.video : cachedVideo && picture.chroma ? pipelines?.cachedVideo ?? this.cachedVideo : pipelines?.image ?? this.image

@@ -30,6 +30,32 @@ function mockTextCanvas(): void {
   })
 }
 describe('代码GPU会话复用与资源边界', () => {
+  it('复杂图形文字只缓存外观和分辨率档位，锚点/位置/旋转/透明度进入GPU均匀缓冲', async () => {
+    vi.stubGlobal('OffscreenCanvas', class {
+      constructor(public width: number, public height: number) {}
+      getContext() { return { save() {}, restore() {}, scale() {}, translate() {}, transform() {}, beginPath() {}, roundRect() {}, fill() {}, fillRect() {}, clearRect() {}, drawImage() {}, strokeText() {}, fillText() {}, measureText(text: string) { return { width: text.length * 50 } } } }
+    })
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const graphic = createVideoEditGraphic('text', 3840, 2160)
+    const draws = evaluateVideoEditGraphic(prepareVideoEditGraphic(graphic), { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } })
+    try {
+      await runtime.draw('graphic', 3840, 2160, draws)
+      const initial = new Float32Array(vi.mocked(device.queue.writeBuffer).mock.lastCall![2] as Float32Array)
+      const moved = { ...draws[0], scale: .5, rotation: 90, pivotX: 500, pivotY: 700, opacity: .25, command: { ...draws[0].command, x: 400, y: 600 } } as typeof draws[0]
+      await runtime.draw('graphic', 3840, 2160, [moved])
+      const values = vi.mocked(device.queue.writeBuffer).mock.lastCall![2] as Float32Array
+      expect(runtime.diagnostics().externalCopies).toBe(1); expect(values[2]).toBe(initial[2] / 2); expect(values[7]).toBe(.25)
+      expect([...values.slice(16)]).toEqual([Math.fround(Math.cos(Math.PI / 2)), 1, 500, 700])
+      await runtime.draw('graphic', 3840, 2160, [{ ...moved, scale: 1.1 }]); expect(runtime.diagnostics().externalCopies).toBe(2)
+      await runtime.draw('graphic', 3840, 2160, [{ ...moved, scale: 1.8, rotation: 5 }]); expect(runtime.diagnostics().externalCopies).toBe(2)
+      await runtime.draw('graphic', 3840, 2160, [{ ...moved, textStyle: { ...moved.textStyle!, tracking: 200 } }]); expect(runtime.diagnostics().externalCopies).toBe(3)
+      const enlarged = await runtime.draw('graphic', 3840, 2160, draws, undefined, 1.1)
+      expect(enlarged.width).toBe(7680); expect(enlarged.height).toBe(4320)
+      expect(await runtime.draw('graphic', 3840, 2160, draws, undefined, 1.8)).toBe(enlarged)
+      expect(await runtime.draw('graphic', 3840, 2160, Array.from({ length: 257 }, () => draws[0]))).toBeDefined()
+      for (let index = 0; index < 17; index++) await runtime.target(`small-${index}`, 8, 8)
+    } finally { await runtime.dispose(); vi.unstubAllGlobals() }
+  })
   it('所有区域蒙版复用 RGBA 缓冲，同一不可变蒙版不重传；替换、目标改写、尺寸变化与释放重新上传', async () => {
     const {device} = gpu(); const writeTexture = vi.fn()
     Object.assign(device.queue,{writeTexture})
