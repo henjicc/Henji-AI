@@ -46,7 +46,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     }
   })
   it('关闭设置后清单消失，旧工具调用也不能读取；恢复立即可用', async () => {
-    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation']
+    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench']
     expect(await embeddedSkillCatalog()).toEqual({ tools: [], instructions: '' })
     await expect(callEmbeddedSkill({ name: 'prompt-optimization', reason: '旧调用' }, signal)).rejects.toThrow('停用')
     state.disabled = []
@@ -75,6 +75,36 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     await expect(callEmbeddedSkill({ name: 'cinematic-director', reason: '旧调用' }, signal)).rejects.toThrow('停用')
   })
 
+  it('剪辑工作台能从首轮索引选中，七份参考按需读取，停用不影响代码创作', async () => {
+    const catalog = await embeddedSkillCatalog()
+    expect(catalog.instructions).toContain('video-edit-workbench')
+    expect(catalog.instructions).toContain('粗剪')
+    expect(catalog.instructions).toContain('写代码画面用 video-edit-code-creation')
+    expect(catalog.instructions).not.toContain('片段响度测量')
+    const main = (await callEmbeddedSkill({ name: 'video-edit-workbench', reason: '普通剪辑与跨工作区交付' }, signal)).data
+    expect(main.content).toContain('trust=builtin')
+    expect(main.bytes).toBeLessThanOrEqual(6144)
+    expect(main.referencePaths).toEqual([
+      'references/captions.md', 'references/color-transitions.md', 'references/cross-workspace.md',
+      'references/deliver.md', 'references/rhythm.md', 'references/sound.md', 'references/timeline.md',
+    ])
+    const links = [...main.content.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1])
+    expect(new Set(links)).toEqual(new Set(main.referencePaths))
+    for (const reference of main.referencePaths) {
+      const result = (await callEmbeddedSkill({ name: 'video-edit-workbench', path: reference, reason: '当前剪辑步骤' }, signal)).data
+      expect(result.path).toBe(reference)
+      expect(result.content).toContain('trust=builtin')
+      expect(result.bytes).toBeLessThanOrEqual(8 * 1024)
+    }
+    await expect(callEmbeddedSkill({ name: 'video-edit-workbench', path: 'references/missing.md', reason: '错误路径' }, signal)).rejects.toThrow('references/timeline.md')
+    state.disabled = ['video-edit-workbench']
+    expect((await embeddedSkillCatalog()).instructions).not.toMatch(/"name"\s*:\s*"video-edit-workbench"/)
+    expect((await embeddedSkillCatalog()).instructions).toContain('video-edit-code-creation')
+    await expect(callEmbeddedSkill({ name: 'video-edit-workbench', reason: '旧调用' }, signal)).rejects.toThrow('停用')
+    state.disabled = []
+    expect((await callEmbeddedSkill({ name: 'video-edit-workbench', reason: '恢复启用' }, signal)).data.name).toBe('video-edit-workbench')
+  })
+
   it('剪辑代码素材技能进入索引，正文只路由，参考按需读取，停用后不可用且其他技能不受影响', async () => {
     const catalog = await embeddedSkillCatalog()
     expect(catalog.instructions).toContain('video-edit-code-creation')
@@ -97,7 +127,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     }
     await expect(callEmbeddedSkill({ name: 'video-edit-code-creation', path: 'references/missing.md', reason: '猜测' }, signal)).rejects.toThrow('references/author-api.md')
     state.disabled = ['video-edit-code-creation']
-    expect((await embeddedSkillCatalog()).instructions).not.toContain('video-edit-code-creation')
+    expect((await embeddedSkillCatalog()).instructions).not.toMatch(/"name"\s*:\s*"video-edit-code-creation"/)
     expect((await embeddedSkillCatalog()).instructions).toContain('cinematic-director')
     await expect(callEmbeddedSkill({ name: 'video-edit-code-creation', reason: '旧调用' }, signal)).rejects.toThrow('停用')
   })

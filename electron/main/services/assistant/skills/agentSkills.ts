@@ -14,7 +14,7 @@ const logger = createMainLogger('main.assistant_skills')
  * 路径与大小限制仍全部由正式注册表在每次读取时核对，这里只决定"哪些名字可被智能体看见"。
  */
 export const AGENT_SKILL_NAMES: ReadonlySet<string> = new Set([
-  'prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation',
+  'prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench',
 ])
 
 export type AgentSkillCaller = 'embedded' | 'external'

@@ -53,7 +53,7 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     const data = await f.contract()
     const names = data.skills!.index.map(item => item.name)
     expect(data.skills!.tool).toBe('load_assistant_skill')
-    expect(names).toEqual(expect.arrayContaining(['video-edit-code-creation', 'prompt-optimization']))
+    expect(names).toEqual(expect.arrayContaining(['video-edit-code-creation', 'video-edit-workbench', 'prompt-optimization']))
     // 依赖已删除旧协议的内置技能不对任何智能体开放。
     expect(names).not.toContain('图片生成')
     for (const item of data.skills!.index) expect(Object.keys(item).sort()).toEqual(['description', 'name'])
@@ -95,6 +95,43 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     expect(api.body.data).toMatchObject({ path: 'references/author-api.md' })
     expect(api.body.data!.content).toContain('smoothstep')
     expect(f.hostCalls).toHaveLength(0)
+  })
+
+  it('工作台技能经同一契约索引发现和七份参考读取，停用及路径拒绝仍有效', async () => {
+    const f = await fixture()
+    const index = (await f.contract()).skills!.index
+    expect(index.find(item => item.name === 'video-edit-workbench')?.description).toContain('写代码画面用 video-edit-code-creation')
+    const main = await f.call({ name: 'video-edit-workbench', reason: '粗剪到导出' })
+    expect(main.isError, main.text).toBe(false)
+    expect(main.body.data).toMatchObject({ name: 'video-edit-workbench', path: null, source: 'builtin' })
+    expect(main.body.data!.content).toContain('trust=builtin')
+    expect(main.body.data!.bytes).toBeLessThanOrEqual(6144)
+    const references = [
+      'references/captions.md', 'references/color-transitions.md', 'references/cross-workspace.md',
+      'references/deliver.md', 'references/rhythm.md', 'references/sound.md', 'references/timeline.md',
+    ]
+    expect(main.body.data!.referencePaths).toEqual(references)
+    for (const reference of references) {
+      const result = await f.call({ name: 'video-edit-workbench', path: reference, reason: '按需指导' })
+      expect(result.isError, result.text).toBe(false)
+      expect(result.body.data).toMatchObject({ path: reference, source: 'builtin' })
+      expect(result.body.data!.content).toContain('trust=builtin')
+      expect(result.body.data!.bytes).toBeLessThanOrEqual(8 * 1024)
+    }
+    const badPath = await f.call({ name: 'video-edit-workbench', path: 'references/../SKILL.md', reason: '越界' })
+    expect(badPath.isError).toBe(true)
+    const missing = await f.call({ name: 'video-edit-workbench', path: 'references/missing.md', reason: '错误路径' })
+    expect(missing.body.error?.message).toContain('references/timeline.md')
+    state.disabled = ['video-edit-workbench']
+    expect((await f.contract()).skills!.index.map(item => item.name)).not.toContain('video-edit-workbench')
+    expect((await f.contract()).skills!.index.map(item => item.name)).toContain('video-edit-code-creation')
+    expect((await f.call({ name: 'video-edit-workbench', reason: '旧调用' })).body.error?.message).toContain('SKILL_DISABLED')
+    state.disabled = []
+    expect((await f.call({ name: 'video-edit-workbench', reason: '恢复启用' })).isError).toBe(false)
+    expect(f.hostCalls).toHaveLength(0)
+    f.connections.revoke(f.caller.id)
+    await f.server.revoke(f.caller.id)
+    await expect(f.client.callTool({ name: 'load_assistant_skill', arguments: { name: 'video-edit-workbench', reason: '撤销后' } })).rejects.toThrow()
   })
 
   it('越界路径、未准入、停用与不存在的参考都被拒绝，并给出可改道的选项', async () => {
