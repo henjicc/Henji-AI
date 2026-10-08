@@ -92,7 +92,8 @@ it('资产重新定位或内容身份变化不能替换原结果；取消不创�
 it('保存失败后重试只保存，不重复导入、字幕或历史', async () => {
   const { owner, target, result } = await setup()
   harnessDocumentStore().failSaves = 1
-  await expect(commitVideoEditCreativeResult(target, result)).rejects.toThrow('剪辑未能保存到磁盘')
+  await expect(commitVideoEditCreativeResult(target, result)).rejects.toMatchObject({ name: 'ApplicationPersistenceFailure',
+    facts: { memoryState: 'modified', persistenceState: 'unconfirmed', recovery: { capabilityId: 'save_video_edit', replayMutation: false } } })
   expect(owner.document.sequences[0].clips).toHaveLength(1); expect(owner.past).toHaveLength(1)
   const calls = vi.mocked(getPlatform().assetLibrary.inspectAsset).mock.calls.length
   expect((await commitVideoEditCreativeResult(target, result)).verified).toBe(true)

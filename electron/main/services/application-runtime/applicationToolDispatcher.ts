@@ -142,6 +142,14 @@ export class ApplicationToolDispatcher {
       } catch (error) { return applicationFailure(error instanceof Error ? error.message : '应用读取失败，请稍后重试。') }
   }
   private async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {
+    await this.operations?.reconcileReceipt(record, async original => {
+      const result = await this.host.execute(callerId, 'get_current_application_context', {}, signal,
+        { ...this.connections.access(callerId), recoveryOperation: original })
+      this.connections.assertActive(callerId)
+      if (signal.aborted) throw new Error('核实已取消。')
+      return result
+    })
+    record = this.operations?.store.get(record.operationId, record.callerId) ?? record
     await this.operations?.reconcileVerification(record, async proof => {
       const result = await this.host.execute(callerId, 'get_current_application_context', {}, signal,
         { ...this.connections.access(callerId), recoveryVerification: proof })

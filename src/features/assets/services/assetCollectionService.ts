@@ -1,5 +1,6 @@
 import { createAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
+import { generatedMediaName } from '@/core/documents/generatedMediaName'
 import type { AssetMediaType, AssetRecord, AssetSource } from '@/platform/contracts/assetLibrary'
 
 const logger = createLogger('features.assets.collection')
@@ -40,7 +41,7 @@ export async function addMediaReferenceToLibrary(input: CollectMediaReferenceInp
   }
   logger.info('开始收录资产', { event: 'asset.collection.start', mediaType: input.mediaType, source: input.source })
   try {
-    const asset = await createAsset({ ...input, filePath })
+    const asset = await createAsset({ ...input, filePath, displayName: generatedMediaName(input.displayName ?? filePath.split(/[\\/]/).at(-1), '素材') })
     logger.info('资产收录完成', { event: 'asset.collection.completed', assetId: asset.id, mediaType: asset.mediaType })
     return asset
   } catch (cause) {

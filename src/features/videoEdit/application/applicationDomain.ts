@@ -45,6 +45,7 @@ import { captureVideoEditProgramFrame } from './videoEditProgramCapture'
 import { collectVideoEditCodeAsset, importVideoEditCodeAsset, type VideoEditCodeAssetTarget } from './videoEditCodeAssets'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { placeVideoEditCreativeResultFromCapability } from './videoEditResultCapability'
+import { recoverVideoEditPlacement } from './videoEditPlacementRecovery'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { handleVideoEditInPlaceCapability } from './videoEditInPlaceCapability'
 import { rippleVideoEditClipSpeedCapability } from '@/core/application-control/domains/videoEdit/videoEditSpeedCapability'
@@ -62,6 +63,7 @@ let stopTracking: (() => void) | null = null
 let stopSmartRegions: (() => void) | null = null
 
 export const videoEditApplicationDomain: ApplicationDomainModule = {
+  recoverOperation: recoverVideoEditPlacement,
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
     for (const type of [STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY] as const) { engine.registerCollectionExecutor(new VideoEditStyleKitCollectionExecutor(type)); engine.registerMutationExecutor(new VideoEditStyleKitMutationExecutor(type)) }
@@ -143,7 +145,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           verification: { verified: true, target: resultRef, condition: '已用正式渲染器生成固定版本画面，并通过资产检查核对尺寸。' } }
       }
       if (definition.id === trimVideoEditClipCapability.id) return await trimVideoEditClip(trimVideoEditClipCapability.inputSchema.parse(raw))
-      if (definition.id === placeVideoEditCreativeResultCapability.id) return await placeVideoEditCreativeResultFromCapability(placeVideoEditCreativeResultCapability.inputSchema.parse(raw), context.signal)
+      if (definition.id === placeVideoEditCreativeResultCapability.id) return await placeVideoEditCreativeResultFromCapability(placeVideoEditCreativeResultCapability.inputSchema.parse(raw), context.signal, context.callerGrant ? context.requestId : undefined)
       if (definition.id === openVideoEditClipSourceCapability.id) {
         // 回到来源（4.1）：与时间线右键 / 双击同一入口
         const input = openVideoEditClipSourceCapability.inputSchema.parse(raw); const id = input.documentRef.id

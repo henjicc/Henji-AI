@@ -27,6 +27,8 @@ const generationSource = z.object({
   type: z.literal('generation'),
   recordId: id,
   outputIndex: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  /** 完整来源提示词，独立于用于显示的短名。 */
+  prompt: z.string().optional(),
 }).strict()
 
 /** 剪辑文件里片段记录的来源。 */

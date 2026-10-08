@@ -20,13 +20,6 @@ import type { ApplicationHostPlatform, LocalHostRequest } from '@/core/applicati
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
-async function removePiFixtureDirectory(directory: string): Promise<void> {
-  if (path.dirname(directory) !== path.resolve(os.tmpdir()) || !path.basename(directory).startsWith('henji-pi-mcp-')) {
-    throw new Error('临时会话目录越界')
-  }
-  await fs.rm(directory, { recursive: true, force: true })
-}
-
 it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置保存；拒绝后可恢复并读回实际结果', async () => {
   const dom = new JSDOM('', { url: 'http://localhost' })
   vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document)
@@ -215,3 +208,121 @@ it('关闭现代 HTTP 监听只结束等待，已登记写入仍可完成并从�
     expect(await direct.call(caller.id, 'get_application_operation', { operationId }, new AbortController().signal)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
   } finally { await client.close(); await server.stop(); host.disconnect(); db.close() }
 }, 15_000)
+
+it('t82：超长素材名的零提交拒绝不锁文档；丢失回执可只读核对成功与拒绝并解除屏障', async () => {
+  const dom = new JSDOM('', { url: 'http://localhost' })
+  vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document)
+  vi.stubGlobal('navigator', dom.window.navigator); vi.stubGlobal('localStorage', dom.window.localStorage)
+  const { attachLocalApplicationHost } = await import('./localApplicationHost')
+  const { installHarnessNativeStorage, uninstallHarnessNativeStorage } = await import('@/tests/harnessNativeStorage')
+  const { createLegacyTrackVideoEditProject, failVideoEditSaves } = await import('@/features/videoEdit/application/videoEditDocumentTestKit')
+  const { closeVideoEditProject } = await import('@/features/videoEdit/application/videoEditService')
+  const { databaseService } = await import('@/services/database')
+  const naming = await import('@/core/documents/generatedMediaName')
+  const { getPlatform } = await import('@/platform/runtime')
+  const prompt = '长提示词😀'.repeat(80)
+  installHarnessNativeStorage()
+  const assets = new Map<string, import('@/platform/contracts/assetLibrary').AssetRecord>()
+  const files = new Map<string, string>()
+  const platform = getPlatform()
+  const content = { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'c'.repeat(64) }
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/t82.henji-video')
+  vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (file, text) => { files.set(file, text) })
+  vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async file => files.get(file)!)
+  vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)
+  vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/generated')
+  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
+  vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue(content)
+  vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
+    const existing = [...assets.values()].find(asset => asset.filePath === input.filePath)
+    if (existing) return existing
+    const asset: import('@/platform/contracts/assetLibrary').AssetRecord = { id: randomUUID(), filePath: input.filePath, mediaType: input.mediaType, displayName: input.displayName ?? '结果', displayUrl: '', source: input.source, mimeType: 'image/png', ...content, width: 1920, height: 1080, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }
+    assets.set(asset.id, asset); return asset
+  })
+  vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => structuredClone(assets.get(id)!))
+  vi.spyOn(databaseService, 'getHistoryById').mockResolvedValue({ id: 't82-result', type: 'image', status: 'success', resultPaths: ['D:/generated/poster.png'], prompt, modelId: 'fixture', providerId: 'fixture', taskId: null, duration: null, errorMessage: null, cost: null, params: {}, createdAt: '2026-10-08T00:00:00Z', updatedAt: '2026-10-08T00:00:00Z' })
+  const owner = await createLegacyTrackVideoEditProject()
+  const id = owner.document.id
+  const db = new Database(':memory:'); createApplicationOperationTablesV1(db)
+  const callerId = randomUUID()
+  const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => bridge.writableEntityTypes())
+  const bridge: ApplicationHostBridge = new ApplicationHostBridge(() => undefined, operations)
+  let handler: (request: LocalHostRequest) => void = () => {}
+  let dropped: AbortController | undefined
+  const hostPlatform: ApplicationHostPlatform = {
+    publishContext: async snapshot => bridge.publishContext(snapshot),
+    onRequest: value => { handler = value; return () => {} }, onCancel: () => () => {}, onRevoke: () => () => {},
+    registerHost: async registration => bridge.register(registration, { send: (channel, payload) => { if (channel === 'application:host:request') handler(payload as LocalHostRequest) } }),
+    complete: async reply => {
+      if (dropped && reply.result.ok !== undefined) { const waiting = dropped; dropped = undefined; waiting.abort(); return }
+      bridge.complete(reply)
+    },
+  }
+  const detach = attachLocalApplicationHost(hostPlatform, true)
+  const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined, access: () => ({ allowWrites: true, allowDestructive: false, allowPaid: false }) }, bridge, operations)
+  const input = { documentRef: { kind: 'video_edit.document', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${owner.activeSequenceId}` }, placement: { mode: 'library' }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: 't82-result' }, outputIndex: 0 } }
+  try {
+    // 故障注入复现旧生产方把全文当名称；仍经真实副本schema、Session和SQLite回执。
+    const faultyName = vi.spyOn(naming, 'generatedMediaName').mockReturnValue(prompt)
+    const before = owner.document
+    const failedId = randomUUID()
+    const failed = await dispatcher.call(callerId, 'place_video_edit_creative_result', { ...input, operationId: failedId }, new AbortController().signal)
+    expect(failed).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
+    expect(JSON.stringify(failed)).toContain('200')
+    expect(owner.document).toBe(before)
+    expect(operations.store.unresolved()).toHaveLength(0)
+
+    // 失败回执也能补取；查询不得再派发放入。
+    dropped = new AbortController()
+    const lostFailureId = randomUUID()
+    await dispatcher.call(callerId, 'place_video_edit_creative_result', { ...input, operationId: lostFailureId }, dropped.signal)
+    const lostFailure = operations.store.get(lostFailureId, callerId)!
+    operations.interrupted(lostFailure.requestId!, lostFailure.rendererEpoch!)
+    expect(operations.store.get(lostFailureId, callerId)?.state).toBe('unknown')
+    expect(await dispatcher.call(callerId, 'get_application_operation', { operationId: lostFailureId }, new AbortController().signal)).toMatchObject({ executionState: 'not_executed' })
+    // 新宿主没有旧内存回执：未保留的原子放入按真实文档解除屏障。
+    operations.store.save({ ...operations.store.get(lostFailureId, callerId)!, state: 'unknown', requestId: randomUUID(), rendererEpoch: randomUUID(), result: undefined })
+    expect(await dispatcher.call(callerId, 'get_application_operation', { operationId: lostFailureId }, new AbortController().signal)).toMatchObject({ executionState: 'not_executed' })
+    faultyName.mockRestore()
+
+    dropped = new AbortController()
+    const successId = randomUUID()
+    await dispatcher.call(callerId, 'place_video_edit_creative_result', { ...input, operationId: successId }, dropped.signal)
+    const lostSuccess = operations.store.get(successId, callerId)!
+    operations.interrupted(lostSuccess.requestId!, lostSuccess.rendererEpoch!)
+    expect(operations.store.get(successId, callerId)?.state).toBe('unknown')
+    const count = owner.document.items.length
+    expect(await dispatcher.call(callerId, 'get_application_operation', { operationId: successId }, new AbortController().signal)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
+    expect(owner.document.items).toHaveLength(count)
+    expect(owner.document.media[0].name.length).toBeLessThanOrEqual(80)
+    expect(owner.document.media[0].creativeSource).toMatchObject({ recordId: 't82-result', prompt })
+    // 模拟旧会话退出、回执完全消失，仅以保存文档里的原子身份与实际素材核对。
+    operations.store.save({ ...operations.store.get(successId, callerId)!, state: 'unknown', requestId: randomUUID(), rendererEpoch: randomUUID(), result: undefined })
+    expect(await dispatcher.call(callerId, 'get_application_operation', { operationId: successId }, new AbortController().signal)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
+    expect(owner.document.items).toHaveLength(count)
+    expect(await dispatcher.call(callerId, 'save_video_edit', { documentRef: input.documentRef, operationId: randomUUID() }, new AbortController().signal)).toMatchObject({ executionState: 'completed' })
+    expect(operations.store.unresolved()).toHaveLength(0)
+    failVideoEditSaves(true)
+    const saveFailureId = randomUUID()
+    expect(await dispatcher.call(callerId, 'place_video_edit_creative_result', { ...input, operationId: saveFailureId }, new AbortController().signal)).toMatchObject({ executionState: 'partial' })
+    expect(await dispatcher.call(callerId, 'save_video_edit', { documentRef: input.documentRef, operationId: randomUUID() }, new AbortController().signal)).toMatchObject({ ok: false })
+    failVideoEditSaves(false)
+    const saveRecovery = await dispatcher.call(callerId, 'retry_application_operation_save', { originalOperationId: saveFailureId, operationId: randomUUID() }, new AbortController().signal)
+    expect(saveRecovery, JSON.stringify(saveRecovery)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
+    expect(operations.store.get(saveFailureId, callerId)?.state).toBe('completed')
+    expect(owner.document.items).toHaveLength(count)
+    expect(operations.store.unresolved()).toHaveLength(0)
+  } finally {
+    failVideoEditSaves(false)
+    detach(); bridge.disconnect(); db.close()
+    await closeVideoEditProject(id)
+    vi.restoreAllMocks(); uninstallHarnessNativeStorage(); vi.unstubAllGlobals()
+  }
+}, 15_000)
+
+async function removePiFixtureDirectory(directory: string): Promise<void> {
+  if (path.dirname(directory) !== path.resolve(os.tmpdir()) || !path.basename(directory).startsWith('henji-pi-mcp-')) {
+    throw new Error('临时会话目录越界')
+  }
+  await fs.rm(directory, { recursive: true, force: true })
+}

@@ -14,6 +14,10 @@ export const localHostRequestSchema = z.object({
   allowWrites: z.boolean().optional(), allowDestructive: z.boolean().optional(), allowPaid: z.boolean().optional(), operationId: z.string().uuid().optional(),
   expectedRevisions: z.record(z.string(), z.number()).optional(),
   recoveryVerification: z.object({ conditions: z.array(applicationVerificationConditionSchema).max(256), evidence: z.array(applicationEvidenceSchema).max(256) }).optional(),
+  /** 可信宿主只读核对：取回原执行回执，不重放业务。 */
+  recoveryOperation: z.object({ requestId: z.string().uuid(), rendererEpoch: z.string().uuid(),
+    atomicPlacement: z.object({ operationId: z.string().uuid(), documentId: z.string().min(1).max(100) }).strict().optional(),
+  }).strict().optional(),
 }).strict()
 export type LocalHostRequest = z.infer<typeof localHostRequestSchema>
 export const localHostReplySchema = z.object({

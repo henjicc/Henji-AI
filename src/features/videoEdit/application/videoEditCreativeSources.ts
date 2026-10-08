@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { videoEditCreativeOrigin, videoEditCreativeSourceRequestSchema, type VideoEditCreativeSource, type VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
+import { videoEditCreativeSourceRequestSchema, type VideoEditCreativeSource, type VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
 import type { DocumentMeta } from '@/core/documents/types'
 import { readGenerationResultMedia } from '@/features/generation/application/generationResultSource'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
@@ -96,7 +96,7 @@ async function generationSource(source: Extract<VideoEditCreativeSourceRequest, 
   const result = await guarded(options, read)
   if (!result) throw new Error('原生成结果不存在，请从历史记录重新选择。')
   const path = localPath(result.source)
-  return { path, mediaType: result.mediaType, name: result.name, librarySource: 'generated', origin: videoEditCreativeOrigin(source),
+  return { path, mediaType: result.mediaType, name: result.name, librarySource: 'generated', origin: { type: 'generation', recordId: source.recordId, outputIndex: source.outputIndex, prompt: result.prompt },
     async recheck() { const latest = await read(); if (!latest || latest.mediaType !== result.mediaType || !sameVideoEditMediaPath(localPath(latest.source), path)) conflict() },
   }
 }

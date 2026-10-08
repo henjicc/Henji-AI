@@ -36,7 +36,8 @@ const sourceRemainder = z.object({ numerator: z.number().int().nonnegative().max
 export const videoEditMediaSchema = z.object({
   id: identifier, name, path: z.string().min(1).max(32768).regex(/^(?:[A-Za-z]:[\\/]|\\\\|\/)/, '素材必须引用本地绝对路径。'),
   kind: z.enum(['video', 'audio', 'image']), durationSeconds: z.number().finite().nonnegative(),
-  codeImageGeneration: videoEditCodeImageGenerationSchema.optional(),
+    codeImageGeneration: videoEditCodeImageGenerationSchema.optional(),
+    creativeSource: videoEditCreativeSourceSchema.optional(),
   width: z.number().int().nonnegative(), height: z.number().int().nonnegative(),
   assetId: identifier.optional(), assetContent: z.object({ sizeBytes: z.number().int().nonnegative(), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: identifier.optional() }).strict().optional(), sourceRevision: identifier.optional(), hasAudio: z.boolean().optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
   /** Sound streams in file order (task 2.6); absent on media imported before, which plays its first stream. */
@@ -104,6 +105,9 @@ export const videoEditDocumentSchema = z.object({
   format: z.literal('henji-video-project'), version: z.literal(2), id: identifier, name, revision: z.number().int().nonnegative(),
   media: z.array(videoEditMediaSchema), bins: z.array(videoEditBinSchema), items: z.array(videoEditItemSchema), sequences: z.array(videoEditSequenceSchema),
   codeMaterials: codeMaterialDefinitionsSchema.optional(),
+  /** 放入与身份同事务保存；回执丢失时核对实际落位，随内容一起撤销。 */
+  creativePlacements: z.array(z.object({ operationId: z.string().uuid(), sequenceId: identifier, assetId: identifier,
+    itemId: identifier, clipId: z.string().max(100) }).strict()).optional(),
   /** 用户指定的封面帧（“设为项目封面”）；没有时自动取第一条序列约 1/3 处的画面。 */
   posterFrame: z.object({ sequenceId: identifier, frame: z.number().int().nonnegative() }).strict().optional(),
   /** 原地生成续接元数据，不属于剪辑撤销历史。旧文件可省略。 */

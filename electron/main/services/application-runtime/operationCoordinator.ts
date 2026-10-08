@@ -1,7 +1,7 @@
 import { applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { z } from 'zod'
-import type { LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
+import { localHostReplySchema, type LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 import { ApplicationOperationStore, operationDigest, type OperationRecord } from './operationStore'
 import { operationVerificationRecovery } from './operationVerificationRecovery'
 
@@ -140,12 +140,26 @@ export class ApplicationOperationCoordinator {
       if (scope in expectedRevisions && expectedRevisions[scope] !== revision) throw new Error(`BASELINE_CONFLICT:${scope} 的读取基线不一致。普通操作可省略 baselineIds 由应用自动核对；严格写入请重新读取相关目标。`)
       expectedRevisions[scope] = revision
     }
-    return this.store.prepare({ operationId, callerId, inputDigest: digest, input, expectedRevisions: baselines.length ? expectedRevisions : undefined, state: 'prepared', capabilityId, targetRefs: writeRefs ?? refs })
+    return this.store.prepare({ operationId, callerId, inputDigest: digest, input, expectedRevisions: baselines.length ? expectedRevisions : undefined, state: 'prepared', capabilityId, targetRefs: writeRefs ?? refs,
+      ...(capabilityId === 'place_video_edit_creative_result' ? { atomicPlacement: true } : {}) })
   }
   dispatched(record: OperationRecord, requestId: string, rendererEpoch: string): void { this.store.claim(record, requestId, rendererEpoch) }
   interrupted(requestId: string, rendererEpoch: string): void {
     const record = this.store.byRequest(requestId, rendererEpoch)
     if (record?.state === 'executing') this.store.save({ ...record, state: 'unknown' })
+  }
+  /** 未知执行只能用原宿主的执行事实核对，不能按输入或“当前值碰巧相同”推断。 */
+  async reconcileReceipt(record: OperationRecord, read: (original: NonNullable<import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['recoveryOperation']>) => Promise<Record<string, unknown>>): Promise<void> {
+    if (!['unknown', 'executing'].includes(record.state) || !record.requestId || !record.rendererEpoch) return
+    const documentId = object(record.input.documentRef).id
+    const result = await read({ requestId: record.requestId, rendererEpoch: record.rendererEpoch,
+      ...(record.atomicPlacement && record.capabilityId === 'place_video_edit_creative_result' && typeof documentId === 'string'
+        ? { atomicPlacement: { operationId: applicationInvocationId(record.callerId, record.operationId), documentId } } : {}) })
+    const reply = localHostReplySchema.safeParse(object(result.data).operationReply)
+    if (result.ok !== true || !reply.success || reply.data.requestId !== record.requestId || reply.data.rendererEpoch !== record.rendererEpoch) return
+    const current = this.store.get(record.operationId, record.callerId)
+    if (!current || current.inputDigest !== record.inputDigest || current.requestId !== record.requestId || current.rendererEpoch !== record.rendererEpoch) return
+    this.complete(reply.data)
   }
   async reconcileVerification(record: OperationRecord, verify: (proof: NonNullable<OperationRecord['recoveryVerification']>) => Promise<Record<string, unknown>>): Promise<void> {
     const proof = operationVerificationRecovery(record)
@@ -168,9 +182,10 @@ export class ApplicationOperationCoordinator {
     const compensated = Array.isArray(partial.compensatedStepIndexes) ? partial.compensatedStepIndexes : []
     const rolledBack = object(details.execution).rolledBack === true || (completed.length > 0
       && completed.every(index => compensated.includes(index)) && Array.isArray(partial.uncompensatedStepIndexes) && partial.uncompensatedStepIndexes.length === 0)
-    const state = reply.result.ok === true ? 'completed' : changed || transaction.persistence || details.persistence ? 'partial'
-      : rolledBack ? 'rolled_back' : cleanFailure ? 'not_executed' : 'unknown'
-    const verified = object(object(reply.result.data).verification).verified === true
+    const persistence = transaction.persistence || details.persistence
+    const state = reply.result.ok === true ? 'completed' : persistence ? 'partial'
+      : rolledBack ? 'rolled_back' : changed ? 'partial' : cleanFailure ? 'not_executed' : 'unknown'
+    const verified = state === 'not_executed' || state === 'rolled_back' || object(object(reply.result.data).verification).verified === true
     this.store.save({ ...record, state, targetRefs: [...record.targetRefs ?? [], ...resultRefs(reply.result)], verificationState: verified ? 'verified' : 'unresolved', result: reply.result })
     if (record.recoveryOf && reply.result.ok === true) {
       const original = this.store.get(record.recoveryOf, record.callerId)
@@ -187,9 +202,17 @@ export class ApplicationOperationCoordinator {
     const original = this.store.get(originalOperationId, callerId)
     if (!original || original.state !== 'partial') throw new Error('RECOVERY_UNAVAILABLE:原操作没有已确认的保存失败，未知修改不能重放。')
     if (original.rendererEpoch !== rendererEpoch) throw new Error('RECOVERY_SESSION_LOST:原编辑会话已关闭，未保存的内存不能伪造恢复；请在应用中核对原文档。')
-    const transaction = object(object(object(original.result?.error).details).transaction)
-    const recovery = object(object(transaction.persistence).recovery)
+    const details = object(object(original.result?.error).details)
+    const transaction = object(details.transaction)
+    const recovery = object(object(transaction.persistence ?? details.persistence).recovery)
     const target = refSchema.safeParse(recovery.target)
+    if (original.atomicPlacement && target.success && recovery.replayMutation === false && recovery.capabilityId === 'save_video_edit'
+      && target.data.kind === 'video_edit.document' && target.data.id === object(original.input.documentRef).id && original.requestId && original.rendererEpoch) {
+      return this.store.prepare({ operationId, callerId, inputDigest: operationDigest(raw), input: { documentRef: { kind: target.data.kind, id: target.data.id } },
+        state: 'prepared', recoveryOf: originalOperationId, capabilityId: 'save_video_edit',
+        recoveryOperation: { requestId: original.requestId, rendererEpoch: original.rendererEpoch,
+          atomicPlacement: { operationId: applicationInvocationId(callerId, originalOperationId), documentId: target.data.id } } })
+    }
     if (recovery.replayMutation !== false || !target.success || !((recovery.capabilityId === 'retry_canvas_document_save' && target.data.kind === 'canvas.document') || (recovery.capabilityId === 'retry_image_edit_document_save' && target.data.kind === 'image_edit.document'))) throw new Error('RECOVERY_UNAVAILABLE:原领域没有登记可执行的仅保存恢复入口。')
     const verification = transaction.recoveryVerification as OperationRecord['recoveryVerification']
     const ownerId = recovery.capabilityId === 'retry_image_edit_document_save' ? z.string().uuid().safeParse(recovery.ownerId) : undefined

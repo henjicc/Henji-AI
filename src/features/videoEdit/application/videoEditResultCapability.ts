@@ -7,6 +7,7 @@ import { splitVideoEditRef } from './videoEditReflection'
 import { captureVideoEditResultTarget, readVideoEditResultPlacement } from './videoEditResultTarget'
 import { readVideoEditImageReturn } from './videoEditFrameEdit'
 import { createVideoEditCreativeTransfer, runVideoEditCreativeTransfer } from './videoEditCreativeTransfer'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 type PlaceInput = z.infer<typeof placeVideoEditCreativeResultCapability.inputSchema>
 type PlaceOutput = z.infer<typeof placeVideoEditCreativeResultCapability.outputSchema>
@@ -31,7 +32,9 @@ async function sourceRequest(source: PlaceInput['result']): Promise<VideoEditCre
 }
 
 /** Same frozen-target transfer as the UI send menus; the public layer only maps refs. */
-export async function placeVideoEditCreativeResultFromCapability(input: PlaceInput, signal?: AbortSignal): Promise<PlaceOutput> {
+export async function placeVideoEditCreativeResultFromCapability(input: PlaceInput, signal?: AbortSignal, operationId?: string): Promise<PlaceOutput> {
+  let dispatched = false
+  try {
   const projectId = input.documentRef.id
   const sequenceId = childOf(projectId, input.sequenceRef)
   const placement = videoEditResultPlacementSchema.parse(input.placement.mode === 'library' ? { mode: 'library' as const }
@@ -40,11 +43,17 @@ export async function placeVideoEditCreativeResultFromCapability(input: PlaceInp
   const bound = input.frameEditSessionRef ? readVideoEditImageReturn(input.frameEditSessionRef) : undefined
   if (input.frameEditSessionRef && (!bound || bound.target.projectId !== projectId || bound.target.sequenceId !== sequenceId || JSON.stringify(videoEditResultPlacementSchema.parse(readVideoEditResultPlacement(bound.target))) !== JSON.stringify(placement))) throw new Error('原帧编辑会话或回填位置已失效，请重新打开当前帧。')
   const target = bound?.target ?? captureVideoEditResultTarget(projectId, sequenceId, placement)
-  const receipt = await runVideoEditCreativeTransfer(createVideoEditCreativeTransfer(target, await sourceRequest(input.result)), signal)
+  const transfer = createVideoEditCreativeTransfer(target, await sourceRequest(input.result))
+  dispatched = true
+  const receipt = await runVideoEditCreativeTransfer(transfer, signal, operationId)
   const resultRef = receipt.clipId ? { kind: 'video_edit.clip' as const, id: `${projectId}:${receipt.clipId}` } : { kind: 'video_edit.item' as const, id: `${projectId}:${receipt.itemId}` }
   return {
     resultRef, documentRef: input.documentRef, assetRef: { kind: 'asset', id: receipt.assetId },
     message: placement.mode === 'library' ? '创作结果已加入素材面板并保存，可一次撤销。' : '创作结果已按指定方式加入剪辑并保存，可一次撤销恢复。',
     verification: { verified: receipt.verified, target: resultRef, condition: '已从剪辑文件回读并核对素材或片段与资产内容身份。' },
+  }
+  } catch (error) {
+    if (!dispatched) throw new ApplicationPreflightFailure(error)
+    throw error
   }
 }

@@ -1,5 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import { resolveLocalAssetPath } from './assetCollectionService'
+import { describe, expect, it, vi } from 'vitest'
+const create = vi.hoisted(() => vi.fn())
+vi.mock('@/commands/assetLibrary', () => ({ createAsset: create }))
+import { addMediaReferenceToLibrary, resolveLocalAssetPath } from './assetCollectionService'
+
+it('资产收录统一短名，不改媒体位置；工作区导出拼接长名也不越界', async () => {
+  create.mockResolvedValue({ id: 'asset' })
+  const filePath = 'D:/generated/result.png'
+  await addMediaReferenceToLibrary({ filePath, mediaType: 'image', source: 'generated', displayName: '👨‍👩‍👧‍👦'.repeat(70) })
+  expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ filePath, displayName: `${'👨‍👩‍👧‍👦'.repeat(7)}…` }))
+  await addMediaReferenceToLibrary({ filePath, mediaType: 'video', source: 'video-edit', displayName: `工程${'帧'.repeat(240)}观察` })
+  expect(create.mock.calls.at(-1)![0].displayName.length).toBeLessThanOrEqual(80)
+})
 
 describe('resolveLocalAssetPath', () => {
   it('解析 Electron 媒体协议中的 Windows 路径', () => {

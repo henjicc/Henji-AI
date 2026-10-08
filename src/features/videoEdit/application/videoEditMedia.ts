@@ -6,6 +6,7 @@ import { toFetchableMediaUrl } from '@/services/imageSource'
 import { editVideoProject, requireVideoEditInstance } from './videoEditService'
 import type { VideoEditMedia, VideoEditDocument } from '@/core/videoEdit/document'
 import { createLogger } from '@/core/logging'
+import { generatedMediaName } from '@/core/documents/generatedMediaName'
 import { matchVideoEditFrameRate, resolveVideoEditMediaInspection, videoEditNativeMediaProbe, type VideoEditBrowserInspection, type VideoEditNativeProbeOutcome } from './videoEditMediaProbe'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { resolveVideoEditAssetReference, sameVideoEditAssetContent, videoEditAssetContentSnapshot } from './videoEditAssetReferences'
@@ -172,7 +173,7 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
     if (binId && !document.bins.some(bin => bin.id === binId)) throw new Error('导入期间目标素材箱已移除，请重新选择导入位置。')
     for (const { source, media: inspectedMedia } of inspected) {
       let media = mediaByPath.get(videoEditMediaPathKey(source.path))
-      if (!media) { media = { ...inspectedMedia }; document.media.push(media); mediaByPath.set(videoEditMediaPathKey(source.path), media) }
+      if (!media) { media = { ...inspectedMedia, name: generatedMediaName(inspectedMedia.name, '素材') }; document.media.push(media); mediaByPath.set(videoEditMediaPathKey(source.path), media) }
       if (source.asset) {
         validateAssetMedia(media, source.asset)
         const content = videoEditAssetContentSnapshot(source.asset)

@@ -2,10 +2,11 @@ import { readImageInfo } from '@/commands/image'
 import { createLogger } from '@/core/logging'
 import { databaseService } from '@/services/database'
 import { readStoredResultUrls } from '@/features/generation/domain/storedResultUrls'
+import { generatedMediaName } from '@/core/documents/generatedMediaName'
 const logger = createLogger('features.generation.result_source')
 type HistoryRecord = Awaited<ReturnType<typeof databaseService.getHistory>>[number]
 export interface GenerationResultMediaSelection { outputIndex: number; localOnly?: boolean }
-export interface GenerationResultMedia { mediaType: 'image' | 'video' | 'audio'; source: string; name: string }
+export interface GenerationResultMedia { mediaType: 'image' | 'video' | 'audio'; source: string; name: string; prompt: string }
 /** 持久历史是结果复用的真相源，不依赖生成页是否挂载或内存任务列表。 */
 export async function readGenerationResultMedia(id: string, expectedType?: 'image' | 'video' | 'audio', selection?: GenerationResultMediaSelection): Promise<GenerationResultMedia | null> {
   const record = await databaseService.getHistoryById(id)
@@ -16,13 +17,13 @@ export async function readGenerationResultMedia(id: string, expectedType?: 'imag
     if (!Number.isSafeInteger(selection.outputIndex) || selection.outputIndex < 0) throw new Error('INVALID_INPUT:请选择已保存结果的有效序号。')
     const source = record.resultPaths[selection.outputIndex] ?? (!selection.localOnly ? readStoredResultUrls(record.params)[selection.outputIndex] : undefined)
     if (!source || selection.localOnly && !/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(source)) throw new Error('NOT_FOUND:所选结果尚未保存到本地，请先完成原结果保存。')
-    return { mediaType: record.type, source, name: record.prompt?.trim() || '生成结果' }
+    return { mediaType: record.type, source, name: generatedMediaName(record.prompt), prompt: record.prompt ?? '' }
   }
   const source = record.type === 'image'
     ? (await resolveReadableGenerationImage(record)).source
     : record.resultPaths.at(-1) ?? readStoredResultUrls(record.params).at(-1) ?? null
   if (!source) throw new Error('NOT_FOUND:生成记录没有可引用的媒体。')
-  return { mediaType: record.type, source, name: record.prompt?.trim() || '生成结果' }
+  return { mediaType: record.type, source, name: generatedMediaName(record.prompt), prompt: record.prompt ?? '' }
 }
 
 export async function resolveReadableGenerationImage(record: HistoryRecord): Promise<{

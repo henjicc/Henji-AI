@@ -2,18 +2,14 @@ import type { ModelDefinition } from '@/core/types'
 import { hasAlternativeModelInput } from '@/core/inputs/alternativeInput'
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import { showAlertDialog } from '@/stores/alertDialogStore'
+import { generatedMediaName } from '@/core/documents/generatedMediaName'
 
-const RESULT_TITLE_MAX_CHARS = 10
 export const DEFAULT_GENERATION_DURATION_MS = 60_000
 export const PROMPT_PARAM_IDS = ['prompt', 'text']
 export const ROW_MEDIA_KINDS: RowMediaKind[] = ['image', 'video', 'audio']
 
 export function buildResultNodeTitle(prompt: string, fallbackTitle: string): string {
-  const normalizedPrompt = prompt.trim()
-  if (!normalizedPrompt) return fallbackTitle
-  return normalizedPrompt.length <= RESULT_TITLE_MAX_CHARS
-    ? normalizedPrompt
-    : `${normalizedPrompt.slice(0, RESULT_TITLE_MAX_CHARS)}...`
+  return generatedMediaName(prompt, fallbackTitle)
 }
 
 export function resolveGenerationPromptInput(

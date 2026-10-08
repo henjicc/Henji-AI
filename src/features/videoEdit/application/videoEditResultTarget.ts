@@ -1,4 +1,6 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
+import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
+import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { createLogger } from '@/core/logging'
 import { videoEditClipSchema, videoEditCreativeSourceSchema, type VideoEditCreativeSource, type VideoEditDocument } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip, placeVideoEditItem } from '@/core/videoEdit/projectItems'
@@ -104,7 +106,7 @@ async function verifySaved(target: VideoEditResultTarget, state: TargetState): P
 }
 
 /** One media import transaction owns the clip, provenance and output-clock captions. */
-export async function commitVideoEditCreativeResult(target: VideoEditResultTarget, result: VideoEditCreativeResult, signal?: AbortSignal): Promise<VideoEditResultReceipt> {
+export async function commitVideoEditCreativeResult(target: VideoEditResultTarget, result: VideoEditCreativeResult, signal?: AbortSignal, operationId?: string): Promise<VideoEditResultReceipt> {
   const state = stateOf(target, signal)
   if (state.busy) throw new Error('此结果正在回填，请等待完成。')
   state.busy = true
@@ -121,10 +123,12 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       return await verifySaved(target, state)
     }
     let clipId: string | undefined; let itemId = ''; let expectedClip = ''; let expectedItem = ''
-    await importVideoEditSources(target.projectId, [{ assetId: asset.id }], undefined, signal, (document, itemIds) => {
+    const applyPlacement = (document: VideoEditDocument, itemIds: string[]): VideoEditDocument => {
       assertVideoEditResultTarget(target, signal)
       const item = document.items.find(item => itemIds.includes(item.id) && document.media.some(media => item.mediaId === media.id && sameAsset(media, asset)))
       if (!item) throw new Error('创作结果在引用期间已改变，请重新选择原结果。')
+      const media = document.media.find(media => media.id === item.mediaId)
+      if (media && origin) media.creativeSource = origin
       const placement = state.placement
       itemId = item.id; expectedItem = JSON.stringify(item)
       if (placement.mode === 'library') return document
@@ -160,6 +164,11 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       // Schema parsing orders keys by declaration; compare the normalized published clip.
       expectedClip = JSON.stringify(videoEditClipSchema.parse(clip))
       return { ...document, sequences: document.sequences.map(value => value.id === sequence.id ? { ...sequence, clips: prior ? sequence.clips.map(value => value.id === prior.id ? clip : value) : [...sequence.clips, clip], ...(captions ? { captions } : {}) } : value) }
+    }
+    await importVideoEditSources(target.projectId, [{ assetId: asset.id }], undefined, signal, (document, itemIds) => {
+      const next = applyPlacement(document, itemIds)
+      return operationId ? { ...next, creativePlacements: [...(next.creativePlacements ?? []),
+        { operationId, sequenceId: target.sequenceId, assetId: asset.id, itemId, clipId: clipId ?? '' }] } : next
     }, state.placement.mode === 'replace' ? [state.placement.clipId] : [])
     stateOf(target)
     const committed = state.owner.document
@@ -175,6 +184,15 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
     return saved
   } catch (error) {
     logger.warn('创作结果回填未完成，原结果保留', { event: 'video_edit.result.commit.failed', error, context: { projectId: target.projectId, sequenceId: target.sequenceId, committed: Boolean(state.committed) } })
+    // import 在独立副本上校验，发布前拒绝不会改原文档；只根据实际对象身份报告零提交。
+    if (!state.committed && state.owner.document === state.baseline) {
+      throw new ApplicationTransactionFailure({ status: 'failed', code: 'EXECUTION_FAILED', message: error instanceof Error ? error.message : String(error), recoverable: true,
+        partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] } })
+    }
+    if (state.committed) throw new ApplicationPersistenceFailure('创作结果已加入剪辑，但保存尚未确认。请仅重试保存，不要重复放入。', {
+      memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document',
+      recovery: { capabilityId: 'save_video_edit', target: { kind: 'video_edit.document', id: target.projectId }, replayMutation: false },
+    }, error)
     throw error
   } finally { state.busy = false }
 }

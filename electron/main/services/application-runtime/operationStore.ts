@@ -16,9 +16,12 @@ export interface OperationRecord {
   capabilityId: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['capabilityId']
   targetRefs?: Array<{ kind: string; id: string }>
   recoveryVerification?: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['recoveryVerification']
+  recoveryOperation?: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['recoveryOperation']
   recoveryResult?: Record<string, unknown>
   requestId?: string
   rendererEpoch?: string
+  /** 执行器将身份与剪辑修改原子保存，可在新渲染会话证明是否保留落位。 */
+  atomicPlacement?: boolean
   result?: Record<string, unknown>
 }
 export interface ReadBaseline {

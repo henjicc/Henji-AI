@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { generatedMediaName } from '../../../../src/core/documents/generatedMediaName'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../../protocol'
@@ -179,7 +180,7 @@ export function createAsset(input: CreateAssetRequest): AssetDto {
   const transaction = getDb().transaction(() => {
     const existing = getDb().prepare('SELECT id FROM assets WHERE file_path = ?').get(storedPath) as { id: string } | undefined
     const id = existing?.id ?? crypto.randomUUID()
-    if (!existing) getDb().prepare('INSERT INTO assets (id, media_type, display_name, file_path, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, input.mediaType, input.displayName?.trim() || path.basename(filePath), storedPath, input.source, now, now)
+      if (!existing) getDb().prepare('INSERT INTO assets (id, media_type, display_name, file_path, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, input.mediaType, generatedMediaName(input.displayName || path.basename(filePath), '素材'), storedPath, input.source, now, now)
     const insertItem = getDb().prepare('INSERT OR IGNORE INTO asset_library_items (library_id, asset_id, added_at) VALUES (?, ?, ?)')
     for (const libraryId of input.libraryIds ?? []) insertItem.run(libraryId, id, now)
     return { id, wasExisting: Boolean(existing) }

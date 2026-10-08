@@ -34,6 +34,17 @@ import { resolveGenerationMediaReferences } from '@/features/generation/applicat
 describe('generation result canvas bridge', () => {
   beforeEach(() => { vi.clearAllMocks(); mocks.history.mockResolvedValue(null) })
 
+  it('长提示词落画布时标题按字素截短，来源提示词完整保存', async () => {
+    const prompt = `海报${'👨‍👩‍👧‍👦'.repeat(50)}`
+    mocks.history.mockResolvedValue({ id: 'saved', type: 'image', status: 'success', resultPaths: ['C:/history/result.png'], params: {}, prompt })
+    mocks.addTrustedMediaCanvasNode.mockResolvedValue({ projectId: 'canvas-1', nodeId: 'node-1', nodeType: 'uploadNode' })
+    await addGenerationResultToCanvas({ projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'saved' } })
+    const data = mocks.addTrustedMediaCanvasNode.mock.calls[0][0].data
+    expect(data.prompt).toBeUndefined() // 媒体节点数据是严格契约，完整提示词留在生成历史来源里
+    expect(data.sourceFileName.length).toBeLessThanOrEqual(80)
+    expect(data.sourceFileName).toBe(`海报${'👨‍👩‍👧‍👦'.repeat(7)}…`)
+  })
+
   it('历史结果不在页面内存中仍能直接放入原画布，不需要先打开生成页', async () => {
     mocks.history.mockResolvedValue({ id: 'saved', type: 'image', status: 'success', resultPaths: ['C:/history/result.png'], params: {}, prompt: '历史图片' })
     mocks.getResult.mockImplementationOnce(() => { throw new Error('生成页未挂载') })
@@ -107,7 +118,7 @@ describe('generation result canvas bridge', () => {
     await addGenerationResultToCanvas({ projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'task-1' } })
     expect(mocks.addTrustedMediaCanvasNode).toHaveBeenCalledWith(expect.objectContaining({
       placement: { mode: 'right_of_node', anchorNodeId: 'selected-1' },
-      data: expect.objectContaining({ sourceFileName: '详细描述'.repeat(30) }),
+      data: expect.objectContaining({ sourceFileName: `${'详细描述'.repeat(19)}详细描…` }),
     }), {})
   })
   it('指定其他项目时不误用当前画布的选中节点', async () => {

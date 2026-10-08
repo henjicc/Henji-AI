@@ -9,6 +9,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { materializeImageEditPreview } from '@/features/imageEdit/application/imageEditApplicationService'
 import { readGenerationResultMedia } from '@/features/generation/application/generationResultSource'
+import { generatedMediaName } from '@/core/documents/generatedMediaName'
 
 /**
  * 组合生成与画布两个领域的窄桥梁。模型只传稳定 generation.result 引用；媒体路径由宿主内部
@@ -30,7 +31,7 @@ export async function addGenerationResultToCanvas(input: {
   const saved = input.resultRef.kind === 'generation.result' ? await readGenerationResultMedia(input.resultRef.id) : null
   const result = input.resultRef.kind === 'image_edit.preview'
     ? { mediaType: 'image' as const, url: await materializeImageEditPreview(input.resultRef.id), filePath: undefined, prompt: '编辑结果' }
-    : saved ? { mediaType: saved.mediaType, url: saved.source, filePath: saved.source, prompt: saved.name }
+    : saved ? { mediaType: saved.mediaType, url: saved.source, filePath: saved.source, prompt: saved.prompt }
       : visibleTaskResultMedia(input.resultRef.id)
   if (!result) throw new Error('GENERATION_RESULT_NOT_AVAILABLE')
 
@@ -39,7 +40,7 @@ export async function addGenerationResultToCanvas(input: {
     sourceType: 'history',
     imageUrl: result.url,
     filePath: result.filePath ?? result.url,
-    displayName: result.prompt.trim().replace(/\s+/g, ' ').slice(0, 120) || '生成结果',
+    displayName: generatedMediaName(result.prompt),
   }
   const selectedNodeId = useProjectStore.getState().currentProjectId === input.projectId
     ? useCanvasStore.getState().selectedNodeId : null

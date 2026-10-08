@@ -3,6 +3,7 @@ import type { TextProcessingPromptTemplate } from '@henjicc/ai-sdk'
 
 import { llmCancelTask, llmChatStream } from '@/commands/llmRuntime'
 import { createLogger } from '@/core/logging'
+import { generatedMediaName } from '@/core/documents/generatedMediaName'
 import { describeLlmProviderError } from '@/core/llm/providerErrorMessage'
 import {
   createPlainTextPromptDocument,
@@ -49,8 +50,7 @@ const logger = createLogger('features.canvas.text_processing')
 const STREAM_PREVIEW_INTERVAL_MS = 200
 
 function buildResultTitle(prompt: string, fallback: string): string {
-  const normalized = prompt.trim()
-  return normalized.length > 16 ? `${normalized.slice(0, 16)}…` : normalized || fallback
+  return generatedMediaName(prompt, fallback)
 }
 
 function createRequestId(): string {

@@ -7,8 +7,11 @@ import { getApplicationControlExecutionEngine } from '@/features/application-con
 import { createApplicationCapabilitySession, listApplicationCapabilities } from './applicationCapabilityService'
 import { buildExternalCapabilityInventory, externalReflectionPermissions } from './externalCapabilityInventory'
 import { rendererEpoch } from './rendererIdentity'
+import { APPLICATION_DOMAINS } from './applicationDomains'
 
 const logger = createLogger('features.application_control.host')
+// 与宿主附件生命周期分开；发送回执失败或同一渲染器重新连接后，核对仍读原执行事实。
+const operationReceipts = new Map<string, { callerId: string; reply: import('@/core/application-control/localHostContracts').LocalHostReply }>()
 
 /** 仅由根宿主通过可信 preload 事件创建授权；网络调用参数不能抵达工厂。 */
 export function attachLocalApplicationHost(platform: ApplicationHostPlatform, ready: boolean): () => void {
@@ -35,6 +38,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
     const execute = async (): Promise<void> => {
       logger.info(readOnly ? '开始读取应用内容' : '开始修改应用内容', { event: `mcp.${action}.start`, context: { requestId, capabilityId } })
       let result: Record<string, unknown>
+      let dispatched = false
       try {
         if (definitions.find(item => item.id === capabilityId)?.paidGenerationPreparation && !allowPaid) throw new Error('此连接没有付费生成授权。')
         if (!ready) throw new Error('应用尚未就绪，请稍后重试。')
@@ -42,7 +46,34 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
         grants.set(requestId, grant)
         const definition = definitions.find((item) => item.id === capabilityId)
         if (!definition) throw new Error('此读取工具不可用，请重新连接。')
+        if (request.data.recoveryOperation && capabilityId !== 'get_current_application_context' && capabilityId !== 'save_video_edit') throw new Error('操作核对只能沿只读宿主或原剪辑保存恢复入口。')
+        dispatched = true
         result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input, expectedRevisions }, { requestId: request.data.operationId ?? requestId, signal: controller.signal })
+        if (result.ok === true && request.data.recoveryOperation && capabilityId === 'save_video_edit') {
+          let verification: unknown = { verified: false, condition: '保存已完成，原放入尚未核对。' }
+          for (const domain of APPLICATION_DOMAINS) {
+            const recovered = await domain.recoverOperation?.(request.data.recoveryOperation, applicationCallerAccess(grant, requestId, controller.signal))
+            if (recovered?.ok === true) { verification = (recovered.data as Record<string, unknown>).verification; break }
+          }
+          result = { ...result, data: { ...result.data as Record<string, unknown>, verification } }
+        } else if (result.ok === true && request.data.recoveryOperation) {
+          const original = request.data.recoveryOperation
+          const receipt = operationReceipts.get(original.requestId)
+          if (receipt?.callerId === callerId && receipt.reply.rendererEpoch === original.rendererEpoch) {
+            result = { ...result, data: { ...result.data as Record<string, unknown>, operationReply: receipt.reply } }
+          } else if (original.rendererEpoch !== rendererEpoch) {
+            for (const domain of APPLICATION_DOMAINS) {
+              const recovered = await domain.recoverOperation?.(original, applicationCallerAccess(grant, requestId, controller.signal))
+              if (recovered) {
+                const outcome = recovered.ok === true ? { ...recovered,
+                  resultingRevision: result.resultingRevision, resultingScopeRevisions: result.resultingScopeRevisions,
+                  data: { ...recovered.data as Record<string, unknown>, revision: result.resultingRevision, scopeRevisions: result.resultingScopeRevisions } } : recovered
+                result = { ...result, data: { ...result.data as Record<string, unknown>, operationReply: { requestId: original.requestId, rendererEpoch: original.rendererEpoch, result: outcome } } }
+                break
+              }
+            }
+          }
+        }
         if (result.ok === true && request.data.recoveryVerification) {
           const proof = request.data.recoveryVerification
           const verification = await getApplicationControlExecutionEngine().verifyRecovery(proof.conditions, proof.evidence, applicationCallerAccess(grant, requestId, controller.signal))
@@ -51,10 +82,12 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
         }
         logger.info(readOnly ? '应用读取结束' : '应用修改结束', { event: `mcp.${action}.completed`, context: { requestId, ok: result.ok } })
       } catch (error) {
-        result = { ok: false, error: { code: 'APPLICATION_EXECUTION_FAILED', message: error instanceof Error ? error.message : '应用操作失败。' } }
+        result = { ok: false, error: { code: 'APPLICATION_EXECUTION_FAILED', message: error instanceof Error ? error.message : '应用操作失败。', ...(!dispatched ? { details: { execution: { notExecuted: true } } } : {}) } }
         logger.warn('应用操作未完成', { event: `mcp.${action}.failed`, context: { requestId } })
       }
-      if (!APPLICATION_READ_CAPABILITY_IDS.some((id) => id === capabilityId) || (!disposed && !controller.signal.aborted)) await platform.complete({ rendererEpoch, requestId, result })
+      const reply = { rendererEpoch, requestId, result }
+      if (!readOnly) operationReceipts.set(requestId, { callerId, reply })
+      if (!readOnly || (!disposed && !controller.signal.aborted)) await platform.complete(reply)
     }
     void execute().catch((error) => logger.error('发送操作结果失败', error, { event: `mcp.${action}.reply.failed` })).finally(() => { active.delete(requestId); grants.delete(requestId) })
   })

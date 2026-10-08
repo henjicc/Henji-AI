@@ -33,6 +33,38 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it('完整补偿的失败即使携带执行过的effects也确定收敛；保存不确定仍保留屏障', () => {
+    const f = fixture()
+    for (const persistence of [false, true]) {
+      const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+      const requestId = randomUUID()
+      f.coordinator.dispatched(original, requestId, f.rendererEpoch)
+      f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: { ok: false, error: { details: { transaction: {
+        effects: [{ effect: 'update' }], partial: { completedStepIndexes: [0], compensatedStepIndexes: [0], uncompensatedStepIndexes: [] },
+        ...(persistence ? { persistence: { stage: 'document', persistenceState: 'unconfirmed' } } : {}),
+      } } } } })
+      expect(f.store.get(original.operationId, f.callerId)?.state).toBe(persistence ? 'partial' : 'rolled_back')
+      if (!persistence) expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).not.toThrow()
+    }
+  })
+  it('丢失回执核对仅接受原请求与原渲染会话；没有证据不能猜未执行', async () => {
+    const f = fixture()
+    const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    const requestId = randomUUID()
+    f.coordinator.dispatched(original, requestId, f.rendererEpoch)
+    f.coordinator.interrupted(requestId, f.rendererEpoch)
+    for (const reply of [undefined,
+      { requestId: randomUUID(), rendererEpoch: f.rendererEpoch, result: { ok: true } },
+      { requestId, rendererEpoch: randomUUID(), result: { ok: true } }]) {
+      await f.coordinator.reconcileReceipt(f.store.get(original.operationId, f.callerId)!, async () => ({ ok: true, data: { operationReply: reply } }))
+      expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown')
+    }
+    const read = vi.fn(async () => ({ ok: true, data: { operationReply: { requestId, rendererEpoch: f.rendererEpoch,
+      result: { ok: false, error: { details: { execution: { notExecuted: true } } } } } } }))
+    await f.coordinator.reconcileReceipt(f.store.get(original.operationId, f.callerId)!, read)
+    expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' })
+    expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).not.toThrow()
+  })
   it.each([false, true])('新连接仅在全部目标重新核实=%s 后才能继续修改，不会重放旧事务', async (verified) => {
     const f = fixture()
     const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
