@@ -20,7 +20,7 @@
 - key 用英文小驼峰（`titleSize`），title 写简短中文（“标题字号”），description 写语义和常用取值（给助手看），tooltip 写一句给用户的提示（可选）。
 - 范围给真实可用的区间，default 是最好看的值；step 符合手感。
 - 多个参数按 `group` 分组（“文字”“配色”“节奏”“质感”），细调项标 `advanced: true` 折到“更多”。
-- 选对类型，用户才有趁手的控件：方向用 angle，位置用 point，区间用 range，配色梯度用 gradient，亮度映射用 curve，三路调色用 grade，缓动用 easing，随机图案用 seed，字体用 font。完整类型表见 [参数与曲线](parameters-curves.md)。
+- 选对类型，用户才有趁手的控件：方向用 angle，位置用 point，区间用 range，配色梯度用 gradient，亮度映射用 curve，三路调色用 grade，缓动用 easing，随机图案用 seed，字体用 font。完整类型表见 [参数类型与自定义组件类型](parameter-types.md)。
 - 需要动画的参数标 `animatable: true`，用户和你都能打关键帧。
 
 ## 画面从参数推导
