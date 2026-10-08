@@ -22,6 +22,18 @@ export type VideoEditTrimMode = 'ripple' | 'roll' | 'slip' | 'slide'
 export interface VideoEditTrim { mode: VideoEditTrimMode; clipIds: readonly string[]; edge?: 'in' | 'out'; delta: number }
 export interface VideoEditTrimResult { sequence: VideoEditSequence; delta: number }
 
+/** 与实际修剪共用约束计算；拒绝的方向同时保留原因（例如相邻轨道锁定）。 */
+export function videoEditTrimAvailability(document: VideoEditDocument, sequenceId: string, trim: Omit<VideoEditTrim, 'delta'>, metadata?: CodeMaterialMetadataReader) {
+  const sequence = document.sequences.find(sequence => sequence.id === sequenceId)
+  if (!sequence) throw new Error('目标序列不存在。')
+  const limit = Math.floor(videoEditFps(sequence.frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
+  const probe = (delta: number): { frames: number; reason?: string } => {
+    try { return { frames: Math.abs(applyVideoEditTrim(document, sequenceId, { ...trim, delta }, metadata).delta) } }
+    catch (error) { return { frames: 0, reason: error instanceof Error ? error.message : String(error) } }
+  }
+  return { negative: probe(-limit), positive: probe(limit) }
+}
+
 const TIMED_KINDS = new Set<VideoEditClip['kind']>(['video', 'audio', 'code', 'graphic', 'adjustment', 'sequence'])
 /** 与 adjustVideoEditClip 同一口径：有源时间的片段修剪入点时要平移源入点。 */
 function timed(clip: VideoEditClip): boolean { return TIMED_KINDS.has(clip.kind) || Boolean(clip.effects?.length) }

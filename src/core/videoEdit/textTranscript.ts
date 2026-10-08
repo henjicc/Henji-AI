@@ -4,7 +4,8 @@ import { applyAudioEditSuggestion, audioEditFillerBlockIds, DEFAULT_AUDIO_EDIT_S
 import { findAudioEditText } from '../audioEdit/text'
 import { joinAudioEditText } from '../audioEdit/captions'
 import { videoEditClipSourceRange, videoEditClipFrameBoundaryAtSource, videoEditClipSourceSecondsAtTime } from './clipSpeed'
-import type { VideoEditClip, VideoEditComposition } from './document'
+import { audibleVideoEditClips, videoEditNestedComposition, type VideoEditClip, type VideoEditComposition } from './document'
+import { videoEditAudioContent } from './audioContent'
 
 const blockSchema = z.object({ id: z.string(), text: z.string().max(20000), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), included: z.boolean(), locked: z.boolean(), granularity: z.enum(['word', 'segment']) }).strict().refine(value => value.endFrame > value.startFrame)
 const sourceRangeSchema = z.object({ startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() }).strict().refine(value => value.endFrame > value.startFrame)
@@ -29,13 +30,14 @@ export function mergeVideoEditTextTranscription(previous: VideoEditTextTranscrip
   }
   return videoEditTextTranscriptionSchema.parse({ ...incoming, audioDocumentIds: [...new Set([...(previous.audioDocumentIds ?? [previous.audioDocumentId]), ...(incoming.audioDocumentIds ?? [incoming.audioDocumentId])])], sources })
 }
-export interface VideoEditTextWord extends AudioEditTranscriptBlock { index: number; clipId: string; from: number; to: number }
+export interface VideoEditTextWord extends AudioEditTranscriptBlock { index: number; clipId: string; from: number; to: number; sourceVoiceId?: string }
 export interface VideoEditTextRange { from: number; to: number }
 // Source timestamps use integer microseconds, independent of sequence frame rate.
 const SOURCE_RATE = 1_000_000
 export function videoEditTextMediaIdentity(composition: VideoEditComposition, itemId: string): string {
   const item = composition.items.find(value => value.id === itemId)
   const media = composition.media.find(value => value.id === item?.mediaId)
+  if (item?.kind === 'sequence') return JSON.stringify([item.sequenceId, videoEditAudioContent(videoEditNestedComposition(composition, { itemId, kind: 'sequence' })!)])
   return JSON.stringify([item?.mediaId, media?.path, media?.sourceRevision, media?.assetContent, item?.sequenceId])
 }
 function sourceForClip(composition: VideoEditComposition, clip: VideoEditClip): VideoEditTextTranscription['sources'][number] | undefined {
@@ -49,10 +51,20 @@ export function mapVideoEditTextRange(clip: VideoEditClip, range: { startFrame: 
   const to = Math.min(clip.start + clip.duration, Math.ceil(videoEditClipFrameBoundaryAtSource(clip, clip.reverse ? low : high, fps) - 1e-6))
   return to > from ? { from, to } : undefined
 }
-export function videoEditTranscriptWords(composition: VideoEditComposition, clipIds?: readonly string[]): VideoEditTextWord[] {
-  const words = composition.clips.flatMap(clip => {
+export function videoEditTranscriptWords(composition: VideoEditComposition, clipIds?: readonly string[], ancestors: ReadonlySet<string> = new Set()): VideoEditTextWord[] {
+  if (ancestors.has(composition.id)) throw new Error('嵌套序列存在循环，不能读取声音词源。')
+  const path = new Set([...ancestors, composition.id])
+  const words = audibleVideoEditClips(composition).flatMap(clip => {
     if (clipIds && !clipIds.includes(clip.id) || clip.sourceComponent === 'video') return []
     const source = sourceForClip(composition, clip)
+    // 已识别父层混音优先；没有父层词源时沿正式嵌套图读取子声音（含固定多机位主音频）。
+    if (!source && clip.kind === 'sequence' && (!clip.audioRole || clip.audioRole === 'dialogue')) {
+      const child = videoEditNestedComposition(composition, clip)!
+      return videoEditTranscriptWords(child, undefined, path).flatMap(word => {
+        const range = mapVideoEditTextRange(clip, { startFrame: word.from / child.fps * SOURCE_RATE, endFrame: word.to / child.fps * SOURCE_RATE }, composition.fps)
+        return range ? [{ ...word, ...range, id: `${clip.id}:${word.id}`, clipId: clip.id, sourceVoiceId: `${clip.id}:${word.sourceVoiceId ?? word.clipId}` }] : []
+      })
+    }
     return (source?.blocks ?? []).flatMap(block => {
       if (!block.included || !block.text.trim()) return []
       const range = mapVideoEditTextRange(clip, block, composition.fps)
@@ -71,11 +83,22 @@ export function mergeVideoEditTextRanges(ranges: readonly VideoEditTextRange[]):
   }
   return merged
 }
+/** 静音证据也沿嵌套音频时钟映射；没有证据不根据词间空白猜测。 */
+function videoEditTextSilences(composition: VideoEditComposition, ancestors: ReadonlySet<string> = new Set()): VideoEditTextRange[] {
+  if (ancestors.has(composition.id)) throw new Error('嵌套序列存在循环，不能读取声音词源。')
+  const path = new Set([...ancestors, composition.id])
+  return audibleVideoEditClips(composition).flatMap(clip => {
+    const source = sourceForClip(composition, clip)
+    const child = !source && clip.kind === 'sequence' ? videoEditNestedComposition(composition, clip) : undefined
+    const ranges = child ? videoEditTextSilences(child, path).map(range => ({ startFrame: range.from / child.fps * SOURCE_RATE, endFrame: range.to / child.fps * SOURCE_RATE })) : source?.silences ?? []
+    return ranges.flatMap(range => { const mapped = mapVideoEditTextRange(clip, range, composition.fps); return mapped ? [mapped] : [] })
+  })
+}
 export function groupVideoEditTextWords(words: readonly VideoEditTextWord[], fps: number): VideoEditTextWord[][] {
   const groups: VideoEditTextWord[][] = []
   for (const word of words) {
     const previous = groups.at(-1); const last = previous?.at(-1)
-    if (last && last.clipId === word.clipId && previous!.length < 128 && word.from - last.to < fps * .6 && !/[。！？.!?]$/.test(last.text)) previous!.push(word)
+    if (last && (last.sourceVoiceId ?? last.clipId) === (word.sourceVoiceId ?? word.clipId) && word.from - last.to < fps * .6 && !/[。！？.!?]$/.test(last.text)) previous!.push(word)
     else groups.push([word])
   }
   return groups
@@ -89,10 +112,7 @@ export const videoEditTextSelectorSchema = z.discriminatedUnion('kind', [
 export type VideoEditTextSelector = z.infer<typeof videoEditTextSelectorSchema>
 export function resolveVideoEditTextRanges(composition: VideoEditComposition, selector: VideoEditTextSelector): VideoEditTextRange[] {
   const parsed = videoEditTextSelectorSchema.parse(selector); const words = videoEditTranscriptWords(composition)
-  if (parsed.kind === 'silence') return mergeVideoEditTextRanges(composition.clips.flatMap(clip => {
-    const source = sourceForClip(composition, clip)
-    return (source?.silences ?? []).flatMap(range => { const mapped = mapVideoEditTextRange(clip, range, composition.fps); return mapped ? [mapped] : [] })
-  }))
+  if (parsed.kind === 'silence') return mergeVideoEditTextRanges(videoEditTextSilences(composition))
   let groups: VideoEditTextWord[][]
   if (parsed.kind === 'words') groups = parsed.ranges.map(range => {
     if (range.end >= words.length) throw new Error('词索引超出当前稿子，请重新读取转录稿。')
@@ -129,9 +149,9 @@ export function buildVideoEditTextTranscription(composition: VideoEditCompositio
     const a = videoEditClipSourceSecondsAtTime(clip, from / composition.fps, composition.fps); const b = videoEditClipSourceSecondsAtTime(clip, to / composition.fps, composition.fps)
     return { startFrame: Math.max(0, Math.round(Math.min(a, b) * SOURCE_RATE)), endFrame: Math.round(Math.max(a, b) * SOURCE_RATE) }
   }
-  const speech = clips.filter(clip => (!clip.audioRole || clip.audioRole === 'dialogue') && ['audio', 'video'].includes(clip.kind) && clip.sourceComponent !== 'video')
+  const speech = clips.filter(clip => (!clip.audioRole || clip.audioRole === 'dialogue') && ['audio', 'video', 'sequence'].includes(clip.kind) && clip.sourceComponent !== 'video')
   for (const clip of speech) {
-    if (!['audio', 'video'].includes(clip.kind) || clip.sourceComponent === 'video') continue
+    if (!['audio', 'video', 'sequence'].includes(clip.kind) || clip.sourceComponent === 'video') continue
     const audioMappingIdentity = JSON.stringify(clip.audioMapping ?? null); const key = `${clip.itemId}:${audioMappingIdentity}`
     const entry: VideoEditTextTranscription['sources'][number] = sources.get(key) ?? { itemId: clip.itemId, mediaIdentity: identities?.[clip.itemId] ?? videoEditTextMediaIdentity(composition, clip.itemId), audioMappingIdentity, coverage: [], blocks: [], silences: [] }
     const coverage = convert(clip, { startFrame: 0, endFrame: audio.source.durationFrames })

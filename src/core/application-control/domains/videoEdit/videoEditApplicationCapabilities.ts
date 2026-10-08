@@ -18,6 +18,7 @@ import { rippleVideoEditClipSpeedCapability } from './videoEditSpeedCapability'
 import { VIDEO_EDIT_LOUDNESS_CAPABILITIES } from './videoEditLoudnessCapabilities'
 import { VIDEO_EDIT_SCENE_CAPABILITIES } from './videoEditSceneCapabilities'
 import { generateVideoEditAudioDuckingCapability } from './videoEditAudioDuckingCapability'
+import { retryVideoEditSmartRegionCapability } from './videoEditSmartRegionCapability'
 
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 const clipRef = applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict()
@@ -138,7 +139,7 @@ export const trimVideoEditClipCapability = defineApplicationCapability({
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
-export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [...VIDEO_EDIT_TITLE_TEMPLATE_CAPABILITIES, ...VIDEO_EDIT_MULTICAM_CAPABILITIES, nestVideoEditClipsCapability, reframeVideoEditCapability, generateVideoEditAudioDuckingCapability, rippleVideoEditClipSpeedCapability, ...[
+export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [retryVideoEditSmartRegionCapability, ...VIDEO_EDIT_TITLE_TEMPLATE_CAPABILITIES, ...VIDEO_EDIT_MULTICAM_CAPABILITIES, nestVideoEditClipsCapability, reframeVideoEditCapability, generateVideoEditAudioDuckingCapability, rippleVideoEditClipSpeedCapability, ...[
   ['save_video_edit', '保存剪辑', '立即把剪辑的当前修改写入它在项目文件夹里的剪辑文件（平时会自动保存）。失败后只重试保存，不重复修改。documentRef 的 id 即剪辑的文档 ID（取自 list_documents）。'],
   ['undo_video_edit', '撤销剪辑修改', '撤销目标剪辑的一步手动或助手修改。'],
   ['redo_video_edit', '重做剪辑修改', '恢复目标剪辑刚撤销的一步修改。'],

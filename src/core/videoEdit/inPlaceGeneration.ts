@@ -6,6 +6,7 @@ import { videoEditFps } from './time'
 import { videoEditClipSourceMidSecondsAt, videoEditClipTailRoom } from './clipSpeed'
 import { videoEditEdgeTracks } from './tracks'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
+import { VideoEditOperationFailure } from './operationFailure'
 
 /*
  * 原地生成（4.12）：在时间线当前位置生成镜头或声音并直接落进去。
@@ -113,17 +114,17 @@ function freeTrack(sequence: VideoEditSequence, kind: 'video' | 'audio', from: n
  */
 export function planVideoEditInPlaceGeneration(document: VideoEditDocument, sequenceId: string, intent: VideoEditInPlaceIntent, targetTracks: readonly number[] = []): VideoEditInPlacePlan {
   const sequence = document.sequences.find(value => value.id === sequenceId)
-  if (!sequence) throw new Error('目标序列不存在。')
+  if (!sequence) throw new VideoEditOperationFailure('目标序列不存在，请使用当前可用序列。', { reason: 'sequence_missing', availableSequenceIds: document.sequences.map(value => value.id) })
   const fps = videoEditFps(sequence.frameRate); const limit = maxFrames(sequence)
   const base = { action: intent.action, sequenceId, width: sequence.width, height: sequence.height, fps }
   const seconds = (value: number): number => Math.max(1, Math.round(value * fps))
-  const checkDuration = (duration: number | undefined): void => { if (duration !== undefined && (!Number.isSafeInteger(duration) || duration < 1)) throw new Error('时长须为正整数帧。') }
+  const checkDuration = (duration: number | undefined): void => { if (duration !== undefined && (!Number.isSafeInteger(duration) || duration < 1)) throw new VideoEditOperationFailure('时长须为正整数帧。', { reason: 'duration_range', minFrames: 1, requestedFrames: Number.isFinite(duration) ? duration : null }) }
   checkDuration(intent.duration)
   if (intent.action === 'replace_shot' || intent.action === 'extend_shot' || intent.action === 'generate_audio' && intent.clipId) {
     const clip = sequence.clips.find(value => value.id === intent.clipId)
-    if (!clip) throw new Error(intent.clipId ? '要处理的片段已不在这个序列里。' : '请指定要替换或延长的片段。')
+    if (!clip) throw new VideoEditOperationFailure('请指定当前序列中要替换或延长的片段。', { reason: 'clip_missing', sequenceId, availableClipIds: sequence.clips.map(value => value.id) })
     const track = sequence.tracks.find(value => value.index === clip.track)
-    if (track?.locked) throw new Error('片段所在轨道已锁定，请先解锁。')
+    if (track?.locked) throw new VideoEditOperationFailure('片段所在轨道已锁定，请先解锁。', { reason: 'track_locked', trackId: track.id, recovery: { propertyId: 'video_edit.track.locked', value: false } })
     if (intent.action === 'generate_audio') {
       if (clip.kind !== 'audio') throw new Error('只能用新的配音或配乐替换声音片段。')
       return { ...base, mediaType: 'audio', frame: clip.start, duration: clip.duration, fill: true, trackIndex: clip.track, placement: 'replace', clipId: clip.id, references: [] }
@@ -132,21 +133,21 @@ export function planVideoEditInPlaceGeneration(document: VideoEditDocument, sequ
     if (intent.action === 'replace_shot') return { ...base, mediaType: 'video', frame: clip.start, duration: clip.duration, fill: true, trackIndex: clip.track, placement: 'replace', clipId: clip.id, references: [reference(document, sequence, clip, 'replaced_head')] }
     const frame = clip.start + clip.duration
     const duration = Math.min(intent.duration ?? seconds(VIDEO_EDIT_IN_PLACE_DEFAULT_SECONDS), limit - frame)
-    if (duration < 1) throw new Error('片段已到序列末尾，不能再延长。')
+    if (duration < 1) throw new VideoEditOperationFailure('片段已到序列末尾，不能再延长。', { reason: 'range', frame, availableFrames: Math.max(0, limit - frame), maxFrame: limit - 1 })
     return { ...base, mediaType: 'video', frame, duration, fill: intent.duration !== undefined, trackIndex: clip.track, placement: intent.mode ?? 'insert', clipId: clip.id, references: [reference(document, sequence, clip, 'extended_tail')] }
   }
   const kind = intent.action === 'generate_audio' ? 'audio' : 'video'
   const frame = intent.frame
-  if (frame === undefined || !Number.isSafeInteger(frame) || frame < 0 || frame >= limit) throw new Error('请指定序列范围内的落点。')
+  if (frame === undefined || !Number.isSafeInteger(frame) || frame < 0 || frame >= limit) throw new VideoEditOperationFailure('请指定序列范围内的落点。', { reason: 'range', requestedFrame: frame ?? null, minFrame: 0, maxFrame: limit - 1, fps })
   let trackIndex: number | null
   let duration = intent.duration
   let fill = duration !== undefined
   if (intent.trackIndex !== undefined) {
     const track = sequence.tracks.find(value => value.index === intent.trackIndex)
     if (!track || track.kind !== kind) throw new Error(kind === 'audio' ? '配音或配乐只能放在音频轨道上。' : '镜头只能放在视频轨道上。')
-    if (track.locked) throw new Error('目标轨道已锁定，请先解锁。')
+    if (track.locked) throw new VideoEditOperationFailure('目标轨道已锁定，请先解锁。', { reason: 'track_locked', trackId: track.id, recovery: { propertyId: 'video_edit.track.locked', value: false } })
     const gap = videoEditTrackGap(sequence, track.index, frame)
-    if (!gap) throw new Error('落点已有片段，请换到空白处，或选中片段用“替换镜头”。')
+    if (!gap) throw new VideoEditOperationFailure('落点已有片段，请换到空白处，或选中片段用“替换镜头”。', { reason: 'slot_occupied', frame, trackId: track.id, occupiedClips: sequence.clips.filter(clip => clip.track === track.index && overlaps(clip, frame, frame + 1)).map(clip => ({ clipId: clip.id, startFrame: clip.start, endFrame: clip.start + clip.duration })), recovery: { action: kind === 'audio' ? 'generate_audio' : 'replace_shot' } })
     if (duration === undefined) { fill = gap.to !== null; duration = gap.to === null ? seconds(VIDEO_EDIT_IN_PLACE_DEFAULT_SECONDS) : gap.to - frame }
     trackIndex = sequence.clips.some(clip => clip.track === track.index && overlaps(clip, frame, frame + duration!)) ? null : track.index
   } else {
@@ -274,9 +275,9 @@ export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: Vi
 export function switchVideoEditClipTake(document: VideoEditDocument, sequenceId: string, clipId: string, index: number): VideoEditDocument {
   const sequence = document.sequences.find(value => value.id === sequenceId)
   const clip = sequence?.clips.find(value => value.id === clipId)
-  if (!sequence || !clip) throw new Error('片段已不在这个序列里。')
+  if (!sequence || !clip) throw new VideoEditOperationFailure('片段已不在这个序列里。', { reason: 'clip_missing', availableSequenceIds: document.sequences.map(value => value.id), availableClipIds: sequence?.clips.map(value => value.id) ?? [] })
   const take = clip.takes?.[index]
-  if (!take) throw new Error('这个片段没有可切回的镜头版本。')
+  if (!take) throw new VideoEditOperationFailure(`这个片段没有所选镜头版本；可用 take 序号：${clip.takes?.map((_, at) => at).join('、') || '无'}。`, { reason: 'take_missing', clipId, requestedTakeIndex: index, availableTakeIndexes: clip.takes?.map((_, at) => at) ?? [] })
   if (sequence.tracks.find(track => track.index === clip.track)?.locked) throw new Error('片段所在轨道已锁定，请先解锁。')
   const item = document.items.find(value => value.id === take.itemId)
   if (!item) throw new Error('这个版本的素材已从项目中移除，不能切回。')

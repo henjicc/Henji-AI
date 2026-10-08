@@ -1,6 +1,6 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { videoEditComposition, videoEditDocumentSchema, type VideoEditClip } from './document'
+import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema, type VideoEditClip } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { addLegacyVideoEditTracks } from './testFixtures'
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, mapVideoEditTextRange, resolveVideoEditTextRanges, videoEditTranscriptWords } from './textTranscript'
@@ -23,6 +23,36 @@ function fixture() {
   return { document, sequence, audio }
 }
 describe('source words ↔ timeline', () => {
+  it('递归读取两层嵌套声音词源，变帧率、裁入点、速度/倒放与静音遵循源时钟', () => {
+    const { document, sequence } = fixture()
+    sequence.textTranscription!.sources[0].silences = [{ startFrame: 2000000, endFrame: 3000000 }]
+    const middle = createVideoEditSequence('中层'); middle.frameRate = { numerator: 24, denominator: 1 }
+    const root = createVideoEditSequence('父层')
+    document.items.push({ id: 'inner-item', name: '内层', kind: 'sequence', sequenceId: sequence.id }, { id: 'middle-item', name: '中层', kind: 'sequence', sequenceId: middle.id })
+    const base = sequence.clips[1]
+    middle.clips = [{ ...base, id: 'inner', itemId: 'inner-item', kind: 'sequence', start: 24, duration: 120, sourceInUs: 1000000, speed: { numerator: 2, denominator: 1 }, linkId: undefined }]
+    root.clips = [{ ...base, id: 'outer', itemId: 'middle-item', kind: 'sequence', start: 60, duration: 180, sourceInUs: 0, linkId: undefined }]
+    document.sequences.push(middle, root)
+    expect(videoEditTranscriptWords(videoEditComposition(document, root.id)).map(word => [word.text, word.from, word.to, word.clipId])).toEqual([['价格', 90, 98, 'outer'], ['九元。', 97, 105, 'outer'], ['那个', 135, 143, 'outer']])
+    expect(resolveVideoEditTextRanges(videoEditComposition(document, root.id), { kind: 'text', text: '价格九元' })).toEqual([{ from: 90, to: 105 }])
+    expect(resolveVideoEditTextRanges(videoEditComposition(document, root.id), { kind: 'silence' })).toEqual([{ from: 105, to: 120 }])
+    middle.clips[0] = { ...middle.clips[0], reverse: true, sourceInUs: 11000000 }
+    expect(videoEditTranscriptWords(videoEditComposition(document, root.id)).map(word => word.text)).toEqual(['那个', '九元。', '价格'])
+    sequence.tracks.find(track => track.kind === 'audio')!.muted = true
+    expect(videoEditTranscriptWords(videoEditComposition(document, root.id))).toEqual([])
+  })
+  it('字幕对嵌套混音的词级识别可回填词源，父层识别优先且子声音改变后失效', () => {
+    const { document, sequence, audio } = fixture(); const root = createVideoEditSequence('字幕父层')
+    document.items.push({ id: 'nested-item', name: '口播嵌套', kind: 'sequence', sequenceId: sequence.id })
+    root.clips = [{ ...sequence.clips[1], id: 'nested', itemId: 'nested-item', kind: 'sequence', linkId: undefined }]
+    document.sequences.push(root)
+    const composition = videoEditComposition(document, root.id)
+    root.textTranscription = buildVideoEditTextTranscription(composition, root.clips, audio, 0)
+    expect(root.textTranscription.sources).toHaveLength(1)
+    expect(videoEditTranscriptWords(videoEditComposition(document, root.id)).map(word => [word.text, word.from, word.to])).toEqual([['嗯，', 0, 15], ['价格', 30, 45], ['九元。', 45, 60], ['那个', 120, 135]])
+    sequence.clips[1].volume = 0
+    expect(videoEditTranscriptWords(videoEditComposition(document, root.id))).toEqual([])
+  })
   it('maps normal, fractional speed, reverse and trimmed half-open intervals', () => {
     const { sequence } = fixture(); const clip: VideoEditClip = { ...sequence.clips[1], start: 20, duration: 90, sourceInUs: 1000000, speed: { numerator: 3, denominator: 2 } }
     expect(mapVideoEditTextRange(clip, { startFrame: 1500000, endFrame: 2000000 }, 30)).toEqual({ from: 30, to: 40 })

@@ -37,6 +37,7 @@ const target = z.discriminatedUnion('action', [
 ])
 export const videoEditInPlaceInputSchema = z.object({
   documentRef,
+  replacesTaskRef: ref('generation.task').optional().describe('重试失败占位或换模型时必填原失败任务引用；新提交成功才移除原占位，提交前失败保留原占位。原任务已成功但落位/保存失败时请用 recover_video_edit_in_place_generation，不能重新付费。'),
   sequenceRef: ref('video_edit.sequence').optional().describe('目标序列；省略时用剪辑当前打开的序列。'),
   target,
   prompt: z.string().trim().min(1).max(32 * 1024).describe('要生成的画面或声音内容。配音时就是要念的台词。'),
@@ -65,7 +66,7 @@ const prepareOutput = z.object({
 export const prepareVideoEditInPlaceGenerationCapability = defineApplicationCapability({
   id: 'prepare_video_edit_in_place_generation', title: '检查原地生成', description: '原地生成提交前的检查：按剪辑当前状态算出落点、长度、轨道与要带入的参考帧，校验模型与参数并给出预估费用。不取帧、不生成、不改剪辑。',
   version: 1, domain: 'video_edit', aliases: ['原地生成估价', '检查生成镜头'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false,
-  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.model'], producesRefs: ['generation.preparation'],
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.model', 'generation.task'], producesRefs: ['generation.preparation'],
   inputSchema: videoEditInPlaceInputSchema, outputSchema: prepareOutput,
   concurrencyKey: 'video_edit_in_place_prepare', resolveConcurrencyKey: parsed => `video_edit_in_place_prepare:${parsed.documentRef.id}`,
   resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: () => [],
@@ -78,9 +79,9 @@ export const generateVideoEditInPlaceCapability = defineApplicationCapability({
   description: '缺镜头、要换画面、要配音时在时间线上直接生成并落进当前位置：generate_shot 在指定秒数生成镜头（如“3 秒处生成 4 秒的日落空镜”= startSeconds 3、durationSeconds 4），replace_shot 把片段换成新生成的版本（原镜头保留，可用 restore_video_edit_clip_take 切回），extend_shot 以片段尾帧续接后续镜头，generate_audio 生成配音或配乐。自动带入参考帧并按序列画幅与落点换算模型的时长和比例。提交后时间线上立刻出现占位，用户可以继续剪辑；生成完成后结果复制进项目素材并一步落进时间线（一次撤销），生成期间原落点被占用时改放到新轨道。返回生成任务 taskRef：用 wait_generation_task 等待，再用 get_video_edit_in_place_generation 读取落位结果；cancel_generation_task 取消会一并撤回占位。会产生付费生成。',
   version: 1, domain: 'video_edit', aliases: ['原地生成', '补镜头', '生成镜头', '替换镜头', '延长镜头', '配音', '配乐', 'generate shot in timeline'], readOnly: false, risk: 'R2', dataClasses: ['C1'], permission: 'generation:create', idempotent: true, destructive: false, timeoutMs: 180000, supportsPreview: false, supportsUndo: false,
   completionKind: 'submitted',
-  requiredScopes: ['video_edit', 'generation'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.model'], producesRefs: ['generation.task'],
+  requiredScopes: ['video_edit', 'generation'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.model', 'generation.task'], producesRefs: ['generation.task'],
   successEvidence: ['返回已提交的生成任务 taskRef；落进时间线须再用 get_video_edit_in_place_generation 确认 status=placed。'],
-  failureRecovery: ['提交前失败不留任何占位与剪辑修改，按错误修正落点、模型或参数后重试；生成失败时占位保留错误，可再次调用本能力（换模型）。'],
+  failureRecovery: ['提交前失败保留原失败占位，修正后带 replacesTaskRef 重试；已生成但落位/保存失败用 recover_video_edit_in_place_generation，只恢复原结果，不重新付费。'],
   executionPrerequisites: ['prepare_video_edit_in_place_generation'], paidGenerationPreparation: 'prepare_video_edit_in_place_generation',
   inputSchema: videoEditInPlaceInputSchema, outputSchema: generateOutput,
   concurrencyKey: 'video_edit_in_place', resolveConcurrencyKey: parsed => `video_edit_in_place:${parsed.documentRef.id}`,
@@ -95,7 +96,7 @@ export const generateVideoEditInPlaceCapability = defineApplicationCapability({
 
 const statusOutput = z.object({
   documentRef, taskRef, status: z.enum(['preparing', 'generating', 'placing', 'failed', 'placed', 'cancelled']), progress: z.number().min(0).max(100).optional(),
-  clipRef: ref('video_edit.clip').optional(), error: z.string().optional(), message: z.string(),
+  clipRef: ref('video_edit.clip').optional(), takeIndex: z.number().int().nonnegative().optional(), error: z.string().optional(), message: z.string(),
 }).strict()
 export const getVideoEditInPlaceGenerationCapability = defineApplicationCapability({
   id: 'get_video_edit_in_place_generation', title: '读取原地生成状态', description: '按生成任务 taskRef 读取一次原地生成：生成中、正在落位、已落进时间线（返回新片段 clipRef）、失败（原因）或已取消。',
@@ -112,7 +113,7 @@ export const switchVideoEditClipTakeCapability = defineApplicationCapability({
   id: 'restore_video_edit_clip_take', title: '切回片段的其他镜头版本', description: '片段被替换过（原地生成的替换镜头、配音替换）后，切换到它记着的其他版本：takeIndex 对应片段属性 takes 里的序号（0 为最近替换下来的那个）。位置、变换与效果不动，当前画面变成可切回的版本；一步撤销。',
   version: 1, domain: 'video_edit', aliases: ['切回原镜头', '换回原来的', '恢复原片段'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 30000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.clip'],
-  inputSchema: z.object({ documentRef, clipRef: ref('video_edit.clip'), takeIndex: z.number().int().min(0).max(7).optional().describe('takes 里的序号，默认 0。') }).strict(), outputSchema: switchOutput,
+  inputSchema: z.object({ documentRef, clipRef: ref('video_edit.clip'), takeIndex: z.number().int().min(0).optional().describe('takes 里的序号，默认 0；可用序号由片段的 takes 列表决定。') }).strict(), outputSchema: switchOutput,
   concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`,
   resolveOperationTargets: parsed => [parsed.documentRef, parsed.clipRef], resolveOperationWriteTargets: parsed => [parsed.documentRef],
   control: capabilityControl('execute', ['video_edit.clip'], { cancelable: false, revisionScopes: ['video_edit'] }), summarize: result => result.message,
@@ -120,6 +121,30 @@ export const switchVideoEditClipTakeCapability = defineApplicationCapability({
   resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['video_edit.clip'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
 
+const recoveryOutput = z.object({ documentRef, taskRef, status: z.enum(['placing', 'placed', 'removed']), verified: z.boolean().optional(), message: z.string() }).strict()
+const recoveryInput = z.object({ documentRef, taskRef }).strict()
+export const recoverVideoEditInPlaceGenerationCapability = defineApplicationCapability({
+  id: 'recover_video_edit_in_place_generation', title: '恢复原地生成落位或保存', description: '对失败原任务复用已经成功的结果，继续落位；已编辑但保存失败时只续保存。不生成、不重复导入、不重新计费。返回 placing 后用 get_video_edit_in_place_generation 查询最终状态。原任务生成失败且无结果时拒绝，付费重试须检查 generate_video_edit_in_place 的 replacesTaskRef。',
+  version: 1, domain: 'video_edit', aliases: ['恢复失败落位', '原地生成重试保存'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 30000, supportsPreview: false, supportsUndo: false,
+  completionKind: 'submitted', requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'generation.task'], producesRefs: ['generation.task'],
+  inputSchema: recoveryInput, outputSchema: recoveryOutput,
+  concurrencyKey: 'video_edit_in_place', resolveConcurrencyKey: input => `video_edit_in_place:${input.documentRef.id}`,
+  resolveOperationTargets: input => [input.documentRef], resolveOperationWriteTargets: input => [input.documentRef],
+  control: capabilityControl('execute', ['video_edit.document'], { revisionScopes: ['video_edit'], verificationRequired: false, resultState: 'submitted' }), summarize: output => output.message,
+})
+export const discardVideoEditInPlaceGenerationCapability = defineApplicationCapability({
+  id: 'discard_video_edit_in_place_generation', title: '移除失败原地生成占位', description: '按原任务引用移除失败占位并保存，与时间线移除相同。不生成、不删除生成历史、不撤销已落位片段；已编辑但保存失败的片段保留，可用恢复能力续保存。',
+  version: 1, domain: 'video_edit', aliases: ['移除失败占位'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 30000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'generation.task'], producesRefs: ['video_edit.document'],
+  inputSchema: recoveryInput, outputSchema: recoveryOutput,
+  concurrencyKey: 'video_edit_in_place', resolveConcurrencyKey: input => `video_edit_in_place:${input.documentRef.id}`,
+  resolveOperationTargets: input => [input.documentRef], resolveOperationWriteTargets: input => [input.documentRef],
+  control: capabilityControl('execute', ['video_edit.document'], { revisionScopes: ['video_edit'] }), summarize: output => output.message,
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.documentRef], count: 1, verified: result.verified === true, evidence: result.verified ? ['失败占位已移除并从文档回读核对。'] : [] }],
+})
+
 export const VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   prepareVideoEditInPlaceGenerationCapability, generateVideoEditInPlaceCapability, getVideoEditInPlaceGenerationCapability, switchVideoEditClipTakeCapability,
+  recoverVideoEditInPlaceGenerationCapability, discardVideoEditInPlaceGenerationCapability,
 ] as ApplicationCapabilityDefinition[]

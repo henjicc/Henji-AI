@@ -1,6 +1,7 @@
 import type { z } from 'zod'
 import type { trimVideoEditClipCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
-import { applyVideoEditTrim } from '@/core/videoEdit/timelineTrims'
+import { applyVideoEditTrim, videoEditTrimAvailability } from '@/core/videoEdit/timelineTrims'
+import { VideoEditOperationFailure } from '@/core/videoEdit/operationFailure'
 import { expandVideoEditSelection, videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { splitVideoEditRef } from './videoEditReflection'
@@ -17,15 +18,20 @@ const MODE_NAMES = { ripple: '波纹编辑', roll: '滚动编辑', slip: '外滑
 export async function trimVideoEditClip(input: TrimInput) {
   const id = input.documentRef.id
   const ref = splitVideoEditRef(input.clipRef)
-  if (ref.projectId !== id || !ref.childId) throw new Error('clipRef 必须属于目标剪辑，请使用目录返回的完整引用。')
   const owner = requireVideoEditInstance(id)
+  const availableRefs = owner.document.sequences.flatMap(sequence => sequence.clips.map(clip => ({ kind: 'video_edit.clip', id: `${id}:${clip.id}` })))
+  const missing = (): VideoEditOperationFailure => new VideoEditOperationFailure(`请使用目标剪辑当前可用的片段引用：${availableRefs.map(ref => ref.id).join('、') || '无'}。`, { reason: 'reference_missing', availableRefs })
+  if (ref.projectId !== id || !ref.childId) throw missing()
   const sequence = owner.document.sequences.find(value => value.clips.some(clip => clip.id === ref.childId))
-  if (!sequence) throw new Error('目标片段不存在。')
+  if (!sequence) throw missing()
   const view = owner.activeSequenceId === sequence.id ? owner : owner.sequenceViews.get(sequence.id)
   const linked = videoEditPickRelations(view?.linkedSelection !== false)
   const trim = { mode: input.mode, ...(input.edge ? { edge: input.edge } : {}), delta: input.frames }
   const result = applyVideoEditTrim(owner.document, sequence.id, { ...trim, clipIds: expandVideoEditSelection(sequence, [ref.childId], linked) }, readVideoEditCodeMetadata(owner, owner.document))
-  if (!result.delta) throw new Error(`${MODE_NAMES[input.mode]}已到素材余量或相邻片段的边界，这个方向不能再修剪；请换方向或换片段。`)
+  if (!result.delta) {
+    const availability = videoEditTrimAvailability(owner.document, sequence.id, { ...trim, clipIds: expandVideoEditSelection(sequence, [ref.childId], linked) }, readVideoEditCodeMetadata(owner, owner.document))
+    throw new VideoEditOperationFailure(`${MODE_NAMES[input.mode]}已到边界；负方向可用 ${availability.negative.frames} 帧，正方向可用 ${availability.positive.frames} 帧，请按余量调整。`, { reason: 'trim_boundary', mode: input.mode, requestedFrames: input.frames, ...availability })
+  }
   executeVideoEditTimelineEdit(id, sequence.id, { kind: 'trim', ...trim, clipIds: [ref.childId], linked })
   await saveVideoEdit(id)
   const verified = await verifyVideoEditSaved(id, requireVideoEditInstance(id).document)

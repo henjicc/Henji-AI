@@ -74,6 +74,43 @@ it('共享智能区域失败时清空单个效果再写回不会重试；状态�
   } finally { app.dispose() }
 })
 
+it('公共重试共享多人区域：两个效果一次请求，成功后共同读回，不改遮罩或历史', async () => {
+  const { app, owner, createEffects, readProperties } = await fixture()
+  try {
+    const refs = await createEffects(2, { regionId: 'person' })
+    await flush()
+    const ensure = vi.mocked(getPlatform().smartRegions.ensure)
+    expect(ensure).toHaveBeenCalledTimes(1)
+    const issued = ensure.mock.calls[0][0]
+    const masks = structuredClone(getActiveVideoEditSequence(owner).clips[0].effects!.map(effect => effect.mask)); const history = owner.past.length
+    ensure.mockResolvedValue({ state: 'ready', segment: { path: 'D:/cache/person.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'person', summary: { value: 2, peak: 2 } } })
+    const retry = await app.call('retry_video_edit_smart_region', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, effectRef: refs[0] })
+    expect(retry, JSON.stringify(retry)).toMatchObject({ ok: true, data: { status: 'analyzing' } })
+    await flush()
+    expect(ensure).toHaveBeenCalledTimes(2)
+    for (const ref of refs) expect((await readProperties(ref, ['video_edit.effect.region_status']))['video_edit.effect.region_status']).toBe('ready')
+    expect(getActiveVideoEditSequence(owner).clips[0].effects!.map(effect => effect.mask)).toEqual(masks)
+    expect(owner.past).toHaveLength(history)
+  } finally { app.dispose() }
+})
+
+it('公共原地规划拒绝返回范围、占用、锁轨与可用镜头版本事实，错误不改变文档', async () => {
+  const { app, owner } = await fixture()
+  try {
+    const sequence = getActiveVideoEditSequence(owner); const clip = sequence.clips[0]
+    const documentRef = { kind: 'video_edit.document', id: owner.document.id }
+    const track = sequence.tracks.find(track => track.index === clip.track)!
+    const trackRef = { kind: 'video_edit.track', id: `${owner.document.id}:${track.id}` }
+    const clipRef = { kind: 'video_edit.clip', id: `${owner.document.id}:${clip.id}` }
+    const input = { documentRef, target: { action: 'generate_shot', startSeconds: 0, trackRef }, prompt: '镜头' }
+    expect(await app.call('prepare_video_edit_in_place_generation', input)).toMatchObject({ ok: false, error: { details: { videoEdit: { reason: 'slot_occupied', occupiedClips: [{ clipId: clip.id }] } } } })
+    expect(await app.call('prepare_video_edit_in_place_generation', { ...input, target: { action: 'generate_shot', startSeconds: 86400 } })).toMatchObject({ ok: false, error: { details: { videoEdit: { reason: 'range', minFrame: 0, maxFrame: 2591999 } } } })
+    expect(await app.call('restore_video_edit_clip_take', { documentRef, clipRef, takeIndex: 100 })).toMatchObject({ ok: false, error: { details: { videoEdit: { reason: 'take_missing', availableTakeIndexes: [] } } } })
+    expect((await app.change(trackRef, { 'video_edit.track.locked': true })).ok).toBe(true)
+    expect(await app.call('prepare_video_edit_in_place_generation', input)).toMatchObject({ ok: false, error: { details: { videoEdit: { reason: 'track_locked', trackId: track.id } } } })
+  } finally { app.dispose() }
+})
+
 it('手绘遮罩经通用实体创建、修改与清空；错误形状被拒，修正后可继续且领域状态一致', async () => {
   const { app, owner, createEffects, readProperties } = await fixture()
   try {

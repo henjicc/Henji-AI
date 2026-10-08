@@ -224,6 +224,7 @@ it('助手修剪能力与时间线修剪工具同一份编辑：链接音画一�
     expect(ripple.message).toContain('-30'); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.duration)).toEqual([60, 60])
     const slip = await app.requireResult('trim_video_edit_clip', { documentRef, clipRef, mode: 'slip', frames: 100 }) as { message: string }
     expect(slip.message).toContain('请求 100 帧'); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.sourceInUs)).toEqual([1_000_000, 1_000_000])
+    expect(await app.call('trim_video_edit_clip', { documentRef, clipRef, mode: 'slip', frames: 1 })).toMatchObject({ ok: false, error: { details: { videoEdit: { reason: 'trim_boundary', negative: { frames: 30 }, positive: { frames: 0 } } } } })
     expect(owner.past.length).toBe(past + 2)
   } finally { app.dispose() }
 })

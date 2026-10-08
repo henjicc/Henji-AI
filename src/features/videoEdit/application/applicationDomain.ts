@@ -35,7 +35,7 @@ import { splitVideoEditRef } from './videoEditReflection'
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { trimVideoEditClip } from './videoEditTrimCapability'
 import { handleVideoEditExportCapability } from './videoEditExportCapability'
-import { videoEditQueuedExportTask } from './videoEditExportQueue'
+import { uniqueVideoEditOutputPath, videoEditProjectOutputDirectory, videoEditQueuedExportTask } from './videoEditExportQueue'
 import { VideoEditExportPresetExecutor, VideoEditExportPresetMutationExecutor } from './videoEditExportPresetReflection'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
@@ -57,6 +57,9 @@ import { measureVideoEditLoudnessCapability, normalizeVideoEditLoudnessCapabilit
 import { executeVideoEditLoudnessCapability } from './videoEditLoudnessCapability'
 import { generateVideoEditAudioDuckingCapability } from '@/core/application-control/domains/videoEdit/videoEditAudioDuckingCapability'
 import { executeVideoEditAudioDuckingCapability } from './videoEditAudioDuckingCapability'
+import { VideoEditOperationFailure } from '@/core/videoEdit/operationFailure'
+import { retryVideoEditSmartRegionCapability } from '@/core/application-control/domains/videoEdit/videoEditSmartRegionCapability'
+import { retryVideoEditSmartRegionFromCapability } from './videoEditSmartRegionCapability'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 let stopImageDocumentLinks: (() => void) | null = null
@@ -64,6 +67,10 @@ let stopTracking: (() => void) | null = null
 let stopSmartRegions: (() => void) | null = null
 
 export const videoEditApplicationDomain: ApplicationDomainModule = {
+  failure(error) {
+    if (error instanceof VideoEditOperationFailure) return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message, recoverable: true, details: { videoEdit: error.facts } } }
+    return undefined
+  },
   recoverOperation: recoverVideoEditPlacement,
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
@@ -101,6 +108,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      if (definition.id === retryVideoEditSmartRegionCapability.id) return retryVideoEditSmartRegionFromCapability(raw, context.signal)
       const styleKit = await handleVideoEditStyleKitCapability(definition.id, raw, context)
       if (styleKit !== undefined) return styleKit
       const title = await handleTitleTemplateCapability(definition.id, raw, context.signal)
@@ -175,7 +183,9 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           if (!sequence || !clip) throw new Error('原代码片段或效果已不存在。')
           target = { kind: 'clip', sequenceId: sequence.id, clipId: clip.id, ...(input.targetRef.kind === 'video_edit.effect' ? { effectId: ref.childId } : {}) }
         }
-        const asset = await collectVideoEditCodeAsset(ref.projectId, target, input.libraryRef ? { libraryId: input.libraryRef.id } : {}, context.signal)
+        // 能力调用不弹保存对话框：先写进项目“导出”文件夹再收录。
+        const path = async (): Promise<string> => uniqueVideoEditOutputPath(await videoEditProjectOutputDirectory(ref.projectId), '可编辑代码素材', 'henji-code')
+        const asset = await collectVideoEditCodeAsset(ref.projectId, target, { ...(input.libraryRef ? { libraryId: input.libraryRef.id } : {}), path }, context.signal)
         if (!asset) throw new Error('用户取消代码素材保存，没有收录资产。')
         const resultRef = { kind: 'asset' as const, id: asset.id }
         return { resultRef, documentRef: input.documentRef, message: '可编辑代码素材已加入资产库，可在另一剪辑引用并重新调参。', verification: { verified: true, target: resultRef, condition: '正式资产检查已核对代码清单的固定路径、结构与内容身份。' } }
@@ -184,7 +194,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         const input = collectVideoEditOutputCapability.inputSchema.parse(raw)
         const task = input.kind === 'export' ? videoEditQueuedExportTask(input.documentRef.id, input.taskId!) : undefined
         if (input.kind === 'export' && (!task || task.state !== 'completed' || !task.output)) throw new Error('请提供原剪辑已完成且可收录的导出taskId；先查询导出状态。')
-        const receipt = input.kind === 'export' ? task!.output! : await captureVideoEditProgramFrame(input.documentRef.id, input.frame, undefined, context.signal)
+        const receipt = input.kind === 'export' ? task!.output! : await captureVideoEditProgramFrame(input.documentRef.id, input.frame, async () => uniqueVideoEditOutputPath(await videoEditProjectOutputDirectory(input.documentRef.id), `${requireVideoEditInstance(input.documentRef.id).document.name}-节目帧${input.frame ?? ''}`, 'png'), context.signal)
         if (!receipt) throw new Error('用户取消选帧，没有保存文件或收录素材。')
         const asset = await collectVideoEditOutput(receipt, input.libraryRef ? { libraryId: input.libraryRef.id } : {}, context.signal)
         const resultRef = { kind: 'asset' as const, id: asset.id }

@@ -14,9 +14,11 @@ vi.mock('./videoEditInPlaceGeneration', async () => {
   const { switchVideoEditClipTake } = await import('@/core/videoEdit/inPlaceGeneration')
   const original = await vi.importActual<typeof import('./videoEditInPlaceGeneration')>('./videoEditInPlaceGeneration')
   return {
+    ...original,
     startVideoEditInPlaceGeneration: start, prepareVideoEditInPlace: vi.fn(), videoEditInPlaceActionLabel: () => '生成镜头',
     selectedVideoEditInPlaceReferences: original.selectedVideoEditInPlaceReferences, videoEditInPlaceDefaultParams: () => ({}), videoEditInPlaceReferenceLabel: original.videoEditInPlaceReferenceLabel,
     findVideoEditInPlaceJobByTask: (taskId: string) => jobs.get(taskId),
+    requireVideoEditFailedGeneration: (_projectId: string, taskId: string) => jobs.get(taskId),
     switchVideoEditClipTakeInProject: (_projectId: string, sequenceId: string, clipId: string, index: number) => { state.document = switchVideoEditClipTake(state.document, sequenceId, clipId, index) },
   }
 })
@@ -42,6 +44,14 @@ beforeEach(() => {
 })
 
 describe('原地生成助手能力', () => {
+  it('公共输入携带原失败任务身份到正式替换占位服务；坏引用返回当前可用事实', async () => {
+    const documentRef = { kind: 'video_edit.document', id: state.document.id }
+    jobs.set('failed', { id: 'old-job', projectId: state.document.id, status: 'failed', taskId: 'failed' })
+    await handleVideoEditInPlaceCapability('generate_video_edit_in_place', { documentRef, replacesTaskRef: { kind: 'generation.task', id: 'failed' }, target: { action: 'generate_shot', startSeconds: 3 }, prompt: '重试' }, context)
+    expect(start.mock.calls.at(-1)?.[1]).toMatchObject({ replacesJobId: 'old-job' })
+    await expect(handleVideoEditInPlaceCapability('prepare_video_edit_in_place_generation', { documentRef, sequenceRef: { kind: 'video_edit.sequence', id: `${state.document.id}:missing` }, target: { action: 'generate_shot', startSeconds: 3 }, prompt: '重试' }, context)).rejects.toMatchObject({ facts: { reason: 'reference_missing', availableRefs: [{ kind: 'video_edit.sequence', id: `${state.document.id}:${state.document.sequences[0].id}` }] } })
+    await expect(handleVideoEditInPlaceCapability('restore_video_edit_clip_take', { documentRef, clipRef: { kind: 'video_edit.clip', id: `${state.document.id}:missing` } }, context)).rejects.toMatchObject({ facts: { availableRefs: [{ kind: 'video_edit.clip', id: `${state.document.id}:a` }] } })
+  })
   it('已登记进剪辑能力目录，输入拒绝未声明字段并点名缺项', () => {
     const ids = VIDEO_EDIT_APPLICATION_CAPABILITIES.map(definition => definition.id)
     expect(ids).toEqual(expect.arrayContaining(['prepare_video_edit_in_place_generation', 'generate_video_edit_in_place', 'get_video_edit_in_place_generation', 'restore_video_edit_clip_take']))

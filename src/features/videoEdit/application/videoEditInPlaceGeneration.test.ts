@@ -166,9 +166,41 @@ describe('原地生成执行', () => {
     const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'save-task' })
     state.saveError = true; notify({ status: 'success', resultAvailable: true }); await flush(); await flush()
     expect(service.readVideoEditInPlaceJob(started.job.id)).toMatchObject({ status: 'failed', clipId: expect.any(String), error: '保存失败' })
-    state.saveError = false; await service.retryVideoEditInPlaceJob(started.job.id); await flush(); await flush()
+    await expect(service.startVideoEditInPlaceGeneration(request(), { taskId: 'do-not-pay', replacesJobId: started.job.id })).rejects.toMatchObject({ facts: { reason: 'recover_original', replayGeneration: false } })
+    state.saveError = false; await service.retryVideoEditInPlaceJob(started.job.id, { recoveryOnly: true }); await flush(); await flush()
     expect(service.readVideoEditInPlaceJob(started.job.id)?.status).toBe('placed')
     expect(imports).toHaveBeenCalledTimes(1); expect(generation.submit).toHaveBeenCalledTimes(1)
+  })
+  it('付费重试只替换原失败身份，新提交失败保留原占位；免费恢复不能重新生成', async () => {
+    const original = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'original-failed' })
+    notify({ status: 'error', errorMessage: '审核失败' }); await flush(); await flush()
+    await expect(service.retryVideoEditInPlaceJob(original.job.id, { recoveryOnly: true })).rejects.toMatchObject({ facts: { reason: 'generation_failed' } })
+    expect(generation.submit).toHaveBeenCalledTimes(1)
+    state.submitError = new Error('提交失败')
+    await expect(service.startVideoEditInPlaceGeneration(request(), { taskId: 'retry-failed', replacesJobId: original.job.id })).rejects.toThrow('提交失败')
+    expect(service.readVideoEditInPlaceJob(original.job.id)?.status).toBe('failed')
+    state.submitError = null
+    const retried = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'retry-paid', replacesJobId: original.job.id })
+    expect(retried.taskId).toBe('retry-paid'); expect(service.readVideoEditInPlaceJob(original.job.id)).toBeUndefined()
+    expect(state.document.inPlaceGenerations?.some(record => record.id === original.job.id)).toBe(false)
+  })
+  it('新付费重试提交后占位保存失败，错误带回新任务身份；恢复等待原结果而不再付费', async () => {
+    const original = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'old-failed' })
+    notify({ status: 'error', errorMessage: '审核失败' }); await flush(); await flush()
+    generation.submit.mockImplementationOnce(async (_input: unknown, taskId?: string) => {
+      state.saveError = true; state.task.status = 'pending'
+      return { taskId: taskId!, status: 'submitted' }
+    })
+    await expect(service.startVideoEditInPlaceGeneration(request(), { taskId: 'new-submitted', replacesJobId: original.job.id })).rejects.toMatchObject({ facts: { reason: 'submitted_save_failed', taskRef: { id: 'new-submitted' }, replayGeneration: false } })
+    expect(service.readVideoEditInPlaceJob(original.job.id)).toBeUndefined()
+    const next = service.findVideoEditInPlaceJobByTask('new-submitted')!
+    expect(next.status).toBe('failed')
+    state.saveError = false
+    const recovered = await service.retryVideoEditInPlaceJob(next.id, { recoveryOnly: true })
+    expect(recovered.taskId).toBe('new-submitted')
+    notify({ status: 'success', resultAvailable: true }); await flush(); await flush()
+    expect(service.readVideoEditInPlaceJob(next.id)?.status).toBe('placed')
+    expect(generation.submit).toHaveBeenCalledTimes(2); expect(imports).toHaveBeenCalledTimes(1)
   })
   it('带入前后镜头参考帧提交；占位随状态推进，完成后一步落进空隙并保存', async () => {
     const started = await service.startVideoEditInPlaceGeneration(request(), { taskId: 'task-1' })
@@ -200,6 +232,7 @@ describe('原地生成执行', () => {
     notify({ status: 'error', errorMessage: '内容审核未通过' })
     await flush()
     expect(service.readVideoEditInPlaceJob(started.job.id)).toMatchObject({ status: 'failed', error: '内容审核未通过' })
+    state.history = { status: 'error' }
     state.task = { status: 'pending', resultAvailable: false, errorMessage: null, cancellable: true, progress: 0 }
     const retried = await service.retryVideoEditInPlaceJob(started.job.id)
     expect(service.readVideoEditInPlaceJob(started.job.id)).toBeUndefined()

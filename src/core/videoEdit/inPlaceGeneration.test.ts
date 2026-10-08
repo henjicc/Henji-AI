@@ -25,6 +25,16 @@ const sequenceOf = (document: VideoEditDocument) => document.sequences[0]
 const valid = (document: VideoEditDocument): VideoEditDocument => videoEditDocumentSchema.parse(document)
 
 describe('原地生成规划', () => {
+  it('同一规划器输出范围、占用、锁定与版本选择事实，不靠应用层再推算', () => {
+    const { document, sequenceId, video } = fixture()
+    const failure = (action: () => unknown) => { try { action(); throw new Error('应拒绝') } catch (error) { return error } }
+    expect(failure(() => planVideoEditInPlaceGeneration(document, sequenceId, { action: 'generate_shot', frame: -1 }))).toMatchObject({ facts: { reason: 'range', minFrame: 0, maxFrame: 2591999 } })
+    expect(failure(() => planVideoEditInPlaceGeneration(document, sequenceId, { action: 'generate_shot', frame: 1, trackIndex: video }))).toMatchObject({ facts: { reason: 'slot_occupied', occupiedClips: [{ clipId: 'a', startFrame: 0, endFrame: 60 }] } })
+    expect(failure(() => switchVideoEditClipTake(document, sequenceId, 'a', 3))).toMatchObject({ facts: { reason: 'take_missing', availableTakeIndexes: [] } })
+    const track = document.sequences[0].tracks.find(track => track.index === video)!
+    track.locked = true
+    expect(failure(() => planVideoEditInPlaceGeneration(document, sequenceId, { action: 'generate_shot', frame: 60, trackIndex: video }))).toMatchObject({ facts: { reason: 'track_locked', trackId: track.id } })
+  })
   it('空隙：生成镜头填满空隙，带上前一镜头尾帧与后一镜头首帧', () => {
     const { document, sequenceId, video } = fixture()
     expect(videoEditTrackGap(sequenceOf(document), video, 100)).toEqual({ from: 60, to: 150 })

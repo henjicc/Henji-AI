@@ -11,6 +11,7 @@ import { editVideoEditText } from './videoEditTextEditing'
 import { closeAllVideoEdits, savedVideoEdit, reopenVideoEdit, failVideoEditSaves } from './videoEditDocumentTestKit'
 import { handleVideoEditTextCapability } from './videoEditTextCapability'
 import { getPlatform } from '@/platform/runtime'
+import { nestVideoEditSelection } from './videoEditNesting'
 
 beforeEach(installHarnessNativeStorage)
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
@@ -62,6 +63,19 @@ it('formal assistant reads mapped transcript, matches original text, extracts an
     const reopened = await reopenVideoEdit(owner.document.id)
     expect(reopened.document.sequences[1].textTranscription).toEqual(owner.document.sequences[1].textTranscription)
     expect(await app.change(sequenceRef, { 'video_edit.sequence.transcript': [] })).toMatchObject({ ok: false })
+  } finally { app.dispose() }
+})
+
+it('公共文本读写递归消费嵌套词源，摘选保存后重开仍有词级时刻', async () => {
+  const owner = await fixture(); const id = owner.document.id; const sequence = owner.document.sequences[0]
+  nestVideoEditSelection({ projectId: id, sequenceId: sequence.id, clipIds: sequence.clips.map(clip => clip.id) }, '嵌套口播')
+  const app = createApplicationHarness()
+  try {
+    const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }; const documentRef = { kind: 'video_edit.document', id }
+    expect((await app.read(sequenceRef, ['video_edit.sequence.transcript'])).properties).toMatchObject({ 'video_edit.sequence.transcript': [{ text: '嗯', from: 0, to: 15, editable: true }, { text: '价格九元。', from: 30, to: 60 }, { text: '那个' }] })
+    expect(await app.call('extract_video_edit_text', { documentRef, sequenceRef, selector: { kind: 'text', text: '价格九元' }, name: '嵌套摘选' })).toMatchObject({ ok: true, data: { ranges: [{ from: 30, to: 60 }], changed: true, verified: true } })
+    const reopened = await reopenVideoEdit(id); const excerpt = reopened.document.sequences.find(sequence => sequence.name === '嵌套摘选')!
+    expect((await app.read({ kind: 'video_edit.sequence', id: `${id}:${excerpt.id}` }, ['video_edit.sequence.transcript'])).properties).toMatchObject({ 'video_edit.sequence.transcript': [{ text: '价格九元。', from: 0, to: 30, editable: true }] })
   } finally { app.dispose() }
 })
 it('capability returns actual deleted original intervals, no recognition; save failure keeps the edit and forbids replay', async () => {

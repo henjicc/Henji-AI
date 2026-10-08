@@ -10,6 +10,7 @@ import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { databaseService } from '@/services/database'
 import { videoEditInPlaceRecordSchema } from '@/core/videoEdit/inPlacePersistence'
+import { VideoEditOperationFailure } from '@/core/videoEdit/operationFailure'
 import { subscribeVisibleGenerationTaskChanges } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
@@ -94,6 +95,33 @@ export function videoEditInPlaceJobsVersion(): number { return version }
 export function listVideoEditInPlaceJobs(): readonly VideoEditInPlaceJob[] { return snapshot }
 export function readVideoEditInPlaceJob(id: string): VideoEditInPlaceJob | undefined { return jobs.get(id) }
 export function findVideoEditInPlaceJobByTask(taskId: string): VideoEditInPlaceJob | undefined { return [...jobs.values()].find(job => job.taskId === taskId) }
+/** 完成占位已清除时，从文档片段及镜头版本的持久来源读回，绝不重新落位。 */
+export function findVideoEditPlacedGeneration(projectId: string, taskId: string): { clipId: string; takeIndex?: number } | undefined {
+  const owner = requireVideoEditInstance(projectId)
+  for (const sequence of owner.document.sequences) for (const clip of sequence.clips) {
+    if (clip.creativeSource?.type === 'generation' && clip.creativeSource.recordId === taskId) return { clipId: clip.id }
+    const takeIndex = clip.takes?.findIndex(take => take.creativeSource?.type === 'generation' && take.creativeSource.recordId === taskId) ?? -1
+    if (takeIndex >= 0) return { clipId: clip.id, takeIndex }
+  }
+  return undefined
+}
+
+export function requireVideoEditFailedGeneration(projectId: string, taskId: string): VideoEditInPlaceJob {
+  requireVideoEditInstance(projectId)
+  const job = findVideoEditInPlaceJobByTask(taskId)
+  if (!job || job.projectId !== projectId || job.status !== 'failed') throw new VideoEditOperationFailure('请引用这个剪辑保留的失败原地生成任务。', { reason: 'failed_task_missing', availableTaskRefs: listVideoEditInPlaceJobs().filter(value => value.projectId === projectId && value.status === 'failed' && value.taskId).map(value => ({ kind: 'generation.task', id: value.taskId })) })
+  return job
+}
+
+/** 新的付费提交只能替换确认生成失败的占位；成功或未知结果一律走原任务恢复。 */
+export async function assertVideoEditInPlaceRegeneration(job: VideoEditInPlaceJob): Promise<void> {
+  if (!job.taskId) throw new Error('原任务身份缺失，不能重新提交。')
+  let status: string | undefined
+  try { status = generationApplicationService.getTask(job.taskId).status } catch { status = undefined }
+  const history = await databaseService.getHistoryById(job.taskId)
+  const successful = Boolean(job.clipId) || normalizeGenerationTaskStatus(status ?? '') === 'success' || normalizeGenerationTaskStatus(history?.status ?? '') === 'success'
+  if (successful || ![history?.status, status].some(value => isGenerationTerminalStatus(value ?? ''))) throw new VideoEditOperationFailure('原任务已成功或结果尚未确认，请恢复原任务落位/保存，不要重新付费生成。', { reason: 'recover_original', taskRef: { kind: 'generation.task', id: job.taskId }, capabilityId: 'recover_video_edit_in_place_generation', replayGeneration: false })
+}
 /** 仅供测试：清空任务表。 */
 export function resetVideoEditInPlaceJobsForTest(): void { for (const controller of controllers.values()) controller.abort(); controllers.clear(); jobs.clear(); publish() }
 
@@ -349,7 +377,7 @@ async function complete(job: VideoEditInPlaceJob, taskId: string, signal: AbortS
   prune()
 }
 
-async function run(job: VideoEditInPlaceJob, preparation: VideoEditInPlacePreparation, taskId: string, controller: AbortController, submitted: (taskId: string) => void, failed: (error: unknown) => void): Promise<void> {
+async function run(job: VideoEditInPlaceJob, preparation: VideoEditInPlacePreparation, taskId: string, controller: AbortController, submitted: (taskId: string) => Promise<void> | void, failed: (error: unknown) => void): Promise<void> {
   const signal = controller.signal
   const unwatch = watchOwner(job, controller)
   let submittedId: string | undefined
@@ -366,7 +394,7 @@ async function run(job: VideoEditInPlaceJob, preparation: VideoEditInPlacePrepar
     signal.throwIfAborted()
     update(job.id, { status: 'generating', taskId: submittedTask.taskId })
     logger.info('原地生成已提交', { event: 'video_edit.in_place.submitted', requestId: submittedTask.taskId, taskId: submittedTask.taskId, modelId: job.modelId, context })
-    submitted(submittedTask.taskId)
+    await submitted(submittedTask.taskId)
     await complete(job, submittedTask.taskId, signal)
     logger.info('原地生成已落进时间线', { event: 'video_edit.in_place.completed', requestId: submittedTask.taskId, taskId: submittedTask.taskId, modelId: job.modelId, context: { ...context, clipId: jobs.get(job.id)?.clipId } })
   } catch (error) {
@@ -390,6 +418,11 @@ export interface VideoEditInPlaceStart { job: VideoEditInPlaceJob; taskId: strin
  * `taskId` 由助手按操作身份传入以保证幂等；界面省略时新建。`replacesJobId` 是被重试或换模型的失败任务。
  */
 export async function startVideoEditInPlaceGeneration(request: VideoEditInPlaceRequest, options: { taskId?: string; replacesJobId?: string } = {}): Promise<VideoEditInPlaceStart> {
+  if (options.replacesJobId) {
+    const original = readVideoEditInPlaceJob(options.replacesJobId)
+    if (!original || original.projectId !== request.projectId || original.status !== 'failed') throw new Error('原失败占位不存在或不属于目标剪辑。')
+    await assertVideoEditInPlaceRegeneration(original)
+  }
   const preparation = await prepareVideoEditInPlace(request)
   const taskId = options.taskId ?? `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   const job: VideoEditInPlaceJob = { id: crypto.randomUUID(), projectId: request.projectId, plan: preparation.plan, request: structuredClone(request), modelId: preparation.modelId, status: 'preparing', taskId }
@@ -400,7 +433,17 @@ export async function startVideoEditInPlaceGeneration(request: VideoEditInPlaceR
   return await new Promise<VideoEditInPlaceStart>((resolve, reject) => {
     let settled = false
     // 重试或换模型：新任务提交成功后才移除原来失败的占位，新提交失败时原占位（和它的错误）还在
-    void run(job, preparation, taskId, controller, submittedId => { settled = true; if (options.replacesJobId) dismissVideoEditInPlaceJob(options.replacesJobId); resolve({ job: jobs.get(job.id)!, taskId: submittedId }) }, error => { if (!settled) { settled = true; reject(error) } })
+    void run(job, preparation, taskId, controller, async submittedId => {
+      if (options.replacesJobId) {
+        dismissVideoEditInPlaceJob(options.replacesJobId)
+        try { await saveVideoEdit(request.projectId) } catch (error) {
+          const failure = new VideoEditOperationFailure('新的生成已经提交，但占位保存未确认。请恢复这个新任务，不要重复付费提交。', { reason: 'submitted_save_failed', taskRef: { kind: 'generation.task', id: submittedId }, capabilityId: 'recover_video_edit_in_place_generation', replayGeneration: false })
+          failure.cause = error
+          throw failure
+        }
+      }
+      settled = true; resolve({ job: jobs.get(job.id)!, taskId: submittedId })
+    }, error => { if (!settled) { settled = true; reject(error) } })
   })
 }
 
@@ -423,22 +466,24 @@ export function dismissVideoEditInPlaceJob(id: string): void {
   persist({ ...job, status: 'cancelled' }); jobs.delete(id); publish()
 }
 /** 用同样的设置重试失败的那一次。 */
-export async function retryVideoEditInPlaceJob(id: string): Promise<VideoEditInPlaceStart> {
+export async function retryVideoEditInPlaceJob(id: string, options: { recoveryOnly?: boolean; taskId?: string } = {}): Promise<VideoEditInPlaceStart> {
   const job = jobs.get(id)
   if (!job || job.status !== 'failed') throw new Error('只有失败的原地生成可以重试。')
   // 生成已成功但落位/保存失败：复用原结果，不发起新的付费请求。
   let successful = Boolean(job.clipId)
+  let terminal = false
   if (!successful && job.taskId) {
-    try { successful = normalizeGenerationTaskStatus(generationApplicationService.getTask(job.taskId).status) === 'success' } catch { successful = false }
-    if (!successful) successful = normalizeGenerationTaskStatus((await databaseService.getHistoryById(job.taskId))?.status ?? '') === 'success'
+    try { const status = generationApplicationService.getTask(job.taskId).status; successful = normalizeGenerationTaskStatus(status) === 'success'; terminal = isGenerationTerminalStatus(status) } catch { successful = false }
+    if (!successful) { const status = (await databaseService.getHistoryById(job.taskId))?.status ?? ''; successful = normalizeGenerationTaskStatus(status) === 'success'; terminal ||= isGenerationTerminalStatus(status) }
   }
-  if (successful && job.taskId) {
+  if ((successful || options.recoveryOnly && !terminal) && job.taskId) {
     update(id, { status: 'placing', error: undefined })
     const controller = new AbortController(); controllers.set(id, controller)
     void resume(jobs.get(id)!, controller)
     return { job: jobs.get(id)!, taskId: job.taskId }
   }
-  return await startVideoEditInPlaceGeneration({ ...job.request, modelId: job.modelId }, { replacesJobId: id })
+  if (options.recoveryOnly) throw new VideoEditOperationFailure('原生成任务没有已完成的结果。若确认生成失败，可携带 replacesTaskRef 检查并提交新的付费生成；移除失败占位无需生成。', { reason: 'generation_failed', taskRef: { kind: 'generation.task', id: job.taskId }, capabilityId: 'generate_video_edit_in_place', retryField: 'replacesTaskRef' })
+  return await startVideoEditInPlaceGeneration({ ...job.request, modelId: job.modelId }, { replacesJobId: id, taskId: options.taskId })
 }
 
 /** 切回替换前的镜头版本（一步编辑，可撤销）。 */
