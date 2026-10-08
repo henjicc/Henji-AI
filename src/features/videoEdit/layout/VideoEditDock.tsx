@@ -5,6 +5,7 @@ import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IWaterma
 import 'dockview-react/dist/styles/dockview.css'
 import { UiButton, UiEmpty } from '@/components/ui'
 import { createLogger } from '@/core/logging'
+import { VIDEO_EDIT_FOCUSABLE_PANELS } from '@/core/videoEdit/panels'
 import { focusVideoEditPanel, listVideoEditInstances, subscribeVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { VideoEditPreview } from '../VideoEditPreview'
 import { VideoEditTimeline } from '../VideoEditTimeline'
@@ -32,12 +33,12 @@ function useDock(): DockContext { const value = useContext(Context); if (!value)
 type PanelBody = (props: { visible: boolean }) => React.ReactElement
 /** 面板内容只有这一份：Dock 与系统浮窗共用，浮窗只是换挂载点。 */
 function ProjectBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="project"><VideoEditProjectPanel {...useDock()} visible={visible} /></div> }
-function EffectsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="effects"><VideoEditEffectsPanel {...useDock()} visible={visible} /></div> }
+function EffectsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0"><VideoEditEffectsPanel {...useDock()} visible={visible} /></div> }
 function ProgramBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock()} visible={visible} /></div> }
 function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditTimeline {...useDock()} visible={visible} /></div> }
 function ContentBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock()} visible={visible} /></div> }
 function EffectsLibraryBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="effects_library"><VideoEditEffectsLibraryPanel {...useDock()} visible={visible} /></div> }
-function SourceBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="source"><VideoEditSourcePanel {...useDock()} visible={visible} /></div> }
+function SourceBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0"><VideoEditSourcePanel {...useDock()} visible={visible} /></div> }
 /** 面板之间露 4px 间隙（参照 PR 的深色边），当前面板组描强调色边，见 index.css 剪辑工作区一节。 */
 const VIDEO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock', 4)
 function TrackingBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="tracking"><VideoEditTrackingPanel {...useDock()} visible={visible} /></div> }
@@ -128,7 +129,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     const event = api.onDidLayoutChange(() => { clearTimeout(timer); timer = setTimeout(save, 200) })
     const focus = api.onDidActivePanelChange(value => {
       const panel = value.panel?.id
-      if (panel && ['project', 'source', 'program', 'timeline', 'effects', 'content', 'lumetri', 'title_templates', 'style_kits'].includes(panel) && instance.activePanel !== panel && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'])
+      if (panel && (VIDEO_EDIT_FOCUSABLE_PANELS as readonly string[]).includes(panel) && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'], { reveal: false })
     })
     disposeRef.current = () => { event.dispose(); focus.dispose(); unbindGestures(); if (timer !== undefined) save() }
   }, [onApiChange, onError, instance])
@@ -140,7 +141,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
         defaultTabComponent={VideoEditDockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
         {...DOCKVIEW_HOST_DND_OPTIONS} defaultRenderer="always" onReady={onReady} />
     </DockviewHost>
-    <VideoEditPopoutPortals onFocusPanel={id => { if (id !== 'effects_library' && instance.activePanel !== id && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id) }}
+    <VideoEditPopoutPortals onFocusPanel={id => { if (id !== 'effects_library' && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id, { reveal: false }) }}
       render={(id, visible) => { const Body = BODIES[id]; return <Body visible={visible} /> }} />
   </Context.Provider>
 }

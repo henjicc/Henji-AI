@@ -13,6 +13,9 @@ import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
 import { createPopoutTestHost } from './popout/videoEditPopout.testSupport'
 import { videoEditClipSchema } from '@/core/videoEdit/document'
 import * as compositing from '../application/videoEditCompositing'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { closeAllVideoEdits, openSeededVideoEdit } from '../application/videoEditDocumentTestKit'
+import { focusVideoEditPanel, setVideoEditView } from '../application/videoEditService'
 
 const lifetime = vi.hoisted(() => ({ created: 0, live: 0, peak: 0, disposed: 0 }))
 const effectScroll = vi.hoisted(() => vi.fn())
@@ -24,16 +27,25 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   async present() { return { presented: true, bitmap: { close() {} } } }
   async dispose() {}
 } }))
+// 本测试验证正式领域与真实 Dockview 的接线，jsdom 不运行源码检查 Worker。
+vi.mock('../engine/videoEditCodeCompiler', async () => {
+  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
+  return { VideoEditCodeCompiler: class {
+    async compile(source: string) { return compileCodeMaterial(source) }
+    dispose() {}
+  } }
+})
 vi.mock('../panels/VideoEditProjectPanel', () => ({ VideoEditProjectPanel: () => <div>素材面板</div> }))
 vi.mock('../panels/VideoEditStyleKitsPanel', () => ({ VideoEditStyleKitsPanel: () => <div>风格面板</div> }))
 vi.mock('../panels/VideoEditAnnotationsPanel', () => ({ VideoEditAnnotationsPanel: () => <div>批注面板</div> }))
 vi.mock('../panels/VideoEditTitleTemplatesPanel', () => ({ VideoEditTitleTemplatesPanel: () => <div>基本图形面板</div> }))
+vi.mock('../panels/VideoEditTimedContentPanel', () => ({ VideoEditTimedContentPanel: () => <div>字幕与标记面板</div> }))
 vi.mock('../panels/VideoEditEffectsPanel', async () => {
   const { useState } = await import('react')
   const { UiButton } = await import('@/components/ui')
   return { VideoEditEffectsPanel: function EffectsPanel(): React.ReactElement {
     const [open, setOpen] = useState(true)
-    return <div>效果控件<div data-video-edit-effect-section="effects">
+    return <div data-video-edit-panel="effects">效果控件<div data-video-edit-effect-section="effects">
       <UiButton aria-label="折叠附加效果" aria-expanded={open} onClick={() => setOpen(!open)}>附加效果</UiButton>
       {open && <div data-video-edit-effect-chain="clip"><div data-video-edit-effect="added-effect" ref={element => { if (element) element.scrollIntoView = effectScroll }}>新效果</div></div>}
     </div></div>
@@ -152,6 +164,63 @@ const makeInstance = (name: string): VideoEditInstance => {
   return { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
 }
 const savedPopouts = (): unknown => JSON.parse(localStorage.getItem(VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY) ?? 'null')
+
+it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'content', 'tracking', 'lumetri'] as const)('聚焦片段后点击 %s：活动标签、always 内容与分组矩形一致，视图更新不抢回标签', async id => {
+  installHarnessNativeStorage()
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0))
+  vi.stubGlobal('cancelAnimationFrame', (handle: number) => window.clearTimeout(handle))
+  vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('dv-content-container') ? new DOMRect(1100, 32, 308, 882) : new DOMRect(0, 0, 1440, 914)
+  })
+  let view: ReturnType<typeof render> | undefined
+  try {
+    const document = createVideoEditDocument('检查器切换')
+    const code = { definitionId: 'definition', versionId: 'version', parameters: {} }
+    document.codeMaterials = [{ id: code.definitionId, name: '代码画面', defaultVersionId: code.versionId, versions: [{ id: code.versionId, apiVersion: 1, languageVersion: 3, source: 'export default {apiVersion:1,languageVersion:3,name:"代码画面",kind:"generator",mode:"static",width:1920,height:1080,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"box",x:0,y:0,width:100,height:100,fill:ctx.style.palette.accent})];}}' }] }]
+    document.items.push({ id: 'item', name: '代码画面', kind: 'code', code })
+    document.sequences[0].clips.push(videoEditClipSchema.parse({ id: 'clip', itemId: 'item', name: '代码画面', kind: 'code', track: 1, start: 0, duration: 60, code, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }))
+    const instance = await openSeededVideoEdit(document)
+    let api: DockviewApi | null = null
+    view = render(<VideoEditDock instance={instance} onError={vi.fn()} onApiChange={value => { api = value }} />)
+    const dock = api as unknown as DockviewApi
+    act(() => {
+      dock.layout(1440, 914)
+      if (!dock.getPanel(id)) showVideoEditPanel(dock, id)
+      setVideoEditView(instance.document.id, { selection: 'clip' })
+      focusVideoEditPanel(instance.document.id, 'effects')
+    })
+    const version = instance.panelFocusVersion
+    const tab = view.container.querySelector(`[data-dock-tab="${id}"]`)!.closest('.dv-tab')!
+    fireEvent.pointerDown(tab, { button: 0 })
+    const checkContent = (): void => {
+      expect(view!.container.querySelector(`[data-dock-tab="${id}"]`)!.closest('.dv-tab')!.classList.contains('dv-active-tab')).toBe(true)
+      expect(dock.getPanel(id)!.group.activePanel?.id).toBe(id)
+      expect(dock.getPanel(id)!.api.isVisible).toBe(true)
+      for (const panel of dock.getPanel(id)!.group.panels) {
+        const roots = view!.container.querySelectorAll(`[data-video-edit-panel="${panel.id}"]`)
+        expect(roots).toHaveLength(1)
+        const overlay = roots[0].closest<HTMLElement>('.dv-render-overlay')!
+        expect(overlay.style.visibility).toBe(panel.id === id ? '' : 'hidden')
+        if (panel.id === id) expect(overlay.style).toMatchObject({ left: '1100px', top: '32px', width: '308px', height: '882px' })
+      }
+    }
+    await waitFor(checkContent)
+    // Dock 的观察回写不应变成新的“打开面板”命令，也不能在后续视图发布时重放。
+    expect(instance.panelFocusVersion).toBe(version)
+    if (id !== 'effects_library') expect(instance.activePanel).toBe(id)
+    act(() => setVideoEditView(instance.document.id, { frame: 1 }))
+    expect(dock.getPanel(id)!.group.activePanel?.id).toBe(id)
+    // 重开与贴回仍通过同一 always renderer，首次激活就绑定当前分组。
+    act(() => { dock.getPanel(id)!.api.close(); showVideoEditPanel(dock, id) })
+    await waitFor(checkContent)
+    act(() => { dock.addFloatingGroup(dock.getPanel(id)!); dockVideoEditPanel(dock, dock.getPanel(id)!) })
+    await waitFor(checkContent)
+  } finally {
+    view?.unmount()
+    await closeAllVideoEdits()
+    uninstallHarnessNativeStorage()
+  }
+})
 
 it.each(['closed', 'stacked', 'visible', 'collapsed', 'popout_stacked', 'popout_visible'] as const)('双击添加后恢复效果控件（%s），已可见时保留原焦点与布局，滚动到新效果', async state => {
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0))

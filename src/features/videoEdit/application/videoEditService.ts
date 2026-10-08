@@ -26,7 +26,7 @@ import { videoEditClipUnderPlayhead } from './videoEditPlayheadSelection'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { updateVideoEditProjectCover } from './videoEditProjectCover'
 import { videoEditInPlaceRecordsSchema, type VideoEditInPlaceRecord } from '@/core/videoEdit/inPlacePersistence'
-import type { VideoEditFocusablePanel } from '@/core/videoEdit/panels'
+import { VIDEO_EDIT_FOCUSABLE_PANELS, type VideoEditFocusablePanel } from '@/core/videoEdit/panels'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -555,10 +555,14 @@ export function setVideoEditTimelineView(id: string, values: Partial<VideoEditTi
   if (instance.selectedCodeElement?.clipId !== primary) instance.selectedCodeElement = null
   publishVideoEdit(true)
 }
-export function focusVideoEditPanel(id: string, panel: VideoEditInstance['activePanel']): void {
+export function focusVideoEditPanel(id: string, panel: VideoEditInstance['activePanel'], options: { reveal?: boolean } = {}): void {
   const instance = requireVideoEditInstance(id)
-  if (!['project', 'source', 'program', 'timeline', 'effects', 'content', 'tracking', 'lumetri', 'title_templates', 'annotations'].includes(panel)) throw new Error('剪辑面板不存在。')
-  instance.activePanel = panel; instance.panelFocusVersion = (instance.panelFocusVersion ?? 0) + 1; publishView()
+  if (!(VIDEO_EDIT_FOCUSABLE_PANELS as readonly string[]).includes(panel)) throw new Error('剪辑面板不存在。')
+  // Dock/浮窗回报已发生的激活，仅同步上下文；不要在 Dockview 更新可见性的事件栈里重入 setActive。
+  if (options.reveal === false && instance.activePanel === panel) return
+  instance.activePanel = panel
+  if (options.reveal !== false) instance.panelFocusVersion = (instance.panelFocusVersion ?? 0) + 1
+  publishView()
 }
 export type VideoEditProjectView = Pick<VideoEditInstance, 'selectedItemIds' | 'selectedBinId' | 'openSequenceIds'>
 export function getVideoEditProjectView(id: string): VideoEditProjectView {
