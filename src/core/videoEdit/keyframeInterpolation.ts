@@ -8,7 +8,7 @@ export function interpolateVideoEditKeyframe(left: CodeParameterValue, right: Co
   const [a, b] = easeRange
   const amount = interpolation === 'ease' ? (smooth(a + (b - a) * t) - smooth(a)) / (smooth(b) - smooth(a)) : t
   if (typeof left === 'number' && typeof right === 'number') return left + (right - left) * amount
-  if (Array.isArray(left) && Array.isArray(right)) return left.map((channel, index) => channel + (right[index] - channel) * amount) as CodeColor
+  if (Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every(channel => typeof channel === 'number') && right.every(channel => typeof channel === 'number')) return (left as number[]).map((channel, index) => channel + ((right as number[])[index] - channel) * amount) as CodeColor
   if (typeof left === 'string' && typeof right === 'string' && /^#[0-9a-f]{6}$/i.test(left) && /^#[0-9a-f]{6}$/i.test(right)) {
     return '#' + [1, 3, 5].map(offset => {
       const a = parseInt(left.slice(offset, offset + 2), 16); const b = parseInt(right.slice(offset, offset + 2), 16)

@@ -5,6 +5,7 @@ import { CODE_EASE_NAMES, codeCubicBezier, codeEase, codeNoise, codeProgress } f
 import { parseCodePath } from './geometry'
 import { readCodeStyleToken, validatedCodeStyle } from './style'
 import { codeShaderGraph, codeShaderTime } from './shaders'
+import { CODE_PARAMETER_FUNCTION_COSTS, easeCodeParameter, sampleCodeCurve, sampleCodeGradient } from './parameterSampling'
 
 const n = (value: unknown): number => finiteCodeNumber(value, '表达式结果')
 const array = (value: unknown): unknown[] => { if (!Array.isArray(value)) throw new CodeMaterialError('TYPE', '需要数组。'); return value }
@@ -137,6 +138,9 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
         const a = (): number => n(args[0]); const b = (): number => n(args[1]); const c = (): number => n(args[2])
         if (CODE_EASE_NAMES.includes(op)) { charge(64); return codeEase(op, a(), args[1] === undefined ? undefined : b()) }
         switch (op) {
+          case 'sampleGradient': charge(CODE_PARAMETER_FUNCTION_COSTS[op]); return sampleCodeGradient(args[0], b())
+          case 'sampleCurve': charge(CODE_PARAMETER_FUNCTION_COSTS[op]); return sampleCodeCurve(args[0], b())
+          case 'ease': charge(CODE_PARAMETER_FUNCTION_COSTS[op]); return easeCodeParameter(args[0], b())
           case 'sin': charge(16); return Math.sin(a()); case 'cos': charge(16); return Math.cos(a()); case 'abs': return Math.abs(a()); case 'floor': return Math.floor(a()); case 'ceil': return Math.ceil(a()); case 'round': return Math.round(a())
           case 'min': return Math.min(a(), b()); case 'max': return Math.max(a(), b()); case 'rgba': return channels(args)
           case 'random': { const index = bounded(a(), 0, 4294967295, 'random'); if (!Number.isInteger(index)) throw new CodeMaterialError('TYPE', 'random 索引必须是整数。'); let hash = (context.seed ?? program.seed) ^ index; hash = Math.imul(hash ^ hash >>> 16, 0x7feb352d); hash = Math.imul(hash ^ hash >>> 15, 0x846ca68b); return ((hash ^ hash >>> 16) >>> 0) / 4294967296 }

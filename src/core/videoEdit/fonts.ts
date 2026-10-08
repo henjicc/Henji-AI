@@ -2,6 +2,7 @@ import { GENERIC_FONT_FACES, type FontFaceInfo } from '../fonts/catalog'
 import type { VideoEditDocument, VideoEditComposition } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import type { CodeMaterialInstance } from './codeMaterialPersistence'
+import type { CodeParameterDeclaration } from './codeMaterial/contract'
 import { videoEditEffectCodes } from './compositing'
 export interface VideoEditFontUse { font: string; ownerId: string; label: string }
 export interface MissingVideoEditFont { font: string; fallback: string; uses: VideoEditFontUse[] }
@@ -18,9 +19,15 @@ export function collectVideoEditFonts(document: VideoEditDocument | VideoEditCom
   }
   const code = (instance: CodeMaterialInstance | undefined, ownerId: string, label: string): void => {
     if (!instance || !readCode) return
-    for (const parameter of readCode(instance).parameters) if (String(parameter.type) === 'font') {
-      add(instance.parameters[parameter.key] ?? parameter.default, `${ownerId}:font:${parameter.key}`, label)
-      for (const point of instance.curves?.[parameter.key] ?? []) add(point.value, `${ownerId}:font:${parameter.key}:key:${point.id}`, `${label}（关键帧）`)
+    const collect = (parameter: CodeParameterDeclaration, value: unknown, id: string, title: string): void => {
+      if (parameter.type === 'font') add(value, id, title)
+      if (parameter.type === 'custom' && value && typeof value === 'object' && !Array.isArray(value)) {
+        for (const [key, field] of Object.entries(parameter.fields)) collect(field, (value as Record<string, unknown>)[key], `${id}:${key}`, title)
+      }
+    }
+    for (const parameter of readCode(instance).parameters) {
+      collect(parameter, instance.parameters[parameter.key] ?? parameter.default, `${ownerId}:font:${parameter.key}`, label)
+      for (const point of instance.curves?.[parameter.key] ?? []) collect(parameter, point.value, `${ownerId}:font:${parameter.key}:key:${point.id}`, `${label}（关键帧）`)
     }
   }
   const sequences = 'clips' in document ? [document, ...(document.sequences ?? [])] : document.sequences

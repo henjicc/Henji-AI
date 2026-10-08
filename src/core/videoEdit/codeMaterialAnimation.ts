@@ -1,19 +1,20 @@
 import { z } from 'zod'
 import { CodeMaterialError } from './codeMaterial/contract'
 import type { CodeParameterDeclaration, CodeParameterValues } from './codeMaterial/contract'
-import { interpolateVideoEditKeyframe } from './keyframeInterpolation'
+import { codeParameterSupportsInterpolation, interpolateCodeMaterialParameter } from './codeMaterial/parameterInterpolation'
+import { codeMaterialAnimatedParameterValueSchema, codeMaterialParameterKeySchema } from './codeMaterial/parameterValueSchema'
 import { validateCodeMaterialParameterValue, validateCodeMaterialParameters } from './codeMaterial/parameters'
 import type { CodeMaterialMetadata } from './codeMaterialDocument'
 import type { CodeMaterialInstance } from './codeMaterialPersistence'
 import type { VideoEditSourceTime } from './time'
 
 const sourceRemainder = z.object({ numerator: z.number().int().min(0).max(999_999), denominator: z.number().int().min(1).max(1_000_000) }).strict().refine(value => value.numerator < value.denominator, '源时刻余量必须小于一微秒。')
-const value = z.union([z.number().finite(), z.boolean(), z.string().max(4096), z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)])])
+const value = codeMaterialAnimatedParameterValueSchema
 export const codeMaterialKeyframeSchema = z.object({
   id: z.string().min(1).max(100), sourceInUs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), sourceRemainder,
   value, interpolation: z.enum(['linear', 'hold', 'ease']),
 }).strict()
-export const codeMaterialCurvesSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.array(codeMaterialKeyframeSchema).min(1)).superRefine((curves, context) => {
+export const codeMaterialCurvesSchema = z.record(codeMaterialParameterKeySchema, z.array(codeMaterialKeyframeSchema).min(1)).superRefine((curves, context) => {
   const ids = Object.values(curves).flat().map(point => point.id)
   if (new Set(ids).size !== ids.length) context.addIssue({ code: 'custom', message: '实例关键帧标识不能重复。' })
 })
@@ -49,7 +50,7 @@ export function prepareCodeMaterialParameters(program: CodeMaterialMetadata, ins
     for (let index = 0; index < points.length; index++) {
       const point = points[index]
       if (index && compareCodeMaterialTime(points[index - 1], point) === 0) throw new CodeMaterialError('PARAMETERS', `参数 ${key} 在同一源时刻有重复关键帧。`)
-      if (declaration.type !== 'number' && declaration.type !== 'color' && point.interpolation !== 'hold') throw new CodeMaterialError('PARAMETERS', `参数 ${key} 只能使用保持插值。`)
+      if (!codeParameterSupportsInterpolation(declaration) && point.interpolation !== 'hold') throw new CodeMaterialError('PARAMETERS', `参数 ${key} 只能使用保持插值。`)
       const seconds = (point.sourceInUs + point.sourceRemainder.numerator / point.sourceRemainder.denominator) / 1e6
       if (program.mode === 'dynamic' && seconds > program.durationSeconds && seconds - program.durationSeconds > 4 * Number.EPSILON * Math.max(1, seconds, program.durationSeconds)) throw new CodeMaterialError('PARAMETERS', `参数 ${key} 的关键帧超出源码声明时长。`)
     }
@@ -60,14 +61,14 @@ export function prepareCodeMaterialParameters(program: CodeMaterialMetadata, ins
 export function evaluateCodeMaterialParameters(prepared: PreparedCodeMaterialParameters, time: VideoEditSourceTime): CodeParameterValues {
   rational(time)
   const values = { ...prepared.values }
-  for (const [key, { points }] of prepared.curves) {
+  for (const [key, { points, declaration }] of prepared.curves) {
     if (compareCodeMaterialTime(time, points[0]) <= 0) { values[key] = structuredClone(points[0].value); continue }
     if (compareCodeMaterialTime(time, points.at(-1)!) >= 0) { values[key] = structuredClone(points.at(-1)!.value); continue }
     let low = 0; let high = points.length - 1
     while (high - low > 1) { const middle = (low + high) >> 1; if (compareCodeMaterialTime(points[middle], time) <= 0) low = middle; else high = middle }
     const left = points[low]; const right = points[high]
     const fraction = intervalFraction(time, left, right)
-    values[key] = structuredClone(interpolateVideoEditKeyframe(left.value, right.value, fraction, typeof left.value === 'string' ? 'hold' : left.interpolation))
+    values[key] = interpolateCodeMaterialParameter(declaration, left.value, right.value, fraction, left.interpolation)
   }
   return values
 }

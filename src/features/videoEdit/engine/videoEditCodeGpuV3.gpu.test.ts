@@ -74,6 +74,37 @@ async function run(body: string): Promise<Uint8Array> {
   } finally { target.destroy() }
 }
 describe('v3 真实 GPU 像素与工作预算', () => {
+  it('t84新参数和结构字段uniform上传与WGSL读取一致，64槽边界真实编译与像素回读', async () => {
+    const host = new VideoEditCodeGpu(wrapped); const input = await host.target('t84:input', W, H)
+    const data = new Uint8Array(W * H * 4); data.fill(255)
+    device.queue.writeTexture({ texture: input.texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
+    const point = { type: 'point', title: '位置', default: { x: .25, y: .25 } }
+    const number = { type: 'number', title: '强度', default: .25, min: 0, max: 1, step: .01 }
+    const color = { type: 'color', title: '颜色', default: [0, 0, 1, 1] }
+    const types = { light: { title: '灯光', layout: 'row', fields: { power: number, position: point, color } } }
+    const parameters = { p: point, r: { type: 'range', title: '区间', min: 0, max: 1, step: .01, default: [.25, .75] }, g: { type: 'grade', title: '调色', default: { hue: 180, strength: .5, luminance: 0 } }, a: { type: 'angle', title: '角度', default: 0 }, seed: { type: 'seed', title: '种子', default: 4294967295 }, flag: { type: 'boolean', title: '开关', default: true }, ink: { ...color, default: [.25, .75, .5, 1] }, lamp: { type: 'light', title: '灯', default: {} } }
+    const body = 'const lamp=ctx.params.lamp; return rgba(clamp(ctx.params.p.x+lamp.power,0,1),ctx.params.r[1],clamp(ctx.params.g.strength+ctx.params.a/180+ctx.params.seed/4294967295*.05+lamp.color.b*.05+lamp.position.y*.1,0,1),ctx.params.flag?ctx.params.ink.a:.5);'
+    const program = compileCodeMaterial(source(body, 'filter').replace('parameters:{}', `parameters:${JSON.stringify(parameters)},types:${JSON.stringify(types)}`))
+    try {
+      device.pushErrorScope('validation')
+      const first = await host.filter('t84:output', 't84:mixed', program, context, {}, input)
+      const rgba = pixel(await read(first.texture), 32, 32)
+      expect(await device.popErrorScope()).toBeNull()
+      // RGBA8 attachment conversion may round a half-integer either way; permit one quantization unit.
+      ;[128, 191, 159, 255].forEach((channel, i) => expect(Math.abs(rgba[i] - channel)).toBeLessThanOrEqual(1))
+      const changed = await host.filter('t84:output', 't84:mixed', program, context, { p: { x: 0, y: 0 }, r: [.1, .2], g: { hue: 0, strength: .1, luminance: 0 }, a: 18, seed: 0, flag: false, lamp: { power: 0, position: { x: 0, y: 0 }, color: [0, 0, 0, 1] } }, input)
+      const changedRgba = pixel(await read(changed.texture), 32, 32)
+      ;[0, 26, 26, 128].forEach((channel, i) => expect(Math.abs(changedRgba[i] - channel)).toBeLessThanOrEqual(1))
+      const many = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`p${i}`, number]))
+      const sum = (names: string[]): string => names.length === 1 ? names[0] : `(${sum(names.slice(0, names.length / 2))}+${sum(names.slice(names.length / 2))})`
+      const large = compileCodeMaterial(source(`return rgba(clamp(${sum(Object.keys(many).map(key => `ctx.params.${key}`))}/64,0,1),0,0,1);`, 'filter').replace('parameters:{}', `parameters:${JSON.stringify(many)}`))
+      device.pushErrorScope('validation')
+      const last = await host.filter('t84:output', 't84:64', large, context, { p63: 1 }, input)
+      const lastRgba = pixel(await read(last.texture), 32, 32)
+      ;[67, 0, 0, 255].forEach((channel, i) => expect(Math.abs(lastRgba[i] - channel)).toBeLessThanOrEqual(1))
+      expect(await device.popErrorScope()).toBeNull()
+    } finally { await host.dispose() }
+  })
   it('4K180帧文字加形状动画复用局部字形，分辨率分档提升且预览/导出像素一致', async () => {
     const calls: Array<{ width: number; height: number; ms: number }> = []
     const host = new VideoEditCodeGpuV3(wrapped, { allocate: (width, height) => texture(width, height), release: texture => texture.destroy() }, async (command, image) => {

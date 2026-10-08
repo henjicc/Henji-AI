@@ -87,7 +87,7 @@ describe('代码GPU会话复用与资源边界', () => {
     expect(device.createBindGroupLayout).toHaveBeenCalledWith({ entries: [
       { binding: 0, visibility: 2, texture: { sampleType: 'float' } },
       { binding: 1, visibility: 2, sampler: { type: 'filtering' } },
-      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 560 } },
+      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 1072 } },
     ] })
     expect(device.createPipelineLayout).toHaveBeenCalledOnce()
     expect(compiled.mock.calls.slice(-2).every(([descriptor]) => (descriptor as { layout: unknown }).layout === device.createPipelineLayout.mock.results[0].value)).toBe(true)

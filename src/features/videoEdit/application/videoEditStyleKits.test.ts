@@ -15,6 +15,8 @@ import { releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
 import { measureCodeText } from '../videoEditGlyphMetrics'
+import { createVideoEditCodeItems } from './videoEditCodeService'
+import { appendVideoEditItems } from './videoEditProjectItems'
 const trial = vi.hoisted(() => ({ fail: false, documents: [] as VideoEditComposition[] }))
 vi.mock('../engine/videoEditCodeCompiler', async () => {
   const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
@@ -111,4 +113,15 @@ it('作品提取是候选，取消不写；无效样例在编译/求值时阻断
   const sample = available().samples[0]; const invalid = { ...available(), samples: [{ ...sample, source: sample.source.replace('s.typeScale.xl * ctx.height', '1 / ctx.time') }] }
   await expect(checkStyleKit(invalid)).rejects.toThrow()
   editVideoProject(owner.document.id, document => ({ ...document, name: '候选不会改这份工程' }))
+})
+it('参数声明区分贝塞尔与RGBA：缓动四元组不取色，组件颜色字段可以取色', async () => {
+  for (const useColor of [false, true]) {
+    const owner = await createVideoEditTestProject()
+    const src = `export default {apiVersion:1,languageVersion:3,name:"取色契约",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,types:{light:{title:"灯光",layout:"row",fields:{color:{type:"color",title:"颜色",default:[1,0,0,1]}}}},parameters:{bg:{type:"easing",title:"缓动",default:[.25,0,.75,1]},range:{type:"range",title:"区间",min:0,max:1,step:.01,default:[0,1]}${useColor ? ',lamp:{type:"light",title:"主光",default:{}}' : ''}},render(ctx){return [];}}`
+    const items = await createVideoEditCodeItems(owner.document.id, [{ source: src }])
+    appendVideoEditItems(owner.document.id, items, owner.activeSequenceId)
+    const result = await extractVideoEditWorkStyle(owner.document.id, owner.activeSequenceId, '参数取色')
+    if (useColor) expect(result.tokens.palette).not.toEqual(BUILTIN_STYLE_KITS[0].tokens.palette)
+    else expect(result.tokens.palette).toEqual(BUILTIN_STYLE_KITS[0].tokens.palette)
+  }
 })

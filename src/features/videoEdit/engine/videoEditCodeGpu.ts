@@ -2,6 +2,7 @@ import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from 
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
+import { CODE_FILTER_PARAMETER_SLOTS, CODE_FILTER_UNIFORM_VEC4S, packCodeFilterParameters } from '@/core/videoEdit/codeMaterial/filterParameters'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand, CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
@@ -162,7 +163,7 @@ export class VideoEditCodeGpu {
     const group = device.createBindGroupLayout({ entries: [
       { binding: 0, visibility: 2, texture: { sampleType: 'float' } },
       { binding: 1, visibility: 2, sampler: { type: 'filtering' } },
-      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 35 * 16 } },
+      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: CODE_FILTER_UNIFORM_VEC4S * 16 } },
       ...Array.from({ length: additional }, (_, index) => ({ binding: index + 3, visibility: 2, texture: { sampleType: 'float' } })),
     ] })
     const layout = device.createPipelineLayout({ bindGroupLayouts: [group] })
@@ -386,14 +387,14 @@ export class VideoEditCodeGpu {
     this.assertLive(); this.assertInput(input.texture)
     const target = this.surface(key, input.width, input.height, format)
     if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '滤镜输入输出不能引用同一纹理。')
-    target.filterBuffer ??= this.device.createBuffer({ size: 35 * 16, usage: 0x08 | 0x40 })
-    const packed = new Float32Array(35 * 4)
+    target.filterBuffer ??= this.device.createBuffer({ size: CODE_FILTER_UNIFORM_VEC4S * 16, usage: 0x08 | 0x40 })
+    const packed = new Float32Array(CODE_FILTER_UNIFORM_VEC4S * 4)
     packed.set([shaderTime, context.localTime, context.sequenceTime, context.width, context.height, context.frame, context.fps])
     const seed = context.seed ?? program.seed
     if (!Number.isInteger(seed) || seed < 0 || seed > 4294967295) throw new CodeMaterialError('CONTEXT', '滤镜种子必须是32位无符号整数。')
     new Uint32Array(packed.buffer)[7] = seed
-    program.parameters.forEach((parameter, index) => { const value = values[parameter.key]; if (Array.isArray(value)) packed.set(value, (index + 2) * 4); else if (typeof value === 'number' || typeof value === 'boolean') packed[(index + 2) * 4] = Number(value) })
-    packed[34 * 4] = 1
+    packed.set(packCodeFilterParameters(program, values), 8)
+    packed[(CODE_FILTER_PARAMETER_SLOTS + 2) * 4] = 1
     this.device.queue.writeBuffer(target.filterBuffer, 0, packed)
     const shaderPasses = codeShaderFilterPasses(program)
     const shaderTextures: GpuTexture[] = []

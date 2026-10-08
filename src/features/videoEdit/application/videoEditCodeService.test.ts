@@ -8,7 +8,7 @@ import { getPlatform } from '@/platform/runtime'
 import { closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia } from './videoEditService'
 import { createVideoEditCodeItems, createVideoEditCodeMaterials, createVideoEditCodeVersions, createVideoEditFilterMaterials, createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { appendVideoEditItems, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from './videoEditProjectItems'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { readVideoEditCodeMetadata, forgetVideoEditCodeMetadata } from './videoEditCodeState'
 import { VideoEditCollectionExecutor } from './videoEditExecutors'
 import { prepareVideoEditCodeCandidate, commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate } from './videoEditCodeCandidates'
 import { bindVideoEditCodeImage, chooseVideoEditCodeImage } from './videoEditCodeImages'
@@ -135,6 +135,36 @@ it('公共图形效果转场实体原子增改删、精确回执、锁定与保�
     expect(getActiveVideoEditSequence(reopened).clips.some(clip => clip.id === left)).toBe(false); expect(getActiveVideoEditSequence(reopened).transitions).toEqual([])
     expect(removed.effects).toEqual(expect.arrayContaining(['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition'].map(entityType => expect.objectContaining({ entityType, effect: 'delete', origin: { kind: 'cascade', declarationId: `${entityType}_delete` } }))))
     undoVideoEdit(id); expect(getActiveVideoEditSequence(reopened).clips.some(clip => clip.id === left)).toBe(true); expect(getActiveVideoEditSequence(reopened).transitions).toHaveLength(1)
+  } finally { app.dispose() }
+})
+it('v3代码滤镜新形状沿公共效果写入、原子拒绝、撤销和保存重开，未缓存版本元数据可读回', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id; const seq = owner.activeSequenceId; const app = createApplicationHarness()
+  const [clipId] = appendVideoEditItems(id, [createVideoEditGraphicItem(id, { kind: 'rect' })], seq)
+  const extended = 'export default {apiVersion:1,languageVersion:3,name:"灯光滤镜",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,types:{light:{title:"灯光",layout:"row",fields:{power:{type:"number",title:"强度",default:1,min:0,max:2,step:.01},position:{type:"point",title:"位置",default:{x:.5,y:.5}}}}},parameters:{lamp:{type:"light",title:"主光",default:{},animatable:true},range:{type:"range",title:"范围",min:0,max:1,step:.01,default:[0,1]},grade:{type:"grade",title:"色轮",default:{hue:0,strength:0,luminance:0}}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(clamp(c.r*ctx.params.lamp.power,0,1),c.g,c.b,c.a);}}'
+  const [definitionId] = await createVideoEditFilterMaterials(id, [{ source: extended }])
+  const effectId = await createVideoEditEffect({ projectId: id, sequenceId: seq, clipId }, { definitionId })
+  const ref = { kind: 'video_edit.effect', id: `${id}:${effectId}` }
+  const parameters = { lamp: { power: 1.4, position: { x: .2, y: .8 } }, range: [.1, .9], grade: { hue: 270, strength: .8, luminance: -.2 } }
+  const originalParameters = structuredClone(owner.document.sequences[0].clips[0].effects![0].code!.parameters)
+  try {
+    boundary.proveFilters = true
+    const before = owner.past.length
+    expect(await app.change(ref, { 'video_edit.effect.parameters': parameters })).toMatchObject({ ok: true })
+    expect((await app.read(ref, ['video_edit.effect.parameters'])).properties).toMatchObject({ 'video_edit.effect.parameters': parameters })
+    expect(owner.past).toHaveLength(before + 1)
+    const baseline = owner.document
+    expect((await app.change(ref, { 'video_edit.effect.parameters': { ...parameters, grade: { ...parameters.grade, hue: 361 } } })).ok).toBe(false)
+    expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(before + 1)
+    undoVideoEdit(id); expect(owner.document.sequences[0].clips[0].effects![0].code!.parameters).toEqual(originalParameters)
+    expect(await app.change(ref, { 'video_edit.effect.parameters': parameters })).toMatchObject({ ok: true })
+    await saveVideoEdit(id); await closeVideoEditProject(id)
+    const reopened = await reopenVideoEdit(id)
+    expect(reopened.document.sequences[0].clips[0].effects![0].code!.parameters).toEqual(parameters)
+    const version = reopened.document.codeMaterials!.find(definition => definition.id === definitionId)!.versions[0]
+    forgetVideoEditCodeMetadata(reopened, version.id); const compileCalls = boundary.compileCalls
+    const metadata = await app.read({ kind: 'video_edit.code_version', id: `${id}:${version.id}` }, ['video_edit.code_version.parameters', 'video_edit.code_version.types'])
+    expect(metadata.properties).toMatchObject({ 'video_edit.code_version.parameters': expect.arrayContaining([expect.objectContaining({ key: 'lamp', type: 'light' })]), 'video_edit.code_version.types': { light: { layout: 'row' } } })
+    expect(boundary.compileCalls).toBe(compileCalls + 1)
   } finally { app.dispose() }
 })
 it('隐藏或关闭滤镜的候选仍进入真实范围证明，负转场不安全源码不发布', async () => {

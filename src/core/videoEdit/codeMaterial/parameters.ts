@@ -1,5 +1,7 @@
 import { CODE_MATERIAL_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeColor, codeImageReference, finiteCodeNumber } from './contract'
 import type { CodeMaterialProgram, CodeParameterDeclaration, CodeParameterValue, CodeParameterValues } from './contract'
+import { parseCodeMaterialV3Parameters, validateCodeMaterialV3ParameterValue } from './parameterTypes'
+import type { CodeParameterTypeDefinition } from './contract'
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new CodeMaterialError('PARAMETERS', `${label}必须是静态对象。`)
@@ -10,7 +12,8 @@ function text(value: unknown, label: string, max: number, allowEmpty = false): s
   return value
 }
 /** The only parameter declarations are extracted from the checked source object. */
-export function parseCodeMaterialParameters(value: unknown): CodeParameterDeclaration[] {
+export function parseCodeMaterialParameters(value: unknown, languageVersion = 1, types: Record<string, CodeParameterTypeDefinition> = {}): CodeParameterDeclaration[] {
+  if (languageVersion === 3) return parseCodeMaterialV3Parameters(value, types)
   const entries = Object.entries(object(value, 'parameters'))
   if (entries.length > CODE_MATERIAL_LIMITS.parameters) throw new CodeMaterialError('BUDGET', '参数最多 32 项。')
   return entries.map(([key, raw]): CodeParameterDeclaration => {
@@ -50,13 +53,13 @@ export function parseCodeMaterialParameters(value: unknown): CodeParameterDeclar
 }
 export function validateCodeMaterialParameterValue(declaration: CodeParameterDeclaration, value: unknown): CodeParameterValue {
   const { key } = declaration
-  if (declaration.type === 'number') { const number = finiteCodeNumber(value, key); if (number < declaration.min || number > declaration.max) throw new CodeMaterialError('PARAMETERS', `${key} 超出声明范围。`); return number }
-  if (declaration.type === 'color') return codeColor(value, key)
+  if (declaration.type === 'number') { const number = finiteCodeNumber(value, key); if (number < declaration.min || number > declaration.max) throw new CodeMaterialError('PARAMETERS', `${key} 超出声明范围 ${declaration.min}–${declaration.max}，期望有限数值。`); return number }
+  if (declaration.type === 'color') { const color = codeColor(value, key); if (declaration.alpha === false && color[3] !== 1) throw new CodeMaterialError('PARAMETERS', `${key} 期望 RGBA，alpha 固定为 1。`); return color }
   if (declaration.type === 'boolean' && typeof value === 'boolean') return value
   if (declaration.type === 'choice' && typeof value === 'string' && declaration.options.includes(value)) return value
   if (declaration.type === 'text') return text(value, key, declaration.maxLength, true)
   if (declaration.type === 'image') return value === null ? null : codeImageReference(value, key)
-  throw new CodeMaterialError('PARAMETERS', `${key} 的实例值不符合声明。`)
+  return validateCodeMaterialV3ParameterValue(declaration, value)
 }
 export function validateCodeMaterialParameters(program: Pick<CodeMaterialProgram, 'parameters'>, values: Readonly<Record<string, unknown>> = {}): CodeParameterValues {
   object(values, '参数实例')

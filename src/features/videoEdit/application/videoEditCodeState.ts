@@ -1,5 +1,6 @@
 import { VideoEditCodeCompiler } from '../engine/videoEditCodeCompiler'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
+import { codeParameterMetadata } from '@/core/videoEdit/codeMaterial/parameterTypes'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { codeMaterialSource, validateCodeMaterialDocument, videoEditCodeReferences } from '@/core/videoEdit/codeMaterialDocument'
 import type { CodeMaterialMetadata, CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
@@ -53,8 +54,8 @@ function put(entries: VideoEditCodeMetadata, definitionId: string, version: Code
   const existing = entries.get(version.id)
   if (existing && (existing.source !== version.source || existing.definitionId !== definitionId || existing.apiVersion !== version.apiVersion || existing.languageVersion !== version.languageVersion)) throw new CodeMaterialError('COMPATIBILITY', '不可变源码版本不能原位替换。')
   if (existing) return
-  const { name, kind, mode, width, height, durationSeconds, seed, parameters } = program
-  const metadata = { name, kind, mode, width, height, durationSeconds, seed, parameters }
+  const { name, kind, mode, width, height, durationSeconds, seed, parameters, types } = program
+  const metadata = { name, kind, mode, width, height, durationSeconds, seed, parameters, ...(types ? { types } : {}) }
   const bytes = new TextEncoder().encode(JSON.stringify(program)).byteLength + new TextEncoder().encode(version.source).byteLength
   if (entries.size >= 4096 || [...entries.values()].reduce((sum, entry) => sum + entry.bytes, 0) + bytes > 32 * 1024 ** 2) throw new CodeMaterialError('BUDGET', '剪辑已检查的代码版本超出会话预算；保存并重新打开剪辑可释放历史版本。')
   entries.set(version.id, { definitionId, source: version.source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, metadata, program, bytes })
@@ -74,4 +75,15 @@ export async function prepareVideoEditCodeMetadata(document: VideoEditDocument):
     return entry.metadata
   })
   return metadata
+}
+export function readVideoEditCodeParameterMetadata(owner: object, document: VideoEditDocument, definitionId: string, versionId: string): { parameters: Record<string, unknown>[]; types: Record<string, unknown> } {
+  const entry = readVideoEditCodeMetadata(owner, document)({ definitionId, versionId, parameters: {} })
+  return { parameters: entry.parameters.map(codeParameterMetadata), types: Object.fromEntries(Object.entries(entry.types ?? {}).map(([name, type]) => [name, { ...type, fields: Object.fromEntries(Object.entries(type.fields).map(([key, field]) => [key, codeParameterMetadata(field)])) }])) }
+}
+/** Metadata queries compile unused immutable versions through the same Worker, without changing the document. */
+export async function ensureVideoEditCodeParameterMetadata(owner: object, document: VideoEditDocument, definitionId: string, versionId: string): Promise<void> {
+  const version = codeMaterialSource(document, { definitionId, versionId, parameters: {} })
+  const known = states.get(owner)?.get(versionId)
+  if (known && known.source === version.source && known.definitionId === definitionId && known.apiVersion === version.apiVersion && known.languageVersion === version.languageVersion) return
+  rememberVideoEditCodeMetadata(owner, definitionId, version, await compileVideoEditCode(version.source))
 }

@@ -51,8 +51,8 @@ const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   'video_edit.track': Object.fromEntries(Object.entries(videoEditTrackSchema.shape).filter(([key]) => key !== 'id')),
   'video_edit.media': { name: text, kind: z.enum(['video', 'image', 'audio']), durationSeconds: z.number(), width: z.number(), height: z.number() },
   'video_edit.source': { itemId: z.string().max(100), timeUs: z.number().int().nonnegative(), presentedTimeUs: z.number().int().nonnegative(), playing: z.boolean(), volume: z.number().min(0).max(1), inUs: z.number().int().nonnegative().nullable(), outUs: z.number().int().nonnegative().nullable(), playbackDirection: z.union([z.literal(1), z.literal(-1)]), status: z.enum(['closed', 'loading', 'ready', 'error']), error: text },
-  'video_edit.code_material': { name: z.string().min(1).max(200), source: z.string().max(65536), defaultVersionId: z.string().min(1).max(100), versionIds: z.array(z.string()), binId: z.string().max(100) },
-  'video_edit.code_version': { source: codeMaterialVersionSchema.shape.source, apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, definitionId: z.string().min(1).max(100) },
+  'video_edit.code_material': { name: z.string().min(1).max(200), source: z.string().max(65536), defaultVersionId: z.string().min(1).max(100), versionIds: z.array(z.string()), binId: z.string().max(100), parameters: z.array(z.record(z.string(), z.json())), types: z.record(z.string(), z.json()) },
+  'video_edit.code_version': { source: codeMaterialVersionSchema.shape.source, apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, definitionId: z.string().min(1).max(100), parameters: z.array(z.record(z.string(), z.json())), types: z.record(z.string(), z.json()) },
   'video_edit.tracker': { name: videoEditTrackerSchema.shape.name, method: videoEditTrackerSchema.shape.method, prompts: videoEditTrackerSchema.shape.prompts, status: text, clipId: z.string().min(1).max(100), sequenceId: z.string().min(1).max(100) },
   'video_edit.graphic_object': { name: z.string().trim().min(1).max(200), kind: z.enum(['rect', 'ellipse', 'text']), clipId: z.string().min(1).max(100), sequenceId: z.string().min(1).max(100), parameters: codeMaterialInstanceSchema.shape.parameters, curves: codeMaterialCurvesSchema, textStyle: videoEditTextStyleSchema.nullable(), visible: z.boolean() },
   'video_edit.effect': { name: videoEditEffectSchema.shape.name, enabled: videoEditEffectSchema.shape.enabled, amount: videoEditEffectSchema.shape.amount, definitionId: codeMaterialInstanceSchema.shape.definitionId, versionId: codeMaterialInstanceSchema.shape.versionId, parameters: codeMaterialInstanceSchema.shape.parameters, curves: codeMaterialCurvesSchema, clipId: z.string().min(1).max(100), sequenceId: z.string().min(1).max(100), mask: videoEditEffectMaskSchema.nullable(), regionStatus: text },
@@ -67,6 +67,8 @@ schemas['video_edit.sequence'].multicam = videoEditSequenceSchema.shape.multicam
 schemas['video_edit.clip'].effectsEnabled = videoEditClipSchema.shape.effectsEnabled.unwrap()
 schemas['video_edit.clip'].disabledIntrinsicSections = videoEditClipSchema.shape.disabledIntrinsicSections.unwrap()
 schemas['video_edit.clip'].codeParameters = codeMaterialInstanceSchema.shape.parameters
+schemas['video_edit.item'].codeParameters = codeMaterialInstanceSchema.shape.parameters
+schemas['video_edit.item'].codeCurves = codeMaterialCurvesSchema
 schemas['video_edit.sequence'].transcript = z.array(z.object({ index: z.number().int().nonnegative(), text: z.string(), from: z.number().int().nonnegative(), to: z.number().int().positive(), editable: z.boolean(), granularity: z.enum(['word', 'segment']) }).strict()).max(100000)
 schemas['video_edit.sequence'].textSilences = z.array(z.object({ from: z.number().int().nonnegative(), to: z.number().int().positive() }).strict()).max(100000)
 for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) schemas['video_edit.clip'][`${key}.keyframes`] = videoEditKeyframesSchema
@@ -147,6 +149,12 @@ labels.codeImageGeneration = '图片生成来源'
 labels.selectedCodeElement = '当前选中的代码元素'
 schemas['video_edit.document'].selectedCodeElement = videoEditSelectedCodeElementContextSchema
 const descriptions: Record<string, string> = {
+  'video_edit.item.code_parameters': '素材项的代码实例参数。按固定源码版本的 parameters/types 声明校验；先读出并保留其它键。只改变此素材项的初始值，现有片段实例独立。图片使用当前剪辑的 {kind:"image",mediaId} 或 null，其它新类型使用声明的 JSON 形状。',
+  'video_edit.item.code_curves': '素材项代码参数的初始动画，源微秒 sourceInUs 加 sourceRemainder，按类型校验值及 linear/ease/hold；只改变此素材项，现有片段实例独立。省略某参数关闭动画，禁止空关键帧数组。',
+  'video_edit.code_material.parameters': '默认源码版本的参数声明（只读）：key、type、title、description、tooltip、group、advanced、visibleWhen、animatable、default 及类型专属约束。自定义 type 使用作者声明的类型名，字段定义见 types。按此声明写入片段 code_parameters 或效果 parameters。',
+  'video_edit.code_material.types': '默认源码版本的自定义组件类型（只读），按类型名索引：title、layout、fields。字段只能是基础类型；结构实例须提供完整字段，声明 default 的缺项已由字段默认补齐。',
+  'video_edit.code_version.parameters': '此固定源码版本的完整参数声明（只读），包含分组、高级、条件显示、默认值和范围。先读回声明，再通过片段 code_parameters、效果 parameters 或素材项 code_parameters 写入实例；修改参数不修改源码。',
+  'video_edit.code_version.types': '此固定源码版本的自定义参数组件类型（只读）：title、layout 与基础类型 fields；参数 type 引用这里的类型名。',
   'video_edit.document.selected_code_element': '当前帧选中的代码元素，只读：clipRef、elementId、源码UTF-16位置sourceSpan及关联参数parameterKeys。由节目点选与源码光标维护；用 clip.code_parameters 通用修改关联参数，或新建 annotation 的 element 目标绑定它。null 表示没有当前可见选中元素。',
   'video_edit.clip.element_overrides': '此代码生成片段的元素覆盖，按当前选区的 elementId 索引。dx/dy 为作者父级坐标的位移，scale/scaleX/scaleY 为相对倍率，rotation 为角度；fill/stroke 为0–1 RGBA，字号/字距为作者像素，行距为字号倍率；hidden 隐藏。可选 curves 使用与代码参数相同的源微秒/余量/插值关键帧结构；文字/字体/隐藏只支持hold。整体替换前先读并保留其它元素与字段；删除一个键即重置该元素。源码移除元素时保留覆盖。文字直接引用文本参数时应修改 code_parameters，不写text覆盖。写回源码应新建 code_version，再在同一事务绑定 code_version_id 并清除已合并覆盖，禁止改写旧版本。',
   'video_edit.clip.code_parameters': '按固定源码声明校验参数字典，只改此片段。图片参数接受 null 或 {kind:"image",mediaId}，mediaId 必须来自当前剪辑图片；可先用通用图片生成，再通过 place_video_edit_creative_result 的 library 模式导入，读取返回 video_edit.item 的 media_id 后绑定。先读原参数并保留其他键；不要用 generation.result、asset 引用或文件路径代替 mediaId。生成与取消使用正式生成任务，参数切换一步撤销。',

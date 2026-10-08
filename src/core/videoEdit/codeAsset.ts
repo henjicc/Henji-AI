@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from './codeMaterialPersistence'
-import { CODE_MATERIAL_LIMITS } from './codeMaterial/contract'
+import { CODE_MATERIAL_LIMITS, isCodeImageReference } from './codeMaterial/contract'
 import { codeElementOverridesSchema } from './codeElementOverrides'
 
-/** A source has at most 32 typed parameter slots (compiler contract), hence at most 32 distinct image dependencies. Bytes bound a single serialized source manifest. */
-export const CODE_ASSET_LIMITS = Object.freeze({ bytes: 512 * 1024, images: 32 })
+/** Bytes bound a serialized source manifest; image dependency count has no product ceiling. */
+export const CODE_ASSET_LIMITS = Object.freeze({ bytes: 512 * 1024 })
 export const CODE_ASSET_MIME = 'application/x-henji-code'
 export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
 const image = z.object({
@@ -17,12 +17,12 @@ export const codeAssetSchema = z.object({
   parameters: codeMaterialInstanceSchema.shape.parameters,
   curves: codeMaterialInstanceSchema.shape.curves,
   elementOverrides: codeElementOverridesSchema.optional(),
-  images: z.array(image).max(CODE_ASSET_LIMITS.images),
+  images: z.array(image),
 }).strict().superRefine((value, context) => {
   if (new TextEncoder().encode(value.sourceVersion.source).byteLength > CODE_MATERIAL_LIMITS.sourceBytes) context.addIssue({ code: 'custom', message: '代码素材源码最多64KiB。' })
   const ids = value.images.map(image => image.id)
   if (new Set(ids).size !== ids.length) context.addIssue({ code: 'custom', message: '代码素材图片依赖标识重复。' })
-  const references = Object.values(value.parameters).flatMap(value => value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'image' ? [value.mediaId] : [])
+  const references = Object.values(value.parameters).flatMap(value => isCodeImageReference(value) ? [value.mediaId] : [])
   if (references.some(id => !ids.includes(id)) || ids.some(id => !references.includes(id))) context.addIssue({ code: 'custom', message: '图片参数与固定依赖清单不一致。' })
 })
 export type CodeAsset = z.infer<typeof codeAssetSchema>

@@ -23,6 +23,7 @@ import { createVideoEditCodeMaterials, createVideoEditCodeVersions } from './vid
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { assertVideoEditClipFollow } from './videoEditTrackingEdits'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, updateVideoEditCompositeEntity, createVideoEditCompositeEntity, removeVideoEditCompositeEntities, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
 import { makeVideoEditGraphicItem } from './videoEditProjectItems'
@@ -232,7 +233,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       const sequence = next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!
       const oldCode = before.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === childId)?.code
       const nextCode = sequence.clips.find(clip => clip.id === childId)?.code
-      const imageValues = (values: typeof oldCode): unknown => Object.entries(values?.parameters ?? {}).filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'image').sort(([left], [right]) => left.localeCompare(right))
+      const imageValues = (values: typeof oldCode): unknown => Object.entries(values?.parameters ?? {}).filter(([, value]) => isCodeImageReference(value)).sort(([left], [right]) => left.localeCompare(right))
       if (oldCode?.versionId !== nextCode?.versionId || JSON.stringify(imageValues(oldCode)) !== JSON.stringify(imageValues(nextCode))) {
         const owner = requireVideoEditInstance(projectId)
         const clip = sequence.clips.find(clip => clip.id === childId)!

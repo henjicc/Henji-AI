@@ -5,6 +5,7 @@ import { defaultVideoEditTextStyle, layoutVideoEditText } from './text'
 import { videoEditSubtitleStyleSchema } from './subtitleStyle'
 import { collectVideoEditFonts, missingVideoEditFonts } from './fonts'
 import { GENERIC_FONT_FACES } from '../fonts/catalog'
+import { compileCodeMaterial } from './codeMaterial/compiler'
 
 it('任意字体名贯通文字、图形标题、字幕和嵌套序列；缺字体说明引用片段和回退', () => {
   const document = createVideoEditDocument('字体工程'); const sequence = createVideoEditSequence()
@@ -29,4 +30,12 @@ it('文字布局生成的 Canvas font 不允许字体名注入额外族', () => 
 it('内置风格只是推荐字体并自动回退，不算缺字体；用户自建风格缺字体照常提示', () => {
   const uses = [{ font: 'Source Han Sans SC', ownerId: 'style:builtin:style:0:display', label: '风格：克制高级' }, { font: 'Source Han Sans SC', ownerId: 'style:mine:display', label: '风格：我的' }]
   expect(missingVideoEditFonts(uses, []).flatMap(item => item.uses.map(use => use.ownerId))).toEqual(['style:mine:display'])
+})
+it('v3字体参数及自定义组件字体字段的默认、实例和关键帧进入同一缺失检测', () => {
+  const program = compileCodeMaterial('export default {apiVersion:1,languageVersion:3,name:"字体组件",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,types:{label:{title:"标签",layout:"row",fields:{face:{type:"font",title:"字体",default:"Missing Default"},power:{type:"number",title:"强度",min:0,max:1,step:.1,default:1}}}},parameters:{face:{type:"font",title:"字体",default:"Missing Font"},label:{type:"label",title:"标签",default:{},animatable:true}},render(ctx){return [];}}')
+  const document = createVideoEditDocument('代码字体')
+  document.items.push({ id: 'item', kind: 'code', name: '代码字体', code: { definitionId: 'd', versionId: 'v', parameters: {}, curves: { label: [{ id: 'key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: { face: 'Missing Keyframe', power: .5 }, interpolation: 'hold' }] } } })
+  const uses = collectVideoEditFonts(document, () => program)
+  expect(uses.map(use => use.font)).toEqual(['Missing Font', 'Missing Default', 'Missing Keyframe'])
+  expect(missingVideoEditFonts(uses, []).map(use => use.font)).toEqual(['Missing Font', 'Missing Default', 'Missing Keyframe'])
 })

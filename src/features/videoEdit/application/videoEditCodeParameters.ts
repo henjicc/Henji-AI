@@ -2,6 +2,7 @@ import { compareCodeMaterialTime, evaluateCodeMaterialParameters, prepareCodeMat
 import type { CodeMaterialKeyframe } from '@/core/videoEdit/codeMaterialAnimation'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { validateCodeMaterialParameterValue } from '@/core/videoEdit/codeMaterial/parameters'
+import { codeParameterSupportsInterpolation } from '@/core/videoEdit/codeMaterial/parameterInterpolation'
 import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditGraphicObjectMetadata } from '@/core/videoEdit/graphics'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
@@ -81,7 +82,7 @@ export function setVideoEditCodeParameter(target: VideoEditParameterTarget, key:
   edit(target, (_document, { binding: code }) => {
     if (options.time && code.curves?.[key]?.length) {
       if (parameter.type === 'image') throw new Error('图片参数不支持关键帧。')
-      code.curves[key] = upsert(code.curves[key], options.time, value as CodeMaterialKeyframe['value'], !['number', 'color'].includes(parameter.type))
+      code.curves[key] = upsert(code.curves[key], options.time, value as CodeMaterialKeyframe['value'], !codeParameterSupportsInterpolation(parameter))
     } else code.parameters[key] = value
   }, options.gesture)
 }
@@ -94,7 +95,7 @@ export function addVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: 
   if (parameter.type === 'image' || !parameter.animatable) throw new Error('此参数不支持关键帧。')
   edit(target, (_document, { binding: code }) => {
     const value = evaluateCodeMaterialParameters(prepareCodeMaterialParameters(metadata, code), time)[key] as CodeMaterialKeyframe['value']
-    code.curves = { ...(code.curves ?? {}), [key]: upsert(code.curves?.[key] ?? [], time, value, !['number', 'color'].includes(parameter.type)) }
+    code.curves = { ...(code.curves ?? {}), [key]: upsert(code.curves?.[key] ?? [], time, value, !codeParameterSupportsInterpolation(parameter)) }
   })
 }
 export function updateVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: string, id: string, changes: Partial<Pick<CodeMaterialKeyframe, 'sourceInUs' | 'sourceRemainder' | 'value' | 'interpolation'>>, gesture?: VideoEditGesture): void {

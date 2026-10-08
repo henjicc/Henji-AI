@@ -1,5 +1,6 @@
 import { registry } from '@/core/ModelRegistry'
 import { createLogger } from '@/core/logging'
+import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { generationService } from '@/core/services/GenerationService'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
 import type { CodeDrawCommand } from '@/core/videoEdit/codeMaterial/contract'
@@ -148,7 +149,7 @@ export async function startCodeImageGeneration(request: CodeImageGenerationReque
   if (code?.versionId !== request.target.versionId) throw new Error('原代码版本已改变，请重新生成。')
   const id = crypto.randomUUID()
   const value = code.parameters[request.parameterKey]
-  const bindingValue = typeof value === 'object' && value && 'mediaId' in value ? value.mediaId : null
+  const bindingValue = isCodeImageReference(value) ? value.mediaId : null
   const job: CodeImageGenerationJob = { id, request: structuredClone({ ...request, prompt, params }), modelId, taskId: `code-image-${id}`, status: 'generating', progress: 0, bindingValue }
   jobs.set(id, job); publish()
   const controller = new AbortController(); controllers.set(id, controller)
@@ -170,7 +171,7 @@ export function retryCodeImageGenerationBinding(id: string): void {
   const job = jobs.get(id)
   if (!job || job.status !== 'failed' || !job.generated) throw new Error('此任务没有可重新应用的完成图片，请再次生成。')
   const current = targetCode(requireVideoEditInstance(job.request.target.projectId).document, job.request.target)?.parameters[job.request.parameterKey]
-  job.bindingValue = typeof current === 'object' && current && 'mediaId' in current ? current.mediaId : null
+  job.bindingValue = isCodeImageReference(current) ? current.mediaId : null
   const controller = new AbortController(); controllers.set(id, controller)
   update(job, { status: 'placing', error: undefined }); void run(job, false, controller)
 }

@@ -2,6 +2,8 @@ import { styleKitSchema, styleKitContent, resolveVideoEditStyleKit, type StyleKi
 import { BUILTIN_STYLE_KITS, availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
 import { extractStyleFromWork, type StyleWorkObservation } from '@/core/videoEdit/styleKitExtraction'
 import { styleColorFromHex } from '@/core/videoEdit/styleKit'
+import { isCodeColor } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
 import { createLogger } from '@/core/logging'
 import { loadFontLibrary, validateFontName } from '@/platform/fonts'
 import { compileVideoEditCode, readVideoEditCodeProgram } from './videoEditCodeState'
@@ -95,7 +97,11 @@ export async function extractVideoEditWorkStyle(projectId: string, sequenceId: s
       if (clip.code) {
         const program = readVideoEditCodeProgram(owner, baseline, clip.code)
         observation.parameters = { ...Object.fromEntries(program.parameters.map(parameter => [parameter.key, parameter.default])), ...clip.code.parameters }
-        for (const [key, value] of Object.entries(observation.parameters)) if (Array.isArray(value)) { observation.colors.push(value); if (Object.hasOwn(basePalette, key)) observation.colorRoles![key as keyof StyleKit['tokens']['palette']] = value }
+        const collectColor = (parameter: CodeParameterDeclaration, value: unknown, key: string): void => {
+          if (parameter.type === 'color' && isCodeColor(value)) { observation.colors.push(value); if (Object.hasOwn(basePalette, key)) observation.colorRoles![key as keyof StyleKit['tokens']['palette']] = value }
+          if (parameter.type === 'custom' && value && typeof value === 'object' && !Array.isArray(value)) for (const [field, member] of Object.entries(parameter.fields)) collectColor(member, (value as Record<string, unknown>)[field], `${key}.${field}`)
+        }
+        for (const parameter of program.parameters) collectColor(parameter, observation.parameters[parameter.key], parameter.key)
       }
       const opacity = clip.curves?.opacity
       if (opacity && opacity.length >= 2) { observation.enterSeconds = (opacity[1].time - opacity[0].time) / fps; observation.exitSeconds = (opacity.at(-1)!.time - opacity.at(-2)!.time) / fps; observation.ease = opacity[0].interpolation === 'linear' ? 'linear' : 'cubicOut' }

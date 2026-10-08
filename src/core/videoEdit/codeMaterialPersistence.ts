@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { CODE_MATERIAL_LIMITS } from './codeMaterial/contract'
 import { codeMaterialCurvesSchema } from './codeMaterialAnimation'
+import { codeMaterialParameterKeySchema, codeMaterialParameterValueSchema } from './codeMaterial/parameterValueSchema'
+export { codeMaterialImageReferenceSchema } from './codeMaterial/parameterValueSchema'
 
 const id = z.string().min(1).max(100)
 export const codeMaterialVersionSchema = z.object({ id, apiVersion: z.literal(1), languageVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]), source: z.string().max(CODE_MATERIAL_LIMITS.sourceBytes), assetOrigin: z.object({ assetId: id, contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict()
@@ -18,9 +20,7 @@ export const codeMaterialDefinitionsSchema = z.array(codeMaterialDefinitionSchem
     }
   }
 })
-export const codeMaterialImageReferenceSchema = z.object({ kind: z.literal('image'), mediaId: id }).strict()
-const parameter = z.union([z.number().finite(), z.boolean(), z.string().max(4096), z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)]), codeMaterialImageReferenceSchema, z.null()])
-export const codeMaterialInstanceSchema = z.object({ definitionId: id, versionId: id, parameters: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), parameter).refine(value => Object.keys(value).length <= 32, '代码参数最多32个。'), curves: codeMaterialCurvesSchema.optional() }).strict()
+export const codeMaterialInstanceSchema = z.object({ definitionId: id, versionId: id, parameters: z.record(codeMaterialParameterKeySchema, codeMaterialParameterValueSchema), curves: codeMaterialCurvesSchema.optional() }).strict()
 export type CodeMaterialVersion = z.infer<typeof codeMaterialVersionSchema>
 export type CodeMaterialDefinition = z.infer<typeof codeMaterialDefinitionSchema>
 export type CodeMaterialInstance = z.infer<typeof codeMaterialInstanceSchema>

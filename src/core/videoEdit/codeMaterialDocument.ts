@@ -8,7 +8,7 @@ import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } fr
 import { validateVideoEditTransitions, videoEditTransitionWindow } from './transitions'
 import { videoEditEffectCodes } from './compositing'
 
-export type CodeMaterialMetadata = Pick<CodeMaterialProgram, 'name' | 'kind' | 'mode' | 'width' | 'height' | 'durationSeconds' | 'seed' | 'parameters'>
+export type CodeMaterialMetadata = Pick<CodeMaterialProgram, 'name' | 'kind' | 'mode' | 'width' | 'height' | 'durationSeconds' | 'seed' | 'parameters' | 'types'>
 export type CodeMaterialMetadataReader = (instance: CodeMaterialInstance) => CodeMaterialMetadata
 export function videoEditCodeReferences(document: VideoEditDocument): CodeMaterialInstance[] {
   return [

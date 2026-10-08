@@ -2,6 +2,9 @@ import ts from 'typescript'
 import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_TIME_KEYS, CODE_V3_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, finiteCodeNumber } from './contract'
 import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, CodeExpression, CodeMaterialProgram, CodeSourceSpan, CodeValueType } from './contract'
 import { CODE_EASE_NAMES } from './motion'
+import { codeParameterShape, codeParameterValueType, type CodeParameterShape } from './parameterTypes'
+import { CODE_PARAMETER_FUNCTION_COSTS } from './parameterSampling'
+import { codeFilterParameterSlots } from './filterParameters'
 import { parseCodePath } from './geometry'
 import { CODE_STYLE_EXPRESSION, isCodeStyleExpression } from './style'
 import { codeShaderFilterPasses, codeShaderNameIssue, codeShaderPropIssue, codeShaderTime, codeShaderTypeIssue, staticCodeShaderValue, type CodeShaderRole } from './shaders'
@@ -43,7 +46,7 @@ const operators: Partial<Record<ts.SyntaxKind, CodeBinaryOperator>> = {
   [ts.SyntaxKind.LessThanToken]: '<', [ts.SyntaxKind.LessThanEqualsToken]: '<=', [ts.SyntaxKind.GreaterThanToken]: '>', [ts.SyntaxKind.GreaterThanEqualsToken]: '>=',
   [ts.SyntaxKind.EqualsEqualsEqualsToken]: '===', [ts.SyntaxKind.ExclamationEqualsEqualsToken]: '!==', [ts.SyntaxKind.AmpersandAmpersandToken]: '&&', [ts.SyntaxKind.BarBarToken]: '||',
 }
-const extra = ['shaderFilter', 'repeat', 'linearGradient', 'radialGradient', 'measureText', 'chars', 'words', 'progress', 'tween', 'stagger', 'keyframes', 'cubicBezier', 'noise', 'sampleOffset', 'blur', 'glow', 'luma', 'contrast', 'saturate', 'hsv', 'hsl', 'toHsv', 'toHsl', 'average', ...CODE_EASE_NAMES]
+const extra = ['sampleGradient', 'sampleCurve', 'ease', 'shaderFilter', 'repeat', 'linearGradient', 'radialGradient', 'measureText', 'chars', 'words', 'progress', 'tween', 'stagger', 'keyframes', 'cubicBezier', 'noise', 'sampleOffset', 'blur', 'glow', 'luma', 'contrast', 'saturate', 'hsv', 'hsl', 'toHsv', 'toHsl', 'average', ...CODE_EASE_NAMES]
 interface Scope { values: Map<string, CodeExpression>; helpers: Map<string, ts.ArrowFunction> }
 
 /** Helper calls are statically inlined into data; arrows never become callable host values. */
@@ -58,6 +61,21 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     if (!(Array.isArray(expected) ? expected : [expected]).includes(value.type)) fail(node, `需要 ${expected}，实际 ${value.type}。`, 'TYPE')
   }
   const unwrap = (value: CodeExpression): CodeExpression => value.kind === 'binding' ? unwrap(program.bindings[value.slot].expression) : value
+  const shapeOf = (input: CodeExpression): CodeParameterShape => {
+    const value = unwrap(input)
+    if (value.kind === 'parameter') return codeParameterShape(program.parameters.find(parameter => parameter.key === value.key)!)
+    if (value.kind === 'object') return { type: 'object', fields: Object.fromEntries(Object.entries(value.properties).map(([key, value]) => [key, shapeOf(value)])) }
+    if (value.kind === 'array') return { type: 'array', element: value.values[0] ? shapeOf(value.values[0]) : undefined }
+    if (value.kind === 'field') return shapeOf(value.value).fields?.[value.key] ?? { type: value.type }
+    if (value.kind === 'index') return shapeOf(value.value).element ?? { type: value.type }
+    if (value.kind === 'repeat') return { type: value.type, element: shapeOf(value.body) }
+    if (value.kind === 'conditional') {
+      const a = shapeOf(value.yes); const b = shapeOf(value.no)
+      return JSON.stringify(a) === JSON.stringify(b) ? a : { type: value.type }
+    }
+    if (value.kind === 'v3call' && value.op === 'measureText') return { type: 'object', fields: { width: { type: 'number' }, height: { type: 'number' }, lines: { type: 'array', element: { type: 'string' } } } }
+    return { type: value.type }
+  }
   const bound = (node: ts.Node, value: CodeExpression): number => {
     const expression = unwrap(value)
     if (expression.kind === 'literal' && typeof expression.value === 'number' && Number.isInteger(expression.value) && expression.value >= 0) return expression.value
@@ -165,8 +183,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       if (ts.isPropertyAccessExpression(node.expression) && !node.expression.questionDotToken && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === 'ctx' && node.expression.name.text === 'params') {
         const parameter = program.parameters.find(item => item.key === key)
         if (!parameter) fail(node, `未声明参数：${key}`)
-        const valueType: CodeValueType = parameter.type === 'choice' || parameter.type === 'text' ? 'string' : parameter.type
-        if (program.kind === 'filter' && ['string', 'image'].includes(valueType)) fail(node, '滤镜不能读取文字或图片参数。', 'TYPE')
+        const valueType = codeParameterValueType(parameter)
         return { kind: 'parameter', type: valueType, key }
       }
       const value = compile(node.expression, env)
@@ -178,9 +195,10 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       type(node, value, 'object')
       const raw = unwrap(value)
       const member = raw.kind === 'object' ? raw.properties[key] : undefined
-      if (!member && !(raw.kind === 'v3call' && raw.op === 'measureText' && ['width', 'height', 'lines'].includes(key))) fail(node, `未知对象字段：${key}`)
+      const shape = shapeOf(value)
+      if (!shape.fields?.[key]) fail(node, `未知对象字段：${key}；可用字段：${Object.keys(shape.fields ?? {}).join('、') || '无'}`, 'TYPE')
       if (member && isCodeStyleExpression(member)) return member
-      return { kind: 'field', type: member?.type ?? (key === 'lines' ? 'array' : 'number'), value, key }
+      return { kind: 'field', type: shape.fields[key].type, value, key }
     }
     if (ts.isElementAccessExpression(node) && !node.questionDotToken && node.argumentExpression) {
       const value = compile(node.expression, env); const index = compile(node.argumentExpression, env); type(node, index, 'number')
@@ -188,7 +206,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       const raw = unwrap(value)
       const member = raw.kind === 'array' || raw.kind === 'color' ? raw.values : undefined
       if (member && new Set(member.map(item => item.type)).size > 1) fail(node, '只允许索引同类型常量表。', 'TYPE')
-      return { kind: 'index', type: value.type === 'color' ? 'number' : value.type === 'string' ? 'string' : member?.[0]?.type ?? 'string', value, index }
+      return { kind: 'index', type: value.type === 'color' ? 'number' : value.type === 'string' ? 'string' : shapeOf(value).element?.type ?? member?.[0]?.type ?? 'string', value, index }
     }
     if (ts.isPrefixUnaryExpression(node)) {
       const op = node.operator === ts.SyntaxKind.PlusToken ? '+' : node.operator === ts.SyntaxKind.MinusToken ? '-' : node.operator === ts.SyntaxKind.ExclamationToken ? '!' : undefined
@@ -302,10 +320,13 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     }
     if (!CODE_BUILTINS.includes(op as CodeBuiltin) && !extra.includes(op)) fail(node, `不允许调用：${op}`)
     const args = node.arguments.map(item => compile(item, env))
-    const arity: Record<string, number[]> = { min: [2], max: [2], sample: [2], clamp: [3], mix: [3], smoothstep: [3], rgba: [4], noise: [1, 2, 3], cubicBezier: [5], progress: [3], tween: [6], stagger: [2], keyframes: [2], sampleOffset: [2], glow: [3], contrast: [2], saturate: [2], hsv: [3, 4], hsl: [3, 4], backOut: [1, 2] }
+    const arity: Record<string, number[]> = { sampleGradient: [2], sampleCurve: [2], ease: [2], min: [2], max: [2], sample: [2], clamp: [3], mix: [3], smoothstep: [3], rgba: [4], noise: [1, 2, 3], cubicBezier: [5], progress: [3], tween: [6], stagger: [2], keyframes: [2], sampleOffset: [2], glow: [3], contrast: [2], saturate: [2], hsv: [3, 4], hsl: [3, 4], backOut: [1, 2] }
     if (!(arity[op] ?? [1]).includes(args.length)) fail(node, `${op} 参数数量无效。`)
     let resultType: CodeValueType = 'number'
-    if (['linearGradient', 'radialGradient'].includes(op)) {
+    if (['sampleGradient', 'sampleCurve', 'ease'].includes(op)) {
+      type(node, args[0], op === 'ease' ? ['string', 'array', 'color'] : 'array'); type(node, args[1], 'number')
+      resultType = op === 'sampleGradient' ? 'color' : 'number'; charge(node, CODE_PARAMETER_FUNCTION_COSTS[op])
+    } else if (['linearGradient', 'radialGradient'].includes(op)) {
       type(node, args[0], 'object'); resultType = 'paint'
       const raw = unwrap(args[0]); const stops = raw.kind === 'object' ? raw.properties.stops : undefined
       const table = stops && unwrap(stops)
@@ -377,7 +398,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     return 0
   }
   if (shaderCount(program.result) > CODE_V3_LIMITS.shaderLayers) fail(body, `每帧最多 ${CODE_V3_LIMITS.shaderLayers} 个着色器层。`, 'BUDGET')
-  if (program.kind === 'filter') codeShaderFilterPasses(program)
+  if (program.kind === 'filter') { codeShaderFilterPasses(program); codeFilterParameterSlots(program) }
   program.metrics.draws = drawCount(program.result)
   if (program.metrics.draws > CODE_V3_LIMITS.draws) fail(body, '重复展开后图形超过 4096 项。', 'BUDGET')
   // Unused helpers are checked too: no dormant host access is accepted.
@@ -435,7 +456,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
           const parameter = text?.kind === 'parameter' ? program.parameters.find(item => item.key === text.key) : undefined
           const length = text?.kind === 'literal' && typeof text.value === 'string' ? text.value.length : parameter?.type === 'text' ? parameter.maxLength : 4096
           result += length * (fields.kind === 'object' && fields.properties.maxLines ? 32 : 2) + 64
-        } else result += CODE_EASE_NAMES.includes(value.op) || ['noise', 'tween', 'cubicBezier'].includes(value.op) ? 64 : 1
+        } else result += CODE_PARAMETER_FUNCTION_COSTS[value.op] ?? (CODE_EASE_NAMES.includes(value.op) || ['noise', 'tween', 'cubicBezier'].includes(value.op) ? 64 : 1)
       }
     }
     costs.set(value, result); return result

@@ -3,6 +3,7 @@ import ts from 'typescript'
 import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS, CODE_TIME_KEYS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, codeConditionalCost, finiteCodeNumber } from './contract'
 import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, CodeExpression, CodeMaterialProgram, CodeValueType } from './contract'
 import { parseCodeMaterialParameters } from './parameters'
+import { parseCodeMaterialTypes } from './parameterTypes'
 import { codeSourceSpan, compileCodeMaterialV3 } from './compilerV3'
 import { shaderGraphCustomShaderSchema, type ShaderGraphCustomShader } from '../shaderGraph/spec'
 
@@ -107,7 +108,7 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   if (!exported || !ts.isExportAssignment(exported) || exported.isExportEquals || !ts.isObjectLiteralExpression(exported.expression)) fail(file, '源码必须以 export default 静态对象结束。')
   const definition = exported.expression
   const metadata = new Map<string, ts.Expression>(); let render: ts.MethodDeclaration | undefined
-  const allowed = new Set(['apiVersion', 'languageVersion', 'name', 'kind', 'mode', 'width', 'height', 'durationSeconds', 'seed', 'parameters', 'shaders', 'render'])
+  const allowed = new Set(['apiVersion', 'languageVersion', 'name', 'kind', 'mode', 'width', 'height', 'durationSeconds', 'seed', 'parameters', 'types', 'shaders', 'render'])
   for (const item of definition.properties) {
     if (!ts.isPropertyAssignment(item) && !ts.isMethodDeclaration(item)) fail(item, '定义不允许展开、简写或访问器。')
     const key = propertyName(item.name)
@@ -123,12 +124,14 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   const kind = value('kind'); const mode = value('mode')
   if (kind !== 'generator' && kind !== 'filter') throw new CodeMaterialError('SYNTAX', 'kind 必须为 generator 或 filter。')
   if (mode !== 'static' && mode !== 'dynamic') throw new CodeMaterialError('SYNTAX', 'mode 必须为 static 或 dynamic。')
-  const parameters = parseCodeMaterialParameters(value('parameters'))
+  if (metadata.has('types') && languageVersion !== 3) fail(metadata.get('types')!, 'types 仅用于 v3 作者语言。')
+  const types = metadata.has('types') ? parseCodeMaterialTypes(value('types')) : undefined
+  const parameters = parseCodeMaterialParameters(value('parameters'), languageVersion === 3 ? 3 : 1, types)
   const imageParameters = parameters.some(parameter => parameter.type === 'image')
   if (imageParameters && kind !== 'generator') throw new CodeMaterialError('TYPE', '图片资源参数仅用于生成器，滤镜仍只采样当前输入。')
   const program: CodeMaterialProgram = { apiVersion: 1, languageVersion: languageVersion === 3 ? 3 : imageParameters ? 2 : 1, name: staticString(value('name'), 'name', 160), kind, mode,
     width: staticNumber(value('width'), 'width', 1, 8192, true), height: staticNumber(value('height'), 'height', 1, 8192, true), durationSeconds: staticNumber(value('durationSeconds'), 'durationSeconds', 0.000001, VIDEO_EDIT_MAX_SEQUENCE_SECONDS), seed: staticNumber(value('seed'), 'seed', 0, 4294967295, true),
-    parameters, bindings: [], result: { kind: 'literal', type: 'boolean', value: false }, metrics: { ...ast, cpuOperations: 0, scalarOperations: 0, samples: 0 } }
+    parameters, ...(types ? { types } : {}), bindings: [], result: { kind: 'literal', type: 'boolean', value: false }, metrics: { ...ast, cpuOperations: 0, scalarOperations: 0, samples: 0 } }
   if (!render?.body || render.modifiers?.length || render.asteriskToken || render.questionToken || render.type || render.typeParameters?.length || render.parameters.length !== 1) fail(render ?? definition, '需要纯 render(ctx) 方法。')
   const argument = render.parameters[0]
   if (!ts.isIdentifier(argument.name) || argument.name.text !== 'ctx' || argument.type || argument.initializer || argument.questionToken || argument.dotDotDotToken || argument.modifiers?.length) fail(argument, 'render 仅允许未注解的 ctx 参数。')

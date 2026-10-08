@@ -6,17 +6,40 @@ export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes
 export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 200000, draws: 4096, shaderLayers: 32, shaderFilterPasses: 8, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
 export type CodeColor = [number, number, number, number]
 export interface CodeImageReference { kind: 'image'; mediaId: string }
-export type CodeParameterValue = number | boolean | string | CodeColor | CodeImageReference | null
+export interface CodePoint { x: number; y: number }
+export interface CodeGrade { hue: number; strength: number; luminance: number }
+export interface CodeGradientStop { at: number; color: CodeColor }
+export type CodeRange = [number, number]
+export type CodeEasing = string | CodeColor
+export type CodeBasicParameterValue = number | boolean | string | CodeColor | CodeRange | CodePoint | CodeGrade | CodeGradientStop[] | CodePoint[]
+export type CodeParameterObject = Record<string, CodeBasicParameterValue>
+export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeImageReference | null
 export type CodeParameterValues = Record<string, CodeParameterValue>
-interface ParameterBase { key: string; title: string; description: string; animatable: boolean }
-export type CodeParameterDeclaration = ParameterBase & (
-  | { type: 'number'; default: number; min: number; max: number; step: number; unit: string }
-  | { type: 'color'; default: CodeColor }
+export interface CodeParameterVisibility { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
+interface ParameterBase { key: string; title: string; description: string; animatable: boolean; tooltip?: string; group?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }
+export type CodeBasicParameterDeclaration = ParameterBase & (
+  | { type: 'number'; default: number; min: number; max: number; step: number; unit: string; control?: 'slider' | 'knob' | 'input' }
+  | { type: 'angle'; default: number; min: number; max: number }
+  | { type: 'point'; default: CodePoint; space: 'frame' | 'pixels'; min: CodePoint; max: CodePoint }
+  | { type: 'range'; default: CodeRange; min: number; max: number; step: number; unit: string }
+  | { type: 'color'; default: CodeColor; alpha?: boolean }
+  | { type: 'gradient'; default: CodeGradientStop[]; maxStops: number }
+  | { type: 'curve'; default: CodePoint[]; kind: 'tone' | 'hue' }
+  | { type: 'grade'; default: CodeGrade }
   | { type: 'boolean'; default: boolean }
-  | { type: 'choice'; default: string; options: string[] }
-  | { type: 'text'; default: string; maxLength: number }
-  | { type: 'image'; default: null; animatable: false }
+  | { type: 'choice'; default: string; options: string[]; optionLabels?: Record<string, string>; control?: 'dropdown' | 'segmented' }
+  | { type: 'text'; default: string; maxLength: number; multiline?: boolean }
+  | { type: 'font'; default: string }
+  | { type: 'easing'; default: CodeEasing }
+  | { type: 'seed'; default: number }
 )
+export interface CodeParameterTypeDefinition { title: string; layout: 'stack' | 'row' | 'grid' | 'wheel'; fields: Record<string, CodeBasicParameterDeclaration> }
+/** A closed IR tag keeps consumers exhaustive; typeName retains the author's open type name. */
+export type CodeParameterDeclaration = CodeBasicParameterDeclaration | (ParameterBase & (
+  | { type: 'image'; default: null; animatable: false }
+  | { type: 'custom'; typeName: string; default: CodeParameterObject; fields: Record<string, CodeBasicParameterDeclaration> }
+))
+export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'font', 'image', 'easing', 'seed'] as const
 export type CodeValueType = 'number' | 'boolean' | 'string' | 'color' | 'image' | 'draw' | 'draws' | 'array' | 'object' | 'paint'
 export type CodeContextKey = 'time' | 'localTime' | 'sequenceTime' | 'width' | 'height' | 'frame' | 'fps' | 'u' | 'v'
 export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; style?: StyleTokens }
@@ -79,6 +102,7 @@ export interface CodeMaterialProgram {
   apiVersion: 1; languageVersion: 1 | 2 | 3; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
   width: number; height: number; durationSeconds: number; seed: number
   parameters: CodeParameterDeclaration[]; bindings: { name: string; expression: CodeExpression }[]; result: CodeExpression
+  types?: Record<string, CodeParameterTypeDefinition>
   /** v3：素材里自己写的着色器（WGSL 函数体），供 shader / shaderFilter 按名字使用。 */
   shaders?: ShaderGraphCustomShader[]
   metrics: { astNodes: number; astDepth: number; cpuOperations: number; scalarOperations: number; samples: number; draws?: number }
@@ -116,4 +140,12 @@ export function codeImageReference(value: unknown, label: string): CodeImageRefe
   const fields = Object.getOwnPropertyDescriptors(value)
   if (Reflect.ownKeys(fields).length !== 2 || !fields.kind || !fields.mediaId || !('value' in fields.kind) || !('value' in fields.mediaId) || fields.kind.value !== 'image' || typeof fields.mediaId.value !== 'string' || fields.mediaId.value.length < 1 || fields.mediaId.value.length > 100) throw new CodeMaterialError('PARAMETERS', `${label}仅允许 kind:image 和有效 mediaId。`)
   return { kind: 'image', mediaId: fields.mediaId.value }
+}
+export function isCodeImageReference(value: unknown): value is CodeImageReference {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const fields = Object.getOwnPropertyDescriptors(value)
+  return Object.keys(fields).length === 2 && fields.kind?.value === 'image' && typeof fields.mediaId?.value === 'string'
+}
+export function isCodeColor(value: unknown): value is CodeColor {
+  return Array.isArray(value) && value.length === 4 && value.every(channel => typeof channel === 'number' && Number.isFinite(channel) && channel >= 0 && channel <= 1)
 }

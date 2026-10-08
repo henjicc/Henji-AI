@@ -4,6 +4,8 @@ import type { CodeExpression, CodeMaterialProgram } from '@/core/videoEdit/codeM
 import { emitCodeV3FilterCall, CODE_V3_FILTER_HELPERS, codeMaterialFilterPasses } from './videoEditCodeCompilerFilterV3'
 import { codeShaderFilterPasses, unwrapCodeShaderExpression } from '@/core/videoEdit/codeMaterial/shaders'
 import { bindCodeMaterialStyle } from '@/core/videoEdit/codeMaterial/style'
+import { CODE_FILTER_PARAMETER_SLOTS, codeFilterParameterReference, codeFilterParameterSlots, codeFilterParameterSlotId } from '@/core/videoEdit/codeMaterial/filterParameters'
+import type { CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
 
 export interface Range { min: number; max: number; integer: boolean }
 export type Bounds = Range | Range[] | null
@@ -66,11 +68,46 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
   program = bindCodeMaterialStyle(program)
   const shaders = codeShaderFilterPasses(program)
   const limits = program.languageVersion === 3 ? CODE_V3_LIMITS : CODE_MATERIAL_LIMITS
-  if (program.kind !== 'filter' || ![1, 3].includes(program.languageVersion) || program.parameters.length > 32 || program.metrics.samples > limits.filterSamples || program.metrics.scalarOperations > limits.filterScalarOperations) throw new CodeMaterialError('BUDGET', '滤镜版本或资源预算无效。')
+  if (program.kind !== 'filter' || ![1, 3].includes(program.languageVersion) || program.languageVersion === 1 && program.parameters.length > 32 || program.metrics.samples > limits.filterSamples || program.metrics.scalarOperations > limits.filterScalarOperations) throw new CodeMaterialError('BUDGET', '滤镜版本或资源预算无效。')
+  const slots = new Map(codeFilterParameterSlots(program).map(slot => [codeFilterParameterSlotId(slot.key, slot.field), slot]))
+  const uniformValue = (key: string, parameter: CodeParameterDeclaration, field?: string): Value => {
+    if (parameter.type === 'custom') return { code: '', bounds: null, fields: Object.fromEntries(Object.entries(parameter.fields).filter(([name]) => slots.has(codeFilterParameterSlotId(key, name))).map(([name, member]) => [name, uniformValue(key, member, name)])) }
+    const slot = slots.get(codeFilterParameterSlotId(key, field))
+    if (!slot) throw new CodeMaterialError('TYPE', `滤镜参数 ${key}${field ? '.' + field : ''} 缺少 GPU 槽位。`)
+    const code = `p.parameters[${slot.index}]`
+    if (parameter.type === 'number' || parameter.type === 'angle') return { code: `${code}.x`, bounds: range(parameter.min, parameter.max) }
+    if (parameter.type === 'seed') return { code: `${code}.x`, bounds: range(0, 4294967295) }
+    if (parameter.type === 'boolean') return { code: `(${code}.x != 0.0)`, bounds: null }
+    if (parameter.type === 'color') return { code, bounds: [range(0, 1, false), range(0, 1, false), range(0, 1, false), parameter.alpha === false ? range(1) : range(0, 1, false)] }
+    const member = (channel: string, min: number, max: number): Value => ({ code: `${code}.${channel}`, bounds: range(min, max) })
+    if (parameter.type === 'point') {
+      const x = member('x', parameter.min.x, parameter.max.x); const y = member('y', parameter.min.y, parameter.max.y)
+      return { code: `${code}.xy`, bounds: [scalar(x), scalar(y)], fields: { x, y } }
+    }
+    if (parameter.type === 'range') {
+      const a = member('x', parameter.min, parameter.max); const b = member('y', parameter.min, parameter.max)
+      return { code: `${code}.xy`, bounds: [scalar(a), scalar(b)], items: [a, b] }
+    }
+    if (parameter.type === 'grade') return { code: `${code}.xyz`, bounds: [range(0, 360), range(0, 1), range(-1, 1)], fields: { hue: member('x', 0, 360), strength: member('y', 0, 1), luminance: member('z', -1, 1) } }
+    throw new CodeMaterialError('TYPE', `参数 ${key}（${parameter.type}）不能用于逐像素 GPU 表达式。`)
+  }
   const bindings: Value[] = []; const locals = new Map<number, Value>(); const passes = codeMaterialFilterPasses(program); let nodes = 0
   const emit = (expression: CodeExpression, depth = 0): Value => {
     if (++nodes > limits.astNodes || depth > limits.depth) throw new CodeMaterialError('BUDGET', '滤镜表达式超出预算。')
     const next = (value: CodeExpression): Value => emit(value, depth + 1)
+    if (expression.kind === 'field') {
+      const reference = codeFilterParameterReference(program, expression)
+      if (reference) {
+        let result = uniformValue(reference.key, reference.parameter, reference.field)
+        for (const key of reference.projection) {
+          const member = result.fields?.[key]
+          if (member) result = member
+          else if (key === 'length' && result.items) result = { code: `${result.items.length}.0`, bounds: range(result.items.length) }
+          else throw new CodeMaterialError('TYPE', `滤镜参数不存在字段 ${key}。`)
+        }
+        return result
+      }
+    }
     switch (expression.kind) {
       case 'literal': {
         if (typeof expression.value === 'boolean') return { code: String(expression.value), bounds: null }
@@ -113,13 +150,9 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
         return { code: contextCode[expression.key], bounds: expression.key === 'localTime' && transitionHandles ? range(-VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, false) : contextRanges[expression.key] }
       }
       case 'parameter': {
-        const index = program.parameters.findIndex(item => item.key === expression.key); const parameter = program.parameters[index]
+        const parameter = program.parameters.find(item => item.key === expression.key)
         if (!parameter) throw new CodeMaterialError('PARAMETERS', '滤镜参数不存在。')
-        const code = `p.parameters[${index}]`
-        if (parameter.type === 'number') return { code: `${code}.x`, bounds: range(parameter.min, parameter.max) }
-        if (parameter.type === 'boolean') return { code: `(${code}.x != 0.0)`, bounds: null }
-        if (parameter.type === 'color') return { code, bounds: Array.from({ length: 4 }, () => range(0, 1, false)) }
-        throw new CodeMaterialError('TYPE', '滤镜不支持文字或选项参数。')
+        return uniformValue(expression.key, parameter)
       }
       case 'binding': {
         const value = bindings[expression.slot]
@@ -238,7 +271,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
   const result = emit(program.result)
   if (colors(result).some(channel => channel.min < -1e-5 || channel.max > 1 + 1e-5)) throw new CodeMaterialError('PARAMETERS', '滤镜输出必须始终位于0到1；请在可能越界的颜色通道显式使用clamp。')
   return `
-struct Params { context0:vec4f, context1:vec3f, seed:u32, parameters:array<vec4f,32>, flags:vec4f }
+struct Params { context0:vec4f, context1:vec3f, seed:u32, parameters:array<vec4f,${CODE_FILTER_PARAMETER_SLOTS}>, flags:vec4f }
 @group(0) @binding(0) var inputTexture: texture_2d<f32>;
 @group(0) @binding(1) var inputSampler: sampler;
 @group(0) @binding(2) var<uniform> p: Params;

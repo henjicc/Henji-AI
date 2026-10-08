@@ -11,6 +11,8 @@ import { addVideoEditCodeKeyframe, deleteVideoEditCodeKeyframe, readVideoEditCod
 import { createVideoEditGraphicItem, appendVideoEditItems } from './videoEditProjectItems'
 import { createVideoEditGraphicObject, deleteVideoEditGraphicObjects, renameVideoEditGraphicObject, reorderVideoEditGraphicObjects } from './videoEditGraphics'
 import { savedVideoEdit } from './videoEditDocumentTestKit'
+import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
+import { createApplicationHarness } from '@/tests/applicationHarness'
 
 const source = `export default {apiVersion:1,name:"参数",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",default:5,min:0,max:10,step:1,animatable:true},other:{type:"boolean",title:"开关",default:false}},render(ctx){return [rect({x:ctx.params.amount,y:0,width:100,height:100,fill:[1,0,0,1]})];}}`
 const files = new Map<string, string>()
@@ -31,6 +33,51 @@ async function setup() {
   })
   return { owner, target: readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, getActiveVideoEditSequence(owner).clips[0].id).target }
 }
+it('v3新形状沿公共片段与素材项写入、校验、读回、撤销及保存；元数据保留组件名和显示条件', async () => {
+  const owner = (await createVideoEditProject())!; const app = createApplicationHarness()
+  const src = 'export default {apiVersion:1,languageVersion:3,name:"参数化灯光",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,types:{light:{title:"灯光",layout:"row",fields:{power:{type:"number",title:"强度",default:1,min:0,max:2,step:.01},position:{type:"point",title:"位置",default:{x:.5,y:.5}},font:{type:"font",title:"字体",default:"sans-serif"}}}},parameters:{enabled:{type:"boolean",title:"启用",default:true},lamp:{type:"light",title:"主光",group:"照明",advanced:true,visibleWhen:{param:"enabled",equals:true},tooltip:"调整主光",description:"主体照明",default:{power:1.4},animatable:true},curve:{type:"curve",title:"映射",default:[{x:0,y:0},{x:1,y:1}],animatable:true}},render(ctx){return [rect({x:ctx.params.lamp.position.x,y:0,width:100,height:100,fill:[1,0,0,1]})];}}'
+  const program = compileCodeMaterial(src); const version = { id: 'v3', source: src, apiVersion: 1 as const, languageVersion: 3 as const }
+  rememberVideoEditCodeMetadata(owner, 'v3d', version, program)
+  editVideoProject(owner.document.id, document => {
+    document.codeMaterials = [{ id: 'v3d', name: program.name, defaultVersionId: version.id, versions: [version] }]
+    document.items.push({ id: 'v3item', name: program.name, kind: 'code', code: { definitionId: 'v3d', versionId: version.id, parameters: {} } })
+    document.sequences[0].clips.push(makeVideoEditItemClip(document, 'v3item', document.sequences[0].id, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))
+    return document
+  })
+  const target = readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, getActiveVideoEditSequence(owner).clips[0].id).target
+  const clipRef = { kind: 'video_edit.clip', id: `${owner.document.id}:${target.clipId}` }
+  const params = { ...validateCodeMaterialParameters(program), lamp: { power: 1.8, position: { x: .25, y: .75 }, font: 'sans-serif' } }
+  try {
+    for (const kind of ['code_material', 'code_version']) {
+      const ref = { kind: `video_edit.${kind}`, id: `${owner.document.id}:${kind === 'code_material' ? 'v3d' : 'v3'}` }
+      const snapshot = await app.read(ref, [`${ref.kind}.parameters`, `${ref.kind}.types`])
+      const properties = snapshot.properties as Record<string, unknown>
+      expect(properties[`${ref.kind}.parameters`]).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'lamp', type: 'light', group: '照明', advanced: true, visibleWhen: { param: 'enabled', equals: true }, tooltip: '调整主光' })]))
+      expect(properties[`${ref.kind}.types`]).toMatchObject({ light: { layout: 'row', fields: { position: { type: 'point' } } } })
+    }
+    const before = owner.past.length
+    expect(await app.change(clipRef, { 'video_edit.clip.code_parameters': params })).toMatchObject({ ok: true })
+    expect(((await app.read(clipRef, ['video_edit.clip.code_parameters'])).properties as Record<string, unknown>)['video_edit.clip.code_parameters']).toEqual(params)
+    expect(owner.past).toHaveLength(before + 1)
+    expect((await app.change(clipRef, { 'video_edit.clip.code_parameters': { ...params, lamp: { ...params.lamp, position: { x: 2, y: .5 } } } })).ok).toBe(false)
+    expect(owner.document.sequences[0].clips[0].code!.parameters).toEqual(params)
+    undoVideoEdit(owner.document.id); expect(owner.document.sequences[0].clips[0].code!.parameters).toEqual({})
+    const itemRef = { kind: 'video_edit.item', id: `${owner.document.id}:v3item` }
+    const itemWrite = await app.change(itemRef, { 'video_edit.item.code_parameters': params })
+    expect(itemWrite, JSON.stringify(itemWrite)).toMatchObject({ ok: true })
+    expect(owner.document.items[0].code!.parameters).toEqual(params)
+    setVideoEditCodeParameter(target, 'lamp', params.lamp)
+    addVideoEditCodeKeyframe(target, 'lamp', time(0)); addVideoEditCodeKeyframe(target, 'lamp', time(1e6))
+    const editor = readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId)
+    expect(editor.curves.lamp[0].interpolation).toBe('linear')
+    updateVideoEditCodeKeyframe(target, 'lamp', editor.curves.lamp[1].id, { value: { ...params.lamp, power: .2 } })
+    expect(() => updateVideoEditCodeKeyframe(target, 'lamp', editor.curves.lamp[1].id, { value: { ...params.lamp, power: 3 } })).toThrow('0–2')
+    addVideoEditCodeKeyframe(target, 'curve', time(0)); expect(readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId).curves.curve[0].interpolation).toBe('hold')
+    await saveVideoEdit(owner.document.id)
+    expect(savedVideoEdit(owner).items[0].code!.parameters).toEqual(params)
+    expect(savedVideoEdit(owner).sequences[0].clips[0].code!.curves!.lamp[0].value).toEqual(params.lamp)
+  } finally { app.dispose() }
+})
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
 it('对象树的增删命名排序同源持久，稳定引用不跟随顺序并拒绝越界或锁定', async () => {
   const owner = (await createVideoEditProject())!; const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
