@@ -89,8 +89,9 @@ registerWebGpuDiagnostics()
 if (isAssistantCliMode()) {
   // safeStorage 依赖既有的 userData/sessionData；助手 CLI 只隔离纯 Chromium 磁盘缓存。
   app.commandLine.appendSwitch('disk-cache-dir', path.join(app.getPath('temp'), 'henji-assistant-cli-cache'))
-  app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+  // 剪辑渲染与代码素材试渲染都要 WebGPU：只在无窗口运行时关 GPU，--visible 端到端验证保留显卡。
+  if (!process.argv.includes('--visible')) app.commandLine.appendSwitch('disable-gpu')
 }
 
 const remoteDebuggingPort = process.env['HENJI_ELECTRON_REMOTE_DEBUGGING_PORT']
