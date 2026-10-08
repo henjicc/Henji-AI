@@ -49,6 +49,8 @@ export default defineConfig({
       },
     },
     plugins: [react()],
+    // 所有 Worker 都以 { type: 'module' } 创建；ES 格式才允许 Worker 内按需 import（着色器组件逐个懒加载）。
+    worker: { format: 'es' },
     optimizeDeps: {
       // 这些三方库只出现在懒加载子树里（工具箱 3D/图片编辑、画布、提示词编辑器等）。
       // 不显式登记时 Vite 会等用户第一次切到对应 Tab 才现场预构建依赖，
