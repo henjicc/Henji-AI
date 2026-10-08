@@ -1,3 +1,8 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { validateImageColorLut } from '../services/image-editor-v3/color-lut-validation'
+import { CUBE_LUT_MAX_BYTES } from '../../../src/core/imaging/lut/cube'
+import type { ContentAddressedResourceStore } from '../services/image-editor-v3/resource-store'
 import { BrowserWindow, dialog, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import type {
   ImageEditorV3ManagedSource,
@@ -42,6 +47,7 @@ type RunRequestV3 = <T>(
 
 export interface ImageEditorV3SourceIpcDependencies {
   sources: SharpSourceProvider
+  resources?: ContentAddressedResourceStore
   sourceIngestor: ImageEditorV3SourceIngestor
   guard(event: IpcMainEvent | IpcMainInvokeEvent): void
   runRequest: RunRequestV3
@@ -149,6 +155,24 @@ export function registerImageEditorV3SourceIpc(dependencies: ImageEditorV3Source
     runRequest,
     cancelRequest: dependencies.cancelRequest,
   })
+  registerIpcHandler('imageEditorV3:lut:import', parseImageEditorV3BasePayload, (payload, event) => (
+    runRequest('lut.import', payload.requestId, event.sender.id, async (signal) => {
+      const selection = await dialog.showOpenDialog(ownerFor(event), { properties: ['openFile'], filters: [{ name: '颜色查找表', extensions: ['cube'] }] })
+      if (selection.canceled || !selection.filePaths[0]) return { status: 'cancelled' as const }
+      signal.throwIfAborted()
+      const file = await fs.open(selection.filePaths[0], 'r')
+      let bytes: Buffer
+      try {
+        const stats = await file.stat()
+        if (!stats.isFile() || stats.size > CUBE_LUT_MAX_BYTES) throw new Error('颜色查找表超出解析工作集（24 MiB），请选择较小的 .cube 文件')
+        bytes = await file.readFile({ signal })
+        await validateImageColorLut(bytes, signal)
+      } finally { await file.close() }
+      if (!dependencies.resources) throw new Error('颜色查找表资源库不可用')
+      const resource = await dependencies.resources.putBuffer(bytes, { mediaType: 'application/x-adobe-cube', maxBytes: CUBE_LUT_MAX_BYTES, signal })
+      return { status: 'completed' as const, value: { resourceRef: resource.id, name: path.basename(selection.filePaths[0]) } }
+    }, CUBE_LUT_MAX_BYTES)
+  ), guard)
   registerIpcHandler('imageEditorV3:source:import', parseImageEditorV3BasePayload, (payload, event) => (
     runRequest('source.import', payload.requestId, event.sender.id, async (signal) => {
       const selection = await dialog.showOpenDialog(ownerFor(event), {

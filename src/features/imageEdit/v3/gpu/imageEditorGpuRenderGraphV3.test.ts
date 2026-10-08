@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { init, type Gpu } from 'vgpu/node'
 
 import {
@@ -32,6 +32,11 @@ import { ImageEditorGpuRasterCompositorV3 } from './imageEditorGpuRasterComposit
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
 import { imageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocolV3'
 
+const lutFixtures = vi.hoisted(() => new Map<string, string>())
+vi.mock('../execution/imageColorLutV3', () => ({ loadImageColorLutV3: async (ref: string) => parseCubeLut(lutFixtures.get(ref)!) }))
+import { parseCubeLut } from '@/core/imaging/lut/cube'
+import { loadImageColorLutV3 } from '../execution/imageColorLutV3'
+
 const WIDTH = 32
 const HEIGHT = 24
 const registry = createBuiltInImageEditRenderNodeRegistry()
@@ -41,6 +46,21 @@ beforeAll(async () => { gpu = await init() })
 afterAll(() => gpu?.dispose())
 
 describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
+  it('共享调整 basic/curves/wheels/HSL 与 CPU 真值逐像素一致，透明与蒙版不漂移', async () => {
+    const cube = ref(98)
+    lutFixtures.set(cube, 'LUT_1D_SIZE 2\n0 0 0\n1 .8 .6')
+    for (const params of [{}, { exposure: .4, temperature: 20, tint: -10, saturation: 15 }, { curve_red_points: [{ x: 0, y: 0 }, { x: 45, y: 60 }, { x: 100, y: 100 }] }, { shadow_hue: 240, shadow_strength: 15, midtone_luminance: 8 }, { hsl_hue_start: 340, hsl_hue_end: 30, hsl_hue_feather: 15, hsl_saturation: -50 }, { input_lut: cube, input_lut_strength: 50 }, { vignette_amount: -40 }, { sharpen: 30 }, { hsl_saturation: -30, hsl_blur: 3, hsl_sharpen: 10 }] as ImageEditJsonObjectV3[]) {
+      const document = baseDocument('shared-grade')
+      const adjustment = createImageEditAdjustmentLayerV3('grade', '全能调整', 'color_grade', params)
+      adjustment.opacity = .82
+      adjustment.mask = { resourceId: ref(92), inverted: false }
+      document.layers = [raster(5, '源'), adjustment]
+      const result = await compareDocument(document, tiles([5, 92], new Set([92])))
+      expect(result.comparison.quantizedMaxLsbError, JSON.stringify(params)).toBeLessThanOrEqual(2)
+      assertBlendTolerance(result)
+    }
+  })
+
   it.each(IMAGE_EDIT_BLEND_MODES_V3)('%s 混合与CPU真值一致', async (blendMode) => {
     const document = baseDocument(`blend-${blendMode}`)
     const base = raster(1, '底图')
@@ -245,6 +265,33 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     compositor.dispose()
   })
 
+  it('共享调整晕影与 HSL 邻域在裁剪、旋转、镜像后仍匹配整图 CPU 映射', async () => {
+    for (const params of [{ vignette_amount: -50 }, { hsl_saturation: -30, hsl_blur: 30, hsl_sharpen: 20, sharpen: 10, vignette_amount: -30 }] as ImageEditJsonObjectV3[]) {
+      const document = baseDocument('grade-oriented')
+      document.geometry.orientation = { rotate: 90, mirrored: true }
+      document.geometry.crop = { x: 3, y: 4, width: 12, height: 16 }
+      document.layers = [raster(9, '源'), createImageEditAdjustmentLayerV3('grade', '调整', 'color_grade', params)]
+      const resources = tiles([9]); const source = resources.get(ref(9))!
+      const compilation = compileImageEditorGpuRasterSceneV3(document, [{ resourceRef: source.resourceRef, byteLength: source.pixels.byteLength, mediaType: 'image/png' }])
+      if (!compilation.supported) throw new Error(compilation.reason)
+      const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+      compositor.syncScene(compilation.scene)
+      compositor.updateViewport({ stageWidth: 12, stageHeight: 16, viewportKey: 'grade-crop', viewport: { documentX: 0, documentY: 0, width: 12, height: 16, zoom: 1, devicePixelRatio: 1 } })
+      const uploaded = compositor.uploadTile(compositor.requiredResourceKeys()[0], source)
+      const candidate = await compositor.readLinearPixelsForTest(() => uploaded)
+      const cpu = await executeImageEditCpuRenderPlanV3(compileImageEditRenderPlanV3(document, registry, 'export'), { loadRaster: async () => decodeInterleavedRgbaSourceTileV3({ ...source, colorSpace: 'srgb' }), rasterizeAnnotations: async () => { throw new Error('无标注') } })
+      const geometry = resolveImageEditOutputGeometryV3(document.geometry)
+      const reference = new Float32Array(12 * 16 * 4)
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 12; x++) {
+        const [sx, sy] = mapImageEditOutputPixelToSourceV3(x, y, geometry)
+        reference.set(cpu!.data.subarray((sy * WIDTH + sx) * 4, (sy * WIDTH + sx) * 4 + 4), (y * 12 + x) * 4)
+      }
+      const comparison = compareImageEditorGoldenV3(reference, candidate, .01)
+      expect(comparison.quantizedMaxLsbError, JSON.stringify(params)).toBeLessThanOrEqual(2)
+      uploaded.destroy(); compositor.dispose()
+    }
+  })
+
   it('裁剪、90度orientation与镜像的呈现坐标逐像素匹配CPU映射', async () => {
     const document = baseDocument('presentation-geometry')
     document.geometry.orientation = { rotate: 90, mirrored: true }
@@ -307,7 +354,9 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     adjustment.blendMode = 'soft-light'
     adjustment.mask = { resourceId: ref(92), inverted: false }
     document.layers = [raster(5, '底图'), adjustment]
-    assertBlendTolerance(await compareDocument(document, tiles([5, 92], new Set([92]))))
+    const result = await compareDocument(document, tiles([5, 92], new Set([92])))
+      expect(result.comparison.quantizedMaxLsbError, JSON.stringify({params, maxIndex:Array.from(result.reference).reduce((best, x, i) => Math.abs(x-result.candidate[i]) > Math.abs(result.reference[best]-result.candidate[best]) ? i : best,0),stats:result.comparison, ref:Array.from(result.reference.slice(1052,1064)),gpu:Array.from(result.candidate.slice(1052,1064))})).toBeLessThanOrEqual(2)
+      assertBlendTolerance(result)
   })
 
   it('仅安全融合连续无蒙版normal曝光，并保持CPU真值', async () => {
@@ -410,6 +459,7 @@ async function compareDocument(
   const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
   const rect = { x: 0, y: 0, width, height }
   const cpu = await executeImageEditCpuRenderPlanV3(plan, {
+    loadColorLut: loadImageColorLutV3,
     loadRaster: async (node) => decodeInterleavedRgbaSourceTileV3({
       ...resources.get(resourceId(node))!, colorSpace: 'srgb',
     }),

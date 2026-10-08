@@ -1,3 +1,5 @@
+import { planColorGrade, isNeutralAdjustmentPlan } from '@/core/imaging/adjustments/plan'
+import { imageColorGradeRuntimeParams } from '@/core/imaging/adjustments/schema'
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
@@ -23,12 +25,22 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
   )).length
   const sourceScratchTargets = scene.graph.some((node) => node.kind === 'source') ? 1 : 0
   const masks = new Set<string>()
+  let adjustmentScratchBytes = 0
   const effectNodes: ImageEditorGpuGraphEffectNodeV3[] = []
   for (const node of scene.graph) {
     if (node.kind === 'composite' && node.mask) masks.add(node.mask.maskId)
     if (node.kind === 'adjustment') {
       for (const adjustment of node.adjustments) {
         if (adjustment.mask) masks.add(adjustment.mask.maskId)
+        if (adjustment.definitionId === 'adjustment.color-grade') {
+          const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width, referenceHeight: _height, ...value } = adjustment.parameters
+          const plan = planColorGrade(imageColorGradeRuntimeParams(value), size[0], size[1])
+          if (!isNeutralAdjustmentPlan(plan)) adjustmentScratchBytes += 3 * fullLinearBytes
+            + plan.scratch.reduce((sum, surface) => sum + surface.width * surface.height * LINEAR_BYTES_PER_PIXEL, 0)
+          // Cube parsing is bounded by the shared 65³ lattice; reserve decoded lookup bytes, not a layer count.
+          adjustmentScratchBytes += [value.input_lut, value.look_lut].filter(ref => !!ref).length * 65 ** 3 * 16
+          adjustmentScratchBytes += plan.passes.filter(pass => pass.lookup?.kind === 'curve').reduce((sum, pass) => sum + (pass.lookup?.kind === 'curve' ? pass.lookup.data.byteLength * 4 : 0), 0)
+        }
       }
     }
     if (node.kind !== 'effect') continue
@@ -38,7 +50,7 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
   return pixels(size) * PRESENT_BYTES_PER_PIXEL
     + (semanticTargets + sourceScratchTargets) * fullLinearBytes
     + masks.size * pixels(size) * MASK_BYTES_PER_PIXEL
-    + estimateEffectsBytes(effectNodes, size)
+    + estimateEffectsBytes(effectNodes, size) + adjustmentScratchBytes
 }
 
 function estimateEffectsBytes(

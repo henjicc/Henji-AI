@@ -1,3 +1,4 @@
+import { parseImageColorGradeParams } from '../../imaging/adjustments/schema';
 import { sanitizeMarkItem } from '../markCodec';
 import {
   cloneImageEditMaskReferenceV3,
@@ -369,6 +370,9 @@ function applyLayerContentCommand(
     }
     const params = cloneImageEditJsonObjectV3(command.params);
     if (!params) throw new ImageEditCommandValidationErrorV3('图层参数不是安全 JSON 对象');
+    if (location.layer.type === 'adjustment' && location.layer.adjustmentId === 'color_grade') {
+      parseImageColorGradeParams(params);
+    }
     return {
       layers: replaceLayer(document.layers, location, { ...location.layer, params }),
       inverse: {

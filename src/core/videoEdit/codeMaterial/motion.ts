@@ -1,6 +1,7 @@
 import { CodeMaterialError, finiteCodeNumber } from './contract'
 
-export const CODE_EASE_NAMES: readonly string[] = ['linear', 'backOut', 'elasticOut', 'bounceOut', ...['sine', 'quad', 'cubic', 'quart', 'quint', 'expo', 'circ'].flatMap(name => ['In', 'Out', 'InOut'].map(suffix => name + suffix))]
+export { PARAM_EASE_NAMES as CODE_EASE_NAMES } from '../../imaging/easing'
+import { PARAM_EASE_NAMES as CODE_EASE_NAMES } from '../../imaging/easing'
 export const codeProgress = (time: number, start: number, duration: number): number => {
   if (duration <= 0) throw new CodeMaterialError('TYPE', '动效 duration 必须大于零。')
   return Math.min(1, Math.max(0, (time - start) / duration))

@@ -31,6 +31,8 @@ interface CompileState {
   layerEvaluationOrder: string[];
   color: Readonly<ImageEditColorModeV3>;
   sequence: number;
+  referenceWidth: number;
+  referenceHeight: number;
 }
 
 function transformIsIdentity(transform: ImageEditLayerCommonV3['transform']): boolean {
@@ -159,7 +161,7 @@ function compileEffectLayer(
     path,
     definitionId,
     [belowNodeId],
-    { ...layer.params, ...commonParameters(layer) },
+    { ...layer.params, ...commonParameters(layer), ...(definitionId === 'adjustment.color-grade' ? { referenceWidth: state.referenceWidth, referenceHeight: state.referenceHeight } : {}) },
   ) ?? belowNodeId;
 }
 
@@ -273,7 +275,7 @@ export function compileImageEditRenderPlanV3(
     diagnostics: [],
     layerEvaluationOrder: [],
     color: document.color,
-    sequence: 0,
+    sequence: 0, referenceWidth: document.geometry.width, referenceHeight: document.geometry.height,
   };
   const outputNodeId = compileLayers(state, document.layers, [], null);
   const rootHash = outputNodeId

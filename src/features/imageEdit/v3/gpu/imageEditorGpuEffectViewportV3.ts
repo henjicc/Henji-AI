@@ -1,3 +1,4 @@
+import { colorGradeSpatialSupport } from '@/core/imaging/adjustments/plan'
 import { resolveFastBlurV3Geometry } from '@/core/imageEdit/v3/effects/fastBlur'
 import { resolveGaussianBlurV2Geometry } from '@/core/imageEdit/v3/effects/gaussianBlur'
 import { resolveImageEditOutputGeometryV3 } from '@/core/imageEdit/v3/outputGeometry'
@@ -17,13 +18,17 @@ export function resolveImageEditorGpuEffectViewportV3(
 ): ImageEditorGpuEffectViewportV3 {
   if (!scene.requiresRenderGraph) return { layout, cropOffset: [0, 0], expanded: false }
   const effects = scene.graph.filter((node) => node.kind === 'effect')
-  if (effects.length === 0) return { layout, cropOffset: [0, 0], expanded: false }
+  const grades = scene.graph.flatMap(node => node.kind === 'adjustment' ? node.adjustments.filter(adjustment => adjustment.definitionId === 'adjustment.color-grade') : [])
+  if (effects.length === 0 && grades.length === 0) return { layout, cropOffset: [0, 0], expanded: false }
   const viewport = layout.viewport
   const scale = viewport.zoom * viewport.devicePixelRatio
   const output = resolveImageEditOutputGeometryV3(scene.geometry)
   const endX = viewport.documentX + viewport.width / viewport.zoom
   const endY = viewport.documentY + viewport.height / viewport.zoom
-  const hasGlobal = effects.some((node) => {
+  // Shared grade pyramids evaluate on the complete oriented source grid: no ROI phase drift,
+  // including neighbors outside non-destructive crops. The existing GPU budget still governs residency.
+  const gradeNeighbors = grades.some(grade => colorGradeSpatialSupport(grade.parameters, scene.geometry.height * scale) > 0)
+  const hasGlobal = gradeNeighbors || effects.some((node) => {
     if (node.definitionId === 'effect.diffusion' || node.definitionId === 'effect.vgpu-glow') return true
     if (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur') {
       return gaussianSupport(node, scale) > 256
@@ -34,10 +39,10 @@ export function resolveImageEditorGpuEffectViewportV3(
   })
   let left: number; let top: number; let right: number; let bottom: number
   if (hasGlobal) {
-    left = Math.max(0, Math.round((viewport.documentX - Math.min(viewport.documentX, 0)) * scale))
-    top = Math.max(0, Math.round((viewport.documentY - Math.min(viewport.documentY, 0)) * scale))
-    right = Math.max(0, Math.round((Math.max(endX, output.outputWidth) - endX) * scale))
-    bottom = Math.max(0, Math.round((Math.max(endY, output.outputHeight) - endY) * scale))
+    left = Math.max(0, Math.round((viewport.documentX - Math.min(viewport.documentX, gradeNeighbors ? -output.cropX : 0)) * scale))
+    top = Math.max(0, Math.round((viewport.documentY - Math.min(viewport.documentY, gradeNeighbors ? -output.cropY : 0)) * scale))
+    right = Math.max(0, Math.round((Math.max(endX, gradeNeighbors ? (output.rotate === 90 || output.rotate === 270 ? output.sourceHeight : output.sourceWidth) - output.cropX : output.outputWidth) - endX) * scale))
+    bottom = Math.max(0, Math.round((Math.max(endY, gradeNeighbors ? (output.rotate === 90 || output.rotate === 270 ? output.sourceWidth : output.sourceHeight) - output.cropY : output.outputHeight) - endY) * scale))
   } else {
     const halo = effects.reduce((sum, node) => {
       if (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur') {

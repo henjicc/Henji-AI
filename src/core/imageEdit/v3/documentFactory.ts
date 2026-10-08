@@ -1,3 +1,4 @@
+import { parseImageColorGradeParams } from '../../imaging/adjustments/schema';
 import {
   createDefaultImageEditColorModeV3,
   type ImageEditColorModeV3,
@@ -103,7 +104,7 @@ export function createImageEditAdjustmentLayerV3(
     ...createImageEditLayerCommonV3(id, name),
     type: 'adjustment',
     adjustmentId,
-    params,
+    params: adjustmentId === 'color_grade' ? parseImageColorGradeParams(params) : params,
     renderable,
   };
 }

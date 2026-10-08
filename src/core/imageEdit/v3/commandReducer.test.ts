@@ -7,6 +7,7 @@ import {
   ImageEditRevisionConflictErrorV3,
 } from './commandReducer';
 import {
+  createImageEditAdjustmentLayerV3,
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
@@ -408,4 +409,13 @@ describe('图片编辑 V3 命令归约器', () => {
     const restored = applyImageEditCommandV3(isolated.document, isolated.inverse);
     expect(restored.document.layers[0]).toMatchObject({ type: 'group', isolated: false });
   });
+});
+
+it('共享调整参数一笔撤销、无效参数不改变权威文档', () => {
+  const source = createDocument([createImageEditAdjustmentLayerV3('grade', '调整', 'color_grade', {})]);
+  const updated = applyImageEditCommandV3(source, { commandId: 'grade-set', expectedRevision: 0, type: 'layer.update-params', layerId: 'grade', params: { exposure: 1, curve_red_points: [{ x: 0, y: 0 }, { x: 100, y: 80 }] } });
+  expect(updated.document.layers[0]).toMatchObject({ params: { exposure: 1 } });
+  expect(applyImageEditCommandV3(updated.document, updated.inverse).document.layers).toEqual(source.layers);
+  expect(() => applyImageEditCommandV3(source, { commandId: 'invalid', expectedRevision: 0, type: 'layer.update-params', layerId: 'grade', params: { hsl_show_mask: true } })).toThrow();
+  expect(source.layers[0]).toMatchObject({ params: { exposure: 0 } });
 });

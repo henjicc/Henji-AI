@@ -9,7 +9,7 @@ import {
   toneMapFloat32TileToSdrV3,
 } from '@/core/imageEdit/v3'
 import { createImageEditHdrMetadataV3, type ImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
-import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditAdjustmentLayerV3, createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorGpuRasterCompositorV3 } from './imageEditorGpuRasterCompositorV3'
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
@@ -49,6 +49,51 @@ describe('GPU 宽色域/HDR 色彩管线（真实 WebGPU）', () => {
     expect(relativeError).toBeLessThanOrEqual(1e-3)
     resolve().destroy()
     compositor.dispose()
+  })
+
+  it.each(['display-p3', 'rec2020'] as const)('%s 共享曝光保留线性 HDR/负通道和 alpha', async (workingSpace) => {
+    const color: ImageEditColorModeV3 = {
+      workingSpace, bitDepth: 'float16', transferFunction: 'linear', hdrMetadata: null, iccProfileResourceId: null,
+    }
+    const { compositor, source, resolve } = createColorScene(color, 1)
+    try {
+      const actual = await compositor.readLinearPixelsForTest(resolve)
+      const expected = decodeInterleavedRgbaSourceTileV3({ ...source, colorSpace: 'srgb' }, workingSpace).data
+      expected.forEach((value, index) => {
+        if (index % 4 !== 3) expected[index] = value * 2
+      })
+      expect(maxRelativeError(expected, actual)).toBeLessThanOrEqual(0.004)
+      expect(actual[3]).toBeCloseTo(expected[3], 3)
+      expect(Math.max(...actual)).toBeGreaterThan(1)
+    } finally { resolve().destroy(); compositor.dispose() }
+  })
+
+  it('参数变化重算显存预算，连续拖动不重传源图或重编译管线', async () => {
+    const color: ImageEditColorModeV3 = {
+      workingSpace: 'srgb', bitDepth: 'float16', transferFunction: 'linear', hdrMetadata: null, iccProfileResourceId: null,
+    }
+    const { compositor, source, document, resolve } = createColorScene(color, 0)
+    try {
+      await compositor.readLinearPixelsForTest(resolve)
+      const neutralBytes = compositor.estimatedResidentGpuBytes()
+      const layer = document.layers[1]
+      if (layer.type !== 'adjustment') throw new Error('Expected adjustment')
+      const sync = (exposure: number) => {
+        layer.params.exposure = exposure
+        const compiled = compileImageEditorGpuRasterSceneV3(document, [{ resourceRef: RESOURCE, byteLength: source.pixels.byteLength, mediaType: 'image/tiff' }])
+        if (!compiled.supported) throw new Error(compiled.reason)
+        compositor.syncScene(compiled.scene)
+      }
+      sync(0.5)
+      expect(compositor.estimatedResidentGpuBytes()).toBeGreaterThan(neutralBytes)
+      await compositor.readLinearPixelsForTest(resolve)
+      const compiledCount = compositor.snapshotStats().pipelineCompileCount
+      const uploads = compositor.snapshotStats().uploadCount
+      sync(1)
+      await compositor.readLinearPixelsForTest(resolve)
+      expect(compositor.snapshotStats().pipelineCompileCount).toBe(compiledCount)
+      expect(compositor.snapshotStats().uploadCount).toBe(uploads)
+    } finally { resolve().destroy(); compositor.dispose() }
   })
 
   it.each(['pq', 'hlg'] as const)('%s SDR tone-map 与 CPU golden 保持 1 LSB', async (standard) => {
@@ -98,10 +143,11 @@ describe('GPU 宽色域/HDR 色彩管线（真实 WebGPU）', () => {
   })
 })
 
-function createColorScene(color: ImageEditColorModeV3) {
+function createColorScene(color: ImageEditColorModeV3, exposure?: number) {
   const document = createImageEditDocumentV3({ width: 2, height: 1 })
   document.color = structuredClone(color)
   document.layers = [createImageEditRasterLayerV3('source', '源', RESOURCE)]
+  if (exposure !== undefined) document.layers.push(createImageEditAdjustmentLayerV3('grade', '调整', 'color_grade', { exposure }))
   const compilation = compileImageEditorGpuRasterSceneV3(document, [{
     resourceRef: RESOURCE, byteLength: 32, mediaType: 'image/tiff',
   }])
@@ -121,7 +167,7 @@ function createColorScene(color: ImageEditColorModeV3) {
     alphaMode: 'straight', orientationApplied: true, originX: 0, originY: 0, pixels: values.buffer,
   }
   const allocation = compositor.uploadTile(key, source)
-  return { compositor, source, resolve: () => allocation }
+  return { compositor, source, document, resolve: () => allocation }
 }
 
 function maxRelativeError(expected: Float32Array, actual: Float32Array): number {

@@ -432,6 +432,7 @@ export function registerImageEditorV3Ipc(): void {
     guard,
   )
   registerImageEditorV3SourceIpc({
+    resources: getRuntime().resources,
     sources: getRuntime().sources,
     sourceIngestor: getRuntime().sourceIngestor,
     guard,

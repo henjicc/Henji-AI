@@ -1,3 +1,4 @@
+import { imageColorGradeJsonSchema } from '@/core/imaging/adjustments/schema'
 import { listImageEditEntitySources } from '../v3/application/imageEditDocumentCatalog'
 import {
   type ApplicationEntityProvider,
@@ -101,7 +102,7 @@ const properties: Record<ImageEditEntityType, ApplicationPropertyDescriptor[]> =
   ],
   [IMAGE_EDIT_ENTITY_TYPES.document]: [
     { ...property(IMAGE_EDIT_ENTITY_TYPES.document, 'preview_ref', '预览引用', { kind: 'ref', refKinds: [IMAGE_EDIT_ENTITY_TYPES.preview] }, '旧版文档所属预览不可变更；V3 实时文档没有旧版预览引用。'), nullable: true },
-    property(IMAGE_EDIT_ENTITY_TYPES.document, 'layer_refs', '编辑层引用', { kind: 'ref_list', refKinds: [IMAGE_EDIT_ENTITY_TYPES.layer, IMAGE_EDIT_ENTITY_TYPES.group], maxItems: 512 }, IMMUTABLE_PREVIEW),
+    property(IMAGE_EDIT_ENTITY_TYPES.document, 'layer_refs', '编辑层引用', { kind: 'ref_list', refKinds: [IMAGE_EDIT_ENTITY_TYPES.layer, IMAGE_EDIT_ENTITY_TYPES.group] }, IMMUTABLE_PREVIEW),
     property(IMAGE_EDIT_ENTITY_TYPES.document, 'version', '文档版本', { kind: 'integer', hardRange: { min: 1 } }, '版本号由预览生成链路递增。'),
     ...IMAGE_EDIT_V3_PROPERTIES['image_edit.document'],
   ],
@@ -394,7 +395,7 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
     provider: new CombinedImageEditReflectionProvider(entityType),
     schemaDocuments: entityType === IMAGE_EDIT_ENTITY_TYPES.layer ? [{
       ref: IMAGE_EDIT_V3_PARAMS_SCHEMA_REF,
-      value: { type: 'object', description: '参数由图片编辑操作注册表按 operation_id 校验。' },
+      value: { type: 'object', description: '调整层 definition_id=color_grade 时使用 color_grade 字段定义；其他效果沿各自操作参数。曲线为百分比控制点，LUT 为已导入的稳定资源引用。', $defs: { color_grade: JSON.parse(JSON.stringify(imageColorGradeJsonSchema())) as JsonValue } },
     }] : entityType === IMAGE_EDIT_ENTITY_TYPES.document ? [{
       ref: imageEditV3SchemaRef('property', 'image_edit.document.color_mode.value'),
       value: { type: 'object', description: 'V3 文档的工作色域、位深、传递函数与 HDR 元数据。' },

@@ -1,3 +1,6 @@
+import type { AdjustmentCoordinates } from '../../../imaging/effects/cpu/colorGrade'
+import { applyImageColorGradeV3 } from '../effects/colorGrade';
+import type { CubeLut } from '../../../imaging/lut/cube';
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
@@ -42,6 +45,7 @@ export const IMAGE_EDIT_TILED_CPU_NODE_IDS_V3: ReadonlySet<string> = new Set([
   'effect.fast-blur',
   'effect.diffusion',
   'effect.vgpu-glow',
+  'adjustment.color-grade',
   'adjustment.exposure',
   'adjustment.curves',
   'adjustment.temperature-tint',
@@ -58,6 +62,7 @@ export class ImageEditRenderNodeUnsupportedErrorV3 extends Error {
 }
 
 export interface ImageEditCpuRenderContextV3 {
+  loadColorLut?: (ref: string) => Promise<CubeLut>;
   loadRaster(node: ImageEditRenderPlanNode): Promise<Float32PremultipliedRgbaTile>;
   rasterizeAnnotations(node: ImageEditRenderPlanNode): Promise<Float32PremultipliedRgbaTile>;
   loadMask?(reference: ImageEditMaskReferenceV3, node: ImageEditRenderPlanNode): Promise<Float32MaskTile>;
@@ -174,7 +179,13 @@ export async function executeImageEditCpuAdjustmentNodeV3(
   node: ImageEditRenderPlanNode,
   source: Float32PremultipliedRgbaTile,
   mask: Float32MaskTile | undefined,
+  loadColorLut?: (ref: string) => Promise<CubeLut>,
+  coordinates?: AdjustmentCoordinates,
 ): Promise<Float32PremultipliedRgbaTile> {
+  if (node.definitionId === 'adjustment.color-grade') {
+    const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width, referenceHeight: _height, ...params } = node.parameters;
+    return applyImageColorGradeV3(source, params, mask, loadColorLut, coordinates ?? { origin: [0, 0], size: [Number(_width ?? source.width), Number(_height ?? source.height)] });
+  }
   if (node.definitionId === 'adjustment.exposure') {
     const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
     return applyExposureAdjustment(linear, {
@@ -304,7 +315,7 @@ export async function executeImageEditCpuRenderPlanV3(
       const source = requireInput(outputs, node);
       const mask = await loadNodeMask(node, context);
       const processed = node.definitionId.startsWith('adjustment.')
-        ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask)
+        ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask, context.loadColorLut)
         : await executeImageEditCpuEffectNodeV3(node, source, mask, context);
       const original = convertFloat32TileColorDomainV3(source, processed.colorDomain);
       // 内建 kernel 已混入蒙版；custom effect 可选择返回裸结果，因此在 context 内遵循同一契约。

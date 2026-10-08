@@ -1,3 +1,4 @@
+import { imageColorGradeParamsSchema } from '../imaging/adjustments/schema'
 import { z } from 'zod'
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '../imageEdit/v3/documentTypes'
 import { IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION } from './schemaVersions'
@@ -16,7 +17,12 @@ export const imageLayerSchema: z.ZodType = z.lazy(() => z.discriminatedUnion('ty
   z.object({ ...common, type: z.literal('raster'), source: z.union([z.object({ kind: z.literal('empty') }), z.object({ kind: z.literal('resource'), resourceId: identifier })]), tiles: z.record(z.string(), identifier) }),
   z.object({ ...common, type: z.literal('annotation'), annotations: z.array(jsonObject) }),
   z.object({ ...common, type: z.literal('effect'), effectId: identifier, params: jsonObject, renderable: z.boolean(), legacyOperation: z.object({ sourceVersion: z.literal(2), operation: jsonObject }).optional() }),
-  z.object({ ...common, type: z.literal('adjustment'), adjustmentId: identifier, params: jsonObject, renderable: z.boolean() }),
+  z.object({ ...common, type: z.literal('adjustment'), adjustmentId: identifier, params: z.union([jsonObject, imageColorGradeParamsSchema]), renderable: z.boolean() }).superRefine((layer, context) => {
+    if (layer.adjustmentId === 'color_grade') {
+      const result = imageColorGradeParamsSchema.safeParse(layer.params)
+      if (!result.success) for (const issue of result.error.issues) context.addIssue({ ...issue, path: ['params', ...issue.path] })
+    }
+  }),
   z.object({ ...common, type: z.literal('group'), children: z.array(imageLayerSchema), isolated: z.boolean() }),
 ]))
 export const imageContentSchema = z.object({

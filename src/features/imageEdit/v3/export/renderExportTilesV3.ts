@@ -1,3 +1,4 @@
+import { loadImageColorLutV3 } from '../execution/imageColorLutV3'
 import { loadImageEditorRasterRegionV3 } from './rasterRegion'
 import { transparentRegion, safeWorkingSetBytes, acquireOrThrow } from './renderExportResourcesV3'
 import {
@@ -313,7 +314,8 @@ async function* renderTiles(
                   if (!('resourceId' in reference)) throw new Error('蒙版引用缺少资源 ID')
                   return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId, region))
                 },
-                executeCustomEffect: async (node, source, mask, region) => {
+                loadColorLut: loadImageColorLutV3,
+      executeCustomEffect: async (node, source, mask, region) => {
                   if (node.definitionId === 'effect.fast-blur') {
                     const analysis = fastBlurAnalysisSet?.analyses.get(node.id)
                     if (analysis) {

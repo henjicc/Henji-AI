@@ -7,6 +7,7 @@ import { parseResourceId } from './resource-store'
 export const IMAGE_EDITOR_V3_MEDIA_HOST = 'image-editor-v3'
 
 const IMAGE_MEDIA_TYPES = new Set([
+  'application/x-adobe-cube',
   'image/avif',
   'image/jpeg',
   'image/png',

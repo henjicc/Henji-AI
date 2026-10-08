@@ -127,11 +127,11 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   full: {
     id: 'full',
     tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
-    layerKinds: ['raster', 'effect'],
+    layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
-    adjustments: [],
+    adjustments: ['color_grade'],
     panels: ['layers', 'properties'],
-    layerControls: [],
+    layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document', 'export-raster'],
     hdrReadiness: {
       state: 'disabled',
@@ -157,11 +157,11 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   'canvas-edit': {
     id: 'canvas-edit',
     tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
-    layerKinds: ['raster', 'effect'],
+    layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
-    adjustments: [],
+    adjustments: ['color_grade'],
     panels: ['layers', 'properties'],
-    layerControls: [],
+    layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document'],
     hdrReadiness: {
       state: 'disabled',

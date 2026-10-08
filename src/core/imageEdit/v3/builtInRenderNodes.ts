@@ -1,3 +1,4 @@
+import { colorGradeSpatialSupport } from '../../imaging/adjustments/plan'
 import { gaussianBlurHalo } from './tileGeometry';
 import { resolveFastBlurV3Geometry } from './effects/fastBlur';
 import {
@@ -83,6 +84,11 @@ const definitions: readonly RenderNodeDefinition[] = [
     globalAnalysis: { maxEdge: 1_024, cacheScope: 'subtree', resultVersion: 4 },
     estimateBytes: (context) => estimateRgbaTileBytes(context, 6),
   },
+  { id: 'adjustment.color-grade', version: 1, category: 'local', color: LINEAR_PREMULTIPLIED, qualities: ['draft', 'stable', 'export'], backends: ['webgpu', 'cpu-libvips'], fusion: 'never', invalidation: 'tile-with-halo',
+    localHalo: (parameters, mip) => {
+      const values = parameters as Readonly<Record<string, unknown>>
+      return colorGradeSpatialSupport(values, Number(values.referenceHeight ?? 1) / 2 ** mip)
+      }, estimateBytes: (context) => estimateRgbaTileBytes(context, 5) },
   ...['exposure', 'curves', 'temperature-tint', 'hsl'].map((kind): RenderNodeDefinition => ({
     id: `adjustment.${kind}`,
     version: kind === 'curves' ? 2 : 1,

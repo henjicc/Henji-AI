@@ -1,3 +1,4 @@
+import { ImageEditorColorGradeParametersV3 } from './ImageEditorColorGradeParametersV3'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -322,6 +323,8 @@ export function ImageEditorEffectParametersV3({
       </div>
     )
   }
+
+  if (layer.type === 'adjustment' && layer.adjustmentId === 'color_grade') return <ImageEditorColorGradeParametersV3 key={`${controller.sessionId}:${layer.id}`} controller={controller} layer={layer} disabled={disabled} />
 
   if (layer.type === 'adjustment' && layer.adjustmentId === 'curves') {
     const points = Array.isArray(params[curveChannel]) ? params[curveChannel] : []

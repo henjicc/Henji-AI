@@ -1,3 +1,4 @@
+import type { CubeLut } from '../../../imaging/lut/cube'
 import {
   createFloat32MaskTile,
   type Float32MaskTile,
@@ -38,6 +39,7 @@ import {
 
 export interface ImageEditCpuRegionRenderContextV3 extends ImageEditCpuSamplingContextV3 {
   /** 文档坐标到当前求值坐标的比例；mip 0 为 1。 */
+  loadColorLut?: (ref: string) => Promise<CubeLut>
   scaleX?: number
   scaleY?: number
   registry: ImageEditRenderNodeRegistry
@@ -342,7 +344,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
       const source = await render(inputNode(nodes, node, 0), expanded)
       const mask = await sampleMask(node, expanded)
       const processed = node.definitionId.startsWith('adjustment.')
-        ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask)
+        ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask, context.loadColorLut, { origin: [expanded.x, expanded.y], size: [context.size.width, context.size.height] })
         : await executeImageEditCpuEffectNodeV3(node, source, mask, {
             executeCustomEffect: context.executeCustomEffect
               ? (effectNode, effectSource, effectMask) => context.executeCustomEffect!(

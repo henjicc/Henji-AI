@@ -917,6 +917,7 @@
         }
       },
       "adjustment": {
+      "color_grade": "Color adjustments",
         "exposure": "Exposure",
         "curves": "Curves",
         "temperature-tint": "Temperature / Tint",

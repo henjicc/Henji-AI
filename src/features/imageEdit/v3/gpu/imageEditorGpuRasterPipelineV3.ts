@@ -143,7 +143,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     this.graph.syncScene(scene)
     this.transientTransforms.clear()
     this.previousMips.clear()
-    this.replanTiles()
+    if (this.layout) this.setViewport(this.layout, this.expandEffects, this.effectRecipeSize)
+    else this.replanTiles()
     pruneImageEditorGpuRetainedStatesV3(this.layers, new Set())
   }
   updateTransientTransform(layerId: string, transform: ImageEditTransformV3 | null): void {

@@ -1,0 +1,1 @@
+export const PARAM_EASE_NAMES: readonly string[] = ['linear', 'backOut', 'elasticOut', 'bounceOut', ...['sine', 'quad', 'cubic', 'quart', 'quint', 'expo', 'circ'].flatMap(name => ['In', 'Out', 'InOut'].map(suffix => name + suffix))]

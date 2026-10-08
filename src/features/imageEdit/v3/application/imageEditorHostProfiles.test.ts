@@ -6,13 +6,13 @@ import {
 } from './imageEditorHostProfiles'
 
 describe('图片编辑 V3 宿主能力裁剪', () => {
-  it('发布版完整工具箱只开放扁平图层、内部保存和 8 位栅格导出入口', () => {
+  it('完整宿主开放共享调整和图层组，保留原保存与导出权限', () => {
     const profile = getImageEditorHostProfileV3('full')
     expect(profile).toMatchObject({
-      layerKinds: ['raster', 'effect'],
-      adjustments: [],
+      layerKinds: ['raster', 'effect', 'adjustment', 'group'],
+      adjustments: ['color_grade'],
       panels: ['layers', 'properties'],
-      layerControls: [],
+      layerControls: ['blend-mode', 'mask'],
       saveActions: ['save-document', 'export-raster'],
       hdrReadiness: {
         state: 'disabled',
@@ -44,7 +44,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
       .toEqual(getReadyImageEditorToolIdsV3(profile))
     expect(getImageEditorHostProfileV3('canvas-edit')).toMatchObject({
-      saveActions: ['save-document'], adjustments: [], layerControls: [],
+      saveActions: ['save-document'], adjustments: ['color_grade'], layerControls: ['blend-mode', 'mask'],
       hdrReadiness: { state: 'disabled' }, allowPackageExternalSources: false,
     })
     expect(getImageEditorHostProfileV3('quick')).toMatchObject({

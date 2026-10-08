@@ -12,6 +12,7 @@ export const IMAGE_EDIT_LAYER_OPERATION_CATALOG_V3: readonly ImageEditLayerOpera
   { operationId: 'image.gaussian-blur-v2', renderDefinitionId: 'effect.gaussian-blur', layerType: 'effect', creatable: true },
   { operationId: 'image.diffusion', renderDefinitionId: 'effect.diffusion', layerType: 'effect', creatable: true },
   { operationId: 'image.vgpu-glow', renderDefinitionId: 'effect.vgpu-glow', layerType: 'effect', creatable: true },
+  { operationId: 'color_grade', renderDefinitionId: 'adjustment.color-grade', layerType: 'adjustment', creatable: true },
   { operationId: 'exposure', renderDefinitionId: 'adjustment.exposure', layerType: 'adjustment', creatable: true },
   { operationId: 'curves', renderDefinitionId: 'adjustment.curves', layerType: 'adjustment', creatable: true },
   { operationId: 'temperature-tint', renderDefinitionId: 'adjustment.temperature-tint', layerType: 'adjustment', creatable: true },

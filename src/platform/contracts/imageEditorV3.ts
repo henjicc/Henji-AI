@@ -353,6 +353,7 @@ export interface ImageEditorV3Platform {
     expectedRevision: number
     targetDocumentRef: ImageEditorV3DocumentRef
   }): Promise<ImageEditorV3DocumentReference>
+  importColorLut?(request: { requestId: string }): Promise<ImageEditorV3DialogResult<{ resourceRef: ImageEditorV3ResourceRef; name: string }>>
   importSource(request: {
     requestId: string
   }): Promise<ImageEditorV3DialogResult<ImageEditorV3ManagedSource>>

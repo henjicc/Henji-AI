@@ -1,3 +1,4 @@
+import { imageColorGradeParamsSchema } from '../../imaging/adjustments/schema';
 import { sanitizeMarkItem } from '../markCodec';
 import type { MarkItem } from '../types';
 import type {
@@ -385,6 +386,7 @@ function parseLayer(value: unknown, depth: number): ImageEditLayerV3 | null {
     if (common.transform.some((entry, index) => entry !== [1, 0, 0, 1, 0, 0][index])) return null;
     const params = cloneImageEditJsonObjectV3(value.params);
     if (!isNonEmptyString(value.adjustmentId) || !params || typeof value.renderable !== 'boolean') return null;
+    if (value.adjustmentId === 'color_grade' && !imageColorGradeParamsSchema.safeParse(params).success) return null;
     return {
       ...common,
       type: 'adjustment',

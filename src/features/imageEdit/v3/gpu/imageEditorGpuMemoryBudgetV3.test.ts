@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
 import {
+  createImageEditAdjustmentLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditRasterLayerV3,
@@ -41,3 +42,14 @@ describe('GPU RenderGraph 常驻资源预算', () => {
 function json(value: unknown): ImageEditJsonObjectV3 {
   return JSON.parse(JSON.stringify(value)) as ImageEditJsonObjectV3
 }
+
+it('共享调整的边界与 ping-pong target 进入预算；中性不保留额外 target', () => {
+  const source = `sha256:${'a'.repeat(64)}` as const
+  const document = createImageEditDocumentV3({ width: 1000, height: 800 })
+  document.layers = [createImageEditRasterLayerV3('source', '源', source), createImageEditAdjustmentLayerV3('grade', '调整', 'color_grade', {})]
+  const estimate = (): number => { const compiled = compileImageEditorGpuRasterSceneV3(document, [{ resourceRef: source, byteLength: 3200000, mediaType: 'image/png' }]); if (!compiled.supported) throw new Error(compiled.reason); return estimateImageEditorGpuGraphResidentBytesV3(compiled.scene, [1000, 800]) }
+  const neutral = estimate()
+  const layer = document.layers[1]; if (layer.type !== 'adjustment') throw new Error('缺少调整')
+  layer.params = { exposure: 1 }
+  expect(estimate() - neutral).toBe(5 * 1000 * 800 * 8)
+})

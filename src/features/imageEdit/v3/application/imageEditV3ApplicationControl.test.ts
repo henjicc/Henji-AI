@@ -243,6 +243,56 @@ describe('图片编辑 V3 实时 Application Control', () => {
     ])
   })
 
+  it('通用集合通过正式命令总线创建共享调整层并通过 params 读写', async () => {
+    const document = createImageEditDocumentV3({
+      width: 640,
+      height: 480,
+      documentId: 'assistant-v3-shared-grade',
+    })
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerPersistedImageEditTestSession('assistant-v3-shared-grade-session', bus))
+    const documentRef = imageEditV3DocumentRef(document.id)
+    const initial = await getApplicationReflectionRegistry().readEntity(
+      documentRef,
+      undefined,
+      accessContext,
+    )
+
+    const created = await commitStep('添加调整', initial.revisions, {
+      kind: 'collection',
+      parent: documentRef,
+      entityType: 'image_edit.layer',
+      expectedRevisions: initial.revisions,
+      operation: {
+        kind: 'create',
+        items: [{ properties: {
+          'image_edit.layer.name': '调整',
+          'image_edit.layer.type': 'adjustment',
+          'image_edit.layer.definition_id': 'color_grade',
+          'image_edit.layer.params': { exposure: .5 },
+        } }],
+      },
+    }, 'create-shared-grade')
+
+    expect(created.status, JSON.stringify(created)).toBe('completed')
+    expect(bus.getSnapshot().document.layers).toEqual([
+      expect.objectContaining({
+        type: 'adjustment',
+        adjustmentId: 'color_grade',
+        params: expect.objectContaining({ exposure: .5 }),
+      }),
+    ])
+    const layer = bus.getSnapshot().document.layers[0]
+    const ref = imageEditV3LayerRef(document.id, layer.id)
+    const snapshot = await getApplicationReflectionRegistry().readEntity(ref, undefined, accessContext)
+    expect(snapshot.properties['image_edit.layer.params']).toMatchObject({ exposure: .5 })
+    const changed = await commitStep('修改曝光', snapshot.revisions, { kind: 'mutation', entityType: 'image_edit.layer', target: ref, expectedRevisions: snapshot.revisions, mutations: [{ propertyId: 'image_edit.layer.params', operation: 'set', value: { exposure: 1 } }] }, 'shared-grade-write')
+    expect(changed.status, JSON.stringify(changed)).toBe('completed')
+    expect(bus.getSnapshot().document.layers[0]).toMatchObject({ params: { exposure: 1 } })
+    bus.undo()
+    expect(bus.getSnapshot().document.layers[0]).toMatchObject({ params: { exposure: .5 } })
+  })
+
   it('通用集合创建删除图层并把 V3 标注别名写回所属标注图层', async () => {
     const document = createImageEditDocumentV3({ width: 640, height: 480, documentId: 'assistant-v3-doc-b' })
     document.layers = [createImageEditAnnotationLayerV3('annotations-b', '标注')]

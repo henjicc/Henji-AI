@@ -13,18 +13,8 @@ import { parseColorGradeCurve } from './colorGradeCurves'
 import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
 
-export type VideoEditBuiltinParamValue = number | boolean | string
-export type VideoEditBuiltinParams = Record<string, VideoEditBuiltinParamValue>
-/** 数值单位：strength 为 0–100 的无量纲强度，percent 为百分比，degrees 为角度，stops 为曝光档；音频效果另有 dB、Hz 与半音；value 为组件自带量纲的普通数值（着色器组件）。 */
-export type VideoEditBuiltinUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibels' | 'hertz' | 'semitones' | 'multiplier' | 'value'
-interface ParamBase { key: string; name: string; tooltip: string; description: string; animatable?: boolean }
-export type VideoEditBuiltinParam =
-  | ParamBase & { type: 'number'; unit: VideoEditBuiltinUnit; min: number; max: number; step: number; default: number }
-  /** `alpha` 时可写 #rrggbbaa（着色器组件的半透明颜色）。 */
-  | ParamBase & { type: 'color'; default: string; alpha?: boolean }
-  | ParamBase & { type: 'enum'; options: ReadonlyArray<{ value: string; label: string }>; default: string }
-  | ParamBase & { type: 'boolean'; default: boolean }
-  | ParamBase & { type: 'curve' | 'lut'; default: string }
+export type { ImagingParamValue as VideoEditBuiltinParamValue, ImagingParams as VideoEditBuiltinParams, ImagingUnit as VideoEditBuiltinUnit, ImagingParam as VideoEditBuiltinParam } from '../imaging/parameterDefinition'
+import { IMAGING_UNIT_LABELS, type ImagingParamValue as VideoEditBuiltinParamValue, type ImagingParam as VideoEditBuiltinParam, type ImagingParams as VideoEditBuiltinParams, type ImagingUnit as VideoEditBuiltinUnit } from '../imaging/parameterDefinition'
 export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level' | 'shader_texture' | 'shader_shape' | 'shader_material' | 'shader_blur' | 'shader_distort' | 'shader_adjust' | 'shader_stylize'
 export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道', shader_texture: '纹理与背景', shader_shape: '图形', shader_material: '材质', shader_blur: '着色器模糊', shader_distort: '扭曲变形', shader_adjust: '着色器调色', shader_stylize: '着色器风格化' }
 /** 内置效果作用于画面还是声音：画面效果只加到画面片段，音频效果只加到声音片段。 */
@@ -42,7 +32,7 @@ export interface VideoEditBuiltinEffectDefinition {
   /** Thumbnail recipe, rendered by the trusted library on the existing host device. */
   cover?: { kind: 'render'; timeSeconds: number }
 }
-export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = { strength: '', percent: '%', degrees: '°', stops: '档', decibels: 'dB', hertz: 'Hz', semitones: '半音', multiplier: '倍', value: '' }
+export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = IMAGING_UNIT_LABELS
 
 const strength = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: 0, max: 100, step: 1, default: fallback, tooltip, description })
 const signed = (key: string, name: string, tooltip: string, description: string, fallback = 0): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: fallback, tooltip, description })

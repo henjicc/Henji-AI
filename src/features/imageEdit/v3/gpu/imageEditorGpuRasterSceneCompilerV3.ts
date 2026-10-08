@@ -66,7 +66,7 @@ export interface ImageEditorGpuGraphCompositeNodeV3 extends ImageEditorGpuGraphN
 
 export interface ImageEditorGpuGraphAdjustmentV3 {
   definitionId: 'adjustment.exposure' | 'adjustment.curves'
-    | 'adjustment.temperature-tint' | 'adjustment.hsl'
+    | 'adjustment.temperature-tint' | 'adjustment.hsl' | 'adjustment.color-grade'
   parameters: ImageEditJsonObjectV3
   opacity: number
   blendMode: ImageEditBlendModeV3
@@ -284,7 +284,7 @@ function adjustment(
 ): ImageEditorGpuGraphAdjustmentV3 {
   const mask = compileMask(node.mask, descriptors, required)
   if (typeof mask === 'string') throw new Error(mask)
-  if (!['adjustment.exposure', 'adjustment.curves', 'adjustment.temperature-tint', 'adjustment.hsl'].includes(node.definitionId)) {
+  if (!['adjustment.exposure', 'adjustment.curves', 'adjustment.temperature-tint', 'adjustment.hsl', 'adjustment.color-grade'].includes(node.definitionId)) {
     throw new Error(`调整图层 ${node.layerId} 未映射到 GPU`)
   }
   return {

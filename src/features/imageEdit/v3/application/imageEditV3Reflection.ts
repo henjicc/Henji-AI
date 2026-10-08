@@ -68,7 +68,7 @@ export const IMAGE_EDIT_V3_DOCUMENT_PROPERTIES: ApplicationPropertyDescriptor[] 
     kind: 'json', schemaRef: imageEditV3SchemaRef('property', 'image_edit.document.color_mode.value'),
   }, true),
   property('image_edit.document', 'root_refs', '根图层', {
-    kind: 'ref_list', refKinds: ['image_edit.layer', 'image_edit.group'], maxItems: 512,
+    kind: 'ref_list', refKinds: ['image_edit.layer', 'image_edit.group'],
   }),
 ]
 
@@ -81,7 +81,7 @@ export const IMAGE_EDIT_V3_RESOURCE_PROPERTIES: ApplicationPropertyDescriptor[] 
     kind: 'json', schemaRef: imageEditV3SchemaRef('property', 'image_edit.resource.roles.value'),
   }),
   property('image_edit.resource', 'layer_refs', '引用图层', {
-    kind: 'ref_list', refKinds: ['image_edit.layer', 'image_edit.group'], maxItems: 512,
+    kind: 'ref_list', refKinds: ['image_edit.layer', 'image_edit.group'],
   }),
 ]
 

@@ -3,7 +3,7 @@
   "formats": {
     "document.video_edit": {
       "version": 1,
-      "fingerprint": "8f493a8e4c87b9910dd01becf8f06ba39a33e3bd42aa1863401709fd61825d30",
+      "fingerprint": "8845257f4d5248314ff9d8b9ef554c2e0ee7197d0bd463be9ccb5577c8899c99",
       "supportedFrom": 1
     },
     "document.canvas": {
@@ -48,7 +48,7 @@
     },
     "code-asset": {
       "version": 1,
-      "fingerprint": "7cabf54e0ae4239f418fc12bf1482bd365fbe37bd4841e306c57f5250d280d7c",
+      "fingerprint": "0a8152ece2a27ff18d9d92abb4032a26ad256ff0e528c04d1bab14061f2db4b2",
       "supportedFrom": 1
     },
     "image-header": {
@@ -58,12 +58,12 @@
     },
     "image-package": {
       "version": 1,
-      "fingerprint": "036f72942ce47677a70237652eeebd6b24059838b46c8b27544aa4484f189b49",
+      "fingerprint": "ab6cef02eb017a28af210e1f40b7bb9938df7a186eef3fd066fc2d655aaa0226",
       "supportedFrom": 1
     },
     "image-working-copy": {
       "version": 3,
-      "fingerprint": "5fac545be10637768f090c84338b401d98179901bb17112bf03f5ed357cf1a03",
+      "fingerprint": "aff7204ad4b2e8e1afa8cb736f42492665191a779e65879b960b2725f5fe1982",
       "supportedFrom": 3
     },
     "settings": {
@@ -83,7 +83,7 @@
     },
     "title-templates": {
       "version": 1,
-      "fingerprint": "5dea6fd60f3d3114e279cdae07035b371f22075ddf7979cad9d48a6f9352d7ae",
+      "fingerprint": "334b11b6b893d4ba85c4525a9bdeef88beff272a54a71c835e17f24f98ef20cb",
       "supportedFrom": 1
     },
     "text-presets": {
@@ -133,7 +133,7 @@
     },
     "canvas-layer-package": {
       "version": 1,
-      "fingerprint": "c57638581962d64a0dfcdf03b7bc6d066d1bd07c5e0f0fba62145c56ada1b998",
+      "fingerprint": "b44ec5fdff7f7339ae3e56e3449c7441a77ff13befe04a49d2508c88f8d9483a",
       "supportedFrom": 1
     },
     "keystore": {
@@ -173,7 +173,7 @@
     },
     "subtitle-manifest": {
       "version": 1,
-      "fingerprint": "e76b099b96dec71929f7f7446a0ff2e637861ed1657f1360a1c2ab77222b5be7",
+      "fingerprint": "87e316a9e804baa7d525567cfa78022f51a31d6ed58a0130d3d1de438da69249",
       "supportedFrom": 1
     },
     "storyboard-metadata": {
@@ -473,6 +473,69 @@
       "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
       "previousFingerprint": "1bb5c90527c793d956a8f0480374ae9aaf1758261f4de8dfbb80a1cbc93a5418",
       "fingerprint": "c57638581962d64a0dfcdf03b7bc6d066d1bd07c5e0f0fba62145c56ada1b998",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T20:36:58.465Z",
+      "format": "image-package",
+      "version": 1,
+      "reason": "开发期图片 v3 新增共享全能调整层：结构化曲线、闭合参数及内容寻址 LUT；两宿主同源渲染，不为旧开发数据保留迁移分支",
+      "previousFingerprint": "036f72942ce47677a70237652eeebd6b24059838b46c8b27544aa4484f189b49",
+      "fingerprint": "ab6cef02eb017a28af210e1f40b7bb9938df7a186eef3fd066fc2d655aaa0226",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T20:36:58.467Z",
+      "format": "image-working-copy",
+      "version": 3,
+      "reason": "开发期图片 v3 新增共享全能调整层：结构化曲线、闭合参数及内容寻址 LUT；两宿主同源渲染，不为旧开发数据保留迁移分支",
+      "previousFingerprint": "5fac545be10637768f090c84338b401d98179901bb17112bf03f5ed357cf1a03",
+      "fingerprint": "aff7204ad4b2e8e1afa8cb736f42492665191a779e65879b960b2725f5fe1982",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T20:36:58.467Z",
+      "format": "canvas-layer-package",
+      "version": 1,
+      "reason": "开发期图片 v3 新增共享全能调整层：结构化曲线、闭合参数及内容寻址 LUT；两宿主同源渲染，不为旧开发数据保留迁移分支",
+      "previousFingerprint": "c57638581962d64a0dfcdf03b7bc6d066d1bd07c5e0f0fba62145c56ada1b998",
+      "fingerprint": "b44ec5fdff7f7339ae3e56e3449c7441a77ff13befe04a49d2508c88f8d9483a",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T21:05:37.974Z",
+      "format": "document.video_edit",
+      "version": 1,
+      "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
+      "previousFingerprint": "8f493a8e4c87b9910dd01becf8f06ba39a33e3bd42aa1863401709fd61825d30",
+      "fingerprint": "8845257f4d5248314ff9d8b9ef554c2e0ee7197d0bd463be9ccb5577c8899c99",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T21:05:37.975Z",
+      "format": "code-asset",
+      "version": 1,
+      "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
+      "previousFingerprint": "7cabf54e0ae4239f418fc12bf1482bd365fbe37bd4841e306c57f5250d280d7c",
+      "fingerprint": "0a8152ece2a27ff18d9d92abb4032a26ad256ff0e528c04d1bab14061f2db4b2",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T21:05:37.975Z",
+      "format": "title-templates",
+      "version": 1,
+      "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
+      "previousFingerprint": "5dea6fd60f3d3114e279cdae07035b371f22075ddf7979cad9d48a6f9352d7ae",
+      "fingerprint": "334b11b6b893d4ba85c4525a9bdeef88beff272a54a71c835e17f24f98ef20cb",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-08T21:05:37.975Z",
+      "format": "subtitle-manifest",
+      "version": 1,
+      "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
+      "previousFingerprint": "e76b099b96dec71929f7f7446a0ff2e637861ed1657f1360a1c2ab77222b5be7",
+      "fingerprint": "87e316a9e804baa7d525567cfa78022f51a31d6ed58a0130d3d1de438da69249",
       "waivedFixtureVersions": []
     }
   ]

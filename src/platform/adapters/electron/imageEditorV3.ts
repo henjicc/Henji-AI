@@ -19,6 +19,11 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     deleteDocumentIfRevision: (request) => (
       getNativeImageEditorV3().deleteDocumentIfRevision(request)
     ),
+    importColorLut: (request) => {
+      const method = getNativeImageEditorV3().importColorLut
+      if (!method) throw new Error('颜色查找表导入不可用')
+      return method(request)
+    },
     importSource: (request) => getNativeImageEditorV3().importSource(request),
     ingestSource: (request) => getNativeImageEditorV3().ingestSource(request),
     readSourceMetadata: (request) => getNativeImageEditorV3().readSourceMetadata(request),

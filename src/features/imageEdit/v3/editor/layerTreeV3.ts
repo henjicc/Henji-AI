@@ -1,3 +1,4 @@
+import { parseImageColorGradeParams } from '@/core/imaging/adjustments/schema'
 import {
   createDefaultDiffusionOperationParams,
   createDefaultVgpuGlowOperationParams,
@@ -208,6 +209,7 @@ function adjustmentParameters(
   adjustmentId: string,
   workingSpace: ImageEditWorkingSpaceV3,
 ): ImageEditJsonObjectV3 {
+  if (adjustmentId === 'color_grade') return parseImageColorGradeParams({})
   if (adjustmentId === 'exposure') return { stops: 0, offset: 0, gamma: 1 }
   if (adjustmentId === 'curves') {
     const identity = [{ x: 0, y: 0 }, { x: 1, y: 1 }]

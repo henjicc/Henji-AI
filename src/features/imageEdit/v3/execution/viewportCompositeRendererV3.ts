@@ -1,3 +1,4 @@
+import { loadImageColorLutV3 } from './imageColorLutV3'
 import {
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
@@ -256,6 +257,7 @@ export async function renderImageEditorViewportCompositeV3(
         }
         return imageEditorViewportTileToMaskV3(loadResource(reference.resourceId, region))
       },
+      loadColorLut: loadImageColorLutV3,
       executeCustomEffect: (node, source, mask, region) => {
         const originalNode = originalById.get(node.id)
         if (dependencies.globalAnalyses && originalNode) {
@@ -290,7 +292,7 @@ export async function renderImageEditorViewportCompositeV3(
         quality: request.quality,
         signal,
         renderInput: renderRegion,
-        executeCustomEffect: (node, source) => customEffects.execute(
+      executeCustomEffect: (node, source) => customEffects.execute(
           node, source, request.quality, request.document.color,
         ),
       })

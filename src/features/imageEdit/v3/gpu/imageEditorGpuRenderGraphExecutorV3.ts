@@ -1,3 +1,5 @@
+import { mapImageEditOutputPixelToSourceV3, resolveImageEditOutputGeometryV3 } from '@/core/imageEdit/v3/outputGeometry'
+import { ImageEditorGpuColorGradeV3 } from './imageEditorGpuColorGradeV3'
 import { draw, frame, target, type Draw, type Gpu, type Target, type Texture } from 'vgpu'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import { createImageEditGeometryHashV3 } from '@/core/imageEdit/v3/outputGeometry'
@@ -81,6 +83,7 @@ export interface ImageEditorGpuRenderGraphStatsV3 {
 }
 /** RenderPlan 投影后的 retained executor；一批失效节点始终编码进同一个 vGPU Frame。 */
 export class ImageEditorGpuRenderGraphExecutorV3 {
+  private readonly grades = new Map<string, ImageEditorGpuColorGradeV3>()
   private readonly sourceDraw: Draw
   private readonly copyDraw: Draw
   private readonly normalDraw: Draw
@@ -236,7 +239,10 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         continue
       }
       if (!input && !sourcePlan) throw new Error(`GPU RenderGraph 缺少节点输入：${node.nodeId}`)
-      const output = target(this.gpu, {
+      const size = imageEditorGpuOutputPixelSizeV3(layout)
+      const reuse = node.kind === 'adjustment' && node.adjustments[0]?.definitionId === 'adjustment.color-grade'
+        && retained && retained.target.size[0] === size[0] && retained.target.size[1] === size[1]
+      const output = reuse ? retained.target : target(this.gpu, {
         size: imageEditorGpuOutputPixelSizeV3(layout),
         format: 'rgba16float',
         clearColor: CLEAR,
@@ -268,7 +274,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       : graphOutput
     const replacements = new Map<string, RetainedNodeState>()
     try {
-      await Promise.all([this.compileTasks(tasks), this.maskAssembler.compile(preparedMasks),
+      await Promise.all([this.compileTasks(tasks, layout), this.maskAssembler.compile(preparedMasks),
         this.effectExecutor.compile(preparedEffects), ...(cropNeeded ? [this.effectCropper.compile()] : [])])
       this.maskAssembler.updateCamera(layout, this.scene.geometry)
       const submitted = operations.length > 0 || preparedMasks.some((entry) => entry.pending) || cropNeeded
@@ -284,6 +290,10 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       if (submitted && awaitCompletion) await submitted.done
     } catch (error) {
       this.maskAssembler.discard(preparedMasks); this.effectExecutor.discard(preparedEffects)
+      for (const task of tasks) {
+        const previous = this.retained.get(task.node.nodeId)
+        if (previous?.target === task.target) this.retained.delete(task.node.nodeId)
+      }
       for (const state of replacements.values()) this.destroyState(state)
       const replaced = new Set([...replacements.values()].map((state) => state.target))
       for (const task of tasks) if (!replaced.has(task.target)) task.target.color.destroy()
@@ -299,17 +309,21 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     for (const [nodeId, replacement] of replacements) {
       const previous = this.retained.get(nodeId)
       if (previous) {
-        this.destroyState(previous)
+        if (previous.target !== replacement.target) this.destroyState(previous)
+        else { previous.buffers.forEach(buffer => buffer.destroy()); previous.curveTexture?.destroy() }
         this.stats.invalidatedNodeCount += 1
       }
       this.retained.set(nodeId, replacement)
       this.stats.renderedNodeCount += 1
     }
+    const activeGrades = new Set(this.scene.graph.filter(node => node.kind === 'adjustment' && node.adjustments[0]?.definitionId === 'adjustment.color-grade').map(node => node.nodeId))
+    for (const [id, grade] of this.grades) if (!activeGrades.has(id)) { grade.dispose(); this.grades.delete(id) }
     this.pruneRetained(new Set(this.scene.graph.filter((node) => !aliases.has(node.nodeId)).map((node) => node.nodeId)))
     return croppedOutput
   }
 
   dispose(): void {
+    this.grades.forEach(value => value.dispose()); this.grades.clear()
     this.clearRetained()
     this.fallbackMask.destroy()
     this.maskAssembler.dispose()
@@ -336,7 +350,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     return `${node.fingerprint}:${input}:${backdrop}:${transform?.join(',') ?? ''}`
   }
 
-  private async compileTasks(tasks: readonly GraphTask[]): Promise<void> {
+  private async compileTasks(tasks: readonly GraphTask[], layout: ImageEditorViewportLayoutV3): Promise<void> {
     const draws = new Map<Draw, Target>()
     for (const task of tasks) {
       if (task.sourcePlan) draws.set(this.sourceDraw, this.sourceScratch!)
@@ -345,6 +359,22 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         draws.set(this.normalDraw, task.target)
         if (task.backdrop) draws.set(this.copyDraw, task.target)
       } else if (task.node.kind === 'composite') draws.set(this.compositeDraw, task.target)
+      else if (task.node.adjustments[0]?.definitionId === 'adjustment.color-grade') {
+        const renderer = this.grades.get(task.node.nodeId) ?? new ImageEditorGpuColorGradeV3(this.gpu, this.onPipelineCompiled)
+        this.grades.set(task.node.nodeId, renderer)
+        const scale = layout.viewport.zoom * layout.viewport.devicePixelRatio
+        const geometry = resolveImageEditOutputGeometryV3(this.scene!.geometry)
+        const x = layout.viewport.documentX + .5 / scale - .5, y = layout.viewport.documentY + .5 / scale - .5
+        const first = mapImageEditOutputPixelToSourceV3(x, y, geometry)
+        const nextX = mapImageEditOutputPixelToSourceV3(x + 1 / scale, y, geometry)
+        const nextY = mapImageEditOutputPixelToSourceV3(x, y + 1 / scale, geometry)
+        await renderer.prepare(task.node.adjustments[0], task.input!, task.target, task.mask, this.scene!.color, {
+          origin: [(first[0] + .5) / geometry.sourceWidth, (first[1] + .5) / geometry.sourceHeight],
+          size: [geometry.sourceWidth * scale, geometry.sourceHeight * scale],
+          basisX: [(nextX[0] - first[0]) / geometry.sourceWidth, (nextX[1] - first[1]) / geometry.sourceHeight],
+          basisY: [(nextY[0] - first[0]) / geometry.sourceWidth, (nextY[1] - first[1]) / geometry.sourceHeight],
+        })
+      }
       else if (task.node.adjustments[0]?.definitionId === 'adjustment.curves') draws.set(this.curvesDraw, task.target)
       else draws.set(this.adjustmentDraw, task.target)
     }
@@ -389,6 +419,8 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         this.compositeDraw.group(0, this.bind(this.compositeDraw, [task.backdrop.color.view, input!.color.view, maskView, { buffer }]))
         currentFrame.pass(task.target, this.compositeDraw)
       }
+    } else if (task.node.adjustments[0]?.definitionId === 'adjustment.color-grade') {
+      this.grades.get(task.node.nodeId)!.encode(currentFrame)
     } else if (task.node.adjustments[0]?.definitionId === 'adjustment.curves') {
       const adjustment = task.node.adjustments[0]
       const { curve: curves, values } = imageEditorGpuGraphCurveValuesV3(adjustment)

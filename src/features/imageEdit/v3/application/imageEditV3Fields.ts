@@ -298,7 +298,7 @@ export const IMAGE_EDIT_V3_GROUP_FIELDS: ApplicationFieldDefinition<
   {
     propertyId: 'image_edit.group.child_refs',
     descriptor: property('image_edit.group', 'child_refs', '子图层', {
-      kind: 'ref_list', refKinds: ['image_edit.layer', 'image_edit.group'], maxItems: 512,
+      kind: 'ref_list', refKinds: ['image_edit.layer', 'image_edit.group'],
     }, { readOnlyReason: '子图层顺序由图层树命令维护。' }),
     read: (source) => source.location.layer.type === 'group'
       ? source.location.layer.children.map((child) => child.type === 'group'
@@ -346,7 +346,7 @@ export const IMAGE_EDIT_V3_MASK_FIELDS: ApplicationFieldDefinition<
   {
     propertyId: 'image_edit.mask.resource_refs',
     descriptor: property('image_edit.mask', 'resource_refs', '像素资源引用', {
-      kind: 'ref_list', refKinds: ['image_edit.resource'], maxItems: 512,
+      kind: 'ref_list', refKinds: ['image_edit.resource'],
     }, { readOnlyReason: '蒙版像素由蒙版编辑工具维护。' }),
     read: (source) => source.location.layer.mask
       ? collectImageEditMaskResourceIdsV3(source.location.layer.mask)

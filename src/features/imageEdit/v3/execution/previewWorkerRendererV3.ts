@@ -1,3 +1,4 @@
+import { loadImageColorLutV3 } from './imageColorLutV3'
 import {
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
@@ -76,7 +77,7 @@ export async function renderImageEditorPreviewTileV3(
   }
   const brushTiles = createPreviewBrushTileMapV3(request.brushTiles)
   const rendered = await executeImageEditCpuRenderPlanV3(plan, {
-    signal,
+    signal, loadColorLut: loadImageColorLutV3,
     loadRaster: async (node) => applyPreviewBrushTileReplacementsV3(
       node,
       convertSrgbProxyToPreviewWorkingSpaceV3(
