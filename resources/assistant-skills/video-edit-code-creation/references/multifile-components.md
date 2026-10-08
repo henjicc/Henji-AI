@@ -32,7 +32,7 @@
 1. 在剪辑文档下 `create_items`，entityType 为 `video_edit.code_component`，属性 `video_edit.code_component.name`（中文名即可）、`video_edit.code_component.source`（模块源码，规则同上面的模块文件，不能 export default）、`video_edit.code_component.description`（这个组件做什么、导出哪些函数、参数含义）。同名再次创建就是发布新版本，旧版本保留。
 2. 素材源码里 `import { lowerThird } from "@组件/人名条"` 引用最新版本，或 `"@组件/人名条@2"` 固定第 2 版。组件也可以导入别的组件，不能循环。
 3. 保存素材版本时，引用会被钉住到当时的组件版本；之后组件再发新版，已有素材画面不变。要用新组件，给素材创建一个新版本。
-4. 开工前先 `read_application_entity` 读本项目已有组件（名称、版本、导出、说明），能复用就复用，别重复写同一个部件。
+4. 开工前先 `list_application_entities` 列出 `video_edit.code_component`，propertyIds 带上 latest_version、exports、description（不带只返回引用），能复用就复用，别重复写同一个部件。
 5. 被素材引用的组件版本不能删除；读组件可以看到哪些素材在用它。
 
-组件函数也遵循参数化：接收一个属性对象（尺寸、颜色、文字、进度），不读 ctx.params，由调用它的素材把自己的参数传进去。这样同一个组件在不同素材里能有不同外观。
+组件函数也遵循参数化：接收一个属性对象（尺寸、颜色、文字、进度），由调用它的素材把自己的参数传进去。模块和组件拿不到 ctx，函数参数也不能叫 ctx；需要画面宽高、时间时作为参数传入。这样同一个组件在不同素材里能有不同外观。

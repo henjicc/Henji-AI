@@ -118,7 +118,7 @@ function withAuthoringHints(result: ApplicationCompletedStepResult, versions: Ar
   for (const { ref, versionId } of versions) {
     const program = versionId ? peekVideoEditCodeProgram(requireVideoEditInstance(ref.id.split(':')[0]), versionId) : undefined
     const hints = program ? codeMaterialAuthoringHints(program) : []
-    if (hints.length) evidence.push({ kind: 'observation', target: ref, fact: `参数化体检（不阻止提交，建议改进后再交付）：${hints.map(hint => hint.message).join('；')}`.slice(0, 1000), data: hints.map(hint => ({ code: hint.code, message: hint.message, ...(hint.line === undefined ? {} : { line: hint.line }) })), capturedAt })
+    if (hints.length) evidence.push({ kind: 'observation', target: ref, fact: `参数化体检（不阻止提交，建议改进后再交付）：${hints.map(hint => hint.message).join(' ')}`.slice(0, 1000), data: hints.map(hint => ({ code: hint.code, message: hint.message, ...(hint.line === undefined ? {} : { line: hint.line }) })), capturedAt })
   }
   return { ...result, evidence }
 }
