@@ -11,6 +11,7 @@ import type { CodeParameterValue } from '@/core/videoEdit/codeMaterial/contract'
 import { builtinParameterFields, readBuiltinField, writeBuiltinField, type ParamFieldSpec } from './params/fieldSpec'
 import { ParamField, type ParamGesture } from './params/ParamField'
 import { ParamList } from './params/ParamList'
+import type { VideoEditCurves } from '@/core/videoEdit/keyframes'
 
 function builtinFieldGesture(field: ParamFieldSpec, gesture: VideoEditBuiltinParamGesture): ParamGesture {
   const write = (value: CodeParameterValue): void => gesture.commit({ params: writeBuiltinField(field, value) })
@@ -37,19 +38,22 @@ export function VideoEditBuiltinEffectControls({ target, effect, onError }: { ta
   </div>
 }
 /** 一组登记参数的各行（名称悬停说明作用，行尾重置为默认值）；内置效果与带参数的过渡共用。 */
-export interface VideoEditBuiltinAnimation { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; start: number; duration: number; frame: number }
+export type VideoEditBuiltinAnimation = { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; start: number; duration: number; frame: number } | { projectId: string; curves?: VideoEditCurves; start: number; duration: number; frame: number }
 export function VideoEditBuiltinParamRows({ params, values, gesture, animation }: { params: readonly VideoEditBuiltinParam[]; values: Readonly<Record<string, unknown>>; gesture: VideoEditBuiltinParamGesture; animation?: VideoEditBuiltinAnimation }): React.ReactElement {
   const fields = builtinParameterFields(params)
+  const curves = animation && ('effect' in animation ? animation.effect.builtin.curves : animation.curves)
+  const projectId = animation && ('target' in animation ? animation.target.projectId : animation.projectId)
   const displayValues = Object.fromEntries(fields.map(field => [field.key, readBuiltinField(field, values)]))
-  const extras = Object.fromEntries(fields.map(field => [field.key, field.bindingKeys.map(key => animation?.effect.builtin.curves?.[key])]))
+  const extras = Object.fromEntries(fields.map(field => [field.key, field.bindingKeys.map(key => curves?.[key])]))
   return <ParamList key={gesture.identity} fields={fields} values={displayValues} extras={extras} contextKey={animation && JSON.stringify([animation.frame, animation.start, animation.duration])}
     renderControl={(field, value) => <BuiltinField field={field} value={value} gesture={gesture} />}
     onReset={field => gesture.commit({ params: Object.fromEntries(field.bindingKeys.map(key => [key, params.find(param => param.key === key)!.default])) })}
     resetDisabled={field => field.bindingKeys.every(key => values[key] === params.find(param => param.key === key)!.default)}
-    renderAnimation={animation && ((field) => <div className="flex flex-wrap gap-1">{field.bindingKeys.map((key, index) => <VideoEditKeyframeControls key={key} label={field.bindingKeys.length > 1 ? field.type === 'point' ? `${field.title}${index === 0 ? '水平' : '垂直'}` : params.find(param => param.key === key)!.name : field.title} value={values[key] as number | string | boolean} points={animation.effect.builtin.curves?.[key]} time={animation.frame - animation.start} duration={animation.duration} discrete={['boolean', 'choice', 'curve', 'lut'].includes(field.type)}
-      onChange={points => { const curves = { ...animation.effect.builtin.curves }; if (points.length) curves[key] = points; else delete curves[key]; gesture.commit({ curves }) }}
-      onSeek={time => setVideoEditView(animation.target.projectId, { frame: animation.start + time, playing: false })}
-      onDisable={() => { gesture.begin(); const curves = { ...animation.effect.builtin.curves }; delete curves[key]; gesture.commit({ curves }); gesture.commit({ params: { [key]: values[key] } }); gesture.finish() }} />)}</div>)} />
+    renderAnimation={animation && ((field) => <div className="flex flex-wrap gap-1">{field.bindingKeys.map((key, index) => <VideoEditKeyframeControls key={key} label={field.bindingKeys.length > 1 ? field.type === 'point' ? `${field.title}${index === 0 ? '水平' : '垂直'}` : params.find(param => param.key === key)!.name : field.title} value={values[key] as number | string | boolean} points={curves?.[key]} time={animation.frame - animation.start} duration={animation.duration} discrete={['boolean', 'choice', 'curve', 'lut'].includes(field.type)}
+      onBegin={gesture.begin} onFinish={gesture.finish} onCancel={gesture.cancel}
+      onChange={points => { const next = { ...curves }; if (points.length) next[key] = points; else delete next[key]; gesture.commit({ curves: next }) }}
+      onSeek={time => setVideoEditView(projectId!, { frame: animation.start + time, playing: false })}
+      onDisable={() => { gesture.begin(); const next = { ...curves }; delete next[key]; gesture.commit({ curves: next }); gesture.commit({ params: { [key]: values[key] } }); gesture.finish() }} />)}</div>)} />
 }
 
 function BuiltinField({ field, value, gesture }: { field: ParamFieldSpec; value: CodeParameterValue; gesture: VideoEditBuiltinParamGesture }): React.ReactElement {

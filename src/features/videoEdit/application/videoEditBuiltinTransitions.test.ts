@@ -76,10 +76,11 @@ it('助手经通用实体读写：目录里读过渡用途与参数，创建带�
     expect(properties['video_edit.builtin_effect.params']).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'direction', options: expect.arrayContaining(['from_left', 'from_top_right']) }), expect.objectContaining({ key: 'feather', min: 0, max: 100, default: 10 })]))
     const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${sequenceId}` }
     const baseline = await app.read(sequenceRef)
-    const created = await app.call('change_application_entities', { summary: '擦除转场', changes: [{ kind: 'create_items', entityType: 'video_edit.transition', parent: sequenceRef, items: [{ properties: { 'video_edit.transition.kind': 'wipe', 'video_edit.transition.left_clip_id': clipIds[0], 'video_edit.transition.right_clip_id': clipIds[1], 'video_edit.transition.duration_frames': 10, 'video_edit.transition.parameters': { direction: 'from_top' } } }] }] }, baseline.revisions as Record<string, number>)
+    const created = await app.call('change_application_entities', { summary: '擦除转场', changes: [{ kind: 'create_items', entityType: 'video_edit.transition', parent: sequenceRef, items: [{ properties: { 'video_edit.transition.kind': 'wipe', 'video_edit.transition.left_clip_id': clipIds[0], 'video_edit.transition.right_clip_id': clipIds[1], 'video_edit.transition.duration_frames': 10, 'video_edit.transition.parameters': { direction: 'from_top' }, 'video_edit.transition.frame_curves': { feather: [{ time: 0, value: 5, interpolation: 'bezier', bezier: [.2, 0, .8, 1] }, { time: 9, value: 80, interpolation: 'linear' }] } } }] }] }, baseline.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
     const transition = getActiveVideoEditSequence(owner).transitions![0]
     expect(transition).toMatchObject({ kind: 'wipe', parameters: { direction: 'from_top' } })
+    expect(transition.frameCurves!.feather[0].bezier).toEqual([.2, 0, .8, 1])
     const ref = { kind: 'video_edit.transition', id: `${id}:${transition.id}` }
     const changed = await app.change(ref, { 'video_edit.transition.parameters': { direction: 'from_right', border: 30 } }); expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
     expect(getActiveVideoEditSequence(owner).transitions![0].parameters).toEqual({ direction: 'from_right', border: 30 })

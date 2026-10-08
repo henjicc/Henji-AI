@@ -1,4 +1,4 @@
-import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSchema, sliceVideoEditCurves, type VideoEditCurves } from '@/core/videoEdit/keyframes'
+import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSchema, sliceVideoEditBuiltinCurves, type VideoEditCurves } from '@/core/videoEdit/keyframes'
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditIntroducesCodeEffects, videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
 import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
@@ -6,7 +6,7 @@ import { assertVideoEditMaskTrackers } from './videoEditTrackingEdits'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
+import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, resizeVideoEditTransition, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
@@ -142,7 +142,7 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     if (!targets.size) throw new Error(media === 'audio' ? '请选择声音片段：音频效果只能加到声音片段，锁定轨道上的片段不能修改。' : '请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。')
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
-      const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditCurves(template.builtin.curves, 0, clip.duration) } } : {}) }))
+      const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditBuiltinCurves(template.builtin, 0, clip.duration) } } : {}) }))
       created.push(...effects.map(effect => effect.id))
       return { ...clip, effects: [...(clip.effects ?? []), ...effects] }
     })
@@ -177,7 +177,7 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
         const time = requireVideoEditInstance(target.projectId).frame - clip.start
         if (time < 0 || time >= clip.duration) throw new Error(`请将播放头放在片段内（${clip.start}–${clip.start + clip.duration - 1} 帧）再编辑关键帧。`)
         const definition = requireVideoEditBuiltinEffect(builtin.id).params.find(param => param.key === key)!
-        curves[key] = putVideoEditKeyframe(curves[key], { time, value: params[key], interpolation: curves[key].find(point => point.time === time)?.interpolation ?? (definition.type === 'boolean' || definition.type === 'enum' || definition.type === 'curve' || definition.type === 'lut' ? 'hold' : 'linear') })
+        curves[key] = putVideoEditKeyframe(curves[key], { ...curves[key].find(point => point.time === time), easeRange: undefined, easeValues: undefined, time, value: params[key], interpolation: curves[key].find(point => point.time === time)?.interpolation ?? (definition.type === 'boolean' || definition.type === 'enum' || definition.type === 'curve' || definition.type === 'lut' ? 'hold' : 'linear') })
         if (builtin.params[key] === undefined) delete params[key]; else params[key] = builtin.params[key]
       }
       effect.builtin = { ...builtin, params, ...(Object.keys(curves).length ? { curves } : {}) }
@@ -211,7 +211,7 @@ export async function copyVideoEditEffects(target: VideoEditCompositeTarget, sou
   if (!effects.length) throw new Error('来源片段没有效果可复制。')
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {
     const clip = requireEffectClip(sequence, target.clipId)
-    clip.effects = effects.map(effect => effect.builtin?.curves ? { ...effect, builtin: { ...effect.builtin, curves: sliceVideoEditCurves(effect.builtin.curves, 0, clip.duration) } } : effect)
+    clip.effects = effects.map(effect => effect.builtin?.curves ? { ...effect, builtin: { ...effect.builtin, curves: sliceVideoEditBuiltinCurves(effect.builtin, 0, clip.duration) } } : effect)
   }, signal)
 }
 export async function updateVideoEditAdjustmentRange(target: VideoEditCompositeTarget, fromTrack: number, signal?: AbortSignal): Promise<void> {
@@ -233,7 +233,7 @@ export async function updateVideoEditTransition(projectId: string, sequenceId: s
   const patch = typeof changes === 'number' ? { durationFrames: changes } : changes
   await editComposite(projectId, sequenceId, videoEditTransitionClipIds(transition), sequence => {
     const list = sequence.transitions!; const index = list.findIndex(value => value.id === transitionId)
-    const next = videoEditTransitionSchema.parse({ ...list[index], ...patch, ...(patch.kind && patch.kind !== list[index].kind ? { parameters: undefined } : {}) })
+    const next = videoEditTransitionSchema.parse({ ...resizeVideoEditTransition(list[index], patch.durationFrames ?? list[index].durationFrames), ...patch, ...(patch.kind && patch.kind !== list[index].kind ? { parameters: undefined, frameCurves: undefined } : {}) })
     // 换了种类：旧种类的参数不再适用，按新种类的默认值
     if (!next.parameters) delete next.parameters
     if (next.alignment === 'center') delete next.alignment

@@ -3,7 +3,7 @@ import { videoEditClipMedia, videoEditClipSchema, type VideoEditDocument, type V
 import { videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
 import { orderVideoEditEffects, videoEditEffectAccepts, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
-import { videoEditTransitionClipIds, videoEditTransitionEditPoints, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, videoEditTransitionWindow, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
+import { videoEditTransitionClipIds, videoEditTransitionEditPoints, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, videoEditTransitionWindow, resizeVideoEditTransition, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { validateVideoEditTransitionParams } from '@/core/videoEdit/transitionParams'
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
@@ -87,7 +87,7 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
     return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: code!.definitionId, versionId: code!.versionId, parameters: code!.parameters, curves: code!.curves ?? {} })) as Data
   }
   // 过渡参数：没有存参数时读出空对象（全部按默认值）；种类与参数见 video_edit.builtin_effect 的 transition:<种类>。
-  return JSON.parse(JSON.stringify({ ...common, ...owner.transition, parameters: owner.transition.parameters ?? {} })) as Data
+  return JSON.parse(JSON.stringify({ ...common, ...owner.transition, parameters: owner.transition.parameters ?? {}, frameCurves: owner.transition.frameCurves ?? {} })) as Data
 }
 /** Draft operations use the same factories and full domain validator as manual
  * creation. No publication or history occurs until the caller proves the draft. */
@@ -123,7 +123,9 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
     const raw = (data.parameters ?? {}) as Record<string, unknown>
     const untouched = JSON.stringify(raw) === JSON.stringify(owner.transition.parameters ?? {})
     const parameters = kind !== owner.transition.kind && untouched ? {} : validateVideoEditTransitionParams(kind, videoEditTransitionPreset(kind).name, raw)
-    const next = videoEditTransitionSchema.parse({ ...owner.transition, kind, durationFrames: data.durationFrames, alignment: data.alignment ?? undefined, framesBeforeCut: data.framesBeforeCut ?? undefined, parameters: Object.keys(parameters).length ? parameters : undefined })
+    const curveUntouched = JSON.stringify(data.frameCurves ?? {}) === JSON.stringify(owner.transition.frameCurves ?? {})
+    const frameCurves = kind !== owner.transition.kind && curveUntouched ? undefined : curveUntouched ? resizeVideoEditTransition(owner.transition, Number(data.durationFrames)).frameCurves : videoEditCurvesSchema.parse(data.frameCurves)
+    const next = videoEditTransitionSchema.parse({ ...owner.transition, frameCurves, kind, durationFrames: data.durationFrames, alignment: data.alignment ?? undefined, framesBeforeCut: data.framesBeforeCut ?? undefined, parameters: Object.keys(parameters).length ? parameters : undefined })
     if (!next.parameters) delete next.parameters
     if (next.alignment === 'center') delete next.alignment
     if (next.alignment !== 'custom') delete next.framesBeforeCut

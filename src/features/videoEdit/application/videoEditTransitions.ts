@@ -4,7 +4,9 @@ import { setVideoEditClipFade } from '@/core/videoEdit/fades'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { applyVideoEditTransitionPairs, dragVideoEditTransition, videoEditTransitionClipIds, videoEditDefaultTransitionKind, videoEditDefaultTransitionPairs, videoEditTransitionMedium, videoEditTransitionPreset, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionMedium, type VideoEditTransitionPair } from '@/core/videoEdit/transitions'
-import { normalizeVideoEditTransitionParams } from '@/core/videoEdit/transitionParams'
+import { normalizeVideoEditTransitionParams, assertVideoEditTransitionCurves, videoEditTransitionParamDefinitions } from '@/core/videoEdit/transitionParams'
+import { putVideoEditKeyframe, videoEditCurvesSchema, type VideoEditCurves } from '@/core/videoEdit/keyframes'
+import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { editComposite } from './videoEditCompositing'
 import { beginVideoEditGesture, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, requireVideoEditInstance, setVideoEditTimelineView, updateVideoEditGesture, type VideoEditGesture, type VideoEditInstance } from './videoEditService'
@@ -86,14 +88,25 @@ export async function applyVideoEditTransitionToSelection(projectId: string, kin
  * 改带参数过渡（擦除、推动……4.7）的参数：效果控件拖动数值时带手势只预览，松手提交成一步撤销；不带手势时就是一步编辑。
  * 内置过渡是确定的 GPU 实现，不走代码素材的试渲染。数值夹进登记范围，未知参数与错类型报错。
  */
-export function updateVideoEditTransitionParams(projectId: string, sequenceId: string, transitionId: string, params: Readonly<Record<string, unknown>>, gesture?: VideoEditGesture): void {
+export function updateVideoEditTransitionParams(projectId: string, sequenceId: string, transitionId: string, params: Readonly<Record<string, unknown>>, gesture?: VideoEditGesture, frameCurves?: VideoEditCurves): void {
   const update = (document: VideoEditDocument): VideoEditDocument => {
     const sequence = document.sequences.find(value => value.id === sequenceId)
     const transition = sequence?.transitions?.find(value => value.id === transitionId)
     if (!sequence || !transition) throw new Error('原过渡已移除。')
     assertVideoEditClipsEditable(sequence, videoEditTransitionClipIds(transition))
     const parameters = normalizeVideoEditTransitionParams(transition.kind, videoEditTransitionPreset(transition.kind).name, params, transition.parameters, true)
-    return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, transitions: sequence.transitions!.map(item => item === transition ? { ...transition, parameters } : item) } : value) }
+    const curves = { ...(frameCurves === undefined ? transition.frameCurves : videoEditCurvesSchema.parse(frameCurves)) }
+    for (const key of Object.keys(params)) if (curves[key]?.length) {
+      const time = requireVideoEditInstance(projectId).frame - videoEditTransitionWindow(sequence, transition).start
+      if (time < 0 || time >= transition.durationFrames) throw new Error('请将播放头放在转场内再编辑关键帧。')
+      const definition = videoEditTransitionParamDefinitions(transition.kind).find(param => param.key === key)!
+      const current = curves[key].find(point => point.time === time)
+      curves[key] = putVideoEditKeyframe(curves[key], { ...current, easeRange: undefined, easeValues: undefined, time, value: parameters[key], interpolation: current?.interpolation ?? (['boolean', 'enum'].includes(definition.type) ? 'hold' : 'linear') })
+      if (transition.parameters?.[key] === undefined) delete parameters[key]; else parameters[key] = transition.parameters[key]
+    }
+    const next = { ...transition, parameters, frameCurves: curves }
+    assertVideoEditTransitionCurves(next)
+    return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, transitions: sequence.transitions!.map(item => item === transition ? next : item) } : value) }
   }
   if (gesture) {
     if (gesture.projectId !== projectId) throw new Error('原参数调整已结束，请重新编辑。')

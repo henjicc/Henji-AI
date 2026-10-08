@@ -1,13 +1,15 @@
 import { ChevronLeft, ChevronRight, Diamond, GanttChart, Timer } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiIconButton } from '@/components/ui'
+import { PanelTrigger, UiIconButton } from '@/components/ui'
 import { putVideoEditKeyframe, type VideoEditKeyframe, type VideoEditKeyframes } from '@/core/videoEdit/keyframes'
+import { VideoEditKeyframeInterpolation } from './VideoEditKeyframeInterpolation'
 
 export interface VideoEditKeyframeControlProps {
   label: string; points: VideoEditKeyframes | undefined; time: number; duration: number; value: VideoEditKeyframe['value']; discrete?: boolean
   onChange: (points: VideoEditKeyframes) => void; onDisable: () => void; onSeek: (time: number) => void
+  onBegin: () => void; onFinish: () => void; onCancel: () => void
 }
 /** Parameter-local controls: stopwatch, previous/add-remove/next, interpolation and optional mini track. */
-export function VideoEditKeyframeControls({ label, points, time, duration, value, discrete, onChange, onDisable, onSeek }: VideoEditKeyframeControlProps): React.ReactElement {
+export function VideoEditKeyframeControls({ label, points, time, duration, value, discrete, onChange, onDisable, onSeek, onBegin, onFinish, onCancel }: VideoEditKeyframeControlProps): React.ReactElement {
   const enabled = Boolean(points?.length); const current = points?.find(point => point.time === time)
   const previous = points?.filter(point => point.time < time).at(-1); const next = points?.find(point => point.time > time)
   const inside = time >= 0 && time < duration
@@ -19,7 +21,8 @@ export function VideoEditKeyframeControls({ label, points, time, duration, value
       <UiIconButton size="xs" on={Boolean(current)} title={`${current ? '删除' : '添加'}${label}关键帧`} aria-label={`${current ? '删除' : '添加'}${label}关键帧`} disabled={!inside} onClick={() => current ? onChange(points!.filter(point => point.time !== time)) : add()}><Diamond size={12} fill={current ? 'currentColor' : 'none'} /></UiIconButton>
       <UiIconButton size="xs" title={`下一个${label}关键帧`} aria-label={`下一个${label}关键帧`} disabled={!next} onClick={() => next && onSeek(next.time)}><ChevronRight size={12} /></UiIconButton>
       <PanelTrigger alignment="bottomRight" panelWidth="content" panelPadding="content" renderPanel={() => <span className="flex w-56 flex-col gap-2">
-      {current && !discrete && <Dropdown size="sm" ariaLabel={`${label}插值`} value={current.interpolation} options={[{ value: 'linear', label: '线性' }, { value: 'hold', label: '定格' }, { value: 'ease', label: '缓入缓出' }]} onSelect={interpolation => onChange(putVideoEditKeyframe(points, { ...current, interpolation: interpolation as VideoEditKeyframe['interpolation'] }))} />}
+      {current && !discrete && <VideoEditKeyframeInterpolation label={label} interpolation={current.interpolation} bezier={current.bezier} onBegin={onBegin} onFinish={onFinish} onCancel={onCancel}
+        onChange={changes => onChange(putVideoEditKeyframe(points, { ...current, ...changes, easeRange: undefined, easeValues: undefined }))} />}
       <svg viewBox="0 0 100 20" className="h-8 w-full text-accent-text" aria-label={`${label}迷你关键帧轨`}>
         <path d="M2 10H98" stroke="currentColor" opacity={0.4} />
         {(points ?? []).map(point => { const x = 2 + point.time / Math.max(1, duration - 1) * 96; return <path key={point.time} d={`M${x} 6l4 4-4 4-4-4Z`} fill="currentColor" onPointerDown={event => { event.stopPropagation(); onSeek(point.time) }} /> })}

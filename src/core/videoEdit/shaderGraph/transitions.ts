@@ -3,7 +3,7 @@
  *
  * 框架转场是“揭示”滤镜：把它里面的画面按进度擦掉。剪辑里组成
  * `[@second（后一段）, 转场{children: [@input（前一段）]}]`，进度由时间线驱动（不做参数）。
- * 单侧过渡空着的一侧传透明画面。过渡参数不做关键帧（与其它过渡一致）。
+ * 单侧过渡空着的一侧传透明画面。进度以外的参数沿转场内部帧曲线动画。
  */
 import type { VideoEditBuiltinParam, VideoEditBuiltinParams } from '../builtinEffects'
 import { SHADER_GRAPH_INPUT, SHADER_GRAPH_SECOND, shaderComponent, type ShaderComponent, type ShaderGraphSpec } from './spec'
@@ -30,7 +30,7 @@ export const SHADER_GRAPH_TRANSITION_PRESETS = SHADER_GRAPH_TRANSITION_KINDS.map
 })
 export const SHADER_GRAPH_TRANSITION_PARAMS: Readonly<Record<ShaderGraphTransitionKind, readonly VideoEditBuiltinParam[]>> = Object.fromEntries(SHADER_GRAPH_TRANSITION_KINDS.map(kind => {
   const value = component(kind)
-  return [kind, shaderComponentParams(value, [progressProp(value)]).map(param => ({ ...param, animatable: false }))]
+  return [kind, shaderComponentParams(value, [progressProp(value)])]
 })) as unknown as Record<ShaderGraphTransitionKind, readonly VideoEditBuiltinParam[]>
 
 /** 转场的着色器图；转场图层 id 固定为 `fx`。 */

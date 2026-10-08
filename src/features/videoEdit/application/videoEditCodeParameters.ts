@@ -83,7 +83,7 @@ function declaration(target: VideoEditParameterTarget, key: string) {
 }
 function upsert(points: CodeMaterialKeyframe[], time: VideoEditSourceTime, value: CodeMaterialKeyframe['value'], discrete: boolean): CodeMaterialKeyframe[] {
   const current = points.find(point => compareCodeMaterialTime(point, time) === 0)
-  const point: CodeMaterialKeyframe = { ...time, id: current?.id ?? crypto.randomUUID(), value, interpolation: current?.interpolation ?? (discrete ? 'hold' : 'linear') }
+  const point: CodeMaterialKeyframe = { ...current, ...time, id: current?.id ?? crypto.randomUUID(), value, interpolation: current?.interpolation ?? (discrete ? 'hold' : 'linear') }
   return [...points.filter(point => point !== current), point].sort(compareCodeMaterialTime)
 }
 export function setVideoEditCodeParameter(target: VideoEditParameterTarget, key: string, raw: unknown, options: { gesture?: VideoEditGesture; time?: VideoEditSourceTime } = {}): void {
@@ -107,7 +107,7 @@ export function addVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: 
     code.curves = { ...(code.curves ?? {}), [key]: upsert(code.curves?.[key] ?? [], time, value, !codeParameterSupportsInterpolation(parameter)) }
   })
 }
-export function updateVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: string, id: string, changes: Partial<Pick<CodeMaterialKeyframe, 'sourceInUs' | 'sourceRemainder' | 'value' | 'interpolation'>>, gesture?: VideoEditGesture): void {
+export function updateVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: string, id: string, changes: Partial<Pick<CodeMaterialKeyframe, 'sourceInUs' | 'sourceRemainder' | 'value' | 'interpolation' | 'bezier'>>, gesture?: VideoEditGesture): void {
   declaration(target, key)
   edit(target, (_document, { binding: code }) => {
     const points = code.curves?.[key]

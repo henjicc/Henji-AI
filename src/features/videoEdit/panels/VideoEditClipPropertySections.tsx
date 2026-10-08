@@ -61,7 +61,7 @@ function SingleProperty({ property, clip, frame, gesture }: { property: VideoEdi
   const view = VIEWS[property]
   const value = videoEditClipValue({ ...clip, disabledIntrinsicSections: [] }, property, frame.playhead)
   return <PropertyRow label={view.label} tooltip={view.tooltip} resetLabel={`重置${view.label}`} resetDisabled={value === videoEditClipPropertyDefault(clip, property)} onReset={() => gesture.commit(resetPatch(clip, [property]))}
-    animation={<VideoEditKeyframeControls label={view.label} points={clip.curves?.[property]} value={value} time={frame.playhead - clip.start} duration={clip.duration} onChange={points => gesture.keyframes(property, points)} onSeek={time => gesture.seek(clip.start + time)} onDisable={() => { gesture.begin(); gesture.keyframes(property, []); gesture.commit({ [property]: value }); gesture.finish() }} />}>
+    animation={<VideoEditKeyframeControls onBegin={gesture.begin} onFinish={gesture.finish} onCancel={gesture.cancel} label={view.label} points={clip.curves?.[property]} value={value} time={frame.playhead - clip.start} duration={clip.duration} onChange={points => gesture.keyframes(property, points)} onSeek={time => gesture.seek(clip.start + time)} onDisable={() => { gesture.begin(); gesture.keyframes(property, []); gesture.commit({ [property]: value }); gesture.finish() }} />}>
     <PropertyNumber view={view} clip={clip} frame={frame} gesture={gesture} />
   </PropertyRow>
 }

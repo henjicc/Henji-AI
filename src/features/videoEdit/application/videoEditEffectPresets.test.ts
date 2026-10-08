@@ -53,6 +53,17 @@ it('搜索名称、别名、分类、分组、说明，忽略大小写与全角�
   expect(filterVideoEditLibraryEntries(entries, '  ')).toEqual(entries)
 })
 
+it('贝塞尔过冲预设应用到较短片段，修剪后参数仍可持久保存', async () => {
+  const { owner, id, sequenceId, pictures } = await project()
+  const clip = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[0])!
+  const effect = makeVideoEditBuiltinEffect('gaussian_blur')
+  effect.builtin!.curves = { strength: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: (clip.duration - 1) * 2, value: 100, interpolation: 'linear' }] }
+  const preset = useVideoEditEffectLibraryStore.getState().savePreset('模糊动画', [effect])
+  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [clip.id], `preset:${preset.id}`)).not.toThrow()
+  const points = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects![0].builtin!.curves!.strength
+  expect(points.at(-1)).toMatchObject({ time: clip.duration - 1, value: 100 })
+  expect(points[0].easeValues).toEqual([0, 100])
+})
 it('收藏、参数组合、重命名与删除经本机设置持久保存；写失败不发布新状态', () => {
   const disk = storage(); const first = createVideoEditEffectLibraryStore(disk)
   first.getState().toggleFavorite('effect:gaussian_blur'); first.getState().toggleFavorite('transition:cross_dissolve')

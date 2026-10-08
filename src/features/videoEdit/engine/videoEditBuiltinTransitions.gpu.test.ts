@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { ShaderGraphSession } from './shaderEngines/shaderGraphSession'
+import { initShaderGraphTestGpu } from './shaderEngines/shaderGraphGpu.testing'
+import { shaderGraphTransitionProps, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import { isShaderGraphTransition } from '@/core/videoEdit/shaderGraph/transitions'
-import { init, type Gpu } from 'vgpu/node'
+import { type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { BLACK_HEX } from '@/core/theme/colorTokens'
 import { resolveVideoEditTransitionParams, VIDEO_EDIT_BUILTIN_TRANSITION_KINDS, type VideoEditBuiltinTransitionKind } from '@/core/videoEdit/transitionParams'
-import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
+import { videoEditTransitionRender, type VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 
 // 任务 4.7 视频过渡真实设备专项：过渡着色器在 Dawn 上编译，逐像素核对两端、中点与单侧过渡。npm run test:gpu 无条件执行。
@@ -17,7 +20,7 @@ let gpu: Gpu
 let device: Device
 let effects: VideoEditBuiltinEffectsGpu
 beforeAll(async () => {
-  gpu = await init(); device = gpu.gpu
+  gpu = await initShaderGraphTestGpu(); device = gpu.gpu
   const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
   effects = new VideoEditBuiltinEffectsGpu(device as unknown as GpuDevice, sampler, {
     allocate: (width, height, format) => device.createTexture({ size: [width, height], format: format as 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_DST }) as unknown as GpuTexture,
@@ -56,6 +59,30 @@ const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels
 const near = (actual: number[], expected: number[], tolerance = 3): void => { actual.forEach((value, index) => expect(Math.abs(value - expected[index]), `${actual} ≈ ${expected}`).toBeLessThanOrEqual(tolerance)) }
 
 describe('剪辑视频过渡（真实设备）', () => {
+  it('转场内部帧贝塞尔参数进入真实 GPU；同进度不同参数产生不同画面（内置与 shaders）', async () => {
+    const outgoing = solid(RED); const incoming = solid(BLUE)
+    for (const kind of ['flash', 'shaders.LinearWipe'] as const) {
+      const parameter = kind === 'flash' ? 'intensity' : 'angle'
+      const range = kind === 'flash' ? 100 : 180
+      const transition = { id: 'animated', kind, durationFrames: 11, frameCurves: { [parameter]: [{ time: 0, value: 0, interpolation: 'bezier' as const, bezier: [1 / 3, 0, 2 / 3, 0] as [number, number, number, number] }, { time: 10, value: range, interpolation: 'linear' as const }] } }
+      const render = videoEditTransitionRender({ start: 100, end: 111, transition }, 105)
+      if (render.kind !== 'builtin') throw new Error('需要参数转场输入。')
+      expect(render.input.params[parameter]).toBeCloseTo(range / 8, 5)
+      const output = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture
+      const shader = isShaderGraphTransition(kind) ? await ShaderGraphSession.create(device as unknown as GpuDevice, shaderGraphTransitionSpec(kind)) : undefined
+      const draw = async (input: VideoEditBuiltinTransitionInput): Promise<void> => {
+        if (shader && isShaderGraphTransition(input.kind)) await shader.render({ timeSeconds: .5, width: W, height: H, input: outgoing, second: incoming, output, outputFormat: 'rgba8unorm', props: new Map([['fx', shaderGraphTransitionProps(input.kind, input.params, input.progress)]]) })
+        else await effects.renderTransition(input, outgoing, incoming, output, { width: W, height: H, format: 'rgba8unorm' })
+      }
+      await draw(render.input)
+      const animated = await read(output)
+      await draw({ ...render.input, params: { ...render.input.params, [parameter]: range } })
+      const constant = await read(output)
+      expect(animated.some((value, index) => Math.abs(value - constant[index]) > 10), kind).toBe(true)
+      output.destroy(); shader?.dispose()
+    }
+    outgoing.destroy(); incoming.destroy()
+  })
   it('全部过渡在设备上编译；默认参数下进度 0 是前一段、进度 1 是后一段', async () => {
     for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS.filter(value => !isShaderGraphTransition(value))) {
       for (const [x, y] of [[1, 1], [W / 2, H / 2], [W - 2, H - 2]]) {

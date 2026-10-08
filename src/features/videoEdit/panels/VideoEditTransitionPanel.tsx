@@ -10,10 +10,10 @@ import { videoEditFps } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_TRANSITION_PRESETS, videoEditTransitionAlignmentFields, videoEditTransitionAlignmentOf, videoEditTransitionFramesBeforeCut, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import { deleteVideoEditTransition, updateVideoEditTransition } from '../application/videoEditCompositing'
 import { selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, updateVideoEditTransitionParams, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
-import { resolveVideoEditTransitionParams, videoEditTransitionParamDefinitions } from '@/core/videoEdit/transitionParams'
+import { evaluateVideoEditTransitionParams, videoEditTransitionParamDefinitions } from '@/core/videoEdit/transitionParams'
 import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
 import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
-import type { VideoEditInstance } from '../application/videoEditService'
+import { subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { timelineTimecode } from '../timeline/timelineGeometry'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
 
@@ -29,11 +29,12 @@ const ALIGNMENTS: Array<{ value: VideoEditTransitionAlignment; label: string }> 
 ]
 export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({ instance, sequence, onError }: Props): React.ReactElement | null {
   useSyncExternalStore(subscribeVideoEditTransitionSelection, videoEditTransitionSelectionVersion)
+  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const projectId = instance.document.id
   const transitionId = selectedVideoEditTransitionId(instance)
   const transition = sequence.transitions?.find(value => value.id === transitionId)
   const action = useVideoEditCompositeAction(instance, JSON.stringify([projectId, sequence.id, transitionId ?? null]), onError)
-  const gesture = useVideoEditBuiltinParamGesture(projectId, JSON.stringify([sequence.id, transitionId ?? null]), (changes, handle) => { if (transitionId && changes.params) updateVideoEditTransitionParams(projectId, sequence.id, transitionId, changes.params, handle) }, onError)
+  const gesture = useVideoEditBuiltinParamGesture(projectId, JSON.stringify([sequence.id, transitionId ?? null, transition?.kind]), (changes, handle) => { if (transitionId) updateVideoEditTransitionParams(projectId, sequence.id, transitionId, changes.params ?? {}, handle, changes.curves) }, onError)
   if (!transition) return null
   const params = videoEditTransitionParamDefinitions(transition.kind)
   let window: ReturnType<typeof videoEditTransitionWindow> | undefined
@@ -69,7 +70,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
         }} />
     </UiFormRow>}
     {params.length > 0 && <div className="flex flex-col" data-video-edit-transition-params={transition.kind}>
-      <VideoEditBuiltinParamRows params={params} values={resolveVideoEditTransitionParams(transition.kind, transition.parameters)} gesture={gesture} />
+      <VideoEditBuiltinParamRows params={params} values={evaluateVideoEditTransitionParams(transition, instance.frame - (window?.start ?? 0))} gesture={gesture} animation={window ? { projectId, curves: transition.frameCurves, start: window.start, duration: transition.durationFrames, frame: instance.frame } : undefined} />
     </div>}
     <div className="flex items-center gap-2">
       <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null), false) }}><Trash2 size={14} aria-hidden="true" />删除过渡</UiButton>

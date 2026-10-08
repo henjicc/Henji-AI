@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { changeVideoEditSequenceSettings, videoEditDocumentSchema, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
-import { applyVideoEditTransitionPairs, dragVideoEditTransition, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount, videoEditTransitionRender, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS } from './transitions'
+import { applyVideoEditTransitionPairs, dragVideoEditTransition, retimeVideoEditTransitions, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount, videoEditTransitionRender, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS } from './transitions'
 import { WHITE_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_BUILTIN_TRANSITION_KINDS, VIDEO_EDIT_TRANSITION_PARAMS, validateVideoEditTransitionParams } from './transitionParams'
 import { reconcileVideoEditTimedContent } from './timedContent'
@@ -14,6 +14,50 @@ import { validateCodeMaterialDocument, videoEditCodeReferences } from './codeMat
 import { codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
 import { prepareCodeMaterialParameters, evaluateCodeMaterialParameters } from './codeMaterialAnimation'
 import { offsetVideoEditSource } from './time'
+import type { VideoEditKeyframes } from './keyframes'
+import { SHADER_GRAPH_TRANSITION_PRESETS } from './shaderGraph/transitions'
+
+it('内置与 shaders 转场按内部帧求参数，校验范围/时刻/离散插值，保存后曲线不丢', () => {
+  const { document, sequence } = fixture()
+  const feather: VideoEditKeyframes = [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 0, 2 / 3, 0] }, { time: 8, value: 80, interpolation: 'linear' }]
+  const transition = videoEditTransitionSchema.parse({ ...sequence.transitions![0], kind: 'wipe', durationFrames: 9, frameCurves: { feather } })
+  const window = videoEditTransitionWindow(sequence, transition)
+  expect(videoEditTransitionRender(window, window.start + 4)).toMatchObject({ kind: 'builtin', input: { params: { feather: expect.closeTo(10, 5) }, progress: .5 } })
+  const invalid = (frameCurves: unknown) => videoEditTransitionSchema.safeParse({ ...transition, frameCurves }).success
+  expect(invalid({ feather: [{ time: 9, value: 10, interpolation: 'linear' }] })).toBe(false)
+  expect(invalid({ feather: [{ time: 0, value: 500, interpolation: 'linear' }] })).toBe(false)
+  expect(invalid({ direction: [{ time: 0, value: 'from_top', interpolation: 'bezier' }] })).toBe(false)
+  expect(invalid({ progress: feather })).toBe(false); expect(invalid({ feather: [] })).toBe(false)
+  let animatedShaders = 0
+  for (const preset of SHADER_GRAPH_TRANSITION_PRESETS) {
+    const parameter = VIDEO_EDIT_TRANSITION_PARAMS[preset.kind].find(param => param.type === 'number' && param.animatable !== false)
+    if (!parameter) continue
+    animatedShaders++
+    const value = Number(parameter.default)
+    const shader = videoEditTransitionSchema.parse({ ...transition, kind: preset.kind, frameCurves: { [parameter.key]: feather.map(point => ({ ...point, value })) } })
+    expect(videoEditTransitionRender({ ...window, transition: shader }, window.start + 4)).toMatchObject({ kind: 'builtin', input: { params: { [parameter.key]: value } } })
+  }
+  expect(animatedShaders).toBeGreaterThan(0)
+  sequence.transitions = [transition]
+  const read = videoEditDocumentSchema.parse(JSON.parse(JSON.stringify(document)))
+  expect(read.sequences[0].transitions![0].frameCurves).toEqual({ feather })
+})
+
+it('转场移动、时长拖动、同种替换、断开边界与帧率转换保留并重排曲线；换种类清除', () => {
+  const { sequence } = fixture()
+  const transition = videoEditTransitionSchema.parse({ ...sequence.transitions![0], kind: 'wipe', durationFrames: 9, frameCurves: { feather: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 8, value: 80, interpolation: 'ease' }] } })
+  sequence.transitions = [transition]
+  expect(dragVideoEditTransition(sequence, transition.id, 'move', 2).frameCurves).toEqual(transition.frameCurves)
+  const resized = dragVideoEditTransition(sequence, transition.id, 'out', 4)
+  expect(resized.frameCurves!.feather.at(-1)!.time).toBe(resized.durationFrames - 1)
+  const same = applyVideoEditTransitionPairs(sequence, [{ leftClipId: 'left', rightClipId: 'right', medium: 'video' }], { kind: () => 'wipe', durationFrames: 15 }).sequence.transitions![0]
+  expect(same.frameCurves!.feather.at(-1)!.time).toBe(14)
+  expect(applyVideoEditTransitionPairs(sequence, [{ leftClipId: 'left', rightClipId: 'right', medium: 'video' }], { kind: () => 'flash', durationFrames: 15 }).sequence.transitions![0].frameCurves).toBeUndefined()
+  const detached = retimeVideoEditTransitions(sequence, { ...sequence, clips: sequence.clips.map(clip => clip.id === 'right' ? { ...clip, start: clip.start + 10 } : clip) }).transitions![0]
+  expect(detached.leftClipId).toBeUndefined(); expect(detached.rightClipId).toBe('right'); expect(detached.frameCurves).toEqual(transition.frameCurves)
+  const converted = changeVideoEditSequenceSettings(sequence, { frameRate: { numerator: 30, denominator: 1 } }).transitions![0]
+  expect(converted.frameCurves!.feather.at(-1)!.time).toBeLessThan(converted.durationFrames)
+})
 
 function fixture() {
   const document = createVideoEditDocument('转场剪辑'); const sequence = document.sequences[0]

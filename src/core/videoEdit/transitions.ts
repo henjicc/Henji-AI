@@ -4,8 +4,9 @@ import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './docu
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditSourceSeconds } from './time'
 import { advanceVideoEditClipSource, videoEditClipHeadRoom, videoEditClipTailRoom } from './clipSpeed'
-import { describeVideoEditTransitionParams, isVideoEditBuiltinTransitionKind, resolveVideoEditTransitionParams, videoEditTransitionParamsIssue, type VideoEditBuiltinTransitionKind } from './transitionParams'
+import { describeVideoEditTransitionParams, isVideoEditBuiltinTransitionKind, evaluateVideoEditTransitionParams, assertVideoEditTransitionCurves, videoEditTransitionParamsIssue, type VideoEditBuiltinTransitionKind } from './transitionParams'
 import type { VideoEditBuiltinParams } from './builtinEffects'
+import { videoEditCurvesSchema, type VideoEditCurves } from './keyframes'
 import { SHADER_GRAPH_TRANSITION_PRESETS } from './shaderGraph/transitions'
 
 /**
@@ -50,12 +51,26 @@ export const videoEditTransitionSchema = z.object({
   /** 只在自定义起点时使用：过渡在切点之前的帧数。 */
   framesBeforeCut: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(),
   /** 带参数的视频过渡（擦除、推动等，见 `transitionParams.ts`）的参数；可只写一部分，缺的键按默认值。 */
+  frameCurves: videoEditCurvesSchema.optional(),
   parameters: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(64)])).optional(),
 }).strict().superRefine((transition, ctx) => {
   const issue = videoEditTransitionParamsIssue(transition.kind, videoEditTransitionPreset(transition.kind).name, transition.parameters)
   if (issue) ctx.addIssue({ code: 'custom', message: issue, path: ['parameters'] })
+  try { assertVideoEditTransitionCurves(transition) } catch (error) { ctx.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '转场关键帧无效。', path: ['frameCurves'] }) }
 })
 export type VideoEditTransition = z.infer<typeof videoEditTransitionSchema>
+/** Duration edits preserve parameter animation at the same normalized progress. */
+export function resizeVideoEditTransition(transition: VideoEditTransition, durationFrames: number, convert?: (time: number) => number): VideoEditTransition {
+  if (durationFrames === transition.durationFrames && !convert) return transition
+  const frameCurves: VideoEditCurves | undefined = transition.frameCurves && Object.fromEntries(Object.entries(transition.frameCurves).map(([key, points]) => {
+    const unique = new Map(points.map(point => {
+      const time = Math.max(0, Math.min(durationFrames - 1, convert ? convert(point.time) : Math.round(point.time * (durationFrames - 1) / (transition.durationFrames - 1))))
+      return [time, { ...point, time }]
+    }))
+    return [key, [...unique.values()].sort((a, b) => a.time - b.time)]
+  }))
+  return { ...transition, durationFrames, ...(frameCurves ? { frameCurves } : {}) }
+}
 /**
  * 过渡在时间线上的窗口。单侧过渡的 `left` 与 `right` 是同一个片段，`side` 说明它在片段的哪一端：
  * `in` 在入点（从空白淡入），`out` 在出点（淡出到空白）；普通过渡没有 `side`。
@@ -184,7 +199,7 @@ export function videoEditTransitionRender(window: Pick<VideoEditTransitionWindow
   const kind = window.transition.kind
   if (!isVideoEditBuiltinTransitionKind(kind)) return { kind: 'mix', ...videoEditTransitionMix(window, frame) }
   const progress = videoEditTransitionAmount(window, frame)
-  return { kind: 'builtin', input: { kind, params: resolveVideoEditTransitionParams(kind, window.transition.parameters), progress, ...(window.side === 'in' ? { emptyOutgoing: true } : window.side === 'out' ? { emptyIncoming: true } : {}) } }
+  return { kind: 'builtin', input: { kind, params: evaluateVideoEditTransitionParams(window.transition, frame - window.start), progress, ...(window.side === 'in' ? { emptyOutgoing: true } : window.side === 'out' ? { emptyIncoming: true } : {}) } }
 }
 /** 黑场／白场过渡经过的纯色（预乘 RGBA）；交叉溶解没有。 */
 export function videoEditTransitionDipColor(kind: VideoEditTransitionKind): [number, number, number, number] | undefined {
@@ -257,8 +272,8 @@ export function validateVideoEditTransitions(document: VideoEditDocument, read?:
 /** 只带存在的片段字段（单侧过渡不写另一侧，旧文件不受影响）。 */
 function withClips(transition: VideoEditTransition, leftClipId: string | undefined, rightClipId: string | undefined): VideoEditTransition {
   // 字段顺序固定（与持久化一致），未改动的拖动不会因键序不同被当成一次编辑。
-  const { id, kind, durationFrames, alignment, framesBeforeCut, parameters } = transition
-  return { id, kind, ...(leftClipId ? { leftClipId } : {}), ...(rightClipId ? { rightClipId } : {}), durationFrames, ...(alignment ? { alignment } : {}), ...(framesBeforeCut !== undefined ? { framesBeforeCut } : {}), ...(parameters ? { parameters } : {}) }
+  const { id, kind, durationFrames, alignment, framesBeforeCut, parameters, frameCurves } = transition
+  return { id, kind, ...(leftClipId ? { leftClipId } : {}), ...(rightClipId ? { rightClipId } : {}), durationFrames, ...(alignment ? { alignment } : {}), ...(framesBeforeCut !== undefined ? { framesBeforeCut } : {}), ...(parameters ? { parameters } : {}), ...(frameCurves ? { frameCurves } : {}) }
 }
 /** 单侧过渡：去掉对齐字段（整段在片段内，对齐不起作用）。 */
 function singleSided(transition: VideoEditTransition, clipId: string, side: VideoEditTransitionSide): VideoEditTransition {
@@ -311,7 +326,7 @@ export function retimeVideoEditTransitions(before: Pick<VideoEditSequence, 'clip
   for (const transition of [...transitions]) {
     if (!touched.has(transition.id) || !videoEditTransitionSide(transition)) continue
     const fit = videoEditTransitionFit({ clips: next.clips, transitions }, transition, transition.durationFrames)
-    transitions = fit ? transitions.map(value => value === transition ? { ...transition, durationFrames: fit.durationFrames } : value) : transitions.filter(value => value !== transition)
+    transitions = fit ? transitions.map(value => value === transition ? resizeVideoEditTransition(transition, fit.durationFrames) : value) : transitions.filter(value => value !== transition)
   }
   return { ...next, transitions }
 }
@@ -404,7 +419,7 @@ export function applyVideoEditTransitionPairs(sequence: VideoEditSequence, pairs
     const replaced = transitions.filter(value => atEditPoint(value, pair)); const previous = replaced[0]
     const kind = options.kind?.(pair.medium) ?? VIDEO_EDIT_DEFAULT_TRANSITIONS[pair.medium]
     // 同种过渡再次放上去时保留已调好的参数；换了种类按新种类的默认值。
-    const base: VideoEditTransition = { id: previous?.id ?? crypto.randomUUID(), kind, durationFrames: fit.durationFrames, ...(pair.leftClipId && pair.rightClipId ? videoEditTransitionAlignmentFields(fit.durationFrames, fit.framesBeforeCut) : {}), ...(previous?.kind === kind && previous.parameters ? { parameters: previous.parameters } : {}) }
+    const base: VideoEditTransition = { id: previous?.id ?? crypto.randomUUID(), kind, durationFrames: fit.durationFrames, ...(pair.leftClipId && pair.rightClipId ? videoEditTransitionAlignmentFields(fit.durationFrames, fit.framesBeforeCut) : {}), ...(previous?.kind === kind && previous.parameters ? { parameters: previous.parameters } : {}), ...(previous?.kind === kind && previous.frameCurves ? { frameCurves: resizeVideoEditTransition(previous, fit.durationFrames).frameCurves } : {}) }
     const transition = withClips(base, pair.leftClipId, pair.rightClipId)
     transitions = previous ? transitions.flatMap(value => value === previous ? [transition] : replaced.includes(value) ? [] : [value]) : [...transitions, transition]
     ids.push(transition.id)
@@ -427,7 +442,7 @@ export function dragVideoEditTransition(sequence: Pick<VideoEditSequence, 'clips
     let durationFrames = transition.durationFrames
     if (window.side === 'in' && mode === 'out') durationFrames = Math.min(upper, Math.max(window.start + 2, window.end + delta)) - window.start
     if (window.side === 'out' && mode === 'in') durationFrames = window.end - Math.max(lower, Math.min(window.end - 2, window.start + delta))
-    return { ...transition, durationFrames }
+    return resizeVideoEditTransition(transition, durationFrames)
   }
   let start = window.start; let end = window.end
   if (mode === 'in') start = Math.max(lower, Math.min(end - 2, window.cut, window.start + delta))
@@ -439,7 +454,8 @@ export function dragVideoEditTransition(sequence: Pick<VideoEditSequence, 'clips
     start += bounded; end += bounded
   }
   const durationFrames = end - start
-  return withClips({ id: transition.id, kind: transition.kind, durationFrames, ...videoEditTransitionAlignmentFields(durationFrames, window.cut - start), ...(transition.parameters ? { parameters: transition.parameters } : {}) }, transition.leftClipId, transition.rightClipId)
+  const alignment = videoEditTransitionAlignmentFields(durationFrames, window.cut - start)
+  return withClips({ ...resizeVideoEditTransition(transition, durationFrames), alignment: alignment.alignment, framesBeforeCut: alignment.framesBeforeCut }, transition.leftClipId, transition.rightClipId)
 }
 
 const videoKinds = VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === 'video').map(preset => preset.kind) as [VideoEditTransitionKind, ...VideoEditTransitionKind[]]

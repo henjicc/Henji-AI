@@ -48,7 +48,7 @@ function patchDocument(sequenceId: string, clipId: string, patch: VideoEditClipP
         const time = frame - clip.start
         if (time < 0 || time >= clip.duration) throw new Error(`请将播放头放在片段内（${clip.start}–${clip.start + clip.duration - 1} 帧）再编辑关键帧。`)
         Object.assign(result, { [key]: clip[key] })
-        result.curves = { ...result.curves, [key]: putVideoEditKeyframe(clip.curves[key], { time, value: patch[key]!, interpolation: clip.curves[key]?.find(point => point.time === time)?.interpolation ?? 'linear' }) }
+        result.curves = { ...result.curves, [key]: putVideoEditKeyframe(clip.curves[key], { ...clip.curves[key]?.find(point => point.time === time), easeRange: undefined, easeValues: undefined, time, value: patch[key]!, interpolation: clip.curves[key]?.find(point => point.time === time)?.interpolation ?? 'linear' }) }
       }
       return result
     }) }

@@ -16,6 +16,10 @@ const context = { time: 0, localTime: 0, sequenceTime: 0, width: 1920, height: 1
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
 const measure = (request: Parameters<typeof layoutCodeText>[0]) => layoutCodeText(request, text => text.length * request.fontSize)
 const rect = 'rect({id:"box",x:100,y:100,width:200,height:100,fill:[1,1,1,1]})'
+it('元素覆盖的源时间曲线也使用左点的贝塞尔控制点', () => {
+  const value = codeElementOverridesSchema.parse({ box: { curves: { dx: [{ id: 'a', ...time(0), value: 0, interpolation: 'bezier', bezier: [1 / 3, 0, 2 / 3, 0] }, { id: 'b', ...time(1e6), value: 100, interpolation: 'linear' }] } } }).box
+  expect(evaluateCodeElementOverride(value, time(500000)).dx).toBeCloseTo(12.5, 5)
+})
 it('作者变换之后绕元素中心缩放、旋转，最后平移；绘制命中与包围盒一致且不改IR', () => {
   const program = compileCodeMaterial(source(`return [${rect}];`)); const before = JSON.stringify(program)
   const commands = evaluateCodeMaterial(program, context, {}, { measureText: measure, sourceTime: time(0), elementOverrides: { box: { scale: 2, rotation: 90, dx: 10, dy: 20 } } })
@@ -78,6 +82,11 @@ it('作者已有旋转时非等比角点缩放沿元素轴，固定对角且不�
   expect(opposite[0]).toBeCloseTo(original[0]); expect(opposite[1]).toBeCloseTo(original[1])
   expect(values.scaleX).toBeCloseTo(2); expect(values.scaleY).toBeCloseTo(1)
   expect(next.matrix[0] * next.matrix[2] + next.matrix[1] * next.matrix[3]).toBeCloseTo(0)
+})
+it('元素贝塞尔过冲按已有数字与RGBA范围夹取，不中断绘制', () => {
+  const curve = [{ id: 'a', ...time(0), value: 0, interpolation: 'bezier' as const, bezier: [1 / 3, 3, 2 / 3, 3] as [number, number, number, number] }, { id: 'b', ...time(1000000), value: 1, interpolation: 'linear' as const }]
+  const value = codeElementOverridesSchema.parse({ box: { curves: { opacity: curve, fill: curve.map((point, i) => ({ ...point, id: `fill${i}`, value: i ? [1, 1, 1, 1] : [0, 0, 0, 0] })) } } }).box
+  expect(evaluateCodeElementOverride(value, time(500000))).toMatchObject({ opacity: 1, fill: [1, 1, 1, 1] })
 })
 it('代码资产编码/导入默认值/新片段复制保留覆盖，并保持片段编辑独立', () => {
   const code = source(`return [${rect}];`); const program = compileCodeMaterial(code)

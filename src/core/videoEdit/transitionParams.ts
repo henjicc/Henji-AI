@@ -8,6 +8,7 @@ import { WHITE_HEX } from '../theme/colorTokens'
 import { describeVideoEditParams, normalizeVideoEditParamSet, videoEditPercentParam as percent, videoEditStrengthParam as strength, type VideoEditBuiltinParam, type VideoEditBuiltinParams } from './builtinEffects'
 import type { VideoEditTransitionKind } from './transitions'
 import { SHADER_GRAPH_TRANSITION_KINDS, SHADER_GRAPH_TRANSITION_PARAMS } from './shaderGraph/transitions'
+import { evaluateVideoEditKeyframes, videoEditKeyframeValues, videoEditCurvesSchema, type VideoEditCurves } from './keyframes'
 
 /** 走内置效果着色器的视频过渡种类（顺序即效果面板顺序）。 */
 export const VIDEO_EDIT_BUILTIN_TRANSITION_KINDS = ['wipe', 'push', 'slide', 'cross_zoom', 'blur_dissolve', 'flash', 'iris_round', ...SHADER_GRAPH_TRANSITION_KINDS] as const
@@ -57,6 +58,28 @@ export function isVideoEditBuiltinTransitionKind(kind: VideoEditTransitionKind |
 /** 这种过渡的参数登记；交叉溶解、黑场、白场与音频过渡没有参数。 */
 export function videoEditTransitionParamDefinitions(kind: VideoEditTransitionKind): readonly VideoEditBuiltinParam[] {
   return isVideoEditBuiltinTransitionKind(kind) ? VIDEO_EDIT_TRANSITION_PARAMS[kind] : []
+}
+/** Transition-local frames use the same tracks as clip/effect animation. */
+export function evaluateVideoEditTransitionParams(transition: { kind: VideoEditTransitionKind; parameters?: Readonly<Record<string, unknown>>; frameCurves?: VideoEditCurves }, time: number): VideoEditBuiltinParams {
+  const values = resolveVideoEditTransitionParams(transition.kind, transition.parameters)
+  for (const param of videoEditTransitionParamDefinitions(transition.kind)) values[param.key] = evaluateVideoEditKeyframes(transition.frameCurves?.[param.key], time, values[param.key])
+  // Overshooting tangents are allowed; parameter bounds still apply at consumption.
+  return normalizeVideoEditTransitionParams(transition.kind, transition.kind, values, undefined, true)
+}
+
+export function assertVideoEditTransitionCurves(transition: { kind: VideoEditTransitionKind; durationFrames: number; frameCurves?: VideoEditCurves }): void {
+  const definitions = videoEditTransitionParamDefinitions(transition.kind)
+  for (const [key, points] of Object.entries(videoEditCurvesSchema.parse(transition.frameCurves ?? {}))) {
+    const parameter = definitions.find(param => param.key === key)
+    if (!parameter) throw new Error(`转场参数 ${key} 不存在；可用：${definitions.map(param => param.key).join('、') || '无可动画参数'}。`)
+    if (parameter.animatable === false) throw new Error(`转场参数 ${key} 不支持关键帧。`)
+    if (!points.length) throw new Error(`转场参数 ${key} 的关键帧不能为空；关闭动画请省略这个参数。`)
+    for (const point of points) {
+      if (point.time >= transition.durationFrames) throw new Error(`转场参数 ${key} 的 time 越界：允许转场内 0–${transition.durationFrames - 1} 帧。`)
+      for (const value of videoEditKeyframeValues(point)) validateVideoEditTransitionParams(transition.kind, transition.kind, { [key]: value })
+      if (['boolean', 'enum', 'curve', 'lut'].includes(parameter.type) && point.interpolation !== 'hold') throw new Error(`转场参数 ${key} 只能使用 hold 定格插值。`)
+    }
+  }
 }
 /** 合并并校验（界面拖动 `clamp` 时数值夹进范围，助手写入越界直接报错）；返回完整参数表。 */
 export function normalizeVideoEditTransitionParams(kind: VideoEditTransitionKind, name: string, changes: Readonly<Record<string, unknown>> = {}, base?: Readonly<Record<string, unknown>>, clamp = false): VideoEditBuiltinParams {

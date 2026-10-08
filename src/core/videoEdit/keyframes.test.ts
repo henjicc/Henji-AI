@@ -5,8 +5,27 @@ import { evaluateVideoEditClip, evaluateVideoEditKeyframes, sliceVideoEditCurves
 import { videoEditClipCenterPosition, videoEditClipToFrame, videoEditFrameToClip } from './clipGeometry'
 import { applyVideoEditRateStretch } from './clipSpeedEdits'
 import { defaultVideoEditTextStyle } from './text'
+import { BLACK_HEX, WHITE_HEX } from '../theme/colorTokens'
+import { codeCubicBezier } from './codeMaterial/motion'
 
 const curve = (interpolation: 'linear' | 'hold' | 'ease'): VideoEditKeyframes => [{ time: 0, value: 0, interpolation }, { time: 100, value: 1, interpolation }]
+it('自定义贝塞尔反求时间，允许过冲；修剪与再次修剪保留原曲线（含等值端点）', () => {
+  const points: VideoEditKeyframes = [{ time: 0, value: 0, interpolation: 'bezier', bezier: [.2, 2, .8, -1] }, { time: 100, value: 1, interpolation: 'linear' }]
+  expect(evaluateVideoEditKeyframes(points, 25, 0)).toBeCloseTo(codeCubicBezier(.2, 2, .8, -1, .25), 8)
+  const sliced = sliceVideoEditCurves({ opacity: points }, 20, 61)!.opacity
+  const again = sliceVideoEditCurves({ opacity: sliced }, 10, 40)!.opacity
+  for (let time = 0; time <= 39; time += .25) expect(evaluateVideoEditKeyframes(again, time, 0)).toBeCloseTo(evaluateVideoEditKeyframes(points, time + 30, 0), 7)
+  expect(videoEditKeyframesSchema.parse(again)).toEqual(again)
+  const equal: VideoEditKeyframes = [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, -2] }, { time: 100, value: 1, interpolation: 'linear' }]
+  const equalSlice = sliceVideoEditCurves({ x: equal }, 25, 76)!.x
+  for (let time = 0; time <= 75; time += .5) expect(evaluateVideoEditKeyframes(equalSlice, time, 0)).toBeCloseTo(evaluateVideoEditKeyframes(equal, time + 25, 0), 7)
+  expect(() => videoEditKeyframesSchema.parse([{ ...points[0], easeRange: [.25, 1] }])).toThrow('easeValues')
+  expect(() => videoEditKeyframesSchema.parse([{ ...points[0], bezier: [-.1, 0, 1, 1] }])).toThrow()
+  expect(() => videoEditKeyframesSchema.parse([{ ...points[0], bezier: [0, Infinity, 1, 1] }])).toThrow()
+  const colors: VideoEditKeyframes = [{ time: 0, value: BLACK_HEX, interpolation: 'bezier', bezier: [.2, 3, .8, 3] }, { time: 10, value: WHITE_HEX, interpolation: 'linear' }]
+  expect(evaluateVideoEditKeyframes(colors, 5, '')).toBe(WHITE_HEX)
+  expect(evaluateVideoEditKeyframes([{ time: 0, value: `${BLACK_HEX}00`, interpolation: 'linear' }, { time: 10, value: `${WHITE_HEX}ff`, interpolation: 'linear' }], 5, '')).toBe(`${BLACK_HEX.slice(0, 1)}80808080`)
+})
 function fixture(): ReturnType<typeof createVideoEditDocument> {
   const document = createVideoEditDocument('关键帧')
   document.items.push({ id: 'item', kind: 'text', name: '标题' })
@@ -14,6 +33,22 @@ function fixture(): ReturnType<typeof createVideoEditDocument> {
   return document
 }
 
+it('过冲在消费范围内夹取，拆分后仍可保存且与原曲线逐帧一致', () => {
+  const document = fixture(); const original = document.sequences[0].clips[0]
+  original.curves = { opacity: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: 100, value: 1, interpolation: 'linear' }] }
+  original.effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {}, curves: { strength: [{ ...original.curves.opacity![0], value: 0 }, { time: 100, value: 100, interpolation: 'linear' }] } } }]
+  expect(evaluateVideoEditClip(original, 50).opacity).toBe(1)
+  const sequence = splitVideoEditClip(document.sequences[0], 'clip', 50)
+  expect(videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })).toBeTruthy()
+  for (let frame = 0; frame <= 100; frame++) {
+    const clipped = evaluateVideoEditClip(sequence.clips[frame < 50 ? 0 : 1], frame)
+    const before = evaluateVideoEditClip(original, frame)
+    expect(clipped.opacity).toBeCloseTo(before.opacity, 7)
+    expect(clipped.effects![0].builtin!.params.strength).toBeCloseTo(Number(before.effects![0].builtin!.params.strength), 5)
+  }
+  sequence.clips[1].curves!.opacity![0].easeValues = [0, 99]
+  expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })).toThrow()
+})
 it('停用固有分区按默认渲染，保存参数和关键帧，再打开恢复', () => {
   const clip = fixture().sequences[0].clips[0]
   Object.assign(clip, { x: .4, y: .2, scale: 2, rotation: 45, anchorX: .1, anchorY: .9, opacity: .5, volume: .2, disabledIntrinsicSections: ['motion', 'opacity', 'audio', 'text', 'textStyle'] })

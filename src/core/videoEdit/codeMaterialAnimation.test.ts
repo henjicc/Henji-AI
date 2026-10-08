@@ -11,6 +11,15 @@ const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator
 const point = (id: string, sourceInUs: number, value: CodeMaterialKeyframe['value'], interpolation: CodeMaterialKeyframe['interpolation'] = 'linear'): CodeMaterialKeyframe => ({ id, ...time(sourceInUs), value, interpolation })
 const instance = (curves: CodeMaterialCurves, parameters: CodeMaterialInstance['parameters'] = {}): CodeMaterialInstance => ({ definitionId: 'd', versionId: 'v', parameters, curves })
 const evaluate = (curves: CodeMaterialCurves, us: number) => evaluateCodeMaterialParameters(prepareCodeMaterialParameters(program, instance(curves)), time(us))
+it('代码参数与RGBA共用自定义贝塞尔，源时钟读写保留控制点，离散值继续拒绝平滑插值', () => {
+  const curves: CodeMaterialCurves = { amount: [{ ...point('a', 0, 0, 'bezier'), bezier: [1 / 3, 0, 2 / 3, 0] }, point('b', 1e6, 10)], ink: [{ ...point('c', 0, [0, 0, 0, 0], 'bezier'), bezier: [1 / 3, 0, 2 / 3, 0] }, point('d', 1e6, [1, 1, 1, 1])] }
+  const saved = codeMaterialCurvesSchema.parse(JSON.parse(JSON.stringify(curves)))
+  expect(evaluate(saved, 500000).amount).toBeCloseTo(1.25, 6)
+  expect(evaluate(saved, 500000).ink).toEqual(expect.arrayContaining([expect.closeTo(.125, 6)]))
+  const overshoot = Object.fromEntries(Object.entries(curves).map(([key, points]) => [key, [{ ...points[0], bezier: [1 / 3, 3, 2 / 3, 3] }, points[1]]])) as CodeMaterialCurves
+  expect(evaluate(overshoot, 500000)).toMatchObject({ amount: 10, ink: [1, 1, 1, 1] })
+  expect(() => evaluate({ flag: [point('flag', 0, false, 'bezier')] }, 0)).toThrow('保持')
+})
 
 describe('连续源时刻的有界代码参数曲线', () => {
   it('数值与RGBA按线性/基础缓动求值，端点之外保持端值', () => {

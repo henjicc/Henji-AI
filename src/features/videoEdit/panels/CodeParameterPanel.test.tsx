@@ -232,7 +232,7 @@ it('关键帧使用精确源时刻，未编辑 NTSC 余量不变，移动/值/�
   expect(editor().curves.amount[0]).toMatchObject(time(2500000))
   const pointValue = view.getByRole('spinbutton', { name: '强度关键帧1值' }); fireEvent.focus(pointValue); fireEvent.change(pointValue, { target: { value: '8.5' } }); fireEvent.blur(pointValue)
   expect(editor().curves.amount[0].value).toBe(8.5); expect(editor().code.parameters.amount).toBe(5)
-  fireEvent.click(view.getByRole('button', { name: '强度关键帧1插值' })); fireEvent.click(view.getByText('缓动'))
+  fireEvent.click(view.getByRole('button', { name: '强度关键帧1插值' })); fireEvent.click(view.getByText('缓入缓出'))
   expect(editor().curves.amount[0].interpolation).toBe('ease')
   fireEvent.click(view.getByRole('button', { name: '删除强度关键帧1' })); expect(editor().curves.amount).toBeUndefined()
   fireEvent.click(view.getByRole('button', { name: '为强度添加关键帧' })); const beforeReset = owner.past.length
@@ -328,4 +328,19 @@ it('内置位置双分量拖动一步撤销，Esc 和隐藏恢复两个参数', 
   expect(effect().builtin.params).toEqual(original); expect(owner.past).toHaveLength(before)
   control = view.getByRole('slider', { name: field.title }); fireEvent.pointerDown(control, { pointerId: 83, button: 0, clientX: .2, clientY: .3 }); view.rerender(<BuiltinHost visible={false} />)
   expect(effect().builtin.params).toEqual(original); expect(owner.past).toHaveLength(before); expect(onError).not.toHaveBeenCalled()
+})
+
+it('代码关键帧复用贝塞尔双手柄，编辑当前帧的值保留切线', () => {
+  addVideoEditCodeKeyframe(editor().target, 'amount', time(0))
+  const view = render(<View />)
+  fireEvent.click(view.getByRole('button', { name: '展开强度关键帧' }))
+  fireEvent.click(view.getByRole('button', { name: '强度关键帧1插值' }))
+  fireEvent.click(view.getByText('自定义贝塞尔'))
+  const value = editor().curves.amount[0].bezier
+  expect(value).toEqual([1 / 3, 0, 2 / 3, 1])
+  expect(view.getByRole('slider', { name: '强度关键帧1缓动手柄1' })).toBeTruthy()
+  const range = view.getByRole('slider', { name: '强度滑杆' })
+  fireEvent.pointerDown(range); fireEvent.change(range, { target: { value: '8' } }); fireEvent.pointerUp(range)
+  expect(editor().curves.amount[0]).toMatchObject({ value: 8, interpolation: 'bezier', bezier: value })
+  expect(onError).not.toHaveBeenCalled()
 })

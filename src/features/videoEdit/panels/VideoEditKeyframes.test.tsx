@@ -17,6 +17,8 @@ import { videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 import { useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
+import { selectVideoEditTransition } from '../application/videoEditTransitions'
+import { videoEditTransitionRender, videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import * as codeTrial from '../application/videoEditCodeTrial'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
@@ -56,6 +58,76 @@ function Pen({ owner }: { owner: VideoEditInstance }): React.ReactElement {
   const sequence = getActiveVideoEditSequence(owner)
   return <VideoEditTimelineKeyframes projectId={owner.document.id} sequenceId={sequence.id} clip={sequence.clips[0]} pen={owner.tool === 'pen'} width={200} height={60} pixels={2} onError={error => { throw error }} />
 }
+it('转场面板参数关键帧与通用属性同源：按内部帧添加、求值、拒绝非法写入与读回', async () => {
+  const { owner, id, clipId } = await project()
+  editVideoProject(id, document => {
+    document.sequences[0].transitions = [{ id: 'animated-wipe', kind: 'wipe', rightClipId: clipId, durationFrames: 11 }]
+    return document
+  })
+  selectVideoEditTransition(id, 'animated-wipe')
+  const transition = () => getActiveVideoEditSequence(owner).transitions![0]
+  const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
+  fireEvent.click(ui.getByRole('button', { name: '启用羽化关键帧' }))
+  expect(transition().frameCurves!.feather).toMatchObject([{ time: 0, value: 10 }])
+  act(() => setVideoEditView(id, { frame: 10 }))
+  fireEvent.click(ui.getByRole('button', { name: '添加羽化关键帧' }))
+  expect(transition().frameCurves!.feather.map(point => point.time)).toEqual([0, 10])
+  const app = createApplicationHarness(); const ref = { kind: 'video_edit.transition', id: `${id}:animated-wipe` }
+  try {
+  const curves = { feather: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 0, 2 / 3, 0] }, { time: 10, value: 80, interpolation: 'linear' }] }
+  await act(async () => { expect(await app.change(ref, { 'video_edit.transition.frame_curves': curves })).toMatchObject({ ok: true }) })
+  expect((await app.read(ref, ['video_edit.transition.frame_curves'])).properties).toMatchObject({ 'video_edit.transition.frame_curves': curves })
+  expect(videoEditTransitionRender(videoEditTransitionWindow(getActiveVideoEditSequence(owner), transition()), 5)).toMatchObject({ input: { params: { feather: expect.closeTo(10, 5) } } })
+  act(() => setVideoEditView(id, { frame: 5 }))
+  expect((ui.getByRole('spinbutton', { name: '羽化' }) as HTMLInputElement).value).toBe('10')
+  const input = ui.getByRole('spinbutton', { name: '羽化' }); const history = owner.past.length
+  fireEvent.focus(input); fireEvent.change(input, { target: { value: '30' } }); fireEvent.blur(input)
+  expect(transition().frameCurves!.feather.find(point => point.time === 5)?.value).toBe(30)
+  expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(id)); expect(transition().frameCurves).toEqual(curves)
+  const before = structuredClone(transition())
+  expect((await app.change(ref, { 'video_edit.transition.frame_curves': { feather: [{ time: 11, value: 1, interpolation: 'linear' }] } })).ok).toBe(false)
+  expect((await app.change(ref, { 'video_edit.transition.frame_curves': { direction: [{ time: 0, value: 'from_top', interpolation: 'bezier' }] } })).ok).toBe(false)
+  expect(transition()).toEqual(before)
+  await act(async () => { expect(await app.change(ref, { 'video_edit.transition.duration_frames': 6 })).toMatchObject({ ok: true }) })
+  expect(transition().frameCurves!.feather.at(-1)!.time).toBe(5)
+  await act(async () => { expect(await app.change(ref, { 'video_edit.transition.kind': 'flash' })).toMatchObject({ ok: true }) })
+  expect(transition().frameCurves).toBeUndefined()
+  } finally { app.dispose() }
+})
+
+it('贝塞尔属性手柄与时间线切线拖动共享曲线，一次撤销、取消不留历史，改数值保留控制点', async () => {
+  const { owner, id, clip } = await project()
+  editVideoProject(id, document => { document.sequences[0].clips[0].curves = { opacity: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [.2, .3, .8, .9] }, { time: 50, value: 1, interpolation: 'linear' }] }; return document })
+  const panel = render(<Panel owner={owner} />)
+  fireEvent.click(within(panel.container).getByRole('button', { name: '不透明度关键帧轨与插值' }))
+  const handle = within(document.body).getByRole('slider', { name: '不透明度缓动手柄1' })
+  const svg = handle.closest('svg')!
+  vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 200, height: 100, right: 200, bottom: 100, x: 0, y: 0, toJSON: () => ({}) })
+  const before = owner.past.length
+  fireEvent.pointerDown(handle, { pointerId: 19, button: 0 })
+  fireEvent.pointerMove(svg, { pointerId: 19, clientX: 80, clientY: 30 })
+  fireEvent.pointerMove(svg, { pointerId: 19, clientX: 100, clientY: 40 })
+  fireEvent.pointerUp(svg, { pointerId: 19 })
+  expect(owner.past).toHaveLength(before + 1)
+  expect(clip().curves!.opacity![0].bezier).not.toEqual([.2, .3, .8, .9])
+  act(() => undoVideoEdit(id)); expect(clip().curves!.opacity![0].bezier).toEqual([.2, .3, .8, .9])
+  fireEvent.pointerDown(handle, { pointerId: 20, button: 0 })
+  fireEvent.pointerMove(svg, { pointerId: 20, clientX: 90, clientY: 20 })
+  fireEvent.keyDown(svg, { key: 'Escape' })
+  expect(clip().curves!.opacity![0].bezier).toEqual([.2, .3, .8, .9]); expect(owner.past).toHaveLength(before)
+  panel.unmount()
+  act(() => { owner.tool = 'pen' })
+  const pen = render(<Pen owner={owner} />); const track = pen.container.querySelector('svg')!
+  vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 200, height: 60, right: 200, bottom: 60, x: 0, y: 0, toJSON: () => ({}) })
+  const tangent = within(pen.container).getByLabelText('不透明度贝塞尔出切线')
+  fireEvent.pointerDown(tangent, { pointerId: 21, button: 0 })
+  fireEvent.pointerMove(track, { pointerId: 21, clientX: 40, clientY: 40 })
+  fireEvent.pointerUp(track, { pointerId: 21 })
+  expect(clip().curves!.opacity![0].bezier![0]).toBe(.4)
+  expect(owner.past).toHaveLength(before + 1)
+  act(() => undoVideoEdit(id)); expect(clip().curves!.opacity![0].bezier).toEqual([.2, .3, .8, .9])
+})
 it('固有效果不展示颜色和亮度', async () => {
   const { owner } = await project()
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)

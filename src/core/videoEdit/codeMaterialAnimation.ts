@@ -7,12 +7,13 @@ import { validateCodeMaterialParameterValue, validateCodeMaterialParameters } fr
 import type { CodeMaterialMetadata } from './codeMaterialDocument'
 import type { CodeMaterialInstance } from './codeMaterialPersistence'
 import type { VideoEditSourceTime } from './time'
+import { videoEditBezierSchema, videoEditInterpolationSchema } from './keyframeInterpolation'
 
 const sourceRemainder = z.object({ numerator: z.number().int().min(0).max(999_999), denominator: z.number().int().min(1).max(1_000_000) }).strict().refine(value => value.numerator < value.denominator, '源时刻余量必须小于一微秒。')
 const value = codeMaterialAnimatedParameterValueSchema
 export const codeMaterialKeyframeSchema = z.object({
   id: z.string().min(1).max(100), sourceInUs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), sourceRemainder,
-  value, interpolation: z.enum(['linear', 'hold', 'ease']),
+  value, interpolation: videoEditInterpolationSchema, bezier: videoEditBezierSchema.optional(),
 }).strict()
 export const codeMaterialCurvesSchema = z.record(codeMaterialParameterKeySchema, z.array(codeMaterialKeyframeSchema).min(1)).superRefine((curves, context) => {
   const ids = Object.values(curves).flat().map(point => point.id)
@@ -68,7 +69,7 @@ export function evaluateCodeMaterialParameters(prepared: PreparedCodeMaterialPar
     while (high - low > 1) { const middle = (low + high) >> 1; if (compareCodeMaterialTime(points[middle], time) <= 0) low = middle; else high = middle }
     const left = points[low]; const right = points[high]
     const fraction = intervalFraction(time, left, right)
-    values[key] = interpolateCodeMaterialParameter(declaration, left.value, right.value, fraction, left.interpolation)
+    values[key] = interpolateCodeMaterialParameter(declaration, left.value, right.value, fraction, left.interpolation, left.bezier)
   }
   return values
 }

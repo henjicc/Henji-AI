@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { CODE_V3_LIMITS, CodeMaterialError, type CodeDrawCommand, type CodeMatrix, type CodeTextMeasurer } from './codeMaterial/contract'
 import { codeLocalBounds, codeMultiply, codeTransform } from './codeMaterial/geometry'
-import { codeMaterialKeyframeSchema, compareCodeMaterialTime } from './codeMaterialAnimation'
-import { interpolateVideoEditKeyframe } from './keyframeInterpolation'
+import { codeMaterialKeyframeSchema, compareCodeMaterialTime, type CodeMaterialKeyframe } from './codeMaterialAnimation'
+import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe } from './keyframeInterpolation'
 import type { VideoEditSourceTime } from './time'
 
 const number = z.number().finite()
@@ -56,8 +56,9 @@ export function evaluateCodeElementOverride(value: CodeElementOverride, time: Vi
     else {
       while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (compareCodeMaterialTime(points[mid], time) <= 0) lo = mid; else hi = mid }
       const seconds = (at: VideoEditSourceTime): number => at.sourceInUs + at.sourceRemainder.numerator / at.sourceRemainder.denominator
-      result[key] = interpolateVideoEditKeyframe(points[lo].value, points[hi].value, (seconds(time) - seconds(points[lo])) / (seconds(points[hi]) - seconds(points[lo])), points[lo].interpolation)
+      result[key] = interpolateVideoEditKeyframe(points[lo].value, points[hi].value, (seconds(time) - seconds(points[lo])) / (seconds(points[hi]) - seconds(points[lo])), points[lo].interpolation, undefined, points[lo].bezier)
     }
+    result[key] = clampVideoEditAnimationValue(result[key] as CodeMaterialKeyframe['value'], codeElementOverrideValuesSchema.shape[key as CodeElementOverrideKey])
   }
   return codeElementOverrideValuesSchema.parse(result)
 }

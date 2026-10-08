@@ -11,14 +11,14 @@ import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent } from './timedContent'
 import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia } from './compositing'
-import { videoEditTransitionSchema, validateVideoEditTransitions } from './transitions'
+import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
 import { videoEditCodeImageGenerationSchema } from './codeImageGeneration'
 import { videoEditLabelSchema } from './labels'
 import { videoEditTrackerSchema, videoEditClipFollowSchema, VIDEO_EDIT_MAX_TRACKERS } from './tracking'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from './audioChannels'
 import { videoEditInPlaceRecordsSchema } from './inPlacePersistence'
-import { videoEditClipCurvesSchema, assertVideoEditKeyframeTimes, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, VIDEO_EDIT_ANIMATABLE_KEYS } from './keyframes'
+import { videoEditClipCurvesSchema, assertVideoEditKeyframeTimes, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, VIDEO_EDIT_ANIMATABLE_KEYS, videoEditClipAnimatedValueSchemas, videoEditKeyframeValues } from './keyframes'
 import { videoEditTextStyleSchema } from './text'
 import { colorLutAssetSchema } from './colorLutAsset'
 import { videoEditAudioRoleSchema } from './audioDucking'
@@ -64,10 +64,10 @@ const videoEditClipStateSchema = z.object({
   disabledIntrinsicSections: z.array(videoEditIntrinsicSectionSchema).refine(values => new Set(values).size === values.length, '固有分区不能重复。').optional(),
   linkId: identifier.optional(), groupId: identifier.optional(), sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(), audioMapping: videoEditAudioMappingSchema.optional(),
   start: frame, duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
-  x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
-  scale: z.number().min(0.01).max(4), rotation: z.number().min(-360).max(360),
-  anchorX: z.number().min(0).max(1).optional(), anchorY: z.number().min(0).max(1).optional(), curves: videoEditClipCurvesSchema.optional(),
-  opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), audioRole: videoEditAudioRoleSchema.optional(), text: z.string().max(2000),
+  x: videoEditClipAnimatedValueSchemas.x, y: videoEditClipAnimatedValueSchemas.y,
+  scale: videoEditClipAnimatedValueSchemas.scale, rotation: videoEditClipAnimatedValueSchemas.rotation,
+  anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipCurvesSchema.optional(),
+  opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, audioRole: videoEditAudioRoleSchema.optional(), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
   fadeInFrames: z.number().int().min(1).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(), fadeOutFrames: z.number().int().min(1).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(),
@@ -178,7 +178,7 @@ export const videoEditDocumentSchema = z.object({
       if (clip.textStyle && clip.kind !== 'text') issue('文字样式只能用于文字片段。')
       try {
         assertVideoEditKeyframeTimes(clip.curves, clip.duration, `片段“${clip.name}”`)
-        for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) for (const point of clip.curves?.[key] ?? []) videoEditClipStateSchema.shape[key].parse(point.value)
+        for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) for (const point of clip.curves?.[key] ?? []) for (const value of videoEditKeyframeValues(point)) videoEditClipAnimatedValueSchemas[key].parse(value)
         for (const effect of clip.effects ?? []) assertVideoEditKeyframeTimes(effect.builtin?.curves, clip.duration, `效果“${effect.name}”`)
         if (clip.kind === 'adjustment' && Object.keys(clip.curves ?? {}).some(key => key !== 'opacity')) issue('调整图层只允许不透明度关键帧。')
       } catch (error) { issue(error instanceof Error ? error.message : '片段关键帧无效。') }
@@ -377,6 +377,6 @@ export function changeVideoEditSequenceSettings(sequence: VideoEditSequence, set
     annotations: sequence.annotations.map(mark => mapVideoEditAnnotationTime(mark, convert)),
     ...(sequence.markers ? { markers: sequence.markers.map(mark => ({ ...mark, frame: convert(mark.frame) })) } : {}),
     ...(sequence.captions ? { captions: sequence.captions.map(caption => ({ ...caption, start: convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) })) } : {}),
-    ...(sequence.transitions ? { transitions: sequence.transitions.map(transition => ({ ...transition, durationFrames: convert(transition.durationFrames), ...(transition.framesBeforeCut !== undefined ? { framesBeforeCut: Math.min(convert(transition.durationFrames), convert(transition.framesBeforeCut)) } : {}) })) } : {}),
+    ...(sequence.transitions ? { transitions: sequence.transitions.map(transition => ({ ...resizeVideoEditTransition(transition, convert(transition.durationFrames), convert), ...(transition.framesBeforeCut !== undefined ? { framesBeforeCut: Math.min(convert(transition.durationFrames), convert(transition.framesBeforeCut)) } : {}) })) } : {}),
   })
 }
