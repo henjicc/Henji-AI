@@ -90,7 +90,8 @@ describe('application capability handler coverage', () => {
      * 这两条是**属性写入**而不是集合增删：素材的库归属存在 asset.library_refs 上，
      * 走 append/remove 两个 operation，实体本身既没新建也没删除，声明 update 是准确的。
      */
-    const justifiedExceptions = new Set(['add_asset_to_library', 'remove_asset_from_library'])
+    // remove_image_edit_region 是“移除画面里的物体”：改写图片像素（新增补丁层），不删除任何实体，effect 正是 update。
+    const justifiedExceptions = new Set(['add_asset_to_library', 'remove_asset_from_library', 'remove_image_edit_region'])
     const rules: { pattern: RegExp; effect: ApplicationOperationImpact['effect'] }[] = [
       { pattern: /^(?:create|add|new|duplicate)_/, effect: 'create' },
       { pattern: /^(?:delete|remove)_/, effect: 'delete' },

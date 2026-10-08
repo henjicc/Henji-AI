@@ -769,6 +769,8 @@
         "select-ellipse": "Elliptical selection",
         "select-polygon": "Polygon lasso",
         "select-brush": "Selection brush",
+        "remove": "Remove",
+        "repair": "Repair",
         "select-lasso": "Lasso selection",
         "annotation": "Annotation tools",
         "annotation-text": "Text annotation",
@@ -842,6 +844,19 @@
         "hidden": "The selected raster layer or its group is hidden.",
         "singular": "The selected raster layer has a non-invertible transform.",
         "failed": "The raster stroke was not saved: {{reason}}"
+      },
+      "repair": {
+        "quality": "Repair quality", "fast": "Fast", "fine": "Fine",
+        "remove-selection": "Remove selected content",
+        "download-hint": "Download for first model repair · {{size}}",
+        "download": "Download repair model", "cancel-download": "Cancel download",
+        "drag-source": "Drag the selection to a clean area; release to repair",
+        "select-first": "Create a selection before choosing a clean source",
+        "selecting": "Preparing selection · {{percent}}%",
+        "preparing": "Preparing image · {{percent}}%",
+        "downloading": "Downloading repair model · {{percent}}%",
+        "processing": "Repairing · {{percent}}%",
+        "committing": "Applying repair"
       },
       "selection": {
         "feather": "Feather",

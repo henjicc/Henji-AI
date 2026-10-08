@@ -8,7 +8,7 @@ import { assertInpaintRoi, type ImageInpaintJob, type ImageInpaintQuality, type 
 /** 资源引用只在宿主内部解析；不接受本地路径、远程 URL 或任意张量。 */
 export interface InpaintImageRef { id: string }
 export interface InpaintResourceLease { path: string; release(): Promise<void> }
-export interface ImageInpaintInput { image: InpaintImageRef; mask: InpaintImageRef; roi: InpaintRoi; quality: ImageInpaintQuality }
+export interface ImageInpaintInput { image: InpaintImageRef; mask: InpaintImageRef; roi: InpaintRoi; quality: ImageInpaintQuality; sample?: InpaintImageRef }
 export interface ImageInpaintOutput extends Omit<ImageInpaintResult, 'outputPath'> { patch: InpaintImageRef }
 export interface ImageInpaintProgress { stage: 'resolving' | 'downloading' | 'processing' | 'publishing'; done: number; total: number }
 export interface InpaintResourceAccess {
@@ -49,14 +49,14 @@ export class ImageInpaintService {
     if (this.disposed) return Promise.reject(new LocalInferenceFailure('cancelled', '图片修补服务已关闭。'))
     try {
       assertInpaintRoi(input.roi)
-      for (const [field, ref] of Object.entries({ image: input.image, mask: input.mask })) {
+      for (const [field, ref] of Object.entries({ image: input.image, mask: input.mask, ...(input.sample !== undefined ? { sample: input.sample } : {}) })) {
         if (!ref || typeof ref.id !== 'string' || !ref.id.trim() || Object.keys(ref).some(key => key !== 'id')) throw new Error(`${field} 必须是图片资源引用。`)
       }
       if (!['fast', 'fine', 'blemish'].includes(input.quality)) throw new Error('quality 必须是 fast、fine 或 blemish。')
-      if (Object.keys(input).some(key => !['image', 'mask', 'roi', 'quality'].includes(key))) throw new Error('图片修补输入包含未知字段。')
+      if (Object.keys(input).some(key => !['image', 'mask', 'roi', 'quality', 'sample'].includes(key))) throw new Error('图片修补输入包含未知字段。')
     } catch (error) { return Promise.reject(error) }
     // 避免调用者拖动选区或切换质量档改变已经提交的作业。
-    const snapshot: ImageInpaintInput = { image: { ...input.image }, mask: { ...input.mask }, roi: { ...input.roi }, quality: input.quality }
+    const snapshot: ImageInpaintInput = { image: { ...input.image }, mask: { ...input.mask }, roi: { ...input.roi }, quality: input.quality, ...(input.sample ? { sample: { ...input.sample } } : {}) }
     const id = randomUUID(); const controller = new AbortController()
     const abort = (): void => { controller.abort(); this.deps.inference.cancel(id) }
     if (options.signal?.aborted) return Promise.reject(new LocalInferenceFailure('cancelled', '图片修补已取消。'))
@@ -77,18 +77,18 @@ export class ImageInpaintService {
     this.deps.log('info', '图片修补作业开始', 'image_inpaint.job.start', { requestId: id, quality: input.quality })
     try {
       report('resolving')
-      for (const ref of [input.image, input.mask]) { check(); leases.push(await this.deps.resources.acquire(ref)) }
+      for (const ref of [input.image, input.mask, ...(input.sample ? [input.sample] : [])]) { check(); leases.push(await this.deps.resources.acquire(ref)) }
       check()
-      const algorithm = input.quality === 'fine' ? 'lama' : input.quality === 'blemish' ? 'telea' : 'migan'
+      const algorithm = input.sample ? 'sample' : input.quality === 'fine' ? 'lama' : input.quality === 'blemish' ? 'telea' : 'migan'
       let model: ImageInpaintJob['model']
-      if (algorithm !== 'telea') {
+      if (algorithm !== 'telea' && algorithm !== 'sample') {
         report('downloading')
         const modelPath = await this.deps.ensureModel(algorithm === 'lama' ? 'image_inpainting_lama' : 'image_inpainting_migan')
         check(); model = { name: algorithm, path: modelPath }
       }
       file = await this.deps.temporaryPath(id)
       check()
-      const result = await this.deps.inference.inpaint({ id, sourcePath: leases[0].path, maskPath: leases[1].path, roi: input.roi,
+      const result = await this.deps.inference.inpaint({ id, sourcePath: leases[0].path, maskPath: leases[1].path, ...(input.sample ? { samplePath: leases[2].path } : {}), roi: input.roi,
         quality: input.quality, algorithm, model,
         // 固定 Carve FP32 图的 Fourier MatMul 在本机 DML 真跑失败；直接选 CPU，避免每次冷启动编译后再失败。
         // 保留其他平台现有 EP 顺序；图版本改变时需重新跑同输入对照再开放 DML。

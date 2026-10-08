@@ -769,6 +769,8 @@
         "select-ellipse": "椭圆选择",
         "select-polygon": "多边形套索",
         "select-brush": "画笔选区",
+        "remove": "移除",
+        "repair": "修补",
         "select-lasso": "套索选择",
         "annotation": "标注工具",
         "annotation-text": "文字标注",
@@ -842,6 +844,19 @@
         "hidden": "所选栅格图层或其所在组已隐藏，暂时不能绘制。",
         "singular": "所选栅格图层的变换不可逆，暂时不能绘制。",
         "failed": "栅格笔画未写入：{{reason}}"
+      },
+      "repair": {
+        "quality": "修复质量", "fast": "快速", "fine": "精细",
+        "remove-selection": "移除选区内容",
+        "download-hint": "首次模型修复需下载 · {{size}}",
+        "download": "下载修复模型", "cancel-download": "取消下载",
+        "drag-source": "把选区拖到干净区域，松开取样修补",
+        "select-first": "请先创建选区，再拖到干净区域",
+        "selecting": "正在准备选区 · {{percent}}%",
+        "preparing": "正在准备图片 · {{percent}}%",
+        "downloading": "正在下载修复模型 · {{percent}}%",
+        "processing": "正在修复 · {{percent}}%",
+        "committing": "正在应用修复"
       },
       "selection": {
         "feather": "羽化",

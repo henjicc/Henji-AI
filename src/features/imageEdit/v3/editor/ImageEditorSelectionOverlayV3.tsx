@@ -9,11 +9,14 @@ import { useImageEditorSessionStoreV3 } from '../store'
 import { mapAnnotationPointV3, invertAnnotationMatrixV3, multiplyAnnotationMatricesV3, resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
 import { captureEditorPointerV3, releaseEditorPointerV3, type CapturedEditorPointerV3 } from './pointerCaptureV3'
 import type { ImageEditorV3Controller } from './types'
+import { useImageEditorRepairV3 } from './ImageEditorRepairContextV3'
 
 export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller }): JSX.Element {
   const { t } = useTranslation('ui')
+  const repair = useImageEditorRepairV3()
   const theme = useThemeTokens()
   const canvas = useRef<HTMLCanvasElement>(null)
+  const sourceCanvas = useRef<HTMLCanvasElement>(null)
   const svg = useRef<SVGSVGElement>(null)
   const session = useImageEditorSessionStoreV3(s => s.sessions[controller.sessionId])
   const tool = session?.activeTool ?? 'move'
@@ -23,7 +26,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
   const gesture = useRef<{ tool: string; points: (readonly [number, number])[]; pointer?: CapturedEditorPointerV3; revision: number; selectionRevision: number } | null>(null)
   const draftFrame = useRef<number | null>(null)
   const snapshot = bus.getSnapshot()
-  const active = tool.startsWith('select-')
+  const active = tool.startsWith('select-') || ((tool === 'remove' || tool === 'repair') && !repair?.busy)
   const cancel = () => { const current = gesture.current; gesture.current = null; if (current?.pointer) releaseEditorPointerV3(current.pointer); if (draftFrame.current !== null) cancelAnimationFrame(draftFrame.current); draftFrame.current = null; setDraft([]) }
   useEffect(() => {
     cancel()
@@ -54,6 +57,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
       const pixels = ctx.createImageData(width, height)
       for (let i = 0; i < data.length; i++) pixels.data[i * 4 + 3] = Math.round(data[i] * 255)
       ctx.putImageData(pixels, 0, 0); ctx.globalCompositeOperation = 'source-in'; ctx.fillStyle = theme.colors.accent; ctx.fillRect(0, 0, width, height); ctx.globalCompositeOperation = 'source-over'
+      if (sourceCanvas.current && canvas.current) { sourceCanvas.current.width = width; sourceCanvas.current.height = height; sourceCanvas.current.getContext('2d')?.drawImage(canvas.current, 0, 0) }
     }).catch((cause: unknown) => { if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)) }).finally(() => client.dispose())
     return () => { abort.abort(); client.dispose() }
   }, [snapshot.selection, geometry, controller.document, theme])
@@ -66,8 +70,14 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
     if (!current || current.revision !== bus.getSnapshot().document.revision || current.selectionRevision !== bus.getSnapshot().selectionRevision) { cancel(); return }
     const inverse = invertAnnotationMatrixV3(geometry.sourceToOutput)
     const normalized = current.points.map(p => { const source = mapAnnotationPointV3(inverse, p); return { x: Math.max(0, Math.min(1, source[0] / controller.document.geometry.width)), y: Math.max(0, Math.min(1, source[1] / controller.document.geometry.height)) } })
+    if (current.tool === 'repair') {
+      if (!bus.getSnapshot().selection) { setError(t('imageEditor.v3.repair.select-first')); cancel(); return }
+      const a = normalized[0], b = normalized.at(-1)!
+      void repair?.run({ action: 'repair', sourceOffset: { x: b.x - a.x, y: b.y - a.y } })
+      cancel(); return
+    }
     let shape: ImageEditSelectionIntentShapeV3
-    if (current.tool === 'select-brush') shape = { type: 'brush', points: normalized, radius: Math.min(1, (session?.toolSettings.brushSize ?? 32) / 2 / Math.min(controller.document.geometry.width, controller.document.geometry.height)) }
+    if (current.tool === 'select-brush' || current.tool === 'remove') shape = { type: 'brush', points: normalized, radius: Math.min(1, (session?.toolSettings.brushSize ?? 32) / 2 / Math.min(controller.document.geometry.width, controller.document.geometry.height)) }
     else if (current.tool === 'select-lasso' || current.tool === 'select-polygon') {
       if (normalized.length < 3) { cancel(); return }
       shape = { type: 'lasso', points: normalized }
@@ -77,12 +87,18 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
       // 输出矩形经旋转/镜像后仍是源轴对齐矩形；旋转仅支持正交文档方向。
       shape = { type: current.tool === 'select-ellipse' ? 'ellipse' : 'rectangle', x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) }
     }
-    bus.setSelection(appendImageEditSelectionV3(bus.getSnapshot().selection, shape, session?.toolSettings.selectionCombineMode ?? 'replace'))
+    if (current.tool === 'remove') void repair?.run({ action: 'remove', selection: appendImageEditSelectionV3(null, shape, 'replace') })
+    else bus.setSelection(appendImageEditSelectionV3(bus.getSnapshot().selection, shape, session?.toolSettings.selectionCombineMode ?? 'replace'))
     cancel()
   }
   function down(event: PointerEvent<SVGSVGElement>) {
     if (!active || event.button !== 0) return
     setError(null)
+    if (tool === 'repair') {
+      if (!snapshot.selection) { setError(t('imageEditor.v3.repair.select-first')); return }
+      const context = canvas.current?.getContext('2d'), p = point(event)
+      if (context && canvas.current && !context.getImageData(Math.min(canvas.current.width - 1, Math.max(0, Math.floor(p[0] / geometry.width * canvas.current.width))), Math.min(canvas.current.height - 1, Math.max(0, Math.floor(p[1] / geometry.height * canvas.current.height))), 1, 1).data[3]) return
+    }
     if (tool === 'select-polygon' && gesture.current) { gesture.current.points.push(point(event)); setDraft([...gesture.current.points]); return }
     gesture.current = { tool, points: [point(event)], revision: controller.document.revision, selectionRevision: snapshot.selectionRevision,
       ...(tool !== 'select-polygon' ? { pointer: captureEditorPointerV3(event.currentTarget, event.pointerId) } : {}) }
@@ -92,7 +108,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
     const current = gesture.current
     if (!current?.pointer || current.pointer.pointerId !== event.pointerId) return
     const p = point(event)
-    if (tool === 'select-rect' || tool === 'select-ellipse') current.points = [current.points[0], p]
+    if (tool === 'select-rect' || tool === 'select-ellipse' || tool === 'repair') current.points = [current.points[0], p]
     else {
       const rect = event.currentTarget.getBoundingClientRect()
       const samples = event.nativeEvent.getCoalescedEvents?.() ?? []
@@ -106,6 +122,8 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
   const first = draft[0], last = draft.at(-1)
   return <>
     <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full opacity-30" data-independent-selection />
+    <canvas ref={sourceCanvas} className={`pointer-events-none absolute inset-0 h-full w-full opacity-30 ${tool === 'repair' && first && last ? '' : 'hidden'}`}
+      style={{ transform: first && last ? `translate(${(last[0] - first[0]) / geometry.width * 100}%, ${(last[1] - first[1]) / geometry.height * 100}%)` : undefined }} data-repair-source />
     {/* icon-token-allow: 数据驱动的选区几何预览，不是图标。 */}
     <svg ref={svg} viewBox={`0 0 ${geometry.width} ${geometry.height}`} preserveAspectRatio="none" aria-label={t('imageEditor.v3.selection.overlay')}
       className={`absolute inset-0 h-full w-full touch-none ${active ? 'pointer-events-auto' : 'pointer-events-none'}`}
@@ -113,7 +131,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
       onDoubleClick={() => { if (tool === 'select-polygon') finish() }} onPointerCancel={cancel} onLostPointerCapture={cancel}>
       {first && last ? tool === 'select-rect' ? <rect x={Math.min(first[0], last[0])} y={Math.min(first[1], last[1])} width={Math.abs(first[0] - last[0])} height={Math.abs(first[1] - last[1])} className="fill-accent/10 stroke-accent-text" />
         : tool === 'select-ellipse' ? <ellipse cx={(first[0] + last[0]) / 2} cy={(first[1] + last[1]) / 2} rx={Math.abs(first[0] - last[0]) / 2} ry={Math.abs(first[1] - last[1]) / 2} className="fill-accent/10 stroke-accent-text" />
-          : <polyline points={draft.map(p => p.join(',')).join(' ')} className="fill-none stroke-accent-text" strokeWidth={tool === 'select-brush' ? session?.toolSettings.brushSize : 1.5} strokeLinecap="round" strokeLinejoin="round" /> : null}
+          : <polyline points={draft.map(p => p.join(',')).join(' ')} className="fill-none stroke-accent-text" strokeWidth={tool === 'select-brush' || tool === 'remove' ? session?.toolSettings.brushSize : 1.5} strokeLinecap="round" strokeLinejoin="round" /> : null}
     </svg>
     {error ? <div className="absolute left-3 top-3"><UiError message={error} /></div> : null}
   </>

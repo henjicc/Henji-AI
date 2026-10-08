@@ -4,7 +4,7 @@ import type { LocalExecutionProvider } from '../providers'
 /** 内部像素坐标，基于已正向解码的 SDR/sRGB 图像；公开领域层负责把意图区域换算成 ROI。 */
 export interface InpaintRoi { left: number; top: number; width: number; height: number }
 export type ImageInpaintQuality = 'fast' | 'fine' | 'blemish'
-export type ImageInpaintAlgorithm = 'migan' | 'lama' | 'telea' | 'ns'
+export type ImageInpaintAlgorithm = 'migan' | 'lama' | 'telea' | 'ns' | 'sample'
 
 /** 闭合图片作业。路径仅由主进程资源解析器填充，不作为助手参数或任意 tensor 入口。 */
 export interface ImageInpaintJob {
@@ -12,6 +12,8 @@ export interface ImageInpaintJob {
   sourcePath: string
   /** 与源图正向尺寸一致的单通道灰度 PNG；0=保持，255=修复，灰度=融合覆盖率。 */
   maskPath: string
+  /** 指定来源修补：宿主已经按平移取样，与 ROI 同尺寸的 RGBA PNG。 */
+  samplePath?: string
   roi: InpaintRoi
   quality: ImageInpaintQuality
   algorithm: ImageInpaintAlgorithm

@@ -9,14 +9,18 @@ import { getImageEditorHostProfileV3 } from '../application/imageEditorHostProfi
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorSelectionOverlayV3 } from './ImageEditorSelectionOverlayV3'
 import type { ImageEditorV3Controller } from './types'
+import { appendImageEditSelectionV3 } from '@/core/imageEdit/v3/selection/session'
+
+const repairView = vi.hoisted(() => ({ busy: false, run: vi.fn(async () => undefined) }))
+vi.mock('./ImageEditorRepairContextV3', () => ({ useImageEditorRepairV3: () => repairView }))
 
 vi.mock('../execution/selectionRasterClientV3', () => ({ ImageEditSelectionRasterClientV3: class {
   async rasterize() { return new Float32Array(32 * 16) }
   dispose() {}
 } }))
-beforeEach(() => { useImageEditorSessionStoreV3.setState({ sessions: {} }); vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null) })
+beforeEach(() => { repairView.busy = false; repairView.run.mockClear(); useImageEditorSessionStoreV3.setState({ sessions: {} }); vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null) })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
-function setup(tool: 'select-rect' | 'select-polygon' | 'select-brush') {
+function setup(tool: 'select-rect' | 'select-polygon' | 'select-brush' | 'remove' | 'repair') {
   const document = createImageEditDocumentV3({ width: 32, height: 16, documentId: 'selection-gesture' })
   document.layers = [createImageEditRasterLayerV3('r', '原图')]
   const bus = new ImageEditCommandBusV3(document)
@@ -54,4 +58,24 @@ it('多边形单击添点、回车闭合；画笔取消指针不产生历史', (
   fireEvent.pointerCancel(brush.overlay, { pointerId: 4 })
   expect(brush.bus.getSnapshot().selection).toBeNull(); expect(brush.bus.getSnapshot().history.undoCount).toBe(0)
   brush.bus.dispose()
+})
+it('移除画笔松手调用同源作业，取消笔迹不调用且不污染独立选区历史', () => {
+  const { bus, overlay } = setup('remove')
+  fireEvent.pointerDown(overlay, { button: 0, pointerId: 1, clientX: 80, clientY: 40 })
+  fireEvent.pointerCancel(overlay, { pointerId: 1 }); expect(repairView.run).not.toHaveBeenCalled()
+  fireEvent.pointerDown(overlay, { button: 0, pointerId: 2, clientX: 80, clientY: 40 })
+  fireEvent.pointerUp(overlay, { pointerId: 2, clientX: 160, clientY: 80 })
+  expect(repairView.run).toHaveBeenCalledWith(expect.objectContaining({ action: 'remove', selection: expect.objectContaining({ operations: expect.any(Array) }) }))
+  expect(bus.getSnapshot().selection).toBeNull(); expect(bus.getSnapshot().history.undoCount).toBe(0); bus.dispose()
+})
+it('修补要求既有选区，拖动到来源仅传比例偏移，不改变选区', () => {
+  const { bus, overlay } = setup('repair')
+  fireEvent.pointerDown(overlay, { button: 0, pointerId: 1, clientX: 80, clientY: 40 })
+  fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 240, clientY: 120 }); expect(repairView.run).not.toHaveBeenCalled()
+  const selection = appendImageEditSelectionV3(null, { type: 'rectangle', x: 0.1, y: 0.1, width: 0.2, height: 0.2 }, 'replace')
+  act(() => bus.setSelection(selection))
+  fireEvent.pointerDown(overlay, { button: 0, pointerId: 2, clientX: 80, clientY: 40 })
+  fireEvent.pointerUp(overlay, { pointerId: 2, clientX: 240, clientY: 120 })
+  expect(repairView.run).toHaveBeenCalledWith({ action: 'repair', sourceOffset: { x: 0.5, y: 0.5 } })
+  expect(bus.getSnapshot().selection).toEqual(selection); bus.dispose()
 })

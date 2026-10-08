@@ -11,6 +11,8 @@ import {
   Scan,
   VectorSquare,
   ZoomIn,
+  WandSparkles,
+  Bandage,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -37,6 +39,8 @@ const TOOL_ICONS: Record<ImageEditorToolIdV3, LucideIcon> = {
   'select-lasso': LassoSelect,
   'select-polygon': LassoSelect,
   'select-brush': Paintbrush,
+  remove: WandSparkles,
+  repair: Bandage,
   'annotation-text': MessageSquareText,
   'annotation-callout': MessageSquareText,
   'annotation-arrow': ArrowUpRight,
@@ -63,6 +67,7 @@ const TOOL_GROUPS: readonly (readonly ToolRailEntryV3[])[] = [
   ['move', 'hand', 'zoom'],
   ['crop'],
   ['selection'],
+  ['remove', 'repair'],
   ['annotation'],
   ['raster-brush', 'eraser', 'mask-edit'],
 ]
@@ -134,7 +139,7 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
               const readiness = isAnnotation ? targetTool!.readiness : capabilities.get(id)!.readiness
               const Icon = isAnnotation ? MessageSquareText : TOOL_ICONS[id]
               const label = t(`imageEditor.v3.tools.${id}`)
-              const isRasterPaint = id === 'raster-brush' || id === 'eraser'
+              const isRasterPaint = id === 'raster-brush' || id === 'eraser' || id === 'remove' || id === 'repair'
               const disabled = readiness.state !== 'ready' || (isRasterPaint && !rasterBrushTarget.ready)
               const reason = resolveImageEditorReadinessReasonV3(readiness, t)
               const unavailableLabel = reason

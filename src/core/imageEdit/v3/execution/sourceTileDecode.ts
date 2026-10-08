@@ -1,4 +1,4 @@
-import { createFloat32PremultipliedRgbaTile, type Float32PremultipliedRgbaTile } from '../effects';
+import { createFloat32PremultipliedRgbaTile, type Float32PremultipliedRgbaTile } from '../effects/contracts';
 import type { ImageEditTransferFunctionV3, ImageEditWorkingSpaceV3 } from '../colorTypes';
 import {
   convertFloat32TileWorkingSpaceV3,

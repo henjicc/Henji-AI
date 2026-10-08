@@ -93,6 +93,10 @@ export function createImageEditorV3Api(
   nativePostMessage?: NativePostMessage,
 ): ImageEditorV3Platform {
   return {
+    repairRaster: request => nativeInvoke('imageEditorV3:repair:run', request),
+    readRepairProgress: request => nativeInvoke('imageEditorV3:repair:progress', request),
+    pinRepairResources: request => nativeInvoke('imageEditorV3:repair:pin', request),
+    releaseRepairResources: request => nativeInvoke('imageEditorV3:repair:release', request),
     listDocuments: (request) => nativeInvoke('imageEditorV3:document:list', request),
     loadDocument: (request) => nativeInvoke('imageEditorV3:document:load', request),
     saveDocument: (request) => nativeInvoke('imageEditorV3:document:save', request),

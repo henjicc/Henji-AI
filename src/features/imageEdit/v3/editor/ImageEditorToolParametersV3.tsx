@@ -10,6 +10,7 @@ import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { imageEditorSelectionAllowedCombineModesV3 } from './selectionMaskLayerV3'
 import type { ImageEditorV3Controller } from './types'
 import { ImageEditorSelectionParametersV3 } from './ImageEditorSelectionParametersV3'
+import { ImageEditorRepairParametersV3 } from './ImageEditorRepairParametersV3'
 
 const EMPTY_LAYER_IDS: readonly string[] = []
 
@@ -39,6 +40,7 @@ export function ImageEditorToolParametersV3({
   }, [allowedSelectionModes, controller.profile.id, controller.sessionId, selectionLike, session, setToolSetting])
 
   if (!session) return null
+  if (session.activeTool === 'remove' || session.activeTool === 'repair') return <ImageEditorRepairParametersV3 bus={bus} controller={controller} />
   if (selectionLike && controller.profile.id !== 'mask') return <ImageEditorSelectionParametersV3 bus={bus} controller={controller} />
   if (session.activeTool === 'crop') {
     return <ImageEditorCropParametersV3 controller={controller} bus={bus} />

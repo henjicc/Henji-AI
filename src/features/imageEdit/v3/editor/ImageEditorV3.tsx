@@ -11,6 +11,7 @@ import type { ImageEditorV3Props } from './types'
 import { useImageEditorControllerV3 } from './useImageEditorControllerV3'
 import { useImageEditorHistoryShortcutsV3 } from './useImageEditorHistoryShortcutsV3'
 import { createImageEditorDiagnosticSummaryV3 } from './imageEditorDiagnosticSummaryV3'
+import { ImageEditorRepairProviderV3 } from './ImageEditorRepairContextV3'
 
 function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const { controller, bus } = useImageEditorControllerV3(props)
@@ -30,6 +31,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   }, [controller.document, controller.sessionId, onEditorContextChange])
 
   return (
+    <ImageEditorRepairProviderV3 bus={bus} controller={controller}>
     <div
       ref={rootRef}
       tabIndex={-1}
@@ -82,6 +84,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
         )}
       </div>
     </div>
+    </ImageEditorRepairProviderV3>
   )
 }
 

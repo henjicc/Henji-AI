@@ -323,6 +323,11 @@ export interface ImageEditorV3StandaloneRasterExportResult extends ImageEditorV3
 export type ImageEditorV3RasterPublication = 'document-preview' | 'standalone-image'
 
 export interface ImageEditorV3Platform {
+  /** 有界 SDR 工作块；所有路径和临时文件只在宿主内解析。 */
+  repairRaster?(request: ImageEditorV3RepairRequest): Promise<{ patch: ImageEditorV3ResourceDescriptor; durationMs: number }>
+  readRepairProgress?(request: { requestId: string }): Promise<ImageEditorV3RepairProgress | null>
+  pinRepairResources?(request: { requestId: string; resourceRefs: ImageEditorV3ResourceRef[] }): Promise<void>
+  releaseRepairResources?(request: { requestId: string }): Promise<void>
   listDocuments(request: {
     requestId: string
     cursor?: string
@@ -517,3 +522,15 @@ export interface ImageEditorV3Platform {
   }): Promise<{ deletedResourceRefs: ImageEditorV3ResourceRef[]; reclaimedBytes: number }>
   cancelRequest(requestId: string): Promise<{ cancelled: boolean }>
 }
+
+export interface ImageEditorV3RepairRequest {
+  requestId: string
+  leaseId: string
+  width: number
+  height: number
+  rgba: ArrayBuffer
+  mask: ArrayBuffer
+  sample?: ArrayBuffer
+  quality: 'fast' | 'fine' | 'blemish'
+}
+export interface ImageEditorV3RepairProgress { stage: 'resolving' | 'downloading' | 'processing' | 'publishing'; done: number; total: number }

@@ -12,6 +12,8 @@ export type ImageEditorToolIdV3 =
   | 'select-lasso'
   | 'select-polygon'
   | 'select-brush'
+  | 'remove'
+  | 'repair'
   | 'annotation-text'
   | 'annotation-callout'
   | 'annotation-arrow'
@@ -118,6 +120,7 @@ const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('mask-edit'),
 ];
 const RASTER_PAINT_TOOLS = RASTER_TOOLS.filter(({ id }) => id !== 'mask-edit');
+const REPAIR_TOOLS = [ready('remove'), ready('repair')] as const;
 const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] =
   listCreatableImageEditOperationIdsV3('effect').map(ready);
 const HDR_LIMITATION: ImageEditorCapabilityReadinessV3 = {
@@ -130,7 +133,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
 > = {
   full: {
     id: 'full',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...REPAIR_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
@@ -160,7 +163,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   'canvas-edit': {
     id: 'canvas-edit',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...REPAIR_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],

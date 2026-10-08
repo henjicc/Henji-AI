@@ -88,4 +88,19 @@ describe('图片修补隔离内核', () => {
     expect(result.provider).toBe('wasm'); expect(d.openModel).not.toHaveBeenCalled()
     expect((await sharp(job.outputPath).metadata()).width).toBe(12)
   })
+  it('指定来源搬运真实纹理，保留非选区与 alpha；不调用模型，拒绝透明来源', async () => {
+    job.algorithm = 'sample'; delete job.model
+    job.samplePath = path.join(directory, 'sample.png')
+    const sample = Buffer.alloc(12 * 6 * 4, 200)
+    for (let i = 3; i < sample.length; i += 4) sample[i] = 255
+    await sharp(sample, { raw: { width: 12, height: 6, channels: 4 } }).png().toFile(job.samplePath)
+    const d = deps(); const result = await runImageInpaint(job, d)
+    expect(result.provider).toBe('wasm'); expect(d.openModel).not.toHaveBeenCalled()
+    const patch = await sharp(job.outputPath).raw().toBuffer()
+    expect(patch[((5 - 3) * 12 + 8 - 4) * 4]).toBe(200)
+    expect(patch[3]).toBe(73); expect(patch[0]).toBe(original[(3 * 20 + 4) * 4])
+    sample.fill(0)
+    await sharp(sample, { raw: { width: 12, height: 6, channels: 4 } }).png().toFile(job.samplePath)
+    await expect(runImageInpaint(job, d)).rejects.toThrow('透明')
+  })
 })

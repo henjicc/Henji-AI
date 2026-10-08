@@ -27,6 +27,7 @@ import {
 } from '../services/image-editor-v3'
 import { registerImageEditorV3RasterExportIpc } from './image-editor-v3-raster-export'
 import { registerImageEditorV3BrushTileIpc } from './image-editor-v3-brush-tiles'
+import { registerImageEditorV3RepairIpc } from './image-editor-v3-repair'
 import {
   normalizeImageEditorV3Document,
   parseImageEditorV3BasePayload,
@@ -85,6 +86,7 @@ interface ImageEditorV3Runtime {
   canvasLayers: CanvasLayerPackageService
 }
 let runtime: ImageEditorV3Runtime | undefined
+let disposeRepair: (() => void) | undefined
 // 图片导出写到用户选的位置（常在作品目录里），进行中不允许更换作品目录
 registerWorkRootBusyProbe('image_raster_export', { reason: '还有图片正在导出', isBusy: () => runtime?.rasterExports.hasActiveSessions() ?? false })
 const requestAdmission = new ImageEditorV3RequestAdmission()
@@ -360,6 +362,7 @@ export function registerImageEditorV3Ipc(): void {
     runRequest,
   })
   registerImageEditorV3BrushTileIpc({ store: getRuntime().brushTiles, guard, runRequest })
+  disposeRepair = registerImageEditorV3RepairIpc({ resources: getRuntime().resources, guard, runRequest })
   registerIpcHandler('imageEditorV3:document:list', parseImageEditorV3ListPayload, (payload, event) => (
     runRequest('document.list', payload.requestId, event.sender.id, async (signal) => {
       throwIfAborted(signal)
@@ -462,6 +465,7 @@ export function registerImageEditorV3Ipc(): void {
 }
 
 export async function disposeImageEditorV3Ipc(): Promise<void> {
+  disposeRepair?.(); disposeRepair = undefined
   requestAdmission.abortAll()
   const current = runtime
   runtime = undefined

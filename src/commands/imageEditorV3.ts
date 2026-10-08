@@ -295,6 +295,27 @@ export function cancelImageEditorV3Request(requestId: string): Promise<{ cancell
   return getPlatform().imageEditorV3.cancelRequest(requestId)
 }
 
+export async function repairImageEditorV3Raster(request: import('@/platform/contracts/imageEditorV3').ImageEditorV3RepairRequest, signal: AbortSignal, progress?: (value: import('@/platform/contracts/imageEditorV3').ImageEditorV3RepairProgress) => void): Promise<{ patch: import('@/platform/contracts/imageEditorV3').ImageEditorV3ResourceDescriptor; durationMs: number }> {
+  let reading = false
+  const timer = progress ? setInterval(() => {
+    if (reading || signal.aborted) return
+    reading = true
+    void getPlatform().imageEditorV3.readRepairProgress?.({ requestId: request.requestId }).then(value => { if (value && !signal.aborted) progress(value) }).catch(error => logger.warn('修复进度读取失败', { event: 'image_edit.repair.progress.failed', error })).finally(() => { reading = false })
+  }, 250) : undefined
+  try {
+    return await runCancellable(request.requestId, signal, platform => { if (!platform.repairRaster) throw new Error('图片修复不可用，请更新应用'); return platform.repairRaster(request) })
+  } finally { if (timer) clearInterval(timer) }
+}
+
+export async function pinImageEditorV3RepairResources(requestId: string, resourceIds: readonly string[]): Promise<void> {
+  const pin = getPlatform().imageEditorV3.pinRepairResources
+  if (!pin) throw new Error('图片修复资源保护不可用，请更新应用')
+  await pin({ requestId, resourceRefs: resourceIds.map(toResourceRef) })
+}
+export async function releaseImageEditorV3RepairResources(requestId: string): Promise<void> {
+  await getPlatform().imageEditorV3.releaseRepairResources?.({ requestId })
+}
+
 export function forkImageEditorV3Document(
   request: Parameters<ImageEditorV3Platform['forkDocument']>[0],
   signal?: AbortSignal,

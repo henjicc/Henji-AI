@@ -3,6 +3,9 @@ import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application
 import { splitImageEditV3LayerRef, imageEditV3LayerRef, findImageEditV3LiveLayer } from '../v3/application/imageEditDocumentRefs'
 import { applyImageEditSelectionCapability } from '@/core/application-control/domains/imageEdit/imageEditSelectionCapabilities'
 import { applyImageEditSelectionV3 } from '../v3/application/imageEditSelectionServiceV3'
+import { IMAGE_EDIT_REPAIR_CAPABILITIES, repairImageEditRegionCapability, imageEditRepairInputSchema } from '@/core/application-control/domains/imageEdit/imageEditRepairCapabilities'
+import { repairImageEditRegionV3 } from '../v3/application/imageEditRepairServiceV3'
+import { imageEditV3DocumentRef } from '../v3/application/imageEditDocumentRefs'
 import { requireImageEditDocumentInstanceV3 } from '../v3/application/imageEditDocumentInstances'
 import { runImageEditPersistedOperationV3 } from '../v3/application/imageEditPersistenceOperations'
 import { applicationCallerAccess } from '@/core/application-control/callerContext'
@@ -23,6 +26,23 @@ import { releaseImageDocument } from '@/features/imageEdit/documents/imageDocume
 import { requestImageDocumentInEditor } from '@/features/imageEdit/documents/imageDocumentWorkspace'
 
 export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  for (const capability of IMAGE_EDIT_REPAIR_CAPABILITIES) registrar.registerHandler(capability.id, async (input, context) => {
+    const parsed = capability.inputSchema.parse(input)
+    const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
+    if (parsed.region.kind === 'selection' && parsed.region.ref.id !== imageEditV3DocumentRef(documentId).id) throw new Error('选区引用与目标图层不在同一个图片文档，请读取目标文档的选区引用')
+    const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'repair-region', context.signal) : undefined
+    return runImageEditPersistedOperationV3(documentId, access, async () => {
+      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
+      if (access && persistenceOwner?.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const result = await repairImageEditRegionV3(bus, layerId, { action: capability.id === 'remove_image_edit_region' ? 'remove' : 'repair', quality: parsed.quality,
+        ...(parsed.region.kind === 'rectangle' ? { rectangle: { x: parsed.region.x, y: parsed.region.y, width: parsed.region.width, height: parsed.region.height } } : {}),
+        ...(capability.id === repairImageEditRegionCapability.id ? { sourceRegion: imageEditRepairInputSchema.parse(input).sourceRegion } : {}), signal: context.signal })
+      const current = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
+      const head = bus.getPersistenceSnapshot().history.undo.at(-1)?.forward
+      return { ref: imageEditV3LayerRef(documentId, layerId), documentRef: imageEditV3DocumentRef(documentId), commandId: result.commandId,
+        verification: { verified: current?.layer.type === 'raster' && head?.commandId === result.commandId && head.type === 'raster.apply-tile-delta' && head.layerId === layerId && head.changes.every(change => current.layer.type === 'raster' && current.layer.tiles[change.tileKey] === change.resourceId) } }
+    })
+  })
   registrar.registerHandler(applyImageEditSelectionCapability.id, async (input, context) => {
     const parsed = applyImageEditSelectionCapability.inputSchema.parse(input)
     const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)

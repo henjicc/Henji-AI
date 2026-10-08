@@ -4,6 +4,7 @@ import type { LocalModelRunner, LocalTensorInput } from '../analysis'
 import type { LocalInferenceFailureCode } from '../protocol'
 import type { LocalInferenceLog } from '../providers'
 import { assertInpaintRoi, type ImageInpaintJob, type ImageInpaintResult } from './protocol'
+import { blendSampleTexture } from './sample'
 
 const SIZE = 512 // 两份神经网络的训练/导出工作尺寸；不是源图尺寸上限。
 export class ImageInpaintError extends Error {
@@ -40,7 +41,7 @@ export async function runImageInpaint(job: ImageInpaintJob, deps: ImageInpaintDe
   try {
     check(deps.signal)
     assertInpaintRoi(job.roi)
-    if (!['fast', 'fine', 'blemish'].includes(job.quality) || !['migan', 'lama', 'telea', 'ns'].includes(job.algorithm)) throw new Error('图片修补质量档或算法无效。')
+    if (!['fast', 'fine', 'blemish'].includes(job.quality) || !['migan', 'lama', 'telea', 'ns', 'sample'].includes(job.algorithm)) throw new Error('图片修补质量档或算法无效。')
     const sharp = await loadSharp()
     const source = sharp(job.sourcePath).autoOrient()
     const [metadata, maskMetadata] = await Promise.all([source.metadata(), sharp(job.maskPath).metadata()])
@@ -70,8 +71,14 @@ export async function runImageInpaint(job: ImageInpaintJob, deps: ImageInpaintDe
     let repaired: Uint8Array = rgb
     let provider: ImageInpaintResult['provider'] = 'wasm'
     if (mask.some(value => value !== 0)) {
-      if (mask.every(value => value !== 0)) throw new Error('roi 需要包含未选择的周边像素，才能修补。')
-      if (job.algorithm === 'telea' || job.algorithm === 'ns') {
+      if (job.algorithm !== 'sample' && mask.every(value => value !== 0)) throw new Error('所选区域需要保留未选择的周边像素，请缩小选区或使用指定来源修补。')
+      if (job.algorithm === 'sample') {
+        if (!job.samplePath) throw new Error('请指定干净的来源区域')
+        const sampleMetadata = await sharp(job.samplePath).metadata()
+        if (sampleMetadata.width !== job.roi.width || sampleMetadata.height !== job.roi.height) throw new Error('来源区域尺寸不匹配')
+        const sample = await sharp(job.samplePath).ensureAlpha().raw().toBuffer()
+        repaired = await blendSampleTexture(rgb, sample, mask, job.roi.width, job.roi.height)
+      } else if (job.algorithm === 'telea' || job.algorithm === 'ns') {
         repaired = await classic(rgb, mask, job.roi.width, job.roi.height, job.algorithm)
       } else {
         if (!job.model || job.model.name !== job.algorithm) throw new Error('图片修补作业缺少对应的已校验模型。')
