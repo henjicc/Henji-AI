@@ -1,33 +1,29 @@
-import { useEffect, useState } from 'react'
-import { UiEmpty } from '@/components/ui'
-import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
-import { trialVideoEditCodeFrames } from '../application/videoEditCodeTrial'
+import { useEffect, useRef, useState } from 'react'
+import { UiEmpty, UiButton } from '@/components/ui'
+import type { VideoEditDocument } from '@/core/videoEdit/document'
+import { renderVideoEditAnnotationPreview, videoEditAnnotationPreviewInput } from '../application/videoEditAnnotationPreview'
 
-// Visible rows request frames sequentially; cancelled rows skip work before entering the renderer.
-let tail: Promise<unknown> = Promise.resolve()
-export function VideoEditAnnotationThumbnail({ document, sequenceId, frame }: { document: VideoEditDocument; sequenceId: string; frame: number }): React.ReactElement {
+export function VideoEditAnnotationThumbnail({ document, sequenceId, frame, onJump, label = '标注画面' }: { document: VideoEditDocument; sequenceId: string; frame: number; onJump?: () => void; label?: string }): React.ReactElement {
   const [src, setSrc] = useState<string>()
-  const [failed, setFailed] = useState(false)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+  const input = videoEditAnnotationPreviewInput(document, sequenceId)
+  const snapshot = useRef(input); snapshot.current = input
+  const key = input.key
   useEffect(() => {
     const controller = new AbortController(); let url: string | undefined
-    setSrc(undefined); setFailed(false)
+    setSrc(undefined); setError('')
     const render = async (): Promise<void> => {
+      const blob = await renderVideoEditAnnotationPreview(snapshot.current.composition, frame, controller.signal)
       controller.signal.throwIfAborted()
-      const composition = videoEditComposition(document, sequenceId)
-      const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], controller.signal, true)
-      if (!bitmap) throw new Error('没有缩略帧。')
-      try {
-        const canvas = new OffscreenCanvas(160, Math.max(1, Math.round(bitmap.height * 160 / bitmap.width)))
-        const context = canvas.getContext('2d'); if (!context) throw new Error('无法生成缩略帧。')
-        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-        const blob = await canvas.convertToBlob({ type: 'image/png' }); controller.signal.throwIfAborted()
-        url = URL.createObjectURL(blob); setSrc(url)
-      } finally { bitmap.close() }
+      url = URL.createObjectURL(blob); setSrc(url)
     }
-    tail = tail.catch(() => undefined).then(render).catch(() => { if (!controller.signal.aborted) setFailed(true) })
+    void render().catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : '取帧失败，请重试。') })
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url) }
-  }, [document, sequenceId, frame])
-  return <div className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-control bg-media">
-    {src ? <img src={src} alt="标注画面" className="h-full w-full object-contain" /> : <UiEmpty size="xs" title={failed ? '暂无画面' : '取帧中'} />}
-  </div>
+  }, [key, frame, retry])
+  return <UiButton aria-label={error ? '重新获取标注画面' : label} title={error || undefined} onClick={() => { if (error) setRetry(value => value + 1); else onJump?.() }}>
+    <div className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-control bg-media">
+      {src ? <img src={src} alt="标注画面" className="h-full w-full object-contain" /> : <UiEmpty size="xs" title={error ? '取帧失败，点此重试' : '取帧中'} />}
+    </div>
+  </UiButton>
 }

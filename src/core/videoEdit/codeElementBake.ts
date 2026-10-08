@@ -4,6 +4,21 @@ import type { CodeElementBounds } from './codeMaterial/geometry'
 import type { CodeElementOverride } from './codeElementOverrides'
 
 export interface CodeElementBakeResult { source: string; merged: boolean; reason?: string }
+/** Resize only the exported canvas metadata; comments, layout literals and render code remain intact. */
+export function resizeCodeMaterialCanvas(source: string, size: { width: number; height: number }): string {
+  if (![size.width, size.height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new Error('预览画幅尺寸无效。')
+  const file = ts.createSourceFile('preview.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const exported = file.statements.at(-1)
+  if (!exported || !ts.isExportAssignment(exported) || !ts.isObjectLiteralExpression(exported.expression)) throw new Error('风格组件缺少画幅定义。')
+  const edits: Array<{ start: number; end: number; text: string }> = []
+  for (const key of ['width', 'height'] as const) {
+    const fields = exported.expression.properties.filter((property): property is ts.PropertyAssignment => ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === key)
+    if (fields.length !== 1) throw new Error('风格组件缺少唯一的画幅尺寸。')
+    const value = fields[0].initializer
+    edits.push({ start: value.getStart(file), end: value.end, text: String(size[key]) })
+  }
+  return edits.sort((a, b) => b.start - a.start).reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source)
+}
 /** Only literals at the exact selected call are changed; expressions, repeats and aliases go to the assistant. */
 export function bakeCodeElementLiterals(source: string, element: CodeElementBounds, override: CodeElementOverride, sameSourceOccurrences = 1): CodeElementBakeResult {
   const fail = (reason: string): CodeElementBakeResult => ({ source, merged: false, reason })

@@ -52,15 +52,14 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
 }
 
 let tail: Promise<void> = Promise.resolve()
-let waiting = 0
-/** One bounded queue for creation, source candidates and explicit version binds.
+/** One serial queue for creation, source candidates and explicit version binds.
  * Every trial uses the production full-composition worker and releases it. */
 export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false): Promise<ImageBitmap | undefined> {
   if (!frames.length) throw new Error('源码检查需要边界画面。')
-  if (waiting >= 4) throw new Error('代码素材试渲染队列已满，请等待当前检查完成。')
-  waiting++; const previous = tail; let release!: () => void
+  signal.throwIfAborted()
+  const previous = tail; let release!: () => void
   tail = new Promise<void>(resolve => { release = resolve })
-  await previous
+  let acquired = false
   let renderer: VideoEditRenderSession | undefined; let sequenceId: string | undefined; let bitmap: ImageBitmap | undefined
   let expired = false; let timer: ReturnType<typeof setTimeout> | undefined; let abort: (() => void) | undefined
   try {
@@ -71,13 +70,18 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
       abort = () => { expired = true; reject(signal.reason) }
       signal.addEventListener('abort', abort, { once: true })
     })
+    // Teardown and module loading also have asynchronous boundaries before the next race.
+    void deadline.catch(() => undefined)
+    timer = setTimeout(() => { expired = true; rejectDeadline(new Error('试渲染等待过久，请重试。')) }, 30_000)
+    await Promise.race([previous, deadline]); acquired = true
+    signal.throwIfAborted()
     for (const input of frames) {
       signal.throwIfAborted()
       // Detect a stalled frame, rather than imposing a total duration/count budget on a large edit.
       clearTimeout(timer)
       timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
       if (renderer && sequenceId !== input.document.id) { await renderer.dispose(); renderer = undefined }
-      if (!renderer) { const { VideoEditRenderSession } = await import('../engine/videoEditRenderSession'); signal.throwIfAborted(); renderer = new VideoEditRenderSession(input.document); sequenceId = input.document.id }
+      if (!renderer) { const { VideoEditRenderSession } = await Promise.race([import('../engine/videoEditRenderSession'), deadline]); signal.throwIfAborted(); renderer = new VideoEditRenderSession(input.document); sequenceId = input.document.id }
       else await Promise.race([renderer.updateDocument(input.document), deadline])
       const result = await Promise.race([renderer.present(input.frame).then(result => {
         if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
@@ -95,7 +99,10 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
     bitmap = undefined; return kept
   } finally {
     bitmap?.close(); clearTimeout(timer); if (abort) signal.removeEventListener('abort', abort)
-    try { await renderer?.dispose() } finally { waiting--; release() }
+    try { await renderer?.dispose() } finally {
+      // A cancelled waiter must not release a slot ahead of the still-running predecessor.
+      if (acquired) release(); else void previous.then(release)
+    }
   }
 }
 

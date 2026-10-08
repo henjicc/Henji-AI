@@ -19,7 +19,7 @@ function AnnotationRow({ instance, sequenceId, mark, number, fps, onError }: Pro
   const commitText = (): void => { if (text.trim() && text !== mark.text) run(() => updateVideoEditAnnotation(instance.document.id, mark.id, current => ({ ...current, text }))) }
   return <div className={`space-y-2 border-b border-line px-3 py-3 ${selectedVideoEditAnnotation(instance.document.id) === mark.id ? 'bg-selected-accent' : ''}`} data-video-edit-annotation={mark.id}>
     <div className="flex items-start gap-2">
-      <UiButton aria-label={`跳到标注 ${number}`} onClick={() => run(() => jumpToVideoEditAnnotation(instance.document.id, mark.id))}><VideoEditAnnotationThumbnail document={instance.document} sequenceId={sequenceId} frame={mark.frame} /></UiButton>
+      <VideoEditAnnotationThumbnail label={`跳到标注 ${number}`} onJump={() => run(() => jumpToVideoEditAnnotation(instance.document.id, mark.id))} document={instance.document} sequenceId={sequenceId} frame={mark.frame} />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2 text-13"><span>标注 {number}</span><span className={mark.status === 'addressed' ? 'text-success-text' : mark.status === 'open' ? 'text-accent-text' : 'text-text2'}>{VIDEO_EDIT_ANNOTATION_STATUS_LABELS[mark.status]}</span></div>
         <div className="font-mono text-2xs text-text3">{timelineTimecode(mark.frame, fps)}{mark.endFrame !== undefined ? ` – ${timelineTimecode(mark.endFrame, fps)}` : ''}</div>
