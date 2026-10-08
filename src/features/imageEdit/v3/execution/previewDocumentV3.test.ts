@@ -40,6 +40,7 @@ function documentWithLayers(): ImageEditDocumentV3 {
 
 function snapshot(document: ImageEditDocumentV3): ImageEditCommandBusSnapshotV3 {
   return {
+    selection: null, selectionRevision: 0,
     document,
     previewOverrides: {},
     history: {

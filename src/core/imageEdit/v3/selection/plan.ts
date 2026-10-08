@@ -1,6 +1,5 @@
 import { tileGridSize, type ImageEditTileCoordinate } from '../tileGeometry';
 import {
-  IMAGE_EDIT_SELECTION_MAX_TILES_V3,
   IMAGE_EDIT_SELECTION_TILE_SIZE_V3,
   type ImageEditSelectionExistingMaskTileV3,
   type ImageEditSelectionMaskPlanOptionsV3,
@@ -103,14 +102,6 @@ export function planImageEditSelectionMaskV3(
       throw new Error('不支持的选区组合模式');
   }
 
-  const maxTiles = options.maxTiles ?? IMAGE_EDIT_SELECTION_MAX_TILES_V3;
-  if (!Number.isSafeInteger(maxTiles) || maxTiles < 1
-    || maxTiles > IMAGE_EDIT_SELECTION_MAX_TILES_V3) {
-    throw new Error('选区瓦片上限无效');
-  }
-  if (coordinateByKey.size > maxTiles) {
-    throw new Error(`选区涉及 ${coordinateByKey.size} 个瓦片，超过 ${maxTiles} 个安全上限`);
-  }
   const tileCoordinates = [...coordinateByKey.values()].sort((left, right) => (
     left.y - right.y || left.x - right.x
   ));

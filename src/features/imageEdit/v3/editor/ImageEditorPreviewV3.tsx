@@ -20,6 +20,7 @@ import {
 } from './ImageEditorPreviewOutputV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
 import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
+import { ImageEditorSelectionOverlayV3 } from './ImageEditorSelectionOverlayV3'
 import { ImageEditorViewportChromeV3 } from './ImageEditorViewportChromeV3'
 import { ImageEditorRasterPresentationV3 } from './ImageEditorRasterPresentationV3'
 import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
@@ -170,6 +171,7 @@ export function ImageEditorPreviewV3({
     [activeTool, snapshot.previewOverrides],
   )
   const displaySnapshot = useMemo(() => ({
+    selection: null, selectionRevision: 0,
     document: baseDisplayDocument,
     previewOverrides: basePreviewOverrides,
     history: baseDisplayHistory,
@@ -492,11 +494,11 @@ export function ImageEditorPreviewV3({
             basePreviewDocumentId={basePreviewDocumentId}
             basePreviewRevision={basePreviewRevision}
           />
-          <ImageEditorSelectionMaskOverlayV3
+          {controller.profile.id === 'mask' ? <ImageEditorSelectionMaskOverlayV3
             bus={bus}
             controller={controller}
             resourceByteSizes={resourceByteSizes}
-          />
+          /> : <ImageEditorSelectionOverlayV3 bus={bus} controller={controller} />}
           {navigation.effectiveTool === 'move' ? (
             <ImageEditorLayerControlsV3 presentation={layerControlsPresentation} document={controller.document}
               layerId={selectedLayerId} bounds={selectedLayerId ? layerBounds(selectedLayerId) : null}

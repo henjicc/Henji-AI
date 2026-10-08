@@ -64,6 +64,7 @@ import { useImageEditorViewportCompositeV3 } from './useImageEditorViewportCompo
 
 function snapshot(): ImageEditCommandBusSnapshotV3 {
   return {
+    selection: null, selectionRevision: 0,
     document: createImageEditDocumentV3({
       width: 1_600,
       height: 1_000,

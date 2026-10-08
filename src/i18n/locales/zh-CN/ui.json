@@ -767,6 +767,8 @@
         "crop": "裁剪",
         "select-rect": "矩形选择",
         "select-ellipse": "椭圆选择",
+        "select-polygon": "多边形套索",
+        "select-brush": "画笔选区",
         "select-lasso": "套索选择",
         "annotation": "标注工具",
         "annotation-text": "文字标注",
@@ -842,6 +844,16 @@
         "failed": "栅格笔画未写入：{{reason}}"
       },
       "selection": {
+        "feather": "羽化",
+        "invert": "反选",
+        "clear": "取消选区",
+        "apply-mask": "应用蒙版",
+        "apply-copy": "复制到新图层",
+        "apply-delete": "删除选区内容",
+        "cancel-task": "取消处理",
+        "progress": "正在应用选区 · {{percent}}%",
+        "polygon-hint": "单击加点，双击或回车闭合",
+
         "overlay": "选区转蒙版画布",
         "combineMode": "选区组合方式",
         "replace": "替换",

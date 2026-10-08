@@ -767,6 +767,8 @@
         "crop": "Crop",
         "select-rect": "Rectangular selection",
         "select-ellipse": "Elliptical selection",
+        "select-polygon": "Polygon lasso",
+        "select-brush": "Selection brush",
         "select-lasso": "Lasso selection",
         "annotation": "Annotation tools",
         "annotation-text": "Text annotation",
@@ -842,6 +844,16 @@
         "failed": "The raster stroke was not saved: {{reason}}"
       },
       "selection": {
+        "feather": "Feather",
+        "invert": "Invert",
+        "clear": "Deselect",
+        "apply-mask": "Apply mask",
+        "apply-copy": "Copy to new layer",
+        "apply-delete": "Clear selected content",
+        "cancel-task": "Cancel processing",
+        "progress": "Applying selection · {{percent}}%",
+        "polygon-hint": "Click to add points; double-click or Enter to close",
+
         "overlay": "Selection-to-mask canvas",
         "combineMode": "Selection combine mode",
         "replace": "Replace",

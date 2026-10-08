@@ -2,6 +2,7 @@ import type { ApplicationDomainModule } from '@/features/application-control/dom
 import { createImageEditReflectionRegistrations } from './imageEditReflection'
 import { ImageEditV3LayerMutationExecutor, ImageEditV3GroupMutationExecutor, ImageEditV3MaskMutationExecutor } from '../v3/application/imageEditV3MutationExecutors'
 import { ImageEditV3CollectionExecutor } from '../v3/application/imageEditV3CollectionExecutor'
+import { ImageEditSelectionMutationExecutorV3 } from '../v3/application/imageEditSelectionEntityV3'
 import { resolveImageEditPersistenceParticipantsV3 } from '../v3/application/imageEditPersistenceOperations'
 import { registerImageEditCapabilityHandlers } from './registerImageEditCapabilityHandlers'
 import { openImageEditorWithSourceCapability } from '@/core/application-control/builtinApplicationCapabilities'
@@ -11,6 +12,7 @@ export const imageEditApplicationDomain: ApplicationDomainModule = {
   id: 'imageEdit',
   entities: () => createImageEditReflectionRegistrations(),
   registerExecutors(engine) {
+    engine.registerMutationExecutor(new ImageEditSelectionMutationExecutorV3())
     engine.registerMutationExecutor(new ImageEditV3LayerMutationExecutor())
     engine.registerMutationExecutor(new ImageEditV3GroupMutationExecutor())
     engine.registerMutationExecutor(new ImageEditV3MaskMutationExecutor())

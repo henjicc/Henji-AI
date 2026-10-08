@@ -136,14 +136,14 @@ describe('ImageEditorSelectionMaskOverlayV3', () => {
     ).toBe(false))
   })
 
-  it('quick 与 full 宿主不渲染选择工具，mask 同时提供矩形、椭圆与套索', async () => {
+  it('quick 不开放选择，full 开放独立选择，mask 仍使用蒙版工具', async () => {
     const quick = render(<ControlledSelectionEditor profileId="quick" onDocumentChange={() => undefined} />)
     await screen.findByRole('button', { name: '裁剪' })
     expect(quick.container.querySelector('[data-tool-id="select-rect"]')).toBeNull()
     quick.unmount()
 
     const full = render(<ControlledSelectionEditor profileId="full" onDocumentChange={() => undefined} />)
-    expect(full.container.querySelector('[data-tool-id="select-rect"]')).toBeNull()
+    expect(full.container.querySelector('[data-tool-id="select-rect"]')).not.toBeNull()
     full.unmount()
 
     const mask = render(<ControlledSelectionEditor onDocumentChange={() => undefined} />)

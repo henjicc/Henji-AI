@@ -3,6 +3,7 @@ import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/
 import type { ImageEditDocumentRepositoryV3 } from '@/core/imageEdit/v3/serviceContracts';
 import { ImageEditCommandBusV3 } from './imageEditCommandBus';
 import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3';
+import { appendImageEditSelectionV3 } from '@/core/imageEdit/v3/selection/session';
 
 function createRepository(): ImageEditDocumentRepositoryV3 {
   return {
@@ -16,6 +17,39 @@ function createRepository(): ImageEditDocumentRepositoryV3 {
 }
 
 describe('图片编辑 V3 命令总线', () => {
+  it('后来写回相同几何也不能让旧事务撤销新的选区手势', () => {
+    const bus = new ImageEditCommandBusV3(createImageEditDocumentV3({ width: 100, height: 100, documentId: 'selection-aba' }));
+    const selection = appendImageEditSelectionV3(null, { type: 'rectangle', x: 0.2, y: 0.2, width: 0.5, height: 0.5 }, 'replace');
+    const first = bus.setSelection(selection)!;
+    bus.setSelection(null);
+    const latest = bus.setSelection(selection)!;
+    expect(() => bus.restoreSelection(selection, first)).toThrow('过期事务');
+    expect(bus.getSnapshot().history.undoCount).toBe(3);
+    bus.restoreSelection(selection, latest);
+    expect(bus.getSnapshot().selection).toBeNull();
+    bus.dispose();
+  });
+  it('选区手势与作品共用撤销顺序，清理选区不写作品且新编辑丢弃重做', () => {
+    const repository = createRepository();
+    const bus = new ImageEditCommandBusV3(createImageEditDocumentV3({ width: 100, height: 100, documentId: 'selection-history' }), { repository });
+    const selection = appendImageEditSelectionV3(null, { type: 'rectangle', x: 0.2, y: 0.2, width: 0.5, height: 0.5 }, 'replace');
+    bus.setSelection(selection);
+    expect(repository.scheduleAutosave).not.toHaveBeenCalled();
+    bus.dispatch({ type: 'layer.add', commandId: 'layer', expectedRevision: 0, parentId: null, index: 0, layer: createImageEditRasterLayerV3('r', '图层') });
+    bus.setSelection(null);
+    expect(bus.getSnapshot().history.undoCount).toBe(3);
+    bus.undo(); expect(bus.getSnapshot().selection).toEqual(selection);
+    bus.undo(); expect(bus.getSnapshot().document.layers).toHaveLength(0);
+    bus.undo(); expect(bus.getSnapshot().selection).toBeNull();
+    bus.redo(); expect(bus.getSnapshot().selection).toEqual(selection);
+    bus.redo(); expect(bus.getSnapshot().document.layers).toHaveLength(1);
+    bus.redo(); expect(bus.getSnapshot().selection).toBeNull();
+    expect(bus.getPersistenceSnapshot().history.undo).toHaveLength(1);
+    bus.undo(); bus.undo(); bus.setSelection({ ...selection, inverted: true });
+    expect(bus.redo()).toBe(false);
+    expect(bus.getPersistenceSnapshot().history.redo).toHaveLength(0);
+    bus.dispose(); expect(() => bus.setSelection(null)).toThrow('DOCUMENT_RELEASED');
+  });
   it('滑杆过程不改 revision、不写盘，结束只产生一条历史', () => {
     const repository = createRepository();
     const initial = createImageEditDocumentV3({ width: 100, height: 100, documentId: 'doc' });

@@ -16,6 +16,9 @@ import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/comm
 import { isImageEditTransformInvertibleV3 } from '@/core/imageEdit/v3/execution/affineTransform';
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences';
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier';
+import { imageEditSelectionSessionSchemaV3, type ImageEditSelectionSessionV3 } from '@/core/imageEdit/v3/selection/session';
+
+type SessionHistoryEntry = { commandId: string } | { selectionCommandId: number; before: ImageEditSelectionSessionV3 | null; after: ImageEditSelectionSessionV3 | null };
 
 export type ImageEditPreviewOverrideKindV3 =
   | 'parameter'
@@ -32,6 +35,8 @@ export interface ImageEditPreviewOverrideV3 {
 }
 
 export interface ImageEditCommandBusSnapshotV3 {
+  selection: ImageEditSelectionSessionV3 | null;
+  selectionRevision: number;
   document: ImageEditDocumentV3;
   previewOverrides: Readonly<Record<string, ImageEditPreviewOverrideV3>>;
   history: ReturnType<ImageEditCommandHistoryV3['getState']>;
@@ -53,6 +58,10 @@ type ImageEditCommandBusListenerV3 = (snapshot: ImageEditCommandBusSnapshotV3) =
  * 手势结束后再通过 commitPreview 提交一个命令和一个历史单位。
  */
 export class ImageEditCommandBusV3 {
+  private selection: ImageEditSelectionSessionV3 | null = null;
+  private selectionRevision = 0;
+  private sessionUndo: SessionHistoryEntry[] = [];
+  private sessionRedo: SessionHistoryEntry[] = [];
   private document: ImageEditDocumentV3;
   private readonly history: ImageEditCommandHistoryV3;
   private readonly repository?: ImageEditDocumentRepositoryV3;
@@ -69,6 +78,8 @@ export class ImageEditCommandBusV3 {
     this.history = new ImageEditCommandHistoryV3(options.history);
     if (options.historySnapshot) this.history.restore(document, options.historySnapshot);
     else this.history.clear(document);
+    this.sessionUndo = this.history.createSnapshot().undo.map(entry => ({ commandId: entry.forward.commandId }));
+    this.sessionRedo = this.history.createSnapshot().redo.map(entry => ({ commandId: entry.forward.commandId }));
     this.repository = options.repository;
     this.onPersistentChange = options.onPersistentChange;
     for (const [resourceId, byteSize] of Object.entries(options.resourceByteSizes ?? {})) {
@@ -82,11 +93,13 @@ export class ImageEditCommandBusV3 {
     }
   }
 
-  getSnapshot(): ImageEditCommandBusSnapshotV3 {
+  getSnapshot(): ImageEditCommandBusSnapshotV3 & { selection: ImageEditSelectionSessionV3 | null; selectionRevision: number } {
     return {
+      selection: this.selection,
+      selectionRevision: this.selectionRevision,
       document: this.document,
       previewOverrides: Object.fromEntries(this.previewOverrides),
-      history: this.history.getState(),
+      history: { ...this.history.getState(), undoCount: this.sessionUndo.length, redoCount: this.sessionRedo.length },
     };
   }
 
@@ -129,6 +142,10 @@ export class ImageEditCommandBusV3 {
       nextByteSizes.set(resource.resourceId, resource.byteSize);
     }
     this.document = this.history.execute(this.document, prepared);
+    this.sessionUndo.push({ commandId: prepared.commandId });
+    this.sessionRedo = [];
+    const retainedCommands = new Set(this.history.createSnapshot().undo.map(entry => entry.forward.commandId));
+    this.sessionUndo = this.sessionUndo.filter(entry => !('commandId' in entry) || retainedCommands.has(entry.commandId));
     this.resourceByteSizes.clear();
     nextByteSizes.forEach((byteSize, resourceId) => this.resourceByteSizes.set(resourceId, byteSize));
     this.persistChange(previousRevision);
@@ -173,10 +190,17 @@ export class ImageEditCommandBusV3 {
 
   undo(): boolean {
     this.assertMutable();
+    const entry = this.sessionUndo.at(-1);
+    if (!entry) return false;
+    if (!('commandId' in entry)) {
+      this.sessionUndo.pop(); this.sessionRedo.push(entry);
+      this.selection = entry.before; this.selectionRevision++; this.emit(); return true;
+    }
     const previousRevision = this.document.revision;
     const transition = this.history.undo(this.document);
     if (!transition.changed) return false;
     this.document = transition.document;
+    this.sessionUndo.pop(); this.sessionRedo.push(entry);
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
     this.flushReleasedResources();
@@ -186,10 +210,12 @@ export class ImageEditCommandBusV3 {
 
   undoCommands(commandIdsNewestFirst: readonly string[]): boolean {
     this.assertMutable();
+    this.assertSessionCommandHead(commandIdsNewestFirst);
     const previousRevision = this.document.revision;
     const transition = this.history.undoCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
     this.document = transition.document;
+    this.sessionRedo.push(...this.sessionUndo.splice(-commandIdsNewestFirst.length).reverse());
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
     this.flushReleasedResources();
@@ -199,10 +225,12 @@ export class ImageEditCommandBusV3 {
 
   rollbackCommands(commandIdsNewestFirst: readonly string[]): boolean {
     this.assertMutable();
+    this.assertSessionCommandHead(commandIdsNewestFirst);
     const previousRevision = this.document.revision;
     const transition = this.history.rollbackCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
     this.document = transition.document;
+    this.sessionUndo.splice(-commandIdsNewestFirst.length);
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
     this.flushReleasedResources();
@@ -212,10 +240,17 @@ export class ImageEditCommandBusV3 {
 
   redo(): boolean {
     this.assertMutable();
+    const entry = this.sessionRedo.at(-1);
+    if (!entry) return false;
+    if (!('commandId' in entry)) {
+      this.sessionRedo.pop(); this.sessionUndo.push(entry);
+      this.selection = entry.after; this.selectionRevision++; this.emit(); return true;
+    }
     const previousRevision = this.document.revision;
     const transition = this.history.redo(this.document);
     if (!transition.changed) return false;
     this.document = transition.document;
+    this.sessionRedo.pop(); this.sessionUndo.push(entry);
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
     this.flushReleasedResources();
@@ -226,6 +261,7 @@ export class ImageEditCommandBusV3 {
   clearHistory(): void {
     this.assertMutable();
     this.history.clear(this.document);
+    this.sessionUndo = []; this.sessionRedo = [];
     this.previewOverrides.clear();
     this.persistChange(this.document.revision);
     this.flushReleasedResources();
@@ -244,6 +280,37 @@ export class ImageEditCommandBusV3 {
     this.assertMutable();
     if (this.mutationGuard) throw new Error('图片文档命令总线已绑定运行实例');
     this.mutationGuard = guard;
+  }
+
+  /** 一次手势一个会话历史项；清理实例不落盘，也不污染作品历史。 */
+  setSelection(selection: ImageEditSelectionSessionV3 | null): number | null {
+    this.assertMutable();
+    const after = selection === null ? null : imageEditSelectionSessionSchemaV3.parse(selection);
+    if (JSON.stringify(after) === JSON.stringify(this.selection)) return null;
+    const hadDocumentRedo = this.history.getState().redoCount > 0;
+    const selectionCommandId = this.selectionRevision + 1;
+    this.sessionUndo.push({ selectionCommandId, before: this.selection, after });
+    this.sessionRedo = []; this.history.discardRedo();
+    this.selection = after; this.selectionRevision++;
+    if (hadDocumentRedo) this.persistChange(this.document.revision);
+    this.flushReleasedResources(); this.emit();
+    return selectionCommandId;
+  }
+
+  restoreSelection(expected: ImageEditSelectionSessionV3 | null, selectionCommandId: number, rollback = false): void {
+    this.assertMutable();
+    const entry = this.sessionUndo.at(-1);
+    if (!entry || 'commandId' in entry || entry.selectionCommandId !== selectionCommandId || JSON.stringify(this.selection) !== JSON.stringify(expected)) throw new Error('选区已继续编辑，无法撤销过期事务');
+    this.undo();
+    if (rollback) this.sessionRedo.pop();
+  }
+
+  private assertSessionCommandHead(ids: readonly string[]): void {
+    if (ids.length === 0) return;
+    const actual = this.sessionUndo.slice(-ids.length).reverse();
+    if (actual.length !== ids.length || actual.some((entry, index) => !('commandId' in entry) || entry.commandId !== ids[index])) {
+      throw new Error('待撤销命令之后已有选区或文档编辑，请先撤销较新的操作');
+    }
   }
 
   private assertMutable(): void {

@@ -22,7 +22,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     })
   })
 
-  it('工具箱与画布节点共享已实现的画笔和橡皮，画布不扩展蒙版、选择或导出权限', () => {
+  it('工具箱与画布节点共享独立选区、画笔和橡皮，保留各自导出权限', () => {
     const profile = getImageEditorHostProfileV3('full')
 
     expect(getReadyImageEditorToolIdsV3(profile)).toEqual([
@@ -30,6 +30,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'hand',
       'zoom',
       'crop',
+      'select-rect', 'select-ellipse', 'select-lasso', 'select-polygon', 'select-brush',
       'annotation-text',
       'annotation-callout',
       'annotation-arrow',

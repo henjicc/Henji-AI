@@ -4,8 +4,6 @@ import type { ImageEditTileCoordinate } from '../tileGeometry';
 
 export const IMAGE_EDIT_SELECTION_TILE_SIZE_V3 = 512 as const;
 export const IMAGE_EDIT_SELECTION_AA_SAMPLES_PER_AXIS_V3 = 4 as const;
-export const IMAGE_EDIT_SELECTION_MAX_TILES_V3 = 4_096 as const;
-export const IMAGE_EDIT_SELECTION_MAX_LASSO_POINTS_V3 = 8_192 as const;
 
 export interface ImageEditSelectionPointV3 {
   x: number;
@@ -67,7 +65,6 @@ export interface ImageEditSelectionMaskPlanOptionsV3 {
   combineMode: ImageEditSelectionCombineModeV3;
   /** 稀疏蒙版缺失瓦片恒为 0；已有条目必须包含真实资源字节数。 */
   existingTiles?: readonly ImageEditSelectionExistingMaskTileV3[];
-  maxTiles?: number;
 }
 
 export interface ImageEditSelectionMaskPlanV3 {

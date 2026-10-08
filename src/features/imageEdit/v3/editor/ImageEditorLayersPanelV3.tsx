@@ -6,11 +6,11 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { MouseEvent } from 'react'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Virtuoso } from 'react-virtuoso'
 
-import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton } from '@/components/ui'
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag'
 import type { ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorCapabilityReadinessV3 } from '../application/imageEditorHostProfiles'
@@ -108,6 +108,11 @@ export function ImageEditorLayersPanelV3({
   embedded = false,
 }: ImageEditorLayersPanelV3Props): JSX.Element {
   const { t } = useTranslation('ui')
+  const [creationError, setCreationError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [creationProgress, setCreationProgress] = useState(0)
+  const creationAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => creationAbort.current?.abort(), [])
   const layerViewportRef = useRef<HTMLDivElement>(null)
   const selectedLayerIds = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS,
@@ -158,9 +163,14 @@ export function ImageEditorLayersPanelV3({
   })
 
   const addChoice = (choice: ImageEditLayerCreationChoiceV3): void => {
+    if (creationAbort.current) return
     const layer = createImageEditLayerFromChoiceV3(choice, controller.document.color.workingSpace)
-    controller.addLayer(layer, null, resolveCreationIndex(controller.document.layers, choice))
-    setSelectedLayerIds(controller.sessionId, [layer.id])
+    setCreationError(null)
+    const task = new AbortController(); creationAbort.current = task; setCreating(true); setCreationProgress(0)
+    void Promise.resolve().then(() => controller.addLayer(layer, null, resolveCreationIndex(controller.document.layers, choice), task.signal, (done, total) => setCreationProgress(Math.floor(done / total * 100)))).then(() => {
+      setSelectedLayerIds(controller.sessionId, [layer.id])
+    }).catch((error: unknown) => { if (!task.signal.aborted) setCreationError(error instanceof Error ? error.message : String(error)) })
+      .finally(() => { creationAbort.current = null; setCreating(false) })
   }
 
   const handleSelect = (row: ImageEditLayerTreeRowV3, event: MouseEvent<HTMLButtonElement>): void => {
@@ -230,6 +240,8 @@ export function ImageEditorLayersPanelV3({
 
   return (
     <section data-layers-panel className="flex min-h-0 flex-1 flex-col">
+      {creationError ? <UiError message={creationError} /> : null}
+      {creating ? <div className="flex items-center gap-2 px-3 text-xs text-text2" role="status">{t('imageEditor.v3.selection.progress', { percent: creationProgress })}<UiButton size="sm" onClick={() => creationAbort.current?.abort()}>{t('imageEditor.v3.selection.cancel-task')}</UiButton></div> : null}
       <div className="flex h-10 shrink-0 items-center gap-1 px-3">
         {embedded ? <div className="min-w-0 flex-1" /> : (
           <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-text2">
@@ -248,7 +260,7 @@ export function ImageEditorLayersPanelV3({
             >
               {creationChoices.map(({ choice, readiness }) => {
                 const key = `${choice.kind}:${choice.subtype ?? ''}`
-                const disabled = readiness.state !== 'ready'
+                const disabled = creating || readiness.state !== 'ready'
                 const reason = resolveImageEditorReadinessReasonV3(readiness, t)
                 const unavailableLabel = reason
                   ? t('imageEditor.v3.readiness.unavailableWithReason', {

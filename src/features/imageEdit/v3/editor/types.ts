@@ -98,7 +98,7 @@ export interface ImageEditorV3Controller {
   addAnnotation: (layerId: string, annotation: MarkItem, index?: number) => void
   updateAnnotation: (layerId: string, annotationId: string, annotation: MarkItem) => void
   deleteAnnotation: (layerId: string, annotationId: string) => void
-  addLayer: (layer: ImageEditLayerV3, parentId: string | null, index: number) => void
+  addLayer: (layer: ImageEditLayerV3, parentId: string | null, index: number, signal?: AbortSignal, onProgress?: (completed: number, total: number) => void) => void | Promise<void>
   deleteLayer: (layerId: string) => void
   duplicateLayer: (layerId: string, parentId: string | null, index: number) => string | null
   moveLayer: (layerId: string, parentId: string | null, index: number) => void

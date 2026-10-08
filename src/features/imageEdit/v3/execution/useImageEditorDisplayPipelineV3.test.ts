@@ -81,6 +81,7 @@ function snapshot(
   previewOverrides: ImageEditCommandBusSnapshotV3['previewOverrides'],
 ): ImageEditCommandBusSnapshotV3 {
   return {
+    selection: null, selectionRevision: 0,
     document: {
       ...createImageEditDocumentV3({
         width: 1_600,

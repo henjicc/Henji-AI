@@ -119,7 +119,7 @@ function adopt(bus: ImageEditCommandBusV3, host?: ImageEditPersistenceHostV3): O
   }
   installOwner(instance, host)
   bus.setMutationGuard(() => assertImageEditDocumentAvailableV3(documentId))
-  instance.unsubscribe = bus.subscribePersistence(() => {
+  const unsubscribePersistence = bus.subscribePersistence(() => {
     instance.dirty = true
     instance.revision += 1
     if (instance.timer) clearTimeout(instance.timer)
@@ -133,6 +133,13 @@ function adopt(bus: ImageEditCommandBusV3, host?: ImageEditPersistenceHostV3): O
     }, 500)
     emit()
   })
+  let selectionRevision = bus.getSnapshot().selectionRevision
+  const unsubscribeSelection = bus.subscribe(snapshot => {
+    if (snapshot.selectionRevision === selectionRevision) return
+    selectionRevision = snapshot.selectionRevision
+    emit()
+  })
+  instance.unsubscribe = () => { unsubscribePersistence(); unsubscribeSelection() }
   instances.set(documentId, instance)
   emit()
   return instance

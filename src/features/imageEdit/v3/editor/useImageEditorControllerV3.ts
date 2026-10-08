@@ -6,6 +6,7 @@ import {
   type ImageEditLayerV3,
 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
+import { addImageEditLayerWithSelectionV3 } from '../application/imageEditSelectionServiceV3'
 import { getOrCreateImageEditDocumentInstanceV3, attachImageEditDocumentInstanceV3 } from '../application/imageEditDocumentInstances'
 import {
   getImageEditorHostProfileV3,
@@ -181,8 +182,8 @@ export function useImageEditorControllerV3(
           annotationId,
         })
       },
-      addLayer: (layer, parentId, index) => {
-        binding.bus.dispatch({ ...commandBase(), type: 'layer.add', layer, parentId, index })
+      addLayer: async (layer, parentId, index, signal, onProgress) => {
+        await addImageEditLayerWithSelectionV3(binding.bus, layer, parentId, index, signal, onProgress)
       },
       deleteLayer: (layerId) => {
         binding.bus.dispatch({ ...commandBase(), type: 'layer.delete', layerId })

@@ -1,5 +1,11 @@
 import { retryImageEditDocumentSaveV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
+import { splitImageEditV3LayerRef, imageEditV3LayerRef, findImageEditV3LiveLayer } from '../v3/application/imageEditDocumentRefs'
+import { applyImageEditSelectionCapability } from '@/core/application-control/domains/imageEdit/imageEditSelectionCapabilities'
+import { applyImageEditSelectionV3 } from '../v3/application/imageEditSelectionServiceV3'
+import { requireImageEditDocumentInstanceV3 } from '../v3/application/imageEditDocumentInstances'
+import { runImageEditPersistedOperationV3 } from '../v3/application/imageEditPersistenceOperations'
+import { applicationCallerAccess } from '@/core/application-control/callerContext'
 import type { ApplicationRef } from '@/core/application-control/applicationCapabilities'
 
 import { commitImageEdit } from '@/features/imageEdit/application/imageEditApplicationService'
@@ -17,6 +23,19 @@ import { releaseImageDocument } from '@/features/imageEdit/documents/imageDocume
 import { requestImageDocumentInEditor } from '@/features/imageEdit/documents/imageDocumentWorkspace'
 
 export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  registrar.registerHandler(applyImageEditSelectionCapability.id, async (input, context) => {
+    const parsed = applyImageEditSelectionCapability.inputSchema.parse(input)
+    const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
+    const executionContext = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'selection-apply', context.signal) : undefined
+    return runImageEditPersistedOperationV3(documentId, executionContext, async () => {
+      const { bus } = requireImageEditDocumentInstanceV3(documentId)
+      const owner = requireImageEditDocumentInstanceV3(documentId).persistenceOwner
+      if (executionContext && owner?.projection?.requiredPermissions.some(p => !executionContext.permissions.has(p))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const result = await applyImageEditSelectionV3(bus, layerId, parsed.action, context.signal)
+      return { ref: imageEditV3LayerRef(documentId, result.layerId), commandId: result.commandId,
+        verification: { verified: Boolean(findImageEditV3LiveLayer(bus.getSnapshot().document, result.layerId)?.layer.mask) } }
+    })
+  })
   // 图片文档的通用打开与后台释放（3.5）：列出、新建、移动、副本、回收站、改名走通用文档能力，
   // 这里只登记“打开到哪里”（工具箱图片编辑页接手，离开当前文档时按草稿规则询问）和后台会话怎么释放。
   registerDocumentOpener('image_document', (document) => {

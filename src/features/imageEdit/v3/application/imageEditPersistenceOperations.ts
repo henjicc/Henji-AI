@@ -50,6 +50,8 @@ export function resolveImageEditPersistenceParticipantsV3(
   const owners = new Map<string, ApplicationPersistenceParticipant>()
   for (const step of steps) {
     if (step.kind === 'operation') continue
+    // 独立选区是会话状态；只有消费为图层蒙版时才需要作品保存屏障。
+    if (step.kind === 'mutation' && step.entityType === 'image_edit.selection') continue
     const id = imageEditPersistenceDocumentId(step.kind === 'mutation' ? step.target : step.parent)
     if (!id) continue
     const owner = requireImageEditPersistenceOwnerV3(id)

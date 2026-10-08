@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { UiIconButton } from '@/components/ui'
+import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
 import Tooltip from '@/components/ui/Tooltip'
 import type {
   ImageEditorCapabilityV3,
@@ -35,6 +35,8 @@ const TOOL_ICONS: Record<ImageEditorToolIdV3, LucideIcon> = {
   'select-rect': VectorSquare,
   'select-ellipse': Scan,
   'select-lasso': LassoSelect,
+  'select-polygon': LassoSelect,
+  'select-brush': Paintbrush,
   'annotation-text': MessageSquareText,
   'annotation-callout': MessageSquareText,
   'annotation-arrow': ArrowUpRight,
@@ -48,17 +50,19 @@ const TOOL_ICONS: Record<ImageEditorToolIdV3, LucideIcon> = {
   'mask-edit': CircleDashed,
 }
 
-type ToolRailEntryV3 = ImageEditorToolIdV3 | 'annotation'
+type ToolRailEntryV3 = ImageEditorToolIdV3 | 'annotation' | 'selection'
 type RenderableToolRailEntryV3 =
   | { id: ImageEditorToolIdV3; annotationTools: null }
   | {
     id: 'annotation'
     annotationTools: ImageEditorCapabilityV3<ImageEditorToolIdV3>[]
   }
+  | { id: 'selection'; annotationTools: null }
 
 const TOOL_GROUPS: readonly (readonly ToolRailEntryV3[])[] = [
   ['move', 'hand', 'zoom'],
-  ['crop', 'select-rect', 'select-ellipse', 'select-lasso'],
+  ['crop'],
+  ['selection'],
   ['annotation'],
   ['raster-brush', 'eraser', 'mask-edit'],
 ]
@@ -85,6 +89,12 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
       {TOOL_GROUPS.map((group, groupIndex) => {
         const tools: RenderableToolRailEntryV3[] = []
         group.forEach((tool) => {
+          if (tool === 'selection') {
+            const selectionTools = controller.profile.tools.filter(({ id }) => id.startsWith('select-'))
+            if (controller.profile.id === 'mask') selectionTools.forEach(capability => tools.push({ id: capability.id, annotationTools: null }))
+            else if (selectionTools.length) tools.push({ id: 'selection', annotationTools: null })
+            return
+          }
           if (tool === 'annotation') {
             const annotationTools = IMAGE_EDITOR_ANNOTATION_TOOL_IDS_V3.flatMap((id) => {
               const capability = capabilities.get(id)
@@ -105,6 +115,16 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
             className={`flex flex-col gap-1 ${groupIndex > 0 ? 'mt-2 pt-2' : ''}`}
           >
             {tools.map(({ id, annotationTools }) => {
+              if (id === 'selection') {
+                const selectionTools = controller.profile.tools.filter(({ id: toolId }) => toolId.startsWith('select-'))
+                const current = selectionTools.find(({ id: toolId }) => toolId === activeTool) ?? selectionTools[0]
+                const Icon = TOOL_ICONS[current.id]
+                return <PanelTrigger key={id} panelWidthLabels={selectionTools.map(({ id: toolId }) => t(`imageEditor.v3.tools.${toolId}`))} closeOnPanelClick renderPanel={() => <div className="flex flex-col gap-0.5 p-1" role="menu" aria-label={t('imageEditor.v3.selection.overlay')}>
+                  {selectionTools.map(({ id: toolId, readiness }) => <UiOptionButton key={toolId} role="menuitem" variant="menu" active={activeTool === toolId} disabled={readiness.state !== 'ready'} onClick={() => setActiveTool(controller.sessionId, toolId)}>{t(`imageEditor.v3.tools.${toolId}`)}</UiOptionButton>)}
+                </div>}>
+                  {({ togglePanel, open }) => <UiIconButton size="lg" data-tool-id={current.id} on={activeTool?.startsWith('select-')} aria-label={t(`imageEditor.v3.tools.${current.id}`)} aria-expanded={open} title={t(`imageEditor.v3.tools.${current.id}`)} onClick={togglePanel}><Icon className="h-4 w-4" /></UiIconButton>}
+                </PanelTrigger>
+              }
               const isAnnotation = id === 'annotation'
               const targetTool = isAnnotation
                 ? annotationTools?.find(({ id: toolId }) => toolId === session?.toolSettings.annotationTool)

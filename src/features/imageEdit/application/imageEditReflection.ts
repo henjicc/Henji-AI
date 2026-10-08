@@ -1,4 +1,5 @@
 import { imageColorGradeJsonSchema } from '@/core/imaging/adjustments/schema'
+import { imageEditSelectionRegistrationV3 } from '../v3/application/imageEditSelectionEntityV3'
 import { listImageEditEntitySources } from '../v3/application/imageEditDocumentCatalog'
 import {
   type ApplicationEntityProvider,
@@ -345,7 +346,7 @@ const META: Record<ImageEditEntityType, { title: string; parents: ImageEditEntit
 }
 
 export function createImageEditReflectionRegistrations(): ApplicationEntityRegistration[] {
-  return (Object.values(IMAGE_EDIT_ENTITY_TYPES) as ImageEditEntityType[]).map((entityType) => ({
+  return [...(Object.values(IMAGE_EDIT_ENTITY_TYPES) as ImageEditEntityType[]).map((entityType): ApplicationEntityRegistration => ({
     entity: {
       id: entityType,
       domain: 'image_edit',
@@ -403,5 +404,5 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
       ref: imageEditV3SchemaRef('property', 'image_edit.resource.roles.value'),
       value: { type: 'array', items: { type: 'string' } },
     }] : [],
-  }))
+  })), imageEditSelectionRegistrationV3()]
 }

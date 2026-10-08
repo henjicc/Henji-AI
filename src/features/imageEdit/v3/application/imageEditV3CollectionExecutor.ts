@@ -170,6 +170,8 @@ async function rollbackPayload(payload: UndoPayload): Promise<ApplicationComplet
   }
 }
 
+import { addImageEditLayerWithSelectionV3 } from './imageEditSelectionServiceV3'
+
 export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecutor {
   readonly effectContract = { direct: [], cascades: [] }
 
@@ -208,8 +210,8 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
             index: containerLength(documentId, parentId),
             layer,
           }
-          bus.dispatch(command)
-          commandIds.push(command.commandId)
+          const commandId = await addImageEditLayerWithSelectionV3(bus, command.layer, parentId, command.index, context.signal)
+          commandIds.push(commandId)
           refs.push(layer.type === 'group'
             ? imageEditV3GroupRef(documentId, layer.id)
             : imageEditV3LayerRef(documentId, layer.id))

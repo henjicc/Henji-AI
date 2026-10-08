@@ -9,6 +9,7 @@ import { ImageEditorCropParametersV3 } from './ImageEditorCropParametersV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { imageEditorSelectionAllowedCombineModesV3 } from './selectionMaskLayerV3'
 import type { ImageEditorV3Controller } from './types'
+import { ImageEditorSelectionParametersV3 } from './ImageEditorSelectionParametersV3'
 
 const EMPTY_LAYER_IDS: readonly string[] = []
 
@@ -32,12 +33,13 @@ export function ImageEditorToolParametersV3({
   const selectionLike = session?.activeTool.startsWith('select-') ?? false
 
   useEffect(() => {
-    if (!session || !selectionLike
+    if (controller.profile.id !== 'mask' || !session || !selectionLike
       || allowedSelectionModes.includes(session.toolSettings.selectionCombineMode)) return
     setToolSetting(controller.sessionId, 'selectionCombineMode', 'replace')
-  }, [allowedSelectionModes, controller.sessionId, selectionLike, session, setToolSetting])
+  }, [allowedSelectionModes, controller.profile.id, controller.sessionId, selectionLike, session, setToolSetting])
 
   if (!session) return null
+  if (selectionLike && controller.profile.id !== 'mask') return <ImageEditorSelectionParametersV3 bus={bus} controller={controller} />
   if (session.activeTool === 'crop') {
     return <ImageEditorCropParametersV3 controller={controller} bus={bus} />
   }

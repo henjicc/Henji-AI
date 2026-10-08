@@ -1,5 +1,4 @@
 import {
-  IMAGE_EDIT_SELECTION_MAX_LASSO_POINTS_V3,
   type ImageEditSelectionCombineModeV3,
   type ImageEditSelectionPointV3,
 } from '@/core/imageEdit/v3/selection'
@@ -182,7 +181,6 @@ export function ImageEditorSelectionMaskOverlayV3({
     const output = clientToOutput(clientX, clientY)
     current.draft.end = output
     if (current.tool === 'select-lasso'
-      && current.draft.lassoPoints.length < IMAGE_EDIT_SELECTION_MAX_LASSO_POINTS_V3
       && Math.hypot(
         clientX - current.lastClientPoint[0],
         clientY - current.lastClientPoint[1],

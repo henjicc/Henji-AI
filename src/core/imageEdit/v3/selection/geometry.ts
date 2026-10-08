@@ -1,6 +1,5 @@
 import {
   IMAGE_EDIT_SELECTION_AA_SAMPLES_PER_AXIS_V3,
-  IMAGE_EDIT_SELECTION_MAX_LASSO_POINTS_V3,
   type ImageEditSelectionLassoV3,
   type ImageEditSelectionPointV3,
   type ImageEditSelectionShapeV3,
@@ -56,9 +55,6 @@ function normalizedRect(
 function assertLasso(shape: ImageEditSelectionLassoV3): void {
   if (!Array.isArray(shape.points) || shape.points.length < 3) {
     throw new Error('自由套索至少需要 3 个点');
-  }
-  if (shape.points.length > IMAGE_EDIT_SELECTION_MAX_LASSO_POINTS_V3) {
-    throw new Error('自由套索顶点数量超出上限');
   }
   shape.points.forEach((point, index) => {
     if (!point || typeof point !== 'object') throw new Error(`自由套索第 ${index + 1} 个点无效`);

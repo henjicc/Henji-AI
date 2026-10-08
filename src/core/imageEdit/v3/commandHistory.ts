@@ -241,6 +241,12 @@ export class ImageEditCommandHistoryV3 {
     this.notifyReleased(retainedBefore, 'clear');
   }
 
+  discardRedo(): void {
+    const retainedBefore = this.resourceMap();
+    this.redoEntries.length = 0;
+    this.notifyReleased(retainedBefore, 'redo-cleared');
+  }
+
   createSnapshot(): ImageEditCommandHistorySnapshotV3 {
     if (this.documentId === null || this.headRevision === null) {
       throw new ImageEditRevisionConflictErrorV3('历史尚未绑定图片文档');

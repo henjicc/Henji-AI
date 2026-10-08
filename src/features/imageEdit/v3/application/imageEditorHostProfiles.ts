@@ -10,6 +10,8 @@ export type ImageEditorToolIdV3 =
   | 'select-rect'
   | 'select-ellipse'
   | 'select-lasso'
+  | 'select-polygon'
+  | 'select-brush'
   | 'annotation-text'
   | 'annotation-callout'
   | 'annotation-arrow'
@@ -97,6 +99,8 @@ const SELECTION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] =
   ready('select-rect'),
   ready('select-ellipse'),
   ready('select-lasso'),
+  ready('select-polygon'),
+  ready('select-brush'),
 ];
 const ANNOTATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('annotation-text'),
@@ -126,7 +130,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
 > = {
   full: {
     id: 'full',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
@@ -156,7 +160,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   'canvas-edit': {
     id: 'canvas-edit',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
@@ -171,7 +175,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   mask: {
     id: 'mask',
-    tools: [...NAVIGATION_TOOLS, ...SELECTION_TOOLS, ...RASTER_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ...SELECTION_TOOLS.filter(t => t.id !== 'select-polygon' && t.id !== 'select-brush'), ...RASTER_TOOLS],
     layerKinds: ['raster'],
     effects: [],
     adjustments: [],

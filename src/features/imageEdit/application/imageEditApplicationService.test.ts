@@ -91,6 +91,7 @@ describe('image edit application service', () => {
       IMAGE_EDIT_ENTITY_TYPES.group,
       IMAGE_EDIT_ENTITY_TYPES.mask,
       IMAGE_EDIT_ENTITY_TYPES.resource,
+      'image_edit.selection',
     ])
     const previewRegistration = registrations.find((item) => (
       item.entity.id === IMAGE_EDIT_ENTITY_TYPES.preview

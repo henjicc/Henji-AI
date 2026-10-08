@@ -206,7 +206,7 @@ function rasterizeLassoCoverage(
   }
 }
 
-function rasterizeSelectionCoverage(
+export function rasterizeSelectionCoverage(
   width: number,
   height: number,
   originX: number,

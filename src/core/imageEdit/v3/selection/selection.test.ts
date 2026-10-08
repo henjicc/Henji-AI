@@ -207,12 +207,12 @@ describe('图片编辑 V3 选择转稀疏蒙版', () => {
         points: Array.from({ length: 8_193 }, (_, index) => ({ x: index % 10, y: index % 9 })),
       },
       combineMode: 'replace',
-    })).toThrow('顶点数量超出上限');
+    })).not.toThrow();
     expect(() => planImageEditSelectionMaskV3({
       canvas: { width: 1_000_000, height: 2_048 },
       shape: { type: 'rectangle', x: 0, y: 0, width: 1_000_000, height: 2_048 },
       combineMode: 'replace',
-    })).toThrow('安全上限');
+    })).not.toThrow();
     expect(() => planImageEditSelectionMaskV3({
       canvas: { width: 10, height: 10 },
       shape: { type: 'rectangle', x: 0, y: 0, width: 1, height: 1 },
