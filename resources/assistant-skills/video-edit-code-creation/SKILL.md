@@ -1,71 +1,71 @@
 ---
 name: video-edit-code-creation
-description: 在剪辑里设计、编写或修改原生代码素材（动态图形、标题、花字、模板、滤镜），统一风格、编排动画、放入时间线并取帧审查时使用。普通剪辑、媒体生成和进度查询不触发。
+description: 在剪辑里设计、编写或修改代码素材（动态图形、标题、花字、模板、滤镜），统一风格、编排动画、放入时间线并取帧审查时使用。普通剪辑、媒体生成和进度查询不触发。
 ---
 
 # 剪辑代码创作：先导演，再写代码
 
-用受限 TypeScript 风格作者语言描述画面，只用当前作者接口与正式工具。按意图创作；设计建议不新增 API，样例只核对写法。
+用受限TS作者语言与正式工具描述画面。建议不新增API；编译成功不等于画面验收。
 
-## 总原则
+## 原则与铁律
 
-- **先有想法再有画面**：先说“用什么画面讲哪一句”，每个装饰都要服务它。
-- **少即是多**：每个时刻一个主焦点；元素宁少而大，信息多就分拍。
-- **运动服务信息**：动作交代看哪里、先看什么、何时读完；无理由的动作删除。
-- **参数化**：可能会改的量（文字、配色、节奏、构图、强度）开放成参数，画面从参数推导；用户要求修改时先改参数。
-- **统一胜过花样**：配色、字体、间距、曲线性格与时长刻度共用一套；局部变化要有语义。
-- **节奏要有对比**：快慢、动静、大小交替；阅读停留也属于设计。
-
-## 铁律
-
-1. 新作品先做关键画面，取帧读图后请用户确认，再扩展全片。用户已说“不用停／直接做完”就自己选并说明理由；改字、换色等小改不重新确认方向。
-2. 开工先读相关用户偏好。当前要求与品牌约束优先；自己选的风格不等于用户长期口味。
-3. 改已有作品先用 `read_application_entity` 读当前素材、实例参数、曲线和位置，并看原画面。在原素材上改；源码变动沿新版本绑定，不删除重建满意内容。检查共享实例及相邻接缝。
-4. 每次完成一组修改，都用 `observe_video_edit_frame` 取受影响画面，再用 `read_application_media` 真正读图；拿到引用或编译成功都不能证明画面正确。
-5. 交付前自检，分开报告回读、看过的帧与未验证项。导出或收录按用户要求，不因加载技能增加付费调用或权限。
+- 本技能给起点与判断依据，不规定风格：简报和偏好优先，刻度、配色、曲线可为创意突破；无偏好时给差异明显的方向，样例只示范写法。
+- 先说“用什么画面讲哪一句”，装饰服务母题；每刻一个焦点，元素宁少而大、信息多就分拍。
+- 动作解释看哪里、阅读顺序与交接；快慢、动静、大小有对比，落地后静止。
+- 文字、配色、节奏、构图、强度开放参数，画面从参数推导；改动优先改参数。
+- 字体、颜色、间距、圆角、曲线性格与时长共用规则，局部变化有语义。
+- 新作先做主停留帧、取帧读图、确认方向再扩全片。已授权“不用停／直接做完”自主选并说明；改字换色不重做提案。
+- 开工复用相关偏好；当前要求和品牌约束优先，自己选的风格不算用户口味。
+- 改已有作品先用 `read_application_entity` 读素材、参数、曲线、覆盖与位置并看原画面；保留满意内容，源码改动新增版本重绑，核对共享实例及邻接缝。
+- 每组修改后 `observe_video_edit_frame` 取受影响画面、`read_application_media` 真读图。交付区分回读、已看帧与未验项，导出／收录按用户要求，不自动增加付费或权限。
 
 ## 按任务分流
 
-`load_assistant_skill` 的 name 为 `video-edit-code-creation`；省略 path 读入口，传下表路径读参考。每步读一两份，复用已读内容。
+`load_assistant_skill` 的name为 `video-edit-code-creation`；省略path读入口，按下表路径读参考。每步读一两份，复用已读内容。
 
-| 当前任务 | 先读 |
+| 任务 | 参考 |
 | --- | --- |
-| 新作品、找视觉想法、拆解参考 | [简报与概念](references/brief-concept.md) |
-| 定气质、参数尺度或系列统一 | [风格坐标](references/styles.md) |
-| 定构图、画幅、安全框、信息层级 | [版式](references/layout.md) |
-| 标题、字幕、花字、人名条、选字体 | [文字](references/type.md) |
-| 定配色、渐变、颗粒、投影与辉光，或用全能调色的 HSL 辅助校正局部颜色 | [色彩与质感](references/color-texture.md) |
-| 曲线手感、接力、动势与转场 | [运动](references/motion.md) |
-| 全片节奏、知识讲解、声画安排 | [结构](references/structure.md) |
-| 取帧、批注、A/B、返修与交付 | [审查](references/review.md) |
+| 简报、概念、拆参考 | [简报与概念](references/brief-concept.md) |
+| 风格／构图／字体／颜色 | [风格](references/styles.md)、[版式](references/layout.md)、[文字](references/type.md)、[色彩质感](references/color-texture.md) |
+| 质感选型、实现边界、试一帧 | [定做法](references/approach.md) |
+| 时长曲线、错峰、因果、转场 | [运动](references/motion.md) |
+| 全片节奏、讲解、声画 | [结构](references/structure.md) |
+| 取帧、批注、A/B、评分、交付 | [审查](references/review.md)、[AI味改法](references/review-ai.md) |
 | 换字自适应、量字、压力测试 | [模板](references/templates.md) |
-| 开工读口味、用户明确评价后记偏好 | [用户偏好](references/preferences.md) |
-| 写或修改源码：语法、图形与预算 | [作者接口](references/author-api.md) |
-| 文字排版、量字、逐字与动效函数 | [文字与动效接口](references/author-text-motion.md) |
-| 着色器：框架组件、图层树、自己写 WGSL | [着色器接口](references/author-shaders.md)；组件目录 [纹理](references/shader-components-textures.md)（[续](references/shader-components-textures-2.md)）、[图形材质](references/shader-components-shapes.md)（[续](references/shader-components-shapes-2.md)）、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
-| 处理用户标注/批注 | [标注处理协议](references/annotations.md) |
-| 开放参数、改参数、拆文件、组件库 | [参数化](references/parametric.md)、[多文件与组件库](references/multifile-components.md) |
-| 参数类型、分组与条件显示、自定义组件类型 | [参数类型](references/parameter-types.md) |
-| 实例值、关键帧、图片参数、新版本绑定 | [参数与曲线](references/parameters-curves.md) |
-| 定位目标、插入、时间换算、撤销与恢复 | [时间线契约](references/timeline-check.md) |
-| 需要完整可对照的提交写法 | [接口样例](references/examples.md) |
+| 开工读口味、明确评价后保存 | [偏好](references/preferences.md) |
+| 逐字／逐词、遮罩、排版 | [文字配方](references/recipes-text.md)、[逐词分拍](references/recipes-text-words.md) |
+| 打字机、光标、数字滚动 | [终端与数字](references/recipes-text-data.md) |
+| 字幕实体、花字、关键词、人名条 | [字幕配方](references/recipes-captions.md) |
+| 玻璃、图标、线条、圆角卡片 | [玻璃与线条](references/recipes-glass-lines.md) |
+| 三维镜头参考、代码视差 | [空间配方](references/recipes-3d.md) |
+| 语法、图形、预算 | [作者接口](references/author-api.md) |
+| text、measureText、perChar、缓动 | [文字动效接口](references/author-text-motion.md) |
+| 框架组件、图层树、自写WGSL | [着色器接口](references/author-shaders.md) |
+| 查真实组件名称与角色 | [纹理](references/shader-components-textures.md)／[续](references/shader-components-textures-2.md)、[图形材质](references/shader-components-shapes.md)／[续](references/shader-components-shapes-2.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
+| 用户标注发现、定位、回复 | [标注协议](references/annotations.md) |
+| 参数化、拆文件、项目组件库 | [参数化](references/parametric.md)、[多文件组件](references/multifile-components.md) |
+| 参数类型、分组、条件、自定义类型 | [参数类型](references/parameter-types.md) |
+| 实例值、曲线、图片参数、版本绑定 | [参数曲线](references/parameters-curves.md) |
+| 定位、插入、时间换算、撤销恢复 | [时间线契约](references/timeline-check.md) |
+| 完整提交与调参对照 | [接口样例](references/examples.md) |
 
 ## 导演流程
 
-已有明确决定就从相应阶段继续；小改直接读现状、修改、审查。
+已有决定就从相应阶段继续；小改直接读现状、修改、审查。
 
-| 阶段 | 做什么与产出 | 按需读的 reference |
+| 阶段 | 产出 | 按需读reference |
 | --- | --- | --- |
-| 想清楚 | 五问收成简报，确认目标序列、规格与交付范围 | preferences、brief-concept、timeline-check |
-| 找概念 | 视觉想法＋母题，出 1–3 个方向，说明参考与实现风险 | brief-concept、styles |
-| 定样子 | 做主停留帧，固定版式、字体、颜色；请确认或自主选定 | layout、type、color-texture、author-api |
-| 搭骨架 | 能量曲线与节拍表，粗排完整时间线，先验证信息顺序 | structure、timeline-check |
-| 动起来 | 先因果和主次，再曲线、时长、错峰与转场 | motion、parameters-curves |
-| 看片改 | 三遍看，批注最影响理解的地方，比较后局部修 | review |
-| 交付沉淀 | 回读与自检；按需做可编辑模板，只记明确长期口味 | review、templates、preferences |
+| 想清楚 | 五问简报、目标序列、规格与交付 | preferences、brief-concept、timeline-check |
+| 找概念 | 母题与一到三个方向、参考和风险 | brief-concept、styles |
+| 定做法 | 选实现、查组件与效果、试一帧 | approach、author-shaders、recipes-3d |
+| 定样子 | 主停留帧与版式字体配色，确认方向 | layout、type、color-texture、author-api |
+| 搭骨架 | 能量与节拍表，粗排完整时间线 | structure、timeline-check |
+| 动起来 | 因果主次、曲线错峰、文字与质感 | motion、parameters-curves、recipes-text、recipes-text-words、recipes-text-data、recipes-captions、recipes-glass-lines |
+| 看片改 | 三遍看片、A/B、可执行批注、局部返修 | review、review-ai、annotations |
+| 交付沉淀 | 回读自检、可编辑模板、明确长期口味 | review、templates、multifile-components、preferences |
 
 ## 执行边界
 
-目标从宿主上下文或正式目录取得，不猜 ID；缺剪辑工具时用 `load_application_tools` 加载 video_edit。写入走 `change_application_entities`，依赖新引用才分调用，同目的修改合并事务。源码、参数与关键帧查接口参考，放置与恢复查时间线契约。
+目标来自宿主上下文或正式目录，不猜ID；缺工具用 `load_application_tools` 加载video_edit。写入走 `change_application_entities`，同目的合并事务，依赖新引用才分调用。源码、参数查接口，放置与恢复查时间线。
 
-概念、节拍和批注留当前对话或正式标注，不自动建文档、临时工程或偏好文件。交付指出结果位置与可修改内容。
+概念、节拍、批注留当前对话或正式标注，不自动建文档、临时工程或偏好文件。交付指出结果位置、可修改内容与证据边界。

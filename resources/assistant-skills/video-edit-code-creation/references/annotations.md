@@ -24,7 +24,7 @@ observe_video_edit_frame：documentRef 为实际剪辑引用；target.kind:"prog
 
 element 目标先按 clip_id 回读片段固定源码版本，再读 video_edit.code_version.source。用 elementId 与 sourceSpan 定位对应调用；源码位置是零基 UTF-16 偏移、左闭右开，一基行列帮助阅读。源码已变化时先核对版本/id，不能按旧偏移修改新源码。
 
-如宿主有 video_edit.document.selected_code_element，可读取 clipRef、elementId、sourceSpan 与 parameterKeys，优先修改关联的公开片段参数。没有元素覆盖层，不编造可写 element 属性。无命中/region 时如实说明，读源码或观察可见帧后再改；坐标只辅助，不证明源码归属。
+如宿主有video_edit.document.selected_code_element，可读clipRef、elementId、sourceSpan与parameterKeys，优先修改关联参数。无关联参数的局部修正可沿video_edit.clip.element_overrides按elementId合并，先读并保留其他覆盖；不编造element实体。无命中／region时读源码或可见帧再改，坐标不证明源码归属。
 
 参数修改走片段 code_parameters；结构改动新增 code_version，拿到返回引用后重绑 clip.code_version_id（滤镜重绑 effect.version_id），保留授权范围外实例、其它参数及曲线。必要时检查共享定义的调用方，不删除重建用户满意内容。
 

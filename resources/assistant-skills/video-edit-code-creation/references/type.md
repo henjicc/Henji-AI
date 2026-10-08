@@ -12,7 +12,7 @@
 
 category 可选 serif/sans-serif/monospace/handwriting/unknown；还可按 font.family、font.localized_name、font.name、font.imported 等值筛选，不能把模糊搜索词当作精确家族名。使用返回 nextCursor 继续，不把一页结果当整个字体库。
 
-对返回的 ref 调 `read_application_entity`，propertyIds 取 font.name/family/localized_name/style/weight/category/supports_cjk/imported。按返回 name（精确样式）或 family 写入文字 fontFamily；用真实 weight/style，不猜字体名称或安装情况。代码当前没有 font 参数类型，可用 text/choice 字符串传字体名。目录只读，不能通用创建/删除 font；字体导入由用户的本地文件选择器维护。
+对返回的 ref 调 `read_application_entity`，propertyIds 取 font.name/family/localized_name/style/weight/category/supports_cjk/imported。按返回 name（精确样式）或 family 写入文字 fontFamily；用真实 weight/style，不猜字体名称或安装情况。代码用font参数直接传家族名；缺字体回退不能算品牌字体验收。目录只读，不能通用创建/删除font；字体导入由用户的本地文件选择器维护。
 
 查询安装情况不能证明字形覆盖。样张包含实际中文、数字、英文及 g／y／p，下伸字母和多笔画中文都取帧检查；缺字的符号改用图形表达。字体不是越陌生越好，同家族粗细对照也能建立层级。
 
@@ -41,7 +41,7 @@ category 可选 serif/sans-serif/monospace/handwriting/unknown；还可按 font.
 
 正文 36、阶梯比 1.5，可取 36／54／81／122；全片共用档位，不要每行随意设数值。中文多笔画可比同角色拉丁文字大约 10–15%，最终以实际字面与读图为准。
 
-标题行距从字号的 1.05–1.2 倍起步，正文 1.4–1.6 倍。中文正文字距 0–0.02em，大标题可轻收至 −0.01～−0.03em；英文大写标签 0.05–0.15em。这里 em 是字号比例，只有当前接口公开对应字段才换算写入，不把这些数值当作固定 API 单位。
+标题行距从字号的1.05–1.2倍起步，正文1.4–1.6倍。中文正文字距0–0.02em，大标题轻收至−0.01～−0.03em；英文大写标签0.05–0.15em。作者letterSpacing写字号×em的像素、lineHeight写倍率；字幕style.tracking写千分之一em、leading写1080p参考像素（0自动1.25倍）。量字字段必须同步。
 
 ## 混排与阅读
 
@@ -50,3 +50,5 @@ category 可选 serif/sans-serif/monospace/handwriting/unknown；还可按 font.
 标题完整可读停留可按“字数 × 0.25 秒＋0.5 秒，至少 1.2 秒”估算，再按内容难度修正。字幕跟随语音可从每秒不超过 9 字、每行约 16 字、两行起步排；它们是阅读建议，长文通过分段或延长解决，不能截断原文或设置素材数量上限。
 
 花字只强调当前关键词，避开人脸和字幕；人名与头衔字号分级、共用左边缘。文字遇复杂底图时用清晰底板或降低背景对比，不用一圈厚辉光掩盖可读问题。需要换字复用时读 templates，以真实量字结果驱动底板。
+
+字号阶梯可选1.333或1.5，不每行随意造档。字体候选先查本机；思源／Noto CJK适合现代信息、宋体适合人文、圆体适合亲和语气、手写仅短点缀。家族有中文不代表符号齐全，光标／按键图标用形状，不用缺字方块。系统默认字体、伪粗斜体和横向压字不能代替选型；精确字形名避免重复合成字重。

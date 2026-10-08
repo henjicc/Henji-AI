@@ -68,7 +68,7 @@ radialGradient({cx,cy,r,stops:[[0,rgbaValue],[1,rgbaValue]]})
 
 ## 元素定位
 
-每个图形可给稳定静态 id；省略时按调用源码偏移生成，repeat 自动加重复索引。输出带 elementId、祖先 elementPath 与 sourceSpan：start/end 为零基 UTF-16 偏移、左闭右开；startLine/startColumn/endLine/endColumn 为一基行列。id 是定位信息，当前没有元素覆盖字段；修改须找到源码调用、新增版本并重绑实例。
+每个图形可给稳定静态id；省略按源码偏移生成，repeat加索引。输出带elementId、elementPath与sourceSpan：start/end为零基UTF-16偏移、左闭右开；行列一基。实例可沿video_edit.clip.element_overrides修位置／文字等，先读并保留其他覆盖；文字参数优先改参数。结构改动仍新增版本并重绑。
 
 源码重排改变自动 id/偏移，先核对标注对应的固定 version，不用旧 sourceSpan 切新源码。命中按当前帧变换、裁切和可见性，包围盒是画布 AABB；文字用正式宿主量字。通过标注 target 或选中元素上下文取得定位，见 annotations。
 

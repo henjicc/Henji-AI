@@ -85,6 +85,10 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     expect(main.content).not.toContain('smoothstep')
     const links = [...main.content.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1])
     expect(new Set(links)).toEqual(new Set(main.referencePaths))
+    expect(main.referencePaths).toEqual(expect.arrayContaining([
+      'references/approach.md', 'references/recipes-text.md', 'references/recipes-text-data.md', 'references/recipes-text-words.md',
+      'references/recipes-captions.md', 'references/recipes-glass-lines.md', 'references/recipes-3d.md', 'references/review-ai.md',
+    ]))
     for (const reference of links) {
       const result = (await callEmbeddedSkill({ name: 'video-edit-code-creation', path: reference, reason: '当前步骤' }, signal)).data
       expect(result.path).toBe(reference)
