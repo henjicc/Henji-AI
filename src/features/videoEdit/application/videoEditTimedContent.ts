@@ -1,3 +1,4 @@
+import { joinVideoEditOutputPath } from './videoEditExportQueue'
 import { createLogger } from '@/core/logging'
 import { videoEditCaptionSchema, videoEditMarkerSchema, importVideoEditCaptions, exportVideoEditCaptions, type VideoEditCaption, type VideoEditMarker } from '@/core/videoEdit/timedContent'
 import { getPlatform } from '@/platform/runtime'
@@ -57,14 +58,23 @@ export async function importVideoEditCaptionFile(projectId: string, sequenceId: 
     return ids
   } catch (error) { if (!signal?.aborted) logger.error('剪辑字幕导入失败', { event: 'video_edit.caption.import.failed', context: { projectId, sequenceId }, error }); throw error }
 }
-export async function exportVideoEditSubtitles(projectId: string, format: 'srt' | 'vtt', sequenceId = requireVideoEditInstance(projectId).activeSequenceId, signal?: AbortSignal, clock: 'sequence' | 'range' = 'range'): Promise<{ saved: boolean; verified: boolean }> {
+export async function exportVideoEditSubtitles(projectId: string, format: 'srt' | 'vtt', sequenceId = requireVideoEditInstance(projectId).activeSequenceId, signal?: AbortSignal, clock: 'sequence' | 'range' = 'range', outputDirectory?: string): Promise<{ saved: boolean; verified: boolean }> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence || !sequence.captions?.length) throw new Error('此序列没有可导出的字幕。')
   const range = videoEditExportRange(owner, sequenceId)
   const text = exportVideoEditCaptions(sequence, format, { ...range, clock })
   if (!text.replace(/^WEBVTT\s*/, '').trim()) throw new Error('序列入出点范围内没有字幕。')
-  const path = await getPlatform().system.dialog.save({ defaultPath: `${sequence.name}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
+  let path: string | null
+  if (outputDirectory) {
+    // 能力调用：自动取不重名文件，不弹保存对话框。
+    const platform = getPlatform(); await platform.system.fs.mkdir(outputDirectory, { recursive: true })
+    const base = sequence.name.replace(/[\\/:*?"<>|]/g, '-').trim() || '字幕'
+    for (let attempt = 1; ; attempt++) {
+      path = joinVideoEditOutputPath(outputDirectory, `${attempt === 1 ? base : `${base} (${attempt})`}.${format}`)
+      if (!await platform.system.fs.exists(path)) break
+    }
+  } else path = await getPlatform().system.dialog.save({ defaultPath: `${sequence.name}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
   signal?.throwIfAborted()
   if (!path) return { saved: false, verified: false }
   if (!path.toLowerCase().endsWith(`.${format}`)) throw new Error(`请将字幕保存为.${format}文件。`)

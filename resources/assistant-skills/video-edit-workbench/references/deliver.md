@@ -13,7 +13,7 @@
 
 ## 预设与范围
 
-先读 `video_edit.export_preset`，再 `export_video_edit`。不猜预设ID或输出路径，文件由本机正式选择流程授权。
+先读 `video_edit.export_preset`，再 `export_video_edit`。不猜预设ID或输出路径；能力调用不弹保存对话框，默认写进剪辑所在项目的“导出”文件夹（重名自动加序号），也可用 destination 指定快速下载或下载预设目录。
 
 单项可给 format=mp4/aac/wav/srt/vtt、range、loudness，或完整 settings；settings 不能混 format/loudness/subtitleClock。完整设置查正式 schema：codec=avc/hevc、bitrateMode=vbr/cbr、encoderPreference=hardware/software、captionMode=none/burn/srt/vtt；不编造ProRes或VBR双次编码选项。只用预设或省略设置会适配设备，完整 settings 不支持时明确拒绝；回读 queue.settings 确认实际编码与规格。
 

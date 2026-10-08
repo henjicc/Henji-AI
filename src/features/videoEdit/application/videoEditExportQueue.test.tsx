@@ -51,6 +51,7 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'writeFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(false)
   vi.spyOn(platform.system.fs, 'remove').mockResolvedValue(undefined)
+  vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue(file('output.mp4'))
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue(file(''))
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
@@ -192,6 +193,9 @@ it('助手从通用目录读取预设，跨序列/剪辑一次批量提交、查
     ] })
     expect(result.queue).toHaveLength(2)
     const jobs = videoEditExportQueue.list(); expect(jobs[1].settings.fit).toBe('fill'); expect(jobs[0].range).toEqual({ startFrame: 1, endFrame: 3 })
+    // 助手/外部智能体导出不弹保存对话框（无人可点会一直等待），默认放进项目“导出”文件夹。
+    expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
+    for (const job of jobs) expect(job.path).toMatch(/导出[\\/][^\\/]+\.mp4$/)
     const read = await app.requireResult('query_video_edit_export', { documentRef: { kind: 'video_edit.document', id: second.document.id } }); expect(read.queue).toHaveLength(1)
     expect((await app.call('cancel_video_edit_export', { documentRef: { kind: 'video_edit.document', id: first.document.id }, taskId: jobs[1].id })).ok).toBe(false)
     await app.requireResult('cancel_video_edit_export', { documentRef: { kind: 'video_edit.document', id: second.document.id }, taskId: jobs[1].id }); expect(jobs[1].state).toBe('cancelled')

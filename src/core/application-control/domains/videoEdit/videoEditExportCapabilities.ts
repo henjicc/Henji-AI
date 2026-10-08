@@ -3,12 +3,13 @@ import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
 import { videoEditLoudnessSettingsSchema, videoEditLoudnessMeasurementSchema } from '../../../videoEdit/loudness'
 import { videoEditExportSettingsSchema } from '../../../videoEdit/exportPresets'
+import { canvasDownloadDestinationSchema } from '../canvas/canvasExportApplicationCapabilities'
 
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
 const documentRef = ref('video_edit.document')
 const range = z.object({ startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() }).strict().refine(value => value.endFrame > value.startFrame, '出点必须晚于入点。')
 const item = z.object({ documentRef: documentRef.optional(), sequenceRef: ref('video_edit.sequence').optional(), presetRef: ref('video_edit.export_preset').optional(), settings: videoEditExportSettingsSchema.optional().describe('完整导出设置；覆盖预设并严格校验，不自动替换。只传预设时按设备适配；省略预设和设置时与序列一致并按设备适配。'), fit: z.enum(['fit', 'fill', 'letterbox']).optional(), range: range.optional() }).strict()
-export const videoEditExportInputSchema = z.object({ documentRef, format: z.enum(['mp4', 'aac', 'wav', 'srt', 'vtt']).optional(), settings: videoEditExportSettingsSchema.optional(), range: range.optional(), subtitleClock: z.enum(['sequence', 'range']).optional(), loudness: videoEditLoudnessSettingsSchema.optional(), exports: z.array(item).min(1).optional(), retryTaskId: z.string().min(1).optional() }).strict().superRefine((value, ctx) => {
+export const videoEditExportInputSchema = z.object({ documentRef, format: z.enum(['mp4', 'aac', 'wav', 'srt', 'vtt']).optional(), settings: videoEditExportSettingsSchema.optional(), range: range.optional(), subtitleClock: z.enum(['sequence', 'range']).optional(), loudness: videoEditLoudnessSettingsSchema.optional(), exports: z.array(item).min(1).optional(), destination: canvasDownloadDestinationSchema.optional().describe('输出目录。省略时放进剪辑所在项目的“导出”文件夹；quick 为已配置快速下载目录，preset 为下载预设目录。重名自动加序号，不覆盖、不弹保存对话框。'), retryTaskId: z.string().min(1).optional() }).strict().superRefine((value, ctx) => {
   if (value.exports && (value.retryTaskId || value.format || value.settings || value.range || value.loudness || value.subtitleClock)) ctx.addIssue({ code: 'custom', message: '批量 exports 已包含各项完整设置，不能混用顶层格式、设置、范围、响度、字幕时间或重试参数。' })
   if (value.retryTaskId && (value.format || value.settings || value.range || value.loudness || value.subtitleClock)) ctx.addIssue({ code: 'custom', message: '重试使用原快照与设置，不可同时更改格式、设置、范围或响度。' })
   if ((value.format === 'srt' || value.format === 'vtt') && value.range) ctx.addIssue({ code: 'custom', message: '独立字幕导出使用时间线入出点；自定义范围字幕请用 settings.captionMode 随成片导出。' })

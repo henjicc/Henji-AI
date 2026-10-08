@@ -11,7 +11,9 @@ import { videoEditMediaPathKey } from './videoEditMedia'
 import { adaptVideoEditExportPreset, assertVideoEditExportSupported } from '../engine/videoEditExportEncoder'
 
 const logger = createLogger('features.videoEdit.exportQueue')
-export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string }
+export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string
+  /** 助手/外部智能体调用：校验通过后在此目录自动取不重名文件，不弹本机保存对话框（无人可点时会一直等待）。 */
+  outputDirectory?: () => Promise<string> }
 export interface VideoEditExportJob {
   id: string; owner: VideoEditInstance; name: string; presetName: string; snapshot: VideoEditComposition; settings: VideoEditExportSettings
   range: { startFrame: number; endFrame: number }; path: string
@@ -121,6 +123,17 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
     const paths = new Set<string>()
     for (const [index, job] of jobs.entries()) {
       signal?.throwIfAborted()
+      const directory = !job.path ? await requests[index].outputDirectory?.() : undefined
+      if (!job.path && directory) {
+        await platform.system.fs.mkdir(directory, { recursive: true })
+        const base = (requests[index].fileName ?? `${job.name} - ${job.presetName}`).replace(/\.[^./\\]+$/, '').replace(/[\\/:*?"<>|]/g, '-').trim() || '导出'
+        for (let attempt = 1; ; attempt++) {
+          const candidate = joinVideoEditOutputPath(directory, `${attempt === 1 ? base : `${base} (${attempt})`}.${job.settings.format}`)
+          const outputs = videoEditExportPaths(candidate, job.settings)
+          const taken = await Promise.all(outputs.map(output => platform.system.fs.exists(output)))
+          if (!taken.some(Boolean) && !outputs.some(output => paths.has(videoEditMediaPathKey(output)))) { job.path = candidate; break }
+        }
+      }
       if (!job.path) {
         const path = await platform.system.dialog.save({ defaultPath: requests[index].fileName ?? `${job.name} - ${job.presetName.replace(/[\\/:*?"<>|]/g, '-')}.${job.settings.format}`, filters: [{ name: job.settings.format.toUpperCase(), extensions: [job.settings.format] }] })
         if (!path) { for (const release of releases) release(); return [] }
@@ -143,6 +156,11 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
     if ([...paths].some(key => occupied.has(key))) throw new Error('输出位置已被另一个导出占用，请选择不同文件名。')
     videoEditExportQueue.append(jobs); return jobs
   } catch (error) { for (const release of releases) release(); throw error }
+}
+/** 目录与文件名拼接，沿用目录自身的分隔符。 */
+export function joinVideoEditOutputPath(directory: string, name: string): string {
+  const separator = directory.includes('\\') && !directory.includes('/') ? '\\' : '/'
+  return `${directory.replace(/[\\/]+$/, '')}${separator}${name}`
 }
 export function retryVideoEditExportJob(id: string): void {
   assertApplicationWritesAllowed()

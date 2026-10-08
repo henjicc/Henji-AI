@@ -1,10 +1,12 @@
 import { VIDEO_EDIT_EXPORT_CAPABILITIES, videoEditExportInputSchema, videoEditExportQuerySchema } from '@/core/application-control/domains/videoEdit/videoEditExportCapabilities'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
-import { enqueueVideoEditExports, retryVideoEditExportJob, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
+import { enqueueVideoEditExports, joinVideoEditOutputPath, retryVideoEditExportJob, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
-import { requireVideoEditInstance } from './videoEditService'
+import { requireVideoEditInstance, videoEditDocumentOperations } from './videoEditService'
+import { resolveConfiguredDestination } from '@/features/canvas/application/canvasDownloadService'
+import type { CanvasDownloadDestination } from '@/core/application-control/domains/canvas/canvasExportApplicationCapabilities'
 import { patchVideoEditExportSettings, resolveVideoEditExportSettings, videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { adaptVideoEditExportPreset } from '../engine/videoEditExportEncoder'
@@ -12,6 +14,16 @@ import { adaptVideoEditExportPreset } from '../engine/videoEditExportEncoder'
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
   return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, range: job.range, settings: job.settings,
     outputReady: Boolean(job.task?.output), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
+}
+
+/** 能力调用没有人点保存对话框：默认放进剪辑所在项目的“导出”文件夹，也可指定已配置的快速下载/预设目录。 */
+async function videoEditCapabilityOutputDirectory(projectId: string, destination: CanvasDownloadDestination | undefined): Promise<string> {
+  if (destination) return resolveConfiguredDestination(destination)
+  const container = requireVideoEditInstance(projectId).session.documentMeta.container
+  if (container.kind !== 'project') throw new Error('剪辑不在项目里，无法确定导出位置；请指定 destination（快速下载或预设目录）。')
+  const project = await videoEditDocumentOperations().findProject(container.projectId)
+  if (!project) throw new Error('剪辑所在项目找不到，请指定 destination。')
+  return joinVideoEditOutputPath(project.path, '导出')
 }
 export async function handleVideoEditExportCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
   const definition = VIDEO_EDIT_EXPORT_CAPABILITIES.find(value => value.id === id)
@@ -27,7 +39,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     const input = videoEditExportInputSchema.parse(raw)
     if (input.format === 'srt' || input.format === 'vtt') {
       if (input.loudness) throw new Error('响度标准化只适用于视频成片，字幕导出不包含声音。')
-      const result = await exportVideoEditSubtitles(documentRef.id, input.format, owner.activeSequenceId, context.signal, input.subtitleClock)
+      const result = await exportVideoEditSubtitles(documentRef.id, input.format, owner.activeSequenceId, context.signal, input.subtitleClock, await videoEditCapabilityOutputDirectory(documentRef.id, input.destination))
       return { resultRef: documentRef, queue: [], verification: { verified: result.verified, target: documentRef, condition: result.verified ? '已回读字幕文件核对。' : '用户取消文件选择。' }, message: result.saved ? '字幕已导出并核实。' : '已取消字幕导出。' }
     }
     if (input.retryTaskId) {
@@ -47,8 +59,8 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
         const composition = videoEditComposition(target.document, sequenceId?.slice(projectId.length + 1) ?? target.activeSequenceId)
         const base = value.settings ?? (preset && preset.id !== 'builtin:sequence' ? preset.settings : videoEditSequenceExportSettings(composition))
         const settings = value.settings ? base : await adaptVideoEditExportPreset(resolveVideoEditExportSettings(base, composition))
-        return { projectId, sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings }
-      })) : [{ projectId: documentRef.id, range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })) }]
+        return { projectId, sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings, outputDirectory: () => videoEditCapabilityOutputDirectory(projectId, input.destination) }
+      })) : [{ projectId: documentRef.id, range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })), outputDirectory: () => videoEditCapabilityOutputDirectory(documentRef.id, input.destination) }]
       if (context.callerGrant && requests.some(value => value.settings.addToLibrary) && !context.callerGrant.permissions.includes('assets:write')) throw new Error('加入资产库需要 assets:write 授权；请在导出 settings 中设 addToLibrary=false，或调整连接授权后重试。')
       const jobs = await enqueueVideoEditExports(requests, context.signal)
       submitted = jobs
