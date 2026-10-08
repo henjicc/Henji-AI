@@ -20,7 +20,7 @@ export function VideoEditCodeElementOverlay({ instance, enabled, onError }: { in
   let selected: ReturnType<typeof selectedVideoEditCodeElement>
   let entries: ReturnType<typeof videoEditCodeElementFrames> = new Map()
   let failure: unknown
-  try { if (available && !instance.playing) { entries = videoEditCodeElementFrames(instance); selected = selectedVideoEditCodeElement(instance) } } catch (error) { failure = error }
+  try { if (available && !instance.playing && (hover || instance.selectedCodeElement)) { entries = videoEditCodeElementFrames(instance); selected = selectedVideoEditCodeElement(instance) } } catch (error) { failure = error }
   const errorRef = useRef(onError); errorRef.current = onError
   useEffect(() => { if (failure) errorRef.current(failure) }, [failure])
   useEffect(() => {

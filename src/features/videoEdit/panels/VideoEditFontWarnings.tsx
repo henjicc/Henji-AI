@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { UiButton, UiError } from '@/components/ui'
 import type { VideoEditComposition, VideoEditDocument } from '@/core/videoEdit/document'
@@ -7,7 +7,7 @@ import { fontLibrarySnapshot, importFonts, loadFontLibrary, subscribeFontLibrary
 import { videoEditFontUses } from '../application/videoEditFonts'
 import { createLogger } from '@/core/logging'
 const logger = createLogger('features.videoEdit.fonts')
-export function VideoEditFontWarnings({ document: project }: { document: VideoEditDocument | VideoEditComposition }): React.ReactElement | null {
+export const VideoEditFontWarnings = memo(function VideoEditFontWarnings({ document: project }: { document: VideoEditDocument | VideoEditComposition }): React.ReactElement | null {
   const library = useSyncExternalStore(subscribeFontLibrary, fontLibrarySnapshot)
   const [uses, setUses] = useState<VideoEditFontUse[]>([])
   const [error, setError] = useState('')
@@ -29,4 +29,4 @@ export function VideoEditFontWarnings({ document: project }: { document: VideoEd
     {missing.length > 6 ? <Virtuoso className="h-32" data={missing} itemContent={(_index, font) => row(font)} /> : missing.map(font => <div key={font.font}>{row(font)}</div>)}
     <UiButton size="sm" disabled={busy} onClick={() => { setBusy(true); void importFonts().catch(reason => setError(reason instanceof Error ? reason.message : '字体导入失败。')).finally(() => setBusy(false)) }}>导入缺失字体</UiButton>
   </div>
-}
+})

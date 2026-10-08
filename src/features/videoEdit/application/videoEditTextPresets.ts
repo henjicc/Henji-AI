@@ -11,7 +11,13 @@ const librarySchema = z.array(videoEditTextPresetSchema).superRefine((presets, c
 })
 /** One shared persistence boundary for typography, title templates and style kits. */
 export class VideoEditTextPresetLibrary extends VideoEditLocalLibrary<VideoEditTextPreset> {
-  constructor(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage) { super(VIDEO_EDIT_TEXT_PRESETS_KEY, librarySchema, storage, () => publishVideoEdit(true)) }
+  private revision = 0
+  private readonly listeners = new Set<() => void>()
+  readonly subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
+  readonly snapshot = (): number => this.revision
+  constructor(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage) {
+    super(VIDEO_EDIT_TEXT_PRESETS_KEY, librarySchema, storage, () => { this.revision++; for (const listener of this.listeners) listener(); publishVideoEdit(true) })
+  }
   list(): VideoEditTextPreset[] { return this.custom() }
   save(name: string, style: VideoEditTextStyle): VideoEditTextPreset {
     const preset = videoEditTextPresetSchema.parse({ id: crypto.randomUUID(), name, style }); this.replace([...this.custom(), preset]); return preset

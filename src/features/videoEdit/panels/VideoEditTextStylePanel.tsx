@@ -20,7 +20,7 @@ export function VideoEditTextStylePanel({ projectId, sequenceId, clip, height, o
   const fontPreview = useVideoEditFontPreview(projectId, `${sequenceId}:${clip.id}`, onError, (fontFamily, handle) => updateVideoEditClipProperties(projectId, sequenceId, clip.id, { textStyle: { ...style, fontFamily } }, handle))
   const gesture = useRef<VideoEditGesture>()
   const fields = useRef<HTMLDivElement>(null)
-  const end = (commit = true): void => { const value = gesture.current; gesture.current = undefined; if (value) finishVideoEditGesture(value, commit) }
+  const end = (commit = true): void => { const value = gesture.current; gesture.current = undefined; if (value) { try { finishVideoEditGesture(value, commit) } catch (error) { onError(error) } } }
   useEffect(() => () => { if (gesture.current) finishVideoEditGesture(gesture.current, false) }, [projectId, sequenceId, clip.id])
   const begin = (): void => {
     try {

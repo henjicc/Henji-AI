@@ -8,6 +8,7 @@ import { videoEditFadeOpacity } from '@/core/videoEdit/fades'
 import { videoEditClipPictureSize, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
 import { codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, cycleCodeElement, hitCodeElementIndex, prepareCodeElementIndex, type CodeElementIndex } from '@/core/videoEdit/codeElementSelection'
 import type { CodeElementBounds } from '@/core/videoEdit/codeMaterial/geometry'
+import type { CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditAnnotation, VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
 import { measureCodeText } from '../videoEditGlyphMetrics'
 import { readVideoEditCodeProgram } from './videoEditCodeState'
@@ -17,6 +18,13 @@ import { DEFAULT_STYLE_TOKENS, resolveVideoEditStyleKit } from '@/core/videoEdit
 export interface VideoEditCodeElementFrame { clip: VideoEditClip; index: CodeElementIndex; picture: { width: number; height: number }; source: string }
 interface FrameCache { document: object; sequenceId: string; frame: number; fontGeneration?: number; elements: Map<string, VideoEditCodeElementFrame> }
 const frames = new WeakMap<VideoEditInstance, FrameCache>()
+interface EvaluatedIndex {
+  program: CodeMaterialProgram; code: NonNullable<VideoEditClip['code']>; overrides: VideoEditClip['elementOverrides']
+  style: CodeMaterialContext['style']; context: string; fontGeneration?: number; index: CodeElementIndex
+}
+// Only keep the latest visible frame per instance. Placement/effects change presentation,
+// not author geometry; time, parameters, overrides, style and fonts invalidate it.
+const indices = new WeakMap<VideoEditInstance, Map<string, EvaluatedIndex>>()
 const fontGeneration = (): number | undefined => measureCodeText({ text: '', fontFamily: 'sans-serif', fontWeight: 400, fontStyle: 'normal', fontSize: 12, letterSpacing: 0, lineHeight: 1.2, maxWidth: 0, wrap: false, maxLines: 1 }).fontGeneration
 
 export function videoEditCodeElementFrames(instance: VideoEditInstance, sequenceId = instance.activeSequenceId, frame = instance.frame): Map<string, VideoEditCodeElementFrame> {
@@ -25,16 +33,29 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
   const sequence = instance.document.sequences.find(sequence => sequence.id === sequenceId)
   if (!sequence) return new Map()
   const visible = videoEditVisibleTracks(sequence); const elements = new Map<string, VideoEditCodeElementFrame>()
+  const previous = indices.get(instance); const evaluatedIndices = new Map<string, EvaluatedIndex>()
+  let generation: number | undefined; let measuredGeneration = false
   for (const raw of sequence.clips) {
     if (raw.kind !== 'code' || !raw.code || frame < raw.start || frame >= raw.start + raw.duration || !visible.has(raw.track)) continue
     const evaluated = evaluateVideoEditClip(raw, frame); const clip = { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(raw, frame) }; if (clip.opacity <= 0) continue
     const program = readVideoEditCodeProgram(instance, instance.document, raw.code)
     if (program.languageVersion !== 3) continue
+    if (!measuredGeneration) { generation = fontGeneration(); measuredGeneration = true }
     const context = codeMaterialContextForFrame(raw, frame, sequence.frameRate, program)
     context.style = resolveVideoEditStyleKit(instance.document, sequence, raw)?.tokens ?? DEFAULT_STYLE_TOKENS
-    const parameters = evaluateCodeMaterialParameters(prepareCodeMaterialParameters(program, raw.code), videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate))
-    elements.set(raw.id, { clip, picture: { width: context.width, height: context.height }, index: prepareCodeElementIndex(program, context, parameters, measureCodeText, { elementOverrides: raw.elementOverrides, sourceTime: videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate) }), source: codeMaterialSource(instance.document, raw.code).source })
+    const sourceTime = videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate)
+    const key = JSON.stringify([context.time, context.localTime, context.sequenceTime, context.frame, context.fps, context.width, context.height, sourceTime.sourceInUs, sourceTime.sourceRemainder.numerator, sourceTime.sourceRemainder.denominator])
+    const cached = previous?.get(raw.id)
+    let index: CodeElementIndex
+    if (cached && cached.program === program && cached.code === raw.code && cached.overrides === raw.elementOverrides && cached.style === context.style && cached.context === key && cached.fontGeneration === generation) index = cached.index
+    else {
+      const parameters = evaluateCodeMaterialParameters(prepareCodeMaterialParameters(program, raw.code), sourceTime)
+      index = prepareCodeElementIndex(program, context, parameters, measureCodeText, { elementOverrides: raw.elementOverrides, sourceTime })
+    }
+    evaluatedIndices.set(raw.id, { program, code: raw.code, overrides: raw.elementOverrides, style: context.style, context: key, fontGeneration: generation, index })
+    elements.set(raw.id, { clip, picture: { width: context.width, height: context.height }, index, source: codeMaterialSource(instance.document, raw.code).source })
   }
+  indices.set(instance, evaluatedIndices)
   frames.set(instance, { document: instance.document, sequenceId, frame, fontGeneration: elements.size ? fontGeneration() : undefined, elements }); return elements
 }
 /** Pick only within the top visible picture. A non-code clip occludes code beneath it. */

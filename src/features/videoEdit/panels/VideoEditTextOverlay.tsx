@@ -20,6 +20,7 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
   useSyncExternalStore(subscribeVideoEditMaskEditing, videoEditMaskEditingRevision)
   useSyncExternalStore(subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision)
   const root = useRef<HTMLDivElement>(null); const editor = useRef<HTMLDivElement>(null)
+  const errors = useRef(onError); errors.current = onError
   const editing = useRef<TextSession>(); const dragging = useRef<TextDrag>()
   const [editingId, setEditingId] = useState<string>(); const [draftBox, setDraftBox] = useState<{ x: number; y: number; width: number; height: number }>()
   const layoutCache = useRef(new Map<string, { key: string; layout: VideoEditTextLayout }>())
@@ -29,7 +30,7 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
   const available = enabled && !blocked && (instance.tool === 'type' || instance.tool === 'select' && !instance.playing)
   const finish = (commit = true): void => {
     const session = editing.current; editing.current = undefined; setEditingId(undefined)
-    if (session) finishVideoEditGesture(session.gesture, commit)
+    if (session) { try { finishVideoEditGesture(session.gesture, commit) } catch (error) { errors.current(error) } }
   }
   const cancelDrag = (): void => { const value = dragging.current; dragging.current = undefined; setDraftBox(undefined); if (value?.session) finishVideoEditGesture(value.session.gesture, false) }
   const valid = (session: TextSession): boolean => instance.activeSequenceId === session.sequenceId && instance.selection === session.clipId && instance.frame === session.frame && instance.tool === session.tool && !instance.playing && videoEditProgramCommandIdentity(instance.document.id) === session.command

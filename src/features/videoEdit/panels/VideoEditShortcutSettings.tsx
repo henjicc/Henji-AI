@@ -37,8 +37,8 @@ export function VideoEditShortcutDialog({ open, onClose }: { open: boolean; onCl
       <UiButton onClick={() => { setCapture(null); change({}) }}>{t('videoEditShortcuts.reset')}</UiButton><UiButton onClick={close}>{t('videoEditShortcuts.cancel')}</UiButton>
       <UiButton variant="primary" disabled={Boolean(error) || capture !== null} onClick={() => { try { useSettingsStore.getState().setVideoEditShortcuts(draft); close() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } }}>{t('videoEditShortcuts.save')}</UiButton>
     </>}>
-      {/* 列表占满弹窗剩余高度（原来固定 max-h-96，弹窗下半截留空） */}
-      <div className="flex min-h-0 flex-1 flex-col" onKeyDownCapture={event => {
+      {/* 列表占满弹窗剩余高度（原来固定 max-h-96，弹窗下半截留空）。关闭时不构建：宿主每次编辑都会重渲染，几百行命令与翻译不能跟着拖动一起算。 */}
+      {open && <div className="flex min-h-0 flex-1 flex-col" onKeyDownCapture={event => {
         if (!capture) return
         event.stopPropagation(); event.preventDefault()
         if (event.nativeEvent.isComposing || event.key === 'Process' || event.repeat) return
@@ -54,7 +54,7 @@ export function VideoEditShortcutDialog({ open, onClose }: { open: boolean; onCl
           </div>)}
         </div>
         {error && <UiError size="xs" align="start" title={error} message="" />}
-      </div>
+      </div>}
     </UiModal>
   </>
 }

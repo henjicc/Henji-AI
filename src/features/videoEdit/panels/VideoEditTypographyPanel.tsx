@@ -6,7 +6,6 @@ import { defaultVideoEditTextStyle, videoEditTextStyleSchema, type VideoEditText
 import { BLACK_HEX } from '@/core/theme/colorTokens'
 import { fontLibrarySnapshot, subscribeFontLibrary, resolveFont, readFontPayload } from '@/platform/fonts'
 import { loadDocumentFont } from '@/platform/fontFaces'
-import { subscribeVideoEditDomain, videoEditDomainRevision } from '../application/videoEditService'
 import { videoEditTextPresetLibrary } from '../application/videoEditTextPresets'
 
 export interface VideoEditTypographyPanelProps {
@@ -24,7 +23,7 @@ export interface VideoEditTypographyPanelProps {
 /** All four hosts edit this schema; placement is supplied only by hosts that support it. */
 export function VideoEditTypographyPanel({ style, onChange, onError, onBegin, onEnd, onFontPreview, projectFonts, fontLabel = '文字字体', transform, fields = 'all' }: VideoEditTypographyPanelProps): React.ReactElement {
   const library = useSyncExternalStore(subscribeFontLibrary, fontLibrarySnapshot)
-  useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
+  useSyncExternalStore(videoEditTextPresetLibrary.subscribe, videoEditTextPresetLibrary.snapshot)
   const styleRef = useRef(style); styleRef.current = style
   const [presetId, setPresetId] = useState(''); const [name, setName] = useState('')
   const alive = useRef(true); const fontEpoch = useRef(0)

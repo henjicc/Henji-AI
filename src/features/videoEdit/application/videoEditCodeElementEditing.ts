@@ -96,6 +96,7 @@ export function videoEditCodeElementOverrideSummary(projectId: string, sequenceI
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId); const clip = sequence?.clips.find(value => value.id === clipId)
   if (!clip?.code) return []
   const overrides = clip.elementOverrides ?? {}
+  if (!Object.keys(overrides).length) return []
   const program = readVideoEditCodeProgram(owner, owner.document, clip.code)
   const index = videoEditCodeElementFrames(owner, sequenceId, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame))).get(clip.id)?.index
   const ids = codeElementSourceIds(program, Object.keys(overrides)); for (const id of index?.byId.keys() ?? []) ids.add(id)

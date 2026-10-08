@@ -48,7 +48,7 @@ function FontRow({ face, active, selected, favorite, onPreview, onSelect, onErro
 /** react-virtuoso's root inline height:100% beats a class; inside an auto-height popover that resolved to 0 and hid every row. */
 const FONT_LIST_STYLE = { height: 288 } as const
 
-export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', disabled, projectFonts = [], onSelect, onPreview }: UiFontPickerProps): React.ReactElement {
+export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', disabled, projectFonts, onSelect, onPreview }: UiFontPickerProps): React.ReactElement {
   const library = useSyncExternalStore(subscribeFontLibrary, fontLibrarySnapshot)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -63,10 +63,15 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
   const preview = useRef(onPreview); preview.current = onPreview
   const selectedCallback = useRef(onSelect); selectedCallback.current = onSelect
   const optionPrefix = useId()
-  const current = library.faces.find(face => face.fullName === value) ?? resolveFont(value)
+  // Hosts re-render on every edit (drags included): resolve the value and the project list only when their inputs change.
+  const current = useMemo(() => library.faces.find(face => face.fullName === value) ?? resolveFont(value), [library.faces, value])
+  const projectKey = (projectFonts ?? []).join('\n')
+  const projectList = useMemo(() => projectKey ? projectKey.split('\n') : [], [projectKey])
   useEffect(() => { const owner = fontOwner.current; pinDocumentFonts(owner, current ? [current.id] : []); return () => releaseDocumentFonts(owner) }, [current])
   const familyRows = useMemo(() => {
-    const filtered = filterFonts(library.faces, query, filter, library.preferences, projectFonts)
+    // The list exists only inside the open panel; never filter and sort hundreds of system faces while closed.
+    if (!open) return []
+    const filtered = filterFonts(library.faces, query, filter, library.preferences, projectList)
     const groups = new Map<string, FontFaceInfo>()
     for (const face of filtered) {
       const key = face.family.toLocaleLowerCase(); const existing = groups.get(key)
@@ -74,8 +79,8 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
     }
     const rows = [...groups.values()]
     return filter === 'recent' ? rows.sort((a, b) => library.preferences.recent.indexOf(a.family) - library.preferences.recent.indexOf(b.family)) : rows.sort((a, b) => a.localizedFamily.localeCompare(b.localizedFamily, 'zh-CN'))
-  }, [library.faces, library.preferences, query, filter, projectFonts])
-  const styles = current ? library.faces.filter(face => face.family === current.family) : []
+  }, [open, library.faces, library.preferences, query, filter, projectList])
+  const styles = useMemo(() => current ? library.faces.filter(face => face.family === current.family) : [], [current, library.faces])
   useEffect(() => { retainDocumentFonts(library.faces) }, [library.faces])
   useEffect(() => { void loadFontLibrary().catch(() => undefined) }, [])
   useEffect(() => { setActive(-1); epoch.current++; preview.current?.(null) }, [query, filter])

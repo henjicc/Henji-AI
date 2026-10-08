@@ -7,6 +7,8 @@ import { appendVideoEditClip, appendVideoEditSequence, beginVideoEditGesture, cl
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
+import { defaultVideoEditTextStyle } from '@/core/videoEdit/text'
+import * as fontValidation from './videoEditFonts'
 
 const files = new Map<string, string>()
 beforeEach(() => {
@@ -94,4 +96,30 @@ it('没有任何预览写入的手势取消或提交都不产生新版本，画�
   finishVideoEditGesture(beginVideoEditGesture(id), false)
   finishVideoEditGesture(beginVideoEditGesture(id))
   expect(owner.document.revision).toBe(revision); expect(owner.past).toHaveLength(history)
+})
+
+it('字体预览不逐帧校验；提交校验一次，缺失字体回滚并释放保存屏障', async () => {
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  appendVideoEditClip(id); await saveVideoEdit(id)
+  const history = owner.past.length
+  const validate = vi.spyOn(fontValidation, 'validateVideoEditFontChanges')
+  const handle = beginVideoEditGesture(id)
+  for (const fontFamily of ['serif', 'monospace']) updateVideoEditGesture(handle, document => {
+    document.sequences[0].clips[0].textStyle = { ...defaultVideoEditTextStyle(1080), fontFamily }; return document
+  })
+  expect(validate).not.toHaveBeenCalled()
+  finishVideoEditGesture(handle); expect(validate).toHaveBeenCalledTimes(1); expect(owner.past).toHaveLength(history + 1)
+  validate.mockClear()
+  const invalid = beginVideoEditGesture(id)
+  updateVideoEditGesture(invalid, document => { document.sequences[0].clips[0].textStyle!.fontFamily = 'T77 Missing Font'; return document })
+  const saving = saveVideoEdit(id)
+  expect(() => finishVideoEditGesture(invalid)).toThrow('字体')
+  await saving
+  expect(validate).toHaveBeenCalledTimes(1)
+  expect(getActiveVideoEditSequence(owner).clips[0].textStyle?.fontFamily).toBe('monospace')
+  expect(owner.past).toHaveLength(history + 1)
+  const cancelled = beginVideoEditGesture(id)
+  updateVideoEditGesture(cancelled, document => { document.sequences[0].clips[0].textStyle!.fontFamily = 'Missing Again'; return document })
+  finishVideoEditGesture(cancelled, false)
+  expect(validate).toHaveBeenCalledTimes(1)
 })

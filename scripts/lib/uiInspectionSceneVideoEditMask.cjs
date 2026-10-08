@@ -59,12 +59,17 @@ function createVideoEditMaskScene() {
       const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
       await page.mouse.move(start.x, start.y); await page.mouse.down()
       const dragStart = await page.evaluate(() => performance.now())
+      // HENJI_PROFILE_DRAG=<file> saves a renderer CPU profile of the drag for hotspot analysis (diagnostics only).
+      const profileFile = process.env.HENJI_PROFILE_DRAG
+      const cdp = profileFile ? await page.context().newCDPSession(page) : null
+      if (cdp) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start') }
       const steps = 120
       for (let step = 1; step <= steps; step++) {
         await page.mouse.move(start.x + Math.sin(step / steps * Math.PI * 2) * box.width * 0.3, start.y + step * 0.4)
         await page.waitForTimeout(16)
       }
       const upAt = await page.evaluate(() => performance.now())
+      if (cdp) { const { profile } = await cdp.send('Profiler.stop'); require('node:fs').writeFileSync(profileFile, JSON.stringify(profile)); await cdp.detach() }
       await page.mouse.up()
       document = await saved(page, file, value => JSON.stringify(clipOf(value).effects[0].mask.shapes[0].points) !== JSON.stringify(before))
       await page.waitForTimeout(500)

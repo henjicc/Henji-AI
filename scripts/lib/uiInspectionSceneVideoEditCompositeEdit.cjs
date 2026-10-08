@@ -324,9 +324,12 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         let endedAt
         try {
           await mouseEvent('mouseMoved', box.x + 6, 0)
+          // HENJI_PROFILE_DRAG=<file> saves a renderer CPU profile of the scrub for hotspot analysis (diagnostics only).
+          if (process.env.HENJI_PROFILE_DRAG) { await mouse.send('Profiler.enable'); await mouse.send('Profiler.setSamplingInterval', { interval: 200 }); await mouse.send('Profiler.start') }
           await mouseEvent('mousePressed', box.x + 6); const dragStart = performance.now()
           for (let index = 1; index <= 180; index++) { await mouseEvent('mouseMoved', box.x + index + .1); const remaining = dragStart + index * 1000 / 60 - performance.now(); if (remaining > 0) await page.waitForTimeout(remaining) }
           endedAt = await page.evaluate(() => performance.now()); await mouseEvent('mouseReleased', box.x + 180.1)
+          if (process.env.HENJI_PROFILE_DRAG) fs.writeFileSync(process.env.HENJI_PROFILE_DRAG, JSON.stringify((await mouse.send('Profiler.stop')).profile))
         } finally {
           await mouseEvent('mouseReleased', box.x + 180.1).catch(() => {}); await mouse.detach()
           if (tracing) evidence.dragTracePath = await app.evaluate(({ contentTracing }, target) => contentTracing.stopRecording(target), path.join(root, 'drag.trace.json')).catch(error => String(error))

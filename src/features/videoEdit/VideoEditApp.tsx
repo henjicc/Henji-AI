@@ -31,6 +31,7 @@ import { closeVideoEditAudioDialog, useVideoEditAudioDialog } from './applicatio
 import { VideoEditAudioGainDialog } from './panels/VideoEditAudioGainDialog'
 import { VideoEditExportDialog } from './panels/VideoEditExportDialog'
 import { VideoEditFontWarnings } from './panels/VideoEditFontWarnings'
+import { videoEditCommittedDocument } from './application/videoEditService'
 
 /** Shift+1…5（Premiere 默认）切到的面板；切换后键盘焦点也进入该面板，后续快捷键按它的作用域生效。 */
 const FOCUS_COMMANDS: Partial<Record<VideoEditCommandId, 'project' | 'source' | 'timeline' | 'program' | 'effects'>> = { focus_project: 'project', focus_source: 'source', focus_timeline: 'timeline', focus_program: 'program', focus_effects: 'effects' }
@@ -144,7 +145,7 @@ export default function VideoEditApp(): React.ReactElement {
     {instance ? <>
       <VideoEditImportProgress projectId={instance.document.id} />
       <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={onNotice} />
-      <VideoEditFontWarnings document={instance.document} />
+      <VideoEditFontWarnings document={videoEditCommittedDocument(instance)} />
       <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
     </> : <div className="min-h-0 flex-1">
       {/* 剪辑页 = 项目列表（作品索引）；打开项目 = 打开它的主剪辑 */}

@@ -101,6 +101,7 @@ export function videoEditDocumentOperations(): DocumentOperations { return docum
 export interface VideoEditGesture { readonly projectId: string; readonly token: string }
 interface GestureState {
   handle: VideoEditGesture; before: VideoEditDocument; finished: Promise<void>; release: () => void
+  validateFonts?: boolean
   /** 仅遮罩手势按触及的效果判断变化；其他写入仍沿用完整文档比较。 */
   maskChanges?: Map<string, { before: string | undefined; changed: boolean }>
   /** 遮罩快速路径最近发布的文档；当前文档不是它（或手势起点）时说明有其他写入，回到完整比较。 */
@@ -120,6 +121,8 @@ export function restoreVideoEditProgramCommandIdentity(id: string, expected: obj
 }
 function assertVideoEditWritable(owner: VideoEditInstance): void { if (closing.has(owner)) throw new Error('剪辑正在关闭，请等待保存完成。') }
 export function videoEditGestureActive(projectId: string): boolean { return gestures.has(requireVideoEditInstance(projectId)) }
+/** Read-only panels inspect the committed state while a parameter preview is in progress. */
+export function videoEditCommittedDocument(instance: VideoEditInstance): VideoEditDocument { return gestures.get(instance)?.before ?? instance.document }
 export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   assertApplicationWritesAllowed()
   const owner = requireVideoEditInstance(projectId)
@@ -157,6 +160,7 @@ export function updateVideoEditGesture(handle: VideoEditGesture, update: (docume
   assertVideoEditWritable(owner)
   if (gestures.get(owner)?.handle !== handle) throw new Error('原参数调整已结束，请重新编辑。')
   gestures.get(owner)!.maskChanges = undefined
+  gestures.get(owner)!.validateFonts = true
   return applyVideoEditDocument(owner, update, false)
 }
 /** 遮罩只改变目标效果：校验效果与跟踪引用，复用已校验的时间线、媒体和代码，不克隆整份文档。 */
@@ -190,7 +194,7 @@ export function updateVideoEditMaskGesture(handle: VideoEditGesture, sequenceId:
   }
   const nextClip = { ...clip, effects: clip.effects!.map(value => value === effect ? nextEffect : value) }
   const nextSequence = { ...sequence, clips: sequence.clips.map(value => value === clip ? nextClip : value) }
-  const next = publishVideoEditDocument(owner, { ...owner.document, sequences: owner.document.sequences.map(value => value === sequence ? nextSequence : value) }, false)
+  const next = publishVideoEditDocument(owner, { ...owner.document, sequences: owner.document.sequences.map(value => value === sequence ? nextSequence : value) }, false, true)
   state.maskDocument = next
   recordVideoEditMaskUpdate(sequenceId, next.revision, start)
   logger.debug('遮罩手势更新', { event: 'video_edit.mask.update.completed', context: { projectId: handle.projectId, revision: next.revision, durationMs: performance.now()-start, updatedAt: performance.timeOrigin+performance.now() } })
@@ -211,12 +215,16 @@ export function updateVideoEditPicturePosition(handle: VideoEditGesture, sequenc
   if (clip.x === values.x && clip.y === values.y) return owner.document
   gestures.get(owner)!.maskChanges = undefined
   const nextSequence = { ...sequence, clips: sequence.clips.map(value => value === clip ? { ...clip, ...values } : value) }
-  return publishVideoEditDocument(owner, { ...owner.document, sequences: owner.document.sequences.map(value => value === sequence ? nextSequence : value) }, false)
+  return publishVideoEditDocument(owner, { ...owner.document, sequences: owner.document.sequences.map(value => value === sequence ? nextSequence : value) }, false, true)
 }
 export function finishVideoEditGesture(handle: VideoEditGesture, commit = true): void {
   const owner = instances.get(handle.projectId); const state = owner && gestures.get(owner)
   if (!owner || !state || state.handle !== handle) return
   if (commit) assertApplicationWritesAllowed()
+  if (commit && state.validateFonts) {
+    try { validateVideoEditFontChanges(state.before, owner.document, readVideoEditCodeMetadata(owner, state.before), readVideoEditCodeMetadata(owner, owner.document)) }
+    catch (error) { finishVideoEditGesture(handle, false); throw error }
+  }
   gestures.delete(owner)
   // 只有遮罩快速路径写过（或什么都没写）时才按遮罩变化判断；手势里走过其他写入路径一律完整比较，保证撤销与保存。
   const maskOnly = Boolean(state.maskChanges) && owner.document === (state.maskDocument ?? state.before)
@@ -439,17 +447,16 @@ function applyVideoEditDocument(instance: VideoEditInstance, update: (document: 
   const next = videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
-  if (!restoring) validateVideoEditFontChanges(instance.document, next, readVideoEditCodeMetadata(instance, instance.document), readVideoEditCodeMetadata(instance, next))
+  if (!restoring && !gestures.has(instance)) validateVideoEditFontChanges(instance.document, next, readVideoEditCodeMetadata(instance, instance.document), readVideoEditCodeMetadata(instance, next))
   if (JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
   return publishVideoEditDocument(instance, next, recordHistory)
 }
-function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean): VideoEditDocument {
+function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean, spatialOnly = false): VideoEditDocument {
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
   instance.document = { ...next, id: before.id, name: before.name, revision: instance.document.revision + 1 }
-  rescaleSequenceViews(instance, before)
-  reconcileSequenceView(instance)
+  if (!spatialOnly) { rescaleSequenceViews(instance, before); reconcileSequenceView(instance) }
   instance.version++; publishVideoEdit(true)
   if (recordHistory) notifyVideoEditContent(instance)
   return instance.document
