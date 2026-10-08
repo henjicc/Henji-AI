@@ -1,4 +1,3 @@
-import '../application/videoEditCodeStorage'
 import { expandPinnedCodeComponents } from '@/core/videoEdit/codeMaterial/components'
 import { codeMaterialFilesKey, codeVersionContentKey, documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { documentFontRevision } from '@/platform/fontFaces'

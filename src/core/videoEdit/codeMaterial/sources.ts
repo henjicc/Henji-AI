@@ -76,12 +76,32 @@ export async function loadCodeSourceReferences(version: { files: readonly CodeFi
     const key = JSON.stringify([file.location, file.hash]); if (checked.has(key)) continue
     checked.add(key)
     if (transient.has(file.location)) continue
+    // 渲染 Worker 没有读取服务，使用主线程已校验并发来的源码。
+    if (!reader && contents.has(file.hash)) continue
     if (!reader) throw new CodeMaterialError('COMPATIBILITY', '源码文件读取服务尚未就绪，请重新打开剪辑。')
     const source = await reader(file)
     if (await sha256HexString(source) !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 已被外部修改，请从项目备份恢复原文件，或将改动保存为新版本。`)
     rememberCodeSource(file.hash, source)
   }
 }
+/** 渲染 Worker 不读盘：主线程读好并校验后，把尚未发送的源码随文档一起发过去。 */
+export async function collectCodeSourceTexts(versions: Iterable<{ files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }>, sent?: Set<string>): Promise<Record<string, string>> {
+  const result: Record<string, string> = {}
+  for (const version of versions) {
+    const files = [...version.files, ...componentFileReferences(version.imports)]
+    // 已发送过的版本内容不可变，编辑时不再逐次读盘。
+    if (sent && files.every(file => sent.has(file.hash))) continue
+    await loadCodeSourceReferences(version)
+    for (const file of files) {
+      const source = contents.get(file.hash)
+      if (source === undefined || sent?.has(file.hash)) continue
+      result[file.hash] = source; sent?.add(file.hash)
+    }
+  }
+  return result
+}
+/** Worker 端接收主线程已校验的源码。 */
+export function receiveCodeSourceTexts(sources: Readonly<Record<string, string>> | undefined): void { for (const [hash, source] of Object.entries(sources ?? {})) contents.set(hash, source) }
 export function resolveCodeMaterialFiles(version: { entry: string; files: readonly CodeFileReference[] }, resolver: CodeSourceResolver): CodeMaterialFiles {
   return normalizeCodeMaterialFiles({ entry: version.entry, files: Object.fromEntries(version.files.map(file => [file.path, resolver.read(file.hash, file.location, file.path)])) })
 }

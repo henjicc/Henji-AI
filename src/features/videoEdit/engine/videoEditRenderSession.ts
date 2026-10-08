@@ -4,6 +4,8 @@ import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { isLikelyLocalImagePath, toFetchableMediaUrl } from '@/services/imageSource'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
+import { collectCodeSourceTexts } from '@/core/videoEdit/codeMaterial/sources'
+import '../application/videoEditCodeStorage'
 import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, RenderRequest, RenderResponse } from './videoEditWorker'
 import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
 import type { VideoEditTrackResults } from './videoEditTrackResults'
@@ -31,6 +33,8 @@ export class VideoEditRenderSession {
   private readonly lutRoots = new Set<string>()
   private fontsRevision = -1
   private fontIds = new Set<string>()
+  /** 已发给 Worker 的源码哈希；源码不可变，同一哈希只发一次。 */
+  private readonly sentCodeSources = new Set<string>()
   private stopFonts?: () => void
   private fontSync = Promise.resolve()
   private lastPresentedFrame?: number
@@ -105,7 +109,7 @@ export class VideoEditRenderSession {
     }
     this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
     // Verify original media before dependent code/font preparation or opening a decoder channel.
-    this.ready = this.content.check(document).then(() => Promise.all([this.selectProxies(), this.connectNative(), this.authorizeLuts(document), this.syncFonts(document)])).then(([, decode]) => this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : []))
+    this.ready = this.content.check(document).then(() => Promise.all([this.selectProxies(), this.connectNative(), this.authorizeLuts(document), this.syncFonts(document)])).then(async ([, decode]) => this.request({ kind: 'init', document: this.mediaDocument(document), codeSources: await this.codeSources(document), previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : []))
     this.stopFonts = subscribeFontLibrary(() => { if (!this.disposed && fontLibrarySnapshot().revision !== this.fontsRevision) void this.ready.then(async () => { await this.syncFonts(this.document); if (this.hasPresentationSurface && this.lastPresentedFrame !== undefined && !this.disposed) { const result = await this.present(this.lastPresentedFrame); result.bitmap?.close() } }).catch(error => logger.warn('剪辑字体更新失败', { event: 'video_edit.fonts.update.failed', error })) })
     void this.ready.catch(() => undefined)
   }
@@ -115,7 +119,8 @@ export class VideoEditRenderSession {
     const id = ++this.nextId
     return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject, submitted }); this.worker.postMessage({ ...request, id }, transfer) })
   }
-  async updateDocument(document: VideoEditComposition, original = false): Promise<void> { await this.ready; await this.selectProxies(original); await this.content.check(document); await this.authorizeLuts(document); await this.syncFonts(document); await this.request({ kind: 'update', document: this.mediaDocument(document), localPaths: this.localPaths(document), proxies: this.proxySources() }); this.document = document }
+  private codeSources(document: VideoEditComposition): Promise<Record<string, string>> { return collectCodeSourceTexts((document.codeMaterials ?? []).flatMap(definition => definition.versions), this.sentCodeSources) }
+  async updateDocument(document: VideoEditComposition, original = false): Promise<void> { await this.ready; await this.selectProxies(original); await this.content.check(document); await this.authorizeLuts(document); await this.syncFonts(document); const codeSources = await this.codeSources(document); await this.request({ kind: 'update', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() }); this.document = document }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */

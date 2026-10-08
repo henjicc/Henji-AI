@@ -351,7 +351,7 @@ it('创建结果附带参数化体检提示，不阻止提交', async () => {
     const hardcoded = source.replace('fill:[0,1,1,ctx.params.amount]})', 'fill:[0,1,1,1]}),text({x:0,y:0,text:"写死的标题",fontSize:40,color:[1,1,1,1]})')
     const created = await app.call('change_application_entities', { summary: '创建写死文字的素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': hardcoded } }] }] }, baseline.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
-    const evidence = (created as { data: { evidence: Array<{ kind: string; fact: string; data?: Array<{ code: string }> }> } }).data.evidence.find(item => item.fact.startsWith('参数化体检'))
+    const evidence = (created as unknown as { data: { evidence: Array<{ kind: string; fact: string; data?: Array<{ code: string }> }> } }).data.evidence.find(item => item.fact.startsWith('参数化体检'))
     expect(evidence?.kind).toBe('observation')
     expect(evidence?.data?.map(hint => hint.code)).toEqual(['UNUSED_PARAMETER', 'LITERAL_TEXT'])
     expect(instance.document.codeMaterials).toHaveLength(1)

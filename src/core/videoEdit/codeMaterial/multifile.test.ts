@@ -3,7 +3,7 @@ import { compileCodeMaterial } from './compiler'
 import { evaluateCodeMaterial } from './evaluate'
 import { CodeMaterialError } from './contract'
 import { renameCodeMaterialFile } from './fileEdits'
-import { addressCodeMaterialFiles, codeFilesFromInput, documentCodeSourceResolver, mergeCodeSources, pruneCodeSources, resolveCodeMaterialFiles, verifyCodeSourceReferences } from './sources'
+import { addressCodeMaterialFiles, codeFilesFromInput, collectCodeSourceTexts, documentCodeSourceResolver, mergeCodeSources, pruneCodeSources, resolveCodeMaterialFiles, verifyCodeSourceReferences } from './sources'
 import { codeElementAtSource, prepareCodeElementIndex } from '../codeElementSelection'
 const main = `import { card, width as w } from './parts/card'
 export default {apiVersion:1,languageVersion:3,name:'多文件',kind:'generator',mode:'static',width:100,height:100,durationSeconds:1,seed:1,parameters:{},render(ctx){return [card(w)];}}`
@@ -56,6 +56,14 @@ describe('代码多文件与内容寻址', () => {
     expect(pruneCodeSources({...document,codeMaterials:[]}).codeMaterials).toEqual([])
     await expect(verifyCodeSourceReferences(addressed,documentCodeSourceResolver())).resolves.toBeUndefined()
     await expect(verifyCodeSourceReferences(addressed,{read: hash => sources.find(value=>value.hash===hash)!.source+' '})).rejects.toThrow('哈希')
+  })
+  it('发给渲染 Worker 的源码按哈希只发一次，已发版本不重复读取', async () => {
+    const version = await addressCodeMaterialFiles(input())
+    const sent = new Set<string>()
+    const first = await collectCodeSourceTexts([version, version], sent)
+    expect(Object.keys(first).sort()).toEqual(version.files.map(file => file.hash).sort())
+    expect(first[version.files[0].hash]).toBe(input().files[version.files[0].path as 'main.ts'])
+    expect(await collectCodeSourceTexts([version], sent)).toEqual({})
   })
   it('source 简写与 main.ts 文件集合等价且写入二选一', async () => {
     const source=main.slice(main.indexOf('export default')).replace('[card(w)]','[]')

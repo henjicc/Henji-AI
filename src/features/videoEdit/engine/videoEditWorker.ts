@@ -12,6 +12,7 @@ import { setVideoEditSmartRegionSegments, type VideoEditSmartRegionSegments } fr
 import { readVideoEditTrackingRgb } from './videoEditTrackingPixels'
 import { setVideoEditMaskTimingObserver } from './videoEditEffectMasks'
 import { LoadedFontFaces } from '@/platform/fontFaces'
+import { receiveCodeSourceTexts } from '@/core/videoEdit/codeMaterial/sources'
 import type { FontPayload } from '@/platform/fonts'
 
 /**
@@ -21,7 +22,7 @@ import type { FontPayload } from '@/platform/fonts'
 export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
 export type RenderRequest = { id: number } & (
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
-  { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
+  { kind: 'init'; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'invalidate'; revision: number }
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
   | { kind: 'scale'; divisor: number }
@@ -91,6 +92,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
   if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }
+  if (request.kind === 'init' || request.kind === 'update') receiveCodeSourceTexts(request.codeSources)
   if (request.kind === 'init') revision = request.document.revision
   if (request.kind === 'update') revision = Math.max(revision, request.document.revision)
   queue = queue.then(async () => {
