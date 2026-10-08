@@ -57,6 +57,16 @@ describe('代码多文件与内容寻址', () => {
     await expect(verifyCodeSourceReferences(addressed,documentCodeSourceResolver())).resolves.toBeUndefined()
     await expect(verifyCodeSourceReferences(addressed,{read: hash => sources.find(value=>value.hash===hash)!.source+' '})).rejects.toThrow('哈希')
   })
+  it('未调用的模块 helper 可以接收对象参数，调用处按实参类型检查', () => {
+    const plate = 'export const plate = (p) => rect({x: p.x, y: 0, width: p.width, height: 10, fill: p.color});'
+    const unused = { entry: 'main.ts', files: { 'main.ts': main.replace("import { card, width as w } from './parts/card'", "import { card, width as w } from './parts/card'\nimport { plate } from './parts/plate'"), 'parts/card.ts': validCard, 'parts/plate.ts': plate } }
+    expect(() => compileCodeMaterial(unused)).not.toThrow()
+    const called = { ...unused, files: { ...unused.files, 'main.ts': unused.files['main.ts'].replace('return [card(w)];', 'return [card(w), plate({x: 5, width: 20, color: [0,1,0,1]})];') } }
+    expect(compileCodeMaterial(called).kind).toBe('generator')
+    const wrong = { ...unused, files: { ...unused.files, 'main.ts': unused.files['main.ts'].replace('return [card(w)];', 'return [card(w), plate(3)];') } }
+    expect(() => compileCodeMaterial(wrong)).toThrow('需要 object')
+    expect(() => compileCodeMaterial({ ...unused, files: { ...unused.files, 'parts/plate.ts': 'export const plate = (p) => fetch(p);' } })).toThrow()
+  })
   it('发给渲染 Worker 的源码按哈希只发一次，已发版本不重复读取', async () => {
     const version = await addressCodeMaterialFiles(input())
     const sent = new Set<string>()

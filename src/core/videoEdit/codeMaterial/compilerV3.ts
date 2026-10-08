@@ -401,10 +401,12 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
   if (program.kind === 'filter') { codeShaderFilterPasses(program); codeFilterParameterSlots(program) }
   program.metrics.draws = drawCount(program.result)
   if (program.metrics.draws > CODE_V3_LIMITS.draws) fail(body, '重复展开后图形超过 4096 项。', 'BUDGET')
-  // Unused helpers are checked too: no dormant host access is accepted.
+  // Unused helpers are checked too: no dormant host access is accepted. Their argument types are unknown
+  // until a caller inlines them (a component helper may take an object), so only type mismatches are waived.
   for (const helper of scope.helpers.values()) if (!checked.has(helper)) {
     const names = arrowParams(helper)
-    invoke(helper, names.map(() => ({ kind: 'literal', type: 'number', value: 0 })), scope)
+    try { invoke(helper, names.map(() => ({ kind: 'literal', type: 'number', value: 0 })), scope) }
+    catch (error) { if (!(error instanceof CodeMaterialError) || error.code !== 'TYPE') throw error; active.clear(); inliningDepth = 0 }
   }
   const costs = new WeakMap<CodeExpression, number>()
   const heights = new WeakMap<CodeExpression, number>()
