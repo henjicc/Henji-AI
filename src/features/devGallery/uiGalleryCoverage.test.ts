@@ -16,6 +16,8 @@ const GALLERY_DIR = __dirname
 /** 不在样张页以 JSX 出现的导出（必须写理由）。 */
 const NON_VISUAL: Record<string, string> = {
   GlobalAlertDialog: '全局挂载在 App 根上、由 alertDialogStore 驱动；外观就是 AlertDialog，样张页以 AlertDialog 展示',
+  ParamList: '领域字段描述驱动的组合容器（分组、更多折叠、条件显示），自身不画控件；可见部分是已上样张的参数原件（角度盘、色轮、曲线等）与 UiGroup',
+  ParamField: '按字段类型分派到已上样张的参数原件，并接入领域手势适配器；没有独立外观',
 }
 
 function resolveModule(fromFile: string, specifier: string): string | null {

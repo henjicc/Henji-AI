@@ -166,7 +166,7 @@ describe('ImageEditorV3 professional shell', () => {
     expect(screen.queryByRole('menuitem', { name: '标注图层' })).toBeNull()
   })
 
-  it('图层菜单只提供发布范围内的扁平图层且 CPU 后备可用时允许辉光 Pro', async () => {
+  it('图层菜单提供栅格、效果、全能调色与图层组，CPU 后备可用时允许辉光 Pro', async () => {
     renderEditor(createDocument([createImageEditRasterLayerV3('raster', '底图')]))
 
     expect(document.querySelector('[data-tool-id="move"]')?.getAttribute('aria-pressed')).toBe('true')
@@ -178,10 +178,11 @@ describe('ImageEditorV3 professional shell', () => {
     expect(glow.disabled).toBe(false)
     expect(screen.getByRole('menuitem', { name: '模糊' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()
-    expect(screen.queryByRole('menuitem', { name: '图层组' })).toBeNull()
+    // 完整编辑器开放图层组、蒙版与共享全能调色调整层；曝光仍不作为独立图层提供。
+    expect(screen.getByRole('menuitem', { name: '全能调色' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '图层组' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: '曝光' })).toBeNull()
-    expect(screen.queryByRole('combobox', { name: '混合模式' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '添加蒙版' })).toBeNull()
+    expect(screen.getByRole('button', { name: '添加蒙版' })).toBeTruthy()
   })
 
   it('连续拖动参数只提交一次文档命令', async () => {

@@ -26,7 +26,10 @@ describe('正式读入口打开黄金归档与源码', () => {
       const imported = await codec.import(source)
       try {
         expect(imageWorkingCopySchema.safeParse(imported.manifest.document).success).toBe(true)
-        expect(imported.manifest.document.document).toMatchObject({ layers: [{ id: 'golden-layer', type: 'raster' }] })
+        const layers = (imported.manifest.document.document as { layers: Array<{ id: string; type: string; adjustmentId?: string }> }).layers
+        expect(layers[0]).toMatchObject({ id: 'golden-layer', type: 'raster' })
+        // 黄金样本可含共享全能调色调整层（ie1），其余图层原样保留。
+        for (const layer of layers.slice(1)) expect(layer).toMatchObject({ adjustmentId: 'color_grade' })
         expect(imported.documentHeader).toBeDefined()
       } finally { await imported.resourceLease.release() }
       expect(await fsp.readFile(source)).toEqual(original)
