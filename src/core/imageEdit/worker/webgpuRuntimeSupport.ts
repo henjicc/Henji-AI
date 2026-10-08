@@ -67,7 +67,7 @@ export interface GpuAdapter {
   isFallbackAdapter?: boolean
   features?: Iterable<string>
   limits?: Record<string, number>
-  requestDevice(): Promise<GpuDevice>
+  requestDevice(descriptor?: unknown): Promise<GpuDevice>
 }
 
 export interface GpuProvider {

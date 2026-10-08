@@ -1,8 +1,9 @@
 import type { StyleTokens } from '../styleKit'
+import type { ShaderGraphCustomShader, ShaderGraphSpec } from '../shaderGraph/spec'
 /** Closed author languages. These data structures contain no executable host values. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes: 8192, depth: 64, cpuOperations: 20000, draws: 256, parameters: 32, filterScalarOperations: 128, filterSamples: 4, stringLength: 4096, textCharacters: 8192 })
 /** Work ceilings for the explicit v3 language; resident pixels remain separately budgeted by the GPU host. */
-export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 200000, draws: 4096, shaderLayers: 4, shaderFilterPasses: 4, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
+export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 200000, draws: 4096, shaderLayers: 32, shaderFilterPasses: 8, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
 export type CodeColor = [number, number, number, number]
 export interface CodeImageReference { kind: 'image'; mediaId: string }
 export type CodeParameterValue = number | boolean | string | CodeColor | CodeImageReference | null
@@ -78,6 +79,8 @@ export interface CodeMaterialProgram {
   apiVersion: 1; languageVersion: 1 | 2 | 3; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
   width: number; height: number; durationSeconds: number; seed: number
   parameters: CodeParameterDeclaration[]; bindings: { name: string; expression: CodeExpression }[]; result: CodeExpression
+  /** v3：素材里自己写的着色器（WGSL 函数体），供 shader / shaderFilter 按名字使用。 */
+  shaders?: ShaderGraphCustomShader[]
   metrics: { astNodes: number; astDepth: number; cpuOperations: number; scalarOperations: number; samples: number; draws?: number }
 }
 export type CodeDrawCommand = CodeDrawMetadata & (
@@ -88,7 +91,7 @@ export type CodeDrawCommand = CodeDrawMetadata & (
   | { kind: 'image'; source: CodeImageReference; x: number; y: number; width: number; height: number; opacity: number }
   | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; clip?: { x: number; y: number; width: number; height: number } }
   | { kind: 'path'; points: [number, number][][]; closed: boolean; fill: CodeColor }
-  | { kind: 'shader'; name: string; params: Record<string, number | string>; time: number; x: number; y: number; width: number; height: number }
+  | { kind: 'shader'; graph: ShaderGraphSpec; time: number; x: number; y: number; width: number; height: number }
 )
 export type CodeMaterialErrorCode = 'SOURCE_LIMIT' | 'SYNTAX' | 'TYPE' | 'BUDGET' | 'PARAMETERS' | 'COMPATIBILITY' | 'CONTEXT' | 'NON_FINITE'
 export class CodeMaterialError extends Error {

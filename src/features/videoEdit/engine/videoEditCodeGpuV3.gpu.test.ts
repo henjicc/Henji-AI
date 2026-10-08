@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { init, type Gpu } from 'vgpu/node'
+import { initShaderGraphTestGpu } from './shaderEngines/shaderGraphGpu.testing'
+import type { Gpu } from 'vgpu/node'
 import sharp from 'sharp'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
@@ -14,7 +15,7 @@ import { writeFileSync } from 'node:fs'
 
 let gpu: Gpu; let device: Gpu['gpu']; let wrapped: GpuDevice; let runtime: VideoEditCodeGpuV3
 const W = 64; const H = 64
-const source = (body: string, kind = 'generator'): string => `export default {apiVersion:1,languageVersion:3,name:"GPU v3",kind:"${kind}",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{},render(ctx){${body}}}`
+const source = (body: string, kind = 'generator', shaders = ''): string => `export default {apiVersion:1,languageVersion:3,name:"GPU v3",kind:"${kind}",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{},${shaders ? `shaders:${shaders},` : ''}render(ctx){${body}}}`
 const context = { time: .4, localTime: .4, sequenceTime: .4, width: W, height: H, frame: 24, fps: 60 }
 const testMeasure: CodeTextMeasurer = request => layoutCodeText(request, (text, font) => Array.from(text).length * Number(font.match(/([\d.]+)px/)![1]) * .6)
 const escape = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
@@ -43,7 +44,7 @@ async function rasterFixture(command: CodeDrawCommand, image: { x: number; y: nu
   return { pixels: data, width, height } as unknown as OffscreenCanvas
 }
 beforeAll(async () => {
-  gpu = await init(); device = gpu.gpu
+  gpu = await initShaderGraphTestGpu(); device = gpu.gpu
   const queue = new Proxy(device.queue, { get(target, key) {
     if (key === 'copyExternalImageToTexture') return (from: { source: { pixels: Uint8Array; width: number; height: number } }, to: { texture: Parameters<typeof device.queue.writeTexture>[0]['texture'] }) => target.writeTexture(to, from.source.pixels, { bytesPerRow: from.source.width * 4 }, [from.source.width, from.source.height])
     const value = Reflect.get(target, key) as unknown; return value instanceof Function ? value.bind(target) : value
@@ -223,16 +224,16 @@ describe('v3 真实 GPU 像素与工作预算', () => {
 })
 
 
-describe('t74 作者语言着色器GPU接线', () => {
+describe('作者语言着色器GPU接线（shaders 框架）', () => {
   it('真实编译渲染极光逐字标题、光束产品卡；旋转裁切与帧内复用有像素证据', async () => {
-    const aurora = 'shader({id:"sky",name:"aurora",params:{color_b:[.1,.8,.6,1]},x:0,y:0,width:64,height:64})'
+    const aurora = 'shader({id:"sky",name:"Aurora",params:{colorB:[.1,.8,.6,1]},x:0,y:0,width:64,height:64})'
     const sky = await run(`return [${aurora}];`)
     const title = await run(`return [${aurora},text({x:5,y:30,text:"AI",fontSize:22,color:[1,1,1,1],perChar:(i,n)=>({y:tween(ctx.time,stagger(i,.04),.3,8,0,"expoOut"),opacity:progress(ctx.time,stagger(i,.04),.3)})})];`)
     expect(sky.some((v,i)=>i%4!==3 && v>10)).toBe(true)
     expect(title.filter((v,i)=>i%4!==3 && v>200).length).toBeGreaterThan(sky.filter((v,i)=>i%4!==3 && v>200).length)
-    const card = await run('return [rect({x:0,y:0,width:64,height:64,fill:[.1,.1,.1,1]}),group({x:32,y:10,rotation:15,opacity:.8,clip:{x:0,y:0,width:24,height:40}},[rect({x:0,y:0,width:24,height:40,radius:3,fill:[.2,.2,.3,1]}),shader({name:"beam",params:{direction:ctx.time*60},x:0,y:0,width:24,height:40,blend:"add"})])];')
+    const card = await run('return [rect({x:0,y:0,width:64,height:64,fill:[.1,.1,.1,1]}),group({x:32,y:10,rotation:15,opacity:.8,clip:{x:0,y:0,width:24,height:40}},[rect({x:0,y:0,width:24,height:40,radius:3,fill:[.2,.2,.3,1]}),shader({name:"Beam",params:{startPosition:[.5,0],endPosition:[.5+sin(ctx.time)*.2,1]},x:0,y:0,width:24,height:40,blend:"add"})])];')
     expect(card.some((v,i)=>i%4!==3 && v>80)).toBe(true); expect(pixel(card,0,0)[0]).toBeCloseTo(26,-1)
-    const clipped = await run('return [group({x:32,y:32,rotation:90,clip:{x:0,y:0,width:16,height:16}},[shader({name:"linear_gradient",params:{color_a:[1,0,0,1],color_b:[0,0,1,1]},x:0,y:0,width:32,height:32})])];')
+    const clipped = await run('return [group({x:32,y:32,rotation:90,clip:{x:0,y:0,width:16,height:16}},[shader({name:"LinearGradient",params:{colorA:[1,0,0,1],colorB:[0,0,1,1]},x:0,y:0,width:32,height:32})])];')
     expect(pixel(clipped,24,40)[3]).toBe(255); expect(pixel(clipped,8,40)[3]).toBe(0)
     const before = runtime.counts.allocations
     await run(`return [${aurora},${aurora}];`)
@@ -249,30 +250,59 @@ describe('t74 作者语言着色器GPU接线', () => {
     device.queue.writeTexture({texture:input.texture as never},data,{bytesPerRow:W*4},[W,H])
     try {
       let index=0
-      for(const body of ['const a=shaderFilter("chromatic",{strength:90}); return shaderFilter("grain",{strength:70,speed:ctx.time/2},a);','return clamp(mix(shaderFilter("glass",{scale:20}),blur(2),.5),0,1);']) {
+      for(const body of ['const a=shaderFilter("ChromaticAberration",{strength:.9}); return shaderFilter("FilmGrain",{strength:.7},a);','return clamp(mix(shaderFilter("FlutedGlass",{frequency:20}),blur(2),.5),0,1);']) {
         const program=compileCodeMaterial(source(body,'filter')); device.pushErrorScope('validation')
         const output=await host.filter('t74:output',`t74:${index++}`,program,context,{},input)
         const pixels=await read(output.texture); expect(await device.popErrorScope()).toBeNull()
         expect(pixels.some((v,i)=>i%4!==3 && v>100)).toBe(true); expect(pixels).not.toEqual(data)
         if(index===1) expect(pixel(pixels,0,20)[3]).toBe(0)
       }
-      const repeated=compileCodeMaterial(source('return clamp(mix(shaderFilter("grain",{}),shaderFilter("grain",{speed:1}),.5),0,1);','filter'))
+      const repeated=compileCodeMaterial(source('return clamp(mix(shaderFilter("FilmGrain",{strength:.5}),shaderFilter("FilmGrain",{strength:.5}),.5),0,1);','filter'))
       const allocation=host.diagnostics().textureAllocations
       const one=await host.filter('t74:output','t74:repeated',repeated,context,{},input); const pixels=await read(one.texture)
       expect(host.diagnostics().textureAllocations-allocation).toBe(1)
       const again=await host.filter('t74:output','t74:repeated',repeated,context,{},input); expect(await read(again.texture)).toEqual(pixels)
-      const bad=compileCodeMaterial(source('return shaderFilter("grain",{speed:ctx.time},shaderFilter("chromatic",{}));','filter'))
+      const bad=compileCodeMaterial(source('return shaderFilter("Tint",{color:ctx.time},shaderFilter("ChromaticAberration",{}));','filter'))
       const resident=host.diagnostics().residentBytes
       await expect(host.filter('t74:output','t74:bad',bad,{...context,time:5}, {},input)).rejects.toMatchObject({code:'PARAMETERS',sourceSpan:expect.objectContaining({startLine:1})})
       expect(host.diagnostics().residentBytes).toBe(resident)
     } finally {await host.dispose()}
   },30000)
+  it('素材里自写的 WGSL 生成器与滤镜真实出图；WGSL 报错换算到素材源码行', async () => {
+    const shaders = [
+      '{',
+      '  stripes: {kind: "generator", props: {count: {default: 4}, tint: {type: "color", default: "rgb(0, 255, 0)"}}, wgsl: `',
+      '    let band = step(0.5, fract(uv.x * count));',
+      '    return vec4f(tint.rgb * band, 1.0);`},',
+      '  shift: {kind: "filter", props: {amount: {default: .25}}, wgsl: `',
+      '    return textureSample(childTexture, childSampler, fract(uv + vec2f(amount, 0.0)));`}',
+      '}',
+    ].join('\n')
+    const target = texture()
+    try {
+      const program = compileCodeMaterial(source('return [shader({name:"stripes",params:{count:2,tint:rgba(0,1,0,1)},x:0,y:0,width:64,height:64})];', 'generator', shaders))
+      await runtime.render(target, W, H, evaluateCodeMaterial(program, context, {}, { measureText: testMeasure }))
+      const pixels = await read(target)
+      expect(pixel(pixels, 5, 5)).toEqual([0, 0, 0, 255]); expect(pixel(pixels, 20, 5)).toEqual([0, 255, 0, 255])
+    } finally { target.destroy() }
+    const host = new VideoEditCodeGpu(wrapped); const input = await host.target('own:input', W, H)
+    const data = new Uint8Array(W * H * 4)
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) data.set(x < 32 ? [255, 0, 0, 255] : [0, 0, 255, 255], (y * W + x) * 4)
+    device.queue.writeTexture({ texture: input.texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
+    try {
+      const filter = compileCodeMaterial(source('return shaderFilter("shift",{amount:.5});', 'filter', shaders))
+      const shifted = await read((await host.filter('own:output', 'own:shift', filter, context, {}, input)).texture)
+      expect(pixel(shifted, 5, 5)).toEqual([0, 0, 255, 255]); expect(pixel(shifted, 40, 5)).toEqual([255, 0, 0, 255])
+      const broken = compileCodeMaterial(source('return shaderFilter("bad",{});', 'filter', ['{', '  bad: {kind: "filter", wgsl: `', '    let a = child;', '    return vec4f(nope);`}', '}'].join('\n')))
+      await expect(host.filter('own:output', 'own:bad', broken, context, {}, input)).rejects.toMatchObject({ code: 'TYPE', message: expect.stringMatching(/nope[\s\S]*素材源码第 4 行/) })
+    } finally { await host.dispose() }
+  }, 60000)
   it('五种类别至少一个真实像素输出',async()=>{
-    for(const name of ['linear_gradient','aurora','beam']) {
+    for(const name of ['LinearGradient','Aurora','Beam','Plasma','StudioBackground']) {
       const pixels=await run(`return [shader({name:"${name}",x:0,y:0,width:64,height:64})];`)
       expect(pixels.some((v,i)=>i%4!==3 && v>20),name).toBe(true)
     }
-    // Style and optical categories are covered above by grain/chromatic and glass.
+    // Style and optical categories are covered above by FilmGrain/ChromaticAberration and FlutedGlass.
   },30000)
   it('4K四层/四工序边界与旋转开销实测（显式启用）',async()=>{
     if(process.env.HENJI_CODE_SHADER_BENCH!=='1') return
@@ -286,7 +316,7 @@ describe('t74 作者语言着色器GPU接线', () => {
     }
     try {
       for(const rotation of [0,15]) {
-        const program=compileCodeMaterial(source(`return [group({rotation:${rotation}},repeat(4,i=>shader({name:"aurora",params:{direction:i*20},time:ctx.time+i,x:0,y:0,width:ctx.width,height:ctx.height,opacity:.3})))];`))
+        const program=compileCodeMaterial(source(`return [group({rotation:${rotation}},repeat(4,i=>shader({name:"Aurora",params:{seed:i*20},time:ctx.time+i,x:0,y:0,width:ctx.width,height:ctx.height,opacity:.3})))];`))
         await measure(`layers4_rotation${rotation}`, async i=>{const ctx={...frame,time:i/60};await runtime.render(target,width,height,evaluateCodeMaterial(program,ctx))})
       }
       let peakResidentBytes = 0
@@ -300,7 +330,7 @@ describe('t74 作者语言着色器GPU接线', () => {
         const data = new Uint8Array(width * height * 4)
         for(let y=0;y<height;y++) for(let x=0;x<width;x++) data.set([Math.round(x/width*255),Math.round(y/height*255),x%120<60?255:40,255],(y*width+x)*4)
         device.queue.writeTexture({texture:input.texture as never},data,{bytesPerRow:width*4},[width,height])
-        const program=compileCodeMaterial(source('return shaderFilter("glow_pro",{},shaderFilter("zoom_blur",{},shaderFilter("grain",{},shaderFilter("chromatic",{}))));','filter'))
+        const program=compileCodeMaterial(source('return shaderFilter("Glow",{},shaderFilter("ZoomBlur",{},shaderFilter("FilmGrain",{},shaderFilter("ChromaticAberration",{}))));','filter'))
         await measure('filters4_heavy',async i=>{await host!.filter('t74:bench:out','t74:bench:filter',program,{...frame,time:i/60}, {},input)})
         report.filterResidentBytes=host.diagnostics().residentBytes; report.filterPeakResidentBytes=peakResidentBytes
         expect(peakResidentBytes).toBeLessThanOrEqual(256 * 1024 ** 2)

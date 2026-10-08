@@ -33,10 +33,13 @@ export const shaderParamKey = (key: string): string => key.replace(/[A-Z]/g, let
 /** 位置属性拆成的两个百分比参数键。 */
 export const shaderPositionKeys = (key: string): readonly [string, string] => [`${shaderParamKey(key)}_x`, `${shaderParamKey(key)}_y`]
 
-function params(component: ShaderComponent): VideoEditBuiltinParam[] {
+/** 组件属性 → 剪辑参数（效果与过渡共用）；`skip` 里的属性由宿主驱动（如转场进度），不做参数。 */
+export function shaderComponentParams(component: ShaderComponent, skip: readonly string[] = []): VideoEditBuiltinParam[] {
   const result: VideoEditBuiltinParam[] = []
   for (const prop of component.props) {
-    const base = { key: shaderParamKey(prop.key), name: label(prop), tooltip: '', description: prop.description || prop.label }
+    if (skip.includes(prop.key)) continue
+    // 助手语义里写明代码素材里的属性名：效果参数用下划线键，代码图层用组件原名（两种写法代码里都认）。
+    const base = { key: shaderParamKey(prop.key), name: label(prop), tooltip: '', description: `${prop.description || prop.label}（代码图层属性 ${prop.key}）` }
     if (prop.ui === 'range' && typeof prop.default === 'number' && Number.isFinite(prop.default)) {
       const min = prop.min ?? Math.min(0, prop.default); const max = prop.max ?? Math.max(1, prop.default * 4)
       result.push({ ...base, type: 'number', unit: 'value', min, max, step: prop.step ?? (max - min > 20 ? 1 : 0.01), default: prop.default, animatable: prop.key !== component.speedProp && !prop.compileTime })
@@ -46,34 +49,34 @@ function params(component: ShaderComponent): VideoEditBuiltinParam[] {
     else if (prop.ui === 'position' && prop.default && typeof prop.default === 'object') {
       const point = prop.default as { x?: number; y?: number }
       const [x, y] = shaderPositionKeys(prop.key)
-      result.push({ ...base, key: x, name: `${label(prop)}（水平）`, type: 'number', unit: 'percent', min: -100, max: 200, step: 0.1, default: Math.round((point.x ?? 0.5) * 1000) / 10, description: `${base.description}（水平位置，0 左边缘，100 右边缘）`, animatable: true })
-      result.push({ ...base, key: y, name: `${label(prop)}（垂直）`, type: 'number', unit: 'percent', min: -100, max: 200, step: 0.1, default: Math.round((point.y ?? 0.5) * 1000) / 10, description: `${base.description}（垂直位置，0 上边缘，100 下边缘）`, animatable: true })
+      result.push({ ...base, key: x, name: `${label(prop)}（水平）`, type: 'number', unit: 'percent', min: -100, max: 200, step: 0.1, default: Math.round((point.x ?? 0.5) * 1000) / 10, description: `${prop.description || prop.label}（水平位置百分比，0 左边缘，100 右边缘；代码图层写 ${prop.key}: {x, y}，取 0–1）`, animatable: true })
+      result.push({ ...base, key: y, name: `${label(prop)}（垂直）`, type: 'number', unit: 'percent', min: -100, max: 200, step: 0.1, default: Math.round((point.y ?? 0.5) * 1000) / 10, description: `${prop.description || prop.label}（垂直位置百分比，0 上边缘，100 下边缘；代码图层写 ${prop.key}: {x, y}，取 0–1）`, animatable: true })
     }
   }
   if (component.role === 'generator') result.push({ key: 'blend_mode', name: '混合模式', type: 'enum', default: 'normal', tooltip: '生成的画面怎样叠在原画面上', description: '生成画面与片段原画面的混合模式：normal 直接覆盖（透明处露出原画面），screen 只提亮，multiply 只压暗，overlay 加强对比等。', options: SHADER_BLEND_MODES.map(value => ({ value, label: BLEND_ZH[value] ?? value })) })
   return result
 }
 
+/** 与剪辑已有内置效果完全同功能的组件不再单独列为效果（黑白、反相、翻转），仍可在着色器图层里使用。 */
+const SAME_AS_BUILTIN = new Set(['Grayscale', 'Invert', 'Flip'])
 /** 可作为片段效果的组件：生成器与滤镜（转场另行登记，分组容器不单独成效果）。 */
 export const SHADER_GRAPH_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = SHADER_COMPONENTS
-  .filter(component => (component.role === 'generator' || component.role === 'filter') && GROUPS[component.category])
+  .filter(component => (component.role === 'generator' || component.role === 'filter') && GROUPS[component.category] && !SAME_AS_BUILTIN.has(component.name))
   .map(component => {
     const zh = SHADER_COMPONENT_ZH[component.name]
     return {
       id: `${SHADER_EFFECT_PREFIX}${component.name}`, name: zh?.[0] ?? component.name, group: GROUPS[component.category],
       tooltip: zh?.[1] ?? component.description,
       description: `${component.role === 'generator' ? '生成画面（覆盖片段画面，可用 blend_mode 混合）' : '处理片段画面的滤镜'}：${component.description}${component.speedProp ? `（动画速度由 ${component.speedProp} 控制，不能做关键帧）` : ''}`,
-      params: params(component),
+      params: shaderComponentParams(component),
       cover: { kind: 'render', timeSeconds: 1.5 },
     }
   })
 const BY_ID = new Map(SHADER_GRAPH_EFFECT_DEFINITIONS.map(definition => [definition.id, definition]))
 export function isShaderGraphEffect(id: string): boolean { return BY_ID.has(id) }
 
-/** 效果参数 → 组件属性：位置合回 {x, y}（百分比转 0–1），选项值还原成组件原类型。 */
-export function shaderGraphEffectProps(id: string, values: Readonly<VideoEditBuiltinParams>): Record<string, unknown> {
-  const component = SHADER_COMPONENTS.find(value => `${SHADER_EFFECT_PREFIX}${value.name}` === id)
-  if (!component) throw new Error(`没有着色器效果 ${id}。`)
+/** 剪辑参数 → 组件属性：位置合回 {x, y}（百分比转 0–1），选项值还原成组件原类型（效果与过渡共用）。 */
+export function shaderComponentProps(component: ShaderComponent, values: Readonly<VideoEditBuiltinParams>): Record<string, unknown> {
   const props: Record<string, unknown> = {}
   for (const prop of component.props) {
     if (prop.ui === 'position') {
@@ -90,6 +93,15 @@ export function shaderGraphEffectProps(id: string, values: Readonly<VideoEditBui
   if (component.role === 'generator' && typeof values.blend_mode === 'string') props.blendMode = values.blend_mode
   return props
 }
+/** 效果参数 → 组件属性。 */
+export function shaderGraphEffectProps(id: string, values: Readonly<VideoEditBuiltinParams>): Record<string, unknown> {
+  const component = SHADER_COMPONENTS.find(value => `${SHADER_EFFECT_PREFIX}${value.name}` === id)
+  if (!component) throw new Error(`没有着色器效果 ${id}。`)
+  return shaderComponentProps(component, values)
+}
+
+/** 渲染时钟（片段内秒数），只在渲染时传递，不写入效果参数。 */
+export interface VideoEditShaderClock { shaderTimeSeconds?: number }
 
 /** 一项着色器效果对应的着色器图：先画片段画面，再叠生成器或套滤镜。组件图层 id 固定为 `fx`。 */
 export function shaderGraphEffectSpec(id: string): ShaderGraphSpec {

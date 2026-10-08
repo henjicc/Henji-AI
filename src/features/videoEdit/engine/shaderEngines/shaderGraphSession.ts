@@ -12,7 +12,7 @@
 import { createGpuUniformsMap, resolveBoundingBox, rootPassthrough, shaderRendererGPU } from 'shaders/core'
 import { defineShader, transformAngle, transformBoolean, transformColor, transformPosition, wgsl, wgslTypeForProp } from 'shaders/std'
 import type { GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { SHADER_GRAPH_INPUT, SHADER_GRAPH_SECOND, type ShaderGraphCustomShader, type ShaderGraphLayer, type ShaderGraphSpec, shaderGraphCustomPropKind, shaderGraphStructureKey } from '@/core/videoEdit/shaderGraph/spec'
+import { SHADER_GRAPH_INPUT, SHADER_GRAPH_SECOND, type ShaderGraphCustomShader, type ShaderGraphLayer, type ShaderGraphSpec, shaderGraphCustomPropKind, shaderGraphLayerId, shaderGraphStructureKey } from '@/core/videoEdit/shaderGraph/spec'
 import { SHADER_COMPONENT_LOADERS } from './componentLoaders.generated'
 
 type Renderer = ReturnType<typeof shaderRendererGPU>
@@ -214,7 +214,7 @@ export class ShaderGraphSession {
     renderer.registerNode('root', rootPassthrough.fragment, null, null, {}, rootPassthrough)
     const register = (layers: readonly ShaderGraphLayer[], parent: string, prefix: string): void => {
       layers.forEach((layer, index) => {
-        const id = layer.id ?? `${prefix}${index}`
+        const id = shaderGraphLayerId(layer, index, prefix)
         const definition = layer.type === SHADER_GRAPH_INPUT || layer.type === SHADER_GRAPH_SECOND ? this.hostDefinition(layer.type) : definitions.get(layer.type)!
         if (definition.compute) this.computes = true
         const props = { ...(layer.props ?? {}) }
@@ -242,22 +242,28 @@ export class ShaderGraphSession {
     }
   }
 
+  /**
+   * 每个给出的图层按“完整属性表”处理：没写的属性回到组件默认值（同结构的不同图共用会话，不能残留上一张图的值）。
+   */
   private applyProps(values: ReadonlyMap<string, Readonly<Record<string, unknown>>> | undefined): void {
     if (!values || !this.renderer) return
     for (const [id, props] of values) {
       const node = this.nodes.get(id)
       if (!node) throw new ShaderGraphError(`着色器图里没有图层 ${id}。`)
       const last = this.lastProps.get(id) ?? {}
+      const next: Record<string, unknown> = {}
       let metadataChanged = false
-      for (const [key, value] of Object.entries(props)) {
-        if (Object.is(last[key], value) || (typeof value === 'object' && JSON.stringify(last[key]) === JSON.stringify(value))) continue
-        last[key] = value
-        if (key in node.definition.props) this.renderer.updateUniformValue(id, key, value)
+      for (const key of new Set([...Object.keys(last), ...Object.keys(props)])) {
+        const known = key in node.definition.props
+        const value = key in props ? props[key] : known ? node.definition.props[key].default : undefined
+        if (value !== undefined) next[key] = value
+        if (Object.is(last[key], value) || (typeof value === 'object' && value !== null && JSON.stringify(last[key]) === JSON.stringify(value))) continue
+        if (known) this.renderer.updateUniformValue(id, key, value)
         else metadataChanged = true
       }
-      this.lastProps.set(id, last)
+      this.lastProps.set(id, next)
       if (metadataChanged) {
-        const { renderOrder: _order, id: _id, ...metadata } = this.metadata({ ...node.layer, props: last }, 0, id)
+        const { renderOrder: _order, id: _id, ...metadata } = this.metadata({ ...node.layer, props: next }, 0, id)
         this.renderer.updateNodeMetadata(id, metadata as never)
       }
     }

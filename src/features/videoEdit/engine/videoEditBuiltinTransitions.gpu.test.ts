@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { isShaderGraphTransition } from '@/core/videoEdit/shaderGraph/transitions'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { BLACK_HEX } from '@/core/theme/colorTokens'
@@ -56,7 +57,7 @@ const near = (actual: number[], expected: number[], tolerance = 3): void => { ac
 
 describe('剪辑视频过渡（真实设备）', () => {
   it('全部过渡在设备上编译；默认参数下进度 0 是前一段、进度 1 是后一段', async () => {
-    for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {
+    for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS.filter(value => !isShaderGraphTransition(value))) {
       for (const [x, y] of [[1, 1], [W / 2, H / 2], [W - 2, H - 2]]) {
         near(pixel(await run(kind, 0), x, y), RED); near(pixel(await run(kind, 1), x, y), BLUE)
       }
@@ -83,7 +84,7 @@ describe('剪辑视频过渡（真实设备）', () => {
     near(pixel(await run('cross_zoom', 0.5), W / 2, H / 2), [128, 0, 128, 255], 4)
   }, 60_000)
   it('单侧过渡空着的一侧是透明：入点从透明开始，出点结束于透明', async () => {
-    for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {
+    for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS.filter(value => !isShaderGraphTransition(value))) {
       expect(pixel(await run(kind, 0, {}, 'in'), W / 2, H / 2)[3], kind).toBe(0)
       near(pixel(await run(kind, 1, {}, 'in'), W / 2, H / 2), RED)
       near(pixel(await run(kind, 0, {}, 'out'), W / 2, H / 2), RED)

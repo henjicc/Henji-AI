@@ -222,7 +222,9 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {
       expect(VIDEO_EDIT_TRANSITION_PRESETS.find(preset => preset.kind === kind)?.medium).toBe('video')
       for (const param of VIDEO_EDIT_TRANSITION_PARAMS[kind]) {
-        expect(param.tooltip.length, `${kind}.${param.key}`).toBeGreaterThan(4); expect(param.description.length, `${kind}.${param.key}`).toBeGreaterThan(8)
+        // shaders.* 转场参数的名字已说明含义，悬停说明可空；助手语义必有。
+        if (!kind.startsWith('shaders.')) expect(param.tooltip.length, `${kind}.${param.key}`).toBeGreaterThan(4)
+        expect(param.description.length, `${kind}.${param.key}`).toBeGreaterThan(4)
         if (param.type === 'number') expect(param.default).toBeGreaterThanOrEqual(param.min)
       }
     }

@@ -1,5 +1,4 @@
 // 由 scripts/generate-shader-components.cjs 生成，勿手改。
-/* eslint-disable */
 export const SHADER_COMPONENT_LOADERS: Record<string, () => Promise<{ componentDefinition: unknown }>> = {
   AngularBlur: () => import('shaders/core/AngularBlur'),
   Arc: () => import('shaders/core/Arc'),

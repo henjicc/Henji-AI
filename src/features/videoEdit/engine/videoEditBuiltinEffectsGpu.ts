@@ -6,7 +6,7 @@ import { VIDEO_EDIT_BUILTIN_EFFECT_SHADER, type VideoEditBuiltinEffectEntry } fr
 import type { CubeLut } from '@/core/videoEdit/cubeLut'
 import type { LumetriLutAsset } from '@/core/videoEdit/lumetriLutAsset'
 import { fetchVideoEditLumetriLut } from './videoEditLumetriLutSource'
-import type { ShaderLibraryClock } from './shaderLibrary/planner'
+import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 
 export type VideoEditLutLoader = (asset: LumetriLutAsset) => Promise<CubeLut>
 const loadLut: VideoEditLutLoader = fetchVideoEditLumetriLut
@@ -82,7 +82,7 @@ export class VideoEditBuiltinEffectsGpu {
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
   /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
-  async render(instance: VideoEditBuiltinEffectInstance & ShaderLibraryClock, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly LumetriLutAsset[] = []): Promise<void> {
+  async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly LumetriLutAsset[] = []): Promise<void> {
     await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale }), input.format, input.texture, output, undefined, luts)
   }
   /**

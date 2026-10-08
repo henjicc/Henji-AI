@@ -1,5 +1,5 @@
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { shaderGraphIssues, shaderGraphStructureKey, type ShaderGraphSpec } from '@/core/videoEdit/shaderGraph/spec'
+import { shaderGraphIssues, shaderGraphLayerProps, shaderGraphStructureKey, type ShaderGraphSpec } from '@/core/videoEdit/shaderGraph/spec'
 import { createLogger } from '@/core/logging'
 import { ShaderGraphError, ShaderGraphSession, type ShaderGraphRenderRequest } from './shaderGraphSession'
 
@@ -33,7 +33,9 @@ export class ShaderGraphCache {
     }
     entry.used = performance.now()
     const current = entry
-    const run = current.queue.then(async () => (await current.session).render(request))
+    // 同结构的图共用会话：没指定时按图里写的属性下发（第一次建会话时已带上，后续帧只改变化的项）。
+    const frame = request.props ? request : { ...request, props: shaderGraphLayerProps(spec) }
+    const run = current.queue.then(async () => (await current.session).render(frame))
     current.queue = run.catch(() => undefined)
     return run
   }

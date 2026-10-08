@@ -12,7 +12,7 @@ const CODE_AI_SOURCE = `export default {
   render(ctx){
     const enter=expoOut(progress(ctx.time,0,.6));
     return [
-      shader({id:"sky",name:"aurora",params:{speed:1},x:0,y:0,width:ctx.width,height:ctx.height}),
+      shader({id:"sky",x:0,y:0,width:ctx.width,height:ctx.height,layers:[{type:"SolidColor",props:{color:[.02,.03,.06,1]}},{type:"Aurora",props:{speed:2}}]}),
       group({id:"heading",x:960,y:540+(1-enter)*80,opacity:enter},[
         rect({id:"plate",x:-600,y:-100,width:1200,height:200,radius:20,fill:ctx.style.palette.accent}),
         text({id:"title",x:0,y:0,text:"title",fontFamily:ctx.style.fonts.display.family,
@@ -336,17 +336,17 @@ function createVideoEditCodeAiScene() {
         await step('08-shader-effect', '效果库添加镜头色差并重渲染', async item => {
           await seek(130); await focus(ref('video_edit.clip', 'base')); await dock('效果')
           const before = await snapshot(); item.before = before
-          // “色差”是旧 CPU 效果；“镜头色差”才是 shader_chromatic。
+          // “色差”是旧 CPU 效果；“镜头色差”才是 shaders 框架的 ChromaticAberration。
           const entry = page.locator('[data-video-edit-effects-entry]').filter({ hasText: '镜头色差' }).first()
           await entry.waitFor({ state: 'visible' }); await entry.dblclick()
           const project = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === 'base').effects?.length === 1)
           const effect = project.sequences[0].clips.find(clip => clip.id === 'base').effects[0]
           item.effect = effect
-          assert.equal(effect.builtin?.id, 'shader_chromatic', '添加的不是着色器镜头色差滤镜')
+          assert.equal(effect.builtin?.id, 'shaders.ChromaticAberration', '添加的不是着色器镜头色差滤镜')
           const controls = page.locator(`[data-video-edit-effect="${effect.id}"]`)
           await controls.waitFor({ state: 'visible' })
           await controls.getByLabel('强度', { exact: true }).waitFor({ state: 'visible' })
-          await controls.getByLabel('方向', { exact: true }).waitFor({ state: 'visible' })
+          await controls.getByLabel('角度', { exact: true }).waitFor({ state: 'visible' })
           item.after = await fresh(before.requestedAt, 130)
         })
         await step('09-performance', '汇总呈现耗时与主线程长任务', async item => {

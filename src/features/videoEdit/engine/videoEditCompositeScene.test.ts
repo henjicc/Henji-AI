@@ -33,7 +33,7 @@ const over = (below: CodeColor, above: CodeColor): CodeColor => above.map((value
 
 /** Only the GPU/texture boundary is replaced. Inputs are uniform premultiplied fields;
  * the real scene chooses nodes, contexts, destinations and presentation order. */
-function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, options: { onFilter?: () => void; onBuiltin?: (instance: import('@/core/videoEdit/compositing').VideoEditBuiltinEffectInstance & import('./shaderLibrary/planner').ShaderLibraryClock) => void; offscreenCompletion?: Promise<void>; declineFinal?: boolean } = {}) {
+function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, options: { onFilter?: () => void; onBuiltin?: (instance: import('@/core/videoEdit/compositing').VideoEditBuiltinEffectInstance & import('@/core/videoEdit/shaderGraph/effects').VideoEditShaderClock) => void; offscreenCompletion?: Promise<void>; declineFinal?: boolean } = {}) {
   const device = {} as GpuDevice
   const data = new WeakMap<GpuTexture, CodeColor>(); const keys = new WeakMap<GpuTexture, string>()
   const targets = new Map<string, VideoEditCodePicture>()
@@ -115,7 +115,7 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
 describe('正式合成场景的预乘RGBA编排与有界目标', () => {
   it('着色器效果按片段内秒时间求值，24/60fps同一秒相同且不改持久参数', async () => {
     for (const fps of [24, 60]) {
-      const builtin = { id: 'shader_wave', params: { strength: 50, speed: 2 } }
+      const builtin = { id: 'shaders.WaveDistortion', params: { strength: 0.5 } }
       const effect = { id: 'wave', name: '波浪', amount: 1, enabled: true, builtin }
       const owner = clip('visual', 1, { effects: [effect], start: fps / 2 })
       const document = { ...composition([owner]), fps, frameRate: { numerator: fps, denominator: 1 } }
@@ -125,7 +125,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
       const result = await renderVideoEditCompositeScene(document, nodes, new Map([[owner.id, boundary.picture('raw', [.2, .1, 0, 1])]]), new Map([[owner.id, [{ effect, builtin }]]]), boundary.compositor, fps, () => true)
       await result.completion
       expect(time).toBe(0.5)
-      expect(builtin).toEqual({ id: 'shader_wave', params: { strength: 50, speed: 2 } })
+      expect(builtin).toEqual({ id: 'shaders.WaveDistortion', params: { strength: 0.5 } })
     }
   })
   it('代码效果执行失败跳过该项并报告，后续效果继续，保留整帧与原链', async () => {

@@ -10,7 +10,7 @@ import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS } from './audioEffectDefinitions'
 import { VIDEO_EDIT_LUMETRI } from './lumetri'
 import { parseLumetriCurve } from './lumetriCurves'
-import { SHADER_EFFECT_DEFINITIONS } from './shaderLibrary/catalog'
+import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
 
 export type VideoEditBuiltinParamValue = number | boolean | string
@@ -25,8 +25,8 @@ export type VideoEditBuiltinParam =
   | ParamBase & { type: 'enum'; options: ReadonlyArray<{ value: string; label: string }>; default: string }
   | ParamBase & { type: 'boolean'; default: boolean }
   | ParamBase & { type: 'curve' | 'lut'; default: string }
-export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level' | 'shader_background' | 'shader_filter' | 'shader_light' | 'shader_texture' | 'shader_shape' | 'shader_material' | 'shader_blur' | 'shader_distort' | 'shader_adjust' | 'shader_stylize'
-export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道', shader_background: '着色器背景与纹理', shader_filter: '着色器滤镜与扭曲', shader_light: '着色器光效', shader_texture: '纹理与背景', shader_shape: '图形', shader_material: '材质', shader_blur: '着色器模糊', shader_distort: '扭曲变形', shader_adjust: '着色器调色', shader_stylize: '着色器风格化' }
+export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level' | 'shader_texture' | 'shader_shape' | 'shader_material' | 'shader_blur' | 'shader_distort' | 'shader_adjust' | 'shader_stylize'
+export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道', shader_texture: '纹理与背景', shader_shape: '图形', shader_material: '材质', shader_blur: '着色器模糊', shader_distort: '扭曲变形', shader_adjust: '着色器调色', shader_stylize: '着色器风格化' }
 /** 内置效果作用于画面还是声音：画面效果只加到画面片段，音频效果只加到声音片段。 */
 export type VideoEditBuiltinMedia = 'video' | 'audio'
 export interface VideoEditBuiltinEffectDefinition {
@@ -138,7 +138,7 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
   VIDEO_EDIT_LUMETRI,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
-export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, ...SHADER_EFFECT_DEFINITIONS, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
+export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, GLOW_PRO_EFFECT_DEFINITION, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
 
 const definitions = new Map(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => [definition.id, definition]))
 export function videoEditBuiltinEffect(id: string): VideoEditBuiltinEffectDefinition | undefined { return definitions.get(id) }

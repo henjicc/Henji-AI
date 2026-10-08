@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { isShaderGraphEffect } from '@/core/videoEdit/shaderGraph/effects'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
@@ -88,7 +89,8 @@ describe('剪辑内置效果（真实设备）', () => {
     } finally { local.dispose(); source.destroy(); first.destroy(); second.destroy() }
   }, 60_000)
   it('全部效果的着色器在设备上编译，默认参数出画面且不透明区域保持不透明', async () => {
-    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio')) {
+    // shaders.* 组件效果的真实设备覆盖在 shaderEngines/shaderGraph.gpu.test.ts。
+    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio' && !isShaderGraphEffect(value.id))) {
       const pixels = await run(definition.id, videoEditBuiltinDefaults(definition))
       if (!['crop', 'chroma_key'].includes(definition.id)) expect(pixel(pixels, W / 2, H / 2)[3], definition.id).toBe(255)
     }

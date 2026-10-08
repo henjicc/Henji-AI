@@ -6,16 +6,16 @@ import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand, CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
-import { codeShaderFilterPasses, codeShaderParams } from '@/core/videoEdit/codeMaterial/shaders'
+import { codeShaderFilterPasses, codeShaderGraph } from '@/core/videoEdit/codeMaterial/shaders'
 import { evaluateCodeFrameExpression } from '@/core/videoEdit/codeMaterial/evaluateV3'
-import { TrustedShaderLibraryRenderer } from './shaderLibrary/render'
 import { codeFilterRadius, codeMaterialFilterPasses } from './videoEditCodeCompilerFilterV3'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
-import { isShaderGraphEffect, shaderGraphEffectProps, shaderGraphEffectSpec } from '@/core/videoEdit/shaderGraph/effects'
+import { codeShaderFailure } from './shaderEngines/codeShaderFailure'
+import { isShaderGraphEffect, shaderGraphEffectProps, shaderGraphEffectSpec, type VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
+import { isShaderGraphTransition, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
-import type { ShaderLibraryClock } from './shaderLibrary/planner'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import { invalidateCodeTextMetrics, measureCodeText, measureVideoEditGlyph } from '../videoEditGlyphMetrics'
 import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
@@ -288,7 +288,7 @@ export class VideoEditCodeGpu {
     this.device.queue.submit([encoder.finish()]); this.pending = this.device.queue.onSubmittedWorkDone()
   }
   private v3(): VideoEditCodeGpuV3 {
-    return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes } }, undefined, new TrustedShaderLibraryRenderer(this.builtins()))
+    return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes } }, undefined, () => this.shaderGraphs())
   }
   async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false, overrides?: Pick<import('@/core/videoEdit/codeMaterial/evaluate').CodeMaterialEvaluationOptions, 'elementOverrides' | 'sourceTime'>): Promise<VideoEditCodePicture> {
     const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, ...overrides, measureText: measureCodeText, onDiagnostic: diagnostic => {
@@ -403,16 +403,20 @@ export class VideoEditCodeGpu {
     try {
       for (const primitive of codeMaterialFilterPasses(program)) blurred.push(await this.v3().filterBlur(input.texture, input.width, input.height, codeFilterRadius(program, primitive.radius, values), primitive.threshold ? codeFilterRadius(program, primitive.threshold, values) : undefined))
       for (const primitive of shaderPasses) {
-        let params: Record<string, number | string>
-        try { params = codeShaderParams(primitive.name, 'filter', evaluateCodeFrameExpression(program, primitive.params, context, values)) }
-        catch (error) { if (error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, primitive.expression.sourceSpan); throw error }
+        let graph: import('@/core/videoEdit/shaderGraph/spec').ShaderGraphSpec
+        try {
+          graph = primitive.name !== undefined
+            ? codeShaderGraph(program, { name: primitive.name, params: primitive.params ? evaluateCodeFrameExpression(program, primitive.params, context, values) : {} }, 'filter')
+            : codeShaderGraph(program, evaluateCodeFrameExpression(program, primitive.target, context, values) as { layers?: unknown }, 'filter')
+        } catch (error) { if (error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, primitive.expression.sourceSpan); throw error }
         const source = primitive.input === undefined ? input.texture : shaderTextures[primitive.input]
-        const signature = JSON.stringify([primitive.name, Object.entries(params).sort(([a], [b]) => a.localeCompare(b))])
+        const signature = JSON.stringify(graph)
         let results = shaderResults.get(source); if (!results) { results = new Map(); shaderResults.set(source, results) }
         const cached = results.get(signature)
         if (cached) { shaderTextures.push(cached); continue }
         const output = this.texture(input.width, input.height, format); shaderTextures.push(output); results.set(signature, output)
-        await new TrustedShaderLibraryRenderer(this.builtins()).render({ name: `shader_${primitive.name}`, params, timeSeconds: shaderTime, width: input.width, height: input.height, format, input: source, output })
+        try { await this.shaderGraphs().render(graph, { timeSeconds: shaderTime, width: input.width, height: input.height, input: source, output, outputFormat: format }, { input: true }) }
+        catch (error) { throw codeShaderFailure(error, graph, primitive.expression.sourceSpan) }
       }
     const encoder = this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
@@ -560,11 +564,22 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
     if (isShaderGraphEffect(instance.id)) {
       // `shaders` 组件效果：着色器图 [@input, 组件]，时间是片段内秒数（由合成场景给出）。
-      const time = (instance as ShaderLibraryClock).shaderTimeSeconds ?? 0
+      const time = (instance as VideoEditShaderClock).shaderTimeSeconds ?? 0
       await this.shaderGraphs().render(shaderGraphEffectSpec(instance.id), { timeSeconds: time, width: input.width, height: input.height, input: input.texture, output: target.picture.texture, outputFormat: input.textureFormat, props: new Map([['fx', shaderGraphEffectProps(instance.id, resolveVideoEditBuiltinParams(instance))]]) })
     } else await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format: input.textureFormat }, target.picture.texture, frame, renderScale, luts)
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
+  }
+  private transparentPixel?: GpuTexture
+  /** 1×1 透明画面（单侧过渡空着的一侧），按需创建一次。 */
+  private transparent(): GpuTexture {
+    if (!this.transparentPixel) {
+      this.transparentPixel = this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
+      const encoder = this.device.createCommandEncoder()
+      encoder.beginRenderPass({ colorAttachments: [{ view: this.transparentPixel.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] }).end()
+      this.device.queue.submit([encoder.finish()])
+    }
+    return this.transparentPixel
   }
   /** 着色器图（`shaders` 框架）会话缓存：效果、转场与代码素材 shader 图层共用。 */
   shaderGraphs(): ShaderGraphCache { return this.graphCache ??= new ShaderGraphCache(this.device) }
@@ -584,7 +599,11 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     const format = outgoing.highPrecision || incoming.highPrecision ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
     const target = this.surface(key, outgoing.width, outgoing.height, format)
     if (target.picture.texture === outgoing.texture || target.picture.texture === incoming.texture) throw new CodeMaterialError('CONTEXT', '过渡输入输出不能引用同一纹理。')
-    await this.builtins().renderTransition(transition, outgoing.texture, incoming.texture, target.picture.texture, { width: outgoing.width, height: outgoing.height, format })
+    if (isShaderGraphTransition(transition.kind)) {
+      // 框架转场：前一段在转场图层里被擦掉，露出下面的后一段；单侧过渡空着的一侧用透明画面。
+      const empty = transition.emptyOutgoing || transition.emptyIncoming ? this.transparent() : undefined
+      await this.shaderGraphs().render(shaderGraphTransitionSpec(transition.kind), { timeSeconds: 0, width: outgoing.width, height: outgoing.height, input: transition.emptyOutgoing ? empty : outgoing.texture, second: transition.emptyIncoming ? empty : incoming.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphTransitionProps(transition.kind, transition.params, transition.progress)]]) })
+    } else await this.builtins().renderTransition(transition, outgoing.texture, incoming.texture, target.picture.texture, { width: outgoing.width, height: outgoing.height, format })
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }
@@ -610,7 +629,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.stopFonts()
     this.disposed = true; await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled([...this.mixReady.values(), ...this.maskedMixPipelines.values()])
     await Promise.allSettled([...this.filterCompiles.values()].map(value => value.pending)); await this.pending.catch(() => {})
-    this.releaseUnused(new Set()); await this.v3Runtime?.dispose(); this.v3Runtime = undefined; this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
+    this.releaseUnused(new Set()); await this.v3Runtime?.dispose(); this.v3Runtime = undefined; this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; this.transparentPixel?.destroy(); this.transparentPixel = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
     this.glyphs.clear(); this.filters.clear(); this.filterLayout = undefined; this.image = undefined; this.mixPipelines.clear(); this.maskedMixPipelines.clear()
   }
 }

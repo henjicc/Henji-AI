@@ -8,9 +8,9 @@
  * 单侧过渡空着的一侧按透明处理（与交叉溶解的单侧语义一致）。
  */
 import { VIDEO_EDIT_LUMETRI_SHADER } from './videoEditLumetriShader'
-import { SHADER_LIBRARY_WGSL, SHADER_LIBRARY_ENTRIES } from './shaderLibrary/shaders'
+import { GLOW_PRO_ENTRIES, GLOW_PRO_WGSL } from './glowPro'
 const LEGACY_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'lumetri_basic', 'lumetri_creative', 'lumetri_curve', 'lumetri_wheel', 'lumetri_vignette', 'lumetri_hue_curve', 'lumetri_lut'] as const
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...LEGACY_EFFECT_ENTRIES, ...SHADER_LIBRARY_ENTRIES] as const
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...LEGACY_EFFECT_ENTRIES, ...GLOW_PRO_ENTRIES] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
@@ -248,5 +248,5 @@ fn zoomTap(uv: vec2f, center: vec2f, scale: f32, spread: f32, late: bool) -> vec
  let uv = uvOf(v);
  return mix(mix(outgoing(uv), incoming(uv), u.b.x), vec4f(u.a.rgb, 1.0), u.a.w);
 }
-${SHADER_LIBRARY_WGSL}
+${GLOW_PRO_WGSL}
 `

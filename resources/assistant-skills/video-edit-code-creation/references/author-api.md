@@ -24,7 +24,7 @@ export default {
 }
 ```
 
-name 为 1–160 个 UTF-16 单元；kind 为 generator/filter；mode 为 static/dynamic。width/height 为 1–8192 整数像素，durationSeconds 为 0.000001–86400 秒（24 小时源时钟技术范围），seed 为无符号 32 位整数。parameters 必填，可为空。static 禁止读 time/localTime/sequenceTime/frame/fps；静态 shader 必须显式给固定 time。滤镜按输入画面处理，作者尺寸不是重采样指令。
+name 为 1–160 个 UTF-16 单元；kind 为 generator/filter；可选 shaders 定义自己写的 WGSL 着色器（见 author-shaders）；mode 为 static/dynamic。width/height 为 1–8192 整数像素，durationSeconds 为 0.000001–86400 秒（24 小时源时钟技术范围），seed 为无符号 32 位整数。parameters 必填，可为空。static 禁止读 time/localTime/sequenceTime/frame/fps；静态 shader 必须显式给固定 time。滤镜按输入画面处理，作者尺寸不是重采样指令。
 
 ## 受限语法与 render
 
@@ -51,7 +51,7 @@ v3 还可读固定风格路径 ctx.style：palette 的 bg/surface/fg/muted/accen
 | group({...},children) | x/y 默认 0；children 数组/repeat；clip 为局部矩形 {x,y,width,height} |
 | image({...}) | source 为 image 参数；x/y/width/height；空参数不画 |
 | text({...}) | x/y/text/fontSize；排版见 author-text-motion |
-| shader({...}) | name/params/time/x/y/width/height；见 author-shaders |
+| shader({...}) | name+params 或 layers 图层树，time/x/y/width/height；见 author-shaders |
 
 公共字段：静态字符串 id；opacity 0–1；rotation 为度；scale 或 scaleX/scaleY（后者优先）；anchorX/anchorY 为局部像素锚点，默认 0。scale 可负以镜像；perChar.scale 必须非负。blend 为 normal/multiply/screen/overlay/add/lighten/darken。
 
@@ -81,7 +81,7 @@ radialGradient({cx,cy,r,stops:[[0,rgbaValue],[1,rgbaValue]]})
 | 参数 / 单字符串 / 每帧文字 | 32 / 4096 / 8192 UTF-16 |
 | 滤镜采样 / 标量工作 | 64 / 4096 |
 | 单路径展平点 / 渐变 stops | 4096 / 2–8 |
-| shader 图层 / shaderFilter 工序 | 4 / 4 |
+| shader 图层 / shaderFilter 工序 | 32 / 8 |
 | 字号 / 字形纹理 / GPU 驻留 | 1–1024px / 宽≤8192且≤四百万像素 / 256 MiB |
 
 repeat、辅助函数、路径、字符动画按展开上界计费。以上是单帧保护，不限制工程素材/片段/序列数量，不承诺所有设备 60fps。

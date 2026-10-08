@@ -6,7 +6,7 @@ import { videoEditSourceSeconds } from './time'
 import { advanceVideoEditClipSource, videoEditClipHeadRoom, videoEditClipTailRoom } from './clipSpeed'
 import { describeVideoEditTransitionParams, isVideoEditBuiltinTransitionKind, resolveVideoEditTransitionParams, videoEditTransitionParamsIssue, type VideoEditBuiltinTransitionKind } from './transitionParams'
 import type { VideoEditBuiltinParams } from './builtinEffects'
-import { SHADER_TRANSITION_DEFINITIONS } from './shaderLibrary/catalog'
+import { SHADER_GRAPH_TRANSITION_PRESETS } from './shaderGraph/transitions'
 
 /**
  * 过渡预设（PR“效果”面板的视频过渡／音频过渡）：只列引擎能真实渲染的种类。
@@ -24,7 +24,7 @@ export const VIDEO_EDIT_TRANSITION_PRESETS = [
   { kind: 'blur_dissolve', medium: 'video', name: '模糊过渡', tooltip: '前一段逐渐虚化，在模糊中换成后一段再变清晰', description: '模糊过渡：前一段逐渐失焦，在最模糊时溶成后一段，再重新清晰。适合梦境、回忆、柔和的段落切换。参数：blur 中点最大模糊度。' },
   { kind: 'flash', medium: 'video', name: '闪光', tooltip: '切换瞬间画面一闪（默认白色闪光）', description: '闪光（闪白）：在切点附近画面快速闪成纯色再切到后一段，比白场过渡更短促。适合拍照感、冲击、节拍点、回忆闪回。参数：color 闪光颜色，intensity 闪光强度。' },
   { kind: 'iris_round', medium: 'video', name: '圆形划像', tooltip: '后一段从一个圆里展开（或前一段收进圆里）', description: '圆形划像：后一段画面从圆形里由小到大展开；方式选 close 时前一段收缩成圆消失。适合聚焦某处、复古片尾、卡通感。参数：mode 展开或收拢，center_x / center_y 圆心，feather 羽化，border 边框宽度，border_color 边框颜色。' },
-  ...SHADER_TRANSITION_DEFINITIONS.map(preset => ({ ...preset, medium: 'video' as const, tooltip: preset.description })),
+  ...SHADER_GRAPH_TRANSITION_PRESETS,
   { kind: 'constant_power', medium: 'audio', name: '恒定功率', tooltip: '两段声音交叉淡化，中间音量不塌陷', description: '恒定功率交叉淡化：两段声音按正弦／余弦曲线交叉，过渡中段响度保持平稳，是默认音频过渡。' },
   { kind: 'constant_gain', medium: 'audio', name: '恒定增益', tooltip: '两段声音按直线交叉淡化', description: '恒定增益交叉淡化：两段声音按直线交叉，中段会略微变轻，适合需要明显切换感的地方。' },
   { kind: 'exponential_fade', medium: 'audio', name: '指数淡化', tooltip: '音量按分贝均匀变化，淡出先慢后快地消失，听感更自然', description: '指数淡化：音量按分贝均匀升降（-60 dB 到原音量），淡出时声音在后半段才明显消失、淡入时前半段很轻；交叉时中段比恒定增益更安静，两段声音几乎不重叠，适合音乐结尾淡出、环境声淡入，或不希望两段声音叠在一起的切换。' },

@@ -4,7 +4,8 @@ import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitio
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 import { LUMETRI_CURVE_CHANNELS, LUMETRI_HUE_CURVES, LUMETRI_WHEEL_REGIONS, lumetriWhiteBalance } from '@/core/videoEdit/lumetri'
 import { lumetriCurveLut, lumetriCurvePoints, parseLumetriCurve } from '@/core/videoEdit/lumetriCurves'
-import { planShaderLibraryEffect, planShaderLibraryTransition, shaderLibraryDelegatedEffect, type ShaderLibraryClock } from './shaderLibrary/planner'
+import { planGlowPro } from './glowPro'
+import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 
 /**
  * 把一个内置效果实例翻译成 GPU 工序（纯函数，可单测）：每道工序是一个着色器入口、输入、输出和 16 个 float 的参数。
@@ -90,14 +91,11 @@ export function videoEditGrainSeed(frame: number): number { return (Math.max(0, 
  * `renderScale` is the drawn height over the sequence height (below 1 only at a reduced playback resolution, task 4.9).
  * Spatial amounts already follow the drawn height; it is needed only where a pixel is the smallest unit.
  */
-export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & ShaderLibraryClock, frame: { width: number; height: number; frame: number; renderScale?: number }): VideoEditBuiltinPlan {
+export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, frame: { width: number; height: number; frame: number; renderScale?: number }): VideoEditBuiltinPlan {
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
-  const delegated = shaderLibraryDelegatedEffect(instance)
-  if (delegated) return planVideoEditBuiltinEffect(delegated, frame)
-  const shader = planShaderLibraryEffect(instance, width, height)
-  if (shader) return shader
   const params = resolveVideoEditBuiltinParams(instance)
+  if (instance.id === 'glow_pro') return planGlowPro(params, width, height)
   const plan = new Planner(width, height)
   const H = height
   switch (instance.id) {
@@ -248,8 +246,6 @@ export function planVideoEditBuiltinTransition(input: VideoEditBuiltinTransition
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('过渡需要有效的画面尺寸。')
   if (!Number.isFinite(input.progress) || input.progress < 0 || input.progress > 1) throw new Error('过渡进度必须在 0 到 1 之间。')
-  const shader = planShaderLibraryTransition(input, width, height)
-  if (shader) return shader
   const plan = new Planner(width, height); const params = input.params; const H = height; const t = input.progress
   const empty = (mode = 0): Vec4 => [t, input.emptyOutgoing ? 1 : 0, input.emptyIncoming ? 1 : 0, mode]
   const direction = (): readonly [number, number] => DIRECTIONS[String(params.direction)] ?? DIRECTIONS.from_left

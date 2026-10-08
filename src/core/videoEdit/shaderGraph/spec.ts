@@ -87,6 +87,8 @@ export const shaderGraphCustomShaderSchema = z.object({
   /** 让 time 按“秒 × 这个数值属性”推进（属性名）。 */
   speedProp: identifier.optional(),
   description: z.string().max(2000).optional(),
+  /** 宿主填写：wgsl 第一行在作者源码里的行号，用来把 GPU 编译报错换算成源码行。 */
+  sourceLine: z.number().int().positive().optional(),
 }).strict()
 export type ShaderGraphCustomShader = z.infer<typeof shaderGraphCustomShaderSchema>
 
@@ -144,6 +146,20 @@ export function shaderGraphIssues(spec: ShaderGraphSpec, allow: { input?: boolea
   collect(spec.layers)
   for (const mask of masks) if (!ids.has(mask)) issues.push(`遮罩引用的图层 ${mask} 不存在（给遮罩图层写上 id）。`)
   return issues
+}
+
+/** 图层在会话里的 id：写了 id 用 id，否则按位置 `layer0`、`layer0.1`……（属性按这个 id 每帧下发）。 */
+export function shaderGraphLayerId(layer: ShaderGraphLayer, index: number, prefix = 'layer'): string { return layer.id ?? `${prefix}${index}` }
+/** 每个图层当前的完整属性（按会话 id；没写的属性取默认）。同结构的图共用会话，属性每帧从这里更新。 */
+export function shaderGraphLayerProps(spec: ShaderGraphSpec): Map<string, Record<string, unknown>> {
+  const result = new Map<string, Record<string, unknown>>()
+  const visit = (layers: readonly ShaderGraphLayer[], prefix: string): void => layers.forEach((layer, index) => {
+    const id = shaderGraphLayerId(layer, index, prefix)
+    result.set(id, layer.props ?? {})
+    visit(layer.children ?? [], `${id}.`)
+  })
+  visit(spec.layers, 'layer')
+  return result
 }
 
 /** 会话缓存键：图层树结构、类型、id 与作者源码；不含属性数值。 */

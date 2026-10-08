@@ -84,7 +84,7 @@ describe('剪辑创作 skill 的 Markdown 源码使用真实 v3 编译与求值'
     expect(short?.kind === 'rect' && long?.kind === 'rect' && long.width > short.width).toBe(true)
     const headline = flatten(render(sections[1].source, .25)).find(draw => draw.elementId === 'headline')
     expect(headline?.kind === 'text' && headline.perChar![0].opacity > headline.perChar![5].opacity).toBe(true)
-    expect(render(sections[2].source, 2)[0]).toMatchObject({ kind: 'shader', name: 'aurora', time: 2 })
+    expect(render(sections[2].source, 2)[0]).toMatchObject({ kind: 'shader', time: 2, graph: { layers: [{ type: 'SolidColor' }, { type: 'Aurora' }, { type: 'FilmGrain' }] } })
     const number = (seconds: number) => flatten(render(sections[3].source, seconds))
       .filter(draw => draw.kind === 'text' && draw.elementId?.startsWith('digit') && draw.opacity === 1)
       .map(draw => draw.kind === 'text' ? draw.text : '').join('')

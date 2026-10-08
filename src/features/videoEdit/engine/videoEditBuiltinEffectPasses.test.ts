@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { isShaderGraphEffect } from '@/core/videoEdit/shaderGraph/effects'
+import { isShaderGraphTransition } from '@/core/videoEdit/shaderGraph/transitions'
 import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '@/core/theme/colorTokens'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { planVideoEditBuiltinEffect, planVideoEditBuiltinTransition, videoEditGrainSeed, type VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
@@ -13,7 +15,8 @@ function blurSigmas(result: VideoEditBuiltinPlan): number[] {
 
 describe('内置效果工序与参数打包', () => {
   it('每个效果按默认参数都能规划：最后一道写输出，入口都在着色器里，参数是 16 个 float、开头是目标与输入尺寸', () => {
-    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio')) {
+    // shaders.* 组件效果走着色器图（shaderEngines），不经这里的工序规划。
+    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio' && !isShaderGraphEffect(value.id))) {
       const result = plan(definition.id, videoEditBuiltinDefaults(definition))
       expect(result.passes.at(-1)!.target, definition.id).toBe('output')
       for (const pass of result.passes) {
@@ -74,7 +77,7 @@ describe('内置效果工序与参数打包', () => {
     expect(grain(540, 0.5, 100)[4]).toBeCloseTo(grain(1080, 1, 100)[4])
   })
   it('视频过渡（4.7）：每种过渡在任意进度都能规划，入口都在着色器里；羽化按画面高度换算；单侧标记写进参数', () => {
-    for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {
+    for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS.filter(value => !isShaderGraphTransition(value))) {
       for (const progress of [0, 0.3, 1]) {
         const result = planVideoEditBuiltinTransition({ kind, params: resolveVideoEditTransitionParams(kind, {}), progress }, { width: 1920, height: 1080 })
         expect(result.passes.at(-1)!.target, kind).toBe('output')

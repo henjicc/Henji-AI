@@ -1,0 +1,1228 @@
+{
+ "components": {
+  "AngularBlur": [
+   "旋转模糊",
+   "围绕中心点旋转的放射状运动模糊"
+  ],
+  "Arc": [
+   "扇形",
+   "可调半径与张角的扇形"
+  ],
+  "Aurora": [
+   "极光",
+   "多层光帘、垂直光束与流动光带组成的极光"
+  ],
+  "BarnDoors": [
+   "对开门",
+   "沿中线分开、向两侧擦除"
+  ],
+  "BarShift": [
+   "条带错位",
+   "把画面切成平行条带，各自偏移形成断裂或故障感"
+  ],
+  "Beam": [
+   "光束",
+   "从一点射向另一点的光束"
+  ],
+  "Bend": [
+   "弯曲屏",
+   "像曲面屏一样让画面两端弯向或背离观众"
+  ],
+  "Blob": [
+   "流体团",
+   "带立体光照和渐变的有机流动团块"
+  ],
+  "BlockDissolve": [
+   "方块溶解",
+   "画面按随机顺序逐格消失"
+  ],
+  "BlockNoise": [
+   "方块噪声",
+   "柔和方格随时间变形的块状噪声"
+  ],
+  "BlueNoise": [
+   "蓝噪声",
+   "均匀细密的高频颗粒，适合抖动"
+  ],
+  "Blur": [
+   "高斯模糊（着色器）",
+   "简单的高斯模糊"
+  ],
+  "BokehBlur": [
+   "镜头虚化",
+   "亮点会散成光圈形状的摄影虚化"
+  ],
+  "BrickPattern": [
+   "砖墙",
+   "交错排列的砖块与灰缝"
+  ],
+  "BrightnessContrast": [
+   "亮度与对比度（着色器）",
+   "调整亮度与对比度"
+  ],
+  "BrushedMetal": [
+   "拉丝金属",
+   "带方向纹理与长条高光的拉丝金属质感"
+  ],
+  "Bulge": [
+   "膨胀收缩",
+   "围绕中心放大或收缩画面"
+  ],
+  "CarbonFiber": [
+   "碳纤维",
+   "交织纹理与清漆反光的碳纤维质感"
+  ],
+  "Chalkboard": [
+   "黑板粉笔",
+   "把画面画成黑板上的粉笔素描"
+  ],
+  "ChannelBlur": [
+   "分通道模糊",
+   "红、绿、蓝通道分别模糊"
+  ],
+  "Checkerboard": [
+   "棋盘格",
+   "两种颜色交替的棋盘格"
+  ],
+  "CheckerWipe": [
+   "棋盘擦除",
+   "画面以渐隐的棋盘格方式擦除"
+  ],
+  "Chevron": [
+   "人字纹",
+   "会流动的人字形折线条纹"
+  ],
+  "ChromaticAberration": [
+   "镜头色差",
+   "分离红绿蓝通道，形成棱镜色散"
+  ],
+  "Chrome": [
+   "镜面铬",
+   "棚拍灯光下的抛光镜面铬质感"
+  ],
+  "Circle": [
+   "圆形",
+   "可调大小与柔边的圆形"
+  ],
+  "ColorWheel": [
+   "色轮渐变",
+   "沿方向循环彩虹色或自定义三色的渐变"
+  ],
+  "CompressionArtifacts": [
+   "压缩失真",
+   "模拟有损压缩的方块、振铃与串色"
+  ],
+  "ConcentricSpin": [
+   "同心旋转",
+   "一圈圈同心环各自转动底下的画面"
+  ],
+  "ConicGradient": [
+   "角向渐变",
+   "颜色围绕中心点旋转一周"
+  ],
+  "ContourLines": [
+   "等高线",
+   "按亮度或透明度画出等高线"
+  ],
+  "CornerPin": [
+   "边角定位",
+   "把画面四个角钉到任意位置，自由透视变形"
+  ],
+  "Crescent": [
+   "月牙",
+   "大圆减去小圆形成的月牙"
+  ],
+  "Cross": [
+   "十字",
+   "可调臂长、宽度与圆角的十字"
+  ],
+  "CRTScreen": [
+   "显像管屏幕",
+   "带扫描线的老式显像管显示器"
+  ],
+  "Crystal": [
+   "水晶",
+   "多棱面折射的钻石般透镜"
+  ],
+  "CurlNoise": [
+   "旋流噪声",
+   "缓慢漂移的旋涡流场"
+  ],
+  "DiamondGradient": [
+   "菱形渐变",
+   "从中心向外的菱形渐变"
+  ],
+  "DiamondWipe": [
+   "菱形擦除",
+   "画面在不断变大的菱形格中擦除"
+  ],
+  "DiffuseBlur": [
+   "扩散模糊",
+   "像颗粒一样随机错开像素"
+  ],
+  "DisplacementMap": [
+   "置换贴图",
+   "用另一图层的像素扭曲画面"
+  ],
+  "Dither": [
+   "抖动",
+   "多种图案的抖动效果"
+  ],
+  "DotGrid": [
+   "点阵",
+   "可闪烁的点阵网格"
+  ],
+  "DropShadow": [
+   "投影",
+   "按画面轮廓在后面加柔和阴影"
+  ],
+  "Duotone": [
+   "双色调",
+   "按亮度映射到两种颜色"
+  ],
+  "Ellipse": [
+   "椭圆",
+   "横纵半径可分别调整的椭圆"
+  ],
+  "Emboss": [
+   "浮雕",
+   "按形状在画面上做凸起或凹陷的浮雕光影"
+  ],
+  "Engraving": [
+   "铜版雕刻",
+   "把画面重绘成随明暗变粗细的雕刻线条"
+  ],
+  "ErosionNoise": [
+   "侵蚀纹",
+   "水流侵蚀般分叉的山脊纹理"
+  ],
+  "Exposure": [
+   "曝光（着色器）",
+   "按倍数调整曝光，黑色保持不变"
+  ],
+  "FallingLines": [
+   "下落线条",
+   "带头尾渐变的定向下落线条"
+  ],
+  "FilmGrain": [
+   "胶片颗粒（着色器）",
+   "偏向暗部的胶片颗粒"
+  ],
+  "FilmStock": [
+   "胶片模拟",
+   "十种经典胶片色彩，含光晕与片门抖动"
+  ],
+  "Flip": [
+   "翻转",
+   "水平、垂直或同时翻转画面"
+  ],
+  "Flower": [
+   "花瓣",
+   "可调瓣数与内外比例的花瓣形"
+  ],
+  "FlowField": [
+   "流场扭曲",
+   "平稳持续的流体状扭曲"
+  ],
+  "FlowingGradient": [
+   "流动渐变",
+   "丝绸般流动的有机色带"
+  ],
+  "FlutedGlass": [
+   "条纹玻璃",
+   "透过一排圆柱玻璃折射画面"
+  ],
+  "Form3D": [
+   "立体包裹",
+   "把画面包裹到带光照的三维形体上"
+  ],
+  "FractalNoise": [
+   "分形噪声",
+   "多层叠加、持续演变的分形噪声"
+  ],
+  "Frost": [
+   "冰霜",
+   "厚冰质感，边缘长出细密冰晶"
+  ],
+  "GaborNoise": [
+   "指纹噪声",
+   "带方向的正弦颗粒，形似指纹"
+  ],
+  "Glass": [
+   "玻璃透镜",
+   "按形状折射的真实玻璃透镜"
+  ],
+  "GlassTiles": [
+   "玻璃砖",
+   "按格子折射画面"
+  ],
+  "Glitch": [
+   "故障",
+   "像素融化、颜色错乱的数字故障"
+  ],
+  "Glow": [
+   "柔光",
+   "可调强度的柔和发光"
+  ],
+  "Godrays": [
+   "体积光",
+   "从一点放射的体积光线"
+  ],
+  "Goo": [
+   "液体",
+   "会融合鼓起的湿润液体团"
+  ],
+  "GradientMap": [
+   "渐变映射",
+   "按亮度映射到一组可流动的渐变色"
+  ],
+  "Grayscale": [
+   "黑白",
+   "转为黑白"
+  ],
+  "Grid": [
+   "线框网格",
+   "可调粗细与旋转的网格线"
+  ],
+  "Group": [
+   "分组",
+   "把多个图层编组组合"
+  ],
+  "Halftone": [
+   "半调网点",
+   "印刷风格的半调网点"
+  ],
+  "Heart": [
+   "心形",
+   "可调大小的心形"
+  ],
+  "Heatmap": [
+   "热成像",
+   "热像仪般流动的热量色彩"
+  ],
+  "HexGrid": [
+   "蜂窝网格",
+   "六边形蜂窝网格"
+  ],
+  "Hologram": [
+   "全息投影",
+   "带扫描线与闪烁的科幻全息投影"
+  ],
+  "Holographic": [
+   "镭射贴纸",
+   "流动彩虹光泽与亮片的镭射贴纸"
+  ],
+  "HueShift": [
+   "色相旋转",
+   "在色轮上旋转色相"
+  ],
+  "Invert": [
+   "反相",
+   "反转颜色，保留透明度"
+  ],
+  "IrisWipe": [
+   "圆形揭示（着色器）",
+   "从中心扩大的圆形揭示"
+  ],
+  "IsometricCubes": [
+   "等距立方",
+   "立方体错觉的等距拼贴"
+  ],
+  "Kaleidoscope": [
+   "万花筒",
+   "径向镜像分段的万花筒"
+  ],
+  "LensDistortion": [
+   "镜头畸变",
+   "桶形或枕形畸变并分离色层"
+  ],
+  "LensFlare": [
+   "镜头光晕",
+   "带光斑与星芒的真实镜头光晕"
+  ],
+  "LightEdge": [
+   "边缘流光",
+   "沿形状边缘奔跑闪烁的光"
+  ],
+  "LightLeak": [
+   "漏光",
+   "从一角渗入的暖色胶片漏光"
+  ],
+  "Line": [
+   "线条",
+   "两点之间的实线、虚线或点线"
+  ],
+  "LinearBlur": [
+   "方向模糊（着色器）",
+   "沿指定角度的运动模糊"
+  ],
+  "LinearGradient": [
+   "线性渐变",
+   "平滑的线性颜色渐变"
+  ],
+  "LinearWipe": [
+   "线性擦除",
+   "沿直线边缘柔和擦除"
+  ],
+  "LiquidMetal": [
+   "液态金属",
+   "包裹形状、流动反光的液态铬"
+  ],
+  "Marble": [
+   "大理石",
+   "噪声扰动出的大理石纹理"
+  ],
+  "MeshGradient": [
+   "网格渐变",
+   "柔和漂移的多色网格渐变"
+  ],
+  "Mirror": [
+   "镜像",
+   "沿一条线镜像画面"
+  ],
+  "MultiPointGradient": [
+   "多点渐变",
+   "五个可摆放的颜色点按距离融合"
+  ],
+  "Nebula": [
+   "星云",
+   "封在玻璃里的体积星云与星空"
+  ],
+  "Neon": [
+   "霓虹灯管",
+   "按形状弯出的霓虹灯管"
+  ],
+  "NoiseDissolve": [
+   "噪声溶解",
+   "画面按有机噪声溶解"
+  ],
+  "Obsidian": [
+   "黑曜石",
+   "深色玻璃，侧面流动虹彩"
+  ],
+  "PagePeel": [
+   "翻页",
+   "从一角卷起画面"
+  ],
+  "Paper": [
+   "纸张质感",
+   "给画面加上纸张纹理与粗糙感"
+  ],
+  "Parallelogram": [
+   "平行四边形",
+   "可调宽高与倾斜的平行四边形"
+  ],
+  "PerlinNoise": [
+   "柏林噪声",
+   "平滑变化的梯度噪声"
+  ],
+  "Perspective": [
+   "透视旋转",
+   "在三维空间里平移、俯仰画面"
+  ],
+  "Pixelate": [
+   "像素化",
+   "可调格子大小的像素化"
+  ],
+  "Plasma": [
+   "等离子",
+   "发光流动的等离子团"
+  ],
+  "Plastic": [
+   "塑料",
+   "光亮的注塑塑料质感"
+  ],
+  "PolarCoordinates": [
+   "极坐标",
+   "把直角坐标转换为极坐标"
+  ],
+  "Polygon": [
+   "正多边形",
+   "可调边数与圆角的正多边形"
+  ],
+  "Posterize": [
+   "色调分离",
+   "减少色阶，形成海报效果"
+  ],
+  "Prism": [
+   "棱镜",
+   "光束散开成缓慢旋转的彩虹（背景透明）"
+  ],
+  "ProgressiveBlur": [
+   "渐进模糊",
+   "沿一个方向逐渐加重的模糊"
+  ],
+  "RadialGradient": [
+   "径向渐变",
+   "从中心向外的渐变"
+  ],
+  "RadialWipe": [
+   "时钟擦除",
+   "像时针一样扫过擦除"
+  ],
+  "RandomBars": [
+   "随机条带",
+   "平行条带按随机顺序消失"
+  ],
+  "RectangularCoordinates": [
+   "直角坐标",
+   "把极坐标还原为直角坐标"
+  ],
+  "ReflectivePlane": [
+   "倒影地面",
+   "在下方加上倒映画面的地面"
+  ],
+  "Repeater": [
+   "重复阵列",
+   "按网格、径向或直线重复画面"
+  ],
+  "Ring": [
+   "圆环",
+   "可调半径与粗细的圆环"
+  ],
+  "Ripples": [
+   "波纹",
+   "从一点扩散的同心波纹"
+  ],
+  "RippleWipe": [
+   "涟漪擦除",
+   "从中心脉动扩散的同心环擦除"
+  ],
+  "RoundedRect": [
+   "圆角矩形",
+   "可调宽高与圆角的矩形"
+  ],
+  "Saturation": [
+   "饱和度（着色器）",
+   "调整颜色饱和度"
+  ],
+  "Scratches": [
+   "划痕",
+   "旧胶片般细密的划痕"
+  ],
+  "Sharpness": [
+   "锐度",
+   "用卷积核调整锐度"
+  ],
+  "SimplexNoise": [
+   "单形噪声",
+   "有机流动的噪声"
+  ],
+  "SineWave": [
+   "正弦波",
+   "可调粗细与柔边的流动波"
+  ],
+  "SliceWipe": [
+   "切片擦除",
+   "切成条带交错滑走"
+  ],
+  "Solarize": [
+   "负感",
+   "亮度超过阈值的部分反转"
+  ],
+  "SolidColor": [
+   "纯色",
+   "用单一颜色填满画面"
+  ],
+  "Sparkle": [
+   "闪光点",
+   "在画面亮部闪烁的星芒"
+  ],
+  "Spherize": [
+   "球面化",
+   "把画面映射到球面上"
+  ],
+  "Spiral": [
+   "螺旋",
+   "旋转的螺旋图案"
+  ],
+  "Star": [
+   "星形",
+   "尖角星形"
+  ],
+  "Stone": [
+   "石材浮雕",
+   "给画面加上大理石般的浮雕与扭曲"
+  ],
+  "Strands": [
+   "光丝",
+   "多色渐变的流动光丝"
+  ],
+  "Stretch": [
+   "拉伸",
+   "从中心向一个方向拉伸画面"
+  ],
+  "Stripes": [
+   "条纹",
+   "会流动的交替色条纹"
+  ],
+  "StudioBackground": [
+   "影棚背景",
+   "多灯位柔和变化的影棚背景"
+  ],
+  "SunBurst": [
+   "放射光芒",
+   "从中心放射的光芒"
+  ],
+  "Swirl": [
+   "旋涡",
+   "多层噪声的流动旋涡"
+  ],
+  "Teardrop": [
+   "水滴",
+   "圆头尖尾的水滴形"
+  ],
+  "ThinFilm": [
+   "薄膜虹彩",
+   "边缘的薄膜干涉彩虹"
+  ],
+  "TiltShift": [
+   "移轴",
+   "模拟移轴摄影的选择性对焦"
+  ],
+  "Tint": [
+   "着色",
+   "给画面叠一层颜色"
+  ],
+  "Trapezoid": [
+   "梯形",
+   "可调上下宽度与高度的梯形"
+  ],
+  "TriangularGrid": [
+   "三角网格",
+   "可错位动画的等边三角网格"
+  ],
+  "Tritone": [
+   "三色调",
+   "按暗部、中间调、亮部映射到三种颜色"
+  ],
+  "Truchet": [
+   "特鲁谢拼贴",
+   "四分之一圆弧拼成迷宫般曲线"
+  ],
+  "Twirl": [
+   "旋转扭曲",
+   "围绕中心旋转扭曲画面"
+  ],
+  "VenetianBlinds": [
+   "百叶窗",
+   "平行条带合拢擦除"
+  ],
+  "Vesica": [
+   "双圆交集",
+   "两圆相交形成的透镜形"
+  ],
+  "VHS": [
+   "录像带",
+   "带磨损、串色与扫描线噪声的录像带"
+  ],
+  "Vibrance": [
+   "自然饱和度",
+   "保护肤色的饱和度调整"
+  ],
+  "Vignette": [
+   "暗角（着色器）",
+   "压暗或染色画面边缘，可调颜色与中心，引导视线"
+  ],
+  "Voronoi": [
+   "泰森多边形",
+   "按最近散点着色的细胞图案"
+  ],
+  "Voxels": [
+   "体素",
+   "用小方块重建形状"
+  ],
+  "Water": [
+   "水体",
+   "会折射、吸光、带浪花的透明水体"
+  ],
+  "Watercolor": [
+   "水彩",
+   "颜料边缘、纸纹与晕染的水彩画"
+  ],
+  "WaveDistortion": [
+   "波浪扭曲",
+   "多种波形的波浪扭曲"
+  ],
+  "Waveform": [
+   "波形",
+   "音频可视化波形：柱状、填充、示波线或点阵"
+  ],
+  "WaveletNoise": [
+   "小波噪声",
+   "旋转条带的涟漪噪声"
+  ],
+  "Weave": [
+   "编织",
+   "两色经纬交织的织物纹理"
+  ],
+  "Wool": [
+   "毛织物",
+   "给画面加上交织纤维的织物质感"
+  ],
+  "WorleyNoise": [
+   "细胞噪声",
+   "基于距离的细胞状噪声"
+  ],
+  "ZoomBlur": [
+   "缩放模糊（着色器）",
+   "从中心向外放射的缩放模糊"
+  ]
+ },
+ "labels": {
+  "Blur Intensity": "模糊强度",
+  "Center Position": "中心位置",
+  "Color": "颜色",
+  "Center": "中心",
+  "Size": "大小",
+  "Aperture": "张角",
+  "Rotation": "旋转",
+  "Softness": "柔和度",
+  "Stroke Thickness": "描边粗细",
+  "Stroke Color": "描边颜色",
+  "Stroke Position": "描边位置",
+  "Color Blending": "颜色混合",
+  "Color A": "颜色 A",
+  "Color B": "颜色 B",
+  "Color C": "颜色 C",
+  "Color D": "颜色 D",
+  "Color E": "颜色 E",
+  "Color Space": "色彩空间",
+  "Balance": "平衡",
+  "Intensity": "强度",
+  "Curtains": "光帘数",
+  "Speed": "速度",
+  "Waviness": "波动度",
+  "Ray Detail": "光线细节",
+  "Height": "高度",
+  "Seed": "种子",
+  "Progress": "进度",
+  "Angle": "角度",
+  "Feather": "羽化",
+  "Invert": "反向",
+  "Count": "数量",
+  "Edges": "边缘",
+  "Start Position": "起点位置",
+  "End Position": "终点位置",
+  "Start Thickness": "起点粗细",
+  "End Thickness": "终点粗细",
+  "Start Softness": "起点柔和度",
+  "End Softness": "终点柔和度",
+  "Inside Color": "内侧颜色",
+  "Outside Color": "外侧颜色",
+  "Strength": "强度",
+  "Falloff": "衰减",
+  "Deformation": "变形",
+  "Highlight Intensity": "高光强度",
+  "Highlight X": "高光 X",
+  "Highlight Y": "高光 Y",
+  "Highlight Z": "高光 Z",
+  "Highlight Color": "高光颜色",
+  "Block Size": "方块大小",
+  "Scale": "缩放",
+  "Contrast": "对比度",
+  "Grain Size": "颗粒大小",
+  "Radius": "半径",
+  "Highlight Bloom": "高光散射",
+  "Highlight Threshold": "高光阈值",
+  "Blade Shape": "光圈形状",
+  "Aperture Blades": "光圈叶片",
+  "Blade Rotation": "叶片旋转",
+  "Chromatic Fringe": "色边",
+  "Brick Color": "砖块颜色",
+  "Mortar Color": "灰缝颜色",
+  "Bricks per Row": "每行砖数",
+  "Rows": "行数",
+  "Mortar Gap": "灰缝宽度",
+  "Variation": "变化",
+  "Offset": "偏移",
+  "Speed Variance": "速度差异",
+  "Brightness": "亮度",
+  "Light Color": "亮色",
+  "Dark Color": "暗色",
+  "Brush Angle": "拉丝角度",
+  "Anisotropy": "各向异性",
+  "Grain": "颗粒",
+  "Grain Scale": "颗粒尺度",
+  "Roughness": "粗糙度",
+  "Environment": "环境",
+  "Env Rotation": "环境旋转",
+  "Light Angle": "光源角度",
+  "Bevel Width": "倒角宽度",
+  "Bevel Profile": "倒角轮廓",
+  "Edge Softness": "边缘柔和度",
+  "Fiber Sheen": "纤维光泽",
+  "Resin Color": "树脂颜色",
+  "Weave": "编织",
+  "Weave Scale": "编织尺度",
+  "Weave Angle": "编织角度",
+  "Weave Depth": "编织深度",
+  "Clearcoat": "清漆",
+  "Board": "黑板",
+  "Chalk": "粉笔",
+  "Edge Sensitivity": "边缘灵敏度",
+  "Edge Thickness": "边缘粗细",
+  "Shading": "明暗",
+  "Hatch Scale": "排线尺度",
+  "Red Intensity": "红色强度",
+  "Green Intensity": "绿色强度",
+  "Blue Intensity": "蓝色强度",
+  "Cells": "格数",
+  "Red Offset": "红色偏移",
+  "Green Offset": "绿色偏移",
+  "Blue Offset": "蓝色偏移",
+  "Tint": "色调",
+  "Warm Light": "暖光",
+  "Cool Light": "冷光",
+  "Curvature": "曲率",
+  "Accent Lights": "点缀灯",
+  "Dispersion": "色散",
+  "Shadows": "暗部",
+  "Mode": "模式",
+  "Color 1": "颜色 1",
+  "Color 2": "颜色 2",
+  "Color 3": "颜色 3",
+  "Quality": "质量",
+  "Rings": "环数",
+  "Smoothness": "平滑度",
+  "Speed Randomness": "速度随机",
+  "Repeat": "重复",
+  "Levels": "色阶",
+  "Line Width": "线宽",
+  "Gamma": "伽马",
+  "Source": "来源",
+  "Color Mode": "颜色模式",
+  "Line Color": "线条颜色",
+  "Background Color": "背景颜色",
+  "Top Left": "左上",
+  "Top Right": "右上",
+  "Bottom Left": "左下",
+  "Bottom Right": "右下",
+  "Amount": "程度",
+  "Bite Size": "缺口大小",
+  "Bite Offset": "缺口偏移",
+  "Arm Length": "臂长",
+  "Arm Width": "臂宽",
+  "Rounding": "圆角",
+  "Pixel Size": "像素大小",
+  "Color Shift": "色偏",
+  "Scanline Intensity": "扫描线强度",
+  "Scanline Frequency": "扫描线密度",
+  "Vignette Intensity": "暗角强度",
+  "Vignette Radius": "暗角半径",
+  "Cutout": "镂空",
+  "Refraction": "折射",
+  "Facets": "棱面",
+  "Fresnel": "菲涅尔",
+  "Fresnel Softness": "菲涅尔柔和度",
+  "Fresnel Color": "菲涅尔颜色",
+  "Inner Zoom": "内部缩放",
+  "Highlights": "亮部",
+  "Tint Color": "着色颜色",
+  "Tint Intensity": "着色强度",
+  "Preserve Luminosity": "保持亮度",
+  "Color A (Center)": "颜色 A（中心）",
+  "Color B (Edge)": "颜色 B（边缘）",
+  "Roundness": "圆润度",
+  "Channels": "通道",
+  "Pattern": "图案",
+  "Threshold": "阈值",
+  "Spread": "扩散",
+  "Density": "密度",
+  "Dot Size": "点大小",
+  "Row Offset": "行错位",
+  "Twinkle": "闪烁",
+  "Distance": "距离",
+  "Blur": "模糊",
+  "Blend": "混合",
+  "Width": "宽度",
+  "Depth": "深度",
+  "Light Intensity": "光照强度",
+  "Shadow Intensity": "阴影强度",
+  "Style": "样式",
+  "Frequency": "频率",
+  "Relief": "起伏",
+  "Ink": "墨色",
+  "Paper": "纸色",
+  "Exposure": "曝光",
+  "Lead Color": "头部颜色",
+  "Trail Color": "尾迹颜色",
+  "Trail Length": "尾迹长度",
+  "Stroke Width": "描边宽度",
+  "Bias": "偏置",
+  "Animated": "动画",
+  "Stock": "胶片型号",
+  "Halation": "光晕",
+  "Halation Radius": "光晕半径",
+  "Gate Weave": "片门抖动",
+  "Flip X": "水平翻转",
+  "Flip Y": "垂直翻转",
+  "Petals": "花瓣数",
+  "Inner Ratio": "内径比例",
+  "Detail": "细节",
+  "Evolution Speed": "演变速度",
+  "Distortion": "扭曲",
+  "Shape": "形状",
+  "Wave Amplitude": "波幅",
+  "Wave Frequency": "波频",
+  "Aberration": "色散",
+  "Highlight": "高光",
+  "Highlight Softness": "高光柔和度",
+  "Zoom": "缩放",
+  "Glossiness": "光泽度",
+  "Lighting": "光照",
+  "UV Edges": "边缘处理",
+  "Octaves": "层数",
+  "Ice Color": "冰色",
+  "Ambient": "环境光",
+  "Absorption": "吸收",
+  "Scatter": "散射",
+  "Frost": "霜",
+  "Frost Depth": "霜深度",
+  "Frost Scale": "霜尺度",
+  "Frost Roughness": "霜粗糙度",
+  "Sparkle": "闪光",
+  "Gloss": "光泽",
+  "Thickness": "粗细",
+  "Tile Count": "格数",
+  "RGB Shift": "RGB 错位",
+  "Block Density": "方块密度",
+  "Color Bars": "彩条",
+  "Mirror": "镜像",
+  "Scanlines": "扫描线",
+  "Glow Size": "光晕大小",
+  "Spotty": "斑驳",
+  "Ray Color": "光线颜色",
+  "Goo Color": "液体颜色",
+  "Translucency": "透光度",
+  "Containment": "约束",
+  "Blob Size": "团块大小",
+  "Merge": "融合",
+  "Bulge": "鼓起",
+  "Wobble": "晃动",
+  "Breathe": "呼吸",
+  "Palette": "调色板",
+  "Midtones": "中间调",
+  "Black Point": "黑场",
+  "White Point": "白场",
+  "Cell Color": "格子颜色",
+  "Cyan Angle": "青版角度",
+  "Magenta Angle": "品红版角度",
+  "Yellow Angle": "黄版角度",
+  "Black Angle": "黑版角度",
+  "Misprint": "套印偏差",
+  "Misprint Angle": "套印角度",
+  "Cyan": "青",
+  "Magenta": "品红",
+  "Yellow": "黄",
+  "Black": "黑",
+  "Inner Glow": "内发光",
+  "Outer Glow": "外发光",
+  "Contour": "轮廓",
+  "Volume Fill": "体积填充",
+  "Edge Glow": "边缘发光",
+  "Depth Lines": "深度线",
+  "Depth Density": "深度密度",
+  "Scanline Count": "扫描线数",
+  "Scanline Drift": "扫描线漂移",
+  "Sweep Bar": "扫描条",
+  "Flicker": "闪烁",
+  "Hue Shift": "色相偏移",
+  "Foil Scale": "箔纹尺度",
+  "Saturation": "饱和度",
+  "Crinkle": "褶皱",
+  "Crinkle Scale": "褶皱尺度",
+  "Shift": "偏移",
+  "Segments": "分段数",
+  "Perspective": "透视",
+  "Hue": "色相",
+  "Focus Center": "对焦中心",
+  "Focus Edges": "对焦边缘",
+  "Circle": "圆形",
+  "Swirl": "旋涡",
+  "Noise": "噪声",
+  "Grain Mixer": "颗粒混合",
+  "Grain Overlay": "颗粒叠加",
+  "Light Position": "光源位置",
+  "Ghosts": "鬼影",
+  "Ghost Spread": "鬼影分布",
+  "Ghost Chroma": "鬼影色散",
+  "Halo": "光环",
+  "Halo Size": "光环大小",
+  "Halo Chroma": "光环色散",
+  "Halo Softness": "光环柔和度",
+  "Starburst": "星芒",
+  "Blades": "叶片",
+  "Streak": "拖尾",
+  "Streak Length": "拖尾长度",
+  "Glare": "眩光",
+  "Glare Size": "眩光大小",
+  "Edge Fade": "边缘渐隐",
+  "Bloom": "泛光",
+  "Spots": "光斑",
+  "Spot Size": "光斑大小",
+  "Pulse": "脉动",
+  "Smoke": "烟雾",
+  "Smoke Size": "烟雾大小",
+  "Position": "位置",
+  "Streaks": "光条",
+  "Hot Core": "亮核",
+  "Midtone": "中间调",
+  "Fringe": "色边",
+  "Point A": "点 A",
+  "Point B": "点 B",
+  "Dash Length": "虚线长度",
+  "Gap Length": "间隔长度",
+  "Start Cap": "起点端帽",
+  "End Cap": "终点端帽",
+  "Start": "起点",
+  "End": "终点",
+  "Turbulence": "湍流",
+  "Ripple Scale": "波纹尺度",
+  "Sharpness": "锐度",
+  "Base": "基色",
+  "Tone": "色调",
+  "Points": "点数",
+  "Drift": "漂移",
+  "Wrapping": "缠绕",
+  "Position A": "位置 A",
+  "Position B": "位置 B",
+  "Position C": "位置 C",
+  "Position D": "位置 D",
+  "Position E": "位置 E",
+  "Core Color": "核心颜色",
+  "Gas Color": "气体颜色",
+  "Veil Color": "薄雾颜色",
+  "Cavity": "空腔",
+  "Dust": "尘埃",
+  "Gas Scale": "气体尺度",
+  "Billow": "翻涌",
+  "Glow": "发光",
+  "Stars": "星星",
+  "Star Scale": "星星尺度",
+  "Tube Color": "灯管颜色",
+  "Secondary Color": "次要颜色",
+  "Glow Color": "发光颜色",
+  "Tube Thickness": "灯管粗细",
+  "Glow Intensity": "发光强度",
+  "Glow Radius": "发光半径",
+  "Specular": "镜面高光",
+  "Specular Size": "高光大小",
+  "Corner Smoothing": "转角平滑",
+  "Body Color": "主体颜色",
+  "Iridescence": "虹彩",
+  "Rim Width": "边缘宽度",
+  "Rim Softness": "边缘柔和度",
+  "Flow Angle": "流动角度",
+  "Flow Scale": "流动尺度",
+  "Corner": "角",
+  "Curl Radius": "卷曲半径",
+  "Shadow": "阴影",
+  "Displacement": "置换",
+  "Skew": "倾斜",
+  "Pan": "水平转动",
+  "Tilt": "俯仰",
+  "FOV": "视角",
+  "Gap": "间隔",
+  "Warp": "扭曲",
+  "Gradient Angle": "渐变角度",
+  "Puffiness": "蓬松度",
+  "Reflectivity": "反射率",
+  "Crumple": "揉皱",
+  "Crumple Scale": "揉皱尺度",
+  "Crumple Coverage": "揉皱范围",
+  "Rim Light": "轮廓光",
+  "Rim Color": "轮廓颜色",
+  "Wrap": "环绕",
+  "Sides": "边数",
+  "Beam Width": "光束宽度",
+  "Beam Color": "光束颜色",
+  "Start Falloff": "起点衰减",
+  "End Falloff": "终点衰减",
+  "Split Point": "分光点",
+  "Hue Speed": "色相速度",
+  "Aspect": "宽高比",
+  "Skew Angle": "倾斜角度",
+  "Start Angle": "起始角度",
+  "Direction": "方向",
+  "Bars": "条数",
+  "Floor Height": "地面高度",
+  "Reflection Distance": "倒影距离",
+  "Reflection Falloff": "倒影衰减",
+  "Blur Distance": "模糊距离",
+  "Crop Left": "左裁切",
+  "Crop Right": "右裁切",
+  "Crop Top": "上裁切",
+  "Crop Bottom": "下裁切",
+  "Columns": "列数",
+  "Gap X": "水平间距",
+  "Gap Y": "垂直间距",
+  "Stagger": "错位",
+  "Flip": "翻转",
+  "Sweep": "扫动",
+  "Face Center": "朝向中心",
+  "Spacing": "间距",
+  "Opacity": "不透明度",
+  "Phase": "相位",
+  "Z-Order": "层叠顺序",
+  "Amplitude": "幅度",
+  "Slices": "切片数",
+  "Expand": "扩张",
+  "Ray Length": "光线长度",
+  "Colorize": "上色",
+  "Light Softness": "光照柔和度",
+  "Stroke Falloff": "描边衰减",
+  "Strand Count": "光丝数",
+  "Strand Width": "光丝宽度",
+  "Strand Softness": "光丝柔和度",
+  "Pin Edges": "固定边缘",
+  "Color Scale": "颜色尺度",
+  "Color Variance": "颜色差异",
+  "Color Speed": "颜色速度",
+  "Surface Color": "表面颜色",
+  "Key Color": "主光颜色",
+  "Fill Color": "辅光颜色",
+  "Back Color": "背光颜色",
+  "Vignette": "暗角",
+  "Stage Center": "舞台中心",
+  "Light Depth": "光源深度",
+  "Wall Curvature": "墙面弧度",
+  "Ambient Detail": "环境细节",
+  "Background": "背景",
+  "Ray Count": "光线数",
+  "Length": "长度",
+  "Bottom Width": "底宽",
+  "Top Width": "顶宽",
+  "Fill": "填充",
+  "Lines": "线数",
+  "Color A (Shadows)": "颜色 A（暗部）",
+  "Color B (Midtones)": "颜色 B（中间调）",
+  "Color C (Highlights)": "颜色 C（亮部）",
+  "Midpoint": "中点",
+  "Strips": "条数",
+  "Scanline Noise": "扫描线噪声",
+  "Smear": "拖影",
+  "Border Color": "边框颜色",
+  "Edge Intensity": "边缘强度",
+  "Voxel Size": "体素大小",
+  "Voxel Shape": "体素形状",
+  "Voxel Fill": "体素填充",
+  "Surface Bias": "表面偏置",
+  "Bevel": "倒角",
+  "Grid": "网格",
+  "Light Elevation": "光源仰角",
+  "Ambient Color": "环境光颜色",
+  "Shadow Softness": "阴影柔和度",
+  "Occlusion": "遮蔽",
+  "Seams": "接缝",
+  "Water Color": "水色",
+  "Clarity": "清澈度",
+  "Shallows": "浅水",
+  "Caustics": "焦散",
+  "Caustic Scale": "焦散尺度",
+  "Choppiness": "浪尖",
+  "Wave Scale": "波浪尺度",
+  "Reflection": "反射",
+  "Foam": "浪花",
+  "Brush": "笔触",
+  "Bleed": "晕染",
+  "Paper Color": "纸张颜色",
+  "Wave Type": "波形",
+  "Align": "对齐",
+  "Bar Width": "柱宽",
+  "X Color": "X 颜色",
+  "Y Color": "Y 颜色",
+  "Color A (Low)": "颜色 A（低）",
+  "Color B (High)": "颜色 B（高）",
+  "Lacunarity": "频率倍增",
+  "Persistence": "持续度",
+  "Jitter": "抖动"
+ },
+ "options": {
+  "Outside": "外侧",
+  "Center": "居中",
+  "Inside": "内侧",
+  "Linear RGB": "线性 RGB",
+  "Stretch": "拉伸",
+  "Transparent": "透明",
+  "Mirror": "镜像",
+  "Wrap": "平铺",
+  "Blades": "叶片",
+  "Circle": "圆形",
+  "Star": "星形",
+  "Heart": "心形",
+  "Flower": "花形",
+  "Cross": "十字",
+  "Ring": "圆环",
+  "Twill (2×2)": "斜纹（2×2）",
+  "Plain": "平纹",
+  "Rainbow": "彩虹",
+  "Custom": "自定义",
+  "Luminance": "亮度",
+  "Alpha": "透明度",
+  "Source": "原画面",
+  "Red / Green": "红 / 绿",
+  "Clustered Dot": "聚集网点",
+  "Blue Noise": "蓝噪声",
+  "White Noise": "白噪声",
+  "Custom Colors": "自定义颜色",
+  "Source Colors": "原画面颜色",
+  "Line": "线条",
+  "Cross-Hatch": "交叉排线",
+  "Spiral": "螺旋",
+  "Instant": "拍立得",
+  "Bars": "条带",
+  "Rounded": "圆角",
+  "Waves": "波浪",
+  "Sunset": "日落",
+  "Ocean": "海洋",
+  "Fire": "火焰",
+  "Pastel": "粉彩",
+  "Neon": "霓虹",
+  "Simple": "简洁",
+  "CMYK Print": "CMYK 印刷",
+  "Solid": "实线",
+  "Dashed": "虚线",
+  "Dotted": "点线",
+  "Square": "方形",
+  "Top Left": "左上",
+  "Top Right": "右上",
+  "Bottom Left": "左下",
+  "Bottom Right": "右下",
+  "Clockwise": "顺时针",
+  "Counter-Clockwise": "逆时针",
+  "Both": "双向",
+  "Grid": "网格",
+  "Radial": "径向",
+  "Linear": "直线",
+  "None": "无",
+  "Alternate Flip X": "交替水平翻转",
+  "Alternate Flip Y": "交替垂直翻转",
+  "Forward": "向前",
+  "Backward": "向后",
+  "Cube": "立方体",
+  "Rounded Cube": "圆角立方体",
+  "Sphere": "球体",
+  "Model": "模型",
+  "Screen": "屏幕",
+  "Height": "高度",
+  "Depth": "深度",
+  "Random": "随机",
+  "Top / Sides": "顶面 / 侧面",
+  "Sine": "正弦",
+  "Triangle": "三角",
+  "Sawtooth": "锯齿",
+  "Bounce": "弹跳",
+  "Wave": "波浪",
+  "Dots": "点阵",
+  "Mirrored": "镜像",
+  "Top": "上",
+  "Bottom": "下",
+  "F1 (Cells)": "F1（细胞）",
+  "F2 (Wider Cells)": "F2（大细胞）",
+  "F2 − F1 (Edges)": "F2 − F1（边缘）",
+  "Euclidean": "欧氏距离",
+  "Manhattan": "曼哈顿距离",
+  "Chebyshev": "切比雪夫距离"
+ }
+}

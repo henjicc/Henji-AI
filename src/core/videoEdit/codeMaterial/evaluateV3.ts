@@ -4,7 +4,7 @@ import { validateCodeMaterialParameters } from './parameters'
 import { CODE_EASE_NAMES, codeCubicBezier, codeEase, codeNoise, codeProgress } from './motion'
 import { parseCodePath } from './geometry'
 import { readCodeStyleToken, validatedCodeStyle } from './style'
-import { codeShaderParams, codeShaderTime } from './shaders'
+import { codeShaderGraph, codeShaderTime } from './shaders'
 
 const n = (value: unknown): number => finiteCodeNumber(value, '表达式结果')
 const array = (value: unknown): unknown[] => { if (!Array.isArray(value)) throw new CodeMaterialError('TYPE', '需要数组。'); return value }
@@ -190,7 +190,7 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           const coordinate = (key: string): number => bounded(fields[key] ?? 0, -32768, 32768, key)
           const size = (key: string): number => bounded(fields[key], 0, 32768, key)
           const fill = fields.fill === undefined ? [0, 0, 0, 0] as CodeColor : Array.isArray(fields.fill) ? codeColor(fields.fill, 'fill') : [1, 1, 1, 1] as CodeColor
-          if (expression.shape === 'shader') return { ...meta, kind: 'shader', name: string(fields.name), params: codeShaderParams(fields.name, 'background', fields.params), time: codeShaderTime(fields.time), x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height') }
+          if (expression.shape === 'shader') return { ...meta, kind: 'shader', graph: codeShaderGraph(program, { name: fields.name, params: fields.params, layers: fields.layers }, 'layer'), time: codeShaderTime(fields.time), x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height') }
           if (expression.shape === 'group') {
             let clip: { x: number; y: number; width: number; height: number } | undefined
             if (fields.clip !== undefined) { const raw = object(fields.clip); keys(raw, ['x', 'y', 'width', 'height']); clip = { x: n(raw.x), y: n(raw.y), width: bounded(raw.width, 0, 32768, 'clip.width'), height: bounded(raw.height, 0, 32768, 'clip.height') } }

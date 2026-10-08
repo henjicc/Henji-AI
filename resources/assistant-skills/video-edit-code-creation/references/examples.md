@@ -212,7 +212,7 @@ export default {
 
 ## 三：极光上的章节卡
 
-背景缓慢流动，前景保持稳定阅读。深色极光与细边卡片分层，以章节号、小标签和一句大标题建立信息顺序；卡片整体淡入，不让装饰抢戏。
+背景缓慢流动，前景保持稳定阅读。深色底、极光、胶片颗粒三层着色器图层与细边卡片分层，以章节号、小标签和一句大标题建立信息顺序；卡片整体淡入，不让装饰抢戏。
 
 <!-- skill-example: aurora-chapter -->
 ```ts
@@ -223,15 +223,18 @@ export default {
   parameters: {
     chapter: {type: "text", title: "章节编号", default: "03", maxLength: 8},
     title: {type: "text", title: "章节标题", default: "把想法变成画面", maxLength: 80},
-    speed: {type: "number", title: "背景流速", default: .35, min: 0, max: 2, step: .05}
+    speed: {type: "number", title: "背景流速", default: 1.5, min: 0, max: 6, step: .1}
   },
   render(ctx) {
     const p = expoOut(progress(ctx.time, .15, .7));
     return [
-      shader({id: "aurora", name: "aurora", time: ctx.time,
-        params: {speed: ctx.params.speed, scale: 28, strength: 100,
-          color_a: [.025,.045,.08,1], color_b: [.1,.32,.3,1]},
-        x: 0, y: 0, width: ctx.width, height: ctx.height}),
+      shader({id: "aurora", time: ctx.time, x: 0, y: 0, width: ctx.width, height: ctx.height,
+        layers: [
+          {type: "SolidColor", props: {color: [.02,.035,.06,1]}},
+          {type: "Aurora", props: {speed: ctx.params.speed, intensity: 70, height: 90,
+            colorA: [.05,.18,.2,1], colorB: [.12,.45,.4,1], colorC: [.2,.24,.5,1]}},
+          {type: "FilmGrain", props: {strength: .12}}
+        ]}),
       group({id: "chapter-card", x: 300, y: mix(360,320,p),
         opacity: p * (1-progress(ctx.time,4.5,.5))}, [
         rect({id: "plate", x: 0, y: 0, width: 1320, height: 440,
@@ -277,7 +280,7 @@ export default {
             "video_edit.clip.code_parameters": {
               "chapter": "03",
               "title": "把想法变成画面",
-              "speed": 0.35
+              "speed": 1.5
             }
           }
         }
@@ -304,7 +307,7 @@ export default {
         "video_edit.clip.code_parameters": {
           "chapter": "04",
           "title": "让每一步都可校正",
-          "speed": 0.2
+          "speed": 0.8
         }
       }
     }

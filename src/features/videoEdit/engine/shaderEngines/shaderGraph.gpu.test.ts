@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { init } from 'vgpu/node'
+import type { init } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '../../../../core/imageEdit/worker/webgpuRuntimeSupport'
 import { SHADER_COMPONENTS, type ShaderGraphSpec } from '../../../../core/videoEdit/shaderGraph/spec'
 import { ShaderGraphError, ShaderGraphSession } from './shaderGraphSession'
 import { ShaderGraphCache } from './shaderGraphCache'
+import { initShaderGraphTestGpu } from './shaderGraphGpu.testing'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS, shaderGraphEffectProps, shaderGraphEffectSpec } from '../../../../core/videoEdit/shaderGraph/effects'
+import { SHADER_GRAPH_TRANSITION_KINDS, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '../../../../core/videoEdit/shaderGraph/transitions'
+import { resolveVideoEditTransitionParams } from '../../../../core/videoEdit/transitionParams'
 import { videoEditBuiltinDefaults } from '../../../../core/videoEdit/builtinEffects'
 import { THEME_SEED_ACCENT_HEX } from '../../../../core/theme/colorTokens'
 
@@ -14,11 +17,8 @@ let device: GpuDevice
 let raw: Raw
 const W = 96; const H = 54
 beforeAll(async () => {
-  gpu = await init({})
+  gpu = await initShaderGraphTestGpu()
   device = gpu.gpu as unknown as GpuDevice; raw = gpu.gpu as unknown as Raw
-  // Dawn under node has no navigator.gpu; the worker build does. TypeGPU only asks it for the canvas format.
-  const nav = globalThis.navigator as unknown as { gpu?: unknown }
-  if (!nav.gpu) Object.defineProperty(globalThis.navigator, 'gpu', { value: { getPreferredCanvasFormat: () => 'bgra8unorm' }, configurable: true })
 })
 afterAll(() => gpu?.dispose())
 
@@ -124,6 +124,23 @@ describe('shader graph effects', () => {
     cache.dispose(); input.destroy()
     expect(failures).toEqual([])
   }, 600_000)
+  it('framework transitions show the outgoing picture at progress 0 and the incoming picture at progress 1', async () => {
+    const cache = new ShaderGraphCache(device)
+    const a = texture(); const b = texture()
+    fill(a, () => [255, 0, 0, 255]); fill(b, () => [0, 0, 255, 255])
+    const failures: string[] = []
+    for (const kind of SHADER_GRAPH_TRANSITION_KINDS) {
+      for (const [progress, expected] of [[0, [255, 0, 0, 255]], [1, [0, 0, 255, 255]]] as const) {
+        const output = texture()
+        await cache.render(shaderGraphTransitionSpec(kind), { timeSeconds: 0, width: W, height: H, input: a, second: b, output, outputFormat: 'rgba8unorm', props: new Map([['fx', shaderGraphTransitionProps(kind, resolveVideoEditTransitionParams(kind, {}), progress)]]) })
+        const pixels = await read(output); output.destroy()
+        const matching = [[W / 2, H / 2], [3, 3], [W - 4, H - 4]].filter(([x, y]) => at(pixels, x, y).every((value, index) => Math.abs(value - expected[index]) <= 3)).length
+        if (matching < 2) failures.push(`${kind} @${progress}: ${JSON.stringify(at(pixels, W / 2, H / 2))}`)
+      }
+    }
+    cache.dispose(); a.destroy(); b.destroy()
+    expect(failures).toEqual([])
+  }, 300_000)
   it('maps percent positions and blend modes onto component props', () => {
     expect(shaderGraphEffectProps('shaders.Vignette', { center_x: 25, center_y: 75 })).toMatchObject({ center: { x: 0.25, y: 0.75 } })
     expect(shaderGraphEffectProps('shaders.Aurora', { blend_mode: 'screen', color_a: THEME_SEED_ACCENT_HEX.violet })).toMatchObject({ blendMode: 'screen', colorA: THEME_SEED_ACCENT_HEX.violet })

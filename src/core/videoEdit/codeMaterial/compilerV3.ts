@@ -4,7 +4,7 @@ import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, Cod
 import { CODE_EASE_NAMES } from './motion'
 import { parseCodePath } from './geometry'
 import { CODE_STYLE_EXPRESSION, isCodeStyleExpression } from './style'
-import { codeShaderDefinition, codeShaderParameter, codeShaderFilterPasses, codeShaderTime, staticCodeShaderValue } from './shaders'
+import { codeShaderFilterPasses, codeShaderNameIssue, codeShaderPropIssue, codeShaderTime, codeShaderTypeIssue, staticCodeShaderValue, type CodeShaderRole } from './shaders'
 
 export function codeSourceSpan(node: ts.Node): CodeSourceSpan {
   const file = node.getSourceFile(); const start = node.getStart(file); const end = node.getEnd()
@@ -35,7 +35,7 @@ const shapeFields: Record<CodeDrawKind, string[]> = {
   line: [...common, ...stroke, ...trim, 'x1', 'y1', 'x2', 'y2', 'width', 'color'],
   path: [...common, ...stroke, ...trim, 'd', 'points', 'closed', 'fill'],
   text: [...common, ...stroke, 'x', 'y', 'text', 'fontFamily', 'fontWeight', 'fontStyle', 'fontSize', 'color', 'fill', 'align', 'baseline', 'letterSpacing', 'lineHeight', 'maxWidth', 'wrap', 'maxLines', 'perChar'],
-  shader: [...common.filter(key => !['shadow', 'glow', 'blur'].includes(key)), 'name', 'params', 'time', 'x', 'y', 'width', 'height'],
+  shader: [...common.filter(key => !['shadow', 'glow', 'blur'].includes(key)), 'name', 'params', 'layers', 'time', 'x', 'y', 'width', 'height'],
   group: [...common, 'x', 'y', 'clip'], image: [...common, 'source', 'x', 'y', 'width', 'height'],
 }
 const operators: Partial<Record<ts.SyntaxKind, CodeBinaryOperator>> = {
@@ -67,33 +67,64 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     }
     fail(node, 'repeat 次数必须是非负整数常量或具有非负 min 与整数 max 的数值参数。', 'BUDGET')
   }
-  const validateShader = (node: ts.Node, name: CodeExpression, params: CodeExpression | undefined, role: 'background' | 'filter'): void => {
-    try {
-      const definition = codeShaderDefinition(staticCodeShaderValue(program, name), role)
+  /**
+   * 编译期能确定的部分先查：组件名 / 作者着色器名、属性名、图层树结构。属性值可用任意帧表达式，
+   * 每帧求值后交给框架；滤镜的属性不能逐像素变化（不能读 ctx.u/v 或采样输入）。
+   */
+  const validateShader = (node: ts.Node, target: { name?: CodeExpression; params?: CodeExpression; layers?: CodeExpression }, role: CodeShaderRole): void => {
+    const frameOnly = (value: CodeExpression): boolean => {
+      value = unwrap(value)
+      if (value.kind === 'object') return Object.values(value.properties).every(frameOnly)
+      if (value.kind === 'context') return !['u', 'v'].includes(value.key)
+      if (value.kind === 'local' || value.kind === 'repeat' || value.kind === 'draw' || value.kind === 'draws' || value.kind === 'textAnimation') return false
+      if (value.kind === 'call' && value.op === 'sample' || value.kind === 'v3call' && ['sampleOffset', 'shaderFilter', 'blur', 'glow', 'measureText'].includes(value.op)) return false
+      for (const item of Object.values(value)) {
+        if (Array.isArray(item) && item.some(child => child && typeof child === 'object' && 'kind' in child && !frameOnly(child as CodeExpression))) return false
+        if (item && typeof item === 'object' && 'kind' in item && !frameOnly(item as CodeExpression)) return false
+      }
+      return true
+    }
+    const checkProps = (type: string, params: CodeExpression | undefined): void => {
       if (!params) return
       const raw = unwrap(params)
-      if (raw.kind !== 'object') fail(node, '着色器 params 必须是静态字段对象。', 'PARAMETERS')
-      const frameOnly = (value: CodeExpression): boolean => {
-        value = unwrap(value)
-        if (value.kind === 'object') return Object.values(value.properties).every(frameOnly)
-        if (value.kind === 'context') return !['u', 'v'].includes(value.key)
-        if (value.kind === 'local' || value.kind === 'repeat' || value.kind === 'draw' || value.kind === 'draws' || value.kind === 'textAnimation') return false
-        if (value.kind === 'call' && value.op === 'sample' || value.kind === 'v3call' && ['sampleOffset', 'shaderFilter', 'blur', 'glow', 'measureText'].includes(value.op)) return false
-        for (const item of Object.values(value)) {
-          if (Array.isArray(item) && item.some(child => child && typeof child === 'object' && 'kind' in child && !frameOnly(child as CodeExpression))) return false
-          if (item && typeof item === 'object' && 'kind' in item && !frameOnly(item as CodeExpression)) return false
-        }
-        return true
-      }
+      if (raw.kind !== 'object') fail(node, `${type} 的属性必须是字段对象。`, 'PARAMETERS')
       for (const [key, value] of Object.entries(raw.properties)) {
-        const param = definition.params.find(param => param.key === key)
-        if (!param) codeShaderParameter(definition, key, undefined)
-        type(node, value, param!.type === 'color' ? 'color' : 'number')
-        if (role === 'filter' && !frameOnly(value)) fail(node, 'shaderFilter 参数只能使用帧级表达式，不能采样输入或读取 ctx.u/v。', 'TYPE')
-        const literal = staticCodeShaderValue(program, value)
-        if (literal !== undefined) codeShaderParameter(definition, key, literal)
+        const issue = codeShaderPropIssue(program, type, key)
+        if (issue) fail(node, issue, 'PARAMETERS')
+        if (role === 'filter' && !frameOnly(value)) fail(node, '滤镜着色器的属性只能用帧级表达式，不能采样输入或读取 ctx.u/v。', 'TYPE')
       }
-    } catch (error) { if (error instanceof CodeMaterialError) fail(node, error.message, error.code as 'PARAMETERS'); throw error }
+    }
+    if (target.layers) {
+      const raw = unwrap(target.layers)
+      if (raw.kind !== 'array' || !raw.values.length) fail(node, 'layers 必须是非空的图层数组字面量。', 'PARAMETERS')
+      const visit = (items: CodeExpression[]): void => {
+        for (const item of items) {
+          const layer = unwrap(item)
+          if (layer.kind !== 'object') fail(node, '每个图层必须是 {type, props?, id?, children?} 对象。', 'PARAMETERS')
+          const extra = Object.keys(layer.properties).filter(key => !['type', 'id', 'props', 'children'].includes(key))
+          if (extra.length) fail(node, `图层不认识字段 ${extra.join('、')}；只有 type、id、props、children。`, 'PARAMETERS')
+          const type = layer.properties.type && staticCodeShaderValue(program, layer.properties.type)
+          if (typeof type !== 'string') fail(node, '图层 type 必须是编译期确定的组件名。', 'PARAMETERS')
+          if (type === '@input') { if (role !== 'filter') fail(node, '@input 只能用在滤镜里。', 'PARAMETERS') }
+          else {
+            const issue = codeShaderTypeIssue(program, type)
+            if (issue) fail(node, issue, 'PARAMETERS')
+            checkProps(type, layer.properties.props)
+          }
+          if (layer.properties.children) {
+            const children = unwrap(layer.properties.children)
+            if (children.kind !== 'array') fail(node, 'children 必须是图层数组字面量。', 'PARAMETERS')
+            visit(children.values)
+          }
+        }
+      }
+      visit(raw.values)
+      return
+    }
+    const name = target.name && staticCodeShaderValue(program, target.name)
+    const issue = codeShaderNameIssue(program, name, role)
+    if (issue) fail(node, issue, 'PARAMETERS')
+    checkProps(name as string, target.params)
   }
   const arrowParams = (arrow: ts.ArrowFunction): string[] => {
     if (arrow.modifiers?.length || arrow.type || arrow.typeParameters?.length || arrow.equalsGreaterThanToken.kind !== ts.SyntaxKind.EqualsGreaterThanToken) fail(arrow, '仅允许纯箭头函数。')
@@ -225,6 +256,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
         else if (['closed', 'wrap'].includes(key)) type(input, value, 'boolean')
         else if (['shadow', 'glow', 'clip', 'params'].includes(key)) type(input, value, 'object')
         else if (['points', 'dash', 'radii'].includes(key)) type(input, value, ['array', 'color'])
+        else if (shape === 'shader' && key === 'layers') type(input, value, 'array')
         else if (key === 'source') type(input, value, 'image')
         else type(input, value, 'string')
         properties[key] = value
@@ -239,9 +271,9 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
         }
       }
       if (shape === 'shader') {
-        if (!properties.name) fail(node, 'shader 缺少 name。', 'PARAMETERS')
-        validateShader(node, properties.name, properties.params, 'background')
-        properties.params ??= { kind: 'object', type: 'object', properties: {} }
+        if (!properties.name === !properties.layers) fail(node, 'shader 需要 name（单个组件或自己写的着色器）或 layers（图层树）其中之一。', 'PARAMETERS')
+        if (properties.layers && properties.params) fail(node, 'layers 形式的属性写在每个图层的 props 里，不用 params。', 'PARAMETERS')
+        validateShader(node, { name: properties.name, params: properties.params, layers: properties.layers }, 'layer')
         if (!properties.time) {
           if (program.mode === 'static') fail(node, '静态着色器须显式提供固定 time。', 'TYPE')
           properties.time = { kind: 'context', type: 'number', key: 'time' }
@@ -254,10 +286,18 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       return { kind: 'draw', type: 'draw', shape, properties, children, sourceSpan: codeSourceSpan(node) }
     }
     if (op === 'shaderFilter') {
-      if (program.kind !== 'filter' || ![2, 3].includes(node.arguments.length)) fail(node, 'shaderFilter(name, params, 可选shaderFilter) 仅用于滤镜。', 'TYPE')
+      if (program.kind !== 'filter' || ![1, 2, 3].includes(node.arguments.length)) fail(node, 'shaderFilter(名字, 属性, 可选上一道shaderFilter) 或 shaderFilter({layers:[...]}, 可选上一道shaderFilter) 仅用于滤镜。', 'TYPE')
       const args = node.arguments.map(item => compile(item, env))
-      validateShader(node, args[0], args[1], 'filter')
-      if (args[2]) type(node, args[2], 'color')
+      const tree = unwrap(args[0])
+      if (tree.kind === 'object') {
+        if (Object.keys(tree.properties).some(key => key !== 'layers') || !tree.properties.layers || args.length > 2) fail(node, 'shaderFilter 的图层树写法是 shaderFilter({layers:[...]}, 可选上一道shaderFilter)。', 'PARAMETERS')
+        validateShader(node, { layers: tree.properties.layers }, 'filter')
+        if (args[1]) type(node, args[1], 'color')
+      } else {
+        if (args.length < 2) fail(node, 'shaderFilter(名字, 属性) 需要属性对象（可写 {}）。', 'PARAMETERS')
+        validateShader(node, { name: args[0], params: args[1] }, 'filter')
+        if (args[2]) type(node, args[2], 'color')
+      }
       return { kind: 'v3call', type: 'color', op, args, sourceSpan: codeSourceSpan(node) }
     }
     if (!CODE_BUILTINS.includes(op as CodeBuiltin) && !extra.includes(op)) fail(node, `不允许调用：${op}`)

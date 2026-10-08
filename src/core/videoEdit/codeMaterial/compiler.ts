@@ -4,6 +4,7 @@ import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS,
 import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, CodeExpression, CodeMaterialProgram, CodeValueType } from './contract'
 import { parseCodeMaterialParameters } from './parameters'
 import { codeSourceSpan, compileCodeMaterialV3 } from './compilerV3'
+import { shaderGraphCustomShaderSchema, type ShaderGraphCustomShader } from '../shaderGraph/spec'
 
 const shapeFields: Record<Exclude<CodeDrawKind, 'group' | 'path' | 'shader'>, Record<string, CodeValueType>> = {
   rect: { x: 'number', y: 'number', width: 'number', height: 'number', fill: 'color', radius: 'number' },
@@ -46,6 +47,31 @@ function staticValue(node: ts.Expression): unknown {
   if (ts.isObjectLiteralExpression(node)) return Object.fromEntries([...objectProperties(node)].map(([key, value]) => [key, staticValue(value)]))
   return fail(node, '元数据和参数声明必须是静态字面量。')
 }
+/**
+ * `shaders: { 名字: { kind, props?, wgsl, speedProp?, description? } }`：作者自己写的着色器。
+ * WGSL 可写成多行模板字符串（不能有 ${} 插值）；是数据，不在 CPU 上执行，GPU 编译时校验。
+ */
+function parseCodeMaterialShaders(node: ts.Expression): ShaderGraphCustomShader[] {
+  if (!ts.isObjectLiteralExpression(node)) fail(node, 'shaders 必须是 { 名字: 定义 } 的静态对象。')
+  const wgslText = (value: ts.Expression): string => {
+    if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) return value.text
+    return fail(value, 'wgsl 必须是字符串或不带 ${} 插值的模板字符串。')
+  }
+  return [...objectProperties(node)].map(([name, definition]) => {
+    if (!ts.isObjectLiteralExpression(definition)) fail(definition, `着色器 ${name} 的定义必须是静态对象。`)
+    const fields = objectProperties(definition)
+    const raw: Record<string, unknown> = { name }
+    for (const [key, value] of fields) {
+      if (key === 'sourceLine') fail(value, 'sourceLine 由宿主填写。')
+      raw[key] = key === 'wgsl' ? wgslText(value) : staticValue(value)
+      // 引号/反引号后第一个字符所在行 = wgsl 第 1 行。
+      if (key === 'wgsl') raw.sourceLine = value.getSourceFile().getLineAndCharacterOfPosition(value.getStart() + 1).line + 1
+    }
+    const parsed = shaderGraphCustomShaderSchema.safeParse(raw)
+    if (!parsed.success) fail(definition, `着色器 ${name} 定义无效：${parsed.error.issues.map(issue => `${issue.path.join('.') || '定义'} ${issue.message}`).join('；')}。字段：kind（generator|filter）、props（可选，{名: {type?, default, min?, max?}}）、wgsl（返回 vec4f 的函数体）、speedProp、description。`)
+    return parsed.data
+  })
+}
 function staticString(value: unknown, label: string, max: number): string {
   if (typeof value !== 'string' || !value.length || value.length > max) throw new CodeMaterialError('SYNTAX', `${label}必须是长度不超过 ${max} 的非空文本。`)
   return value
@@ -81,7 +107,7 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   if (!exported || !ts.isExportAssignment(exported) || exported.isExportEquals || !ts.isObjectLiteralExpression(exported.expression)) fail(file, '源码必须以 export default 静态对象结束。')
   const definition = exported.expression
   const metadata = new Map<string, ts.Expression>(); let render: ts.MethodDeclaration | undefined
-  const allowed = new Set(['apiVersion', 'languageVersion', 'name', 'kind', 'mode', 'width', 'height', 'durationSeconds', 'seed', 'parameters', 'render'])
+  const allowed = new Set(['apiVersion', 'languageVersion', 'name', 'kind', 'mode', 'width', 'height', 'durationSeconds', 'seed', 'parameters', 'shaders', 'render'])
   for (const item of definition.properties) {
     if (!ts.isPropertyAssignment(item) && !ts.isMethodDeclaration(item)) fail(item, '定义不允许展开、简写或访问器。')
     const key = propertyName(item.name)
@@ -106,6 +132,10 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   if (!render?.body || render.modifiers?.length || render.asteriskToken || render.questionToken || render.type || render.typeParameters?.length || render.parameters.length !== 1) fail(render ?? definition, '需要纯 render(ctx) 方法。')
   const argument = render.parameters[0]
   if (!ts.isIdentifier(argument.name) || argument.name.text !== 'ctx' || argument.type || argument.initializer || argument.questionToken || argument.dotDotDotToken || argument.modifiers?.length) fail(argument, 'render 仅允许未注解的 ctx 参数。')
+  if (metadata.has('shaders')) {
+    if (languageVersion !== 3) fail(metadata.get('shaders')!, 'shaders（自己写的着色器）只用于 v3 作者语言。')
+    program.shaders = parseCodeMaterialShaders(metadata.get('shaders')!)
+  }
   if (languageVersion === 3) return compileCodeMaterialV3(program, file, render.body, file.statements.slice(0, -1))
   const bindings = new Map<string, number>()
   const parameterTypes = new Map(parameters.map(item => [item.key, item.type === 'number' ? 'number' : item.type === 'boolean' ? 'boolean' : item.type === 'color' ? 'color' : item.type === 'image' ? 'image' : 'string'] as const))
