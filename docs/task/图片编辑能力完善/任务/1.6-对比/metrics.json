@@ -1,0 +1,3437 @@
+{
+  "machine": {
+    "cpu": "AMD Ryzen 9 5900X 12-Core Processor            ",
+    "memoryGiB": 63.91084671020508,
+    "node": "v24.18.0",
+    "platform": "win32"
+  },
+  "rows": [
+    {
+      "fixture": "wall-scratch",
+      "model": "migan",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 1474.465,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-cpu.png",
+          "decodeMs": 35.32979999999998,
+          "inferenceMs": 742.7718999999997,
+          "compositeMs": 7.14469999999983,
+          "durationMs": 785.2543999999998
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-cpu.png",
+          "decodeMs": 35.16849999999977,
+          "inferenceMs": 659.7505000000001,
+          "compositeMs": 4.9693999999999505,
+          "durationMs": 699.9845
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-cpu.png",
+          "decodeMs": 41.0310999999997,
+          "inferenceMs": 652.4090999999999,
+          "compositeMs": 6.701099999999315,
+          "durationMs": 700.1460999999999
+        }
+      ],
+      "rssBaselineMiB": 89.96875,
+      "rssPeakMiB": 892.71484375,
+      "gpuBaselineMiB": 7881,
+      "gpuDevicePeakMiB": 7905,
+      "maskedMae": 1.335192069392813,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "brick-large",
+      "model": "migan",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 669.7973000000002,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-cpu.png",
+          "decodeMs": 35.5634,
+          "inferenceMs": 661.3336999999992,
+          "compositeMs": 11.192699999999604,
+          "durationMs": 708.0954999999994
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-cpu.png",
+          "decodeMs": 28.341300000000047,
+          "inferenceMs": 673.0174999999999,
+          "compositeMs": 11.294599999999264,
+          "durationMs": 712.6584999999995
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-cpu.png",
+          "decodeMs": 33.841199999999844,
+          "inferenceMs": 654.6815999999999,
+          "compositeMs": 11.403699999999844,
+          "durationMs": 699.9305999999997
+        }
+      ],
+      "rssBaselineMiB": 89.96875,
+      "rssPeakMiB": 899.47265625,
+      "gpuBaselineMiB": 7881,
+      "gpuDevicePeakMiB": 7929,
+      "maskedMae": 15.26316494835492,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "branches",
+      "model": "migan",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 659.9710999999998,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-cpu.png",
+          "decodeMs": 31.33509999999933,
+          "inferenceMs": 635.1509999999989,
+          "compositeMs": 7.239599999998973,
+          "durationMs": 673.730599999999
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-cpu.png",
+          "decodeMs": 30.33980000000156,
+          "inferenceMs": 673.1883999999991,
+          "compositeMs": 7.729300000000876,
+          "durationMs": 711.2620999999999
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-cpu.png",
+          "decodeMs": 34.70759999999973,
+          "inferenceMs": 721.9364999999998,
+          "compositeMs": 7.542199999999866,
+          "durationMs": 764.1904999999988
+        }
+      ],
+      "rssBaselineMiB": 89.96875,
+      "rssPeakMiB": 894.609375,
+      "gpuBaselineMiB": 7881,
+      "gpuDevicePeakMiB": 8000,
+      "maskedMae": 14.982582823521545,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "text",
+      "model": "migan",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 755.3402999999998,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-cpu.png",
+          "decodeMs": 35.06039999999848,
+          "inferenceMs": 821.3062000000009,
+          "compositeMs": 6.443299999998999,
+          "durationMs": 862.814699999999
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-cpu.png",
+          "decodeMs": 33.82959999999912,
+          "inferenceMs": 724.3821000000007,
+          "compositeMs": 10.508700000000317,
+          "durationMs": 768.7253999999994
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-cpu.png",
+          "decodeMs": 34.42739999999867,
+          "inferenceMs": 720.3414000000012,
+          "compositeMs": 5.269000000000233,
+          "durationMs": 760.0445999999993
+        }
+      ],
+      "rssBaselineMiB": 89.96875,
+      "rssPeakMiB": 901.0234375,
+      "gpuBaselineMiB": 7881,
+      "gpuDevicePeakMiB": 8000,
+      "maskedMae": 34.58958676389869,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "face-scratch",
+      "model": "migan",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 821.4311999999991,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-cpu.png",
+          "decodeMs": 42.727100000000064,
+          "inferenceMs": 751.4519999999993,
+          "compositeMs": 29.63930000000073,
+          "durationMs": 823.8225000000002
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-cpu.png",
+          "decodeMs": 38.866400000000795,
+          "inferenceMs": 682.3598999999995,
+          "compositeMs": 36.093800000000556,
+          "durationMs": 757.3245999999999
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-cpu.png",
+          "decodeMs": 37.95170000000144,
+          "inferenceMs": 736.6807000000008,
+          "compositeMs": 27.496500000001106,
+          "durationMs": 802.1327000000001
+        }
+      ],
+      "rssBaselineMiB": 89.96875,
+      "rssPeakMiB": 894.609375,
+      "gpuBaselineMiB": 7881,
+      "gpuDevicePeakMiB": 8000,
+      "maskedMae": 14.304166666666667,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "hair-edge",
+      "model": "migan",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 829.0608999999968,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-cpu.png",
+          "decodeMs": 41.98530000000028,
+          "inferenceMs": 810.1349000000009,
+          "compositeMs": 25.796000000002095,
+          "durationMs": 877.9233000000022
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-cpu.png",
+          "decodeMs": 36.42629999999917,
+          "inferenceMs": 777.510000000002,
+          "compositeMs": 26.163100000001577,
+          "durationMs": 840.1039000000019
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-cpu.png",
+          "decodeMs": 40.07390000000305,
+          "inferenceMs": 861.1569000000018,
+          "compositeMs": 28.41990000000078,
+          "durationMs": 929.6570000000029
+        }
+      ],
+      "rssBaselineMiB": 89.96875,
+      "rssPeakMiB": 898.95703125,
+      "gpuBaselineMiB": 7881,
+      "gpuDevicePeakMiB": 8000,
+      "maskedMae": 28.89034482758621,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "transparent-wide",
+      "model": "migan",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 829.0139999999992,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-cpu.png",
+          "decodeMs": 31.312999999998283,
+          "inferenceMs": 937.458300000002,
+          "compositeMs": 4.524799999999232,
+          "durationMs": 973.3006999999998
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-cpu.png",
+          "decodeMs": 26.218000000000757,
+          "inferenceMs": 726.1562000000013,
+          "compositeMs": 4.199799999998504,
+          "durationMs": 756.5787999999993
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-cpu.png",
+          "decodeMs": 26.431800000002113,
+          "inferenceMs": 779.1951000000008,
+          "compositeMs": 5.54910000000018,
+          "durationMs": 811.1810000000005
+        }
+      ],
+      "rssBaselineMiB": 89.96875,
+      "rssPeakMiB": 899.03125,
+      "gpuBaselineMiB": 7881,
+      "gpuDevicePeakMiB": 8000,
+      "maskedMae": 0.9975314356244697,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "wall-scratch",
+      "model": "migan",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 2235.544600000001,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-dml.png",
+          "decodeMs": 38.10189999999784,
+          "inferenceMs": 30.179700000000594,
+          "compositeMs": 5.790099999998347,
+          "durationMs": 74.07660000000033
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-dml.png",
+          "decodeMs": 41.07010000000082,
+          "inferenceMs": 53.525000000001455,
+          "compositeMs": 4.867799999999988,
+          "durationMs": 99.46789999999964
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-dml.png",
+          "decodeMs": 40.69129999999859,
+          "inferenceMs": 31.675199999997858,
+          "compositeMs": 5.633499999999913,
+          "durationMs": 78.0047999999988
+        }
+      ],
+      "rssBaselineMiB": 151.9296875,
+      "rssPeakMiB": 533.953125,
+      "gpuBaselineMiB": 7872,
+      "gpuDevicePeakMiB": 8451,
+      "maskedMae": 1.335192069392813,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "brick-large",
+      "model": "migan",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 99.14490000000296,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-dml.png",
+          "decodeMs": 37.006099999998696,
+          "inferenceMs": 28.948499999998603,
+          "compositeMs": 15.721300000001065,
+          "durationMs": 81.6830000000009
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-dml.png",
+          "decodeMs": 40.58720000000176,
+          "inferenceMs": 42.00210000000152,
+          "compositeMs": 44.02469999999812,
+          "durationMs": 126.619200000001
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-dml.png",
+          "decodeMs": 39.18760000000111,
+          "inferenceMs": 75.89459999999963,
+          "compositeMs": 14.095900000000256,
+          "durationMs": 129.1850000000013
+        }
+      ],
+      "rssBaselineMiB": 151.9296875,
+      "rssPeakMiB": 538.296875,
+      "gpuBaselineMiB": 7872,
+      "gpuDevicePeakMiB": 8451,
+      "maskedMae": 15.263136230052746,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "branches",
+      "model": "migan",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 106.03910000000178,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-dml.png",
+          "decodeMs": 35.98749999999927,
+          "inferenceMs": 33.654600000001665,
+          "compositeMs": 11.337000000003172,
+          "durationMs": 80.98519999999917
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-dml.png",
+          "decodeMs": 30.36999999999898,
+          "inferenceMs": 31.820800000001327,
+          "compositeMs": 7.154300000001967,
+          "durationMs": 69.35050000000047
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-dml.png",
+          "decodeMs": 30.828300000001036,
+          "inferenceMs": 62.94640000000072,
+          "compositeMs": 7.526100000002771,
+          "durationMs": 101.3051000000014
+        }
+      ],
+      "rssBaselineMiB": 151.9296875,
+      "rssPeakMiB": 541.12109375,
+      "gpuBaselineMiB": 7872,
+      "gpuDevicePeakMiB": 8454,
+      "maskedMae": 14.982649684083842,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "text",
+      "model": "migan",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 76.3798999999999,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-dml.png",
+          "decodeMs": 31.911900000002788,
+          "inferenceMs": 62.605899999998655,
+          "compositeMs": 5.096199999999953,
+          "durationMs": 99.62039999999979
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-dml.png",
+          "decodeMs": 35.24879999999757,
+          "inferenceMs": 40.778000000002066,
+          "compositeMs": 6.064699999998993,
+          "durationMs": 82.09859999999753
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-dml.png",
+          "decodeMs": 35.53450000000157,
+          "inferenceMs": 61.773700000001554,
+          "compositeMs": 5.9553000000014435,
+          "durationMs": 103.27060000000347
+        }
+      ],
+      "rssBaselineMiB": 151.9296875,
+      "rssPeakMiB": 541.12109375,
+      "gpuBaselineMiB": 7872,
+      "gpuDevicePeakMiB": 8466,
+      "maskedMae": 34.58958676389869,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "face-scratch",
+      "model": "migan",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 118.99619999999777,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-dml.png",
+          "decodeMs": 52.11939999999959,
+          "inferenceMs": 63.96270000000004,
+          "compositeMs": 28.6820000000007,
+          "durationMs": 144.77020000000266
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-dml.png",
+          "decodeMs": 51.85529999999926,
+          "inferenceMs": 46.82749999999942,
+          "compositeMs": 51.214499999998225,
+          "durationMs": 149.91010000000097
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-dml.png",
+          "decodeMs": 45.54829999999856,
+          "inferenceMs": 38.73749999999927,
+          "compositeMs": 31.177200000001903,
+          "durationMs": 115.46949999999924
+        }
+      ],
+      "rssBaselineMiB": 151.9296875,
+      "rssPeakMiB": 541.12109375,
+      "gpuBaselineMiB": 7872,
+      "gpuDevicePeakMiB": 8516,
+      "maskedMae": 14.304166666666667,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "hair-edge",
+      "model": "migan",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 130.52790000000095,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-dml.png",
+          "decodeMs": 49.279999999998836,
+          "inferenceMs": 37.433499999999185,
+          "compositeMs": 49.77899999999863,
+          "durationMs": 136.49709999999686
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-dml.png",
+          "decodeMs": 42.28189999999813,
+          "inferenceMs": 37.72109999999884,
+          "compositeMs": 29.44340000000011,
+          "durationMs": 109.45339999999851
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-dml.png",
+          "decodeMs": 42.68629999999757,
+          "inferenceMs": 60.23400000000038,
+          "compositeMs": 28.38619999999719,
+          "durationMs": 131.31199999999808
+        }
+      ],
+      "rssBaselineMiB": 151.9296875,
+      "rssPeakMiB": 541.12109375,
+      "gpuBaselineMiB": 7872,
+      "gpuDevicePeakMiB": 8516,
+      "maskedMae": 28.89034482758621,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "transparent-wide",
+      "model": "migan",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 63.21249999999782,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-dml.png",
+          "decodeMs": 26.413899999999558,
+          "inferenceMs": 61.47119999999995,
+          "compositeMs": 5.241500000000087,
+          "durationMs": 93.13300000000163
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-dml.png",
+          "decodeMs": 28.04449999999997,
+          "inferenceMs": 36.84710000000268,
+          "compositeMs": 5.594300000000658,
+          "durationMs": 70.49150000000009
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-dml.png",
+          "decodeMs": 42.48080000000118,
+          "inferenceMs": 40.519899999999325,
+          "compositeMs": 8.197400000000926,
+          "durationMs": 91.20430000000124
+        }
+      ],
+      "rssBaselineMiB": 151.9296875,
+      "rssPeakMiB": 543.22265625,
+      "gpuBaselineMiB": 7872,
+      "gpuDevicePeakMiB": 8516,
+      "maskedMae": 0.9975314356244697,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "wall-scratch",
+      "model": "migan-pipeline",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 1680.7796000000017,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-pipeline-cpu.png",
+          "decodeMs": 35.21779999999853,
+          "inferenceMs": 857.3041999999987,
+          "compositeMs": 5.479800000000978,
+          "durationMs": 898.1046999999999
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-pipeline-cpu.png",
+          "decodeMs": 36.198599999999715,
+          "inferenceMs": 767.6038000000044,
+          "compositeMs": 4.453600000000733,
+          "durationMs": 808.2608
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-pipeline-cpu.png",
+          "decodeMs": 50.88090000000375,
+          "inferenceMs": 835.1482000000033,
+          "compositeMs": 7.034899999998743,
+          "durationMs": 893.068299999999
+        }
+      ],
+      "rssBaselineMiB": 234.48046875,
+      "rssPeakMiB": 1050.078125,
+      "gpuBaselineMiB": 8010,
+      "gpuDevicePeakMiB": 8010,
+      "maskedMae": 43.41140024783147,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "brick-large",
+      "model": "migan-pipeline",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 879.3850999999995,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-pipeline-cpu.png",
+          "decodeMs": 38.589899999999034,
+          "inferenceMs": 805.4147000000012,
+          "compositeMs": 9.60399999999936,
+          "durationMs": 853.6129999999976
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-pipeline-cpu.png",
+          "decodeMs": 30.295099999995728,
+          "inferenceMs": 947.922599999998,
+          "compositeMs": 32.18630000000121,
+          "durationMs": 1010.4089999999997
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-pipeline-cpu.png",
+          "decodeMs": 38.01140000000305,
+          "inferenceMs": 1051.9735999999975,
+          "compositeMs": 10.924299999998766,
+          "durationMs": 1100.914300000004
+        }
+      ],
+      "rssBaselineMiB": 234.48046875,
+      "rssPeakMiB": 1050.078125,
+      "gpuBaselineMiB": 8010,
+      "gpuDevicePeakMiB": 8010,
+      "maskedMae": 18.068761188171887,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "branches",
+      "model": "migan-pipeline",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 919.5603999999948,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-pipeline-cpu.png",
+          "decodeMs": 45.00419999999576,
+          "inferenceMs": 807.7044999999998,
+          "compositeMs": 8.83119999999326,
+          "durationMs": 861.5440000000017
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-pipeline-cpu.png",
+          "decodeMs": 42.23019999999815,
+          "inferenceMs": 799.9242999999988,
+          "compositeMs": 7.769500000002154,
+          "durationMs": 849.928399999997
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-pipeline-cpu.png",
+          "decodeMs": 33.9913000000015,
+          "inferenceMs": 776.9929000000047,
+          "compositeMs": 7.0393999999942025,
+          "durationMs": 818.0271999999968
+        }
+      ],
+      "rssBaselineMiB": 234.48046875,
+      "rssPeakMiB": 1050.078125,
+      "gpuBaselineMiB": 8010,
+      "gpuDevicePeakMiB": 8010,
+      "maskedMae": 20.16671681208839,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "text",
+      "model": "migan-pipeline",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 770.8438999999998,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-pipeline-cpu.png",
+          "decodeMs": 33.406699999999546,
+          "inferenceMs": 718.2496000000028,
+          "compositeMs": 5.402200000004086,
+          "durationMs": 757.0614999999962
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-pipeline-cpu.png",
+          "decodeMs": 32.128600000003644,
+          "inferenceMs": 696.2373000000007,
+          "compositeMs": 5.477500000000873,
+          "durationMs": 733.8481000000029
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-pipeline-cpu.png",
+          "decodeMs": 32.416299999997136,
+          "inferenceMs": 721.1244999999981,
+          "compositeMs": 5.9900999999954365,
+          "durationMs": 759.5352999999959
+        }
+      ],
+      "rssBaselineMiB": 234.48046875,
+      "rssPeakMiB": 1050.078125,
+      "gpuBaselineMiB": 8010,
+      "gpuDevicePeakMiB": 8010,
+      "maskedMae": 40.93570140359131,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "face-scratch",
+      "model": "migan-pipeline",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 710.308100000002,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-pipeline-cpu.png",
+          "decodeMs": 40.88130000000092,
+          "inferenceMs": 689.7445000000007,
+          "compositeMs": 25.461199999997916,
+          "durationMs": 756.0912000000026
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-pipeline-cpu.png",
+          "decodeMs": 35.56719999999768,
+          "inferenceMs": 711.1442999999999,
+          "compositeMs": 25.38839999999618,
+          "durationMs": 772.1031999999977
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-pipeline-cpu.png",
+          "decodeMs": 37.73689999999624,
+          "inferenceMs": 689.9220000000059,
+          "compositeMs": 26.761500000000524,
+          "durationMs": 754.4250000000029
+        }
+      ],
+      "rssBaselineMiB": 234.48046875,
+      "rssPeakMiB": 1050.078125,
+      "gpuBaselineMiB": 8010,
+      "gpuDevicePeakMiB": 8010,
+      "maskedMae": 45.87361111111111,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "hair-edge",
+      "model": "migan-pipeline",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 829.5823000000019,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-pipeline-cpu.png",
+          "decodeMs": 30.111900000003516,
+          "inferenceMs": 668.787900000003,
+          "compositeMs": 27.66649999999936,
+          "durationMs": 726.5702000000019
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-pipeline-cpu.png",
+          "decodeMs": 33.101699999999255,
+          "inferenceMs": 691.2472999999954,
+          "compositeMs": 26.983000000000175,
+          "durationMs": 751.335500000001
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-pipeline-cpu.png",
+          "decodeMs": 31.84560000000056,
+          "inferenceMs": 658.8099999999977,
+          "compositeMs": 24.380599999996775,
+          "durationMs": 715.0424000000057
+        }
+      ],
+      "rssBaselineMiB": 234.48046875,
+      "rssPeakMiB": 1050.078125,
+      "gpuBaselineMiB": 8010,
+      "gpuDevicePeakMiB": 8010,
+      "maskedMae": 37.03528735632184,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "transparent-wide",
+      "model": "migan-pipeline",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 683.1849999999977,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-pipeline-cpu.png",
+          "decodeMs": 23.073700000000827,
+          "inferenceMs": 643.3508000000002,
+          "compositeMs": 4.252300000000105,
+          "durationMs": 670.6814000000013
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-pipeline-cpu.png",
+          "decodeMs": 23.378300000003946,
+          "inferenceMs": 698.2785000000003,
+          "compositeMs": 4.323500000005879,
+          "durationMs": 725.984000000004
+        },
+        {
+          "algorithm": "migan",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-pipeline-cpu.png",
+          "decodeMs": 21.0199000000066,
+          "inferenceMs": 653.1895999999979,
+          "compositeMs": 4.449199999995471,
+          "durationMs": 678.6626000000033
+        }
+      ],
+      "rssBaselineMiB": 234.48046875,
+      "rssPeakMiB": 1050.078125,
+      "gpuBaselineMiB": 8010,
+      "gpuDevicePeakMiB": 8010,
+      "maskedMae": 10.732932191622309,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "wall-scratch",
+      "model": "migan-pipeline",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 2399.7244999999966,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-pipeline-dml.png",
+          "decodeMs": 31.926800000001094,
+          "inferenceMs": 30.661599999999453,
+          "compositeMs": 4.135399999999208,
+          "durationMs": 66.72830000000249
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-pipeline-dml.png",
+          "decodeMs": 31.119599999998172,
+          "inferenceMs": 55.298500000004424,
+          "compositeMs": 4.513700000003155,
+          "durationMs": 90.93529999999737
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-migan-pipeline-dml.png",
+          "decodeMs": 24.460600000005797,
+          "inferenceMs": 27.763200000001234,
+          "compositeMs": 5.645299999996496,
+          "durationMs": 57.87390000000596
+        }
+      ],
+      "rssBaselineMiB": 195.625,
+      "rssPeakMiB": 556.453125,
+      "gpuBaselineMiB": 7887,
+      "gpuDevicePeakMiB": 7941,
+      "maskedMae": 43.41140024783147,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "brick-large",
+      "model": "migan-pipeline",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 90.60329999999522,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-pipeline-dml.png",
+          "decodeMs": 29.3211999999985,
+          "inferenceMs": 25.256999999997788,
+          "compositeMs": 10.08070000000589,
+          "durationMs": 64.6623000000036
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-pipeline-dml.png",
+          "decodeMs": 27.333999999995285,
+          "inferenceMs": 26.446100000001024,
+          "compositeMs": 7.872100000000501,
+          "durationMs": 61.65729999999894
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-migan-pipeline-dml.png",
+          "decodeMs": 22.96360000000277,
+          "inferenceMs": 30.313600000001315,
+          "compositeMs": 9.341400000004796,
+          "durationMs": 62.624400000000605
+        }
+      ],
+      "rssBaselineMiB": 195.625,
+      "rssPeakMiB": 564.40234375,
+      "gpuBaselineMiB": 7887,
+      "gpuDevicePeakMiB": 8604,
+      "maskedMae": 18.068732469869715,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "branches",
+      "model": "migan-pipeline",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 55.25189999999566,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-pipeline-dml.png",
+          "decodeMs": 21.648000000001048,
+          "inferenceMs": 26.07610000000568,
+          "compositeMs": 6.2215999999971245,
+          "durationMs": 53.950700000001234
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-pipeline-dml.png",
+          "decodeMs": 26.284899999998743,
+          "inferenceMs": 26.21979999999894,
+          "compositeMs": 5.153700000002573,
+          "durationMs": 57.66309999999794
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-migan-pipeline-dml.png",
+          "decodeMs": 22.39879999999539,
+          "inferenceMs": 43.80909999999858,
+          "compositeMs": 6.164199999999255,
+          "durationMs": 72.37619999999879
+        }
+      ],
+      "rssBaselineMiB": 195.625,
+      "rssPeakMiB": 570.9609375,
+      "gpuBaselineMiB": 7887,
+      "gpuDevicePeakMiB": 8604,
+      "maskedMae": 20.166783672650688,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "text",
+      "model": "migan-pipeline",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 65.68319999999949,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-pipeline-dml.png",
+          "decodeMs": 21.629000000000815,
+          "inferenceMs": 34.41319999999541,
+          "compositeMs": 4.197700000004261,
+          "durationMs": 60.24399999999878
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-pipeline-dml.png",
+          "decodeMs": 37.71990000000369,
+          "inferenceMs": 49.24629999999888,
+          "compositeMs": 6.015099999996892,
+          "durationMs": 92.98830000000453
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-migan-pipeline-dml.png",
+          "decodeMs": 21.35689999999886,
+          "inferenceMs": 34.58380000000034,
+          "compositeMs": 3.8251000000018394,
+          "durationMs": 59.769899999999325
+        }
+      ],
+      "rssBaselineMiB": 195.625,
+      "rssPeakMiB": 570.6796875,
+      "gpuBaselineMiB": 7887,
+      "gpuDevicePeakMiB": 8604,
+      "maskedMae": 40.933113777150474,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "face-scratch",
+      "model": "migan-pipeline",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 151.78110000000015,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-pipeline-dml.png",
+          "decodeMs": 39.84479999999894,
+          "inferenceMs": 36.83260000000155,
+          "compositeMs": 29.369000000006054,
+          "durationMs": 106.05010000000038
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-pipeline-dml.png",
+          "decodeMs": 36.1958999999988,
+          "inferenceMs": 33.79660000000149,
+          "compositeMs": 23.8778999999995,
+          "durationMs": 93.96349999999802
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-migan-pipeline-dml.png",
+          "decodeMs": 30.007799999999406,
+          "inferenceMs": 30.903099999995902,
+          "compositeMs": 21.47040000000561,
+          "durationMs": 82.38500000000204
+        }
+      ],
+      "rssBaselineMiB": 195.625,
+      "rssPeakMiB": 571.44140625,
+      "gpuBaselineMiB": 7887,
+      "gpuDevicePeakMiB": 8604,
+      "maskedMae": 45.87361111111111,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "hair-edge",
+      "model": "migan-pipeline",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 84.11089999999967,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-pipeline-dml.png",
+          "decodeMs": 27.07780000000639,
+          "inferenceMs": 35.46219999999448,
+          "compositeMs": 35.25340000000142,
+          "durationMs": 97.79760000000533
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-pipeline-dml.png",
+          "decodeMs": 27.78280000000086,
+          "inferenceMs": 34.37480000000505,
+          "compositeMs": 24.572400000004563,
+          "durationMs": 86.74139999999898
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-migan-pipeline-dml.png",
+          "decodeMs": 29.557499999995343,
+          "inferenceMs": 31.82890000000043,
+          "compositeMs": 21.044800000003306,
+          "durationMs": 82.43529999999737
+        }
+      ],
+      "rssBaselineMiB": 195.625,
+      "rssPeakMiB": 572.34375,
+      "gpuBaselineMiB": 7887,
+      "gpuDevicePeakMiB": 8604,
+      "maskedMae": 37.03528735632184,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "transparent-wide",
+      "model": "migan-pipeline",
+      "requested": "dml",
+      "actual": "dml",
+      "coldMs": 54.67540000000008,
+      "warm": [
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-pipeline-dml.png",
+          "decodeMs": 15.590799999998126,
+          "inferenceMs": 31.73809999999503,
+          "compositeMs": 3.312099999995553,
+          "durationMs": 50.644200000002456
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-pipeline-dml.png",
+          "decodeMs": 15.328300000001036,
+          "inferenceMs": 33.24659999999858,
+          "compositeMs": 3.4254000000000815,
+          "durationMs": 52.00340000000142
+        },
+        {
+          "algorithm": "migan",
+          "provider": "dml",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-migan-pipeline-dml.png",
+          "decodeMs": 44.9690000000046,
+          "inferenceMs": 37.64919999999984,
+          "compositeMs": 4.604900000005728,
+          "durationMs": 87.22789999999804
+        }
+      ],
+      "rssBaselineMiB": 195.625,
+      "rssPeakMiB": 571.60546875,
+      "gpuBaselineMiB": 7887,
+      "gpuDevicePeakMiB": 8604,
+      "maskedMae": 10.732932191622309,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "wall-scratch",
+      "model": "lama",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 14236.083299999991,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-lama-cpu.png",
+          "decodeMs": 34.257400000002235,
+          "inferenceMs": 1974.5417000000016,
+          "compositeMs": 5.366699999998673,
+          "durationMs": 2014.1705999999976
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-lama-cpu.png",
+          "decodeMs": 30.063199999989592,
+          "inferenceMs": 2002.5623999999953,
+          "compositeMs": 8.728300000002491,
+          "durationMs": 2041.3589999999967
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-lama-cpu.png",
+          "decodeMs": 39.68609999999171,
+          "inferenceMs": 2070.1684999999998,
+          "compositeMs": 4.949699999997392,
+          "durationMs": 2114.807799999995
+        }
+      ],
+      "rssBaselineMiB": 245.20703125,
+      "rssPeakMiB": 1061.6953125,
+      "gpuBaselineMiB": 7867,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 0.429574555968608,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "brick-large",
+      "model": "lama",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 2472.2992999999988,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-lama-cpu.png",
+          "decodeMs": 33.52380000000994,
+          "inferenceMs": 2304.797999999995,
+          "compositeMs": 10.48059999999532,
+          "durationMs": 2348.8064000000013
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-lama-cpu.png",
+          "decodeMs": 26.570200000001932,
+          "inferenceMs": 2741.0142999999953,
+          "compositeMs": 10.377899999992223,
+          "durationMs": 2777.9663
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-lama-cpu.png",
+          "decodeMs": 32.499400000000605,
+          "inferenceMs": 2154.026199999993,
+          "compositeMs": 10.498999999996158,
+          "durationMs": 2197.028299999991
+        }
+      ],
+      "rssBaselineMiB": 245.20703125,
+      "rssPeakMiB": 1070.7109375,
+      "gpuBaselineMiB": 7867,
+      "gpuDevicePeakMiB": 7978,
+      "maskedMae": 7.094291758804553,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "branches",
+      "model": "lama",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 2819.1361000000034,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-lama-cpu.png",
+          "decodeMs": 39.02459999998973,
+          "inferenceMs": 3304.993199999997,
+          "compositeMs": 9.747499999997672,
+          "durationMs": 3353.7698999999993
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-lama-cpu.png",
+          "decodeMs": 40.96680000000924,
+          "inferenceMs": 2510.8052000000025,
+          "compositeMs": 6.422999999995227,
+          "durationMs": 2558.199099999998
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-lama-cpu.png",
+          "decodeMs": 47.595799999995506,
+          "inferenceMs": 2703.7270000000135,
+          "compositeMs": 6.587100000004284,
+          "durationMs": 2757.914499999999
+        }
+      ],
+      "rssBaselineMiB": 245.20703125,
+      "rssPeakMiB": 1070.7109375,
+      "gpuBaselineMiB": 7867,
+      "gpuDevicePeakMiB": 7978,
+      "maskedMae": 9.825995386621202,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "text",
+      "model": "lama",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 2811.9569000000047,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-lama-cpu.png",
+          "decodeMs": 38.49430000000575,
+          "inferenceMs": 2171.776500000007,
+          "compositeMs": 5.555899999992107,
+          "durationMs": 2215.8312000000005
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-lama-cpu.png",
+          "decodeMs": 35.97179999999935,
+          "inferenceMs": 2102.0141999999905,
+          "compositeMs": 4.635200000004261,
+          "durationMs": 2142.6264000000083
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-lama-cpu.png",
+          "decodeMs": 33.143800000005285,
+          "inferenceMs": 2162.99549999999,
+          "compositeMs": 5.4254000000073574,
+          "durationMs": 2201.5703000000067
+        }
+      ],
+      "rssBaselineMiB": 245.20703125,
+      "rssPeakMiB": 1070.7109375,
+      "gpuBaselineMiB": 7867,
+      "gpuDevicePeakMiB": 7978,
+      "maskedMae": 33.565592409629105,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "face-scratch",
+      "model": "lama",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 2287.8278999999893,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-lama-cpu.png",
+          "decodeMs": 42.910900000002584,
+          "inferenceMs": 2343.0590999999986,
+          "compositeMs": 25.816500000000815,
+          "durationMs": 2411.790300000008
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-lama-cpu.png",
+          "decodeMs": 39.85919999999169,
+          "inferenceMs": 2327.4474000000046,
+          "compositeMs": 27.229699999996228,
+          "durationMs": 2394.5399999999936
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-lama-cpu.png",
+          "decodeMs": 35.78970000000845,
+          "inferenceMs": 1959.7451,
+          "compositeMs": 25.483699999997043,
+          "durationMs": 2021.0224000000017
+        }
+      ],
+      "rssBaselineMiB": 245.20703125,
+      "rssPeakMiB": 1072.0078125,
+      "gpuBaselineMiB": 7867,
+      "gpuDevicePeakMiB": 8036,
+      "maskedMae": 12.08611111111111,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "hair-edge",
+      "model": "lama",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 1997.1650000000081,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-lama-cpu.png",
+          "decodeMs": 34.31100000000151,
+          "inferenceMs": 1943.1937000000034,
+          "compositeMs": 25.285699999993085,
+          "durationMs": 2002.794200000004
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-lama-cpu.png",
+          "decodeMs": 32.36469999999099,
+          "inferenceMs": 2112.138399999996,
+          "compositeMs": 25.993700000006356,
+          "durationMs": 2170.500199999995
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-lama-cpu.png",
+          "decodeMs": 35.08410000000731,
+          "inferenceMs": 2016.2753000000084,
+          "compositeMs": 22.20570000000589,
+          "durationMs": 2073.5686000000132
+        }
+      ],
+      "rssBaselineMiB": 245.20703125,
+      "rssPeakMiB": 1072.0078125,
+      "gpuBaselineMiB": 7867,
+      "gpuDevicePeakMiB": 8036,
+      "maskedMae": 30.419655172413794,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "transparent-wide",
+      "model": "lama",
+      "requested": "cpu",
+      "actual": "cpu",
+      "coldMs": 1978.3722999999882,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-lama-cpu.png",
+          "decodeMs": 23.52829999999085,
+          "inferenceMs": 2017.7146999999968,
+          "compositeMs": 4.495899999994435,
+          "durationMs": 2045.7448999999906
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-lama-cpu.png",
+          "decodeMs": 17.00890000000072,
+          "inferenceMs": 2387.776800000007,
+          "compositeMs": 3.9774000000033993,
+          "durationMs": 2408.766900000017
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-lama-cpu.png",
+          "decodeMs": 25.45380000001751,
+          "inferenceMs": 3043.1389999999956,
+          "compositeMs": 5.5151999999943655,
+          "durationMs": 3074.112200000003
+        }
+      ],
+      "rssBaselineMiB": 245.20703125,
+      "rssPeakMiB": 1072.0078125,
+      "gpuBaselineMiB": 7867,
+      "gpuDevicePeakMiB": 8036,
+      "maskedMae": 0.785234899328859,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "wall-scratch",
+      "model": "lama",
+      "requested": "dml",
+      "actual": "cpu",
+      "coldMs": 34325.2868,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-lama-dml.png",
+          "decodeMs": 41.218900000007125,
+          "inferenceMs": 2183.208899999998,
+          "compositeMs": 4.791100000002189,
+          "durationMs": 2229.2274000000034
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-lama-dml.png",
+          "decodeMs": 34.25,
+          "inferenceMs": 2112.8478000000177,
+          "compositeMs": 5.8695000000006985,
+          "durationMs": 2152.970900000015
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-lama-dml.png",
+          "decodeMs": 32.273700000019744,
+          "inferenceMs": 2034.266499999998,
+          "compositeMs": 7.863400000002002,
+          "durationMs": 2074.408400000015
+        }
+      ],
+      "rssBaselineMiB": 177.140625,
+      "rssPeakMiB": 1127.52734375,
+      "gpuBaselineMiB": 7936,
+      "gpuDevicePeakMiB": 8272,
+      "maskedMae": 0.429574555968608,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "brick-large",
+      "model": "lama",
+      "requested": "dml",
+      "actual": "cpu",
+      "coldMs": 2093.223100000003,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-lama-dml.png",
+          "decodeMs": 32.33230000000913,
+          "inferenceMs": 1925.1652999999933,
+          "compositeMs": 10.682999999989988,
+          "durationMs": 1968.1851000000024
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-lama-dml.png",
+          "decodeMs": 26.654799999989336,
+          "inferenceMs": 2015.354399999982,
+          "compositeMs": 10.615300000004936,
+          "durationMs": 2052.6276999999827
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-lama-dml.png",
+          "decodeMs": 36.24230000001262,
+          "inferenceMs": 1994.3650999999954,
+          "compositeMs": 10.709899999987101,
+          "durationMs": 2041.322199999995
+        }
+      ],
+      "rssBaselineMiB": 177.140625,
+      "rssPeakMiB": 1127.52734375,
+      "gpuBaselineMiB": 7936,
+      "gpuDevicePeakMiB": 8272,
+      "maskedMae": 7.094291758804553,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "branches",
+      "model": "lama",
+      "requested": "dml",
+      "actual": "cpu",
+      "coldMs": 2030.9397999999928,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-lama-dml.png",
+          "decodeMs": 33.456199999985984,
+          "inferenceMs": 1906.1030000000028,
+          "compositeMs": 6.53859999999986,
+          "durationMs": 1946.1015999999945
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-lama-dml.png",
+          "decodeMs": 27.410600000002887,
+          "inferenceMs": 1831.7923999999766,
+          "compositeMs": 6.374699999985751,
+          "durationMs": 1865.5817000000097
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-lama-dml.png",
+          "decodeMs": 34.34979999999632,
+          "inferenceMs": 1947.6124000000127,
+          "compositeMs": 7.224799999996321,
+          "durationMs": 1989.1910999999964
+        }
+      ],
+      "rssBaselineMiB": 177.140625,
+      "rssPeakMiB": 1127.52734375,
+      "gpuBaselineMiB": 7936,
+      "gpuDevicePeakMiB": 8272,
+      "maskedMae": 9.825995386621202,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "text",
+      "model": "lama",
+      "requested": "dml",
+      "actual": "cpu",
+      "coldMs": 1900.6731999999902,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-lama-dml.png",
+          "decodeMs": 32.4600999999966,
+          "inferenceMs": 2058.3739999999816,
+          "compositeMs": 5.264299999980722,
+          "durationMs": 2096.103299999988
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-lama-dml.png",
+          "decodeMs": 36.311000000016065,
+          "inferenceMs": 1993.2185999999929,
+          "compositeMs": 4.965000000025611,
+          "durationMs": 2034.4986000000208
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-lama-dml.png",
+          "decodeMs": 36.67929999998887,
+          "inferenceMs": 2021.9151999999885,
+          "compositeMs": 5.237600000022212,
+          "durationMs": 2063.8359000000055
+        }
+      ],
+      "rssBaselineMiB": 177.140625,
+      "rssPeakMiB": 1127.52734375,
+      "gpuBaselineMiB": 7936,
+      "gpuDevicePeakMiB": 8272,
+      "maskedMae": 33.565592409629105,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "face-scratch",
+      "model": "lama",
+      "requested": "dml",
+      "actual": "cpu",
+      "coldMs": 1820.6211000000185,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-lama-dml.png",
+          "decodeMs": 31.782399999996414,
+          "inferenceMs": 1872.0990000000165,
+          "compositeMs": 24.613600000011502,
+          "durationMs": 1928.5011999999988
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-lama-dml.png",
+          "decodeMs": 28.75710000001709,
+          "inferenceMs": 1896.0750000000116,
+          "compositeMs": 25.96779999998398,
+          "durationMs": 1950.8043999999936
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-lama-dml.png",
+          "decodeMs": 43.37359999999171,
+          "inferenceMs": 2177.94749999998,
+          "compositeMs": 26.40429999999469,
+          "durationMs": 2247.7294999999867
+        }
+      ],
+      "rssBaselineMiB": 177.140625,
+      "rssPeakMiB": 1127.52734375,
+      "gpuBaselineMiB": 7936,
+      "gpuDevicePeakMiB": 8272,
+      "maskedMae": 12.08611111111111,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "hair-edge",
+      "model": "lama",
+      "requested": "dml",
+      "actual": "cpu",
+      "coldMs": 2004.8983000000007,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-lama-dml.png",
+          "decodeMs": 34.813300000008894,
+          "inferenceMs": 1874.8503999999957,
+          "compositeMs": 25.80340000000433,
+          "durationMs": 1935.4710000000196
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-lama-dml.png",
+          "decodeMs": 33.45650000000023,
+          "inferenceMs": 1786.6908999999869,
+          "compositeMs": 25.488799999991897,
+          "durationMs": 1845.6412999999884
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-lama-dml.png",
+          "decodeMs": 33.79529999999795,
+          "inferenceMs": 1939.796399999992,
+          "compositeMs": 26.12510000000475,
+          "durationMs": 1999.7213999999803
+        }
+      ],
+      "rssBaselineMiB": 177.140625,
+      "rssPeakMiB": 1127.52734375,
+      "gpuBaselineMiB": 7936,
+      "gpuDevicePeakMiB": 8272,
+      "maskedMae": 30.419655172413794,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "transparent-wide",
+      "model": "lama",
+      "requested": "dml",
+      "actual": "cpu",
+      "coldMs": 1917.424800000008,
+      "warm": [
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-lama-dml.png",
+          "decodeMs": 23.282500000001164,
+          "inferenceMs": 1907.2570000000123,
+          "compositeMs": 4.506799999973737,
+          "durationMs": 1935.0512000000163
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-lama-dml.png",
+          "decodeMs": 22.824099999997998,
+          "inferenceMs": 1847.0715999999957,
+          "compositeMs": 4.494000000006054,
+          "durationMs": 1874.3938999999955
+        },
+        {
+          "algorithm": "lama",
+          "provider": "cpu",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-lama-dml.png",
+          "decodeMs": 22.910700000007637,
+          "inferenceMs": 1903.1600000000035,
+          "compositeMs": 5.063300000008894,
+          "durationMs": 1931.1371000000217
+        }
+      ],
+      "rssBaselineMiB": 177.140625,
+      "rssPeakMiB": 1127.52734375,
+      "gpuBaselineMiB": 7936,
+      "gpuDevicePeakMiB": 8272,
+      "maskedMae": 0.785234899328859,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "wall-scratch",
+      "model": "telea",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 311.28979999999865,
+      "warm": [
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-telea-wasm.png",
+          "decodeMs": 28.378000000026077,
+          "inferenceMs": 7.83540000001085,
+          "compositeMs": 5.022599999996601,
+          "durationMs": 41.2390000000014
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-telea-wasm.png",
+          "decodeMs": 33.33890000000247,
+          "inferenceMs": 7.200600000011036,
+          "compositeMs": 5.260199999989709,
+          "durationMs": 45.80349999997998
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-telea-wasm.png",
+          "decodeMs": 64.48420000000624,
+          "inferenceMs": 7.480199999990873,
+          "compositeMs": 4.989600000000792,
+          "durationMs": 76.95810000001802
+        }
+      ],
+      "rssBaselineMiB": 179.9921875,
+      "rssPeakMiB": 263.03125,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 0.785419248244527,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "brick-large",
+      "model": "telea",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 79.41969999999856,
+      "warm": [
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-telea-wasm.png",
+          "decodeMs": 31.04849999997532,
+          "inferenceMs": 31.17359999998007,
+          "compositeMs": 40.6594000000041,
+          "durationMs": 102.88699999998789
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-telea-wasm.png",
+          "decodeMs": 29.041700000001583,
+          "inferenceMs": 26.744200000015553,
+          "compositeMs": 7.826700000005076,
+          "durationMs": 63.61710000000312
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-telea-wasm.png",
+          "decodeMs": 20.667300000000978,
+          "inferenceMs": 21.507299999997485,
+          "compositeMs": 8.157399999996414,
+          "durationMs": 50.334600000001956
+        }
+      ],
+      "rssBaselineMiB": 179.9921875,
+      "rssPeakMiB": 286.53125,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 17.619989852866563,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "branches",
+      "model": "telea",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 70.6594000000041,
+      "warm": [
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-telea-wasm.png",
+          "decodeMs": 21.747899999987567,
+          "inferenceMs": 9.877500000002328,
+          "compositeMs": 6.147799999976996,
+          "durationMs": 37.77779999998165
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-telea-wasm.png",
+          "decodeMs": 23.176500000001397,
+          "inferenceMs": 9.3293999999878,
+          "compositeMs": 5.35130000000936,
+          "durationMs": 37.86120000001392
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-telea-wasm.png",
+          "decodeMs": 20.84790000002249,
+          "inferenceMs": 9.787899999995716,
+          "compositeMs": 6.29849999997532,
+          "durationMs": 36.93860000002314
+        }
+      ],
+      "rssBaselineMiB": 179.9921875,
+      "rssPeakMiB": 283.078125,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 49.46521579246482,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "text",
+      "model": "telea",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 32.21950000000652,
+      "warm": [
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-telea-wasm.png",
+          "decodeMs": 53.08650000000489,
+          "inferenceMs": 6.615799999999581,
+          "compositeMs": 4.861900000018068,
+          "durationMs": 64.56720000001951
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-telea-wasm.png",
+          "decodeMs": 20.576800000009825,
+          "inferenceMs": 6.827799999999115,
+          "compositeMs": 4.267200000002049,
+          "durationMs": 31.674900000012713
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-telea-wasm.png",
+          "decodeMs": 21.553899999998976,
+          "inferenceMs": 6.78080000000773,
+          "compositeMs": 4.046100000006845,
+          "durationMs": 32.384399999980815
+        }
+      ],
+      "rssBaselineMiB": 179.9921875,
+      "rssPeakMiB": 283.078125,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 45.19689484827099,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "face-scratch",
+      "model": "telea",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 49.72029999998631,
+      "warm": [
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-telea-wasm.png",
+          "decodeMs": 25.674500000022817,
+          "inferenceMs": 4.531199999997625,
+          "compositeMs": 35.24220000000787,
+          "durationMs": 65.45150000002468
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-telea-wasm.png",
+          "decodeMs": 32.329100000002654,
+          "inferenceMs": 5.665899999992689,
+          "compositeMs": 23.283599999995204,
+          "durationMs": 61.282600000005914
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-telea-wasm.png",
+          "decodeMs": 31.136399999988498,
+          "inferenceMs": 4.261300000012852,
+          "compositeMs": 19.21469999998226,
+          "durationMs": 54.61559999999008
+        }
+      ],
+      "rssBaselineMiB": 179.9921875,
+      "rssPeakMiB": 283.078125,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 14.870833333333334,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "hair-edge",
+      "model": "telea",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 68.03019999997923,
+      "warm": [
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-telea-wasm.png",
+          "decodeMs": 26.7725999999966,
+          "inferenceMs": 5.815099999977974,
+          "compositeMs": 21.27390000000014,
+          "durationMs": 53.86480000001029
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-telea-wasm.png",
+          "decodeMs": 26.600700000009965,
+          "inferenceMs": 5.74900000001071,
+          "compositeMs": 19.96229999998468,
+          "durationMs": 52.31570000000647
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-telea-wasm.png",
+          "decodeMs": 26.46219999997993,
+          "inferenceMs": 6.149600000004284,
+          "compositeMs": 19.04320000001462,
+          "durationMs": 51.65810000000056
+        }
+      ],
+      "rssBaselineMiB": 179.9921875,
+      "rssPeakMiB": 283.078125,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 24.40241379310345,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "transparent-wide",
+      "model": "telea",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 27.29629999998724,
+      "warm": [
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-telea-wasm.png",
+          "decodeMs": 15.912199999991572,
+          "inferenceMs": 5.255200000014156,
+          "compositeMs": 3.6793000000179745,
+          "durationMs": 24.849199999996927
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-telea-wasm.png",
+          "decodeMs": 15.285799999983283,
+          "inferenceMs": 4.3386999999929685,
+          "compositeMs": 3.5997999999963213,
+          "durationMs": 23.22609999999986
+        },
+        {
+          "algorithm": "telea",
+          "provider": "wasm",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-telea-wasm.png",
+          "decodeMs": 17.07019999998738,
+          "inferenceMs": 5.247700000007171,
+          "compositeMs": 3.925199999997858,
+          "durationMs": 26.246099999989383
+        }
+      ],
+      "rssBaselineMiB": 179.9921875,
+      "rssPeakMiB": 283.078125,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 1.3740646455295842,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "wall-scratch",
+      "model": "ns",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 29.350600000005215,
+      "warm": [
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-ns-wasm.png",
+          "decodeMs": 20.798199999990175,
+          "inferenceMs": 3.1600000000034925,
+          "compositeMs": 4.302900000009686,
+          "durationMs": 28.263999999995576
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-ns-wasm.png",
+          "decodeMs": 21.996000000013737,
+          "inferenceMs": 3.3123999999952503,
+          "compositeMs": 4.067800000018906,
+          "durationMs": 29.379000000015367
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\wall-scratch-ns-wasm.png",
+          "decodeMs": 20.98080000001937,
+          "inferenceMs": 3.111700000008568,
+          "compositeMs": 37.24189999999362,
+          "durationMs": 61.337100000004284
+        }
+      ],
+      "rssBaselineMiB": 283.20703125,
+      "rssPeakMiB": 286.09375,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 0,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "brick-large",
+      "model": "ns",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 50.360799999994924,
+      "warm": [
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-ns-wasm.png",
+          "decodeMs": 21.513799999986077,
+          "inferenceMs": 19.892499999987194,
+          "compositeMs": 6.325299999996787,
+          "durationMs": 47.735399999975925
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-ns-wasm.png",
+          "decodeMs": 21.027100000006612,
+          "inferenceMs": 20.142699999996694,
+          "compositeMs": 60.297400000010384,
+          "durationMs": 101.4710999999952
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\brick-large-ns-wasm.png",
+          "decodeMs": 30.824099999997998,
+          "inferenceMs": 28.79020000001765,
+          "compositeMs": 8.98210000002291,
+          "durationMs": 68.60130000000936
+        }
+      ],
+      "rssBaselineMiB": 283.20703125,
+      "rssPeakMiB": 287.10546875,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 17.254903650096207,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "branches",
+      "model": "ns",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 35.42540000000736,
+      "warm": [
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-ns-wasm.png",
+          "decodeMs": 21.780400000017835,
+          "inferenceMs": 7.471599999989849,
+          "compositeMs": 20.407700000010664,
+          "durationMs": 49.664099999994505
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-ns-wasm.png",
+          "decodeMs": 22.30299999998533,
+          "inferenceMs": 7.986600000003818,
+          "compositeMs": 4.965599999995902,
+          "durationMs": 35.259499999985565
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\branches-ns-wasm.png",
+          "decodeMs": 20.87750000000233,
+          "inferenceMs": 7.313099999999395,
+          "compositeMs": 4.954200000007404,
+          "durationMs": 33.14790000001085
+        }
+      ],
+      "rssBaselineMiB": 283.20703125,
+      "rssPeakMiB": 289.28515625,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 48.755524353959814,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "text",
+      "model": "ns",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 30.11600000000908,
+      "warm": [
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-ns-wasm.png",
+          "decodeMs": 20.092900000017835,
+          "inferenceMs": 4.4429999999993015,
+          "compositeMs": 3.903500000014901,
+          "durationMs": 28.442700000014156
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-ns-wasm.png",
+          "decodeMs": 21.722700000012992,
+          "inferenceMs": 4.613099999987753,
+          "compositeMs": 3.8040000000037253,
+          "durationMs": 30.143000000010943
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\text-ns-wasm.png",
+          "decodeMs": 20.695999999996275,
+          "inferenceMs": 4.622700000007171,
+          "compositeMs": 18.781400000007125,
+          "durationMs": 44.10439999998198
+        }
+      ],
+      "rssBaselineMiB": 283.20703125,
+      "rssPeakMiB": 289.4765625,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 43.85909197835803,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "face-scratch",
+      "model": "ns",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 48.603899999987334,
+      "warm": [
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-ns-wasm.png",
+          "decodeMs": 45.108399999997346,
+          "inferenceMs": 2.6283999999868684,
+          "compositeMs": 19.0451999999932,
+          "durationMs": 66.78570000000764
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-ns-wasm.png",
+          "decodeMs": 27.699099999997998,
+          "inferenceMs": 2.840299999981653,
+          "compositeMs": 33.2447000000102,
+          "durationMs": 63.78719999999157
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\face-scratch-ns-wasm.png",
+          "decodeMs": 25.538100000005215,
+          "inferenceMs": 2.6106999999901745,
+          "compositeMs": 18.326499999995576,
+          "durationMs": 46.47829999998794
+        }
+      ],
+      "rssBaselineMiB": 283.20703125,
+      "rssPeakMiB": 289.4765625,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 14.397222222222222,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "hair-edge",
+      "model": "ns",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 64.49170000001322,
+      "warm": [
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-ns-wasm.png",
+          "decodeMs": 25.342600000003586,
+          "inferenceMs": 3.604300000006333,
+          "compositeMs": 36.29079999998794,
+          "durationMs": 65.24000000001979
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-ns-wasm.png",
+          "decodeMs": 26.013799999986077,
+          "inferenceMs": 3.631099999998696,
+          "compositeMs": 18.807299999985844,
+          "durationMs": 48.45590000000084
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 0,
+            "top": 0,
+            "width": 512,
+            "height": 512
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\hair-edge-ns-wasm.png",
+          "decodeMs": 25.58640000000014,
+          "inferenceMs": 3.744700000010198,
+          "compositeMs": 22.52160000000731,
+          "durationMs": 51.85739999997895
+        }
+      ],
+      "rssBaselineMiB": 283.20703125,
+      "rssPeakMiB": 289.4765625,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 27.350689655172413,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    },
+    {
+      "fixture": "transparent-wide",
+      "model": "ns",
+      "requested": "wasm",
+      "actual": "wasm",
+      "coldMs": 22.884700000024168,
+      "warm": [
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-ns-wasm.png",
+          "decodeMs": 16.374299999995856,
+          "inferenceMs": 3.469100000016624,
+          "compositeMs": 4.019100000004983,
+          "durationMs": 23.86710000000312
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-ns-wasm.png",
+          "decodeMs": 20.051199999987148,
+          "inferenceMs": 4.2348000000056345,
+          "compositeMs": 3.8148999999975786,
+          "durationMs": 28.10319999998319
+        },
+        {
+          "algorithm": "ns",
+          "provider": "wasm",
+          "roi": {
+            "left": 640,
+            "top": 512,
+            "width": 512,
+            "height": 256
+          },
+          "outputPath": "D:\\VibeCode\\Henji-AI\\docs\\task\\图片编辑能力完善\\任务\\1.6-对比\\transparent-wide-ns-wasm.png",
+          "decodeMs": 20.07289999999921,
+          "inferenceMs": 4.342999999993481,
+          "compositeMs": 3.79759999999078,
+          "durationMs": 28.21590000001015
+        }
+      ],
+      "rssBaselineMiB": 283.20703125,
+      "rssPeakMiB": 289.4765625,
+      "gpuBaselineMiB": 7935,
+      "gpuDevicePeakMiB": 7935,
+      "maskedMae": 0,
+      "unchangedPixels": true,
+      "alphaPreserved": true
+    }
+  ],
+  "fallbacks": [
+    {
+      "event": "local_inference.provider.fallback",
+      "context": {
+        "model": "lama",
+        "provider": "dml",
+        "next": "cpu",
+        "reason": "Non-zero status code returned while running MatMul node. Name:'/generator/model/model.5/conv1/ffc/convg2g/fu/rttn/MatMul_5' Status Message: N:\\_work\\1\\s\\onnxruntime\\core\\providers\\dml\\DmlExecutionProvider\\src\\MLOperatorAuthorImpl.cpp(2591)\\onnxruntime.dll!00007FF9A45DC299: (caller: 00007FF9A45DB93A)"
+      }
+    }
+  ]
+}

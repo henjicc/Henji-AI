@@ -3,6 +3,7 @@ import type { LocalExecutionProvider } from './providers'
 import type { OnnxExtraOutput } from './tracking/onnxGraphOutputs'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
 import type { TrackingFrameReply, TrackingFrameRequest } from '../../../../src/platform/contracts/tracking'
+import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
 
 /*
  * 主进程 ↔ 本地推理后台进程（utility process）的消息。主进程负责解析素材、准备模型与缓存位置，
@@ -11,6 +12,7 @@ import type { TrackingFrameReply, TrackingFrameRequest } from '../../../../src/p
 
 export type LocalInferenceModelName = 'yunet' | 'rvm' | 'selfie' | 'ppocr'
   | 'etam_image_encoder' | 'etam_mask_decoder' | 'etam_memory_encoder' | 'etam_memory_attention' | 'etam_mask_downsample' | 'vittrack'
+  | 'migan' | 'lama'
 
 export interface LocalInferenceModelFile {
   name: LocalInferenceModelName
@@ -45,6 +47,7 @@ export type LocalInferenceFailureCode = 'decode' | 'inference' | 'output' | 'can
 
 export type LocalInferenceRequest =
   | { type: 'analyze'; job: SmartRegionAnalysisJob }
+  | { type: 'inpaint'; job: ImageInpaintJob }
   | { type: 'track'; job: TrackingJob }
   | { type: 'candidates'; job: TrackingCandidatesJob }
   | { type: 'cancel'; id: string }
@@ -64,6 +67,6 @@ export interface SmartRegionAnalysisResult {
 export type LocalInferenceEvent =
   | { type: 'frames'; id: string; requestId: string; request: TrackingFrameRequest }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult }
+  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult }
   | { type: 'failed'; id: string; code: LocalInferenceFailureCode; message: string }
   | { type: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }

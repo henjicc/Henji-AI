@@ -14,6 +14,8 @@ export const LOCAL_MODEL_IDS = [
   'text_detection_ppocr',
   'object_tracking_vittrack',
   'object_tracking_efficienttam',
+  'image_inpainting_migan',
+  'image_inpainting_lama',
 ] as const
 
 export type LocalModelId = (typeof LOCAL_MODEL_IDS)[number]

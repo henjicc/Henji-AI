@@ -14,7 +14,7 @@ import type { LocalExecutionProvider, LocalInferenceLog } from './providers'
  * 推理会话、解码、压缩、写文件都由调用方注入，单测可以用替身跑完整流程。
  */
 
-export interface LocalTensorInput { type: 'float32' | 'float16' | 'int64'; data: Float32Array | Uint16Array | BigInt64Array; dims: readonly number[] }
+export interface LocalTensorInput { type: 'float32' | 'float16' | 'int64' | 'uint8'; data: Float32Array | Uint16Array | BigInt64Array | Uint8Array; dims: readonly number[] }
 export interface LocalTensorOutput { data: unknown; dims: readonly number[] }
 export interface LocalModelRunner {
   readonly provider: LocalExecutionProvider

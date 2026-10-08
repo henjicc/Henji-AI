@@ -1,0 +1,8 @@
+{
+  "backend": "cpu",
+  "responseMs": 1.7409999999999854,
+  "quiescenceMs": 623.9517000000001,
+  "retainedUntilRun": true,
+  "releases": 2,
+  "publications": 0
+}

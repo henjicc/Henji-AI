@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LocalInferenceHost, type LocalInferenceChild } from './host'
 import type { LocalInferenceEvent, LocalInferenceRequest, SmartRegionAnalysisJob, SmartRegionAnalysisResult } from './protocol'
+import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
 
 class FakeChild extends EventEmitter implements LocalInferenceChild {
   readonly sent: LocalInferenceRequest[] = []
@@ -16,6 +17,20 @@ const result: SmartRegionAnalysisResult = { model: 'yunet', provider: 'dml', fra
 
 describe('本地推理宿主', () => {
   afterEach(() => { vi.useRealTimers() })
+
+  it('图片修补与分析共用宿主，重复标识被拒绝；完成进度与补丁回执正常转发', async () => {
+    const child = new FakeChild(); const host = new LocalInferenceHost({ fork: () => child, log: vi.fn() })
+    const inpaint: ImageInpaintJob = { id: 'patch', sourcePath: 'source.png', maskPath: 'mask.png', roi: { left: 0, top: 0, width: 20, height: 10 }, quality: 'blemish', algorithm: 'telea', providers: ['cpu'], outputPath: 'patch.png' }
+    const progress = vi.fn(); const pending = host.inpaint(inpaint, progress)
+    expect(child.sent).toEqual([{ type: 'inpaint', job: inpaint }])
+    await expect(host.inpaint(inpaint)).rejects.toMatchObject({ code: 'inference' })
+    child.reply({ type: 'progress', id: 'patch', done: 1, total: 4 })
+    const patch: ImageInpaintResult = { algorithm: 'telea', provider: 'wasm', roi: inpaint.roi, outputPath: inpaint.outputPath, decodeMs: 1, inferenceMs: 1, compositeMs: 1, durationMs: 3 }
+    child.reply({ type: 'done', id: 'patch', result: patch })
+    await expect(pending).resolves.toEqual(patch)
+    expect(progress).toHaveBeenCalledWith(1, 4)
+    host.dispose()
+  })
 
   it('按需启动后台进程，转发进度、日志与结果；空闲后结束进程，再次分析重新启动', async () => {
     vi.useFakeTimers()

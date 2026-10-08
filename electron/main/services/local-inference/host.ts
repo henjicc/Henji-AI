@@ -1,6 +1,7 @@
 import type { LocalInferenceEvent, LocalInferenceFailureCode, LocalInferenceRequest, SmartRegionAnalysisJob, SmartRegionAnalysisResult } from './protocol'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
 import { assertTrackingFrames, type TrackingFrameProvider } from '../../../../src/platform/contracts/tracking'
+import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
 
 /*
  * 主进程侧的本地推理宿主：按需启动后台进程（utility process），派发分析、转发进度与日志、取消；
@@ -88,6 +89,10 @@ export class LocalInferenceHost {
     return this.send<SmartRegionAnalysisResult>({ type: 'analyze', job }, job.id, progress)
   }
 
+  inpaint(job: ImageInpaintJob, progress: (done: number, total: number) => void = () => undefined): Promise<ImageInpaintResult> {
+    return this.send<ImageInpaintResult>({ type: 'inpaint', job }, job.id, progress)
+  }
+
   /** 跟踪（4.10）：与分析同一个后台进程、同一个队列（显卡与解码都是独占负载）。 */
   track(job: TrackingJob, progress: (done: number, total: number) => void = () => undefined, frames?: TrackingFrameProvider): Promise<TrackingJobResult> {
     return this.send<TrackingJobResult>({ type: 'track', job }, job.id, progress, frames)
@@ -99,6 +104,7 @@ export class LocalInferenceHost {
 
   private send<T>(request: LocalInferenceRequest, id: string, progress: (done: number, total: number) => void, frames?: TrackingFrameProvider): Promise<T> {
     if (this.disposed) return Promise.reject(new LocalInferenceFailure('cancelled', '本地推理已关闭。'))
+    if (this.pending.has(id)) return Promise.reject(new LocalInferenceFailure('inference', '本地推理作业标识重复。'))
     clearTimeout(this.idleTimer)
     const child = this.ensureChild()
     return new Promise<T>((resolve, reject) => {

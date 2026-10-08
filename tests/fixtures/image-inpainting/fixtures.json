@@ -1,0 +1,86 @@
+[
+  {
+    "name": "wall-scratch",
+    "source": "wall-scratch-source.png",
+    "original": "wall-scratch-original.png",
+    "mask": "wall-scratch-mask.png",
+    "roi": {
+      "left": 0,
+      "top": 0,
+      "width": 512,
+      "height": 512
+    }
+  },
+  {
+    "name": "brick-large",
+    "source": "brick-large-source.png",
+    "original": "brick-large-original.png",
+    "mask": "brick-large-mask.png",
+    "roi": {
+      "left": 0,
+      "top": 0,
+      "width": 512,
+      "height": 512
+    }
+  },
+  {
+    "name": "branches",
+    "source": "branches-source.png",
+    "original": "branches-original.png",
+    "mask": "branches-mask.png",
+    "roi": {
+      "left": 0,
+      "top": 0,
+      "width": 512,
+      "height": 512
+    }
+  },
+  {
+    "name": "text",
+    "source": "text-source.png",
+    "original": "text-original.png",
+    "mask": "text-mask.png",
+    "roi": {
+      "left": 0,
+      "top": 0,
+      "width": 512,
+      "height": 512
+    }
+  },
+  {
+    "name": "face-scratch",
+    "source": "face-scratch-source.png",
+    "original": "face-scratch-original.png",
+    "mask": "face-scratch-mask.png",
+    "roi": {
+      "left": 0,
+      "top": 0,
+      "width": 512,
+      "height": 512
+    }
+  },
+  {
+    "name": "hair-edge",
+    "source": "hair-edge-source.png",
+    "original": "hair-edge-original.png",
+    "mask": "hair-edge-mask.png",
+    "roi": {
+      "left": 0,
+      "top": 0,
+      "width": 512,
+      "height": 512
+    }
+  },
+  {
+    "name": "transparent-wide",
+    "source": "transparent-wide-source.png",
+    "original": "transparent-wide-original.png",
+    "mask": "transparent-wide-mask.png",
+    "roi": {
+      "left": 640,
+      "top": 512,
+      "width": 512,
+      "height": 256
+    }
+  }
+]

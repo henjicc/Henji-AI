@@ -26,6 +26,8 @@ function state(): LocalModelsState {
     models: [
       { ...model('face_detection_yunet', fake.ready.has('face_detection_yunet') ? 'ready' : 'not_downloaded'), ...fake.modelDetails },
       model('object_tracking_efficienttam', 'unavailable'),
+      model('image_inpainting_migan', fake.ready.has('image_inpainting_migan') ? 'ready' : 'not_downloaded'),
+      model('image_inpainting_lama', fake.ready.has('image_inpainting_lama') ? 'ready' : 'not_downloaded'),
     ],
   }
 }
@@ -58,6 +60,14 @@ const yunet = { kind: 'local_model.item', id: 'face_detection_yunet' }
 async function change(target: { kind: string; id: string }, properties: Record<string, unknown>) {
   return applicationReflectionHandlers.changeEntities({ summary: '本地模型', changes: [{ kind: 'set_properties', target, entityType: target.kind, properties }] }, context())
 }
+
+it.each(['image_inpainting_migan', 'image_inpainting_lama'])('新修补模型 %s 沿现有通用读改下载/删除，不新增同义工具', async id => {
+  const ref = { kind: 'local_model.item', id }
+  await change(ref, { 'local_model.item.downloaded': true })
+  expect((await applicationReflectionHandlers.readEntity({ ref, propertyIds: ['local_model.item.status'] }, context())).properties).toEqual({ 'local_model.item.status': 'ready' })
+  await change(ref, { 'local_model.item.downloaded': false })
+  expect(fake.calls).toEqual([`ensure:${id}`, `remove:${id}`])
+})
 
 it('通过通用 change 下载并删除本地模型，下载服务状态随之变化', async () => {
   await change(yunet, { 'local_model.item.downloaded': true })

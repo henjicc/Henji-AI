@@ -73,6 +73,41 @@ export const LOCAL_MODEL_SOURCE_PROBES: Readonly<Record<DownloadRegion, string>>
 
 export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
   {
+    id: 'image_inpainting_migan',
+    title: { zh: '图片修补 MI-GAN', en: 'Image Inpainting MI-GAN' },
+    purpose: { zh: '在本机移除图片中选定的物体或瑕疵，适合快速修补', en: 'Locally removes selected objects or blemishes for fast image repair' },
+    folderName: { zh: '图片修补 MI-GAN', en: 'Image Inpainting MI-GAN' },
+    homepage: 'https://github.com/Picsart-AI-Research/MI-GAN',
+    license: { spdx: 'MIT', url: 'https://github.com/Picsart-AI-Research/MI-GAN/blob/main/LICENSE-WEIGHTS' },
+    availability: 'available',
+    files: [{
+      name: 'migan.onnx', role: 'model', sizeBytes: 29_546_882,
+      sha256: '593eba0b7e04730f1b61c0a3cbca68d97d8d6a7ff5c6a44a7b9d7fcd880fc5ae',
+      sources: [
+        // 镜像即使尚未上传也会按现有选择器回退，下载必须经过上面的字节/哈希校验。
+        { region: 'domestic', label: 'own-modelscope', url: ownUrl('image_inpainting_migan/migan.onnx') },
+        { region: 'global', label: 'huggingface-author', url: 'https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/migan.onnx' },
+      ],
+    }],
+  },
+  {
+    id: 'image_inpainting_lama',
+    title: { zh: '图片修补 LaMa', en: 'Image Inpainting LaMa' },
+    purpose: { zh: '在本机修补较大区域与重复纹理，可按需要另行下载', en: 'Locally repairs larger regions and repeating textures; downloaded on demand' },
+    folderName: { zh: '图片修补 LaMa', en: 'Image Inpainting LaMa' },
+    homepage: 'https://github.com/Carve-Photos/lama',
+    license: { spdx: 'Apache-2.0', url: 'https://github.com/Carve-Photos/lama/blob/main/LICENSE' },
+    availability: 'available',
+    files: [{
+      name: 'lama_fp32.onnx', role: 'model', sizeBytes: 208_044_816,
+      sha256: '1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6',
+      sources: [
+        { region: 'domestic', label: 'own-modelscope', url: ownUrl('image_inpainting_lama/lama_fp32.onnx') },
+        { region: 'global', label: 'huggingface-carve', url: 'https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/lama_fp32.onnx' },
+      ],
+    }],
+  },
+  {
     id: 'face_detection_yunet',
     title: { zh: '人脸检测 YuNet', en: 'Face Detection (YuNet)' },
     purpose: { zh: '找出画面中的人脸，用于人脸打码与人脸区域', en: 'Finds faces for face blur and face regions' },
