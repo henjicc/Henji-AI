@@ -81,6 +81,7 @@ const importPublication = (asset = codeAssetFixture()) => ({ asset, media: [], m
 function collectionBoundary() {
   const bytes = new Map<string, Uint8Array>(); const assets = new Map<string, AssetRecord>(); const platform = getPlatform()
   vi.spyOn(platform.system.fs, 'exists').mockImplementation(async path => bytes.has(path))
+  vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
   vi.spyOn(platform.system.fs, 'writeFile').mockImplementation(async (path, value, options) => { if (options?.exclusive && bytes.has(path)) throw new Error('exists'); bytes.set(path, value) })
   vi.spyOn(platform.system.fs, 'readFile').mockImplementation(async path => bytes.get(path)!)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/')
@@ -768,7 +769,11 @@ it('公共收录引用确切附加效果，清单不包含选中片段的生成�
     const input = { documentRef: { kind: 'video_edit.document', id }, targetRef: { kind: 'video_edit.effect', id: `${id}:${effect.id}` } }
     const result = await app.call('collect_video_edit_code_asset', input)
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true, data: { resultRef: { kind: 'asset' }, verification: { verified: true } } })
-    expect(decodeCodeAsset(bytes.get('D:/filter.henji-code')!)).toMatchObject({ ...testCodeAssetSource(filterSource, 1), parameters: { gain: .8 } })
+    // 能力调用不弹保存对话框，写进项目“导出”文件夹。
+    expect(platform.system.dialog.save).not.toHaveBeenCalled()
+    const written = [...bytes.keys()].find(path => /导出[\\/]可编辑代码素材\.henji-code$/.test(path))
+    expect(written, [...bytes.keys()].join(',')).toBeDefined()
+    expect(decodeCodeAsset(bytes.get(written!)!)).toMatchObject({ ...testCodeAssetSource(filterSource, 1), parameters: { gain: .8 } })
     expect((await app.call('collect_video_edit_code_asset', { ...input, documentRef: { kind: 'video_edit.document', id: 'other-project' } })).ok).toBe(false)
     expect(platform.system.fs.writeFile).toHaveBeenCalledOnce()
   } finally { app.dispose() }

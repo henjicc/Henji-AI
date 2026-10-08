@@ -19,7 +19,7 @@ export function registerVideoEditProgramCapture(owner: VideoEditInstance, sequen
 }
 
 /** The current real Program frame is captured; cached publication is retryable. */
-export async function captureVideoEditProgramFrame(projectId: string, frame?: number, requestedPath?: string, signal?: AbortSignal): Promise<VideoEditOutputReceipt | null> {
+export async function captureVideoEditProgramFrame(projectId: string, frame?: number, requestedPath?: string | (() => Promise<string>), signal?: AbortSignal): Promise<VideoEditOutputReceipt | null> {
   const owner = requireVideoEditInstance(projectId)
   if (pending.has(owner)) throw new Error('此剪辑正在保存节目选帧，请等待完成。')
   pending.add(owner)
@@ -35,13 +35,13 @@ export async function captureVideoEditProgramFrame(projectId: string, frame?: nu
       if (!listVideoEditInstances().includes(owner) || owner.document !== baseline || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing || videoEditProgramCommandIdentity(projectId) !== command) throw new Error('原节目帧已改变或剪辑已关闭，请重新选帧。')
     }
     const cached = published.get(owner)
-    if (!requestedPath && cached?.document === baseline && cached.sequenceId === document.id && cached.frame === target) {
+    if (typeof requestedPath !== 'string' && cached?.document === baseline && cached.sequenceId === document.id && cached.frame === target) {
       try { await verifyVideoEditOutput(cached.output); assertCurrent(); return cached.output } catch (error) { assertCurrent(); published.delete(owner); logger.debug('已发布节目选帧不可复用', { event: 'video_edit.program_frame.cache_discarded', error }) }
     }
     const provider = providers.get(owner)
     if (!provider || provider.sequenceId !== document.id) throw new Error('请打开当前序列的节目面板后再选帧。')
     const platform = getPlatform()
-    const path = requestedPath ?? await platform.system.dialog.save({ defaultPath: `${baseline.name}-${target}.png`, filters: [{ name: 'PNG 图片', extensions: ['png'] }] })
+    const path = typeof requestedPath === 'function' ? await requestedPath() : requestedPath ?? await platform.system.dialog.save({ defaultPath: `${baseline.name}-${target}.png`, filters: [{ name: 'PNG 图片', extensions: ['png'] }] })
     if (!path) return null
     assertCurrent()
     if (await platform.system.fs.exists(path)) throw new Error('请选择新的文件名保存选帧，避免覆盖已有文件。')

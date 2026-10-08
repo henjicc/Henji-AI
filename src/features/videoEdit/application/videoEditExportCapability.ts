@@ -1,10 +1,10 @@
 import { VIDEO_EDIT_EXPORT_CAPABILITIES, videoEditExportInputSchema, videoEditExportQuerySchema } from '@/core/application-control/domains/videoEdit/videoEditExportCapabilities'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
-import { enqueueVideoEditExports, joinVideoEditOutputPath, retryVideoEditExportJob, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
+import { enqueueVideoEditExports, retryVideoEditExportJob, videoEditProjectOutputDirectory, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
-import { requireVideoEditInstance, videoEditDocumentOperations } from './videoEditService'
+import { requireVideoEditInstance } from './videoEditService'
 import { resolveConfiguredDestination } from '@/features/canvas/application/canvasDownloadService'
 import type { CanvasDownloadDestination } from '@/core/application-control/domains/canvas/canvasExportApplicationCapabilities'
 import { patchVideoEditExportSettings, resolveVideoEditExportSettings, videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
@@ -18,12 +18,7 @@ export function videoEditExportJobSummary(job: VideoEditExportJob): Record<strin
 
 /** 能力调用没有人点保存对话框：默认放进剪辑所在项目的“导出”文件夹，也可指定已配置的快速下载/预设目录。 */
 async function videoEditCapabilityOutputDirectory(projectId: string, destination: CanvasDownloadDestination | undefined): Promise<string> {
-  if (destination) return resolveConfiguredDestination(destination)
-  const container = requireVideoEditInstance(projectId).session.documentMeta.container
-  if (container.kind !== 'project') throw new Error('剪辑不在项目里，无法确定导出位置；请指定 destination（快速下载或预设目录）。')
-  const project = await videoEditDocumentOperations().findProject(container.projectId)
-  if (!project) throw new Error('剪辑所在项目找不到，请指定 destination。')
-  return joinVideoEditOutputPath(project.path, '导出')
+  return destination ? resolveConfiguredDestination(destination) : videoEditProjectOutputDirectory(projectId)
 }
 export async function handleVideoEditExportCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
   const definition = VIDEO_EDIT_EXPORT_CAPABILITIES.find(value => value.id === id)

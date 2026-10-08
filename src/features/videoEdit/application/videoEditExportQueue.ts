@@ -6,7 +6,7 @@ import { resolveVideoEditExportSettings, videoEditSequenceExportSettings, videoE
 import { getPlatform } from '@/platform/runtime'
 import { exportVideoEdit, videoEditExportTask, type VideoEditExportTask } from './videoEditExport'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
-import { holdVideoEditActivity, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, videoEditExportRange, type VideoEditInstance } from './videoEditService'
+import { holdVideoEditActivity, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, videoEditDocumentOperations, videoEditExportRange, type VideoEditInstance } from './videoEditService'
 import { videoEditMediaPathKey } from './videoEditMedia'
 import { adaptVideoEditExportPreset, assertVideoEditExportSupported } from '../engine/videoEditExportEncoder'
 
@@ -156,6 +156,23 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
     if ([...paths].some(key => occupied.has(key))) throw new Error('输出位置已被另一个导出占用，请选择不同文件名。')
     videoEditExportQueue.append(jobs); return jobs
   } catch (error) { for (const release of releases) release(); throw error }
+}
+/** 剪辑所在项目的“导出”文件夹：助手与外部智能体的产物默认放这里，不弹保存对话框。 */
+export async function videoEditProjectOutputDirectory(projectId: string): Promise<string> {
+  const container = requireVideoEditInstance(projectId).session.documentMeta.container
+  if (container.kind !== 'project') throw new Error('剪辑不在项目里，无法确定输出位置；请指定 destination（快速下载或预设目录）。')
+  const project = await videoEditDocumentOperations().findProject(container.projectId)
+  if (!project) throw new Error('剪辑所在项目找不到，请指定 destination。')
+  return joinVideoEditOutputPath(project.path, '导出')
+}
+/** 在目录中取不重名的文件路径（重名加“ (2)”序号），不覆盖已有文件。 */
+export async function uniqueVideoEditOutputPath(directory: string, name: string, extension: string): Promise<string> {
+  const platform = getPlatform(); await platform.system.fs.mkdir(directory, { recursive: true })
+  const base = name.replace(/[\\/:*?"<>|]/g, '-').trim() || '输出'
+  for (let attempt = 1; ; attempt++) {
+    const candidate = joinVideoEditOutputPath(directory, `${attempt === 1 ? base : `${base} (${attempt})`}.${extension}`)
+    if (!await platform.system.fs.exists(candidate)) return candidate
+  }
 }
 /** 目录与文件名拼接，沿用目录自身的分隔符。 */
 export function joinVideoEditOutputPath(directory: string, name: string): string {

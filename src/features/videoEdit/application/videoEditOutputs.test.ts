@@ -57,6 +57,7 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(platform.system.fs, 'exists').mockImplementation(async path => media.has(path))
+  vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
   vi.spyOn(platform.system.fs, 'writeFile').mockImplementation(async (path, bytes, options) => { if (options?.exclusive && media.has(path)) throw new Error('exists'); media.set(path, bytes) })
   vi.spyOn(platform.system.fs, 'remove').mockImplementation(async path => { media.delete(path) })
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/')

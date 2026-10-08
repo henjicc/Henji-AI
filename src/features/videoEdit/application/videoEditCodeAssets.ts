@@ -72,7 +72,7 @@ export async function readVideoEditCodeAsset(assetId: string, signal?: AbortSign
 }
 
 /** Save the raw fixed instance, never the currently evaluated animation values. */
-export async function collectVideoEditCodeAsset(projectId: string, target: VideoEditCodeAssetTarget, options: { libraryId?: string; path?: string } = {}, signal?: AbortSignal): Promise<AssetRecord | null> {
+export async function collectVideoEditCodeAsset(projectId: string, target: VideoEditCodeAssetTarget, options: { libraryId?: string; path?: string | (() => Promise<string>) } = {}, signal?: AbortSignal): Promise<AssetRecord | null> {
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const targetKey = JSON.stringify(target)
   if (collecting.has(owner)) throw new Error('原剪辑正在收录代码素材，请等待完成。')
   collecting.add(owner)
@@ -84,7 +84,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     const source = codeMaterialSource(baseline, selected.code)
     prepareCodeMaterialParameters(readVideoEditCodeMetadata(owner, baseline)(selected.code), selected.code)
     const cached = latest.get(owner)
-    if (!options.path && cached?.document === baseline && cached.target === targetKey) {
+    if (typeof options.path !== 'string' && cached?.document === baseline && cached.target === targetKey) {
       await verifyVideoEditOutput(cached.receipt); assertOwner(owner, baseline, signal)
       return await collectVideoEditOutput(cached.receipt, options, signal)
     }
@@ -100,7 +100,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     }
     const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files.map(file => ({ ...file, location: `asset:${file.hash}` })), ...(source.imports ? { imports: assetPins(source.imports) } : {}) }, codeSources: [...new Map([...source.files, ...componentFileReferences(source.imports)].map(file => [file.hash, { hash: file.hash, source: documentCodeSourceResolver().read(file.hash, file.location, file.path) }])).values()], parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
     const bytes = encodeCodeAsset(manifest); const platform = getPlatform()
-    const path = options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
+    const path = typeof options.path === 'function' ? await options.path() : options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
     assertOwner(owner, baseline, signal)
     if (!path) return null
     if (await platform.system.fs.exists(path)) throw new Error('请选择新文件名保存代码素材，避免覆盖原文件。')
