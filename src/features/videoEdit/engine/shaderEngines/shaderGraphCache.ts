@@ -1,4 +1,4 @@
-import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { shaderGraphIssues, shaderGraphLayerProps, shaderGraphStructureKey, type ShaderGraphSpec } from '@/core/videoEdit/shaderGraph/spec'
 import { createLogger } from '@/core/logging'
 import { ShaderGraphError, ShaderGraphSession, type ShaderGraphRenderRequest } from './shaderGraphSession'
@@ -40,6 +40,28 @@ export class ShaderGraphCache {
     return run
   }
 
+  private warming: Promise<void> = Promise.resolve()
+  private dummy?: { texture: GpuTexture; output: GpuTexture }
+  /**
+   * 后台预热：没缓存过的图先用 32×18 的透明画面渲一帧，把框架管线编译好（管线与尺寸无关，正式尺寸只重建纹理）。
+   * 逐个排队执行，不并发抢 GPU；失败只记日志，正式渲染时会再报给用户。
+   */
+  warm(specs: readonly ShaderGraphSpec[]): Promise<void> {
+    const pending = specs.filter(spec => !this.entries.has(shaderGraphStructureKey(spec)))
+    if (!pending.length) return this.warming
+    this.warming = this.warming.then(async () => {
+      for (const spec of pending) {
+        if (this.entries.has(shaderGraphStructureKey(spec))) continue
+        this.dummy ??= { texture: this.device.createTexture({ size: [32, 18], format: 'rgba8unorm', usage: 0x04 | 0x10 }), output: this.device.createTexture({ size: [32, 18], format: 'rgba8unorm', usage: 0x04 | 0x10 }) }
+        const started = performance.now()
+        await this.render(spec, { timeSeconds: 0, width: 32, height: 18, input: this.dummy.texture, second: this.dummy.texture, output: this.dummy.output, outputFormat: 'rgba8unorm' }).then(
+          () => logger.debug('着色器图预热完成', { event: 'video_edit.shader_graph.warmed', context: { layers: spec.layers.length, ms: Math.round(performance.now() - started) } }),
+          error => logger.warn('着色器图预热失败', { event: 'video_edit.shader_graph.warm_failed', context: { layers: spec.layers.length }, error }))
+      }
+    })
+    return this.warming
+  }
+
   /** 帧边界调用：释放长时间没用到的会话。 */
   releaseIdle(now = performance.now()): void {
     for (const [key, entry] of this.entries) {
@@ -50,6 +72,7 @@ export class ShaderGraphCache {
   }
 
   dispose(): void {
+    this.dummy?.texture.destroy(); this.dummy?.output.destroy(); this.dummy = undefined
     for (const entry of this.entries.values()) void entry.session.then(session => session.dispose(), () => undefined)
     this.entries.clear()
   }

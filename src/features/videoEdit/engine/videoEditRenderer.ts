@@ -1,4 +1,6 @@
 import { createLogger } from '@/core/logging'
+import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effects'
+import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { videoEditClipMedia, videoEditNestedComposition, videoEditDuration, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
@@ -211,6 +213,14 @@ export class VideoEditRenderer {
     }
     this.document = document
     this.resizeCanvas()
+    this.warmShaderGraphs()
+  }
+  /** 打开剪辑、加效果或转场后，在后台把新出现的着色器图先编译好（见 ShaderGraphCache.warm）。 */
+  private warmShaderGraphs(): void {
+    const compositor = this.compositor
+    if (!compositor) return
+    const specs = videoEditShaderGraphWarmSpecs(this.document.sequences ?? [this.document], kind => isShaderGraphTransition(kind) ? shaderGraphTransitionSpec(kind) : undefined)
+    if (specs.length) void compositor.code().then(code => code.shaderGraphs().warm(specs)).catch(() => undefined)
   }
   /** Newly imported/replaced fonts must rebuild cached glyphs and nested text surfaces. */
   async invalidateFontResources(): Promise<void> {
@@ -360,7 +370,7 @@ export class VideoEditRenderer {
     active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor); this.warmShaderGraphs() }
     const effectErrors: string[] = []
     const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
       const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`

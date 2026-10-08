@@ -5,7 +5,7 @@ import { SHADER_COMPONENTS, type ShaderGraphSpec } from '../../../../core/videoE
 import { ShaderGraphError, ShaderGraphSession } from './shaderGraphSession'
 import { ShaderGraphCache } from './shaderGraphCache'
 import { initShaderGraphTestGpu } from './shaderGraphGpu.testing'
-import { SHADER_GRAPH_EFFECT_DEFINITIONS, shaderGraphEffectProps, shaderGraphEffectSpec } from '../../../../core/videoEdit/shaderGraph/effects'
+import { SHADER_GRAPH_EFFECT_DEFINITIONS, shaderGraphEffectProps, shaderGraphEffectSpec, videoEditShaderGraphWarmSpecs } from '../../../../core/videoEdit/shaderGraph/effects'
 import { SHADER_GRAPH_TRANSITION_KINDS, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '../../../../core/videoEdit/shaderGraph/transitions'
 import { resolveVideoEditTransitionParams } from '../../../../core/videoEdit/transitionParams'
 import { videoEditBuiltinDefaults } from '../../../../core/videoEdit/builtinEffects'
@@ -141,6 +141,17 @@ describe('shader graph effects', () => {
     cache.dispose(); a.destroy(); b.destroy()
     expect(failures).toEqual([])
   }, 300_000)
+  it('warms effect and transition graphs found in the edit so the first real frame does not compile', async () => {
+    const cache = new ShaderGraphCache(device)
+    const specs = videoEditShaderGraphWarmSpecs([{ clips: [{ effects: [{ builtin: { id: 'shaders.Vignette' } }, { builtin: { id: 'gaussian_blur' } }, { builtin: { id: 'shaders.Vignette' } }] }], transitions: [{ kind: 'shaders.LinearWipe' }, { kind: 'wipe' }] }], kind => kind.startsWith('shaders.') ? shaderGraphTransitionSpec(kind as never) : undefined)
+    expect(specs).toHaveLength(2)
+    await cache.warm(specs)
+    const input = texture(); const output = texture(); fill(input, () => [10, 20, 30, 255])
+    const started = performance.now()
+    await cache.render(specs[0], { timeSeconds: 0, width: W, height: H, input, output, outputFormat: 'rgba8unorm' })
+    expect(performance.now() - started).toBeLessThan(250)
+    cache.dispose(); input.destroy(); output.destroy()
+  })
   it('maps percent positions and blend modes onto component props', () => {
     expect(shaderGraphEffectProps('shaders.Vignette', { center_x: 25, center_y: 75 })).toMatchObject({ center: { x: 0.25, y: 0.75 } })
     expect(shaderGraphEffectProps('shaders.Aurora', { blend_mode: 'screen', color_a: THEME_SEED_ACCENT_HEX.violet })).toMatchObject({ blendMode: 'screen', colorA: THEME_SEED_ACCENT_HEX.violet })

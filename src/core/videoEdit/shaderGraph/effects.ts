@@ -107,3 +107,16 @@ export interface VideoEditShaderClock { shaderTimeSeconds?: number }
 export function shaderGraphEffectSpec(id: string): ShaderGraphSpec {
   return { layers: [{ type: SHADER_GRAPH_INPUT }, { type: id.slice(SHADER_EFFECT_PREFIX.length), id: 'fx' }] }
 }
+
+/**
+ * 剪辑里静态可知的着色器图（片段效果、着色器转场），用于后台预热：新结构首次编译约半秒，
+ * 放在打开剪辑/加效果时做，播放到那一段时就不再卡一下。代码素材的 shader 图层要逐帧求值才知道，不在此列。
+ */
+export function videoEditShaderGraphWarmSpecs(sequences: ReadonlyArray<{ clips: ReadonlyArray<{ effects?: ReadonlyArray<{ builtin?: { id: string } }> }>; transitions?: ReadonlyArray<{ kind: string }> }>, transitionSpec: (kind: string) => ShaderGraphSpec | undefined): ShaderGraphSpec[] {
+  const specs = new Map<string, ShaderGraphSpec>()
+  for (const sequence of sequences) {
+    for (const clip of sequence.clips) for (const effect of clip.effects ?? []) if (effect.builtin && isShaderGraphEffect(effect.builtin.id)) specs.set(effect.builtin.id, shaderGraphEffectSpec(effect.builtin.id))
+    for (const transition of sequence.transitions ?? []) { const spec = transitionSpec(transition.kind); if (spec) specs.set(transition.kind, spec) }
+  }
+  return [...specs.values()]
+}
