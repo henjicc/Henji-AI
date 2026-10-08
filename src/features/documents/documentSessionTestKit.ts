@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { sha256HexString } from '@/utils/save/hash'
+import type { DocumentsPlatform } from '@/platform/contracts/documents'
+import { packageComponentSource, type CodeComponent, type CodeComponentVersion } from '@/core/videoEdit/codeMaterial/components'
 
 import { documentKindRegistry, type DocumentKindDescriptor } from '@/core/documents/kinds'
 import { entryNameKey, keepBothEntryName, normalizeEntryName } from '@/core/documents/naming'
@@ -112,6 +115,44 @@ export interface FakeDocumentCommandsOptions {
 }
 
 export class FakeDocumentCommands implements DocumentOperationCommands {
+  readonly codeFiles = new Map<string, string>()
+  private readonly codeVersions = new Map<string, number>()
+  private readonly codeComponents = new Map<string, CodeComponent[]>()
+  private codeRoot(id: string): string {
+    const meta = this.documents.get(id)!.meta
+    return meta.container.kind === 'project' ? this.projects.get(meta.container.projectId)!.path : TEST_DOCUMENT_ROOT
+  }
+  writeCodeVersion: DocumentsPlatform['writeCodeVersion'] = async request => {
+    const folder = request.folder ?? `${request.name}-${request.definitionId}`
+    const key = `${this.codeRoot(request.target.id)}:${request.definitionId}`; const number = (this.codeVersions.get(key) ?? 0) + 1; this.codeVersions.set(key, number)
+    const files = []
+    for (const [path, source] of Object.entries(request.contents.files)) {
+      const location = `${this.codeRoot(request.target.id)}/代码/${folder}/v${number}/${path}`
+      this.codeFiles.set(location, source); files.push({ path, location, hash: await sha256HexString(source) })
+    }
+    return { folder, files }
+  }
+  readCodeFile: DocumentsPlatform['readCodeFile'] = async file => { const source = this.codeFiles.get(file.location); if (source === undefined) throw new Error(`${file.path} 的源码文件缺失。`); return source }
+  withdrawCodeComponent: DocumentsPlatform['withdrawCodeComponent'] = async request => {
+    const root = this.codeRoot(request.target.id); const components = this.codeComponents.get(root) ?? []
+    for (const component of components) { component.versions = component.versions.filter(version => version.location !== request.location || version.hash !== request.hash); component.latestVersion = Math.max(0, ...component.versions.map(version => version.version)) }
+    this.codeComponents.set(root, components.filter(component => component.versions.length))
+  }
+  listCodeComponents: DocumentsPlatform['listCodeComponents'] = async target => structuredClone(this.codeComponents.get(this.codeRoot(target.id)) ?? [])
+  publishCodeComponent: DocumentsPlatform['publishCodeComponent'] = async request => {
+    const root = this.codeRoot(request.target.id); const components = this.codeComponents.get(root) ?? []
+    let name = request.name
+    if (request.keepBoth) { let suffix = 2; while (components.some(component => component.name === name)) name = `${request.name} (${suffix++})` }
+    const component = components.find(component => component.name === name) ?? { name, latestVersion: 0, versions: [] }
+    let version = component.latestVersion + 1
+    while (this.codeFiles.has(`${root}/代码/组件库/${name}/v${version}.ts`)) version++
+    const location = `${root}/代码/组件库/${name}/v${version}.ts`
+    const source = packageComponentSource(request.source, { name, version, description: request.description, exports: request.exports, imports: request.imports.map(({ name, version, hash }) => ({ name, version, hash })) })
+    const record: CodeComponentVersion = { name, version, location, hash: await sha256HexString(source), source, exports: request.exports, description: request.description, imports: request.imports }
+    this.codeFiles.set(location, source); component.latestVersion = version; component.versions.push(record)
+    if (!components.includes(component)) components.push(component); this.codeComponents.set(root, components)
+    return structuredClone(record)
+  }
   readonly documents = new Map<string, StoredDocument>()
   readonly projects = new Map<string, ProjectSummary>()
   readonly trashed: string[] = []

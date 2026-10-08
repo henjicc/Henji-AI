@@ -1,4 +1,7 @@
-import { codeFilesFromInput, verifyCodeSourceReferences, documentCodeSourceResolver, mergeCodeSources, resolveCodeMaterialFiles, type CodeSource } from '@/core/videoEdit/codeMaterial/sources'
+import { importAssetCodeComponents, withdrawProjectCodeComponents } from './videoEditCodeStorage'
+import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoEdit/codeAsset'
+import { prepareCodeVersionPublication } from './videoEditCodeStorage'
+import { loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from '@/core/videoEdit/codeMaterialVersions'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
@@ -43,9 +46,9 @@ function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProg
 }
 /** Trial uses the same full-resolution source/compiler/GPU path as preview and
  * export. Its bounded temporary session is always released before publication. */
-function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader, media: VideoEditMedia[] = [], endpoints = false, codeSources: CodeSource[] = []): Array<{ document: VideoEditComposition; frame: number }> {
+function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader, media: VideoEditMedia[] = [], endpoints = false): Array<{ document: VideoEditComposition; frame: number }> {
   const sequence = createVideoEditSequence('源码候选检查')
-  const document: VideoEditDocument = { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name: sequence.name, revision: 0, media, bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence], codeSources }
+  const document: VideoEditDocument = { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name: sequence.name, revision: 0, media, bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
   const frames = candidates.flatMap(candidate => {
     const program = read(candidate.filter ?? candidate.item.code!)
     sequence.width = program.width; sequence.height = program.height
@@ -75,12 +78,13 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     if (!listVideoEditInstances().includes(owner)) controller.abort(new Error('原剪辑已关闭，候选已取消。'))
     else if (owner.document !== baseline) controller.abort(new Error('检查期间剪辑已修改，候选已取消。'))
   })
-  const candidates: Candidate[] = []; let codeSources = baseline.codeSources ?? []
+  const candidates: Candidate[] = []
   logger.info('检查代码素材', { event: 'video_edit.code.create.start', context: { projectId, count: inputs.length } })
   try {
     for (const input of inputs) {
-      const { definition, program, codeSources: addedSources } = await makeCodeMaterialDefinition(codeFilesFromInput(input), source => compileVideoEditCode(source, controller.signal))
-      codeSources = mergeCodeSources(codeSources, addedSources)
+      const contents = codeFilesFromInput(input)
+      const publicationState = await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports)
+      const { definition, program } = await makeCodeMaterialDefinition(contents, source => compileVideoEditCode(source, controller.signal), publicationState)
       controller.signal.throwIfAborted()
       if (expectedKind === 'generator' && program.kind !== 'generator') throw new Error('输入滤镜应添加为效果，不能直接创建生成素材。')
       if (expectedKind === 'filter' && program.kind !== 'filter') throw new Error('效果源码需要声明为输入滤镜。')
@@ -108,7 +112,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     }
     if (owner.document !== baseline) throw new Error('源码检查期间剪辑已修改，请重新检查候选。')
     const items = candidates.filter(candidate => !candidate.filter).map(candidate => candidate.item)
-    let candidateDocument = videoEditDocumentSchema.parse({ ...baseline, codeSources, media: [...baseline.media.map(media => publication?.media.find(incoming => incoming.id === media.id) ?? media), ...(publication?.media ?? []).filter(media => !baseline.media.some(existing => existing.id === media.id))], codeMaterials: [...(baseline.codeMaterials ?? []), ...candidates.map(candidate => candidate.definition)], items: [...baseline.items, ...items] })
+    let candidateDocument = videoEditDocumentSchema.parse({ ...baseline, media: [...baseline.media.map(media => publication?.media.find(incoming => incoming.id === media.id) ?? media), ...(publication?.media ?? []).filter(media => !baseline.media.some(existing => existing.id === media.id))], codeMaterials: [...(baseline.codeMaterials ?? []), ...candidates.map(candidate => candidate.definition)], items: [...baseline.items, ...items] })
     const filter = candidates.find(candidate => candidate.filter)
     let filterTrial: Array<{ document: VideoEditComposition; frame: number }> | undefined
     if (publication && filter) {
@@ -128,7 +132,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     const read = readVideoEditCodeMetadata(owner, candidateDocument)
     validateCodeMaterialDocument(candidateDocument, read)
     const placements = publication || afterCreate ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
-    const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication), codeSources)
+    const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication))
     await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal)
     if (publication) await publication.beforePublish()
     controller.signal.throwIfAborted()
@@ -161,10 +165,19 @@ export async function createVideoEditFilterMaterials(projectId: string, inputs: 
 
 /** Asset imports reuse the source creation transaction with a complete instance. */
 export async function createVideoEditCodeAssetInstance(projectId: string, publication: CodeAssetPublication, binId?: string, signal?: AbortSignal): Promise<{ definitionId: string; itemId?: string }> {
-  await verifyCodeSourceReferences(publication.asset.sourceVersion, documentCodeSourceResolver(publication.asset))
+  await verifyCodeSourceReferences({ files: [...publication.asset.sourceVersion.files, ...componentFileReferences(publication.asset.sourceVersion.imports)] }, assetCodeSourceResolver(publication.asset))
+  publication = { ...publication, asset: await importAssetCodeComponents(projectId, publication.asset, signal) }
+  try {
+  rememberCodeAssetSources(publication.asset)
   signal?.throwIfAborted()
-  const created = (await createCheckedMaterials(projectId, [{ ...resolveCodeMaterialFiles(publication.asset.sourceVersion, documentCodeSourceResolver(publication.asset)), name: publication.asset.name, ...(binId ? { binId } : {}) }], undefined, signal, publication))[0]
+  const created = (await createCheckedMaterials(projectId, [{ ...resolveCodeMaterialFiles(publication.asset.sourceVersion, assetCodeSourceResolver(publication.asset)), name: publication.asset.name, ...(binId ? { binId } : {}) }], undefined, signal, publication))[0]
   return { definitionId: created.definition.id, ...(!created.filter ? { itemId: created.item.id } : {}) }
+  } catch (error) {
+    // Parents are withdrawn before their children; fixed file references remain readable.
+    const components = publication.asset.sourceVersion.imports ?? []
+    const flattened = (pins: typeof components): typeof components => pins.flatMap(pin => [...flattened(pin.imports), pin])
+    await withdrawProjectCodeComponents(projectId, flattened(components)); throw error
+  }
 }
 
 /** Append checked immutable versions. Existing defaults, items and clips keep
@@ -176,25 +189,25 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
   const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('源码版本创建已取消。'))
   signal?.addEventListener('abort', cancel, { once: true })
   const off = subscribeVideoEditDomain(() => { if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) controller.abort(new Error('原剪辑已关闭或内容已改变，候选已取消。')) })
-  let codeSources = baseline.codeSources ?? []
   const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []
   try {
     for (const input of inputs) {
       const definition = definitions.get(input.definitionId)
       if (!definition) throw new Error('代码素材定义不属于此剪辑。')
-      const result = await appendCodeMaterialVersion(definition, codeFilesFromInput(input), source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver({ codeSources }))
-      codeSources = mergeCodeSources(codeSources, result.codeSources)
+      await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
+      const contents = codeFilesFromInput(input)
+      const result = await appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), await prepareCodeVersionPublication(projectId, contents))
       controller.signal.throwIfAborted()
       if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
       definitions.set(definition.id, result.definition); added.push(result.versionId)
       rememberVideoEditCodeMetadata(owner, definition.id, result.definition.versions.find(version => version.id === result.versionId)!, result.program)
       trials.push(candidate({ ...result.definition, defaultVersionId: result.versionId }, result.program, {}))
     }
-    const document = videoEditDocumentSchema.parse({ ...baseline, codeSources, codeMaterials: [...definitions.values()] })
+    const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: [...definitions.values()] })
     const read = readVideoEditCodeMetadata(owner, document)
     // Separate candidates may append to the same definition; each isolated
     // source trial avoids duplicate definitions while retaining one queue.
-    await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, codeSources)), controller.signal)
+    await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false)), controller.signal)
     controller.signal.throwIfAborted()
     if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, () => document)

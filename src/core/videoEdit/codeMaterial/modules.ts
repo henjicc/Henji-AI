@@ -75,7 +75,8 @@ export function linkCodeMaterialFiles(input: string | CodeMaterialFiles): { file
     if (active.length >= CODE_V3_LIMITS.depth) throw new CodeMaterialError('BUDGET', '模块依赖深度超出编译预算。', originalCodeSourceSpan(caller ?? module.file))
     active.push(path)
     for (const declaration of module.imports) {
-      const target = resolveCodeImportPath(path, (declaration.moduleSpecifier as ts.StringLiteral).text, declaration)
+      const specifier = (declaration.moduleSpecifier as ts.StringLiteral).text
+      const target = contents.resolvedImports?.[path]?.[specifier] ?? resolveCodeImportPath(path, specifier, declaration)
       const dependency = modules.get(target)
       if (!dependency) fail(declaration, `导入文件 ${target} 不存在；可用文件：${[...modules.keys()].join('、')}`)
       visit(target, declaration)

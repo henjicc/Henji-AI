@@ -1,3 +1,4 @@
+import { withdrawCodeComponentRequestSchema, writeCodeVersionRequestSchema, readCodeFileRequestSchema, publishCodeComponentRequestSchema } from '../../../src/core/videoEdit/codeMaterial/storageContract'
 import type { z } from 'zod'
 
 import {
@@ -43,6 +44,11 @@ function parseWith<T>(schema: z.ZodType<T>, optional = false): (input: unknown) 
 export function registerDocumentsIpc(): void {
   const service = (): DocumentsPlatform => getDocumentService()
   const c = DOCUMENT_IPC_CHANNELS
+  registerIpcHandler(c.withdrawCodeComponent, parseWith(withdrawCodeComponentRequestSchema), request => service().withdrawCodeComponent(request))
+  registerIpcHandler(c.writeCodeVersion, parseWith(writeCodeVersionRequestSchema), request => service().writeCodeVersion(request))
+  registerIpcHandler(c.readCodeFile, parseWith(readCodeFileRequestSchema), file => service().readCodeFile(file))
+  registerIpcHandler(c.listCodeComponents, parseWith(documentTargetSchema), target => service().listCodeComponents(target))
+  registerIpcHandler(c.publishCodeComponent, parseWith(publishCodeComponentRequestSchema), request => service().publishCodeComponent(request))
   registerIpcHandler(c.listDocuments, parseWith(documentListQuerySchema, true), (query) => service().listDocuments(query))
   registerIpcHandler(c.readDocument, parseWith(documentTargetSchema), (target) => service().readDocument(target))
   registerIpcHandler(c.createDocument, parseWith(createDocumentRequestSchema), (request) => service().createDocument(request))

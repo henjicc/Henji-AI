@@ -50,12 +50,12 @@ describe('代码多文件与内容寻址', () => {
     const shared = 'export const color=[1,0,0,1];'; const addressed = await addressCodeMaterialFiles({ entry:'main.ts', files:{'main.ts':main,'a.ts':shared,'b.ts':shared} })
     expect(addressed.codeSources).toHaveLength(2); expect(addressed.files.find(file=>file.path==='a.ts')!.hash).toBe(addressed.files.find(file=>file.path==='b.ts')!.hash)
     const sources=mergeCodeSources(addressed.codeSources,addressed.codeSources)
-    expect(resolveCodeMaterialFiles(addressed,documentCodeSourceResolver({codeSources:sources})).files['b.ts']).toBe(shared)
-    const document={codeSources:sources,codeMaterials:[{versions:[{files:addressed.files.filter(file=>file.path==='main.ts')}]}]}
-    expect(pruneCodeSources(document).codeSources).toHaveLength(1)
-    expect(pruneCodeSources({...document,codeMaterials:[]}).codeSources).toHaveLength(0)
-    await expect(verifyCodeSourceReferences(addressed,documentCodeSourceResolver({codeSources:sources}))).resolves.toBeUndefined()
-    await expect(verifyCodeSourceReferences(addressed,documentCodeSourceResolver({codeSources:sources.map(value=>({...value,source:value.source+' '}))}))).rejects.toThrow('哈希')
+    expect(resolveCodeMaterialFiles(addressed,documentCodeSourceResolver()).files['b.ts']).toBe(shared)
+    const document={codeMaterials:[{versions:[{files:addressed.files.filter(file=>file.path==='main.ts')}]}]}
+    expect(pruneCodeSources(document)).toBe(document)
+    expect(pruneCodeSources({...document,codeMaterials:[]}).codeMaterials).toEqual([])
+    await expect(verifyCodeSourceReferences(addressed,documentCodeSourceResolver())).resolves.toBeUndefined()
+    await expect(verifyCodeSourceReferences(addressed,{read: hash => sources.find(value=>value.hash===hash)!.source+' '})).rejects.toThrow('哈希')
   })
   it('source 简写与 main.ts 文件集合等价且写入二选一', async () => {
     const source=main.slice(main.indexOf('export default')).replace('[card(w)]','[]')

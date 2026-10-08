@@ -1,7 +1,9 @@
-import { codeMaterialFilesKey, documentCodeSourceResolver, resolveCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import '../application/videoEditCodeStorage'
+import { expandPinnedCodeComponents } from '@/core/videoEdit/codeMaterial/components'
+import { codeMaterialFilesKey, codeVersionContentKey, documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { createLogger } from '@/core/logging'
-import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
+import { codeMaterialVersion as codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialProgram, CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
@@ -75,16 +77,14 @@ export class VideoEditCodeSources {
   constructor(private document: VideoEditComposition, private readonly acquireRuntime: () => Promise<CodeRuntime>, private readonly compiler: Compiler = new VideoEditCodeCompiler()) { this.checkVersions(document) }
   private checkVersions(document: VideoEditComposition): void {
     const additions = new Map<string, KnownVersion>(); let bytes = this.knownBytes
-    const resolver = documentCodeSourceResolver(document)
     for (const definition of document.codeMaterials ?? []) for (const version of definition.versions) {
       const key = identity(definition.id, version.id); const known = this.known.get(key) ?? additions.get(key)
-      const files = resolveCodeMaterialFiles(version, resolver)
-      const source = codeMaterialFilesKey(files)
+      const source = codeVersionContentKey(version)
       if (known) {
         if (known.source !== source || known.apiVersion !== version.apiVersion || known.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被改写，请创建新版本。')
         continue
       }
-      const size = Object.values(files.files).reduce((sum, value) => sum + new TextEncoder().encode(value).byteLength, 0)
+      const size = new TextEncoder().encode(source).byteLength
       bytes += size
       additions.set(key, { source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, bytes: size })
     }
@@ -98,7 +98,8 @@ export class VideoEditCodeSources {
   }
   cancel(): void { this.epoch++; this.controller?.abort(); this.controller = undefined }
   private async program(key: string, version: CodeMaterialVersion, signal: AbortSignal, pinned: ReadonlySet<string>): Promise<CodeMaterialProgram> {
-    const files = resolveCodeMaterialFiles(version, documentCodeSourceResolver(this.document)); const source = codeMaterialFilesKey(files)
+    await loadCodeSourceReferences(version); signal.throwIfAborted()
+    const resolver = documentCodeSourceResolver(); const files = expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver); const source = codeMaterialFilesKey(files)
     const cached = this.programs.get(key)
     if (cached) {
       if (cached.source !== source) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被改写，请创建新版本。')
@@ -223,6 +224,11 @@ export class VideoEditCodeSources {
       })
       this.gpuWork = work.catch(() => { this.releaseUnused(this.protectedKeys) })
       await work; assertCurrent(); return result
+    } catch (error) {
+      // File I/O can fail before the serialized GPU work starts. Drop this frame's
+      // retained pictures without touching a newer frame's protected working set.
+      if (imageOutcome && (this.controller === controller || !this.controller)) { this.protectedKeys = new Set(); this.releaseUnused(this.protectedKeys) }
+      throw error
     } finally { if (this.controller === controller) this.controller = undefined }
   }
   /** 片段在这一帧的作用区域蒙版（智能区域按素材时间取分析结果，手绘遮罩按几何栅格化）；读取失败只记日志，效果按未就绪跳过。 */
@@ -235,7 +241,7 @@ export class VideoEditCodeSources {
       return undefined
     }
   }
-  diagnostics() { return { programs: this.programs.size, programBytes: this.programBytes, staticPictures: this.staticPictures.size, seenVersions: this.known.size, seenSourceBytes: this.knownBytes, compiler: this.compiler.diagnostics?.() } }
+  diagnostics() { return { programs: this.programs.size, programBytes: this.programBytes, staticPictures: this.staticPictures.size, seenVersions: this.known.size, seenManifestBytes: this.knownBytes, compiler: this.compiler.diagnostics?.() } }
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true; this.cancel(); this.compiler.dispose(); this.protectedKeys.clear()

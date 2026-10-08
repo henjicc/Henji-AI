@@ -1,3 +1,6 @@
+import type { CodeFileReference } from '../../core/videoEdit/codeMaterial/sources'
+import type { CodeComponent, CodeComponentVersion } from '../../core/videoEdit/codeMaterial/components'
+import type { WithdrawCodeComponentRequest, WriteCodeVersionRequest, PublishCodeComponentRequest } from '../../core/videoEdit/codeMaterial/storageContract'
 import type {
   CreateDocumentRequest,
   CreateProjectRequest,
@@ -49,6 +52,12 @@ import type {
 export type * from '../../core/documents/types'
 
 export interface DocumentsPlatform {
+  /** 事务补偿：撤回可发现的发布，保留源码及固定引用，不删除文件。 */
+  withdrawCodeComponent(request: WithdrawCodeComponentRequest): Promise<void>
+  writeCodeVersion(request: WriteCodeVersionRequest): Promise<{ folder: string; files: CodeFileReference[] }>
+  readCodeFile(file: CodeFileReference): Promise<string>
+  listCodeComponents(target: DocumentTarget): Promise<CodeComponent[]>
+  publishCodeComponent(request: PublishCodeComponentRequest): Promise<CodeComponentVersion>
   /** 列出文档（查作品索引；按类型、容器、草稿与缺失筛选），按更新时间倒序。 */
   listDocuments(query?: DocumentListQuery): Promise<DocumentSummary[]>
   /** 读取文档：内容里的位置已换回绝对路径，并授权媒体协议读取所在外部容器与外部引用目录。 */
@@ -115,6 +124,11 @@ export interface DocumentsPlatform {
 
 /** IPC 通道名与 DocumentsPlatform 方法一一对应（主进程注册与 preload 桥共用）。 */
 export const DOCUMENT_IPC_CHANNELS = {
+  withdrawCodeComponent: 'documents:code:withdrawComponent',
+  writeCodeVersion: 'documents:code:writeVersion',
+  readCodeFile: 'documents:code:readFile',
+  listCodeComponents: 'documents:code:listComponents',
+  publishCodeComponent: 'documents:code:publishComponent',
   listDocuments: 'documents:list',
   readDocument: 'documents:read',
   createDocument: 'documents:create',

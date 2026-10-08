@@ -13,6 +13,7 @@ import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
 import { measureCodeText } from '../videoEditGlyphMetrics'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
+import { portableCodeComponentFiles } from '@/core/videoEdit/codeMaterial/components'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 
 const logger = createLogger('features.videoEdit.styleKits')
@@ -73,7 +74,7 @@ export function captureVideoEditStyleSample(projectId: string, sequenceId: strin
   if (!clip?.code) throw new Error('请先选择一个 v3 代码片段。')
   const program = readVideoEditCodeProgram(owner, owner.document, clip.code)
   if (program.kind !== 'generator' || program.languageVersion !== 3) throw new Error('风格组件需要 v3 生成器。')
-  return styleKitSchema.parse({ ...kit, samples: [...kit.samples, { id: crypto.randomUUID(), name: clip.name, kind: 'chapter', source: codeMaterialSource(owner.document, clip.code).contents }] })
+  return styleKitSchema.parse({ ...kit, samples: [...kit.samples, { id: crypto.randomUUID(), name: clip.name, kind: 'chapter', source: portableCodeComponentFiles(codeMaterialSource(owner.document, clip.code).compilation) }] })
 }
 export function styleKitHostSummary(projectId: string, sequenceId: string): { ref: string | null; name: string; summary: string } {
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)

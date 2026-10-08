@@ -1,7 +1,8 @@
+import { loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import type { VideoEditComposition, VideoEditDocument } from '@/core/videoEdit/document'
 import { collectVideoEditFonts, missingVideoEditFonts, type VideoEditFontUse } from '@/core/videoEdit/fonts'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
+import { codeMaterialSource, codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { fontLibrarySnapshot, loadFontLibrary, prepareFontPayloads, validateFontName, type FontPayload } from '@/platform/fonts'
 import { compileVideoEditCode } from './videoEditCodeState'
 import { createLogger } from '@/core/logging'
@@ -12,7 +13,10 @@ export async function videoEditFontUses(document: VideoEditDocument | VideoEditC
   const read: CodeMaterialMetadataReader = instance => metadata.get(instance.versionId)!
   // Collect only font parameter declarations; compile through the existing cached compiler worker.
   const codes = [...document.items.flatMap(item => item.code ? [item.code] : []), ...('clips' in document ? [document, ...(document.sequences ?? [])] : document.sequences).flatMap(sequence => sequence.clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...(clip.effects ?? []).flatMap(effect => effect.code ? [effect.code] : [])]))]
-  for (const instance of codes) if (!metadata.has(instance.versionId)) metadata.set(instance.versionId, await compileVideoEditCode(codeMaterialSource(document, instance).contents))
+  for (const instance of codes) if (!metadata.has(instance.versionId)) {
+    await loadCodeSourceReferences(codeMaterialVersion(document, instance))
+    metadata.set(instance.versionId, await compileVideoEditCode(codeMaterialSource(document, instance).compilation))
+  }
   return collectVideoEditFonts(document, read)
 }
 export async function prepareVideoEditFonts(document: VideoEditDocument | VideoEditComposition): Promise<FontPayload[]> {

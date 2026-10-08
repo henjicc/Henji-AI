@@ -8,6 +8,34 @@ import { runSchemaMigrations, SCHEMA_MIGRATIONS, type SchemaMigration } from '..
 import { createTestEnvironment, HOST_STYLE, type TestEnvironment } from './documents.test-support'
 import { DocumentIndexStore } from './index-store'
 
+describe.skipIf(!process.versions.electron)('代码文件与原生作品索引', () => {
+  it('源码引用经 SQLite 文档索引存取、移动、复制与项目包往返仍可按 hash 读取', async () => {
+    const db = new Database(':memory:'); runSchemaMigrations(db)
+    const env = createTestEnvironment({ catalog: new DocumentIndexStore(db, HOST_STYLE) })
+    try {
+      const { service } = env.services
+      const project = await service.createProject({ name: '源码项目' }); const container = { kind: 'project' as const, projectId: project.id }
+      const created = await service.createDocument({ kind: 'video_edit', container, name: '源码剪辑' }); const target = { id: created.meta.id }
+      const stored = await service.writeCodeVersion({ target, definitionId: 'code', name: '人名条', contents: { entry: 'main.ts', files: { 'main.ts': 'export default {}', 'parts/card.ts': 'export const value=1;' } } })
+      const component = await service.publishCodeComponent({ target, name: '共享', source: 'export const width=16;', description: '', imports: [], exports: ['width'] })
+      const content = { media: [], bins: [], items: [], sequences: [], codeMaterials: [{ id: 'code', folder: stored.folder, versions: [{ files: stored.files, imports: [{ name: component.name, version: component.version, hash: component.hash, location: component.location, imports: [] }] }] }] }
+      await service.saveDocument({ target, expectedRevision: 0, content })
+      expect(await fsp.readFile(created.meta.path, 'utf8')).toContain('henji:/代码/')
+      const destination = await service.createProject({ name: '目标' })
+      const copied = await service.duplicateDocument({ target, container: { kind: 'project', projectId: destination.id }, onConflict: 'keepBoth' }); expect(copied.copiedFiles).toBe(3)
+      await service.moveDocument({ target, container: { kind: 'project', projectId: destination.id }, onConflict: 'keepBoth' })
+      const moved = (await service.readDocument(target)).content as typeof content
+      expect(await service.readCodeFile(moved.codeMaterials[0].versions[0].files[0])).toBe('export default {}')
+      const archive = await service.exportProjectPackage({ projectId: destination.id, destination: path.join(env.outside, '代码包') })
+      const imported = await service.importPackage({ source: archive.path }); expect(imported.type).toBe('project'); if (imported.type !== 'project') throw new Error('项目包导入结果类型错误')
+      const importedDoc = (await service.listDocuments({ container: { kind: 'project', projectId: imported.project!.id } }))[0]
+      const loaded = (await service.readDocument({ id: importedDoc.id })).content as typeof content
+      expect(await service.readCodeFile(loaded.codeMaterials[0].versions[0].files[1])).toBe('export const value=1;')
+      expect((await service.listCodeComponents({ id: importedDoc.id }))[0].name).toBe('共享')
+    } finally { db.close(); await env.cleanup() }
+  })
+})
+
 vi.mock('../logging/main-logger', () => ({
   createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))

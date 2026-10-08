@@ -31,8 +31,11 @@ import type { CodeAsset } from '@/core/videoEdit/codeAsset'
 import { decodeCodeAsset, encodeCodeAsset } from '@/core/videoEdit/codeAsset'
 import { collectVideoEditCodeAsset, importVideoEditCodeAsset } from './videoEditCodeAssets'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
+import { publishProjectCodeComponent, projectCodeComponents, refuseCodeComponentRemoval } from './videoEditCodeStorage'
+import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import * as mediaService from './videoEditMedia'
+import * as projectService from './videoEditService'
 import { openSeededVideoEdit, replaceSavedVideoEdit, savedVideoEdit, reopenVideoEdit, createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 
 const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[] }))
@@ -341,12 +344,27 @@ it('运行时跳过失败代码效果的画面不能让新增代码试渲染误�
   expect(close).toHaveBeenCalledOnce(); expect(boundary.activeRenderers).toBe(0)
 })
 
+it('创建结果附带参数化体检提示，不阻止提交', async () => {
+  const instance = await createLegacyTrackVideoEditProject(); const id = instance.document.id; const app = createApplicationHarness()
+  try {
+    const parent = { kind: 'video_edit.document', id }; const baseline = await app.read(parent)
+    const hardcoded = source.replace('fill:[0,1,1,ctx.params.amount]})', 'fill:[0,1,1,1]}),text({x:0,y:0,text:"写死的标题",fontSize:40,color:[1,1,1,1]})')
+    const created = await app.call('change_application_entities', { summary: '创建写死文字的素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': hardcoded } }] }] }, baseline.revisions as Record<string, number>)
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    const evidence = (created as { data: { evidence: Array<{ kind: string; fact: string; data?: Array<{ code: string }> }> } }).data.evidence.find(item => item.fact.startsWith('参数化体检'))
+    expect(evidence?.kind).toBe('observation')
+    expect(evidence?.data?.map(hint => hint.code)).toEqual(['UNUSED_PARAMETER', 'LITERAL_TEXT'])
+    expect(instance.document.codeMaterials).toHaveLength(1)
+  } finally { app.dispose() }
+})
+
 it('公共集合提交新源码、实例参数独立、保存重开只保存源码版本，手动与工具共用撤销', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id; const app = createApplicationHarness()
   try {
     const parent = { kind: 'video_edit.document', id }; const baseline = await app.read(parent)
     const created = await app.call('change_application_entities', { summary: '创作新的透明动态图形', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': source } }] }] }, baseline.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    expect(JSON.stringify(created)).not.toContain('参数化体检')
     expect(instance.past).toHaveLength(1); expect(boundary.dimensions).toEqual([[3840, 2160]]); expect(boundary.activeRenderers).toBe(0)
     const definition = instance.document.codeMaterials![0]; const item = instance.document.items[0]
     const materialRef = { kind: 'video_edit.code_material', id: `${id}:${definition.id}` }
@@ -412,10 +430,10 @@ it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写�
 it('磁盘替换固定版本或未检查引用不能进入剪辑，失败打开释放源码线程并保留原文件', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   await createVideoEditCodeItems(id, [{ source }]); const original = instance.document
-  expect(() => editVideoProject(id, document => { testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('seed:7', 'seed:8')); return document })).toThrow('被替换')
+  expect(() => editVideoProject(id, document => { testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('seed:7', 'seed:8')); return document })).toThrow('不可变')
   expect(instance.document).toBe(original)
   editVideoProject(id, document => ({ ...document, items: [] }))
-  expect(() => editVideoProject(id, document => { testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('seed:7', 'seed:8')); return document })).toThrow('被替换')
+  expect(() => editVideoProject(id, document => { testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('seed:7', 'seed:8')); return document })).toThrow('不可变')
   await closeVideoEditProject(id)
   const raw = savedVideoEdit(instance); testSetCodeSource(raw, raw.codeMaterials![0].versions[0], 'export default {render(){while(true){}}}')
   replaceSavedVideoEdit(id, raw); const invalid = JSON.stringify(savedVideoEdit(instance))
@@ -825,12 +843,11 @@ it('公共多文件创建与追加保留旧版本、哈希去重，保存清理�
     const revision = await app.read(parent)
     const appended = await app.call('change_application_entities', {summary:'追加多文件版本',changes:[{kind:'create_items',entityType:'video_edit.code_version',parent,items:[{properties:{'video_edit.code_version.definition_id':definition.id,'video_edit.code_version.files':nextFiles}}]}]},revision.revisions as Record<string,number>)
     expect(appended,JSON.stringify(appended)).toMatchObject({ok:true})
-    expect(owner.document.codeMaterials![0].versions[0]).toEqual(previous); expect(owner.document.codeSources).toHaveLength(3)
+    expect(owner.document.codeMaterials![0].versions[0]).toEqual(previous); expect(owner.document).not.toHaveProperty('codeSources')
     const newest=owner.document.codeMaterials![0].versions[1]
     expect((await app.read({kind:'video_edit.code_version',id:`${id}:${newest.id}`},['video_edit.code_version.files'])).properties).toEqual({'video_edit.code_version.files':nextFiles})
-    editVideoProject(id, document => ({...document,codeSources:[...document.codeSources!,{hash:'f'.repeat(64),source:'没有版本引用的源码'}]}))
     await saveVideoEdit(id); const reopened=await reopenVideoEdit(id)
-    expect(reopened.document.codeSources).toHaveLength(3)
+    expect(reopened.document).not.toHaveProperty('codeSources')
     expect(resolveCodeMaterialFiles(reopened.document.codeMaterials![0].versions[1],documentCodeSourceResolver(reopened.document))).toEqual({entry:'main.ts',files:nextFiles})
     const {bytes}=collectionBoundary()
     await collectVideoEditCodeAsset(id,{kind:'definition',definitionId:definition.id},{path:'D:/t88-multi.henji-code'})
@@ -862,4 +879,87 @@ it('jsdom多文件编辑经正式候选服务保存新版本，旧文件不变�
     expect(resolveCodeMaterialFiles(definition.versions[1],documentCodeSourceResolver(owner.document)).files['parts/card.ts']).toBe(changed)
     act(()=>{undoVideoEdit(id)});expect(owner.document.codeMaterials![0].versions).toEqual([original]);expect(getActiveVideoEditSequence(owner).clips[0].code!.versionId).toBe(original.id)
   } finally {view.unmount()}
+})
+
+
+it('项目组件通用创建读回、最新和指定版本钉住、依赖循环与删除保护', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id; const app = createApplicationHarness(); const parent = {kind:'video_edit.document',id}
+  const publish = async (name: string, source: string) => app.call('change_application_entities', {summary:'发布项目代码组件', changes:[{kind:'create_items',entityType:'video_edit.code_component',parent,items:[{properties:{'video_edit.code_component.name':name,'video_edit.code_component.source':source,'video_edit.code_component.description':'复用标题'}}]}]}, (await app.read(parent)).revisions as Record<string,number>)
+  expect(await publish('人名条','export const draw=()=>rect({x:0,y:0,width:20,height:20,fill:[1,0,0,1]});')).toMatchObject({ok:true})
+  const ref={kind:'video_edit.code_component',id:`${id}:人名条`}
+  expect((await app.read(ref,['video_edit.code_component.name','video_edit.code_component.latest_version','video_edit.code_component.exports'])).properties).toMatchObject({'video_edit.code_component.name':'人名条','video_edit.code_component.latest_version':1,'video_edit.code_component.exports':['draw']})
+  const main='import {draw} from "@组件/人名条";export default {apiVersion:1,languageVersion:3,name:"组件素材",kind:"generator",mode:"static",width:100,height:100,durationSeconds:1,seed:1,parameters:{},render(ctx){return [draw()]}}'
+  await createVideoEditCodeMaterials(id,[{source:main}]); const definition=owner.document.codeMaterials![0]; const pinned=structuredClone(definition.versions[0].imports)
+  expect(pinned?.[0].version).toBe(1)
+  expect(await publish('人名条','export const draw=()=>rect({x:0,y:0,width:40,height:20,fill:[0,1,0,1]});')).toMatchObject({ok:true})
+  expect(owner.document.codeMaterials![0].versions[0].imports).toEqual(pinned)
+  await createVideoEditCodeVersions(id,[{definitionId:definition.id,source:main}]); expect(owner.document.codeMaterials![0].versions[1].imports?.[0].version).toBe(2)
+  await createVideoEditCodeVersions(id,[{definitionId:definition.id,source:main.replace('@组件/人名条','@组件/人名条@1')}]); expect(owner.document.codeMaterials![0].versions[2].imports?.[0].version).toBe(1)
+  expect(()=>refuseCodeComponentRemoval('人名条',1)).toThrow('组件素材')
+  expect((await app.read(ref, ['video_edit.code_component.references', 'video_edit.code_component.source'])).properties).toMatchObject({ 'video_edit.code_component.references': expect.arrayContaining([expect.objectContaining({ materialRef: { kind: 'video_edit.code_material', id: `${id}:${definition.id}`, label: definition.name }, componentVersion: 1 })]), 'video_edit.code_component.source': expect.stringContaining('width:40') })
+  expect((await publish('默认','export default {}')).ok).toBe(false)
+  await publishProjectCodeComponent(id,{name:'上层',source:'import {draw} from "@组件/人名条";export const lower=()=>draw();'});
+  await expect(publishProjectCodeComponent(id,{name:'人名条',source:'import {lower} from "@组件/上层";export const draw=()=>lower();'})).rejects.toThrow('循环')
+  await expect(createVideoEditCodeMaterials(id,[{source:main.replace('@组件/人名条','@组件/不存在')}])).rejects.toThrow('不存在')
+})
+
+it('版本创建写文件先于文档提交，文件写入失败不修改文档或历史', async () => {
+  const owner=await createLegacyTrackVideoEditProject(); const baseline=owner.document; const history=owner.past.length; const platform=getPlatform()
+  const failure=vi.spyOn(platform.documents,'writeCodeVersion').mockImplementation(async () => {expect(owner.document).toBe(baseline);throw new Error('磁盘只读')})
+  await expect(createVideoEditCodeMaterials(owner.document.id,[{source}])).rejects.toThrow('磁盘只读')
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); failure.mockRestore()
+  const original=platform.documents.writeCodeVersion
+  const order=vi.spyOn(platform.documents,'writeCodeVersion').mockImplementation(async request=>{expect(owner.document).toBe(baseline);return original(request)})
+  await createVideoEditCodeMaterials(owner.document.id,[{source}]); expect(order).toHaveBeenCalledOnce(); expect(owner.document).not.toBe(baseline); order.mockRestore()
+})
+
+it('文件成功写入后文档提交失败，文档和历史保持原状，孤儿源码仍可读取', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const baseline = owner.document; const history = owner.past.length
+  const write = vi.spyOn(getPlatform().documents, 'writeCodeVersion')
+  const commit = vi.spyOn(projectService, 'editVideoProject').mockImplementation(() => { throw new Error('提交失败') })
+  await expect(createVideoEditCodeMaterials(owner.document.id, [{ source }])).rejects.toThrow('提交失败')
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(write).toHaveBeenCalledOnce()
+  const stored = await write.mock.results[0].value
+  expect(await getPlatform().documents.readCodeFile(stored.files[0])).toBe(source)
+  commit.mockRestore(); write.mockRestore()
+})
+
+it('组件集合批次失败撤回已发布版本，通用撤销保留源码且不复用版本号', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id; const executor = new CodeComponentCollectionExecutor()
+  const context = { requestId: 't89-component', exposure: 'assistant' as const, permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1' as const]) }
+  const create = (sources: string[]) => executor.apply({ kind: 'collection', entityType: 'video_edit.code_component', parent: { kind: 'video_edit.document', id }, expectedRevisions: {}, operation: { kind: 'create', items: sources.map(source => ({ properties: { 'video_edit.code_component.name': '可撤回', 'video_edit.code_component.source': source } })) } }, context)
+  await expect(create(['export const width=1;', 'export default {}'])).rejects.toThrow('默认导出')
+  expect(await projectCodeComponents(id)).toEqual([])
+  const result = await create(['export const width=2;']); const version = (await projectCodeComponents(id))[0].versions[0]
+  expect(version.version).toBe(2); expect(result.undoToken).toBeTruthy()
+  await executor.undo(result.undoToken!); expect(await projectCodeComponents(id)).toEqual([])
+  expect(await getPlatform().documents.readCodeFile({ path: '可撤回', location: version.location, hash: version.hash })).toContain('width=2')
+})
+
+it('代码资产往返携带递归固定组件，导入重名改写钉版本并写进目标项目', async () => {
+  const owner=await createLegacyTrackVideoEditProject(); const id=owner.document.id
+  await publishProjectCodeComponent(id,{name:'颜色',source:'export const fill=[1,0,0,1];'})
+  await publishProjectCodeComponent(id,{name:'人名条',source:'import {fill} from "@组件/颜色";export const draw=()=>rect({x:0,y:0,width:20,height:20,fill:fill});'})
+  const main='import {draw} from "@组件/人名条";export default {apiVersion:1,languageVersion:3,name:"复用素材",kind:"generator",mode:"static",width:100,height:100,durationSeconds:1,seed:1,parameters:{},render(ctx){return [draw()]}}'
+  const [definitionId]=await createVideoEditCodeMaterials(id,[{source:main}]); const {bytes}=collectionBoundary()
+  await collectVideoEditCodeAsset(id,{kind:'definition',definitionId},{path:'D:/t89-components.henji-code'})
+  const manifest=decodeCodeAsset(bytes.get('D:/t89-components.henji-code')!); expect(manifest.codeSources).toHaveLength(3); expect(manifest.sourceVersion.imports?.[0].imports[0].name).toBe('颜色')
+  const imported=await createVideoEditCodeAssetInstance(id,importPublication(manifest)); const version=owner.document.codeMaterials!.find(definition=>definition.id===imported.definitionId)!.versions[0]
+  expect(version.imports?.[0].name).toBe('人名条 (2)'); expect(version.imports?.[0].imports[0].name).toBe('颜色 (2)')
+  expect(testCodeSource(owner.document,version)).toContain('@组件/人名条 (2)@1')
+  expect((await projectCodeComponents(id)).map(component=>component.name)).toContain('颜色 (2)')
+  expect(version.files[0].location).toContain('/代码/'); expect(version.imports?.[0].location).toContain('/代码/组件库/')
+})
+
+it('源码编辑器项目组件只读查看、导入插入及模块发布共用领域服务', async () => {
+  const owner=await createLegacyTrackVideoEditProject();const id=owner.document.id
+  await publishProjectCodeComponent(id,{name:'组件卡',source:'export const draw=()=>rect({x:0,y:0,width:20,height:20,fill:[1,0,0,1]});'})
+  const main='import {draw} from "./parts/card";export default {apiVersion:1,languageVersion:3,name:"编辑项目组件",kind:"generator",mode:"static",width:100,height:100,durationSeconds:1,seed:1,parameters:{},render(ctx){return [draw()]}}'
+  const [itemId]=await createVideoEditCodeItems(id,[{files:{'main.ts':main,'parts/card.ts':'export const draw=()=>rect({x:0,y:0,width:20,height:20,fill:[1,0,0,1]});'}}]); const [clipId]=appendVideoEditItems(id,[itemId],owner.activeSequenceId)
+  const target={projectId:id,sequenceId:owner.activeSequenceId,clipId,versionId:owner.document.items.find(item=>item.id===itemId)!.code!.versionId}
+  const view=render(createElement(CodeSourceEditor,{editor:readVideoEditCodeEditor(target.projectId,target.sequenceId,target.clipId)}));fireEvent.click(view.getByText('查看与编辑源码'))
+  await waitFor(()=>expect(view.getByText('组件卡 · 第 1 版')).toBeTruthy());fireEvent.click(view.getByText('组件卡 · 第 1 版'));expect((view.getByLabelText('项目组件源码') as HTMLTextAreaElement).readOnly).toBe(true)
+  fireEvent.click(view.getByText('插入导入语句'));expect((view.getByLabelText('代码素材源码') as HTMLTextAreaElement).value).toContain('@组件/组件卡')
+  fireEvent.click(view.getByText('parts/card.ts'));fireEvent.click(view.getByText('发布为项目组件'));fireEvent.change(view.getByLabelText('组件名称'),{target:{value:'新组件'}});fireEvent.click(view.getByText('发布组件'))
+  await waitFor(()=>expect(view.getByText('新组件 · 第 1 版')).toBeTruthy());expect((await projectCodeComponents(id)).some(component=>component.name==='新组件')).toBe(true);view.unmount()
 })

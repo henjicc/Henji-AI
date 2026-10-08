@@ -1,3 +1,4 @@
+import type { DocumentCodeFiles } from './code-files'
 import type {
   CreateDocumentRequest,
   CreateProjectRequest,
@@ -62,8 +63,15 @@ export class DocumentService implements DocumentsPlatform {
     covers: DocumentCoverStore
     sessionState: DocumentSessionStateStore
     packages: DocumentPackageService
+    codeFiles: DocumentCodeFiles
     kinds: Pick<DocumentKindRegistry, 'forFileName'>
   }) {}
+
+  withdrawCodeComponent: DocumentsPlatform['withdrawCodeComponent'] = request => this.parts.codeFiles.withdraw(request)
+  writeCodeVersion: DocumentsPlatform['writeCodeVersion'] = request => this.parts.codeFiles.writeVersion(request)
+  readCodeFile: DocumentsPlatform['readCodeFile'] = file => this.parts.codeFiles.read(file)
+  listCodeComponents: DocumentsPlatform['listCodeComponents'] = target => this.parts.codeFiles.list(target)
+  publishCodeComponent: DocumentsPlatform['publishCodeComponent'] = request => this.parts.codeFiles.publish(request)
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {
     const { workspace, covers } = this.parts

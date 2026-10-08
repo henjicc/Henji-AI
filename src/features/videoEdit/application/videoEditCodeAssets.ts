@@ -1,4 +1,4 @@
-import { addressCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { componentFileReferences, documentCodeSourceResolver, loadCodeSourceReferences, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { CODE_ASSET_LIMITS, codeAssetSchema, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
@@ -19,6 +19,7 @@ import { verifyVideoEditMediaContent } from '../videoEditMediaContent'
 
 const logger = createLogger('features.videoEdit.codeAssets')
 export type VideoEditCodeAssetTarget = { kind: 'item'; itemId: string } | { kind: 'definition'; definitionId: string } | { kind: 'clip'; sequenceId: string; clipId: string; effectId?: string }
+const assetPins = (pins: readonly CodeComponentPin[] = []): CodeComponentPin[] => pins.map(pin => ({ ...pin, location: `asset:${pin.hash}`, imports: assetPins(pin.imports) }))
 const collecting = new WeakSet<VideoEditInstance>()
 const latest = new WeakMap<VideoEditInstance, { document: VideoEditDocument; target: string; receipt: VideoEditOutputReceipt }>()
 function assertOwner(owner: VideoEditInstance, baseline: VideoEditDocument, signal?: AbortSignal): void {
@@ -70,7 +71,10 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
   collecting.add(owner)
   try {
     assertOwner(owner, baseline, signal)
-    const selected = binding(owner, target); const source = codeMaterialSource(baseline, selected.code)
+    const selected = binding(owner, target)
+    const fixed = baseline.codeMaterials!.find(definition => definition.id === selected.code.definitionId)!.versions.find(version => version.id === selected.code.versionId)!
+    await loadCodeSourceReferences(fixed)
+    const source = codeMaterialSource(baseline, selected.code)
     prepareCodeMaterialParameters(readVideoEditCodeMetadata(owner, baseline)(selected.code), selected.code)
     const cached = latest.get(owner)
     if (!options.path && cached?.document === baseline && cached.target === targetKey) {
@@ -87,7 +91,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
       assertOwner(owner, baseline, signal)
       images.push({ id, path: media.path, content, ...(media.assetId ? { assetId: media.assetId } : {}) })
     }
-    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files }, codeSources: (await addressCodeMaterialFiles(source.contents)).codeSources, parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
+    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files.map(file => ({ ...file, location: `asset:${file.hash}` })), ...(source.imports ? { imports: assetPins(source.imports) } : {}) }, codeSources: [...new Map([...source.files, ...componentFileReferences(source.imports)].map(file => [file.hash, { hash: file.hash, source: documentCodeSourceResolver().read(file.hash, file.location, file.path) }])).values()], parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
     const bytes = encodeCodeAsset(manifest); const platform = getPlatform()
     const path = options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
     assertOwner(owner, baseline, signal)

@@ -1,8 +1,9 @@
 import { renameCodeMaterialFile } from '@/core/videoEdit/codeMaterial/fileEdits'
 import { Virtuoso } from 'react-virtuoso'
-import { codeFilePathSchema, codeMaterialFilesKey, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { codeFilePathSchema, codeMaterialFilesKey, loadCodeSourceReferences, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { CodeMaterialError, type CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
-import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { codeElementAtSource } from '@/core/videoEdit/codeElementSelection'
 import { selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames } from '../application/videoEditCodeElements'
 import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading, UiTextAreaField, UiInput, UiOptionButton } from '@/components/ui'
@@ -11,6 +12,7 @@ import type { VideoEditCodeEditorState } from '../application/videoEditCodeParam
 import { requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision } from '../application/videoEditService'
 import { videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 import { registerVideoEditCodeSourceOpener } from '../application/videoEditCodeElementEditing'
+import { ProjectCodeComponents } from './ProjectCodeComponents'
 
 function CandidatePreview({ candidate, onError }: { candidate: VideoEditCodeCandidate; onError: (reason: unknown) => void }): React.ReactElement {
   const host = useRef<HTMLCanvasElement>(null)
@@ -48,9 +50,17 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [checkingFiles, setCheckingFiles] = useState(true)
+  useEffect(() => {
+    let live = true; setCheckingFiles(true)
+    void loadCodeSourceReferences(codeMaterialVersion(owner.document, editor.code)).catch(reason => {
+      if (live) setError(reason instanceof Error ? reason.message : '源码文件未能读取，请恢复原文件后重试。')
+    }).finally(() => { if (live) setCheckingFiles(false) })
+    return () => { live = false }
+  }, [owner, editor.code])
   const selected = !editor.target.effectId && unchanged ? selectedVideoEditCodeElement(owner) : undefined
   const span = selected?.entry.clip.id === editor.target.clipId ? selected.element.sourceSpan : undefined
-  useLayoutEffect(() => { if (span) setActiveFile(span.file) }, [span, selected?.element.elementId])
+  useLayoutEffect(() => { if (span && draft.files[span.file] !== undefined) setActiveFile(span.file) }, [span, selected?.element.elementId, draft.files])
   useLayoutEffect(() => {
     const input = sourceInput.current
     const location = errorSpan ?? span
@@ -119,10 +129,13 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
     } finally { disposeVideoEditCodeCandidate(current); job?.controller.abort() }
   }
   return <UiGroup gap="row" data-video-edit-code-source-editor={editor.target.clipId}>
+    {checkingFiles && <UiLoading size="xs" message="正在核对源码文件" />}
+    {span && draft.files[span.file] === undefined && <span className="text-xs text-text3">此元素来自项目组件。请在下方查看组件；修改时发布组件新版本，再重新保存素材。</span>}
     {span && span.file === activeFile && <div aria-label="选中元素源码" className="max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-xs"><mark className="bg-accent/15 text-text1">{draft.files[activeFile].slice(span.start, span.end)}</mark></div>}
     <div role="listbox" aria-label="源码文件" className="max-h-40 overflow-auto">
       {Object.keys(draft.files).length > 50 ? <div className="h-40"><Virtuoso data={Object.keys(draft.files).sort()} itemContent={(_index, path) => <UiOptionButton variant="menu" role="option" active={path === activeFile} aria-selected={path === activeFile} className="w-full" onClick={() => { setActiveFile(path); setErrorSpan(undefined) }}>{path}{path === draft.entry ? ' · 入口' : ''}</UiOptionButton>} /></div> : Object.keys(draft.files).sort().map(path => <UiOptionButton key={path} variant="menu" role="option" active={path === activeFile} aria-selected={path === activeFile} className="w-full" onClick={() => { setActiveFile(path); setErrorSpan(undefined) }}>{path}{path === draft.entry ? ' · 入口' : ''}</UiOptionButton>)}
     </div>
+    <ProjectCodeComponents projectId={editor.target.projectId} file={activeFile} source={draft.files[activeFile] ?? ''} module={activeFile !== draft.entry} onImport={statement => changeDraft(statement + (draft.files[activeFile] ?? ''))} />
     <div className="flex flex-wrap items-center gap-2">
       <UiButton onClick={() => { setFileAction('create'); setFileName('') }}>新建文件</UiButton>
       <UiButton onClick={() => { setFileAction('rename'); setFileName(activeFile) }}>重命名</UiButton>

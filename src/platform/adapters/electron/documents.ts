@@ -13,6 +13,11 @@ function getNativeDocuments(): DocumentsPlatform {
 /** 文档底座：preload 桥已按 DocumentsPlatform 实现，这里只做可用性检查与转发。 */
 export function createElectronDocuments(): DocumentsPlatform {
   return {
+    withdrawCodeComponent: request => getNativeDocuments().withdrawCodeComponent(request),
+    writeCodeVersion: (request) => getNativeDocuments().writeCodeVersion(request),
+    readCodeFile: (file) => getNativeDocuments().readCodeFile(file),
+    listCodeComponents: (target) => getNativeDocuments().listCodeComponents(target),
+    publishCodeComponent: (request) => getNativeDocuments().publishCodeComponent(request),
     listDocuments: (query) => getNativeDocuments().listDocuments(query),
     readDocument: (target) => getNativeDocuments().readDocument(target),
     createDocument: (request) => getNativeDocuments().createDocument(request),

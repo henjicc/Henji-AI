@@ -1,4 +1,4 @@
-import { addressCodeMaterialFiles, mergeCodeSources } from '@/core/videoEdit/codeMaterial/sources'
+import { addressCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { isUiInspectionActive } from '@/platform/runtime'
 import { buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
@@ -26,9 +26,8 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
   const model = createVideoEditDocument('有限合成检查'); const sequence = model.sequences[0]
   sequence.width = 3840; sequence.height = 2160; sequence.frameRate = { numerator: 60, denominator: 1 }
   sequence.tracks.push(...[2, 3].map(index => ({ ...sequence.tracks.find(track => track.kind === 'video')!, id: `visual-${index}`, index, name: `画面${index}` })))
-  const { codeSources: greenSources, ...greenManifest } = await addressCodeMaterialFiles(source('return rgba(0,1,0,.5);'))
-  const { codeSources: gainSources, ...gainManifest } = await addressCodeMaterialFiles(source('const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);', 'static', '{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}}'))
-  model.codeSources = mergeCodeSources(greenSources, gainSources)
+  const { codeSources: _greenSources, ...greenManifest } = await addressCodeMaterialFiles(source('return rgba(0,1,0,.5);'))
+  const { codeSources: _gainSources, ...gainManifest } = await addressCodeMaterialFiles(source('const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);', 'static', '{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}}'))
   model.codeMaterials = [
     { id: 'green', name: '绿色滤镜', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 1, ...greenManifest }] },
     { id: 'gain', name: '红色强度', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 1, ...gainManifest }] },

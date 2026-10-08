@@ -1,4 +1,5 @@
-import { documentCodeSourceResolver, mergeCodeSources, normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { prepareCodeVersionPublication } from './videoEditCodeStorage'
+import { documentCodeSourceResolver, loadCodeSourceReferences, normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { appendCodeMaterialVersion } from '@/core/videoEdit/codeMaterialVersions'
 import { proposeCodeMaterialMigration, type CodeMaterialMigrationImpact } from '@/core/videoEdit/codeMaterialAnimation'
 import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
@@ -58,7 +59,8 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   }
   logger.info('检查源码候选', { event: 'video_edit.code.candidate.start', context: { projectId: target.projectId, clipId: target.clipId, scope } })
   try {
-    const appended = await appendCodeMaterialVersion(definition, source, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline))
+    await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
+    const appended = await appendCodeMaterialVersion(definition, source, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline), await prepareCodeVersionPublication(target.projectId, normalizeCodeMaterialFiles(source)))
     controller.signal.throwIfAborted(); newVersion = appended.versionId
     const version = appended.definition.versions.find(version => version.id === newVersion)!
     rememberVideoEditCodeMetadata(owner, definition.id, version, appended.program)
@@ -66,7 +68,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const impacts: VideoEditCodeCandidate['impacts'][number][] = []; let count = 0
     const selectedIds = new Set<string>()
     const selectedEffects = new Map<string, string[]>()
-    const document = videoEditDocumentSchema.parse({ ...baseline, codeSources: mergeCodeSources(baseline.codeSources, appended.codeSources), codeMaterials: baseline.codeMaterials!.map(value => value.id === definition.id ? appended.definition : value), sequences: baseline.sequences.map(value => ({ ...value, clips: value.clips.map(clip => {
+    const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: baseline.codeMaterials!.map(value => value.id === definition.id ? appended.definition : value), sequences: baseline.sequences.map(value => ({ ...value, clips: value.clips.map(clip => {
       if (target.effectId) {
         return { ...clip, effects: clip.effects?.map(effect => {
           const selected = scope === 'single' ? value.id === target.sequenceId && clip.id === target.clipId && effect.id === target.effectId : effect.code?.definitionId === definition.id && effect.code.versionId === target.versionId

@@ -1,3 +1,4 @@
+import { DocumentCodeFiles } from './code-files'
 import path from 'node:path'
 
 import { documentKindRegistry, type DocumentKindRegistry } from '../../../../src/core/documents/kinds'
@@ -114,6 +115,7 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     stagingDirectory: path.join(environment.storeDirectory, 'package-staging'),
     hideDirectory: environment.hideDirectory,
   })
-  const service = new DocumentService({ workspace, repository, projects, scanner, covers, sessionState, packages, kinds })
+  const codeFiles = new DocumentCodeFiles(workspace, repository, environment.logger('main.documents.code'))
+  const service = new DocumentService({ codeFiles, workspace, repository, projects, scanner, covers, sessionState, packages, kinds })
   return { service, workspace, repository, projects, scanner, covers, sessionState, packages }
 }

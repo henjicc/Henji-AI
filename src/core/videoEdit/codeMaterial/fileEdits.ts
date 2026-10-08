@@ -16,6 +16,7 @@ export function renameCodeMaterialFile(input: CodeMaterialFiles, previous: strin
     const edits: { start: number; end: number; text: string }[] = []
     for (const statement of parsed.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
       const request = statement.moduleSpecifier.text
+      if (request.startsWith('@组件/')) continue
       const target = resolveCodeImportPath(path, request, statement.moduleSpecifier)
       if (target !== previous && path !== previous) continue
       const destination = (target === previous ? next : target).split('/'); const from = renamed.split('/').slice(0, -1)

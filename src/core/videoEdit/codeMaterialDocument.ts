@@ -1,3 +1,4 @@
+import { expandPinnedCodeComponents } from './codeMaterial/components'
 import { documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeMaterialFiles } from './codeMaterial/sources'
 import type { VideoEditDocument } from './document'
 import type { CodeMaterialInstance, CodeMaterialVersion } from './codeMaterialPersistence'
@@ -18,10 +19,15 @@ export function videoEditCodeReferences(document: VideoEditDocument): CodeMateri
     ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(clip.effects)])),
   ]
 }
-export function codeMaterialSource(document: Pick<VideoEditDocument, 'codeMaterials' | 'codeSources'>, instance: CodeMaterialInstance): CodeMaterialVersion & { contents: CodeMaterialFiles } {
+export function codeMaterialSource(document: Pick<VideoEditDocument, 'codeMaterials'>, instance: CodeMaterialInstance): CodeMaterialVersion & { contents: CodeMaterialFiles; compilation: CodeMaterialFiles } {
+  const version = codeMaterialVersion(document, instance)
+  const resolver = documentCodeSourceResolver(document); const contents = resolveCodeMaterialFiles(version, resolver)
+  return { ...version, contents, compilation: expandPinnedCodeComponents(contents, version.imports ?? [], resolver) }
+}
+export function codeMaterialVersion(document: Pick<VideoEditDocument, 'codeMaterials'>, instance: CodeMaterialInstance): CodeMaterialVersion {
   const version = document.codeMaterials?.find(definition => definition.id === instance.definitionId)?.versions.find(version => version.id === instance.versionId)
   if (!version) throw new CodeMaterialError('COMPATIBILITY', '固定代码版本不存在，请恢复原源码引用。')
-  return { ...version, contents: resolveCodeMaterialFiles(version, documentCodeSourceResolver(document)) }
+  return version
 }
 /** Metadata is checked against source by the host Worker, never trusted from the file. */
 export function validateCodeMaterialDocument(document: VideoEditDocument, read: CodeMaterialMetadataReader): void {
@@ -32,7 +38,7 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
   }
   for (const definition of document.codeMaterials ?? []) read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })
   for (const item of document.items) if (item.code) {
-    if (item.elementOverrides && codeMaterialSource(document, item.code).languageVersion !== 3) throw new CodeMaterialError('TYPE', '元素覆盖需要第三版代码生成素材。')
+    if (item.elementOverrides && codeMaterialVersion(document, item.code).languageVersion !== 3) throw new CodeMaterialError('TYPE', '元素覆盖需要第三版代码生成素材。')
     const program = read(item.code)
     if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜应作为附加效果使用，不能直接创建生成素材项。')
     validate(item.code, program)
@@ -40,7 +46,7 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
   for (const sequence of document.sequences) {
     for (const clip of sequence.clips) {
       if (clip.code) {
-        if (clip.elementOverrides && codeMaterialSource(document, clip.code).languageVersion !== 3) throw new CodeMaterialError('TYPE', '元素覆盖需要第三版代码生成素材。')
+        if (clip.elementOverrides && codeMaterialVersion(document, clip.code).languageVersion !== 3) throw new CodeMaterialError('TYPE', '元素覆盖需要第三版代码生成素材。')
         const program = read(clip.code)
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '代码片段需要生成素材。')
         validate(clip.code, program)

@@ -1,3 +1,4 @@
+import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
 import { VideoEditTextPresetExecutor, VideoEditTextPresetMutationExecutor } from './videoEditTextPresetReflection'
 import { VideoEditStyleKitCollectionExecutor, VideoEditStyleKitMutationExecutor, STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY } from './videoEditStyleKitReflection'
 import { handleVideoEditStyleKitCapability } from './videoEditStyleKitCapabilities'
@@ -66,6 +67,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   recoverOperation: recoverVideoEditPlacement,
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
+    engine.registerCollectionExecutor(new CodeComponentCollectionExecutor())
     for (const type of [STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY] as const) { engine.registerCollectionExecutor(new VideoEditStyleKitCollectionExecutor(type)); engine.registerMutationExecutor(new VideoEditStyleKitMutationExecutor(type)) }
     engine.registerCollectionExecutor(new VideoEditTextPresetExecutor())
     engine.registerMutationExecutor(new VideoEditTextPresetMutationExecutor())

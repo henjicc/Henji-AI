@@ -1,3 +1,4 @@
+import { createCodeComponentRegistration } from './videoEditCodeComponentReflection'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { createVideoEditTextPresetRegistration } from './videoEditTextPresetReflection'
 import { videoEditImportTask } from './videoEditImportTask'
@@ -73,7 +74,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false): Vi
     const version = definition?.versions.find(version => version.id === childId)
     if (!definition || !version) throw new Error('NOT_FOUND：固定代码版本不存在。')
     const contents = codeMaterialSource(instance.document, { definitionId: definition.id, versionId: version.id, parameters: {} }).contents
-    return { ...version, ...contents, source: contents.files[contents.entry], definitionId: definition.id, ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, version.id))) as VideoEditFieldData : {}) }
+    return { ...JSON.parse(JSON.stringify(version)) as VideoEditFieldData, ...contents, source: contents.files[contents.entry], definitionId: definition.id, ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, version.id))) as VideoEditFieldData : {}) }
   }
   if (!VIDEO_EDIT_TYPES.includes(ref.kind as VideoEditEntityType)) throw new Error('未知剪辑实体类型。')
   const found = videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).find(item => item.id === childId)
@@ -107,7 +108,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
   }
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
     if (this.entityType === 'video_edit.media' && (!request.propertyIds?.length || request.propertyIds.includes('video_edit.media.proxy_state'))) { const target = splitVideoEditRef(ref); await ensureVideoEditProxyState(target.projectId, target.childId) }
-    const needsMetadata = ['video_edit.code_material', 'video_edit.code_version'].includes(this.entityType) && (!request.propertyIds?.length || request.propertyIds.some(id => id.endsWith('.parameters') || id.endsWith('.types')))
+    const needsMetadata = ['video_edit.code_material', 'video_edit.code_version'].includes(this.entityType)
     if (needsMetadata) {
       const { projectId, childId } = splitVideoEditRef(ref); const owner = requireVideoEditInstance(projectId)
       const definition = owner.document.codeMaterials?.find(definition => this.entityType === 'video_edit.code_material' ? definition.id === childId : definition.versions.some(version => version.id === childId))
@@ -194,5 +195,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createTitleTemplateRegistration(), createFontRegistration(), createStyleKitRegistration(STYLE_KIT_ENTITY), createStyleKitRegistration(STYLE_PRESET_ENTITY)]
+  })), createCodeComponentRegistration(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createTitleTemplateRegistration(), createFontRegistration(), createStyleKitRegistration(STYLE_KIT_ENTITY), createStyleKitRegistration(STYLE_PRESET_ENTITY)]
 }

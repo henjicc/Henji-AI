@@ -106,7 +106,8 @@ export function askAssistantForVideoEditCodeElement(target: VideoEditCodeElement
   const current = readVideoEditCodeElementEdit(target)
   if (!current.element || !current.entry) throw new Error('此元素当前不可见，请选择可见元素。')
   const span = current.element.sourceSpan
-  const text = bake ? `请把这些覆盖写回源码，保留其它元素和动画。覆盖：${JSON.stringify(current.override)}；sourceSpan：${JSON.stringify(span)}。创建新的源码版本，在同一事务绑定该片段的新版本并只删除已合并覆盖。` : '请修改这里（等待用户说明）。'
+  const component = span && current.entry.files.files[span.file] === undefined
+  const text = bake ? `请把这些覆盖写回源码，保留其它元素和动画。覆盖：${JSON.stringify(current.override)}；sourceSpan：${JSON.stringify(span)}。${component ? '此元素来自固定项目组件，不能改写已发布文件。先从 video_edit.code_component 的 versions/source 读回组件，发布组件新版本，再用原素材文件创建新素材版本，让组件导入解析到新版本。' : '创建新的源码版本，'}在同一事务绑定该片段的新版本并只删除已合并覆盖。` : '请修改这里（等待用户说明）。'
   const id = createVideoEditAnnotation(target.projectId, target.sequenceId, { frame: current.owner.frame, clipId: target.clipId, target: { kind: 'element', elementId: target.elementId, ...(span ? { sourceSpan: { file: span.file, start: span.start, end: span.end } } : {}), region: videoEditCodeElementRegion(current.entry, current.element, current.sequence) }, text, status: 'open' })
   const mark = current.owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!.annotations.find(mark => mark.id === id)!
   openAssistant(bake ? '请把这个元素的覆盖写回源码：' : '请修改这里：', { context: videoEditAnnotationPrompt(target.projectId, [mark], text), onTextSubmitted: submitted => updateVideoEditAnnotation(target.projectId, id, current => ({ ...current, text: bake ? `${text}\n用户说明：${submitted}` : submitted })) })
@@ -116,7 +117,9 @@ export async function bakeVideoEditCodeElement(target: VideoEditCodeElementTarge
   const current = readVideoEditCodeElementEdit(target)
   if (!current.element || !current.entry) throw new Error('此元素当前不可见。')
   const count = current.entry.index.bounds.filter(bound => bound.sourceSpan?.start === current.element!.sourceSpan?.start && bound.sourceSpan?.file === current.element!.sourceSpan?.file).length
-  const result = bakeCodeElementLiterals(current.entry.files.files[current.element.sourceSpan?.file ?? current.entry.files.entry], current.element, current.override, count)
+  const source = current.entry.files.files[current.element.sourceSpan?.file ?? current.entry.files.entry]
+  if (source === undefined) { askAssistantForVideoEditCodeElement(target, true); return 'assistant' }
+  const result = bakeCodeElementLiterals(source, current.element, current.override, count)
   // Offset-based identities of later calls change when a literal's length changes.
   // Let the assistant rebuild identities rather than silently invalidate other edits.
   const otherOffsetIds = Object.keys(current.clip.elementOverrides ?? {}).some(id => id !== target.elementId && id.startsWith('call:'))

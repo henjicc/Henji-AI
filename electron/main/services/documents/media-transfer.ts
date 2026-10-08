@@ -9,6 +9,7 @@ import { mapContentStrings, type LocationReference } from '../../../../src/core/
 import { parseAbsolutePath, pathKey, relativeSegments, type PathStyle } from '../../../../src/core/storage/pathSyntax'
 import { copyFileNoOverwrite, EntryExistsError } from '../fs/no-overwrite'
 import type { ResolvedContainer } from './workspace'
+import { ensureCodeLocation } from './code-files'
 
 /*
  * 文档换容器时带走它用到的素材（实施方案 2.11）：原容器里被引用的文件复制到新容器，原处保留；
@@ -68,6 +69,7 @@ function targetFor(rest: readonly string[], from: ResolvedContainer, to: Resolve
   if (first !== undefined && tail.length) {
     if (sameEntryName(first, path.basename(from.generatedDir))) return path.join(to.generatedDir, ...tail)
     if (sameEntryName(first, path.basename(from.materialsDir))) return path.join(to.materialsDir, ...tail)
+    if (first === '代码') return path.join(to.root, '代码', ...tail)
     if (first === INTERNAL_FOLDER_NAME) return path.join(to.root, INTERNAL_FOLDER_NAME, ...tail)
   }
   return path.join(to.materialsDir, ...rest)
@@ -91,6 +93,68 @@ export async function copyKeepingBoth(source: string, desired: string): Promise<
   throw new Error('目标文件夹里同名文件过多，请先整理后重试。')
 }
 
+/** Component integrity is part of the same immutable publication, including document-only packages. */
+export async function copyCodeIntegrity(source: string, destination: string): Promise<void> {
+  if (!source.split(/[\\/]/).includes('组件库') || !source.endsWith('.ts')) return
+  const integrity = `${source}.sha256`
+  if (!(await fsp.stat(integrity).catch(() => null))?.isFile()) throw new Error('项目组件校验文件缺失，请从项目备份恢复后重新复制。')
+  const result = await copyKeepingBoth(integrity, `${destination}.sha256`)
+  if (result.path !== `${destination}.sha256`) throw new Error('目标组件校验文件冲突，请选择另一个项目目录。')
+  if ((await fsp.stat(`${source}.withdrawn`).catch(() => null))?.isFile()) {
+    const marker = await copyKeepingBoth(`${source}.withdrawn`, `${destination}.withdrawn`)
+    if (marker.path !== `${destination}.withdrawn`) throw new Error('目标组件发布状态冲突，请重新复制。')
+  }
+}
+
+interface CodeGroup { source: string; desired: string; files: Array<{ source: string; tail: string[] }>; component: boolean }
+/** Choose one destination for the entire code definition/component, never rename its individual modules. */
+export async function codeGroupDestinations(files: readonly string[], to: ResolvedContainer, copyOwner = true): Promise<Map<string, string>> {
+  const groups = new Map<string, CodeGroup>()
+  for (const source of files) {
+    const segments = source.split(/[\\/]/); const index = segments.lastIndexOf('代码')
+    if (index < 0 || segments.length <= index + 2) continue
+    const component = segments[index + 1] === '组件库'; const count = component ? 3 : 2
+    if (segments.length <= index + count) continue
+    const tail = segments.slice(index + count); let directory = source
+    for (const _part of tail) directory = path.dirname(directory)
+    const group = groups.get(directory) ?? { source: directory, desired: path.join(to.root, ...segments.slice(index, index + count)), files: [], component }
+    group.files.push({ source, tail }); groups.set(directory, group)
+  }
+  const result = new Map<string, string>(); const reserved = new Set<string>()
+  for (const group of groups.values()) {
+    const owner = group.component ? null : await fsp.readFile(path.join(group.source, '.definition'), 'utf8').catch(() => null)
+    for (let ordinal = 1; ; ordinal++) {
+      const candidate = ordinal === 1 ? group.desired : `${group.desired} (${ordinal})`
+      await ensureCodeLocation(to.root, path.join(candidate, '.probe'), path.sep === '\\' ? 'win32' : 'posix')
+      if (reserved.has(candidate.toLocaleLowerCase())) continue
+      const targetOwner = group.component ? null : await fsp.readFile(path.join(candidate, '.definition'), 'utf8').catch(() => null)
+      if (owner !== null && targetOwner !== null && owner !== targetOwner) continue
+      let conflict = false
+      for (const file of group.files) {
+        const target = path.join(candidate, ...file.tail)
+        await ensureCodeLocation(to.root, target, path.sep === '\\' ? 'win32' : 'posix')
+        const existingFile = await fsp.stat(target).catch(() => null)
+        if (existingFile && !(await sameFileContent(file.source, target))) { conflict = true; break }
+        if (existingFile && group.component) {
+          const sourceWithdrawn = Boolean(await fsp.stat(`${file.source}.withdrawn`).catch(() => null))
+          const targetWithdrawn = Boolean(await fsp.stat(`${target}.withdrawn`).catch(() => null))
+          if (sourceWithdrawn !== targetWithdrawn) { conflict = true; break }
+        }
+      }
+      if (conflict) continue
+      reserved.add(candidate.toLocaleLowerCase())
+      for (const file of group.files) result.set(file.source, path.join(candidate, ...file.tail))
+      if (copyOwner && owner !== null && group.source !== candidate) {
+        await fsp.mkdir(candidate, { recursive: true })
+        const copiedOwner = await copyKeepingBoth(path.join(group.source, '.definition'), path.join(candidate, '.definition'))
+        if (copiedOwner.path !== path.join(candidate, '.definition')) throw new Error('目标源码目录归属冲突，请重新复制。')
+      }
+      break
+    }
+  }
+  return result
+}
+
 export async function transferContainerMedia(options: MediaTransferOptions): Promise<MediaTransferResult> {
   const { style, from, to } = options
   const fromRoot = parseAbsolutePath(style, from.root)
@@ -98,6 +162,7 @@ export async function transferContainerMedia(options: MediaTransferOptions): Pro
   const mapping = new Map<string, string>()
   const missingPaths: string[] = []
   let copied = 0
+  const codeTargets = await codeGroupDestinations(options.references.filter(reference => reference.scope === 'container' && !options.isDocumentFile(reference.path)).map(reference => reference.path), to)
   for (const reference of options.references) {
     if (reference.scope !== 'container' || options.isDocumentFile(reference.path)) continue
     const parsed = parseAbsolutePath(style, reference.path)
@@ -109,9 +174,10 @@ export async function transferContainerMedia(options: MediaTransferOptions): Pro
       continue
     }
     if (!stat.isFile()) continue
-    const desired = targetFor(rest, from, to)
+    const desired = codeTargets.get(reference.path) ?? targetFor(rest, from, to)
     if (rest[0] === INTERNAL_FOLDER_NAME) await options.prepareInternalFolder?.(to.root)
     const result = await copyKeepingBoth(reference.path, desired)
+    await copyCodeIntegrity(reference.path, result.path)
     const key = pathKey(style, reference.path)
     if (key) mapping.set(key, result.path)
     if (result.copied) copied += 1
@@ -122,10 +188,18 @@ export async function transferContainerMedia(options: MediaTransferOptions): Pro
 /** 把内容里指向原文件的绝对路径换成复制后的新位置。 */
 export function rewriteContentPaths(content: unknown, mapping: ReadonlyMap<string, string>, style: PathStyle): unknown {
   if (!mapping.size) return content
-  return mapContentStrings(content, (value) => {
+  const rewritten = mapContentStrings(content, (value) => {
     const key = pathKey(style, value)
     return key !== null ? mapping.get(key) ?? value : value
   })
+  if (rewritten && typeof rewritten === 'object' && 'codeMaterials' in rewritten && Array.isArray(rewritten.codeMaterials)) for (const definition of rewritten.codeMaterials) {
+    if (!definition || typeof definition !== 'object' || typeof definition.folder !== 'string' || !Array.isArray(definition.versions)) continue
+    const location: unknown = definition.versions[0]?.files?.[0]?.location
+    if (typeof location !== 'string') continue
+    const segments = location.split(/[\\/]/); const index = segments.lastIndexOf('代码')
+    if (index >= 0 && segments[index + 1] !== '组件库') definition.folder = segments[index + 1]
+  }
+  return rewritten
 }
 
 export interface MediaCollectOptions {
@@ -153,6 +227,7 @@ export async function collectContainerMedia(options: MediaCollectOptions): Promi
     ...options.references.filter((reference) => reference.scope !== 'container').map((reference) => reference.path),
     ...options.programReferences.filter((value) => parseAbsolutePath(style, value) !== null),
   ]
+  const codeTargets = await codeGroupDestinations(candidates.filter(source => !options.isDocumentFile(source)), to)
   for (const source of candidates) {
     const key = pathKey(style, source)
     if (!key || mapping.has(key) || options.isDocumentFile(source)) continue
@@ -162,7 +237,10 @@ export async function collectContainerMedia(options: MediaCollectOptions): Promi
       continue
     }
     if (!stat.isFile()) continue
-    const result = await copyKeepingBoth(source, path.join(to.materialsDir, path.basename(source)))
+    const segments = source.split(/[\\/]/); const codeIndex = segments.lastIndexOf('代码')
+    const desired = codeTargets.get(source) ?? (codeIndex >= 0 ? path.join(to.root, ...segments.slice(codeIndex)) : path.join(to.materialsDir, path.basename(source)))
+    const result = await copyKeepingBoth(source, desired)
+    await copyCodeIntegrity(source, result.path)
     mapping.set(key, result.path)
     if (result.copied) copied += 1
   }

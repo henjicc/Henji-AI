@@ -116,7 +116,6 @@ beforeEach(async () => {
   const persisted = await Promise.all([source, alternate].map(text => addressCodeMaterialFiles(text)))
   for (const [index, program] of programs.entries()) rememberVideoEditCodeMetadata(owner, `d${index}`, { id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 1, languageVersion: 1 }, program)
   editVideoProject(owner.document.id, document => {
-    document.codeSources = persisted.flatMap(value => value.codeSources)
     document.codeMaterials = programs.map((program, index) => ({ id: `d${index}`, name: program.name, defaultVersionId: `v${index}`, versions: [{ id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 1, languageVersion: 1 }] }))
     for (const [index, program] of programs.entries()) {
       document.items.push({ id: `i${index}`, name: program.name, kind: 'code', code: { definitionId: `d${index}`, versionId: `v${index}`, parameters: Object.fromEntries(program.parameters.map(parameter => [parameter.key, parameter.default])) } })
@@ -285,7 +284,6 @@ it('新角度和点位在实例/关键帧共用控件，自定义字体悬停回
   const version = { id: 'rich-version', entry: persisted.entry, files: persisted.files, apiVersion: 1 as const, languageVersion: 3 as const }
   rememberVideoEditCodeMetadata(owner, 'rich-definition', version, program)
   editVideoProject(owner.document.id, document => {
-    document.codeSources!.push(...persisted.codeSources)
     document.codeMaterials!.push({ id: 'rich-definition', name: program.name, defaultVersionId: version.id, versions: [version] })
     document.items.push({ id: 'rich-item', name: program.name, kind: 'code', code: { definitionId: 'rich-definition', versionId: version.id, parameters: Object.fromEntries(program.parameters.map(parameter => [parameter.key, parameter.default])) } })
     document.sequences[0].clips.push(makeVideoEditItemClip(document, 'rich-item', sequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))

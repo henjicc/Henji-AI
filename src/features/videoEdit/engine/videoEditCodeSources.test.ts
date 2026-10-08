@@ -187,7 +187,7 @@ describe('可见代码源与固定内容复用', () => {
     boundary.compiler.compile.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
     const pending = boundary.sources.prepare(document, document.clips, 0, () => true)
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    await boundary.sources.dispose(); finish(compileCodeMaterial(testCodeSource(document, document.codeMaterials![0].versions[0]))); await rejected
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function')); await boundary.sources.dispose(); finish(compileCodeMaterial(testCodeSource(document, document.codeMaterials![0].versions[0]))); await rejected
     expect(boundary.acquire).not.toHaveBeenCalled(); expect(boundary.generator).not.toHaveBeenCalled()
     expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0 })
   })
@@ -361,7 +361,7 @@ describe('失效、身份与资源上限', () => {
     let resolve!: (program: CodeMaterialProgram) => void
     boundary.compiler.compile.mockImplementationOnce(() => new Promise<CodeMaterialProgram>(done => { resolve = done }))
     const pending = boundary.sources.prepare(document, document.clips, 0, () => true); const failed = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    const next = { ...document, revision: 1 }; boundary.sources.updateDocument(next)
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function')); const next = { ...document, revision: 1 }; boundary.sources.updateDocument(next)
     resolve(compileCodeMaterial(source())); await failed
     expect(boundary.generator).not.toHaveBeenCalled(); expect(boundary.sources.diagnostics().programs).toBe(0)
     await boundary.sources.prepare(next, next.clips, 0, () => true)
@@ -370,7 +370,7 @@ describe('失效、身份与资源上限', () => {
     const changed = changedVersion(other, 'later'); boundary.sources.updateDocument(changed)
     boundary.compiler.compile.mockImplementationOnce(() => new Promise<CodeMaterialProgram>(done => { late = done }))
     const last = boundary.sources.prepare(changed, changed.clips, 0, () => true); const lastFailed = expect(last).rejects.toMatchObject({ name: 'AbortError' })
-    await boundary.sources.dispose(); late(compileCodeMaterial(source('static', '晚到'))); await lastFailed
+    await vi.waitFor(() => expect(late).toBeTypeOf('function')); await boundary.sources.dispose(); late(compileCodeMaterial(source('static', '晚到'))); await lastFailed
     expect(boundary.compiler.dispose).toHaveBeenCalledOnce(); expect(boundary.pictures.size).toBe(0)
     expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0, seenVersions: 0 })
   })
@@ -395,10 +395,11 @@ describe('失效、身份与资源上限', () => {
       const oneNew = fixture(); oneNew.id = atCountLimit.id; oneNew.codeMaterials![0].versions[0].id = 'new'
       expect(() => counted.sources.updateDocument(oneNew)).not.toThrow()
       expect(counted.sources.diagnostics().seenVersions).toBe(4097)
-      expect(sized.sources.diagnostics().seenSourceBytes).toBe(8 * 1024 ** 2)
+      const manifestBytes = sized.sources.diagnostics().seenManifestBytes
+      expect(manifestBytes).toBeGreaterThan(0); expect(manifestBytes).toBeLessThan(8 * 1024 ** 2)
       oneNew.id = atByteLimit.id
       expect(() => sized.sources.updateDocument(oneNew)).not.toThrow()
-      expect(sized.sources.diagnostics().seenSourceBytes).toBeGreaterThan(8 * 1024 ** 2)
+      expect(sized.sources.diagnostics().seenManifestBytes).toBeGreaterThan(manifestBytes)
       expect(counted.compiler.compile).not.toHaveBeenCalled(); expect(sized.compiler.compile).not.toHaveBeenCalled()
       expect(counted.acquire).not.toHaveBeenCalled(); expect(sized.acquire).not.toHaveBeenCalled()
     } finally { await counted.sources.dispose(); await sized.sources.dispose() }

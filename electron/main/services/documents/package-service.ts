@@ -28,7 +28,7 @@ import { isSymbolicLinkEntry, iterateEntries, openEntryReadStream, openZip, read
 import { decodeDocumentContent, loadDocumentFile, type LoadedDocumentFile } from './document-file'
 import { DocumentFormatError, DocumentLocationError, ProjectNotFoundError } from './errors'
 import type { DocumentIndexScanner } from './index-scanner'
-import { rewriteContentPaths } from './media-transfer'
+import { codeGroupDestinations, sameFileContent, rewriteContentPaths } from './media-transfer'
 import { readEntryNameKeys } from './name-check'
 import type { PackageAdapterRegistry } from './package-adapters'
 import type { ProjectService } from './projects'
@@ -236,6 +236,7 @@ export class DocumentPackageService {
     const entries: PackageEntry[] = []
     const missingPaths: string[] = []
     const mapping = new Map<string, string>()
+    const codeTargets = await codeGroupDestinations(decoded.report.references.map(reference => reference.path), container, false)
     for (const reference of decoded.report.references) {
       const key = pathKey(style, reference.path)
       if (!key || mapping.has(key) || this.options.kinds.forFileName(path.basename(reference.path))) continue
@@ -252,17 +253,45 @@ export class DocumentPackageService {
         if (!names.has(relative)) {
           names.add(relative)
           entries.push({ name: relative, source: reference.path })
+          if (inside[0] === '代码' && inside[1] !== '组件库' && inside.length > 2) {
+            const ownerRelative = `代码/${inside[1]}/.definition`; const ownerPath = path.join(container.root, '代码', inside[1], '.definition')
+            if (!names.has(ownerRelative) && (await fsp.stat(ownerPath).catch(() => null))?.isFile()) { names.add(ownerRelative); entries.push({ name: ownerRelative, source: ownerPath }) }
+          }
+          if (inside.includes('组件库') && reference.path.endsWith('.ts')) {
+            const integrity = `${reference.path}.sha256`
+            if (!(await fsp.stat(integrity).catch(() => null))?.isFile()) throw new DocumentLocationError('项目组件校验文件缺失，请恢复原组件后导出。')
+            names.add(`${relative}.sha256`); entries.push({ name: `${relative}.sha256`, source: integrity })
+            if ((await fsp.stat(`${reference.path}.withdrawn`).catch(() => null))?.isFile()) { names.add(`${relative}.withdrawn`); entries.push({ name: `${relative}.withdrawn`, source: `${reference.path}.withdrawn` }) }
+          }
         }
         continue
       }
       // 容器之外的文件：放进包里的“素材”，重名（内容不同）时加序号
+      const segments = reference.path.split(/[\\/]/); const codeIndex = segments.lastIndexOf('代码')
+      const codeTarget = codeTargets.get(reference.path)
+      const planned = codeTarget ? relativeSegments(style, root, parseAbsolutePath(style, codeTarget)!) : null
+      const relativeDirectory = planned?.length ? planned.slice(0, -1).join('/') : codeIndex >= 0 ? segments.slice(codeIndex, -1).join('/') : materials
       const base = path.basename(reference.path)
       const extension = path.extname(base)
-      const stem = keepBothEntryName(path.basename(base, extension), (candidate) => names.has(`${materials}/${candidate}${extension}`))
-      const relative = `${materials}/${stem}${extension}`
+      const plannedRelative = planned?.join('/')
+      if (plannedRelative && names.has(plannedRelative) && await sameFileContent(reference.path, codeTarget!)) { mapping.set(key, codeTarget!); continue }
+      const stem = keepBothEntryName(path.basename(base, extension), (candidate) => names.has(`${relativeDirectory}/${candidate}${extension}`))
+      const relative = `${relativeDirectory}/${stem}${extension}`
       names.add(relative)
       entries.push({ name: relative, source: reference.path })
-      mapping.set(key, path.join(container.root, materials, `${stem}${extension}`))
+      if (codeIndex >= 0 && segments[codeIndex + 1] !== '组件库' && segments.length > codeIndex + 2) {
+        let sourceGroup = reference.path
+        for (let depth = segments.length - codeIndex - 2; depth > 0; depth--) sourceGroup = path.dirname(sourceGroup)
+        const ownerRelative = `${(planned ?? segments.slice(codeIndex)).slice(0, 2).join('/')}/.definition`; const ownerPath = path.join(sourceGroup, '.definition')
+        if (!names.has(ownerRelative) && (await fsp.stat(ownerPath).catch(() => null))?.isFile()) { names.add(ownerRelative); entries.push({ name: ownerRelative, source: ownerPath }) }
+      }
+      if (codeIndex >= 0 && segments.includes('组件库') && reference.path.endsWith('.ts')) {
+        const integrity = `${reference.path}.sha256`
+        if (!(await fsp.stat(integrity).catch(() => null))?.isFile()) throw new DocumentLocationError('项目组件校验文件缺失，请恢复原组件后导出。')
+        names.add(`${relative}.sha256`); entries.push({ name: `${relative}.sha256`, source: integrity })
+        if ((await fsp.stat(`${reference.path}.withdrawn`).catch(() => null))?.isFile()) { names.add(`${relative}.withdrawn`); entries.push({ name: `${relative}.withdrawn`, source: `${reference.path}.withdrawn` }) }
+      }
+      mapping.set(key, path.join(container.root, ...relative.split('/')))
     }
     const content = rewriteContentPaths(decoded.content, mapping, style)
     const encoded = createLocationCodec(this.workspace.locationContext(container)).encodeContent(content)
