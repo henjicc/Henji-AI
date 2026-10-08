@@ -1,3 +1,4 @@
+import { documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeMaterialFiles } from './codeMaterial/sources'
 import type { VideoEditDocument } from './document'
 import type { CodeMaterialInstance, CodeMaterialVersion } from './codeMaterialPersistence'
 import type { CodeMaterialProgram } from './codeMaterial/contract'
@@ -17,10 +18,10 @@ export function videoEditCodeReferences(document: VideoEditDocument): CodeMateri
     ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(clip.effects)])),
   ]
 }
-export function codeMaterialSource(document: Pick<VideoEditDocument, 'codeMaterials'>, instance: CodeMaterialInstance): CodeMaterialVersion {
+export function codeMaterialSource(document: Pick<VideoEditDocument, 'codeMaterials' | 'codeSources'>, instance: CodeMaterialInstance): CodeMaterialVersion & { contents: CodeMaterialFiles } {
   const version = document.codeMaterials?.find(definition => definition.id === instance.definitionId)?.versions.find(version => version.id === instance.versionId)
   if (!version) throw new CodeMaterialError('COMPATIBILITY', '固定代码版本不存在，请恢复原源码引用。')
-  return version
+  return { ...version, contents: resolveCodeMaterialFiles(version, documentCodeSourceResolver(document)) }
 }
 /** Metadata is checked against source by the host Worker, never trusted from the file. */
 export function validateCodeMaterialDocument(document: VideoEditDocument, read: CodeMaterialMetadataReader): void {

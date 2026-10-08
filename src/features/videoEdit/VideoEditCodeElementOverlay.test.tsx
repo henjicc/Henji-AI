@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -26,9 +27,9 @@ beforeEach(async () => {
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const size = Number(this.font.match(/([\d.]+)px/)?.[1] ?? 16) * fontScale; return { width: text.length * size, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * size } } } } })
   owner = await createVideoEditTestProject()
   const program = compileCodeMaterial(original)
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', source: original, apiVersion: 1, languageVersion: 3 }, program)
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(original, owner.document), apiVersion: 1, languageVersion: 3 }, program)
   editVideoProject(owner.document.id, document => {
-    document.codeMaterials = [{ id: 'definition', name: '标题', defaultVersionId: 'version', versions: [{ id: 'version', source: original, apiVersion: 1, languageVersion: 3 }] }]
+    document.codeMaterials = [{ id: 'definition', name: '标题', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(original, owner.document), apiVersion: 1, languageVersion: 3 }] }]
     document.items.push({ id: 'code-item', name: '标题', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
     const clip = makeVideoEditItemClip(document, 'code-item', owner.activeSequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document)); clipId = clip.id
     document.sequences[0].clips.push(clip); return document
@@ -89,8 +90,8 @@ it('评论钉自动绑定代码元素和源码；动态元素包围盒跟随且�
   expect(moved.mark.target.kind === 'element' && moved.mark.target.region!.x).toBeGreaterThan(initial.target.kind === 'element' ? initial.target.region!.x : 0)
   expect(mark).toEqual(initial)
   const next = source('return [rect({id:"新底板",x:0,y:0,width:100,height:100,fill:[1,1,1,1]})];')
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'new-version', source: next, apiVersion: 1, languageVersion: 3 }, compileCodeMaterial(next))
-  act(() => { editVideoProject(owner.document.id, document => { document.codeMaterials![0].versions.push({ id: 'new-version', source: next, apiVersion: 1, languageVersion: 3 }); document.sequences[0].clips.find(clip => clip.id === clipId)!.code!.versionId = 'new-version'; return document }); setVideoEditView(owner.document.id, { frame: 0 }) })
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'new-version', ...testCodeManifest(next, owner.document), apiVersion: 1, languageVersion: 3 }, compileCodeMaterial(next))
+  act(() => { editVideoProject(owner.document.id, document => { document.codeMaterials![0].versions.push({ id: 'new-version', ...testCodeManifest(next, owner.document), apiVersion: 1, languageVersion: 3 }); document.sequences[0].clips.find(clip => clip.id === clipId)!.code!.versionId = 'new-version'; return document }); setVideoEditView(owner.document.id, { frame: 0 }) })
   view.rerender(<VideoEditAnnotationOverlay instance={owner} mode="point" onError={onError} />)
   expect(view.getByRole('button', { name: '1 · 元素已不存在' })).toBeTruthy(); expect(onError).not.toHaveBeenCalled()
 })
@@ -124,9 +125,9 @@ it('字体加载后同帧重新度量文字选框，淡入零透明帧不可选'
 })
 it('4K节目完整热命中链含片段逆映射与1000粒子，P95小于4ms', () => {
   const particles = source('return repeat(1000,i=>ellipse({id:"粒子",x:(i%50)*70,y:floor(i/50)*90,width:12,height:12,fill:[1,1,1,1]}));').replace('width:1920,height:1080', 'width:3840,height:2160')
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'particles', source: particles, apiVersion: 1, languageVersion: 3 }, compileCodeMaterial(particles))
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'particles', ...testCodeManifest(particles, owner.document), apiVersion: 1, languageVersion: 3 }, compileCodeMaterial(particles))
   editVideoProject(owner.document.id, document => {
-    document.codeMaterials![0].versions.push({ id: 'particles', source: particles, apiVersion: 1, languageVersion: 3 })
+    document.codeMaterials![0].versions.push({ id: 'particles', ...testCodeManifest(particles, owner.document), apiVersion: 1, languageVersion: 3 })
     const sequence = document.sequences[0]; sequence.width = 3840; sequence.height = 2160; sequence.clips.find(clip => clip.id === clipId)!.code!.versionId = 'particles'; return document
   })
   expect(videoEditCodeElementFrames(owner).get(clipId)!.index.bounds).toHaveLength(1000)

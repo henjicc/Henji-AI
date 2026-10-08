@@ -1,3 +1,4 @@
+import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
 import { codeMaterialContextForFrame } from '@/core/videoEdit/codeMaterialTiming'
@@ -15,7 +16,7 @@ import { readVideoEditCodeProgram } from './videoEditCodeState'
 import { getActiveVideoEditSequence, setVideoEditView, type VideoEditInstance } from './videoEditService'
 import { DEFAULT_STYLE_TOKENS, resolveVideoEditStyleKit } from '@/core/videoEdit/styleKit'
 
-export interface VideoEditCodeElementFrame { clip: VideoEditClip; index: CodeElementIndex; picture: { width: number; height: number }; source: string }
+export interface VideoEditCodeElementFrame { clip: VideoEditClip; index: CodeElementIndex; picture: { width: number; height: number }; files: CodeMaterialFiles }
 interface FrameCache { document: object; sequenceId: string; frame: number; fontGeneration?: number; elements: Map<string, VideoEditCodeElementFrame> }
 const frames = new WeakMap<VideoEditInstance, FrameCache>()
 interface EvaluatedIndex {
@@ -53,7 +54,7 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
       index = prepareCodeElementIndex(program, context, parameters, measureCodeText, { elementOverrides: raw.elementOverrides, sourceTime })
     }
     evaluatedIndices.set(raw.id, { program, code: raw.code, overrides: raw.elementOverrides, style: context.style, context: key, fontGeneration: generation, index })
-    elements.set(raw.id, { clip, picture: { width: context.width, height: context.height }, index, source: codeMaterialSource(instance.document, raw.code).source })
+    elements.set(raw.id, { clip, picture: { width: context.width, height: context.height }, index, files: codeMaterialSource(instance.document, raw.code).contents })
   }
   indices.set(instance, evaluatedIndices)
   frames.set(instance, { document: instance.document, sequenceId, frame, fontGeneration: elements.size ? fontGeneration() : undefined, elements }); return elements
@@ -105,7 +106,7 @@ export function codeElementAnnotationTarget(instance: VideoEditInstance, point: 
   const hit = hitVideoEditCodeElement(instance, point); if (!hit) return undefined
   const entry = videoEditCodeElementFrames(instance).get(hit.clipId)!
   const span = hit.element.sourceSpan
-  return { clipId: hit.clipId, target: { kind: 'element', elementId: hit.element.elementId, ...(span ? { sourceSpan: { start: span.start, end: span.end } } : {}), region: videoEditCodeElementRegion(entry, hit.element, getActiveVideoEditSequence(instance)) } }
+  return { clipId: hit.clipId, target: { kind: 'element', elementId: hit.element.elementId, ...(span ? { sourceSpan: { file: span.file, start: span.start, end: span.end } } : {}), region: videoEditCodeElementRegion(entry, hit.element, getActiveVideoEditSequence(instance)) } }
 }
 /** Derived display only: following animation must never rewrite the persisted annotation or add undo entries. */
 export function resolveVideoEditElementAnnotation(instance: VideoEditInstance, mark: VideoEditAnnotation, sequenceId = instance.activeSequenceId, frame = instance.frame): { mark: VideoEditAnnotation; missing: boolean; label?: string } {

@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
@@ -29,7 +30,7 @@ it.skipIf(process.env.HENJI_GESTURE_BENCH !== '1')('service gestures with v3, fo
   const sequence = document.sequences[0]
   sequence.width = 3840; sequence.height = 2160; sequence.frameRate = { numerator: 60, denominator: 1 }
   const source = `export default {apiVersion:1,languageVersion:3,name:"基准",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:7,parameters:{font:{type:"text",title:"字体",default:"sans-serif",maxLength:200}},render(ctx){return [${Array.from({ length: 48 }, (_, i) => `rect({id:"shape${i}",x:${i * 15},y:${i * 8},width:100,height:100,fill:[1,1,1,1]})`).join(',')}];}}`
-  document.codeMaterials = [{ id: 'code', name: '基准', defaultVersionId: 'version', versions: [{ id: 'version', source, apiVersion: 1, languageVersion: 3 }] }]
+  document.codeMaterials = [{ id: 'code', name: '基准', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, document), apiVersion: 1, languageVersion: 3 }] }]
   document.styleKits = [styleKitSchema.parse({ id: 'kit', name: '基准风格' })]; sequence.styleKitId = 'kit'
   document.items = [{ id: 'item', kind: 'code', name: '代码', code: { definitionId: 'code', versionId: 'version', parameters: { font: 'sans-serif' } } }]
   sequence.clips = Array.from({ length: 120 }, (_, i) => videoEditClipSchema.parse({ id: `clip${i}`, itemId: 'item', kind: 'code', name: `代码${i}`, code: document.items[0].code, track: sequence.tracks.find(track => track.kind === 'video')!.index, start: Math.floor(i / 4) * 600, duration: 600, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', effects: [{ id: `effect${i}`, name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} } }], elementOverrides: { shape0: { fontFamily: 'sans-serif' } } }))

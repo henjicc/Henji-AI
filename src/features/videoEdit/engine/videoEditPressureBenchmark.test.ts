@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { afterEach, expect, it, vi } from 'vitest'
 import { writeFileSync } from 'node:fs'
 import { init } from 'vgpu/node'
@@ -94,7 +95,7 @@ it.skipIf(process.env.HENJI_VIDEO_PRESSURE_BENCH !== '1')('原4K60等价500片�
   Object.assign(sequence, { width: 3840, height: 2160, fps: 60, frameRate: { numerator: 60, denominator: 1 } })
   sequence.tracks = Array.from({ length: 32 }, (_, index) => ({ ...sequence.tracks[0], id: `track-${index}`, index, kind: index ? 'video' as const : 'audio' as const }))
   project.items.push({ id: 'video', name: '解码模拟', kind: 'video' }, { id: 'code', name: '压力原创动态代码', kind: 'code', code: { definitionId: 'generator', versionId: 'v', parameters: {} } })
-  project.codeMaterials = [generator, filter].map((source, index) => ({ id: index ? 'filter' : 'generator', name: index ? '原创红色处理' : '原创轨道标题', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 1, source }] }))
+  project.codeMaterials = [generator, filter].map((source, index) => ({ id: index ? 'filter' : 'generator', name: index ? '原创红色处理' : '原创轨道标题', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 1, ...testCodeManifest(source, document) }] }))
   const base = { ...makeVideoEditItemClip(project, 'video', sequence.id, { frame: 0, track: 1 }), id: 'base', duration: 360 }
   base.effects = [{ id: 'red', name: '原创红色处理', enabled: true, amount: 1, code: { definitionId: 'filter', versionId: 'v', parameters: {} } }]
   sequence.clips = [base, { ...base, id: 'overlay', track: 2, x: .3, y: .3, scale: .3, effects: undefined, sourceInUs: 1_000_000 }, { ...base, id: 'dynamic', kind: 'code', itemId: 'code', code: { definitionId: 'generator', versionId: 'v', parameters: {} }, track: 3, effects: undefined, duration: 360 }, ...Array.from({ length: 497 }, (_, index) => ({ ...base, id: `offscreen-${index}`, start: 3600 + index * 4, duration: 2, track: 31, effects: undefined }))]

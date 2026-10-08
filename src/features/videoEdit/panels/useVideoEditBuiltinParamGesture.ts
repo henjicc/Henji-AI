@@ -30,6 +30,6 @@ export function useVideoEditBuiltinParamGesture(projectId: string, scope: string
       errorHandler.current(error)
     }
   }
-  return { begin, commit, finish: () => end(true), cancel: () => end(false), active: () => handle.current !== undefined }
+  return { identity: JSON.stringify([projectId, scope]), begin, commit, finish: () => end(true), cancel: () => end(false), active: () => handle.current !== undefined }
 }
 export type VideoEditBuiltinParamGesture = ReturnType<typeof useVideoEditBuiltinParamGesture>

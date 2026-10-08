@@ -49,7 +49,7 @@ export function readVideoEditCodeEditor(projectId: string, sequenceId: string, c
   const metadata = readVideoEditCodeMetadata(owner, owner.document)(code)
   const { frame, sourceTime } = currentTime(projectId, sequenceId, clipId)
   const prepared = prepareCodeMaterialParameters(metadata, code)
-  return { target, name: effect?.name ?? clip.name, metadata: structuredClone(metadata), code: structuredClone(code), source: codeMaterialSource(owner.document, code).source, frame, sourceTime, parameters: evaluateCodeMaterialParameters(prepared, sourceTime), curves: Object.fromEntries([...prepared.curves].map(([key, curve]) => [key, structuredClone(curve.points)])) }
+  return { target, name: effect?.name ?? clip.name, metadata: structuredClone(metadata), code: structuredClone(code), files: codeMaterialSource(owner.document, code).contents, frame, sourceTime, parameters: evaluateCodeMaterialParameters(prepared, sourceTime), curves: Object.fromEntries([...prepared.curves].map(([key, curve]) => [key, structuredClone(curve.points)])) }
 }
 export function readVideoEditGraphicEditor(projectId: string, sequenceId: string, clipId: string, objectId: string) {
   const target: VideoEditGraphicTarget = { projectId, sequenceId, clipId, objectId }

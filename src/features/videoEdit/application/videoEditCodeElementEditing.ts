@@ -27,7 +27,7 @@ export function readVideoEditCodeElementEdit(target: VideoEditCodeElementTarget)
   const element = entry?.index.byId.get(target.elementId)
   const program = readVideoEditCodeProgram(owner, owner.document, clip.code!)
   const override = readCodeElementOverride(clip.elementOverrides, target.elementId) ?? {}
-  return { owner, sequence, clip, entry, element, program, override, values: evaluateCodeElementOverride(override, time), time, textParameter: element?.command.kind === 'text' ? codeElementTextParameter(program, element.sourceSpan?.start) : undefined }
+  return { owner, sequence, clip, entry, element, program, override, values: evaluateCodeElementOverride(override, time), time, textParameter: element?.command.kind === 'text' ? codeElementTextParameter(program, element.sourceSpan?.start, element.sourceSpan?.file) : undefined }
 }
 function edit(target: VideoEditCodeElementTarget, change: (clip: ReturnType<typeof resolve>['clip']) => void, gesture?: VideoEditGesture): void {
   if (gesture && gesture.projectId !== target.projectId) throw new Error('元素调整不属于此剪辑。')
@@ -107,7 +107,7 @@ export function askAssistantForVideoEditCodeElement(target: VideoEditCodeElement
   if (!current.element || !current.entry) throw new Error('此元素当前不可见，请选择可见元素。')
   const span = current.element.sourceSpan
   const text = bake ? `请把这些覆盖写回源码，保留其它元素和动画。覆盖：${JSON.stringify(current.override)}；sourceSpan：${JSON.stringify(span)}。创建新的源码版本，在同一事务绑定该片段的新版本并只删除已合并覆盖。` : '请修改这里（等待用户说明）。'
-  const id = createVideoEditAnnotation(target.projectId, target.sequenceId, { frame: current.owner.frame, clipId: target.clipId, target: { kind: 'element', elementId: target.elementId, ...(span ? { sourceSpan: { start: span.start, end: span.end } } : {}), region: videoEditCodeElementRegion(current.entry, current.element, current.sequence) }, text, status: 'open' })
+  const id = createVideoEditAnnotation(target.projectId, target.sequenceId, { frame: current.owner.frame, clipId: target.clipId, target: { kind: 'element', elementId: target.elementId, ...(span ? { sourceSpan: { file: span.file, start: span.start, end: span.end } } : {}), region: videoEditCodeElementRegion(current.entry, current.element, current.sequence) }, text, status: 'open' })
   const mark = current.owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!.annotations.find(mark => mark.id === id)!
   openAssistant(bake ? '请把这个元素的覆盖写回源码：' : '请修改这里：', { context: videoEditAnnotationPrompt(target.projectId, [mark], text), onTextSubmitted: submitted => updateVideoEditAnnotation(target.projectId, id, current => ({ ...current, text: bake ? `${text}\n用户说明：${submitted}` : submitted })) })
   return id
@@ -115,13 +115,13 @@ export function askAssistantForVideoEditCodeElement(target: VideoEditCodeElement
 export async function bakeVideoEditCodeElement(target: VideoEditCodeElementTarget, signal?: AbortSignal): Promise<'baked' | 'assistant'> {
   const current = readVideoEditCodeElementEdit(target)
   if (!current.element || !current.entry) throw new Error('此元素当前不可见。')
-  const count = current.entry.index.bounds.filter(bound => bound.sourceSpan?.start === current.element!.sourceSpan?.start).length
-  const result = bakeCodeElementLiterals(current.entry.source, current.element, current.override, count)
+  const count = current.entry.index.bounds.filter(bound => bound.sourceSpan?.start === current.element!.sourceSpan?.start && bound.sourceSpan?.file === current.element!.sourceSpan?.file).length
+  const result = bakeCodeElementLiterals(current.entry.files.files[current.element.sourceSpan?.file ?? current.entry.files.entry], current.element, current.override, count)
   // Offset-based identities of later calls change when a literal's length changes.
   // Let the assistant rebuild identities rather than silently invalidate other edits.
   const otherOffsetIds = Object.keys(current.clip.elementOverrides ?? {}).some(id => id !== target.elementId && id.startsWith('call:'))
   if (!result.merged || otherOffsetIds) { askAssistantForVideoEditCodeElement(target, true); return 'assistant' }
-  const candidate = await prepareVideoEditCodeCandidate(target, result.source, 'single', signal, { clearElementOverrides: [target.elementId] })
+  const candidate = await prepareVideoEditCodeCandidate(target, { ...current.entry.files, files: { ...current.entry.files.files, [current.element.sourceSpan?.file ?? current.entry.files.entry]: result.source } }, 'single', signal, { clearElementOverrides: [target.elementId] })
   try { if (candidate.impacts.length) throw new Error('源码写回改变了参数，请在源码编辑器中检查。'); commitVideoEditCodeCandidate(candidate); return 'baked' }
   finally { disposeVideoEditCodeCandidate(candidate) }
 }

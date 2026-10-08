@@ -1,4 +1,5 @@
-import { CODE_MATERIAL_LIMITS, CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
+import { normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialProgram, CodeMaterialErrorCode, CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 
 export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ program: CodeMaterialProgram } | { error: { code: CodeMaterialErrorCode; message: string; sourceSpan?: CodeSourceSpan } })
@@ -6,7 +7,7 @@ export interface CodeCompilerWorker {
   onmessage: ((event: MessageEvent<CodeCompilerResponse>) => void) | null
   onerror: ((event: ErrorEvent) => void) | null
   onmessageerror: ((event: MessageEvent) => void) | null
-  postMessage(message: { id: number; source: string }): void
+  postMessage(message: { id: number; files: CodeMaterialFiles }): void
   terminate(): void
 }
 interface Pending { resolve: (program: CodeMaterialProgram) => void; reject: (error: Error) => void; clean: () => void }
@@ -45,10 +46,11 @@ export class VideoEditCodeCompiler {
     this.pending.clear()
     this.jobs.clear()
   }
-  compile(source: string, signal?: AbortSignal): Promise<CodeMaterialProgram> {
+  compile(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
     if (this.disposed) return Promise.reject(new Error('源码检查会话已关闭。'))
     if (signal?.aborted) return Promise.reject(new DOMException('源码检查已取消。', 'AbortError'))
-    if (typeof source !== 'string' || source.length > CODE_MATERIAL_LIMITS.sourceBytes || new TextEncoder().encode(source).byteLength > CODE_MATERIAL_LIMITS.sourceBytes) return Promise.reject(new CodeMaterialError('SOURCE_LIMIT', '源码最多64KiB。'))
+    let files: CodeMaterialFiles
+    try { files = normalizeCodeMaterialFiles(source) } catch (error) { return Promise.reject(error) }
     if (this.jobs.size >= 8) return Promise.reject(new CodeMaterialError('BUDGET', '源码检查队列已满，请等待当前检查完成。'))
     let worker: CodeCompilerWorker
     try { worker = this.acquire() } catch (error) { return Promise.reject(error) }
@@ -63,7 +65,7 @@ export class VideoEditCodeCompiler {
       const timer = setTimeout(() => { if (this.pending.has(id)) this.reset(new Error('源码检查超过时限，已释放线程；最后有效版本保留，请重试。')) }, this.timeoutMs)
       const clean = (): void => { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
       this.jobs.add(id); this.pending.set(id, { resolve, reject, clean }); signal?.addEventListener('abort', abort, { once: true })
-      try { worker.postMessage({ id, source }) } catch (error) { this.reset(error instanceof Error ? error : new Error(String(error))) }
+      try { worker.postMessage({ id, files }) } catch (error) { this.reset(error instanceof Error ? error : new Error(String(error))) }
     })
   }
   dispose(): void { this.disposed = true; this.reset(new Error('源码检查会话已关闭。')) }

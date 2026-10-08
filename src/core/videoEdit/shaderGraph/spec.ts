@@ -89,6 +89,7 @@ export const shaderGraphCustomShaderSchema = z.object({
   description: z.string().max(2000).optional(),
   /** 宿主填写：wgsl 第一行在作者源码里的行号，用来把 GPU 编译报错换算成源码行。 */
   sourceLine: z.number().int().positive().optional(),
+  sourceFile: z.string().optional(),
 }).strict()
 export type ShaderGraphCustomShader = z.infer<typeof shaderGraphCustomShaderSchema>
 

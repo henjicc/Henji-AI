@@ -1,3 +1,5 @@
+import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
@@ -34,8 +36,31 @@ const editor = (index = 0) => readVideoEditCodeEditor(owner.document.id, sequenc
 function View({ visible = true }: { visible?: boolean }): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditEffectsPanel instance={owner} onError={onError} visible={visible} /> }
 function transfer(type: string, value: unknown, files: File[] = []): DataTransfer { return { types: [type], files, getData: (requested: string) => requested === type ? JSON.stringify(value) : '' } as unknown as DataTransfer }
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: unknown) => void; const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail }); return { promise, resolve, reject } }
-function candidate(overrides: Partial<VideoEditCodeCandidate> = {}): VideoEditCodeCandidate { return { target: editor().target, source, scope: 'single', versionId: 'internal-candidate-version', clipCount: 1, bitmap: { width: 3840, height: 2160, close: vi.fn() } as unknown as ImageBitmap, impacts: [], ...overrides } }
+function candidate(overrides: Partial<VideoEditCodeCandidate> = {}): VideoEditCodeCandidate { return { target: editor().target, files: { entry: 'main.ts', files: { 'main.ts': source } }, scope: 'single', versionId: 'internal-candidate-version', clipCount: 1, bitmap: { width: 3840, height: 2160, close: vi.fn() } as unknown as ImageBitmap, impacts: [], ...overrides } }
 async function check(view: ReturnType<typeof render>): Promise<void> { await act(async () => { fireEvent.click(view.getByRole('button', { name: '检查并预览' })) }) }
+
+it('多文件草稿新建、切换、重命名、删除与保存新版本保留旧版本', async () => {
+  const original = structuredClone(owner.document.codeMaterials)
+  const proof = candidate(); vi.mocked(prepareVideoEditCodeCandidate).mockResolvedValue(proof)
+  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '查看与编辑源码' }))
+  expect(view.getByRole('button', { name: '删除文件' }).hasAttribute('disabled')).toBe(true)
+  fireEvent.click(view.getByRole('button', { name: '新建文件' }))
+  fireEvent.change(view.getByRole('textbox', { name: '源码文件路径' }), { target: { value: 'parts/card.ts' } })
+  fireEvent.click(view.getByRole('button', { name: '确定' }))
+  fireEvent.change(view.getByRole('textbox', { name: '代码素材源码' }), { target: { value: 'export const width=30;' } })
+  fireEvent.click(view.getByRole('button', { name: '重命名' }))
+  fireEvent.change(view.getByRole('textbox', { name: '源码文件路径' }), { target: { value: 'parts/卡片.ts' } })
+  fireEvent.click(view.getByRole('button', { name: '确定' }))
+  fireEvent.click(view.getByRole('option', { name: 'main.ts · 入口' }))
+  expect((view.getByRole('textbox', { name: '代码素材源码' }) as HTMLTextAreaElement).value).toBe(source)
+  await check(view)
+  expect(prepareVideoEditCodeCandidate).toHaveBeenCalledWith(editor().target, { entry: 'main.ts', files: { 'main.ts': source, 'parts/卡片.ts': 'export const width=30;' } }, 'single', expect.any(AbortSignal))
+  fireEvent.click(view.getByRole('button', { name: '保存为新版本' }))
+  expect(commitVideoEditCodeCandidate).toHaveBeenCalledWith(proof, false)
+  expect(owner.document.codeMaterials).toEqual(original)
+  fireEvent.click(view.getByRole('option', { name: 'parts/卡片.ts' })); fireEvent.click(view.getByRole('button', { name: '删除文件' }))
+  expect(view.queryByRole('option', { name: 'parts/卡片.ts' })).toBeNull()
+})
 
 beforeEach(async () => {
   installHarnessNativeStorage(); onError = vi.fn(); draw = vi.fn()
@@ -50,7 +75,7 @@ beforeEach(async () => {
   vi.mocked(disposeVideoEditCodeCandidate).mockReset().mockImplementation(proof => { if (!disposed.has(proof)) { disposed.add(proof); proof.bitmap.close() } })
   vi.mocked(openAssetLibrary).mockClear()
   owner = (await createVideoEditProject())!
-  const program = compileCodeMaterial(source); const version = { id: 'v', source, apiVersion: 1 as const, languageVersion: program.languageVersion }
+  const program = compileCodeMaterial(source); const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 1 as const, languageVersion: program.languageVersion }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
   editVideoProject(owner.document.id, document => {
     document.codeMaterials = [{ id: 'd', name: program.name, defaultVersionId: 'v', versions: [version] }]
@@ -117,13 +142,13 @@ it('源码按需展开，检查生成真实候选画布，单片段提交携带�
   const proof = candidate(); vi.mocked(prepareVideoEditCodeCandidate).mockResolvedValue(proof)
   const view = render(<View />); expect(view.queryByRole('textbox', { name: '代码素材源码' })).toBeNull()
   fireEvent.click(view.getByRole('button', { name: '查看与编辑源码' })); expect((view.getByRole('textbox', { name: '代码素材源码' }) as HTMLTextAreaElement).value).toBe(source)
-  expect(view.getByRole('button', { name: '应用已检查源码' }).hasAttribute('disabled')).toBe(true)
+  expect(view.getByRole('button', { name: '保存为新版本' }).hasAttribute('disabled')).toBe(true)
   await check(view)
-  expect(prepareVideoEditCodeCandidate).toHaveBeenCalledWith(editor().target, source, 'single', expect.any(AbortSignal))
+  expect(prepareVideoEditCodeCandidate).toHaveBeenCalledWith(editor().target, editor().files, 'single', expect.any(AbortSignal))
   expect(draw).toHaveBeenCalledWith(proof.bitmap, 0, 0)
   const canvas = view.getByLabelText('源码候选预览') as HTMLCanvasElement; expect([canvas.width, canvas.height]).toEqual([3840, 2160])
   expect(view.container.textContent).not.toContain(proof.versionId)
-  fireEvent.click(view.getByRole('button', { name: '应用已检查源码' }))
+  fireEvent.click(view.getByRole('button', { name: '保存为新版本' }))
   expect(commitVideoEditCodeCandidate).toHaveBeenCalledWith(proof, false); expect(proof.bitmap.close).toHaveBeenCalledTimes(1); expect([canvas.width, canvas.height]).toEqual([0, 0]); expect(onError).not.toHaveBeenCalled()
 })
 
@@ -132,10 +157,10 @@ it('批量范围明确选择，迁移逐项显示原值和动画影响，勾选�
   vi.mocked(prepareVideoEditCodeCandidate).mockResolvedValue(proof)
   const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '查看与编辑源码' }))
   fireEvent.click(view.getByRole('button', { name: '源码应用范围' })); fireEvent.click(view.getByText('相同原版本的所有片段')); await check(view)
-  expect(prepareVideoEditCodeCandidate).toHaveBeenCalledWith(editor().target, source, 'matching', expect.any(AbortSignal))
+  expect(prepareVideoEditCodeCandidate).toHaveBeenCalledWith(editor().target, editor().files, 'matching', expect.any(AbortSignal))
   expect(view.getByText('序列甲 · 片段甲 · 强度')).toBeTruthy(); expect(view.getByText('参数已删除；移除原值；移除已有关键帧')).toBeTruthy(); expect(view.getByText('将应用到 2 个片段')).toBeTruthy()
-  fireEvent.click(view.getByRole('button', { name: '应用已检查源码' })); expect(commitVideoEditCodeCandidate).not.toHaveBeenCalled()
-  fireEvent.click(view.getByRole('checkbox', { name: '确认参数与关键帧迁移' })); fireEvent.click(view.getByRole('button', { name: '应用已检查源码' }))
+  fireEvent.click(view.getByRole('button', { name: '保存为新版本' })); expect(commitVideoEditCodeCandidate).not.toHaveBeenCalled()
+  fireEvent.click(view.getByRole('checkbox', { name: '确认参数与关键帧迁移' })); fireEvent.click(view.getByRole('button', { name: '保存为新版本' }))
   expect(commitVideoEditCodeCandidate).toHaveBeenCalledWith(proof, true); expect(onError).not.toHaveBeenCalled()
 })
 
@@ -169,10 +194,10 @@ it('外部剪辑修改立即使候选不可提交，自身提交的发布不被�
   const first = candidate(); vi.mocked(prepareVideoEditCodeCandidate).mockResolvedValue(first)
   const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '查看与编辑源码' })); await check(view)
   act(() => setVideoEditCodeParameter(editor().target, 'amount', 6))
-  expect(first.bitmap.close).toHaveBeenCalledTimes(1); expect(view.getByRole('button', { name: '应用已检查源码' }).hasAttribute('disabled')).toBe(true)
+  expect(first.bitmap.close).toHaveBeenCalledTimes(1); expect(view.getByRole('button', { name: '保存为新版本' }).hasAttribute('disabled')).toBe(true)
   const second = candidate(); vi.mocked(prepareVideoEditCodeCandidate).mockResolvedValue(second); await check(view)
   vi.mocked(commitVideoEditCodeCandidate).mockImplementation(() => { setVideoEditCodeParameter(editor().target, 'amount', 7); return 'accepted' })
-  fireEvent.click(view.getByRole('button', { name: '应用已检查源码' }))
+  fireEvent.click(view.getByRole('button', { name: '保存为新版本' }))
   expect(editor().parameters.amount).toBe(7); expect(second.bitmap.close).toHaveBeenCalledTimes(1); expect(view.queryByRole('alert')).toBeNull(); expect(onError).not.toHaveBeenCalled()
 })
 
@@ -180,7 +205,7 @@ it('候选画面呈现失败释放证明与资源，恢复检查后才可提交'
   const proof = candidate(); vi.mocked(prepareVideoEditCodeCandidate).mockResolvedValue(proof); draw.mockImplementation(() => { throw new Error('候选画面不可用') })
   const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '查看与编辑源码' })); await check(view)
   await waitFor(() => expect(view.getByRole('alert').textContent).toContain('候选画面不可用'))
-  expect(proof.bitmap.close).toHaveBeenCalledTimes(1); expect(view.getByRole('button', { name: '应用已检查源码' }).hasAttribute('disabled')).toBe(true); expect(commitVideoEditCodeCandidate).not.toHaveBeenCalled()
+  expect(proof.bitmap.close).toHaveBeenCalledTimes(1); expect(view.getByRole('button', { name: '保存为新版本' }).hasAttribute('disabled')).toBe(true); expect(commitVideoEditCodeCandidate).not.toHaveBeenCalled()
 })
 
 it('异步图片失败保留原绑定，隐藏整个面板取消源码检查并释放晚到画面', async () => {
@@ -195,4 +220,20 @@ it('异步图片失败保留原绑定，隐藏整个面板取消源码检查并�
   view.rerender(<View visible={false} />); expect(signal.aborted).toBe(true)
   const late = candidate(); await act(async () => result.resolve(late))
   expect(late.bitmap.close).toHaveBeenCalledTimes(1); expect(onError).not.toHaveBeenCalled(); expect(commitVideoEditCodeCandidate).not.toHaveBeenCalled()
+})
+
+it('模块编译错误自动选择对应文件并定位错误行', async () => {
+  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '查看与编辑源码' }))
+  fireEvent.click(view.getByRole('button', { name: '新建文件' }))
+  fireEvent.change(view.getByRole('textbox', { name: '源码文件路径' }), { target: { value: 'parts/card.ts' } })
+  fireEvent.click(view.getByRole('button', { name: '确定' }))
+  const module = 'export const a=1;\nexport const b=nope;'
+  fireEvent.change(view.getByRole('textbox', { name: '代码素材源码' }), { target: { value: module } })
+  fireEvent.click(view.getByRole('option', { name: 'main.ts · 入口' }))
+  vi.mocked(prepareVideoEditCodeCandidate).mockRejectedValue(new CodeMaterialError('SYNTAX', '未知名称', { file: 'parts/card.ts', start: 0, end: 0, startLine: 2, endLine: 2, startColumn: 16, endColumn: 20 }))
+  await check(view)
+  const input = view.getByRole('textbox', { name: '代码素材源码' }) as HTMLTextAreaElement
+  expect(input.value).toBe(module); expect(input.selectionStart).toBe(module.indexOf('nope'))
+  expect(view.getByRole('alert').textContent).toContain('parts/card.ts:2:16')
+  expect(commitVideoEditCodeCandidate).not.toHaveBeenCalled()
 })

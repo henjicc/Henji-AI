@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
@@ -22,10 +23,10 @@ it('reuse author index across mask/placement while returning current placement; 
   installHarnessNativeStorage()
   const owner = await createVideoEditTestProject(); const id = owner.document.id; const sequenceId = owner.activeSequenceId
   const source = 'export default {apiVersion:1,languageVersion:3,name:"缓存",kind:"generator",mode:"dynamic",width:1920,height:1080,durationSeconds:10,seed:7,parameters:{amount:{type:"number",title:"位置",default:10,min:0,max:100,step:1}},render(ctx){return [rect({id:"box",x:ctx.params.amount+ctx.time*10,y:100,width:100,height:100,fill:ctx.style.palette.accent})];}}'
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', apiVersion: 1, languageVersion: 3, source }, compileCodeMaterial(source))
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', apiVersion: 1, languageVersion: 3, ...testCodeManifest(source, owner.document) }, compileCodeMaterial(source))
   let clipId = ''; let effectId = ''
   editVideoProject(id, document => {
-    document.codeMaterials = [{ id: 'definition', name: '缓存', defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 1, languageVersion: 3, source }] }]
+    document.codeMaterials = [{ id: 'definition', name: '缓存', defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 1, languageVersion: 3, ...testCodeManifest(source, document) }] }]
     document.items.push({ id: 'item', name: '缓存', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: { amount: 10 } } })
     document.styleKits = [styleKitSchema.parse({ id: 'kit', name: '风格' })]; document.sequences[0].styleKitId = 'kit'
     const clip = makeVideoEditItemClip(document, 'item', sequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document))

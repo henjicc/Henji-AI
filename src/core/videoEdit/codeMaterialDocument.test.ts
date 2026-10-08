@@ -1,3 +1,4 @@
+import { testCodeManifest } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
 import { compileCodeMaterial } from './codeMaterial/compiler'
@@ -10,7 +11,7 @@ import { makeVideoEditItemClip, makeVideoEditItemSequence } from './projectItems
 const source = (mode = 'dynamic') => `export default {apiVersion:1,name:"原创透明形状",kind:"generator",mode:"${mode}",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{amount:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}},render(ctx){return [rect({x:${mode === 'dynamic' ? 'ctx.time*10' : '10'},y:10,width:100,height:100,fill:[1,0,0,ctx.params.amount]})];}}`
 function setup(mode = 'dynamic') {
   const program = compileCodeMaterial(source(mode)); const document = createVideoEditDocument('代码剪辑')
-  document.codeMaterials = [{ id: 'definition', name: program.name, defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 1, languageVersion: 1, source: source(mode) }] }]
+  document.codeMaterials = [{ id: 'definition', name: program.name, defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 1, languageVersion: 1, ...testCodeManifest(source(mode), document) }] }]
   document.items.push({ id: 'item', name: program.name, kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: { amount: .2 } } })
   const read = () => program; const sequence = document.sequences[0]
   sequence.frameRate = { numerator: 30000, denominator: 1001 }

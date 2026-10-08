@@ -52,7 +52,7 @@ export async function prepareCodeImageGenerationContext(target: VideoEditCodeTar
   if (editor.target.versionId !== target.versionId) throw new Error('原代码版本已改变，请重新打开生成面板。')
   const parameter = editor.metadata.parameters.find(parameter => parameter.key === key && parameter.type === 'image')
   if (!parameter) throw new Error('此参数不是图片引用。')
-  const program = await compileVideoEditCode(editor.source, signal)
+  const program = await compileVideoEditCode(editor.files, signal)
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId)
   const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!

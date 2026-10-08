@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
@@ -176,7 +177,7 @@ it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'con
   try {
     const document = createVideoEditDocument('检查器切换')
     const code = { definitionId: 'definition', versionId: 'version', parameters: {} }
-    document.codeMaterials = [{ id: code.definitionId, name: '代码画面', defaultVersionId: code.versionId, versions: [{ id: code.versionId, apiVersion: 1, languageVersion: 3, source: 'export default {apiVersion:1,languageVersion:3,name:"代码画面",kind:"generator",mode:"static",width:1920,height:1080,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"box",x:0,y:0,width:100,height:100,fill:ctx.style.palette.accent})];}}' }] }]
+    document.codeMaterials = [{ id: code.definitionId, name: '代码画面', defaultVersionId: code.versionId, versions: [{ id: code.versionId, apiVersion: 1, languageVersion: 3, ...testCodeManifest('export default {apiVersion:1,languageVersion:3,name:"代码画面",kind:"generator",mode:"static",width:1920,height:1080,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"box",x:0,y:0,width:100,height:100,fill:ctx.style.palette.accent})];}}', document) }] }]
     document.items.push({ id: 'item', name: '代码画面', kind: 'code', code })
     document.sequences[0].clips.push(videoEditClipSchema.parse({ id: 'clip', itemId: 'item', name: '代码画面', kind: 'code', track: 1, start: 0, duration: 60, code, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }))
     const instance = await openSeededVideoEdit(document)

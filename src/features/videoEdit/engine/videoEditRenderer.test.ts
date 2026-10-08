@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditSequence, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
@@ -368,7 +369,7 @@ it('拆出的音画共用原引用且混音逐样本不增倍，纯画面独奏�
 const codeSource = 'export default {apiVersion:1,name:"原创透明图形",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{},render(ctx){return [rect({x:0,y:0,width:100,height:100,fill:[1,0,0,.5]})];}}'
 function mixedFixture(): ReturnType<typeof videoEditComposition> {
   const document = fixture()
-  document.codeMaterials = [{ id: 'definition', name: '原创图形', defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 1, languageVersion: 1, source: codeSource }] }]
+  document.codeMaterials = [{ id: 'definition', name: '原创图形', defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 1, languageVersion: 1, ...testCodeManifest(codeSource, document) }] }]
   const instance = { definitionId: 'definition', versionId: 'version', parameters: {} }
   document.items.push({ id: 'code-item', name: '原创图形', kind: 'code', code: instance })
   document.clips.push({ ...document.clips[0], id: 'code-clip', itemId: 'code-item', name: '原创图形', kind: 'code', track: 2, code: instance })

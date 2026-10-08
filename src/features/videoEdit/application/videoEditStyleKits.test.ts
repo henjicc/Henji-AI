@@ -1,3 +1,4 @@
+import { testCodeSource, testFilesSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
@@ -34,7 +35,7 @@ vi.mock('../engine/videoEditRenderSession', async () => {
       trial.documents.push(this.document)
       for (const clip of this.document.clips) if (clip.code) {
         const version = this.document.codeMaterials!.find(value => value.id === clip.code!.definitionId)!.versions.find(value => value.id === clip.code!.versionId)!
-        const program = compileCodeMaterial(version.source); const time = (frame - clip.start) / this.document.fps
+        const program = compileCodeMaterial(testCodeSource(this.document, version)); const time = (frame - clip.start) / this.document.fps
         evaluateCodeMaterial(program, { time, localTime: time, sequenceTime: frame / this.document.fps, width: program.width, height: program.height, frame, fps: this.document.fps, style: resolveVideoEditStyleKit(this.document, this.document, clip)?.tokens }, clip.code.parameters, { measureText: measureCodeText })
       }
       return { presented: true, bitmap: { close() {} } }
@@ -110,7 +111,7 @@ it('作品提取是候选，取消不写；无效样例在编译/求值时阻断
   const value = await extractVideoEditWorkStyle(owner.document.id, owner.activeSequenceId, '候选')
   expect(value.name).toBe('候选'); expect(owner.document).toBe(before)
   await expect(extractVideoEditWorkStyle(owner.document.id, owner.activeSequenceId, '取消', AbortSignal.abort())).rejects.toThrow()
-  const sample = available().samples[0]; const invalid = { ...available(), samples: [{ ...sample, source: sample.source.replace('s.typeScale.xl * ctx.height', '1 / ctx.time') }] }
+  const sample = available().samples[0]; const invalid = { ...available(), samples: [{ ...sample, source: testFilesSource(sample.source).replace('s.typeScale.xl * ctx.height', '1 / ctx.time') }] }
   await expect(checkStyleKit(invalid)).rejects.toThrow()
   editVideoProject(owner.document.id, document => ({ ...document, name: '候选不会改这份工程' }))
 })

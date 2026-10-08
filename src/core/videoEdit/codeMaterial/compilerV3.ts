@@ -1,4 +1,5 @@
 import ts from 'typescript'
+import { originalCodeSourceSpan } from './modules'
 import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_TIME_KEYS, CODE_V3_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, finiteCodeNumber } from './contract'
 import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, CodeExpression, CodeMaterialProgram, CodeSourceSpan, CodeValueType } from './contract'
 import { CODE_EASE_NAMES } from './motion'
@@ -10,13 +11,11 @@ import { CODE_STYLE_EXPRESSION, isCodeStyleExpression } from './style'
 import { codeShaderFilterPasses, codeShaderNameIssue, codeShaderPropIssue, codeShaderTime, codeShaderTypeIssue, staticCodeShaderValue, type CodeShaderRole } from './shaders'
 
 export function codeSourceSpan(node: ts.Node): CodeSourceSpan {
-  const file = node.getSourceFile(); const start = node.getStart(file); const end = node.getEnd()
-  const a = file.getLineAndCharacterOfPosition(start); const b = file.getLineAndCharacterOfPosition(end)
-  return { start, end, startLine: a.line + 1, startColumn: a.character + 1, endLine: b.line + 1, endColumn: b.character + 1 }
+  return originalCodeSourceSpan(node)
 }
 function fail(node: ts.Node, message: string, code: 'SYNTAX' | 'TYPE' | 'BUDGET' | 'NON_FINITE' | 'PARAMETERS' = 'SYNTAX'): never {
   const span = codeSourceSpan(node)
-  throw new CodeMaterialError(code, `${message}（${span.startLine}:${span.startColumn}）`, span)
+  throw new CodeMaterialError(code, message, span)
 }
 function fields(node: ts.ObjectLiteralExpression): Map<string, ts.Expression> {
   const values = new Map<string, ts.Expression>()
@@ -163,11 +162,12 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     const result = ts.isBlock(arrow.body) ? block(arrow.body.statements, inner) : compile(arrow.body, inner)
     active.delete(arrow); checked.add(arrow); inliningDepth--; return result
   }
-  const compile = (node: ts.Expression, env: Scope): CodeExpression => {
+  const compile = (node: ts.Expression, env: Scope): CodeExpression => { const value = compileExpression(node, env); return { ...value, sourceSpan: value.sourceSpan ?? codeSourceSpan(node) } }
+  const compileExpression = (node: ts.Expression, env: Scope): CodeExpression => {
     charge(node)
     if (ts.isParenthesizedExpression(node)) return compile(node.expression, env)
     if (ts.isNumericLiteral(node)) return { kind: 'literal', type: 'number', value: finiteCodeNumber(Number(node.text), '源码数字') }
-    if (ts.isStringLiteral(node)) {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       if (node.text.length > 4096) fail(node, '字符串超过 4096 UTF-16 单元。', 'BUDGET')
       return { kind: 'literal', type: 'string', value: node.text }
     }
@@ -353,7 +353,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
   }
   const declarations = (statements: readonly ts.Statement[], env: Scope): void => {
     for (const statement of statements) {
-      if (!ts.isVariableStatement(statement) || statement.modifiers?.length || statement.declarationList.flags !== ts.NodeFlags.Const) fail(statement, '仅允许 const 声明。')
+      if (!ts.isVariableStatement(statement) || statement.modifiers?.length || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) fail(statement, '仅允许 const 声明。')
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name) || !declaration.initializer || declaration.type || declaration.exclamationToken) fail(declaration, 'const 需要未注解的名称与纯表达式。')
         const name = declaration.name.text; assertCodeMaterialKey(name)

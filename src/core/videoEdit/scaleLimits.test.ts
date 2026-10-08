@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { sceneCutsSchema } from './sceneDetection'
 import { videoEditAudioSyncSize } from './multicamSync'
 import { expect, it } from 'vitest'
@@ -13,7 +14,7 @@ it('接受1200个素材和素材项、400个素材箱、64个序列及超过500�
   document.media = Array.from({ length: 1200 }, (_, index) => ({ id: `media${index}`, name: `照片${index}`, kind: 'image' as const, path: `/images/${index}.png`, width: 16, height: 16, durationSeconds: 0 }))
   document.items = document.media.map((media, index) => ({ id: `item${index}`, name: media.name, kind: media.kind, mediaId: media.id, binId: document.bins[index % 400].id }))
   document.lumetriLuts = Array.from({ length: 300 }, (_, index) => ({ id: `lut${index}`, name: `LUT${index}`, path: `/luts/${index}.cube`, contentIdentity: 'a'.repeat(64) }))
-  document.codeMaterials = Array.from({ length: 100 }, (_, index) => ({ id: `definition${index}`, name: '代码', defaultVersionId: `version${index}`, versions: [{ id: `version${index}`, apiVersion: 1, languageVersion: 1, source: '' }] }))
+  document.codeMaterials = Array.from({ length: 100 }, (_, index) => ({ id: `definition${index}`, name: '代码', defaultVersionId: `version${index}`, versions: [{ id: `version${index}`, apiVersion: 1, languageVersion: 1, ...testCodeManifest('', document) }] }))
   expect(sceneCutsSchema.safeParse(Array.from({ length: 1200 }, (_, index) => index)).success).toBe(true)
   document.sequences = Array.from({ length: 64 }, () => createVideoEditSequence())
   const sequence = document.sequences[0]

@@ -1,3 +1,4 @@
+import { addressCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { CODE_ASSET_LIMITS, codeAssetSchema, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
@@ -86,7 +87,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
       assertOwner(owner, baseline, signal)
       images.push({ id, path: media.path, content, ...(media.assetId ? { assetId: media.assetId } : {}) })
     }
-    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, source: source.source }, parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
+    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files }, codeSources: (await addressCodeMaterialFiles(source.contents)).codeSources, parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
     const bytes = encodeCodeAsset(manifest); const platform = getPlatform()
     const path = options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
     assertOwner(owner, baseline, signal)

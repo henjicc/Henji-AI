@@ -1,3 +1,4 @@
+import { testFilesSource } from './codeMaterial/sourceTestFixtures'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_STYLE_TOKENS, styleKitSchema, styleTokensSchema, styleKitRenderKey, resolveVideoEditStyleKit, recommendedStyleKitText, resolveStyleTypeScale } from './styleKit'
 import { BUILTIN_STYLE_KITS, availableStyleKitFonts } from './styleKitPresets'
@@ -55,7 +56,7 @@ describe('风格包契约与真实作者语言', () => {
     const commands = evaluateCodeMaterial(program, { ...context, style: tokens }, {}, { measureText })
     expect(commands[0]).toMatchObject({ children: [expect.objectContaining({ fill: tokens.palette.surface }), expect.anything(), expect.anything(), expect.anything()] })
     expect(evaluateCodeMaterial(program, context, {}, { measureText }).length).toBeGreaterThan(0)
-    for (const body of ['ctx.style.palette.bg=[1,0,0,1];return [];', 'return [ctx.style.constructor];', 'return [ctx.style.palette.unknown];']) expect(() => compileCodeMaterial(source.replace(/render\(ctx\) \{[\s\S]*$/, `render(ctx) { ${body} } }`))).toThrow()
+    for (const body of ['ctx.style.palette.bg=[1,0,0,1];return [];', 'return [ctx.style.constructor];', 'return [ctx.style.palette.unknown];']) expect(() => compileCodeMaterial(testFilesSource(source).replace(/render\(ctx\) \{[\s\S]*$/, `render(ctx) { ${body} } }`))).toThrow()
     expect(() => readCodeStyleToken(tokens, ['__proto__'])).toThrow()
     expect(() => evaluateCodeMaterial(program, { ...context, style: { ...tokens, palette: { ...tokens.palette, surface: [2, 0, 0, 1] } } }, {}, { measureText })).toThrow()
   })

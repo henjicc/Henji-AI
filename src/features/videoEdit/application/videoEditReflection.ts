@@ -1,3 +1,4 @@
+import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { createVideoEditTextPresetRegistration } from './videoEditTextPresetReflection'
 import { videoEditImportTask } from './videoEditImportTask'
 import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeParameterMetadata } from './videoEditCodeState'
@@ -64,13 +65,15 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false): Vi
     const definition = instance.document.codeMaterials?.find(value => value.id === childId)
     if (!definition) throw new Error('NOT_FOUND：代码素材定义不存在。')
     const item = instance.document.items.find(item => item.code?.definitionId === childId)
-    return { name: definition.name, source: definition.versions.find(version => version.id === definition.defaultVersionId)!.source, defaultVersionId: definition.defaultVersionId, versionIds: definition.versions.map(version => version.id), binId: item?.binId ?? '', ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, definition.defaultVersionId))) as VideoEditFieldData : {}) }
+    const contents = codeMaterialSource(instance.document, { definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} }).contents
+    return { name: definition.name, source: contents.files[contents.entry], ...contents, defaultVersionId: definition.defaultVersionId, versionIds: definition.versions.map(version => version.id), binId: item?.binId ?? '', ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, definition.defaultVersionId))) as VideoEditFieldData : {}) }
   }
   if (ref.kind === 'video_edit.code_version') {
     const definition = instance.document.codeMaterials?.find(value => value.versions.some(version => version.id === childId))
     const version = definition?.versions.find(version => version.id === childId)
     if (!definition || !version) throw new Error('NOT_FOUND：固定代码版本不存在。')
-    return { ...version, definitionId: definition.id, ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, version.id))) as VideoEditFieldData : {}) }
+    const contents = codeMaterialSource(instance.document, { definitionId: definition.id, versionId: version.id, parameters: {} }).contents
+    return { ...version, ...contents, source: contents.files[contents.entry], definitionId: definition.id, ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, version.id))) as VideoEditFieldData : {}) }
   }
   if (!VIDEO_EDIT_TYPES.includes(ref.kind as VideoEditEntityType)) throw new Error('未知剪辑实体类型。')
   const found = videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).find(item => item.id === childId)
@@ -176,8 +179,8 @@ const required: Partial<Record<VideoEditEntityType, string[]>> = {
   'video_edit.sequence': ['video_edit.sequence.name'], 'video_edit.bin': ['video_edit.bin.name'], 'video_edit.item': ['video_edit.item.name', 'video_edit.item.kind'],
   'video_edit.clip': ['video_edit.clip.item_id', 'video_edit.clip.kind', 'video_edit.clip.name'], 'video_edit.annotation': ['video_edit.annotation.target', 'video_edit.annotation.frame', 'video_edit.annotation.text'],
   'video_edit.marker': ['video_edit.marker.frame', 'video_edit.marker.name'], 'video_edit.track': ['video_edit.track.kind'], 'video_edit.caption': ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.text'],
-  'video_edit.code_material': ['video_edit.code_material.source'],
-  'video_edit.code_version': ['video_edit.code_version.source', 'video_edit.code_version.definition_id'],
+  'video_edit.code_material': [],
+  'video_edit.code_version': ['video_edit.code_version.definition_id'],
   'video_edit.graphic_object': ['video_edit.graphic_object.kind'],
   'video_edit.effect': ['video_edit.effect.definition_id'],
   'video_edit.tracker': ['video_edit.tracker.name', 'video_edit.tracker.method', 'video_edit.tracker.prompts'],

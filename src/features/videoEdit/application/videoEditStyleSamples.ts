@@ -1,3 +1,5 @@
+import { normalizeCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { resizeCodeMaterialCanvas } from '@/core/videoEdit/codeElementBake'
 import { styleKitSchema, type StyleKit } from '@/core/videoEdit/styleKit'
 import { createVideoEditPlacedCodeItems } from './videoEditCodeService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
@@ -17,11 +19,12 @@ export async function insertVideoEditStyleSample(projectId: string, sequenceId: 
   if (!sequence || !sample) throw new Error('请选择原序列与风格组件。')
   const existing = owner.document.styleKits?.find(value => value.id === checked.id)
   const snapshot = { ...checked, id: existing ? checked.id : crypto.randomUUID(), revision: existing ? existing.revision + 1 : 0 }
-  const source = sample.source.replace('width: 1920, height: 1080', `width: ${Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator)}, height: ${sequence.height}`)
+  const files = normalizeCodeMaterialFiles(sample.source)
+  const source = { ...files, files: { ...files.files, [files.entry]: resizeCodeMaterialCanvas(files.files[files.entry], { width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), height: sequence.height }) } }
   let ids: string[] = []
   logger.info('style_kit.insert_sample.start', '添加风格组件', { context: { projectId, sequenceId, sampleId } })
   try {
-    await createVideoEditPlacedCodeItems(projectId, [{ source, name: sample.name }], (document, itemIds) => {
+    await createVideoEditPlacedCodeItems(projectId, [{ ...source, name: sample.name }], (document, itemIds) => {
       const styled = { ...document, styleKits: [...(document.styleKits ?? []).filter(value => value.id !== snapshot.id), snapshot], sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, styleKitId: snapshot.id } : value) }
       const result = placeVideoEditDrop(styled, itemIds, sequenceId, placement ?? { frame: owner.activeSequenceId === sequenceId ? owner.frame : 0, mode: 'top' }, { targetTrackIds: owner.targetTrackIds, codeMetadata: readVideoEditCodeMetadata(owner, styled) })
       ids = result.document.sequences.find(value => value.id === sequenceId)!.clips.filter(clip => itemIds.includes(clip.itemId)).map(clip => clip.id); return result.document

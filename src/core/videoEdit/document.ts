@@ -1,3 +1,4 @@
+import { codeSourcesSchema } from './codeMaterial/sources'
 import { videoEditAnnotationSchema, mapVideoEditAnnotationTime } from './annotations'
 export { videoEditAnnotationSchema } from './annotations'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
@@ -105,6 +106,7 @@ export const videoEditDocumentSchema = z.object({
   format: z.literal('henji-video-project'), version: z.literal(2), id: identifier, name, revision: z.number().int().nonnegative(),
   media: z.array(videoEditMediaSchema), bins: z.array(videoEditBinSchema), items: z.array(videoEditItemSchema), sequences: z.array(videoEditSequenceSchema),
   codeMaterials: codeMaterialDefinitionsSchema.optional(),
+  codeSources: codeSourcesSchema.optional(),
   /** 放入与身份同事务保存；回执丢失时核对实际落位，随内容一起撤销。 */
   creativePlacements: z.array(z.object({ operationId: z.string().uuid(), sequenceId: identifier, assetId: identifier,
     itemId: identifier, clipId: z.string().max(100) }).strict()).optional(),
@@ -118,6 +120,8 @@ export const videoEditDocumentSchema = z.object({
   const binsById = new Map(document.bins.map(value => [value.id, value]))
   const itemsById = new Map(document.items.map(value => [value.id, value]))
   const sequencesById = new Map(document.sequences.map(value => [value.id, value]))
+  const hashes = new Set(document.codeSources?.map(source => source.hash))
+  if (document.codeMaterials?.some(definition => definition.versions.some(version => version.files.some(file => !hashes.has(file.hash))))) issue('代码版本引用的源码内容缺失。')
   const definitionsById = new Map(document.codeMaterials?.map(value => [value.id, value]))
   const styleIds = new Set(document.styleKits?.map(value => value.id))
   if (styleIds.size !== (document.styleKits?.length ?? 0)) issue('工程风格包标识不能重复。')
@@ -251,7 +255,7 @@ export type VideoEditMedia = z.infer<typeof videoEditMediaSchema>
 export type VideoEditItem = z.infer<typeof videoEditItemSchema>
 export type VideoEditBin = z.infer<typeof videoEditBinSchema>
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
-export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'lumetriLuts' | 'styleKits'> & { fps: number; sequences?: VideoEditSequence[] }
+export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'codeSources' | 'lumetriLuts' | 'styleKits'> & { fps: number; sequences?: VideoEditSequence[] }
 export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {
   return { id: crypto.randomUUID(), name, width: 1920, height: 1080, frameRate: { numerator: 30, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
     // 新序列与 PR 一样只有一条视频轨（V1）和一条音频轨（A1）；需要更多轨道时拖到轨道外或用轨道头菜单添加。
@@ -263,7 +267,7 @@ export function createVideoEditDocument(name: string): VideoEditDocument {
 export function videoEditComposition(document: VideoEditDocument, sequenceId: string): VideoEditComposition {
   const sequence = document.sequences.find(item => item.id === sequenceId)
   if (!sequence) throw new Error('目标序列不存在。')
-  return { ...sequence, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styleKits ? { styleKits: document.styleKits } : {}), ...(document.lumetriLuts ? { lumetriLuts: document.lumetriLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
+  return { ...sequence, ...(document.codeSources ? { codeSources: document.codeSources } : {}), width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styleKits ? { styleKits: document.styleKits } : {}), ...(document.lumetriLuts ? { lumetriLuts: document.lumetriLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
 }
 export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' | 'items'>, clip: VideoEditClip): VideoEditMedia | undefined {
   const item = document.items.find(item => item.id === clip.itemId)

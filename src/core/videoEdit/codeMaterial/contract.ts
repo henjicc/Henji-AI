@@ -59,7 +59,7 @@ export type CodeBinaryOperator = '+' | '-' | '*' | '/' | '%' | '<' | '<=' | '>' 
 export function codeBinaryCost(op: CodeBinaryOperator): number { return op === '%' ? 4 : 1 }
 export function codeConditionalCost(type: CodeValueType): number { return type === 'color' ? 4 : 1 }
 export type CodeDrawKind = 'rect' | 'ellipse' | 'line' | 'text' | 'image' | 'group' | 'path' | 'shader'
-export interface CodeSourceSpan { start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
+export interface CodeSourceSpan { file: string; start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
 export type CodeBlend = 'normal' | 'multiply' | 'screen' | 'overlay' | 'add' | 'lighten' | 'darken'
 export interface CodeGradient { kind: 'linearGradient' | 'radialGradient'; x1?: number; y1?: number; x2?: number; y2?: number; cx?: number; cy?: number; r?: number; stops: [number, CodeColor][] }
 export type CodePaint = CodeColor | CodeGradient
@@ -75,7 +75,7 @@ export interface CodeDrawMetadata {
   paint?: CodePaint; stroke?: CodePaint; strokeWidth?: number; lineCap?: 'butt' | 'round' | 'square'; lineJoin?: 'miter' | 'round' | 'bevel'; dash?: number[]; trimStart?: number; trimEnd?: number
   shadow?: { x: number; y: number; blur: number; color: CodeColor }; glow?: { radius: number; intensity: number; color: CodeColor }; blur?: number
 }
-export type CodeExpression = { type: CodeValueType } & (
+export type CodeExpression = { type: CodeValueType; sourceSpan?: CodeSourceSpan } & (
   | { kind: 'literal'; value: number | boolean | string }
   | { kind: 'color'; values: CodeExpression[] }
   | { kind: 'context'; key: CodeContextKey }
@@ -99,6 +99,7 @@ export type CodeExpression = { type: CodeValueType } & (
   | { kind: 'textAnimation'; slot: number; countSlot: number; body: CodeExpression }
 )
 export interface CodeMaterialProgram {
+  sourceSpan?: CodeSourceSpan
   apiVersion: 1; languageVersion: 1 | 2 | 3; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
   width: number; height: number; durationSeconds: number; seed: number
   parameters: CodeParameterDeclaration[]; bindings: { name: string; expression: CodeExpression }[]; result: CodeExpression
@@ -119,7 +120,7 @@ export type CodeDrawCommand = CodeDrawMetadata & (
 )
 export type CodeMaterialErrorCode = 'SOURCE_LIMIT' | 'SYNTAX' | 'TYPE' | 'BUDGET' | 'PARAMETERS' | 'COMPATIBILITY' | 'CONTEXT' | 'NON_FINITE'
 export class CodeMaterialError extends Error {
-  constructor(readonly code: CodeMaterialErrorCode, message: string, readonly sourceSpan?: CodeSourceSpan) { super(message); this.name = 'CodeMaterialError' }
+  constructor(readonly code: CodeMaterialErrorCode, message: string, readonly sourceSpan?: CodeSourceSpan) { super(sourceSpan && !message.includes(`（${sourceSpan.file}:`) ? `${message}（${sourceSpan.file}:${sourceSpan.startLine}:${sourceSpan.startColumn}）` : message); this.name = 'CodeMaterialError' }
 }
 export function assertCodeMaterialKey(key: string): void {
   if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key) || ['__proto__', 'prototype', 'constructor', 'caller', 'callee', 'arguments'].includes(key)) throw new CodeMaterialError('SYNTAX', `不允许的名称：${key}`)

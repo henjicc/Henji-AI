@@ -1,3 +1,4 @@
+import { testCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { BUILTIN_STYLE_KITS } from '@/core/videoEdit/styleKitPresets'
@@ -27,7 +28,7 @@ it('科技信息预设按预览尺寸使用正式试渲染，转换前释放bitm
   expect(blob).toBeInstanceOf(Blob)
   const document = vi.mocked(trialVideoEditCodeFrames).mock.calls[0][0][0].document
   expect(document).toMatchObject({ width: 960, height: 540 })
-  expect(compileCodeMaterial(document.codeMaterials![0].versions[0].source)).toMatchObject({ width: 960, height: 540 })
+  expect(compileCodeMaterial(testCodeSource(document, document.codeMaterials![0].versions[0]))).toMatchObject({ width: 960, height: 540 })
   expect(close).toHaveBeenCalledOnce()
   expect(logs.debug.mock.calls.map(call => call[1].event)).toEqual(['style_kit.preview.start', 'style_kit.preview.completed'])
 })
@@ -38,6 +39,7 @@ it.each(['render', 'encode'])('%s永不返回时显示可恢复失败，日志�
   const kit = BUILTIN_STYLE_KITS[1]; const signal = new AbortController().signal
   const result = renderStyleKitPreview(kit, 'title', { width: 960, height: 540 }, signal)
   const assertion = expect(result).rejects.toThrow('等待过久')
+  await vi.waitFor(() => expect(stage === 'render' ? trialVideoEditCodeFrames : encode).toHaveBeenCalledOnce())
   await vi.advanceTimersByTimeAsync(VIDEO_EDIT_PREVIEW_TIMEOUT_MS); await assertion
   expect(logs.warn).toHaveBeenCalledWith('风格预览未完成', expect.objectContaining({ event: 'style_kit.preview.failed' }))
   if (stage === 'encode') expect(close).toHaveBeenCalledOnce()

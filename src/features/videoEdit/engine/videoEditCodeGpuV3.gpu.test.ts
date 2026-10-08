@@ -326,6 +326,12 @@ describe('作者语言着色器GPU接线（shaders 框架）', () => {
       expect(pixel(shifted, 5, 5)).toEqual([0, 0, 255, 255]); expect(pixel(shifted, 40, 5)).toEqual([255, 0, 0, 255])
       const broken = compileCodeMaterial(source('return shaderFilter("bad",{});', 'filter', ['{', '  bad: {kind: "filter", wgsl: `', '    let a = child;', '    return vec4f(nope);`}', '}'].join('\n')))
       await expect(host.filter('own:output', 'own:bad', broken, context, {}, input)).rejects.toMatchObject({ code: 'TYPE', message: expect.stringMatching(/nope[\s\S]*素材源码第 4 行/) })
+      const linked = { entry: 'main.ts', files: { 'main.ts': 'import {body} from "./parts/wgsl";'+source('return shaderFilter("bad",{});', 'filter', '{bad:{kind:"filter",wgsl:body}}'), 'parts/wgsl.ts': 'export const body=`\nreturn vec4f(nope);`;' } }
+      const multi = compileCodeMaterial(linked)
+      await expect(host.filter('own:output', 'own:bad-module', multi, context, {}, input)).rejects.toMatchObject({ code: 'TYPE', sourceSpan: expect.objectContaining({file:'parts/wgsl.ts',startLine:2}), message: expect.stringContaining('parts/wgsl.ts 素材源码第 2 行') })
+      linked.files['parts/wgsl.ts']='export const body=`return vec4f(0.0,1.0,0.0,1.0);`;'
+      const green=await host.filter('own:output','own:good-module',compileCodeMaterial(linked),context,{},input)
+      expect(pixel(await read(green.texture),5,5)).toEqual([0,255,0,255])
     } finally { await host.dispose() }
   }, 60000)
   it('五种类别至少一个真实像素输出',async()=>{

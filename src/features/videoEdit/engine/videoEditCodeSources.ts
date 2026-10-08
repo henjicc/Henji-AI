@@ -1,3 +1,4 @@
+import { codeMaterialFilesKey, documentCodeSourceResolver, resolveCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { createLogger } from '@/core/logging'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
@@ -74,17 +75,18 @@ export class VideoEditCodeSources {
   constructor(private document: VideoEditComposition, private readonly acquireRuntime: () => Promise<CodeRuntime>, private readonly compiler: Compiler = new VideoEditCodeCompiler()) { this.checkVersions(document) }
   private checkVersions(document: VideoEditComposition): void {
     const additions = new Map<string, KnownVersion>(); let bytes = this.knownBytes
+    const resolver = documentCodeSourceResolver(document)
     for (const definition of document.codeMaterials ?? []) for (const version of definition.versions) {
       const key = identity(definition.id, version.id); const known = this.known.get(key) ?? additions.get(key)
+      const files = resolveCodeMaterialFiles(version, resolver)
+      const source = codeMaterialFilesKey(files)
       if (known) {
-        if (known.source !== version.source || known.apiVersion !== version.apiVersion || known.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被改写，请创建新版本。')
+        if (known.source !== source || known.apiVersion !== version.apiVersion || known.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被改写，请创建新版本。')
         continue
       }
-      if (typeof version.source !== 'string' || version.source.length > 65536) throw new CodeMaterialError('SOURCE_LIMIT', '源码最多64KiB。')
-      const size = new TextEncoder().encode(version.source).byteLength
-      if (size > 65536) throw new CodeMaterialError('SOURCE_LIMIT', '源码最多64KiB。')
+      const size = Object.values(files.files).reduce((sum, value) => sum + new TextEncoder().encode(value).byteLength, 0)
       bytes += size
-      additions.set(key, { source: version.source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, bytes: size })
+      additions.set(key, { source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, bytes: size })
     }
     for (const [key, version] of additions) this.known.set(key, version)
     this.knownBytes = bytes
@@ -96,22 +98,23 @@ export class VideoEditCodeSources {
   }
   cancel(): void { this.epoch++; this.controller?.abort(); this.controller = undefined }
   private async program(key: string, version: CodeMaterialVersion, signal: AbortSignal, pinned: ReadonlySet<string>): Promise<CodeMaterialProgram> {
+    const files = resolveCodeMaterialFiles(version, documentCodeSourceResolver(this.document)); const source = codeMaterialFilesKey(files)
     const cached = this.programs.get(key)
     if (cached) {
-      if (cached.source !== version.source) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被改写，请创建新版本。')
+      if (cached.source !== source) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被改写，请创建新版本。')
       this.programs.delete(key); this.programs.set(key, cached); return cached.program
     }
     logger.debug('可见代码源码检查开始', { event: 'video_edit.code.compile.start', context: { sequenceId: this.document.id, version: key } })
     try {
-      const program = await this.compiler.compile(version.source, signal); signal.throwIfAborted()
+      const program = await this.compiler.compile(files, signal); signal.throwIfAborted()
       if (program.apiVersion !== version.apiVersion || program.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '代码源码协议与固定版本声明不一致。')
-      const bytes = new TextEncoder().encode(version.source).byteLength + new TextEncoder().encode(JSON.stringify(program)).byteLength
+      const bytes = new TextEncoder().encode(source).byteLength + new TextEncoder().encode(JSON.stringify(program)).byteLength
       while (this.programs.size >= CACHED_PROGRAMS || this.programBytes + bytes > CACHED_PROGRAM_BYTES) {
         const oldest = [...this.programs].find(([key]) => !pinned.has(key))
         if (!oldest) break
         this.programs.delete(oldest[0]); this.programBytes -= oldest[1].bytes
       }
-      this.programs.set(key, { source: version.source, program: freezeProgram(program), bytes }); this.programBytes += bytes
+      this.programs.set(key, { source, program: freezeProgram(program), bytes }); this.programBytes += bytes
       logger.debug('可见代码源码检查完成', { event: 'video_edit.code.compile.completed', context: { sequenceId: this.document.id, version: key } })
       return program
     } catch (error) {

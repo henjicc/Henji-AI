@@ -1,3 +1,4 @@
+import { testCodeAssetSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 /** @vitest-environment jsdom */
 import React from 'react'
@@ -36,7 +37,7 @@ const asset: AssetRecord = {
   inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [],
 }
 const manifest: CodeAsset = {
-  format: 'henji-code-asset', version: 1, name: '可调图案', sourceVersion: { apiVersion: 1, languageVersion: 1, source: 'not-executed-in-preview' },
+  format: 'henji-code-asset', version: 1, name: '可调图案', ...testCodeAssetSource('not-executed-in-preview', 1),
   parameters: { size: 100 }, images: [],
 }
 function owner(id = 'project-a'): VideoEditInstance {
@@ -77,7 +78,7 @@ describe('可编辑代码资产预览与导入', () => {
     expect(mocks.image).toHaveBeenLastCalledWith(expect.objectContaining({ open: false, imageUrl: '', filePaths: [], infoSource: undefined }), expect.anything())
     expect(mocks.video).toHaveBeenLastCalledWith(expect.objectContaining({ open: false, videoUrl: '', filePath: undefined }), expect.anything())
     expect(mocks.audio).toHaveBeenLastCalledWith(expect.objectContaining({ open: false, audioUrl: '', filePath: undefined }), expect.anything())
-    expect(document.body.textContent).not.toContain(manifest.sourceVersion.source)
+    expect(document.body.textContent).not.toContain(manifest.codeSources[0].source)
     expect(document.body.textContent).not.toContain(asset.contentIdentity)
   })
 

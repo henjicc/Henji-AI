@@ -10,5 +10,6 @@ export function codeShaderFailure(error: unknown, graph: ShaderGraphSpec, span?:
   if (!(error instanceof ShaderGraphError)) return error
   const shader = error.shader ? graph.shaders?.find(value => value.name === error.shader) : undefined
   const line = shader?.sourceLine && error.line ? shader.sourceLine + error.line - 1 : undefined
-  return new CodeMaterialError('TYPE', line ? `${error.message}（素材源码第 ${line} 行）` : error.message, span)
+  const location: CodeSourceSpan | undefined = line ? { file: shader?.sourceFile ?? span?.file ?? 'main.ts', start: 0, end: 0, startLine: line, endLine: line, startColumn: 1, endColumn: 1 } : span
+  return new CodeMaterialError('TYPE', line ? `${error.message}（${location!.file} 素材源码第 ${line} 行）` : error.message, location)
 }

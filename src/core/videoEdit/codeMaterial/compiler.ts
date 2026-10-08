@@ -1,6 +1,8 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '../time'
 import ts from 'typescript'
-import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS, CODE_TIME_KEYS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, codeConditionalCost, finiteCodeNumber } from './contract'
+import { linkCodeMaterialFiles } from './modules'
+import type { CodeMaterialFiles } from './sources'
+import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_MATERIAL_LIMITS, CODE_TIME_KEYS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, codeConditionalCost, finiteCodeNumber } from './contract'
 import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, CodeExpression, CodeMaterialProgram, CodeValueType } from './contract'
 import { parseCodeMaterialParameters } from './parameters'
 import { parseCodeMaterialTypes } from './parameterTypes'
@@ -21,8 +23,7 @@ const binaryOperators = new Map<ts.SyntaxKind, CodeBinaryOperator>([
   [ts.SyntaxKind.EqualsEqualsEqualsToken, '==='], [ts.SyntaxKind.ExclamationEqualsEqualsToken, '!=='], [ts.SyntaxKind.AmpersandAmpersandToken, '&&'], [ts.SyntaxKind.BarBarToken, '||'],
 ])
 function fail(node: ts.Node, message: string, code: 'SYNTAX' | 'TYPE' | 'BUDGET' = 'SYNTAX'): never {
-  const file = node.getSourceFile(); const position = file.getLineAndCharacterOfPosition(node.getStart(file))
-  throw new CodeMaterialError(code, `${message}（${position.line + 1}:${position.character + 1}）`, codeSourceSpan(node))
+  throw new CodeMaterialError(code, message, codeSourceSpan(node))
 }
 function propertyName(node: ts.PropertyName): string {
   if (!ts.isIdentifier(node) && !ts.isStringLiteral(node)) return fail(node, '字段必须使用静态名称。')
@@ -40,7 +41,7 @@ function objectProperties(node: ts.ObjectLiteralExpression): Map<string, ts.Expr
 }
 function staticValue(node: ts.Expression): unknown {
   if (node.kind === ts.SyntaxKind.NullKeyword) return null
-  if (ts.isStringLiteral(node)) { if (node.text.length > CODE_MATERIAL_LIMITS.stringLength) fail(node, '静态文本超出长度限制。'); return node.text }
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) { if (node.text.length > CODE_MATERIAL_LIMITS.stringLength) fail(node, '静态文本超出长度限制。'); return node.text }
   if (ts.isNumericLiteral(node)) return finiteCodeNumber(Number(node.text), '源码数字')
   if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword) return node.kind === ts.SyntaxKind.TrueKeyword
   if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.MinusToken || node.operator === ts.SyntaxKind.PlusToken) && ts.isNumericLiteral(node.operand)) return finiteCodeNumber((node.operator === ts.SyntaxKind.MinusToken ? -1 : 1) * Number(node.operand.text), '源码数字')
@@ -63,10 +64,10 @@ function parseCodeMaterialShaders(node: ts.Expression): ShaderGraphCustomShader[
     const fields = objectProperties(definition)
     const raw: Record<string, unknown> = { name }
     for (const [key, value] of fields) {
-      if (key === 'sourceLine') fail(value, 'sourceLine 由宿主填写。')
+      if (key === 'sourceLine' || key === 'sourceFile') fail(value, 'sourceLine 由宿主填写。')
       raw[key] = key === 'wgsl' ? wgslText(value) : staticValue(value)
       // 引号/反引号后第一个字符所在行 = wgsl 第 1 行。
-      if (key === 'wgsl') raw.sourceLine = value.getSourceFile().getLineAndCharacterOfPosition(value.getStart() + 1).line + 1
+      if (key === 'wgsl') { const span = codeSourceSpan(value); raw.sourceLine = span.startLine; raw.sourceFile = span.file }
     }
     const parsed = shaderGraphCustomShaderSchema.safeParse(raw)
     if (!parsed.success) fail(definition, `着色器 ${name} 定义无效：${parsed.error.issues.map(issue => `${issue.path.join('.') || '定义'} ${issue.message}`).join('；')}。字段：kind（generator|filter）、props（可选，{名: {type?, default, min?, max?}}）、wgsl（返回 vec4f 的函数体）、speedProp、description。`)
@@ -82,28 +83,17 @@ function staticNumber(value: unknown, label: string, min: number, max: number, i
   if (number < min || number > max || (integer && !Number.isInteger(number))) throw new CodeMaterialError('SYNTAX', `${label}超出允许范围。`)
   return number
 }
-function astBudget(file: ts.SourceFile): { astNodes: number; astDepth: number } {
-  const stack = [{ node: file as ts.Node, depth: 0 }]; let astNodes = 0; let astDepth = 0
-  while (stack.length) {
-    const current = stack.pop()!; astNodes++; astDepth = Math.max(astDepth, current.depth)
-    if (astNodes > CODE_V3_LIMITS.astNodes || astDepth > CODE_MATERIAL_LIMITS.depth) fail(current.node, '源码 AST 数量或深度超出预算。', 'BUDGET')
-    ts.forEachChild(current.node, child => { stack.push({ node: child, depth: current.depth + 1 }) })
-  }
-  return { astNodes, astDepth }
-}
 function ensureType(node: ts.Node, expression: CodeExpression, expected: CodeValueType): void { if (expression.type !== expected) fail(node, `需要 ${expected}，实际为 ${expression.type}。`, 'TYPE') }
 
 /** Parse TypeScript syntax only; no emitted JavaScript is ever executed. Unknown syntax fails closed. */
-export function compileCodeMaterial(source: string): CodeMaterialProgram {
-  if (typeof source !== 'string' || source.length > CODE_MATERIAL_LIMITS.sourceBytes || new TextEncoder().encode(source).byteLength > CODE_MATERIAL_LIMITS.sourceBytes) throw new CodeMaterialError('SOURCE_LIMIT', '源码最多 64 KiB。')
-  let file: ts.SourceFile
-  try { file = ts.createSourceFile('material.ts', source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS) } catch { throw new CodeMaterialError('SYNTAX', '源码无法解析或嵌套过深。') }
-  const diagnostics = (file as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics
-  if (diagnostics.length) {
-    const diagnostic = diagnostics[0]; const position = file.getLineAndCharacterOfPosition(diagnostic.start ?? 0)
-    throw new CodeMaterialError('SYNTAX', `源码语法无效：${ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')}（${position.line + 1}:${position.character + 1}）`)
+export function compileCodeMaterial(source: string | CodeMaterialFiles): CodeMaterialProgram {
+  const { file, ...ast } = linkCodeMaterialFiles(source)
+  try { const program = compileLinkedCodeMaterial(file, ast); return { ...program, sourceSpan: codeSourceSpan(file.statements.at(-1)!) } } catch (error) {
+    if (error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, codeSourceSpan(file))
+    throw error
   }
-  const ast = astBudget(file)
+}
+function compileLinkedCodeMaterial(file: ts.SourceFile, ast: { astNodes: number; astDepth: number }): CodeMaterialProgram {
   const exported = file.statements.at(-1)
   if (!exported || !ts.isExportAssignment(exported) || exported.isExportEquals || !ts.isObjectLiteralExpression(exported.expression)) fail(file, '源码必须以 export default 静态对象结束。')
   const definition = exported.expression
@@ -143,10 +133,14 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   const bindings = new Map<string, number>()
   const parameterTypes = new Map(parameters.map(item => [item.key, item.type === 'number' ? 'number' : item.type === 'boolean' ? 'boolean' : item.type === 'color' ? 'color' : item.type === 'image' ? 'image' : 'string'] as const))
   const compile = (node: ts.Expression, arrayOutput = false): CodeExpression => {
+    const expression = compileExpression(node, arrayOutput)
+    return { ...expression, sourceSpan: expression.sourceSpan ?? codeSourceSpan(node) }
+  }
+  const compileExpression = (node: ts.Expression, arrayOutput = false): CodeExpression => {
     program.metrics.cpuOperations++
     if (ts.isParenthesizedExpression(node)) return compile(node.expression, arrayOutput)
     if (ts.isNumericLiteral(node)) return { kind: 'literal', type: 'number', value: finiteCodeNumber(Number(node.text), '源码数字') }
-    if (ts.isStringLiteral(node)) { if (node.text.length > CODE_MATERIAL_LIMITS.stringLength || (kind === 'filter')) fail(node, '滤镜不允许文本，或文本超出长度限制。'); return { kind: 'literal', type: 'string', value: node.text } }
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) { if (node.text.length > CODE_MATERIAL_LIMITS.stringLength || (kind === 'filter')) fail(node, '滤镜不允许文本，或文本超出长度限制。'); return { kind: 'literal', type: 'string', value: node.text } }
     if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword) return { kind: 'literal', type: 'boolean', value: node.kind === ts.SyntaxKind.TrueKeyword }
     if (ts.isIdentifier(node)) { const slot = bindings.get(node.text); if (slot === undefined) return fail(node, `未声明或禁止的名称：${node.text}`); return { kind: 'binding', slot, type: program.bindings[slot].expression.type } }
     if (ts.isPropertyAccessExpression(node) && !node.questionDotToken) {

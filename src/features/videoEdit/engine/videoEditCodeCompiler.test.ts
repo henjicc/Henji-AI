@@ -53,3 +53,14 @@ describe('源码检查线程与有界恢复', () => {
     compiler.dispose(); await Promise.all([closed, failure])
   })
 })
+
+it('Worker协议传完整文件集合，错误回执保留模块位置', async () => {
+  const runtime = worker(); const compiler = new VideoEditCodeCompiler(() => runtime)
+  const files = { entry: 'main.ts', files: { 'main.ts': 'import {x} from "./x"', 'x.ts': 'export const x=1' } }
+  const pending = compiler.compile(files)
+  expect(runtime.postMessage).toHaveBeenCalledWith({ id: 1, files })
+  const span = { file: 'x.ts', start: 0, end: 1, startLine: 2, endLine: 2, startColumn: 1, endColumn: 2 }
+  const failure = expect(pending).rejects.toMatchObject({ code: 'SYNTAX', sourceSpan: span, message: expect.stringContaining('x.ts:2:1') })
+  runtime.onmessage!({ data: { id: 1, error: { code: 'SYNTAX', message: '模块错误', sourceSpan: span } } } as MessageEvent)
+  await failure; compiler.dispose()
+})

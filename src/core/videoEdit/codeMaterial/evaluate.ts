@@ -31,6 +31,12 @@ function validateContext(context: CodeMaterialContext, transitionHandles: boolea
 }
 /** Evaluate generator IR once at an explicit source time. Filter IR stays on the trusted GPU path. */
 export function evaluateCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>> = {}, options: CodeMaterialEvaluationOptions = {}): CodeDrawCommand[] {
+  try { return evaluateCodeMaterialProgram(program, context, values, options) } catch (error) {
+    if (error instanceof CodeMaterialError && !error.sourceSpan && program.sourceSpan) throw new CodeMaterialError(error.code, error.message, program.sourceSpan)
+    throw error
+  }
+}
+function evaluateCodeMaterialProgram(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeMaterialEvaluationOptions): CodeDrawCommand[] {
   if (program.languageVersion === 3 && program.kind === 'generator' && program.apiVersion === 1) {
     validateContext(context, options.transitionHandles === true); codeMaterialRandom(context.seed ?? program.seed, 0)
     const commands = identifyCodeElements(evaluateCodeMaterialV3(program, context, values, options))
@@ -50,6 +56,12 @@ export function evaluateCodeMaterial(program: CodeMaterialProgram, context: Code
   const color = (value: EvaluatedValue): CodeColor => codeColor(value, '图形颜色')
   const bounded = (value: EvaluatedValue, min: number, max: number, label: string): number => { const result = number(value); if (result < min || result > max) throw new CodeMaterialError('BUDGET', `${label}超出图形范围。`); return result }
   const evaluate = (expression: CodeExpression, depth = 0): EvaluatedValue => {
+    try { return evaluateExpression(expression, depth) } catch (error) {
+      if (error instanceof CodeMaterialError && !error.sourceSpan && expression.sourceSpan) throw new CodeMaterialError(error.code, error.message, expression.sourceSpan)
+      throw error
+    }
+  }
+  const evaluateExpression = (expression: CodeExpression, depth = 0): EvaluatedValue => {
     charge(); if (depth > CODE_MATERIAL_LIMITS.depth) throw new CodeMaterialError('BUDGET', '求值表达式嵌套超出预算。')
     const next = (value: CodeExpression): EvaluatedValue => evaluate(value, depth + 1)
     switch (expression.kind) {

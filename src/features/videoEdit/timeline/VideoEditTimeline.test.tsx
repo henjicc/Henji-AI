@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
@@ -179,10 +180,10 @@ beforeEach(async () => {
   })
   owner = (await createVideoEditProject())!
   const program = compileCodeMaterial(source)
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', source, apiVersion: 1, languageVersion: 1 }, program)
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 1 }, program)
   editVideoProject(owner.document.id, document => {
     document.media.push({ id: 'media', name: '视频', path: 'D:/fixture/video.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 30, hasAudio: false })
-    document.codeMaterials = [{ id: 'definition', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', source, apiVersion: 1, languageVersion: 1 }] }]
+    document.codeMaterials = [{ id: 'definition', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 1 }] }]
     document.items.push({ id: 'video-item', name: '视频', kind: 'video', mediaId: 'media' }, { id: 'code-item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
     // 多轨编辑用例沿用八条轨道（A1 + V1–V7）；新序列默认只有 V1/A1。
     addLegacyVideoEditTracks(document.sequences[0])

@@ -1,3 +1,4 @@
+import { codeMaterialFilesSchema, codeSourceTextSchema } from './codeMaterial/sources'
 import { z } from 'zod'
 import type { CodeColor } from './codeMaterial/contract'
 import { CODE_EASE_NAMES } from './codeMaterial/motion'
@@ -29,7 +30,7 @@ export function resolveStyleTypeScale<T extends { typeScale: { baseSize: number;
 }
 export type StyleTokens = z.infer<typeof styleTokensSchema>
 export const DEFAULT_STYLE_TOKENS: StyleTokens = styleTokensSchema.parse({})
-export const styleKitSampleSchema = z.object({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), kind: z.enum(['title', 'lower_third', 'chapter', 'emphasis', 'data', 'transition']), source: z.string().min(1).refine(value => new TextEncoder().encode(value).length <= 65536, '样例源码超过作者语言 64KiB 技术预算。') }).strict()
+export const styleKitSampleSchema = z.object({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), kind: z.enum(['title', 'lower_third', 'chapter', 'emphasis', 'data', 'transition']), source: z.union([codeSourceTextSchema, codeMaterialFilesSchema]) }).strict()
 export const styleKitContentSchema = z.object({ tokens: styleTokensSchema.prefault({}), rules: z.string().default(''), samples: z.array(styleKitSampleSchema).default([]) }).strict().superRefine((value, context) => { if (new Set(value.samples.map(sample => sample.id)).size !== value.samples.length) context.addIssue({ code: 'custom', path: ['samples'], message: '样例标识不能重复。' }) })
 export const styleKitSchema = styleKitContentSchema.safeExtend({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), revision: z.number().int().nonnegative().default(0) })
 export type StyleKit = z.infer<typeof styleKitSchema>

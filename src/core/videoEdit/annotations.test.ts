@@ -13,7 +13,7 @@ export function annotation(input: Partial<VideoEditAnnotation> = {}): VideoEditA
 const reply = { id: 'reply', author: { kind: 'assistant' as const, name: '助手' }, createdAt: '2026-10-08T01:00:00.000Z', text: '移动了标题，撤销本次修改可恢复。' }
 describe('标注状态与目标', () => {
   it('五种目标可写，错误矩形、时间段和元素定位均拒绝', () => {
-    for (const target of [{ kind: 'point', x: .5, y: .5 }, { kind: 'region', x: .2, y: .2, width: .3, height: .4 }, { kind: 'stroke', strokes: [[{ x: .2, y: .3 }], [{ x: .4, y: .5 }]] }, { kind: 'element', elementId: 'headline', sourceSpan: { start: 5, end: 15 } }, { kind: 'range', startFrame: 20, endFrame: 30 }]) expect(videoEditAnnotationSchema.safeParse({ ...annotation(), target, clipId: 'clip', ...(target.kind === 'range' ? { endFrame: 30 } : {}) }).success).toBe(true)
+    for (const target of [{ kind: 'point', x: .5, y: .5 }, { kind: 'region', x: .2, y: .2, width: .3, height: .4 }, { kind: 'stroke', strokes: [[{ x: .2, y: .3 }], [{ x: .4, y: .5 }]] }, { kind: 'element', elementId: 'headline', sourceSpan: { file: 'main.ts', start: 5, end: 15 } }, { kind: 'range', startFrame: 20, endFrame: 30 }]) expect(videoEditAnnotationSchema.safeParse({ ...annotation(), target, clipId: 'clip', ...(target.kind === 'range' ? { endFrame: 30 } : {}) }).success).toBe(true)
     expect(() => annotation({ target: { kind: 'region', x: .8, y: .2, width: .3, height: .4 } })).toThrow('画幅')
     expect(() => annotation({ target: { kind: 'element', elementId: 'headline' } })).toThrow('片段')
     expect(() => annotation({ target: { kind: 'range', startFrame: 20, endFrame: 30 }, endFrame: 40 })).toThrow('一致')

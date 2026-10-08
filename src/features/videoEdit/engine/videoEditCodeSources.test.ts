@@ -1,3 +1,5 @@
+import { testCodeSource, testSetCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { describe, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
@@ -16,7 +18,7 @@ function source(mode: 'static' | 'dynamic' = 'static', name = '新图形', kind 
 }
 function fixture(code = source(), count = 1): VideoEditComposition {
   const document = createVideoEditDocument('代码源生命周期')
-  document.codeMaterials = [{ id: 'definition', name: '图形', defaultVersionId: 'v0', versions: Array.from({ length: count }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, source: count === 1 ? code : source('static', `版本${index}`) })) }]
+  document.codeMaterials = [{ id: 'definition', name: '图形', defaultVersionId: 'v0', versions: Array.from({ length: count }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, ...testCodeManifest(count === 1 ? code : source('static', `版本${index}`), document) })) }]
   document.items = [{ id: 'item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'v0', parameters: {} } }]
   const clip: VideoEditClip = { id: 'clip', itemId: 'item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'v0', parameters: {} }, track: 1, start: 0, duration: 90, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   document.sequences[0].clips = [clip]
@@ -32,7 +34,7 @@ function boundaries(document: VideoEditComposition) {
   const releaseUnused = vi.fn((keys: ReadonlySet<string>) => { for (const key of pictures.keys()) if (!keys.has(key)) pictures.delete(key) })
   const runtime: Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> = { generator, releaseUnused }
   const acquire = vi.fn(async () => runtime)
-  const compiler = { compile: vi.fn(async (code: string, _signal?: AbortSignal) => compileCodeMaterial(code)), dispose: vi.fn() }
+  const compiler = { compile: vi.fn(async (code: string | import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles, _signal?: AbortSignal) => compileCodeMaterial(code)), dispose: vi.fn() }
   return { sources: new VideoEditCodeSources(document, acquire, compiler), compiler, acquire, generator, releaseUnused, pictures }
 }
 function changedVersion(document: VideoEditComposition, id: string): VideoEditComposition {
@@ -75,7 +77,7 @@ describe('可见代码源与固定内容复用', () => {
   })
   it('40份不同代码滤镜同帧保留，下一帧不重新编译，缩短链后闲置缓存回落', async () => {
     const document = fixture(source(), 40)
-    document.codeMaterials![0].versions.forEach((version, index) => { version.source = source('static', `滤镜${index}`, 'filter') })
+    document.codeMaterials![0].versions.forEach((version, index) => { testSetCodeSource(document, version, source('static', `滤镜${index}`, 'filter')); })
     document.clips = [{ ...document.clips[0], kind: 'image', code: undefined,
       effects: Array.from({ length: 40 }, (_, index) => ({ id: `fx-${index}`, name: '效果', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: `v${index}`, parameters: {} } })) }]
     const boundary = boundaries(document)
@@ -86,7 +88,7 @@ describe('可见代码源与固定内容复用', () => {
       }
       expect(boundary.compiler.compile).toHaveBeenCalledTimes(40)
       expect(boundary.sources.diagnostics().programs).toBe(40)
-      const next = { ...document, clips: [{ ...document.clips[0], effects: document.clips[0].effects!.slice(0, 1) }], codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'new', apiVersion: 1 as const, languageVersion: 1 as const, source: source('static', '新滤镜', 'filter') }] }] }
+      const next = { ...document, clips: [{ ...document.clips[0], effects: document.clips[0].effects!.slice(0, 1) }], codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'new', apiVersion: 1 as const, languageVersion: 1 as const, ...testCodeManifest(source('static', '新滤镜', 'filter'), document) }] }] }
       next.clips[0].effects.push({ id: 'new', name: '效果', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: 'new', parameters: {} } })
       boundary.sources.updateDocument(next)
       await boundary.sources.prepare(next, next.clips, 2, () => true)
@@ -95,7 +97,7 @@ describe('可见代码源与固定内容复用', () => {
   })
   it('全透明调整层不准备四项效果，九层原范围继续透传且零GPU资源', async () => {
     const document = fixture(source(), 36)
-    document.codeMaterials![0].versions.forEach((version, index) => { version.source = source('static', `调整滤镜${index}`, 'filter') })
+    document.codeMaterials![0].versions.forEach((version, index) => { testSetCodeSource(document, version, source('static', `调整滤镜${index}`, 'filter')); })
     document.clips = Array.from({ length: 9 }, (_, index) => ({ ...document.clips[0], id: `adjustment-${index}`, kind: 'adjustment' as const, code: undefined, track: index + 1, volume: 0, opacity: 0, adjustment: { fromTrack: 0 },
       effects: Array.from({ length: 4 }, (_, effect) => ({ id: `fx-${index}-${effect}`, name: '效果', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: `v${index * 4 + effect}`, parameters: {} } })) }))
     const boundary = boundaries(document)
@@ -119,7 +121,7 @@ describe('可见代码源与固定内容复用', () => {
   })
   it('32轨关闭或零强度效果不编译、占用程序预算或建立GPU上下文', async () => {
     const document = fixture(source('static', '滤镜', 'filter'), 36)
-    document.codeMaterials![0].versions.forEach((version, index) => { version.source = source('static', `滤镜${index}`, 'filter') })
+    document.codeMaterials![0].versions.forEach((version, index) => { testSetCodeSource(document, version, source('static', `滤镜${index}`, 'filter')); })
     document.clips = Array.from({ length: 32 }, (_, index) => ({ ...document.clips[0], id: `clip-${index}`, kind: 'image' as const, code: undefined, track: index,
       effects: [{ id: `effect-${index}`, name: `效果${index}`, enabled: index % 2 === 0, amount: index % 2 === 0 ? 0 : 1, code: { definitionId: 'definition', versionId: `v${index}`, parameters: {} } }] }))
     const boundary = boundaries(document)
@@ -158,7 +160,7 @@ describe('可见代码源与固定内容复用', () => {
   it('滤镜与生成器共用固定program缓存，转场保留原局部时钟、真实源参数及同帧保留键', async () => {
     const document = fixture(source('dynamic'))
     const filter = source('static', '附加滤镜', 'filter')
-    document.codeMaterials!.push({ id: 'filter', name: '滤镜', defaultVersionId: 'fv', versions: [{ id: 'fv', apiVersion: 1, languageVersion: 1, source: filter }] })
+    document.codeMaterials!.push({ id: 'filter', name: '滤镜', defaultVersionId: 'fv', versions: [{ id: 'fv', apiVersion: 1, languageVersion: 1, ...testCodeManifest(filter, document) }] })
     const base = document.clips[0]
     document.clips = [{ ...base, start: 0, duration: 60, sourceInUs: 1_000_000 }, { ...structuredClone(base), id: 'right', start: 60, duration: 60, sourceInUs: 1_000_000 }]
     document.clips[1].effects = [{ id: 'effect', name: '滤镜', enabled: true, amount: .5, code: { definitionId: 'filter', versionId: 'fv', parameters: { amount: .8 } } }]
@@ -179,13 +181,13 @@ describe('可见代码源与固定内容复用', () => {
   })
   it('附加滤镜迟到编译在关闭后不能获取GPU或发布效果', async () => {
     const document = fixture(); document.clips[0].kind = 'text'; delete document.clips[0].code
-    document.codeMaterials![0].versions[0].source = source('static', '滤镜', 'filter')
+    testSetCodeSource(document, document.codeMaterials![0].versions[0], source('static', '滤镜', 'filter'))
     document.clips[0].effects = [{ id: 'effect', name: '效果', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: 'v0', parameters: {} } }]
     const boundary = boundaries(document); let finish!: (program: CodeMaterialProgram) => void
     boundary.compiler.compile.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
     const pending = boundary.sources.prepare(document, document.clips, 0, () => true)
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    await boundary.sources.dispose(); finish(compileCodeMaterial(document.codeMaterials![0].versions[0].source)); await rejected
+    await boundary.sources.dispose(); finish(compileCodeMaterial(testCodeSource(document, document.codeMaterials![0].versions[0]))); await rejected
     expect(boundary.acquire).not.toHaveBeenCalled(); expect(boundary.generator).not.toHaveBeenCalled()
     expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0 })
   })
@@ -223,21 +225,21 @@ describe('可见代码源与固定内容复用', () => {
     } finally { await boundary.sources.dispose() }
   })
   it('不可见版本不编译，离开所有代码片段释放目标，滤镜拒绝生成入口', async () => {
-    const document = fixture(); document.codeMaterials![0].versions.push({ id: 'invalid-hidden', apiVersion: 1, languageVersion: 1, source: 'never execute this' })
+    const document = fixture(); document.codeMaterials![0].versions.push({ id: 'invalid-hidden', apiVersion: 1, languageVersion: 1, ...testCodeManifest('never execute this', document) })
     const boundary = boundaries(document)
     try {
       await boundary.sources.prepare(document, [], 0, () => true); expect(boundary.acquire).not.toHaveBeenCalled(); expect(boundary.compiler.compile).not.toHaveBeenCalled()
       await boundary.sources.prepare(document, document.clips, 0, () => true)
       await boundary.sources.prepare(document, [], 90, () => true)
       expect(boundary.pictures.size).toBe(0); expect(boundary.sources.diagnostics().staticPictures).toBe(0)
-      const filter = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'filter', apiVersion: 1 as const, languageVersion: 1 as const, source: source('dynamic', '滤镜', 'filter') }] }] }
+      const filter = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'filter', apiVersion: 1 as const, languageVersion: 1 as const, ...testCodeManifest(source('dynamic', '滤镜', 'filter'), document) }] }] }
       boundary.sources.updateDocument(filter)
       await expect(boundary.sources.prepare(filter, changedVersion(filter, 'filter').clips, 0, () => true)).rejects.toThrow('单输入滤镜')
       expect(boundary.generator).toHaveBeenCalledOnce()
     } finally { await boundary.sources.dispose() }
   })
   it('编译失败不替换旧静态目标，恢复旧有效版本不重求值', async () => {
-    const document = fixture(); document.codeMaterials![0].versions.push({ id: 'bad', apiVersion: 1, languageVersion: 1, source: 'invalid' })
+    const document = fixture(); document.codeMaterials![0].versions.push({ id: 'bad', apiVersion: 1, languageVersion: 1, ...testCodeManifest('invalid', document) })
     const boundary = boundaries(document)
     try {
       const old = (await boundary.sources.prepare(document, document.clips, 0, () => true)).pictures.get('clip')
@@ -253,7 +255,7 @@ describe('可见代码源与固定内容复用', () => {
 describe('失效、身份与资源上限', () => {
   it('IR缓存逐出同步GPU滤镜管线，返回未改写旧版本可重新编译渲染', async () => {
     let document = fixture(source(), 33)
-    document.codeMaterials!.push({ id: 'filter', name: '滤镜', defaultVersionId: 'fv', versions: [{ id: 'fv', apiVersion: 1, languageVersion: 1, source: source('static', '旧滤镜', 'filter') }] })
+    document.codeMaterials!.push({ id: 'filter', name: '滤镜', defaultVersionId: 'fv', versions: [{ id: 'fv', apiVersion: 1, languageVersion: 1, ...testCodeManifest(source('static', '旧滤镜', 'filter'), document) }] })
     const original = document.clips[0]
     const filterClip: VideoEditClip = { ...original, kind: 'image', code: undefined, effects: [{ id: 'fx', name: '滤镜', enabled: true, amount: 1, code: { definitionId: 'filter', versionId: 'fv', parameters: {} } }] }
     document = { ...document, clips: [filterClip] }
@@ -286,7 +288,7 @@ describe('失效、身份与资源上限', () => {
       const after = await prepareFilter()
       expect(after).not.toBe(before); expect(runtime.diagnostics().filterFrames).toBe(2)
       expect(compiler.compile).toHaveBeenCalledTimes(34)
-      const changed = { ...document, codeMaterials: document.codeMaterials!.map(definition => definition.id === 'filter' ? { ...definition, versions: definition.versions.map(version => ({ ...version, source: source('static', '冒用', 'filter') })) } : definition) }
+      const changed = { ...document, codeMaterials: document.codeMaterials!.map(definition => definition.id === 'filter' ? { ...definition, versions: definition.versions.map(version => ({ ...version, ...testCodeManifest(source('static', '冒用', 'filter'), document) })) } : definition) }
       expect(() => sources.updateDocument(changed)).toThrow('不可变代码版本')
     } finally { await sources.dispose(); await runtime.dispose() }
     expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0, pipelines: 0 })
@@ -364,7 +366,7 @@ describe('失效、身份与资源上限', () => {
     expect(boundary.generator).not.toHaveBeenCalled(); expect(boundary.sources.diagnostics().programs).toBe(0)
     await boundary.sources.prepare(next, next.clips, 0, () => true)
     let late!: (program: CodeMaterialProgram) => void
-    const other = { ...next, codeMaterials: [{ ...next.codeMaterials![0], versions: [...next.codeMaterials![0].versions, { id: 'later', apiVersion: 1 as const, languageVersion: 1 as const, source: source('static', '晚到') }] }] }
+    const other = { ...next, codeMaterials: [{ ...next.codeMaterials![0], versions: [...next.codeMaterials![0].versions, { id: 'later', apiVersion: 1 as const, languageVersion: 1 as const, ...testCodeManifest(source('static', '晚到'), document) }] }] }
     const changed = changedVersion(other, 'later'); boundary.sources.updateDocument(changed)
     boundary.compiler.compile.mockImplementationOnce(() => new Promise<CodeMaterialProgram>(done => { late = done }))
     const last = boundary.sources.prepare(changed, changed.clips, 0, () => true); const lastFailed = expect(last).rejects.toMatchObject({ name: 'AbortError' })
@@ -378,7 +380,7 @@ describe('失效、身份与资源上限', () => {
       for (let index = 0; index < 36; index++) { document = changedVersion(document, `v${index}`); boundary.sources.updateDocument(document); await boundary.sources.prepare(document, document.clips, 0, () => true) }
       expect(boundary.sources.diagnostics()).toMatchObject({ programs: 32, seenVersions: 36 })
       expect(boundary.sources.diagnostics().programBytes).toBeLessThanOrEqual(16 * 1024 ** 2)
-      const rewritten = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: document.codeMaterials![0].versions.map(version => version.id === 'v0' ? { ...version, source: source('static', '冒用旧ID') } : version) }] }
+      const rewritten = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: document.codeMaterials![0].versions.map(version => version.id === 'v0' ? { ...version, ...testCodeManifest(source('static', '冒用旧ID'), document) } : version) }] }
       expect(() => boundary.sources.updateDocument(rewritten)).toThrow('不可变代码版本')
       expect(boundary.compiler.compile).toHaveBeenCalledTimes(36)
     } finally { await boundary.sources.dispose() }
@@ -386,7 +388,7 @@ describe('失效、身份与资源上限', () => {
   it('不可变身份历史不限制数量或总源码字节，编译资源仍按缓存预算分配', async () => {
     const atCountLimit = fixture(source(), 4096); const counted = boundaries(atCountLimit)
     const atByteLimit = fixture()
-    atByteLimit.codeMaterials![0].versions = Array.from({ length: 128 }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, source: ' '.repeat(65536) }))
+    atByteLimit.codeMaterials![0].versions = Array.from({ length: 128 }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, ...testCodeManifest(' '.repeat(65536), atByteLimit) }))
     const sized = boundaries(atByteLimit)
     try {
       expect(counted.sources.diagnostics().seenVersions).toBe(4096)

@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -23,7 +24,7 @@ beforeEach(() => {
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function setup() {
-  const owner = (await createVideoEditProject())!; const program = compileCodeMaterial(source); const version = { id: 'v', source, apiVersion: 1 as const, languageVersion: 1 as const }
+  const owner = (await createVideoEditProject())!; const program = compileCodeMaterial(source); const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 1 as const, languageVersion: 1 as const }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
   editVideoProject(owner.document.id, document => {
     document.codeMaterials = [{ id: 'd', name: program.name, defaultVersionId: 'v', versions: [version] }]
@@ -36,7 +37,7 @@ async function setup() {
 it('v3新形状沿公共片段与素材项写入、校验、读回、撤销及保存；元数据保留组件名和显示条件', async () => {
   const owner = (await createVideoEditProject())!; const app = createApplicationHarness()
   const src = 'export default {apiVersion:1,languageVersion:3,name:"参数化灯光",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,types:{light:{title:"灯光",layout:"row",fields:{power:{type:"number",title:"强度",default:1,min:0,max:2,step:.01},position:{type:"point",title:"位置",default:{x:.5,y:.5}},font:{type:"font",title:"字体",default:"sans-serif"}}}},parameters:{enabled:{type:"boolean",title:"启用",default:true},lamp:{type:"light",title:"主光",group:"照明",advanced:true,visibleWhen:{param:"enabled",equals:true},tooltip:"调整主光",description:"主体照明",default:{power:1.4},animatable:true},curve:{type:"curve",title:"映射",default:[{x:0,y:0},{x:1,y:1}],animatable:true}},render(ctx){return [rect({x:ctx.params.lamp.position.x,y:0,width:100,height:100,fill:[1,0,0,1]})];}}'
-  const program = compileCodeMaterial(src); const version = { id: 'v3', source: src, apiVersion: 1 as const, languageVersion: 3 as const }
+  const program = compileCodeMaterial(src); const version = { id: 'v3', ...testCodeManifest(src, owner.document), apiVersion: 1 as const, languageVersion: 3 as const }
   rememberVideoEditCodeMetadata(owner, 'v3d', version, program)
   editVideoProject(owner.document.id, document => {
     document.codeMaterials = [{ id: 'v3d', name: program.name, defaultVersionId: version.id, versions: [version] }]
@@ -122,7 +123,7 @@ it('命名图形对象复用参数曲线和单笔手势，不伪造代码版本�
 it('同片段多个效果按稳定id分别调参、动画和撤销，静态效果保留长源入点', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
   const text = 'export default {apiVersion:1,name:"滤镜",kind:"filter",mode:"static",width:1920,height:1080,durationSeconds:10,seed:1,parameters:{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
-  const program = compileCodeMaterial(text); const version = { id: 'filter-v', source: text, apiVersion: 1 as const, languageVersion: 1 as const }
+  const program = compileCodeMaterial(text); const version = { id: 'filter-v', ...testCodeManifest(text, owner.document), apiVersion: 1 as const, languageVersion: 1 as const }
   rememberVideoEditCodeMetadata(owner, 'filter-d', version, program)
   const itemId = createVideoEditGraphicItem(id, { kind: 'solid' }); const [clipId] = appendVideoEditItems(id, [itemId], sequenceId)
   editVideoProject(id, document => {

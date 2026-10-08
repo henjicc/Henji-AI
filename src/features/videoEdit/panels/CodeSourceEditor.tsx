@@ -1,7 +1,11 @@
+import { renameCodeMaterialFile } from '@/core/videoEdit/codeMaterial/fileEdits'
+import { Virtuoso } from 'react-virtuoso'
+import { codeFilePathSchema, codeMaterialFilesKey, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { CodeMaterialError, type CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { codeElementAtSource } from '@/core/videoEdit/codeElementSelection'
 import { selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames } from '../application/videoEditCodeElements'
-import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading, UiTextAreaField } from '@/components/ui'
+import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading, UiTextAreaField, UiInput, UiOptionButton } from '@/components/ui'
 import { commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate, prepareVideoEditCodeCandidate, type VideoEditCodeApplyScope, type VideoEditCodeCandidate } from '../application/videoEditCodeCandidates'
 import type { VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
 import { requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision } from '../application/videoEditService'
@@ -33,25 +37,37 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
   const mounted = useRef(true)
   const pending = useRef<{ controller: AbortController; baseline: typeof document }>()
   const proof = useRef<VideoEditCodeCandidate>()
-  const [draft, setDraft] = useState(editor.source)
+  const [draft, setDraft] = useState<CodeMaterialFiles>(editor.files)
+  const [activeFile, setActiveFile] = useState(editor.files.entry)
+  const [fileAction, setFileAction] = useState<'create' | 'rename'>()
+  const [fileName, setFileName] = useState('')
+  const [errorSpan, setErrorSpan] = useState<CodeSourceSpan>()
+  const unchanged = codeMaterialFilesKey(draft) === codeMaterialFilesKey(editor.files)
   const [scope, setScope] = useState<VideoEditCodeApplyScope>('single')
   const [candidate, setCandidate] = useState<VideoEditCodeCandidate>()
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const selected = !editor.target.effectId && draft === editor.source ? selectedVideoEditCodeElement(owner) : undefined
+  const selected = !editor.target.effectId && unchanged ? selectedVideoEditCodeElement(owner) : undefined
   const span = selected?.entry.clip.id === editor.target.clipId ? selected.element.sourceSpan : undefined
+  useLayoutEffect(() => { if (span) setActiveFile(span.file) }, [span, selected?.element.elementId])
   useLayoutEffect(() => {
     const input = sourceInput.current
-    if (!input || !span) return
-    if (input.ownerDocument.activeElement !== input) input.setSelectionRange(span.start, span.end)
+    const location = errorSpan ?? span
+    if (!input || !location) return
+    if (activeFile !== location.file) return
+    if (input.ownerDocument.activeElement !== input || errorSpan) {
+      const lines = input.value.split('\n')
+      const start = errorSpan ? lines.slice(0, location.startLine - 1).reduce((offset, line) => offset + line.length + 1, 0) + location.startColumn - 1 : location.start
+      input.setSelectionRange(start, errorSpan ? start + Math.max(1, location.endColumn - location.startColumn) : location.end)
+    }
     const lineHeight = Number.parseFloat(input.ownerDocument.defaultView!.getComputedStyle(input).lineHeight) || 20
-    input.scrollTop = Math.max(0, (span.startLine - 2) * lineHeight)
-  }, [span, selected?.element.elementId])
+    input.scrollTop = Math.max(0, (location.startLine - 2) * lineHeight)
+  }, [span, errorSpan, activeFile, selected?.element.elementId])
   const locateCursor = (): void => {
-    if (editor.target.effectId || draft !== editor.source || !sourceInput.current) return
+    if (editor.target.effectId || !unchanged || !sourceInput.current) return
     const entry = videoEditCodeElementFrames(owner).get(editor.target.clipId)
-    const element = entry && codeElementAtSource(entry.index, sourceInput.current.selectionStart)
+    const element = entry && codeElementAtSource(entry.index, sourceInput.current.selectionStart, activeFile)
     selectVideoEditCodeElement(owner, editor.target.clipId, element?.elementId ?? null)
   }
   const release = useCallback((): void => {
@@ -70,16 +86,26 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
       invalidate(); setError('剪辑内容已改变，请重新检查源码。')
     }
   }, [document, invalidate])
-  const changeDraft = (value: string): void => { invalidate(); setDraft(value); setError(null) }
+  const changeFiles = (value: CodeMaterialFiles): void => { invalidate(); setDraft(value); setError(null); setErrorSpan(undefined) }
+  const changeDraft = (value: string): void => changeFiles({ ...draft, files: { ...draft.files, [activeFile]: value } })
+  const submitFile = (): void => {
+    const result = codeFilePathSchema.safeParse(fileName)
+    if (!result.success) { setError(result.error.issues[0].message); return }
+    const path = result.data
+    if (Object.prototype.hasOwnProperty.call(draft.files, path)) { setError('此文件已存在，请使用其他名称。'); return }
+    try { changeFiles(fileAction === 'rename' ? renameCodeMaterialFile(draft, activeFile, path) : { ...draft, files: { ...draft.files, [path]: '' } }) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : '文件重命名失败。'); return }
+    setActiveFile(path); setFileAction(undefined); setFileName('')
+  }
   const check = async (): Promise<void> => {
-    invalidate(); setError(null); setBusy(true)
+    invalidate(); setError(null); setErrorSpan(undefined); setBusy(true)
     const job = { controller: new AbortController(), baseline: document }; pending.current = job
     try {
       const result = await prepareVideoEditCodeCandidate(editor.target, draft, scope, job.controller.signal)
       if (!mounted.current || pending.current !== job || job.controller.signal.aborted) { disposeVideoEditCodeCandidate(result); return }
       proof.current = result; setCandidate(result)
     } catch (reason) {
-      if (mounted.current && pending.current === job && !job.controller.signal.aborted) setError(reason instanceof Error ? reason.message : '源码检查失败，请修改后重试。')
+      if (mounted.current && pending.current === job && !job.controller.signal.aborted) { setError(reason instanceof Error ? reason.message : '源码检查失败，请修改后重试。'); if (reason instanceof CodeMaterialError && reason.sourceSpan && draft.files[reason.sourceSpan.file] !== undefined) { setErrorSpan(reason.sourceSpan); setActiveFile(reason.sourceSpan.file) } }
     } finally { if (mounted.current && pending.current === job) setBusy(false) }
   }
   const commit = (): void => {
@@ -93,12 +119,21 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
     } finally { disposeVideoEditCodeCandidate(current); job?.controller.abort() }
   }
   return <UiGroup gap="row" data-video-edit-code-source-editor={editor.target.clipId}>
-    {span && <div aria-label="选中元素源码" className="max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-xs"><mark className="bg-accent/15 text-text1">{draft.slice(span.start, span.end)}</mark></div>}
-    <UiFormRow density="compact" label="源码"><UiTextAreaField ref={sourceInput} aria-label="代码素材源码" className="font-mono" rows={12} wrap="off" value={draft} spellCheck={false} onClick={locateCursor} onKeyUp={locateCursor} onChange={event => changeDraft(event.target.value)} textHistory={{ onValueChange: changeDraft }} /></UiFormRow>
+    {span && span.file === activeFile && <div aria-label="选中元素源码" className="max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-xs"><mark className="bg-accent/15 text-text1">{draft.files[activeFile].slice(span.start, span.end)}</mark></div>}
+    <div role="listbox" aria-label="源码文件" className="max-h-40 overflow-auto">
+      {Object.keys(draft.files).length > 50 ? <div className="h-40"><Virtuoso data={Object.keys(draft.files).sort()} itemContent={(_index, path) => <UiOptionButton variant="menu" role="option" active={path === activeFile} aria-selected={path === activeFile} className="w-full" onClick={() => { setActiveFile(path); setErrorSpan(undefined) }}>{path}{path === draft.entry ? ' · 入口' : ''}</UiOptionButton>} /></div> : Object.keys(draft.files).sort().map(path => <UiOptionButton key={path} variant="menu" role="option" active={path === activeFile} aria-selected={path === activeFile} className="w-full" onClick={() => { setActiveFile(path); setErrorSpan(undefined) }}>{path}{path === draft.entry ? ' · 入口' : ''}</UiOptionButton>)}
+    </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <UiButton onClick={() => { setFileAction('create'); setFileName('') }}>新建文件</UiButton>
+      <UiButton onClick={() => { setFileAction('rename'); setFileName(activeFile) }}>重命名</UiButton>
+      <UiButton variant="danger" disabled={activeFile === draft.entry} onClick={() => { const files = { ...draft.files }; delete files[activeFile]; changeFiles({ ...draft, files }); setActiveFile(draft.entry) }}>删除文件</UiButton>
+    </div>
+    {fileAction && <UiFormRow density="compact" label={fileAction === 'create' ? '新文件路径' : '新路径'}><div className="flex items-center gap-2"><UiInput aria-label="源码文件路径" value={fileName} onChange={event => setFileName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitFile(); if (event.key === 'Escape') setFileAction(undefined) }} /><UiButton onClick={submitFile}>确定</UiButton><UiButton onClick={() => setFileAction(undefined)}>取消</UiButton></div></UiFormRow>}
+    <UiFormRow density="compact" label="源码"><UiTextAreaField ref={sourceInput} aria-label="代码素材源码" className="font-mono" rows={12} wrap="off" value={draft.files[activeFile] ?? ''} spellCheck={false} onClick={locateCursor} onKeyUp={locateCursor} onChange={event => changeDraft(event.target.value)} textHistory={{ onValueChange: changeDraft }} /></UiFormRow>
     <UiFormRow density="compact" label="应用范围"><Dropdown<VideoEditCodeApplyScope> ariaLabel="源码应用范围" value={scope} options={[{ value: 'single', label: '此片段' }, { value: 'matching', label: '相同原版本的所有片段' }]} onSelect={value => { if (value !== scope) { invalidate(); setScope(value); setError(null) } }} /></UiFormRow>
     <div className="flex flex-wrap items-center gap-2">
       <UiButton variant="secondary" disabled={busy} onClick={() => { void check() }}>检查并预览</UiButton>
-      <UiButton disabled={draft === editor.source} onClick={() => changeDraft(editor.source)}>恢复当前源码</UiButton>
+      <UiButton disabled={unchanged} onClick={() => { changeFiles(editor.files); setActiveFile(editor.files.entry) }}>恢复当前源码</UiButton>
       {busy && <UiButton onClick={invalidate}>取消检查</UiButton>}
     </div>
     {busy && <UiLoading size="xs" message="正在检查源码并生成预览" />}
@@ -114,7 +149,7 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
         <UiFormRow density="compact" label="确认以上参数与关键帧变化" inline><UiCheckbox aria-label="确认参数与关键帧迁移" checked={confirmed} onCheckedChange={setConfirmed} /></UiFormRow>
       </UiGroup>}
     </UiGroup>}
-    <UiButton variant="primary" disabled={!candidate || busy || (candidate.impacts.length > 0 && !confirmed)} onClick={commit}>应用已检查源码</UiButton>
+    <UiButton variant="primary" disabled={!candidate || busy || (candidate.impacts.length > 0 && !confirmed)} onClick={commit}>保存为新版本</UiButton>
   </UiGroup>
 }
 

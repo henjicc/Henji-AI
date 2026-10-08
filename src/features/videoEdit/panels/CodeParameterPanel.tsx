@@ -1,101 +1,36 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { RotateCcw } from 'lucide-react'
-import { Dropdown, UiButton, UiColorInput, UiError, UiFormRow, UiGroup, UiIconButton, UiRangeInput, UiSwitch, UiTextAreaField, UiFontPicker } from '@/components/ui'
+import { UiButton, UiError, UiGroup } from '@/components/ui'
 import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 import { collectVideoEditCodeAsset } from '../application/videoEditCodeAssets'
-import NumberInput from '@/components/ui/NumberInput'
-import type { CodeColor, CodeImageReference, CodeParameterDeclaration, CodeParameterValue } from '@/core/videoEdit/codeMaterial/contract'
-import type { VideoEditSourceTime } from '@/core/videoEdit/time'
-import { readVideoEditCodeEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, updateVideoEditCodeKeyframe, type VideoEditParameterTarget, type VideoEditCodeEditorState, type VideoEditParameterEditorState } from '../application/videoEditCodeParameters'
-import { activeVideoEditInstance, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision, type VideoEditGesture } from '../application/videoEditService'
+import type { CodeImageReference, CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
+import { readVideoEditCodeEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, type VideoEditCodeEditorState, type VideoEditParameterEditorState } from '../application/videoEditCodeParameters'
+import { activeVideoEditInstance, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision } from '../application/videoEditService'
 import { CodeKeyframePanel } from './CodeKeyframePanel'
-import { useCodeParameterGesture, videoEditParameterTargetIdentity } from './useCodeParameterGesture'
+import { videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 import { CodeImageParameterControl } from './CodeImageParameterControl'
 import { CodeSourceEditor } from './CodeSourceEditor'
 import { selectedVideoEditCodeElement } from '../application/videoEditCodeElements'
-import { useVideoEditFontPreview } from './useVideoEditFontPreview'
-import { collectVideoEditFonts } from '@/core/videoEdit/fonts'
-
-type ScalarParameter = Exclude<CodeParameterDeclaration, { type: 'image' }>
-interface ScalarProps {
-  target: VideoEditParameterTarget
-  parameter: ScalarParameter
-  value: CodeParameterValue
-  label: string
-  time?: VideoEditSourceTime
-  onError: (reason: unknown) => void
-  onWrite: (value: CodeParameterValue, gesture?: VideoEditGesture, at?: VideoEditSourceTime) => void
-}
-function colorHex(color: CodeColor): string { return `#${color.slice(0, 3).map(channel => Math.round(channel * 255).toString(16).padStart(2, '0')).join('')}` }
-function colorFromHex(hex: string, alpha: number): CodeColor { return [parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255, alpha] }
-
-/** Only author-declared scalar values; both instance and keyframe controls use this view. */
-function CodeScalarControl({ target, parameter, value, label, time, onError, onWrite }: ScalarProps): React.ReactElement {
-  const gesture = useCodeParameterGesture(target, onError, time)
-  const fontPreview = useVideoEditFontPreview(target.projectId, `${videoEditParameterTargetIdentity(target)}:${parameter.key}`, onError, (name, handle) => onWrite(name, handle, time))
-  const touched = useRef(false)
-  const write = (next: CodeParameterValue): void => gesture.write((handle, at) => onWrite(next, handle, at))
-  const writeAtomic = (next: CodeParameterValue): void => gesture.atomic((handle, at) => onWrite(next, handle, at))
-  const numeric = (current: number, min: number, max: number, step: number, ariaLabel: string, change: (next: number) => void): React.ReactElement => <div
-    onFocusCapture={() => { touched.current = false; gesture.begin() }}
-    onChangeCapture={() => { touched.current = true }}
-    onClickCapture={event => { if (elementOfEventTarget(event.target)?.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
-    onKeyDownCapture={event => { if (['ArrowUp', 'ArrowDown'].includes(event.key)) touched.current = true }}
-    onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) gesture.finish() }}
-  ><NumberInput key={gesture.epoch} value={current} min={min} max={max} step={step} ariaLabel={ariaLabel} widthClassName="w-full" commitOnChange
-    // 数值拖动没有键盘焦点：越过拖动阈值即开始手势，松手提交一步撤销，Esc 回到拖动前
-    onScrubStart={() => { touched.current = true; gesture.begin() }} onScrubEnd={cancelled => { if (cancelled) { touched.current = false; gesture.cancel() } else gesture.finish() }}
-    onChange={next => {
-    if (!touched.current) return
-    if (gesture.active()) change(next)
-    else { gesture.begin(); change(next); gesture.finish() }
-  }} /></div>
-
-  let control: React.ReactElement
-  if (String(parameter.type) === 'font' || 'objectId' in target && parameter.key === 'fontFamily') return <UiFontPicker ariaLabel={label} value={value as string} projectFonts={collectVideoEditFonts(requireVideoEditInstance(target.projectId).document).map(use => use.font)} onPreview={face => fontPreview(face?.fullName ?? null)} onSelect={writeAtomic} />
-  switch (parameter.type) {
-    case 'number':
-      control = <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2"><div className="min-w-0 flex-1">{numeric(value as number, parameter.min, parameter.max, parameter.step, label, write)}</div>{parameter.unit && <span className="text-2xs text-text3">{parameter.unit}</span>}</div>
-        <UiRangeInput key={gesture.epoch} aria-label={`${label}滑杆`} min={parameter.min} max={parameter.max} step={parameter.step} value={value as number}
-          onFocus={gesture.begin} onBlur={gesture.finish}
-          onPointerDown={event => { gesture.begin(); event.currentTarget.setPointerCapture?.(event.pointerId) }}
-          onPointerUp={gesture.finish} onPointerCancel={gesture.cancel} onLostPointerCapture={gesture.finish}
-          onKeyDown={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.begin() }}
-          onKeyUp={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.finish() }}
-          onChange={event => write(Number(event.target.value))} />
-      </div>
-      break
-    case 'color': {
-      const color = value as CodeColor
-      control = <div className="flex items-center gap-2"><UiColorInput key={gesture.epoch} aria-label={`${label}颜色`} value={colorHex(color)} onFocus={gesture.begin} onBlur={gesture.finish} onPointerDown={gesture.begin} onChange={event => write(colorFromHex(event.target.value, color[3]))} /><div className="min-w-0 flex-1">{numeric(color[3], 0, 1, 0.01, `${label}透明度`, alpha => write([color[0], color[1], color[2], alpha]))}</div></div>
-      break
-    }
-    case 'boolean': control = <UiSwitch aria-label={label} checked={value as boolean} onCheckedChange={writeAtomic} />; break
-    case 'choice': control = <Dropdown ariaLabel={label} value={value as string} options={parameter.options.map(option => ({ label: option, value: option }))} onSelect={writeAtomic} />; break
-    case 'text': control = <UiTextAreaField key={gesture.epoch} aria-label={label} rows={2} maxLength={parameter.maxLength} value={value as string} onChange={event => write(event.target.value)} textHistory={{ onValueChange: write, onEditStart: gesture.begin, onEditEnd: gesture.finish }} />; break
-    default: throw new Error('此参数类型尚未提供界面控件。')
-  }
-  return <div onKeyDownCapture={event => { if (event.key === 'Escape' && gesture.active()) { event.preventDefault(); event.stopPropagation(); touched.current = false; gesture.cancel() } }}>{control}</div>
-}
+import { codeParameterFields } from './params/fieldSpec'
+import { ParamList } from './params/ParamList'
+import { ParamField } from './params/ParamField'
+import { CodeParamField } from './params/CodeParamField'
 
 export function VideoEditParameterFields({ editor, onError }: { editor: VideoEditParameterEditorState; onError: (reason: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const selected = 'code' in editor && !editor.target.effectId ? selectedVideoEditCodeElement(requireVideoEditInstance(editor.target.projectId)) : undefined
   const chosen = selected?.entry.clip.id === editor.target.clipId ? selected : undefined
-  const identity = videoEditParameterTargetIdentity(editor.target)
   const title = 'code' in editor ? editor.target.effectId ? '效果参数' : '代码参数' : '对象参数'
+  const fields = codeParameterFields(editor.metadata.parameters, editor.metadata.types)
   return <UiGroup title={title} titleTone="compact" divided data-video-edit-code-parameters={editor.target.clipId}>
-    {chosen && <div className="text-xs text-accent" aria-label="已选元素">已选元素：{chosen.label}</div>}
-    {editor.metadata.parameters.map(parameter => parameter.type === 'image' ? 'code' in editor ? <UiFormRow density="compact" key={`${identity}:${parameter.key}`} label={parameter.title} info={parameter.description || undefined} data-video-edit-code-parameter={parameter.key} data-code-element-parameter={chosen?.parameterKeys.includes(parameter.key) || undefined} className={chosen?.parameterKeys.includes(parameter.key) ? "bg-accent/10" : undefined}><CodeImageParameterControl target={editor.target} parameterKey={parameter.key} title={parameter.title} value={editor.parameters[parameter.key] as CodeImageReference | null} /></UiFormRow> : null : <UiGroup key={`${identity}:${parameter.key}`} gap="row" data-video-edit-code-parameter={parameter.key} data-code-element-parameter={chosen?.parameterKeys.includes(parameter.key) || undefined} className={chosen?.parameterKeys.includes(parameter.key) ? "bg-accent/10" : undefined}>
-      <UiFormRow density="compact" label={<span className="flex items-center gap-2"><span>{parameter.title}</span><UiIconButton size="sm" title={`重置${parameter.title}${editor.curves[parameter.key]?.length ? '（含关键帧）' : ''}`} aria-label={`重置${parameter.title}`} onClick={() => { try { resetVideoEditCodeParameter(editor.target, parameter.key) } catch (error) { onError(error) } }}><RotateCcw className="h-3.5 w-3.5" /></UiIconButton></span>} info={parameter.description || undefined}>
-        <CodeScalarControl target={editor.target} parameter={parameter} value={editor.parameters[parameter.key]} label={parameter.title} time={editor.sourceTime} onError={onError} onWrite={(value, gesture, at) => setVideoEditCodeParameter(editor.target, parameter.key, value, { gesture, time: at })} />
-      </UiFormRow>
-      {parameter.animatable && <CodeKeyframePanel editor={editor} parameter={parameter} onError={onError} renderValue={(point, label) => <CodeScalarControl target={editor.target} parameter={parameter} value={point.value} label={label} onError={onError} onWrite={(value, gesture) => updateVideoEditCodeKeyframe(editor.target, parameter.key, point.id, { value: value as typeof point.value }, gesture)} />} />}
-    </UiGroup>)}
+    {chosen && <div className="text-xs text-accent-text" aria-label="已选元素">已选元素：{chosen.label}</div>}
+    <ParamList key={videoEditParameterTargetIdentity(editor.target)} fields={fields} values={editor.parameters} extras={editor.curves} contextKey={JSON.stringify(editor.sourceTime)} highlightedKeys={chosen?.parameterKeys}
+      onReset={field => { try { resetVideoEditCodeParameter(editor.target, field.key) } catch (error) { onError(error) } }}
+      renderControl={(field, value) => field.type === 'image' ? 'code' in editor ? <ParamField field={field} value={value} gesture={{ begin() {}, finish() {}, cancel() {}, active: () => false, write() {}, atomic() {} }} image={<CodeImageParameterControl target={editor.target} parameterKey={field.key} title={field.title} value={value as CodeImageReference | null} />} /> : null :
+        <CodeParamField target={editor.target} field={field} value={value} time={editor.sourceTime} onError={onError} onWrite={(next, gesture, at) => setVideoEditCodeParameter(editor.target, field.key, next, { gesture, time: at })} />}
+      renderAnimation={field => field.type === 'image' || field.type === 'lut' ? null : <CodeKeyframePanel editor={editor} parameter={editor.metadata.parameters.find(parameter => parameter.key === field.key)! as Exclude<CodeParameterDeclaration, { type: 'image' }>} field={field} onError={onError} />}
+    />
   </UiGroup>
 }
 

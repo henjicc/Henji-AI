@@ -65,7 +65,7 @@ export function bakeCodeElementLiterals(source: string, element: CodeElementBoun
 }
 
 /** Parameter text editing targets only a direct string parameter, including a chain of local aliases. */
-export function codeElementTextParameter(program: CodeMaterialProgram, sourceStart: number | undefined): string | undefined {
+export function codeElementTextParameter(program: CodeMaterialProgram, sourceStart: number | undefined, sourceFile = 'main.ts'): string | undefined {
   let result: string | undefined
   const resolve = (expression: unknown, seen = new Set<number>()): string | undefined => {
     if (!expression || typeof expression !== 'object' || !('kind' in expression)) return undefined
@@ -75,7 +75,7 @@ export function codeElementTextParameter(program: CodeMaterialProgram, sourceSta
   }
   const visit = (value: unknown): void => {
     if (!value || typeof value !== 'object') return
-    if ('kind' in value && value.kind === 'draw' && 'sourceSpan' in value && (value.sourceSpan as { start?: number } | undefined)?.start === sourceStart && 'properties' in value) result = resolve((value.properties as Record<string, unknown>).text)
+    if ('kind' in value && value.kind === 'draw' && 'sourceSpan' in value && (value.sourceSpan as { start?: number; file?: string } | undefined)?.start === sourceStart && (value.sourceSpan as { file?: string } | undefined)?.file === sourceFile && 'properties' in value) result = resolve((value.properties as Record<string, unknown>).text)
     for (const child of Object.values(value)) if (child && typeof child === 'object') visit(child)
   }
   visit(program.result); program.bindings.forEach(binding => visit(binding.expression))
@@ -89,14 +89,14 @@ export function codeElementSourceIds(program: CodeMaterialProgram, existing: rea
     if ('kind' in value && value.kind === 'draw' && 'properties' in value) {
       const id = (value.properties as Record<string, { kind?: string; value?: unknown }>).id
       if (id?.kind === 'literal' && typeof id.value === 'string') ids.add(id.value)
-      else if ('sourceSpan' in value) automatic.add(`call:${(value.sourceSpan as { start: number }).start}`)
+      else if ('sourceSpan' in value) automatic.add(`call:${(value.sourceSpan as { file: string; start: number }).file}:${(value.sourceSpan as { start: number }).start}`)
     }
     for (const child of Object.values(value)) if (child && typeof child === 'object') visit(child)
   }
   visit(program.result); program.bindings.forEach(binding => visit(binding.expression))
   for (const id of existing) {
     const base = id.split('@[')[0]
-    const call = base.match(/^(call:\d+)(?::\d+(?:\.\d+)*)?$/)?.[1]
+    const call = base.match(/^(call:[^:]+:\d+)(?::\d+(?:\.\d+)*)?$/)?.[1]
     if (ids.has(base) || ids.has(base.replace(/:\d+(?:\.\d+)*$/, '')) || automatic.has(base) || call && automatic.has(call)) ids.add(id)
   }
   return ids

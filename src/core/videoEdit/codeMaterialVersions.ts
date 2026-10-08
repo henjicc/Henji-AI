@@ -1,38 +1,29 @@
-import { codeMaterialDefinitionSchema, codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
-import type { CodeMaterialDefinition, CodeMaterialVersion } from './codeMaterialPersistence'
-import { CodeMaterialError } from './codeMaterial/contract'
-import type { CodeMaterialProgram } from './codeMaterial/contract'
+import { codeMaterialDefinitionSchema } from './codeMaterialPersistence'
+import type { CodeMaterialDefinition } from './codeMaterialPersistence'
+import { CodeMaterialError, type CodeMaterialProgram } from './codeMaterial/contract'
+import { addressCodeMaterialFiles, resolveCodeMaterialFiles, type CodeMaterialFiles, type CodeSource, type CodeSourceResolver } from './codeMaterial/sources'
 
-export type CodeSourceCompiler = (source: string) => Promise<CodeMaterialProgram>
-const version = (definition: CodeMaterialDefinition, id: string): CodeMaterialVersion => {
-  const value = definition.versions.find(version => version.id === id)
-  if (!value) throw new CodeMaterialError('COMPATIBILITY', '固定代码版本不存在，不能切换到当前默认版本。')
-  return value
+export type CodeSourceCompiler = (files: CodeMaterialFiles) => Promise<CodeMaterialProgram>
+export interface CodeMaterialDefinitionResult { definition: CodeMaterialDefinition; program: CodeMaterialProgram; codeSources: CodeSource[] }
+/** Hash-addressed source is stored separately; IR is rebuildable cache. */
+export async function makeCodeMaterialDefinition(source: string | CodeMaterialFiles, compile: CodeSourceCompiler): Promise<CodeMaterialDefinitionResult> {
+  const addressed = await addressCodeMaterialFiles(source)
+  const program = await compile(resolveCodeMaterialFiles(addressed, { read: hash => addressed.codeSources.find(value => value.hash === hash)!.source }))
+  const { codeSources, ...manifest } = addressed
+  const version = { id: crypto.randomUUID(), apiVersion: 1, languageVersion: program.languageVersion, ...manifest }
+  const definition = codeMaterialDefinitionSchema.parse({ id: crypto.randomUUID(), name: program.name, defaultVersionId: version.id, versions: [version] })
+  return { definition, program, codeSources }
 }
-async function checkedVersion(definition: CodeMaterialDefinition, id: string, compile: CodeSourceCompiler): Promise<CodeMaterialProgram> {
-  const sourceVersion = version(definition, id); const program = await compile(sourceVersion.source)
-  if (program.apiVersion !== sourceVersion.apiVersion || program.languageVersion !== sourceVersion.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码语言版本与固定版本不一致。')
-  return program
-}
-/** Persist source only. Checked IR and schemas are rebuildable cache, never file
- * authority. The host supplies its bounded compiler worker at this boundary. */
-export async function makeCodeMaterialDefinition(source: string, compile: CodeSourceCompiler): Promise<{ definition: CodeMaterialDefinition; program: CodeMaterialProgram }> {
-  const program = await compile(source)
-  const sourceVersion: CodeMaterialVersion = { id: crypto.randomUUID(), apiVersion: 1, languageVersion: program.languageVersion, source }
-  const definition = codeMaterialDefinitionSchema.parse({ id: crypto.randomUUID(), name: program.name, defaultVersionId: sourceVersion.id, versions: [sourceVersion] })
-  codeMaterialDefinitionsSchema.parse([definition])
-  return { definition, program }
-}
-/** Candidate publication appends a version, preserving every existing version
- * and instance. Changing the default is a separate explicit host edit. */
-export async function appendCodeMaterialVersion(definition: CodeMaterialDefinition, source: string, compile: CodeSourceCompiler): Promise<{ definition: CodeMaterialDefinition; versionId: string; program: CodeMaterialProgram }> {
-  const previous = await checkedVersion(definition, definition.defaultVersionId, compile)
-  const program = await compile(source)
-  if (previous.kind !== program.kind) throw new CodeMaterialError('COMPATIBILITY', '生成素材与输入滤镜不能在同一定义中互换，请另建素材。')
-  const existing = definition.versions.find(value => value.source === source)
-  if (existing) { if (existing.apiVersion !== program.apiVersion || existing.languageVersion !== program.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码语言版本与固定版本不一致。'); return { definition, versionId: existing.id, program } }
-  const sourceVersion: CodeMaterialVersion = { id: crypto.randomUUID(), apiVersion: 1, languageVersion: program.languageVersion, source }
-  const candidate = codeMaterialDefinitionSchema.parse({ ...definition, versions: [...definition.versions, sourceVersion] })
-  codeMaterialDefinitionsSchema.parse([candidate])
-  return { definition: candidate, versionId: sourceVersion.id, program }
+/** A resolver is required for the previous immutable version; t89 can replace its storage. */
+export async function appendCodeMaterialVersion(definition: CodeMaterialDefinition, source: string | CodeMaterialFiles, compile: CodeSourceCompiler, resolver: CodeSourceResolver): Promise<CodeMaterialDefinitionResult & { versionId: string }> {
+  const previousVersion = definition.versions.find(version => version.id === definition.defaultVersionId)
+  if (!previousVersion) throw new CodeMaterialError('COMPATIBILITY', '固定代码版本不存在。')
+  const previous = await compile(resolveCodeMaterialFiles(previousVersion, resolver))
+  if (previous.apiVersion !== previousVersion.apiVersion || previous.languageVersion !== previousVersion.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码语言版本与固定版本不一致。')
+  const result = await makeCodeMaterialDefinition(source, compile)
+  if (previous.kind !== result.program.kind) throw new CodeMaterialError('COMPATIBILITY', '生成素材与输入滤镜不能在同一定义中互换，请另建素材。')
+  const version = result.definition.versions[0]
+  const existing = definition.versions.find(value => value.entry === version.entry && JSON.stringify([...value.files].sort((a, b) => a.path.localeCompare(b.path))) === JSON.stringify([...version.files].sort((a, b) => a.path.localeCompare(b.path))))
+  if (existing) return { ...result, definition, versionId: existing.id }
+  return { ...result, definition: codeMaterialDefinitionSchema.parse({ ...definition, versions: [...definition.versions, version] }), versionId: version.id }
 }

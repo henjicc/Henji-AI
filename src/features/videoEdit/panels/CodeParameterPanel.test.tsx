@@ -3,6 +3,7 @@ import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, within, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { addressCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -13,6 +14,11 @@ import { VideoEditEffectsPanel } from './VideoEditEffectsPanel'
 import { appendVideoEditItems, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from '../application/videoEditProjectItems'
 import { createVideoEditGraphicObject } from '../application/videoEditGraphics'
 import { createLegacyTrackVideoEditProject } from '../application/videoEditDocumentTestKit'
+import { SHADER_GRAPH_EFFECT_DEFINITIONS } from '@/core/videoEdit/shaderGraph/effects'
+import { applyVideoEditBuiltinEffect } from '../application/videoEditCompositing'
+import { VideoEditBuiltinEffectControls } from './VideoEditBuiltinEffectControls'
+import { builtinParameterFields } from './params/fieldSpec'
+import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/textMeasurement', () => ({ measureElementTextWidth: () => 30 }))
@@ -107,9 +113,11 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   owner = (await createLegacyTrackVideoEditProject())
   const programs = [source, alternate].map(compileCodeMaterial)
-  for (const [index, program] of programs.entries()) rememberVideoEditCodeMetadata(owner, `d${index}`, { id: `v${index}`, source: [source, alternate][index], apiVersion: 1, languageVersion: 1 }, program)
+  const persisted = await Promise.all([source, alternate].map(text => addressCodeMaterialFiles(text)))
+  for (const [index, program] of programs.entries()) rememberVideoEditCodeMetadata(owner, `d${index}`, { id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 1, languageVersion: 1 }, program)
   editVideoProject(owner.document.id, document => {
-    document.codeMaterials = programs.map((program, index) => ({ id: `d${index}`, name: program.name, defaultVersionId: `v${index}`, versions: [{ id: `v${index}`, source: [source, alternate][index], apiVersion: 1, languageVersion: 1 }] }))
+    document.codeSources = persisted.flatMap(value => value.codeSources)
+    document.codeMaterials = programs.map((program, index) => ({ id: `d${index}`, name: program.name, defaultVersionId: `v${index}`, versions: [{ id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 1, languageVersion: 1 }] }))
     for (const [index, program] of programs.entries()) {
       document.items.push({ id: `i${index}`, name: program.name, kind: 'code', code: { definitionId: `d${index}`, versionId: `v${index}`, parameters: Object.fromEntries(program.parameters.map(parameter => [parameter.key, parameter.default])) } })
       document.sequences[0].clips.push(makeVideoEditItemClip(document, `i${index}`, document.sequences[0].id, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))
@@ -266,7 +274,60 @@ it('已有关键帧按需展开，取消后未聚焦的数值步进仍可开始�
   fireEvent.click(view.getByRole('button', { name: '收起强度关键帧' }))
   const range = view.getByRole('slider', { name: '强度滑杆' }); fireEvent.pointerDown(range); fireEvent.change(range, { target: { value: '8' } }); fireEvent.keyDown(range, { key: 'Escape' })
   const number = view.getByRole('spinbutton', { name: '强度' }); const history = owner.past.length
-  const increase = number.closest('[data-ui-field-control]')!.querySelector('[aria-label="增加数值"]')!
+  const increase = number.closest('[data-ui-field-control]')!.querySelector('[aria-label="增加强度"]')!
   fireEvent.click(increase)
   expect(editor().parameters.amount).toBe(5.25); expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
+})
+
+it('新角度和点位在实例/关键帧共用控件，自定义字体悬停回滚完整组件值', async () => {
+  const rich = `export default {apiVersion:1,languageVersion:3,name:"丰富参数",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,types:{typography:{title:"文字组件",layout:"stack",fields:{face:{type:"font",title:"组件字体",default:"sans-serif"},size:{type:"number",title:"组件字号",default:12,min:1,max:100,step:1}}}},parameters:{angle:{type:"angle",title:"转角",default:0,min:-180,max:180,animatable:true},point:{type:"point",title:"位置",default:{x:0.5,y:0.5},animatable:true},type:{type:"typography",title:"字体组合",default:{}}},render(ctx){return [rect({x:0,y:0,width:10,height:10,fill:[1,0,0,1]})];}}`
+  const program = compileCodeMaterial(rich); const persisted = await addressCodeMaterialFiles(rich)
+  const version = { id: 'rich-version', entry: persisted.entry, files: persisted.files, apiVersion: 1 as const, languageVersion: 3 as const }
+  rememberVideoEditCodeMetadata(owner, 'rich-definition', version, program)
+  editVideoProject(owner.document.id, document => {
+    document.codeSources!.push(...persisted.codeSources)
+    document.codeMaterials!.push({ id: 'rich-definition', name: program.name, defaultVersionId: version.id, versions: [version] })
+    document.items.push({ id: 'rich-item', name: program.name, kind: 'code', code: { definitionId: 'rich-definition', versionId: version.id, parameters: Object.fromEntries(program.parameters.map(parameter => [parameter.key, parameter.default])) } })
+    document.sequences[0].clips.push(makeVideoEditItemClip(document, 'rich-item', sequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))
+    return document
+  })
+  const clipId = getActiveVideoEditSequence(owner).clips.at(-1)!.id
+  setVideoEditView(owner.document.id, { selection: clipId, frame: 0 })
+  const state = () => readVideoEditCodeEditor(owner.document.id, sequenceId, clipId)
+  const view = render(<View />); const before = owner.past.length
+  const point = view.getByRole('slider', { name: '位置' })
+  fireEvent.pointerDown(point, { pointerId: 71, button: 0, clientX: .4, clientY: .6 }); fireEvent.pointerMove(point, { pointerId: 71, clientX: .8, clientY: .7 })
+  expect(state().parameters.point).toEqual({ x: .8, y: .7 }); expect(owner.past).toHaveLength(before)
+  fireEvent.pointerUp(point, { pointerId: 71 }); expect(owner.past).toHaveLength(before + 1)
+  act(() => undoVideoEdit(owner.document.id)); expect(state().parameters.point).toEqual({ x: .5, y: .5 })
+  fireEvent.click(view.getByRole('button', { name: '为转角添加关键帧' }))
+  const value = view.getByRole('slider', { name: '转角关键帧1值' }); expect(value.closest('[data-param-control]')?.getAttribute('data-param-control')).toBe('angle')
+  fireEvent.keyDown(value, { key: 'ArrowRight' }); expect(state().curves.angle[0]).toMatchObject({ value: 1, interpolation: 'linear' })
+  const fontHistory = owner.past.length
+  fireEvent.click(view.getByRole('button', { name: '组件字体' })); const fontOption = await view.findByRole('option', { name: /系统衬线/ })
+  fireEvent.pointerEnter(fontOption.parentElement!); await waitFor(() => expect(state().parameters.type).toEqual({ face: 'serif', size: 12 }))
+  expect(owner.past).toHaveLength(fontHistory)
+  fireEvent.keyDown(fontOption, { key: 'Escape' }); await waitFor(() => expect(state().parameters.type).toEqual({ face: 'sans-serif', size: 12 }))
+  expect(owner.past).toHaveLength(fontHistory); expect(onError).not.toHaveBeenCalled()
+})
+
+it('内置位置双分量拖动一步撤销，Esc 和隐藏恢复两个参数', () => {
+  const definition = SHADER_GRAPH_EFFECT_DEFINITIONS.find(definition => builtinParameterFields(definition.params).some(field => field.type === 'point'))!
+  const field = builtinParameterFields(definition.params).find(field => field.type === 'point')!
+  const id = owner.document.id
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipIds[0]], definition.id)
+  const target = { projectId: id, sequenceId, clipId: clipIds[0] }
+  const effect = () => getActiveVideoEditSequence(owner).clips[0].effects!.at(-1)! as VideoEditBuiltinEffect
+  function BuiltinHost({ visible = true }: { visible?: boolean }) { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return visible ? <VideoEditBuiltinEffectControls target={target} effect={effect()} onError={onError} /> : null }
+  const view = render(<BuiltinHost />); const before = owner.past.length
+  const original = { ...effect().builtin.params }
+  let control = view.getByRole('slider', { name: field.title })
+  fireEvent.pointerDown(control, { pointerId: 81, button: 0, clientX: .2, clientY: .3 }); fireEvent.pointerMove(control, { pointerId: 81, clientX: .8, clientY: .9 })
+  expect(effect().builtin.params).toMatchObject({ [field.bindingKeys[0]]: 80, [field.bindingKeys[1]]: 90 }); expect(owner.past).toHaveLength(before)
+  fireEvent.pointerUp(control, { pointerId: 81 }); expect(owner.past).toHaveLength(before + 1)
+  act(() => undoVideoEdit(id)); expect(effect().builtin.params).toEqual(original)
+  control = view.getByRole('slider', { name: field.title }); fireEvent.pointerDown(control, { pointerId: 82, button: 0, clientX: .2, clientY: .3 }); fireEvent.keyDown(control, { key: 'Escape' })
+  expect(effect().builtin.params).toEqual(original); expect(owner.past).toHaveLength(before)
+  control = view.getByRole('slider', { name: field.title }); fireEvent.pointerDown(control, { pointerId: 83, button: 0, clientX: .2, clientY: .3 }); view.rerender(<BuiltinHost visible={false} />)
+  expect(effect().builtin.params).toEqual(original); expect(owner.past).toHaveLength(before); expect(onError).not.toHaveBeenCalled()
 })

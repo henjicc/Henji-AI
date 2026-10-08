@@ -80,8 +80,8 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
   const evaluate = (expression: CodeExpression, depth = 0): unknown => {
     try { return evaluateNode(expression, depth) }
     catch (error) {
-      const span = (expression.kind === 'draw' || expression.kind === 'v3call') && expression.sourceSpan
-      if (span && error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, `${error.message}（${span.startLine}:${span.startColumn}）`, span)
+      const span = expression.sourceSpan
+      if (span && error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, span)
       throw error
     }
   }
@@ -189,7 +189,7 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           if (++draws > CODE_V3_LIMITS.draws) throw new CodeMaterialError('BUDGET', '本帧图形超过 4096。')
           const fields: Record<string, unknown> = {}
           for (const key in expression.properties) if (key !== 'perChar') fields[key] = next(expression.properties[key])
-          const elementId = string(fields.id ?? `call:${expression.sourceSpan?.start ?? 0}`) + (indices.length ? `:${indices.join('.')}` : '')
+          const elementId = string(fields.id ?? `call:${expression.sourceSpan?.file ?? 'main.ts'}:${expression.sourceSpan?.start ?? 0}`) + (indices.length ? `:${indices.join('.')}` : '')
           const meta: CodeDrawMetadata = { ...metadata(fields), elementId, sourceSpan: expression.sourceSpan, elementPath: [] }
           const coordinate = (key: string): number => bounded(fields[key] ?? 0, -32768, 32768, key)
           const size = (key: string): number => bounded(fields[key], 0, 32768, key)
@@ -228,7 +228,7 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           }
           return { ...meta, kind: 'text', x: coordinate('x'), y: coordinate('y'), ...request, fontSize: layout.fontSize, color: fields.color ? codeColor(fields.color, 'text.color') : fields.fill ? fill : [1, 1, 1, 1], align: align as 'left' | 'center' | 'right', baseline, layout, ...(perChar ? { perChar } : {}) }
         } catch (error) {
-          if (error instanceof CodeMaterialError && !error.sourceSpan && expression.sourceSpan) throw new CodeMaterialError(error.code, `${error.message}（${expression.sourceSpan.startLine}:${expression.sourceSpan.startColumn}）`, expression.sourceSpan)
+          if (error instanceof CodeMaterialError && !error.sourceSpan && expression.sourceSpan) throw new CodeMaterialError(error.code, error.message, expression.sourceSpan)
           throw error
         }
       }

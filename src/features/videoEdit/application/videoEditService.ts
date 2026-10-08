@@ -1,3 +1,4 @@
+import { pruneCodeSources, assertCodeSourcesUnchanged } from '@/core/videoEdit/codeMaterial/sources'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { copyVideoEditSequence } from '@/core/videoEdit/sequenceCopy'
 import { createLogger } from '@/core/logging'
@@ -444,6 +445,7 @@ export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument
 }
 function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   const requested = update(structuredClone(instance.document))
+  assertCodeSourcesUnchanged(instance.document, requested)
   const next = videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
@@ -599,7 +601,7 @@ export async function saveVideoEdit(id: string): Promise<void> {
 
 /** 文档内容（剪辑的持久部分）：去掉外壳表达的 format / version / id / name / revision。 */
 export function videoEditDocumentContent(document: VideoEditDocument): VideoEditDocumentContent {
-  const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = document
+  const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = pruneCodeSources(document)
   return content as VideoEditDocumentContent
 }
 /** 文档内容 → 剪辑（完整 schema 校验）；内容读不懂时报错，原文件不动。 */

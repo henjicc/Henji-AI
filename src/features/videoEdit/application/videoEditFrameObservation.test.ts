@@ -1,3 +1,4 @@
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { askAssistantAtVideoEditFrame, createVideoEditAnnotation } from './videoEditAnnotations'
 import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
@@ -123,10 +124,10 @@ it('公共观察高亮指定代码元素，绑定标注按指定动画帧跟随�
   const owner = await createVideoEditProject(); const id = owner.document.id
   const source = 'export default {apiVersion:1,languageVersion:3,name:"元素",kind:"generator",mode:"dynamic",width:1920,height:1080,durationSeconds:10,seed:1,parameters:{},render(ctx){return [rect({id:"标题底板",x:ctx.time*100+100,y:100,width:200,height:100,fill:[1,1,1,1]})];}}'
   const program = compileCodeMaterial(source)
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', source, apiVersion: 1, languageVersion: 3 }, program)
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 3 }, program)
   let clipId = ''
   editVideoProject(id, document => {
-    document.codeMaterials = [{ id: 'definition', name: '元素', defaultVersionId: 'version', versions: [{ id: 'version', source, apiVersion: 1, languageVersion: 3 }] }]
+    document.codeMaterials = [{ id: 'definition', name: '元素', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, document), apiVersion: 1, languageVersion: 3 }] }]
     document.items.push({ id: 'code-item', name: '元素', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
     const clip = makeVideoEditItemClip(document, 'code-item', owner.activeSequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document)); clipId = clip.id; document.sequences[0].clips.push(clip); return document
   })

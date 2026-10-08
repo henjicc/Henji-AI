@@ -13,7 +13,7 @@ export const videoEditAnnotationTargetSchema = z.discriminatedUnion('kind', [
   point.extend({ kind: z.literal('point') }).strict(),
   region.extend({ kind: z.literal('region') }).strict(),
   z.object({ kind: z.literal('stroke'), strokes: z.array(z.array(point).min(1)).min(1) }).strict(),
-  z.object({ kind: z.literal('element'), elementId: z.string().min(1), sourceSpan: z.object({ start: z.number().int().nonnegative(), end: z.number().int().positive() }).strict().refine(span => span.end > span.start).optional(), region: region.optional() }).strict(),
+  z.object({ kind: z.literal('element'), elementId: z.string().min(1), sourceSpan: z.object({ file: z.string().min(1), start: z.number().int().nonnegative(), end: z.number().int().positive() }).strict().refine(span => span.end > span.start).optional(), region: region.optional() }).strict(),
   z.object({ kind: z.literal('range'), startFrame: frame, endFrame: frame, trackIds: z.array(identifier).optional(), clipIds: z.array(identifier).optional() }).strict(),
 ])
 export const videoEditAnnotationAuthorSchema = z.object({ kind: z.enum(['user', 'assistant', 'external']), name: z.string().trim().min(1) }).strict()

@@ -1,6 +1,7 @@
+import { codeSourcesSchema, documentCodeSourceResolver, resolveCodeMaterialFiles } from './codeMaterial/sources'
 import { z } from 'zod'
 import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from './codeMaterialPersistence'
-import { CODE_MATERIAL_LIMITS, isCodeImageReference } from './codeMaterial/contract'
+import { isCodeImageReference } from './codeMaterial/contract'
 import { codeElementOverridesSchema } from './codeElementOverrides'
 
 /** Bytes bound a serialized source manifest; image dependency count has no product ceiling. */
@@ -13,13 +14,14 @@ const image = z.object({
 }).strict()
 export const codeAssetSchema = z.object({
   format: z.literal('henji-code-asset'), version: z.literal(1), name: z.string().trim().min(1).max(200),
-  sourceVersion: codeMaterialVersionSchema.omit({ id: true, assetOrigin: true }),
+  sourceVersion: z.object({ apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, entry: codeMaterialVersionSchema.shape.entry, files: codeMaterialVersionSchema.shape.files }).strict(),
+  codeSources: codeSourcesSchema,
   parameters: codeMaterialInstanceSchema.shape.parameters,
   curves: codeMaterialInstanceSchema.shape.curves,
   elementOverrides: codeElementOverridesSchema.optional(),
   images: z.array(image),
 }).strict().superRefine((value, context) => {
-  if (new TextEncoder().encode(value.sourceVersion.source).byteLength > CODE_MATERIAL_LIMITS.sourceBytes) context.addIssue({ code: 'custom', message: '代码素材源码最多64KiB。' })
+  try { resolveCodeMaterialFiles(value.sourceVersion, documentCodeSourceResolver(value)); codeMaterialVersionSchema.parse({ ...value.sourceVersion, id: 'asset-version' }) } catch (error) { context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '代码素材文件无效。' }) }
   const ids = value.images.map(image => image.id)
   if (new Set(ids).size !== ids.length) context.addIssue({ code: 'custom', message: '代码素材图片依赖标识重复。' })
   const references = Object.values(value.parameters).flatMap(value => isCodeImageReference(value) ? [value.mediaId] : [])

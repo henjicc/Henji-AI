@@ -150,7 +150,7 @@ it('效果控件的作用区域：选区域后出现羽化 / 扩展 / 反转与�
   await flush()
   const target = { projectId: id, sequenceId, clipId: video.id }
   const effect = (): VideoEditBuiltinEffect => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!.effects![0] as VideoEditBuiltinEffect
-  const gesture = { begin: vi.fn(), finish: vi.fn(), cancel: vi.fn(), active: () => false, commit: (changes: Parameters<typeof updateVideoEditBuiltinEffect>[2]) => updateVideoEditBuiltinEffect(target, effect().id, changes) }
+  const gesture = { identity: 'smart-region-test', begin: vi.fn(), finish: vi.fn(), cancel: vi.fn(), active: () => false, commit: (changes: Parameters<typeof updateVideoEditBuiltinEffect>[2]) => updateVideoEditBuiltinEffect(target, effect().id, changes) }
   const view = render(<VideoEditSmartRegionControls target={target} effect={effect()} gesture={gesture} />)
   expect(view.getByRole('status').textContent).toContain('正在分析画面')
   expect(view.getByLabelText('羽化')).toBeTruthy(); expect(view.getByLabelText('反转作用区域')).toBeTruthy()

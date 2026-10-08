@@ -1,3 +1,5 @@
+import { testCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -37,9 +39,9 @@ beforeEach(async () => {
   installHarnessNativeStorage()
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const size = Number(this.font.match(/([\d.]+)px/)?.[1] ?? 16); return { width: text.length * size, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * size } } } } })
   owner = await createVideoEditTestProject()
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', source, apiVersion: 1, languageVersion: 3 }, compileCodeMaterial(source))
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 3 }, compileCodeMaterial(source))
   editVideoProject(owner.document.id, document => {
-    document.codeMaterials = [{ id: 'definition', name: '元素编辑', defaultVersionId: 'version', versions: [{ id: 'version', source, apiVersion: 1, languageVersion: 3 }] }]
+    document.codeMaterials = [{ id: 'definition', name: '元素编辑', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 3 }] }]
     document.items.push({ id: 'item', name: '元素编辑', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
     const value = makeVideoEditItemClip(document, 'item', owner.activeSequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document)); clipId = value.id; document.sequences[0].clips.push(value); return document
   })
@@ -125,7 +127,7 @@ it('助手通用实体原子读写、拒绝无效值与锁定、撤销和保存�
 })
 it('确定性写回创建新版本并清除覆盖同一步撤销；复杂坐标创建助手标注', async () => {
   updateVideoEditCodeElement(target(), { dx: 20, fill: [1,0,0,1] }); const before = owner.past.length
-  expect(await bakeVideoEditCodeElement(target())).toBe('baked'); expect(clip().elementOverrides).toBeUndefined(); expect(clip().code!.versionId).not.toBe('version'); expect(owner.document.codeMaterials![0].versions[0].source).toBe(source); expect(owner.past).toHaveLength(before + 1)
+  expect(await bakeVideoEditCodeElement(target())).toBe('baked'); expect(clip().elementOverrides).toBeUndefined(); expect(clip().code!.versionId).not.toBe('version'); expect(testCodeSource(owner.document, owner.document.codeMaterials![0].versions[0])).toBe(source); expect(owner.past).toHaveLength(before + 1)
   undoVideoEdit(owner.document.id); expect(clip().code!.versionId).toBe('version'); expect(clip().elementOverrides?.box.dx).toBe(20)
   updateVideoEditCodeElement(target(), { scale: 2 }); expect(await bakeVideoEditCodeElement(target())).toBe('assistant')
   const mark = getActiveVideoEditSequence(owner).annotations.at(-1)!; expect(mark.text).toContain('请把这些覆盖写回源码'); expect(mark.target).toMatchObject({ kind: 'element', elementId: 'box' }); expect(clip().elementOverrides?.box.scale).toBe(2)

@@ -1,3 +1,4 @@
+import { documentCodeSourceResolver, mergeCodeSources, normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { appendCodeMaterialVersion } from '@/core/videoEdit/codeMaterialVersions'
 import { proposeCodeMaterialMigration, type CodeMaterialMigrationImpact } from '@/core/videoEdit/codeMaterialAnimation'
 import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
@@ -14,7 +15,7 @@ export type VideoEditCodeApplyScope = 'single' | 'matching'
 export interface VideoEditCodeCandidate {
   readonly target: VideoEditCodeTarget
   readonly scope: VideoEditCodeApplyScope
-  readonly source: string
+  readonly files: CodeMaterialFiles
   readonly versionId: string
   readonly clipCount: number
   readonly bitmap: ImageBitmap
@@ -27,7 +28,7 @@ const preparing = new WeakMap<VideoEditInstance, number>()
 
 /** The candidate is an opaque proof of the exact checked source and document;
  * its public display fields cannot be used to forge a publication. */
-export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget, source: string, scope: VideoEditCodeApplyScope = 'single', signal?: AbortSignal, options: { clearElementOverrides?: readonly string[] } = {}): Promise<VideoEditCodeCandidate> {
+export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget, source: string | CodeMaterialFiles, scope: VideoEditCodeApplyScope = 'single', signal?: AbortSignal, options: { clearElementOverrides?: readonly string[] } = {}): Promise<VideoEditCodeCandidate> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
   if ((active.get(owner)?.size ?? 0) + (preparing.get(owner) ?? 0) >= 2) throw new Error('请先关闭或提交现有源码候选。')
@@ -57,7 +58,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   }
   logger.info('检查源码候选', { event: 'video_edit.code.candidate.start', context: { projectId: target.projectId, clipId: target.clipId, scope } })
   try {
-    const appended = await appendCodeMaterialVersion(definition, source, source => compileVideoEditCode(source, controller.signal))
+    const appended = await appendCodeMaterialVersion(definition, source, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline))
     controller.signal.throwIfAborted(); newVersion = appended.versionId
     const version = appended.definition.versions.find(version => version.id === newVersion)!
     rememberVideoEditCodeMetadata(owner, definition.id, version, appended.program)
@@ -65,7 +66,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const impacts: VideoEditCodeCandidate['impacts'][number][] = []; let count = 0
     const selectedIds = new Set<string>()
     const selectedEffects = new Map<string, string[]>()
-    const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: baseline.codeMaterials!.map(value => value.id === definition.id ? appended.definition : value), sequences: baseline.sequences.map(value => ({ ...value, clips: value.clips.map(clip => {
+    const document = videoEditDocumentSchema.parse({ ...baseline, codeSources: mergeCodeSources(baseline.codeSources, appended.codeSources), codeMaterials: baseline.codeMaterials!.map(value => value.id === definition.id ? appended.definition : value), sequences: baseline.sequences.map(value => ({ ...value, clips: value.clips.map(clip => {
       if (target.effectId) {
         return { ...clip, effects: clip.effects?.map(effect => {
           const selected = scope === 'single' ? value.id === target.sequenceId && clip.id === target.clipId && effect.id === target.effectId : effect.code?.definitionId === definition.id && effect.code.versionId === target.versionId
@@ -94,7 +95,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     bitmap = await trialVideoEditCodeFrames(uniqueFrames, controller.signal, true)
     controller.signal.throwIfAborted()
     if (!bitmap || requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('源码候选的原剪辑已改变。')
-    candidate = Object.freeze({ target: Object.freeze({ ...target }), scope, source, versionId: appended.versionId, clipCount: count, bitmap, impacts: structuredClone(impacts) })
+    candidate = Object.freeze({ target: Object.freeze({ ...target }), scope, files: normalizeCodeMaterialFiles(source), versionId: appended.versionId, clipCount: count, bitmap, impacts: structuredClone(impacts) })
     candidates.set(candidate, { owner, baseline, document, controller, clean: () => { committed = owner.document.codeMaterials?.some(definition => definition.versions.some(version => version.id === newVersion)) ?? false; clean() }, needsConfirmation: impacts.length > 0 })
     const set = active.get(owner) ?? new Set(); set.add(candidate); active.set(owner, set)
     logger.info('源码候选已生成', { event: 'video_edit.code.candidate.ready', context: { projectId: target.projectId, count, impacts: impacts.length } })

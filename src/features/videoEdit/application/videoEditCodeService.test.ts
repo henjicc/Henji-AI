@@ -1,3 +1,9 @@
+import { createElement } from 'react'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
+import { CodeSourceEditor } from '../panels/CodeSourceEditor'
+import { documentCodeSourceResolver, resolveCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { testCodeSource, testSetCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
+import { testCodeAssetSource, testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { resolve as resolvePath, sep as pathSeparator } from 'node:path'
 // @vitest-environment jsdom
@@ -55,7 +61,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
       for (const clip of this.document.clips) if (visible.has(clip.track) && (frame >= clip.start && frame < clip.start + clip.duration || windows.some(window => [window.left.id, window.right.id].includes(clip.id)))) {
         if (clip.kind === 'adjustment' && clip.opacity === 0) continue
         for (const effect of clip.effects ?? []) if (effect.enabled && effect.amount > 0) {
-          const source = this.document.codeMaterials!.find(definition => definition.id === effect.code!.definitionId)!.versions.find(version => version.id === effect.code!.versionId)!.source
+          const source = testCodeSource(this.document, this.document.codeMaterials!.find(definition => definition.id === effect.code!.definitionId)!.versions.find(version => version.id === effect.code!.versionId)!)
           boundary.filterProofs++; emitCodeMaterialFilter(compileCodeMaterial(source), frame < clip.start || frame >= clip.start + clip.duration)
         }
       }
@@ -67,7 +73,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 const source = `export default {apiVersion:1,name:"原创移动圆",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:4,seed:7,parameters:{amount:{type:"number",title:"透明度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){return [ellipse({x:100+ctx.time*20,y:100,width:500,height:500,fill:[0,1,1,ctx.params.amount]})];}}`
 const files = new Map<string, string>()
 const filterSource = 'export default {apiVersion:1,name:"原创滤镜",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
-const codeAssetFixture = (codeSource = source): CodeAsset => ({ format: 'henji-code-asset', version: 1, name: '可编辑资产', sourceVersion: { apiVersion: 1, languageVersion: codeSource.includes('type:"image"') ? 2 : 1, source: codeSource }, parameters: { amount: .7 }, curves: { amount: [{ id: 'asset-key', sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 }, value: .9, interpolation: 'ease' }] }, images: [] })
+const codeAssetFixture = (codeSource = source): CodeAsset => ({ format: 'henji-code-asset', version: 1, name: '可编辑资产', ...testCodeAssetSource(codeSource, codeSource.includes('type:"image"') ? 2 : 1), parameters: { amount: .7 }, curves: { amount: [{ id: 'asset-key', sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 }, value: .9, interpolation: 'ease' }] }, images: [] })
 const importPublication = (asset = codeAssetFixture()) => ({ asset, media: [], mediaIds: new Map<string, string>(), origin: { assetId: 'fixed-asset', contentIdentity: 'a'.repeat(64) }, beforePublish: async () => undefined })
 function collectionBoundary() {
   const bytes = new Map<string, Uint8Array>(); const assets = new Map<string, AssetRecord>(); const platform = getPlatform()
@@ -285,7 +291,7 @@ it('保存重开检查非默认滤镜固定版本，复制效果独立，滤镜�
   const document = createVideoEditDocument('真实固定滤镜'); const sequence = document.sequences[0]
   document.items = [{ id: 'text', name: '文字', kind: 'text' }]
   const filterSource = `export default {apiVersion:1,name:"单输入",kind:"filter",mode:"static",width:1920,height:1080,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.amount,c.g,c.b,c.a);}}`
-  document.codeMaterials = [{ id: 'filter', name: '滤镜', defaultVersionId: 'default', versions: [{ id: 'default', apiVersion: 1, languageVersion: 1, source: filterSource }, { id: 'held', apiVersion: 1, languageVersion: 1, source: filterSource.replace('default:.5', 'default:.8') }] }]
+  document.codeMaterials = [{ id: 'filter', name: '滤镜', defaultVersionId: 'default', versions: [{ id: 'default', apiVersion: 1, languageVersion: 1, ...testCodeManifest(filterSource, document) }, { id: 'held', apiVersion: 1, languageVersion: 1, ...testCodeManifest(filterSource.replace('default:.5', 'default:.8'), document) }] }]
   const clip = makeVideoEditItemClip(document, 'text', sequence.id, { frame: 0, duration: 30 })
   clip.effects = [{ id: 'fixed-effect', name: '滤镜', enabled: true, amount: .7, code: { definitionId: 'filter', versionId: 'held', parameters: { amount: .6 } } }]
   sequence.clips = [clip]
@@ -304,7 +310,7 @@ it('保存重开检查非默认滤镜固定版本，复制效果独立，滤镜�
   const reopened = await reopenVideoEdit(id)
   expect(reopened.document).toEqual({ ...saved, revision: 0 })
   expect(boundary.compileCalls).toBe(4)
-  const invalid = structuredClone(document); invalid.id = 'wrong-effect-kind'; invalid.codeMaterials![0].versions[1].source = source
+  const invalid = structuredClone(document); invalid.id = 'wrong-effect-kind'; testSetCodeSource(invalid, invalid.codeMaterials![0].versions[1], source)
   await expect(openSeededVideoEdit(invalid)).rejects.toThrow('单输入滤镜')
   expect(listVideoEditInstances()).toEqual([reopened])
 })
@@ -406,12 +412,12 @@ it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写�
 it('磁盘替换固定版本或未检查引用不能进入剪辑，失败打开释放源码线程并保留原文件', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   await createVideoEditCodeItems(id, [{ source }]); const original = instance.document
-  expect(() => editVideoProject(id, document => { document.codeMaterials![0].versions[0].source = source.replace('seed:7', 'seed:8'); return document })).toThrow('被替换')
+  expect(() => editVideoProject(id, document => { testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('seed:7', 'seed:8')); return document })).toThrow('被替换')
   expect(instance.document).toBe(original)
   editVideoProject(id, document => ({ ...document, items: [] }))
-  expect(() => editVideoProject(id, document => { document.codeMaterials![0].versions[0].source = source.replace('seed:7', 'seed:8'); return document })).toThrow('被替换')
+  expect(() => editVideoProject(id, document => { testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('seed:7', 'seed:8')); return document })).toThrow('被替换')
   await closeVideoEditProject(id)
-  const raw = savedVideoEdit(instance); raw.codeMaterials![0].versions[0].source = 'export default {render(){while(true){}}}'
+  const raw = savedVideoEdit(instance); testSetCodeSource(raw, raw.codeMaterials![0].versions[0], 'export default {render(){while(true){}}}')
   replaceSavedVideoEdit(id, raw); const invalid = JSON.stringify(savedVideoEdit(instance))
   const disposed = boundary.disposedCompilers
   await expect(reopenVideoEdit(id)).rejects.toThrow()
@@ -640,7 +646,7 @@ it('代码资产原始参数和有理源曲线一次发布、保存重开、单�
   expect(code.parameters).toEqual({ amount: .7 }); expect(code.curves).toEqual(codeAssetFixture().curves)
   expect(owner.document.codeMaterials![0].versions[0].assetOrigin).toEqual(importPublication().origin)
   await saveVideoEdit(id); const reopened = await reopenVideoEdit(id)
-  expect(reopened.document.items[0].code).toEqual(code); expect(reopened.document.codeMaterials![0].versions[0].source).toBe(source)
+  expect(reopened.document.items[0].code).toEqual(code); expect(testCodeSource(reopened.document, reopened.document.codeMaterials![0].versions[0])).toBe(source)
   const next = await createVideoEditCodeAssetInstance(id, importPublication())
   expect(reopened.document.items).toHaveLength(2); undoVideoEdit(id)
   expect(reopened.document.items.some(item => item.id === next.itemId)).toBe(false); expect(reopened.document.items[0].code).toEqual(code)
@@ -648,7 +654,7 @@ it('代码资产原始参数和有理源曲线一次发布、保存重开、单�
 it('v3片段元素覆盖收录并导入为素材初始值，新片段独立复制且保存重开不丢失', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
   const code = source.replace('apiVersion:1,', 'apiVersion:1,languageVersion:3,').replace('ellipse({x:', 'ellipse({id:"circle",x:')
-  const asset = { ...codeAssetFixture(code), sourceVersion: { source: code, apiVersion: 1 as const, languageVersion: 3 as const }, elementOverrides: { circle: { dx: 20, fill: [1,0,0,1] as [number, number, number, number] } } }
+  const asset = { ...codeAssetFixture(code), ...testCodeAssetSource(code, 3 as const), elementOverrides: { circle: { dx: 20, fill: [1,0,0,1] as [number, number, number, number] } } }
   const created = await createVideoEditCodeAssetInstance(id, importPublication(asset))
   const [first, second] = appendVideoEditItems(id, [created.itemId!, created.itemId!], owner.activeSequenceId)
   editVideoProject(id, document => { document.sequences[0].clips.find(clip => clip.id === first)!.elementOverrides!.circle.dx = 90; return document })
@@ -687,7 +693,7 @@ it('代码资产filter强制检查隐藏真实目标并保留参数，不制造�
   expect(boundary.filterProofs).toBeGreaterThan(0); expect(owner.past).toHaveLength(before + 1); expect(owner.document.items).toHaveLength(1)
   const clip = getActiveVideoEditSequence(owner).clips[0]; expect(clip.opacity).toBe(0); expect(clip.effects![0].code!.parameters.gain).toBe(.8)
   const baseline = owner.document
-  await expect(createVideoEditCodeAssetInstance(id, { ...importPublication({ ...asset, sourceVersion: { ...asset.sourceVersion, source: filterSource.replace('mode:"static"', 'mode:"dynamic"').replace('durationSeconds:10', 'durationSeconds:1') } }), filterTarget })).rejects.toThrow()
+  await expect(createVideoEditCodeAssetInstance(id, { ...importPublication({ ...asset, ...testCodeAssetSource(filterSource.replace('mode:"static"', 'mode:"dynamic"').replace('durationSeconds:10', 'durationSeconds:1'), 1) }), filterTarget })).rejects.toThrow()
   expect(owner.document).toBe(baseline)
   editVideoSequence(id, owner.activeSequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, locked: true })) }))
   const locked = owner.document; await expect(createVideoEditCodeAssetInstance(id, { ...importPublication(asset), filterTarget })).rejects.toThrow('锁定'); expect(owner.document).toBe(locked)
@@ -744,7 +750,7 @@ it('公共收录引用确切附加效果，清单不包含选中片段的生成�
     const input = { documentRef: { kind: 'video_edit.document', id }, targetRef: { kind: 'video_edit.effect', id: `${id}:${effect.id}` } }
     const result = await app.call('collect_video_edit_code_asset', input)
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true, data: { resultRef: { kind: 'asset' }, verification: { verified: true } } })
-    expect(decodeCodeAsset(bytes.get('D:/filter.henji-code')!)).toMatchObject({ sourceVersion: { source: filterSource }, parameters: { gain: .8 } })
+    expect(decodeCodeAsset(bytes.get('D:/filter.henji-code')!)).toMatchObject({ ...testCodeAssetSource(filterSource, 1), parameters: { gain: .8 } })
     expect((await app.call('collect_video_edit_code_asset', { ...input, documentRef: { kind: 'video_edit.document', id: 'other-project' } })).ok).toBe(false)
     expect(platform.system.fs.writeFile).toHaveBeenCalledOnce()
   } finally { app.dispose() }
@@ -802,4 +808,58 @@ it('一次创建260份代码素材和试渲染边界不受32/64/257旧数量限�
   expect(ids).toHaveLength(260); expect(instance.document.codeMaterials).toHaveLength(260)
   expect(instance.document.items).toHaveLength(260); expect(instance.past).toHaveLength(1)
   expect(boundary.activeRenderers).toBe(0)
+})
+
+it('公共多文件创建与追加保留旧版本、哈希去重，保存清理无引用内容且资产往返完整', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id; const app = createApplicationHarness()
+  const main = 'import {draw} from "./parts/card";export default {apiVersion:1,languageVersion:3,name:"多文件资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{},render(ctx){return [draw()]}}'
+  const module = 'export const draw=()=>rect({x:0,y:0,width:20,height:20,fill:[1,0,0,1]});'
+  const files = { 'main.ts': main, 'parts/card.ts': module }
+  try {
+    const parent = { kind: 'video_edit.document', id }; const baseline = await app.read(parent)
+    const created = await app.call('change_application_entities', { summary: '创建多文件代码素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.files': files, 'video_edit.code_material.entry': 'main.ts' } }] }] }, baseline.revisions as Record<string, number>)
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    const definition = owner.document.codeMaterials![0]; const previous = structuredClone(definition.versions[0])
+    expect((await app.read({kind:'video_edit.code_material',id:`${id}:${definition.id}`},['video_edit.code_material.files','video_edit.code_material.source','video_edit.code_material.entry'])).properties).toEqual({'video_edit.code_material.files':files,'video_edit.code_material.source':main,'video_edit.code_material.entry':'main.ts'})
+    const nextFiles = { ...files, 'parts/card.ts': module.replace('width:20','width:30') }
+    const revision = await app.read(parent)
+    const appended = await app.call('change_application_entities', {summary:'追加多文件版本',changes:[{kind:'create_items',entityType:'video_edit.code_version',parent,items:[{properties:{'video_edit.code_version.definition_id':definition.id,'video_edit.code_version.files':nextFiles}}]}]},revision.revisions as Record<string,number>)
+    expect(appended,JSON.stringify(appended)).toMatchObject({ok:true})
+    expect(owner.document.codeMaterials![0].versions[0]).toEqual(previous); expect(owner.document.codeSources).toHaveLength(3)
+    const newest=owner.document.codeMaterials![0].versions[1]
+    expect((await app.read({kind:'video_edit.code_version',id:`${id}:${newest.id}`},['video_edit.code_version.files'])).properties).toEqual({'video_edit.code_version.files':nextFiles})
+    editVideoProject(id, document => ({...document,codeSources:[...document.codeSources!,{hash:'f'.repeat(64),source:'没有版本引用的源码'}]}))
+    await saveVideoEdit(id); const reopened=await reopenVideoEdit(id)
+    expect(reopened.document.codeSources).toHaveLength(3)
+    expect(resolveCodeMaterialFiles(reopened.document.codeMaterials![0].versions[1],documentCodeSourceResolver(reopened.document))).toEqual({entry:'main.ts',files:nextFiles})
+    const {bytes}=collectionBoundary()
+    await collectVideoEditCodeAsset(id,{kind:'definition',definitionId:definition.id},{path:'D:/t88-multi.henji-code'})
+    const manifest=decodeCodeAsset(bytes.get('D:/t88-multi.henji-code')!)
+    expect(resolveCodeMaterialFiles(manifest.sourceVersion,documentCodeSourceResolver(manifest))).toEqual({entry:'main.ts',files})
+    const imported=await createVideoEditCodeAssetInstance(id,importPublication(manifest))
+    const importedVersion=reopened.document.codeMaterials!.find(value=>value.id===imported.definitionId)!.versions[0]
+    expect(resolveCodeMaterialFiles(importedVersion,documentCodeSourceResolver(reopened.document))).toEqual({entry:'main.ts',files})
+  } finally {app.dispose()}
+})
+
+it('jsdom多文件编辑经正式候选服务保存新版本，旧文件不变且同一撤销恢复原版本', async () => {
+  const owner=await createLegacyTrackVideoEditProject();const id=owner.document.id
+  const files={'main.ts':'import {draw} from "./parts/card";export default {apiVersion:1,languageVersion:3,name:"编辑器",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{},render(ctx){return [draw()]}}','parts/card.ts':'export const draw=()=>rect({x:0,y:0,width:20,height:20,fill:[1,0,0,1]});'}
+  const [itemId]=await createVideoEditCodeItems(id,[{files}]);appendVideoEditItems(id,[itemId],owner.activeSequenceId,{frame:0,track:2})
+  const clip=getActiveVideoEditSequence(owner).clips[0];const original=structuredClone(owner.document.codeMaterials![0].versions[0])
+  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn(),measureText:()=>({width:60})} as unknown as CanvasRenderingContext2D)
+  vi.spyOn(VideoEditRenderSession.prototype,'present').mockResolvedValue({id:1,presented:true,bitmap:{width:64,height:64,close:vi.fn()}})
+  const view=render(createElement(CodeSourceEditor,{editor:readVideoEditCodeEditor(id,owner.activeSequenceId,clip.id)}))
+  try {
+    fireEvent.click(view.getByRole('button',{name:'查看与编辑源码'}));fireEvent.click(view.getByRole('option',{name:'parts/card.ts'}))
+    const changed=files['parts/card.ts'].replace('width:20','width:30')
+    fireEvent.change(view.getByRole('textbox',{name:'代码素材源码'}),{target:{value:changed}})
+    fireEvent.click(view.getByRole('button',{name:'检查并预览'}))
+    await waitFor(()=>expect(view.getByRole('button',{name:'保存为新版本'}).hasAttribute('disabled')).toBe(false))
+    act(()=>{fireEvent.click(view.getByRole('button',{name:'保存为新版本'}))})
+    const definition=owner.document.codeMaterials![0];expect(definition.versions).toHaveLength(2);expect(definition.versions[0]).toEqual(original)
+    expect(getActiveVideoEditSequence(owner).clips[0].code!.versionId).toBe(definition.versions[1].id)
+    expect(resolveCodeMaterialFiles(definition.versions[1],documentCodeSourceResolver(owner.document)).files['parts/card.ts']).toBe(changed)
+    act(()=>{undoVideoEdit(id)});expect(owner.document.codeMaterials![0].versions).toEqual([original]);expect(getActiveVideoEditSequence(owner).clips[0].code!.versionId).toBe(original.id)
+  } finally {view.unmount()}
 })

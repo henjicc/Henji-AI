@@ -8,7 +8,7 @@ import type { VideoEditSourceTime } from './time'
 
 export const videoEditSelectedCodeElementContextSchema = z.object({
   clipRef: z.string().min(1), elementId: z.string().min(1),
-  sourceSpan: z.object({ start: z.number().int().nonnegative(), end: z.number().int().positive(), startLine: z.number().int().positive(), startColumn: z.number().int().positive(), endLine: z.number().int().positive(), endColumn: z.number().int().positive() }).strict().optional(),
+  sourceSpan: z.object({ file: z.string().min(1), start: z.number().int().nonnegative(), end: z.number().int().positive(), startLine: z.number().int().positive(), startColumn: z.number().int().positive(), endLine: z.number().int().positive(), endColumn: z.number().int().positive() }).strict().optional(),
   parameterKeys: z.array(z.string().min(1)),
 }).strict().nullable()
 
@@ -23,7 +23,7 @@ export function prepareCodeElementIndex(program: CodeMaterialProgram, context: C
     const ancestor = byPath.get(bound.elementPath.slice(0, i + 1).join('|'))
     return ancestor ? [ancestor] : []
   })]))
-  const dependencies = new Map<number, string[]>()
+  const dependencies = new Map<string, string[]>()
   const keys = (expression: CodeExpression, seen = new Set<number>()): Set<string> => {
     const result = new Set<string>()
     if (expression.kind === 'parameter') result.add(expression.key)
@@ -35,11 +35,11 @@ export function prepareCodeElementIndex(program: CodeMaterialProgram, context: C
       if (value && typeof value === 'object' && 'kind' in value && 'type' in value) for (const key of keys(value as CodeExpression, seen)) result.add(key)
       else for (const child of children) if (child && typeof child === 'object' && 'kind' in child && 'type' in child) for (const key of keys(child as CodeExpression, seen)) result.add(key)
     }
-    if ('sourceSpan' in expression && expression.sourceSpan) dependencies.set(expression.sourceSpan.start, [...result])
+    if ('sourceSpan' in expression && expression.sourceSpan) dependencies.set(JSON.stringify([expression.sourceSpan.file, expression.sourceSpan.start]), [...result])
     return result
   }
   keys(program.result); for (const binding of program.bindings) keys(binding.expression)
-  return { bounds, byId: new Map(bounds.map(bound => [bound.elementId, bound])), ancestors, parameters: new Map(bounds.map(bound => [bound.elementId, dependencies.get(bound.sourceSpan?.start ?? -1) ?? []])) }
+  return { bounds, byId: new Map(bounds.map(bound => [bound.elementId, bound])), ancestors, parameters: new Map(bounds.map(bound => [bound.elementId, dependencies.get(JSON.stringify([bound.sourceSpan?.file, bound.sourceSpan?.start])) ?? []])) }
 }
 
 export function hitCodeElementIndex(index: CodeElementIndex, x: number, y: number): CodeElementBounds[] {
@@ -59,8 +59,8 @@ export function hitCodeElementIndex(index: CodeElementIndex, x: number, y: numbe
 export function cycleCodeElement(hits: readonly CodeElementBounds[], current?: string, cycle = false): CodeElementBounds | undefined {
   return hits.length ? hits[cycle ? (hits.findIndex(hit => hit.elementId === current) + 1) % hits.length : 0] : undefined
 }
-export function codeElementAtSource(index: CodeElementIndex, offset: number): CodeElementBounds | undefined {
-  return index.bounds.filter(bound => bound.sourceSpan && bound.sourceSpan.start <= offset && offset < bound.sourceSpan.end && bound.opacity >= .01 && bound.width > 0 && bound.height > 0).sort((a, b) => (a.sourceSpan!.end - a.sourceSpan!.start) - (b.sourceSpan!.end - b.sourceSpan!.start))[0]
+export function codeElementAtSource(index: CodeElementIndex, offset: number, file = 'main.ts'): CodeElementBounds | undefined {
+  return index.bounds.filter(bound => bound.sourceSpan && bound.sourceSpan.file === file && bound.sourceSpan.start <= offset && offset < bound.sourceSpan.end && bound.opacity >= .01 && bound.width > 0 && bound.height > 0).sort((a, b) => (a.sourceSpan!.end - a.sourceSpan!.start) - (b.sourceSpan!.end - b.sourceSpan!.start))[0]
 }
 export function codeElementLabel(bound: CodeElementBounds): string {
   const originalId = bound.command.authorElementId ?? bound.command.elementId ?? bound.elementId

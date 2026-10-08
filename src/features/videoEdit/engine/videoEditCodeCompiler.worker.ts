@@ -1,3 +1,4 @@
+import { codeMaterialFilesKey, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
@@ -5,12 +6,13 @@ import type { CodeCompilerResponse } from './videoEditCodeCompiler'
 
 const cache = new Map<string, { program: CodeMaterialProgram; bytes: number }>()
 let bytes = 0
-self.onmessage = (event: MessageEvent<{ id: number; source: string }>): void => {
-  const { id, source } = event.data
+self.onmessage = (event: MessageEvent<{ id: number; files: CodeMaterialFiles }>): void => {
+  const { id, files } = event.data
+  const source = codeMaterialFilesKey(files)
   try {
     const cached = cache.get(source)
     if (cached) { cache.delete(source); cache.set(source, cached); self.postMessage({ id, program: cached.program, cacheHit: true } satisfies CodeCompilerResponse); return }
-    const program = compileCodeMaterial(source)
+    const program = compileCodeMaterial(files)
     const size = new TextEncoder().encode(source).byteLength + new TextEncoder().encode(JSON.stringify(program)).byteLength
     while (cache.size >= 32 || bytes + size > 16 * 1024 ** 2) {
       const oldest = cache.entries().next().value as [string, { program: CodeMaterialProgram; bytes: number }] | undefined

@@ -12,7 +12,7 @@ export async function videoEditFontUses(document: VideoEditDocument | VideoEditC
   const read: CodeMaterialMetadataReader = instance => metadata.get(instance.versionId)!
   // Collect only font parameter declarations; compile through the existing cached compiler worker.
   const codes = [...document.items.flatMap(item => item.code ? [item.code] : []), ...('clips' in document ? [document, ...(document.sequences ?? [])] : document.sequences).flatMap(sequence => sequence.clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...(clip.effects ?? []).flatMap(effect => effect.code ? [effect.code] : [])]))]
-  for (const instance of codes) if (!metadata.has(instance.versionId)) metadata.set(instance.versionId, await compileVideoEditCode(codeMaterialSource(document, instance).source))
+  for (const instance of codes) if (!metadata.has(instance.versionId)) metadata.set(instance.versionId, await compileVideoEditCode(codeMaterialSource(document, instance).contents))
   return collectVideoEditFonts(document, read)
 }
 export async function prepareVideoEditFonts(document: VideoEditDocument | VideoEditComposition): Promise<FontPayload[]> {
