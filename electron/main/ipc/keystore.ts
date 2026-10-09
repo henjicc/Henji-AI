@@ -1,6 +1,5 @@
 import {
   getAiProviderApiKey,
-  getAiProviderKeyStatus,
   getLlmProviderApiKey,
   getLlmProviderKeyStatus,
   removeAiProviderApiKey,
@@ -71,14 +70,6 @@ export function registerKeystoreIpc(): void {
 
   registerIpcHandler<ProviderKeyPayload, string | null>('ai:getProviderApiKey', parseProviderKeyPayload, ({ providerId }) => {
     return getAiProviderApiKey(providerId)
-  })
-
-  registerIpcHandler('ai:getProviderKeyStatus', (input: unknown): void => {
-    if (input !== undefined) {
-      throw new Error('Expected no IPC payload')
-    }
-  }, () => {
-    return getAiProviderKeyStatus()
   })
 
   registerIpcHandler<CredentialPayload, string | null>('llm:getProviderApiKey', parseCredentialPayload, ({ credentialId }) => {

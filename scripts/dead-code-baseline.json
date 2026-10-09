@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "reason": "R12首次登记：保护R04正在处理的imaging冷候选，不修改其文件；未使用导出只报告。",
+  "files": [
+    "src/core/imaging/effects/gaussianMeasurements.ts"
+  ],
+  "dependencies": []
+}

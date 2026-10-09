@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreWorkspaces": ["packages/ai-sdk"],
+  "includeEntryExports": true,
+  "entry": [
+    "src/main.tsx",
+    "electron/main/index.ts",
+    "electron/preload/index.ts",
+    "electron/main/*-utility.ts",
+    "electron/main/*-worker.ts",
+    "electron/main/services/audio/waveform-worker.ts",
+    "electron/main/services/fonts/worker.ts",
+    "src/**/*{Worker,worker}.ts",
+    "src/**/*.test.{ts,tsx}",
+    "electron/**/*.test.ts",
+    "src/tests/setup.ts",
+    "scripts/**/*.{cjs,mjs,js,ts}",
+    "*.config.{ts,js,cjs}",
+    "src/core/examples/*.ts",
+    "src/**/index.{ts,tsx}",
+    "src/features/documents/application/documentPromptStoreLedger.ts",
+    "src/features/videoEdit/engine/videoEditColorGradeShader.ts",
+    "src/features/canvas/extensions/CanvasExtension.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts", "scripts/**/*.{cjs,mjs,js,ts}", "*.config.{ts,js,cjs}", "!scripts/__fixtures__/**"],
+  "ignoreBinaries": ["attrib", "cargo", "rustup", "dumpbin", "powershell", "pwsh", "ffmpeg", "ffprobe"]
+}

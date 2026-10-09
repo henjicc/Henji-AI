@@ -14,7 +14,6 @@ vi.mock('electron', () => ({
 
 vi.mock('../services/keystore', () => ({
   getAiProviderApiKey: vi.fn(),
-  getAiProviderKeyStatus: vi.fn(() => []),
   getLlmProviderApiKey: vi.fn(),
   getLlmProviderKeyStatus: vi.fn(() => []),
   removeAiProviderApiKey: vi.fn(),
@@ -32,12 +31,12 @@ describe('keystore renderer boundary', () => {
   it('LLM 只暴露读取状态，写入必须走 provider settings 原子事务', () => {
     expect([...mocks.channels].sort()).toEqual([
       'ai:getProviderApiKey',
-      'ai:getProviderKeyStatus',
       'ai:removeProviderApiKey',
       'ai:setProviderApiKey',
       'llm:getProviderApiKey',
       'llm:getProviderKeyStatus',
     ])
+    expect(mocks.channels.has('ai:getProviderKeyStatus')).toBe(false)
     expect(mocks.channels.has('llm:setProviderApiKey')).toBe(false)
     expect(mocks.channels.has('llm:removeProviderApiKey')).toBe(false)
     expect([...mocks.channels].some(channel => channel.startsWith('keystore:'))).toBe(false)

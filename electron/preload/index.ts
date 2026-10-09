@@ -137,7 +137,12 @@ const diagnosticsApi: HenjiDiagnosticsApi = {
       }
     }
     ipcRenderer.on('diagnostics:streamEcho:event', listener)
-    await nativeInvoke('diagnostics:streamEcho', { streamId, message })
+    try {
+      await nativeInvoke('diagnostics:streamEcho', { streamId, message })
+    } catch (error) {
+      ipcRenderer.removeListener('diagnostics:streamEcho:event', listener)
+      throw error
+    }
     return async () => {
       ipcRenderer.removeListener('diagnostics:streamEcho:event', listener)
       await nativeInvoke('diagnostics:cancelStream', { streamId })

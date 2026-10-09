@@ -95,9 +95,11 @@ jobs:
         run: |
           npm run check:main-imports
           npm run check:dependency-graph
+          npm run check:ipc-contract
+          npm run check:dead-code
 
       - name: 依赖图门禁夹具自检
-        run: node --test scripts/check-dependency-graph.test.cjs
+        run: node --test scripts/check-dependency-graph.test.cjs scripts/check-ipc-contract.test.cjs scripts/check-dead-code.test.cjs
 
       - name: 类型检查（渲染层）
         run: npx tsc -p tsconfig.json --noEmit

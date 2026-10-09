@@ -61,7 +61,7 @@ packages/ai-sdk/       # 可独立发布的模型 SDK：catalog、provider、协
 
 - **禁止**在业务组件中直接发起模型生成 API 调用（`fetch()` / `axios`）
 - 提供商细节（路由、请求格式、轮询、结果解析与上传协议）落在 `packages/ai-sdk/src/{catalog,providers,protocols,upload}/`；主进程只注入网络、凭据、媒体读取、日志/追踪，并负责落盘、进度、待取结果与 IPC
-- `src/core/providers/` 只承载基类与兼容层（如 `ProviderFactoryRegistry`），不承担真实 provider 执行
+- `src/core/providers/` 只承载基类与公共契约，不承担真实 provider 执行
 - 非生成场景（更新检查、资源下载/转换）可在服务层封装网络请求，但禁止散落在业务 UI
 
 ## 平台抽象层（PAL）边界
