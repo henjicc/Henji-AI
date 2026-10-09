@@ -141,7 +141,7 @@ describe('ImageEditorV3 professional shell', () => {
       (element) => element.getAttribute('data-layer-id'),
     )).toEqual(['group', 'raster'])
 
-    fireEvent.click(screen.getByRole('button', { name: '展开图层组' }))
+    fireEvent.click(await screen.findByRole('button', { name: '展开图层组' }))
     expect(Array.from(rendered.container.querySelectorAll('[data-layer-id]')).map(
       (element) => element.getAttribute('data-layer-id'),
     )).toEqual(['group', 'child-top', 'child-bottom', 'raster'])
