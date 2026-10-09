@@ -1,3 +1,5 @@
+import { createImageEditLayerCommonV3 } from '@/core/imageEdit/v3/layerTypes'
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { describe, expect, it, vi } from 'vitest';
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory';
 import type { ImageEditDocumentRepositoryV3 } from '@/core/imageEdit/v3/serviceContracts';
@@ -167,7 +169,7 @@ describe('图片编辑 V3 命令总线', () => {
     const mask = `sha256:${'3'.repeat(64)}`;
     const layer = createImageEditRasterLayerV3('layer', '图层', source);
     layer.tiles = { '0/0/0': tile };
-    layer.mask = { resourceId: mask, inverted: false };
+    layer.mask = { ...createImageEditSparseMaskReferenceV3(mask, false), tiles: { '0/0/0': mask } };
     const bus = new ImageEditCommandBusV3(
       createImageEditDocumentV3({ width: 10, height: 10, documentId: 'structural-resources' }),
       { resourceByteSizes: { [source]: 8_192, [tile]: 2_048, [mask]: 512 } },
@@ -200,6 +202,7 @@ describe('图片编辑 V3 命令总线', () => {
       type: 'layer.group', commandId: 'group-rich-layers', expectedRevision: 2,
       layerIds: ['layer', 'layer-copy'],
       group: {
+        ...createImageEditLayerCommonV3('group', '组'),
         id: 'group', name: '组', type: 'group', visible: true, locked: false,
         opacity: 1, blendMode: 'normal', transform: [1, 0, 0, 1, 0, 0],
         mask: null, isolated: false, children: [],

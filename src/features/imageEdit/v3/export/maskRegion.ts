@@ -9,7 +9,6 @@ import {
   type ImageEditMaskReferenceV3,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
-import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import {
   getImageEditorSparseMaskReferencePlanV3,
   type ImageEditorSparseMaskPlanV3,
@@ -103,8 +102,7 @@ export async function loadImageEditorV3SparseMaskRegion(
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
   budget: ImageEditResourceBudget,
-): Promise<Float32MaskTile | null> {
-  if (!isImageEditSparseMaskReferenceV3(reference)) return null
+): Promise<Float32MaskTile> {
   const maskPlan = getImageEditorSparseMaskReferencePlanV3(reference, plan)
   if (!maskPlan) throw new Error(`稀疏蒙版计划缺失：${reference.maskId}`)
   const references = [...maskPlan.tiles.values()].filter((tile) => intersects(tile, region, mip))

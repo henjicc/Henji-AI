@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { describe, expect, it } from 'vitest'
 import { createImageEditDocumentV3, createImageEditGroupLayerV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { mapImageEditTransformPointV3 } from '@/core/imageEdit/v3'
@@ -60,8 +61,29 @@ describe('图层像素命中与控制点数学', () => {
     expect(pickImageEditorLayerV3(document, [15, 15], maps)).toBe('bottom')
     top.tiles = {}
     maps.set('top-source', createLayerAlphaMapV3(1, 1, 40, 40, new Uint8Array([255])))
-    top.mask = { resourceId: 'mask', inverted: true }
+    top.mask = { ...createImageEditSparseMaskReferenceV3('mask', true), tiles: { '0/0/0': 'mask' } }
     maps.set('mask', createLayerAlphaMapV3(1, 1, 40, 40, new Uint8Array([255])))
+    expect(pickImageEditorLayerV3(document, [15, 15], maps)).toBe('bottom')
+  })
+  it('共同蒙版禁用、密度和独立变换与渲染一致，零填充内容不被选择', () => {
+    const { document, top, maps } = fixture()
+    top.mask = createImageEditSparseMaskReferenceV3('empty', false, 0)
+    expect(pickImageEditorLayerV3(document, [15, 15], maps)).toBe('bottom')
+    top.maskAttachment.enabled = false
+    expect(pickImageEditorLayerV3(document, [15, 15], maps)).toBe('top')
+    top.maskAttachment.enabled = true
+    top.maskAttachment.density = 0
+    expect(pickImageEditorLayerV3(document, [15, 15], maps)).toBe('top')
+    top.maskAttachment.density = 1
+    top.mask.tiles = { '0/0/0': 'area' }
+    maps.set('area', createLayerAlphaMapV3(2, 1, 20, 40, new Uint8Array([255, 0])))
+    top.maskAttachment.linked = false
+    top.maskAttachment.transform = [1, 0, 0, 1, 10, 0]
+    expect(pickImageEditorLayerV3(document, [15, 15], maps)).toBe('top')
+    top.maskAttachment.transform = [1, 0, 0, 1, 0, 0]
+    expect(pickImageEditorLayerV3(document, [15, 15], maps)).toBe('bottom')
+    top.fillOpacity = 0
+    top.maskAttachment.enabled = false
     expect(pickImageEditorLayerV3(document, [15, 15], maps)).toBe('bottom')
   })
   it('旋转/镜像后的角点缩放仍固定对角锚点，Shift 才自由缩放', () => {

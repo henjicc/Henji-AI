@@ -1,3 +1,4 @@
+import { imageEditOperationParametersV3 } from './renderContracts/operationParameters';
 import { createDefaultDiffusionOperationParams } from '../diffusionParams';
 import { createDefaultVgpuGlowOperationParams } from '../vgpuGlowParams';
 import { parseImageColorGradeParams } from '../../imaging/adjustments/schema';
@@ -140,9 +141,7 @@ const sharedBindings = new Map<string, ImageEditSharedEffectBindingV3>([[GAUSSIA
 
 /** 剥离宿主运行参数后仍用严格共享 schema；未知作品参数在正式写入处拒绝。 */
 export function gaussianParametersFromNodeV3(parameters: Readonly<Record<string, unknown>>) {
-  const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width,
-    referenceHeight: _height, effectQuality: _quality, ...effect } = parameters;
-  return gaussianParameterSchema.parse(effect);
+  return gaussianParameterSchema.parse(imageEditOperationParametersV3(parameters));
 }
 
 /** 一个描述 + 一处宿主绑定；操作列表、CPU/GPU 支持集合随登记/释放一起派生。 */

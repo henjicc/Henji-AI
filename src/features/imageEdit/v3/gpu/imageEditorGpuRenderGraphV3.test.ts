@@ -46,6 +46,64 @@ beforeAll(async () => { gpu = await init() })
 afterAll(() => gpu?.dispose())
 
 describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
+  it('已合成组的空间变换明确进入 CPU 后备，不静默返回未经变换的 GPU 图', () => {
+    const document = baseDocument('transformed-group')
+    const group = createImageEditGroupLayerV3('group', '变换组')
+    group.transform = [1, 0, 0, 1, 2, 0]
+    group.children = [raster(1, '内容')]
+    document.layers = [group]
+    expect(compileImageEditorGpuRasterSceneV3(document, [{ resourceRef: ref(1), byteLength: WIDTH * HEIGHT * 4, mediaType: 'image/png' }]))
+      .toMatchObject({ supported: false, reason: expect.stringContaining('CPU') })
+  })
+
+  it.each(IMAGE_EDIT_BLEND_MODES_V3)('共同模型：%s 剪贴链保持基底覆盖、填充及整体透明度', async blendMode => {
+    const document = baseDocument(`clip-${blendMode}`)
+    const base = raster(1, '半透明基底')
+    base.fillOpacity = .61
+    base.opacity = .47
+    const clipped = raster(2, '剪贴内容')
+    clipped.clipping = true
+    clipped.blendMode = blendMode
+    clipped.opacity = .73
+    document.layers = [raster(3, '背景'), base, clipped]
+    assertBlendTolerance(await compareDocument(document, tiles([1, 2, 3])))
+  })
+
+  it('共同模型：局部滤镜、独立蒙版及组 opacity 与 CPU 真值一致', async () => {
+    const document = baseDocument('local-filter-mask')
+    const content = raster(5, '局部滤镜内容')
+    content.fillOpacity = .67
+    content.opacity = .82
+    content.mask = { ...createImageEditSparseMaskReferenceV3('layer-mask'), tiles: { '0/0/0': ref(91) } }
+    content.maskAttachment = { enabled: true, linked: false, density: .55, transform: [1, 0, 0, 1, 2, 0] }
+    content.filters = [{ id: 'local-grade', operationType: 'adjustment', effectId: 'exposure', params: { stops: .4 },
+      enabled: true, opacity: .72, blendMode: 'normal',
+      mask: { ...createImageEditSparseMaskReferenceV3('filter-mask', true, 0), tiles: { '0/0/0': ref(92) } } }]
+    const group = createImageEditGroupLayerV3('local-group', '隔离结果')
+    group.opacity = .8
+    group.children = [content]
+    document.layers = [raster(1, '背景'), group]
+    assertBlendTolerance(await compareDocument(document, tiles([1, 5, 91, 92], new Set([91, 92]))))
+  })
+
+  it.each(['exposure', 'curves', 'color_grade', 'gaussian_blur'])('共同蒙版附件：%s 独立变换与密度与 CPU 一致', async operation => {
+    const document = baseDocument(`attachment-${operation}`)
+    const layer = operation === 'gaussian_blur'
+      ? createImageEditEffectLayerV3('processor', '滤镜', operation, { sigma_fraction_height: .03 })
+      : createImageEditAdjustmentLayerV3('processor', '调整', operation,
+        operation === 'color_grade' ? { exposure: .4 } : operation === 'curves'
+          ? { master: [{ x: 0, y: 0 }, { x: .5, y: .7 }, { x: 1, y: 1 }] } : { stops: .4 })
+    layer.mask = { ...createImageEditSparseMaskReferenceV3('attachment-mask', true, 0), tiles: { '0/0/0': ref(90) } }
+    layer.maskAttachment = { enabled: true, linked: false, density: .43, transform: [1, 0, 0, 1, 2, 0] }
+    document.layers = [raster(1, '内容'), layer]
+    const result = await compareDocument(document, tiles([1, 90], new Set([90])))
+    assertBlendTolerance(result)
+    if (operation === 'color_grade') {
+      expect(result.comparison.quantizedMaxLsbError, JSON.stringify(result.comparison)).toBeLessThanOrEqual(1)
+      expect(result.comparison.quantizedWithinOneLsbRatio).toBe(1)
+    }
+  })
+
   it('共享调整 basic/curves/wheels/HSL 与 CPU 真值逐像素一致，透明与蒙版不漂移', async () => {
     const cube = ref(98)
     lutFixtures.set(cube, 'LUT_1D_SIZE 2\n0 0 0\n1 .8 .6')
@@ -53,7 +111,7 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
       const document = baseDocument('shared-grade')
       const adjustment = createImageEditAdjustmentLayerV3('grade', '全能调整', 'color_grade', params)
       adjustment.opacity = .82
-      adjustment.mask = { resourceId: ref(92), inverted: false }
+      adjustment.mask = { ...createImageEditSparseMaskReferenceV3(ref(92), false), tiles: { '0/0/0': ref(92) } }
       document.layers = [raster(5, '源'), adjustment]
       const result = await compareDocument(document, tiles([5, 92], new Set([92])))
       expect(result.comparison.quantizedMaxLsbError, JSON.stringify(params)).toBeLessThanOrEqual(2)
@@ -77,12 +135,12 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     const outer = createImageEditGroupLayerV3('outer', '外组')
     outer.isolated = true
     outer.opacity = 0.81
-    outer.mask = { resourceId: ref(90), inverted: false }
+    outer.mask = { ...createImageEditSparseMaskReferenceV3(ref(90), false), tiles: { '0/0/0': ref(90) } }
     const inner = createImageEditGroupLayerV3('inner', '内组')
     inner.isolated = true
     const subject = raster(3, '主体')
     subject.blendMode = 'screen'
-    subject.mask = { resourceId: ref(91), inverted: true }
+    subject.mask = { ...createImageEditSparseMaskReferenceV3(ref(91), true), tiles: { '0/0/0': ref(91) } }
     const texture = raster(4, '纹理')
     texture.blendMode = 'multiply'
     inner.children = [subject, texture]
@@ -161,7 +219,7 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
       'fast-blur-mix', '快速模糊混合', 'image.fast-blur-v3', { radius: 5 },
     )
     effectLayer.opacity = 0.64
-    effectLayer.mask = { resourceId: ref(94), inverted: false }
+    effectLayer.mask = { ...createImageEditSparseMaskReferenceV3(ref(94), false), tiles: { '0/0/0': ref(94) } }
     document.layers = [raster(13, '源'), effectLayer]
     const result = await compareDocument(document, tiles([13, 94], new Set([94])))
     expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
@@ -340,7 +398,7 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     )
     adjustment.opacity = 0.86
     adjustment.blendMode = 'soft-light'
-    adjustment.mask = { resourceId: ref(92), inverted: false }
+    adjustment.mask = { ...createImageEditSparseMaskReferenceV3(ref(92), false), tiles: { '0/0/0': ref(92) } }
     document.layers = [raster(5, '底图'), adjustment]
     const result = await compareDocument(document, tiles([5, 92], new Set([92])))
       expect(result.comparison.quantizedMaxLsbError, JSON.stringify({params, maxIndex:Array.from(result.reference).reduce((best, x, i) => Math.abs(x-result.candidate[i]) > Math.abs(result.reference[best]-result.candidate[best]) ? i : best,0),stats:result.comparison, ref:Array.from(result.reference.slice(1052,1064)),gpu:Array.from(result.candidate.slice(1052,1064))})).toBeLessThanOrEqual(2)
@@ -453,7 +511,7 @@ async function compareDocument(
     }),
     rasterizeAnnotations: async () => { throw new Error('3.1 golden不含标注') },
     loadMask: async (mask) => {
-      const resource = resources.get('resourceId' in mask ? mask.resourceId : Object.values(mask.tiles)[0])!
+      const resource = resources.get(Object.values(mask.tiles)[0])!
       const rgba = new Uint8Array(resource.pixels)
       return createFloat32MaskTile(width, height, Float32Array.from({ length: width * height }, (_, pixel) => rgba[pixel * 4] / 255))
     },

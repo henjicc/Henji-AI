@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检使用 CommonJS。 */
+const { imageEditInspectionModel } = require('./imageEditInspectionModel.cjs')
 const {
   verifyMultiLayerDragPerformance,
 } = require('./uiInspectionMultiLayerDragPerformance.cjs')
@@ -9,7 +11,7 @@ function attachUiInspectionCanvasGpuFiveLayer(context) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
-    const fixture = await page.evaluate(async (targetProjectId) => {
+    const fixture = await page.evaluate(async ({ targetProjectId, model }) => {
       const specs = [
         ['ui-background-layer', '背景图层', 960, 640, 0, 0, 'rgb(28,92,218)'],
         ['ui-prop-layer', '道具元素', 160, 160, 60, 80, 'rgb(226,78,130)'],
@@ -32,7 +34,7 @@ function attachUiInspectionCanvasGpuFiveLayer(context) {
       const managed = sources[0]
       if (new Set(sources.map((source) => source.resource.resourceRef)).size !== 5) throw new Error('合成五层必须是五个独立资源')
       const common = (id, name, transform, resourceRef) => ({
-        id,
+        ...model.common, id,
         name,
         visible: true,
         locked: false,
@@ -45,7 +47,7 @@ function attachUiInspectionCanvasGpuFiveLayer(context) {
         tiles: {},
       })
       const editDocument = {
-        version: 3,
+        ...model.document,
         id: `reality-gpu-five-layer-${crypto.randomUUID()}`,
         revision: 0,
         geometry: {
@@ -113,16 +115,16 @@ function attachUiInspectionCanvasGpuFiveLayer(context) {
         dragStartOutput: [670, 350],
         expectedColors: specs.map((spec) => spec[6].match(/\d+/g).map(Number)),
       }
-    }, projectId)
+    }, { targetProjectId: projectId, model: imageEditInspectionModel() })
     fixture.windowSize = inspection?.requestedWindowSize ?? null
     const verified = await verifyMultiLayerDragPerformance({
       page, app, projectId, fixture, settlePage, inspection, reopenProject: reopenCanvasProjectFromStorage,
     })
-    console.log(`[image-editor-gpu-baseline] ${JSON.stringify({
+    process.stdout.write(`[image-editor-gpu-baseline] ${JSON.stringify({
       fixture: 'synthetic-five-independent-resources',
       path: 'webgpu-surface-transient-transform',
       ...verified.dragBaseline,
-    })}`)
+    })}\n`)
   }
 
   Object.assign(context, { setupCanvasGpuFiveLayerPerformance })

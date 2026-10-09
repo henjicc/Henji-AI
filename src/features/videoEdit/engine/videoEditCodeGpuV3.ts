@@ -1,3 +1,4 @@
+import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { CodeMaterialError, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeBlend, CodeColor, CodeDrawCommand, CodeMatrix, CodePaint } from '@/core/videoEdit/codeMaterial/contract'
@@ -15,7 +16,7 @@ interface CachedImage extends Image { bytes: number; used: boolean; glyph?: bool
 interface Allocator { allocate(width: number, height: number): GpuTexture; release(texture: GpuTexture): void }
 type Encoder = ReturnType<GpuDevice['createCommandEncoder']>
 const normalBlend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
-const shader = `
+const shader = COMPOSITING_WGSL + `
 struct P { box:vec4f, color:vec4f, canvas:vec4f, matrix0:vec4f, matrix1:vec4f, stroke:vec4f, extra:vec4f }
 @group(0) @binding(0) var<uniform> p:P;
 struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f }
@@ -43,11 +44,11 @@ struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 @group(0) @binding(3) var background:texture_2d<f32>;
 @fragment fn composite(v:V)->@location(0) vec4f {
  let a=textureSampleLevel(image,sampler0,v.uv,0.0)*p.canvas.z; let b=textureSampleLevel(background,sampler0,v.position.xy/p.canvas.xy,0.0);
- let s=a.rgb/max(a.a,.000001); let d=b.rgb/max(b.a,.000001); var rgb=s;
- if(p.extra.x==1.0) { rgb=s*d; } else if(p.extra.x==2.0) { rgb=s+d-s*d; }
- else if(p.extra.x==3.0) { rgb=select(2.0*s*d,1.0-2.0*(1.0-s)*(1.0-d),d>vec3f(.5)); }
- else if(p.extra.x==4.0) { rgb=min(s+d,vec3f(1)); } else if(p.extra.x==5.0) { rgb=max(s,d); } else if(p.extra.x==6.0) { rgb=min(s,d); }
- return vec4f(a.rgb*(1.0-b.a)+b.rgb*(1.0-a.a)+rgb*a.a*b.a,a.a+b.a-a.a*b.a);
+ let s=select(vec3f(0),a.rgb/a.a,a.a>0.0); let d=select(vec3f(0),b.rgb/b.a,b.a>0.0);
+ var rgb=blendRgb(d,s,u32(p.extra.x));
+ // Video-only modes extend the adapter; shared modes and source-over use the neutral kernel.
+ if(p.extra.x==4.0) { rgb=min(s+d,vec3f(1)); } else if(p.extra.x==5.0) { rgb=max(s,d); } else if(p.extra.x==6.0) { rgb=min(s,d); }
+ return compositeWithBlend(b,a,rgb,false);
 }
 @fragment fn effects(v:V)->@location(0) vec4f {
  let base=textureSampleLevel(background,sampler0,v.uv,0.0);

@@ -14,7 +14,6 @@ import {
   type ImageEditRect,
   type ImageEditRenderPlanNode,
 } from '@/core/imageEdit/v3'
-import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { convertPreviewWorkingSpaceToSrgbDisplayV3 } from './previewColorV3'
 import { scaleImageEditorPreviewEffectsV3 } from './previewEffectScalingV3'
 import { resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
@@ -25,7 +24,6 @@ import {
   applyImageEditorViewportBrushTilesV3,
   createTransparentImageEditorViewportRegionV3,
   decodeImageEditorViewportSourceTileV3,
-  imageEditorViewportTileToMaskV3,
   loadImageEditorViewportSourceRegionV3,
   loadImageEditorViewportSparseMaskV3,
   rasterizeImageEditorViewportAnnotationsV3,
@@ -246,16 +244,13 @@ export async function renderImageEditorViewportCompositeV3(
         signal,
       ),
       loadMask: async (reference, _node, region) => {
-        if (isImageEditSparseMaskReferenceV3(reference)) {
-          return loadImageEditorViewportSparseMaskV3(
+        return loadImageEditorViewportSparseMaskV3(
             reference,
             region,
             request.plan.mip,
             request.brushTiles,
             signal,
-          )
-        }
-        return imageEditorViewportTileToMaskV3(loadResource(reference.resourceId, region))
+        )
       },
       loadColorLut: loadImageColorLutV3,
       executeCustomEffect: (node, source, mask, region) => {

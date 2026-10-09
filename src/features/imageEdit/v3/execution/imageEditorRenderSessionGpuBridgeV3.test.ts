@@ -1,3 +1,4 @@
+import { loadImageEditorGpuSceneTileV3 } from './imageEditorGpuSceneTileLoaderV3'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
@@ -90,10 +91,11 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     readSourceTiles.mockReset()
   })
 
-  it('legacy r8 mask冻结为source-raster后仍走图片source reader', async () => {
+  it('拒绝把旧整图蒙版当作源图片读取', async () => {
     const harness = clientHarness()
     const resourceRef = `sha256:${'9'.repeat(64)}` as const
     const brushReader = vi.fn()
+    const fallback = vi.fn()
     readSourceTile.mockResolvedValue({
       resourceRef, mip: 0, tileX: 0, tileY: 0, halo: 0,
       width: 1, height: 1, channels: 4, bitDepth: 8,
@@ -103,7 +105,7 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
       originX: 0, originY: 0, pixels: new Uint8Array([128, 128, 128, 255]).buffer,
     })
     const bridge = new ImageEditorRenderSessionGpuBridgeV3(
-      'gpu-legacy-mask', harness.client, vi.fn(), false, undefined, undefined, brushReader,
+      'gpu-invalid-mask', harness.client, fallback, false, undefined, undefined, brushReader,
     )
     bridge.syncSnapshot({
       document: createImageEditDocumentV3({ width: 1, height: 1 }),
@@ -115,8 +117,10 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
       keys: [{ resourceRef, resourceKind: 'source-raster', mip: 0, tileX: 0, tileY: 0,
         contentVersion: 'legacy-mask', format: 'r8unorm' }],
     })
-    await vi.waitFor(() => expect(harness.client.uploadTiles).toHaveBeenCalledOnce())
-    expect(readSourceTile).toHaveBeenCalledOnce()
+    await expect(loadImageEditorGpuSceneTileV3({ resourceRef, resourceKind: 'source-raster', mip: 0, tileX: 0, tileY: 0, contentVersion: 'invalid-mask', format: 'r8unorm' }, new AbortController().signal, { document: null, resourceDescriptors: new Map(), annotationNodes: new Map(), sourceBitDepth: 8, readBrushTiles: brushReader })).rejects.toThrow('蒙版仅接受稀疏受管瓦片')
+    await vi.waitFor(() => expect(fallback).toHaveBeenCalledWith(expect.objectContaining({ compositionBackend: 'cpu', deviceStatus: 'fallback' })))
+    expect(harness.client.uploadTiles).not.toHaveBeenCalled()
+    expect(readSourceTile).not.toHaveBeenCalled()
     expect(brushReader).not.toHaveBeenCalled()
     bridge.dispose()
   })

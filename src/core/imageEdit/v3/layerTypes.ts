@@ -19,12 +19,6 @@ export type ImageEditTransformV3 = readonly [number, number, number, number, num
 
 export const IMAGE_EDIT_MASK_TILE_SIZE_V3 = 512 as const;
 
-/** V3 早期文档保存的单一栅格资源蒙版；永久保留读取能力。 */
-export interface ImageEditLegacyMaskReferenceV3 {
-  resourceId: string;
-  inverted: boolean;
-}
-
 /**
  * 可编辑蒙版只保存不可变 Float32 瓦片的内容寻址引用。
  * 缺失瓦片等价于 defaultValue，不允许把整幅蒙版或 Data URL 写进文档。
@@ -41,9 +35,7 @@ export interface ImageEditSparseMaskReferenceV3 {
   inverted: boolean;
 }
 
-export type ImageEditMaskReferenceV3 =
-  | ImageEditLegacyMaskReferenceV3
-  | ImageEditSparseMaskReferenceV3;
+export type ImageEditMaskReferenceV3 = ImageEditSparseMaskReferenceV3;
 
 export interface ImageEditLayerCommonV3 {
   id: string;
@@ -51,9 +43,34 @@ export interface ImageEditLayerCommonV3 {
   visible: boolean;
   locked: boolean;
   opacity: number;
+  /** 内容填充；在滤镜前应用，整体 opacity 在层结果后应用。 */
+  fillOpacity: number;
+  /** 同组下方连续栈的内容基底；结构编辑不得产生悬空剪贴。 */
+  clipping: boolean;
+  maskAttachment: ImageEditMaskAttachmentV3;
+  filters: ImageEditLayerFilterV3[];
   blendMode: ImageEditBlendModeV3;
   transform: ImageEditTransformV3;
   mask: ImageEditMaskReferenceV3 | null;
+}
+
+export interface ImageEditMaskAttachmentV3 {
+  enabled: boolean;
+  linked: boolean;
+  density: number;
+  transform: ImageEditTransformV3;
+}
+
+export interface ImageEditLayerFilterV3 {
+  id: string;
+  operationType: 'effect' | 'adjustment';
+  effectId: string;
+  params: ImageEditJsonObjectV3;
+  enabled: boolean;
+  opacity: number;
+  blendMode: ImageEditBlendModeV3;
+  /** 滤镜区域快照在文档 reference grid 求值，独立于图层蒙版。 */
+  mask: ImageEditSparseMaskReferenceV3 | null;
 }
 
 export type ImageEditRasterSourceV3 =
@@ -121,6 +138,10 @@ export function createImageEditLayerCommonV3(
     visible: true,
     locked: false,
     opacity: 1,
+    fillOpacity: 1,
+    clipping: false,
+    maskAttachment: { enabled: true, linked: true, density: 1, transform: [...IMAGE_EDIT_IDENTITY_TRANSFORM_V3] },
+    filters: [],
     blendMode: 'normal',
     transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3,
     mask: null,
@@ -143,9 +164,7 @@ export function isValidImageEditMaskReferenceV3(
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const mask = value as Record<string, unknown>;
   if (typeof mask.inverted !== 'boolean') return false;
-  if (mask.kind !== 'sparse-mask') {
-    return typeof mask.resourceId === 'string' && mask.resourceId.length > 0;
-  }
+  if (mask.kind !== 'sparse-mask') return false;
   if (mask.storage !== 'mask-float32'
     || typeof mask.maskId !== 'string' || mask.maskId.length === 0
     || mask.tileSize !== IMAGE_EDIT_MASK_TILE_SIZE_V3
@@ -182,22 +201,18 @@ export function createImageEditSparseMaskReferenceV3(
 export function collectImageEditMaskResourceIdsV3(
   mask: ImageEditMaskReferenceV3,
 ): string[] {
-  return isImageEditSparseMaskReferenceV3(mask)
-    ? [...new Set(Object.values(mask.tiles))]
-    : [mask.resourceId];
+  return [...new Set(Object.values(mask.tiles))];
 }
 
 /** 用于会话/实体稳定寻址，禁止把返回值当成像素资源引用。 */
 export function getImageEditMaskIdentityV3(mask: ImageEditMaskReferenceV3): string {
-  return isImageEditSparseMaskReferenceV3(mask) ? mask.maskId : mask.resourceId;
+  return mask.maskId;
 }
 
 export function cloneImageEditMaskReferenceV3(
   mask: ImageEditMaskReferenceV3,
 ): ImageEditMaskReferenceV3 {
-  return isImageEditSparseMaskReferenceV3(mask)
-    ? { ...mask, tiles: { ...mask.tiles } }
-    : { ...mask };
+  return { ...mask, tiles: { ...mask.tiles } };
 }
 
 export function collectImageEditLayerIdsV3(layers: readonly ImageEditLayerV3[]): string[] {

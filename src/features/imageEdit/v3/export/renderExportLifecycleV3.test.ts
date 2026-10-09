@@ -6,6 +6,21 @@ import { renderImageEditorV3ExportTiles } from './renderExportTilesV3'
 import { SOURCE, MASK, MASK_TILE, FakeImage, description, fakeSourceReader, collectPixels, solidImage, impulseImage, fakeSourcePyramidReader } from './renderExportTestFixtures'
 
 describe('图片编辑 V3 导出生命周期与蒙版', () => {
+  it('内容滤镜的真实稀疏区域参与分块导出；关闭滤镜恢复原始像素', async () => {
+    const document = createImageEditDocumentV3({ width: 32, height: 2, documentId: 'local-filter-export', sourceResourceId: SOURCE })
+    document.layers[0].filters = [{ id: 'local-exposure', operationType: 'adjustment', effectId: 'exposure', params: { stops: 1 }, enabled: true, opacity: 1, blendMode: 'normal',
+      mask: { ...createImageEditSparseMaskReferenceV3('filter-area', false, 0), tiles: { '0/0/0': MASK } } }]
+    const images = new Map<string, FakeImage>([[SOURCE, solidImage(32, 2, 64)],
+      [MASK, { width: 32, height: 2, pixel: x => x < 16 ? [0, 0, 0, 255] : [255, 255, 255, 255] }]])
+    const enabled = await collectPixels(document, 16, images)
+    expect(enabled[0]).toBe(64)
+    expect(enabled[31 * 4]).toBeGreaterThanOrEqual(88)
+    document.layers[0].filters[0].enabled = false
+    const disabled = await collectPixels(document, 16, images)
+    expect(disabled[0]).toBe(64)
+    expect(disabled[31 * 4]).toBe(64)
+  })
+
   it('默认导出与其他编辑会话共享全局资源账本，提前结束后归还', async () => {
     const document = createImageEditDocumentV3({
       width: 1,
@@ -56,7 +71,7 @@ describe('图片编辑 V3 导出生命周期与蒙版', () => {
       'exposure',
       { stops: 1, offset: 0, gamma: 1 },
     )
-    exposure.mask = { resourceId: MASK, inverted: false }
+    exposure.mask = { ...createImageEditSparseMaskReferenceV3(MASK, false), tiles: { '0/0/0': MASK } }
     document.layers.push(exposure)
     const images = new Map<string, FakeImage>([
       [SOURCE, solidImage(32, 2, 64)],
@@ -232,7 +247,7 @@ describe('图片编辑 V3 导出生命周期与蒙版', () => {
     const group = createImageEditGroupLayerV3('group', '组')
     group.children = masked.layers
     group.transform = [1, 0, 0, 1, 1, 0]
-    group.mask = { resourceId: MASK, inverted: false }
+    group.mask = { ...createImageEditSparseMaskReferenceV3(MASK, false), tiles: { '0/0/0': MASK } }
     masked.layers = [group]
     const maskImage: FakeImage = {
       width: 4,

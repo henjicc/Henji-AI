@@ -79,7 +79,6 @@ function nodeResourceRefs(plan: ImageEditRenderPlan): ImageEditorV3ResourceRef[]
       const source = isRecord(node.parameters.source) ? node.parameters.source : null
       if (source?.kind === 'resource') add(source.resourceId)
     }
-    if (node.mask && 'resourceId' in node.mask) add(node.mask.resourceId)
   }
   return result
 }
@@ -294,16 +293,6 @@ export function createImageEditorViewportSourceTileRequestsV3(
           const request = sourceRequest(resourceRef, 0, Math.floor(point.x / 512), Math.floor(point.y / 512), bitDepth, size)
           requests.set(request.key, request)
         }
-      }
-    }
-    if (node.mask && !isImageEditSparseMaskReferenceV3(node.mask)) {
-      const regions = requirements.maskRegions.get(node.id)
-      if (regions && RESOURCE_REF_PATTERN.test(node.mask.resourceId)) {
-        addRegions(
-          node.mask.resourceId as ImageEditorV3ResourceRef,
-          regions,
-          sourceMips.get(node.mask.resourceId as ImageEditorV3ResourceRef) ?? candidate.mip,
-        )
       }
     }
   }

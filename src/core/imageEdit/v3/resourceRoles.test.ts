@@ -4,19 +4,19 @@ import { createImageEditSparseMaskReferenceV3 } from './layerTypes'
 import { collectImageEditResourceRolesV3 } from './resourceRoles'
 import { ImageEditCommandHistoryV3 } from './commandHistory'
 
-it('隐藏组、普通图片蒙版与稀疏蒙版共享唯一字段遍历', () => {
+it('隐藏组、图层蒙版与稀疏像素共享唯一字段遍历', () => {
   const document = createImageEditDocumentV3({ width: 64, height: 64 })
   const raster = createImageEditRasterLayerV3('raster', '图片', 'image')
   raster.tiles = { '0/0/0': 'rgba' }
-  raster.mask = { resourceId: 'image-mask', inverted: false }
+  raster.mask = { ...createImageEditSparseMaskReferenceV3('image-mask', false), tiles: { '0/0/0': 'image-mask' } }
   const group = createImageEditGroupLayerV3('group', '组')
   group.visible = false
   group.children = [raster]
   group.mask = { ...createImageEditSparseMaskReferenceV3('mask'), tiles: { '0/0/0': 'sparse-mask' } }
   document.layers = [group]
   const roles = collectImageEditResourceRolesV3(document)
-  expect([...roles.images]).toEqual(['image-mask', 'image'])
-  expect([...roles.sparse]).toEqual([['sparse-mask', 'mask-float32'], ['rgba', 'rgba-float32']])
+  expect([...roles.images]).toEqual(['image'])
+  expect([...roles.sparse]).toEqual([['sparse-mask', 'mask-float32'], ['image-mask', 'mask-float32'], ['rgba', 'rgba-float32']])
 })
 
 it('已删除图层只在真实逆命令中保留brush；不把所有history resources推断为brush', () => {

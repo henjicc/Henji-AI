@@ -1,3 +1,4 @@
+import { blendChannel, compositeChannel } from '../../../imaging/compositing';
 import type { ImageEditBlendModeV3 } from '../layerTypes';
 import {
   assertFloat32MaskTile,
@@ -5,24 +6,6 @@ import {
   type Float32MaskTile,
   type Float32PremultipliedRgbaTile,
 } from '../effects/contracts';
-
-function blendChannel(backdrop: number, source: number, mode: ImageEditBlendModeV3): number {
-  if (mode === 'multiply') return backdrop * source;
-  if (mode === 'screen') return backdrop + source - backdrop * source;
-  if (mode === 'overlay') {
-    return backdrop <= 0.5
-      ? 2 * backdrop * source
-      : 1 - 2 * (1 - backdrop) * (1 - source);
-  }
-  if (mode === 'soft-light') {
-    if (source <= 0.5) return backdrop - (1 - 2 * source) * backdrop * (1 - backdrop);
-    const curve = backdrop <= 0.25
-      ? ((16 * backdrop - 12) * backdrop + 4) * backdrop
-      : Math.sqrt(Math.max(0, backdrop));
-    return backdrop + (2 * source - 1) * (curve - backdrop);
-  }
-  return source;
-}
 
 export function applyContentMaskAndOpacityV3(
   content: Float32PremultipliedRgbaTile,
@@ -52,6 +35,7 @@ export function compositePremultipliedTilesV3(
   backdrop: Float32PremultipliedRgbaTile | null,
   source: Float32PremultipliedRgbaTile,
   blendMode: ImageEditBlendModeV3,
+  clipping = false,
 ): Float32PremultipliedRgbaTile {
   if (!backdrop) return source;
   if (
@@ -64,17 +48,10 @@ export function compositePremultipliedTilesV3(
   ) throw new Error('合成瓦片的尺寸或颜色域不一致');
   const data = new Float32Array(source.data.length);
   for (let offset = 0; offset < data.length; offset += 4) {
-    const backdropAlpha = backdrop.data[offset + 3];
-    const sourceAlpha = source.data[offset + 3];
-    const outputAlpha = sourceAlpha + backdropAlpha * (1 - sourceAlpha);
-    data[offset + 3] = outputAlpha;
+    const ba = backdrop.data[offset + 3], sa = source.data[offset + 3];
+    data[offset + 3] = clipping ? ba : sa + ba * (1 - sa);
     for (let channel = 0; channel < 3; channel += 1) {
-      const backdropStraight = backdropAlpha > 0 ? backdrop.data[offset + channel] / backdropAlpha : 0;
-      const sourceStraight = sourceAlpha > 0 ? source.data[offset + channel] / sourceAlpha : 0;
-      const blended = blendChannel(backdropStraight, sourceStraight, blendMode);
-      data[offset + channel] = (1 - sourceAlpha) * backdrop.data[offset + channel]
-        + (1 - backdropAlpha) * source.data[offset + channel]
-        + backdropAlpha * sourceAlpha * blended;
+      data[offset + channel] = compositeChannel(backdrop.data[offset + channel], source.data[offset + channel], ba, sa, blendMode, clipping);
     }
   }
   return createFloat32PremultipliedRgbaTile(

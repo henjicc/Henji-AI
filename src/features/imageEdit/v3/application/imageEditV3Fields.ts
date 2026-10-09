@@ -1,3 +1,4 @@
+import { imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3, imageEditSparseMaskSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
 import { z } from 'zod'
 import type { ImageEditCanvasGeometryV3 } from '@/core/imageEdit/v3/documentTypes'
 import type {
@@ -11,9 +12,10 @@ import type { ImageEditLayerCommonPatchV3 } from '@/core/imageEdit/v3/commandTyp
 import {
   collectImageEditMaskResourceIdsV3,
   type ImageEditLayerV3,
+  type ImageEditLayerFilterV3,
 } from '@/core/imageEdit/v3/layerTypes'
 
-import { imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, type ImageEditLiveLayerLocationV3 } from './imageEditDocumentRefs'
+import { imageEditV3FilterRef, imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, type ImageEditLiveLayerLocationV3 } from './imageEditDocumentRefs'
 
 export const IMAGE_EDIT_V3_ENTITY_TYPES = {
   group: 'image_edit.group',
@@ -227,6 +229,52 @@ function createCommonFields(
       storeActions: [],
     },
     {
+      propertyId: `${entityType}.fill_opacity`,
+      descriptor: property(entityType, 'fill_opacity', '内容填充', {
+        kind: 'number', hardRange: { min: 0, max: 1 }, softRange: { min: 0, max: 1, step: 0.01 },
+      }),
+      read: source => source.location.layer.fillOpacity,
+      writer: { write(draft, mutation) {
+        if (typeof mutation.value !== 'number' || !Number.isFinite(mutation.value)) throw new Error('INVALID_INPUT：填充必须是 0～1 的数字');
+        draft.commonPatch.fillOpacity = mutation.value;
+      } }, storeActions: [],
+    },
+    {
+      propertyId: `${entityType}.clipping`,
+      descriptor: property(entityType, 'clipping', '剪贴到同组下方内容基底', { kind: 'boolean' }),
+      read: source => source.location.layer.clipping,
+      writer: { write(draft, mutation) {
+        if (typeof mutation.value !== 'boolean') throw new Error('INVALID_INPUT：剪贴必须是布尔值');
+        draft.commonPatch.clipping = mutation.value;
+      } }, storeActions: [],
+    },
+    {
+      propertyId: `${entityType}.mask_attachment`,
+      descriptor: property(entityType, 'mask_attachment', '蒙版启用、链接、密度与变换', {
+        kind: 'json', schemaRef: imageEditV3SchemaRef('property', `${entityType}.mask_attachment.value`),
+      }),
+      read: source => source.location.layer.maskAttachment as unknown as JsonValue,
+      writer: { write(draft, mutation) {
+        draft.commonPatch.maskAttachment = imageEditMaskAttachmentSchemaV3.parse(mutation.value);
+      } }, storeActions: [],
+    },
+    {
+      propertyId: `${entityType}.filter_refs`,
+      descriptor: property(entityType, 'filter_refs', '按执行顺序排列的图层滤镜引用', { kind: 'ref_list', refKinds: ['image_edit.layer_filter'] }, { readOnlyReason: '通过图层滤镜集合增删，或修改滤镜顺序。' }),
+      read: source => source.location.layer.filters.map(filter => imageEditV3FilterRef(source.documentId, source.location.layer.id, filter.id)),
+      storeActions: [],
+    },
+    {
+      propertyId: `${entityType}.filters`,
+      descriptor: property(entityType, 'filters', '有序图层滤镜与局部区域快照', {
+        kind: 'json', schemaRef: imageEditV3SchemaRef('property', `${entityType}.filters.value`),
+      }),
+      read: source => source.location.layer.filters as unknown as JsonValue,
+      writer: { write(draft, mutation) {
+        draft.commonPatch.filters = imageEditLayerFiltersSchemaV3.parse(mutation.value);
+      } }, storeActions: [],
+    },
+    {
       propertyId: `${entityType}.blend_mode`,
       descriptor: property(entityType, 'blend_mode', '混合模式', { kind: 'enum', values: BLEND_MODES }),
       read: (source) => source.location.layer.blendMode,
@@ -387,4 +435,34 @@ export const IMAGE_EDIT_V3_DOCUMENT_FIELDS: ApplicationFieldDefinition<ImageEdit
     read: geometry => geometry.crop as unknown as JsonValue, writer: { write(geometry, mutation) {
       geometry.crop = z.object({ x: z.number().int().nonnegative(), y: z.number().int().nonnegative(), width: z.number().int().positive(), height: z.number().int().positive() }).strict().nullable().parse(mutation.value)
     } }, storeActions: [] },
+]
+
+export interface ImageEditV3FilterFieldSource {
+  documentId: string
+  location: ImageEditLiveLayerLocationV3
+  filter: ImageEditLayerFilterV3
+  index: number
+}
+export interface ImageEditV3FilterMutationDraft { filter: ImageEditLayerFilterV3; index: number }
+
+export const IMAGE_EDIT_V3_FILTER_FIELDS: ApplicationFieldDefinition<ImageEditV3FilterFieldSource, ImageEditV3FilterMutationDraft>[] = [
+  { propertyId: 'image_edit.layer_filter.layer_ref', descriptor: property('image_edit.layer_filter', 'layer_ref', '所属图层', { kind: 'ref', refKinds: ['image_edit.layer', 'image_edit.group'] }, { readOnlyReason: READ_ONLY_IDENTITY }),
+    read: source => source.location.layer.type === 'group' ? imageEditV3GroupRef(source.documentId, source.location.layer.id) : imageEditV3LayerRef(source.documentId, source.location.layer.id), storeActions: [] },
+  ...(['operation_type', 'effect_id'] as const).map(suffix => ({
+    propertyId: `image_edit.layer_filter.${suffix}`,
+    descriptor: property('image_edit.layer_filter', suffix, suffix === 'effect_id' ? '滤镜定义' : '滤镜种类', suffix === 'effect_id' ? { kind: 'string' } : { kind: 'enum', values: ['effect', 'adjustment'].map(value => ({ value, label: value })) }, { readOnlyReason: '滤镜定义在创建时确定；更换定义请删除后重新添加。' }),
+    read: (source: ImageEditV3FilterFieldSource) => suffix === 'effect_id' ? source.filter.effectId : source.filter.operationType, storeActions: [],
+  })),
+  { propertyId: 'image_edit.layer_filter.index', descriptor: property('image_edit.layer_filter', 'index', '图层内滤镜顺序', { kind: 'integer', hardRange: { min: 0 } }),
+    read: source => source.index, writer: { write(draft, mutation) { draft.index = z.number().int().nonnegative().parse(mutation.value) } }, storeActions: [] },
+  { propertyId: 'image_edit.layer_filter.enabled', descriptor: property('image_edit.layer_filter', 'enabled', '滤镜开关', { kind: 'boolean' }),
+    read: source => source.filter.enabled, writer: { write(draft, mutation) { draft.filter.enabled = z.boolean().parse(mutation.value) } }, storeActions: [] },
+  { propertyId: 'image_edit.layer_filter.opacity', descriptor: property('image_edit.layer_filter', 'opacity', '滤镜强度', { kind: 'number', hardRange: { min: 0, max: 1 } }),
+    read: source => source.filter.opacity, writer: { write(draft, mutation) { draft.filter.opacity = z.number().min(0).max(1).parse(mutation.value) } }, storeActions: [] },
+  { propertyId: 'image_edit.layer_filter.blend_mode', descriptor: property('image_edit.layer_filter', 'blend_mode', '滤镜混合模式', { kind: 'enum', values: BLEND_MODES }),
+    read: source => source.filter.blendMode, writer: { write(draft, mutation) { draft.filter.blendMode = z.enum(['normal', 'multiply', 'screen', 'overlay', 'soft-light']).parse(mutation.value) } }, storeActions: [] },
+  { propertyId: 'image_edit.layer_filter.params', descriptor: property('image_edit.layer_filter', 'params', '滤镜参数', { kind: 'json', schemaRef: PARAMS_SCHEMA_REF }),
+    read: source => source.filter.params as JsonValue, writer: { write(draft, mutation) { draft.filter.params = z.record(z.string(), z.json()).parse(mutation.value) } }, storeActions: [] },
+  { propertyId: 'image_edit.layer_filter.mask', descriptor: property('image_edit.layer_filter', 'mask', '滤镜局部区域快照', { kind: 'json', schemaRef: imageEditV3SchemaRef('property', 'image_edit.layer_filter.mask.value') }, { nullable: true }),
+    read: source => source.filter.mask as unknown as JsonValue, writer: { write(draft, mutation) { draft.filter.mask = imageEditSparseMaskSchemaV3.nullable().parse(mutation.value) } }, storeActions: [] },
 ]

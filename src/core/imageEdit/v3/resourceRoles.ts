@@ -1,7 +1,7 @@
 import type { ImageEditDocumentV3 } from './documentTypes'
 import type { ImageEditCommandHistorySnapshotV3 } from './commandHistoryCodec'
 import type { ImageEditCommandV3 } from './commandTypes'
-import { isImageEditSparseMaskReferenceV3, type ImageEditLayerV3, type ImageEditMaskReferenceV3 } from './layerTypes'
+import { type ImageEditLayerV3, type ImageEditMaskReferenceV3 } from './layerTypes'
 
 export type ImageEditSparseResourceStorageV3 = 'rgba-float32' | 'mask-float32'
 
@@ -19,11 +19,11 @@ export function collectImageEditResourceRolesV3(
   }
   const mask = (value: ImageEditMaskReferenceV3 | null): void => {
     if (!value) return
-    if (isImageEditSparseMaskReferenceV3(value)) Object.values(value.tiles).forEach((id) => add(id, 'mask-float32'))
-    else images.add(value.resourceId)
+    Object.values(value.tiles).forEach((id) => add(id, 'mask-float32'))
   }
   const layer = (value: ImageEditLayerV3): void => {
     mask(value.mask)
+    value.filters.forEach(filter => mask(filter.mask))
     if (value.type === 'raster') {
       if (value.source.kind === 'resource') images.add(value.source.resourceId)
       Object.values(value.tiles).forEach((id) => add(id, 'rgba-float32'))
@@ -33,6 +33,7 @@ export function collectImageEditResourceRolesV3(
     if (value.type === 'layer.add') layer(value.layer)
     else if (value.type === 'layer.group') layer(value.group)
     else if (value.type === 'layer.set-mask') mask(value.mask)
+    else if (value.type === 'layer.update-common') value.patch.filters?.forEach(filter => mask(filter.mask))
     else if (value.type === 'raster.apply-tile-delta' || value.type === 'mask.apply-tile-delta') {
       const storage = value.type === 'raster.apply-tile-delta' ? 'rgba-float32' : 'mask-float32'
       for (const change of value.changes) { add(change.resourceId, storage); add(change.previousResourceId, storage) }

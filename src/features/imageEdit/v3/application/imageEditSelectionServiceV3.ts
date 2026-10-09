@@ -2,13 +2,11 @@ import { ImageEditorV3CommandRepository, createImageEditorV3RequestId, persistIm
 import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import { collectImageEditLayerResourceIdsForCommandV3 } from '@/core/imageEdit/v3/commandTypes'
 import { createFloat32MaskTile } from '@/core/imageEdit/v3/effects/contracts'
-import { IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3 } from '@/core/imageEdit/v3/colorTypes'
-import { collectImageEditMaskResourceIdsV3, createImageEditSparseMaskReferenceV3, isImageEditSparseMaskReferenceV3, type ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
+import { collectImageEditMaskResourceIdsV3, createImageEditSparseMaskReferenceV3, type ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
 import { createLogger } from '@/core/logging'
 import { resolveAnnotationLayerToOutputMatrixV3, resolveAnnotationOutputGeometryV3, multiplyAnnotationMatricesV3, invertAnnotationMatrixV3 } from '../editor/annotationGeometryV3'
 import { createImageEditorMaskBrushTileLoaderV3 } from '../editor/maskBrushTilesV3'
-import { imageEditorV3SourceRegionToMask, loadImageEditorV3SourceRegion } from '../export/sourceRegion'
 import { ImageEditSelectionRasterClientV3 } from '../execution/selectionRasterClientV3'
 import { findImageEditV3LiveLayer } from './imageEditDocumentRefs'
 import type { ImageEditCommandBusV3 } from './imageEditCommandBus'
@@ -38,7 +36,7 @@ export async function materializeImageEditSelectionMaskV3(bus: ImageEditCommandB
   const sizes = new Map(Object.entries(bus.getResourceByteSizes()))
   const existing = layer.mask
   if (existing && collectImageEditMaskResourceIdsV3(existing).some(id => !sizes.get(id))) throw new Error('蒙版资源信息不完整，请重新打开原文档')
-  const oldLoader = mode !== 'replace' && existing && isImageEditSparseMaskReferenceV3(existing)
+  const oldLoader = mode !== 'replace' && existing
     ? createImageEditorMaskBrushTileLoaderV3({ document: start.document, mask: existing, resourceByteSizes: sizes }) : null
   const parent = parentId ? findImageEditV3LiveLayer(start.document, parentId) : null
   const ancestors = parent ? [parent.layer, ...parent.ancestors.slice().reverse()] : []
@@ -65,10 +63,6 @@ export async function materializeImageEditSelectionMaskV3(bus: ImageEditCommandB
         const old = await oldLoader({ mip: 0, x: x / 512, y: y / 512 }, signal ?? new AbortController().signal)
         if (old.tile.storage !== 'mask-float32') throw new Error('蒙版格式不匹配')
         for (let i = 0; i < data.length; i++) data[i] *= existing?.inverted ? 1 - old.tile.data[i] : old.tile.data[i]
-      } else if (mode !== 'replace' && existing && !isImageEditSparseMaskReferenceV3(existing)) {
-        const color = start.document.color
-        const old = imageEditorV3SourceRegionToMask(await loadImageEditorV3SourceRegion(existing.resourceId, region, start.document.geometry, 32, color.workingSpace, color.transferFunction, color.hdrMetadata?.referenceWhiteNits ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3, signal ?? new AbortController().signal, {}))
-        for (let i = 0; i < data.length; i++) data[i] *= existing.inverted ? 1 - old.data[i] : old.data[i]
       }
       fresh()
       if (!data.some(v => v > 0)) { onProgress?.(++completed, total); continue }

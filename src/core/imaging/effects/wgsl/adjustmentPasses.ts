@@ -1,10 +1,10 @@
 import { COLOR_GRADE_WGSL } from './colorGrade'
-export function adjustmentPassesWgsl({ extendedRange = false, globalCoordinates = false }: { extendedRange?: boolean; globalCoordinates?: boolean } = {}): string {
+export function adjustmentPassesWgsl({ extendedRange = false, globalCoordinates = false, float32Sampling = false }: { extendedRange?: boolean; globalCoordinates?: boolean; float32Sampling?: boolean } = {}): string {
 return `
-${COLOR_GRADE_WGSL}
+${float32Sampling ? COLOR_GRADE_WGSL.replace('textureSampleLevel(gradeMask, s, uv, 0.0)', 'sampleFloat32(gradeMask, uv)') : COLOR_GRADE_WGSL}
 struct Params { size: vec4f, a: vec4f, b: vec4f, c: vec4f }
 @group(0) @binding(0) var source: texture_2d<f32>;
-@group(0) @binding(1) var s: sampler;
+${float32Sampling ? '' : '@group(0) @binding(1) var s: sampler;'}
 @group(0) @binding(2) var<uniform> u: Params;
 @group(0) @binding(3) var original: texture_2d<f32>;
 @group(0) @binding(4) var colorLut: texture_3d<f32>;
@@ -16,8 +16,19 @@ struct Vertex { @builtin(position) position: vec4f }
 }
 const LUMA = vec3f(0.2126, 0.7152, 0.0722);
 fn uvOf(v: Vertex) -> vec2f { return v.position.xy / u.size.xy; }
-fn tap(uv: vec2f) -> vec4f { return textureSampleLevel(source, s, uv, 0.0); }
-fn tapOriginal(uv: vec2f) -> vec4f { return textureSampleLevel(original, s, uv, 0.0); }
+${float32Sampling ? `
+// Bilinear clamp-to-edge via textureLoad: rgba32float does not require float32-filterable.
+fn sampleFloat32(image: texture_2d<f32>, uv: vec2f) -> vec4f {
+ let edge = vec2i(textureDimensions(image)) - vec2i(1);
+ let at = clamp(uv * vec2f(textureDimensions(image)) - vec2f(0.5), vec2f(0), vec2f(edge));
+ let lo = vec2i(floor(at)); let hi = min(lo + vec2i(1), edge); let weight = fract(at);
+ return mix(mix(textureLoad(image, lo, 0), textureLoad(image, vec2i(hi.x, lo.y), 0), weight.x),
+   mix(textureLoad(image, vec2i(lo.x, hi.y), 0), textureLoad(image, hi, 0), weight.x), weight.y);
+}
+fn tap(uv: vec2f) -> vec4f { return sampleFloat32(source, uv); }
+fn tapOriginal(uv: vec2f) -> vec4f { return sampleFloat32(original, uv); }
+` : `fn tap(uv: vec2f) -> vec4f { return textureSampleLevel(source, s, uv, 0.0); }
+fn tapOriginal(uv: vec2f) -> vec4f { return textureSampleLevel(original, s, uv, 0.0); }`}
 fn colorGradeSelectionSaturation(chroma: f32, light: f32) -> f32 { let value = chroma / max(0.000001, 1.0 - abs(2.0 * light - 1.0)); return ${extendedRange ? 'clamp(value, 0.0, 1.0)' : 'value'}; }
 fn colorGradePosition(v: Vertex) -> vec2f { return ${globalCoordinates ? 'u.b.zw + (v.position.x - 0.5) * u.c.xy + (v.position.y - 0.5) * u.c.zw' : 'uvOf(v)'}; }
 fn inside(uv: vec2f) -> bool { return all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0)); }

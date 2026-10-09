@@ -302,7 +302,7 @@ describe('图片编辑 V3 命令历史', () => {
     const source = createPaintDocument();
     const legacyCommand = {
       commandId: 'legacy-mask-history', expectedRevision: 0, type: 'layer.set-mask',
-      layerId: 'paint', mask: { resourceId: 'sha256:legacy-mask', inverted: false },
+      layerId: 'paint', mask: { ...createImageEditSparseMaskReferenceV3('sha256:legacy-mask', false), tiles: { '0/0/0': 'sha256:legacy-mask' } },
     } as const;
     const legacyApplied = applyImageEditCommandV3(source, legacyCommand, {
       allowLegacyResourceMetadata: true,

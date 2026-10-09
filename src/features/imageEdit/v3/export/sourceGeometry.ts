@@ -38,7 +38,6 @@ export async function readImageEditorRenderSourceSizesV3(
     const source = node.parameters.source
     if (node.definitionId === 'source.raster' && isRecord(source)
       && source.kind === 'resource' && typeof source.resourceId === 'string') resourceRefs.add(source.resourceId)
-    if (node.mask && 'resourceId' in node.mask) resourceRefs.add(node.mask.resourceId)
   }
   for (const resourceRef of resourceRefs) {
     const pyramid = await readImageEditorExportSourcePyramidV3(resourceRef, signal, dependencies)
@@ -59,9 +58,7 @@ export async function prepareImageEditorExportSourceGeometryV3(
   const sizes = await readImageEditorRenderSourceSizesV3(plan, signal, dependencies)
   return (target) => {
     let size = canvasSize
-    if (target.kind === 'mask') {
-      if ('resourceId' in target.reference) size = sizes.get(target.reference.resourceId) ?? canvasSize
-    } else if (target.node.definitionId === 'source.raster') {
+    if (target.kind === 'content' && target.node.definitionId === 'source.raster') {
       const source = target.node.parameters.source
       const resourceId = isRecord(source) && source.kind === 'resource' && typeof source.resourceId === 'string'
         ? source.resourceId : null

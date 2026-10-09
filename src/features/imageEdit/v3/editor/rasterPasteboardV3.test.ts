@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -35,7 +36,7 @@ describe('ImageEditorRasterPasteboardV3', () => {
     expect(resolveImageEditorRasterPasteboardLayerV3(document)).toBeNull()
 
     document.layers[1].visible = false
-    document.layers[0].mask = { resourceId: 'sha256:mask', inverted: false }
+    document.layers[0].mask = { ...createImageEditSparseMaskReferenceV3('sha256:mask', false), tiles: { '0/0/0': 'sha256:mask' } }
     expect(resolveImageEditorRasterPasteboardLayerV3(document)).toBeNull()
 
     document.layers[0].mask = null
@@ -89,7 +90,7 @@ describe('ImageEditorRasterPasteboardV3', () => {
       .toEqual(document.layers.map(({ id }) => id))
 
     document.layers[0].visible = true
-    document.layers[1].mask = { resourceId: RESOURCE_A, inverted: false }
+    document.layers[1].mask = { ...createImageEditSparseMaskReferenceV3(RESOURCE_A, false), tiles: { '0/0/0': RESOURCE_A } }
     expect(resolveImageEditorRasterPasteboardStackV3(document, descriptors)).toBeNull()
 
     document.layers[1].mask = null

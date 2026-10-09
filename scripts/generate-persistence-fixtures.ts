@@ -14,6 +14,7 @@ import { VIDEO_EDIT_EXPORT_PRESETS } from '../src/core/videoEdit/exportPresets'
 import { videoEditTextStyleSchema } from '../src/core/videoEdit/text'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
 import { createDefaultImageEditColorModeV3 } from '../src/core/imageEdit/v3/colorTypes'
+import { IMAGE_WORKING_VERSION, IMAGE_PACKAGE_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
 import { createThemePayloadV2 } from '../src/core/theme/themeMigration'
 import { DEFAULT_THEME_SEED } from '../src/core/theme/themeEngine'
 import { DEFAULT_THEME_COLOR_SCHEME_HEX, SETTINGS_ACCENT_HEX } from '../src/core/theme/colorTokens'
@@ -42,8 +43,13 @@ videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const image = createImageEditDocumentV3({ width: 64, height: 48, documentId: 'golden-image', color: createDefaultImageEditColorModeV3() })
 image.layers.push(createImageEditRasterLayerV3('golden-layer', '空白图层'))
+image.layers[0].fillOpacity = .7
+image.layers[0].maskAttachment.linked = false
+image.layers[0].maskAttachment.density = .6
+image.layers[0].filters = [{ id: 'golden-local-grade', operationType: 'adjustment', effectId: 'exposure',
+  params: { stops: .4 }, enabled: true, opacity: .8, blendMode: 'normal', mask: null }]
 image.layers.push(createImageEditEffectLayerV3('golden-shared-gaussian', '高斯模糊', 'gaussian_blur', { sigma_fraction_height: .009, axis: 'horizontal', edge_mode: 'transparent' }))
-const working = { format: 'henji-image-edit', formatVersion: 3, documentId: image.id, revision: 0, createdAt: timestamp, updatedAt: timestamp, document: image, resourceRefs: [] }
+const working = { format: 'henji-image-edit', formatVersion: IMAGE_WORKING_VERSION, documentId: image.id, revision: 0, createdAt: timestamp, updatedAt: timestamp, document: image, resourceRefs: [] }
 const values: Record<string, unknown> = {
   'document.video_edit': videoContent,
   'document.canvas': { nodes: [{ id: 'golden-node', type: 'textDisplay', position: { x: 0, y: 0 }, data: { text: '黄金样本' } }], edges: [] },
@@ -56,7 +62,7 @@ const values: Record<string, unknown> = {
   'code-component': { schemaVersion: 1, name: '组件', version: 1, description: '黄金组件', exports: ['value'], imports: [] },
   'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], parameters: { label: '黄金样本' }, curves: {}, images: [] }),
   'image-header': { format: 'henji-image-document', version: 1, id: image.id, revision: 0, kindVersion: 1, createdAt: timestamp, updatedAt: timestamp, contentRevision: 0, emptyUntilRevision: 0, summary: { width: 64, height: 48, layers: 1 } },
-  'image-package': { packageFormat: 'henjiimg', packageVersion: 1, createdAt: timestamp, document: working, resources: [] },
+  'image-package': { packageFormat: 'henjiimg', packageVersion: IMAGE_PACKAGE_VERSION, createdAt: timestamp, document: working, resources: [] },
   'image-working-copy': working,
   settings: { providerKeyStatus: { kie: false }, uploadProvider: 'kie', uploadFallbackEnabled: false, canvasLodLevel: 'balanced', videoEditBinsFirst: true },
   theme: { theme: 'dark' },
@@ -67,7 +73,7 @@ const values: Record<string, unknown> = {
   'voice-library': [{ voiceId: 'golden-voice', voiceName: '黄金音色', providerId: 'kie', createdAt: timestamp, updatedAt: timestamp, status: 'ready', activated: true }],
   'preset-export': { version: '1.0', name: '黄金生成预设', description: null, modelId: null, params: { prompt: '黄金样本' } },
   'theme-payload': createThemePayloadV2({ seed: DEFAULT_THEME_SEED }),
-  'canvas-layer-package': { format: 'henji-canvas-layer', version: 1, documentId: image.id, contentRevision: 0 },
+  'canvas-layer-package': { format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: image.id, contentRevision: 0 },
   keystore: { version: 1, keys: {} },
   'media-grants': { version: 1, roots: [{ path: '/persistence-project', grantedAt: 1791504000000 }] },
   'llm-config': { providers: [], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [], tools: [], policy: {}, memory: {} },

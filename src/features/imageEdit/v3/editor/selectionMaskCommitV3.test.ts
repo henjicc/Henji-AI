@@ -78,9 +78,9 @@ describe('图片编辑 V3 选区蒙版原子提交', () => {
     expect(bus.getSnapshot().document.layers[0].mask).toMatchObject({ defaultValue: 0 })
   })
 
-  it('legacy/default1 的边界外 replace 不读旧像素并清空旧资源引用', async () => {
+  it('default1 的边界外 replace 不读旧像素并清空旧资源引用', async () => {
     const { bus, document, layer } = createFixture()
-    layer.mask = { resourceId: OLD_RESOURCE_ID, inverted: true }
+    layer.mask = { ...createImageEditSparseMaskReferenceV3(OLD_RESOURCE_ID, true), tiles: { '0/0/0': OLD_RESOURCE_ID } }
     const persistTiles = persistWithSequentialHashes()
     const commit = new ImageEditorSelectionMaskCommitV3({
       bus,
@@ -108,7 +108,7 @@ describe('图片编辑 V3 选区蒙版原子提交', () => {
     })
     expect(bus.undo()).toBe(true)
     expect(bus.getSnapshot().document.layers[0].mask).toEqual({
-      resourceId: OLD_RESOURCE_ID, inverted: true,
+      ...createImageEditSparseMaskReferenceV3(OLD_RESOURCE_ID, true), tiles: { '0/0/0': OLD_RESOURCE_ID },
     })
   })
 

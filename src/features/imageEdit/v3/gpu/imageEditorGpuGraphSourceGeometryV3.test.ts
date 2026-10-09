@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import * as imageCommands from '@/commands/imageEditorV3'
+import { loadImageEditorGpuSceneTileV3 } from '../execution/imageEditorGpuSceneTileLoaderV3'
 import { init, type Gpu } from 'vgpu/node'
 import {
   compileImageEditRenderPlanV3, convertFloat32TileColorDomainV3,
@@ -27,6 +30,55 @@ beforeAll(async () => { gpu = await init() })
 afterAll(() => gpu?.dispose())
 
 describe('GPU RenderGraph 源坐标只投影一次（真实 WebGPU）', () => {
+  it.each([false, true])('分数缩放跨512边界时 brush→brush/source 保留连续Alpha（邻接替换=$0）', async (neighborBrush) => {
+    const base = source(20, 1024, 8)
+    const brushRef = source(21, 512, 8).ref
+    const doc = createImageEditDocumentV3({ width: 512, height: 4 })
+    const layer = createImageEditRasterLayerV3('halo', '连续源', base.ref)
+    layer.transform = [.5, 0, 0, .5, .25, 0]
+    layer.tiles = { '0/0/0': brushRef, ...(neighborBrush ? { '0/1/0': brushRef } : {}) }
+    doc.layers = [layer]
+    const brushData = new Float32Array(512 * 8 * 4).fill(1)
+    const reader = vi.fn(async (request: Parameters<typeof imageCommands.readImageEditorV3BrushTiles>[0]) => ({
+      tiles: request.tiles.map(entry => ({ tileKey: entry.tileKey,
+        tile: { storage: 'rgba-float32' as const, width: 512, height: 8, colorDomain: 'linear-light' as const,
+          workingSpace: 'srgb' as const, transferFunction: 'srgb' as const, referenceWhiteNits: 203,
+          alpha: 'premultiplied' as const, data: brushData } })),
+    }))
+    const readSource = vi.spyOn(imageCommands, 'readImageEditorV3SourceTile').mockImplementation(async request => {
+      const originX = Math.max(0, request.tileX * 512 - 1)
+      const width = Math.min(1024, request.tileX * 512 + 513) - originX
+      const result = tile(base, 0, request.tileX, 0)
+      return { ...result, halo: 1, originX, width, rowStride: width * 4,
+        pixels: new Uint8Array(width * 8 * 4).fill(255).buffer }
+    })
+    const resources = [{ resourceRef: base.ref, byteLength: 32768, mediaType: 'image/png' },
+      { resourceRef: brushRef, byteLength: brushData.byteLength, mediaType: 'application/x-henji-brush-tile-v3' }]
+    const compiled = compileImageEditorGpuRasterSceneV3(doc, resources,
+      { [base.ref]: createImageEditorGpuPyramidDescriptorV3(1024, 8) })
+    if (!compiled.supported) throw new Error(compiled.reason)
+    const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+    const uploaded = new Map<string, ReturnType<typeof compositor.uploadTile>>()
+    try {
+      compositor.syncScene(compiled.scene); compositor.updateViewport(viewport(512, 4))
+      for (const key of compositor.requiredResourceKeys()) {
+        const pixels = await loadImageEditorGpuSceneTileV3(key, new AbortController().signal, {
+          document: doc, annotationNodes: new Map(), sourceBitDepth: 8, readBrushTiles: reader,
+          resourceDescriptors: new Map(resources.map(entry => [entry.resourceRef, entry])),
+        })
+        expect(pixels.halo).toBe(1)
+        uploaded.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key, pixels))
+      }
+      const actual = await compositor.readLinearPixelsForTest(key => uploaded.get(imageEditorGpuSceneTileKeyV3(key)) ?? null)
+      for (let y = 0; y < 4; y++) for (let x = 254; x <= 258; x++) {
+        for (let channel = 0; channel < 4; channel++) expect(actual[(y * 512 + x) * 4 + channel]).toBe(1)
+      }
+    } finally {
+      readSource.mockRestore()
+      for (const texture of uploaded.values()) texture.destroy()
+      compositor.dispose()
+    }
+  })
   it.each([0, 12])('640源缩至64后模糊%s与真实CPU参考一致，不先截成6×6', async (radius) => {
     const input = source(1, 640, 640)
     const doc = document(input, [.1, 0, 0, .1, 0, 0], radius)
@@ -90,7 +142,7 @@ describe('GPU RenderGraph 源坐标只投影一次（真实 WebGPU）', () => {
     const group = createImageEditGroupLayerV3('group', '隔离蒙版组')
     group.isolated = true
     group.opacity = .5
-    group.mask = { resourceId: mask.ref, inverted: false }
+    group.mask = { ...createImageEditSparseMaskReferenceV3(mask.ref, false), tiles: { '0/0/0': mask.ref } }
     doc.layers[0].opacity = .75
     group.children = [doc.layers[0]]
     doc.layers[0] = group
@@ -195,8 +247,7 @@ async function cpuReference(doc: ImageEditDocumentV3, inputs: readonly Source[],
       })
     },
     loadMask: async (mask) => {
-      if (!('resourceId' in mask)) throw new Error('本组仅测试完整组蒙版')
-      const input = inputs.find((entry) => entry.ref === mask.resourceId)!
+      const input = inputs.find((entry) => entry.ref === Object.values(mask.tiles)[0])!
       const rgba = new Uint8Array(tile(input, 0, 0, 0, true).pixels)
       return createFloat32MaskTile(input.width, input.height, Float32Array.from({ length: input.width * input.height }, (_, index) => rgba[index * 4] / 255))
     },

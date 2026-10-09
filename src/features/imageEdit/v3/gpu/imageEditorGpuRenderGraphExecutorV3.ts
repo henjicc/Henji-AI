@@ -1,3 +1,5 @@
+import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
+import { composeImageEditTransformsV3 } from '@/core/imageEdit/v3/renderContracts/maskTransform'
 import { createBuiltInImageEditRenderNodeRegistry } from '@/core/imageEdit/v3/builtInRenderNodes'
 import { mapImageEditOutputPixelToSourceV3, resolveImageEditOutputGeometryV3 } from '@/core/imageEdit/v3/outputGeometry'
 import { ImageEditorGpuColorGradeV3 } from './imageEditorGpuColorGradeV3'
@@ -113,9 +115,9 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     this.sourceDraw = draw(gpu, { shader: sourceShader, vertices: 3, label: 'image-editor-graph-source' })
     this.copyDraw = draw(gpu, { shader: copyShader, vertices: 3, label: 'image-editor-graph-copy' })
     this.normalDraw = draw(gpu, { shader: normalShader, vertices: 3, blend: 'premultiplied', label: 'image-editor-graph-normal' })
-    this.compositeDraw = draw(gpu, { shader: compositeShader, vertices: 3, label: 'image-editor-graph-blend' })
-    this.adjustmentDraw = draw(gpu, { shader: adjustmentShader, vertices: 3, label: 'image-editor-graph-adjustment' })
-    this.curvesDraw = draw(gpu, { shader: curvesShader, vertices: 3, label: 'image-editor-graph-curves' })
+    this.compositeDraw = draw(gpu, { shader: COMPOSITING_WGSL + compositeShader, vertices: 3, label: 'image-editor-graph-blend' })
+    this.adjustmentDraw = draw(gpu, { shader: COMPOSITING_WGSL + adjustmentShader, vertices: 3, label: 'image-editor-graph-adjustment' })
+    this.curvesDraw = draw(gpu, { shader: COMPOSITING_WGSL + curvesShader, vertices: 3, label: 'image-editor-graph-curves' })
     this.fallbackMask = gpu.device.createTexture({
       size: [1, 1], format: 'r8unorm', usage: ['copy_dst', 'texture_binding'],
       label: 'image-editor-graph-default-mask',
@@ -178,9 +180,13 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         if (maskTargets.has(cacheKey)) continue
         const plan = maskPlans.get(mask.maskId)
         if (!plan) continue
+        const maskParameters = node.kind === 'effect' ? node.parameters : node.kind === 'adjustment'
+          ? node.adjustments.find(entry => entry.mask === mask)?.parameters : undefined
         const transform = node.kind === 'composite'
-          ? this.transientTransforms.get(node.layerId) ?? node.transform
-          : [1, 0, 0, 1, 0, 0] as ImageEditTransformV3
+          ? node.maskLinked && this.transientTransforms.has(node.layerId)
+            ? composeImageEditTransformsV3(this.transientTransforms.get(node.layerId)!, node.maskLocalTransform ?? [1,0,0,1,0,0])
+            : node.maskTransform ?? node.transform
+          : (maskParameters?.maskTransform ?? [1, 0, 0, 1, 0, 0]) as unknown as ImageEditTransformV3
         const prepared = this.maskAssembler.prepare(cacheKey, mask, plan, transform, layout, regions !== null)
         preparedMasks.push(prepared)
         activeMaskKeys.add(cacheKey)
@@ -366,7 +372,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     for (const task of tasks) {
       if (task.sourcePlan) draws.set(this.sourceDraw, this.sourceScratch!)
       if (task.node.kind === 'source') draws.set(this.sourceDraw, task.target)
-      else if (task.node.kind === 'composite' && (task.node.blendMode === 'normal' || !task.backdrop)) {
+      else if (task.node.kind === 'composite' && (task.node.blendMode === 'normal' && !task.node.clipping || !task.backdrop)) {
         draws.set(this.normalDraw, task.target)
         if (task.backdrop) draws.set(this.copyDraw, task.target)
       } else if (task.node.kind === 'composite') draws.set(this.compositeDraw, task.target)
@@ -419,7 +425,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       const buffer = this.uniform(values)
       buffers.push(buffer)
       const maskView = task.mask?.color.view ?? this.fallbackMask.view
-      if (task.node.blendMode === 'normal' || !task.backdrop) {
+      if (task.node.blendMode === 'normal' && !task.node.clipping || !task.backdrop) {
         if (task.backdrop) {
           this.copyDraw.group(0, this.bind(this.copyDraw, [task.backdrop.color.view]))
           currentFrame.pass(task.target, this.copyDraw)

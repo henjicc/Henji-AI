@@ -111,3 +111,32 @@ it('正式稀疏蒙版恢复类型，普通源和ICC不被改标；取消解码�
     (ref) => store.describe(ref), brushes, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
   expect(released).toHaveBeenCalledOnce()
 })
+
+it('真实滤镜蒙版及共同属性保存后重开；删除滤镜的持久历史继续保留瓦片并可撤销', async () => {
+  const store = new ContentAddressedResourceStore(path.join(directory, 'resources'))
+  const brushes = new ImageEditBrushTileStoreV3(store)
+  const mask = await brushes.persistTile(createFloat32MaskTile(2, 2, new Float32Array([0, .25, .75, 1])))
+  let document = createImageEditDocumentV3({ width: 2, height: 2, documentId: 'filter-history-resources' })
+  document.layers = [createImageEditRasterLayerV3('base', '基底'), createImageEditRasterLayerV3('content', '内容')]
+  const content = document.layers[1]
+  content.fillOpacity = .4; content.clipping = true
+  content.maskAttachment = { enabled: false, linked: false, density: .3, transform: [1, 0, 0, 1, 1, 0] }
+  content.filters = [{ id: 'filter', operationType: 'adjustment', effectId: 'exposure', params: { stops: .5 }, enabled: true, opacity: .7, blendMode: 'normal',
+    mask: { ...createImageEditSparseMaskReferenceV3('filter-mask', false, 0), tiles: { '0/0/0': mask.resourceId } } }]
+  const history = new ImageEditCommandHistoryV3()
+  document = history.execute(document, { type: 'layer.update-common', commandId: 'remove-filter', expectedRevision: 0, layerId: 'content',
+    patch: { filters: [] }, resources: [{ resourceId: mask.resourceId, byteSize: mask.byteSize }] })
+  const repository = new ImageEditDocumentRepository(path.join(directory, 'documents'))
+  await repository.create({ documentId: document.id, revision: document.revision, document, history: history.createSnapshot(), resourceRefs: [] })
+  const reloaded = await new ImageEditDocumentRepository(path.join(directory, 'documents')).load(document.id)
+  const restoredDocument = reloaded.document as ImageEditDocumentV3
+  expect(restoredDocument.layers[1]).toMatchObject({ fillOpacity: .4, clipping: true, maskAttachment: content.maskAttachment, filters: [] })
+  const descriptors = await describeImageEditorV3DocumentResources(restoredDocument, reloaded.history, reloaded.resourceRefs,
+    ref => store.describe(ref), brushes, new AbortController().signal)
+  expect(descriptors.find(item => item.resourceRef === mask.resourceId)?.mediaType).toBe('application/x-henji-brush-tile-v3')
+  const restored = new ImageEditCommandHistoryV3(); restored.restore(restoredDocument, reloaded.history)
+  const undone = restored.undo(restoredDocument).document
+  expect(undone.layers[1].filters).toEqual(content.filters)
+  expect(collectImageEditorPreviewResourceRequestsV3(undone, 2, descriptors)).toContainEqual(expect.objectContaining({ storage: 'mask-float32', resourceId: mask.resourceId }))
+  expect(restored.redo(undone).document.layers[1].filters).toEqual([])
+})

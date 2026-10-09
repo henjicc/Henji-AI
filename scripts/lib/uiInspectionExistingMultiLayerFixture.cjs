@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检使用 CommonJS。 */
+const { imageEditInspectionModel } = require('./imageEditInspectionModel.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -50,7 +52,10 @@ function detectImageMediaType(bytes) {
 
 function loadExistingMultiLayerSource(source) {
   const stored = JSON.parse(fs.readFileSync(source.documentPath, 'utf8'))
-  const layers = stored?.document?.layers
+  const { loadTypeScript } = require('../check-persistence-compat.cjs')
+  const decoded = loadTypeScript('src/core/imageEdit/v3/documentCodec.ts').decodeImageEditDocumentV3(stored.document)
+  if (!decoded.ok) throw new Error('已有多图层夹具必须使用当前正式图片文档格式')
+  const layers = decoded.document.layers
   if (!Array.isArray(layers)
     || layers.length < 2
     || (source.expectedLayerCount !== null && layers.length !== source.expectedLayerCount)) {
@@ -97,7 +102,7 @@ async function seedExistingMultiLayerIsolatedFixture(page, context, source) {
   await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await context.settlePage(page, 350)
   const payload = loadExistingMultiLayerSource(source)
-  const target = await page.evaluate(async ({ targetProjectId, fixture }) => {
+  const target = await page.evaluate(async ({ targetProjectId, fixture, model }) => {
     const resources = new Map()
     for (const item of fixture.resources) {
       const managed = await window.henjiNative.imageEditorV3.ingestSource({
@@ -116,7 +121,7 @@ async function seedExistingMultiLayerIsolatedFixture(page, context, source) {
       },
     }))
     const editDocument = {
-      version: 3,
+      ...model.document,
       id: documentId,
       revision: 0,
       geometry: fixture.geometry,
@@ -164,7 +169,7 @@ async function seedExistingMultiLayerIsolatedFixture(page, context, source) {
       nodeId,
       expectedLayerCount: layers.length,
     }
-  }, { targetProjectId: projectId, fixture: payload })
+  }, { targetProjectId: projectId, fixture: payload, model: imageEditInspectionModel() })
   // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await context.reopenCanvasProjectFromStorage(page, projectId)
   return target

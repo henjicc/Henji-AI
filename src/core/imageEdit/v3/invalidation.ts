@@ -16,7 +16,7 @@ export interface ImageEditInvalidationResult {
 }
 
 function nodeIdentity(node: ImageEditRenderPlanNode): string {
-  return `${node.layerId}:${node.definitionId}`;
+  return node.cacheIdentity ?? `${node.layerId}:${node.definitionId}`;
 }
 
 function expandRect(rect: ImageEditRect, halo: number): ImageEditRect {

@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '../layerTypes'
 import { describe, expect, it } from 'vitest';
 import {
   createImageEditAnnotationLayerV3,
@@ -97,7 +98,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
         offset: 0,
         gamma: 1,
       }),
-      mask: { resourceId: 'sha256:mask', inverted: false },
+      mask: { ...createImageEditSparseMaskReferenceV3('sha256:mask', false), tiles: { '0/0/0': 'sha256:mask' } },
     };
     const input = tile(2, [0.25, 0.25, 0.25, 1, 0.25, 0.25, 0.25, 1]);
     const plan = compileImageEditRenderPlanV3(
@@ -141,7 +142,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
   it('内容蒙版乘到内容 alpha，组蒙版作用于整个隔离组结果', async () => {
     const content = {
       ...createImageEditRasterLayerV3('content', '内容', 'sha256:content'),
-      mask: { resourceId: 'sha256:content-mask', inverted: false },
+      mask: { ...createImageEditSparseMaskReferenceV3('sha256:content-mask', false), tiles: { '0/0/0': 'sha256:content-mask' } },
     };
     const contentPlan = compileImageEditRenderPlanV3(
       document([content], 2),
@@ -163,7 +164,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
     const group = {
       ...createImageEditGroupLayerV3('masked-group', '带蒙版组'),
       isolated: true,
-      mask: { resourceId: 'sha256:group-mask', inverted: false },
+      mask: { ...createImageEditSparseMaskReferenceV3('sha256:group-mask', false), tiles: { '0/0/0': 'sha256:group-mask' } },
       children: [child],
     };
     const groupPlan = compileImageEditRenderPlanV3(

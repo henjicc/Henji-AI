@@ -1,3 +1,5 @@
+import { imageEditLayerMaskTransformV3 } from '@/core/imageEdit/v3/renderContracts/maskTransform'
+import { maskDensity } from '@/core/imaging/compositing'
 import { invertImageEditTransformV3, mapImageEditTransformPointV3 } from '@/core/imageEdit/v3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditLayerV3, ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
@@ -54,16 +56,11 @@ function sample(map: LayerAlphaMapV3 | undefined, x: number, y: number): number 
 
 function maskValue(layer: ImageEditLayerV3, x: number, y: number, maps: LayerAlphaMapsV3): number | undefined {
   const mask = layer.mask
-  if (!mask) return 1
-  let value: number | undefined
-  if ('kind' in mask) {
-    const tx = Math.floor(x / mask.tileSize), ty = Math.floor(y / mask.tileSize)
-    const resourceId = mask.tiles[`0/${tx}/${ty}`]
-    value = resourceId ? sample(maps.get(resourceId), x - tx * mask.tileSize, y - ty * mask.tileSize) : mask.defaultValue
-  } else {
-    value = sample(maps.get(`mask:${mask.resourceId}`) ?? maps.get(mask.resourceId), x, y)
-  }
-  return value === undefined ? undefined : mask.inverted ? 1 - value : value
+  if (!mask || !layer.maskAttachment.enabled) return 1
+  const tx = Math.floor(x / mask.tileSize), ty = Math.floor(y / mask.tileSize)
+  const resourceId = mask.tiles[`0/${tx}/${ty}`]
+  const value = resourceId ? sample(maps.get(resourceId), x - tx * mask.tileSize, y - ty * mask.tileSize) : mask.defaultValue
+  return value === undefined ? undefined : maskDensity(mask.inverted ? 1 - value : value, layer.maskAttachment.density)
 }
 
 export function layerToOutputV3(document: ImageEditDocumentV3, location: ImageEditLayerLocationV3,
@@ -81,7 +78,7 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
   expand(document.layers)
   for (const location of flattenImageEditLayerTreeV3(document.layers, groups)) {
     const { layer, ancestors } = location
-    if (layer.type !== 'raster' || [layer, ...ancestors].some((entry) => !entry.visible || entry.locked || entry.opacity === 0)) continue
+    if (layer.type !== 'raster' || [layer, ...ancestors].some((entry) => !entry.visible || entry.locked || entry.opacity === 0 || entry.fillOpacity === 0)) continue
     const [x, y] = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, location)), ...point)
     const tx = Math.floor(x / 512), ty = Math.floor(y / 512)
     const tile = layer.tiles[`0/${tx}/${ty}`]
@@ -93,10 +90,10 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
       const entry = index === 0 ? location : {
         ...location, layer: ancestors[index - 1], ancestors: ancestors.slice(0, index - 1),
       }
-      const local = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, entry)), ...point)
+      const local = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, entry, imageEditLayerMaskTransformV3(entry.layer))), ...point)
       const mask = maskValue(entry.layer, ...local, maps)
       if (mask === undefined) return undefined
-      alpha *= mask * entry.layer.opacity
+      alpha *= mask * entry.layer.opacity * entry.layer.fillOpacity
     }
     const sourceMap = tile ? maps.get(tile) : layer.source.kind === 'resource' ? maps.get(layer.source.resourceId) : undefined
     if (alpha >= (sourceMap?.hitThreshold ?? 1) / 255 * layer.opacity

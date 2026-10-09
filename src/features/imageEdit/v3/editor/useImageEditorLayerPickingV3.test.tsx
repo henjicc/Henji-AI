@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 /** @vitest-environment jsdom */
 import '@/tests/imageEditDocumentFixture'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
@@ -36,16 +37,17 @@ describe('图层命中资源生命周期', () => {
     expect(reader.tile).toHaveBeenCalledTimes(1)
   })
 
-  it('旧式不透明灰度蒙版读取亮度，不将其误判为全白 Alpha', async () => {
+  it('稀疏蒙版读取 float32 覆盖，而源图片只读取 Alpha', async () => {
+    const maskRef = `sha256:${'b'.repeat(64)}` as const
     reader.metadata.mockResolvedValue({ width: 2, height: 1, hasAlpha: false })
-    reader.tile.mockResolvedValue({ width: 2, height: 1, bitDepth: 8,
-      pixels: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]).buffer })
+    reader.brush.mockResolvedValue({ tiles: [{ tileKey: '0/0/0', tile: { storage: 'mask-float32', width: 2, height: 1, data: new Float32Array([0, 1]) } }] })
     const document = createImageEditDocumentV3({ width: 2, height: 1, sourceResourceId: ref })
-    document.layers[0].mask = { resourceId: ref, inverted: false }
-    const { result } = renderHook(() => useImageEditorLayerPickingV3(document, descriptors))
+    document.layers[0].mask = { ...createImageEditSparseMaskReferenceV3('mask'), tiles: { '0/0/0': maskRef } }
+    const { result } = renderHook(() => useImageEditorLayerPickingV3(document, [...descriptors, { resourceRef: maskRef, byteLength: 80, mediaType: 'application/x-henji-brush-tile-v3' }]))
     await waitFor(() => expect(result.current.size).toBe(2))
     expect(result.current.get(ref)?.alpha).toEqual(new Uint8Array([255]))
-    expect(result.current.get(`mask:${ref}`)?.alpha).toEqual(new Uint8Array([0, 255]))
+    expect(result.current.get(maskRef)?.alpha).toEqual(new Uint8Array([0, 255]))
+    expect(reader.tile).not.toHaveBeenCalled()
   })
 
   it('删除资源后迟到的读取不会重新写入新文档缓存', async () => {

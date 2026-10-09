@@ -1,6 +1,5 @@
 import {
   IMAGE_EDIT_IDENTITY_TRANSFORM_V3,
-  isImageEditSparseMaskReferenceV3,
   mipSize,
   type ImageEditCpuSamplingGridV3,
   type ImageEditCpuSamplingTargetV3,
@@ -86,13 +85,6 @@ export function createImageEditorViewportSamplingGridResolverV3(
   }
   return (target) => {
     if (target.kind === 'content') return contentGrid(target.node, new Set())
-    if (isImageEditSparseMaskReferenceV3(target.reference)) return fallback
-    const resourceId = target.reference.resourceId
-    const sourceSize = resourceSizes.get(resourceId)
-    const actualMip = sourceMipLevels.get(resourceId)
-    if (!sourceSize || actualMip === undefined) {
-      throw new Error('视口采样网格缺少蒙版资源几何或 mip')
-    }
-    return samplingGrid(sourceSize, actualMip, outputMip)
+    return fallback
   }
 }

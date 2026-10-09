@@ -1,0 +1,130 @@
+{
+  "packageFormat": "henjiimg",
+  "packageVersion": 2,
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "document": {
+    "format": "henji-image-edit",
+    "formatVersion": 4,
+    "documentId": "golden-image",
+    "revision": 0,
+    "createdAt": "2026-10-09T00:00:00.000Z",
+    "updatedAt": "2026-10-09T00:00:00.000Z",
+    "document": {
+      "version": 4,
+      "id": "golden-image",
+      "revision": 0,
+      "geometry": {
+        "width": 64,
+        "height": 48,
+        "orientation": {
+          "rotate": 0,
+          "mirrored": false
+        },
+        "crop": null
+      },
+      "color": {
+        "workingSpace": "srgb",
+        "bitDepth": 8,
+        "transferFunction": "srgb",
+        "hdrMetadata": null,
+        "iccProfileResourceId": null
+      },
+      "layers": [
+        {
+          "id": "golden-layer",
+          "name": "空白图层",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "fillOpacity": 0.7,
+          "clipping": false,
+          "maskAttachment": {
+            "enabled": true,
+            "linked": false,
+            "density": 0.6,
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          "filters": [
+            {
+              "id": "golden-local-grade",
+              "operationType": "adjustment",
+              "effectId": "exposure",
+              "params": {
+                "stops": 0.4
+              },
+              "enabled": true,
+              "opacity": 0.8,
+              "blendMode": "normal",
+              "mask": null
+            }
+          ],
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "raster",
+          "source": {
+            "kind": "empty"
+          },
+          "tiles": {}
+        },
+        {
+          "id": "golden-shared-gaussian",
+          "name": "高斯模糊",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "fillOpacity": 1,
+          "clipping": false,
+          "maskAttachment": {
+            "enabled": true,
+            "linked": true,
+            "density": 1,
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          "filters": [],
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "effect",
+          "effectId": "gaussian_blur",
+          "params": {
+            "sigma_fraction_height": 0.009,
+            "axis": "horizontal",
+            "edge_mode": "transparent"
+          },
+          "renderable": true
+        }
+      ]
+    },
+    "resourceRefs": []
+  },
+  "resources": []
+}

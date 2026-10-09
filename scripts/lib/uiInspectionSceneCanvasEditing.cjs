@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检使用 CommonJS。 */
+const { imageEditInspectionModel } = require('./imageEditInspectionModel.cjs')
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检场景使用 CommonJS 工厂。 */
 const {
   selectOverlappingReactFlowNode,
@@ -202,10 +204,10 @@ function attachUiInspectionCanvasEditing(context) {
   }
 
   async function setupCanvasMultiLayerDocumentEditor(page, _app, inspection) {
-    const { panoramaSource, projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 700)
-    const fixture = await page.evaluate(async ({ targetProjectId, source }) => {
+    const fixture = await page.evaluate(async ({ targetProjectId, model }) => {
       const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
       const nodes = (stored?.nodes ?? [])
       const edges = (stored?.edges ?? [])
@@ -231,36 +233,14 @@ function attachUiInspectionCanvasEditing(context) {
         requestId: `reality-multi-layer-ingest-${crypto.randomUUID()}`,
         source: { kind: 'data-url', dataUrl: fixtureCanvas.toDataURL('image/png') },
       })
-      // 旧 V1 迁移子场景仍依赖原 1600×800 本地资源入库；与 2.2 的单瓦片夹具分开。
-      const legacyManaged = await window.henjiNative.imageEditorV3.ingestSource({
-        requestId: `reality-multi-layer-legacy-ingest-${crypto.randomUUID()}`,
-        source: { kind: 'local-path', filePath: source },
-      })
-      await window.henjiNative.imageEditorV3.saveDocument({
-        requestId: `reality-multi-layer-legacy-retain-${crypto.randomUUID()}`,
-        document: {
-          version: 3,
-          id: `ui-multi-layer-legacy-retain-${crypto.randomUUID()}`,
-          revision: 0,
-          geometry: {
-            width: legacyManaged.metadata.width,
-            height: legacyManaged.metadata.height,
-            orientation: { rotate: 0, mirrored: false },
-            crop: null,
-          },
-          color: {
-            workingSpace: 'srgb', bitDepth: 8, transferFunction: 'srgb',
-            hdrMetadata: null, iccProfileResourceId: null,
-          },
-          layers: [],
-        },
-        expectedRevision: 0,
-        history: null,
-        resourceRefs: [legacyManaged.resource.resourceRef],
-        previewRef: null,
-      })
+      const pixels = fixtureContext.getImageData(0, 0, 320, 240).data
+      const coverage = new Float32Array(320 * 240)
+      for (let i = 0; i < coverage.length; i++) coverage[i] = (pixels[i*4]*.2126 + pixels[i*4+1]*.7152 + pixels[i*4+2]*.0722) / 255
+      const masks = await window.henjiNative.imageEditorV3.persistBrushTiles({ requestId: `reality-mask-${crypto.randomUUID()}`,
+        tiles: [{ tileKey: '0/0/0', tile: { storage: 'mask-float32', width: 320, height: 240, data: coverage.buffer } }] })
+      const maskRef = masks.tiles[0].resource.resourceRef
       const common = (id, name) => ({
-        id,
+        ...model.common, id,
         name,
         visible: true,
         locked: false,
@@ -273,7 +253,7 @@ function attachUiInspectionCanvasEditing(context) {
         tiles: {},
       })
       const editDocument = {
-        version: 3,
+        ...model.document,
         id: documentId,
         revision: 0,
         geometry: {
@@ -308,17 +288,17 @@ function attachUiInspectionCanvasEditing(context) {
             transform: [0.55, 0, 0, 0.55, 180, 100],
           },
           {
-            id: 'ui-complex-isolated-group', name: '隔离合成组', type: 'group',
+            ...model.common, id: 'ui-complex-isolated-group', name: '隔离合成组', type: 'group',
             visible: true, locked: false, opacity: 0.78, blendMode: 'soft-light',
             transform: [1, 0, 0, 1, 0, 0],
-            mask: { resourceId: managed.resource.resourceRef, inverted: false },
+            mask: { ...model.mask, maskId: 'group-mask', tiles: { '0/0/0': maskRef } },
             isolated: true,
             children: [
               {
                 ...common('ui-complex-screen-layer', '滤色蒙版层'),
                 opacity: 0.66, blendMode: 'screen',
                 transform: [0.42, 0, 0, 0.42, 24, 28],
-                mask: { resourceId: managed.resource.resourceRef, inverted: true },
+                mask: { ...model.mask, maskId: 'screen-mask', inverted: true, tiles: { '0/0/0': maskRef } },
               },
               {
                 ...common('ui-complex-multiply-layer', '正片叠底层'),
@@ -328,7 +308,7 @@ function attachUiInspectionCanvasEditing(context) {
             ],
           },
           {
-            id: 'ui-complex-exposure', name: '曝光调整', type: 'adjustment',
+            ...model.common, id: 'ui-complex-exposure', name: '曝光调整', type: 'adjustment',
             visible: true, locked: false, opacity: 0.72, blendMode: 'normal',
             transform: [1, 0, 0, 1, 0, 0], mask: null,
             adjustmentId: 'exposure', params: { stops: 0.22, offset: 0.008, gamma: 1.03 },
@@ -341,7 +321,7 @@ function attachUiInspectionCanvasEditing(context) {
         document: editDocument,
         expectedRevision: 0,
         history: null,
-        resourceRefs: [managed.resource.resourceRef],
+        resourceRefs: [managed.resource.resourceRef, maskRef],
         previewRef: null,
       })
       const nodeId = '__ui_multi_layer_document_result'
@@ -369,88 +349,10 @@ function attachUiInspectionCanvasEditing(context) {
           isGenerating: false,
         },
       })
-      const legacyNodeId = '__ui_multi_layer_legacy_result'
-      const legacyCompletionId = `generation-output:${legacyNodeId}`
-      let legacyHash = 2166136261
-      for (let index = 0; index < legacyCompletionId.length; index += 1) {
-        legacyHash ^= legacyCompletionId.charCodeAt(index)
-        legacyHash = Math.imul(legacyHash, 16777619)
-      }
-      const legacyStackId = `layer-stack:${(legacyHash >>> 0).toString(36)}`
-      const legacyResourceId = `${legacyStackId}:resource:0`
-      const legacyDocument = {
-        version: 1,
-        stackId: legacyStackId,
-        status: 'ready',
-        source: {
-          capabilityId: 'image.layer-separation',
-          sourceNodeId: '__ui_panorama_source',
-          inputResourceId: source,
-          inputResourceStatus: 'ready',
-          providerId: 'volcengine',
-          modelId: 'volcengine-seedream-5.0-pro',
-          completionId: legacyCompletionId,
-        },
-        canvas: {
-          width: legacyManaged.metadata.width,
-          height: legacyManaged.metadata.height,
-          colorSpace: 'srgb',
-          alphaMode: 'straight',
-          compositeOperation: 'source-over',
-          clipPolicy: 'canvas-bounds',
-        },
-        compositeResourceId: `${legacyStackId}:composite`,
-        thumbnailResourceId: `${legacyStackId}:thumbnail`,
-        layers: [{
-          version: 1,
-          layerId: `${legacyStackId}:layer:0`,
-          sourceOutputIndex: 0,
-          providerZIndex: 0,
-          order: 0,
-          role: 'base',
-          name: '旧版底图',
-          resourceId: legacyResourceId,
-          placement: { x: 0, y: 0, width: legacyManaged.metadata.width, height: legacyManaged.metadata.height },
-          opacity: 1,
-          visible: true,
-          blendMode: 'normal',
-          alpha: 'opaque',
-        }],
-        resources: [
-          { version: 1, resourceId: legacyResourceId, status: 'ready', filePath: source, mimeType: 'image/jpeg', width: legacyManaged.metadata.width, height: legacyManaged.metadata.height, hasAlpha: false, byteLength: null, sha256: 'ui-legacy-base' },
-          { version: 1, resourceId: `${legacyStackId}:composite`, status: 'ready', filePath: source, mimeType: 'image/png', width: legacyManaged.metadata.width, height: legacyManaged.metadata.height, hasAlpha: true, byteLength: null, sha256: 'ui-legacy-composite' },
-          { version: 1, resourceId: `${legacyStackId}:thumbnail`, status: 'ready', filePath: source, mimeType: 'image/webp', width: legacyManaged.metadata.width, height: legacyManaged.metadata.height, hasAlpha: false, byteLength: null, sha256: 'ui-legacy-thumbnail' },
-        ],
-      }
-      nodes.push({
-        id: legacyNodeId,
-        type: 'layerStackResultNode',
-        position: { x: 720, y: 460 },
-        width: 520,
-        height: 300,
-        measured: { width: 520, height: 300 },
-        style: { width: 520, height: 300 },
-        data: {
-          displayName: '旧版多图层图片文档（迁移夹具）',
-          imageUrl: source,
-          previewImageUrl: source,
-          aspectRatio: `${legacyManaged.metadata.width}:${legacyManaged.metadata.height}`,
-          resultKind: 'layer-stack',
-          layerStackDocument: legacyDocument,
-          isGenerating: false,
-        },
-      })
       edges.push({
         id: '__ui_multi_layer_document_edge',
         source: '__ui_panorama_source',
         target: nodeId,
-        sourceHandle: 'source',
-        targetHandle: 'target',
-      })
-      edges.push({
-        id: '__ui_multi_layer_legacy_edge',
-        source: '__ui_panorama_source',
-        target: legacyNodeId,
         sourceHandle: 'source',
         targetHandle: 'target',
       })
@@ -459,7 +361,6 @@ function attachUiInspectionCanvasEditing(context) {
         documentRef: saved.documentRef,
         initialRevision: saved.revision,
         nodeId,
-        legacyNodeId,
         expectedNodeCount: nodes.length,
         complexGraph: true,
         // 前景右下区域：在前景范围内、画面之内（前景 0.55@180,100 会伸出小尺寸夹具图的右下边），
@@ -471,7 +372,7 @@ function attachUiInspectionCanvasEditing(context) {
             + Math.min(100 + managed.metadata.height * 0.55, managed.metadata.height)) / 2,
         ],
       }
-    }, { targetProjectId: projectId, source: panoramaSource })
+    }, { targetProjectId: projectId, model: imageEditInspectionModel() })
 
     const verifiedDrag = await verifyMultiLayerDragPerformance({
       page,
@@ -644,71 +545,16 @@ function attachUiInspectionCanvasEditing(context) {
     await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
     await dialog.waitFor({ state: 'hidden', timeout: 60000 })
 
-    const legacyResult = page.locator(
-      `[data-layer-stack-node-id="${fixture.legacyNodeId}"]`
-    )
-    await legacyResult.waitFor({ state: 'visible', timeout: 12000 })
-    const narrowViewport = await page.evaluate(() => window.outerWidth <= 1000)
-    const clickLegacyEdit = async () => {
-      const editButton = legacyResult.getByRole('button', { name: /^(编辑|Edit)$/i })
-      if (narrowViewport) {
-        await editButton.evaluate((button) => button.click())
-        return
-      }
-      await editButton.click()
-    }
-    await clickLegacyEdit()
-    dialog = page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i })
-    await dialog.waitFor({ state: 'visible', timeout: 30000 })
-    if (await page.getByRole('dialog', { name: /^图层\s*·|^Layers\s*·/i }).count()) {
-      throw new Error('旧 V1 节点仍打开轻量图层弹窗')
-    }
-    await dialog.locator('[data-image-editor-v3]').getByText('旧版底图').waitFor({
-      state: 'visible',
-      timeout: 15000,
-    })
-    await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
-    await dialog.waitFor({ state: 'hidden', timeout: 60000 })
-    await settlePage(page, 700)
-    const firstLegacyMigration = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
-      const nodes = (stored?.nodes ?? [])
-      const node = nodes.find((candidate) => candidate.id === targetNodeId)
-      return {
-        documentRef: node?.data?.imageEditSession?.documentRef,
-        revision: node?.data?.imageEditSession?.revision,
-        keptLegacyV1: node?.data?.layerStackDocument?.version === 1,
-      }
-    }, { targetProjectId: projectId, targetNodeId: fixture.legacyNodeId })
-    if (!String(firstLegacyMigration.documentRef ?? '').startsWith('image-edit-v3:')
-      || !firstLegacyMigration.keptLegacyV1) {
-      throw new Error(`旧 V1 节点没有迁移为可编辑 V3 文档：${JSON.stringify(firstLegacyMigration)}`)
-    }
-    await clickLegacyEdit()
-    dialog = page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i })
-    await dialog.waitFor({ state: 'visible', timeout: 15000 })
-    await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
-    await dialog.waitFor({ state: 'hidden', timeout: 60000 })
-    await settlePage(page, 700)
-    const secondLegacyMigration = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
-      const nodes = (stored?.nodes ?? [])
-      return nodes.find((candidate) => candidate.id === targetNodeId)?.data?.imageEditSession ?? null
-    }, { targetProjectId: projectId, targetNodeId: fixture.legacyNodeId })
-    if (secondLegacyMigration?.documentRef !== firstLegacyMigration.documentRef) {
-      throw new Error(`旧 V1 节点二次打开重复创建文档：${JSON.stringify({ firstLegacyMigration, secondLegacyMigration })}`)
-    }
-
     await reopenedResult.click()
     await page.keyboard.press('Meta+c')
     await page.keyboard.press('Meta+v')
     await page.waitForFunction(() => (
-      document.querySelectorAll('[data-layer-stack-status="editable-v3"]').length >= 3
+      document.querySelectorAll('[data-layer-stack-status="editable-v3"]').length >= 2
     ), undefined, { timeout: 30000 })
     const duplicateNodeId = await page.locator('[data-layer-stack-status="editable-v3"]')
       .evaluateAll((elements, knownIds) => elements
         .map((element) => element.getAttribute('data-layer-stack-node-id'))
-        .find((nodeId) => nodeId && !knownIds.includes(nodeId)) ?? null, [fixture.nodeId, fixture.legacyNodeId])
+        .find((nodeId) => nodeId && !knownIds.includes(nodeId)) ?? null, [fixture.nodeId])
     if (!duplicateNodeId) throw new Error('复制后无法从正式画布节点识别新节点')
     await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 700)

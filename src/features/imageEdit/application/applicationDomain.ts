@@ -1,3 +1,4 @@
+import { ImageEditLayerFilterMutationExecutorV3, ImageEditLayerFilterCollectionExecutorV3 } from '../v3/application/imageEditLayerFilterEntityV3'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { createImageEditReflectionRegistrations } from './imageEditReflection'
 import { ImageEditV3DocumentMutationExecutor, ImageEditV3LayerMutationExecutor, ImageEditV3GroupMutationExecutor, ImageEditV3MaskMutationExecutor } from '../v3/application/imageEditV3MutationExecutors'
@@ -12,6 +13,8 @@ export const imageEditApplicationDomain: ApplicationDomainModule = {
   id: 'imageEdit',
   entities: () => createImageEditReflectionRegistrations(),
   registerExecutors(engine) {
+    engine.registerMutationExecutor(new ImageEditLayerFilterMutationExecutorV3())
+    engine.registerCollectionExecutor(new ImageEditLayerFilterCollectionExecutorV3())
     engine.registerMutationExecutor(new ImageEditV3DocumentMutationExecutor())
     engine.registerMutationExecutor(new ImageEditSelectionMutationExecutorV3())
     engine.registerMutationExecutor(new ImageEditV3LayerMutationExecutor())

@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import {
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
@@ -93,7 +94,7 @@ function complexMaskFixture(): ImageEditorGpuBaselineFixtureV3 {
   group.opacity = 0.85
   const subject = raster(32, '蒙版主体')
   subject.blendMode = 'screen'
-  subject.mask = { resourceId: resourceRef(91), inverted: false }
+  subject.mask = { ...createImageEditSparseMaskReferenceV3(resourceRef(91), false), tiles: { '0/0/0': resourceRef(91) } }
   const texture = raster(33, '叠加纹理')
   texture.blendMode = 'multiply'
   group.children = [subject, texture]

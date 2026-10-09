@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { describe, expect, it, vi } from 'vitest'
 import {
   compileImageEditRenderPlanV3, createBuiltInImageEditRenderNodeRegistry,
@@ -10,10 +11,10 @@ const MASK = `sha256:${'b'.repeat(64)}` as const
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
 describe('导出使用统一采样网格与独立源几何', () => {
-  it('内容与不同尺寸完整蒙版各读真实尺寸，同求值mip均为identity', async () => {
+  it('内容读真实源尺寸，稀疏蒙版沿文档网格而不走图片金字塔', async () => {
     const document = createImageEditDocumentV3({ width: 128, height: 64 })
     const layer = createImageEditRasterLayerV3('layer', '源', SOURCE)
-    layer.mask = { resourceId: MASK, inverted: false }
+    layer.mask = { ...createImageEditSparseMaskReferenceV3(MASK, false), tiles: { '0/0/0': MASK } }
     document.layers = [layer]
     const readSourcePyramid = vi.fn(async (ref: string) => ({
       tileSize: 512 as const,
@@ -28,10 +29,10 @@ describe('导出使用统一采样网格与独立源几何', () => {
       size: { width: 16, height: 8 }, toEvaluation: [1, 0, 0, 1, 0, 0],
     })
     expect(resolver({ kind: 'mask', ownerNode: composite, reference: composite.mask! })).toEqual({
-      size: { width: 8, height: 4 }, toEvaluation: [1, 0, 0, 1, 0, 0],
+      size: { width: 32, height: 16 }, toEvaluation: [1, 0, 0, 1, 0, 0],
     })
     expect(resolver({ kind: 'content', node: composite })?.size).toEqual({ width: 32, height: 16 })
-    expect(readSourcePyramid.mock.calls.map(([ref]) => ref)).toEqual([SOURCE, MASK])
+    expect(readSourcePyramid.mock.calls.map(([ref]) => ref)).toEqual([SOURCE])
   })
 
   it('大于画布的源加稀疏覆盖后仍保留源右侧，不退回画布大小', async () => {

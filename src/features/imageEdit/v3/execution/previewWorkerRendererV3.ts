@@ -7,7 +7,6 @@ import {
   type ImageEditDocumentV3,
   type ImageEditRenderPlan,
 } from '@/core/imageEdit/v3'
-import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { applyImageEditorPreviewGeometryV3 } from './previewGeometryV3'
 import {
   convertPreviewWorkingSpaceToSrgbDisplayV3,
@@ -19,7 +18,6 @@ import {
   applyPreviewBrushTileReplacementsV3,
   createPreviewBrushTileMapV3,
   createTransparentPreviewTileV3,
-  loadPreviewMaskV3,
   rasterizePreviewAnnotationsV3,
   rasterizePreviewLayerV3,
   resolveImageEditorPreviewDimensionsV3,
@@ -91,9 +89,7 @@ export async function renderImageEditorPreviewTileV3(
       rasterizePreviewAnnotationsV3(node, request.document, dimensions),
       request.document.color,
     ),
-    loadMask: async (reference) => isImageEditSparseMaskReferenceV3(reference)
-      ? loadPreviewSparseMaskV3(reference, brushTiles, dimensions)
-      : loadPreviewMaskV3(reference.resourceId, proxies, dimensions),
+    loadMask: async (reference) => loadPreviewSparseMaskV3(reference, brushTiles, dimensions),
     transformContent: async (content, transform) => transformPreviewTileV3(
       content,
       transform,

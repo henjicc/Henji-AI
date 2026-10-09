@@ -33,7 +33,6 @@ import type {
 import { ImageEditorV3ExportCapabilityError } from './contracts'
 import type { ImageEditorV3VgpuGlowAnalysisSet } from './vgpuGlowAnalysis'
 import {
-  imageEditorV3SourceRegionToMask,
   loadImageEditorV3SourceRegion,
 } from './sourceRegion'
 import type { ImageEditorSparseMaskPlanV3 } from '../execution/sparseMaskResourcesV3'
@@ -201,9 +200,7 @@ export async function buildImageEditorV3FastBlurAnalyses(
               dependencies,
               budget,
             )
-            if (sparse) return sparse
-            if (!('resourceId' in reference)) throw new Error('蒙版引用缺少资源 ID')
-            return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId, requestedRegion))
+                  return sparse
           },
           executeCustomEffect: async (node, source, mask, effectRegion) => {
             if (node.definitionId === 'effect.fast-blur') {

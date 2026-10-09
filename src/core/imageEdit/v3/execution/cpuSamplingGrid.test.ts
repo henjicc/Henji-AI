@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '../layerTypes'
 import { describe, expect, it, vi } from 'vitest'
 import { createBuiltInImageEditRenderNodeRegistry } from '../builtInRenderNodes'
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '../documentFactory'
@@ -79,7 +80,7 @@ describe('CPU 区域合成的唯一采样网格契约', () => {
 
   it.each([0, 2, 3])('半透明大蒙版使用自己的mip%s，不共用1px内容ROI或缩放', async (maskMip) => {
     const { document, layer } = fixture()
-    layer.mask = { resourceId: 'sha256:mask', inverted: false }
+    layer.mask = { ...createImageEditSparseMaskReferenceV3('sha256:mask', false), tiles: { '0/0/0': 'sha256:mask' } }
     const maskEdge = 64 / (2 ** maskMip)
     const maskRect = { x: 0, y: 0, width: maskEdge, height: maskEdge }
     const loadMask = vi.fn(async (_ref, _node, region: ImageEditRect) => createFloat32MaskTile(
@@ -115,7 +116,7 @@ describe('CPU 区域合成的唯一采样网格契约', () => {
   ])('反转蒙版$name的资源外像素保留可见内容', async ({ region, expected, reads }) => {
     const document = createImageEditDocumentV3({ width: 4, height: 1 })
     const layer = createImageEditRasterLayerV3('source', '不透明底图', 'sha256:source')
-    layer.mask = { resourceId: 'sha256:small-mask', inverted: true }
+    layer.mask = { ...createImageEditSparseMaskReferenceV3('sha256:small-mask', true), tiles: { '0/0/0': 'sha256:small-mask' } }
     document.layers = [layer]
     const loadMask = vi.fn(async (_reference: unknown, _node: unknown, requested: ImageEditRect) => (
       createFloat32MaskTile(requested.width, requested.height,

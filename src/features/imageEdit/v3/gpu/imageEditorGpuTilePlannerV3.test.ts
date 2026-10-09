@@ -144,26 +144,30 @@ describe('GPU 大图视口瓦片规划', () => {
     expect(plan.mip).toBe(0)
     expect(plan.tiles.map((tile) => tile.key)).toEqual([expect.objectContaining({
       resourceRef: brushA, tileX: 0, tileY: 0,
-      contentVersion: 'brush-a-v1', format: 'rgba16float',
+      format: 'rgba16float', rasterRegion: expect.objectContaining({
+        tiles: [expect.objectContaining({ contentVersion: 'brush-a-v1' })],
+      }),
     })])
   })
 
-  it('连续100次笔画采样只更换脏tile key，不重传未变化tile', () => {
+  it('连续100次笔画采样只失效脏tile及其采样halo，不重传非邻接tile', () => {
     const value = scene()
     const active = `sha256:${'d'.repeat(64)}` as const
     const stable = `sha256:${'e'.repeat(64)}` as const
-    const layout = { stageWidth: 1024, stageHeight: 512, viewportKey: 'stroke-100',
-      viewport: { documentX: 0, documentY: 0, width: 1024, height: 512,
+    const layout = { stageWidth: 2560, stageHeight: 512, viewportKey: 'stroke-100',
+      viewport: { documentX: 0, documentY: 0, width: 2560, height: 512,
         zoom: 1, devicePixelRatio: 1 } }
     let previous = new Map<string, string>()
     let changedActive = 0
     let retransmittedStable = 0
+    let changedNeighbor = 0
     for (let sample = 0; sample < 100; sample += 1) {
       const plan = planImageEditorGpuRasterTilesV3(value, {
         ...value.layers[0], resourceRef: null, contentVersion: 'stroke',
         sparseTiles: {
           '0/0/0': { resourceRef: active, contentVersion: `active-${sample}`, byteLength: 64 },
           '0/1/0': { resourceRef: stable, contentVersion: 'stable-1', byteLength: 64 },
+          '0/4/0': { resourceRef: stable, contentVersion: 'stable-1', byteLength: 64 },
         },
       }, layout)
       const current = new Map(plan.tiles.map((tile) => (
@@ -171,11 +175,13 @@ describe('GPU 大图视口瓦片规划', () => {
       )))
       if (sample > 0) {
         if (current.get('0/0') !== previous.get('0/0')) changedActive += 1
-        if (current.get('1/0') !== previous.get('1/0')) retransmittedStable += 1
+        if (current.get('1/0') !== previous.get('1/0')) changedNeighbor += 1
+        if (current.get('4/0') !== previous.get('4/0')) retransmittedStable += 1
       }
       previous = current
     }
     expect(changedActive).toBe(99)
     expect(retransmittedStable).toBe(0)
+    expect(changedNeighbor).toBe(99)
   })
 })

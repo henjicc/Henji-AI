@@ -1,3 +1,4 @@
+import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import { createBuiltInImageEditRenderNodeRegistry, gaussianParametersFromNodeV3 } from '@/core/imageEdit/v3/builtInRenderNodes'
 import { resolveImageGaussianPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
 import type { EffectEvaluationContext } from '@/core/imaging/effects/descriptor'
@@ -58,7 +59,7 @@ export class ImageEditorGpuEffectExecutorV3 {
     private readonly fallbackMask: Texture,
     private readonly onCompiled: () => void,
   ) {
-    this.mix = effect(gpu, mixShader, { label: 'image-editor-graph-effect-mix' })
+    this.mix = effect(gpu, COMPOSITING_WGSL + mixShader, { label: 'image-editor-graph-effect-mix' })
     this.targets = new ImageEditorGpuEffectTargetPoolV3(gpu)
   }
 
@@ -121,7 +122,7 @@ export class ImageEditorGpuEffectExecutorV3 {
       maskTexture: entry.mask ?? this.fallbackMask,
       params: { options: [entry.node.opacity, blendIndex(entry.node.blendMode), 0, 0],
         maskOptions: [entry.node.mask ? 1 : 0, entry.node.mask?.defaultValue ?? 1,
-          entry.node.mask?.inverted ? 1 : 0, 0] },
+          entry.node.mask?.inverted ? 1 : 0, Number(entry.node.parameters.maskDensity ?? 1)] },
     })
     currentFrame.pass({ target: entry.output, clear: [0, 0, 0, 0] }, this.mix)
   }

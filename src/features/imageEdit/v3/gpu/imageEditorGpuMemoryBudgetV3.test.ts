@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { describe, expect, it } from 'vitest'
 
 import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
@@ -68,7 +69,7 @@ it('共享调整的边界与 ping-pong target 进入预算；中性不保留额�
   const neutral = estimate()
   const layer = document.layers[1]; if (layer.type !== 'adjustment') throw new Error('缺少调整')
   layer.params = { exposure: 1 }
-  expect(estimate() - neutral).toBe(5 * 1000 * 800 * 8)
+  expect(estimate() - neutral).toBe(5 * 1000 * 800 * 16)
 })
 
 it.each(['stable', 'export'] as const)('%s：8K 强高斯的真实局部纹理/halo/mip 预算低于256MiB，不预留整幅纹理', quality => {
@@ -98,7 +99,7 @@ it('同一蒙版挂到不同节点按各自的rgba16合成纹理计费', () => {
     return estimateImageEditorGpuGraphResidentBytesV3(compiled.scene, [512, 512])
   }
   const before = estimate()
-  first.mask = { resourceId: maskRef, inverted: false }
-  second.mask = { resourceId: maskRef, inverted: false }
+  first.mask = { ...createImageEditSparseMaskReferenceV3(maskRef, false), tiles: { '0/0/0': maskRef } }
+  second.mask = { ...createImageEditSparseMaskReferenceV3(maskRef, false), tiles: { '0/0/0': maskRef } }
   expect(estimate() - before).toBe(2 * 512 * 512 * 8)
 })

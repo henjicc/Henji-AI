@@ -1,7 +1,6 @@
 import { createImageEditRasterReplacementV3, addImageEditRasterReplacementV3, finishImageEditRasterReplacementV3 } from '@/core/imageEdit/v3/execution/rasterTileReplacement'
 import {
   IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
-  convertFloat32TileColorDomainV3,
   convertFloat32TileWorkingSpaceV3,
   createTileRegion,
   enumerateTilesForRect,
@@ -154,7 +153,7 @@ function brushMap(
 
 /** mip0 稀疏画笔是栅格源对应区域的 whole-tile replacement。 */
 export function applyImageEditorViewportBrushTilesV3(
-  node: ImageEditRenderPlanNode,
+  node: Pick<ImageEditRenderPlanNode, 'parameters'>,
   base: Float32PremultipliedRgbaTile,
   region: ImageEditRect,
   mip: number,
@@ -318,27 +317,6 @@ export function rasterizeImageEditorViewportAnnotationsV3(
   )
 }
 
-export function imageEditorViewportTileToMaskV3(
-  tile: Float32PremultipliedRgbaTile,
-): Float32MaskTile {
-  const perceptual = convertFloat32TileColorDomainV3(tile, 'perceptual-working')
-  let usesAlpha = false
-  for (let offset = 3; offset < perceptual.data.length; offset += 4) {
-    if (perceptual.data[offset] < 1) { usesAlpha = true; break }
-  }
-  const data = new Float32Array(tile.width * tile.height)
-  for (let pixel = 0; pixel < data.length; pixel += 1) {
-    const offset = pixel * 4
-    const alpha = Math.min(1, Math.max(0, perceptual.data[offset + 3]))
-    const inverseAlpha = alpha > 0 ? 1 / alpha : 0
-    data[pixel] = usesAlpha ? alpha : Math.min(1, Math.max(0,
-      perceptual.data[offset] * inverseAlpha * 0.2126
-      + perceptual.data[offset + 1] * inverseAlpha * 0.7152
-      + perceptual.data[offset + 2] * inverseAlpha * 0.0722,
-    ))
-  }
-  return createFloat32MaskTile(tile.width, tile.height, data)
-}
 
 export function cropImageEditorViewportTileV3(
   tile: Float32PremultipliedRgbaTile,

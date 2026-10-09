@@ -1,3 +1,4 @@
+import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
 import { listImageEditDocumentEntitiesV3 } from './imageEditDocumentCatalog'
 import {
   fieldDescriptors,
@@ -116,6 +117,9 @@ function collectResources(document: ImageEditDocumentV3): ResourceUsage[] {
     byId.set(resourceId, usage)
   }
   for (const { layer } of collectImageEditV3LiveLayers(document)) {
+    for (const filter of layer.filters) {
+      for (const id of collectImageEditJsonResourceIdsV3(filter)) add(id, 'filter', layer.id);
+    }
     if (layer.mask) {
       for (const resourceId of collectImageEditMaskResourceIdsV3(layer.mask)) {
         add(resourceId, 'mask', layer.id)

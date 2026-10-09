@@ -1,3 +1,6 @@
+import { imageEditLayerMaskTransformV3 } from './renderContracts/maskTransform';
+import { assertImageEditLayerSemanticsV3 } from './layerModel/semantics';
+import { evaluationCacheIdentity, type EvaluationContext } from '../../imaging/evaluation';
 import type { ImageEditDocumentV3 } from './documentTypes';
 import type { ImageEditColorModeV3 } from './colorTypes';
 import {
@@ -34,6 +37,9 @@ interface CompileState {
   effectQuality: 'interactive' | 'final';
   referenceWidth: number;
   referenceHeight: number;
+  evaluationIdentity: string;
+  nodeHashes: Map<string, string>;
+  nodeOccurrences: Map<string, number>;
 }
 
 function transformIsIdentity(transform: ImageEditLayerCommonV3['transform']): boolean {
@@ -42,7 +48,11 @@ function transformIsIdentity(transform: ImageEditLayerCommonV3['transform']): bo
 
 function commonParameters(layer: ImageEditLayerCommonV3): Record<string, unknown> {
   return {
-    opacity: layer.opacity,
+    opacity: layer.opacity * layer.fillOpacity,
+    maskTransform: imageEditLayerMaskTransformV3(layer),
+    maskLinked: layer.maskAttachment.linked,
+    maskLocalTransform: layer.maskAttachment.transform,
+    maskDensity: layer.maskAttachment.density,
     blendMode: layer.blendMode,
     transform: [...layer.transform],
   };
@@ -59,7 +69,7 @@ function appendNode(
   definitionId: string,
   inputNodeIds: readonly string[],
   parameters: Readonly<Record<string, unknown>>,
-  mask: ImageEditMaskReferenceV3 | null = layer.mask,
+  mask: ImageEditMaskReferenceV3 | null = layer.maskAttachment.enabled ? layer.mask : null,
 ): string | null {
   const definition = state.registry.get(definitionId);
   if (!definition) {
@@ -72,9 +82,10 @@ function appendNode(
   }
   const id = `render-${++state.sequence}-${layer.id}`;
   const inputHashes = inputNodeIds.map((inputId) => (
-    state.nodes.find((node) => node.id === inputId)?.subtreeHash ?? 'transparent'
+    state.nodeHashes.get(inputId) ?? 'transparent'
   ));
   const subtreeHash = createImageEditRenderHash({
+    evaluationIdentity: state.evaluationIdentity,
     definitionId,
     definitionVersion: definition.version,
     inputHashes,
@@ -83,8 +94,13 @@ function appendNode(
       ? hashObject(cloneImageEditMaskReferenceV3(mask) as unknown as Record<string, unknown>)
       : null,
   });
+  state.nodeHashes.set(id, subtreeHash);
+  const identity = JSON.stringify([path, layer.id, definitionId, parameters.filterId ?? null]);
+  const occurrence = state.nodeOccurrences.get(identity) ?? 0;
+  state.nodeOccurrences.set(identity, occurrence + 1);
   state.nodes.push({
     id,
+    cacheIdentity: `${identity}:${occurrence}`,
     layerId: layer.id,
     layerPath: [...path, layer.id],
     definitionId,
@@ -104,6 +120,8 @@ function compositeContent(
   path: readonly string[],
   contentNodeId: string,
   belowNodeId: string | null,
+  overrides: Record<string, unknown> = {},
+  mask: ImageEditMaskReferenceV3 | null = layer.maskAttachment.enabled ? layer.mask : null,
 ): string {
   return appendNode(
     state,
@@ -111,7 +129,8 @@ function compositeContent(
     path,
     'composite.layer',
     belowNodeId ? [belowNodeId, contentNodeId] : [contentNodeId],
-    commonParameters(layer),
+    { ...commonParameters(layer), ...overrides },
+    mask,
   ) ?? belowNodeId ?? contentNodeId;
 }
 
@@ -126,9 +145,10 @@ function compileContentLayer(
     ? { source: layer.source, tiles: layer.tiles, colorMode: state.color }
     : { annotations: layer.annotations, colorMode: state.color };
   const contentNodeId = appendNode(state, layer, path, definitionId, [], contentParameters, null);
-  return contentNodeId
-    ? compositeContent(state, layer, path, contentNodeId, belowNodeId)
-    : belowNodeId ?? '';
+  if (!contentNodeId) return belowNodeId ?? '';
+  const filtered = compileLayerFilters(state, layer, path, contentNodeId);
+  return compositeContent(state, layer, path, filtered, belowNodeId, layer.filters.some(filter => filter.enabled)
+    ? { opacity: layer.opacity, transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3 } : {});
 }
 
 function compileEffectLayer(
@@ -170,6 +190,9 @@ function groupCanPassThrough(layer: ImageEditGroupLayerV3): boolean {
   return !layer.isolated
     && layer.blendMode === 'normal'
     && layer.opacity === 1
+    && layer.fillOpacity === 1
+    && !layer.clipping
+    && layer.filters.length === 0
     && layer.mask === null
     && transformIsIdentity(layer.transform)
     // 效果/调整图层的作用域必须止于当前组。若把父级 backdrop 直接作为组内
@@ -206,7 +229,9 @@ function compileGroup(
     { isolated: true },
     null,
   ) ?? isolatedOutput;
-  return compositeContent(state, layer, path, groupOutput, belowNodeId);
+  const filtered = compileLayerFilters(state, layer, path, groupOutput);
+  return compositeContent(state, layer, path, filtered, belowNodeId, layer.filters.some(filter => filter.enabled)
+    ? { opacity: layer.opacity, transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3 } : {});
 }
 
 function compileLayers(
@@ -216,18 +241,53 @@ function compileLayers(
   initialNodeId: string | null,
 ): string | null {
   let outputNodeId = initialNodeId;
-  for (const layer of layers) {
-    if (!layer.visible) continue;
+  for (let index = 0; index < layers.length; index += 1) {
+    const layer = layers[index];
+    if (layer.clipping) continue; // clipped run is consumed with its structural base, including hidden bases.
+    let end = index + 1;
+    while (end < layers.length && layers[end].clipping) end += 1;
+    if (!layer.visible) { index = end - 1; continue; }
     state.layerEvaluationOrder.push(layer.id);
-    if (layer.type === 'raster' || layer.type === 'annotation') {
-      outputNodeId = compileContentLayer(state, layer, path, outputNodeId) || outputNodeId;
-    } else if (layer.type === 'effect' || layer.type === 'adjustment') {
-      outputNodeId = compileEffectLayer(state, layer, path, outputNodeId);
-    } else {
-      outputNodeId = compileGroup(state, layer, path, outputNodeId);
-    }
+    if (end > index + 1) {
+      // Base opacity/blend are applied once after the source-atop run, never to the backdrop.
+      const base = { ...layer, opacity: 1, blendMode: 'normal' as const };
+      let stack = compileSingleLayer(state, base, path, null);
+      for (let clippedIndex = index + 1; clippedIndex < end; clippedIndex += 1) {
+        const clipped = layers[clippedIndex];
+        if (!clipped.visible || !stack) continue;
+        state.layerEvaluationOrder.push(clipped.id);
+        const content = compileSingleLayer(state, { ...clipped, blendMode: 'normal' }, path, null);
+        if (content) stack = compositeContent(state, clipped, path, content, stack,
+          { opacity: 1, transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3, blendMode: clipped.blendMode, clipping: true }, null);
+      }
+      if (stack) outputNodeId = compositeContent(state, layer, path, stack, outputNodeId,
+        { opacity: layer.opacity, transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3 }, null);
+      index = end - 1;
+    } else outputNodeId = compileSingleLayer(state, layer, path, outputNodeId);
   }
   return outputNodeId;
+}
+
+function compileSingleLayer(state: CompileState, layer: ImageEditLayerV3, path: readonly string[], below: string | null): string | null {
+  if (layer.type === 'raster' || layer.type === 'annotation') return compileContentLayer(state, layer, path, below) || below;
+  if (layer.type === 'effect' || layer.type === 'adjustment') return compileEffectLayer(state, layer, path, below);
+  return compileGroup(state, layer, path, below);
+}
+
+function compileLayerFilters(state: CompileState, layer: ImageEditLayerV3, path: readonly string[], content: string): string {
+  const enabled = layer.filters.filter(filter => filter.enabled);
+  if (!enabled.length) return content;
+  let output = compositeContent(state, layer, path, content, null,
+    { opacity: layer.fillOpacity, blendMode: 'normal' }, null);
+  for (const filter of enabled) {
+    output = appendNode(state, layer, path,
+      imageEditRenderDefinitionIdForOperationV3(filter.effectId, filter.operationType), [output],
+      { ...filter.params, opacity: filter.opacity, blendMode: filter.blendMode,
+        transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3, referenceWidth: state.referenceWidth,
+        referenceHeight: state.referenceHeight, effectQuality: state.effectQuality,
+        filterId: filter.id }, filter.mask) ?? output;
+  }
+  return output;
 }
 
 function canFusePointwise(
@@ -245,10 +305,12 @@ function createPasses(
   registry: ImageEditRenderNodeRegistry,
 ): ImageEditRenderPass[] {
   const passes: ImageEditRenderPass[] = [];
+  const byId = new Map(nodes.map(node => [node.id, node]));
   for (const node of nodes) {
     const definition = registry.get(node.definitionId);
     const previous = passes.at(-1);
-    const previousNode = previous ? nodes.find((candidate) => candidate.id === previous.nodeIds.at(-1)) : null;
+    const previousNodeId = previous?.nodeIds.at(-1);
+    const previousNode = previousNodeId ? byId.get(previousNodeId) : null;
     if (
       previous?.kind === 'fused-pointwise'
       && previousNode
@@ -270,10 +332,22 @@ export function compileImageEditRenderPlanV3(
   registry: ImageEditRenderNodeRegistry,
   quality: ImageEditRenderQuality,
   effectQuality: 'interactive' | 'final' = quality === 'export' ? 'final' : 'interactive',
+  evaluation?: EvaluationContext,
 ): ImageEditRenderPlan {
+  if (evaluation?.signal?.aborted) throw new DOMException('图片渲染已取消', 'AbortError');
+  assertImageEditLayerSemanticsV3(document.layers);
+  const evaluationIdentity = evaluationCacheIdentity(evaluation ?? {
+    target: { kind: 'image_edit.document', id: document.id }, sourceVersion: 'static', time: { kind: 'static' },
+    referenceGrid: { width: document.geometry.width, height: document.geometry.height },
+    roi: { x: 0, y: 0, width: document.geometry.width, height: document.geometry.height },
+    color: { workingSpace: document.color.workingSpace, transferFunction: document.color.transferFunction,
+      alpha: 'premultiplied', precision: document.color.bitDepth === 'float32' ? 'float32' : 'float16' },
+    quality: effectQuality,
+  });
   const state: CompileState = {
     registry,
     nodes: [],
+    nodeHashes: new Map(), nodeOccurrences: new Map(), evaluationIdentity,
     diagnostics: [],
     layerEvaluationOrder: [],
     color: document.color,

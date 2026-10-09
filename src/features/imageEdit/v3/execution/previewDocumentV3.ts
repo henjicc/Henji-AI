@@ -8,7 +8,6 @@ import type {
   ImageEditLayerV3,
   ImageEditTransformV3,
 } from '@/core/imageEdit/v3/layerTypes'
-import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import type {
   ImageEditCommandBusSnapshotV3,
   ImageEditPreviewOverrideV3,
@@ -282,10 +281,10 @@ function collectLayerResources(
   brushes: Map<string, ImageEditorPreviewBrushResourceRequestV3>,
   resourceSizes: ReadonlyMap<string, ImageEditSize>,
 ): void {
-  if (layer.mask) {
-    if (isImageEditSparseMaskReferenceV3(layer.mask)) {
+  for (const mask of [layer.mask, ...layer.filters.map(filter => filter.mask)]) {
+    if (mask) {
       const maskPlan = createImageEditorSparseMaskReferencePlanV3(
-        layer.mask,
+        mask,
         document.geometry,
         [...descriptors.values()],
       )
@@ -300,8 +299,6 @@ function collectLayerResources(
           'mask-float32',
         )
       }
-    } else if (RESOURCE_REF_PATTERN.test(layer.mask.resourceId)) {
-      addProxyRequest(layer.mask.resourceId, maxDimension, descriptors, proxies)
     }
   }
   if (layer.type === 'raster') {

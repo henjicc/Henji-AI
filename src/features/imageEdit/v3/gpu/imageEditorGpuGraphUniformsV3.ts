@@ -25,8 +25,8 @@ export function imageEditorGpuGraphCompositeValuesV3(
   // 源瓦片、蒙版和上游组/效果均已投影为视口纹理；合成不再执行图层变换。
   return new Float32Array([
     1, 0, 0, 1, 0, 0, 0, 0,
-    node.opacity, imageEditorGpuGraphBlendIndexV3(node.blendMode), 0, 0,
-    node.mask ? 1 : 0, node.mask?.defaultValue ?? 1, node.mask?.inverted ? 1 : 0, 0,
+    node.opacity, imageEditorGpuGraphBlendIndexV3(node.blendMode), node.clipping ? 1 : 0, 0,
+    node.mask ? 1 : 0, node.mask?.defaultValue ?? 1, node.mask?.inverted ? 1 : 0, node.maskDensity ?? 1,
   ])
 }
 
@@ -60,7 +60,7 @@ export function imageEditorGpuGraphAdjustmentValuesV3(node: ImageEditorGpuGraphA
   if (node.adjustments.length > capacity) throw new Error(`GPU 点式 pass 超出 uniform 容量 ${capacity}，需要分批`)
   values.set([binding.uniformCode, node.adjustments.length, first.opacity,
     imageEditorGpuGraphBlendIndexV3(first.blendMode), mask ? 1 : 0,
-    mask?.defaultValue ?? 1, mask?.inverted ? 1 : 0, 0])
+    mask?.defaultValue ?? 1, mask?.inverted ? 1 : 0, Number(first.parameters.maskDensity ?? 1)])
   node.adjustments.forEach((entry, index) => {
     if (entry.definitionId !== first.definitionId) throw new Error('GPU 点式融合需要相同 kernel')
     values.set(binding.pack!(entry.parameters), 8 + index * 4)
@@ -76,7 +76,7 @@ export function imageEditorGpuGraphCurveValuesV3(adjustment: ImageEditorGpuGraph
   const mask = adjustment.mask
   return { curve, values: new Float32Array([
     adjustment.opacity, imageEditorGpuGraphBlendIndexV3(adjustment.blendMode), 0, 0,
-    mask ? 1 : 0, mask?.defaultValue ?? 1, mask?.inverted ? 1 : 0, 0,
+    mask ? 1 : 0, mask?.defaultValue ?? 1, mask?.inverted ? 1 : 0, Number(adjustment.parameters.maskDensity ?? 1),
     ...curve.slopes,
   ]) }
 }

@@ -1,3 +1,4 @@
+import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from './documentTypes';
 import { describe, expect, it } from 'vitest';
 import { createDefaultImageEditColorModeV3 } from './colorTypes';
 import type { ImageEditDocumentV3 } from './documentTypes';
@@ -33,7 +34,7 @@ function glow(strength: number): ImageEditEffectLayerV3 {
 
 function doc(resourceId: string, radius: number, glowStrength = 1): ImageEditDocumentV3 {
   return {
-    version: 3, id: 'doc', revision: 1,
+    version: IMAGE_EDIT_DOCUMENT_VERSION_V3, id: 'doc', revision: 1,
     geometry: { width: 2_000, height: 1_000, orientation: { rotate: 0, mirrored: false }, crop: null },
     color: createDefaultImageEditColorModeV3(),
     layers: [source(resourceId), blur(radius), glow(glowStrength)],
@@ -79,5 +80,19 @@ describe('图片编辑 V3 失效传播', () => {
         invalidatedNodeIds: [], dirtyRect: null, invalidatedAnalysisNodeIds: [],
         retainedUnderlyingCaches: true,
       });
+  });
+
+  it('同层重复合成与滤镜节点身份不冲突，整体 opacity 保留内容滤镜缓存', () => {
+    const document = doc('source-a', 8);
+    document.layers[0].filters = [{ id: 'local', operationType: 'adjustment', effectId: 'exposure', params: { stops: .5 }, enabled: true, opacity: 1, blendMode: 'normal', mask: null }];
+    const before = compileImageEditRenderPlanV3(document, registry, 'stable');
+    const cause = { kind: 'parameters' as const, layerId: 'source', mip: 0, dirtyRect: { x: 0, y: 0, width: 10, height: 10 } };
+    expect(computeImageEditPlanInvalidationV3(before, before, cause, registry).invalidatedNodeIds).toEqual([]);
+    document.layers[0].opacity = .5;
+    const after = compileImageEditRenderPlanV3(document, registry, 'stable');
+    const result = computeImageEditPlanInvalidationV3(before, after, cause, registry);
+    const retained = after.nodes.filter(node => node.definitionId === 'source.raster' || node.parameters.filterId === 'local');
+    expect(retained.every(node => !result.invalidatedNodeIds.includes(node.id))).toBe(true);
+    expect(new Set(after.nodes.map(node => node.cacheIdentity)).size).toBe(after.nodes.length);
   });
 });

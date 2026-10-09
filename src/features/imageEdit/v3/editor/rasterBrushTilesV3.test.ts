@@ -149,6 +149,13 @@ describe('图片编辑 V3 栅格画笔瓦片读取', () => {
     expect(resolved.target.inverseMatrix.map((value) => Object.is(value, -0) ? 0 : value))
       .toEqual([0.5, 0, 0, 0.5, -5, -6])
     expect(mapAnnotationPointV3(resolved.target.inverseMatrix, [14, 18])).toEqual([2, 3])
+    layer.maskAttachment.linked = false
+    layer.maskAttachment.transform = [1, 0, 0, 1, 2, 3]
+    const independent = resolveImageEditorMaskBrushLayerV3(document, [layer.id])
+    expect(independent.ready && independent.target.matrix).toEqual([2, 0, 0, 2, 4, 6])
+    layer.maskAttachment.linked = true
+    const linked = resolveImageEditorMaskBrushLayerV3(document, [layer.id])
+    expect(linked.ready && linked.target.matrix).toEqual([2, 0, 0, 2, 14, 18])
   })
 
   it('画笔目标固定使用文档颜色契约与不透明黑色', () => {

@@ -138,8 +138,14 @@ function createGpuBrushScenes(context) {
         || afterStroke.imageBitmapFrameCount !== 0) {
         throw new Error(`连续画笔未保持直接Surface：${JSON.stringify({ initial, afterStroke })}`)
       }
-      if (uploadDelta < 1 || uploadDelta > 4) {
-        throw new Error(`100次采样只应上传跨越的脏瓦片，实际增量=${uploadDelta}`)
+      // 首次稀疏笔画把源金字塔切到 mip0，并为分数缩放装配一像素邻接采样。
+      // 1200×760 夹具恰有 3×2 块；三块笔画及其相邻行必须各上传一次。
+      // 后续撤销/重做仍要求零重传；非邻接缓存复用另由 planner 精确测试覆盖。
+      const expectedStrokeUploads = Math.ceil(1200 / 512) * Math.ceil(760 / 512)
+      if (uploadDelta !== expectedStrokeUploads) {
+        throw new Error(`100次采样应各上传一次首次mip0笔画及采样邻域：${JSON.stringify({
+          expectedStrokeUploads, uploadDelta,
+        })}`)
       }
       const strokeChangedSamples = changedSamples(strokePixels, initialPixels)
       if (strokeChangedSamples < 8) {

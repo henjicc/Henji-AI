@@ -36,6 +36,8 @@ interface RetainedMaskV3 {
 /** 把可见 sparse mask tiles 组装为视口纹理；缓存身份只依赖内容、相机和变换。 */
 export class ImageEditorGpuMaskAssemblerV3 {
   private readonly drawable: Draw
+  private readonly background: Draw
+  private backgroundCamera: NativeBindGroup | null = null
   private readonly cameraBuffer: NativeBuffer
   private cameraBindGroup: NativeBindGroup | null = null
   private readonly retained = new Map<string, RetainedMaskV3>()
@@ -43,6 +45,8 @@ export class ImageEditorGpuMaskAssemblerV3 {
 
   constructor(private readonly gpu: Gpu, private readonly onCompiled: () => void) {
     this.drawable = draw(gpu, { shader: maskShader, vertices: 3, label: 'image-editor-graph-mask-tile' })
+    this.background = draw(gpu, { shader: maskShader, vertices: 3,
+      entry: { vertex: 'vs_main', fragment: 'fs_background' }, label: 'image-editor-graph-mask-domain' })
     this.cameraBuffer = gpu.gpu.createBuffer({
       size: 48, usage: BUFFER_UNIFORM | BUFFER_COPY_DST, label: 'image-editor-graph-mask-camera',
     })
@@ -82,11 +86,14 @@ export class ImageEditorGpuMaskAssemblerV3 {
   async compile(prepared: readonly ImageEditorGpuPreparedMaskV3[]): Promise<void> {
     if (this.compiled || !prepared.some((entry) => entry.pending)) return
     await this.drawable.compile(prepared.find((entry) => entry.pending)!.target)
+    await this.background.compile(prepared.find((entry) => entry.pending)!.target)
     this.compiled = true
     this.onCompiled()
     this.cameraBindGroup = this.gpu.gpu.createBindGroup({
       layout: this.drawable.layout(1), entries: [{ binding: 0, resource: { buffer: this.cameraBuffer } }],
     })
+    this.backgroundCamera = this.gpu.gpu.createBindGroup({ layout: this.background.layout(1),
+      entries: [{ binding: 0, resource: { buffer: this.cameraBuffer } }] })
   }
 
   updateCamera(layout: ImageEditorViewportLayoutV3, geometry: ImageEditCanvasGeometryV3, globalPixelGrid = false): void {
@@ -97,6 +104,14 @@ export class ImageEditorGpuMaskAssemblerV3 {
     if (!prepared.pending) return
     this.drawable.group(1, this.cameraBindGroup!)
     const inverse = invertImageEditTransformV3(prepared.transform)
+    const backgroundBuffer = this.uniform(new Float32Array([
+      ...inverse.slice(0, 4), inverse[4], inverse[5], prepared.mask.defaultValue, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]))
+    prepared.buffers.push(backgroundBuffer)
+    this.background.group(0, this.gpu.gpu.createBindGroup({ layout: this.background.layout(0),
+      entries: [{ binding: 1, resource: { buffer: backgroundBuffer } }] }))
+    this.background.group(1, this.backgroundCamera!)
     const groups = prepared.plan.plan.tiles.map((tile, index) => {
       const resource = prepared.plan.resources[index]
       if (!resource) throw new Error(`GPU RenderGraph 蒙版 ${prepared.mask.maskId} 缺少瓦片`)
@@ -114,8 +129,9 @@ export class ImageEditorGpuMaskAssemblerV3 {
     })
     currentFrame.pass({
       target: prepared.target,
-      clear: [prepared.mask.defaultValue, prepared.mask.defaultValue, prepared.mask.defaultValue, 1],
+      clear: [0, 0, 0, 1],
     }, (pass) => {
+      pass.draw(this.background)
       for (const group of groups) { this.drawable.group(0, group); pass.draw(this.drawable) }
     })
   }

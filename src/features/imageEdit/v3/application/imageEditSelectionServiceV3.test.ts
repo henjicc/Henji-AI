@@ -14,7 +14,7 @@ import type { ImageEditBrushTileV3 } from '@/core/imageEdit/v3/brush/contracts'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
 import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry'
 import { exportCurrentImageEditSelectionV3 } from './imageEditSelectionExportV3'
-import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
+import { createImageEditSparseMaskReferenceV3, isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 
 const storage = vi.hoisted(() => new Map<string, ImageEditBrushTileV3>())
 const hooks = vi.hoisted(() => ({ afterPersist: null as (() => void) | null }))
@@ -87,11 +87,12 @@ describe('独立选区正式消费与通用实体', () => {
     await expect(applyImageEditSelectionV3(bus, 'raster', 'mask')).rejects.toThrow('未锁定')
     bus.dispose()
   })
-  it('单资源蒙版继续沿共享解码路径保留 alpha 与反相，不绕过原蒙版', async () => {
+  it('稀疏蒙版沿共享瓦片读取保留覆盖与反相，不绕过原蒙版', async () => {
     const document = createImageEditDocumentV3({ width: 32, height: 16, documentId: crypto.randomUUID() })
     const resourceId = `sha256:${'a'.repeat(64)}`
-    document.layers = [{ ...createImageEditRasterLayerV3('raster', '原图'), mask: { resourceId, inverted: true } }]
-    const bus = new ImageEditCommandBusV3(document, { resourceByteSizes: { [resourceId]: 1024 } })
+    document.layers = [{ ...createImageEditRasterLayerV3('raster', '原图'), mask: { ...createImageEditSparseMaskReferenceV3('existing', true), tiles: { '0/0/0': resourceId } } }]
+    storage.set(resourceId, { storage: 'mask-float32', width: 32, height: 16, data: new Float32Array(32 * 16).fill(.4) })
+    const bus = new ImageEditCommandBusV3(document, { resourceByteSizes: { [resourceId]: 32 * 16 * 4 + 64 } })
     bus.setSelection(appendImageEditSelectionV3(null, { type: 'rectangle', x: 0.25, y: 0.25, width: 0.5, height: 0.5 }, 'replace'))
     await applyImageEditSelectionV3(bus, 'raster', 'delete')
     expect(maskPixels(bus, 'raster')[8 * 32 + 16]).toBe(0)

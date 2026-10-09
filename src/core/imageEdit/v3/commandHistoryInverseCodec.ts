@@ -49,7 +49,10 @@ export function assertImageEditHistoryInversePairV3(
       if (inverse.type !== 'layer.group' || inverse.group.id !== forward.groupId) fail('图层解组逆向补丁无效');
       assertStructuralResourcesMatch(forward, inverse); break;
     case 'layer.update-common':
-      if (inverse.type !== 'layer.update-common' || inverse.layerId !== forward.layerId) fail('图层属性逆向补丁无效'); break;
+      if (inverse.type !== 'layer.update-common' || inverse.layerId !== forward.layerId) fail('图层属性逆向补丁无效');
+      assertStructuralResourcesMatch(forward, inverse);
+      if (Object.keys(forward.patch).sort().join() !== Object.keys(inverse.patch).sort().join()) fail('图层属性逆向字段不匹配');
+      break;
     case 'layer.update-params':
       if (inverse.type !== 'layer.update-params' || inverse.layerId !== forward.layerId) fail('图层参数逆向补丁无效'); break;
     case 'group.update-isolation':

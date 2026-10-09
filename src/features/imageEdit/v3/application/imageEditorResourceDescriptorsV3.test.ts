@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -25,7 +26,7 @@ describe('ImageEditor V3 受控资源描述符', () => {
     const descriptors = reconcileImageEditorV3ResourceDescriptors(document, [
       { resourceRef: SOURCE, byteLength: 4_096, mediaType: 'image/png' },
       { resourceRef: BRUSH, byteLength: 1, mediaType: null },
-      { resourceRef: STALE, byteLength: 1_024, mediaType: 'image/png' },
+      { resourceRef: STALE, byteLength: 1_024, mediaType: IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE },
     ], [
       { resourceId: BRUSH, byteSize: 128 },
     ])
@@ -44,16 +45,16 @@ describe('ImageEditor V3 受控资源描述符', () => {
     })
   })
 
-  it('复制图层保留的源图与旧式蒙版不会被误标为 brush tile', () => {
+  it('复制图层保留的源图与稀疏蒙版按权威字段登记媒体类型', () => {
     const raster = createImageEditRasterLayerV3('raster', '底图', SOURCE)
-    raster.mask = { resourceId: STALE, inverted: false }
+    raster.mask = { ...createImageEditSparseMaskReferenceV3(STALE, false), tiles: { '0/0/0': STALE } }
     const document = {
       ...createImageEditDocumentV3({ width: 512, height: 512, documentId: 'legacy-source' }),
       layers: [raster],
     }
     const descriptors = reconcileImageEditorV3ResourceDescriptors(document, [
       { resourceRef: SOURCE, byteLength: 4_096, mediaType: 'image/png' },
-      { resourceRef: STALE, byteLength: 1_024, mediaType: 'image/png' },
+      { resourceRef: STALE, byteLength: 1_024, mediaType: IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE },
     ], [
       { resourceId: SOURCE, byteSize: 4_096 },
       { resourceId: STALE, byteSize: 1_024 },
@@ -61,7 +62,7 @@ describe('ImageEditor V3 受控资源描述符', () => {
 
     expect(descriptors).toEqual([
       { resourceRef: SOURCE, byteLength: 4_096, mediaType: 'image/png' },
-      { resourceRef: STALE, byteLength: 1_024, mediaType: 'image/png' },
+      { resourceRef: STALE, byteLength: 1_024, mediaType: IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE },
     ])
   })
 })

@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '../layerTypes'
 import { executeImageEditCpuRenderPlanV3 } from './cpuRenderPlanExecutor'
 import { cropImageEditRgbaRegionV3 } from './affineTransform'
 import { describe, expect, it } from 'vitest'
@@ -20,7 +21,7 @@ describe('图片编辑 V3 区域 RenderPlan 仿射执行', () => {
     const group = createImageEditGroupLayerV3('group', '组')
     group.children = document.layers
     group.transform = [1, 0, 0, 1, 1, 0]
-    group.mask = { resourceId: `sha256:${'b'.repeat(64)}`, inverted: false }
+    group.mask = { ...createImageEditSparseMaskReferenceV3(`sha256:${'b'.repeat(64)}`, false), tiles: { '0/0/0': `sha256:${'b'.repeat(64)}` } }
     document.layers = [group]
     const registry = createBuiltInImageEditRenderNodeRegistry()
     const plan = compileImageEditRenderPlanV3(document, registry, 'export')

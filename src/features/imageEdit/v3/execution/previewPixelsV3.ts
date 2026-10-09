@@ -1,6 +1,5 @@
 import {
   convertFloat32TileColorDomainV3,
-  createFloat32MaskTile,
   createFloat32PremultipliedRgbaTile,
   decodeSrgbExtended,
   encodeSrgbExtended,
@@ -277,27 +276,6 @@ export function rasterizePreviewAnnotationsV3(
   return imageDataToLinearPreviewTileV3(
     context.getImageData(0, 0, canvas.width, canvas.height),
   )
-}
-
-export async function loadPreviewMaskV3(
-  resourceId: string,
-  proxies: ReadonlyMap<string, ImageEditorPreviewProxyV3>,
-  dimensions: ImageEditorPreviewDimensionsV3,
-): Promise<Float32MaskTile> {
-  const proxy = proxies.get(resourceId)
-  if (!proxy) throw new Error(`预览缺少蒙版资源：${resourceId}`)
-  const { context } = createCanvas(dimensions.width, dimensions.height)
-  await drawProxy(context, proxies, resourceId, 0, 0, dimensions.width, dimensions.height)
-  const pixels = context.getImageData(0, 0, dimensions.width, dimensions.height).data
-  const hasTransparency = pixels.some((value, index) => index % 4 === 3 && value < 255)
-  const mask = new Float32Array(dimensions.width * dimensions.height)
-  for (let pixel = 0; pixel < mask.length; pixel += 1) {
-    const offset = pixel * 4
-    mask[pixel] = hasTransparency
-      ? pixels[offset + 3] / 255
-      : (pixels[offset] * 0.2126 + pixels[offset + 1] * 0.7152 + pixels[offset + 2] * 0.0722) / 255
-  }
-  return createFloat32MaskTile(dimensions.width, dimensions.height, mask)
 }
 
 export function transformPreviewTileV3(

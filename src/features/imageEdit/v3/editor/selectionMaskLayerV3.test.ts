@@ -18,7 +18,7 @@ describe('图片编辑 V3 选区蒙版目标', () => {
   it('只有 defaultValue=0 的稀疏蒙版允许全组合模式', () => {
     const layer = createImageEditRasterLayerV3('layer', '图层')
     expect(imageEditorSelectionAllowedCombineModesV3(layer)).toEqual(['replace'])
-    layer.mask = { resourceId: RESOURCE_ID, inverted: false }
+    layer.mask = { ...createImageEditSparseMaskReferenceV3(RESOURCE_ID, false), tiles: { '0/0/0': RESOURCE_ID } }
     expect(imageEditorSelectionAllowedCombineModesV3(layer)).toEqual(['replace'])
     layer.mask = createImageEditSparseMaskReferenceV3('default-one')
     expect(imageEditorSelectionAllowedCombineModesV3(layer)).toEqual(['replace'])
@@ -50,10 +50,10 @@ describe('图片编辑 V3 选区蒙版目标', () => {
     expect(mapAnnotationPointV3(resolved.target.inverseMatrix, [30, 34])).toEqual([10, 10])
   })
 
-  it('旧蒙版或资源大小不完整时只允许安全替换并明确阻止提交', () => {
+  it('default1 蒙版或资源大小不完整时只允许安全替换并明确阻止提交', () => {
     const document = createImageEditDocumentV3({ width: 64, height: 64 })
     const layer = createImageEditRasterLayerV3('layer', '图层')
-    layer.mask = { resourceId: RESOURCE_ID, inverted: false }
+    layer.mask = { ...createImageEditSparseMaskReferenceV3(RESOURCE_ID, false), tiles: { '0/0/0': RESOURCE_ID } }
     document.layers = [layer]
 
     expect(resolveImageEditorSelectionMaskTargetV3({

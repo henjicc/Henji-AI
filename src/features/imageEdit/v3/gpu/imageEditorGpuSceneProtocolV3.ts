@@ -25,6 +25,14 @@ export interface ImageEditorGpuSceneTileKeyV3 {
   resourceByteLength?: number
   /** 颜色资源为 RGBA；蒙版统一上传为紧凑 r8unorm。 */
   format?: 'rgba8unorm' | 'rgba16float' | 'r8unorm'
+  /** 带稀疏替换的采样边界：只冻结本瓦片及 1px halo 命中的邻接引用。 */
+  rasterRegion?: {
+    sourceRef: ImageEditorV3ResourceRef | null
+    sourceSize: { width: number; height: number } | null
+    extent: { width: number; height: number }
+    rect: { x: number; y: number; width: number; height: number }
+    tiles: readonly { tileKey: string; resourceRef: ImageEditorV3ResourceRef; byteLength: number; contentVersion: string }[]
+  }
 }
 
 export interface ImageEditorGpuSceneUploadTileV3 {

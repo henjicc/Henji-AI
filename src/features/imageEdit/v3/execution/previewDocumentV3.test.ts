@@ -22,7 +22,7 @@ const BRUSH = `sha256:${'c'.repeat(64)}`
 function documentWithLayers(): ImageEditDocumentV3 {
   const raster = {
     ...createImageEditRasterLayerV3('raster', '底图', RESOURCE),
-    mask: { resourceId: MASK, inverted: false },
+    mask: { ...createImageEditSparseMaskReferenceV3(MASK, false), tiles: { '0/0/0': MASK } },
   }
   const annotation = createImageEditAnnotationLayerV3('annotations', '标注')
   const blur = createImageEditEffectLayerV3(
@@ -122,6 +122,7 @@ describe('ImageEditor V3 瞬态预览文档', () => {
 
   it('只收集合法的受管栅格、稀疏瓦片和蒙版资源', () => {
     const document = documentWithLayers()
+    document.layers[0].mask = null
     const raster = document.layers[0]
     if (raster.type !== 'raster') throw new Error('测试图层类型错误')
     raster.tiles['0/0/0'] = BRUSH
@@ -139,7 +140,6 @@ describe('ImageEditor V3 瞬态预览文档', () => {
     }])
     expect(requests).toEqual(expect.arrayContaining([
       { kind: 'image-proxy', resourceId: RESOURCE, maxDimension: 1_600 },
-      { kind: 'image-proxy', resourceId: MASK, maxDimension: 1_600 },
       {
         kind: 'brush-tile',
         storage: 'rgba-float32',
@@ -155,6 +155,7 @@ describe('ImageEditor V3 瞬态预览文档', () => {
 
   it('brush descriptor 缺失、媒体类型错误或字节数越界时拒绝交给图片代理', () => {
     const document = documentWithLayers()
+    document.layers[0].mask = null
     const raster = document.layers[0]
     if (raster.type !== 'raster') throw new Error('测试图层类型错误')
     raster.tiles['0/0/0'] = BRUSH
@@ -171,6 +172,17 @@ describe('ImageEditor V3 瞬态预览文档', () => {
       byteLength: 79,
       mediaType: 'application/x-henji-brush-tile-v3',
     }])).toThrow(/字节数无效/)
+  })
+
+  it('滤镜区域独立登记为受管蒙版瓦片，保留在预览计划内', () => {
+    const document = documentWithLayers()
+    document.layers[0].mask = null
+    document.layers[0].filters = [{ id: 'filter', operationType: 'adjustment', effectId: 'exposure', params: { stops: 1 }, enabled: true, opacity: 1, blendMode: 'normal',
+      mask: { ...createImageEditSparseMaskReferenceV3('filter-mask', false, 0), tiles: { '0/0/0': BRUSH } } }]
+    const requests = collectImageEditorPreviewResourceRequestsV3(document, 1600, [{ resourceRef: BRUSH as `sha256:${string}`, byteLength: 128, mediaType: 'application/x-henji-brush-tile-v3' }])
+    expect(requests).toContainEqual(expect.objectContaining({ kind: 'brush-tile', storage: 'mask-float32', resourceId: BRUSH }))
+    const plan = compileImageEditorPreviewPlanV3(document, 'stable', 1600)
+    expect(plan.nodes.some(node => node.mask?.maskId === 'filter-mask')).toBe(true)
   })
 
   it('稀疏蒙版瓦片走 mask-float32 受管请求而不是图片代理', () => {

@@ -1,3 +1,5 @@
+import { normalizeImageEditLayerCommonPatchV3 } from './commandCommonPatch';
+import type { ImageEditLayerCommonPatchV3 } from './commandTypes';
 import { sanitizeMarkItem } from '../markCodec';
 import {
   collectImageEditCommandResourceReferencesV3,
@@ -18,11 +20,9 @@ import {
   ImageEditHistoryInversePairErrorV3,
 } from './commandHistoryInverseCodec';
 import {
-  IMAGE_EDIT_BLEND_MODES_V3,
   type ImageEditLayerV3,
   type ImageEditMaskReferenceV3,
 } from './layerTypes';
-import { isImageEditTransformInvertibleV3 } from './execution/affineTransform';
 import { calculateImageEditHistorySnapshotResourceTotalsV3 } from './commandHistoryResources';
 
 export const IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3 = 1 as const;
@@ -64,7 +64,7 @@ export class InvalidImageEditHistorySnapshotV3Error extends Error {}
 const DEFAULT_MAX_COMMANDS = 200;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-const COMMON_LAYER_KEYS = ['id', 'name', 'visible', 'locked', 'opacity', 'blendMode', 'transform', 'mask'];
+const COMMON_LAYER_KEYS = ['id', 'name', 'visible', 'locked', 'opacity', 'fillOpacity', 'clipping', 'maskAttachment', 'filters', 'blendMode', 'transform', 'mask'];
 
 function fail(message: string): never {
   throw new InvalidImageEditHistorySnapshotV3Error(message);
@@ -290,17 +290,11 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
       if (strictResources && command.resources === undefined) fail('图层解组命令缺少资源元数据');
       if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层命令资源元数据'); break;
     case 'layer.update-common': {
-      validateBase(command, ['layerId', 'patch']); nonEmptyString(command.layerId, '图层 ID');
+      validateBase(command, ['layerId', 'patch', ...(command.resources === undefined ? [] : ['resources'])]);
+      if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层公共属性资源元数据'); nonEmptyString(command.layerId, '图层 ID');
       if (!isRecord(command.patch) || Object.keys(command.patch).length === 0) fail('公共属性补丁无效');
-      exactKeysWithOptional(command.patch, [], ['name', 'visible', 'locked', 'opacity', 'blendMode', 'transform'], '公共属性补丁');
-      if (command.patch.name !== undefined && typeof command.patch.name !== 'string') fail('图层名称无效');
-      if (command.patch.visible !== undefined && typeof command.patch.visible !== 'boolean') fail('图层显隐值无效');
-      if (command.patch.locked !== undefined && typeof command.patch.locked !== 'boolean') fail('图层锁定值无效');
-      if (command.patch.opacity !== undefined && (typeof command.patch.opacity !== 'number'
-        || !Number.isFinite(command.patch.opacity) || command.patch.opacity < 0 || command.patch.opacity > 1)) fail('图层不透明度无效');
-      if (command.patch.blendMode !== undefined && !IMAGE_EDIT_BLEND_MODES_V3.includes(command.patch.blendMode as never)) fail('图层混合模式无效');
-      if (command.patch.transform !== undefined
-        && !isImageEditTransformInvertibleV3(command.patch.transform)) fail('图层变换无效');
+      try { normalizeImageEditLayerCommonPatchV3(command.patch as ImageEditLayerCommonPatchV3); }
+      catch { fail('公共属性补丁无效'); }
       break;
     }
     case 'layer.update-params':

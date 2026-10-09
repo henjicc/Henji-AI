@@ -1,3 +1,5 @@
+import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
+import { imageEditOperationParametersV3 } from '@/core/imageEdit/v3/renderContracts/operationParameters'
 import { draw, effect, target, type Draw, type Effect, type Gpu, type Target, type Texture } from 'vgpu'
 import { adjustmentPassesWgsl } from '@/core/imaging/effects/wgsl/adjustmentPasses'
 import { planColorGrade, isNeutralAdjustmentPlan, type AdjustmentTexture } from '@/core/imaging/adjustments/plan'
@@ -13,7 +15,7 @@ import mixShader from './shaders/imageEditorGpuEffectMixV3.wgsl?raw'
 type Buffer = ReturnType<Gpu['gpu']['createBuffer']>
 const CLEAR = [0, 0, 0, 0] as const
 // Workspace transfer boundary extends signed SDR values; adjustment formulas remain shared.
-const shader = adjustmentPassesWgsl({ extendedRange: true, globalCoordinates: true })
+const shader = adjustmentPassesWgsl({ extendedRange: true, globalCoordinates: true, float32Sampling: true })
 
 /** A retained adjustment renderer: no source readback, pipeline recompilation or image upload on drag. */
 export class ImageEditorGpuColorGradeV3 {
@@ -26,18 +28,16 @@ export class ImageEditorGpuColorGradeV3 {
   private readonly toLinear: Draw
   private readonly mix: Effect
   private readonly fallbackLut: Texture
-  private readonly sampler: ReturnType<Gpu['gpu']['createSampler']>
   private passes: Array<{ draw: Draw | Effect; target: Target }> = []
 
   constructor(private readonly gpu: Gpu, private readonly onCompiled: () => void) {
     this.toEncoded = draw(gpu, { shader: boundaryShader, vertices: 3 })
     this.toLinear = draw(gpu, { shader: boundaryShader, vertices: 3 })
-    this.mix = effect(gpu, mixShader)
+    this.mix = effect(gpu, COMPOSITING_WGSL + mixShader)
     this.fallbackLut = gpu.device.createTexture({ size: [1, 1, 1], dimension: '3d', format: 'rgba32float', usage: ['texture_binding'] })
-    this.sampler = gpu.gpu.createSampler({ minFilter: 'linear', magFilter: 'linear' })
   }
   private surface(index: number, size: readonly [number, number]): Target {
-    const result = this.scratch[index] ??= target(this.gpu, { size, format: 'rgba16float', clearColor: CLEAR })
+    const result = this.scratch[index] ??= target(this.gpu, { size, format: 'rgba32float', clearColor: CLEAR })
     if (result.size[0] !== size[0] || result.size[1] !== size[1]) result.resize(size)
     return result
   }
@@ -53,7 +53,7 @@ export class ImageEditorGpuColorGradeV3 {
     this.passes.push({ draw: drawable, target: output })
   }
   async prepare(adjustment: ImageEditorGpuGraphAdjustmentV3, input: Target, output: Target, mask: Target | null, color: ImageEditColorModeV3, view: { origin: readonly [number, number]; size: readonly [number, number]; basisX: readonly [number, number]; basisY: readonly [number, number] }): Promise<void> {
-    const { opacity: _opacity, blendMode: _blend, transform: _transform, referenceWidth: _width, referenceHeight: _height, effectQuality: _quality, ...value } = adjustment.parameters
+    const value = imageEditOperationParametersV3(adjustment.parameters)
     const params = imageColorGradeRuntimeParams(value)
     assertImageColorGradeLutDomain(color, params)
     const plan = planColorGrade(params, input.size[0], input.size[1], view.size)
@@ -73,7 +73,7 @@ export class ImageEditorGpuColorGradeV3 {
       const drawable = this.draws.get(key) ?? draw(this.gpu, { shader, entry: { vertex: 'vs', fragment: pass.entry }, vertices: 3 })
       this.draws.set(key, drawable)
       let lookup: Texture | undefined
-      const settings: Record<string, unknown> = { colorLut: this.fallbackLut, source: texture(pass.source), s: this.sampler, u: pass.uniforms, original: texture(pass.original ?? 'input'), gradeMask: texture(pass.mask ?? 'input') }
+      const settings: Record<string, unknown> = { colorLut: this.fallbackLut, source: texture(pass.source), u: pass.uniforms, original: texture(pass.original ?? 'input'), gradeMask: texture(pass.mask ?? 'input') }
       if (pass.lookup) {
         const lookupKey = pass.lookup.kind === 'curve' ? `curve:${Array.from(pass.lookup.data).join(',')}` : pass.lookup.ref
         lookup = this.lookups.get(lookupKey)
@@ -109,7 +109,7 @@ export class ImageEditorGpuColorGradeV3 {
     }
     for (const surface of this.scratch.splice(neutral ? 0 : plan.scratch.length + 3)) surface.color.destroy()
     this.mix.set({ originalTexture: input.color, processedTexture: linear.color, maskTexture: mask?.color ?? input.color,
-      params: { options: [adjustment.opacity, blendIndex(adjustment.blendMode), 0, 0], maskOptions: [adjustment.mask ? 1 : 0, adjustment.mask?.defaultValue ?? 1, adjustment.mask?.inverted ? 1 : 0, 0] } })
+      params: { options: [adjustment.opacity, blendIndex(adjustment.blendMode), 0, 0], maskOptions: [adjustment.mask ? 1 : 0, adjustment.mask?.defaultValue ?? 1, adjustment.mask?.inverted ? 1 : 0, Number(adjustment.parameters.maskDensity ?? 1)] } })
     this.passes.push({ draw: this.mix, target: output })
     for (const pass of this.passes) if (!this.compiled.has(pass.draw)) { await pass.draw.compile(pass.target); this.compiled.add(pass.draw); this.onCompiled() }
     const active = new Set(plan.passes.flatMap(pass => !pass.lookup ? [] : [pass.lookup.kind === 'curve' ? `curve:${Array.from(pass.lookup.data).join(',')}` : pass.lookup.ref]))

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检使用 CommonJS。 */
+const { imageEditInspectionModel } = require('./imageEditInspectionModel.cjs')
 async function openCanvasImageEditorV3Fixture({
   page,
   context,
@@ -80,7 +82,7 @@ async function openCanvasImageEditorV3Fixture({
     const saved = await window.henjiNative.imageEditorV3.saveDocument({
       requestId: `reality-canvas-gpu-save-${crypto.randomUUID()}`,
       document: {
-        version: 3,
+        ...payload.model.document,
         id: documentId,
         revision: 0,
         geometry: {
@@ -94,17 +96,17 @@ async function openCanvasImageEditorV3Fixture({
           hdrMetadata: null, iccProfileResourceId: null,
         },
         layers: [{
-          id: 'reality-gpu-source-layer', name: payload.label, type: 'raster',
+          ...payload.model.common, id: 'reality-gpu-source-layer', name: payload.label, type: 'raster',
           visible: true, locked: false, opacity: 1, blendMode: 'normal',
           transform: payload.transform, mask: null,
           source: { kind: 'resource', resourceId: managed.resource.resourceRef }, tiles: {},
         }, ...(foregroundSource ? [{
-          id: 'reality-gpu-foreground-layer', name: '独立前景', type: 'raster',
+          ...payload.model.common, id: 'reality-gpu-foreground-layer', name: '独立前景', type: 'raster',
           visible: true, locked: false, opacity: 1, blendMode: 'normal',
           transform: payload.foreground.transform, mask: null,
           source: { kind: 'resource', resourceId: foregroundSource.resource.resourceRef }, tiles: {},
         }] : []), ...(payload.annotations.length ? [{
-          id: 'reality-annotation-layer', name: '后台标注', type: 'annotation',
+          ...payload.model.common, id: 'reality-annotation-layer', name: '后台标注', type: 'annotation',
           visible: true, locked: false, opacity: 1, blendMode: 'normal',
           transform: [1, 0, 0, 1, 0, 0], mask: null, annotations: payload.annotations,
         }] : [])],
@@ -150,7 +152,7 @@ async function openCanvasImageEditorV3Fixture({
       sourceResourceRef: managed.resource.resourceRef,
       foregroundResourceRef: foregroundSource?.resource.resourceRef ?? null,
       sourceGeometry: { width: managed.metadata.width, height: managed.metadata.height } }
-  }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground, annotations })
+  }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground, annotations, model: imageEditInspectionModel() })
   if (!openEditor) return { dialog: null, editor: null, fixture, projectId }
   // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await context.reopenCanvasProjectFromStorage(page, projectId)

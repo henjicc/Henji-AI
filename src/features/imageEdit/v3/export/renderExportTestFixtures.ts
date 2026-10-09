@@ -1,4 +1,5 @@
-import { createFloat32PremultipliedRgbaTile, type Float32PremultipliedRgbaTile, type ImageEditDocumentV3, type ImageEditJsonObjectV3 } from '@/core/imageEdit/v3'
+import { collectImageEditResourceRolesV3 } from '@/core/imageEdit/v3/resourceRoles'
+import { createFloat32MaskTile, createFloat32PremultipliedRgbaTile, type Float32PremultipliedRgbaTile, type ImageEditDocumentV3, type ImageEditJsonObjectV3 } from '@/core/imageEdit/v3'
 import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
 import type { ImageEditorV3RasterExportDescription } from '@/platform/contracts/imageEditorV3'
 import { type ImageEditorV3ExportAnnotationRasterizeRequest, type ImageEditorV3ExportSourceTileRequest, type ImageEditorV3ExportRenderDependencies } from './contracts'
@@ -186,7 +187,9 @@ export async function collectPixels(
   for await (const tile of renderImageEditorV3ExportTiles(
     {
       document,
-      resourceDescriptors: managed?.resourceDescriptors ?? [],
+      resourceDescriptors: managed?.resourceDescriptors ?? [...collectImageEditResourceRolesV3(document).sparse].filter(([, storage]) => storage === 'mask-float32').map(([resourceRef]) => ({
+        resourceRef: resourceRef as `sha256:${string}`, byteLength: (images.get(resourceRef)?.width ?? 1) * (images.get(resourceRef)?.height ?? 1) * 4 + 80, mediaType: 'application/x-henji-brush-tile-v3',
+      })),
       description: description(width, height),
       tileSize,
     },
@@ -194,6 +197,13 @@ export async function collectPixels(
       readSourcePyramid: fakeSourcePyramidReader(images),
       readSourceTile: fakeSourceReader(images),
       rasterizeAnnotations,
+      readBrushTiles: async requests => ({ tiles: requests.map(({ tileKey, resource }) => {
+        const image = images.get(resource.resourceId)
+        if (!image) throw new Error(`missing fake mask ${resource.resourceId}`)
+        const coverage = new Float32Array(image.width * image.height)
+        for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) coverage[y * image.width + x] = image.pixel(x, y)[0] / 255
+        return { tileKey, tile: createFloat32MaskTile(image.width, image.height, coverage) }
+      }) }),
       ...managed?.dependencies,
     },
   )) {

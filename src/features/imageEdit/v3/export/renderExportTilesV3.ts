@@ -52,7 +52,6 @@ import {
   validateImageEditorV3SparseRasterResources,
 } from './brushRegion'
 import {
-  imageEditorV3SourceRegionToMask,
   loadImageEditorV3SourceRegion,
 } from './sourceRegion'
 import { createImageEditorSparseMaskPlanV3 } from '../execution/sparseMaskResourcesV3'
@@ -310,9 +309,7 @@ async function* renderTiles(
                     dependencies,
                     budget,
                   )
-                  if (sparse) return sparse
-                  if (!('resourceId' in reference)) throw new Error('蒙版引用缺少资源 ID')
-                  return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId, region))
+                  return sparse
                 },
                 loadColorLut: loadImageColorLutV3,
       executeCustomEffect: async (node, source, mask, region) => {

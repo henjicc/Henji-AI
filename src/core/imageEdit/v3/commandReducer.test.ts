@@ -126,7 +126,7 @@ describe('图片编辑 V3 命令归约器', () => {
       commandId: 'opacity', expectedRevision: 1, type: 'layer.update-common', layerId: 'marks-copy', patch: { opacity: 0.4 },
     }).document;
     document = applyImageEditCommandV3(document, {
-      commandId: 'mask', expectedRevision: 2, type: 'layer.set-mask', layerId: 'marks-copy', mask: { resourceId: 'sha256:mask', inverted: true },
+      commandId: 'mask', expectedRevision: 2, type: 'layer.set-mask', layerId: 'marks-copy', mask: { ...createImageEditSparseMaskReferenceV3('sha256:mask', true), tiles: { '0/0/0': 'sha256:mask' } },
       maskResources: [{ resourceId: 'sha256:mask', byteSize: 64 }],
       previousMaskResources: [],
     }).document;
@@ -139,7 +139,7 @@ describe('图片编辑 V3 命令归约器', () => {
       annotation: { id: 'text', type: 'text', x: 1, y: 2, text: 'V3', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 20 },
     });
     const copy = (added.document.layers[1].type === 'group' ? added.document.layers[1].children[0] : null);
-    expect(copy).toMatchObject({ opacity: 0.4, mask: { resourceId: 'sha256:mask', inverted: true } });
+    expect(copy).toMatchObject({ opacity: 0.4, mask: { ...createImageEditSparseMaskReferenceV3('sha256:mask', true), tiles: { '0/0/0': 'sha256:mask' } } });
     expect(copy?.type === 'annotation' ? copy.annotations : []).toHaveLength(1);
 
     const removedAgain = applyImageEditCommandV3(added.document, added.inverse);

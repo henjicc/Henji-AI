@@ -11,6 +11,7 @@ export function floatPremultipliedTileToGpuSource(
   premultiplied: Float32Array,
   width: number,
   height: number,
+  region?: { x: number; y: number },
 ): ImageEditorV3SourceTile {
   const straight = new Float32Array(premultiplied.length)
   for (let offset = 0; offset < premultiplied.length; offset += 4) {
@@ -23,10 +24,10 @@ export function floatPremultipliedTileToGpuSource(
   }
   return {
     resourceRef: key.resourceRef, mip: key.mip, tileX: key.tileX, tileY: key.tileY,
-    halo: 0, width, height, channels: 4, bitDepth: 32,
+    halo: region ? 1 : 0, width, height, channels: 4, bitDepth: 32,
     sampleFormat: 'float', numericRange: 'scene-linear', byteOrder: 'little-endian',
     rowStride: width * 16, colorSpace: 'scrgb', transferFunction: 'linear',
     alphaMode: 'straight', orientationApplied: true,
-    originX: key.tileX * 512, originY: key.tileY * 512, pixels: straight.buffer,
+    originX: region?.x ?? key.tileX * 512, originY: region?.y ?? key.tileY * 512, pixels: straight.buffer,
   }
 }

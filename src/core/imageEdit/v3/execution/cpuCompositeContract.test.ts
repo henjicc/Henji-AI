@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '../layerTypes'
 import { describe, expect, it } from 'vitest'
 import { createBuiltInImageEditRenderNodeRegistry } from '../builtInRenderNodes'
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '../documentFactory'
@@ -62,7 +63,7 @@ describe('CPU 图层合成完整契约', () => {
   it.each([false, true])('恒等变换的小图层按原坐标透明补齐，蒙版=%s', async (masked) => {
     const document = createImageEditDocumentV3({ width: 4, height: 3 })
     const layer = createImageEditRasterLayerV3('small', '分离元素', 'sha256:small')
-    if (masked) layer.mask = { resourceId: 'sha256:mask', inverted: false }
+    if (masked) layer.mask = { ...createImageEditSparseMaskReferenceV3('sha256:mask', false), tiles: { '0/0/0': 'sha256:mask' } }
     document.layers = [
       createImageEditRasterLayerV3('base', '底图', 'sha256:base'), layer,
     ]

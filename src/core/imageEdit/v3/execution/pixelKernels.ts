@@ -1,3 +1,4 @@
+import { imageEditOperationParametersV3 } from '../renderContracts/operationParameters';
 import { applyImageColorGradeV3 } from '../effects/colorGrade';
 import type { ImageEditCpuPixelKernelV3 } from '../renderNodeDefinition';
 import {
@@ -67,8 +68,8 @@ function compiledCurves(node: ImageEditRenderPlanNode): CompiledCurvesAdjustment
 
 
 export const colorGradeCpuV3: ImageEditCpuPixelKernelV3 = async (node, source, mask, context) => {
-    const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width, referenceHeight: _height, effectQuality: _quality, ...params } = node.parameters;
-    return applyImageColorGradeV3(source, params, mask, context.loadColorLut, context.coordinates ?? { origin: [0, 0], size: [Number(_width ?? source.width), Number(_height ?? source.height)] });
+    const params = imageEditOperationParametersV3(node.parameters);
+    return applyImageColorGradeV3(source, params, mask, context.loadColorLut, context.coordinates ?? { origin: [0, 0], size: [Number(node.parameters.referenceWidth ?? source.width), Number(node.parameters.referenceHeight ?? source.height)] });
 };
 
 export const exposureCpuV3: ImageEditCpuPixelKernelV3 = async (node, source, mask, _context) => {

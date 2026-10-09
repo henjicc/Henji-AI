@@ -1,3 +1,5 @@
+import { collectImageEditJsonResourceIdsV3 } from './resourceReferences';
+import { createImageEditLayerContentRegistryV3 } from './layerEntries/base';
 import type { MarkItem } from '../types';
 import type {
   ImageEditCropRectV3,
@@ -11,6 +13,8 @@ import type {
   ImageEditMaskReferenceV3,
   ImageEditJsonObjectV3,
   ImageEditTransformV3,
+  ImageEditMaskAttachmentV3,
+  ImageEditLayerFilterV3,
 } from './layerTypes';
 import { collectImageEditMaskResourceIdsV3 } from './layerTypes';
 
@@ -30,6 +34,10 @@ export type ImageEditLayerCommonPatchV3 = Partial<{
   visible: boolean;
   locked: boolean;
   opacity: number;
+  fillOpacity: number;
+  clipping: boolean;
+  maskAttachment: ImageEditMaskAttachmentV3;
+  filters: ImageEditLayerFilterV3[];
   blendMode: ImageEditBlendModeV3;
   transform: ImageEditTransformV3;
 }>;
@@ -85,6 +93,8 @@ export interface ImageEditLayerUpdateCommonCommandV3 extends ImageEditCommandBas
   type: 'layer.update-common';
   layerId: string;
   patch: ImageEditLayerCommonPatchV3;
+  /** 替换滤镜栈时保留前后两组权威资源；命令总线自动补齐。 */
+  resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
 export interface ImageEditLayerSetMaskCommandV3 extends ImageEditCommandBaseV3 {
@@ -200,39 +210,18 @@ export function collectImageEditLayerResourceIdsForCommandV3(
   layer: ImageEditLayerV3,
 ): string[] {
   const output: string[] = [];
-  collectLayerResourceIds(layer, output);
+  output.push(...createImageEditLayerContentRegistryV3().resourceIds(layer));
   return [...new Set(output)].sort();
-}
-
-function collectLayerResourceIds(layer: ImageEditLayerV3, output: string[]): void {
-  if (layer.mask) output.push(...collectImageEditMaskResourceIdsV3(layer.mask));
-  if (layer.type === 'raster') {
-    if (layer.source.kind === 'resource') output.push(layer.source.resourceId);
-    output.push(...Object.values(layer.tiles));
-  } else if (layer.type === 'group') {
-    layer.children.forEach((child) => collectLayerResourceIds(child, output));
-  }
 }
 
 function collectLegacyLayerResources(
   layer: ImageEditLayerV3,
   output: ImageEditHistoryResourceReferenceV3[],
 ): void {
-  if (layer.mask) {
-    collectImageEditMaskResourceIdsV3(layer.mask).forEach((resourceId) => {
-      output.push({ resourceId, byteSize: null });
-    });
+  for (const resourceId of collectImageEditLayerResourceIdsForCommandV3(layer)) {
+    output.push({ resourceId, byteSize: null });
   }
-  if (layer.type === 'raster') {
-    if (layer.source.kind === 'resource') {
-      output.push({ resourceId: layer.source.resourceId, byteSize: null });
-    }
-    for (const resourceId of Object.values(layer.tiles)) {
-      output.push({ resourceId, byteSize: null });
-    }
-  } else if (layer.type === 'group') {
-    layer.children.forEach((child) => collectLegacyLayerResources(child, output));
-  }
+
 }
 
 /** 枚举命令本身持有的权威资源引用；不会读取文档或像素。 */
@@ -240,6 +229,11 @@ export function collectImageEditCommandResourceReferencesV3(
   command: ImageEditCommandV3,
 ): ImageEditHistoryResourceReferenceV3[] {
   const resources: ImageEditHistoryResourceReferenceV3[] = [];
+  if (command.type === 'layer.update-common' && command.patch.filters) {
+    if (command.resources) resources.push(...command.resources);
+    else for (const filter of command.patch.filters) resources.push(...collectImageEditJsonResourceIdsV3(filter)
+      .map(resourceId => ({ resourceId, byteSize: null })));
+  }
   if (command.type === 'raster.apply-tile-delta' || command.type === 'mask.apply-tile-delta') {
     for (const change of command.changes) {
       if (change.previousResourceId) {

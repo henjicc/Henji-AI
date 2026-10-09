@@ -36,6 +36,8 @@ import {
   type ImageEditTransformV3,
 } from './layerTypes';
 import { isImageEditTransformInvertibleV3 } from './execution/affineTransform';
+import { assertImageEditLayerSemanticsV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3 } from './layerModel/semantics';
+import { createImageEditLayerContentRegistryV3 } from './layerEntries/base';
 
 export type ImageEditDocumentSourceFormatV3 = 'v3' | 'invalid' | 'unknown-version';
 
@@ -299,24 +301,31 @@ function parseMask(value: unknown): ImageEditMaskReferenceV3 | null | undefined 
       inverted: value.inverted,
     };
   }
-  if (!isNonEmptyString(value.resourceId)) return undefined;
-  return { resourceId: value.resourceId, inverted: value.inverted };
+  return undefined;
 }
 
 function parseCommon(value: Record<string, unknown>): ImageEditLayerCommonV3 | null {
   const transform = parseTransform(value.transform);
   const mask = parseMask(value.mask);
+  const attachment = imageEditMaskAttachmentSchemaV3.safeParse(value.maskAttachment);
+  const filters = imageEditLayerFiltersSchemaV3.safeParse(value.filters);
   if (!isNonEmptyString(value.id) || typeof value.name !== 'string'
     || typeof value.visible !== 'boolean' || typeof value.locked !== 'boolean'
     || !isFiniteNumber(value.opacity) || value.opacity < 0 || value.opacity > 1
     || !IMAGE_EDIT_BLEND_MODES_V3.includes(value.blendMode as never)
-    || !transform || mask === undefined) return null;
+    || !transform || mask === undefined || !attachment.success || !filters.success
+    || !isFiniteNumber(value.fillOpacity) || value.fillOpacity < 0 || value.fillOpacity > 1
+    || typeof value.clipping !== 'boolean') return null;
   return {
     id: value.id,
     name: value.name,
     visible: value.visible,
     locked: value.locked,
     opacity: value.opacity,
+    fillOpacity: value.fillOpacity,
+    clipping: value.clipping,
+    maskAttachment: attachment.data,
+    filters: filters.data,
     blendMode: value.blendMode as ImageEditLayerCommonV3['blendMode'],
     transform,
     mask,
@@ -417,6 +426,11 @@ function parseDocument(value: Record<string, unknown>): ImageEditDocumentV3 | nu
     if (!layer || !registerIds(layer)) return null;
     layers.push(layer);
   }
+  try {
+    assertImageEditLayerSemanticsV3(layers);
+    const registry = createImageEditLayerContentRegistryV3();
+    for (const layer of layers) registry.parse(layer.type, layer);
+  } catch { return null; }
   return {
     version: IMAGE_EDIT_DOCUMENT_VERSION_V3,
     id: value.id,

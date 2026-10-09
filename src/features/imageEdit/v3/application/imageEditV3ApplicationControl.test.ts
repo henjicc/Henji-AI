@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 
-import type { ApplicationControlAccessContext, ApplicationExecutionContext } from '@/core/application-control'
+import type { ApplicationControlAccessContext, ApplicationExecutionContext, JsonValue } from '@/core/application-control'
 import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
@@ -60,6 +60,91 @@ async function commitStep(
 }
 
 describe('图片编辑 V3 实时 Application Control', () => {
+  it('滤镜子集合经正式事务增删、参数和开关排序读回、持久历史及撤销', async () => {
+    const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'filter-entities' })
+    document.layers = [createImageEditRasterLayerV3('content', '内容')]
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerPersistedImageEditTestSession('filter-entities-session', bus))
+    const reflection = getApplicationReflectionRegistry()
+    const parent = imageEditV3LayerRef(document.id, 'content')
+    const fields = reflection.describe({ entityTypes: ['image_edit.layer', 'image_edit.group', 'image_edit.layer_filter'] }, accessContext).properties
+    for (const field of fields) if (field.value.kind === 'json') {
+      expect(reflection.resolveSchema(field.value.schemaRef, accessContext)).toBeTruthy()
+      expect(() => reflection.resolveSchema(field.value.kind === 'json' ? field.value.schemaRef : field.schemaRef,
+        { ...accessContext, permissions: new Set() })).toThrow('PERMISSION_DENIED')
+    }
+    const before = await reflection.readEntity(parent, undefined, accessContext)
+    const created = await commitStep('添加两个图层滤镜', before.revisions, { kind: 'collection', parent,
+      entityType: 'image_edit.layer_filter', expectedRevisions: before.revisions,
+      operation: { kind: 'create', items: [0.4, 0.6].map(stops => ({ properties: {
+        'image_edit.layer_filter.operation_type': 'adjustment', 'image_edit.layer_filter.effect_id': 'exposure',
+        'image_edit.layer_filter.params': { stops },
+      } })) } }, 'filter-create')
+    expect(created.status, JSON.stringify(created)).toBe('completed')
+    const listed = await reflection.listEntities('image_edit.layer_filter', { limit: 10 }, accessContext)
+    expect(listed.refs).toHaveLength(2)
+    const target = listed.refs[0]
+    const first = await reflection.readEntity(target, undefined, accessContext)
+    const changed = await commitStep('关闭并移动滤镜', first.revisions, { kind: 'mutation', target,
+      entityType: 'image_edit.layer_filter', expectedRevisions: first.revisions, mutations: [
+        { propertyId: 'image_edit.layer_filter.enabled', operation: 'set', value: false },
+        { propertyId: 'image_edit.layer_filter.index', operation: 'set', value: 1 },
+        { propertyId: 'image_edit.layer_filter.params', operation: 'set', value: { stops: 1.2 } },
+        { propertyId: 'image_edit.layer_filter.mask', operation: 'set', value: createImageEditSparseMaskReferenceV3('empty-region', false, 0) as unknown as JsonValue },
+      ] }, 'filter-change')
+    expect(changed.status, JSON.stringify(changed)).toBe('completed')
+    expect((await reflection.readEntity(target, undefined, accessContext)).properties).toMatchObject({
+      'image_edit.layer_filter.enabled': false, 'image_edit.layer_filter.index': 1, 'image_edit.layer_filter.params': { stops: 1.2 },
+    })
+    const saved = bus.getPersistenceSnapshot()
+    const restored = new ImageEditCommandBusV3(saved.document, { historySnapshot: saved.history })
+    expect(restored.undo()).toBe(true)
+    expect(restored.getSnapshot().document.layers[0].filters[0]).toMatchObject({ enabled: true, params: { stops: 0.4 }, mask: null })
+    expect(restored.redo()).toBe(true)
+    expect(restored.getSnapshot().document.layers[0].filters[1].enabled).toBe(false)
+    restored.dispose()
+    const read = await reflection.readEntity(parent, undefined, accessContext)
+    const removed = await commitStep('删除图层滤镜', read.revisions, { kind: 'collection', parent,
+      entityType: 'image_edit.layer_filter', expectedRevisions: read.revisions, operation: { kind: 'remove', targets: [target] } }, 'filter-remove')
+    expect(removed.status, JSON.stringify(removed)).toBe('completed')
+    await expect(reflection.readEntity(target, undefined, accessContext)).rejects.toThrow('NOT_FOUND')
+    if (removed.status !== 'completed' || !removed.undoRef) throw new Error('滤镜删除缺少撤销引用')
+    const undone = await getApplicationControlExecutionEngine().undo({ undoRef: removed.undoRef,
+      expectedRevisions: removed.resultingRevisions, idempotencyKey: 'filter-remove-undo' }, executionContext)
+    expect(undone.status, JSON.stringify(undone)).toBe('completed')
+    expect((await reflection.readEntity(target, undefined, accessContext)).properties['image_edit.layer_filter.enabled']).toBe(false)
+  })
+  it('共同字段经通用事务原子改写、读回并撤销', async () => {
+    const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'common-fields' })
+    const base = createImageEditRasterLayerV3('base', '基底')
+    const content = createImageEditRasterLayerV3('content', '内容')
+    document.layers = [base, content]
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerPersistedImageEditTestSession('common-fields-session', bus))
+    const reflection = getApplicationReflectionRegistry()
+    const target = imageEditV3LayerRef(document.id, content.id)
+    const before = await reflection.readEntity(target, undefined, accessContext)
+    const filters = [{ id: 'local', operationType: 'adjustment', effectId: 'exposure', params: { stops: .4 }, enabled: true, opacity: .7, blendMode: 'normal', mask: null }]
+    const attachment = { enabled: true, linked: false, density: .6, transform: [1, 0, 0, 1, 2, 0] }
+    const mutations = [
+      { propertyId: 'image_edit.layer.fill_opacity', operation: 'set' as const, value: .4 },
+      { propertyId: 'image_edit.layer.clipping', operation: 'set' as const, value: true },
+      { propertyId: 'image_edit.layer.mask_attachment', operation: 'set' as const, value: attachment },
+      { propertyId: 'image_edit.layer.filters', operation: 'set' as const, value: filters },
+    ]
+    const result = await commitStep('准备局部滤镜剪贴层', before.revisions, {
+      kind: 'mutation', target, entityType: 'image_edit.layer', expectedRevisions: before.revisions, mutations,
+    }, 'common-fields')
+    expect(result.status, JSON.stringify(result)).toBe('completed')
+    const readback = await reflection.readEntity(target, undefined, accessContext)
+    for (const mutation of mutations) expect(readback.properties[mutation.propertyId]).toEqual(mutation.value)
+    if (result.status !== 'completed' || !result.undoRef) throw new Error('缺少共同字段撤销引用')
+    const undo = await getApplicationControlExecutionEngine().undo({ undoRef: result.undoRef,
+      expectedRevisions: result.resultingRevisions, idempotencyKey: 'common-fields-undo' }, executionContext)
+    expect(undo.status, JSON.stringify(undo)).toBe('completed')
+    expect(bus.getSnapshot().document.layers[1]).toMatchObject({ fillOpacity: 1, clipping: false, filters: [] })
+  })
+
   it('实时 V3 图层属性和蒙版反相经通用事务写回同一命令总线并可撤销', async () => {
     const document = createImageEditDocumentV3({ width: 1280, height: 720, documentId: 'assistant-v3-doc-a' })
     const raster = {
@@ -79,7 +164,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
       'gaussian_blur',
       { sigma_fraction_height: 8 },
     )
-    effect.mask = { resourceId: 'sha256:legacy-mask-a', inverted: false }
+    effect.mask = { ...createImageEditSparseMaskReferenceV3('sha256:legacy-mask-a', false), tiles: { '0/0/0': 'sha256:legacy-mask-a' } }
     document.layers = [raster, effect]
     const bus = new ImageEditCommandBusV3(document, {
       resourceByteSizes: {

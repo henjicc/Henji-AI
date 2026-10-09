@@ -1,6 +1,6 @@
+import { imageEditLayerMaskTransformV3 } from '@/core/imageEdit/v3/renderContracts/maskTransform'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
-  isImageEditSparseMaskReferenceV3,
   type ImageEditLayerV3,
   type ImageEditSparseMaskReferenceV3,
 } from '@/core/imageEdit/v3/layerTypes'
@@ -18,7 +18,7 @@ export type ImageEditorMaskLayerResolutionV3 =
   | { ready: true; target: EditableImageEditorMaskV3 }
   | {
       ready: false
-      reason: 'select-one' | 'missing-mask' | 'legacy-mask' | 'locked' | 'hidden' | 'singular'
+      reason: 'select-one' | 'missing-mask' | 'locked' | 'hidden' | 'singular'
     }
 
 function invert(matrix: AnnotationMatrixV3): AnnotationMatrixV3 | null {
@@ -35,7 +35,7 @@ function invert(matrix: AnnotationMatrixV3): AnnotationMatrixV3 | null {
   ]
 }
 
-/** 蒙版与所属图层内容共用局部坐标，因此屏幕编辑矩阵必须包含 owner transform。 */
+/** 编辑矩阵复用共同附件契约：链接蒙版随内容变换，解绑蒙版使用独立变换。 */
 export function resolveImageEditorMaskBrushLayerV3(
   document: ImageEditDocumentV3,
   selectedLayerIds: readonly string[],
@@ -43,9 +43,6 @@ export function resolveImageEditorMaskBrushLayerV3(
   if (selectedLayerIds.length !== 1) return { ready: false, reason: 'select-one' }
   const location = findImageEditLayerLocationV3(document.layers, selectedLayerIds[0])
   if (!location?.layer.mask) return { ready: false, reason: 'missing-mask' }
-  if (!isImageEditSparseMaskReferenceV3(location.layer.mask)) {
-    return { ready: false, reason: 'legacy-mask' }
-  }
   if (location.layer.locked || location.ancestors.some((ancestor) => ancestor.locked)) {
     return { ready: false, reason: 'locked' }
   }
@@ -55,7 +52,7 @@ export function resolveImageEditorMaskBrushLayerV3(
   const matrix = resolveAnnotationLayerToOutputMatrixV3(
     document,
     [
-      location.layer.transform,
+      imageEditLayerMaskTransformV3(location.layer),
       ...location.ancestors.slice().reverse().map((ancestor) => ancestor.transform),
     ],
   )

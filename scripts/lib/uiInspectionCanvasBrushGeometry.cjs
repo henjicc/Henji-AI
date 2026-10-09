@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检由 CommonJS runner 加载。 */
 const sharp = require('sharp')
 const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
+const log = message => process.stdout.write(`${message}\n`)
 
 const BRUSH_GEOMETRY_CASES = [
   { id: 'small-source', name: '小原图外首次画笔', sourceSize: 16, scale: 1, from: 48, to: 52, y: 48, brushSize: 32 },
@@ -133,6 +135,44 @@ async function readContentPixels(page, editor, app, onEvidence) {
     .resize(256, 256, { fit: 'fill' }).ensureAlpha().raw().toBuffer()]
 }
 
+async function waitForContentLayout(page, editor) {
+  // 停靠宽度动画会把小图移动半个 CSS 像素，导致原生 DIP 取整捕获不同的像素列。
+  // 等实际位置停止变化，不能把两个落在同一捕获像素内的截图当成布局已经稳定。
+  let previous = null; let stable = 0
+  await waitForState(page, async () => {
+    const box = await editor.locator('[data-viewport-content]').boundingBox()
+    stable = box && previous && ['x', 'y', 'width', 'height'].every(key => Math.abs(box[key] - previous[key]) < 0.0001)
+      ? stable + 1 : 0
+    previous = box
+    return stable
+  }, value => value >= 3, '图片编辑停靠布局没有稳定')
+}
+
+async function alignContentCapture(page, editor, reference) {
+  await waitForContentLayout(page, editor)
+  const content = editor.locator('[data-viewport-content]')
+  const box = await content.boundingBox()
+  if (!box) throw new Error('图片内容没有有效采样位置')
+  const target = reference ?? { ...box, x: Math.ceil(box.x / 20) * 20, y: Math.ceil(box.y / 20) * 20 }
+  if (Math.abs(box.width - target.width) > 0.001 || Math.abs(box.height - target.height) > 0.001) {
+    throw new Error('重开后画面缩放改变，不能比较不同采样网格')
+  }
+  // 正式抓手导航对齐相同的屏幕采样相位；不改文档、截图或恢复容差。
+  // 只等布局停止并不足够：重开保存的停靠宽度可把画面永久平移半个 CSS 像素。
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(from.x + target.x - box.x, from.y + target.y - box.y)
+  await page.mouse.up()
+  await page.mouse.move(10, 10)
+  await waitForContentLayout(page, editor)
+  const aligned = await content.boundingBox()
+  if (!aligned || ['x', 'y', 'width', 'height'].some(key => Math.abs(aligned[key] - target[key]) > 0.001)) {
+    throw new Error(`正式抓手未对齐同一采样网格：${JSON.stringify({ target, aligned })}`)
+  }
+  return target
+}
+
 async function capturePixelResult(editor, helpers, suffix, capture, result) {
   const state = await editor.evaluate((root) => {
     const box = (selector) => {
@@ -149,7 +189,7 @@ async function capturePixelResult(editor, helpers, suffix, capture, result) {
     }
   })
   // 只在本阶段最终结果输出一次，绑定参考像素实际来源；不把每轮截图写入日志。
-  console.log(`[canvas-gpu-brush-pixel-sample] ${JSON.stringify({ suffix, ...result, capture, state })}`)
+  log(`[canvas-gpu-brush-pixel-sample] ${JSON.stringify({ suffix, ...result, capture, state })}`)
   // 保留失败时整个正式窗口；不得仅留下最终差异计数而丢失画面现场。
   if (!result.accepted) await helpers.capture?.(`${suffix}-failed`)
 }
@@ -242,7 +282,6 @@ function createCanvasBrushGeometryScenes(context) {
       const nodePreview = node.locator('img[alt="多图层图片预览"]')
       const initialNodeSource = await nodePreview.getAttribute('src')
       const initialNodePixels = await readPreviewResourcePixels(page, fixture.sourceResourceRef, scenario.sourceSize)
-      await helpers.capture?.('initial')
       const documentBox = await editor.locator('[data-document-transparency-grid]').boundingBox()
       const contentBox = await editor.locator('[data-viewport-content]').boundingBox()
       if (!documentBox || !contentBox || ['x', 'y', 'width', 'height'].some((key) => Math.abs(documentBox[key] - contentBox[key]) > 1)) {
@@ -252,8 +291,10 @@ function createCanvasBrushGeometryScenes(context) {
       // 撤销/重做后选中层会在效果层与栅格层之间回落，控制框时有时无。所有像素采样统一在抓手工具下进行，
       // 不画任何编辑控件，判据本身不变。
       await editor.locator('[data-tool-id="hand"]').click()
+      const capturePosition = await alignContentCapture(page, editor)
       const initialPixels = await waitPixels(null,
         { mode: 'initial-white', label: '初始白色原图尚未实际显示' }, 'initial')
+      await helpers.capture?.('initial')
       await editor.locator('[data-layer-id="reality-gpu-source-layer"] [data-layer-select]').click()
       await editor.locator('[data-tool-id="raster-brush"]').click()
       const brushParameters = await configureBrushFixture(editor, scenario)
@@ -328,7 +369,7 @@ function createCanvasBrushGeometryScenes(context) {
       assertClosedDocumentProjection(initial, redone, closed, nodeState, fixture.documentRef)
       const nodePixels = await readPreviewResourcePixels(page, closed.previewRef)
       const previewPixels = inspectPreviewPixelDifference(initialNodePixels, nodePixels, scenario)
-      console.log(`[canvas-gpu-brush-preview-pixels] ${JSON.stringify({ case: scenario.id,
+      log(`[canvas-gpu-brush-preview-pixels] ${JSON.stringify({ case: scenario.id,
         rgbChangedOver8: previewPixels.rgbChangedOver8, maxRgbDifference: previewPixels.maxRgbDifference,
         maxAlphaDifference: previewPixels.maxAlphaDifference, brushParameters })}`)
       assertVisiblePreviewChange(initialNodePixels, nodePixels)
@@ -342,10 +383,11 @@ function createCanvasBrushGeometryScenes(context) {
       if (reopened.revision !== revision || JSON.stringify(reopened.document.layers) !== JSON.stringify(redone.document.layers)) {
         throw new Error('重新打开丢失笔画、效果或创建新版本')
       }
+      await alignContentCapture(page, editor, capturePosition)
       await waitPixels(effectPixels,
         { mode: 'restored', changed: effectChanged, label: '重开没有恢复像素' }, 'reopened')
       await helpers.capture?.('reopened')
-      console.log(`[canvas-gpu-brush-geometry] ${JSON.stringify({ case: scenario.id, brushEvidence,
+      log(`[canvas-gpu-brush-geometry] ${JSON.stringify({ case: scenario.id, brushEvidence,
         pixelCaptureScale: 'electron-capture-page-raw-png-normalized-256',
         paintChangedPixels: paintChanged, effectChangedPixels: effectChanged,
         revision, reopenedRevision: reopened.revision, sameDocument: true })}`)

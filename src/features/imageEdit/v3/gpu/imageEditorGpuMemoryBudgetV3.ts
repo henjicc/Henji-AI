@@ -1,3 +1,4 @@
+import { imageEditOperationParametersV3 } from '@/core/imageEdit/v3/renderContracts/operationParameters'
 import { resolveImageGaussianPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
 import { gaussianParametersFromNodeV3 } from '@/core/imageEdit/v3/builtInRenderNodes'
 import { planColorGrade, isNeutralAdjustmentPlan } from '@/core/imaging/adjustments/plan'
@@ -39,10 +40,10 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
       for (const adjustment of node.adjustments) {
         if (adjustment.mask) masks.add(`${node.nodeId}:${adjustment.mask.maskId}`)
         if (adjustment.definitionId === 'adjustment.color-grade') {
-          const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width, referenceHeight: _height, effectQuality: _quality, ...value } = adjustment.parameters
+          const value = imageEditOperationParametersV3(adjustment.parameters)
           const plan = planColorGrade(imageColorGradeRuntimeParams(value), size[0], size[1])
-          if (!isNeutralAdjustmentPlan(plan)) adjustmentScratchBytes += 3 * fullLinearBytes
-            + plan.scratch.reduce((sum, surface) => sum + surface.width * surface.height * LINEAR_BYTES_PER_PIXEL, 0)
+          if (!isNeutralAdjustmentPlan(plan)) adjustmentScratchBytes += 3 * pixels(size) * 16
+            + plan.scratch.reduce((sum, surface) => sum + surface.width * surface.height * 16, 0)
           // Cube parsing is bounded by the shared 65³ lattice; reserve decoded lookup bytes, not a layer count.
           adjustmentScratchBytes += [value.input_lut, value.look_lut].filter(ref => !!ref).length * 65 ** 3 * 16
           adjustmentScratchBytes += plan.passes.filter(pass => pass.lookup?.kind === 'curve').reduce((sum, pass) => sum + (pass.lookup?.kind === 'curve' ? pass.lookup.data.byteLength * 4 : 0), 0)

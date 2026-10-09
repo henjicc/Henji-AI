@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from './layerTypes'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -65,7 +66,7 @@ async function render(
   const output = new Uint8Array(document.geometry.width * 4)
   for await (const tile of renderImageEditorV3ExportTiles({
     document,
-    resourceDescriptors: [],
+    resourceDescriptors: images.has(MASK) ? [{ resourceRef: MASK, byteLength: images.get(MASK)!.length * 4 + 80, mediaType: 'application/x-henji-brush-tile-v3' }] : [],
     description: {
       width: document.geometry.width,
       height: 1,
@@ -84,6 +85,7 @@ async function render(
         columns: Math.ceil(pixels.length / 512), rows: 1 }] }
     },
     readSourceTile: sourceReader(images),
+    readBrushTiles: async requests => ({ tiles: requests.map(request => ({ tileKey: request.tileKey, tile: { storage: 'mask-float32' as const, width: images.get(MASK)!.length, height: 1, data: Float32Array.from(images.get(MASK)!, pixel => pixel[0] / 255) } })) }),
     rasterizeAnnotations,
   })) {
     output.set(new Uint8Array(tile.pixels), tile.x * 4)
@@ -113,7 +115,7 @@ describe('图片编辑 V3 独立导出派生视图', () => {
     group.children = [target]
     group.isolated = true
     group.transform = [1, 0, 0, 1, 1, 0]
-    group.mask = { resourceId: MASK, inverted: false }
+    group.mask = { ...createImageEditSparseMaskReferenceV3(MASK, false), tiles: { '0/0/0': MASK } }
     document.layers.push(group)
     const before = JSON.stringify(document)
 

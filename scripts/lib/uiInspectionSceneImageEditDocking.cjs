@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检使用 CommonJS。 */
+const { imageEditInspectionModel } = require('./imageEditInspectionModel.cjs')
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检目录使用 CommonJS 场景工厂，与现有启动器一致。 */
 const assert = require('node:assert/strict')
 const path = require('node:path')
@@ -107,18 +109,18 @@ function createImageEditDockingScene(context) {
   const openCanvasDocument = async page => {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     const nodeId = '__ui_image_docking_document'
-    await page.evaluate(async ({ projectId, nodeId, filePath }) => {
+    await page.evaluate(async ({ projectId, nodeId, filePath, model }) => {
       const managed = await window.henjiNative.imageEditorV3.ingestSource({
         requestId: `ui-docking-ingest-${crypto.randomUUID()}`, source: { kind: 'local-path', filePath },
       })
       const saved = await window.henjiNative.imageEditorV3.saveDocument({
         requestId: `ui-docking-save-${crypto.randomUUID()}`,
         document: {
-          version: 3, id: `ui-docking-${crypto.randomUUID()}`, revision: 0,
+          ...model.document, id: `ui-docking-${crypto.randomUUID()}`, revision: 0,
           geometry: { width: managed.metadata.width, height: managed.metadata.height, orientation: { rotate: 0, mirrored: false }, crop: null },
           color: { workingSpace: 'srgb', bitDepth: 8, transferFunction: 'srgb', hdrMetadata: null, iccProfileResourceId: null },
           layers: [{
-            id: 'source', name: '底图', type: 'raster', visible: true, locked: false, opacity: 1, blendMode: 'normal',
+            ...model.common, id: 'source', name: '底图', type: 'raster', visible: true, locked: false, opacity: 1, blendMode: 'normal',
             transform: [1, 0, 0, 1, 0, 0], mask: null, source: { kind: 'resource', resourceId: managed.resource.resourceRef }, tiles: {},
           }],
         },
@@ -136,7 +138,7 @@ function createImageEditDockingScene(context) {
         },
       })
       await window.henjiNative.testFixtures.writeCanvas(projectId, { ...canvas, nodes, viewport: { x: 80, y: 100, zoom: 0.65 } })
-    }, { projectId, nodeId, filePath: path.resolve(__dirname, '../../tests/fixtures/image-inpainting/face-scratch-source.png') })
+    }, { projectId, nodeId, model: imageEditInspectionModel(), filePath: path.resolve(__dirname, '../../tests/fixtures/image-inpainting/face-scratch-source.png') })
     await reopenCanvasProjectFromStorage(page, projectId)
     const node = page.locator(`[data-layer-stack-node-id="${nodeId}"]`)
     await node.waitFor({ state: 'visible', timeout: 15000 })

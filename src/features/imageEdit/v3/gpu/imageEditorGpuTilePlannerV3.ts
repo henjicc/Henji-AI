@@ -31,17 +31,14 @@ export function planImageEditorGpuMaskTilesV3(
   if (Object.keys(mask.sparseTiles).length === 0) {
     return {
       layerId: mask.maskId, mip: 0,
-      tiles: mask.key ? [{
-        key: mask.key, coreOriginX: 0, coreOriginY: 0,
-        coreWidth: scene.width, coreHeight: scene.height,
-      }] : [],
+      tiles: [],
     }
   }
   const planned = planImageEditorGpuRasterTilesV3(scene, {
     layerId: mask.maskId, sourceKind: 'raster', resourceRef: null,
     contentVersion: `mask:${mask.maskId}`, sparseTiles: mask.sparseTiles,
     visible: true, opacity: 1, transform,
-  }, layout, 0)
+  }, layout, 0, false)
   return {
     ...planned,
     tiles: planned.tiles.map((tile) => ({
@@ -65,6 +62,7 @@ export function planImageEditorGpuRasterTilesV3(
   layer: ImageEditorGpuRasterLayerV3,
   layout: ImageEditorViewportLayoutV3,
   previousMip?: number,
+  rasterSamplingHalo = true,
 ): ImageEditorGpuPlannedLayerV3 {
   const inverse = invertImageEditTransformV3(layer.transform)
   const viewport = layout.viewport
@@ -155,6 +153,24 @@ export function planImageEditorGpuRasterTilesV3(
       contentVersion: override?.contentVersion ?? layer.contentVersion,
       ...(override ? { resourceByteLength: override.byteLength } : {}),
       ...(override || layer.sourceKind === 'annotation' ? { format: 'rgba16float' as const } : {}),
+    }
+    if (rasterSamplingHalo && hasSparseOverrides && layer.sourceKind === 'raster') {
+      const coreWidth = overrideRect?.width ?? Math.min(512, mipDimensions.width - tile.tileX * 512)
+      const coreHeight = overrideRect?.height ?? Math.min(512, mipDimensions.height - tile.tileY * 512)
+      const x = Math.max(0, tile.tileX * 512 - 1), y = Math.max(0, tile.tileY * 512 - 1)
+      const rect = { x, y, width: Math.min(sparseExtent.width, tile.tileX * 512 + coreWidth + 1) - x,
+        height: Math.min(sparseExtent.height, tile.tileY * 512 + coreHeight + 1) - y }
+      const neighbors = Object.entries(layer.sparseTiles).filter(([name]) => {
+        const [, tx, ty] = name.split('/').map(Number)
+        return tx * 512 < x + rect.width && ty * 512 < y + rect.height
+          && (tx + 1) * 512 > x && (ty + 1) * 512 > y
+      }).sort(([a], [b]) => a.localeCompare(b)).map(([tileKey, entry]) => ({
+        tileKey, resourceRef: entry.resourceRef, byteLength: entry.byteLength, contentVersion: entry.contentVersion,
+      }))
+      key.rasterRegion = { sourceRef: layer.resourceRef, sourceSize: layer.resourceRef ? sourceSize : null,
+        extent: sparseExtent, rect, tiles: neighbors }
+      key.contentVersion = JSON.stringify([layer.contentVersion, scene.color, sparseExtent, rect, neighbors])
+      key.format = 'rgba16float'
     }
     return [{
       key,

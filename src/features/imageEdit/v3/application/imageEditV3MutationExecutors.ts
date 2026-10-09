@@ -26,7 +26,7 @@ import {
   type ImageEditV3MaskMutationDraft,
 } from './imageEditV3Fields'
 import { getImageEditDocumentCatalogRevisionV3, requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
-import { findImageEditV3LiveLayer, splitImageEditV3DocumentRef, splitImageEditV3LayerRef } from './imageEditDocumentRefs'
+import { findImageEditV3LiveLayer, splitImageEditV3FilterRef, splitImageEditV3DocumentRef, splitImageEditV3LayerRef } from './imageEditDocumentRefs'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 
@@ -37,7 +37,7 @@ import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 }
 import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
 
 interface UndoPayload {
-  entityType: 'image_edit.document' | 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask'
+  entityType: 'image_edit.document' | 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask' | 'image_edit.layer_filter'
   documentId: string
   targetId: string
   commandIdsNewestFirst: string[]
@@ -51,7 +51,7 @@ function decodeUndo(token: string): UndoPayload {
   if (!token.startsWith(UNDO_PREFIX)) throw new Error('IMAGE_EDIT_V3_UNDO_INVALID')
   const value = JSON.parse(token.slice(UNDO_PREFIX.length)) as Partial<UndoPayload>
   if (
-    !['image_edit.document', 'image_edit.layer', 'image_edit.group', 'image_edit.mask'].includes(value.entityType ?? '')
+    !['image_edit.document', 'image_edit.layer', 'image_edit.group', 'image_edit.mask', 'image_edit.layer_filter'].includes(value.entityType ?? '')
     || typeof value.documentId !== 'string'
     || typeof value.targetId !== 'string'
     || !Array.isArray(value.commandIdsNewestFirst)
@@ -123,10 +123,11 @@ async function rollbackPayload(payload: UndoPayload): Promise<ApplicationComplet
 }
 
 function mutationDocumentIdentity(ref: import('@/core/application-control').ApplicationRef, kind: UndoPayload['entityType']): { documentId: string } {
+  if (kind === 'image_edit.layer_filter') return splitImageEditV3FilterRef(ref)
   return kind === 'image_edit.document' ? splitImageEditV3DocumentRef(ref) : splitImageEditV3LayerRef(ref, kind)
 }
 
-abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExecutor {
+export abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExecutor {
   abstract readonly entityType: UndoPayload['entityType']
   abstract readonly writableProperties: ReadonlySet<string>
   abstract readonly propertyOperations: ApplicationMutationExecutor['propertyOperations']

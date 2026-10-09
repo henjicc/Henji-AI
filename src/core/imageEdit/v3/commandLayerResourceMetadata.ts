@@ -7,6 +7,7 @@ import {
 } from './commandTypes'
 import type { ImageEditDocumentV3 } from './documentTypes'
 import { collectImageEditMaskResourceIdsV3 } from './layerTypes'
+import { collectImageEditJsonResourceIdsV3 } from './resourceReferences'
 
 type StructuralCommandV3 = Extract<ImageEditCommandV3, {
   type: 'layer.add' | 'layer.delete' | 'layer.duplicate' | 'layer.group' | 'layer.ungroup'
@@ -70,6 +71,11 @@ export function assertImageEditStructuralCommandResourcesV3(
   command: ImageEditCommandV3,
   allowLegacyMissing = false,
 ): void {
+  if (command.type === 'layer.update-common' && command.patch.filters) {
+    const ids = filterResourceIds(document, command);
+    if (ids.length || command.resources) assertDescriptors(command.resources, ids, '滤镜命令资源元数据');
+    return;
+  }
   if (command.type !== 'layer.add'
     && command.type !== 'layer.delete'
     && command.type !== 'layer.duplicate'
@@ -99,6 +105,12 @@ export function prepareImageEditCommandResourceMetadataV3(
   command: ImageEditCommandV3,
   byteSizes: ReadonlyMap<string, number>,
 ): ImageEditCommandV3 {
+  if (command.type === 'layer.update-common' && command.patch.filters) {
+    const ids = filterResourceIds(document, command);
+    return { ...command, resources: command.resources
+      ? assertDescriptors(command.resources, ids, '滤镜命令资源元数据')
+      : descriptorsFromIds(ids, byteSizes, '滤镜命令') };
+  }
   if (command.type === 'layer.add'
     || command.type === 'layer.delete'
     || command.type === 'layer.duplicate'
@@ -124,6 +136,13 @@ export function prepareImageEditCommandResourceMetadataV3(
     previousMaskResources: command.previousMaskResources
       ?? descriptorsFromIds(previousIds, byteSizes, '原蒙版'),
   }
+}
+
+function filterResourceIds(document: ImageEditDocumentV3,
+  command: Extract<ImageEditCommandV3, { type: 'layer.update-common' }>): string[] {
+  const location = findImageEditCommandLayerLocationV3(document.layers, command.layerId);
+  if (!location) throw new ImageEditCommandValidationErrorV3(`图层不存在：${command.layerId}`);
+  return collectImageEditJsonResourceIdsV3([location.layer.filters, command.patch.filters]);
 }
 
 export function collectPositiveImageEditCommandResourceBytesV3(

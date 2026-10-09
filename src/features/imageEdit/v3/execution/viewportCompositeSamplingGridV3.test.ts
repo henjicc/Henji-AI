@@ -73,10 +73,10 @@ describe('图片编辑 V3 viewport 实际采样网格', () => {
     expect(resolve({
       kind: 'mask',
       ownerNode,
-      reference: { resourceId: MASK, inverted: false },
+      reference: { ...createImageEditSparseMaskReferenceV3('mask'), tiles: { '0/0/0': MASK } },
     })).toEqual({
-      size: { width: 16, height: 16 },
-      toEvaluation: [1 / 2, 0, 0, 1 / 2, 0, 0],
+      size: { width: 8, height: 8 },
+      toEvaluation: [1, 0, 0, 1, 0, 0],
     })
     expect(resolve({
       kind: 'mask',

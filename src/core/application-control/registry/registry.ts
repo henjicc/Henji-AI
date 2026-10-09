@@ -195,7 +195,10 @@ export class ApplicationReflectionRegistry {
       if (!context.acceptedDataClasses.has(descriptor.dataClass)) throw new Error('PERMISSION_DENIED')
     }
     if (parsedRef.kind === 'property') {
-      const descriptor = this.properties.get(parsedRef.id)
+      const descriptor = this.properties.get(parsedRef.id) ?? [...this.properties.values()].find(
+        (property) => property.value.kind === 'json'
+          && schemaKey(property.value.schemaRef) === schemaKey(parsedRef) && this.canReadProperty(property, context),
+      )
       if (!descriptor || !this.canReadProperty(descriptor, context)) throw new Error('PERMISSION_DENIED')
     }
     return document.value

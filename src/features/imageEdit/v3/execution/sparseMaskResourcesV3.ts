@@ -1,7 +1,6 @@
 import type { ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
 import {
   IMAGE_EDIT_MASK_TILE_SIZE_V3,
-  isImageEditSparseMaskReferenceV3,
   type ImageEditMaskReferenceV3,
   type ImageEditSparseMaskReferenceV3,
 } from '@/core/imageEdit/v3/layerTypes'
@@ -117,7 +116,7 @@ export function createImageEditorSparseMaskPlanV3(
   const byMaskId = new Map<string, ImageEditorSparseMaskReferencePlanV3>()
   for (const node of plan.nodes) {
     const mask = node.mask
-    if (!mask || !isImageEditSparseMaskReferenceV3(mask) || byMaskId.has(mask.maskId)) continue
+    if (!mask || byMaskId.has(mask.maskId)) continue
     byMaskId.set(mask.maskId, createImageEditorSparseMaskReferencePlanV3(
       mask,
       canvasSize,
@@ -131,7 +130,6 @@ export function getImageEditorSparseMaskReferencePlanV3(
   reference: ImageEditMaskReferenceV3,
   plan: ImageEditorSparseMaskPlanV3,
 ): ImageEditorSparseMaskReferencePlanV3 | null {
-  if (!isImageEditSparseMaskReferenceV3(reference)) return null
   const resolved = plan.byMaskId.get(reference.maskId)
   if (!resolved) throw new Error(`渲染计划缺少稀疏蒙版：${reference.maskId}`)
   return resolved

@@ -40,11 +40,6 @@ export function getImageEditHistoryMaskValidationErrorV3(
       if (!isNonEmptyString(tileKey, MASK_TILE_KEY_MAX_LENGTH)) return `${label}瓦片键无效`;
       if (!isNonEmptyString(resourceId)) return `${label}瓦片资源 ID无效`;
     }
-  } else {
-    if (!hasExactKeys(value, ['resourceId', 'inverted'])) {
-      return `${label}包含未知字段或缺少字段`;
-    }
-    if (!isNonEmptyString(value.resourceId)) return `${label}资源 ID无效`;
-  }
+  } else return `${label}存储契约无效`;
   return typeof value.inverted === 'boolean' ? null : `${label}反转值无效`;
 }

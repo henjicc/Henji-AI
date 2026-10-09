@@ -1,3 +1,4 @@
+import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from './documentTypes';
 import { describe, expect, it } from 'vitest';
 import { createDefaultImageEditColorModeV3 } from './colorTypes';
 import type { ImageEditDocumentV3 } from './documentTypes';
@@ -49,7 +50,7 @@ function adjustment(id: string, adjustmentId: string): ImageEditAdjustmentLayerV
 
 function document(layers: ImageEditLayerV3[]): ImageEditDocumentV3 {
   return {
-    version: 3,
+    version: IMAGE_EDIT_DOCUMENT_VERSION_V3,
     id: 'doc',
     revision: 1,
     geometry: {

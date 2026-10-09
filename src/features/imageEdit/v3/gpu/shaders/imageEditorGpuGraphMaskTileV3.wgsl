@@ -34,14 +34,7 @@ fn loadMask(coord: vec2i) -> f32 {
   return vec4f(positions[vi], 0, 1);
 }
 @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-  let outputPoint = select(position.xy / camera.documentOriginScale.z + camera.documentOriginScale.xy,
-    (position.xy + camera.orientation.zw) / camera.documentOriginScale.z, camera.documentOriginScale.w > 0.5);
-  let documentPoint = outputToDocument(outputPoint);
-  let inverse = params.inverseLinear;
-  let sourcePoint = vec2f(
-    inverse.x * documentPoint.x + inverse.z * documentPoint.y + params.inverseTranslation.x,
-    inverse.y * documentPoint.x + inverse.w * documentPoint.y + params.inverseTranslation.y
-  );
+  let sourcePoint = sourcePosition(position.xy);
   let mipPoint = sourcePoint / params.tileOriginScaleLayer.z;
   let core = params.coreRect;
   if (mipPoint.x < core.x || mipPoint.y < core.y
@@ -53,5 +46,27 @@ fn loadMask(coord: vec2i) -> f32 {
     mix(loadMask(p0), loadMask(p0 + vec2i(1, 0)), f.x),
     mix(loadMask(p0 + vec2i(0, 1)), loadMask(p0 + vec2i(1, 1)), f.x), f.y
   );
+  return vec4f(value, value, value, 1.0);
+}
+
+fn sourcePosition(position: vec2f) -> vec2f {
+  let outputPoint = select(position / camera.documentOriginScale.z + camera.documentOriginScale.xy,
+    (position + camera.orientation.zw) / camera.documentOriginScale.z, camera.documentOriginScale.w > 0.5);
+  let documentPoint = outputToDocument(outputPoint);
+  let inverse = params.inverseLinear;
+  return vec2f(
+    inverse.x * documentPoint.x + inverse.z * documentPoint.y + params.inverseTranslation.x,
+    inverse.y * documentPoint.x + inverse.w * documentPoint.y + params.inverseTranslation.y
+  );
+}
+
+fn domainCoverage(point: vec2i) -> f32 {
+  return select(0.0, params.inverseTranslation.z, all(point >= vec2i(0)) && all(vec2f(point) < camera.geometry.xy));
+}
+@fragment fn fs_background(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  let point = sourcePosition(position.xy) - vec2f(0.5);
+  let p = vec2i(floor(point)); let f = fract(point);
+  let value = mix(mix(domainCoverage(p), domainCoverage(p + vec2i(1, 0)), f.x),
+                  mix(domainCoverage(p + vec2i(0, 1)), domainCoverage(p + vec2i(1, 1)), f.x), f.y);
   return vec4f(value, value, value, 1.0);
 }

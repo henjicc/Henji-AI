@@ -1,3 +1,4 @@
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { init, type Gpu } from 'vgpu/node'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditAdjustmentLayerV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
@@ -108,10 +109,10 @@ it.each(['stable', 'export'] as const)('%s：真实区域/tile、mip、串联与
   for (const axis of ['both', 'horizontal', 'vertical']) for (const scale of [1, .75]) {
     const document = createImageEditDocumentV3({ width, height })
     const first = createImageEditEffectLayerV3('first', '高斯', 'gaussian_blur', { sigma_fraction_height: .003, axis, edge_mode: 'transparent' })
-    first.opacity = .81; first.mask = { resourceId: maskRef, inverted: true }
+    first.opacity = .81; first.mask = { ...createImageEditSparseMaskReferenceV3(maskRef, true), tiles: { '0/0/0': maskRef } }
     const second = createImageEditEffectLayerV3('second', '串联', 'gaussian_blur', { sigma_fraction_height: .03, axis, edge_mode: 'clamp' })
     second.opacity = .73; second.blendMode = 'screen'
-    second.mask = { resourceId: maskRef, inverted: false }
+    second.mask = { ...createImageEditSparseMaskReferenceV3(maskRef, false), tiles: { '0/0/0': maskRef } }
     const raster = createImageEditRasterLayerV3('source', '源', resourceRef)
     raster.transform = [1.2, .15, -.2, .9, 12.3, -5.2]
     document.layers = [raster, first,

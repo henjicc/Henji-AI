@@ -37,6 +37,7 @@ import {
   type ImageEditCommandLayerLocationV3 as LayerLocation,
 } from './commandLayerLocation';
 import { assertImageEditStructuralCommandResourcesV3 } from './commandLayerResourceMetadata';
+import { assertImageEditLayerSemanticsV3 } from './layerModel/semantics';
 
 export {
   ImageEditCommandValidationErrorV3,
@@ -118,6 +119,10 @@ function cloneLayer(layer: ImageEditLayerV3, idMap?: Readonly<Record<string, str
     visible: layer.visible,
     locked: layer.locked,
     opacity: layer.opacity,
+    fillOpacity: layer.fillOpacity,
+    clipping: layer.clipping,
+    maskAttachment: jsonClone(layer.maskAttachment),
+    filters: jsonClone(layer.filters),
     blendMode: layer.blendMode,
     transform: [...layer.transform],
     mask: layer.mask ? cloneImageEditMaskReferenceV3(layer.mask) : null,
@@ -358,7 +363,8 @@ function applyLayerContentCommand(
       Object.assign(inversePatch, { [key]: location.layer[key] });
     }
     const nextLayer = { ...location.layer, ...patch } as ImageEditLayerV3;
-    return { layers: replaceLayer(document.layers, location, nextLayer), inverse: { ...base, type: 'layer.update-common', layerId, patch: inversePatch } };
+    return { layers: replaceLayer(document.layers, location, nextLayer), inverse: { ...base, type: 'layer.update-common', layerId, patch: inversePatch,
+      ...(command.resources ? { resources: command.resources.map(resource => ({ ...resource })) } : {}) } };
   }
   assertLayerEditable(location);
   if (command.type === 'layer.update-params') {
@@ -521,6 +527,11 @@ export function applyImageEditCommandV3(
     options.allowLegacyResourceMetadata === true,
   );
   const inverse = documentResult?.inverse ?? layerResult?.inverse;
+  try {
+    assertImageEditLayerSemanticsV3(layerResult?.layers ?? document.layers);
+  } catch (error) {
+    throw new ImageEditCommandValidationErrorV3(error instanceof Error ? error.message : '图层语义无效');
+  }
   if (!inverse) throw new ImageEditCommandValidationErrorV3('图片编辑命令没有生成逆向补丁');
   const historyMetadataBytes = new TextEncoder().encode(JSON.stringify([command, inverse])).byteLength;
   const history = calculateImageEditCommandHistoryResourcesV3(command, inverse);

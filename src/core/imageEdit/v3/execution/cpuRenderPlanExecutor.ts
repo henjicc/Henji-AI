@@ -1,3 +1,4 @@
+import { maskDensity } from '../../../imaging/compositing';
 import { createBuiltInImageEditRenderNodeRegistry } from '../builtInRenderNodes';
 import type { ImageEditPixelExecutionContextV3 } from '../renderNodeDefinition';
 import type { AdjustmentCoordinates } from '../../../imaging/effects/cpu/colorGrade'
@@ -79,10 +80,14 @@ async function loadNodeMask(
 ): Promise<Float32MaskTile | undefined> {
   if (!node.mask) return undefined;
   if (!context.loadMask) throw new Error(`图层蒙版没有可用的资源读取器：${node.layerId}`);
-  const mask = await context.loadMask(node.mask, node);
-  if (!node.mask.inverted) return mask;
+  let mask = await context.loadMask(node.mask, node);
+  const transform = node.parameters.maskTransform ?? node.parameters.transform;
+  if (transform !== undefined && !isIdentityTransform(transform)) {
+    if (!Array.isArray(transform) || !context.transformMask) throw new Error(`图层蒙版变换没有可用执行器：${node.layerId}`);
+    mask = await context.transformMask(mask, transform.filter((entry): entry is number => typeof entry === 'number'), node);
+  }
   const data = new Float32Array(mask.data.length);
-  for (let index = 0; index < data.length; index += 1) data[index] = 1 - mask.data[index];
+  for (let index = 0; index < data.length; index += 1) data[index] = maskDensity(node.mask.inverted ? 1 - mask.data[index] : mask.data[index], numberParameter(node, 'maskDensity', 1));
   return createFloat32MaskTile(mask.width, mask.height, data);
 }
 
@@ -140,20 +145,12 @@ async function executeComposite(
   const contentIndex = node.inputNodeIds.length === 1 ? 0 : 1;
   let content = requireInput(outputs, node, contentIndex);
   const transform = node.parameters.transform;
-  let mask = await loadNodeMask(node, context);
+  const mask = await loadNodeMask(node, context);
   if (!isIdentityTransform(transform)) {
     if (!Array.isArray(transform) || !context.transformContent) {
       throw new Error(`图层变换没有可用执行器：${node.layerId}`);
     }
     content = await context.transformContent(content, transform.filter((entry): entry is number => typeof entry === 'number'), node);
-    if (mask) {
-      if (!context.transformMask) throw new Error(`图层蒙版变换没有可用执行器：${node.layerId}`);
-      mask = await context.transformMask(
-        mask,
-        transform.filter((entry): entry is number => typeof entry === 'number'),
-        node,
-      );
-    }
   }
   const backdrop = node.inputNodeIds.length > 1 ? requireInput(outputs, node, 0) : null;
   if (backdrop) {
@@ -164,7 +161,7 @@ async function executeComposite(
     numberParameter(node, 'opacity', 1),
     mask,
   );
-  return compositePremultipliedTilesV3(backdrop, masked, imageEditCpuRenderNodeBlendModeV3(node));
+  return compositePremultipliedTilesV3(backdrop, masked, imageEditCpuRenderNodeBlendModeV3(node), node.parameters.clipping === true);
 }
 
 export async function executeImageEditCpuRenderPlanV3(

@@ -17,6 +17,8 @@ export interface ImageEditRenderPlanNode {
   parameters: Readonly<Record<string, unknown>>;
   mask: ImageEditMaskReferenceV3 | null;
   subtreeHash: string;
+  /** 语义节点身份，不使用全局编译顺序；同一层可以多次使用相同算法。 */
+  cacheIdentity?: string;
 }
 
 export interface ImageEditRenderPass {

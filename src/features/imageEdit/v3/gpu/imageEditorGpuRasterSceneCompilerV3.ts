@@ -6,7 +6,6 @@ import {
 import type { ImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
-  isImageEditSparseMaskReferenceV3,
   type ImageEditBlendModeV3,
   type ImageEditJsonObjectV3,
   type ImageEditMaskReferenceV3,
@@ -34,7 +33,6 @@ export interface ImageEditorGpuRasterLayerV3 {
 
 export interface ImageEditorGpuGraphMaskV3 {
   maskId: string
-  key: ImageEditorGpuSceneTileKeyV3 | null
   sparseTiles: Readonly<Record<string, {
     resourceRef: `sha256:${string}`
     contentVersion: string
@@ -57,6 +55,11 @@ export interface ImageEditorGpuGraphSourceNodeV3 extends ImageEditorGpuGraphNode
 
 export interface ImageEditorGpuGraphCompositeNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
   kind: 'composite'
+  clipping?: boolean
+  maskTransform?: ImageEditTransformV3
+  maskLinked?: boolean
+  maskLocalTransform?: ImageEditTransformV3
+  maskDensity?: number
   backdropNodeId: string | null
   contentNodeId: string
   transform: ImageEditTransformV3
@@ -169,6 +172,13 @@ export function compileImageEditorGpuRasterSceneV3(
     return { supported: false, reason: error instanceof Error ? error.message : String(error) }
   }
   const layers: ImageEditorGpuRasterLayerV3[] = []
+  const sourceNodes = new Set(graph.filter(node => node.kind === 'source').map(node => node.nodeId))
+  for (const node of graph) {
+    if (node.kind === 'composite' && !sourceNodes.has(node.contentNodeId)
+      && node.transform.some((value, index) => value !== [1, 0, 0, 1, 0, 0][index])) {
+      return { supported: false, reason: '组结果的空间变换当前由 CPU 区域求值；GPU 不静默忽略该变换' }
+    }
+  }
   collectRasterLayers(document.layers, descriptors, plan.nodes, layers)
   if (sourcePyramids) {
     for (const layer of layers) {
@@ -184,7 +194,7 @@ export function compileImageEditorGpuRasterSceneV3(
     node.kind === 'adjustment'
     || node.kind === 'effect'
     || node.kind === 'alias'
-    || (node.kind === 'composite' && (node.blendMode !== 'normal' || node.mask !== null))
+    || (node.kind === 'composite' && (node.blendMode !== 'normal' || node.mask !== null || node.clipping))
   ))
   return {
     supported: true,
@@ -249,6 +259,11 @@ function compileNode(
       backdropNodeId: node.inputNodeIds.length > 1 ? node.inputNodeIds[0] : null,
       contentNodeId: node.inputNodeIds[contentIndex], transform,
       opacity: numberParameter(node, 'opacity', 1), blendMode: blendParameter(node), mask,
+      clipping: node.parameters.clipping === true,
+      maskTransform: transformParameter(node.parameters.maskTransform ?? node.parameters.transform) ?? transform,
+      maskDensity: numberParameter(node, 'maskDensity', 1),
+      maskLinked: node.parameters.maskLinked !== false,
+      maskLocalTransform: transformParameter(node.parameters.maskLocalTransform) ?? [1,0,0,1,0,0],
     }
   }
   if (node.definitionId === 'group.isolated') {
@@ -301,9 +316,7 @@ function compileMask(
   required: Map<string, ImageEditorGpuSceneTileKeyV3>,
 ): ImageEditorGpuGraphMaskV3 | null | string {
   if (!mask) return null
-  let resourceId: string | null
-  const defaultValue: 0 | 1 = 1
-  if (isImageEditSparseMaskReferenceV3(mask)) {
+  {
     const unsupported = Object.keys(mask.tiles).find((key) => !isMipZeroTileKey(key))
     if (unsupported) return `蒙版 ${mask.maskId} 的瓦片键无效：${unsupported}`
     const sparseTiles = compileSparseTiles(mask.tiles, descriptors)
@@ -317,18 +330,10 @@ function compileMask(
       })
     }
     return {
-      maskId: mask.maskId, key: null, sparseTiles,
+      maskId: mask.maskId, sparseTiles,
       defaultValue: mask.defaultValue, inverted: mask.inverted,
     }
-  } else resourceId = mask.resourceId
-  if (!resourceId) return {
-    maskId: 'empty-mask', key: null, sparseTiles: {}, defaultValue, inverted: mask.inverted,
   }
-  if (!isResourceRef(resourceId)) return `蒙版资源引用无效：${resourceId}`
-  const key = resourceKey(resourceId, descriptors, 'r8unorm', 'source-raster')
-  if (!key) return `蒙版缺少受管资源描述：${resourceId}`
-  addRequired(required, key)
-  return { maskId: resourceId, key, sparseTiles: {}, defaultValue, inverted: mask.inverted }
 }
 
 function resourceKey(
@@ -375,7 +380,7 @@ function collectRasterLayers(
         layerId: layer.id, sourceKind: 'annotation',
         resourceRef: createImageEditorGpuAnnotationResourceRefV3(planNode),
         contentVersion: annotationContentVersion(planNode), sparseTiles: {},
-        visible: layer.visible, opacity: layer.opacity, transform: [...layer.transform],
+        visible: layer.visible, opacity: layer.opacity * layer.fillOpacity, transform: [...layer.transform],
       })
       continue
     }
@@ -392,7 +397,7 @@ function collectRasterLayers(
       contentVersion: resourceRef ? `${resourceRef}:${descriptors.get(resourceRef)!.byteLength}` : 'empty',
       sparseTiles,
       visible: layer.visible,
-      opacity: layer.opacity,
+      opacity: layer.opacity * layer.fillOpacity,
       transform: [...layer.transform],
     })
   }

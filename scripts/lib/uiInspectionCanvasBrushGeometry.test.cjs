@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- node:test 精确验证正式 CommonJS 巡检场景。 */
 const assert = require('node:assert/strict')
 const test = require('node:test')
 const { BRUSH_GEOMETRY_CASES, assertBrushGeometryState, changedPixels,
@@ -29,7 +30,7 @@ test('像素等待每阶段只报告最终样本；失败保留截图且仍抛�
   const page = { waitForTimeout: async (delay) => { clock += delay } }
   const white = Array(64).fill(255)
   const results = []; const screenshots = []; const logs = []
-  t.mock.method(console, 'log', (message) => logs.push(message))
+  t.mock.method(process.stdout, 'write', (message) => { logs.push(message); return true })
   const editor = { evaluate: async () => ({ selectedTools: ['move'], brushOverlayTiles: 0, revision: '5' }) }
   const capture = { clipCss: { x: 10, y: 20, width: 64, height: 64 },
     capture: { contentDip: { x: 9, y: 18, width: 58, height: 58 } } }

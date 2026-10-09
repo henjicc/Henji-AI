@@ -1,3 +1,4 @@
+import { maskDensity } from '../../../imaging/compositing';
 import type { CubeLut } from '../../../imaging/lut/cube'
 import {
   createFloat32MaskTile,
@@ -117,6 +118,12 @@ function nodeTransform(
   return scaleImageEditTransformV3(transform, scaleX, scaleY)
 }
 
+function maskNodeTransform(node: ImageEditRenderPlanNode, scaleX: number, scaleY: number): readonly number[] {
+  const value = node.parameters.maskTransform ?? node.parameters.transform;
+  if (!isImageEditTransformInvertibleV3(value)) throw new Error('蒙版变换不可逆');
+  return scaleImageEditTransformV3(value, scaleX, scaleY);
+}
+
 function invertMask(mask: Float32MaskTile): Float32MaskTile {
   const data = new Float32Array(mask.data.length)
   for (let index = 0; index < data.length; index += 1) data[index] = 1 - mask.data[index]
@@ -206,7 +213,7 @@ export function collectImageEditCpuRegionRequirementsV3(
         transform,
       )
       if (node.mask) addRegion(masks, node.id, resolveImageEditCpuSamplingRegionV3(
-        context, { kind: 'mask', ownerNode: node, reference: node.mask }, region, transform,
+        context, { kind: 'mask', ownerNode: node, reference: node.mask }, region, maskNodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1),
       ).region)
       visit(content, transformed.region)
       return
@@ -216,6 +223,7 @@ export function collectImageEditCpuRegionRequirementsV3(
       : effectInputRegion(node, region, context)
     if (node.mask) addRegion(masks, node.id, resolveImageEditCpuSamplingRegionV3(
       context, { kind: 'mask', ownerNode: node, reference: node.mask }, inputRegion,
+      maskNodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1),
     ).region)
     visit(inputNode(nodes, node, 0), inputRegion)
   }
@@ -243,11 +251,10 @@ export async function executeImageEditCpuRenderRegionPlanV3(
   const sampleMask = async (
     node: ImageEditRenderPlanNode,
     region: ImageEditRect,
-    transform?: readonly number[],
   ): Promise<Float32MaskTile | undefined> => {
     if (!node.mask) return undefined
     const requested = resolveImageEditCpuSamplingRegionV3(
-      context, { kind: 'mask', ownerNode: node, reference: node.mask }, region, transform,
+      context, { kind: 'mask', ownerNode: node, reference: node.mask }, region, maskNodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1),
     )
     let sampled: Float32MaskTile
     if (requested.region.width === 0 || requested.region.height === 0) {
@@ -259,7 +266,10 @@ export async function executeImageEditCpuRenderRegionPlanV3(
         : resampleImageEditMaskAffineV3(mask, requested.region, region, requested.transform)
     }
     // 资源范围外的原始蒙版为零；须先补齐输出采样域，再统一反转。
-    return node.mask.inverted ? invertMask(sampled) : sampled
+    const result = node.mask.inverted ? invertMask(sampled) : sampled;
+    const density = numberParameter(node, 'maskDensity', 1);
+    if (density === 1) return result;
+    return createFloat32MaskTile(result.width, result.height, result.data.map(value => maskDensity(value, density)))
   }
   const render = (
     node: ImageEditRenderPlanNode,
@@ -311,12 +321,13 @@ export async function executeImageEditCpuRenderRegionPlanV3(
         const masked = applyContentMaskAndOpacityV3(
           content,
           numberParameter(node, 'opacity', 1),
-          await sampleMask(node, region, transform),
+          await sampleMask(node, region),
         )
         return compositePremultipliedTilesV3(
           backdrop,
           masked,
           imageEditCpuRenderNodeBlendModeV3(node),
+          node.parameters.clipping === true,
         )
       }
       const expanded = effectInputRegion(node, region, context)
@@ -352,5 +363,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
   }
   const output = nodes.get(plan.outputNodeId)
   if (!output) throw new Error('渲染计划输出节点不存在')
-  return render(output, outputRegion)
+  const result = await render(output, outputRegion)
+  throwIfAborted(context.signal)
+  return result
 }

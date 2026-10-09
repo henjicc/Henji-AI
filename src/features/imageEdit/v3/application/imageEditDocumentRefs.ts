@@ -46,6 +46,15 @@ export function imageEditV3MaskRef(documentId: string, layerId: string): Applica
   return { kind: 'image_edit.mask', id: `${V3_REF_PREFIX}${encodePart(documentId)}:${encodePart(layerId)}` }
 }
 
+export function imageEditV3FilterRef(documentId: string, layerId: string, filterId: string): ApplicationRef {
+  return { kind: 'image_edit.layer_filter', id: `${V3_REF_PREFIX}${encodePart(documentId)}:${encodePart(layerId)}:${encodePart(filterId)}` }
+}
+
+export function splitImageEditV3FilterRef(ref: ApplicationRef): { documentId: string; layerId: string; filterId: string } {
+  const [documentId, layerId, filterId] = parts(ref, 'image_edit.layer_filter', 3)
+  return { documentId, layerId, filterId }
+}
+
 export function imageEditV3ResourceRef(documentId: string, resourceId: string): ApplicationRef {
   return { kind: 'image_edit.resource', id: `${V3_REF_PREFIX}${encodePart(documentId)}:${encodePart(resourceId)}` }
 }
