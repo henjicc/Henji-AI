@@ -38,6 +38,7 @@ import {
 import { isImageEditTransformInvertibleV3 } from './execution/affineTransform';
 import { assertImageEditLayerSemanticsV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3 } from './layerModel/semantics';
 import { createImageEditLayerContentRegistryV3 } from './layerEntries/base';
+import { imageEditNamedRegionsSchemaV3 } from './namedRegions';
 
 export type ImageEditDocumentSourceFormatV3 = 'v3' | 'invalid' | 'unknown-version';
 
@@ -413,7 +414,8 @@ function parseDocument(value: Record<string, unknown>): ImageEditDocumentV3 | nu
   if (!isNonEmptyString(value.id) || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0) return null;
   const geometry = parseGeometry(value.geometry);
   const color = parseColor(value.color);
-  if (!geometry || !color || !Array.isArray(value.layers)) return null;
+  const namedRegions = imageEditNamedRegionsSchemaV3.safeParse(value.namedRegions);
+  if (!geometry || !color || !Array.isArray(value.layers) || !namedRegions.success) return null;
   const layers: ImageEditLayerV3[] = [];
   const ids = new Set<string>();
   const registerIds = (layer: ImageEditLayerV3): boolean => {
@@ -438,6 +440,7 @@ function parseDocument(value: Record<string, unknown>): ImageEditDocumentV3 | nu
     geometry,
     color,
     layers,
+    namedRegions: namedRegions.data,
   };
 }
 

@@ -55,6 +55,19 @@ function snapshot(document: ImageEditDocumentV3): ImageEditCommandBusSnapshotV3 
 }
 
 describe('ImageEditor V3 瞬态预览文档', () => {
+  it('fill 和蒙版密度/变换预览复用参数覆盖而不改变文档', () => {
+    const document = documentWithLayers()
+    const maskAttachment = { ...document.layers[0].maskAttachment, density: .25, linked: false }
+    const projected = projectImageEditorPreviewDocumentV3({ ...snapshot(document), previewOverrides: {
+      fill: { id: 'fill', kind: 'parameter', targetId: 'raster', baseRevision: 7, value: { fillOpacity: .4 } },
+      mask: { id: 'mask', kind: 'parameter', targetId: 'raster', baseRevision: 7, value: { maskAttachment } },
+    } })
+    expect(projected.layers[0]).toMatchObject({ fillOpacity: .4, maskAttachment })
+    expect(document.layers[0].fillOpacity).toBe(1)
+    expect(document.layers[0].maskAttachment.density).toBe(1)
+    expect(projected.revision).toBe(7)
+  })
+
   it('参数覆盖不修改权威文档、revision 或历史', () => {
     const document = documentWithLayers()
     const originalParams = document.layers[2].type === 'effect' ? document.layers[2].params : {}

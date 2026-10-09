@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- Electron 验收脚本使用仓内 CommonJS 接口。 */
 const assert = require('node:assert/strict')
 const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
@@ -88,7 +89,6 @@ async function waitUntil(check, label, timeout = 20000) {
 }
 
 const button = (page, name) => page.getByRole('button', { name, exact: true }).filter({ visible: true }).first()
-const same = (left, right) => path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
 const inside = (folder, file) => path.resolve(file).toLowerCase().startsWith(`${path.resolve(folder).toLowerCase()}${path.sep}`)
 const returnButton = (page) => page.getByRole('button', { name: `返回剪辑 · ${PROJECT_NAME}`, exact: true }).filter({ visible: true }).first()
 
@@ -158,7 +158,7 @@ async function clipWhere(file, predicate, label, timeout = 30000) {
 async function opacitySlider(page) {
   const tab = page.getByRole('tab', { name: '基础', exact: true }).filter({ visible: true }).first()
   if (await tab.count()) await tab.click()
-  const slider = page.getByRole('slider', { name: '不透明度' }).filter({ visible: true }).first()
+  const slider = page.getByRole('slider', { name: '不透明度滑杆' }).filter({ visible: true }).first()
   await slider.waitFor({ state: 'visible', timeout: 15000 })
   return slider
 }
@@ -436,6 +436,7 @@ async function runFreeCompositionRestart({ launch, userDataDir, outDir }) {
     await closeCurrent()
     evidence.passed = true
     save()
+    // eslint-disable-next-line no-console -- 验收命令输出证据位置。
     console.log(`✓ 自由组合真实验收通过，证据：${evidenceFile}`)
   } catch (error) {
     evidence.error = error instanceof Error ? error.stack ?? error.message : String(error)

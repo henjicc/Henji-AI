@@ -37,7 +37,7 @@ const specs = {
   'annotation-mosaic': { icon: MessageSquareText, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
   'raster-brush': { icon: Paintbrush, group: paint, profiles: painting, input: 'overlay', cursor: 'cursor-crosshair', shortcut: 'KeyB', requiresRasterTarget: true },
   eraser: { icon: Eraser, group: paint, profiles: painting, input: 'overlay', cursor: 'cursor-crosshair', shortcut: 'KeyE', requiresRasterTarget: true },
-  'mask-edit': { icon: CircleDashed, group: paint, profiles: ['mask'], input: 'overlay', cursor: 'cursor-crosshair' },
+  'mask-edit': { icon: CircleDashed, group: paint, profiles: painting, input: 'overlay', cursor: 'cursor-crosshair' },
 } as const
 
 declare module '../../toolFramework/types' {

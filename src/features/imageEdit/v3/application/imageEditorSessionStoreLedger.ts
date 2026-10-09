@@ -26,6 +26,7 @@ export const IMAGE_EDITOR_SESSION_STORE_LEDGER_V3: ApplicationStoreActionLedger<
     disposeSession: { kind: 'excluded', category: 'internal', reason: LIFECYCLE_REASON },
     setActiveTool: { kind: 'excluded', category: 'view_state', reason: TOOL_REASON },
     setSelectedLayerIds: { kind: 'excluded', category: 'transient_selection', reason: SELECTION_REASON },
+    setEditTarget: { kind: 'excluded', category: 'view_state', reason: '像素或蒙版编辑焦点只属于当前窗口，助手通过图层与蒙版实体直接写入相同作品。' },
     toggleGroupExpanded: { kind: 'excluded', category: 'view_state', reason: EXPANSION_REASON },
     setToolSetting: { kind: 'excluded', category: 'view_state', reason: TOOL_SETTING_REASON },
   },

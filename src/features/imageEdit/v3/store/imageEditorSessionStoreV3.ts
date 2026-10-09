@@ -43,6 +43,7 @@ export interface ImageEditorSessionStateV3 {
   activeTool: ImageEditorToolIdV3
   selectedLayerIds: string[]
   expandedGroupIds: string[]
+  editTarget: 'pixels' | 'mask'
   toolSettings: ImageEditorToolSettingsV3
 }
 
@@ -58,6 +59,7 @@ interface ImageEditorSessionStoreV3 {
   setActiveTool: (sessionId: string, tool: ImageEditorToolIdV3) => void
   setSelectedLayerIds: (sessionId: string, layerIds: readonly string[]) => void
   toggleGroupExpanded: (sessionId: string, groupId: string) => void
+  setEditTarget: (sessionId: string, target: 'pixels' | 'mask') => void
   setToolSetting: <K extends keyof ImageEditorToolSettingsV3>(
     sessionId: string,
     key: K,
@@ -119,6 +121,7 @@ export const useImageEditorSessionStoreV3 = create<ImageEditorSessionStoreV3>((s
           activeTool,
           selectedLayerIds: initialLayerId ? [initialLayerId] : [],
           expandedGroupIds: [],
+          editTarget: activeTool === 'mask-edit' ? 'mask' : 'pixels',
           toolSettings: { ...DEFAULT_TOOL_SETTINGS },
         },
       },
@@ -134,7 +137,8 @@ export const useImageEditorSessionStoreV3 = create<ImageEditorSessionStoreV3>((s
   setActiveTool: (sessionId, activeTool) => set((state) => {
     const session = state.sessions[sessionId]
     if (!session || session.activeTool === activeTool) return state
-    return { sessions: { ...state.sessions, [sessionId]: { ...session, activeTool } } }
+    const editTarget = activeTool === 'mask-edit' ? 'mask' : activeTool === 'raster-brush' || activeTool === 'eraser' ? 'pixels' : session.editTarget
+    return { sessions: { ...state.sessions, [sessionId]: { ...session, activeTool, editTarget } } }
   }),
 
   setSelectedLayerIds: (sessionId, layerIds) => set((state) => {
@@ -152,6 +156,12 @@ export const useImageEditorSessionStoreV3 = create<ImageEditorSessionStoreV3>((s
       ? session.expandedGroupIds.filter((id) => id !== groupId)
       : [...session.expandedGroupIds, groupId]
     return { sessions: { ...state.sessions, [sessionId]: { ...session, expandedGroupIds } } }
+  }),
+
+  setEditTarget: (sessionId, editTarget) => set((state) => {
+    const session = state.sessions[sessionId]
+    if (!session || session.editTarget === editTarget) return state
+    return { sessions: { ...state.sessions, [sessionId]: { ...session, editTarget } } }
   }),
 
   setToolSetting: (sessionId, key, value) => set((state) => {

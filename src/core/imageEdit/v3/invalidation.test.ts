@@ -34,7 +34,8 @@ function glow(strength: number): ImageEditEffectLayerV3 {
 
 function doc(resourceId: string, radius: number, glowStrength = 1): ImageEditDocumentV3 {
   return {
-    version: IMAGE_EDIT_DOCUMENT_VERSION_V3, id: 'doc', revision: 1,
+    version: IMAGE_EDIT_DOCUMENT_VERSION_V3,
+    namedRegions: [], id: 'doc', revision: 1,
     geometry: { width: 2_000, height: 1_000, orientation: { rotate: 0, mirrored: false }, crop: null },
     color: createDefaultImageEditColorModeV3(),
     layers: [source(resourceId), blur(radius), glow(glowStrength)],

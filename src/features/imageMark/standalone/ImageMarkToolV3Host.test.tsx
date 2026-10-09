@@ -165,7 +165,7 @@ async function startRasterExport(formatLabel = 'PNG（8 位）'): Promise<void> 
 }
 
 async function findLayerOpacity(
-  opacityLabel = '不透明度',
+  opacityLabel = '不透明度滑杆',
   basicsLabel = '基础',
 ): Promise<HTMLElement> {
   fireEvent.click(await screen.findByRole('tab', { name: basicsLabel }))
@@ -234,7 +234,7 @@ describe('ImageMarkToolV3Host', () => {
     expect(mocks.save).not.toHaveBeenCalled()
 
     const opacity = await findLayerOpacity()
-    fireEvent.change(opacity, { target: { value: '0.75' } })
+    fireEvent.change(opacity, { target: { value: '75' } })
     fireEvent.pointerUp(opacity)
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1), { timeout: 1_500 })
     expect(mocks.save).toHaveBeenNthCalledWith(
@@ -293,7 +293,7 @@ describe('ImageMarkToolV3Host', () => {
     expect(openDocument.hooks).toBeTruthy()
 
     const opacity = await findLayerOpacity()
-    fireEvent.change(opacity, { target: { value: '0.5' } })
+    fireEvent.change(opacity, { target: { value: '50' } })
     fireEvent.pointerUp(opacity)
     await openDocument.hooks?.flush()
     expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ revision: 1 }), expect.anything())
@@ -319,7 +319,7 @@ describe('ImageMarkToolV3Host', () => {
     })
 
     const opacity = await findLayerOpacity()
-    fireEvent.change(opacity, { target: { value: '0.7' } })
+    fireEvent.change(opacity, { target: { value: '70' } })
     fireEvent.pointerUp(opacity)
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1), { timeout: 1_500 })
 
@@ -336,7 +336,7 @@ describe('ImageMarkToolV3Host', () => {
   it('选定格式后先落盘待保存命令，再读取权威快照执行栅格分块导出', async () => {
     renderHost()
     const opacity = await findLayerOpacity()
-    fireEvent.change(opacity, { target: { value: '0.6' } })
+    fireEvent.change(opacity, { target: { value: '60' } })
     fireEvent.pointerUp(opacity)
 
     await startRasterExport('JPEG（8 位，白色背景）')
@@ -422,7 +422,7 @@ describe('ImageMarkToolV3Host', () => {
     })
     renderHost()
 
-    expect(await findLayerOpacity('Opacity', 'Basics')).toBeTruthy()
+    expect(await findLayerOpacity('Opacity滑杆', 'Basics')).toBeTruthy()
     const exportButton = screen.getByRole('button', {
       name: /Export unavailable: This version cannot preserve HDR metadata reliably/,
     }) as HTMLButtonElement

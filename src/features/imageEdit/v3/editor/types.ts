@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import type { ImageEditLayerCommonPatchV3, ImageEditLayersMoveCommandV3 } from '@/core/imageEdit/v3/commandTypes'
+import type { ImageEditNamedRegionV3 } from '@/core/imageEdit/v3/namedRegions'
 
 import type { MarkItem } from '@/core/imageEdit/types'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
@@ -92,12 +94,15 @@ export interface ImageEditorV3Controller {
   /** 缩减展示宿主可不附着历史；正式编辑器由同一实例总线提供。 */
   historyPort?: Pick<import('../application/imageEditCommandBus').ImageEditCommandBusV3, 'getHistoryView' | 'readHistoryPage' | 'readHistoryDocument' | 'jumpToHistory' | 'subscribe'>
   historyResourceDescriptors?: readonly ImageEditorV3ResourceDescriptor[]
+  regionPort?: Pick<import('../application/imageEditCommandBus').ImageEditCommandBusV3, 'getSnapshot' | 'setSelection' | 'subscribe'>
+  setNamedRegions?: (regions: ImageEditNamedRegionV3[]) => void
+  moveLayers?: (moves: ImageEditLayersMoveCommandV3['moves']) => void
   sessionId: string
   profile: ImageEditorHostProfileV3
   document: ImageEditDocumentV3
   updateLayerCommon: (
     layerId: string,
-    patch: Partial<Pick<ImageEditLayerV3, 'name' | 'visible' | 'locked' | 'opacity' | 'blendMode' | 'transform'>>,
+    patch: ImageEditLayerCommonPatchV3,
   ) => void
   updateLayerParams: (layerId: string, params: ImageEditJsonObjectV3) => void
   addAnnotation: (layerId: string, annotation: MarkItem, index?: number) => void
@@ -138,7 +143,7 @@ export interface ImageEditorV3Controller {
   commitLayerCommonPreview: (
     previewId: string,
     layerId: string,
-    patch: Partial<Pick<ImageEditLayerV3, 'opacity'>>,
+    patch: ImageEditLayerCommonPatchV3,
   ) => void
   commitLayerParamsPreview: (
     previewId: string,

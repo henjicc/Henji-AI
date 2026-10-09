@@ -51,6 +51,7 @@ function adjustment(id: string, adjustmentId: string): ImageEditAdjustmentLayerV
 function document(layers: ImageEditLayerV3[]): ImageEditDocumentV3 {
   return {
     version: IMAGE_EDIT_DOCUMENT_VERSION_V3,
+    namedRegions: [],
     id: 'doc',
     revision: 1,
     geometry: {

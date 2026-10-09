@@ -26,7 +26,7 @@ import {
   type ImageEditV3MaskMutationDraft,
 } from './imageEditV3Fields'
 import { getImageEditDocumentCatalogRevisionV3, requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
-import { findImageEditV3LiveLayer, splitImageEditV3FilterRef, splitImageEditV3DocumentRef, splitImageEditV3LayerRef } from './imageEditDocumentRefs'
+import { collectImageEditV3LiveLayers, findImageEditV3LiveLayer, splitImageEditV3FilterRef, splitImageEditV3DocumentRef, splitImageEditV3LayerRef } from './imageEditDocumentRefs'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 
@@ -36,6 +36,7 @@ const UNDO_PREFIX = 'image-edit-v3-undo:'
 import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
 import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
 import { IMAGE_EDIT_HISTORY_FIELDS_V3, type ImageEditHistoryMutationDraftV3 } from './imageEditHistoryFields'
+import { IMAGE_EDIT_WORKFLOW_FIELDS_V3, imageEditLayerMovesSchemaV3, type ImageEditWorkflowDraftV3 } from './imageEditWorkflowFields'
 
 interface UndoPayload {
   entityType: 'image_edit.document' | 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask' | 'image_edit.layer_filter'
@@ -91,6 +92,14 @@ function completed(
   commandIds: string[],
   historyJump?: UndoPayload['historyJump'],
 ): ApplicationCompletedStepResult {
+  const movesMutation = step.mutations.find(mutation => mutation.propertyId === 'image_edit.document.layer_order')
+  if (movesMutation) {
+    const moves = imageEditLayerMovesSchemaV3.parse(movesMutation.value)
+    const actual = new Map(collectImageEditV3LiveLayers(requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document).map(location => [location.layer.id, location]))
+    if (moves.some(move => actual.get(move.layerId)?.parentId !== move.parentId || actual.get(move.layerId)?.index !== move.index)) {
+      throw new Error('图层移动后位置读回与请求不符，已取消本次修改')
+    }
+  }
   const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
@@ -99,7 +108,7 @@ function completed(
     evidence: step.mutations.map((mutation) => ({
       kind: 'property_value' as const,
       target: { ...step.target, revision },
-      fact: `图片编辑属性 ${mutation.propertyId} 已通过当前 V3 命令总线更新。`,
+      fact: `图片编辑属性 ${mutation.propertyId} 已通过当前 V3 命令总线更新并读回。`,
       data: mutation.value ?? null,
       capturedAt: new Date().toISOString(),
     })),
@@ -399,8 +408,9 @@ export class ImageEditV3DocumentMutationExecutor extends ImageEditV3MutationExec
   readonly entityType = 'image_edit.document'
   private readonly writers = fieldWriterTable(IMAGE_EDIT_V3_DOCUMENT_FIELDS)
   private readonly historyWriters = fieldWriterTable(IMAGE_EDIT_HISTORY_FIELDS_V3)
-  readonly writableProperties = new Set([...writableProperties(this.writers), ...writableProperties(this.historyWriters)])
-  readonly propertyOperations = new Map([...propertyOperations(this.writers), ...propertyOperations(this.historyWriters)])
+  private readonly workflowWriters = fieldWriterTable(IMAGE_EDIT_WORKFLOW_FIELDS_V3)
+  readonly writableProperties = new Set([...writableProperties(this.writers), ...writableProperties(this.historyWriters), ...writableProperties(this.workflowWriters)])
+  readonly propertyOperations = new Map([...propertyOperations(this.writers), ...propertyOperations(this.historyWriters), ...propertyOperations(this.workflowWriters)])
 
   async createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number }> {
     const { documentId } = splitImageEditV3DocumentRef(step.target)
@@ -414,19 +424,26 @@ export class ImageEditV3DocumentMutationExecutor extends ImageEditV3MutationExec
       return { documentId, commands: [], historyPosition: draft.position }
     }
     const geometry = structuredClone(document.geometry)
-    await applyWriterTable(this.writers, geometry, step.mutations)
+    const workflow: ImageEditWorkflowDraftV3 = {}
+    const workflowMutations = step.mutations.filter(mutation => this.workflowWriters[mutation.propertyId])
+    await applyWriterTable(this.workflowWriters, workflow, workflowMutations)
+    const geometryMutations = step.mutations.filter(mutation => !this.workflowWriters[mutation.propertyId])
+    await applyWriterTable(this.writers, geometry, geometryMutations)
     const orientationChanged = geometry.orientation.rotate !== document.geometry.orientation.rotate
       || geometry.orientation.mirrored !== document.geometry.orientation.mirrored
     const cropSpecified = step.mutations.some(mutation => mutation.propertyId === 'image_edit.document.crop_rect')
     return {
       documentId,
-      commands: [{
-        type: 'document.update-output-geometry',
+      commands: [...(workflow.regions ? [{ type: 'document.set-named-regions' as const, regions: workflow.regions,
+        commandId: createImageEditIdV3('regions'), expectedRevision: document.revision }] : []),
+        ...(workflow.moves ? [{ type: 'layer.move-many' as const, moves: workflow.moves,
+          commandId: createImageEditIdV3('moves'), expectedRevision: document.revision }] : []), ...(geometryMutations.length ? [{
+        type: 'document.update-output-geometry' as const,
         commandId: createImageEditIdV3('geometry'),
         expectedRevision: document.revision,
         orientation: geometry.orientation,
         crop: orientationChanged && !cropSpecified ? null : geometry.crop,
-      }],
+      }] : [])],
     }
   }
 }

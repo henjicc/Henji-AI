@@ -33,6 +33,7 @@ function createNestedDocument(): ImageEditDocumentV3 {
   };
   return {
     version: IMAGE_EDIT_DOCUMENT_VERSION_V3,
+    namedRegions: [],
     id: 'document-1',
     revision: 7,
     geometry: createImageEditCanvasGeometryV3(4000, 3000),

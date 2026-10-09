@@ -879,10 +879,13 @@
       },
       "repair": {
         "auto": "Auto",
-        "quality": "Repair quality", "fast": "Fast", "fine": "Fine",
+        "quality": "Repair quality",
+        "fast": "Fast",
+        "fine": "Fine",
         "remove-selection": "Remove selected content",
         "download-hint": "Download for first model repair · {{size}}",
-        "download": "Download repair model", "cancel-download": "Cancel download",
+        "download": "Download repair model",
+        "cancel-download": "Cancel download",
         "drag-source": "Drag the selection to a clean area; release to repair",
         "select-first": "Create a selection before choosing a clean source",
         "selecting": "Preparing selection · {{percent}}%",
@@ -901,7 +904,6 @@
         "cancel-task": "Cancel processing",
         "progress": "Applying selection · {{percent}}%",
         "polygon-hint": "Click to add points; double-click or Enter to close",
-
         "overlay": "Selection-to-mask canvas",
         "combineMode": "Selection combine mode",
         "replace": "Replace",
@@ -977,7 +979,7 @@
         }
       },
       "adjustment": {
-      "color_grade": "Color adjustments",
+        "color_grade": "Color adjustments",
         "exposure": "Exposure",
         "curves": "Curves",
         "temperature-tint": "Temperature / Tint",
@@ -1062,6 +1064,36 @@
           "green": "Green",
           "blue": "Blue"
         }
+      },
+      "workflow": {
+        "fill": "Fill",
+        "density": "Mask density",
+        "clipping": "Clip to layer below",
+        "content": "Layer content",
+        "mask": "Mask",
+        "maskEnabled": "Enable mask",
+        "maskLinked": "Link layer and mask",
+        "unlink": "Unlink mask",
+        "link": "Link mask",
+        "maskTarget": "Edit {{name}} mask",
+        "clippedLayer": "Clipped layer",
+        "group": "Group selected layers",
+        "ungroup": "Ungroup",
+        "outGroup": "Move out of group",
+        "groupName": "Layer group"
+      },
+      "channels": {
+        "title": "Channels",
+        "save": "Save selection as channel",
+        "load": "Load channel selection",
+        "update": "Update channel from selection",
+        "delete": "Delete channel",
+        "name": "Channel name",
+        "defaultName": "Selection channel",
+        "empty": "No selection channels yet",
+        "emptyDescription": "Save a selection to load or edit it again.",
+        "unavailable": "Reopen the editor to manage channels",
+        "loadUnavailable": "Reopen the editor to load selections"
       }
     }
   },

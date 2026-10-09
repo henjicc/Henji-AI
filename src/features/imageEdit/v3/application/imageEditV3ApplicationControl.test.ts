@@ -7,6 +7,7 @@ import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
+  createImageEditGroupLayerV3,
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
@@ -61,6 +62,35 @@ async function commitStep(
 }
 
 describe('图片编辑 V3 实时 Application Control', () => {
+  it('命名区域和批量树位置经正式描述、通用写入和读回，支持事务撤销', async () => {
+    const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'workflow-reflection' })
+    document.layers = [createImageEditRasterLayerV3('content', '内容'), createImageEditGroupLayerV3('group', '组')]
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerPersistedImageEditTestSession('workflow-reflection-session', bus))
+    const reflection = getApplicationReflectionRegistry(), target = imageEditV3DocumentRef(document.id)
+    const regions = [{ id: 'named', name: '主体', selection: { operations: [{ combine: 'replace', invertBefore: false, shape: { type: 'rectangle', x: .1, y: .2, width: .5, height: .3 } }], feather: .02, inverted: false } }]
+    const ids = ['image_edit.document.named_regions', 'image_edit.document.layer_order']
+    const descriptors = reflection.describe({ entityTypes: ['image_edit.document'] }, accessContext).properties
+    for (const id of ids) {
+      const field = descriptors.find(entry => entry.id === id)
+      expect(field?.readOnlyReason).toBeUndefined()
+      expect(field).toBeDefined()
+      if (field?.value.kind === 'json') expect(reflection.resolveSchema(field.value.schemaRef, accessContext)).toBeTruthy()
+    }
+    const before = await reflection.readEntity(target, ids, accessContext)
+    const result = await commitStep('保存主体并移入组', before.revisions, { kind: 'mutation', target, entityType: 'image_edit.document', expectedRevisions: before.revisions,
+      mutations: [{ propertyId: ids[0], operation: 'set', value: regions }, { propertyId: ids[1], operation: 'set', value: [{ layerId: 'content', parentId: 'group', index: 0 }] }] }, 'workflow')
+    expect(result.status, JSON.stringify(result)).toBe('completed')
+    const read = await reflection.readEntity(target, ids, accessContext)
+    expect(read.properties[ids[0]]).toEqual(regions)
+    expect(read.properties[ids[1]]).toEqual([{ layerId: 'group', parentId: null, index: 0 }, { layerId: 'content', parentId: 'group', index: 0 }])
+    if (result.status !== 'completed' || !result.undoRef) throw new Error('缺少工作流事务撤销引用')
+    const undone = await getApplicationControlExecutionEngine().undo({ undoRef: result.undoRef, expectedRevisions: result.resultingRevisions, idempotencyKey: 'workflow-transaction-undo' }, executionContext)
+    expect(undone.status, JSON.stringify(undone)).toBe('completed')
+    expect(bus.getSnapshot().document.layers).toEqual(document.layers)
+    expect(bus.getSnapshot().document.namedRegions).toEqual([])
+  })
+
   it('多步历史导航失败时逆序补偿游标，混合新编辑在写入前拒绝', async () => {
     const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'history-compensation' })
     document.layers = [createImageEditRasterLayerV3('content', '内容')]

@@ -131,8 +131,14 @@ export function useImageEditorControllerV3(
     const selected = session.selectedLayerIds.filter((id) => validIds.has(id))
     const fallbackId = resolveImageEditorDefaultLayerIdV3(document.layers)
     if (selected.length === 0 && fallbackId) selected.push(fallbackId)
-    useImageEditorSessionStoreV3.getState().setSelectedLayerIds(sessionId, selected)
-  }, [document.layers, sessionId])
+    const store = useImageEditorSessionStoreV3.getState()
+    store.setSelectedLayerIds(sessionId, selected)
+    const target = selected.length === 1 ? findImageEditLayerLocationV3(document.layers, selected[0])?.layer : undefined
+    if (session.editTarget === 'mask' && !target?.mask) {
+      store.setEditTarget(sessionId, 'pixels')
+      if (session.activeTool === 'mask-edit') store.setActiveTool(sessionId, readyToolIds.includes('raster-brush') ? 'raster-brush' : 'move')
+    }
+  }, [document.layers, readyToolIds, sessionId])
 
   const controller = useMemo<ImageEditorV3Controller>(() => {
     const commandBase = (): { commandId: string; expectedRevision: number } => ({
@@ -143,6 +149,9 @@ export function useImageEditorControllerV3(
       sessionId,
       profile,
       document,
+      regionPort: binding.bus,
+      setNamedRegions: regions => binding.bus.dispatch({ ...commandBase(), type: 'document.set-named-regions', regions }),
+      moveLayers: moves => binding.bus.dispatch({ ...commandBase(), type: 'layer.move-many', moves }),
       updateLayerCommon: (layerId, patch) => {
         binding.bus.dispatch({ ...commandBase(), type: 'layer.update-common', layerId, patch })
       },

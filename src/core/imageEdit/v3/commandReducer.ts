@@ -38,6 +38,7 @@ import {
 } from './commandLayerLocation';
 import { assertImageEditStructuralCommandResourcesV3 } from './commandLayerResourceMetadata';
 import { assertImageEditLayerSemanticsV3 } from './layerModel/semantics';
+import { imageEditNamedRegionsSchemaV3 } from './namedRegions';
 
 export {
   ImageEditCommandValidationErrorV3,
@@ -221,6 +222,49 @@ function applyLayerCommand(
   const structuralResources = 'resources' in command && command.resources
     ? command.resources.map((resource) => ({ ...resource }))
     : undefined;
+  if (command.type === 'layer.move-many') {
+    if (!command.moves.length || new Set(command.moves.map(move => move.layerId)).size !== command.moves.length) {
+      throw new ImageEditCommandValidationErrorV3('请选择不重复的待移动图层');
+    }
+    const ids = new Set(command.moves.map(move => move.layerId));
+    const locations = command.moves.map(move => {
+      const location = findLayerLocation(document.layers, move.layerId);
+      if (!location) throw new ImageEditCommandValidationErrorV3('待移动图层不存在');
+      assertLayerEditable(location);
+      assertContainerEditable(document.layers, move.parentId);
+      if (location.ancestors.some(ancestor => ids.has(ancestor.id))
+        || (move.parentId && command.moves.some(entry => {
+          const source = findLayerLocation(document.layers, entry.layerId);
+          return source && containsLayerId(source.layer, move.parentId!);
+        }))) throw new ImageEditCommandValidationErrorV3('不能同时移动组与后代，或放入待移动组的后代');
+      return location;
+    });
+    const remove = (layers: readonly ImageEditLayerV3[]): ImageEditLayerV3[] => layers
+      .filter(layer => !ids.has(layer.id))
+      .map(layer => layer.type === 'group' ? { ...layer, children: remove(layer.children) } : layer);
+    let layers = remove(document.layers);
+    const destinations = new Map<string | null, typeof command.moves>();
+    for (const move of command.moves) {
+      const entries = destinations.get(move.parentId) ?? [];
+      entries.push(move); destinations.set(move.parentId, entries);
+    }
+    for (const [parentId, moves] of destinations) {
+      const container = [...getContainer(layers, parentId)];
+      const ordered = moves.slice().sort((left, right) => left.index - right.index);
+      if (new Set(ordered.map(move => move.index)).size !== ordered.length) {
+        throw new ImageEditCommandValidationErrorV3('目标图层位置不能重复');
+      }
+      for (const move of ordered) {
+        assertIndex(move.index, container.length);
+        const location = locations.find(entry => entry.layer.id === move.layerId)!;
+        container.splice(move.index, 0, location.layer);
+      }
+      layers = replaceContainer(layers, parentId, container);
+    }
+    return { layers, inverse: { ...base, type: 'layer.move-many', moves: locations.map(location => ({
+      layerId: location.layer.id, parentId: location.parentId, index: location.index,
+    })) } };
+  }
   if (command.type === 'layer.add') {
     assertContainerEditable(document.layers, command.parentId);
     const layer = cloneLayer(command.layer);
@@ -520,13 +564,16 @@ export function applyImageEditCommandV3(
   const documentResult = command.type === 'document.update-output-geometry'
     ? applyImageEditOutputGeometryCommandV3(document, command, nextRevision)
     : null;
-  const layerResult = documentResult ? null : applyLayerCommand(
+  const regionsResult = command.type === 'document.set-named-regions'
+    ? imageEditNamedRegionsSchemaV3.parse(command.regions) : null;
+  const layerResult = documentResult || regionsResult ? null : applyLayerCommand(
     document,
     command,
     nextRevision,
     options.allowLegacyResourceMetadata === true,
   );
-  const inverse = documentResult?.inverse ?? layerResult?.inverse;
+  const inverse = regionsResult ? { ...inverseBase(command, nextRevision), type: 'document.set-named-regions' as const,
+    regions: structuredClone(document.namedRegions) } : documentResult?.inverse ?? layerResult?.inverse;
   try {
     assertImageEditLayerSemanticsV3(layerResult?.layers ?? document.layers);
   } catch (error) {
@@ -543,6 +590,7 @@ export function applyImageEditCommandV3(
     document: {
       ...document,
       revision: nextRevision,
+      ...(regionsResult ? { namedRegions: regionsResult } : {}),
       ...(documentResult ? { geometry: documentResult.geometry } : { layers: layerResult?.layers ?? document.layers }),
     },
     inverse,

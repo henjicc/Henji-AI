@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检启动器使用 CommonJS 场景工厂。 */
 const { createImageEditToolLifecycleScene, createImageEditRegistrationFailureScene, createImageEditQuickMarkViewerScene } = require('./uiInspectionSceneImageEditToolLifecycle.cjs')
 const { createImageEditDockingScene, createImageEditLayoutFailureScene } = require('./uiInspectionSceneImageEditDocking.cjs')
+const { createImageEditLayerPanelsScene } = require('./uiInspectionSceneImageEditLayerPanels.cjs')
 const { createImageEditHistoryScene } = require('./uiInspectionSceneImageEditHistory.cjs')
 const { createImageEditRegionHostsScene } = require('./uiInspectionSceneImageEditRegionHosts.cjs')
 const { diffBuffers } = require('./canvasVisualDiff.cjs')
@@ -164,6 +165,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createImageEditQuickMarkViewerScene(context),
     createImageEditDockingScene(context),
     createImageEditHistoryScene(context),
+    createImageEditLayerPanelsScene(context),
     createImageEditLayoutFailureScene(context),
     createImageEditRegionHostsScene(context),
     ...createCameraStagePlaybackScenes(context),

@@ -6,7 +6,7 @@ export type ImageEditorHostProfileIdV3 = 'full' | 'quick' | 'canvas-edit' | 'mas
 
 export type ImageEditorToolIdV3 = ImageEditorRegisteredToolId;
 
-export type ImageEditorPanelIdV3 = 'layers' | 'properties' | 'histogram' | 'color' | 'history';
+export type ImageEditorPanelIdV3 = 'layers' | 'properties' | 'histogram' | 'color' | 'history' | 'channels';
 export type ImageEditorLayerControlV3 = 'blend-mode' | 'mask';
 export type ImageEditorSaveActionV3 = 'save-document' | 'save-package' | 'export-raster';
 export type ImageEditorLayerKindV3 = 'raster' | 'annotation' | 'effect' | 'adjustment' | 'group';
@@ -90,7 +90,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
-    panels: ['layers', 'properties', 'history'],
+    panels: ['layers', 'properties', 'history', 'channels'],
     layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document', 'export-raster'],
     hdrReadiness: {
@@ -120,7 +120,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
-    panels: ['layers', 'properties', 'history'],
+    panels: ['layers', 'properties', 'history', 'channels'],
     layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document'],
     hdrReadiness: {

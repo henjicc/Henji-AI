@@ -11,7 +11,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     expect(profile).toMatchObject({
       layerKinds: ['raster', 'effect', 'adjustment', 'group'],
       adjustments: ['color_grade'],
-      panels: ['layers', 'properties', 'history'],
+      panels: ['layers', 'properties', 'history', 'channels'],
       layerControls: ['blend-mode', 'mask'],
       saveActions: ['save-document', 'export-raster'],
       hdrReadiness: {
@@ -42,6 +42,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'annotation-mosaic',
       'raster-brush',
       'eraser',
+      'mask-edit',
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
       .toEqual(getReadyImageEditorToolIdsV3(profile))

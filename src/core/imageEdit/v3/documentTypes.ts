@@ -1,8 +1,9 @@
 import type { ImageEditColorModeV3 } from './colorTypes';
 import type { ImageEditLayerV3 } from './layerTypes';
+import type { ImageEditNamedRegionV3 } from './namedRegions';
 
 /** 文档内容与工作副本外壳独立版本化；历史页改动不改变图层/几何内容。 */
-export const IMAGE_EDIT_DOCUMENT_VERSION_V3 = 4;
+export const IMAGE_EDIT_DOCUMENT_VERSION_V3 = 5;
 
 export type ImageEditRotationV3 = 0 | 90 | 180 | 270;
 
@@ -34,4 +35,5 @@ export interface ImageEditDocumentV3 {
   color: ImageEditColorModeV3;
   /** 自下而上的合成顺序；组内 children 同样自下而上。 */
   layers: ImageEditLayerV3[];
+  namedRegions: ImageEditNamedRegionV3[];
 }

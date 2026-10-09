@@ -49,6 +49,14 @@ const rasterPasteboardResources = vi.hoisted(() => ({
   readSourceMetadata: vi.fn(),
   readSourceTile: vi.fn(),
 }))
+// 此组只测节目交互读资源；缩略图另有生命周期测试，避免派生请求污染计数。
+vi.mock('../panels/thumbnails', () => ({
+  ImageEditThumbnailsV3: class {
+    readDocument = vi.fn(async () => 'thumbnail.png')
+    read = vi.fn(async () => 'thumbnail.png')
+    dispose = vi.fn()
+  },
+}))
 vi.mock('@/commands/imageEditorV3', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/commands/imageEditorV3')>()
   return {

@@ -4,15 +4,18 @@ import {
   Copy,
   Plus,
   Trash2,
+  FolderPlus,
+  Ungroup,
+  CornerUpLeft,
 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 
-import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiOptionButton } from '@/components/ui'
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag'
-import type { ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
+import { collectImageEditLayerIdsV3, type ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorCapabilityReadinessV3 } from '../application/imageEditorHostProfiles'
 import { useImageEditorSessionStoreV3 } from '../store'
 import {
@@ -22,13 +25,18 @@ import {
   findImageEditLayerLocationV3,
   flattenImageEditLayerTreeV3,
   isImageEditLayerLocationEditableV3,
-  resolveImageEditLayerDropV3,
+  canGroupImageEditLayersV3,
+  canUngroupImageEditLayerV3,
   type ImageEditLayerCreationChoiceV3,
   type ImageEditLayerTreeRowV3,
 } from './layerTreeV3'
 import { ImageEditorLayerRowV3 } from './ImageEditorLayerRowV3'
 import { resolveImageEditorReadinessReasonV3 } from './readinessPresentationV3'
 import type { ImageEditorV3Controller } from './types'
+import { resolveImageEditLayerMovesV3 } from '../panels/layers/treeDrop'
+import { selectImageEditTargetV3 } from '../panels/layers/editTarget'
+import { ImageEditThumbnailsV3 } from '../panels/thumbnails'
+import { useImageEditorDisposableV3 } from '../execution/useImageEditorDisposableV3'
 
 interface ImageEditorLayersPanelV3Props {
   controller: ImageEditorV3Controller
@@ -45,12 +53,12 @@ interface ImageEditorLayerCreationCapabilityV3 {
 }
 
 function getEffectiveSelectedIds(
-  layers: readonly ImageEditLayerV3[],
+  index: ReadonlyMap<string, ImageEditLayerTreeRowV3>,
   selectedLayerIds: readonly string[],
 ): string[] {
   const selected = new Set(selectedLayerIds)
   return selectedLayerIds.filter((id) => {
-    const location = findImageEditLayerLocationV3(layers, id)
+    const location = index.get(id)
     return location && !location.ancestors.some((ancestor) => selected.has(ancestor.id))
   })
 }
@@ -108,6 +116,13 @@ export function ImageEditorLayersPanelV3({
   embedded = false,
 }: ImageEditorLayersPanelV3Props): JSX.Element {
   const { t } = useTranslation('ui')
+  const thumbnailResource = useMemo(() => {
+    const renderer = controller.historyPort ? new ImageEditThumbnailsV3({ sessionId: controller.sessionId,
+      historyResourceDescriptors: controller.historyResourceDescriptors }) : null
+    return { renderer, dispose: () => renderer?.dispose() }
+  }, [controller.sessionId, controller.historyResourceDescriptors, controller.historyPort])
+  useImageEditorDisposableV3(thumbnailResource)
+  const thumbnails = thumbnailResource.renderer
   const [creationError, setCreationError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [creationProgress, setCreationProgress] = useState(0)
@@ -129,10 +144,12 @@ export function ImageEditorLayersPanelV3({
     () => flattenImageEditLayerTreeV3(controller.document.layers, expanded),
     [controller.document.layers, expanded],
   )
+  const allRows = useMemo(() => flattenImageEditLayerTreeV3(controller.document.layers, new Set(collectImageEditLayerIdsV3(controller.document.layers))), [controller.document.layers])
+  const treeIndex = useMemo(() => new Map(allRows.map(row => [row.layer.id, row])), [allRows])
   const selectedSet = useMemo(() => new Set(selectedLayerIds), [selectedLayerIds])
-  const effectiveSelectedIds = getEffectiveSelectedIds(controller.document.layers, selectedLayerIds)
+  const effectiveSelectedIds = getEffectiveSelectedIds(treeIndex, selectedLayerIds)
   const primaryLocation = effectiveSelectedIds.length === 1
-    ? findImageEditLayerLocationV3(controller.document.layers, effectiveSelectedIds[0])
+    ? (treeIndex.get(effectiveSelectedIds[0]) ?? null)
     : null
   const primaryEditable = Boolean(
     primaryLocation && isImageEditLayerLocationEditableV3(primaryLocation),
@@ -150,10 +167,17 @@ export function ImageEditorLayersPanelV3({
     [creationChoices],
   )
   const reorderRows = useCallback((fromIndex: number, toIndex: number): void => {
-    const destination = resolveImageEditLayerDropV3(rows, fromIndex, toIndex)
-    if (!destination) return
-    controller.moveLayer(destination.layerId, destination.parentId, destination.index)
-  }, [controller, rows])
+    const moves = resolveImageEditLayerMovesV3(rows, fromIndex, toIndex, selectedLayerIds, allRows)
+    if (!moves) return
+    try {
+      if (controller.moveLayers) controller.moveLayers(moves)
+      else if (moves.length === 1) controller.moveLayer(moves[0].layerId, moves[0].parentId, moves[0].index)
+      else throw new Error('请重新打开编辑器后移动多个图层')
+      const groupId = moves[0].parentId
+      if (groupId && !expanded.has(groupId)) toggleGroupExpanded(controller.sessionId, groupId)
+      setCreationError(null)
+    } catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
+  }, [controller, rows, selectedLayerIds, allRows, expanded, toggleGroupExpanded])
   const { dragState, itemRefs, handleMouseDown } = useReorderDrag({
     disabled: rows.length < 2,
     isCustomDragging: false,
@@ -190,6 +214,7 @@ export function ImageEditorLayersPanelV3({
   }
 
   const handleSelect = (row: ImageEditLayerTreeRowV3, event: MouseEvent<HTMLButtonElement>): void => {
+    if (dragState.isDragging || dragState.isDropping) { event.preventDefault(); return }
     if (event.metaKey || event.ctrlKey) {
       const next = selectedSet.has(row.layer.id)
         ? selectedLayerIds.filter((id) => id !== row.layer.id)
@@ -207,9 +232,12 @@ export function ImageEditorLayersPanelV3({
         return
       }
     }
-    setSelectedLayerIds(controller.sessionId, [row.layer.id])
+    selectImageEditTargetV3(controller, row.layer.id, 'pixels')
   }
 
+  const runAction = (work: () => void): void => {
+    try { work(); setCreationError(null) } catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
+  }
   const renderRow = (row: ImageEditLayerTreeRowV3, index: number): JSX.Element => {
     const fromIndex = dragState.fromIndex
     const toIndex = dragState.toIndex
@@ -234,6 +262,8 @@ export function ImageEditorLayersPanelV3({
       <ImageEditorLayerRowV3
       key={row.layer.id}
       controller={controller}
+      thumbnails={thumbnails}
+      onError={setCreationError}
       row={row}
       selected={selectedSet.has(row.layer.id)}
       expanded={expanded.has(row.layer.id)}
@@ -256,7 +286,7 @@ export function ImageEditorLayersPanelV3({
 
   return (
     <section data-layers-panel className="flex min-h-0 flex-1 flex-col">
-      {creationError ? <UiError message={creationError} /> : null}
+      {creationError ? <UiError size="xs" message={creationError} /> : null}
       {creating ? <div className="flex items-center gap-2 px-3 text-xs text-text2" role="status">{t('imageEditor.v3.selection.progress', { percent: creationProgress })}<UiButton size="sm" onClick={() => creationAbort.current?.abort()}>{t('imageEditor.v3.selection.cancel-task')}</UiButton></div> : null}
       <div className="flex h-10 shrink-0 items-center gap-1 px-3">
         {embedded ? <div className="min-w-0 flex-1" /> : (
@@ -323,11 +353,11 @@ export function ImageEditorLayersPanelV3({
           title={t('imageEditor.v3.layers.moveUp')}
           onClick={() => {
             if (!primaryLocation || !primaryEditable) return
-            controller.moveLayer(
+            runAction(() => controller.moveLayer(
               primaryLocation.layer.id,
               primaryLocation.parentId,
               primaryLocation.index + 1,
-            )
+            ))
           }}
         >
           <ArrowUp className="h-3.5 w-3.5" />
@@ -338,11 +368,11 @@ export function ImageEditorLayersPanelV3({
           title={t('imageEditor.v3.layers.moveDown')}
           onClick={() => {
             if (!primaryLocation || !primaryEditable) return
-            controller.moveLayer(
+            runAction(() => controller.moveLayer(
               primaryLocation.layer.id,
               primaryLocation.parentId,
               primaryLocation.index - 1,
-            )
+            ))
           }}
         >
           <ArrowDown className="h-3.5 w-3.5" />
@@ -376,6 +406,29 @@ export function ImageEditorLayersPanelV3({
         </UiIconButton>
       </div>
 
+      {controller.profile.layerKinds.includes('group') ? <div className="flex shrink-0 items-center gap-1 px-3 pb-2">
+        <UiIconButton size="sm" aria-label={t('imageEditor.v3.workflow.group')} title={t('imageEditor.v3.workflow.group')}
+          disabled={!canGroupImageEditLayersV3(controller.document.layers, effectiveSelectedIds)}
+          onClick={() => {
+            try { const id = controller.groupLayers(effectiveSelectedIds, t('imageEditor.v3.workflow.groupName')); setSelectedLayerIds(controller.sessionId, [id]); toggleGroupExpanded(controller.sessionId, id); setCreationError(null) }
+            catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
+          }}><FolderPlus className="h-4 w-4" /></UiIconButton>
+        <UiIconButton size="sm" aria-label={t('imageEditor.v3.workflow.ungroup')} title={t('imageEditor.v3.workflow.ungroup')} disabled={!canUngroupImageEditLayerV3(primaryLocation)}
+          onClick={() => {
+            if (!primaryLocation || primaryLocation.layer.type !== 'group') return
+            try { const ids = primaryLocation.layer.children.map(layer => layer.id); controller.ungroupLayer(primaryLocation.layer.id); setSelectedLayerIds(controller.sessionId, ids); setCreationError(null) }
+            catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
+          }}><Ungroup className="h-4 w-4" /></UiIconButton>
+        <UiIconButton size="sm" aria-label={t('imageEditor.v3.workflow.outGroup')} title={t('imageEditor.v3.workflow.outGroup')} disabled={!primaryEditable || !primaryLocation?.parentId}
+          onClick={() => {
+            if (!primaryLocation?.parentId) return
+            const parent = findImageEditLayerLocationV3(controller.document.layers, primaryLocation.parentId)
+            if (!parent) return
+            try { controller.moveLayer(primaryLocation.layer.id, parent.parentId, parent.index + 1); setCreationError(null) }
+            catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
+          }}><CornerUpLeft className="h-4 w-4" /></UiIconButton>
+      </div> : null}
+
       <div
         role="tree"
         aria-label={t('imageEditor.v3.layers.title')}
@@ -396,9 +449,7 @@ export function ImageEditorLayersPanelV3({
         }}
       >
         {rows.length === 0 ? (
-          <p className="px-4 py-8 text-center text-xs text-text2">
-            {t('imageEditor.v3.layers.empty')}
-          </p>
+          <UiEmpty size="sm" title={t('imageEditor.v3.layers.empty')} />
         ) : (
           <Virtuoso
             ref={listRef}

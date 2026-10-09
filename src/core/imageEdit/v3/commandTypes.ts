@@ -17,6 +17,18 @@ import type {
   ImageEditLayerFilterV3,
 } from './layerTypes';
 import { collectImageEditMaskResourceIdsV3 } from './layerTypes';
+import type { ImageEditNamedRegionV3 } from './namedRegions';
+
+export interface ImageEditNamedRegionsCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'document.set-named-regions';
+  regions: ImageEditNamedRegionV3[];
+}
+
+/** 所有移出与插入在一个命令里验证，允许剪贴层与基底一起移动。 */
+export interface ImageEditLayersMoveCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'layer.move-many';
+  moves: { layerId: string; parentId: string | null; index: number }[];
+}
 
 export interface ImageEditCommandBaseV3 {
   commandId: string;
@@ -175,6 +187,8 @@ export interface ImageEditMaskTileDeltaCommandV3 extends ImageEditCommandBaseV3 
 }
 
 export type ImageEditCommandV3 =
+  | ImageEditNamedRegionsCommandV3
+  | ImageEditLayersMoveCommandV3
   | ImageEditDocumentUpdateOutputGeometryCommandV3
   | ImageEditLayerAddCommandV3
   | ImageEditLayerDeleteCommandV3

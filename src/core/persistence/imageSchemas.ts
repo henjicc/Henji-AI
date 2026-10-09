@@ -4,6 +4,7 @@ import { imageColorGradeParamsSchema } from '../imaging/adjustments/schema'
 import { z } from 'zod'
 import { imageEditHistoryCheckpointSchemaV3 } from '../imageEdit/v3/historyPaging/schema'
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '../imageEdit/v3/documentTypes'
+import { imageEditNamedRegionsSchemaV3 } from '../imageEdit/v3/namedRegions'
 import { IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION } from './schemaVersions'
 
 const integer = z.number().int().nonnegative()
@@ -39,6 +40,7 @@ export const imageContentSchema = z.object({
   geometry: z.object({ width: integer, height: integer, orientation: z.object({ rotate: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]), mirrored: z.boolean() }), crop: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable() }),
   color: z.object({ workingSpace: z.enum(['srgb', 'display-p3', 'rec2020']), bitDepth: z.union([z.literal(8), z.literal(16), z.literal('float16'), z.literal('float32')]), transferFunction: z.enum(['srgb', 'linear', 'pq', 'hlg']), hdrMetadata: hdrMetadata.nullable(), iccProfileResourceId: identifier.nullable() }),
   layers: z.array(imageLayerSchema),
+  namedRegions: imageEditNamedRegionsSchemaV3,
 })
 export const imageWorkingCopySchema = z.object({ format: z.literal('henji-image-edit'), formatVersion: z.literal(IMAGE_WORKING_VERSION), documentId: identifier, revision: integer, createdAt: z.string(), updatedAt: z.string(), document: imageContentSchema, historyCheckpoint: imageEditHistoryCheckpointSchemaV3.optional(), resourceRefs: z.array(resource), previewRef: resource.optional() }).strict()
 export const imageDocumentHeaderSchema = z.object({ format: z.literal('henji-image-document'), version: z.literal(IMAGE_HEADER_VERSION), id: identifier, draft: z.boolean().optional(), revision: integer, kindVersion: z.number().int().positive(), createdAt: z.string(), updatedAt: z.string(), contentRevision: integer, emptyUntilRevision: integer.nullable().optional(), summary: z.object({ width: integer, height: integer, layers: integer }) })

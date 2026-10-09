@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 3,
-      "fingerprint": "690b33f50c44a712a549debbc0dca607bb3b66ecc2cef1b44f739b68b700c390",
-      "supportedFrom": 3
+      "version": 4,
+      "fingerprint": "7c15812b5523c892c7b5fcd980e4b2ebc45a458b7cfc0587337d3cb8dd4568af",
+      "supportedFrom": 4
     },
     "image-working-copy": {
-      "version": 5,
-      "fingerprint": "7e63868b5b6f0470b240042ac46f99fd62179dc7173c3ae92fba9430e7a1eac3",
-      "supportedFrom": 5
+      "version": 6,
+      "fingerprint": "b80d30100e5cec7e49dfdc9049248c5e8c6e808b7b10bcbcb26b9880ae16bab7",
+      "supportedFrom": 6
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 3,
-      "fingerprint": "2b1bcbd2c4943fe56a6d83cfe059719f5c3d036fac57ef846aaed4ecc46efb67",
-      "supportedFrom": 3
+      "version": 4,
+      "fingerprint": "cc27c0aa6e8fd94b7fcfec18ee6403e4d5841d48d8f0ee28506cac37d237b011",
+      "supportedFrom": 4
     },
     "keystore": {
       "version": 1,
@@ -720,6 +720,33 @@
       "reason": "历史页只改变工作副本外壳；图片内容版本独立保持 4，黄金样本按正式构造器重新生成",
       "previousFingerprint": "62f9870511b37abff697f8574509f0d21230eedd1f0fe7e88a59722d6b3738aa",
       "fingerprint": "2b1bcbd2c4943fe56a6d83cfe059719f5c3d036fac57ef846aaed4ecc46efb67",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T18:46:14.937Z",
+      "format": "image-package",
+      "version": 4,
+      "reason": "开发期命名选区通道进入作品与命令历史，内容版本改为5，不保留旧格式读取",
+      "previousFingerprint": "690b33f50c44a712a549debbc0dca607bb3b66ecc2cef1b44f739b68b700c390",
+      "fingerprint": "7c15812b5523c892c7b5fcd980e4b2ebc45a458b7cfc0587337d3cb8dd4568af",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T18:46:14.938Z",
+      "format": "image-working-copy",
+      "version": 6,
+      "reason": "开发期命名选区通道进入作品与命令历史，内容版本改为5，不保留旧格式读取",
+      "previousFingerprint": "7e63868b5b6f0470b240042ac46f99fd62179dc7173c3ae92fba9430e7a1eac3",
+      "fingerprint": "b80d30100e5cec7e49dfdc9049248c5e8c6e808b7b10bcbcb26b9880ae16bab7",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T18:46:14.938Z",
+      "format": "canvas-layer-package",
+      "version": 4,
+      "reason": "开发期命名选区通道进入作品与命令历史，内容版本改为5，不保留旧格式读取",
+      "previousFingerprint": "2b1bcbd2c4943fe56a6d83cfe059719f5c3d036fac57ef846aaed4ecc46efb67",
+      "fingerprint": "cc27c0aa6e8fd94b7fcfec18ee6403e4d5841d48d8f0ee28506cac37d237b011",
       "waivedFixtureVersions": []
     }
   ]

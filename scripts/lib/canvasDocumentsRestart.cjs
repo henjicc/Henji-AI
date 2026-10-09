@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- Electron 验收脚本使用仓内 CommonJS 接口。 */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { setInspectionWindowSize } = require('./uiInspection.cjs')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 const { createRuntimeEvidenceCollector, queryApplicationLogs } = require('./runtimeEvidence.cjs')
@@ -170,7 +172,10 @@ function viewportTransform(page) {
 
 /** 造一份 V3 两层图片文档与带多图层节点的画布（经正式图片编辑接口与测试夹具）。 */
 async function seedMultiLayerCanvas(page, name) {
-  return await page.evaluate(async (canvasName) => {
+  const factory = loadTypeScript('src/core/imageEdit/v3/documentFactory.ts')
+  const imageDocument = factory.createImageEditDocumentV3({ width: 320, height: 200 })
+  imageDocument.layers = [factory.createImageEditRasterLayerV3('reality-layer-base', '底图'), factory.createImageEditRasterLayerV3('reality-layer-top', '前景')]
+  return await page.evaluate(async ({ canvasName, imageDocument }) => {
     const draw = async (fill, overlay) => {
       const canvas = document.createElement('canvas')
       canvas.width = 320
@@ -192,18 +197,12 @@ async function seedMultiLayerCanvas(page, name) {
     const base = await ingest(await draw('rgb(14, 116, 144)', null), 'base')
     const top = await ingest(await draw('rgb(0, 0, 0)', 'rgb(244, 63, 94)'), 'top')
     const documentId = `reality-canvas-layers-${crypto.randomUUID()}`
-    const layer = (id, layerName, resource) => ({
-      id, name: layerName, type: 'raster', visible: true, locked: false, opacity: 1, blendMode: 'normal',
-      transform: [1, 0, 0, 1, 0, 0], mask: null, source: { kind: 'resource', resourceId: resource }, tiles: {},
-    })
+    imageDocument.id = documentId
+    imageDocument.layers[0].source = { kind: 'resource', resourceId: base.resource.resourceRef }
+    imageDocument.layers[1].source = { kind: 'resource', resourceId: top.resource.resourceRef }
     const saved = await window.henjiNative.imageEditorV3.saveDocument({
       requestId: `reality-canvas-layers-save-${crypto.randomUUID()}`,
-      document: {
-        version: 3, id: documentId, revision: 0,
-        geometry: { width: 320, height: 200, orientation: { rotate: 0, mirrored: false }, crop: null },
-        color: { workingSpace: 'srgb', bitDepth: 8, transferFunction: 'srgb', hdrMetadata: null, iccProfileResourceId: null },
-        layers: [layer('reality-layer-base', '底图', base.resource.resourceRef), layer('reality-layer-top', '前景', top.resource.resourceRef)],
-      },
+      document: imageDocument,
       expectedRevision: 0, history: null,
       resourceRefs: [base.resource.resourceRef, top.resource.resourceRef], previewRef: null,
     })
@@ -222,7 +221,7 @@ async function seedMultiLayerCanvas(page, name) {
       }],
     })
     return { canvasId: created.id, nodeId, documentRef: saved.documentRef }
-  }, name)
+  }, { canvasName: name, imageDocument })
 }
 
 async function loadLayers(page, documentRef) {
@@ -421,7 +420,7 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     await page.waitForTimeout(1000)
     const tab = editorDialog.getByRole('tab', { name: '基础', exact: true }).filter({ visible: true }).first()
     if (await tab.count()) await tab.click()
-    const slider = editorDialog.getByRole('slider', { name: '不透明度' }).filter({ visible: true }).first()
+    const slider = editorDialog.getByRole('slider', { name: '不透明度滑杆' }).filter({ visible: true }).first()
     await slider.waitFor({ state: 'visible', timeout: 10000 })
     await slider.focus()
     for (let index = 0; index < 4; index += 1) await page.keyboard.press('ArrowLeft')
@@ -549,6 +548,7 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     await closeCurrent()
     evidence.passed = true
     save()
+    // eslint-disable-next-line no-console -- 验收命令输出证据位置。
     console.log(`✓ 画布文档接入真实验收通过，证据：${evidenceFile}`)
   } catch (error) {
     evidence.error = error instanceof Error ? error.stack ?? error.message : String(error)

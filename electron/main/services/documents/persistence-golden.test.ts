@@ -43,6 +43,7 @@ describe('正式读入口打开黄金归档与源码', () => {
         const layers = (imported.manifest.document.document as { layers: Array<{ id: string; type: string; adjustmentId?: string }> }).layers
         expect(layers[0]).toMatchObject({ id: 'golden-layer', type: 'raster', fillOpacity: .7, maskAttachment: { linked: false, density: .6 }, filters: [{ effectId: 'exposure', params: { stops: .4 } }] })
         expect(layers).toHaveLength(4)
+        expect(document.namedRegions).toMatchObject([{ id: 'golden-region', name: '主体', selection: { feather: .02 } }])
         expect(layers[1]).toMatchObject({ type: 'adjustment', adjustmentId: 'color_grade' })
         expect(layers[2]).toMatchObject({ type: 'effect', effectId: 'gaussian_blur' })
         expect(layers[3]).toMatchObject({ type: 'annotation', annotations: [{ id: 'golden-mark' }] })

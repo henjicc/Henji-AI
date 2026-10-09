@@ -1,14 +1,14 @@
 import { Plus, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
   UiButton,
+  UiEmpty,
   UiChipButton,
   UiFormRow,
   UiGroup,
   UiInput,
-  UiRangeInput,
   Dropdown,
   UiSwitch,
 } from '@/components/ui'
@@ -27,10 +27,22 @@ import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { isImageEditLayerTransformableV3 } from './layerTransformV3'
 import { resolveImageEditorReadinessReasonV3 } from './readinessPresentationV3'
 import type { ImageEditorV3Controller } from './types'
+import { ImageEditorLayerScalarsV3 } from '../panels/properties/ImageEditorLayerScalarsV3'
+import { selectImageEditTargetV3 } from '../panels/layers/editTarget'
 
 interface ImageEditorPropertiesPanelV3Props {
   controller: ImageEditorV3Controller
   embedded?: boolean
+}
+
+function MaskTransformProperties({ controller, layer, disabled }: { controller: ImageEditorV3Controller; layer: ImageEditLayerV3; disabled: boolean }): JSX.Element {
+  const adapter = useMemo<ImageEditorV3Controller>(() => ({ ...controller,
+    setTransformPreview: (id, layerId, transform) => controller.setParameterPreview(id, layerId, { maskAttachment: { ...layer.maskAttachment, transform } }),
+    clearTransformPreview: controller.clearParameterPreview,
+    commitTransformPreview: (id, layerId, transform) => controller.commitLayerCommonPreview(id, layerId, { maskAttachment: { ...layer.maskAttachment, transform } }),
+  }), [controller, layer.maskAttachment])
+  const target = useMemo(() => ({ ...layer, transform: layer.maskAttachment.transform }), [layer])
+  return <ImageEditorLayerTransformPropertiesV3 layer={target} disabled={disabled} controller={adapter} />
 }
 
 const EMPTY_LAYER_IDS: readonly string[] = []
@@ -43,9 +55,10 @@ function LayerNameField({ controller, layer, disabled }: {
 }): JSX.Element {
   const { t } = useTranslation('ui')
   const [name, setName] = useState(layer.name)
+  const cancelled = useRef(false)
   useEffect(() => setName(layer.name), [layer.id, layer.name])
   const commit = (): void => {
-    if (disabled) return
+    if (disabled || cancelled.current) { cancelled.current = false; return }
     const trimmed = name.trim()
     if (trimmed && trimmed !== layer.name) controller.updateLayerCommon(layer.id, { name: trimmed })
     else setName(layer.name)
@@ -61,77 +74,12 @@ function LayerNameField({ controller, layer, disabled }: {
         onKeyDown={(event) => {
           if (event.key === 'Enter') event.currentTarget.blur()
           if (event.key === 'Escape') {
+            cancelled.current = true
             setName(layer.name)
             event.currentTarget.blur()
           }
         }}
       />
-    </UiFormRow>
-  )
-}
-
-function OpacityControl({ controller, layer, disabled }: {
-  controller: ImageEditorV3Controller
-  layer: ImageEditLayerV3
-  disabled: boolean
-}): JSX.Element {
-  const { t } = useTranslation('ui')
-  const previewId = `${controller.sessionId}:${layer.id}:opacity`
-  const [draft, setDraft] = useState(layer.opacity)
-  const activeRef = useRef(false)
-  const draftRef = useRef(layer.opacity)
-  useEffect(() => {
-    if (!activeRef.current) {
-      setDraft(layer.opacity)
-      draftRef.current = layer.opacity
-    }
-  }, [layer.id, layer.opacity])
-  useEffect(() => () => controller.clearParameterPreview(previewId), [controller, previewId])
-  useEffect(() => {
-    if (!disabled || !activeRef.current) return
-    activeRef.current = false
-    controller.clearParameterPreview(previewId)
-    setDraft(layer.opacity)
-    draftRef.current = layer.opacity
-  }, [controller, disabled, layer.opacity, previewId])
-  const update = (next: number): void => {
-    if (disabled) return
-    activeRef.current = true
-    draftRef.current = next
-    setDraft(next)
-    controller.setParameterPreview(previewId, layer.id, { opacity: next })
-  }
-  const commit = (): void => {
-    if (disabled || !activeRef.current) return
-    activeRef.current = false
-    controller.commitLayerCommonPreview(previewId, layer.id, { opacity: draftRef.current })
-  }
-  return (
-    <UiFormRow density="compact" label={t('imageEditor.v3.properties.opacity')}>
-      <div className="flex items-center gap-2">
-        <UiRangeInput
-          aria-label={t('imageEditor.v3.properties.opacity')}
-          min={0}
-          max={1}
-          step={0.01}
-          value={draft}
-          disabled={disabled}
-          onChange={(event) => update(Number(event.currentTarget.value))}
-          onPointerUp={commit}
-          onPointerCancel={() => {
-            if (!activeRef.current) return
-            activeRef.current = false
-            controller.clearParameterPreview(previewId)
-            setDraft(layer.opacity)
-            draftRef.current = layer.opacity
-          }}
-          onKeyUp={commit}
-          onBlur={commit}
-        />
-        <span className="w-10 text-right text-xs tabular-nums text-text2">
-          {Math.round(draft * 100)}%
-        </span>
-      </div>
     </UiFormRow>
   )
 }
@@ -148,10 +96,11 @@ export function ImageEditorPropertiesPanelV3({
     ? findImageEditLayerLocationV3(controller.document.layers, selectedIds[0])
     : undefined
   const selected = selectedLocation?.layer
+  const editTarget = useImageEditorSessionStoreV3(state => state.sessions[controller.sessionId]?.editTarget ?? 'pixels')
   const [activeTab, setActiveTab] = useState<ImageEditorPropertiesTabV3>('parameters')
   useEffect(() => {
     if (selected?.id) setActiveTab('parameters')
-  }, [selected?.id])
+  }, [selected?.id, editTarget])
   const effectReadiness = selected?.type === 'effect'
     ? controller.profile.effects.find(({ id }) => id === selected.effectId)?.readiness
     : undefined
@@ -167,7 +116,7 @@ export function ImageEditorPropertiesPanelV3({
             {t('imageEditor.v3.properties.title')}
           </h2>
         ) : null}
-        <p className="mt-4 text-xs text-text2">{t('imageEditor.v3.properties.selectOne')}</p>
+        <UiEmpty size="sm" title={t('imageEditor.v3.properties.selectOne')} />
       </section>
     )
   }
@@ -183,6 +132,7 @@ export function ImageEditorPropertiesPanelV3({
       selected.id,
       createImageEditSparseMaskReferenceV3(createImageEditIdV3('mask')),
     )
+    selectImageEditTargetV3(controller, selected.id, 'mask')
   }
 
   return (
@@ -247,7 +197,8 @@ export function ImageEditorPropertiesPanelV3({
             }}
           />
         </UiFormRow>
-        <OpacityControl controller={controller} layer={selected} disabled={contentLocked} />
+        <ImageEditorLayerScalarsV3 controller={controller} layer={selected} disabled={contentLocked} />
+        {selectedLocation.index > 0 ? <UiFormRow density="compact" label={t('imageEditor.v3.workflow.clipping')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.clipping')} checked={selected.clipping} disabled={contentLocked} onCheckedChange={clipping => controller.updateLayerCommon(selected.id, { clipping })} /></UiFormRow> : null}
         {controller.profile.layerControls.includes('blend-mode') ? (
           <UiFormRow density="compact" label={t('imageEditor.v3.properties.blendMode')}>
             <Dropdown<ImageEditLayerV3['blendMode']>
@@ -283,7 +234,7 @@ export function ImageEditorPropertiesPanelV3({
       </UiGroup>
       ) : (
       <>
-        {selected.type === 'raster' || selected.type === 'annotation' || selected.type === 'group' ? (
+        {editTarget !== 'mask' && (selected.type === 'raster' || selected.type === 'annotation' || selected.type === 'group') ? (
           <ImageEditorLayerTransformPropertiesV3
             controller={controller}
             layer={selected}
@@ -291,7 +242,7 @@ export function ImageEditorPropertiesPanelV3({
           />
         ) : null}
 
-        {(selected.type === 'effect' || selected.type === 'adjustment') ? (
+        {editTarget !== 'mask' && (selected.type === 'effect' || selected.type === 'adjustment') ? (
           <div>
             {!selected.renderable ? (
               <p className="mb-3 text-xs text-warning-text">{t('imageEditor.v3.properties.unrenderable')}</p>
@@ -307,7 +258,7 @@ export function ImageEditorPropertiesPanelV3({
           </div>
         ) : null}
 
-        {selected.type === 'annotation' ? (
+        {editTarget !== 'mask' && selected.type === 'annotation' ? (
           <ImageEditorAnnotationPropertiesV3
             controller={controller}
             layer={selected}
@@ -319,6 +270,14 @@ export function ImageEditorPropertiesPanelV3({
           <UiGroup titleTone="compact" divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
           {selected.mask ? (
             <>
+              <div className="flex gap-1">
+                <UiChipButton active={editTarget === 'pixels'} size="sm" onClick={() => selectImageEditTargetV3(controller, selected.id, 'pixels')}>{t('imageEditor.v3.workflow.content')}</UiChipButton>
+                <UiChipButton active={editTarget === 'mask'} size="sm" onClick={() => selectImageEditTargetV3(controller, selected.id, 'mask')}>{t('imageEditor.v3.workflow.mask')}</UiChipButton>
+              </div>
+              <UiFormRow density="compact" label={t('imageEditor.v3.workflow.maskEnabled')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.maskEnabled')} checked={selected.maskAttachment.enabled} disabled={contentLocked} onCheckedChange={enabled => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, enabled } })} /></UiFormRow>
+              <UiFormRow density="compact" label={t('imageEditor.v3.workflow.maskLinked')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.maskLinked')} checked={selected.maskAttachment.linked} disabled={contentLocked} onCheckedChange={linked => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, linked } })} /></UiFormRow>
+              <ImageEditorLayerScalarsV3 controller={controller} layer={selected} disabled={contentLocked} mask />
+              {editTarget === 'mask' ? <MaskTransformProperties layer={selected} disabled={contentLocked} controller={controller} /> : null}
               <UiFormRow density="compact" label={t('imageEditor.v3.properties.maskInverted')} inline>
                 <UiSwitch
                   aria-label={t('imageEditor.v3.properties.maskInverted')}
@@ -339,7 +298,7 @@ export function ImageEditorPropertiesPanelV3({
                 className="justify-start gap-2"
                 disabled={contentLocked}
                 onClick={() => {
-                  if (!contentLocked) controller.setLayerMask(selected.id, null)
+                  if (!contentLocked) { controller.setLayerMask(selected.id, null); selectImageEditTargetV3(controller, selected.id, 'pixels') }
                 }}
               >
                 <X className="h-4 w-4" />

@@ -42,6 +42,7 @@ sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }]
 videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const image = createImageEditDocumentV3({ width: 64, height: 48, documentId: 'golden-image', color: createDefaultImageEditColorModeV3() })
+image.namedRegions = [{ id: 'golden-region', name: '主体', selection: { operations: [{ combine: 'replace', invertBefore: false, shape: { type: 'ellipse', x: .2, y: .1, width: .5, height: .7 } }], feather: .02, inverted: false } }]
 image.layers.push(createImageEditRasterLayerV3('golden-layer', '空白图层'))
 image.layers[0].fillOpacity = .7
 image.layers[0].maskAttachment.linked = false

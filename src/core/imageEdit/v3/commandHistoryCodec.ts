@@ -24,6 +24,7 @@ import {
   type ImageEditMaskReferenceV3,
 } from './layerTypes';
 import { calculateImageEditHistorySnapshotResourceTotalsV3 } from './commandHistoryResources';
+import { imageEditNamedRegionsSchemaV3 } from './namedRegions';
 
 export const IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3 = 1 as const;
 export const IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3 = 2 as const;
@@ -241,6 +242,20 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史命令无效');
   const command = value;
   switch (command.type) {
+    case 'document.set-named-regions':
+      validateBase(command, ['regions']);
+      if (!imageEditNamedRegionsSchemaV3.safeParse(command.regions).success) fail('历史通道快照无效');
+      break;
+    case 'layer.move-many':
+      validateBase(command, ['moves']);
+      if (!Array.isArray(command.moves) || command.moves.length === 0) fail('待移动图层无效');
+      command.moves.forEach(move => {
+        if (!isRecord(move)) fail('图层移动目标无效');
+        exactKeys(move, ['layerId', 'parentId', 'index'], '图层移动目标');
+        nonEmptyString(move.layerId, '图层 ID'); validateNullableId(move.parentId, '父图层 ID'); validateIndex(move.index, '图层位置');
+      });
+      if (new Set(command.moves.map(move => (move as Record<string, unknown>).layerId)).size !== command.moves.length) fail('待移动图层重复');
+      break;
     case 'document.update-output-geometry':
       validateOutputGeometryCommand(command); break;
     case 'layer.add':

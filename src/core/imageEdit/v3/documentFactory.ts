@@ -136,5 +136,6 @@ export function createImageEditDocumentV3(
     geometry: createImageEditCanvasGeometryV3(options.width, options.height),
     color: options.color ?? createDefaultImageEditColorModeV3(),
     layers,
+    namedRegions: [],
   };
 }

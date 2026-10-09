@@ -1,5 +1,6 @@
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
 import { IMAGE_EDIT_HISTORY_FIELDS_V3 } from './imageEditHistoryFields'
+import { IMAGE_EDIT_WORKFLOW_FIELDS_V3 } from './imageEditWorkflowFields'
 import { listImageEditDocumentEntitiesV3 } from './imageEditDocumentCatalog'
 import {
   fieldDescriptors,
@@ -66,6 +67,7 @@ function property(
 export const IMAGE_EDIT_V3_DOCUMENT_PROPERTIES: ApplicationPropertyDescriptor[] = [
   ...fieldDescriptors(IMAGE_EDIT_V3_DOCUMENT_FIELDS),
   ...fieldDescriptors(IMAGE_EDIT_HISTORY_FIELDS_V3),
+  ...fieldDescriptors(IMAGE_EDIT_WORKFLOW_FIELDS_V3),
   property('image_edit.document', 'revision', '文档修订号', { kind: 'integer', hardRange: { min: 0 } }),
   property('image_edit.document', 'width', '画布宽度', { kind: 'integer', hardRange: { min: 1 } }),
   property('image_edit.document', 'height', '画布高度', { kind: 'integer', hardRange: { min: 1 } }),
@@ -245,6 +247,7 @@ export class ImageEditV3ReflectionProvider {
       const document = bus.getSnapshot().document
       values = {
         ...fieldReadValues(IMAGE_EDIT_V3_DOCUMENT_FIELDS, document.geometry),
+        ...fieldReadValues(IMAGE_EDIT_WORKFLOW_FIELDS_V3.filter(field => !request.propertyIds || request.propertyIds.includes(field.propertyId)), document),
         ...fieldReadValues(IMAGE_EDIT_HISTORY_FIELDS_V3.filter(field => !request.propertyIds || request.propertyIds.includes(field.propertyId)), bus),
         'image_edit.document.revision': document.revision,
         'image_edit.document.width': document.geometry.width,

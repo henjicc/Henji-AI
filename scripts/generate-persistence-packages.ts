@@ -22,7 +22,7 @@ import { createImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentFact
 export async function generateImageHistoryPersistenceFixtures(sourceFixture: string, root = process.cwd()): Promise<void> {
   const source = JSON.parse(await fsp.readFile(sourceFixture, 'utf8')) as { document: Record<string, unknown>; createdAt: string }
   // 样本作者复用既有图层/参数，正式读入口仍拒绝旧开发版本。
-  let document = parseImageEditDocumentV3({ ...source.document, version: createImageEditDocumentV3({ width: 1, height: 1 }).version })
+  let document = parseImageEditDocumentV3({ ...source.document, namedRegions: source.document.namedRegions ?? [], version: createImageEditDocumentV3({ width: 1, height: 1 }).version })
   const history = new ImageEditCommandHistoryV3()
   for (const opacity of [.9, 1, .5]) document = history.execute(document, {
     type: 'layer.update-common', commandId: `golden-opacity-${document.revision}`, expectedRevision: document.revision,
@@ -42,7 +42,9 @@ export async function generateImageHistoryPersistenceFixtures(sourceFixture: str
       await fsp.writeFile(path.join(directory, `v${version}.json`), `${JSON.stringify(content, null, 2)}\n`, { flag: 'wx' })
     }
     await write('image-working-copy', IMAGE_WORKING_VERSION, persisted)
-    await write('image-history-checkpoint', IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, persisted.historyCheckpoint)
+    if (!fs.existsSync(path.join(root, 'tests/fixtures/persistence/image-history-checkpoint', `v${IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3}.json`))) {
+      await write('image-history-checkpoint', IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, persisted.historyCheckpoint)
+    }
     const header = parseImageDocumentHeader(JSON.parse(await fsp.readFile(path.join(root, 'tests/fixtures/persistence/image-header/v1.json'), 'utf8')))
     header.contentRevision = document.revision
     const codec = new HenjiImagePackageCodec(resources)

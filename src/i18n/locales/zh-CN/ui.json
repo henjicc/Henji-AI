@@ -879,10 +879,13 @@
       },
       "repair": {
         "auto": "自动",
-        "quality": "修复质量", "fast": "快速", "fine": "精细",
+        "quality": "修复质量",
+        "fast": "快速",
+        "fine": "精细",
         "remove-selection": "移除选区内容",
         "download-hint": "首次模型修复需下载 · {{size}}",
-        "download": "下载修复模型", "cancel-download": "取消下载",
+        "download": "下载修复模型",
+        "cancel-download": "取消下载",
         "drag-source": "把选区拖到干净区域，松开取样修补",
         "select-first": "请先创建选区，再拖到干净区域",
         "selecting": "正在准备选区 · {{percent}}%",
@@ -901,7 +904,6 @@
         "cancel-task": "取消处理",
         "progress": "正在应用选区 · {{percent}}%",
         "polygon-hint": "单击加点，双击或回车闭合",
-
         "overlay": "选区转蒙版画布",
         "combineMode": "选区组合方式",
         "replace": "替换",
@@ -977,7 +979,7 @@
         }
       },
       "adjustment": {
-      "color_grade": "全能调色",
+        "color_grade": "全能调色",
         "exposure": "曝光",
         "curves": "曲线",
         "temperature-tint": "色温 / 色调",
@@ -1062,6 +1064,36 @@
           "green": "绿色",
           "blue": "蓝色"
         }
+      },
+      "workflow": {
+        "fill": "填充",
+        "density": "蒙版密度",
+        "clipping": "剪贴到下方图层",
+        "content": "图层内容",
+        "mask": "蒙版",
+        "maskEnabled": "启用蒙版",
+        "maskLinked": "链接图层与蒙版",
+        "unlink": "解除蒙版链接",
+        "link": "链接蒙版",
+        "maskTarget": "编辑{{name}}蒙版",
+        "clippedLayer": "剪贴图层",
+        "group": "将所选图层编组",
+        "ungroup": "取消编组",
+        "outGroup": "移出图层组",
+        "groupName": "图层组"
+      },
+      "channels": {
+        "title": "通道",
+        "save": "保存选区为通道",
+        "load": "载入通道选区",
+        "update": "用当前选区更新通道",
+        "delete": "删除通道",
+        "name": "通道名称",
+        "defaultName": "选区通道",
+        "empty": "还没有选区通道",
+        "emptyDescription": "创建选区后保存，随时载入或继续修改。",
+        "unavailable": "请重新打开编辑器后管理通道",
+        "loadUnavailable": "请重新打开编辑器后载入选区"
       }
     }
   },

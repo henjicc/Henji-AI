@@ -6,7 +6,7 @@ import { UiButton, UiEmpty, UiError, UiIconButton, UiLoading, UiOptionButton } f
 import type { ImageEditHistoryRowV3 } from '@/core/imageEdit/v3/historyPaging/projection'
 import type { ImageEditorPanelContextV3 } from '../../panelFramework/panelRegistry'
 import type { ImageEditorV3Controller } from '../../editor/types'
-import { ImageEditHistoryThumbnailsV3 } from './historyThumbnails'
+import { ImageEditThumbnailsV3 } from '../thumbnails'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { useImageEditorDisposableV3 } from '../../execution/useImageEditorDisposableV3'
 import { createLogger } from '@/core/logging'
@@ -15,7 +15,7 @@ type HistoryPort = NonNullable<ImageEditorV3Controller['historyPort']>
 const logger = createLogger('features.imageEdit.history_panel')
 
 const HistoryThumbnail = memo(function HistoryThumbnail({ thumbnails, row, generation }: {
-  thumbnails: ImageEditHistoryThumbnailsV3; row: ImageEditHistoryRowV3; generation: number
+  thumbnails: ImageEditThumbnailsV3; row: ImageEditHistoryRowV3; generation: number
 }): JSX.Element {
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
@@ -34,7 +34,7 @@ const HistoryThumbnail = memo(function HistoryThumbnail({ thumbnails, row, gener
 })
 
 const HistoryList = memo(function HistoryList({ port, thumbnails, disabled, onJump }: {
-  port: HistoryPort; thumbnails: ImageEditHistoryThumbnailsV3; disabled: boolean; onJump: (position: number) => void
+  port: HistoryPort; thumbnails: ImageEditThumbnailsV3; disabled: boolean; onJump: (position: number) => void
 }): JSX.Element {
   const { t } = useTranslation('ui')
   const [view, setView] = useState(() => port.getHistoryView())
@@ -86,7 +86,7 @@ export function ImageEditorHistoryPanelV3({ controller }: ImageEditorPanelContex
   const port = controller.historyPort
   const sessionId = controller.sessionId
   const historyResourceDescriptors = controller.historyResourceDescriptors
-  const thumbnails = useMemo(() => new ImageEditHistoryThumbnailsV3({ sessionId, historyPort: port, historyResourceDescriptors }), [sessionId, port, historyResourceDescriptors])
+  const thumbnails = useMemo(() => new ImageEditThumbnailsV3({ sessionId, historyPort: port, historyResourceDescriptors }), [sessionId, port, historyResourceDescriptors])
   useImageEditorDisposableV3(thumbnails)
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null)
   const [failed, setFailed] = useState(false)

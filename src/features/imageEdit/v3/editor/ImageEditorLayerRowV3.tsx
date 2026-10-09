@@ -11,6 +11,9 @@ import {
   Sparkles,
   SquarePen,
   Unlock,
+  Link,
+  Unlink,
+  CornerDownRight,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent } from 'react'
@@ -21,6 +24,10 @@ import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { ImageEditLayerTreeRowV3 } from './layerTreeV3'
 import type { ImageEditorV3Controller } from './types'
+import { useImageEditorSessionStoreV3 } from '../store'
+import { selectImageEditTargetV3 } from '../panels/layers/editTarget'
+import { LayerThumbnailV3 } from '../panels/layers/LayerThumbnail'
+import type { ImageEditThumbnailsV3 } from '../panels/thumbnails'
 
 interface ImageEditorLayerRowV3Props {
   controller: ImageEditorV3Controller
@@ -38,6 +45,8 @@ interface ImageEditorLayerRowV3Props {
   dropOffsetRows: number
   onDragMouseDown: (event: MouseEvent<HTMLDivElement>) => void
   dragDisabled: boolean
+  onError?: (message: string) => void
+  thumbnails?: ImageEditThumbnailsV3 | null
 }
 
 const TYPE_ICON = {
@@ -72,11 +81,14 @@ export function ImageEditorLayerRowV3({
   dropOffsetRows,
   onDragMouseDown,
   dragDisabled,
+  thumbnails,
+  onError,
 }: ImageEditorLayerRowV3Props): JSX.Element {
   const { t } = useTranslation('ui')
   const LayerIcon = TYPE_ICON[row.layer.type]
   const ancestorLocked = row.ancestors.some((ancestor) => ancestor.locked)
   const editable = !row.layer.locked && !ancestorLocked
+  const target = useImageEditorSessionStoreV3(state => state.sessions[controller.sessionId]?.editTarget ?? 'pixels')
   const [renaming, setRenaming] = useState(false)
   const [draftName, setDraftName] = useState(row.layer.name)
   const renameInputRef = useRef<HTMLInputElement>(null)
@@ -115,6 +127,9 @@ export function ImageEditorLayerRowV3({
     setRenaming(false)
   }
 
+  const move = (index: number): void => {
+    try { controller.moveLayer(row.layer.id, row.parentId, index) } catch (error) { onError?.(error instanceof Error ? error.message : String(error)) }
+  }
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === 'ArrowLeft' && row.layer.type === 'group' && expanded) {
       event.preventDefault()
@@ -130,14 +145,14 @@ export function ImageEditorLayerRowV3({
       event.preventDefault()
       if (dragDisabled) return
       const index = Math.min(row.container.length - 1, row.index + 1)
-      if (index !== row.index) controller.moveLayer(row.layer.id, row.parentId, index)
+      if (index !== row.index) move(index)
       return
     }
     if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowDown') {
       event.preventDefault()
       if (dragDisabled) return
       const index = Math.max(0, row.index - 1)
-      if (index !== row.index) controller.moveLayer(row.layer.id, row.parentId, index)
+      if (index !== row.index) move(index)
       return
     }
     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
@@ -208,11 +223,11 @@ export function ImageEditorLayerRowV3({
           onClick={(event) => onSelect(row, event)}
           onKeyDown={handleKeyDown}
         >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-raised text-text2">
-            <LayerIcon className="h-3.5 w-3.5" />
-          </span>
+          <LayerThumbnailV3 document={controller.document} layer={row.layer} thumbnails={thumbnails} fallback={<LayerIcon className="h-3.5 w-3.5" />} />
+          {row.layer.clipping ? <CornerDownRight className="h-3 w-3 shrink-0 text-text2" aria-label={t('imageEditor.v3.workflow.clippedLayer')} /> : null}
           <span
             data-layer-name
+            title={row.layer.name}
             className="min-w-0 flex-1 truncate text-xs text-text1"
             onDoubleClick={(event) => {
               event.stopPropagation()
@@ -223,12 +238,6 @@ export function ImageEditorLayerRowV3({
           >
             {row.layer.name}
           </span>
-          {row.layer.mask ? (
-            <CircleDashed
-              className="h-3.5 w-3.5 shrink-0 text-text2"
-              aria-label={t('imageEditor.v3.layers.hasMask')}
-            />
-          ) : null}
         </UiOptionButton>
         {renaming ? (
           <div className={`absolute left-12 top-1/2 -translate-y-1/2 ${row.layer.mask ? 'right-8' : 'right-2'}`}>
@@ -255,6 +264,20 @@ export function ImageEditorLayerRowV3({
           </div>
         ) : null}
       </div>
+
+      {row.layer.mask && controller.profile.layerControls.includes('mask') ? <>
+        <UiIconButton size="xs" on={row.layer.maskAttachment.linked} disabled={!editable}
+          aria-label={row.layer.maskAttachment.linked ? t('imageEditor.v3.workflow.unlink') : t('imageEditor.v3.workflow.link')}
+          title={row.layer.maskAttachment.linked ? t('imageEditor.v3.workflow.unlink') : t('imageEditor.v3.workflow.link')}
+          onClick={() => controller.updateLayerCommon(row.layer.id, { maskAttachment: { ...row.layer.maskAttachment, linked: !row.layer.maskAttachment.linked } })}>
+          {row.layer.maskAttachment.linked ? <Link className="h-3 w-3" /> : <Unlink className="h-3 w-3" />}
+        </UiIconButton>
+        <UiIconButton data-layer-mask-target size="sm" on={selected && target === 'mask'}
+          aria-label={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })} title={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })}
+          onClick={() => selectImageEditTargetV3(controller, row.layer.id, 'mask')}>
+          <CircleDashed className="h-4 w-4" />
+        </UiIconButton>
+      </> : null}
 
       <UiIconButton
         className="shrink-0"

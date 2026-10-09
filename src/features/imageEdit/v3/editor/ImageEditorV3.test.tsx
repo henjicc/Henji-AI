@@ -37,6 +37,8 @@ function createDocument(layers: ImageEditLayerV3[]): ImageEditDocumentV3 {
   }
 }
 
+let layoutSequence = 0
+
 function renderEditor(
   document: ImageEditDocumentV3,
   options: {
@@ -50,6 +52,7 @@ function renderEditor(
     <VirtuosoMockContext.Provider value={{ viewportHeight: 264, itemHeight: 44 }}><div style={{ width: 1200, height: 800 }}>
       <ImageEditorV3
         sourceImageUrl="preview.png"
+        layoutWorkspaceId={`image-edit-test-${++layoutSequence}`}
         document={document}
         profileId={options.profileId ?? 'full'}
         onDocumentChange={options.onDocumentChange ?? (() => undefined)}
@@ -217,9 +220,9 @@ describe('ImageEditorV3 professional shell', () => {
     )
 
     fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
-    const opacity = await screen.findByRole('slider', { name: '不透明度' })
-    fireEvent.change(opacity, { target: { value: '0.8' } })
-    fireEvent.change(opacity, { target: { value: '0.55' } })
+    const opacity = await screen.findByRole('slider', { name: '不透明度滑杆' })
+    fireEvent.change(opacity, { target: { value: '80' } })
+    fireEvent.change(opacity, { target: { value: '55.00000000000001' } })
     expect(changes).toHaveLength(0)
     fireEvent.pointerUp(opacity)
 
@@ -491,7 +494,11 @@ describe('ImageEditorV3 professional shell', () => {
       expect(rows[1].className).not.toContain('ring-inset')
     })
 
+    const sessionBeforeDrop = Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
+    const selectedBeforeDrop = [...sessionBeforeDrop.selectedLayerIds]
     fireEvent.mouseUp(window)
+    fireEvent.click(firstLayer)
+    expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0].selectedLayerIds).toEqual(selectedBeforeDrop)
 
     await waitFor(() => expect(changes).toHaveLength(1))
     expect(changes[0].layers.map((layer) => layer.id)).toEqual(['top', 'bottom'])
@@ -526,9 +533,10 @@ describe('ImageEditorV3 professional shell', () => {
     expect(preview?.className).not.toContain('rounded')
     expect(preview?.className).not.toContain('shadow')
     expect(rendered.container.querySelector('[data-editor-panel-dock="right"]')).toBeTruthy()
-    expect(dockedPanels).toHaveLength(3)
+    expect(dockedPanels).toHaveLength(4)
     // 历史与属性同组成标签，DOM 中标签页顺序随 Dockview 激活顺序变化，只校验集合
     expect([...dockedPanels].map((panel) => panel.getAttribute('data-editor-panel-id')).sort()).toEqual([
+      'channels',
       'history',
       'layers',
       'properties',
@@ -599,13 +607,14 @@ describe('ImageEditorV3 professional shell', () => {
     fireEvent.click(await screen.findByRole('button', { name: '关闭图层面板' }))
     fireEvent.click(screen.getByRole('button', { name: '关闭属性面板' }))
     fireEvent.click(screen.getByRole('button', { name: '关闭历史面板' }))
+    fireEvent.click(screen.getByRole('button', { name: '关闭通道面板' }))
     expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(0)
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '显示图层面板' }))
     await screen.findByRole('button', { name: '关闭图层面板' })
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
-    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(3))
+    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(4))
     expect(rendered.container.querySelector('[data-preview-surface]')).toBe(preview)
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
     expect(screen.getByRole('button', { name: '撤销' }).hasAttribute('disabled')).toBe(true)
