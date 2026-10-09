@@ -11,6 +11,9 @@ import { ImageEditSelectionRasterClientV3 } from '../execution/selectionRasterCl
 import { findImageEditV3LiveLayer } from './imageEditDocumentRefs'
 import type { ImageEditCommandBusV3 } from './imageEditCommandBus'
 
+export { previewAdvancedImageEditSelectionV3, commitAdvancedImageEditSelectionV3 } from '../tools/selectionAdvanced/service'
+export type { AdvancedSelectionOperation, AdvancedSelectionOptions, AdvancedSelectionPreview } from '../tools/selectionAdvanced/service'
+
 const logger = createLogger('features.image_edit_v3.selection')
 
 async function collectOrphanSelectionResources(bus: ImageEditCommandBusV3): Promise<void> {
@@ -80,7 +83,7 @@ export async function materializeImageEditSelectionMaskV3(bus: ImageEditCommandB
     const resources = collectImageEditMaskResourceIdsV3(mask).map(resourceId => ({ resourceId, byteSize: sizes.get(resourceId)! }))
     return { mask, resources, expectedRevision: start.document.revision }
   } catch (error) {
-    logger.error('选区应用失败', { event: 'image_edit.selection.materialize.failed', error })
+    logger.error('选区应用失败', error, { event: 'image_edit.selection.materialize.failed' })
     await collectOrphanSelectionResources(bus)
     throw error
   } finally { client.dispose() }

@@ -186,7 +186,7 @@ export interface ImageEditMaskTileDeltaCommandV3 extends ImageEditCommandBaseV3 
   changes: ImageEditRasterTileChangeV3[];
 }
 
-export type ImageEditCommandV3 =
+export type ImageEditLeafCommandV3 =
   | ImageEditNamedRegionsCommandV3
   | ImageEditLayersMoveCommandV3
   | ImageEditDocumentUpdateOutputGeometryCommandV3
@@ -205,6 +205,13 @@ export type ImageEditCommandV3 =
   | ImageEditAnnotationDeleteCommandV3
   | ImageEditRasterTileDeltaCommandV3
   | ImageEditMaskTileDeltaCommandV3;
+
+/** Prepared operations publish one revision and one history entry; nested batches are not allowed. */
+export interface ImageEditAtomicCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'document.atomic';
+  commands: ImageEditLeafCommandV3[];
+}
+export type ImageEditCommandV3 = ImageEditLeafCommandV3 | ImageEditAtomicCommandV3;
 
 export interface ImageEditCommandApplyResultV3 {
   document: ImageEditDocumentV3;
@@ -243,6 +250,7 @@ export function collectImageEditCommandResourceReferencesV3(
   command: ImageEditCommandV3,
 ): ImageEditHistoryResourceReferenceV3[] {
   const resources: ImageEditHistoryResourceReferenceV3[] = [];
+  if (command.type === 'document.atomic') return mergeImageEditHistoryResourceReferencesV3(command.commands.flatMap(collectImageEditCommandResourceReferencesV3));
   if (command.type === 'layer.update-common' && command.patch.filters) {
     if (command.resources) resources.push(...command.resources);
     else for (const filter of command.patch.filters) resources.push(...collectImageEditJsonResourceIdsV3(filter)

@@ -18,7 +18,7 @@ describe('共享区域覆盖', () => {
   });
   it('变换后的压缩模型输入转浮点；画外和奇异矩阵分别拒绝覆盖与求值', () => {
     const shape = { type: 'mask' as const, width: 2, height: 1, matrix: [0.5, 0, 0, 1, 0.25, 0] as const,
-      runs: [[0, 1, 64], [1, 1, 192]] as const };
+      runs: [[0, 1, Math.fround(64 / 255)], [1, 1, Math.fround(192 / 255)]] as const };
     const program = { operations: [{ shape, combine: 'replace' as const }], feather: 0, inverted: false };
     const result = evaluateRegionProgram(program, { width: 4, height: 1 }, { x: -1, y: 0, width: 6, height: 1 });
     expect([...result]).toEqual([0, 0, expect.closeTo(64 / 255, 6), expect.closeTo(192 / 255, 6), 0, 0]);

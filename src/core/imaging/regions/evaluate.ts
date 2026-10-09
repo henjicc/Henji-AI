@@ -15,7 +15,7 @@ export function rasterizeRegionIntent(shape: RegionIntent, size: { width: number
     const at = (x: number, y: number): number => {
       const index = Math.max(0, Math.min(shape.height - 1, y)) * shape.width + Math.max(0, Math.min(shape.width - 1, x))
       let low = 0, high = shape.runs.length - 1
-      while (low <= high) { const middle = Math.floor((low + high) / 2), [start, length, value] = shape.runs[middle]; if (index < start) high = middle - 1; else if (index >= start + length) low = middle + 1; else return value / 255 }
+      while (low <= high) { const middle = Math.floor((low + high) / 2), [start, length, value] = shape.runs[middle]; if (index < start) high = middle - 1; else if (index >= start + length) low = middle + 1; else return value }
       return 0
     }
     for (let y = 0; y < region.height; y++) for (let x = 0; x < region.width; x++) {

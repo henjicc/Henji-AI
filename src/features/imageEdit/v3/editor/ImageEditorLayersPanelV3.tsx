@@ -7,6 +7,7 @@ import {
   FolderPlus,
   Ungroup,
   CornerUpLeft,
+  MoreHorizontal,
 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -404,30 +405,33 @@ export function ImageEditorLayersPanelV3({
         >
           <Trash2 className="h-3.5 w-3.5" />
         </UiIconButton>
-      </div>
-
-      {controller.profile.layerKinds.includes('group') ? <div className="flex shrink-0 items-center gap-1 px-3 pb-2">
-        <UiIconButton size="sm" aria-label={t('imageEditor.v3.workflow.group')} title={t('imageEditor.v3.workflow.group')}
+      {controller.profile.layerKinds.includes('group') ? <PanelTrigger panelWidth={200} panelPadding="menu" closeOnPanelClick
+        renderPanel={() => <div role="menu" className="flex flex-col gap-1">
+        <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.group')}
           disabled={!canGroupImageEditLayersV3(controller.document.layers, effectiveSelectedIds)}
           onClick={() => {
             try { const id = controller.groupLayers(effectiveSelectedIds, t('imageEditor.v3.workflow.groupName')); setSelectedLayerIds(controller.sessionId, [id]); toggleGroupExpanded(controller.sessionId, id); setCreationError(null) }
             catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><FolderPlus className="h-4 w-4" /></UiIconButton>
-        <UiIconButton size="sm" aria-label={t('imageEditor.v3.workflow.ungroup')} title={t('imageEditor.v3.workflow.ungroup')} disabled={!canUngroupImageEditLayerV3(primaryLocation)}
+          }}><FolderPlus className="h-4 w-4" />{t('imageEditor.v3.workflow.group')}</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.ungroup')} disabled={!canUngroupImageEditLayerV3(primaryLocation)}
           onClick={() => {
             if (!primaryLocation || primaryLocation.layer.type !== 'group') return
             try { const ids = primaryLocation.layer.children.map(layer => layer.id); controller.ungroupLayer(primaryLocation.layer.id); setSelectedLayerIds(controller.sessionId, ids); setCreationError(null) }
             catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><Ungroup className="h-4 w-4" /></UiIconButton>
-        <UiIconButton size="sm" aria-label={t('imageEditor.v3.workflow.outGroup')} title={t('imageEditor.v3.workflow.outGroup')} disabled={!primaryEditable || !primaryLocation?.parentId}
+          }}><Ungroup className="h-4 w-4" />{t('imageEditor.v3.workflow.ungroup')}</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.outGroup')} disabled={!primaryEditable || !primaryLocation?.parentId}
           onClick={() => {
             if (!primaryLocation?.parentId) return
             const parent = findImageEditLayerLocationV3(controller.document.layers, primaryLocation.parentId)
             if (!parent) return
             try { controller.moveLayer(primaryLocation.layer.id, parent.parentId, parent.index + 1); setCreationError(null) }
             catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><CornerUpLeft className="h-4 w-4" /></UiIconButton>
-      </div> : null}
+          }}><CornerUpLeft className="h-4 w-4" />{t('imageEditor.v3.workflow.outGroup')}</UiOptionButton>
+        </div>}>
+        {({ open, togglePanel }) => <UiIconButton on={open} aria-haspopup="menu" aria-expanded={open}
+          aria-label={t('imageEditor.v3.filterWorkspace.moreLayerActions', { defaultValue: '更多图层操作' })} onClick={togglePanel}><MoreHorizontal className="h-4 w-4" /></UiIconButton>}
+      </PanelTrigger> : null}
+      </div>
 
       <div
         role="tree"

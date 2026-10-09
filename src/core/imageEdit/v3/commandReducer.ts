@@ -561,6 +561,23 @@ export function applyImageEditCommandV3(
     throw new ImageEditCommandValidationErrorV3('图片文档 revision 无效或已耗尽');
   }
   const nextRevision = document.revision + 1;
+  if (command.type === 'document.atomic') {
+    if (!command.commands.length || command.commands.some(child => (child as ImageEditCommandV3).type === 'document.atomic')
+      || new Set(command.commands.map(child => child.commandId)).size !== command.commands.length) throw new ImageEditCommandValidationErrorV3('原子命令必须包含不重复的非嵌套操作');
+    let candidate = document;
+    const inverses: import('./commandTypes').ImageEditLeafCommandV3[] = [];
+    for (const child of command.commands) {
+      const result = applyImageEditCommandV3(candidate, { ...child, expectedRevision: candidate.revision }, options);
+      candidate = result.document;
+      if (result.inverse.type === 'document.atomic') throw new ImageEditCommandValidationErrorV3('不支持嵌套原子操作');
+      inverses.unshift(result.inverse);
+    }
+    const inverse: ImageEditCommandV3 = { ...inverseBase(command, nextRevision), type: 'document.atomic', commands: inverses };
+    const history = calculateImageEditCommandHistoryResourcesV3(command, inverse);
+    const historyMetadataBytes = new TextEncoder().encode(JSON.stringify([command, inverse])).byteLength;
+    return { document: { ...candidate, revision: nextRevision }, inverse, historyMetadataBytes,
+      historyResources: history.resources, historyBytes: historyMetadataBytes + history.bytes };
+  }
   const documentResult = command.type === 'document.update-output-geometry'
     ? applyImageEditOutputGeometryCommandV3(document, command, nextRevision)
     : null;

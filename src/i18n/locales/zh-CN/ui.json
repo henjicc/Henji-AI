@@ -653,6 +653,41 @@
       }
     },
     "v3": {
+      "filterWorkspace": {
+        "title": "调整与滤镜",
+        "scope": "滤镜作用范围",
+        "content": "当前图层",
+        "below": "下方合成",
+        "adjustmentLibrary": "颜色调整",
+        "effectLibrary": "空间滤镜",
+        "unavailable": "不可用滤镜",
+        "add": "添加滤镜或调整",
+        "dismiss": "关闭提示",
+        "preparing": "正在应用选区",
+        "cancel": "取消",
+        "select": "选择一个图层以添加滤镜或调整",
+        "empty": "当前图层还没有滤镜",
+        "enabled": "启用{{title}}",
+        "earlier": "提前执行",
+        "later": "延后执行",
+        "remove": "删除滤镜",
+        "mask": "局部蒙版",
+        "removeMask": "移除滤镜蒙版",
+        "strength": "应用强度",
+        "blendMode": "滤镜混合模式",
+        "moreLayerActions": "更多图层操作",
+        "scopeNotice": "作用于同组下方的合成画面",
+        "editLayerParameters": "编辑图层参数",
+        "actions": "滤镜操作",
+        "convertTitle": "转换滤镜作用范围",
+        "convertConfirm": "确认转换",
+        "beforeScope": "原作用范围：{{names}}",
+        "afterScope": "转换后作用范围：{{names}}",
+        "orderNotice": "此滤镜在图层滤镜序列中的顺序也会改变，请确认画面效果。",
+        "convertComposite": "转为滤镜图层",
+        "convertContent": "转为下方图层滤镜",
+        "noTarget": "没有可挂载的下方图层"
+      },
       "subject": {
         "auto": "选择主体",
         "portrait": "选择人像",
@@ -815,7 +850,10 @@
         "annotation-mosaic": "打码",
         "raster-brush": "栅格画笔",
         "eraser": "橡皮擦",
-        "mask-edit": "编辑蒙版"
+        "mask-edit": "编辑蒙版",
+        "select-wand": "魔棒",
+        "select-color-range": "色彩范围",
+        "select-focus": "焦点区域"
       },
       "layerControls": {
         "rotate": "旋转图层",
@@ -1094,6 +1132,26 @@
         "emptyDescription": "创建选区后保存，随时载入或继续修改。",
         "unavailable": "请重新打开编辑器后管理通道",
         "loadUnavailable": "请重新打开编辑器后载入选区"
+      },
+      "selectionAdvanced": {
+        "settings": "选区设置",
+        "modify": "修改选区",
+        "tolerance": "颜色容差",
+        "contiguous": "连续区域",
+        "clearSamples": "清除取样",
+        "range": "焦点范围",
+        "noise": "去噪",
+        "mode": "修改方式",
+        "radius": "短边比例",
+        "preview": "预览",
+        "apply": "应用选区",
+        "cancel": "取消",
+        "preparing": "计算选区",
+        "expand": "扩展",
+        "contract": "收缩",
+        "smooth": "平滑",
+        "feather": "羽化",
+        "border": "边界"
       }
     }
   },

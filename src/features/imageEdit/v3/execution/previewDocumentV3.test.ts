@@ -55,6 +55,17 @@ function snapshot(document: ImageEditDocumentV3): ImageEditCommandBusSnapshotV3 
 }
 
 describe('ImageEditor V3 瞬态预览文档', () => {
+  it('普通图层滤镜参数覆盖进入合成预览，清除覆盖恢复原值且不写作品', () => {
+    const document = documentWithLayers()
+    const filter = { id: 'local', operationType: 'effect' as const, effectId: 'gaussian_blur', params: { sigma_fraction_height: .002 }, enabled: true, opacity: 1, blendMode: 'normal' as const, mask: null }
+    document.layers[0].filters = [filter]
+    const state = snapshot(document)
+    const projected = projectImageEditorPreviewDocumentV3({ ...state, previewOverrides: { drag: { id: 'drag', kind: 'parameter', targetId: 'raster', baseRevision: 7, value: { filters: [{ ...filter, params: { sigma_fraction_height: .02 } }] } } } })
+    expect(projected.layers[0].filters[0].params).toEqual({ sigma_fraction_height: .02 })
+    expect(document.layers[0].filters[0]).toBe(filter)
+    expect(projectImageEditorPreviewDocumentV3(state).layers[0].filters[0].params).toEqual({ sigma_fraction_height: .002 })
+    expect(projected.revision).toBe(7)
+  })
   it('fill 和蒙版密度/变换预览复用参数覆盖而不改变文档', () => {
     const document = documentWithLayers()
     const maskAttachment = { ...document.layers[0].maskAttachment, density: .25, linked: false }

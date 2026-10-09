@@ -1,4 +1,5 @@
 import { ImageEditorSubjectParametersV3 } from './ImageEditorSubjectParametersV3'
+import { SelectionAdvancedOptionsV3 } from '../tools/selectionAdvanced/SelectionAdvancedOptions'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UiButton, UiError, UiRangeInput, UiOptionButton, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
@@ -30,6 +31,7 @@ export function ImageEditorSelectionParametersV3({ bus, controller }: { bus: Ima
     finally { abort.current = null; setBusy(false) }
   }
   return <div className="flex min-w-max shrink-0 items-center gap-3 whitespace-nowrap" data-selection-parameters>
+    <SelectionAdvancedOptionsV3 tool={session?.activeTool ?? ''} hasSelection={Boolean(selection)} />
     {session?.activeTool.startsWith('select-subject') ? <ImageEditorSubjectParametersV3 /> : null}
     <div role="group" aria-label={t('imageEditor.v3.selection.combineMode')} className={UI_SEGMENTED_TRACK_CLASS}>
       {(['replace', 'add', 'subtract', 'intersect'] as const).map(mode => <UiOptionButton key={mode} variant="segment" active={session?.toolSettings.selectionCombineMode === mode}

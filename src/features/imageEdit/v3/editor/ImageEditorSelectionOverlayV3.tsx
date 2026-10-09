@@ -1,4 +1,5 @@
 import { useImageEditorSubjectV3 } from './ImageEditorSubjectContextV3'
+import { useSelectionAdvancedV3 } from '../tools/selectionAdvanced/SelectionAdvancedContext'
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UiError } from '@/components/ui'
@@ -18,6 +19,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
   const { t } = useTranslation('ui')
   const repair = useImageEditorRepairV3()
   const subject = useImageEditorSubjectV3()
+  const advanced = useSelectionAdvancedV3()
   const theme = useThemeTokens()
   const canvas = useRef<HTMLCanvasElement>(null)
   const sourceCanvas = useRef<HTMLCanvasElement>(null)
@@ -30,6 +32,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
   const gesture = useRef<{ tool: string; points: (readonly [number, number])[]; pointer?: CapturedEditorPointerV3; revision: number; selectionRevision: number } | null>(null)
   const draftFrame = useRef<number | null>(null)
   const snapshot = bus.getSnapshot()
+  const displayedSelection = advanced?.preview ?? snapshot.selection
   const active = (tool.startsWith('select-') && !subject?.busy) || ((tool === 'remove' || tool === 'repair') && !repair?.busy)
   const cancel = () => { const current = gesture.current; gesture.current = null; if (current?.pointer) releaseEditorPointerV3(current.pointer); if (draftFrame.current !== null) cancelAnimationFrame(draftFrame.current); draftFrame.current = null; setDraft([]) }
   useEffect(() => {
@@ -46,7 +49,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
   useEffect(() => {
     if (!canvas.current) return
     canvas.current.width = 0
-    if (!snapshot.selection) return
+    if (!displayedSelection) return
     const ctx = canvas.current.getContext('2d')
     if (!ctx) return
     const abort = new AbortController(), client = new ImageEditSelectionRasterClientV3()
@@ -55,7 +58,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
     canvas.current.width = width; canvas.current.height = height
     const previewSize = { width: Math.max(1, Math.round(controller.document.geometry.width * scale)), height: Math.max(1, Math.round(controller.document.geometry.height * scale)) }
     const matrix = multiplyAnnotationMatricesV3([previewSize.width / controller.document.geometry.width, 0, 0, previewSize.height / controller.document.geometry.height, 0, 0], multiplyAnnotationMatricesV3(invertAnnotationMatrixV3(geometry.sourceToOutput), [geometry.width / width, 0, 0, geometry.height / height, 0, 0]))
-    void client.rasterize({ selection: snapshot.selection, size: previewSize, region: { x: 0, y: 0, width, height }, matrix }, abort.signal).then(data => {
+    void client.rasterize({ selection: displayedSelection, size: previewSize, region: { x: 0, y: 0, width, height }, matrix }, abort.signal).then(data => {
       if (abort.signal.aborted) return
       const pixels = ctx.createImageData(width, height)
       for (let i = 0; i < data.length; i++) pixels.data[i * 4 + 3] = Math.round(data[i] * 255)
@@ -63,7 +66,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
       if (sourceCanvas.current && canvas.current) { sourceCanvas.current.width = width; sourceCanvas.current.height = height; sourceCanvas.current.getContext('2d')?.drawImage(canvas.current, 0, 0) }
     }).catch((cause: unknown) => { if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)) }).finally(() => client.dispose())
     return () => { abort.abort(); client.dispose() }
-  }, [snapshot.selection, geometry, controller.document, theme])
+  }, [displayedSelection, geometry, controller.document, theme])
   function point(event: PointerEvent<SVGSVGElement>): readonly [number, number] {
     const rect = event.currentTarget.getBoundingClientRect()
     return [(event.clientX - rect.left) / rect.width * geometry.width, (event.clientY - rect.top) / rect.height * geometry.height]
@@ -102,6 +105,13 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
   }
   function down(event: PointerEvent<SVGSVGElement>) {
     if (!active || event.button !== 0) return
+    if (tool === 'select-wand' || tool === 'select-color-range' || tool === 'select-focus') {
+      if (tool !== 'select-focus' && !advanced?.busy) {
+        const p = mapAnnotationPointV3(invertAnnotationMatrixV3(geometry.sourceToOutput), point(event));
+        advanced?.sample({ x: Math.max(0, Math.min(1, p[0] / controller.document.geometry.width)), y: Math.max(0, Math.min(1, p[1] / controller.document.geometry.height)) });
+      }
+      return;
+    }
     setError(null)
     if (tool === 'repair') {
       if (!snapshot.selection) { setError(t('imageEditor.v3.repair.select-first')); return }

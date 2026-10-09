@@ -84,6 +84,7 @@ function sumKnownResources(resources: readonly ImageEditHistoryResourceReference
 }
 
 function hasStrictResourceMetadata(command: ImageEditCommandV3): boolean {
+  if (command.type === 'document.atomic') return command.commands.every(hasStrictResourceMetadata);
   if (command.type === 'layer.add'
     || command.type === 'layer.delete'
     || command.type === 'layer.duplicate'

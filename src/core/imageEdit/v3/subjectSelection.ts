@@ -8,10 +8,10 @@ export const imageEditSubjectRegionSchemaV3 = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('box'), x: ratio, y: ratio, width: ratio.positive(), height: ratio.positive() }).strict(),
 ])
 export type ImageEditSubjectRegionV3 = z.infer<typeof imageEditSubjectRegionSchemaV3>
-/** 会话遮罩 RLE：(起始像素、连续长度、覆盖率字节)。matrix 将遮罩比例坐标映射到文档比例坐标。 */
+/** 无损 float32 遮罩 RLE：(起始像素、连续长度、0..1 覆盖率)。matrix 将遮罩比例坐标映射到文档比例坐标。 */
 export const imageEditSelectionMaskShapeSchemaV3 = z.object({
   type: z.literal('mask'), width: z.number().int().positive().safe(), height: z.number().int().positive().safe(),
-  runs: z.array(z.tuple([z.number().int().nonnegative().safe(), z.number().int().positive().safe(), z.number().int().min(1).max(255)])),
+  runs: z.array(z.tuple([z.number().int().nonnegative().safe(), z.number().int().positive().safe(), z.number().finite().positive().max(1)])),
   matrix: z.tuple([z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite()]),
 }).strict()
 export type ImageEditSelectionMaskShapeV3 = z.infer<typeof imageEditSelectionMaskShapeSchemaV3>
@@ -20,19 +20,21 @@ export function validateImageEditSelectionMaskV3(mask: ImageEditSelectionMaskSha
   const pixels = mask.width * mask.height
   const [a, b, c, d] = mask.matrix
   const determinant = a * d - b * c
-  if (!Number.isSafeInteger(pixels) || pixels > 0xffffffff || !Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) return false
+  if (!Number.isSafeInteger(pixels) || !Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) return false
   let end = 0
   for (const [start, length] of mask.runs) { if (start < end || start + length > pixels) return false; end = start + length }
   return true
 }
 
-export function encodeImageEditSelectionMaskV3(bytes: Uint8Array, width: number, height: number): ImageEditSelectionMaskShapeV3 {
+export function encodeImageEditSelectionMaskV3(bytes: Uint8Array | Float32Array, width: number, height: number): ImageEditSelectionMaskShapeV3 {
   if (bytes.length !== width * height) throw new Error('主体遮罩尺寸不匹配')
   const runs: ImageEditSelectionMaskShapeV3['runs'] = []
   for (let i = 0; i < bytes.length;) {
     const start = i, value = bytes[i++]
     while (i < bytes.length && bytes[i] === value) i++
-    if (value) runs.push([start, i - start, value])
+    const coverage = bytes instanceof Uint8Array ? Math.fround(value / 255) : value
+    if (!Number.isFinite(coverage) || coverage < 0 || coverage > 1) throw new Error('遮罩覆盖率无效')
+    if (coverage) runs.push([start, i - start, coverage])
   }
   return { type: 'mask', width, height, runs, matrix: [1, 0, 0, 1, 0, 0] }
 }

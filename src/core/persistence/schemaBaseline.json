@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 4,
-      "fingerprint": "7c15812b5523c892c7b5fcd980e4b2ebc45a458b7cfc0587337d3cb8dd4568af",
-      "supportedFrom": 4
+      "version": 5,
+      "fingerprint": "405628a35c95525a6a8851e5bdf3d74d7d244949dc4c47f46969649d5b7c1548",
+      "supportedFrom": 5
     },
     "image-working-copy": {
-      "version": 6,
-      "fingerprint": "b80d30100e5cec7e49dfdc9049248c5e8c6e808b7b10bcbcb26b9880ae16bab7",
-      "supportedFrom": 6
+      "version": 7,
+      "fingerprint": "e5d3c5cf8c28e8ae87c4b31532088d8a29e9a92af21145c0a90bbe0bef2d25a6",
+      "supportedFrom": 7
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 4,
-      "fingerprint": "cc27c0aa6e8fd94b7fcfec18ee6403e4d5841d48d8f0ee28506cac37d237b011",
-      "supportedFrom": 4
+      "version": 5,
+      "fingerprint": "4c8e704ca8325baa78f56bd791c61e36bb55f946fa452f3d439811e7aeaa4f1b",
+      "supportedFrom": 5
     },
     "keystore": {
       "version": 1,
@@ -182,9 +182,9 @@
       "supportedFrom": 1
     },
     "image-history-checkpoint": {
-      "version": 1,
-      "fingerprint": "d0b02a406edba526dc32f55cc50f835ecca398cea803f8a58b51db85b2be7ba9",
-      "supportedFrom": 1
+      "version": 2,
+      "fingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46",
+      "supportedFrom": 2
     }
   },
   "devBreaks": [
@@ -747,6 +747,42 @@
       "reason": "开发期命名选区通道进入作品与命令历史，内容版本改为5，不保留旧格式读取",
       "previousFingerprint": "2b1bcbd2c4943fe56a6d83cfe059719f5c3d036fac57ef846aaed4ecc46efb67",
       "fingerprint": "cc27c0aa6e8fd94b7fcfec18ee6403e4d5841d48d8f0ee28506cac37d237b011",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T20:50:46.153Z",
+      "format": "image-history-checkpoint",
+      "version": 2,
+      "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
+      "previousFingerprint": "d0b02a406edba526dc32f55cc50f835ecca398cea803f8a58b51db85b2be7ba9",
+      "fingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T20:50:46.154Z",
+      "format": "image-package",
+      "version": 5,
+      "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
+      "previousFingerprint": "7c15812b5523c892c7b5fcd980e4b2ebc45a458b7cfc0587337d3cb8dd4568af",
+      "fingerprint": "405628a35c95525a6a8851e5bdf3d74d7d244949dc4c47f46969649d5b7c1548",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T20:50:46.154Z",
+      "format": "image-working-copy",
+      "version": 7,
+      "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
+      "previousFingerprint": "b80d30100e5cec7e49dfdc9049248c5e8c6e808b7b10bcbcb26b9880ae16bab7",
+      "fingerprint": "e5d3c5cf8c28e8ae87c4b31532088d8a29e9a92af21145c0a90bbe0bef2d25a6",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T20:50:46.154Z",
+      "format": "canvas-layer-package",
+      "version": 5,
+      "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
+      "previousFingerprint": "cc27c0aa6e8fd94b7fcfec18ee6403e4d5841d48d8f0ee28506cac37d237b011",
+      "fingerprint": "4c8e704ca8325baa78f56bd791c61e36bb55f946fa452f3d439811e7aeaa4f1b",
       "waivedFixtureVersions": []
     }
   ]

@@ -653,6 +653,41 @@
       }
     },
     "v3": {
+      "filterWorkspace": {
+        "title": "Adjustments & Filters",
+        "scope": "Filter scope",
+        "content": "Current layer",
+        "below": "Composite below",
+        "adjustmentLibrary": "Color adjustments",
+        "effectLibrary": "Spatial filters",
+        "unavailable": "Unavailable filter",
+        "add": "Add filter or adjustment",
+        "dismiss": "Dismiss",
+        "preparing": "Applying selection",
+        "cancel": "Cancel",
+        "select": "Select one layer to add filters or adjustments",
+        "empty": "This layer has no filters yet",
+        "enabled": "Enable {{title}}",
+        "earlier": "Run earlier",
+        "later": "Run later",
+        "remove": "Delete filter",
+        "mask": "Local mask",
+        "removeMask": "Remove filter mask",
+        "strength": "Strength",
+        "blendMode": "Filter blend mode",
+        "moreLayerActions": "More layer actions",
+        "scopeNotice": "Applies to the composite below in this group",
+        "editLayerParameters": "Edit layer parameters",
+        "actions": "Filter actions",
+        "convertTitle": "Convert filter scope",
+        "convertConfirm": "Confirm conversion",
+        "beforeScope": "Current scope: {{names}}",
+        "afterScope": "New scope: {{names}}",
+        "orderNotice": "The filter order will also change. Please check the resulting image.",
+        "convertComposite": "Convert to filter layer",
+        "convertContent": "Attach to layer below",
+        "noTarget": "No layer below to attach the filter"
+      },
       "subject": {
         "auto": "Select subject",
         "portrait": "Select people",
@@ -815,7 +850,10 @@
         "annotation-mosaic": "Redact",
         "raster-brush": "Raster brush",
         "eraser": "Eraser",
-        "mask-edit": "Edit mask"
+        "mask-edit": "Edit mask",
+        "select-wand": "Magic wand",
+        "select-color-range": "Color range",
+        "select-focus": "Focus area"
       },
       "layerControls": {
         "rotate": "Rotate layer",
@@ -1094,6 +1132,26 @@
         "emptyDescription": "Save a selection to load or edit it again.",
         "unavailable": "Reopen the editor to manage channels",
         "loadUnavailable": "Reopen the editor to load selections"
+      },
+      "selectionAdvanced": {
+        "settings": "Selection settings",
+        "modify": "Modify selection",
+        "tolerance": "Color tolerance",
+        "contiguous": "Contiguous",
+        "clearSamples": "Clear samples",
+        "range": "Focus range",
+        "noise": "Noise reduction",
+        "mode": "Modification",
+        "radius": "Short-edge ratio",
+        "preview": "Preview",
+        "apply": "Apply selection",
+        "cancel": "Cancel",
+        "preparing": "Computing selection",
+        "expand": "Expand",
+        "contract": "Contract",
+        "smooth": "Smooth",
+        "feather": "Feather",
+        "border": "Border"
       }
     }
   },

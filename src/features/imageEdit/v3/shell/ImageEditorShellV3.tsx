@@ -6,6 +6,7 @@ import type { ImageEditorV3Controller } from '../editor/types'
 import shellPanels from '../panelEntries/shell'
 import historyPanels from '../panelEntries/history'
 import channelPanels from '../panelEntries/channels'
+import adjustmentPanels from '../panelEntries/adjustments'
 import { ImageEditorPanelRegistryV3, type ImageEditorPanelDefinitionV3 } from '../panelFramework/panelRegistry'
 import { createImageEditorMemoryLayoutStoreV3, resetImageEditorDockLayoutV3, type ImageEditorLayoutStoreV3 } from '../panelFramework/layout'
 import { ImageEditorDockV3 } from './ImageEditorDockV3'
@@ -13,8 +14,8 @@ import { ImageEditorPanelMenuV3 } from './ImageEditorDockChromeV3'
 import { ImageEditorShellContextV3 } from './ImageEditorShellContextV3'
 
 // 每个面板任务只需新增自己的登记条目；不再改中央 union/switch/内容分派。
-const entries = import.meta.glob<readonly ImageEditorPanelDefinitionV3[]>(['../panelEntries/*.{ts,tsx}', '!../panelEntries/shell.tsx', '!../panelEntries/history.tsx', '!../panelEntries/channels.tsx'], { eager: true, import: 'default' })
-const defaultRegistry = new ImageEditorPanelRegistryV3([...shellPanels, ...historyPanels, ...channelPanels, ...Object.values(entries).flat()])
+const entries = import.meta.glob<readonly ImageEditorPanelDefinitionV3[]>(['../panelEntries/*.{ts,tsx}', '!../panelEntries/shell.tsx', '!../panelEntries/history.tsx', '!../panelEntries/channels.tsx', '!../panelEntries/adjustments.tsx'], { eager: true, import: 'default' })
+const defaultRegistry = new ImageEditorPanelRegistryV3([...shellPanels, ...historyPanels, ...channelPanels, ...adjustmentPanels, ...Object.values(entries).flat()])
 
 export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, registry = defaultRegistry, layoutStore, onDockApiChange }: {
   controller: ImageEditorV3Controller

@@ -344,7 +344,7 @@ export function CanvasEditToolEditorV3Host({
   if (bootstrap.kind === 'loading') {
     return (
       <UiLoading
-        className="h-[min(76vh,900px)]"
+        className="min-h-0 flex-1"
         message={t('toolDialog.imageEditorV3.loading')}
       />
     )
@@ -352,7 +352,7 @@ export function CanvasEditToolEditorV3Host({
   if (bootstrap.kind === 'failed') {
     return (
       <UiError
-        className="h-[min(76vh,900px)]"
+        className="min-h-0 flex-1"
         title={t('toolDialog.imageEditorV3.openFailed')}
         message={t('toolDialog.imageEditorV3.openFailedDescription')}
         onRetry={() => setBootstrapAttempt((value) => value + 1)}
@@ -382,7 +382,7 @@ export function CanvasEditToolEditorV3Host({
     <div
       ref={interactionRootRef}
       aria-busy={interactionDisabled || saving}
-      className="h-[min(76vh,900px)]"
+      className="flex min-h-0 flex-1 flex-col"
     >
       <ImageEditorV3
         layoutWorkspaceId="canvas"

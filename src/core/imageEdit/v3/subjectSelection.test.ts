@@ -18,6 +18,14 @@ describe('模型主体遮罩进入独立选区', () => {
     const right = rasterizeImageEditSessionRegionV3(selection, { width: 4, height: 4 }, { x: 2, y: 0, width: 2, height: 4 })
     expect(right[2]).toBe(values[6]); expect(raster({ ...selection, inverted: true })[0]).toBe(1)
   })
+  it('float32 覆盖率经过 JSON 与逐块求值保持逐位一致，不量化为灰度字节', () => {
+    const input = Float32Array.of(.123456789, .50000006, 1, 0)
+    const mask = encodeImageEditSelectionMaskV3(input, 2, 2)
+    const selection = imageEditSelectionSessionSchemaV3.parse(JSON.parse(JSON.stringify(appendImageEditSelectionV3(null, mask, 'replace'))))
+    const result = rasterizeImageEditSessionRegionV3(selection, { width: 2, height: 2 }, { x: 0, y: 0, width: 2, height: 2 })
+    expect(new Uint32Array(result.buffer)).toEqual(new Uint32Array(input.buffer))
+    expect(mask.runs[0][2]).not.toBe(Math.round(input[0] * 255) / 255)
+  })
   it('拒绝重叠/越界的RLE、奇异坐标、错长度和越界提示', () => {
     const mask = encodeImageEditSelectionMaskV3(Uint8Array.of(255), 1, 1), selection = appendImageEditSelectionV3(null, mask, 'replace')
     for (const invalid of [{ ...mask, runs: [[0, 2, 255]] }, { ...mask, runs: [[0, 1, 255], [0, 1, 255]] }, { ...mask, matrix: [0, 0, 0, 0, 0, 0] }, { ...mask, matrix: [1e308, 0, 0, 1e308, 0, 0] }]) {

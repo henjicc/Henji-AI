@@ -5,7 +5,7 @@ import { ToolRegistry } from './registry'
 describe('工具登记', () => {
   it('所有当前工具声明入口、宿主、图标、光标和意图，并保留宿主工具顺序', () => {
     const registry = new ToolRegistry(tools)
-    expect(registry.list()).toHaveLength(24)
+    expect(registry.list()).toHaveLength(27)
     expect(registry.list().filter(tool => tool.profiles.includes('mask')).map(tool => tool.id)).toEqual([
       'move', 'hand', 'zoom', 'select-rect', 'select-ellipse', 'select-lasso', 'raster-brush', 'eraser', 'mask-edit',
     ])

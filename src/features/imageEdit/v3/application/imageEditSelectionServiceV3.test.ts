@@ -9,7 +9,7 @@ import { rasterizeSelectionRequestV3 } from '../execution/selectionRaster.worker
 import type { SelectionRasterRequestV3 } from '../execution/selectionRaster.worker'
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
-import { imageEditV3DocumentRef, imageEditV3LayerRef } from './imageEditDocumentRefs'
+import { imageEditV3DocumentRef, imageEditV3LayerRef, imageEditV3FilterRef } from './imageEditDocumentRefs'
 import type { ImageEditBrushTileV3 } from '@/core/imageEdit/v3/brush/contracts'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
 import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry'
@@ -116,6 +116,28 @@ describe('独立选区正式消费与通用实体', () => {
       expect(tile.value.bitmap[8 * 32 + 16]).toBe(255); expect(tile.value.bitmap[0]).toBe(0)
       expect(await iterator.next()).toEqual({ done: true, value: { left: 8, top: 4, width: 16, height: 8 } })
     } finally { dispose() }
+  })
+  it('助手算法确认选区、快照到普通滤镜并原子转换，与人共用状态和撤销', async () => {
+    const bus = createBus(), document = bus.getSnapshot().document;
+    document.layers[0].filters = [{ id: 'local', effectId: 'exposure', operationType: 'adjustment', enabled: true, params: { stops: .4 }, opacity: 1, blendMode: 'normal', mask: null }];
+    const dispose = registerPersistedImageEditTestSession('filter-selection-capability', bus);
+    const context = { signal: new AbortController().signal, requestId: 'filter-selection' };
+    try {
+      const computed = await executeApplicationCapabilityResult({ id: 'compute_image_edit_selection', version: 1, input: { targetRef: imageEditV3LayerRef(document.id, 'raster'), operation: { kind: 'modify', mode: 'feather', radiusRatio: .01 } } }, context);
+      expect(computed.ok, JSON.stringify(computed)).toBe(true);
+      const applied = await executeApplicationCapabilityResult({ id: 'apply_image_edit_selection', version: 1, input: { targetRef: imageEditV3FilterRef(document.id, 'raster', 'local'), action: 'mask' } }, context);
+      expect(applied.ok, JSON.stringify(applied)).toBe(true);
+      const before = bus.getSnapshot().document.layers[0].filters[0].mask;
+      expect(before).not.toBeNull(); bus.setSelection(null);
+      expect(bus.getSnapshot().document.layers[0].filters[0].mask).toEqual(before);
+      const count = bus.getSnapshot().history.undoCount;
+      const converted = await executeApplicationCapabilityResult({ id: 'convert_image_edit_filter_scope', version: 1, input: { targetRef: imageEditV3FilterRef(document.id, 'raster', 'local') } }, context);
+      expect(converted.ok, JSON.stringify(converted)).toBe(true);
+      expect(bus.getSnapshot().history.undoCount).toBe(count + 1);
+      expect(bus.getSnapshot().document.layers).toHaveLength(2);
+      bus.undo(); expect(bus.getSnapshot().document.layers).toHaveLength(1);
+      expect(bus.getSnapshot().document.layers[0].filters[0].mask).toEqual(before);
+    } finally { dispose(); bus.dispose(); }
   })
   it('describe → 通用 change → read 的真实状态闭环，羽化元数据和取消选区可撤销', async () => {
     const bus = createBus(), document = bus.getSnapshot().document

@@ -16,7 +16,7 @@ import {
 
 function document(layers: ImageEditDocumentV3['layers'], revision = 1): ImageEditDocumentV3 {
   return {
-    version: 5,
+    version: 6,
       namedRegions: [],
     id: 'document',
     revision,

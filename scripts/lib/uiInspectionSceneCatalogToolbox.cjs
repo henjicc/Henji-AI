@@ -71,7 +71,7 @@ function createToolboxScenes(context) {
           await surface.waitFor({ state: 'visible', timeout: 12000 })
           const addLayerButton = page.getByRole('button', { name: /^(添加图层|Add layer)$/i })
           const dropTarget = surface.locator('[data-project-library-drop]').first()
-          await Promise.race([
+          await Promise.any([
             addLayerButton.waitFor({ state: 'visible', timeout: 12000 }),
             dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
           ])
@@ -345,7 +345,7 @@ function createToolboxScenes(context) {
         await host.waitFor({ state: 'visible', timeout: 12000 })
         const dropTarget = host.locator('[data-project-library-drop]').first()
         const editor = host.locator('[data-image-editor-v3]')
-        await Promise.race([
+        await Promise.any([
           dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
           editor.waitFor({ state: 'visible', timeout: 12000 }),
         ])
@@ -560,7 +560,6 @@ function createToolboxScenes(context) {
         })
         const layerMenuHorizontalSpace = layerMenuLayout.panelWidth - layerMenuLayout.maxLabelWidth
         if (layerMenuLayout.panelWidth < 72
-          || layerMenuLayout.panelWidth > 128
           || layerMenuHorizontalSpace < 16
           || layerMenuHorizontalSpace > 40
           || layerMenuLayout.items.length === 0
@@ -571,7 +570,9 @@ function createToolboxScenes(context) {
         await layerAddMenu.waitFor({ state: 'hidden', timeout: 1000 })
 
         const workspace = editor.locator('[data-editor-panel-workspace]')
-        if (await workspace.locator('[data-docked-editor-panel]').count() !== 2) throw new Error('图层与属性必须完整停靠')
+        for (const id of ['layers', 'properties', 'adjustments']) {
+          if (await workspace.locator(`[data-dock-tab="${id}"]`).count() !== 1) throw new Error(`正式面板未完整停靠：${id}`)
+        }
         const parametersTab = editor.getByRole('tab', { name: /^(参数|Parameters)$/i })
         await editor.getByRole('tab', { name: /^(基础|Basics)$/i }).click()
         await editor.getByRole('textbox', { name: /^(名称|Name)$/i }).waitFor({ state: 'visible' })

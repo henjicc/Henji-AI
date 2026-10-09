@@ -1,4 +1,5 @@
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import { imageEditLayerFiltersSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
 import { createTileRegion, type ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
 import { resolveImageEditRasterStorageSizeV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
@@ -98,6 +99,9 @@ function applyLayerOverride(
         next = { ...layer, [key]: Math.min(1, Math.max(0, Number(override.value[key]))) }
       } else if (keys.length === 1 && isRecord(override.value.maskAttachment)) {
         next = { ...layer, maskAttachment: { ...layer.maskAttachment, ...override.value.maskAttachment } }
+      } else if (keys.length === 1 && 'filters' in override.value) {
+        const filters = imageEditLayerFiltersSchemaV3.safeParse(override.value.filters)
+        if (filters.success) next = { ...layer, filters: filters.data }
       } else if (layer.type === 'effect' || layer.type === 'adjustment') {
         const params = toJsonObject(override.value)
         if (params) next = { ...layer, params }

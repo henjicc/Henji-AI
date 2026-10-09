@@ -242,6 +242,15 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史命令无效');
   const command = value;
   switch (command.type) {
+    case 'document.atomic':
+      validateBase(command, ['commands']);
+      if (!Array.isArray(command.commands) || command.commands.length === 0) fail('原子历史操作为空');
+      for (const child of command.commands) {
+        if (!isRecord(child) || child.type === 'document.atomic') fail('历史不能包含嵌套原子操作');
+        validateCommand(child, strictResources);
+      }
+      if (new Set(command.commands.map(child => (child as Record<string, unknown>).commandId)).size !== command.commands.length) fail('原子历史操作 ID 重复');
+      break;
     case 'document.set-named-regions':
       validateBase(command, ['regions']);
       if (!imageEditNamedRegionsSchemaV3.safeParse(command.regions).success) fail('历史通道快照无效');

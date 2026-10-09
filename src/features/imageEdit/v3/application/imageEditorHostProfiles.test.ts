@@ -10,8 +10,8 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     const profile = getImageEditorHostProfileV3('full')
     expect(profile).toMatchObject({
       layerKinds: ['raster', 'effect', 'adjustment', 'group'],
-      adjustments: ['color_grade'],
-      panels: ['layers', 'properties', 'history', 'channels'],
+      adjustments: ['color_grade', 'exposure', 'curves', 'temperature-tint', 'hsl'],
+      panels: ['layers', 'properties', 'history', 'channels', 'adjustments'],
       layerControls: ['blend-mode', 'mask'],
       saveActions: ['save-document', 'export-raster'],
       hdrReadiness: {
@@ -30,7 +30,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'hand',
       'zoom',
       'crop',
-      'select-rect', 'select-ellipse', 'select-lasso', 'select-polygon', 'select-brush', 'select-subject', 'select-subject-box',
+      'select-rect', 'select-ellipse', 'select-lasso', 'select-polygon', 'select-brush', 'select-wand', 'select-color-range', 'select-focus', 'select-subject', 'select-subject-box',
       'remove', 'repair',
       'annotation-text',
       'annotation-callout',
@@ -47,7 +47,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
       .toEqual(getReadyImageEditorToolIdsV3(profile))
     expect(getImageEditorHostProfileV3('canvas-edit')).toMatchObject({
-      saveActions: ['save-document'], adjustments: ['color_grade'], layerControls: ['blend-mode', 'mask'],
+      saveActions: ['save-document'], adjustments: ['color_grade', 'exposure', 'curves', 'temperature-tint', 'hsl'], layerControls: ['blend-mode', 'mask'],
       hdrReadiness: { state: 'disabled' }, allowPackageExternalSources: false,
     })
     expect(getImageEditorHostProfileV3('quick')).toMatchObject({

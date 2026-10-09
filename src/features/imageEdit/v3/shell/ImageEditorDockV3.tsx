@@ -37,7 +37,7 @@ function registeredPanel(definition: ImageEditorPanelDefinitionV3): (props: IDoc
       setLocation(api.group.api.location.type)
       return () => events.forEach(event => event.dispose())
     }, [api])
-    const bodyVisible = visible && !collapsed.has(definition.id)
+    const bodyVisible = visible && !api.group.panels.some(panel => collapsed.has(panel.id))
     // 生命周期以当前文档/controller 为准；切目标时先释放原目标再通知新目标。
     useEffect(() => {
       const current = controllerRef.current
@@ -145,7 +145,7 @@ export function ImageEditorDockV3({
     const update = (): void => {
       for (const group of api.groups) {
         if (group.panels.some(panel => panel.id === 'preview')) continue
-        const isCollapsed = Boolean(group.activePanel && collapsed.has(group.activePanel.id))
+        const isCollapsed = group.panels.some(panel => collapsed.has(panel.id))
         const headerHeight = group.element.querySelector('.dv-tabs-and-actions-container')?.getBoundingClientRect().height || 32
         const maximumHeight = isCollapsed ? headerHeight : (api.height || 1000)
         const previous = groupSizesRef.current.get(group)

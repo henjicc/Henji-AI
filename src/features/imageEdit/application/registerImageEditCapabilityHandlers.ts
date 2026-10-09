@@ -1,3 +1,10 @@
+import { convertImageEditFilterScopeCapability } from '@/core/application-control/domains/imageEdit/imageEditFilterCapabilities'
+import { prepareImageEditFilterConversionV3, commitImageEditFilterConversionV3 } from '../v3/filterWorkspace/service'
+import { findImageEditLayerLocationV3 } from '../v3/editor/layerTreeV3'
+import { computeImageEditSelectionCapability } from '@/core/application-control/domains/imageEdit/imageEditAdvancedSelectionCapabilities'
+import { previewImageEditSelectionIntentV3, applyImageEditSelectionPreviewV3 } from '../v3/tools/selectionAdvanced/service'
+import { snapshotImageEditFilterSelectionV3 } from '../v3/filterWorkspace/service'
+import { splitImageEditV3FilterRef, imageEditV3FilterRef } from '../v3/application/imageEditDocumentRefs'
 import { selectImageEditRegionCapability } from '@/core/application-control/domains/imageEdit/imageEditSubjectCapabilities'
 import { selectImageEditRegionV3 } from '../v3/application/imageEditSubjectSelectionServiceV3'
 import { retryImageEditDocumentSaveV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
@@ -28,6 +35,42 @@ import { releaseImageDocument } from '@/features/imageEdit/documents/imageDocume
 import { requestImageDocumentInEditor } from '@/features/imageEdit/documents/imageDocumentWorkspace'
 
 export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  registrar.registerHandler(convertImageEditFilterScopeCapability.id, async (input, context) => {
+    const parsed = convertImageEditFilterScopeCapability.inputSchema.parse(input)
+    const target = parsed.targetRef.kind === 'image_edit.layer_filter' ? splitImageEditV3FilterRef(parsed.targetRef) : splitImageEditV3LayerRef(parsed.targetRef)
+    const { documentId, layerId } = target
+    const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'convert-filter', context.signal) : undefined
+    return runImageEditPersistedOperationV3(documentId, access, async () => {
+      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
+      if (access && persistenceOwner?.projection?.requiredPermissions.some(p => !access.permissions.has(p))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      context.signal?.throwIfAborted()
+      const location = findImageEditLayerLocationV3(bus.getSnapshot().document.layers, layerId)
+      if (!location) throw new Error('图层不存在，请重新读取')
+      const below = location.container[location.index - 1]
+      const filterId = 'filterId' in target && typeof target.filterId === 'string' ? target.filterId : null
+      if (!filterId && !below) throw new Error('没有可挂载的下方图层')
+      const plan = prepareImageEditFilterConversionV3(bus, filterId
+        ? { direction: 'content-to-composite', layerId, filterId, title: location.layer.name + ' · 滤镜' }
+        : { direction: 'composite-to-content', layerId, targetLayerId: below.id })
+      const commandId = commitImageEditFilterConversionV3(bus, plan)
+      const result = findImageEditV3LiveLayer(bus.getSnapshot().document, plan.resultLayerId)
+      return { ref: plan.resultFilterId ? imageEditV3FilterRef(documentId, plan.resultLayerId, plan.resultFilterId) : imageEditV3LayerRef(documentId, plan.resultLayerId),
+        ownerRef: imageEditV3LayerRef(documentId, filterId ? layerId : plan.resultLayerId), commandId, beforeTargets: plan.beforeTargets, afterTargets: plan.afterTargets,
+        verification: { verified: Boolean(result && (!plan.resultFilterId || result.layer.filters.some(f => f.id === plan.resultFilterId))) } }
+    })
+  })
+  registrar.registerHandler(computeImageEditSelectionCapability.id, async (input, context) => {
+    const parsed = computeImageEditSelectionCapability.inputSchema.parse(input)
+    const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
+    const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'compute-selection', context.signal) : undefined
+    return runImageEditPersistedOperationV3(documentId, access, async () => {
+      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
+      if (access && persistenceOwner?.projection?.requiredPermissions.some(p => !access.permissions.has(p))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const preview = await previewImageEditSelectionIntentV3(bus, layerId, parsed.operation, parsed.combine, { signal: context.signal })
+      applyImageEditSelectionPreviewV3(bus, preview)
+      return { ref: { ...imageEditV3DocumentRef(documentId), kind: 'image_edit.selection' }, verification: { verified: JSON.stringify(bus.getSnapshot().selection) === JSON.stringify(preview.result) } }
+    })
+  })
   registrar.registerHandler(selectImageEditRegionCapability.id, async (input, context) => {
     const parsed = selectImageEditRegionCapability.inputSchema.parse(input)
     const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
@@ -61,12 +104,18 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
   })
   registrar.registerHandler(applyImageEditSelectionCapability.id, async (input, context) => {
     const parsed = applyImageEditSelectionCapability.inputSchema.parse(input)
-    const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
+    const target = parsed.targetRef.kind === 'image_edit.layer_filter' ? splitImageEditV3FilterRef(parsed.targetRef) : splitImageEditV3LayerRef(parsed.targetRef)
+    const { documentId, layerId } = target
     const executionContext = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'selection-apply', context.signal) : undefined
     return runImageEditPersistedOperationV3(documentId, executionContext, async () => {
       const { bus } = requireImageEditDocumentInstanceV3(documentId)
       const owner = requireImageEditDocumentInstanceV3(documentId).persistenceOwner
       if (executionContext && owner?.projection?.requiredPermissions.some(p => !executionContext.permissions.has(p))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      if ('filterId' in target && typeof target.filterId === 'string') {
+        const commandId = await snapshotImageEditFilterSelectionV3(bus, layerId, target.filterId, context.signal)
+        return { ref: imageEditV3FilterRef(documentId, layerId, target.filterId), commandId,
+          verification: { verified: Boolean(findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)?.layer.filters.find(f => f.id === target.filterId)?.mask) } }
+      }
       const result = await applyImageEditSelectionV3(bus, layerId, parsed.action, context.signal)
       return { ref: imageEditV3LayerRef(documentId, result.layerId), commandId: result.commandId,
         verification: { verified: Boolean(findImageEditV3LiveLayer(bus.getSnapshot().document, result.layerId)?.layer.mask) } }

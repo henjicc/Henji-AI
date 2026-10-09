@@ -79,6 +79,13 @@ describe('持久格式逐版本链', () => {
 })
 
 describe('Schema结构指纹', () => {
+  it('当前图片黄金样本保留 float32 区域与原子历史检查点', () => {
+    const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/image-working-copy/v${IMAGE_WORKING_VERSION}.json`, 'utf8'))
+    const parsed = imageWorkingCopySchema.parse(raw)
+    const shape = parsed.document.namedRegions.find(region => region.id === 'golden-float32')?.selection.operations[0].shape
+    expect(shape).toMatchObject({ type: 'mask', runs: [[0, 1, Math.fround(.123456789)], [1, 1, Math.fround(.50000006)], [2, 1, 1]] })
+    expect(parsed.historyCheckpoint?.version).toBe(2)
+  })
   it('图片高斯黄金样本保留 canonical 参数，旧半径字段明确拒绝', () => {
     const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/image-working-copy/v${IMAGE_WORKING_VERSION}.json`, 'utf8')) as { document: { layers: Array<{ type: string; effectId?: string; params?: Record<string, unknown> }> } }
     const effect = raw.document.layers.find(layer => layer.effectId === 'gaussian_blur')

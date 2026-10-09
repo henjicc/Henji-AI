@@ -1,4 +1,5 @@
 import { ImageEditorSubjectProviderV3 } from './ImageEditorSubjectContextV3'
+import { SelectionAdvancedProviderV3 } from '../tools/selectionAdvanced/SelectionAdvancedContext'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -31,6 +32,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
 
   return (
     <ImageEditorSubjectProviderV3 bus={bus} controller={controller}>
+    <SelectionAdvancedProviderV3 bus={bus} controller={controller}>
     <ImageEditorRepairProviderV3 bus={bus} controller={controller}>
     <div
       ref={rootRef}
@@ -76,6 +78,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
       />}
     </div>
     </ImageEditorRepairProviderV3>
+    </SelectionAdvancedProviderV3>
     </ImageEditorSubjectProviderV3>
   )
 }

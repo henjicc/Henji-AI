@@ -26,6 +26,10 @@ export function assertImageEditHistoryInversePairV3(
   if (inverse.commandId !== `${forward.commandId}:inverse`
     || inverse.expectedRevision !== forward.expectedRevision + 1) fail('历史逆向补丁基线无效');
   switch (forward.type) {
+    case 'document.atomic':
+      if (inverse.type !== 'document.atomic' || inverse.commands.length !== forward.commands.length) fail('原子历史逆向补丁无效');
+      forward.commands.forEach((child, index) => assertImageEditHistoryInversePairV3(child, inverse.commands[inverse.commands.length - 1 - index]));
+      break;
     case 'document.set-named-regions':
       if (inverse.type !== forward.type) fail('通道逆向补丁无效'); break;
     case 'layer.move-many':

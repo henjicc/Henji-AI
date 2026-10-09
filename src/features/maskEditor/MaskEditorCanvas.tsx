@@ -263,7 +263,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
       className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-gap/85 p-3"
       data-application-observation-region="mask_editor.canvas"
     >
-      {previewFailed ? <UiError title="遮罩预览失败" message="请重试，或关闭后重新打开参考图。" onRetry={() => setPreviewAttempt(value => value + 1)} /> : null}
+      {previewFailed ? <div className="absolute inset-0 z-raised bg-gap/85"><UiError className="h-full" title="遮罩预览失败" message="请重试，或关闭后重新打开参考图。" onRetry={() => setPreviewAttempt(value => value + 1)} /></div> : null}
       <Stage
         width={fit.width}
         height={fit.height}

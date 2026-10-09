@@ -200,10 +200,11 @@ describe('ImageEditorV3 professional shell', () => {
     expect(glow.disabled).toBe(false)
     expect(screen.getByRole('menuitem', { name: '模糊' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()
-    // 完整编辑器开放图层组、蒙版与共享全能调色调整层；曝光仍不作为独立图层提供。
+    // 调整库和图层菜单使用同一登记，完整编辑器开放全部可创建调整。
     expect(screen.getByRole('menuitem', { name: '全能调色' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '图层组' })).toBeTruthy()
-    expect(screen.queryByRole('menuitem', { name: '曝光' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: '曝光' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '曲线' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '添加蒙版' })).toBeTruthy()
   })
 
@@ -533,9 +534,10 @@ describe('ImageEditorV3 professional shell', () => {
     expect(preview?.className).not.toContain('rounded')
     expect(preview?.className).not.toContain('shadow')
     expect(rendered.container.querySelector('[data-editor-panel-dock="right"]')).toBeTruthy()
-    expect(dockedPanels).toHaveLength(4)
+    expect(dockedPanels).toHaveLength(5)
     // 历史与属性同组成标签，DOM 中标签页顺序随 Dockview 激活顺序变化，只校验集合
     expect([...dockedPanels].map((panel) => panel.getAttribute('data-editor-panel-id')).sort()).toEqual([
+      'adjustments',
       'channels',
       'history',
       'layers',
@@ -604,17 +606,21 @@ describe('ImageEditorV3 professional shell', () => {
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
     const preview = rendered.container.querySelector('[data-preview-surface]')
-    fireEvent.click(await screen.findByRole('button', { name: '关闭图层面板' }))
-    fireEvent.click(screen.getByRole('button', { name: '关闭属性面板' }))
-    fireEvent.click(screen.getByRole('button', { name: '关闭历史面板' }))
-    fireEvent.click(screen.getByRole('button', { name: '关闭通道面板' }))
+    await screen.findByRole('button', { name: '关闭图层面板' })
+    expect(screen.queryByRole('button', { name: '关闭历史面板' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '关闭通道面板' })).toBeNull()
+    for (const title of ['图层', '属性', '历史', '通道', '调整与滤镜']) {
+      fireEvent.click(screen.getByRole('button', { name: '面板' }))
+      fireEvent.click(await screen.findByRole('menuitem', { name: `关闭${title}面板` }))
+      await waitFor(() => expect(screen.queryByRole('menu', { name: '面板' })).toBeNull())
+    }
     expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(0)
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '显示图层面板' }))
     await screen.findByRole('button', { name: '关闭图层面板' })
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
-    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(4))
+    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(5))
     expect(rendered.container.querySelector('[data-preview-surface]')).toBe(preview)
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
     expect(screen.getByRole('button', { name: '撤销' }).hasAttribute('disabled')).toBe(true)
