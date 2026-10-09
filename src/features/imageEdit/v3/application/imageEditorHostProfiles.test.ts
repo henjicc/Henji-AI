@@ -11,7 +11,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     expect(profile).toMatchObject({
       layerKinds: ['raster', 'effect', 'adjustment', 'group'],
       adjustments: ['color_grade'],
-      panels: ['layers', 'properties'],
+      panels: ['layers', 'properties', 'history'],
       layerControls: ['blend-mode', 'mask'],
       saveActions: ['save-document', 'export-raster'],
       hdrReadiness: {
