@@ -195,12 +195,14 @@ export async function runCanvasTransaction(
   const checkpoint = createCanvasMutationCheckpoint(projectId, runtime)
   const releasePersistence = runtime ? runtime.pause() : pauseCanvasProjectPersistence(projectId)
   const persistenceEffects: Array<() => void> = []
+  const rollbackEffects: Array<() => Promise<void>> = []
   let results: Record<string, unknown>[]
   try {
     const execution = execute({
       deferCommit: true,
       checkpoint,
       afterPersistenceConfirmed: (effect) => persistenceEffects.push(effect),
+      afterRollbackConfirmed: (effect) => rollbackEffects.push(effect),
     })
     // 无 I/O 的组合写入在同一个同步阶段封存，避免 React 挂载/测量插入半成品事务。
     results = Array.isArray(execution) ? execution : await execution
@@ -223,6 +225,15 @@ export async function runCanvasTransaction(
     const recovery = persist()
     releasePersistence()
     await recovery
+    const compensationFailures: unknown[] = []
+    for (const effect of rollbackEffects.reverse()) {
+      try { await effect() } catch (compensationError) { compensationFailures.push(compensationError) }
+    }
+    if (compensationFailures.length) {
+      const failure = new AggregateError([error, ...compensationFailures], '画布已恢复，复制来源补偿未完成')
+      logger.error('画布批事务来源补偿失败', failure, { event: 'canvas.batch.rollback.failed', projectId })
+      throw failure
+    }
     logger[rejectedBeforeMutation ? 'warn' : 'error']('画布批量写入失败', error, {
       event: 'canvas.batch.apply.failed', projectId, operationCount, ...logContext,
     })

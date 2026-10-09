@@ -103,6 +103,12 @@ describe('多图层文档节点复制事务', () => {
     expect(source?.data.imageEditSession).toMatchObject({ documentRef: sourceSession.documentRef })
     expect(copied?.data.imageEditSession).toMatchObject({ documentRef: 'image-edit-v3:fork-document' })
     expect(mocks.fork).toHaveBeenCalledOnce()
+    await undoCanvasChange(projectId, String(result.undoRef))
+    expect(useCanvasStore.getState().nodes.map(node => node.id)).toEqual(['source-node'])
+    await redoCanvasChange(projectId)
+    expect(useCanvasStore.getState().nodes.find(node => node.id === result.nodeId)?.data.imageEditSession)
+      .toMatchObject({ documentRef: 'image-edit-v3:fork-document' })
+    expect(mocks.fork).toHaveBeenCalledOnce()
   })
 
   it('fork 成功但副本节点未接管时精确补偿新文档', async () => {

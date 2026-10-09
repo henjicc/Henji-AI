@@ -1,4 +1,4 @@
-import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance, leaseCanvasProject } from './canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { createLogger } from '@/core/logging'
 
@@ -10,17 +10,19 @@ import {
   isTextAnnotationNode,
   type CanvasNode,
   type CanvasNodeData,
-  type LayerStackResultNodeData,
   type StoryboardFrameItem,
 } from '../domain/canvasNodes'
 import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
+import { getCanvasNodeDefinition } from '../domain/nodeRegistry'
+import type { CanvasNodeSourceCopy, CanvasNodeSourceServices } from '../domain/nodeSourceDuplication'
+import { createSnapshot, pushSnapshot } from '@/stores/canvasStoreHelpers'
 import {
   extractCanvasNodeDataForDuplication,
   listCanvasNodeDataKeys,
   parseCanvasSpecialEditorData,
 } from '../domain/nodeControlRegistry'
 import {
-  addControlledCanvasNode,
+  stageControlledCanvasNode,
   CanvasApplicationError,
   rememberCanvasUndo,
   requireCurrentCanvasProject,
@@ -36,9 +38,9 @@ import {
   assertCanvasCommitContext,
   assertCanvasPersistenceEffectRegistration,
   confirmCanvasPersistence,
-  CanvasPersistenceError,
   runAfterCanvasPersistence,
   type CanvasCommitOptions,
+  runCanvasMutationStage,
 } from './canvasPersistenceService'
 import {
   validateCanvasNodeDataPatch, validateCanvasNodeGenerationConfig, type CanvasNodeGenerationConfig,
@@ -173,57 +175,122 @@ interface CanvasNodeDuplicationInput<T> {
   projectId: string
   sourceNodeId: string
   data: Record<string, unknown>
-  createNode: (data: Record<string, unknown>) => T | Promise<T>
+  createNode: (data: Record<string, unknown>) => T
 }
 
-/** 已载入的普通节点同步提交；只有加载画布、复制文档或调用方自身需要时才异步等待。 */
-export function commitCanvasNodeDuplication<T>(input: CanvasNodeDuplicationInput<T>): T | Promise<T> {
-  const commit = () => {
-    const source = requireNode(input.projectId, input.sourceNodeId)
-    if (!isEditableLayerStackResultNode(source)) return input.createNode(input.data)
-    return commitCanvasDocumentNodeDuplication(input, source)
-  }
+const sourceServices: CanvasNodeSourceServices = {
+  cameraStage: () => import('@/features/cameraStage/projects/cameraStageProjectService'),
+  // 保留原来的组合根加载边界，节点声明只消费应用服务注入的 I/O。
+  layerStack: () => import('./multiLayerDocumentNodeGenerationAdapter'),
+}
+
+interface CanvasNodesDuplicationInput<T> {
+  projectId: string
+  nodes: { sourceNodeId: string; data: Record<string, unknown> }[]
+  /** 同步提交全部节点及其组/连线；异步 I/O 必须由 duplicateSource 完成。 */
+  createNodes: (data: Record<string, unknown>[]) => T
+}
+
+/** 普通节点保持同步；整批来源准备成功后才提交图结构，失败整批补偿，一次撤销。 */
+export function commitCanvasNodesDuplication<T>(input: CanvasNodesDuplicationInput<T>, options: CanvasCommitOptions = {}): T | Promise<T> {
   if (!findCanvasProjectInstance(input.projectId)) {
-    return getCanvasProjectInstance(input.projectId).then(commit)
+    return getCanvasProjectInstance(input.projectId).then(() => commitCanvasNodesDuplication(input, options))
   }
-  return commit()
-}
+  const instance = requireCanvasProjectInstance(input.projectId)
+  const sources = input.nodes.map(node => requireNode(input.projectId, node.sourceNodeId))
+  assertCanvasCommitContext(input.projectId, options)
+  if (options.deferCommit && sources.some(source => getCanvasNodeDefinition(source.type)?.duplicateSource)
+    && !options.afterRollbackConfirmed) {
+    throw new Error('延迟节点复制缺少来源文档补偿协调器')
+  }
+  const copies: CanvasNodeSourceCopy[] = []
+  const data = input.nodes.map(node => node.data)
+  const release = leaseCanvasProject(instance)
+  const resumePersistence = instance.pausePersistence()
+  const resume = () => { resumePersistence(); release() }
+  logger.info('开始复制画布节点', { event: 'canvas.node.duplicate.start', projectId: input.projectId,
+    context: { sourceNodeIds: sources.map(node => node.id) } })
 
-async function commitCanvasDocumentNodeDuplication<T>(
-  input: CanvasNodeDuplicationInput<T>, source: { id: string; data: LayerStackResultNodeData },
-): Promise<T> {
-  // 延迟加载组合根，避免“导出画布事务 -> 批处理服务 -> 节点复制 -> 文档组合根”
-  // 在模块初始化期形成环；UI、批处理和助手仍委托同一个正式服务实例。
-  const documentAdapter = await import('./multiLayerDocumentNodeGenerationAdapter')
-  const projection = await documentAdapter.forkMultiLayerDocumentNode({
-    sourceNodeId: source.id,
-    targetNodeId: crypto.randomUUID(),
-    data: source.data,
-  })
-  try {
-    return await input.createNode({
-      ...input.data,
-      resultKind: 'layer-stack',
-      imageEditSession: projection.imageEditSession,
-      imageUrl: projection.imageUrl,
-      previewImageUrl: projection.previewImageUrl,
-      aspectRatio: projection.aspectRatio,
-    })
-  } catch (error) {
-    if (error instanceof CanvasPersistenceError) throw error
-    await documentAdapter.rollbackCreatedMultiLayerDocument(projection).catch((rollbackError) => {
-      logger.error('复制节点失败后的文档补偿失败', rollbackError, {
-        event: 'canvas.multi_layer_document.fork.rollback.failed',
-        nodeId: source.id,
-        context: {
-          documentRef: projection.imageEditSession.documentRef,
-          revision: projection.imageEditSession.revision,
-          cleanupCandidate: true,
-        },
-      })
-    })
+  const compensateSources = async (): Promise<void> => {
+    const failures: unknown[] = []
+    for (const copy of [...copies].reverse()) {
+      try { await copy.rollback() } catch (cleanupError) {
+        failures.push(cleanupError)
+        logger.error('复制来源补偿失败', cleanupError, { event: 'canvas.node.duplicate.rollback.failed', projectId: input.projectId })
+      }
+    }
+    if (failures.length) throw new AggregateError(failures, '节点来源补偿未完成')
+  }
+
+  const rollback = async (error: unknown): Promise<never> => {
+    let compensationError: unknown
+    try { await compensateSources() } catch (cleanupError) { compensationError = cleanupError }
+    logger.error('复制画布节点失败', error, { event: 'canvas.node.duplicate.failed', projectId: input.projectId,
+      context: { compensationFailed: Boolean(compensationError) } })
+    if (compensationError) throw new AggregateError([error, compensationError], '节点复制失败，来源文档补偿未完成')
     throw error
   }
+
+  const commit = (): T => runCanvasMutationStage(options, () => {
+    for (const source of sources) {
+      const current = requireNode(input.projectId, source.id)
+      if (current.data !== source.data || current.type !== source.type || current.parentId !== source.parentId) {
+        throw new CanvasApplicationError('STALE_CONTEXT', '来源节点已改变，请重新复制')
+      }
+    }
+    const before = instance.store.getState()
+    try {
+      const result = input.createNodes(data)
+      const after = instance.store.getState()
+      if (after.nodes !== before.nodes || after.edges !== before.edges) {
+        instance.store.setState({ history: {
+          past: pushSnapshot(before.history.past, createSnapshot(before.nodes, before.edges)), future: [],
+        } })
+      }
+      logger.info('画布节点复制已提交', { event: 'canvas.node.duplicate.completed', projectId: input.projectId })
+      if (copies.length && options.afterRollbackConfirmed) {
+        options.afterRollbackConfirmed(compensateSources)
+      }
+      return result
+    } catch (error) {
+      instance.store.setState({ nodes: before.nodes, edges: before.edges, history: before.history,
+        selectedNodeId: before.selectedNodeId, dragHistorySnapshot: before.dragHistorySnapshot,
+        activeHistoryGroup: before.activeHistoryGroup })
+      throw error
+    }
+  })
+
+  const prepare = (start: number): T | Promise<T> => {
+    for (let index = start; index < sources.length; index++) {
+      const source = sources[index]
+      const duplicateSource = getCanvasNodeDefinition(source.type)?.duplicateSource
+      if (!duplicateSource) continue
+      return duplicateSource(source, sourceServices).then(copy => {
+        if (copy) { copies.push(copy); data[index] = { ...data[index], ...copy.data } }
+        return prepare(index + 1)
+      })
+    }
+    return commit()
+  }
+
+  try {
+    const result = prepare(0)
+    if (result instanceof Promise) return result.catch(rollback).finally(resume)
+    resume()
+    return result
+  } catch (error) {
+    if (copies.length) return rollback(error).finally(resume)
+    resume()
+    logger.error('复制画布节点失败', error, { event: 'canvas.node.duplicate.failed', projectId: input.projectId })
+    throw error
+  }
+}
+
+export function commitCanvasNodeDuplication<T>(input: CanvasNodeDuplicationInput<T>, options: CanvasCommitOptions = {}): T | Promise<T> {
+  return commitCanvasNodesDuplication({ projectId: input.projectId,
+    nodes: [{ sourceNodeId: input.sourceNodeId, data: input.data }],
+    createNodes: data => input.createNode(data[0]),
+  }, options)
 }
 
 export async function duplicateCanvasNode(input: {
@@ -232,52 +299,43 @@ export async function duplicateCanvasNode(input: {
   placement: CanvasNodePlacement
 }, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
-  const node = requireNode(input.projectId, input.nodeId)
-  const editableDocument = isEditableLayerStackResultNode(node)
-  const data = editableDocument
-    ? structuredClone(node.data as Record<string, unknown>)
-    : extractCanvasNodeDataForDuplication(
-        node.type,
-        node.data as Record<string, unknown>,
-      )
-  const result = await commitCanvasNodeDuplication({
-    projectId: input.projectId,
-    sourceNodeId: node.id,
-    data,
-    createNode: async (forkedData) => {
-      if (!editableDocument) {
-        return addControlledCanvasNode({
-          projectId: input.projectId,
-          nodeType: node.type,
-          placement: input.placement,
-          data: forkedData,
-        }, options)
-      }
-      const canvas = requireCanvasProjectInstance(input.projectId).store.getState()
-      const before = {
-        nodes: canvas.nodes,
-        edges: canvas.edges,
-        history: canvas.history,
-      }
-      try {
-        const created = await addControlledCanvasNode({
+  const release = leaseCanvasProject(requireCanvasProjectInstance(input.projectId))
+  try {
+    const node = requireNode(input.projectId, input.nodeId)
+    const hasSourceLifecycle = Boolean(getCanvasNodeDefinition(node.type)?.duplicateSource)
+    const data = hasSourceLifecycle
+      ? structuredClone(node.data as Record<string, unknown>)
+      : extractCanvasNodeDataForDuplication(
+          node.type,
+          node.data as Record<string, unknown>,
+        )
+    const result = await commitCanvasNodeDuplication({
+      projectId: input.projectId,
+      sourceNodeId: node.id,
+      data,
+      createNode: (forkedData) => {
+        if (!hasSourceLifecycle) {
+          return stageControlledCanvasNode({
+            projectId: input.projectId,
+            nodeType: node.type,
+            placement: input.placement,
+            data: forkedData,
+          }, { ...options, deferCommit: true })
+        }
+        const created = stageControlledCanvasNode({
           projectId: input.projectId,
           nodeType: node.type,
           placement: input.placement,
         }, { ...options, deferCommit: true })
         const nodeId = String(created.nodeId)
         requireCanvasProjectInstance(input.projectId).store.getState().updateNodeData(nodeId, forkedData, { skipHistory: true })
-        const undoRef = rememberCanvasUndo(input.projectId, 'duplicate_node')
-        await confirmCanvasPersistence(input.projectId, options)
-        return { ...created, undoRef }
-      } catch (error) {
-        if (error instanceof CanvasPersistenceError) throw error
-        requireCanvasProjectInstance(input.projectId).store.getState().setCanvasData(before.nodes, before.edges, before.history)
-        throw error
-      }
-    },
-  })
-  return { ...result, duplicatedFromNodeId: node.id }
+        return created
+      },
+    }, options)
+    const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'duplicate_node')
+    await confirmCanvasPersistence(input.projectId, options)
+    return { ...result, ...(undoRef ? { undoRef } : {}), duplicatedFromNodeId: node.id }
+  } finally { release() }
 }
 
 export async function updateCanvasNode(input: {

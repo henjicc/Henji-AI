@@ -1,4 +1,5 @@
 import { registry } from '@/core/ModelRegistry';
+import { duplicateLayerStackNodeSource } from './nodeSourceDuplication';
 
 import {
   DEFAULT_LOCAL_REDRAW_SETTINGS,
@@ -337,6 +338,7 @@ export const layerSeparationGenerationNodeDefinition: CanvasNodeDefinition<Layer
 };
 
 export const layerStackResultNodeDefinition: CanvasNodeDefinition<LayerStackResultNodeData> = {
+  duplicateSource: duplicateLayerStackNodeSource,
   type: CANVAS_NODE_TYPES.layerStackResult,
   menuLabelKey: 'node.menu.layerStackResult',
   menuIcon: 'assetGroup',

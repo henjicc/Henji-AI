@@ -24,6 +24,8 @@ export interface CanvasCommitOptions {
   checkpoint?: CanvasMutationCheckpoint
   /** 批事务最终持久化成功后才允许触发的外部副作用；回滚或写盘失败时不会执行。 */
   afterPersistenceConfirmed?: (effect: () => void) => void
+  /** 批事务恢复原画布并确认保存后，撤回尚未交付的外部来源。 */
+  afterRollbackConfirmed?: (effect: () => Promise<void>) => void
 }
 
 export function assertCanvasPersistenceEffectRegistration(options: CanvasCommitOptions): void {

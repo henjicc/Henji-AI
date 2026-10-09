@@ -1,15 +1,14 @@
 import { useCallback, useRef } from 'react'
 import type { Connection, NodeChange, NodePositionChange } from '@xyflow/react'
-import { canvasStoreAttachment, useCanvasStore } from '@/stores/canvasStore'
+import { canvasStoreAttachment, useCanvasStore, type CanvasState } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { collectNodeIdsWithDescendants } from '@/stores/canvasStoreHelpers'
 import {
-  CANVAS_NODE_TYPES,
   isAssetGroupNode,
   type CanvasEdge,
   type CanvasNode,
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes'
-import { duplicateCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { rebaseCanvasLocalPromptData } from '@/features/canvas/application/generationPromptDocument'
 import {
   cloneNodeData,
@@ -20,11 +19,33 @@ import {
 } from '@/features/canvas/canvasUtils'
 import { reconcileAssetGroupGraph } from '@/features/canvas/application/assetGroupGraph'
 import { resetDuplicatedCanvasExecutionData } from '@/features/canvas/application/canvasDuplicationExecutionState'
-import { commitCanvasNodeDuplication } from '@/features/canvas/application/canvasMutationService'
+import { commitCanvasNodesDuplication } from '@/features/canvas/application/canvasMutationService'
 import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback'
 import { createLogger } from '@/core/logging'
 
 const logger = createLogger('features.canvas.duplication')
+
+type DragBaseline = Pick<CanvasState, 'nodes' | 'edges' | 'history'>
+
+/** 副本的拖放属于同一次复制；只合并纯位移，期间的其他内容编辑仍保留独立历史。 */
+function finishDuplicationDrag(baseline: DragBaseline | null, copiedIds: ReadonlySet<string>): void {
+  if (!baseline) return
+  const snapshot = baseline.history.past.at(-1)
+  if (!snapshot) return
+  const current = useCanvasStore.getState()
+  const boundary = current.history.past.indexOf(snapshot)
+  if (boundary < 0) return
+  const baselineNodes = new Map(baseline.nodes.map(node => [node.id, node]))
+  const onlyCopyPositionsChanged = (nodes: CanvasNode[], edges: CanvasEdge[]) => edges === baseline.edges
+    && nodes.length === baseline.nodes.length && nodes.every(node => {
+      const original = baselineNodes.get(node.id)
+      return original && node.data === original.data && node.parentId === original.parentId
+        && (copiedIds.has(node.id) || (node.position.x === original.position.x && node.position.y === original.position.y))
+    })
+  if (!onlyCopyPositionsChanged(current.nodes, current.edges)
+    || current.history.past.slice(boundary + 1).some(step => !onlyCopyPositionsChanged(step.nodes, step.edges))) return
+  useCanvasStore.setState({ history: baseline.history, dragHistorySnapshot: null })
+}
 
 interface UseCanvasDuplicationParams {
   nodes: CanvasNode[]
@@ -56,6 +77,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
     positions: Map<string, NodePositionChange>
     stopped: boolean
     settled: boolean
+    historyBaseline: DragBaseline | null
   } | null>(null)
 
   const duplicateNodes = useCallback(
@@ -63,10 +85,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
       const dedupedIds = Array.from(new Set(sourceNodeIds))
       if (dedupedIds.length === 0) return null
 
-      const requestedIds = new Set(dedupedIds)
-      for (const node of nodes) {
-        if (node.parentId && requestedIds.has(node.parentId)) requestedIds.add(node.id)
-      }
+      const requestedIds = collectNodeIdsWithDescendants(nodes, dedupedIds)
       const sourceNodes = nodes.filter((node) => requestedIds.has(node.id))
       if (sourceNodes.length === 0) return null
 
@@ -131,125 +150,109 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         if (promptPatch) {
           useCanvasStore.getState().updateNodeData(nextNodeId, promptPatch, { skipHistory: true })
         }
-        if (sourceNode.type === CANVAS_NODE_TYPES.cameraStage) {
-          const projectId = (data as { projectId?: DynamicValue }).projectId
-          if (typeof projectId === 'string' && projectId) {
-            void duplicateCameraStageDocument(projectId).then((copied) => {
-              if (copied) useCanvasStore.getState().updateNodeData(nextNodeId, { projectId: copied.id })
-            })
-          }
-        }
       }
 
-      // 每段同步创建只通知一次界面；遇到文档 I/O 先发布已完成状态，
-      // 等文档接管成功再顺序继续。领域动作、历史和补偿仍走原有唯一入口。
-      const copyFrom = (startIndex: number): void | Promise<void> => canvasStoreAttachment.batchViewUpdates(() => {
-        for (let index = startIndex; index < sourceNodes.length; index++) {
-          const sourceNode = sourceNodes[index]
-          const data = cloneNodeData(sourceNode.data) as DynamicValueMap
-          resetDuplicatedCanvasExecutionData(sourceNode.type, data)
-          const projectId = useProjectStore.getState().currentProjectId
-          if (!projectId) throw new Error('当前没有可复制节点的项目')
-          const created = commitCanvasNodeDuplication({
-            projectId,
-            sourceNodeId: sourceNode.id,
-            data: { ...data },
-            createNode: (forkedData) => {
-              if (useProjectStore.getState().currentProjectId !== projectId) {
-                throw new Error('画布已切换，已取消节点复制')
+      const projectId = useProjectStore.getState().currentProjectId
+      if (!projectId) throw new Error('当前没有可复制节点的项目')
+      const copyInputs = sourceNodes.map(sourceNode => {
+        const data = cloneNodeData(sourceNode.data) as DynamicValueMap
+        resetDuplicatedCanvasExecutionData(sourceNode.type, data)
+        return { sourceNodeId: sourceNode.id, data }
+      })
+      return await commitCanvasNodesDuplication({
+        projectId,
+        nodes: copyInputs,
+        createNodes: (preparedData) => canvasStoreAttachment.batchViewUpdates(() => {
+          if (useProjectStore.getState().currentProjectId !== projectId) {
+            throw new Error('画布已切换，已取消节点复制')
+          }
+          for (let index = 0; index < sourceNodes.length; index++) {
+            const sourceNode = sourceNodes[index]
+            const data = preparedData[index] as DynamicValueMap
+            const nextNodeId = addNode(sourceNode.type as CanvasNodeType, {
+              x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,
+              y: sourceNode.position.y + chosenOffset.y + offsetStep * 6,
+            }, data)
+            recordCopy(sourceNode, data, nextNodeId)
+          }
+
+          const sizeSyncChanges = Array.from(sizeMap.entries()).map(([nodeId, size]) => ({
+            id: nodeId,
+            type: 'dimensions' as const,
+            dimensions: { width: size.width, height: size.height },
+            resizing: false,
+            setAttributes: true,
+          }))
+          if (sizeSyncChanges.length > 0) {
+            applyNodesChange(sizeSyncChanges)
+          }
+
+          canvasStoreAttachment.batchViewUpdates(() => {
+            for (const edge of internalEdges) {
+              const nextSource = idMap.get(edge.source)
+              const nextTarget = idMap.get(edge.target)
+              if (!nextSource || !nextTarget) continue
+              connectNodes({
+                source: nextSource,
+                target: nextTarget,
+                sourceHandle: edge.sourceHandle ?? 'source',
+                targetHandle: edge.targetHandle ?? 'target',
+              })
+            }
+          })
+
+          const copiedAssetGroups = sourceNodes.filter(isAssetGroupNode)
+          if (copiedAssetGroups.length > 0 || sourceNodes.some(node => node.parentId && idMap.has(node.parentId))) {
+            const current = useCanvasStore.getState()
+            const regroupedNodes = current.nodes.map((node) => {
+              const originalEntry = Array.from(idMap.entries()).find(([, copiedId]) => copiedId === node.id)
+              if (!originalEntry) return node
+              const original = sourceNodes.find((candidate) => candidate.id === originalEntry[0])
+              if (!original) return node
+              if (isAssetGroupNode(original)) {
+                return {
+                  ...node,
+                  data: {
+                    ...original.data,
+                    memberOrder: original.data.memberOrder
+                      .map((memberId) => idMap.get(memberId))
+                      .filter((memberId): memberId is string => Boolean(memberId)),
+                    coverMemberId: original.data.coverMemberId
+                      ? idMap.get(original.data.coverMemberId) ?? null
+                      : null,
+                    bindings: [],
+                  },
+                }
               }
-              return addNode(sourceNode.type as CanvasNodeType, {
-                x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,
-                y: sourceNode.position.y + chosenOffset.y + offsetStep * 6,
-              }, forkedData)
-            },
-          })
-          if (typeof created !== 'string') {
-            return created.then((nextNodeId) => canvasStoreAttachment.batchViewUpdates(() => {
-              recordCopy(sourceNode, data, nextNodeId)
-              return copyFrom(index + 1)
-            }))
+              if (original.parentId && idMap.has(original.parentId)) {
+                return {
+                  ...node,
+                  parentId: idMap.get(original.parentId),
+                  position: original.position,
+                  extent: original.extent,
+                  hidden: original.hidden,
+                  selected: false,
+                }
+              }
+              return node
+            })
+            const reconciled = reconcileAssetGroupGraph(regroupedNodes, current.edges)
+            useCanvasStore.setState({ nodes: reconciled.nodes, edges: reconciled.edges })
           }
-          recordCopy(sourceNode, data, created)
-        }
+
+          if (!options.disableOffsetIteration) {
+            pasteIterationRef.current += 1
+          }
+          const firstNodeId = idMap.get(sourceNodes[0].id) ?? null
+          if (firstNodeId && !options.suppressSelect) {
+            setSelectedNode(firstNodeId)
+          }
+          if (!options.suppressPersist) {
+            scheduleCanvasPersist(0)
+          }
+          return { firstNodeId, idMap }
+        }),
       })
-      const copying = copyFrom(0)
-      if (copying) await copying
-
-      const sizeSyncChanges = Array.from(sizeMap.entries()).map(([nodeId, size]) => ({
-        id: nodeId,
-        type: 'dimensions' as const,
-        dimensions: { width: size.width, height: size.height },
-        resizing: false,
-        setAttributes: true,
-      }))
-      if (sizeSyncChanges.length > 0) {
-        applyNodesChange(sizeSyncChanges)
-      }
-
-      canvasStoreAttachment.batchViewUpdates(() => {
-        for (const edge of internalEdges) {
-          const nextSource = idMap.get(edge.source)
-          const nextTarget = idMap.get(edge.target)
-          if (!nextSource || !nextTarget) continue
-          connectNodes({
-            source: nextSource,
-            target: nextTarget,
-            sourceHandle: edge.sourceHandle ?? 'source',
-            targetHandle: edge.targetHandle ?? 'target',
-          })
-        }
-      })
-
-      const copiedAssetGroups = sourceNodes.filter(isAssetGroupNode)
-      if (copiedAssetGroups.length > 0) {
-        const current = useCanvasStore.getState()
-        const regroupedNodes = current.nodes.map((node) => {
-          const originalEntry = Array.from(idMap.entries()).find(([, copiedId]) => copiedId === node.id)
-          if (!originalEntry) return node
-          const original = sourceNodes.find((candidate) => candidate.id === originalEntry[0])
-          if (!original) return node
-          if (isAssetGroupNode(original)) {
-            return {
-              ...node,
-              data: {
-                ...original.data,
-                memberOrder: original.data.memberOrder
-                  .map((memberId) => idMap.get(memberId))
-                  .filter((memberId): memberId is string => Boolean(memberId)),
-                coverMemberId: original.data.coverMemberId
-                  ? idMap.get(original.data.coverMemberId) ?? null
-                  : null,
-                bindings: [],
-              },
-            }
-          }
-          if (original.parentId && idMap.has(original.parentId)) {
-            return {
-              ...node,
-              parentId: idMap.get(original.parentId),
-              position: original.position,
-              hidden: true,
-              selected: false,
-            }
-          }
-          return node
-        })
-        const reconciled = reconcileAssetGroupGraph(regroupedNodes, current.edges)
-        useCanvasStore.setState({ nodes: reconciled.nodes, edges: reconciled.edges })
-      }
-
-      if (!options.disableOffsetIteration) {
-        pasteIterationRef.current += 1
-      }
-      const firstNodeId = idMap.get(sourceNodes[0].id) ?? null
-      if (firstNodeId && !options.suppressSelect) {
-        setSelectedNode(firstNodeId)
-      }
-      if (!options.suppressPersist) {
-        scheduleCanvasPersist(0)
-      }
-      return { firstNodeId, idMap }
     }),
     [addNode, applyNodesChange, connectNodes, edges, nodes, scheduleCanvasPersist, setSelectedNode]
   )
@@ -290,6 +293,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         idMap: null as Map<string, string> | null,
         stopped: false,
         settled: false,
+        historyBaseline: null as DragBaseline | null,
       }
       altDragCopyRef.current = session
       logger.info('开始拖拽复制节点', { event: 'canvas.node.alt_duplicate.start', context: { sourceNodeIds } })
@@ -303,6 +307,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
       }).then((result) => {
         if (!result) return
         session.idMap = result.idMap
+        session.historyBaseline = useCanvasStore.getState()
         const changes: NodeChange<CanvasNode>[] = []
         for (const [sourceId, change] of session.positions) {
           const copiedId = result.idMap.get(sourceId)
@@ -317,7 +322,10 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
           }
         }
         if (changes.length) applyNodesChange(changes)
-        if (session.stopped) scheduleCanvasPersist(0)
+        if (session.stopped) {
+          finishDuplicationDrag(session.historyBaseline, new Set(result.idMap.values()))
+          scheduleCanvasPersist(0)
+        }
         logger.info('拖拽副本已创建', { event: 'canvas.node.alt_duplicate.completed', context: { sourceNodeIds } })
       }).catch((error: unknown) => {
         logger.error('拖拽复制节点失败', error, { event: 'canvas.node.alt_duplicate.failed' })
@@ -355,6 +363,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
           .filter((node) => copiedIds.has(node.id) && node.dragging)
           .map((node) => ({ id: node.id, type: 'position', position: node.position, dragging: false }))
         if (finalChanges.length) applyNodesChange(finalChanges)
+        finishDuplicationDrag(session.historyBaseline, new Set(session.idMap?.values()))
         altDragCopyRef.current = null
         scheduleCanvasPersist(0)
       }

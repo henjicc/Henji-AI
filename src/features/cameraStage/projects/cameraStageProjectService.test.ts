@@ -1,5 +1,6 @@
 import '@/tests/cameraStageProjectFixture'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as documentOperations from '@/features/documents/documentOperations'
 import { documentKindRegistry } from '@/core/documents/kinds'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
@@ -14,6 +15,8 @@ import {
   CameraStageLeaveCancelledError,
   createDraftCameraStageDocument,
   createNamedCameraStageDocument,
+  duplicateCameraStageDocument,
+  rollbackDuplicatedCameraStageDocument,
   leaveCameraStageEditor,
   openCameraStageDocument,
 } from './cameraStageProjectService'
@@ -28,14 +31,44 @@ let prompter: ScriptedPrompter
 beforeEach(() => {
   commands = new FakeDocumentCommands()
   prompter = createScriptedPrompter()
-  setCameraStageDocumentRegistryForTests(new DocumentSessionRegistry({ commands, prompter, kinds: documentKindRegistry }))
+  const registry = new DocumentSessionRegistry({ commands, prompter, kinds: documentKindRegistry })
+  setCameraStageDocumentRegistryForTests(registry)
+  const operations = new documentOperations.DocumentOperations({ registry, commands: {
+    ...documentOperations.defaultDocumentOperationCommands,
+    duplicateDocument: request => commands.duplicateDocument(request),
+    trashDocument: target => commands.trashDocument(target),
+  } })
+  vi.spyOn(documentOperations, 'getDocumentOperations').mockReturnValue(operations)
   useCameraStageSessionStore.setState({ appView: 'list', lastDocumentId: null, stageViewMode: 'director' })
 })
+afterEach(() => { vi.restoreAllMocks() })
 
 const stored = (id: string): CameraStageSceneContent => commands.stored(id)!.content as CameraStageSceneContent
 const sceneContent = (): CameraStageSceneContent => structuredClone(sceneToDocumentContent(createDefaultCameraStageSceneSnapshot()))
 
 describe('镜头参考文档入口', () => {
+  it('独立复制当前尚未落盘的来源内容；补偿只撤回副本', async () => {
+    commands.seed({ kind: 'camera_stage', id: 'source', name: '来源', content: sceneContent() })
+    await openCameraStageDocument({ id: 'source' })
+    useCameraStageStore.getState().addPrimitive('box')
+    const copied = await duplicateCameraStageDocument('source')
+    expect(copied?.id).not.toBe('source')
+    expect(stored(copied!.id)).toEqual(stored('source'))
+    expect(stored(copied!.id).objects.map(object => object.type)).toContain('primitive')
+    expect(stored(copied!.id)).not.toBe(stored('source'))
+    await rollbackDuplicatedCameraStageDocument(copied!.id)
+    expect(commands.stored(copied!.id)).toBeUndefined()
+    expect(commands.stored('source')).toBeDefined()
+    expect(useCameraStageStore.getState().currentProjectId).toBe('source')
+  })
+
+  it('来源缺失返回空结果，复制写入失败明确拒绝且不产生副本', async () => {
+    expect(await duplicateCameraStageDocument('missing')).toBeNull()
+    commands.seed({ kind: 'camera_stage', id: 'source', name: '来源', content: sceneContent() })
+    vi.spyOn(commands, 'duplicateDocument').mockRejectedValueOnce(new Error('disk unavailable'))
+    await expect(duplicateCameraStageDocument('source')).rejects.toThrow('disk unavailable')
+    expect((await commands.listDocuments({ kind: 'camera_stage' })).map(document => document.id)).toEqual(['source'])
+  })
   it('把画布全景输入持久化到未打开的镜头参考文档', async () => {
     commands.seed({ kind: 'camera_stage', id: 'env', name: '环境', content: sceneContent() })
     await applyProjectEnvironmentImage('env', '/media/panorama.png')

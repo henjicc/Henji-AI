@@ -1,4 +1,5 @@
 import type { CanvasNodeData, CanvasNodeType } from './canvasNodes';
+import type { CanvasNodeSourceDuplicator } from './nodeSourceDuplication';
 import type {
   MediaKind,
   NodeGenerationSpec,
@@ -83,6 +84,8 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
   menuBehavior?: 'create' | 'chooseMediaBeforeCreate';
   /** 画布运行协调器使用的声明式执行角色。 */
   executionKind?: CanvasNodeExecutionKind;
+  /** 来源先独立复制，再交给统一复制事务提交；失败必须补偿新来源。 */
+  duplicateSource?: CanvasNodeSourceDuplicator;
   capabilities: CanvasNodeCapabilities;
   connectivity: CanvasNodeConnectivity;
   /** 节点主媒体类型与角色（source=素材输入 / generator=生成 / result=结果展示） */

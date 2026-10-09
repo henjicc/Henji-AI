@@ -18,6 +18,7 @@ import { getDefaultModelId } from './defaultModels';
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
 import { imageOutputsFromData } from './nodeRegistryMediaOutputs';
 import type { CanvasNodeDefinition } from './nodeRegistryContracts';
+import { duplicateCameraStageNodeSource } from './nodeSourceDuplication';
 
 export const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
   type: CANVAS_NODE_TYPES.exportImage,
@@ -186,6 +187,7 @@ export const textProcessingNodeDefinition: CanvasNodeDefinition<TextProcessingNo
 };
 
 export const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
+  duplicateSource: duplicateCameraStageNodeSource,
   defaultParameterFields: ['outputKind'],
   type: CANVAS_NODE_TYPES.cameraStage,
   menuLabelKey: 'node.menu.cameraStage',

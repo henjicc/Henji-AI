@@ -140,6 +140,11 @@ export async function duplicateCameraStageDocument(projectId: string): Promise<S
   }
 }
 
+/** 仅撤回尚未交给画布的副本；复用文档删除屏障和系统回收站，不删除原件。 */
+export async function rollbackDuplicatedCameraStageDocument(projectId: string): Promise<void> {
+  await getDocumentOperations().trashDocument({ id: projectId })
+}
+
 /** 同步画布输入到目标文档实例，保留尚未落盘的其他编辑。 */
 export async function applyProjectEnvironmentImage(projectId: string, environmentImageUrl: string | null): Promise<void> {
   const release = await leaseCameraStageProjectRuntime(projectId)

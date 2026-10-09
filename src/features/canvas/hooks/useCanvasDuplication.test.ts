@@ -12,10 +12,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/stores/canvasStore', () => ({ useCanvasStore: { getState: mocks.getState },
   canvasStoreAttachment: { batchViewUpdates: <T,>(work: () => T) => work() } }))
 vi.mock('@/stores/projectStore', () => ({ useProjectStore: { getState: () => mocks.project } }))
-vi.mock('../application/canvasMutationService', () => ({ commitCanvasNodeDuplication: mocks.fork }))
+vi.mock('../application/canvasMutationService', () => ({ commitCanvasNodesDuplication: mocks.fork }))
 vi.mock('../application/canvasOperationFeedback', () => ({ reportCanvasOperationFailure: mocks.feedback }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({ duplicateCameraStageDocument: vi.fn() }))
 vi.mock('../application/generationPromptDocument', () => ({ rebaseCanvasLocalPromptData: () => null }))
 vi.mock('../application/assetGroupGraph', () => ({ reconcileAssetGroupGraph: vi.fn() }))
 vi.mock('../application/canvasDuplicationExecutionState', () => ({ resetDuplicatedCanvasExecutionData: vi.fn() }))
@@ -25,7 +24,11 @@ vi.mock('../canvasUtils', () => ({
   hasRectCollision: () => false,
 }))
 
-type ForkInput = { sourceNodeId: string; data: Record<string, unknown>; createNode: (data: Record<string, unknown>) => string }
+type ForkInput = {
+  nodes: { sourceNodeId: string; data: Record<string, unknown> }[]
+  createNodes: (data: Record<string, unknown>[]) => unknown
+}
+const commit = (input: ForkInput) => input.createNodes(input.nodes.map(node => node.data))
 const event = (altKey: boolean) => new MouseEvent('mousedown', { altKey })
 const source = (id: string, x: number): CanvasNode => ({
   id, type: 'uploadNode', position: { x, y: 40 }, selected: true, data: {},
@@ -35,7 +38,7 @@ function setup(multiple = false, withThird = false) {
   let nodes = [source('a', 20), ...(multiple ? [source('b', 240)] : []), ...(withThird ? [source('c', 460)] : [])]
   const original = nodes.slice()
   const persist = vi.fn()
-  mocks.getState.mockImplementation(() => ({ nodes, updateNodeData: vi.fn() }))
+  mocks.getState.mockImplementation(() => ({ nodes, edges: [], history: { past: [], future: [] }, updateNodeData: vi.fn() }))
   const apply = (changes: NodeChange<CanvasNode>[]) => { nodes = applyNodeChanges(changes, nodes) }
   const { result } = renderHook(() => useCanvasDuplication({
     nodes: original, edges: [], selectedNodeIds: original.map((node) => node.id),
@@ -55,21 +58,18 @@ function setup(multiple = false, withThird = false) {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.project.currentProjectId = 'project'
-  mocks.fork.mockImplementation((input: ForkInput) => input.createNode(input.data))
+  mocks.fork.mockImplementation(commit)
 })
 afterEach(cleanup)
 
 describe('Alt 拖拽复制', () => {
-  it('普通节点在同一同步段创建，文档等待结束后按原顺序继续', async () => {
+  it('整批来源等待结束后才按原顺序提交全部节点', async () => {
     const view = setup(true, true)
     let finish!: () => void
-    mocks.fork.mockImplementation((input: ForkInput) => input.sourceNodeId === 'b'
-      ? new Promise<string>(resolve => { finish = () => resolve(input.createNode(input.data)) })
-      : input.createNode(input.data))
+    mocks.fork.mockImplementation((input: ForkInput) => new Promise(resolve => { finish = () => resolve(commit(input)) }))
     let pending!: ReturnType<typeof view.result.current.duplicateNodes>
     act(() => { pending = view.result.current.duplicateNodes(['a', 'b', 'c']) })
-    expect(view.nodes()).toHaveLength(4)
-    expect(view.nodes()[3].id).toBe('copy-3')
+    expect(view.nodes()).toHaveLength(3)
     await act(async () => { finish(); await pending })
     expect(view.nodes().slice(3).map(node => node.id)).toEqual(['copy-3', 'copy-4', 'copy-5'])
     expect(view.persist).toHaveBeenCalledTimes(1)
@@ -78,8 +78,8 @@ describe('Alt 拖拽复制', () => {
   it('文档等待期间切换画布拒绝接管，不继续创建后续节点', async () => {
     const view = setup(true)
     let finish!: () => void
-    mocks.fork.mockImplementation((input: ForkInput) => new Promise<string>((resolve, reject) => {
-      finish = () => { try { resolve(input.createNode(input.data)) } catch (error) { reject(error) } }
+    mocks.fork.mockImplementation((input: ForkInput) => new Promise((resolve, reject) => {
+      finish = () => { try { resolve(commit(input)) } catch (error) { reject(error) } }
     }))
     let pending!: ReturnType<typeof view.result.current.duplicateNodes>
     act(() => { pending = view.result.current.duplicateNodes(['a', 'b']) })
@@ -111,8 +111,8 @@ describe('Alt 拖拽复制', () => {
 
   it('异步文档复制尚未完成就松手，保留最终位置且原节点从未移动', async () => {
     let finish!: () => void
-    mocks.fork.mockImplementation((input: ForkInput) => new Promise<string>((resolve) => {
-      finish = () => resolve(input.createNode(input.data))
+    mocks.fork.mockImplementation((input: ForkInput) => new Promise((resolve) => {
+      finish = () => resolve(commit(input))
     }))
     const view = setup()
     act(() => view.result.current.handleNodeDragStart(event(true), view.original[0]))
