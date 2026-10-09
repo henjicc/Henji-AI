@@ -17,10 +17,15 @@
         "width": 64,
         "height": 48,
         "orientation": {
-          "rotate": 0,
-          "mirrored": false
+          "rotate": 90,
+          "mirrored": true
         },
-        "crop": null
+        "crop": {
+          "x": 1,
+          "y": 2,
+          "width": 32,
+          "height": 40
+        }
       },
       "color": {
         "workingSpace": "srgb",
@@ -173,6 +178,36 @@
             "edge_mode": "transparent"
           },
           "renderable": true
+        },
+        {
+          "id": "golden-quick-marks",
+          "name": "快速标记",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "annotation",
+          "annotations": [
+            {
+              "id": "golden-mark",
+              "type": "rect",
+              "x": 10,
+              "y": 20,
+              "width": 12,
+              "height": 14,
+              "stroke": "#000000",
+              "lineWidth": 2
+            }
+          ]
         }
       ]
     },

@@ -8,29 +8,21 @@ import type {
 } from '@/core/application-control'
 import { applyWriterTable, fieldWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
-import { imageEditDocumentToMarkDoc, replaceMarkDocInImageEditDocument, type ImageEditDocument, type MarkItem } from '@/core/imageEdit'
-import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
+import type { MarkItem } from '@/core/imageEdit'
 import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import { requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { findImageEditV3LiveLayer, isImageEditV3Ref, splitImageEditV3AnnotationRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 
 import { IMAGE_MARK_ANNOTATION_FIELDS as FIELDS, IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
-import { annotationRef, imageMarkRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
+import { imageMarkRevision } from './imageMarkSessionAccess'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 
 const logger = createLogger('features.imageMark.annotation_mutation')
 
-const UNDO_PREFIX = 'image-mark-annotation-undo:'
 const V3_UNDO_PREFIX = 'image-mark-v3-annotation-undo:'
 
 const WRITERS = fieldWriterTable(FIELDS)
-
-interface UndoPayload {
-  sessionId: string
-  annotationId: string
-  previousDocument: ImageEditDocument
-}
 
 interface V3UndoPayload {
   documentId: string
@@ -38,11 +30,7 @@ interface V3UndoPayload {
   commandId: string
 }
 
-/**
- * image_mark.annotation 属性写入执行器（6.2）：只有 data 一条真正可写（type 创建后不可变）。
- * draft 是目标标注的克隆，applyWriterTable 跑完写入表后整体替换回 items 数组里的同一位置，
- * 再走 imageEditSessionStore.commitDocument 落地。
- */
+/** 标注写入、撤销和补偿均委托 V3 持久命令。 */
 export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationExecutor {
   readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = IMAGE_MARK_ENTITY_TYPES.annotation
@@ -58,42 +46,8 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
   }
 
   private async applyInMemory(step: MutationStep): Promise<ApplicationCompletedStepResult> {
-    if (isImageEditV3Ref(step.target)) return this.applyV3(step)
-    const { sessionId, annotationId } = splitAnnotationRef(step.target)
-    const previousDocument = requireSessionDocument(sessionId)
-    const markDoc = imageEditDocumentToMarkDoc(previousDocument)
-    const index = markDoc.items.findIndex((item) => item.id === annotationId)
-    if (index < 0) throw new Error('NOT_FOUND')
-
-    const draft: MarkItem = structuredClone(markDoc.items[index])
-    await applyWriterTable(WRITERS, draft, step.mutations)
-
-    const nextItems = [...markDoc.items]
-    nextItems[index] = draft
-    const nextDocument = replaceMarkDocInImageEditDocument(previousDocument, { ...markDoc, items: nextItems })
-    useImageEditSessionStore.getState().commitDocument(sessionId, nextDocument)
-
-    const revision = imageMarkRevision()
-    logger.info('标注属性写入完成', {
-      event: 'image_mark.annotation_mutation.apply.completed',
-      sessionId,
-      annotationId,
-      properties: step.mutations.map((mutation) => mutation.propertyId),
-    })
-
-    return {
-      status: 'completed',
-      resultingRevisions: { image_mark: revision },
-      directRefs: [{ ...annotationRef(sessionId, draft), revision }],
-      evidence: step.mutations.map((mutation) => ({
-        kind: 'property_value' as const,
-        target: { ...annotationRef(sessionId, draft), revision },
-        fact: `标注属性 ${mutation.propertyId} 已更新。`,
-        data: mutation.value ?? null,
-        capturedAt: new Date().toISOString(),
-      })),
-      undoToken: `${UNDO_PREFIX}${JSON.stringify({ sessionId, annotationId, previousDocument } satisfies UndoPayload)}`,
-    }
+    if (!isImageEditV3Ref(step.target)) throw new Error('NOT_FOUND')
+    return this.applyV3(step)
   }
 
   async compensate(step: MutationStep, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> {
@@ -139,7 +93,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
       const revision = imageMarkRevision()
       return {
         status: 'completed',
-        resultingRevisions: { image_mark: revision },
+        resultingRevisions: { image_mark: revision, image_edit: revision },
         directRefs: [{ kind: this.entityType, id: payload.targetId, revision }],
         evidence: [{
           kind: 'entity_state',
@@ -149,21 +103,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
         }],
       }
     }
-    if (!undoToken.startsWith(UNDO_PREFIX)) throw new Error('IMAGE_MARK_ANNOTATION_UNDO_INVALID')
-    const { sessionId, annotationId, previousDocument } = JSON.parse(undoToken.slice(UNDO_PREFIX.length)) as UndoPayload
-    useImageEditSessionStore.getState().commitDocument(sessionId, previousDocument)
-    const revision = imageMarkRevision()
-    return {
-      status: 'completed',
-      resultingRevisions: { image_mark: revision },
-      directRefs: [{ kind: this.entityType, id: `${sessionId}:${annotationId}`, revision }],
-      evidence: [{
-        kind: 'entity_state',
-        target: { kind: IMAGE_MARK_ENTITY_TYPES.document, id: sessionId, revision },
-        fact: '标注属性写入已撤销。',
-        capturedAt: new Date().toISOString(),
-      }],
-    }
+    throw new Error('IMAGE_MARK_V3_ANNOTATION_UNDO_INVALID')
   }
 
   private async applyV3(step: MutationStep): Promise<ApplicationCompletedStepResult> {
@@ -195,7 +135,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
     })
     return {
       status: 'completed',
-      resultingRevisions: { image_mark: revision },
+      resultingRevisions: { image_mark: revision, image_edit: revision },
       directRefs: [{ ...step.target, revision }],
       evidence: step.mutations.map((mutation) => ({
         kind: 'property_value' as const,

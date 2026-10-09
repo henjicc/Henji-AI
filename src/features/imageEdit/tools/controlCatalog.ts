@@ -1,5 +1,3 @@
-import { IMAGE_EDIT_OPERATION_IDS } from '@/core/imageEdit'
-
 import { imageEditOperationSchema, type ImageEditControlOperation } from '../application/imageEditControlCatalog'
 
 export interface ImageEditorToolControlDefinition {
@@ -14,28 +12,28 @@ export const IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS: readonly ImageEditorToolCont
   {
     id: 'geometry',
     label: '几何',
-    operationId: IMAGE_EDIT_OPERATION_IDS.orientation,
+    operationId: 'document.update-output-geometry',
     operationSchema: imageEditOperationSchema,
     kinds: ['rotate_cw', 'rotate_ccw', 'flip_h', 'flip_v', 'crop', 'mark'],
   },
   {
     id: 'blur',
     label: '模糊',
-    operationId: IMAGE_EDIT_OPERATION_IDS.blur,
+    operationId: 'gaussian_blur',
     operationSchema: imageEditOperationSchema,
     kinds: ['blur'],
   },
   {
     id: 'diffusion',
     label: '发光',
-    operationId: IMAGE_EDIT_OPERATION_IDS.diffusion,
+    operationId: 'image.diffusion',
     operationSchema: imageEditOperationSchema,
     kinds: ['diffusion'],
   },
   {
     id: 'vgpuGlow',
     label: '辉光 Pro',
-    operationId: IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+    operationId: 'image.vgpu-glow',
     operationSchema: imageEditOperationSchema,
     kinds: ['vgpu_glow'],
   },

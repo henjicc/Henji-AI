@@ -1,6 +1,5 @@
 import { colorGradeSpatialSupport } from '@/core/imaging/adjustments/plan'
 import { resolveFastBlurV3Geometry } from '@/core/imageEdit/v3/effects/fastBlur'
-import { resolveGaussianBlurV2Geometry } from '@/core/imageEdit/v3/effects/gaussianBlur'
 import { resolveImageEditOutputGeometryV3 } from '@/core/imageEdit/v3/outputGeometry'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import type { ImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
@@ -60,9 +59,6 @@ export function resolveImageEditorGpuEffectViewportV3(
   const gradeNeighbors = grades.some(grade => colorGradeSpatialSupport(grade.parameters, scene.geometry.height * scale) > 0)
   const hasGlobal = gradeNeighbors || effects.some((node) => {
     if (node.definitionId === 'effect.diffusion' || node.definitionId === 'effect.vgpu-glow') return true
-    if (node.definitionId === 'effect.blur-v1') {
-      return gaussianSupport(node, scale) > 256
-    }
     if (node.definitionId !== 'effect.fast-blur') return false
     return resolveFastBlurV3Geometry({ radius: finiteParameter(node.parameters.radius) * scale,
       mip: finiteParameter(node.parameters.mip) }).requiresGlobalAnalysis
@@ -75,9 +71,6 @@ export function resolveImageEditorGpuEffectViewportV3(
     bottom = Math.max(0, Math.round((Math.max(endY, gradeNeighbors ? (output.rotate === 90 || output.rotate === 270 ? output.sourceWidth : output.sourceHeight) - output.cropY : output.outputHeight) - endY) * scale))
   } else {
     const halo = effects.reduce((sum, node) => {
-      if (node.definitionId === 'effect.blur-v1') {
-        return sum + gaussianSupport(node, scale)
-      }
       if (node.definitionId !== 'effect.fast-blur') return sum
       const radius = finiteParameter(node.parameters.radius)
       const mip = finiteParameter(node.parameters.mip)
@@ -102,16 +95,6 @@ export function resolveImageEditorGpuEffectViewportV3(
     },
   }
   return { layout: expandedLayout, cropOffset: [left, top], expanded: true }
-}
-
-function gaussianSupport(
-  node: Extract<ImageEditorGpuRasterSceneV3['graph'][number], { kind: 'effect' }>,
-  scale: number,
-): number {
-  const legacy = node.definitionId === 'effect.blur-v1'
-  const radius = finiteParameter(node.parameters[legacy ? 'radiusPixels' : 'radius']) * scale
-  const mip = legacy ? 0 : finiteParameter(node.parameters.mip)
-  return resolveGaussianBlurV2Geometry({ radius, mip }).haloAtMip
 }
 
 function finiteParameter(value: unknown): number {

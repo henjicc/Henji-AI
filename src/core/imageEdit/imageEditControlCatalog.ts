@@ -1,8 +1,5 @@
 import { z } from 'zod'
-import {
-  IMAGE_BLUR_ALGORITHMS,
-  type ImageBlurAlgorithmId,
-} from './blurParams'
+import { gaussianParameterSchema } from '../imaging/effects/gaussian'
 import {
   MAX_MOSAIC_STRENGTH_PERCENT,
   MIN_MOSAIC_STRENGTH_PERCENT,
@@ -65,11 +62,6 @@ export const imageEditMarkItemSchema = imageEditMarkItemUnionSchema.superRefine(
 })
 
 const rotationDegreesSchema = z.number().int().min(0).max(360).refine((degrees) => degrees % 90 === 0, 'degrees 必须是 90 的倍数').optional()
-const blurAlgorithmIds = IMAGE_BLUR_ALGORITHMS.map((algorithm) => algorithm.id) as [
-  ImageBlurAlgorithmId,
-  ...ImageBlurAlgorithmId[],
-]
-const blurAlgorithmSchema = z.enum(blurAlgorithmIds)
 const unitIntervalSchema = z.number().finite().min(0).max(1).describe('取值范围 0～1。')
 
 const diffusionTintSchema = z.object({
@@ -97,8 +89,9 @@ const imageEditOperationUnionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('mark').describe('添加结构化标注。'), item: imageEditMarkItemSchema }).strict(),
   z.object({
     kind: z.literal('blur').describe('添加模糊。'),
-    algorithm: blurAlgorithmSchema.optional().describe('模糊算法；省略时使用编辑器默认算法。'),
-    strength: unitIntervalSchema.optional().describe('模糊强度。'),
+    sigma_fraction_height: gaussianParameterSchema.shape.sigma_fraction_height.optional(),
+    axis: gaussianParameterSchema.shape.axis.optional(),
+    edge_mode: gaussianParameterSchema.shape.edge_mode.optional(),
   }).strict(),
   z.object({
     kind: z.literal('diffusion').describe('添加黑柔、白柔或数字辉光。'),
@@ -224,29 +217,12 @@ export const IMAGE_EDIT_PREVIEW_CAPABILITY_METADATA = {
   ],
 } as const
 
-const SINGLETON_OPERATION_KINDS = ['crop', 'blur', 'diffusion', 'vgpu_glow'] as const
-
 export const imageEditPreviewOperationsSchema = z.array(imageEditOperationSchema)
   .min(1)
-  .max(32)
   .superRefine((operations, context) => {
-    const firstSingletonIndices = new Map<string, number>()
     const explicitMarkIds = new Map<string, number>()
 
     operations.forEach((operation, index) => {
-      if ((SINGLETON_OPERATION_KINDS as readonly string[]).includes(operation.kind)) {
-        const firstIndex = firstSingletonIndices.get(operation.kind)
-        if (firstIndex !== undefined) {
-          context.addIssue({
-            code: 'custom',
-            path: [index, 'kind'],
-            message: `operations 中 ${operation.kind} 只能出现一次；请只保留最终需要的一项 ${operation.kind}，并删除其余重复项。`,
-          })
-        } else {
-          firstSingletonIndices.set(operation.kind, index)
-        }
-      }
-
       if (operation.kind === 'mark' && operation.item.id !== undefined) {
         const firstIndex = explicitMarkIds.get(operation.item.id)
         if (firstIndex !== undefined) {
@@ -261,17 +237,9 @@ export const imageEditPreviewOperationsSchema = z.array(imageEditOperationSchema
       }
     })
 
-    const diffusionIndex = operations.findIndex((operation) => operation.kind === 'diffusion')
-    const vgpuGlowIndex = operations.findIndex((operation) => operation.kind === 'vgpu_glow')
-    if (diffusionIndex >= 0 && vgpuGlowIndex >= 0) {
-      context.addIssue({
-        code: 'custom',
-        path: [Math.max(diffusionIndex, vgpuGlowIndex), 'kind'],
-        message: 'diffusion 与 vgpu_glow 不能同时使用；请选择并只保留一种光效。',
-      })
-    }
+
   })
-  .describe('提供 1～32 项图片编辑；朝向命令按输入顺序重映射，mark 按输入顺序叠加，blur 与唯一光效最终按编辑器固定阶段执行。crop、blur、diffusion、vgpu_glow 各最多一项，diffusion 与 vgpu_glow 只能选择一种。每项只能使用列出的 kind 和字段。')
+  .describe('按输入顺序执行 V3 图片命令，无编辑操作数量上限；朝向变化清除裁剪，crop 使用当前朝向空间，mark 使用原图空间，效果可以叠加。')
 
 function inputJsonSchema(schema: z.ZodType): Record<string, unknown> {
   const generated = z.toJSONSchema(schema, {

@@ -3,14 +3,14 @@ import {
   ImageEditorV3CommandRepository,
   ingestImageEditorV3Source,
 } from '@/commands/imageEditorV3'
-import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
-import { migrateImageEditDocumentV2ToV3 } from '@/core/imageEdit/v3/legacyMigration'
+import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import { createLogger } from '@/core/logging'
 import { createImageDocument, type OpenImageDocument } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import type { DocumentContainerRef } from '@/core/documents/types'
 
-import { createImageMarkV3ColorMode, resolveImageMarkV3SourceLocator } from './imageMarkV3Source'
+import { createImageMarkV3ColorMode, prepareImageEditSourceLocatorV3 } from './imageMarkV3Source'
 
 /*
  * 从一张图片新建图片文档（3.5）：打开图片 / 新建空白图片 / 粘贴 / 拖入 / 从其他工具传来。
@@ -23,8 +23,8 @@ const logger = createLogger('features.imageMark.document_source')
 export interface ImageDocumentSource {
   /** 本地路径、http(s) 或 data: 地址。 */
   url: string
-  /** 从其他工具传来时带着的标注（旧版标注文档会迁移成图层）。 */
-  document?: ImageEditDocument
+  /** 从其他工具传来时带着的标注（V3 图层文档）。 */
+  document?: ImageEditDocumentV3
   /** 新建空白图片。 */
   blank?: boolean
 }
@@ -40,19 +40,22 @@ export async function createImageDocumentFromSource(
   container: DocumentContainerRef = { kind: 'user' },
 ): Promise<OpenImageDocument> {
   const documentId = newDocumentId()
-  const managed = await ingestImageEditorV3Source({
-    requestId: createImageEditorV3RequestId('image-document-source'),
-    source: resolveImageMarkV3SourceLocator(source.url),
-  })
-  let generatedLayerIndex = 0
-  const migrated = migrateImageEditDocumentV2ToV3(source.document ?? createEmptyImageEditDocument(), {
-    width: managed.metadata.width,
-    height: managed.metadata.height,
-    sourceResourceId: managed.resource.resourceRef,
-    documentId,
-    idFactory: (prefix) => `${prefix}-${documentId}-${generatedLayerIndex += 1}`,
-  })
-  const document = { ...migrated, color: createImageMarkV3ColorMode(managed.metadata) }
+  let document: ImageEditDocumentV3
+  if (source.document) {
+    document = { ...structuredClone(source.document), id: documentId, revision: 0 }
+  } else {
+    const managed = await ingestImageEditorV3Source({
+      requestId: createImageEditorV3RequestId('image-document-source'),
+      source: await prepareImageEditSourceLocatorV3(source.url),
+    })
+    document = createImageEditDocumentV3({
+        width: managed.metadata.width,
+        height: managed.metadata.height,
+        sourceResourceId: managed.resource.resourceRef,
+        documentId,
+        color: createImageMarkV3ColorMode(managed.metadata),
+      })
+  }
   const history = new ImageEditCommandHistoryV3()
   history.clear(document)
   const reference = await new ImageEditorV3CommandRepository().save(document, {

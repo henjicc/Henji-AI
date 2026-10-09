@@ -7,12 +7,16 @@ import { createApplicationCapabilitySession } from '@/features/application-contr
 import { externalReflectionPermissions } from '@/features/application-control/externalCapabilityInventory'
 import { createImageEditPreview, resetImageEditApplicationStateForTests } from '@/features/imageEdit/application/imageEditApplicationService'
 import { getStoredImageEditPreview } from '@/features/imageEdit/application/imageEditSessionRegistry'
-import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage, readHarnessImageEditDocument } from './harnessNativeStorage'
 
+import { imageEditTestManagedSource, imageEditTestSnapshot } from './imageEditV3SourceFixture'
 const io = vi.hoisted(() => ({ assets: new Map<string, AssetRecord>(), render: vi.fn(), persist: vi.fn() }))
-vi.mock('@/commands/image', async importOriginal => ({ ...await importOriginal<typeof import('@/commands/image')>(),
-  readImageInfo: async () => ({ width: 800, height: 600 }), persistImageSource: io.persist }))
-vi.mock('@/features/imageEdit/execution/browserImageEditExecution', () => ({ exportImageEditDocument: io.render }))
+vi.mock('@/commands/image', async importOriginal => ({ ...await importOriginal<typeof import('@/commands/image')>(), persistImageSource: io.persist }))
+vi.mock('@/commands/imageEditorV3', async importOriginal => ({ ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
+  ingestImageEditorV3Source: async () => imageEditTestManagedSource(),
+  loadImageEditorV3Document: async (request: { documentRef: string }) => { const value = readHarnessImageEditDocument(request.documentRef.slice('image-edit-v3:'.length)); return value ? imageEditTestSnapshot(value.document) : null },
+}))
+vi.mock('@/features/imageEdit/v3/application/imageEditMaterializationV3', () => ({ materializeImageEditSnapshotV3: io.render }))
 vi.mock('@/commands/assetLibrary', async importOriginal => ({ ...await importOriginal<typeof import('@/commands/assetLibrary')>(),
   createAsset: async (input: CreateAssetInput) => {
     const asset: AssetRecord = { id: crypto.randomUUID(), ...input, displayName: input.displayName ?? '', displayUrl: input.filePath,
@@ -31,7 +35,7 @@ vi.mock('@/commands/assetLibrary', async importOriginal => ({ ...await importOri
 afterEach(() => { resetImageEditApplicationStateForTests(); uninstallHarnessNativeStorage(); io.assets.clear(); vi.clearAllMocks() })
 it('MCP 授权目录通过正式服务创建、读取并保存编辑预览，原预览不被覆盖', async () => {
   installHarnessNativeStorage()
-  io.render.mockResolvedValue('data:image/png;base64,fixture')
+  io.render.mockResolvedValue({ raster: { mediaUrl: 'C:/fixture/edited.png' } })
   io.persist.mockResolvedValue('C:/fixture/edited.png')
   const source = await createImageEditPreview({ sourceRef: 'asset:original', source: 'C:/fixture/original.png', operations: [{ kind: 'flip_h' }] })
   const sourceRef = { kind: 'image_edit.preview', id: String(source.previewRef) }
@@ -48,7 +52,7 @@ it('MCP 授权目录通过正式服务创建、读取并保存编辑预览，原
   const previewRef = String(created.data.previewRef)
   const read = await execute('read_application_entity', 1, { ref: { kind: 'image_edit.preview', id: previewRef }, propertyIds: ['image_edit.preview.width'] })
   expect(read.ok, JSON.stringify(read)).toBe(true)
-  expect(read).toMatchObject({ data: { properties: { 'image_edit.preview.width': 800 } } })
+  expect(read).toMatchObject({ data: { properties: { 'image_edit.preview.width': 600 } } })
   const saved = await execute('commit_image_edit', 1, { previewRef, displayName: '旋转后的图片' })
   expect(saved.ok, JSON.stringify(saved)).toBe(true)
   if (!saved.ok) throw new Error('保存失败')

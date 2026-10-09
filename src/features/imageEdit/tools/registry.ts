@@ -1,8 +1,4 @@
 import { Blend, ScanLine, Sparkles } from 'lucide-react';
-import { BlurInspector } from './blur/BlurInspector';
-import { GeometryInspector } from './geometry/GeometryInspector';
-import { DiffusionInspector } from './diffusion/DiffusionInspector';
-import { VgpuGlowInspector } from './vgpuGlow/VgpuGlowInspector';
 import type { ImageEditorToolDefinition } from './types';
 import { IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS } from './controlCatalog';
 import { ICON_IMAGE_GLOW_PRO } from '@/core/theme/icons';
@@ -38,25 +34,21 @@ imageEditorToolRegistry.register({
   ...geometry,
   control: geometry,
   icon: ScanLine,
-  inspector: GeometryInspector,
 });
 imageEditorToolRegistry.register({
   ...blur,
   control: blur,
   icon: Blend,
-  inspector: BlurInspector,
 });
 imageEditorToolRegistry.register({
   ...diffusion,
   control: diffusion,
   icon: Sparkles,
-  inspector: DiffusionInspector,
 });
 imageEditorToolRegistry.register({
   ...vgpuGlow,
   control: vgpuGlow,
   icon: ICON_IMAGE_GLOW_PRO,
-  inspector: VgpuGlowInspector,
 });
 
 export function getImageEditorTools(): ImageEditorToolDefinition[] {

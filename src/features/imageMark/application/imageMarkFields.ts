@@ -4,10 +4,9 @@ import {
   type JsonValue,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
-import { sanitizeMarkItem, type ImageMarkDoc, type MarkItem, type MarkRotation } from '@/core/imageEdit'
+import { sanitizeMarkItem, type MarkItem } from '@/core/imageEdit'
 
 export const IMAGE_MARK_ENTITY_TYPES = {
-  document: 'image_mark.document',
   annotation: 'image_mark.annotation',
 } as const
 
@@ -44,78 +43,6 @@ function property(
     ...(readOnlyReason ? { readOnlyReason } : {}),
   }
 }
-
-const ROTATE_VALUES = ['0', '90', '180', '270'].map((value) => ({ value, label: `${value}°` }))
-
-function parseRotate(value: JsonValue | undefined): MarkRotation {
-  if (typeof value !== 'string' || !ROTATE_VALUES.some((entry) => entry.value === value)) {
-    throw new Error('INVALID_INPUT：orientation_rotate 只能是 0/90/180/270。')
-  }
-  return Number(value) as MarkRotation
-}
-
-/*
- * 文档级三条属性（旋转、镜像、裁剪矩形），全部读写同一份 ImageMarkDoc——写入表驱动的
- * draft 就是文档快照本身（fieldDefinition.ts 里"直写型"的先例），执行器把它克隆一份，
- * 依次跑完这批 writer 后整体提交，不需要单独的 patch 类型。
- *
- * 三条字段的 storeActions 都写 commitDocument：这是 imageEditSessionStore（6.1）里唯一的
- * "整份文档提交"原语，也是 image_mark.annotation 集合写入落地的同一条原语——账本里
- * commitDocument 选择归到这三条属性，annotation 那侧的集合写入覆盖由它自己的
- * collectionWrite 声明与执行器独立审计，见 imageMarkStoreLedger.ts 的说明。
- */
-export const IMAGE_MARK_DOCUMENT_FIELDS: ApplicationFieldDefinition<ImageMarkDoc, ImageMarkDoc>[] = [
-  {
-    propertyId: `${IMAGE_MARK_ENTITY_TYPES.document}.orientation_rotate`,
-    descriptor: property(IMAGE_MARK_ENTITY_TYPES.document, 'orientation_rotate', '旋转角度', { kind: 'enum', values: ROTATE_VALUES }),
-    read: (doc) => String(doc.orientation.rotate) as JsonValue,
-    writer: {
-      write(doc, mutation) {
-        doc.orientation = { ...doc.orientation, rotate: parseRotate(mutation.value) }
-      },
-    },
-    storeActions: ['commitDocument'],
-  },
-  {
-    propertyId: `${IMAGE_MARK_ENTITY_TYPES.document}.orientation_mirrored`,
-    descriptor: property(IMAGE_MARK_ENTITY_TYPES.document, 'orientation_mirrored', '水平镜像', { kind: 'boolean' }),
-    read: (doc) => doc.orientation.mirrored,
-    writer: {
-      write(doc, mutation) {
-        if (typeof mutation.value !== 'boolean') throw new Error('INVALID_INPUT：orientation_mirrored 必须是布尔值。')
-        doc.orientation = { ...doc.orientation, mirrored: mutation.value }
-      },
-    },
-    storeActions: ['commitDocument'],
-  },
-  {
-    propertyId: `${IMAGE_MARK_ENTITY_TYPES.document}.crop_rect`,
-    descriptor: {
-      ...property(IMAGE_MARK_ENTITY_TYPES.document, 'crop_rect', '裁剪矩形', { kind: 'json', schemaRef: schemaRef(`${IMAGE_MARK_ENTITY_TYPES.document}.crop_rect.value`) }),
-      nullable: true,
-    },
-    read: (doc) => (doc.crop as unknown as JsonValue) ?? null,
-    writer: {
-      write(doc, mutation) {
-        if (mutation.value === null) {
-          doc.crop = null
-          return
-        }
-        const rect = mutation.value as Record<string, unknown> | null
-        if (
-          !rect || typeof rect !== 'object' || Array.isArray(rect)
-          || typeof rect.x !== 'number' || typeof rect.y !== 'number'
-          || typeof rect.width !== 'number' || typeof rect.height !== 'number'
-          || rect.width <= 0 || rect.height <= 0
-        ) {
-          throw new Error('INVALID_INPUT：crop_rect 必须是 {x,y,width,height} 或 null，且 width/height 为正数。')
-        }
-        doc.crop = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-      },
-    },
-    storeActions: ['commitDocument'],
-  },
-]
 
 const ANNOTATION_TYPE_VALUES = ['rect', 'ellipse', 'arrow', 'pen', 'text', 'number', 'mosaic']
   .map((value) => ({ value, label: value }))
@@ -158,6 +85,6 @@ export const IMAGE_MARK_ANNOTATION_FIELDS: ApplicationFieldDefinition<MarkItem, 
         Object.assign(item, sanitized)
       },
     },
-    storeActions: ['commitDocument'],
+    storeActions: [],
   },
 ]

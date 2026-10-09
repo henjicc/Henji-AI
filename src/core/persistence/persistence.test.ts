@@ -86,6 +86,18 @@ describe('Schema结构指纹', () => {
     effect.params = { radius: 12, mip: 0 }
     expect(imageWorkingCopySchema.safeParse(raw).success).toBe(false)
   })
+  it('V3 黄金样本的标注、几何可读，V2 文档、legacy 载荷及旧模糊不能进入当前落盘', () => {
+    const raw = JSON.parse(fs.readFileSync('tests/fixtures/persistence/image-working-copy/v3.json', 'utf8'))
+    expect(parseImageEditDocumentV3(raw.document)).toMatchObject({ geometry: { orientation: { rotate: 90, mirrored: true }, crop: { width: 32, height: 40 } }, layers: [{}, {}, {}, { type: 'annotation', annotations: [{ id: 'golden-mark' }] }] })
+    const effect = raw.document.layers.find((layer: { type: string }) => layer.type === 'effect')
+    effect.legacyOperation = { sourceVersion: 2, operation: { type: 'blur' } }
+    expect(imageWorkingCopySchema.safeParse(raw).success).toBe(false)
+    expect(() => parseImageEditDocumentV3(raw.document)).toThrow()
+    delete effect.legacyOperation
+    effect.effectId = 'image.blur'
+    expect(imageWorkingCopySchema.safeParse(raw).success).toBe(false)
+    expect(() => parseImageEditDocumentV3({ version: 2, operations: [] })).toThrow()
+  })
   it('字段声明顺序不影响；类型、默认值、必填/可选和未知字段策略变化都会改变', () => {
     const hash = (schema: z.ZodType): string => persistenceSchemaStructure({ data: schema })
     const base = z.object({ label: z.string(), count: z.number().default(1) }).strict()

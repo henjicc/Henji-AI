@@ -182,12 +182,6 @@
       "reason": "节点标题改名输入框的最小宽度：短标题时仍能看到光标与 4 个字"
     },
     {
-      "file": "src/features/imageEdit/editor/ImageToolRail.tsx",
-      "category": "arbitraryValue",
-      "values": ["w-[52px]"],
-      "reason": "图片编辑工具栏竖条 52 宽 = 36 工具按钮 + 两侧 8 内边距，与 IMAGE_EDITOR_TOOL_RAIL_WIDTH 一致"
-    },
-    {
       "file": "src/features/imageEdit/v3/editor/ImageEditorFloatingPanelsV3.tsx",
       "category": "arbitraryValue",
       "values": ["w-[25rem]"],

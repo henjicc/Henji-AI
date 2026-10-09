@@ -142,7 +142,7 @@ function validateLayerKeys(value: unknown): void {
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史图层无效');
   const specific = value.type === 'raster' ? ['type', 'source', 'tiles']
     : value.type === 'annotation' ? ['type', 'annotations']
-      : value.type === 'effect' ? ['type', 'effectId', 'params', 'renderable', ...(value.legacyOperation === undefined ? [] : ['legacyOperation'])]
+      : value.type === 'effect' ? ['type', 'effectId', 'params', 'renderable']
         : value.type === 'adjustment' ? ['type', 'adjustmentId', 'params', 'renderable']
           : value.type === 'group' ? ['type', 'children', 'isolated']
             : fail('历史图层类型未知');
@@ -161,9 +161,6 @@ function validateLayerKeys(value: unknown): void {
   } else if (value.type === 'annotation') {
     if (!Array.isArray(value.annotations)) fail('历史标注图层无效');
     value.annotations.forEach(validateAnnotation);
-  } else if (value.type === 'effect' && value.legacyOperation !== undefined) {
-    if (!isRecord(value.legacyOperation)) fail('历史兼容效果无效');
-    exactKeys(value.legacyOperation, ['sourceVersion', 'operation'], '历史兼容效果');
   }
   if (value.type === 'group') {
     if (!Array.isArray(value.children)) fail('历史图层组无效');

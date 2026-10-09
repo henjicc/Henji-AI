@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { ImageEditorV3SourceMetadata } from '@/platform/contracts/imageEditorV3'
 import {
   createImageMarkV3ColorMode,
   resolveImageMarkV3SourceLocator,
+  prepareImageEditSourceLocatorV3,
 } from './imageMarkV3Source'
+
+const sourceIO = vi.hoisted(() => ({ persist: vi.fn() }))
+vi.mock('@/commands/image', async importOriginal => ({ ...await importOriginal<typeof import('@/commands/image')>(), persistImageSource: sourceIO.persist }))
 
 const RESOURCE_REF = `sha256:${'a'.repeat(64)}` as const
 
@@ -36,6 +40,12 @@ function metadata(
 }
 
 describe('imageMarkV3Source', () => {
+  it('文件 URL 解码为主进程路径，不透明媒体只经正式持久化边界解析', async () => {
+    expect(await prepareImageEditSourceLocatorV3('file:///C:/图片/a.png')).toEqual({ kind: 'local-path', filePath: 'C:/图片/a.png' })
+    sourceIO.persist.mockResolvedValue('C:/managed/a.png')
+    expect(await prepareImageEditSourceLocatorV3('henji-media://image-editor-v3/source')).toEqual({ kind: 'local-path', filePath: 'C:/managed/a.png' })
+    expect(sourceIO.persist).toHaveBeenCalledWith('henji-media://image-editor-v3/source')
+  })
   it('只把主进程支持的三类来源送入受管导入', () => {
     expect(resolveImageMarkV3SourceLocator('/private/tmp/source.png')).toEqual({
       kind: 'local-path',

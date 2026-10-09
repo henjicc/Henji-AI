@@ -365,21 +365,13 @@ function parseLayer(value: unknown, depth: number): ImageEditLayerV3 | null {
     if (common.transform.some((entry, index) => entry !== [1, 0, 0, 1, 0, 0][index])) return null;
     const params = cloneImageEditJsonObjectV3(value.params);
     if (!isNonEmptyString(value.effectId) || !params || typeof value.renderable !== 'boolean') return null;
-    let legacyOperation: ImageEditEffectLayerV3['legacyOperation'];
-    if (value.legacyOperation !== undefined) {
-      if (!isRecord(value.legacyOperation) || value.legacyOperation.sourceVersion !== 2) return null;
-      const operation = cloneImageEditJsonObjectV3(value.legacyOperation.operation);
-      if (!operation) return null;
-      legacyOperation = { sourceVersion: 2, operation };
-    }
-    if (!value.renderable && !legacyOperation) return null;
+    if ('legacyOperation' in value || value.effectId === 'image.blur') return null;
     return {
       ...common,
       type: 'effect',
       effectId: value.effectId,
       params,
       renderable: value.renderable,
-      ...(legacyOperation ? { legacyOperation } : {}),
     } satisfies ImageEditEffectLayerV3;
   }
   if (value.type === 'adjustment') {

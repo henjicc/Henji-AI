@@ -1,11 +1,9 @@
-import type { ImageEditDocument } from '@/core/imageEdit'
-
-const MAX_PREVIEWS = 64
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 
 export interface ImageEditPreviewSnapshot {
   previewRef: string
   sourceRef: string
-  document: ImageEditDocument
+  document: ImageEditDocumentV3
   width: number
   height: number
   revision: number
@@ -19,11 +17,6 @@ export interface StoredImageEditPreview extends ImageEditPreviewSnapshot {
 const previews = new Map<string, StoredImageEditPreview>()
 
 export function storeImageEditPreview(preview: StoredImageEditPreview): void {
-  while (previews.size >= MAX_PREVIEWS) {
-    const oldestRef = previews.keys().next().value
-    if (typeof oldestRef !== 'string') break
-    previews.delete(oldestRef)
-  }
   previews.set(preview.previewRef, preview)
 }
 
@@ -31,12 +24,18 @@ export function getStoredImageEditPreview(previewRef: string): StoredImageEditPr
   return previews.get(previewRef) ?? null
 }
 
+/** 预览是创建能力产生的不可变快照；继续编辑会创建另一份 V3 文档。 */
+export function isImageEditPreviewDocument(documentId: string): boolean {
+  for (const preview of previews.values()) if (preview.document.id === documentId) return true
+  return false
+}
+
 export function deleteStoredImageEditPreview(previewRef: string): void {
   previews.delete(previewRef)
 }
 
-export function listImageEditPreviews(): ImageEditPreviewSnapshot[] {
-  return [...previews.values()].map(({ source: _source, ...preview }) => structuredClone(preview))
+export function* iterateImageEditPreviewReferences(): Iterable<{ previewRef: string; revision: number }> {
+  for (const preview of previews.values()) yield { previewRef: preview.previewRef, revision: preview.revision }
 }
 
 export function readImageEditPreview(previewRef: string): ImageEditPreviewSnapshot | null {

@@ -72,18 +72,12 @@ export interface ImageEditAnnotationLayerV3 extends ImageEditLayerCommonV3 {
   annotations: MarkItem[];
 }
 
-export interface ImageEditLegacyOperationV3 {
-  sourceVersion: 2;
-  operation: ImageEditJsonObjectV3;
-}
-
 export interface ImageEditEffectLayerV3 extends ImageEditLayerCommonV3 {
   type: 'effect';
   effectId: string;
   params: ImageEditJsonObjectV3;
-  /** 未注册的旧操作仍可保存和移动，但渲染器必须跳过。 */
+  /** 是否参与效果渲染。 */
   renderable: boolean;
-  legacyOperation?: ImageEditLegacyOperationV3;
 }
 
 export interface ImageEditAdjustmentLayerV3 extends ImageEditLayerCommonV3 {

@@ -5,13 +5,10 @@ import compositeShaderSource from './shaders/vgpuGlowComposite.wgsl?raw';
 import upsampleShaderSource from './shaders/vgpuGlowUpsample.wgsl?raw';
 import baselineShaderSource from './worker/baseline.wgsl?raw';
 import {
-  IMAGE_EDIT_OPERATION_IDS,
-  InvalidImageEditOperationParamsError,
+  InvalidVgpuGlowOperationParamsError,
   applyVgpuGlowLook,
   compileVgpuGlowRecipe,
-  createBuiltInImageEditOperationRegistry,
   createDefaultVgpuGlowOperationParams,
-  decodeImageEditDocument,
   effectiveScatterSigmaPx,
   extractVirtualEmitterRadiance,
   parseVgpuGlowOperationParams,
@@ -21,6 +18,8 @@ import {
   resolveSoftChannelPeak,
   type VgpuGlowRecipe,
 } from './index';
+import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from './v3/documentFactory';
+import { parseImageEditDocumentV3, stringifyImageEditDocumentV3 } from './v3/documentCodec';
 const UHD = { width: 3840, height: 2160 } as const;
 const DOWNSAMPLE_13 = [[-2, -2, 1 / 32], [0, -2, 1 / 16], [2, -2, 1 / 32], [-2, 0, 1 / 16], [0, 0, 1 / 8], [2, 0, 1 / 16], [-2, 2, 1 / 32], [0, 2, 1 / 16], [2, 2, 1 / 32], [-1, -1, 1 / 8], [1, -1, 1 / 8], [-1, 1, 1 / 8], [1, 1, 1 / 8]] as const;
 // 13-tap 二维核的精确单轴边缘分布；足以完整追踪质量和一阶矩。
@@ -366,28 +365,19 @@ describe('VGPU 辉光操作契约', () => {
     expect(white / almostWhite).toBeLessThan(1.03);
   });
 
-  it('拒绝越界参数，并由内置注册表按 effect 阶段校验', () => {
+  it('拒绝越界参数并校验正式辉光参数', () => {
     const defaults = createDefaultVgpuGlowOperationParams();
     expect(() => parseVgpuGlowOperationParams({ ...defaults, intensity: 1.01 }))
-      .toThrow(InvalidImageEditOperationParamsError);
-    const definition = createBuiltInImageEditOperationRegistry().get(IMAGE_EDIT_OPERATION_IDS.vgpuGlow);
-    expect(definition).toMatchObject({ stage: 'effect', order: 160, supportsMultiple: false });
-    expect(definition?.parseParams(defaults)).toEqual(defaults);
+      .toThrow(InvalidVgpuGlowOperationParamsError);
+    expect(parseVgpuGlowOperationParams(defaults)).toEqual(defaults);
   });
 
-  it('V2 文档往返时保留辉光 Pro 参数', () => {
+  it('V3 文档往返时保留辉光 Pro 参数', () => {
     const params = applyVgpuGlowLook('neon');
-    const decoded = decodeImageEditDocument({
-      version: 2,
-      operations: [{
-        id: 'vgpu-glow-test',
-        operationId: IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
-        enabled: true,
-        params,
-      }],
-    });
-    expect(decoded).toMatchObject({ sourceFormat: 'v2', issues: [] });
-    expect(decoded.document.operations[0]?.params).toEqual(params);
+    const document = createImageEditDocumentV3({ width: 64, height: 64 });
+    document.layers.push(createImageEditEffectLayerV3('glow', '辉光', 'image.vgpu-glow', JSON.parse(JSON.stringify(params))));
+    const decoded = parseImageEditDocumentV3(stringifyImageEditDocumentV3(document));
+    expect(decoded.layers[0]).toMatchObject({ params });
   });
 
   it('默认关闭着色和 RGB 分离，并拒绝开发期旧参数', () => {
@@ -399,7 +389,7 @@ describe('VGPU 辉光操作契约', () => {
       chromaticChannels: ['red', 'blue'],
     });
     expect(() => parseVgpuGlowOperationParams({ ...defaults, schemaVersion: 3 }))
-      .toThrow(InvalidImageEditOperationParamsError);
+      .toThrow(InvalidVgpuGlowOperationParamsError);
   });
 
   it('着色器分离 SDR 发射幅度与线性色度，并让白热只替换独立核心', () => {

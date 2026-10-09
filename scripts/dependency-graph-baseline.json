@@ -1238,30 +1238,6 @@
       "cell": "canvas → imageEdit"
     },
     {
-      "from": "src/features/canvas/imageEditV3/canvasEditV3Materialization.ts",
-      "to": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExportSpec",
-      "line": 4,
-      "cell": "canvas → imageMark"
-    },
-    {
-      "from": "src/features/canvas/imageEditV3/canvasEditV3Session.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 6,
-      "cell": "canvas → imageEdit"
-    },
-    {
-      "from": "src/features/canvas/imageEditV3/canvasEditV3Session.ts",
-      "to": "src/features/imageMark/standalone/imageMarkV3Source.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/standalone/imageMarkV3Source",
-      "line": 26,
-      "cell": "canvas → imageMark"
-    },
-    {
       "from": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
       "to": "src/features/imageMark/standalone/imageMarkV3Source.ts",
       "kind": "static",
@@ -1650,16 +1626,8 @@
       "to": "src/features/assets/services/assetCollectionService.ts",
       "kind": "static",
       "specifier": "@/features/assets/services/assetCollectionService",
-      "line": 9,
+      "line": 14,
       "cell": "imageEdit → assets"
-    },
-    {
-      "from": "src/features/imageEdit/application/imageEditDocumentBuilder.ts",
-      "to": "src/features/imageMark/domain/geometry.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/geometry",
-      "line": 28,
-      "cell": "imageEdit → imageMark"
     },
     {
       "from": "src/features/imageEdit/application/imageSourceCapabilityService.ts",
@@ -1780,86 +1748,6 @@
       "specifier": "@/features/documents/documentSessionTypes",
       "line": 8,
       "cell": "imageEdit → documents"
-    },
-    {
-      "from": "src/features/imageEdit/editor/ImageEditor.tsx",
-      "to": "src/features/imageMark/editor/MarkEditor.tsx",
-      "kind": "static",
-      "specifier": "@/features/imageMark/editor/MarkEditor",
-      "line": 7,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/editor/ImageEditor.tsx",
-      "to": "src/features/imageMark/editor/shared.ts",
-      "kind": "type",
-      "specifier": "@/features/imageMark/editor/shared",
-      "line": 8,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/editor/ImageEditor.tsx",
-      "to": "src/features/imageMark/render/orientedImage.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/render/orientedImage",
-      "line": 9,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/editor/useImageEditorSession.ts",
-      "to": "src/features/imageMark/editor/MarkEditor.tsx",
-      "kind": "type",
-      "specifier": "@/features/imageMark/editor/MarkEditor",
-      "line": 16,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/editor/useImageEditorSession.ts",
-      "to": "src/features/imageMark/editor/useMarkHistory.ts",
-      "kind": "type",
-      "specifier": "@/features/imageMark/editor/useMarkHistory",
-      "line": 17,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/execution/browserImageEditExecution.ts",
-      "to": "src/features/imageMark/render/exportMarkedImage.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/render/exportMarkedImage",
-      "line": 9,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/store/imageEditSessionStore.ts",
-      "to": "src/features/imageMark/editor/shared.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/editor/shared",
-      "line": 4,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/tools/geometry/GeometryInspector.tsx",
-      "to": "src/features/imageMark/domain/geometry.ts",
-      "kind": "type",
-      "specifier": "@/features/imageMark/domain/geometry",
-      "line": 12,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/tools/geometry/GeometryInspector.tsx",
-      "to": "src/features/imageMark/editor/shared.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/editor/shared",
-      "line": 11,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/tools/geometry/GeometryInspector.tsx",
-      "to": "src/features/imageMark/editor/useMarkEditorContext.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/editor/useMarkEditorContext",
-      "line": 13,
-      "cell": "imageEdit → imageMark"
     },
     {
       "from": "src/features/imageEdit/v3/application/imageEditDocumentCatalog.ts",
@@ -2087,18 +1975,10 @@
     },
     {
       "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
-      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
-      "line": 17,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
       "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 19,
+      "line": 15,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2106,7 +1986,7 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
-      "line": 20,
+      "line": 16,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2119,50 +1999,26 @@
     },
     {
       "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
-      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
       "kind": "static",
-      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
-      "line": 12,
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 13,
       "cell": "imageMark → imageEdit"
     },
     {
       "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
       "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
       "line": 14,
       "cell": "imageMark → imageEdit"
     },
     {
       "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
-      "line": 15,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
       "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
       "line": 1,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkDocumentMutationExecutor.ts",
-      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
-      "line": 10,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkReflection.ts",
-      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
-      "line": 11,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2170,7 +2026,7 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentCatalog.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentCatalog",
-      "line": 13,
+      "line": 12,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2178,7 +2034,7 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 12,
+      "line": 11,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2186,7 +2042,7 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentLoading.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentLoading",
-      "line": 15,
+      "line": 14,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2194,7 +2050,7 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
-      "line": 14,
+      "line": 13,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2202,15 +2058,7 @@
       "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
-      "line": 19,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkSessionAccess.ts",
-      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
-      "line": 3,
+      "line": 18,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2218,38 +2066,6 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 4,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkStoreLedger.ts",
-      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
-      "kind": "type",
-      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
-      "line": 3,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/registerImageMarkCapabilityHandlers.ts",
-      "to": "src/features/application-control/capabilities/handlerTypes.ts",
-      "kind": "type",
-      "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 3,
-      "cell": "imageMark → application-control"
-    },
-    {
-      "from": "src/features/imageMark/application/registerImageMarkCapabilityHandlers.ts",
-      "to": "src/features/application-control/capabilities/handlerUtils.ts",
-      "kind": "static",
-      "specifier": "@/features/application-control/capabilities/handlerUtils",
-      "line": 4,
-      "cell": "imageMark → application-control"
-    },
-    {
-      "from": "src/features/imageMark/application/registerImageMarkCapabilityHandlers.ts",
-      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
       "line": 1,
       "cell": "imageMark → imageEdit"
     },
@@ -2375,10 +2191,18 @@
     },
     {
       "from": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
-      "to": "src/features/imageEdit/v3/export/planning.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditRasterExportSpecV3.ts",
       "kind": "static",
-      "specifier": "@/features/imageEdit/v3/export/planning",
-      "line": 2,
+      "specifier": "@/features/imageEdit/v3/application/imageEditRasterExportSpecV3",
+      "line": 1,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/imageMarkV3Source.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditSourceV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditSourceV3",
+      "line": 1,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2455,18 +2279,50 @@
     },
     {
       "from": "src/features/imageMark/viewer/ViewerMarkEditor.tsx",
-      "to": "src/features/imageEdit/editor/ImageEditor.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
       "kind": "static",
-      "specifier": "@/features/imageEdit/editor/ImageEditor",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 9,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/viewer/ViewerMarkEditor.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditManagedSessionV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditManagedSessionV3",
+      "line": 12,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/viewer/ViewerMarkEditor.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditMaterializationV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditMaterializationV3",
       "line": 13,
       "cell": "imageMark → imageEdit"
     },
     {
       "from": "src/features/imageMark/viewer/ViewerMarkEditor.tsx",
-      "to": "src/features/imageEdit/execution/browserImageEditExecution.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
       "kind": "static",
-      "specifier": "@/features/imageEdit/execution/browserImageEditExecution",
-      "line": 12,
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
+      "line": 10,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/viewer/ViewerMarkEditor.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceQueue.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceQueue",
+      "line": 11,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/viewer/ViewerMarkEditor.tsx",
+      "to": "src/features/imageEdit/v3/editor/index.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/editor",
+      "line": 8,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -3492,11 +3348,11 @@
     "canvas → cameraStage": 7,
     "canvas → documents": 8,
     "canvas → generation": 8,
-    "canvas → imageEdit": 23,
+    "canvas → imageEdit": 22,
     "canvas → navigation": 2,
     "canvas → maskEditor": 8,
     "canvas → settings": 1,
-    "canvas → imageMark": 6,
+    "canvas → imageMark": 4,
     "canvas → videoEdit": 2,
     "documents → application-control": 3,
     "generation → application-control": 3,
@@ -3505,12 +3361,12 @@
     "generation → canvas": 8,
     "imageEdit → application-control": 4,
     "imageEdit → assets": 1,
-    "imageEdit → imageMark": 39,
     "imageEdit → generation": 1,
     "imageEdit → navigation": 2,
     "imageEdit → documents": 8,
-    "imageMark → application-control": 3,
-    "imageMark → imageEdit": 40,
+    "imageEdit → imageMark": 28,
+    "imageMark → application-control": 1,
+    "imageMark → imageEdit": 38,
     "imageMark → documents": 3,
     "imageMark → videoEdit": 3,
     "localModels → application-control": 2,
@@ -3543,7 +3399,7 @@
   },
   "firstScreen": {
     "entry": "src/main.tsx",
-    "moduleCount": 979,
+    "moduleCount": 971,
     "heavyModules": []
   },
   "dynamicBackEdges": [

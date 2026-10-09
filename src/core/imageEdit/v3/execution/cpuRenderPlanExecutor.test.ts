@@ -72,21 +72,21 @@ describe('V3 CPU RenderPlan 执行器', () => {
     expect(clearMarks?.data[8]).toBeCloseTo(0, 6);
   });
 
-  it('迁移后的 Blur v1 使用冻结的旧版半径执行，不再落入不支持分支', async () => {
+  it('正式 Gaussian 比例参数委托共享 CPU 执行', async () => {
     const source = createImageEditRasterLayerV3('source', '原图', 'sha256:source');
     const marks = createImageEditAnnotationLayerV3('marks', '标注');
     const blur = createImageEditEffectLayerV3(
-      'legacy-blur',
-      '旧版模糊',
-      'image.blur',
-      { algorithm: 'gaussian', strength: 0.5, radiusPixels: 0.8 },
+      'gaussian',
+      '高斯模糊',
+      'gaussian_blur',
+      { sigma_fraction_height: .4 },
     );
 
     const result = await render(document([source, marks, blur]));
 
     expect(result?.data[0]).toBeGreaterThan(0);
     expect(result?.data[4]).toBeLessThan(1);
-    expect(result?.colorDomain).toBe('perceptual-working');
+    expect(result?.colorDomain).toBe('linear-light');
   });
 
   it('效果蒙版在原结果和处理结果间混合，且只应用一次', async () => {

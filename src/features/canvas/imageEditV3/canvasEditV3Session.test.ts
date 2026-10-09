@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createEmptyImageEditDocument, stringifyImageEditDocument } from '@/core/imageEdit'
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentRepositoryV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type {
@@ -85,14 +84,12 @@ function existingSnapshot(revision = 4): ImageEditorV3DocumentSnapshot {
 }
 
 describe('画布图片编辑 V3 会话', () => {
-  it('导入 V2 文档、迁移受管源并先保存唯一 V3 真相源', async () => {
+  it('直接由 V3 工厂创建受管源并先保存唯一真相源', async () => {
     const repo = repository()
     const ingestSource = vi.fn(async () => managedSource())
     const prepared = await prepareCanvasEditV3Session({
       sourceImageUrl: '/source.png',
-      toolOptions: {
-        document: stringifyImageEditDocument(createEmptyImageEditDocument()),
-      },
+      toolOptions: {},
       documentId: 'canvas-imported',
       repository: repo,
       ingestSource,

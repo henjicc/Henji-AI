@@ -9,8 +9,8 @@
   "contentRevision": 0,
   "emptyUntilRevision": 0,
   "summary": {
-    "width": 64,
-    "height": 48,
-    "layers": 1
+    "width": 32,
+    "height": 40,
+    "layers": 4
   }
 }

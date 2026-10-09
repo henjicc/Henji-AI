@@ -21,7 +21,7 @@ const FIRST_SCREEN_HEAVY_PACKAGES = [
   'three', '@react-three/fiber', '@react-three/drei', 'monaco-editor', '@monaco-editor/react',
 ]
 const FIRST_SCREEN_HEAVY_MODULE_PREFIXES = [
-  'src/features/imageEdit/v3/editor/', 'src/features/imageEdit/editor/',
+  'src/features/imageEdit/v3/editor/',
   'src/features/maskEditor/v3/', 'src/features/maskEditor/MaskEditorCanvas.tsx',
   'src/core/imageEdit/webgpu/', 'src/core/imageEdit/worker/webgpuRuntimeBackend.ts',
   'src/features/imageEdit/v3/execution/imageEditorRenderSessionGpuBridgeV3.ts',

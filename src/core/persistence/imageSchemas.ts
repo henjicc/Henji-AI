@@ -19,9 +19,10 @@ export const imageLayerSchema: z.ZodType = z.lazy(() => z.discriminatedUnion('ty
   z.object({ ...common, type: z.literal('annotation'), annotations: z.array(jsonObject) }),
   z.object({ ...common, type: z.literal('effect'), effectId: identifier,
     params: z.union([jsonObject, ...listImagingEffects().filter(effect => effect.hosts.includes('image')).map(effect => effect.parameterSchema)]),
-    renderable: z.boolean(), legacyOperation: z.object({ sourceVersion: z.literal(2), operation: jsonObject }).optional(),
-  }).superRefine((layer, context) => {
+    renderable: z.boolean(),
+  }).strict().superRefine((layer, context) => {
     const descriptor = listImagingEffects().find(effect => effect.id === layer.effectId && effect.hosts.includes('image'))
+    if (layer.effectId === 'image.blur') { context.addIssue({ code: 'custom', path: ['effectId'], message: '图片效果未登记' }); return }
     if (!descriptor) return
     const result = descriptor.parameterSchema.safeParse(layer.params)
     if (!result.success) for (const issue of result.error.issues) context.addIssue({ ...issue, path: ['params', ...issue.path] })

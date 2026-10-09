@@ -1,0 +1,45 @@
+import {
+  createDefaultImageEditColorModeV3,
+  type ImageEditColorModeV3,
+} from '@/core/imageEdit/v3/colorTypes'
+import type {
+  ImageEditorV3SourceLocator,
+  ImageEditorV3SourceMetadata,
+} from '@/platform/contracts/imageEditorV3'
+import { decodeMediaFileUrl } from '@/utils/mediaFileUrl'
+import { persistImageSource } from '@/commands/image'
+import { isLikelyLocalImagePath } from '@/services/imageSource'
+
+export function resolveImageMarkV3SourceLocator(sourceImageUrl: string): ImageEditorV3SourceLocator {
+  if (isLikelyLocalImagePath(sourceImageUrl)) {
+    return { kind: 'local-path', filePath: sourceImageUrl }
+  }
+  if (sourceImageUrl.startsWith('data:')) {
+    return { kind: 'data-url', dataUrl: sourceImageUrl }
+  }
+  if (/^https?:\/\//i.test(sourceImageUrl)) {
+    return { kind: 'http-url', url: sourceImageUrl }
+  }
+  throw new Error('当前图片来源还不能导入新版编辑器')
+}
+
+export function createImageMarkV3ColorMode(
+  metadata: ImageEditorV3SourceMetadata,
+): ImageEditColorModeV3 {
+  const format = metadata.format?.toLowerCase()
+  if (!format || !['jpeg', 'png', 'webp'].includes(format)) {
+    throw new Error(`当前新版编辑器仅支持 JPEG、PNG 和 WebP：${format ?? '未知格式'}`)
+  }
+  if (metadata.hdr || metadata.bitsPerSample > 8 || metadata.depth === 'float') {
+    throw new Error('当前新版编辑器仅支持 8-bit SDR 图片')
+  }
+  // 候选版统一在导入边界转换到 sRGB；ICC/P3/HDR 文档模式留待后续版本重新开放。
+  return createDefaultImageEditColorModeV3()
+}
+
+/** 不透明媒体能力先经唯一持久化边界转成可读路径；原始路径、HTTP 和 Data URL 直接受管导入。 */
+export async function prepareImageEditSourceLocatorV3(source: string): Promise<ImageEditorV3SourceLocator> {
+  const normalized = decodeMediaFileUrl(source)
+  if (/^(?:henji-media:|blob:|asset:)/i.test(normalized)) return { kind: 'local-path', filePath: await persistImageSource(normalized) }
+  return resolveImageMarkV3SourceLocator(normalized)
+}

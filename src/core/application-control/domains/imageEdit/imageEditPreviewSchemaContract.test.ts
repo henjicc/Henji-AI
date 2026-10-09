@@ -56,7 +56,7 @@ describe('图片编辑预览能力契约', () => {
     capability.id === 'create_image_edit_preview'
   ))
 
-  it('只保留一条正式预览能力，并暴露完整受限 operations AI schema', () => {
+  it('只保留一条正式预览能力，并暴露V3 operations AI schema', () => {
     expect(canonicalPreview).toBeDefined()
     expect(canonicalPreview?.version).toBe(2)
     expect(canonicalPreview?.title).toBe(IMAGE_EDIT_PREVIEW_CAPABILITY_METADATA.title)
@@ -86,8 +86,8 @@ describe('图片编辑预览能力契约', () => {
     expect(variants.every((variant) => variant.additionalProperties === false)).toBe(true)
 
     const operations = property(canonicalPreview?.aiInputSchema, 'operations')
-    expect(operations.description).not.toContain('按数组顺序应用')
-    expect(operations.description).toContain('最终按编辑器固定阶段执行')
+    expect(operations.description).toContain('按输入顺序')
+    expect(operations.maxItems).toBeUndefined()
     expect(operations.description).not.toContain('后项参数为准')
     expect(operations.description).not.toContain('后项启用')
   })
@@ -125,45 +125,22 @@ describe('图片编辑预览能力契约', () => {
   })
 
   it.each([
-    {
-      label: '重复 crop',
-      operations: [
-        { kind: 'crop', crop: { x: 0, y: 0, width: 20, height: 20 } },
-        { kind: 'crop', crop: { x: 1, y: 1, width: 10, height: 10 } },
-      ],
-      fix: 'crop 只能出现一次',
-    },
-    {
-      label: '重复 blur',
-      operations: [{ kind: 'blur', strength: 0.2 }, { kind: 'blur', strength: 0.7 }],
-      fix: 'blur 只能出现一次',
-    },
-    {
-      label: '重复 diffusion',
-      operations: [{ kind: 'diffusion' }, { kind: 'diffusion', mode: 'glow' }],
-      fix: 'diffusion 只能出现一次',
-    },
-    {
-      label: '重复 vgpu_glow',
-      operations: [{ kind: 'vgpu_glow' }, { kind: 'vgpu_glow', look: 'neon' }],
-      fix: 'vgpu_glow 只能出现一次',
-    },
-    {
-      label: '同时使用两种互斥光效',
-      operations: [{ kind: 'diffusion' }, { kind: 'vgpu_glow' }],
-      fix: '请选择并只保留一种光效',
-    },
-  ])('$label 时拒绝静默覆盖并直接说明改法', ({ operations, fix }) => {
-    const parsed = canonicalPreview?.inputSchema.safeParse({
-      sourceRef: { kind: 'asset', id: 'asset-1' },
-      operations,
-    })
-    expect(parsed?.success).toBe(false)
-    if (parsed && !parsed.success) {
-      expect(parsed.error.issues.map((issue) => issue.message).join('\n')).toContain(fix)
-    }
+    [{ kind: 'crop', crop: { x: 0, y: 0, width: 20, height: 20 } }, { kind: 'crop', crop: { x: 1, y: 1, width: 10, height: 10 } }],
+    [{ kind: 'blur', sigma_fraction_height: 0.02 }, { kind: 'blur', sigma_fraction_height: 0.07 }],
+    [{ kind: 'diffusion' }, { kind: 'diffusion', mode: 'glow' }],
+    [{ kind: 'vgpu_glow' }, { kind: 'vgpu_glow', look: 'neon' }],
+    [{ kind: 'diffusion' }, { kind: 'vgpu_glow' }],
+  ])('V3 顺序命令允许覆盖裁剪和追加多个独立效果：%j', (...operations) => {
+    expect(canonicalPreview?.inputSchema.safeParse({ sourceRef: { kind: 'asset', id: 'asset-1' }, operations }).success).toBe(true)
   })
-
+  it('高斯意图参数与登记相同，旧强度参数和重复标注 ID 明确拒绝', () => {
+    const blur = operationVariant(canonicalPreview?.aiInputSchema, 'blur')
+    expect(property(blur, 'axis').enum).toEqual(['both', 'horizontal', 'vertical'])
+    expect(property(blur, 'edge_mode').enum).toEqual(['clamp', 'transparent'])
+    expect(canonicalPreview?.inputSchema.safeParse({ sourceRef: { kind: 'asset', id: 'asset-1' }, operations: [{ kind: 'blur', strength: .2 }] }).success).toBe(false)
+    const item = { id: 'duplicate', type: 'text', x: 0, y: 0, text: '说明', color: BLACK_HEX, fontSize: 12 }
+    expect(canonicalPreview?.inputSchema.safeParse({ sourceRef: { kind: 'asset', id: 'asset-1' }, operations: [{ kind: 'mark', item }, { kind: 'mark', item }] }).success).toBe(false)
+  })
   it('能力用可自我修正的信息拒绝静默失效参数', () => {
     const invalidMode = canonicalPreview?.inputSchema.safeParse({
       sourceRef: { kind: 'asset', id: 'asset-1' },

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { createEmptyImageEditDocument } from '../document'
 import {
   coerceImageEditSessionData,
   isImageEditSessionReferenceV3,
@@ -48,12 +47,12 @@ describe('图片编辑 V3 会话引用', () => {
     }
   })
 
-  it('旧会话继续走 V2 兼容解码，V3 引用不会被降成空白 V2 文档', () => {
+  it('拒绝旧开发会话，仅保存 V3 引用', () => {
     const legacy = {
       sourceUrl: 'legacy.png',
-      document: createEmptyImageEditDocument(),
+      document: { version: 2, operations: [] },
     }
-    expect(coerceImageEditSessionData(legacy, 'fallback.png')).toEqual(legacy)
+    expect(() => coerceImageEditSessionData(legacy, 'fallback.png')).toThrow('V3 受管文档引用')
 
     const v3 = {
       kind: 'image-edit-v3' as const,

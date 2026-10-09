@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage, readHarnessImageEditDocument } from '@/tests/harnessNativeStorage'
+import { imageEditTestManagedSource, imageEditTestSnapshot } from '@/tests/imageEditV3SourceFixture'
 const mocks = vi.hoisted(() => ({
   getResult: vi.fn(),
   addTrustedMediaCanvasNode: vi.fn(),
@@ -12,7 +15,8 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/services/database/index', () => ({ databaseService: { init: vi.fn(), getHistoryById: mocks.history } }))
 vi.mock('@/commands/image', () => ({ readImageInfo: async () => ({ width: 800, height: 600 }), persistImageSource: mocks.persist }))
-vi.mock('@/features/imageEdit/execution/browserImageEditExecution', () => ({ exportImageEditDocument: mocks.render }))
+vi.mock('@/features/imageEdit/v3/application/imageEditMaterializationV3', () => ({ materializeImageEditSnapshotV3: mocks.render }))
+vi.mock('@/commands/imageEditorV3', async importOriginal => ({ ...await importOriginal<typeof import('@/commands/imageEditorV3')>(), ingestImageEditorV3Source: async () => imageEditTestManagedSource(), loadImageEditorV3Document: async (request: { documentRef: string }) => { const value = readHarnessImageEditDocument(request.documentRef.slice('image-edit-v3:'.length)); return value ? imageEditTestSnapshot(value.document) : null } }))
 vi.mock('@/features/assets/services/assetCollectionService', () => ({ addMediaReferenceToLibrary: mocks.collect }))
 vi.mock('@/stores/projectStore', () => ({ useProjectStore: { getState: () => mocks.project } }))
 vi.mock('@/stores/canvasStore', () => ({ useCanvasStore: { getState: () => mocks.canvas } }))
@@ -32,7 +36,8 @@ import { createImageEditPreview, resetImageEditApplicationStateForTests } from '
 import { resolveGenerationMediaReferences } from '@/features/generation/application/generationMediaReferences'
 
 describe('generation result canvas bridge', () => {
-  beforeEach(() => { vi.clearAllMocks(); mocks.history.mockResolvedValue(null) })
+  afterEach(uninstallHarnessNativeStorage)
+  beforeEach(() => { installHarnessNativeStorage(); vi.clearAllMocks(); mocks.history.mockResolvedValue(null) })
 
   it('长提示词落画布时标题按字素截短，来源提示词完整保存', async () => {
     const prompt = `海报${'👨‍👩‍👧‍👦'.repeat(50)}`
@@ -58,7 +63,7 @@ describe('generation result canvas bridge', () => {
 
   it('编辑预览直接复用于生成并落回原画布，两步共用合成图且不收藏', async () => {
     resetImageEditApplicationStateForTests()
-    mocks.render.mockResolvedValue('data:image/png;base64,edited')
+    mocks.render.mockResolvedValue({ raster: { mediaUrl: 'henji-media://edited' } })
     mocks.persist.mockResolvedValue('C:/managed/edited.png')
     mocks.addTrustedMediaCanvasNode.mockResolvedValue({ projectId: 'canvas-1', nodeId: 'node-1', nodeType: 'uploadNode' })
     const preview = await createImageEditPreview({ sourceRef: 'generation.result:source', source: 'C:/original.png', operations: [{ kind: 'rotate_cw', degrees: 90 }] })

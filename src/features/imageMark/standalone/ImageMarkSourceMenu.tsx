@@ -10,7 +10,7 @@ interface ImageMarkSourceMenuProps {
   onCreateBlank: () => void
 }
 
-/** 独立图片编辑器唯一的图片来源菜单，V2/V3 宿主共用。 */
+/** 独立 V3 图片编辑器唯一的图片来源菜单。 */
 export function ImageMarkSourceMenu({
   disabled = false,
   onOpenFile,

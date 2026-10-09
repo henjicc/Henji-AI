@@ -1,20 +1,17 @@
 import { create } from 'zustand'
 
-import {
-  createEmptyImageEditDocument,
-  type ImageEditDocument,
-} from '@/core/imageEdit'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 
 export interface ImageEditorHandoff {
   sessionRef: string
   sourceUrl: string
   sourceName: string
-  document: ImageEditDocument
+  document?: ImageEditDocumentV3
 }
 
 interface ImageEditorHandoffState {
   pending: ImageEditorHandoff | null
-  offer: (handoff: Omit<ImageEditorHandoff, 'document'> & { document?: ImageEditDocument }) => void
+  offer: (handoff: Omit<ImageEditorHandoff, 'document'> & { document?: ImageEditDocumentV3 }) => void
   consume: (sessionRef: string) => void
 }
 
@@ -23,7 +20,7 @@ export const useImageEditorHandoffStore = create<ImageEditorHandoffState>((set) 
   offer: (handoff) => set({
     pending: {
       ...handoff,
-      document: handoff.document ?? createEmptyImageEditDocument(),
+      document: handoff.document,
     },
   }),
   consume: (sessionRef) => set((state) => (
@@ -32,7 +29,7 @@ export const useImageEditorHandoffStore = create<ImageEditorHandoffState>((set) 
 }))
 
 export function offerImageEditorHandoff(
-  handoff: Omit<ImageEditorHandoff, 'document'> & { document?: ImageEditDocument }
+  handoff: Omit<ImageEditorHandoff, 'document'> & { document?: ImageEditDocumentV3 }
 ): void {
   useImageEditorHandoffStore.getState().offer(handoff)
 }

@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  IMAGE_EDIT_OPERATION_IDS,
-  imageEditDocumentToMarkDoc,
-  parseImageEditDocument,
-  parseMarkDoc,
-} from '@/core/imageEdit';
+import { listCreatableImageEditOperationIdsV3 } from '@/core/imageEdit/v3/operationCatalog';
 import { CANVAS_NODE_TYPES, NODE_TOOL_TYPES, type CanvasNode } from '../domain/canvasNodes';
 import {
   createStableLayerId,
@@ -78,17 +73,16 @@ describe('画布图片工具注册', () => {
     data: { imageUrl: 'source-image', aspectRatio: '1:1' },
   };
 
-  it('从注册信息提供编辑器策略，并让新旧文档初始值保持一致', () => {
+  it('从登记派生 V3 操作，新图片延迟由受管工厂创建', () => {
     const plugin = getToolPlugin(NODE_TOOL_TYPES.edit);
     expect(plugin).toMatchObject({
       editor: 'edit',
       dialog: { resultNodeTitle: '编辑结果' },
-      operationIds: Object.values(IMAGE_EDIT_OPERATION_IDS),
+      operationIds: ['document.update-output-geometry', 'annotation.add', ...listCreatableImageEditOperationIdsV3('effect')],
     });
 
     const options = imageEditToolPlugin.createInitialOptions(imageNode);
-    const document = parseImageEditDocument(options.document);
-    expect(imageEditDocumentToMarkDoc(document)).toEqual(parseMarkDoc(options.markDoc));
+    expect(options).toEqual({});
   });
 
   it('拒绝重复工具类型和未注册的核心操作', () => {

@@ -1,129 +1,44 @@
-import {
-  imageEditMarkItemSchema,
-  imageEditPreviewOperationsSchema,
-  type ImageEditControlOperation,
-} from './imageEditControlCatalog';
-import {
-  createDefaultBlurOperationParams,
-  createDefaultDiffusionOperationParams,
-  createDefaultVgpuGlowOperationParams,
-  createEmptyMarkDoc,
-  createImageEditOperation,
-  createImageEditDocumentFromMarkDoc,
-  createMarkId,
-  IMAGE_EDIT_OPERATION_IDS,
-  imageEditDocumentToMarkDoc,
-  applyDiffusionPresetForSelection,
-  applyVgpuGlowLook,
-  replaceMarkDocInImageEditDocument,
-  upsertImageEditOperation,
-  upsertImageEditOperationWithExclusivity,
-  type BlurOperationParams,
-  type DiffusionOperationParams,
-  type ImageEditDocument,
-  type ImageEditOperation,
-  type MarkItem,
-  type VgpuGlowOperationParams,
-} from '@/core/imageEdit';
-import {
-  applyOrientationOpToDoc,
-  type OrientationOp,
-} from '@/features/imageMark/domain/geometry';
-import { MIN_IMAGE_EDIT_CROP_SIZE_PX } from '@/core/imageEdit/constraints';
-import { z } from 'zod';
+import { imageEditMarkItemSchema, imageEditPreviewOperationsSchema } from './imageEditControlCatalog'
+import { createDefaultDiffusionOperationParams, createDefaultVgpuGlowOperationParams, applyDiffusionPresetForSelection, applyVgpuGlowLook, createMarkId, type DiffusionOperationParams, type VgpuGlowOperationParams, type MarkItem } from '@/core/imageEdit'
+import { createImageEditAnnotationLayerV3, createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditCommandV3 } from '@/core/imageEdit/v3/commandTypes'
+import type { ImageEditJsonObjectV3 } from '@/core/imageEdit/v3/layerTypes'
+import { composeOrientation } from '@/core/imageEdit/marks/geometry'
+import { ImageEditCommandBusV3 } from '../v3/application/imageEditCommandBus'
 
-export interface AssistantImageEditSourceSize {
-  width: number;
-  height: number;
-}
+export interface AssistantImageEditSourceSize { width: number; height: number }
 
-const ORIENTATION_OPERATIONS: Record<
-  Extract<ImageEditControlOperation['kind'], 'rotate_cw' | 'rotate_ccw' | 'flip_h' | 'flip_v'>,
-  OrientationOp
-> = {
-  rotate_cw: 'rotate-cw',
-  rotate_ccw: 'rotate-ccw',
-  flip_h: 'flip-h',
-  flip_v: 'flip-v',
-};
-
-function isOrientationOperation(
-  operation: ImageEditControlOperation
-): operation is Extract<
-  ImageEditControlOperation,
-  { kind: 'rotate_cw' | 'rotate_ccw' | 'flip_h' | 'flip_v' }
-> {
-  return operation.kind === 'rotate_cw'
-    || operation.kind === 'rotate_ccw'
-    || operation.kind === 'flip_h'
-    || operation.kind === 'flip_v';
-}
-
-export function buildImageEditDocumentFromControlOperations(
-  values: readonly unknown[],
-  sourceSize: AssistantImageEditSourceSize,
-  existingDocument?: ImageEditDocument
-): ImageEditDocument {
-  let doc = existingDocument ? imageEditDocumentToMarkDoc(existingDocument) : createEmptyMarkDoc();
-  let currentWidth = sourceSize.width;
-  let currentHeight = sourceSize.height;
-  let blurParams: BlurOperationParams | null = null;
-  const exclusiveEffectOperations: ImageEditOperation[] = [];
-  const operations = imageEditPreviewOperationsSchema.parse(values);
-  const markIds = new Set(doc.items.map((item) => item.id));
-  if (doc.orientation.rotate === 90 || doc.orientation.rotate === 270) {
-    [currentWidth, currentHeight] = [currentHeight, currentWidth];
+/** 预览只是 V3 命令的输入投影，标注坐标始终使用原图空间。 */
+export function buildImageEditDocumentFromControlOperations(values: readonly unknown[], sourceSize: AssistantImageEditSourceSize, existingDocument?: ImageEditDocumentV3): ImageEditDocumentV3 {
+  const bus = new ImageEditCommandBusV3(existingDocument ?? createImageEditDocumentV3(sourceSize))
+  const operations = imageEditPreviewOperationsSchema.parse(values)
+  const dispatch = (command: ImageEditCommandV3): void => { bus.dispatch(command) }
+  const base = (): { commandId: string; expectedRevision: number } => ({ commandId: createImageEditIdV3('preview-command'), expectedRevision: bus.getSnapshot().document.revision })
+  const addEffect = (id: string, params: ImageEditJsonObjectV3): void => {
+    const layer = createImageEditEffectLayerV3(createImageEditIdV3('effect'), id, id, params)
+    dispatch({ ...base(), type: 'layer.add', layer, parentId: null, index: bus.getSnapshot().document.layers.length })
   }
-
-  for (const [operationIndex, operation] of operations.entries()) {
-    if (isOrientationOperation(operation)) {
-      const turns = operation.kind === 'rotate_cw' || operation.kind === 'rotate_ccw'
-        ? (operation.degrees ?? 90) / 90
-        : 1;
-      for (let turn = 0; turn < turns; turn += 1) {
-        doc = applyOrientationOpToDoc(
-          doc,
-          currentWidth,
-          currentHeight,
-          ORIENTATION_OPERATIONS[operation.kind]
-        );
-        if (operation.kind === 'rotate_cw' || operation.kind === 'rotate_ccw') {
-          [currentWidth, currentHeight] = [currentHeight, currentWidth];
-        }
+  let annotationLayerId: string | null = null
+  try {
+    for (const operation of operations) {
+      const document = bus.getSnapshot().document
+      if (operation.kind === 'rotate_cw' || operation.kind === 'rotate_ccw' || operation.kind === 'flip_h' || operation.kind === 'flip_v') {
+        let orientation = document.geometry.orientation
+        const op = { rotate_cw: 'rotate-cw', rotate_ccw: 'rotate-ccw', flip_h: 'flip-h', flip_v: 'flip-v' } as const
+        const turns = operation.kind === 'rotate_cw' || operation.kind === 'rotate_ccw' ? (operation.degrees ?? 90) / 90 : 1
+        for (let turn = 0; turn < turns; turn += 1) orientation = composeOrientation(orientation, op[operation.kind])
+        dispatch({ ...base(), type: 'document.update-output-geometry', orientation, crop: null })
+        continue
       }
-      continue;
-    }
-
-    if (operation.kind === 'crop') {
-      const crop = operation.crop;
-      if (
-        crop.width < MIN_IMAGE_EDIT_CROP_SIZE_PX
-        || crop.height < MIN_IMAGE_EDIT_CROP_SIZE_PX
-        || crop.x < 0
-        || crop.y < 0
-        || crop.x + crop.width > currentWidth
-        || crop.y + crop.height > currentHeight
-      ) {
-        throw new z.ZodError([{
-          code: 'custom',
-          path: ['operations', operationIndex, 'crop'],
-          message: `裁剪区域无效：当前图片 ${currentWidth}×${currentHeight}；width 和 height 至少为 ${MIN_IMAGE_EDIT_CROP_SIZE_PX}，且必须满足 x ≥ 0、y ≥ 0、x + width ≤ ${currentWidth}、y + height ≤ ${currentHeight}。请按此范围修改 crop。`,
-        }]);
+      if (operation.kind === 'crop') {
+        dispatch({ ...base(), type: 'document.update-output-geometry', orientation: document.geometry.orientation, crop: operation.crop })
+        continue
       }
-      doc = { ...doc, crop };
-      continue;
-    }
-
-    if (operation.kind === 'blur') {
-      const defaults = createDefaultBlurOperationParams();
-      blurParams = {
-        ...defaults,
-        algorithm: operation.algorithm ?? defaults.algorithm,
-        strength: operation.strength ?? defaults.strength,
-      };
-      continue;
-    }
-
+      if (operation.kind === 'blur') {
+        addEffect('gaussian_blur', { sigma_fraction_height: operation.sigma_fraction_height ?? .01, axis: operation.axis ?? 'both', edge_mode: operation.edge_mode ?? 'clamp' })
+        continue
+      }
     if (operation.kind === 'diffusion') {
       const defaults = createDefaultDiffusionOperationParams();
       const hasGlowOnlyOverride = operation.glowExposure !== undefined
@@ -157,10 +72,7 @@ export function buildImageEditDocumentFromControlOperations(
           lightness: operation.tint?.lightness ?? preset.tint.lightness,
         },
       };
-      exclusiveEffectOperations.push(createImageEditOperation(
-        IMAGE_EDIT_OPERATION_IDS.diffusion,
-        diffusionParams,
-      ));
+      addEffect('image.diffusion', diffusionParams as unknown as ImageEditJsonObjectV3);
       continue;
     }
 
@@ -178,38 +90,21 @@ export function buildImageEditDocumentFromControlOperations(
         sourceThreshold: operation.sourceThreshold ?? preset.sourceThreshold,
         whiteHeat: operation.whiteHeat ?? preset.whiteHeat,
       };
-      exclusiveEffectOperations.push(createImageEditOperation(
-        IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
-        vgpuGlowParams,
-      ));
+      addEffect('image.vgpu-glow', vgpuGlowParams as unknown as ImageEditJsonObjectV3);
       continue;
     }
 
-    const parsed = imageEditMarkItemSchema.parse(operation.item);
-    if (parsed.id !== undefined && markIds.has(parsed.id)) {
-      throw new z.ZodError([{
-        code: 'custom',
-        path: ['operations', operationIndex, 'item', 'id'],
-        message: `标注 id 不能重复：${parsed.id}；请删除该 id 让系统自动生成，或改成不同 id。`,
-      }]);
+      const parsed = imageEditMarkItemSchema.parse(operation.item)
+      const item = { ...parsed, id: parsed.id ?? createMarkId() } as MarkItem
+      if (!annotationLayerId) {
+        const layer = createImageEditAnnotationLayerV3(createImageEditIdV3('annotation-layer'), '标注')
+        annotationLayerId = layer.id
+        dispatch({ ...base(), type: 'layer.add', layer, parentId: null, index: bus.getSnapshot().document.layers.length })
+      }
+      const layer = bus.getSnapshot().document.layers.find(candidate => candidate.id === annotationLayerId)
+      if (!layer || layer.type !== 'annotation') throw new Error('标注图层不存在')
+      dispatch({ ...base(), type: 'annotation.add', layerId: layer.id, annotation: item, index: layer.annotations.length })
     }
-    const item = { ...parsed, id: parsed.id ?? createMarkId() } as MarkItem;
-    markIds.add(item.id);
-    doc = { ...doc, items: [...doc.items, item] };
-  }
-
-  const document = existingDocument
-    ? replaceMarkDocInImageEditDocument(existingDocument, doc)
-    : createImageEditDocumentFromMarkDoc(doc);
-  let result = document;
-  if (blurParams) {
-    result = upsertImageEditOperation(
-      result,
-      createImageEditOperation(IMAGE_EDIT_OPERATION_IDS.blur, blurParams),
-    );
-  }
-  for (const operation of exclusiveEffectOperations) {
-    result = upsertImageEditOperationWithExclusivity(result, operation);
-  }
-  return result;
+    return bus.getSnapshot().document
+  } finally { bus.dispose() }
 }

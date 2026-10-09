@@ -7,12 +7,10 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useNavigationStore } from '@/stores/navigationStore'
-import { createEmptyImageEditDocument } from '@/core/imageEdit'
 import {
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
-import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { useAudioEditStore } from '@/features/audioEdit/store/audioEditStore'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentContent'
@@ -47,7 +45,6 @@ describe('宿主作用域 revision', () => {
     useAudioEditStore.getState().setProject(null)
     await resetAudioEditProjectInstancesForTests()
     setAudioEditDocumentRegistryForTests(null)
-    useImageEditSessionStore.setState({ sessions: {}, revision: 0 })
   })
 
   it('切换工具箱工具只推进 navigation，不推进 toolbox', () => {
@@ -157,19 +154,6 @@ describe('宿主作用域 revision', () => {
 
     // 这条守的是"别把上一条修过头"：数据变化必须继续推进基线，否则乐观并发就失效了。
     expect(getHostScopeRevisions().toolbox).toBeGreaterThan(before.toolbox)
-  })
-
-  it('图片编辑会话的权威领域计数发布为 image_mark 基线', () => {
-    const before = getHostScopeRevisions().image_mark
-    useImageEditSessionStore.getState().ensureSession('revision-session', createEmptyImageEditDocument())
-    const opened = getHostScopeRevisions().image_mark
-    expect(opened).toBe(before + 1)
-
-    const document = useImageEditSessionStore.getState().sessions['revision-session'].document
-    useImageEditSessionStore.getState().commitDocument('revision-session', structuredClone(document))
-
-    expect(getHostScopeRevisions().image_mark).toBe(opened + 1)
-    expect(getHostScopeRevisions().image_mark).toBe(useImageEditSessionStore.getState().revision)
   })
 
   it('V3 命令总线变化同时推进 image_edit 与标注兼容基线', () => {

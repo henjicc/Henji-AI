@@ -135,7 +135,6 @@ function cloneLayer(layer: ImageEditLayerV3, idMap?: Readonly<Record<string, str
       effectId: layer.effectId,
       params: jsonClone<ImageEditJsonObjectV3>(layer.params),
       renderable: layer.renderable,
-      ...(layer.legacyOperation ? { legacyOperation: jsonClone(layer.legacyOperation) } : {}),
     };
   }
   if (layer.type === 'adjustment') {

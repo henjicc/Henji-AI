@@ -1,6 +1,3 @@
-import { coerceImageEditSession } from '../legacy'
-import type { ImageEditSession } from '../types'
-
 export type ImageEditDocumentRefV3 = `image-edit-v3:${string}`
 export type ImageEditPreviewRefV3 = `sha256:${string}`
 
@@ -16,7 +13,7 @@ export interface ImageEditSessionReferenceV3 {
   previewRef: ImageEditPreviewRefV3 | null
 }
 
-export type ImageEditSessionData = ImageEditSession | ImageEditSessionReferenceV3
+export type ImageEditSessionData = ImageEditSessionReferenceV3
 
 const DOCUMENT_REF_PATTERN = /^image-edit-v3:[A-Za-z0-9_-]{1,128}$/
 const PREVIEW_REF_PATTERN = /^sha256:[a-f0-9]{64}$/
@@ -62,11 +59,12 @@ export function isImageEditSessionReferenceV3(
   }
 }
 
-/** 保留 V3 受管引用；其余存量格式继续交给既有 V2 兼容解码器。 */
+/** 跨宿主只接受受管 V3 文档引用。 */
 export function coerceImageEditSessionData(
   value: unknown,
   fallbackSourceUrl: string,
 ): ImageEditSessionData {
   const v3 = parseImageEditSessionReferenceV3(value, fallbackSourceUrl)
-  return v3 ?? coerceImageEditSession(value, fallbackSourceUrl)
+  if (!v3) throw new TypeError('图片编辑会话必须是 V3 受管文档引用')
+  return v3
 }

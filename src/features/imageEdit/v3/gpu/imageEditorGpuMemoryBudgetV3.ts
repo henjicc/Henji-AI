@@ -6,7 +6,6 @@ import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
 } from '@/core/imageEdit/v3/effects'
-import { resolveGaussianPixelPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
 import type {
   ImageEditorGpuGraphEffectNodeV3,
   ImageEditorGpuRasterSceneV3,
@@ -77,17 +76,6 @@ function estimateEffectsBytes(
         ? imageEditorGpuGaussianScratchBytesV3(region.plan, region.windows)
           + region.output.width * region.output.height * LINEAR_BYTES_PER_PIXEL
         : gaussianScratch(resolveImageGaussianPlan(gaussianParametersFromNodeV3(node.parameters), { referenceSize: { width: Number(node.parameters.referenceWidth), height: Number(node.parameters.referenceHeight) }, outputSize: { width: size[0], height: size[1] }, quality: node.parameters.effectQuality === 'final' ? 'final' : 'interactive' }))
-    }
-    if (node.definitionId === 'effect.blur-v1') {
-      const radiusKey = node.definitionId === 'effect.blur-v1' ? 'radiusPixels' : 'radius'
-      const rawRadius = node.parameters[radiusKey]
-      const rawMip = node.definitionId === 'effect.blur-v1' ? 0 : node.parameters.mip
-      const radius = typeof rawRadius === 'number' && Number.isFinite(rawRadius)
-        ? Math.max(0, rawRadius)
-        : 0
-      const mip = typeof rawMip === 'number' && Number.isFinite(rawMip) ? Math.max(0, rawMip) : 0
-      // final 的 fp32 中间窗口归各 Gaussian renderer 持有，不能按共享 fp16 金字塔估算。
-      gaussianScratchBytes += gaussianScratch(resolveGaussianPixelPlan({ radius: radius / (2 ** mip), mip: 0 }, size[0], size[1]))
     }
     if (node.definitionId === 'effect.fast-blur') scratchTargets = Math.max(scratchTargets, 2)
     if (node.definitionId === 'effect.diffusion') {

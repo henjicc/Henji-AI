@@ -17,6 +17,7 @@ import { ensureImageEditRefInstanceV3 } from './imageEditDocumentLoading'
 import { collectImageEditMaskResourceIdsV3 } from '@/core/imageEdit/v3/layerTypes'
 
 import {
+  IMAGE_EDIT_V3_DOCUMENT_FIELDS,
   IMAGE_EDIT_V3_GROUP_FIELDS,
   IMAGE_EDIT_V3_LAYER_FIELDS,
   IMAGE_EDIT_V3_MASK_FIELDS,
@@ -61,6 +62,7 @@ function property(
 }
 
 export const IMAGE_EDIT_V3_DOCUMENT_PROPERTIES: ApplicationPropertyDescriptor[] = [
+  ...fieldDescriptors(IMAGE_EDIT_V3_DOCUMENT_FIELDS),
   property('image_edit.document', 'revision', '文档修订号', { kind: 'integer', hardRange: { min: 0 } }),
   property('image_edit.document', 'width', '画布宽度', { kind: 'integer', hardRange: { min: 1 } }),
   property('image_edit.document', 'height', '画布高度', { kind: 'integer', hardRange: { min: 1 } }),
@@ -235,6 +237,7 @@ export class ImageEditV3ReflectionProvider {
       const { documentId } = splitImageEditV3DocumentRef(ref)
       const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
       values = {
+        ...fieldReadValues(IMAGE_EDIT_V3_DOCUMENT_FIELDS, document.geometry),
         'image_edit.document.revision': document.revision,
         'image_edit.document.width': document.geometry.width,
         'image_edit.document.height': document.geometry.height,
@@ -273,7 +276,7 @@ export class ImageEditV3ReflectionProvider {
     return {
       ref,
       entityType: this.entityType,
-      revisions: { image_edit: revision, ...imageEditPersistenceRevisionsV3(ref) },
+      revisions: { image_edit: revision, ...(values['image_edit.layer.type'] === 'annotation' ? { image_mark: revision } : {}), ...imageEditPersistenceRevisionsV3(ref) },
       properties: selectProperties(values, request.propertyIds),
       capturedAt: new Date().toISOString(),
     }
@@ -296,12 +299,15 @@ export class ImageEditV3ReflectionProvider {
     return propertyIds.map((propertyId) => {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
+      const owner = this.entityType === 'image_edit.document'
+        ? requireImageEditDocumentInstanceV3(splitImageEditV3DocumentRef(ref).documentId).persistenceOwner : null
+      const writable = !descriptor.readOnlyReason && Boolean(owner)
       return {
         propertyId,
         readable: true,
-        writable: false,
-        reasons: [descriptor.readOnlyReason ?? READ_ONLY_DOCUMENT],
-        requiredPermissions: descriptor.requiredPermissions.read,
+        writable,
+        reasons: writable ? [] : [descriptor.readOnlyReason ?? IMAGE_EDIT_PREVIEW_ONLY_REASON],
+        requiredPermissions: writable ? [...descriptor.requiredPermissions.write, ...imageEditPersistencePermissionsV3(ref)] : descriptor.requiredPermissions.read,
         revisions: { image_edit: getImageEditDocumentCatalogRevisionV3(), ...imageEditPersistenceRevisionsV3(ref) },
       }
     })

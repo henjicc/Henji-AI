@@ -7,7 +7,6 @@ import {
   applyDiffusionV4,
   applyExposureAdjustment,
   applyFastBlurV3,
-  applyLegacyGaussianBlurV1,
   applyHslAdjustment,
   applyTemperatureTintAdjustment,
   applyVgpuGlowV4,
@@ -102,15 +101,6 @@ export const hslCpuV3: ImageEditCpuPixelKernelV3 = async (node, source, mask, _c
       saturation: numberParameter(node, 'saturation', 0),
       lightness: numberParameter(node, 'lightness', 0),
     }, { mask });
-};
-
-export const legacyBlurCpuV3: ImageEditCpuPixelKernelV3 = async (node, source, mask, _context) => {
-    const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
-    return applyLegacyGaussianBlurV1(
-      perceptual,
-      numberParameter(node, 'radiusPixels', 0),
-      { mask },
-    );
 };
 
 export const fastBlurCpuV3: ImageEditCpuPixelKernelV3 = async (node, source, mask, _context) => {

@@ -6,16 +6,9 @@ import {
   isUploadNode,
   type CanvasNode,
 } from '../domain/canvasNodes';
-import {
-  IMAGE_EDIT_OPERATION_IDS,
-  createEmptyImageEditDocument,
-  imageEditDocumentToMarkDoc,
-  stringifyImageEditDocument,
-  stringifyMarkDoc,
-} from '@/core/imageEdit';
+import { listCreatableImageEditOperationIdsV3 } from '@/core/imageEdit/v3/operationCatalog';
 import { EXPORT_RESULT_DISPLAY_NAME } from '../domain/nodeDisplay';
 import type { CanvasToolPlugin, ToolOptions } from './types';
-import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
 import { CANVAS_EDIT_V3_SESSION_OPTION } from '../imageEditV3/canvasEditV3Contracts';
 import {
   CANVAS_EDIT_V3_LAYER_STACK_OPTION,
@@ -36,7 +29,7 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
     size: 'workspace',
     resultNodeTitle: '编辑结果',
   },
-  operationIds: Object.values(IMAGE_EDIT_OPERATION_IDS),
+  operationIds: ['document.update-output-geometry', 'annotation.add', ...listCreatableImageEditOperationIdsV3('effect')],
   supportsNode: (node) => (
     supportsImageSourceNode(node)
     || isLayerStackResultNode(node)
@@ -54,14 +47,7 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
         [CANVAS_EDIT_V3_SESSION_OPTION]: JSON.stringify(node.data.imageEditSession),
       };
     }
-    const document = createEmptyImageEditDocument();
-    return {
-      color: ANNOTATION_DEFAULT_STROKE_HEX,
-      lineWidthPercent: 0.4,
-      fontSizePercent: 10,
-      document: stringifyImageEditDocument(document),
-      markDoc: stringifyMarkDoc(imageEditDocumentToMarkDoc(document)),
-    };
+    return {};
   },
   fields: [],
   execute: async (sourceImageUrl, options, context) =>

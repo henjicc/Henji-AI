@@ -184,6 +184,8 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
  * 能做的事"的量化终点。条目要说清楚拦路的是什么、归到哪一期。
  */
 const ASSISTANT_BLIND_FEATURES = {
+  imageMark: 'R05 已删除 V2 独立持久 Store；标注由 imageEdit V3 文档实例、命令总线及持久化参与者持有。'
+    + 'imageMarkReflection 与标注通用属性/集合执行器覆盖人和助手读改，文档几何走 image_edit.document；不保留空 StoreLedger。',
   videoEdit: '剪辑由 videoEditService 的文件实例持有，没有 Zustand store；'
     + 'videoEditReflection、字段定义、事务执行器与领域保存参与者覆盖可编辑内容，公共回环由 videoEditService.test.ts 验证。',
   'application-control': '调用方中立的能力会话与根宿主协调层，没有独立业务实体或 Store；'

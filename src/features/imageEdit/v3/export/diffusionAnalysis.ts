@@ -90,16 +90,6 @@ function dependencyPlan(
       if (node.definitionId === 'effect.fast-blur') {
         return { ...node, parameters: { ...node.parameters, mip } }
       }
-      if (node.definitionId === 'effect.blur-v1') {
-        const radius = node.parameters.radiusPixels
-        return {
-          ...node,
-          parameters: {
-            ...node.parameters,
-            radiusPixels: typeof radius === 'number' ? radius / (2 ** mip) : radius,
-          },
-        }
-      }
       return node
     })
   return {

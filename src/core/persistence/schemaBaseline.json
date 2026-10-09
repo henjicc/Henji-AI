@@ -58,12 +58,12 @@
     },
     "image-package": {
       "version": 1,
-      "fingerprint": "79afffa04c4a2aef827dc09c019cf9e0143946a9908f4fd9eb304ca3810de41e",
+      "fingerprint": "117c73e5de586a69a576da5f6a8e323440e4a4fdf082a5b32562eac47ab00e5a",
       "supportedFrom": 1
     },
     "image-working-copy": {
       "version": 3,
-      "fingerprint": "8dab341e2a184551b0147478f6717bd49c6e9a0bb23ad5678d854ad905960e09",
+      "fingerprint": "edaa40c8dbce98c58c94598f8c420d8571fad5403d759c34fbd04130b2610533",
       "supportedFrom": 3
     },
     "settings": {
@@ -133,7 +133,7 @@
     },
     "canvas-layer-package": {
       "version": 1,
-      "fingerprint": "85c005712fb98917a93e1dd8b49ab7b310fc4e11152c9257a199ec86739441fd",
+      "fingerprint": "8db9cd793f201ddd7d82e6e79607e50ea45a985b0d3fad4d6969a07b042df78b",
       "supportedFrom": 1
     },
     "keystore": {
@@ -572,6 +572,33 @@
       "reason": "t114 图片高斯采用共享 canonical 参数 schema 与登记派生，删除旧字段契约",
       "previousFingerprint": "b44ec5fdff7f7339ae3e56e3449c7441a77ff13befe04a49d2508c88f8d9483a",
       "fingerprint": "85c005712fb98917a93e1dd8b49ab7b310fc4e11152c9257a199ec86739441fd",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T04:39:48.401Z",
+      "format": "image-package",
+      "version": 1,
+      "reason": "R05 开发期删除 V2 文档迁移、legacyOperation 与旧模糊载荷，仅接受 V3 文档与正式效果参数",
+      "previousFingerprint": "79afffa04c4a2aef827dc09c019cf9e0143946a9908f4fd9eb304ca3810de41e",
+      "fingerprint": "117c73e5de586a69a576da5f6a8e323440e4a4fdf082a5b32562eac47ab00e5a",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T04:39:48.403Z",
+      "format": "image-working-copy",
+      "version": 3,
+      "reason": "R05 开发期删除 V2 文档迁移、legacyOperation 与旧模糊载荷，仅接受 V3 文档与正式效果参数",
+      "previousFingerprint": "8dab341e2a184551b0147478f6717bd49c6e9a0bb23ad5678d854ad905960e09",
+      "fingerprint": "edaa40c8dbce98c58c94598f8c420d8571fad5403d759c34fbd04130b2610533",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T04:39:48.403Z",
+      "format": "canvas-layer-package",
+      "version": 1,
+      "reason": "R05 开发期删除 V2 文档迁移、legacyOperation 与旧模糊载荷，仅接受 V3 文档与正式效果参数",
+      "previousFingerprint": "85c005712fb98917a93e1dd8b49ab7b310fc4e11152c9257a199ec86739441fd",
+      "fingerprint": "8db9cd793f201ddd7d82e6e79607e50ea45a985b0d3fad4d6969a07b042df78b",
       "waivedFixtureVersions": []
     }
   ]

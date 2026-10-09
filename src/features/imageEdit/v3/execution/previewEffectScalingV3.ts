@@ -7,9 +7,7 @@ const MAX_DISPLAY_PIXELS_PER_BLUR_PREVIEW_PIXEL = 3
 
 function finiteRadius(layer: ImageEditLayerV3, height: number): number | null {
   if (layer.type !== 'effect' || !layer.visible || !layer.renderable || layer.opacity <= 0) return null
-  const value = layer.effectId === 'image.blur'
-    ? layer.params.radiusPixels
-    : layer.effectId === 'gaussian_blur' ? Number(layer.params.sigma_fraction_height) * height
+  const value = layer.effectId === 'gaussian_blur' ? Number(layer.params.sigma_fraction_height) * height
     : layer.effectId === 'image.fast-blur-v3'
       ? layer.params.radius
       : null
@@ -98,16 +96,6 @@ function scaleLayers(
         params: {
           ...layer.params,
           mip: Math.max(0, Math.log2(1 / Math.max(scale, Number.EPSILON))),
-        },
-      }
-    }
-    if (layer.type === 'effect' && layer.effectId === 'image.blur') {
-      const radiusPixels = Number(layer.params.radiusPixels ?? 0)
-      return {
-        ...layer,
-        params: {
-          ...layer.params,
-          radiusPixels: Number.isFinite(radiusPixels) ? Math.max(0, radiusPixels * scale) : 0,
         },
       }
     }

@@ -4,6 +4,7 @@ import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/appl
 import { ensureImageEditDocumentBindingV3 } from './imageEditDocumentBindings'
 import { ensureImageDocumentOpenInBackground } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
+import { isImageEditPreviewDocument } from '../../application/imageEditSessionRegistry'
 import {
   findImageEditDocumentInstanceV3, getOrCreateImageEditDocumentInstanceV3,
   getOrCreateImageEditPersistenceQueueV3, type ImageEditDocumentInstanceV3,
@@ -43,6 +44,13 @@ export async function ensureImageEditDocumentInstanceV3(documentId: string): Pro
     const history = new ImageEditCommandHistoryV3()
     if (snapshot.history) history.restore(snapshot.document, snapshot.history)
     else history.clear(snapshot.document)
+    // 不可变预览可通过同一反射读取，但不安装保存 owner；既有写屏障会拒绝原地修改。
+    if (isImageEditPreviewDocument(documentId)) {
+      return getOrCreateImageEditDocumentInstanceV3(snapshot.document, {
+        historySnapshot: history.createSnapshot(),
+        resourceByteSizes: Object.fromEntries(snapshot.resources.map((resource) => [resource.resourceRef, resource.byteLength])),
+      })
+    }
     const queue = getOrCreateImageEditPersistenceQueueV3({
       repository: new ImageEditorV3CommandRepository(),
       initialReference: { documentId, revision: snapshot.revision, previewRef: snapshot.previewRef },

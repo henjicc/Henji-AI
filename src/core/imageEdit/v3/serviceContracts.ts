@@ -11,7 +11,7 @@ export interface ImageEditDocumentReferenceV3 {
 
 export interface ImageEditDocumentSnapshotV3 extends ImageEditDocumentReferenceV3 {
   document: ImageEditDocumentV3;
-  /** 旧 V1/V2/早期 V3 存档没有历史时为 null。 */
+  /** V3 快照没有保存历史时为 null；不接受旧版图片文档。 */
   history: ImageEditCommandHistorySnapshotV3 | null;
 }
 

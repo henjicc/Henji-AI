@@ -22,7 +22,7 @@ function cloneOptions(options?: GeneratorOptions): GeneratorOptions {
   return { ...(options ?? {}) }
 }
 
-/** 兼容旧 ImageEditState、ImageMarkSession 与 V2 ImageEditSession 落盘格式。 */
+/** 恢复明确的 V3 受管会话引用。 */
 function restoreEditStates(
   states: DynamicValue,
   images: string[],

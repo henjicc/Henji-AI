@@ -18,6 +18,7 @@ import {
 } from '@/core/imageEdit/v3/layerTypes'
 
 import {
+  IMAGE_EDIT_V3_DOCUMENT_FIELDS,
   IMAGE_EDIT_V3_GROUP_FIELDS,
   IMAGE_EDIT_V3_LAYER_FIELDS,
   IMAGE_EDIT_V3_MASK_FIELDS,
@@ -36,7 +37,7 @@ import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 }
 import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
 
 interface UndoPayload {
-  entityType: 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask'
+  entityType: 'image_edit.document' | 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask'
   documentId: string
   targetId: string
   commandIdsNewestFirst: string[]
@@ -50,7 +51,7 @@ function decodeUndo(token: string): UndoPayload {
   if (!token.startsWith(UNDO_PREFIX)) throw new Error('IMAGE_EDIT_V3_UNDO_INVALID')
   const value = JSON.parse(token.slice(UNDO_PREFIX.length)) as Partial<UndoPayload>
   if (
-    !['image_edit.layer', 'image_edit.group', 'image_edit.mask'].includes(value.entityType ?? '')
+    !['image_edit.document', 'image_edit.layer', 'image_edit.group', 'image_edit.mask'].includes(value.entityType ?? '')
     || typeof value.documentId !== 'string'
     || typeof value.targetId !== 'string'
     || !Array.isArray(value.commandIdsNewestFirst)
@@ -121,6 +122,10 @@ async function rollbackPayload(payload: UndoPayload): Promise<ApplicationComplet
   }
 }
 
+function mutationDocumentIdentity(ref: import('@/core/application-control').ApplicationRef, kind: UndoPayload['entityType']): { documentId: string } {
+  return kind === 'image_edit.document' ? splitImageEditV3DocumentRef(ref) : splitImageEditV3LayerRef(ref, kind)
+}
+
 abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExecutor {
   abstract readonly entityType: UndoPayload['entityType']
   abstract readonly writableProperties: ReadonlySet<string>
@@ -130,7 +135,7 @@ abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExe
   abstract createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[] }>
 
   async apply(step: MutationStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
-    const { documentId } = splitImageEditV3LayerRef(step.target, this.entityType)
+    const { documentId } = mutationDocumentIdentity(step.target, this.entityType)
     return runImageEditPersistedOperationV3(documentId, context, (batchContext) => this.applyInMemory(step, batchContext!))
   }
 
@@ -178,8 +183,8 @@ abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExe
     steps: MutationStep[],
     context: ApplicationExecutionContext,
   ): Promise<ApplicationCompletedStepResult[]> {
-    const { documentId } = splitImageEditV3LayerRef(steps[0].target, this.entityType)
-    if (steps.some((step) => splitImageEditV3LayerRef(step.target, this.entityType).documentId !== documentId)) {
+    const { documentId } = mutationDocumentIdentity(steps[0].target, this.entityType)
+    if (steps.some((step) => mutationDocumentIdentity(step.target, this.entityType).documentId !== documentId)) {
       throw new Error('图片编辑原子修改只能针对同一文档，请拆分不同文档的操作')
     }
     return runImageEditPersistedOperationV3(documentId, context, (batchContext) => this.applyAtomicInMemory(steps, batchContext!))
@@ -346,6 +351,34 @@ export class ImageEditV3MaskMutationExecutor extends ImageEditV3MutationExecutor
           ...cloneImageEditMaskReferenceV3(location.layer.mask),
           inverted: draft.inverted,
         },
+      }],
+    }
+  }
+}
+
+export class ImageEditV3DocumentMutationExecutor extends ImageEditV3MutationExecutorBase {
+  readonly entityType = 'image_edit.document'
+  private readonly writers = fieldWriterTable(IMAGE_EDIT_V3_DOCUMENT_FIELDS)
+  readonly writableProperties = writableProperties(this.writers)
+  readonly propertyOperations = propertyOperations(this.writers)
+
+  async createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[] }> {
+    const { documentId } = splitImageEditV3DocumentRef(step.target)
+    const { bus } = requireImageEditDocumentInstanceV3(documentId)
+    const document = bus.getSnapshot().document
+    const geometry = structuredClone(document.geometry)
+    await applyWriterTable(this.writers, geometry, step.mutations)
+    const orientationChanged = geometry.orientation.rotate !== document.geometry.orientation.rotate
+      || geometry.orientation.mirrored !== document.geometry.orientation.mirrored
+    const cropSpecified = step.mutations.some(mutation => mutation.propertyId === 'image_edit.document.crop_rect')
+    return {
+      documentId,
+      commands: [{
+        type: 'document.update-output-geometry',
+        commandId: createImageEditIdV3('geometry'),
+        expectedRevision: document.revision,
+        orientation: geometry.orientation,
+        crop: orientationChanged && !cropSpecified ? null : geometry.crop,
       }],
     }
   }

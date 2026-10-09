@@ -1,4 +1,3 @@
-import type { ComponentType } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import type { z } from 'zod';
 
@@ -13,5 +12,4 @@ export interface ImageEditorToolDefinition {
     kinds: readonly ImageEditControlOperation['kind'][];
   };
   icon: LucideIcon;
-  inspector: ComponentType;
 }

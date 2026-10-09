@@ -6,9 +6,8 @@ import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NotificationProvider } from '@/contexts/NotificationContext'
-import { createEmptyImageEditDocument } from '@/core/imageEdit'
+import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import { migrateImageEditDocumentV2ToV3 } from '@/core/imageEdit/v3/legacyMigration'
 import type { OpenImageDocument } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import type { ImageDocumentWorkingHooks } from '@/features/imageEdit/documents/imageDocumentPersistence'
 import type { ImageEditDocumentReferenceV3 } from '@/core/imageEdit/v3/serviceContracts'
@@ -105,7 +104,7 @@ const SOURCE_URL = `henji-media://image-editor-v3/${'a'.repeat(64)}?mediaType=im
 
 function workingDocument(revision = 0): ImageEditDocumentV3 {
   const source = managedSource()
-  const migrated = migrateImageEditDocumentV2ToV3(createEmptyImageEditDocument(), {
+  const migrated = createImageEditDocumentV3({
     width: source.metadata.width,
     height: source.metadata.height,
     sourceResourceId: source.resource.resourceRef,

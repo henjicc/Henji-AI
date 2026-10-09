@@ -1,5 +1,5 @@
 import type { CanvasNode, NodeToolType } from '../domain/canvasNodes';
-import { imageEditOperationRegistry } from '@/core/imageEdit';
+import { listImageEditLayerOperationsV3 } from '@/core/imageEdit/v3/operationCatalog';
 import { builtInToolPlugins } from './builtInTools';
 import type { CanvasToolPlugin } from './types';
 
@@ -8,13 +8,14 @@ export class CanvasToolRegistrationError extends Error {}
 export function createCanvasToolRegistry(
   plugins: readonly CanvasToolPlugin[]
 ): Map<NodeToolType, CanvasToolPlugin> {
+  const operations = new Set(['document.update-output-geometry', 'annotation.add', ...listImageEditLayerOperationsV3().map(entry => entry.operationId)]);
   const registry = new Map<NodeToolType, CanvasToolPlugin>();
   for (const plugin of plugins) {
     if (registry.has(plugin.type)) {
       throw new CanvasToolRegistrationError(`画布工具已注册：${plugin.type}`);
     }
     for (const operationId of plugin.operationIds ?? []) {
-      if (!imageEditOperationRegistry.get(operationId)) {
+      if (!operations.has(operationId)) {
         throw new CanvasToolRegistrationError(
           `画布工具 ${plugin.type} 引用了未知图片操作：${operationId}`
         );

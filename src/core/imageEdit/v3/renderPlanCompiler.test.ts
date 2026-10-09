@@ -35,8 +35,8 @@ function annotationLayer(): ImageEditAnnotationLayerV3 {
 function blurLayer(): ImageEditEffectLayerV3 {
   return {
     ...createImageEditLayerCommonV3('blur', '模糊'),
-    type: 'effect', effectId: 'image.blur', renderable: true,
-    params: { radiusPixels: 18 },
+    type: 'effect', effectId: 'gaussian_blur', renderable: true,
+    params: { sigma_fraction_height: .0225 },
   };
 }
 
@@ -146,10 +146,10 @@ describe('图片编辑 V3 有序 RenderPlan', () => {
     ))).toBe(true);
   });
 
-  it('未知 legacy 效果原样留在文档但不改变渲染输出', () => {
+  it('不可渲染效果原样留在文档但不改变渲染输出', () => {
     const unknown: ImageEditEffectLayerV3 = {
       ...createImageEditLayerCommonV3('unknown', '未知效果'),
-      type: 'effect', effectId: 'legacy.unknown', renderable: false, params: { x: 1 },
+      type: 'effect', effectId: 'unavailable.effect', renderable: false, params: { x: 1 },
     };
     const withoutUnknown = compileImageEditRenderPlanV3(document([baseLayer()]), registry, 'stable');
     const withUnknown = compileImageEditRenderPlanV3(document([baseLayer(), unknown]), registry, 'stable');

@@ -1,14 +1,7 @@
-export * from './execution/browserImageEditExecution';
-export * from './execution/workerImageEditClient';
-export * from './execution/imageEditExecution';
-export { ImageEditor } from './editor/ImageEditor';
-export type { ImageEditorProps } from './editor/ImageEditor';
+// 编辑器 UI 从 v3/editor 延迟加载；跨领域公开入口只暴露轻量应用操作。
+export * from './v3/application/imageEditManagedSessionV3';
+export * from './v3/application/imageEditMaterializationV3';
 export { ImageEditorShell } from './shell/ImageEditorShell';
 export type { ImageEditorShellProps } from './shell/ImageEditorShell';
-export { ImageToolInspector } from './editor/ImageToolInspector';
-export { ImageToolPanel } from './editor/ImageToolPanel';
-export { ImageToolRail } from './editor/ImageToolRail';
-export { useImageEditorSession } from './editor/useImageEditorSession';
-export type { ImageEditorSession, UseImageEditorSessionParams } from './editor/useImageEditorSession';
 export * from './store/imageEditorUiStore';
 export * from './tools';

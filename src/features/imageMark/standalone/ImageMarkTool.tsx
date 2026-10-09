@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ClipboardPaste, FilePlus2, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { createLogger } from '@/core/logging';
-import type { ImageEditDocument } from '@/core/imageEdit';
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes';
 import type { DocumentSummary, DocumentTarget } from '@/core/documents/types';
 import { AlertDialog, UiLoading } from '@/components/ui';
 import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage';
@@ -175,7 +175,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   useEffect(() => {
     if (!pendingHandoff || acceptingHandoffRef.current === pendingHandoff.sessionRef) return;
     acceptingHandoffRef.current = pendingHandoff.sessionRef;
-    const document: ImageEditDocument = pendingHandoff.document;
+    const document: ImageEditDocumentV3 | undefined = pendingHandoff.document;
     void createFrom({ url: pendingHandoff.sourceUrl, document }, pendingHandoff.sessionRef)
       .finally(() => {
         consumeHandoff(pendingHandoff.sessionRef);

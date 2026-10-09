@@ -75,9 +75,8 @@ export interface MarkEditorDocumentController {
 }
 
 /**
- * 统一图片编辑器(快速标记):
- * 画布节点工具、图片查看器、工具箱共用同一实现。
- * 数据为 ImageMarkDoc,导出统一走 render/exportMarkedImage。
+ * 标注与蒙版草稿的绘制组件。
+ * ImageMarkDoc 仅描述绘制投影；正式图片文档、朝向、保存和导出由 V3 宿主维护。
  */
 export function MarkEditor({
   sourceImageUrl,

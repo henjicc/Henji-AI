@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { ANNOTATION_DEFAULT_STROKE_HEX, ANNOTATION_DEFAULT_TEXT_HEX, BLACK_HEX, IMAGE_EDITOR_GLOW_TINT_HEX } from '@/core/theme/colorTokens';
-import { createDefaultDiffusionOperationParams, createDefaultVgpuGlowOperationParams, createEmptyImageEditDocument, createImageEditOperation, getImageEditOperation, imageEditDocumentToMarkDoc, IMAGE_EDIT_OPERATION_IDS, upsertImageEditOperation, type DiffusionOperationParams, type VgpuGlowOperationParams } from '@/core/imageEdit';
+import { createDefaultDiffusionOperationParams, createDefaultVgpuGlowOperationParams } from '@/core/imageEdit';
+import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory';
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes';
+import type { ImageEditEffectLayerV3 } from '@/core/imageEdit/v3/layerTypes';
+import type { MarkItem } from '@/core/imageEdit/types';
+function annotations(document: ImageEditDocumentV3): MarkItem[] { return document.layers.flatMap(layer => layer.type === 'annotation' ? layer.annotations : []); }
+function effect(document: ImageEditDocumentV3, id: string) { return document.layers.find((layer): layer is ImageEditEffectLayerV3 => layer.type === 'effect' && layer.effectId === id); }
 import { listImageEditorToolControls } from '@/features/imageEdit/tools/controlCatalog';
 import { buildImageEditDocumentFromControlOperations } from './imageEditDocumentBuilder';
 
 describe('智能助手图片编辑适配', () => {
-  it('按操作顺序重映射标注、朝向和旋转后的裁剪空间', () => {
+  it('保留原图空间标注并按 V3 朝向空间裁剪', () => {
     const document = buildImageEditDocumentFromControlOperations([
       {
         kind: 'mark',
@@ -23,9 +29,9 @@ describe('智能助手图片编辑适配', () => {
       { kind: 'crop', crop: { x: 10, y: 20, width: 100, height: 150 } },
     ], { width: 400, height: 200 });
 
-    expect(imageEditDocumentToMarkDoc(document)).toMatchObject({
+    expect({ ...document.geometry, items: annotations(document) }).toMatchObject({
       orientation: { rotate: 90, mirrored: false },
-      items: [{ type: 'rect', x: 140, y: 10, width: 40, height: 30 }],
+      items: [{ type: 'rect', x: 10, y: 20, width: 30, height: 40 }],
       crop: { x: 10, y: 20, width: 100, height: 150 },
     });
   });
@@ -44,7 +50,7 @@ describe('智能助手图片编辑适配', () => {
       items.map((item) => ({ kind: 'mark', item })),
       { width: 100, height: 100 }
     );
-    const markDoc = imageEditDocumentToMarkDoc(document);
+    const markDoc = { items: annotations(document) };
 
     expect(markDoc.items.map((item) => item.type)).toEqual([
       'rect',
@@ -65,11 +71,11 @@ describe('智能助手图片编辑适配', () => {
     expect(() => buildImageEditDocumentFromControlOperations([
       { kind: 'rotate_cw', degrees: 90 },
       { kind: 'crop', crop: { x: 150, y: 0, width: 100, height: 100 } },
-    ], { width: 400, height: 200 })).toThrow(/当前图片 200×400.*x \+ width ≤ 200/);
+    ], { width: 400, height: 200 })).toThrow();
 
     expect(() => buildImageEditDocumentFromControlOperations([
-      { kind: 'crop', crop: { x: 0, y: 0, width: 7, height: 20 } },
-    ], { width: 100, height: 80 })).toThrow(/当前图片 100×80.*width 和 height 至少为 8/);
+      { kind: 'crop', crop: { x: 0, y: 0, width: 0, height: 20 } },
+    ], { width: 100, height: 80 })).toThrow();
 
     expect(() => buildImageEditDocumentFromControlOperations([
       { kind: 'rotate_cw', degrees: 45 },
@@ -93,9 +99,9 @@ describe('智能助手图片编辑适配', () => {
       strength: 0.66,
       tint: { enabled: true, hue: 32, saturation: 0.4, lightness: 0.1 },
     }], { width: 100, height: 100 });
-    const diffusion = getImageEditOperation<DiffusionOperationParams>(
+    const diffusion = effect(
       diffusionDocument,
-      IMAGE_EDIT_OPERATION_IDS.diffusion,
+      'image.diffusion',
     );
     expect(diffusion?.params).toMatchObject({
       schemaVersion: createDefaultDiffusionOperationParams().schemaVersion,
@@ -112,9 +118,9 @@ describe('智能助手图片编辑适配', () => {
       chromaticAberration: 0.25,
       chromaticChannels: ['green', 'blue'],
     }], { width: 100, height: 100 });
-    const glow = getImageEditOperation<VgpuGlowOperationParams>(
+    const glow = effect(
       glowDocument,
-      IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+      'image.vgpu-glow',
     );
     expect(glow?.params).toMatchObject({
       schemaVersion: createDefaultVgpuGlowOperationParams().schemaVersion,
@@ -131,9 +137,9 @@ describe('智能助手图片编辑适配', () => {
       glowExposure: 0.7,
       tint: { hue: 28, saturation: 0.6 },
     }], { width: 100, height: 100 });
-    const diffusion = getImageEditOperation<DiffusionOperationParams>(
+    const diffusion = effect(
       diffusionDocument,
-      IMAGE_EDIT_OPERATION_IDS.diffusion,
+      'image.diffusion',
     );
     expect(diffusion?.params).toMatchObject({
       mode: 'glow',
@@ -145,9 +151,9 @@ describe('智能助手图片编辑适配', () => {
       kind: 'vgpu_glow',
       tintColor: IMAGE_EDITOR_GLOW_TINT_HEX.neon,
     }], { width: 100, height: 100 });
-    const glow = getImageEditOperation<VgpuGlowOperationParams>(
+    const glow = effect(
       glowDocument,
-      IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+      'image.vgpu-glow',
     );
     expect(glow?.params).toMatchObject({
       tintEnabled: true,
@@ -216,18 +222,18 @@ describe('智能助手图片编辑适配', () => {
         { kind: 'diffusion' as const, mode: 'glow' as const },
       ],
     },
-  ])('$label 时拒绝静默关闭其中一套参数', ({ operations }) => {
-    expect(() => buildImageEditDocumentFromControlOperations(
+  ])('$label 时顺序保留两套独立图层', ({ operations }) => {
+    expect(buildImageEditDocumentFromControlOperations(
       operations,
       { width: 100, height: 100 },
-    )).toThrow(/请选择并只保留一种光效/);
+    ).layers.filter(layer => layer.type === 'effect')).toHaveLength(2);
   });
 
-  it('拒绝会被构建器静默覆盖的重复单例操作与标注 ID', () => {
-    expect(() => buildImageEditDocumentFromControlOperations([
-      { kind: 'blur', strength: 0.2 },
-      { kind: 'blur', strength: 0.8 },
-    ], { width: 100, height: 100 })).toThrow(/blur 只能出现一次/);
+  it('允许重复效果、拒绝重复标注 ID', () => {
+    expect(buildImageEditDocumentFromControlOperations([
+      { kind: 'blur', sigma_fraction_height: 0.02 },
+      { kind: 'blur', sigma_fraction_height: 0.08 },
+    ], { width: 100, height: 100 }).layers).toHaveLength(2);
 
     expect(() => buildImageEditDocumentFromControlOperations([
       { kind: 'mark', item: { id: 'same', type: 'text', x: 1, y: 2, text: '一', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 10 } },
@@ -238,55 +244,41 @@ describe('智能助手图片编辑适配', () => {
   it.each([
     {
       label: '既有柔光上新增辉光 Pro',
-      existingId: IMAGE_EDIT_OPERATION_IDS.diffusion,
+      existingId: 'image.diffusion',
       existingParams: createDefaultDiffusionOperationParams(),
       incoming: { kind: 'vgpu_glow' as const, look: 'neon' as const },
-      incomingId: IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+      incomingId: 'image.vgpu-glow',
     },
     {
       label: '既有辉光 Pro 上新增柔光',
-      existingId: IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+      existingId: 'image.vgpu-glow',
       existingParams: createDefaultVgpuGlowOperationParams(),
       incoming: { kind: 'diffusion' as const, mode: 'white_mist' as const },
-      incomingId: IMAGE_EDIT_OPERATION_IDS.diffusion,
+      incomingId: 'image.diffusion',
     },
-  ])('$label 时关闭旧光效并保留其参数', ({ existingId, existingParams, incoming, incomingId }) => {
-    const existingOperation = createImageEditOperation(existingId, existingParams, 'existing-effect');
-    const existing = upsertImageEditOperation(createEmptyImageEditDocument(), existingOperation);
+  ])('$label 时保留已有光效并追加新图层', ({ existingId, existingParams, incoming, incomingId }) => {
+    const existing = createImageEditDocumentV3({ width: 100, height: 100 });
+    existing.layers.push(createImageEditEffectLayerV3('existing-effect', '已有光效', existingId, JSON.parse(JSON.stringify(existingParams))));
     const updated = buildImageEditDocumentFromControlOperations(
       [incoming],
       { width: 100, height: 100 },
       existing,
     );
 
-    expect(getImageEditOperation(updated, existingId)).toMatchObject({
+    expect(effect(updated, existingId)).toMatchObject({
       id: 'existing-effect',
-      enabled: false,
+      visible: true,
       params: existingParams,
     });
-    expect(getImageEditOperation(updated, incomingId)?.enabled).toBe(true);
+    expect(effect(updated, incomingId)?.visible).toBe(true);
   });
 
-  it('更新助手标注时保留既有柔光与未知 V2 操作', () => {
-    const existing = upsertImageEditOperation(
-      createEmptyImageEditDocument(),
-      createImageEditOperation(IMAGE_EDIT_OPERATION_IDS.diffusion, {
-        schemaVersion: 1,
-        mode: 'black_mist', presetId: null, strength: 0.3, density: '1/4',
-        source: { thresholdEV: 1, softKneeEV: 1, power: 1, highlightRecovery: 0 },
-        scatter: { highlightAmount: 0.1, microAmount: 0, nearRadius: 0, farRadius: 0.04, tailAmount: 0, tailShape: 2, anisotropy: 0, angle: 0, chromaticSpread: 0 },
-        tone: { veil: 0, blackRetention: 1, highlightCompression: 0, scatterDesaturation: 0 },
-        detail: { highFrequencyRetention: 1, midFrequencyRetention: 1 },
-        lens: { focalLengthEq: 50, aperture: 2.8, positionVariation: 0 }, quality: 'realtime',
-      })
-    );
-    existing.operations.splice(2, 0, { id: 'future', operationId: 'image.future', enabled: true, params: { amount: 1 } });
-    const updated = buildImageEditDocumentFromControlOperations([
-      { kind: 'mark', item: { type: 'text', x: 2, y: 3, text: '保留', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 12 } },
-    ], { width: 100, height: 100 }, existing);
-
-    expect(updated.operations.find((operation) => operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion)).toBeDefined();
-    expect(updated.operations.find((operation) => operation.operationId === 'image.future')).toBeDefined();
-    expect(imageEditDocumentToMarkDoc(updated).items).toHaveLength(1);
+  it('追加标注时保留已有 V3 图层，操作数不受旧 32 条上限约束', () => {
+    const existing = createImageEditDocumentV3({ width: 100, height: 100 });
+    existing.layers.push(createImageEditEffectLayerV3('existing', '柔光', 'image.diffusion', JSON.parse(JSON.stringify(createDefaultDiffusionOperationParams()))));
+    const updated = buildImageEditDocumentFromControlOperations(Array.from({ length: 40 }, (_, index) => ({ kind: 'mark', item: { id: `mark-${index}`, type: 'text', x: 2, y: 3, text: '保留', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 12 } })), { width: 100, height: 100 }, existing);
+    expect(updated.layers[0]).toEqual(existing.layers[0]);
+    expect(annotations(updated)).toHaveLength(40);
+    expect(updated.version).toBe(3);
   });
 });

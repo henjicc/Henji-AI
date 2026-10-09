@@ -28,13 +28,16 @@ describe('正式读入口打开黄金归档与源码', () => {
         expect(imageWorkingCopySchema.safeParse(imported.manifest.document).success).toBe(true)
         const layers = (imported.manifest.document.document as { layers: Array<{ id: string; type: string; adjustmentId?: string }> }).layers
         expect(layers[0]).toMatchObject({ id: 'golden-layer', type: 'raster' })
-        // 黄金样本可含共享全能调色调整层（ie1），其余图层原样保留。
-        for (const layer of layers.slice(1)) expect(layer).toMatchObject({ adjustmentId: 'color_grade' })
+        expect(layers).toHaveLength(4)
+        expect(layers[1]).toMatchObject({ type: 'adjustment', adjustmentId: 'color_grade' })
+        expect(layers[2]).toMatchObject({ type: 'effect', effectId: 'gaussian_blur' })
+        expect(layers[3]).toMatchObject({ type: 'annotation', annotations: [{ id: 'golden-mark' }] })
+        expect(imported.manifest.document.document).toMatchObject({ geometry: { orientation: { rotate: 90, mirrored: true }, crop: { x: 1, y: 2, width: 32, height: 40 } } })
         expect(imported.documentHeader).toBeDefined()
       } finally { await imported.resourceLease.release() }
       expect(await fsp.readFile(source)).toEqual(original)
     }
-    expect((await readImageDocumentPackageHeader(fixture('image-header', 'v1.henjiimg'))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 64, height: 48, layers: 1 } })
+    expect((await readImageDocumentPackageHeader(fixture('image-header', 'v1.henjiimg'))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 32, height: 40, layers: 4 } })
   })
   it('真实项目包导入后剪辑内容和代码文件可读，保留效果、字幕与调色', async () => {
     environment = createTestEnvironment()

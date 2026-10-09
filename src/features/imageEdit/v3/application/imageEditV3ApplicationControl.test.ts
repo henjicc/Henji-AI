@@ -378,11 +378,11 @@ describe('图片编辑 V3 实时 Application Control', () => {
 
     const annotationLayerRef = imageEditV3LayerRef(document.id, 'annotations-b')
     const markRevision = imageMarkRevision()
-    const createdAnnotation = await commitStep('在 V3 标注图层添加矩形', { image_mark: markRevision }, {
+    const createdAnnotation = await commitStep('在 V3 标注图层添加矩形', { image_mark: markRevision, image_edit: markRevision }, {
       kind: 'collection',
       parent: annotationLayerRef,
       entityType: 'image_mark.annotation',
-      expectedRevisions: { image_mark: markRevision },
+      expectedRevisions: { image_mark: markRevision, image_edit: markRevision },
       operation: {
         kind: 'create',
         items: [{ properties: {

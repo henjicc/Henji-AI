@@ -7,15 +7,14 @@ import {
   unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
-import { imageEditDocumentToMarkDoc, type ImageMarkDoc, type MarkItem } from '@/core/imageEdit'
-import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
+import { type ImageMarkDoc, type MarkItem } from '@/core/imageEdit'
 import { requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
-import { listImageEditDocumentEntitiesV3, listImageEditEntitySources } from '@/features/imageEdit/v3/application/imageEditDocumentCatalog'
+import { listImageEditDocumentEntitiesV3 } from '@/features/imageEdit/v3/application/imageEditDocumentCatalog'
 import { collectImageEditV3LiveLayers, findImageEditV3LiveLayer, imageEditV3AnnotationRef, isImageEditV3Ref, splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { ensureImageEditRefInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentLoading'
 
-import { IMAGE_MARK_ANNOTATION_FIELDS, IMAGE_MARK_DOCUMENT_FIELDS, IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
-import { annotationRef, imageMarkRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
+import { IMAGE_MARK_ANNOTATION_FIELDS, IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
+import { imageMarkRevision } from './imageMarkSessionAccess'
 import { IMAGE_EDIT_PREVIEW_ONLY_REASON, imageEditPersistenceAvailabilityV3, imageEditPersistenceRevisionsV3, imageEditPersistencePermissionsV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 
 function digest(seed: string): string {
@@ -25,74 +24,6 @@ function digest(seed: string): string {
 
 function schemaRef(kind: 'entity' | 'property', id: string) {
   return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 1, digest: digest(`${kind}:${id}`) } as const
-}
-
-function paginate<T>(items: T[], request: { cursor?: string; limit: number }): { page: T[]; nextCursor: string | null } {
-  const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
-  const page = items.slice(offset, offset + request.limit)
-  return { page, nextCursor: offset + page.length < items.length ? String(offset + page.length) : null }
-}
-
-/**
- * 标注文档实体（会话态单例）：只有当前打开的编辑器实例才有——与 camera_stage.playback
- * 同一先例（只对当前打开的对象有意义，未打开不列出）。这里天然更简单：imageEditSessionStore
- * 的 sessions 记录本身就是"编辑器是否打开"的信号，不需要像 playback 那样另外判断
- * "有没有播放头"。
- */
-class ImageMarkDocumentReflectionProvider implements ApplicationEntityProvider {
-  readonly entityType = IMAGE_MARK_ENTITY_TYPES.document
-
-  async listEntities(request: { cursor?: string; limit: number }) {
-    const sessionIds = Object.keys(useImageEditSessionStore.getState().sessions)
-    const { page, nextCursor } = paginate(sessionIds, request)
-    return {
-      refs: page.map((sessionId) => ({ kind: this.entityType, id: sessionId })),
-      nextCursor,
-      revisions: { image_mark: imageMarkRevision() },
-    }
-  }
-
-  async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
-    if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
-    const document = requireSessionDocument(ref.id)
-    const markDoc = imageEditDocumentToMarkDoc(document)
-    const values = fieldReadValues(IMAGE_MARK_DOCUMENT_FIELDS, markDoc)
-    return {
-      ref,
-      entityType: this.entityType,
-      revisions: { image_mark: imageMarkRevision() },
-      properties: request.propertyIds ? Object.fromEntries(Object.entries(values).filter(([id]) => request.propertyIds?.includes(id))) : values,
-      capturedAt: new Date().toISOString(),
-    }
-  }
-
-  async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
-    requireSessionDocument(ref.id)
-    const descriptorMap = new Map(fieldDescriptors(IMAGE_MARK_DOCUMENT_FIELDS).map((item) => [item.id, item]))
-    const revisions = { image_mark: imageMarkRevision() }
-    return propertyIds.map((propertyId) => {
-      const descriptor = descriptorMap.get(propertyId)
-      if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
-      const writable = !descriptor.readOnlyReason
-      return {
-        propertyId,
-        readable: true,
-        writable,
-        reasons: writable ? [] : [descriptor.readOnlyReason ?? '只读状态'],
-        requiredPermissions: writable ? descriptor.requiredPermissions.write : descriptor.requiredPermissions.read,
-        revisions,
-      }
-    })
-  }
-
-  async getCollectionAvailability(parent: ApplicationRef) {
-    return unrestrictedCollectionAvailability(
-      this.entityType,
-      parent,
-      { image_mark: imageMarkRevision() },
-      ['image_mark:write'],
-    )
-  }
 }
 
 function findAnnotation(markDoc: ImageMarkDoc, annotationId: string): MarkItem {
@@ -106,46 +37,26 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
   readonly entityType = IMAGE_MARK_ENTITY_TYPES.annotation
 
   async listEntities(request: { cursor?: string; limit: number }) {
-    const sessions = useImageEditSessionStore.getState().sessions
-    const legacyRefs: ApplicationRef[] = Object.entries(sessions).flatMap(([sessionId, record]) =>
-      imageEditDocumentToMarkDoc(record.document).items.map((item) => annotationRef(sessionId, item))
-    )
-    return listImageEditEntitySources(request, [async (pageRequest) => {
-      const { page, nextCursor } = paginate(legacyRefs, pageRequest)
-      return { refs: page, nextCursor, revisions: { image_mark: imageMarkRevision() } }
-    }, async (pageRequest) => {
-      const current = await listImageEditDocumentEntitiesV3(pageRequest, (document) =>
-        collectImageEditV3LiveLayers(document).flatMap(({ layer }) =>
-          layer.type === 'annotation'
-            ? layer.annotations.map((item) => imageEditV3AnnotationRef(document.id, layer.id, item.id))
-            : []
-        )
-      )
-      return { ...current, revisions: { image_mark: imageMarkRevision() } }
-    }])
+    const current = await listImageEditDocumentEntitiesV3(request, (document) =>
+      collectImageEditV3LiveLayers(document).flatMap(({ layer }) =>
+        layer.type === 'annotation' ? layer.annotations.map(item => imageEditV3AnnotationRef(document.id, layer.id, item.id)) : []))
+    return { ...current, revisions: { image_mark: imageMarkRevision(), image_edit: imageMarkRevision() } }
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
     if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
-    const item = isImageEditV3Ref(ref)
-      ? await (async () => {
-          await ensureImageEditRefInstanceV3(ref)
-          const { documentId, layerId, annotationId } = splitImageEditV3AnnotationRef(ref)
-          const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
-          const location = findImageEditV3LiveLayer(document, layerId)
-          if (!location || location.layer.type !== 'annotation') throw new Error('NOT_FOUND')
-          return findAnnotation({ version: 1, orientation: { rotate: 0, mirrored: false }, crop: null, items: location.layer.annotations }, annotationId)
-        })()
-      : (() => {
-          const { sessionId, annotationId } = splitAnnotationRef(ref)
-          const document = requireSessionDocument(sessionId)
-          return findAnnotation(imageEditDocumentToMarkDoc(document), annotationId)
-        })()
+    await ensureImageEditRefInstanceV3(ref)
+    const { documentId, layerId, annotationId } = splitImageEditV3AnnotationRef(ref)
+    const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
+    const location = findImageEditV3LiveLayer(document, layerId)
+    if (!location || location.layer.type !== 'annotation') throw new Error('NOT_FOUND')
+    const item = location.layer.annotations.find(candidate => candidate.id === annotationId)
+    if (!item) throw new Error('NOT_FOUND')
     const values = fieldReadValues(IMAGE_MARK_ANNOTATION_FIELDS, item)
     return {
       ref,
       entityType: this.entityType,
-      revisions: { image_mark: imageMarkRevision(), ...imageEditPersistenceRevisionsV3(ref) },
+      revisions: { image_mark: imageMarkRevision(), image_edit: imageMarkRevision(), ...imageEditPersistenceRevisionsV3(ref) },
       properties: request.propertyIds ? Object.fromEntries(Object.entries(values).filter(([id]) => request.propertyIds?.includes(id))) : values,
       capturedAt: new Date().toISOString(),
     }
@@ -164,13 +75,9 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
       if (location.layer.locked || location.ancestors.some((ancestor) => ancestor.locked)) {
         stateReason = '标注图层或其父组已锁定。'
       }
-    } else {
-      const { sessionId, annotationId } = splitAnnotationRef(ref)
-      const document = requireSessionDocument(sessionId)
-      findAnnotation(imageEditDocumentToMarkDoc(document), annotationId)
-    }
+    } else throw new Error('NOT_FOUND')
     const descriptorMap = new Map(fieldDescriptors(IMAGE_MARK_ANNOTATION_FIELDS).map((item) => [item.id, item]))
-    const revisions = { image_mark: imageMarkRevision(), ...imageEditPersistenceRevisionsV3(ref) }
+    const revisions = { image_mark: imageMarkRevision(), image_edit: imageMarkRevision(), ...imageEditPersistenceRevisionsV3(ref) }
     return propertyIds.map((propertyId) => {
       const descriptor = descriptorMap.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
@@ -196,7 +103,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
       const availability = imageEditPersistenceAvailabilityV3(documentId, unrestrictedCollectionAvailability(
         this.entityType,
         parent,
-        { image_mark: imageMarkRevision() },
+        { image_mark: imageMarkRevision(), image_edit: imageMarkRevision() },
         ['image_mark:write'],
       ))
       if (!requireImageEditDocumentInstanceV3(documentId).persistenceOwner) return imageEditPersistenceAvailabilityV3(documentId, availability)
@@ -206,7 +113,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
         kind: 'state' as const,
         requirementId: 'image_edit.annotation_layer.unlocked',
         affectedEntityTypes: ['image_edit.layer'],
-        revisionScopes: ['image_mark'],
+        revisionScopes: ['image_mark', 'image_edit'],
       }
       return {
         ...availability,
@@ -214,13 +121,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
         remove: { ...availability.remove, available: false, reasons: [reason], blocks: [block] },
       }
     }
-    requireSessionDocument(parent.id)
-    return unrestrictedCollectionAvailability(
-      this.entityType,
-      parent,
-      { image_mark: imageMarkRevision() },
-      ['image_mark:write'],
-    )
+    throw new Error('NOT_FOUND')
   }
 }
 
@@ -228,34 +129,16 @@ export function createImageMarkReflectionRegistrations(): ApplicationEntityRegis
   return [
     {
       entity: {
-        id: IMAGE_MARK_ENTITY_TYPES.document,
-        domain: 'image_mark',
-        version: 1,
-        title: '标注文档',
-        description: '一次图片标注编辑会话的文档：旋转/镜像与裁剪矩形。只在编辑器打开期间存在。',
-        refKind: IMAGE_MARK_ENTITY_TYPES.document,
-        dataClass: 'C1',
-        exposures: ['ui', 'assistant', 'local_adapter'],
-        parentTypes: [],
-        revisionScopes: ['image_mark'],
-        queryCapabilityIds: ['read_application_entity'],
-        schemaRef: schemaRef('entity', IMAGE_MARK_ENTITY_TYPES.document),
-      },
-      properties: fieldDescriptors(IMAGE_MARK_DOCUMENT_FIELDS),
-      provider: new ImageMarkDocumentReflectionProvider(),
-    },
-    {
-      entity: {
         id: IMAGE_MARK_ENTITY_TYPES.annotation,
         domain: 'image_mark',
         version: 1,
         title: '标注对象',
-        description: '标注文档下的一条标注（画笔/矩形/箭头/文字/打码等），挂在 image_mark.document 下。',
+        description: 'V3 标注图层下的一条标注（画笔/矩形/箭头/文字/打码等）。',
         refKind: IMAGE_MARK_ENTITY_TYPES.annotation,
         dataClass: 'C1',
         exposures: ['ui', 'assistant', 'local_adapter'],
-        parentTypes: [IMAGE_MARK_ENTITY_TYPES.document, 'image_edit.layer'],
-        revisionScopes: ['image_mark'],
+        parentTypes: ['image_edit.layer'],
+        revisionScopes: ['image_mark', 'image_edit'],
         queryCapabilityIds: ['read_application_entity'],
         schemaRef: schemaRef('entity', IMAGE_MARK_ENTITY_TYPES.annotation),
         /**

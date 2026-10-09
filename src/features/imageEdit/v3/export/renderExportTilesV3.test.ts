@@ -51,19 +51,19 @@ describe('图片编辑 V3 分块导出渲染', () => {
     expect(clear[(1 * 32 + 15) * 4]).toBe(255)
   })
 
-  it('允许迁移后的 Blur v1 在分块导出中保持旧版感知域模糊', async () => {
+  it('正式高斯在分块导出中作用于下方标注', async () => {
     const document = createImageEditDocumentV3({
       width: 32,
       height: 4,
-      documentId: 'legacy-blur-export',
+      documentId: 'gaussian-export',
       sourceResourceId: SOURCE,
     })
     const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
     const blur = createImageEditEffectLayerV3(
-      'legacy-blur',
-      '旧版模糊',
-      'image.blur',
-      { algorithm: 'gaussian', strength: 0.5, radiusPixels: 1 },
+      'gaussian',
+      '高斯模糊',
+      'gaussian_blur',
+      { sigma_fraction_height: 1 / 3 },
     )
     document.layers.push(annotation, blur)
 

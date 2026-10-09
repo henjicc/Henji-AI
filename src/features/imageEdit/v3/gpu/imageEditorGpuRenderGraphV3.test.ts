@@ -134,18 +134,6 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
   })
 
-  it('legacy blur-v1保持CPU感知域与120px封顶真值', async () => {
-    const document = baseDocument('legacy-gaussian')
-    document.layers = [
-      raster(112, '源'),
-      createImageEditEffectLayerV3('legacy-gaussian', '旧版模糊', 'image.blur', {
-        radiusPixels: 160,
-      }),
-    ]
-    const result = await compareDocument(document, tiles([112]))
-    expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
-  })
-
   it.each([
     ['小图/最小值', 16, 12, 0],
     ['小图/默认值', 16, 12, 12],

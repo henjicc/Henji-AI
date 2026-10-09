@@ -1,5 +1,5 @@
 import type { ApplicationRef } from '@/core/application-control/applicationCapabilities'
-import type { ImageEditDocument } from '@/core/imageEdit/index'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { createLogger } from '@/core/logging/index'
 import { inspectAsset } from '@/commands/assetLibrary'
 import { readImageInfo } from '@/commands/image'
@@ -18,7 +18,7 @@ interface ResolvedImageSource {
   ref: ApplicationRef
   source: string
   name: string
-  document?: ImageEditDocument
+  document?: ImageEditDocumentV3
 }
 
 async function resolveImageSource(ref: ApplicationRef): Promise<ResolvedImageSource> {
@@ -55,22 +55,12 @@ async function resolveImageSource(ref: ApplicationRef): Promise<ResolvedImageSou
   if (ref.kind === 'image_edit.preview') {
     const preview = getStoredImageEditPreview(ref.id)
     if (!preview) throw new Error('NOT_FOUND')
-    try {
-      const info = await readImageInfo(preview.source)
-      return {
-        ref,
-        source: preview.source,
-        name: info.fileName || `图片编辑预览-${ref.id.slice(-8)}.${info.extension || 'png'}`,
-        document: structuredClone(preview.document),
-      }
-    } catch {
-      throw new Error('NOT_FOUND')
-    }
+    return { ref, source: preview.source, name: `图片编辑预览-${ref.id.slice(-8)}.png`, document: structuredClone(preview.document) }
   }
   throw new Error('INVALID_INPUT')
 }
 
-function openImageEditor(source: ResolvedImageSource, document?: ImageEditDocument): string {
+function openImageEditor(source: ResolvedImageSource, document?: ImageEditDocumentV3): string {
   const sessionRef = `image-edit-session:${source.ref.kind}:${source.ref.id}`
   offerImageEditorHandoff({
     sessionRef,

@@ -117,65 +117,12 @@ export interface MarkCropRect {
   height: number;
 }
 
-/** V1 兼容文档：坐标位于当前朝向下的图片像素空间。 */
+/** 标注绘制与独立蒙版工具使用的几何投影，不作为持久图片文档。 */
 export interface ImageMarkDoc {
   version: 1;
   items: MarkItem[];
   orientation: MarkOrientation;
   crop: MarkCropRect | null;
-}
-
-/** V1 兼容会话，第三阶段完成前保持公开。 */
-export interface ImageMarkSession {
-  sourceUrl: string;
-  doc: ImageMarkDoc;
-}
-
-export const IMAGE_EDIT_DOCUMENT_VERSION = 2 as const;
-
-export const IMAGE_EDIT_OPERATION_IDS = {
-  orientation: 'image.orientation',
-  blur: 'image.blur',
-  diffusion: 'image.diffusion',
-  vgpuGlow: 'image.vgpu-glow',
-  annotations: 'image.annotations',
-  crop: 'image.crop',
-} as const;
-
-export type BuiltInImageEditOperationId =
-  typeof IMAGE_EDIT_OPERATION_IDS[keyof typeof IMAGE_EDIT_OPERATION_IDS];
-
-export interface ImageEditOperation<TParams extends object = object> {
-  /** 文档内的操作实例 ID。 */
-  id: string;
-  /** 注册表中的稳定能力 ID。 */
-  operationId: string;
-  enabled: boolean;
-  params: TParams;
-}
-
-export interface ImageEditDocument {
-  version: typeof IMAGE_EDIT_DOCUMENT_VERSION;
-  /** 数组顺序就是执行顺序。 */
-  operations: ImageEditOperation[];
-}
-
-export interface ImageEditSession {
-  sourceUrl: string;
-  document: ImageEditDocument;
-}
-
-export interface OrientationOperationParams {
-  rotate: MarkRotation;
-  mirrored: boolean;
-}
-
-export interface AnnotationOperationParams {
-  items: MarkItem[];
-}
-
-export interface CropOperationParams {
-  rect: MarkCropRect | null;
 }
 
 export type DiffusionMode = 'black_mist' | 'white_mist' | 'glow';
@@ -276,9 +223,7 @@ export function isNeutralOrientation(orientation: MarkOrientation): boolean {
   return orientation.rotate === 0 && !orientation.mirrored;
 }
 
-export function hasMarkEffect(doc: ImageMarkDoc): boolean {
-  return doc.items.length > 0 || !isNeutralOrientation(doc.orientation) || doc.crop !== null;
-}
+
 
 export function isLabeledMark(item: MarkItem): item is LabeledMark {
   return item.type === 'rect' || item.type === 'ellipse' || item.type === 'arrow';

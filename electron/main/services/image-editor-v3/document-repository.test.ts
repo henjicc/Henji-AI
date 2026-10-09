@@ -286,24 +286,21 @@ describe('ImageEditDocumentRepository', () => {
     })).rejects.toThrow('逆向补丁')
   })
 
-  it('无历史的早期 V3 也必须通过严格文档 codec，并保留 legacy 效果载荷', async () => {
+  it('未知效果只保留 V3 参数；旧 V2 载荷和未登记图层明确拒绝', async () => {
     const repository = new ImageEditDocumentRepository(rootDir)
-    const legacy = {
+    const futureEffect = {
       ...createImageEditEffectLayerV3(
-        'legacy-effect',
-        '旧效果',
-        'legacy.v2.unknown',
+        'future-effect',
+        '未来效果',
+        'image.future-effect',
         {},
         false,
       ),
-      legacyOperation: {
-        sourceVersion: 2 as const,
-        operation: { type: 'future-effect', amount: 0.5 },
-      },
+
     }
     const document: ImageEditDocumentV3 = {
-      ...documentAt('legacy-document', 0),
-      layers: [legacy],
+      ...documentAt('future-document', 0),
+      layers: [futureEffect],
     }
     const saved = await repository.create({
       documentId: document.id,
@@ -312,9 +309,10 @@ describe('ImageEditDocumentRepository', () => {
     expect(saved.history).toBeUndefined()
     expect((saved.document as ImageEditDocumentV3).layers[0]).toMatchObject({
       renderable: false,
-      legacyOperation: { operation: { type: 'future-effect', amount: 0.5 } },
+      params: {},
     })
 
+    await expect(repository.create({ documentId: 'retired', document: { ...documentAt('retired', 0), layers: [{ ...futureEffect, legacyOperation: { sourceVersion: 2, operation: { amount: 0.5 } } }] } })).rejects.toThrow('invalid-v3-document')
     await expect(repository.create({
       documentId: 'invalid-layer-document',
       document: {

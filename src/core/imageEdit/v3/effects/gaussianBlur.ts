@@ -1,5 +1,4 @@
 import { createFloat32PremultipliedRgbaTile, mixProcessedWithMask, assertFloat32PremultipliedRgbaTile, type CpuReferenceKernelContract, type Float32PremultipliedRgbaTile, type Float32TileProcessOptions } from './contracts'
-import { convertFloat32TileColorDomainV3 } from '../execution/tileColor'
 import { GAUSSIAN_EFFECT, gaussianParameterSchema, type GaussianParameters, type ResolvedGaussianPlan } from '../../../imaging/effects/gaussian'
 import { executeGaussianCpu } from '../../../imaging/effects/cpu/gaussian'
 import type { EffectEvaluationContext, EffectQuality } from '../../../imaging/effects/descriptor'
@@ -23,11 +22,6 @@ export interface GaussianBlurV2Geometry {
 export const GAUSSIAN_BLUR_V2_CONTRACT: CpuReferenceKernelContract = {
   id: 'effect.gaussian_blur', version: 2, inputColorDomain: 'linear-light', outputColorDomain: 'linear-light', alpha: 'premultiplied', precision: 'float32', maskMix: 'source-to-processed',
 }
-/** 仅保留旧 dispatch 的输入输出包装；滤波语义统一为线性光，没有半径封顶。 */
-export const LEGACY_GAUSSIAN_BLUR_V1_CONTRACT: CpuReferenceKernelContract = {
-  id: 'effect.blur-v1', version: 1, inputColorDomain: 'perceptual-working', outputColorDomain: 'perceptual-working', alpha: 'premultiplied', precision: 'float32', maskMix: 'source-to-processed',
-}
-
 export function resolveImageGaussianPlan(parameters: GaussianParameters, context: EffectEvaluationContext): ResolvedGaussianPlan {
   return GAUSSIAN_EFFECT.resolve(parameters, context)
 }
@@ -59,13 +53,6 @@ export function applyGaussianBlurV2(tile: Float32PremultipliedRgbaTile, paramete
   const plan = resolveGaussianPixelPlan({ ...parameters, radius: sigma, mip: 0 }, tile.width, tile.height)
   const data = executeGaussianCpu(plan, { x: 0, y: 0, width: tile.width, height: tile.height, data: tile.data }).data
   return mixProcessedWithMask(tile, createFloat32PremultipliedRgbaTile(tile.width, tile.height, 'linear-light', data, tile.workingSpace, tile.transferFunction, tile.referenceWhiteNits), options.mask)
-}
-
-export function applyLegacyGaussianBlurV1(tile: Float32PremultipliedRgbaTile, radiusPixels: number, options: Float32TileProcessOptions = {}): Float32PremultipliedRgbaTile {
-  assertFloat32PremultipliedRgbaTile(tile)
-  const linear = convertFloat32TileColorDomainV3(tile, 'linear-light')
-  const processed = applyGaussianBlurV2(linear, { radius: radiusPixels, mip: 0 })
-  return mixProcessedWithMask(tile, convertFloat32TileColorDomainV3(processed, tile.colorDomain), options.mask)
 }
 
 function validateGaussianParameters(parameters: GaussianBlurV2Parameters): void {

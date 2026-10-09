@@ -9,10 +9,9 @@ import { gaussianExecutionWindows, executeGaussianCpu } from '../../imaging/effe
 import { createFloat32PremultipliedRgbaTile, mixProcessedWithMask } from './effects/contracts';
 import { convertFloat32TileColorDomainV3 } from './execution/tileColor';
 import { resolveImageGaussianPlan } from './effects/gaussianBlur';
-import { colorGradeCpuV3, exposureCpuV3, curvesCpuV3, temperatureCpuV3, hslCpuV3, legacyBlurCpuV3, fastBlurCpuV3, diffusionCpuV3, glowCpuV3 } from './execution/pixelKernels';
+import { colorGradeCpuV3, exposureCpuV3, curvesCpuV3, temperatureCpuV3, hslCpuV3, fastBlurCpuV3, diffusionCpuV3, glowCpuV3 } from './execution/pixelKernels';
 import { imageEditorGpuExposureParametersV3, imageEditorGpuHslParametersV3, imageEditorGpuTemperatureMatrixV3 } from './gpuAdjustmentPacking';
 import { colorGradeSpatialSupport } from '../../imaging/adjustments/plan'
-import { gaussianBlurHalo } from './tileGeometry';
 import { resolveFastBlurV3Geometry } from './effects/fastBlur';
 import {
   ImageEditRenderNodeRegistry,
@@ -46,16 +45,6 @@ const definitions: readonly RenderNodeDefinition[] = [
     qualities: ['draft', 'stable', 'export'], backends: ['webgpu', 'browser-canvas', 'cpu-libvips'],
     fusion: 'never', invalidation: 'tile',
     estimateBytes: (context) => estimateRgbaTileBytes(context),
-  },
-  {
-    id: 'effect.blur-v1', operation: { id: 'image.blur', layerType: 'effect', creatable: false }, cpu: legacyBlurCpuV3, gpu: { kind: 'effect', kernel: 'legacy-gaussian' }, version: 1, category: 'local', color: PASSTHROUGH_PREMULTIPLIED,
-    qualities: ['draft', 'stable', 'export'], backends: ['webgpu', 'browser-canvas', 'cpu-libvips'],
-    fusion: 'never', invalidation: 'tile-with-halo',
-    localHalo: (parameters, mip) => {
-      const radius = Number((parameters as { radiusPixels?: unknown }).radiusPixels ?? 0);
-      return gaussianBlurHalo(Number.isFinite(radius) ? Math.max(0, radius) : 0, mip);
-    },
-    estimateBytes: (context) => estimateRgbaTileBytes(context, 2),
   },
   {
     id: 'effect.fast-blur', operation: { id: 'image.fast-blur-v3', layerType: 'effect', creatable: true, defaults: () => ({ radius: 12 }) }, cpu: fastBlurCpuV3, gpu: { kind: 'effect', kernel: 'fast-blur' }, version: 3, category: 'global-analysis', color: LINEAR_PREMULTIPLIED,

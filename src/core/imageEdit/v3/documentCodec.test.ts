@@ -13,12 +13,6 @@ import {
 } from './layerTypes';
 
 function createNestedDocument(): ImageEditDocumentV3 {
-  const legacyOperation = {
-    id: 'future-instance',
-    operationId: 'vendor.future-light',
-    enabled: true,
-    params: { amount: 0.75, stops: [0, 0.5, 1], mode: 'future' },
-  };
   const group: ImageEditGroupLayerV3 = {
     ...createImageEditLayerCommonV3('group-1', '光效组'),
     type: 'group',
@@ -29,7 +23,6 @@ function createNestedDocument(): ImageEditDocumentV3 {
       effectId: 'vendor.future-light',
       params: { amount: 0.75, nested: { values: [1, true, null] } },
       renderable: false,
-      legacyOperation: { sourceVersion: 2, operation: legacyOperation },
     }, {
       ...createImageEditLayerCommonV3('adjustment-1', '曝光'),
       type: 'adjustment',
@@ -61,11 +54,7 @@ describe('图片编辑 V3 文档编解码', () => {
     const unknown = group.children[0];
     expect(unknown).toMatchObject({ type: 'effect', renderable: false });
     if (unknown.type !== 'effect') throw new Error('测试文档未知效果解析失败');
-    expect(unknown.legacyOperation?.operation).toEqual(
-      (source.layers[0] as ImageEditGroupLayerV3).children[0].type === 'effect'
-        ? ((source.layers[0] as ImageEditGroupLayerV3).children[0] as typeof unknown).legacyOperation?.operation
-        : null
-    );
+    expect(unknown.params).toEqual({ amount: .75, nested: { values: [1, true, null] } });
   });
 
   it('往返 512 Float32 稀疏蒙版且拒绝伪造整图或错误 tileSize', () => {

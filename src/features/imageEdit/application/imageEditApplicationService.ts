@@ -1,13 +1,18 @@
-import { persistImageSource, readImageInfo } from '@/commands/image'
+import { ingestImageEditorV3Source, ImageEditorV3CommandRepository, loadImageEditorV3Document } from '@/commands/imageEditorV3'
+import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import { parseImageEditDocumentV3 } from '@/core/imageEdit/v3/documentCodec'
+import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
+import { imageEditOutputSizeV3 } from '@/core/imageEdit/v3/outputGeometry'
+import { createImageMarkV3ColorMode, prepareImageEditSourceLocatorV3 } from '@/features/imageEdit/v3/application/imageEditSourceV3'
+import { materializeImageEditSnapshotV3 } from '../v3/application/imageEditMaterializationV3'
+import { persistImageSource } from '@/commands/image'
 import { inspectAsset } from '@/commands/assetLibrary'
 import {
   createMarkId,
-  hasImageEditEffect,
-  parseImageEditDocument,
 } from '@/core/imageEdit'
 import { createLogger } from '@/core/logging'
 import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
-import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution'
 
 import { buildImageEditDocumentFromControlOperations } from './imageEditDocumentBuilder'
 import {
@@ -30,12 +35,13 @@ export async function materializeImageEditPreview(previewRef: string): Promise<s
   const cached = renderedPreviews.get(preview)
   if (cached?.signature === signature) return cached.source
   const document = structuredClone(preview.document)
-  const source = preview.source
   const pending = (async () => {
     logger.info('编辑结果准备开始', { event: 'image_edit.preview.materialize.start', previewRef })
     try {
-      const rendered = await exportImageEditDocument(source, document)
-      const filePath = await persistImageSource(rendered)
+      const snapshot = await loadImageEditorV3Document({ requestId: `preview-export:${document.id}:${document.revision}`, documentRef: `image-edit-v3:${document.id}` })
+      if (!snapshot || snapshot.documentRef !== `image-edit-v3:${document.id}` || snapshot.document.id !== document.id || snapshot.document.revision !== document.revision || snapshot.revision !== document.revision) throw new Error('预览文档与权威快照不一致')
+      const rendered = await materializeImageEditSnapshotV3(snapshot, 'edited.png')
+      const filePath = await persistImageSource(rendered.raster.mediaUrl)
       logger.info('编辑结果准备完成', { event: 'image_edit.preview.materialize.completed', previewRef })
       return filePath
     } catch (error) {
@@ -60,14 +66,18 @@ export async function createImageEditPreview(input: {
     operationCount: input.operations.length,
   })
   try {
-    const info = await readImageInfo(input.source)
-    const document = buildImageEditDocumentFromControlOperations(
-      input.operations,
-      info,
-      input.existingDocument === undefined
-        ? undefined
-        : parseImageEditDocument(input.existingDocument),
-    )
+    let initial: ImageEditDocumentV3
+    if (input.existingDocument !== undefined) {
+      initial = { ...parseImageEditDocumentV3(input.existingDocument), id: createMarkId(), revision: 0 }
+    } else {
+      const managed = await ingestImageEditorV3Source({ requestId: `preview-source:${createMarkId()}`, source: await prepareImageEditSourceLocatorV3(input.source) })
+      initial = createImageEditDocumentV3({ width: managed.metadata.width, height: managed.metadata.height, sourceResourceId: managed.resource.resourceRef, color: createImageMarkV3ColorMode(managed.metadata) })
+    }
+    const document = buildImageEditDocumentFromControlOperations(input.operations, initial.geometry, initial)
+    const history = new ImageEditCommandHistoryV3()
+    history.clear(document)
+    await new ImageEditorV3CommandRepository().save(document, { expectedRevision: 0, previewRef: null, history: history.createSnapshot() })
+    const info = imageEditOutputSizeV3(document.geometry)
     const createdAt = Date.now()
     const previewRef = `image-edit-preview:${createMarkId()}`
     storeImageEditPreview({
@@ -90,7 +100,7 @@ export async function createImageEditPreview(input: {
       previewRef,
       sourceRef: input.sourceRef,
       operationCount: input.operations.length,
-      hasEffect: hasImageEditEffect(document),
+      hasEffect: document.revision > 0,
       width: info.width,
       height: info.height,
       document,

@@ -3,13 +3,11 @@ import {
   applyExposureAdjustment,
   applyFastBlurV3,
   applyGaussianBlurV2,
-  applyLegacyGaussianBlurV1,
   createFloat32MaskTile,
   createFloat32PremultipliedRgbaTile,
   EXPOSURE_ADJUSTMENT_CONTRACT,
   FAST_BLUR_V3_CONTRACT,
   GAUSSIAN_BLUR_V2_CONTRACT,
-  LEGACY_GAUSSIAN_BLUR_V1_CONTRACT,
   resolveGaussianBlurV2Geometry,
   resolveFastBlurV3Geometry,
 } from './index';
@@ -192,31 +190,5 @@ describe('Blur v3 快速 CPU 后备', () => {
     expect(blurred.data[11]).toBeGreaterThan(0);
     expect(blurred.data[8] / blurred.data[11]).toBeCloseTo(2, 5);
     expect(blurred.data[9] / blurred.data[11]).toBeCloseTo(0.5, 5);
-  });
-});
-
-describe('legacy Blur v1 委托共享高斯', () => {
-  it('输入输出包装保持预乘域，线性滤波不再有120px封顶', () => {
-    const source = createFloat32PremultipliedRgbaTile(
-      3,
-      1,
-      'perceptual-working',
-      new Float32Array([
-        0, 0, 0, 0,
-        1, 1, 1, 1,
-        0, 0, 0, 0,
-      ]),
-    );
-    const capped = applyLegacyGaussianBlurV1(source, 320);
-    const legacyMaximum = applyLegacyGaussianBlurV1(source, 120);
-
-    expect(capped.data).not.toEqual(legacyMaximum.data);
-    expect(capped.data[0]).toBeGreaterThan(0);
-    expect(capped.data[4]).toBeLessThan(1);
-    expect(LEGACY_GAUSSIAN_BLUR_V1_CONTRACT).toMatchObject({
-      version: 1,
-      inputColorDomain: 'perceptual-working',
-      alpha: 'premultiplied',
-    });
   });
 });
