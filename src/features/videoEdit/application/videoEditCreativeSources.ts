@@ -11,8 +11,7 @@ import { exportAudioEdit } from '@/features/audioEdit/application/audioEditAppli
 import { flushAudioEditProject, getAudioEditProjectInstance, loadAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { loadImageEditorV3Document, createImageEditorV3RequestId } from '@/commands/imageEditorV3'
 import { materializeImageEditorV3StandaloneRaster } from '@/commands/imageEditorV3Export'
-import { createImageMarkV3RasterExportSpec } from '@/features/imageMark/standalone/imageMarkV3RasterExport'
-import { prepareImageEditorV3ExportRender, renderImageEditorV3ExportTilesWithGpu } from '@/features/imageEdit/v3/export'
+import { createImageMarkV3RasterExportSpec } from '@/features/imageMark/standalone/imageMarkV3RasterExportSpec'
 import { ensureImageDocumentOpenInBackground } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import { getPlatform } from '@/platform/runtime'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
@@ -149,6 +148,15 @@ async function imageSource(meta: DocumentMeta, revision: number | undefined, opt
   const fingerprint = snapshot.sourceFingerprint
   const spec = createImageMarkV3RasterExportSpec(snapshot.document, meta.name)
   if (!IMAGE_EDIT_VIDEO_FORMATS.has(spec.format)) throw new Error('此图片文档为高位深或 HDR，需要先在图片编辑中导出为 PNG 后再加入剪辑。')
+  const { prepareImageEditorV3ExportRender, renderImageEditorV3ExportTilesWithGpu } = await guarded(options, async () => {
+    try { return await import('@/features/imageEdit/v3/export') }
+    catch (error) {
+      logger.error('加载图片导出功能失败', error, {
+        event: 'video_edit.creative_source.image_export.load.failed', context: { documentId: meta.id },
+      })
+      throw new Error('图片导出功能加载失败，请重试；若仍失败，请重新打开应用', { cause: error })
+    }
+  })
   prepareImageEditorV3ExportRender(snapshot.document, spec.description)
   assertCurrent(options)
   const tiles = renderImageEditorV3ExportTilesWithGpu({ document: snapshot.document, resourceDescriptors: snapshot.resources, description: spec.description, tileSize: 512, signal: options.signal })

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   render: vi.fn(),
   materialize: vi.fn(),
+  loadRenderer: vi.fn(),
 }))
 
 vi.mock('@/features/imageEdit/v3/export', async () => {
@@ -32,6 +33,10 @@ vi.mock('@/features/imageEdit/v3/export', async () => {
 
 vi.mock('@/commands/imageEditorV3Export', () => ({
   materializeImageEditorV3Raster: mocks.materialize,
+}))
+
+vi.mock('./loadCanvasImageEditExportRenderer', () => ({
+  loadCanvasImageEditExportRenderer: mocks.loadRenderer,
 }))
 
 function snapshot(): ImageEditorV3DocumentSnapshot {
@@ -62,6 +67,10 @@ describe('画布图片编辑 V3 受管物化', () => {
       plan: { nodes: [], diagnostics: [] },
     })
     mocks.render.mockReset().mockReturnValue(tiles)
+    mocks.loadRenderer.mockReset().mockResolvedValue({
+      prepareImageEditorV3ExportRender: mocks.prepare,
+      renderImageEditorV3ExportTilesWithGpu: mocks.render,
+    })
     mocks.materialize.mockReset().mockResolvedValue({
       outputRef: 'image-export-v3:canvas-document@3:png8',
       documentRef: 'image-edit-v3:canvas-document',
@@ -137,6 +146,19 @@ describe('画布图片编辑 V3 受管物化', () => {
       snapshot(),
       'source.png',
     )).rejects.toThrow('版本不一致')
+  })
+
+  it('等待渲染器加载期间取消，不预检、不创建输出会话', async () => {
+    const controller = new AbortController()
+    let resolve!: (renderer: { prepareImageEditorV3ExportRender: typeof mocks.prepare;
+      renderImageEditorV3ExportTilesWithGpu: typeof mocks.render }) => void
+    mocks.loadRenderer.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    const pending = materializeCanvasEditV3Snapshot(snapshot(), 'source.png', controller.signal)
+    controller.abort()
+    resolve({ prepareImageEditorV3ExportRender: mocks.prepare, renderImageEditorV3ExportTilesWithGpu: mocks.render })
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(mocks.prepare).not.toHaveBeenCalled()
+    expect(mocks.materialize).not.toHaveBeenCalled()
   })
 
   it('拒绝主进程返回与权威渲染计划不一致的尺寸或格式', async () => {

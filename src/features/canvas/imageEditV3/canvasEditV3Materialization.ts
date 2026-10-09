@@ -1,12 +1,9 @@
 import { materializeImageEditorV3Raster } from '@/commands/imageEditorV3Export'
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit'
-import {
-  prepareImageEditorV3ExportRender,
-  renderImageEditorV3ExportTilesWithGpu,
-} from '@/features/imageEdit/v3/export'
+import { loadCanvasImageEditExportRenderer } from './loadCanvasImageEditExportRenderer'
 import {
   createImageMarkV3RasterExportSpec,
-} from '@/features/imageMark/standalone/imageMarkV3RasterExport'
+} from '@/features/imageMark/standalone/imageMarkV3RasterExportSpec'
 import type {
   ImageEditorV3DocumentSnapshot,
   ImageEditorV3ManagedRasterExportResult,
@@ -40,6 +37,12 @@ export async function materializeCanvasEditV3Snapshot(
     throw error
   }
   const spec = createImageMarkV3RasterExportSpec(snapshot.document, sourceName)
+  const { prepareImageEditorV3ExportRender, renderImageEditorV3ExportTilesWithGpu } = await loadCanvasImageEditExportRenderer()
+  if (signal?.aborted) {
+    const error = new Error('画布图片编辑输出已取消')
+    error.name = 'AbortError'
+    throw error
+  }
   prepareImageEditorV3ExportRender(snapshot.document, spec.description)
   const tiles = renderImageEditorV3ExportTilesWithGpu({
     document: snapshot.document,

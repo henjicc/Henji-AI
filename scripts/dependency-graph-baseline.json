@@ -1399,6 +1399,14 @@
       "cell": "canvas → navigation"
     },
     {
+      "from": "src/features/canvas/capabilities/elementEditPolicy.ts",
+      "to": "src/features/maskEditor/document.ts",
+      "kind": "static",
+      "specifier": "@/features/maskEditor/document",
+      "line": 2,
+      "cell": "canvas → maskEditor"
+    },
+    {
       "from": "src/features/canvas/domain/defaultModels.ts",
       "to": "src/features/settings/modelDefaultsManager.ts",
       "kind": "static",
@@ -1488,18 +1496,10 @@
     },
     {
       "from": "src/features/canvas/imageEditV3/canvasEditV3Materialization.ts",
-      "to": "src/features/imageEdit/v3/export/index.ts",
+      "to": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
       "kind": "static",
-      "specifier": "@/features/imageEdit/v3/export",
-      "line": 3,
-      "cell": "canvas → imageEdit"
-    },
-    {
-      "from": "src/features/canvas/imageEditV3/canvasEditV3Materialization.ts",
-      "to": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExport",
-      "line": 7,
+      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExportSpec",
+      "line": 4,
       "cell": "canvas → imageMark"
     },
     {
@@ -1525,6 +1525,22 @@
       "specifier": "@/features/imageMark/standalone/imageMarkV3Source",
       "line": 15,
       "cell": "canvas → imageMark"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/loadCanvasImageEditExportRenderer.ts",
+      "to": "src/features/imageEdit/v3/export/index.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/imageEdit/v3/export",
+      "line": 9,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/loadCanvasImageEditExportRenderer.ts",
+      "to": "src/features/imageEdit/v3/export/index.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/export",
+      "line": 7,
+      "cell": "canvas → imageEdit"
     },
     {
       "from": "src/features/canvas/imageEditV3/MultiLayerDocumentEditorDialog.tsx",
@@ -1560,18 +1576,10 @@
     },
     {
       "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts",
-      "to": "src/features/imageEdit/v3/export/index.ts",
+      "to": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
       "kind": "static",
-      "specifier": "@/features/imageEdit/v3/export",
+      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExportSpec",
       "line": 14,
-      "cell": "canvas → imageEdit"
-    },
-    {
-      "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts",
-      "to": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExport",
-      "line": 18,
       "cell": "canvas → imageMark"
     },
     {
@@ -1672,9 +1680,9 @@
     },
     {
       "from": "src/features/canvas/nodes/localRedraw/useLocalRedrawMaskAutosave.ts",
-      "to": "src/features/maskEditor/maskDocument.ts",
+      "to": "src/features/maskEditor/document.ts",
       "kind": "static",
-      "specifier": "@/features/maskEditor/maskDocument",
+      "specifier": "@/features/maskEditor/document",
       "line": 5,
       "cell": "canvas → maskEditor"
     },
@@ -1684,14 +1692,6 @@
       "kind": "static",
       "specifier": "@/features/maskEditor/maskExport",
       "line": 6,
-      "cell": "canvas → maskEditor"
-    },
-    {
-      "from": "src/features/canvas/nodes/localRedraw/useLocalRedrawMaskAutosave.ts",
-      "to": "src/features/maskEditor/types.ts",
-      "kind": "type",
-      "specifier": "@/features/maskEditor/types",
-      "line": 7,
       "cell": "canvas → maskEditor"
     },
     {
@@ -2624,18 +2624,18 @@
     },
     {
       "from": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
-      "kind": "type",
-      "specifier": "@/features/imageEdit/v3/application/imageEditorHostProfiles",
-      "line": 8,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
       "to": "src/features/imageEdit/v3/export/index.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/export",
-      "line": 3,
+      "line": 2,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
+      "to": "src/features/imageEdit/v3/export/planning.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/export/planning",
+      "line": 2,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -3227,7 +3227,7 @@
       "to": "src/features/documents/documentOperations.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentOperations",
-      "line": 18,
+      "line": 17,
       "cell": "videoEdit → documents"
     },
     {
@@ -3243,22 +3243,22 @@
       "to": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/documents/imageDocumentRuntime",
-      "line": 16,
-      "cell": "videoEdit → imageEdit"
-    },
-    {
-      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
-      "to": "src/features/imageEdit/v3/export/index.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/export",
       "line": 15,
       "cell": "videoEdit → imageEdit"
     },
     {
       "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
-      "to": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
+      "to": "src/features/imageEdit/v3/export/index.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/imageEdit/v3/export",
+      "line": 152,
+      "cell": "videoEdit → imageEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
       "kind": "static",
-      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExport",
+      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExportSpec",
       "line": 14,
       "cell": "videoEdit → imageMark"
     },
@@ -3839,6 +3839,57 @@
         "跨 feature 非 index 导入 maskEditor → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/maskEditor/v3/MaskEditorV3Host.tsx:32 → src/features/imageEdit/v3/editor/index.ts (static)",
         "跨 feature 非 index 导入 videoEdit → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/videoEdit/application/videoEditCreativeSources.ts:15 → src/features/imageEdit/v3/export/index.ts (static)"
       ]
+    }
+  ],
+  "firstScreen": {
+    "entry": "src/main.tsx",
+    "moduleCount": 975,
+    "heavyModules": []
+  },
+  "dynamicBackEdges": [
+    {
+      "from": "src/features/canvas/application/canvasMutationService.ts",
+      "to": "src/features/canvas/application/cameraStageRenderApplicationService.ts"
+    },
+    {
+      "from": "src/features/canvas/application/canvasMutationService.ts",
+      "to": "src/features/canvas/application/cameraStageRenderApplicationService.ts"
+    },
+    {
+      "from": "src/features/canvas/application/canvasMutationService.ts",
+      "to": "src/features/canvas/application/multiLayerDocumentNodeGenerationAdapter.ts"
+    },
+    {
+      "from": "src/features/canvas/application/canvasMutationService.ts",
+      "to": "src/features/canvas/application/multiLayerDocumentNodeGenerationAdapter.ts"
+    },
+    {
+      "from": "src/features/canvas/application/canvasMutationService.ts",
+      "to": "src/features/canvas/application/multiLayerDocumentNodeGenerationAdapter.ts"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCodeTrial.ts",
+      "to": "src/features/videoEdit/engine/videoEditRenderSession.ts"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditMedia.ts",
+      "to": "src/features/videoEdit/application/videoEditFolderImport.ts"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditService.ts",
+      "to": "src/features/videoEdit/application/videoEditInPlaceGeneration.ts"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditService.ts",
+      "to": "src/features/videoEdit/application/videoEditInPlaceGeneration.ts"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditTracking.ts",
+      "to": "src/features/videoEdit/application/videoEditSmartRegions.ts"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditTracking.ts",
+      "to": "src/features/videoEdit/application/videoEditSmartRegions.ts"
     }
   ]
 }

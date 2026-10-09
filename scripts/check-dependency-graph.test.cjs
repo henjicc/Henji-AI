@@ -4,7 +4,8 @@ const os = require('node:os')
 const path = require('node:path')
 const { test } = require('node:test')
 const madge = require('madge')
-const { scan, compare, forbiddenReason, writeBaseline } = require('./check-dependency-graph.cjs')
+const { scan, compare, forbiddenReason, writeBaseline, firstScreenReachability,
+  FIRST_SCREEN_HEAVY_PACKAGES, FIRST_SCREEN_HEAVY_MODULE_PREFIXES } = require('./check-dependency-graph.cjs')
 const { createImportResolver, readResolvedImports, assistantImportViolation } = require('./lib/resolvedImports.cjs')
 
 const fixture = path.join(__dirname, '__fixtures__/dependency-graph')
@@ -139,4 +140,60 @@ test('解析失败不能漏边后通过', (t) => {
   assert.throws(() => readResolvedImports(path.join(root, 'src/missing.ts'), root, createImportResolver(root)), /无法解析本地依赖/)
   write(root, 'src/wrong-case.ts', "import { alias } from '@/Alias'")
   assert.throws(() => readResolvedImports(path.join(root, 'src/wrong-case.ts'), root), /大小写不一致|无法解析本地依赖/)
+})
+
+test('首屏只沿静态值边；重包子路径和编辑/GPU 执行器均输出完整入口路径', () => {
+  const edges = [
+    { from: 'src/main.tsx', to: 'src/policy.ts', kind: 'static', specifier: './policy' },
+    { from: 'src/policy.ts', to: 'src/editor.ts', kind: 'dynamic', specifier: './editor' },
+    { from: 'src/policy.ts', to: 'src/gpu.ts', kind: 'type', specifier: './gpu' },
+    { from: 'src/editor.ts', to: 'node_modules/konva/index.d.ts', kind: 'static', specifier: 'konva' },
+  ]
+  assert.equal(firstScreenReachability(edges).moduleCount, 2)
+  assert.deepEqual(firstScreenReachability(edges).heavyModules, [])
+  for (const pkg of FIRST_SCREEN_HEAVY_PACKAGES) {
+    const current = firstScreenReachability([...edges, {
+      from: 'src/policy.ts', to: `node_modules/${pkg}/index.d.ts`, kind: 'static', specifier: `${pkg}/lib`,
+    }])
+    assert.deepEqual(current.heavyModules, [{ target: pkg, route: ['src/main.tsx', 'src/policy.ts', pkg] }])
+  }
+  for (const prefix of FIRST_SCREEN_HEAVY_MODULE_PREFIXES) {
+    const target = prefix.endsWith('/') ? `${prefix}renderer.ts` : prefix
+    assert.equal(firstScreenReachability([...edges, {
+      from: 'src/policy.ts', to: target, kind: 'static', specifier: '@/heavy',
+    }]).heavyModules[0].target, target)
+  }
+})
+
+test('首屏违规冻结后只能缩减，显式 accept-new 也不能重新放宽', async (t) => {
+  const root = workspace(t)
+  write(root, 'src/main.tsx', "export { value } from './entry'")
+  const baseline = await scan(root)
+  write(root, 'src/features/imageEdit/v3/editor/renderer.ts', 'export const renderer = 1')
+  write(root, 'src/main.tsx', "export { renderer } from './features/imageEdit/v3/editor/renderer'")
+  const current = await scan(root)
+  assert.ok(compare(current, baseline).some((failure) => /首屏静态值依赖到重模块.*src\/main.tsx/.test(failure)))
+  const filename = path.join(root, 'baseline.json')
+  assert.throws(() => writeBaseline(filename, current, baseline, '仍然拒绝'), /只许缩减/)
+  assert.deepEqual(compare(baseline, current), [])
+  write(root, 'src/main.tsx', "import 'monaco-editor/not-installed-subpath'")
+  assert.ok(compare(await scan(root), baseline).some((failure) => /首屏静态值依赖到重模块.*monaco-editor/.test(failure)))
+  write(root, 'src/main.tsx', "export const lazy = () => import('monaco-editor/not-installed-subpath')")
+  assert.deepEqual((await scan(root)).firstScreen.heavyModules, [])
+})
+
+test('把静态环换成动态加载不能藏环，两个动态边组成的回路也会失败', async (t) => {
+  const root = workspace(t)
+  write(root, 'src/alias.ts', "export { value as alias } from './entry'")
+  const baseline = await scan(root)
+  write(root, 'src/entry.ts', "export const value = 1; export const lazy = () => import('./alias')")
+  const hidden = await scan(root)
+  assert.equal(hidden.cycles.length, 0)
+  assert.ok(compare(hidden, baseline).some((failure) => failure.includes('新增动态值回边')))
+  write(root, 'src/alias.ts', "export const alias = () => import('./entry')")
+  const double = await scan(root)
+  assert.equal(double.dynamicBackEdges.length, 2)
+  assert.ok(compare(double, hidden).some((failure) => failure.includes('新增动态值回边')))
+  write(root, 'src/alias.ts', "export const alias = () => import('./entry'); export const twice = () => import('./entry')")
+  assert.ok(compare(await scan(root), double).some((failure) => failure.includes('新增动态值回边')))
 })

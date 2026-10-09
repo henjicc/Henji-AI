@@ -16,30 +16,4 @@ export {
   MIN_MASK_BRUSH_HARDNESS,
   normalizeMaskBrushHardness,
 } from './brushHardness';
-export {
-  appendMaskPoint,
-  appendMaskStroke,
-  cloneMaskDocument,
-  createEmptyMaskDocument,
-  createMaskHistoryState,
-  fitMaskStage,
-  hasPaintedMask,
-  isMaskShape,
-  isMaskStroke,
-  parseMaskEditorDocument,
-  reduceMaskHistory,
-  resolveMaskShapeBounds,
-  resolveMaskDocument,
-} from './maskDocument';
-export type {
-  MaskEditorDocument,
-  MaskEditorResult,
-  MaskEditorV3Result,
-  MaskPoint,
-  MaskMark,
-  MaskShape,
-  MaskShapeKind,
-  MaskStroke,
-  MaskStrokeMode,
-  MaskTool,
-} from './types';
+export * from './document';

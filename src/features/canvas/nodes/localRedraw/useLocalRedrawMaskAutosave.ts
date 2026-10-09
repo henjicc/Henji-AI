@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { persistImageSourceTracked } from '@/commands/image';
 import { createLogger } from '@/core/logging';
-import { cloneMaskDocument, hasPaintedMask } from '@/features/maskEditor/maskDocument';
+import { cloneMaskDocument, hasPaintedMask, type MaskEditorDocument } from '@/features/maskEditor/document';
 import { exportMaskDocumentToPng } from '@/features/maskEditor/maskExport';
-import type { MaskEditorDocument } from '@/features/maskEditor/types';
 import { getPlatform } from '@/platform/runtime';
 
 const logger = createLogger('features.canvas.local-redraw-workbench');

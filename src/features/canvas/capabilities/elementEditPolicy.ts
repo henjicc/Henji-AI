@@ -1,5 +1,5 @@
 import type { ModelDefinition } from '@/core/types'
-import { hasPaintedMask, parseMaskEditorDocument, type MaskEditorDocument } from '@/features/maskEditor'
+import { hasPaintedMask, parseMaskEditorDocument, type MaskEditorDocument } from '@/features/maskEditor/document'
 import type { LocalRedrawSettings } from '@/platform/contracts/image'
 import type { CanvasImageCapabilityModelPolicy } from './types'
 

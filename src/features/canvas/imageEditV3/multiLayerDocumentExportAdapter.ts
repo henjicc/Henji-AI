@@ -11,12 +11,9 @@ import {
   type ImageEditExportTargetViewV3,
 } from '@/core/imageEdit/v3'
 import { splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
-import {
-  prepareImageEditorV3ExportRender,
-  renderImageEditorV3ExportTilesWithGpu,
-} from '@/features/imageEdit/v3/export'
-import { createImageMarkV3RasterExportSpec } from '@/features/imageMark/standalone/imageMarkV3RasterExport'
+import { createImageMarkV3RasterExportSpec } from '@/features/imageMark/standalone/imageMarkV3RasterExportSpec'
 import { getPlatform } from '@/platform/runtime'
+import { loadCanvasImageEditExportRenderer } from './loadCanvasImageEditExportRenderer'
 
 import type { MultiLayerDocumentExportTarget } from '../domain/multiLayerDocumentNode'
 import {
@@ -170,6 +167,8 @@ export function createMultiLayerDocumentExportPort(
         format,
         suggestedName: `${view.displayName}.png`,
       })
+      const { prepareImageEditorV3ExportRender, renderImageEditorV3ExportTilesWithGpu } = await loadCanvasImageEditExportRenderer()
+      throwIfAborted(signal)
       prepareImageEditorV3ExportRender(view.document, spec.description)
       const tiles = renderImageEditorV3ExportTilesWithGpu({
         document: view.document,

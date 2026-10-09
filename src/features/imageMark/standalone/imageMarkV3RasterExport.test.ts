@@ -40,6 +40,11 @@ vi.mock('@/features/imageEdit/v3/export', async () => {
   }
 })
 
+vi.mock('@/features/imageEdit/v3/export/capabilities', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/features/imageEdit/v3/export/capabilities')>(),
+  prepareImageEditorV3ExportRender: mocks.prepare,
+}))
+
 vi.mock('@/commands/imageEditorV3Export', () => ({
   exportImageEditorV3Raster: mocks.exportRaster,
 }))

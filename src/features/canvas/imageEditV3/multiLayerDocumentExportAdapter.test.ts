@@ -13,6 +13,19 @@ import type {
 import type { MultiLayerDocumentExportTarget } from '../domain/multiLayerDocumentNode'
 import { createMultiLayerDocumentExportPort } from './multiLayerDocumentExportAdapter'
 
+// 本测试验证适配器契约；像素管线有自己的精确测试，避免导入完整 GPU 内核占用超时预算。
+vi.mock('./loadCanvasImageEditExportRenderer', async () => {
+  const { prepareImageEditorV3ExportRender } = await import('@/features/imageEdit/v3/export/planning')
+  return { loadCanvasImageEditExportRenderer: async () => ({
+    prepareImageEditorV3ExportRender,
+    renderImageEditorV3ExportTilesWithGpu: () => ({
+      async *[Symbol.asyncIterator]() {
+        yield { x: 0, y: 0, width: 4, height: 2, rowStride: 16, pixels: new Uint8Array(32) }
+      },
+    }),
+  }) }
+})
+
 const SOURCE = `sha256:${'1'.repeat(64)}` as const
 const PREVIEW = `sha256:${'2'.repeat(64)}` as const
 const FINGERPRINT = `sha256:${'3'.repeat(64)}` as const
