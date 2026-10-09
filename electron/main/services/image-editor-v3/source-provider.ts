@@ -32,6 +32,10 @@ import {
 } from './source-orientation'
 import { ManagedSourcePyramid, type SourcePyramidTileLayout } from './source-pyramid'
 import { runSharpOperation } from './sharp-operation'
+import { SourceDecodeStripeCache } from './source-decode-stripes'
+import { createMainLogger } from '../logging'
+
+const logger = createMainLogger('main.image_editor_v3.source_provider')
 
 const MAX_MIP_LEVEL = 30
 const MAX_TILE_HALO = 2048
@@ -112,6 +116,7 @@ export class SharpSourceProvider implements SourceProvider {
   private readonly sharpLoader: typeof loadSharp
   private readonly derivedCache: DerivedDiskCache | null
   private readonly pyramid: ManagedSourcePyramid | null
+  private readonly decodeStripes = new SourceDecodeStripeCache()
 
   constructor(
     private readonly resources: ContentAddressedResourceStore,
@@ -264,6 +269,55 @@ export class SharpSourceProvider implements SourceProvider {
     const bitDepth = request.bitDepth ?? (metadata.hdr ? 32 : sourceStorageBitDepth(metadata))
     if (metadata.hdr && bitDepth !== 32) {
       throw new Error('HDR source tiles require Float32 scRGB decoding; encoded integer fallback is disabled')
+    }
+
+    // mip0 的横向相邻块共享一次原生全宽条带解码，避免 PNG/JPEG 从文件头重复扫描。
+    // 只保留两个有界条带，不建立完整 RGBA 表面；HDR 与缩放继续走原区域契约。
+    if (mip === 0 && halo === 0 && bitDepth !== 32
+      && metadata.width > IMAGE_EDIT_TILE_SIZE && metadata.height > IMAGE_EDIT_TILE_SIZE) {
+      const stripeStride = metadata.width * 4 * (bitDepth / 8)
+      const stripe = await this.decodeStripes.read(
+        `${request.resourceId}:${tileY}:${bitDepth}`,
+        stripeStride * outputHeight,
+        async (signal) => {
+          const started = performance.now()
+          const context = { resourceId: request.resourceId, tileY, bitDepth, bytes: stripeStride * outputHeight }
+          logger.debug('开始解码图片源条带', { event: 'image_editor_v3.source.stripe.start', context })
+          try {
+            const sharp = await this.sharpLoader()
+            const encoded = mapOrientedSourceRectToEncoded({ left: 0, top: originY,
+              width: metadata.width, height: outputHeight },
+            { width: metadata.encodedWidth, height: metadata.encodedHeight }, metadata.orientation)
+            const pipeline = sharp(this.resources.getFilesystemPath(request.resourceId), {
+              limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS, sequentialRead: false, failOn: 'warning',
+            }).extract(encoded).autoOrient().toColourspace(bitDepth === 16 ? 'rgb16' : 'srgb')
+              .ensureAlpha().raw({ depth: bitDepth === 16 ? 'ushort' : 'uchar' })
+            const pixels = normalizeRawLittleEndian(await runSharpOperation(pipeline, signal, () => pipeline.toBuffer()), bitDepth)
+            logger.debug('完成解码图片源条带', { event: 'image_editor_v3.source.stripe.completed',
+              context: { ...context, elapsedMs: performance.now() - started } })
+            return pixels
+          } catch (error) {
+            logger.debug('图片源条带解码未完成', { event: signal.aborted
+              ? 'image_editor_v3.source.stripe.cancelled' : 'image_editor_v3.source.stripe.failed', context, error })
+            throw error
+          }
+        },
+        request.signal,
+      )
+      if (stripe) {
+        throwIfImageSourceAborted(request.signal)
+        const rowStride = outputWidth * 4 * (bitDepth / 8)
+        const pixels = Buffer.allocUnsafe(rowStride * outputHeight)
+        for (let row = 0; row < outputHeight; row += 1) {
+          const start = row * stripeStride + originX * 4 * (bitDepth / 8)
+          stripe.copy(pixels, row * rowStride, start, start + rowStride)
+        }
+        return { resourceId: request.resourceId, mip, tileX, tileY, halo,
+          width: outputWidth, height: outputHeight, channels: 4, bitDepth,
+          sampleFormat: 'uint', numericRange: bitDepth === 16 ? 'unorm16' : 'unorm8',
+          byteOrder: 'little-endian', rowStride, colorSpace: 'srgb', transferFunction: 'srgb',
+          alphaMode: 'straight', orientationApplied: true, originX, originY, pixels }
+      }
     }
 
     const sharp = await this.sharpLoader()

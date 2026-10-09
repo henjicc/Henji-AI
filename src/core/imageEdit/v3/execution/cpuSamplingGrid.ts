@@ -46,5 +46,14 @@ export function resolveImageEditCpuSamplingRegionV3(
 ): { transform: ImageEditTransformV3; region: ImageEditRect } {
   const grid = resolveImageEditCpuSamplingGridV3(context, target)
   const transform = multiplyImageEditTransformsV3(layerTransform, grid.toEvaluation)
+  // 整数恒等采样没有双线性邻域；扩大一像素会让一个 512 输出块读取四个源块。
+  if (transform.every((value, index) => value === [1, 0, 0, 1, 0, 0][index])) {
+    const x = Math.min(grid.size.width, Math.max(0, outputRegion.x))
+    const y = Math.min(grid.size.height, Math.max(0, outputRegion.y))
+    return { transform, region: { x, y,
+      width: Math.max(0, Math.min(grid.size.width, outputRegion.x + outputRegion.width) - x),
+      height: Math.max(0, Math.min(grid.size.height, outputRegion.y + outputRegion.height) - y),
+    } }
+  }
   return { transform, region: resolveImageEditInverseSourceRectV3(outputRegion, transform, grid.size) }
 }

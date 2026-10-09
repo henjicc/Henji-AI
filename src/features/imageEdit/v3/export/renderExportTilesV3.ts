@@ -1,3 +1,6 @@
+import { splitImageEditCpuOutputV3, assembleImageEditCpuOutputV3 } from '../../../../core/imageEdit/v3/execution/cpuOutputParts'
+import { ImageEditCpuRegionWorkerClientV3 } from '../../../../core/imageEdit/v3/execution/cpuRegionWorkerClient'
+import type { ImageEditCpuRegionRenderContextV3 } from '../../../../core/imageEdit/v3/execution/cpuRenderRegionExecutor'
 import { loadImageColorLutV3 } from '../execution/imageColorLutV3'
 import { loadImageEditorRasterRegionV3 } from './rasterRegion'
 import { transparentRegion, safeWorkingSetBytes, acquireOrThrow } from './renderExportResourcesV3'
@@ -145,6 +148,24 @@ async function* renderTiles(
   const outputSize = { width: geometry.outputWidth, height: geometry.outputHeight }
   const grid = tileGridSize(outputSize, 0, tileSize)
   const total = grid.width * grid.height
+  const cpuWorkers: ImageEditCpuRegionWorkerClientV3[] = []
+  const useCpuWorkers = typeof Worker !== 'undefined'
+  const workerConcurrency = plan.nodes.some(node => registry.get(node.definitionId)?.globalAnalysis) ? 1 : 4
+  const getCpuWorker = (index: number): ImageEditCpuRegionWorkerClientV3 => {
+    if (cpuWorkers[index]) return cpuWorkers[index]
+    const worker = new Worker(new URL('../../../../core/imageEdit/v3/execution/cpuRenderRegion.worker.ts', import.meta.url), { type: 'module' })
+    const client = new ImageEditCpuRegionWorkerClientV3({
+      postMessage: (message) => worker.postMessage(message),
+      terminate: () => worker.terminate(),
+      subscribe: (receive, fail) => {
+        worker.onmessage = (event) => receive(event.data)
+        worker.onerror = (event) => fail(new Error(event.message || 'CPU 区域 Worker 异常'))
+        worker.onmessageerror = () => fail(new Error('CPU 区域 Worker 消息反序列化失败'))
+      },
+    })
+    cpuWorkers[index] = client
+    return client
+  }
   let completed = 0
   let diffusionAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3DiffusionAnalyses>> | null = null
   let glowAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3VgpuGlowAnalyses>> | null = null
@@ -159,6 +180,8 @@ async function* renderTiles(
       height: geometry.outputHeight,
       tileSize,
       tileCount: total,
+      backend: useCpuWorkers ? 'cpu-worker' : 'cpu-inline',
+      maximumWorkerConcurrency: useCpuWorkers ? workerConcurrency : 0,
       halo: plan.nodes.reduce((total, node) => (
         total + Math.max(0, Math.ceil(registry.get(node.definitionId)?.localHalo?.(node.parameters, 0) ?? 0))
       ), 0),
@@ -244,20 +267,20 @@ async function* renderTiles(
             : 'cpu',
           priority: IMAGE_EDIT_RENDER_PRIORITY.export,
           run: async (taskContext) => {
-            const requirements = collectImageEditCpuRegionRequirementsV3(
-              plan,
-              [sourceRegion],
-              {
-                registry,
-                size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
-                resolveSamplingGrid,
-              },
-            )
-            const workingLease = acquireOrThrow(
-              budget,
-              'in-flight',
-              safeWorkingSetBytes(requirements, sourceRegion),
-            )
+            const samplingContext = { registry, size: { width: geometry.sourceWidth, height: geometry.sourceHeight }, resolveSamplingGrid }
+            const workerOutput = { rect: outputRect, geometry, description: request.description }
+            let parts = splitImageEditCpuOutputV3(workerOutput, useCpuWorkers ? workerConcurrency : 1)
+            const workingBytes = () => parts.reduce((bytes, part) => bytes + safeWorkingSetBytes(
+              collectImageEditCpuRegionRequirementsV3(plan, [part.region], samplingContext), part.region,
+            ), 0) * (useCpuWorkers ? 2 : 1)
+            // 并发仅消耗预算，不限制产品数量；压力下减少到两个或一个区域。
+            if (!budget.admission('in-flight', workingBytes()).admitted && parts.length > 1) {
+              parts = splitImageEditCpuOutputV3(workerOutput, 2)
+            }
+            if (!budget.admission('in-flight', workingBytes()).admitted && parts.length > 1) {
+              parts = splitImageEditCpuOutputV3(workerOutput, 1)
+            }
+            const workingLease = acquireOrThrow(budget, 'in-flight', workingBytes())
             try {
               const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
               const loadSource = (
@@ -281,7 +304,7 @@ async function* renderTiles(
                 sourceCache.set(key, loaded)
                 return loaded
               }
-              const renderedRegion = await executeImageEditCpuRenderRegionPlanV3(plan, sourceRegion, {
+              const renderContext: ImageEditCpuRegionRenderContextV3 = {
                 size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
                 registry,
                 signal: taskContext.signal,
@@ -374,9 +397,18 @@ async function* renderTiles(
                     },
                   })
                 },
-              })
+              }
+              const workerTile = useCpuWorkers ? assembleImageEditCpuOutputV3(await Promise.all(parts.map(
+                (part, index) => getCpuWorker(index).render(plan, part.region, renderContext, part.output),
+              )).catch(error => {
+                // 一个区域失败立即终止其余线程与读取，不能提前归还仍在使用的像素预算。
+                cpuWorkers.forEach(worker => worker.dispose())
+                scheduler.cancelSession(currentSessionId)
+                throw error
+              }), outputRect, request.description.bitDepth / 8 * 4) : null
+              const renderedRegion = workerTile ? null : await executeImageEditCpuRenderRegionPlanV3(plan, sourceRegion, renderContext)
               throwIfAborted(taskContext.signal)
-              const outputFloat = projectImageEditorV3RenderedRegionToOutput(
+              const outputFloat = workerTile ? null : projectImageEditorV3RenderedRegionToOutput(
                 renderedRegion ?? transparentRegion(
                   sourceRegion,
                   document.color.workingSpace,
@@ -387,8 +419,8 @@ async function* renderTiles(
                 outputRect,
                 geometry,
               )
-              const tile = encodeImageEditorV3RenderedOutputTile(
-                outputFloat,
+              const tile = workerTile ?? encodeImageEditorV3RenderedOutputTile(
+                outputFloat!,
                 outputRect,
                 request.description,
               )
@@ -436,6 +468,7 @@ async function* renderTiles(
     })
     throw error
   } finally {
+    cpuWorkers.forEach(worker => worker.dispose())
     fastBlurAnalysisSet?.release()
     glowAnalysisSet?.release()
     diffusionAnalysisSet?.release()

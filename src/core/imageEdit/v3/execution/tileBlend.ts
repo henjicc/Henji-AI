@@ -17,6 +17,7 @@ export function applyContentMaskAndOpacityV3(
     throw new Error('内容蒙版与图层瓦片尺寸不一致');
   }
   if (mask) assertFloat32MaskTile(mask);
+  if (opacity === 1 && !mask) return content;
   const data = new Float32Array(content.data.length);
   for (let pixel = 0; pixel < content.width * content.height; pixel += 1) {
     const amount = opacity * (mask?.data[pixel] ?? 1);
@@ -46,6 +47,8 @@ export function compositePremultipliedTilesV3(
     || backdrop.transferFunction !== source.transferFunction
     || backdrop.referenceWhiteNits !== source.referenceWhiteNits
   ) throw new Error('合成瓦片的尺寸或颜色域不一致');
+  // 稀疏蒙版之外的内容常是全透明零瓦片，所有支持的混合模式均保留背景。
+  if (source.data.every(value => value === 0)) return backdrop;
   const data = new Float32Array(source.data.length);
   for (let offset = 0; offset < data.length; offset += 4) {
     const ba = backdrop.data[offset + 3], sa = source.data[offset + 3];
@@ -80,10 +83,17 @@ export function mixEffectLayerV3(
   const data = new Float32Array(source.data.length);
   for (let offset = 0; offset < data.length; offset += 4) {
     const alpha = source.data[offset + 3];
+    const processedAlpha = processed.data[offset + 3];
+    if (alpha === 1 && processedAlpha === 1 && blendMode === 'normal') {
+      data[offset + 3] = 1;
+      data[offset] = source.data[offset] + (processed.data[offset] - source.data[offset]) * opacity;
+      data[offset + 1] = source.data[offset + 1] + (processed.data[offset + 1] - source.data[offset + 1]) * opacity;
+      data[offset + 2] = source.data[offset + 2] + (processed.data[offset + 2] - source.data[offset + 2]) * opacity;
+      continue;
+    }
     data[offset + 3] = source.data[offset + 3] + (processed.data[offset + 3] - source.data[offset + 3]) * opacity;
     for (let channel = 0; channel < 3; channel += 1) {
       const original = alpha > 0 ? source.data[offset + channel] / alpha : 0;
-      const processedAlpha = processed.data[offset + 3];
       const adjusted = processedAlpha > 0 ? processed.data[offset + channel] / processedAlpha : 0;
       const blended = blendChannel(original, adjusted, blendMode);
       data[offset + channel] = (original + (blended - original) * opacity) * data[offset + 3];

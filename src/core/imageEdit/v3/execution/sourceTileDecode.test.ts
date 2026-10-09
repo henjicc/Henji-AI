@@ -3,6 +3,22 @@ import { decodeSrgbExtended, encodeTransferFunctionV3 } from './tileColor';
 import { decodeInterleavedRgbaSourceTileV3 } from './sourceTileDecode';
 
 describe('V3 源瓦片显式解码边界', () => {
+  it('sRGB8查表覆盖全部颜色/Alpha码值，保留行padding和缓冲偏移并逐值等于原公式', () => {
+    const rowStride = 256 * 4 + 7;
+    const storage = new Uint8Array(17 + rowStride * 256);
+    const pixels = storage.subarray(17);
+    const expected = new Float32Array(256 * 256 * 4);
+    for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+      const input = y * rowStride + x * 4;
+      const output = (y * 256 + x) * 4;
+      pixels.set([x, 255 - x, x ^ 127, y], input);
+      for (let channel = 0; channel < 3; channel++) expected[output + channel] = decodeSrgbExtended(pixels[input + channel] / 255) * (y / 255);
+      expected[output + 3] = y / 255;
+    }
+    const actual = decodeInterleavedRgbaSourceTileV3({ width: 256, height: 256, rowStride, bitDepth: 8,
+      sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian', transferFunction: 'srgb', alphaMode: 'straight', pixels });
+    expect(actual.data).toEqual(expected);
+  });
   it('把 8 位 sRGB straight alpha 转为线性 Float32 预乘', () => {
     const result = decodeInterleavedRgbaSourceTileV3({
       width: 1,

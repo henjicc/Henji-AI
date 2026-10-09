@@ -3,7 +3,11 @@ import type { ImageEditTransferFunctionV3, ImageEditWorkingSpaceV3 } from '../co
 import {
   convertFloat32TileWorkingSpaceV3,
   decodeTransferFunctionV3,
+  decodeSrgbExtended,
 } from './tileColor';
+
+// Double 精度的离散输入查表与原公式完全相同，不能先舍入成 Float32 再乘 Alpha。
+const SRGB8_LINEAR = Float64Array.from({ length: 256 }, (_, value) => decodeSrgbExtended(value / 255));
 
 export interface InterleavedRgbaSourceTileV3 {
   width: number;
@@ -80,22 +84,36 @@ export function decodeInterleavedRgbaSourceTileV3(
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const output = new Float32Array(source.width * source.height * 4);
   const channelBytes = bytesPerChannel(source.bitDepth);
-  for (let y = 0; y < source.height; y += 1) {
-    for (let x = 0; x < source.width; x += 1) {
-      const sourceOffset = y * source.rowStride + x * 4 * channelBytes;
-      const targetOffset = (y * source.width + x) * 4;
-      const alpha = readSample(view, sourceOffset + 3 * channelBytes, source);
-      if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) throw new Error('源瓦片 Alpha 超出 0～1');
-      output[targetOffset + 3] = alpha;
-      for (let channel = 0; channel < 3; channel += 1) {
-        const encoded = readSample(view, sourceOffset + channel * channelBytes, source);
-        if (!Number.isFinite(encoded)) throw new Error('源瓦片颜色通道不是有限数');
-        const linear = decodeTransferFunctionV3(
-          encoded,
-          source.transferFunction,
-          source.referenceWhiteNits,
-        );
-        output[targetOffset + channel] = linear * alpha;
+  if (source.bitDepth === 8 && source.transferFunction === 'srgb') {
+    for (let y = 0; y < source.height; y += 1) {
+      let input = y * source.rowStride;
+      let target = y * source.width * 4;
+      for (let x = 0; x < source.width; x += 1, input += 4, target += 4) {
+        const alpha = bytes[input + 3] / 255;
+        output[target] = SRGB8_LINEAR[bytes[input]] * alpha;
+        output[target + 1] = SRGB8_LINEAR[bytes[input + 1]] * alpha;
+        output[target + 2] = SRGB8_LINEAR[bytes[input + 2]] * alpha;
+        output[target + 3] = alpha;
+      }
+    }
+  } else {
+    for (let y = 0; y < source.height; y += 1) {
+      for (let x = 0; x < source.width; x += 1) {
+        const sourceOffset = y * source.rowStride + x * 4 * channelBytes;
+        const targetOffset = (y * source.width + x) * 4;
+        const alpha = readSample(view, sourceOffset + 3 * channelBytes, source);
+        if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) throw new Error('源瓦片 Alpha 超出 0～1');
+        output[targetOffset + 3] = alpha;
+        for (let channel = 0; channel < 3; channel += 1) {
+          const encoded = readSample(view, sourceOffset + channel * channelBytes, source);
+          if (!Number.isFinite(encoded)) throw new Error('源瓦片颜色通道不是有限数');
+          const linear = decodeTransferFunctionV3(
+            encoded,
+            source.transferFunction,
+            source.referenceWhiteNits,
+          );
+          output[targetOffset + channel] = linear * alpha;
+        }
       }
     }
   }

@@ -16,6 +16,7 @@ import {
   type CompiledCurvesAdjustment,
 } from '../effects';
 import type { ImageEditRenderPlanNode } from '../renderPlan';
+import { assertFloat32MaskTile, assertFloat32PremultipliedRgbaTile, createFloat32PremultipliedRgbaTile } from '../effects/contracts';
 import {
   convertFloat32TileColorDomainV3,
 } from './tileColor';
@@ -74,10 +75,45 @@ export const colorGradeCpuV3: ImageEditCpuPixelKernelV3 = async (node, source, m
 
 export const exposureCpuV3: ImageEditCpuPixelKernelV3 = async (node, source, mask, _context) => {
     const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
+    const gamma = numberParameter(node, 'gamma', 1);
+    if (gamma === 1) {
+      // 中性 gamma 是线性点操作；避免每像素创建 mapper 数组与调用 signed pow。
+      // 保留 straight→premult 的运算顺序及 Float32 写入，再走同一蒙版混合契约。
+      assertFloat32PremultipliedRgbaTile(linear, 'linear-light');
+      if (mask) {
+        assertFloat32MaskTile(mask);
+        if (mask.width !== linear.width || mask.height !== linear.height) throw new Error('效果蒙版与输入瓦片尺寸不一致');
+      }
+      const multiplier = 2 ** numberParameter(node, 'stops', 0);
+      const bias = numberParameter(node, 'offset', 0);
+      const data = new Float32Array(linear.data.length);
+      for (let offset = 0; offset < data.length; offset += 4) {
+        const alpha = linear.data[offset + 3];
+        const amount = mask?.data[offset / 4];
+        if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) throw new Error('Alpha 必须是 0～1 的有限浮点数');
+        if (alpha === 0) {
+          if (amount !== undefined) for (let channel = 0; channel < 3; channel++) {
+            const original = linear.data[offset + channel];
+            data[offset + channel] = original + (0 - original) * amount;
+          }
+          continue;
+        }
+        for (let channel = 0; channel < 3; channel += 1) {
+          const mapped = linear.data[offset + channel] / alpha * multiplier + bias;
+          if (!Number.isFinite(mapped)) throw new Error('曝光计算结果不是有限数');
+          const processed = Math.fround((mapped === 0 ? 0 : mapped) * alpha);
+          const original = linear.data[offset + channel];
+          data[offset + channel] = amount === undefined ? processed : original + (processed - original) * amount;
+        }
+        data[offset + 3] = alpha;
+      }
+      return createFloat32PremultipliedRgbaTile(linear.width, linear.height,
+        linear.colorDomain, data, linear.workingSpace, linear.transferFunction, linear.referenceWhiteNits);
+    }
     return applyExposureAdjustment(linear, {
       stops: numberParameter(node, 'stops', 0),
       offset: numberParameter(node, 'offset', 0),
-      gamma: numberParameter(node, 'gamma', 1),
+      gamma,
     }, { mask });
 };
 
