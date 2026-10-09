@@ -1,11 +1,15 @@
+import i18n from '@/i18n'
+import { TOOL_CATALOG } from '@/core/toolbox/toolCatalog'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { listImageEditorToolControls } from '@/features/imageEdit/tools/controlCatalog'
 import { useNavigationStore } from '@/stores/navigationStore'
 
 export function listToolboxTools(): Record<string, unknown>[] {
   return [
-    { id: 'audioEdit', name: '口播剪辑', capabilities: ['project', 'transcript', 'suggestion', 'preview', 'export', 'vst3'] },
-    { id: 'cameraStage', name: '3D 镜头参考', capabilities: ['project', 'object', 'state_keyframe', 'camera_move', 'render'] },
+    ...TOOL_CATALOG.tools.map((tool) => ({
+      id: tool.id, name: i18n.t(tool.titleKey), description: i18n.t(tool.descriptionKey),
+      surfaceId: tool.surfaceId, actions: [...tool.actions], capabilities: [...tool.capabilities],
+    })),
     ...listImageEditorToolControls().map((tool) => ({
       id: tool.id,
       name: tool.label,

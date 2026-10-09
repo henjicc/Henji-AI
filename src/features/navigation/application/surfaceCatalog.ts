@@ -1,4 +1,6 @@
 import type { SettingsNavigationTarget, SettingsTabId } from '@/core/types/settingsNavigation'
+import { TOOL_DESCRIPTORS, type ToolDescriptor } from '@/core/toolbox/toolCatalog'
+import type { ToolboxToolId } from '@/core/types/workspace'
 import type { WorkspaceId } from '@/core/types/workspace'
 import {
   resolveSurfaceObservationProfile,
@@ -17,7 +19,7 @@ export interface ApplicationSurfaceDefinition {
   id: ApplicationSurfaceId
   kind: 'workspace' | 'tool' | 'settings' | 'overlay'
   workspace?: WorkspaceId
-  toolId?: 'audioEdit' | 'cameraStage' | 'imageMark'
+  toolId?: ToolboxToolId
   settingsTarget?: SettingsNavigationTarget
   acceptedRefKinds: readonly string[]
   openPolicy: SurfaceOpenPolicy
@@ -56,6 +58,22 @@ function observationPolicy(surfaceId: ApplicationSurfaceId): ApplicationSurfaceD
   }
 }
 
+/** 工具 Surface 由纯登记派生；观察策略继续使用唯一画像入口。 */
+export function createToolboxSurfaces<const T extends readonly ToolDescriptor[]>(tools: T): {
+  id: T[number]['surfaceId']; toolId: T[number]['id']; kind: 'tool'; workspace: 'tools';
+  acceptedRefKinds: readonly string[]; openPolicy: SurfaceOpenPolicy; availability: string[];
+}[] {
+  return tools.map((tool) => ({
+    id: tool.surfaceId as T[number]['surfaceId'],
+    kind: 'tool' as const,
+    workspace: 'tools' as const,
+    toolId: tool.id as T[number]['id'],
+    ...immediate,
+    acceptedRefKinds: tool.acceptedRefKinds,
+    openPolicy: 'after_target_resolved' as const,
+  }))
+}
+
 const surfaceDefinitions = [
   { id: 'overlay.assistant', kind: 'overlay', ...immediate },
   { id: 'workspace.generation', kind: 'workspace', workspace: 'generation', ...immediate },
@@ -70,24 +88,7 @@ const surfaceDefinitions = [
     id: 'workspace.assets', kind: 'workspace', workspace: 'assets', ...immediate,
     acceptedRefKinds: ['asset', 'asset.library'],
   },
-  {
-    id: 'tool.image_edit', kind: 'tool', workspace: 'tools', toolId: 'imageMark', ...immediate,
-    acceptedRefKinds: ['image_edit.document', 'image_edit.layer', 'generation.result', 'asset'],
-    openPolicy: 'after_target_resolved',
-  },
-  {
-    id: 'tool.audio_edit', kind: 'tool', workspace: 'tools', toolId: 'audioEdit', ...immediate,
-    acceptedRefKinds: ['audio_edit.document', 'audio_edit.transcript_block', 'audio_edit.suggestion', 'audio_edit.render'],
-    openPolicy: 'after_target_resolved',
-  },
-  {
-    id: 'tool.camera_stage', kind: 'tool', workspace: 'tools', toolId: 'cameraStage', ...immediate,
-    acceptedRefKinds: [
-      'camera_stage.document', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera',
-      'camera_stage.state_keyframe', 'camera_stage.trajectory',
-    ],
-    openPolicy: 'after_target_resolved',
-  },
+  ...createToolboxSurfaces(TOOL_DESCRIPTORS),
   { id: 'settings.general', kind: 'settings', settingsTarget: { tab: 'general' }, ...immediate },
   { id: 'settings.general.basic', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-basic' }, ...immediate },
   { id: 'settings.general.view', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-view' }, ...immediate },

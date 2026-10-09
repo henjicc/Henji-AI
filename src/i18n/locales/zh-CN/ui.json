@@ -1,4 +1,18 @@
 {
+  "toolbox": {
+    "audioEdit": {
+      "title": "口播剪辑",
+      "description": "按逐字稿剪口播：删掉停顿和语气词，保留想要的句子，导出成片或交给剪辑"
+    },
+    "imageMark": {
+      "title": "图片编辑",
+      "description": "打开或粘贴图片，标注、裁剪、模糊与调整，一键复制或保存"
+    },
+    "cameraStage": {
+      "title": "3D 镜头参考",
+      "description": "搭三维场景、摆角色姿势、调机位取景，截图作为生成参考图"
+    }
+  },
   "generate": "生成",
   "generating": "生成中...",
   "cancel": "取消",

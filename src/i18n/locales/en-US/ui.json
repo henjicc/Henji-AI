@@ -1,4 +1,18 @@
 {
+  "toolbox": {
+    "audioEdit": {
+      "title": "Speech editing",
+      "description": "Edit speech by transcript: remove pauses and fillers, keep the sentences you want, then export or send to video editing"
+    },
+    "imageMark": {
+      "title": "Image editing",
+      "description": "Open or paste an image, annotate, crop, blur and adjust, then copy or save"
+    },
+    "cameraStage": {
+      "title": "3D shot reference",
+      "description": "Build a 3D scene, pose characters and frame a camera shot to capture a generation reference"
+    }
+  },
   "generate": "Generate",
   "generating": "Generating...",
   "cancel": "Cancel",

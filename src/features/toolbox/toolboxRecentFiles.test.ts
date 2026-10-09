@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   listDocuments: vi.fn(),
   openCamera: vi.fn(),
   openAudio: vi.fn(),
+  requestImage: vi.fn(),
   selectTool: vi.fn(),
 }))
 
@@ -13,6 +14,10 @@ vi.mock('@/features/documents/documentOperations', () => ({
 }))
 vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({ openCameraStageDocument: mocks.openCamera }))
 vi.mock('@/features/audioEdit/application/audioEditDocumentService', () => ({ openAudioEditDocument: mocks.openAudio }))
+vi.mock('@/features/imageEdit/documents/imageDocumentWorkspace', () => ({
+  getImageDocumentWorkspace: () => ({ current: null }),
+  requestImageDocumentInEditor: mocks.requestImage,
+}))
 
 import { loadToolboxRecentFiles, mergeToolboxRecentFiles, openToolboxRecentFile } from './toolboxRecentFiles'
 
@@ -23,7 +28,7 @@ describe('工具首页最近文件', () => {
   afterEach(() => { vi.clearAllMocks() })
 
   it('两个工具的工程按最近编辑合并排序并截取前几项', () => {
-    const merged = mergeToolboxRecentFiles([audio('a1', 10), audio('a2', 40)], [camera('c1', 30), camera('c2', 20)], 3)
+    const merged = mergeToolboxRecentFiles([{ toolId: 'audioEdit', documents: [audio('a1', 10), audio('a2', 40)] }, { toolId: 'cameraStage', documents: [camera('c1', 30), camera('c2', 20)] }], 3)
     expect(merged.map((file) => file.key)).toEqual(['audioEdit:a2', 'cameraStage:c1', 'cameraStage:c2'])
   })
 
@@ -36,6 +41,7 @@ describe('工具首页最近文件', () => {
     // 口播与镜头参考都是通用文档：只列已保存且文件还在的
     expect(mocks.listDocuments).toHaveBeenCalledWith({ kind: 'camera_stage', container: { kind: 'any' }, includeDrafts: false, includeMissing: false })
     expect(mocks.listDocuments).toHaveBeenCalledWith({ kind: 'audio_edit', container: { kind: 'any' }, includeDrafts: false, includeMissing: false })
+    expect(mocks.listDocuments).toHaveBeenCalledWith({ kind: 'image_document', container: { kind: 'any' }, includeDrafts: false, includeMissing: false })
   })
 
   it('打开镜头参考走它的文档打开入口（进入编辑器），再切到该工具', async () => {
@@ -43,6 +49,12 @@ describe('工具首页最近文件', () => {
     await openToolboxRecentFile({ key: 'cameraStage:c1', toolId: 'cameraStage', projectId: 'c1', name: 'c1', updatedAt: 1 })
     expect(mocks.openCamera).toHaveBeenCalledWith({ id: 'c1' })
     expect(mocks.selectTool).toHaveBeenCalledWith('cameraStage')
+  })
+
+  it('图片文档把打开请求交给编辑器，保留编辑器的保存询问', async () => {
+    await openToolboxRecentFile({ key: 'imageMark:i1', toolId: 'imageMark', projectId: 'i1', name: 'i1', updatedAt: 1 })
+    expect(mocks.requestImage).toHaveBeenCalledWith({ id: 'i1' })
+    expect(mocks.selectTool).toHaveBeenCalledWith('imageMark')
   })
 
   it('打开口播失败时仍进入该工具（落在口播列表）并把错误交给调用方', async () => {

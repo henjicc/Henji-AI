@@ -1,6 +1,6 @@
 export type WorkspaceId = 'generation' | 'nodes' | 'videoEdit' | 'tools' | 'assets'
 
-export type ToolboxToolId = 'audioEdit' | 'cameraStage' | 'imageMark'
+export { toolboxToolIdSchema, type ToolboxToolId } from '../toolbox/toolCatalog'
 
 export const DEFAULT_WORKSPACE_ID: WorkspaceId = 'generation'
 

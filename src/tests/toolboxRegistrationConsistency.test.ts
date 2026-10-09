@@ -1,70 +1,88 @@
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-import ts from 'typescript'
-import { describe, expect, it } from 'vitest'
-import { listApplicationSurfaces } from '@/features/navigation/application/surfaceCatalog'
-import { mergeToolboxRecentFiles } from '@/features/toolbox/toolboxRecentFiles'
+// @vitest-environment jsdom
+import { createElement } from 'react'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
+import { TOOL_CATALOG, TOOL_DESCRIPTORS, createToolCatalog, type ToolDescriptor } from '@/core/toolbox/toolCatalog'
+import { toolboxToolIdSchema } from '@/core/types/workspace'
+import { APPLICATION_SURFACE_IDS } from '@/core/application-control/applicationSurfaces'
+import { listApplicationSurfaces, createToolboxSurfaces } from '@/features/navigation/application/surfaceCatalog'
+import { getToolboxRecentFileProviders, mergeToolboxRecentFiles } from '@/features/toolbox/toolboxRecentFiles'
 import { TOOLBOX_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/toolbox/toolboxApplicationCapabilities'
+import { createToolboxRuntime, TOOLBOX_RUNTIME } from '@/workspaces/toolboxRuntime'
 
-function source(file: string): ts.SourceFile {
-  return ts.createSourceFile(file, readFileSync(path.resolve(file), 'utf8'), ts.ScriptTarget.Latest, true)
-}
+const sorted = (values: Iterable<string>): string[] => [...values].sort()
+const document = { id: 'document-probe', name: '登记探测', updatedAt: 1 }
 
-function findNode<T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T): T {
-  let found: T | undefined
-  function visit(node: ts.Node): void {
-    if (predicate(node)) found = node
-    else ts.forEachChild(node, visit)
-  }
-  visit(root)
-  if (!found) throw new Error('未找到登记源 AST，必须更新真实来源读取方式')
-  return found
-}
+afterEach(cleanup)
 
-function sorted(values: Iterable<string>): string[] {
-  return [...new Set(values)].sort()
-}
+describe('工具箱登记 → 派生入口', () => {
+  it('工具类型/schema、加载器、Surface、最近文件和能力输入输出都派生自登记', () => {
+    const ids = sorted(TOOL_CATALOG.tools.map((tool) => tool.id))
+    expect(sorted(toolboxToolIdSchema.options)).toEqual(ids)
+    expect(sorted(TOOLBOX_RUNTIME.map((tool) => tool.descriptor.id))).toEqual(ids)
+    expect(sorted(listApplicationSurfaces().flatMap((surface) => surface.toolId ? [surface.toolId] : []))).toEqual(ids)
+    expect(sorted(APPLICATION_SURFACE_IDS.filter((id) => id.startsWith('tool.'))))
+      .toEqual(sorted(TOOL_CATALOG.tools.map((tool) => tool.surfaceId)))
+    const providers = getToolboxRecentFileProviders(TOOLBOX_RUNTIME)
+    expect(sorted(providers.map((tool) => tool.descriptor.id)))
+      .toEqual(sorted(TOOL_CATALOG.tools.filter((tool) => tool.actions.includes('recent_files')).map((tool) => tool.id)))
+    const recent = mergeToolboxRecentFiles(providers.map((tool) => ({ toolId: tool.descriptor.id, documents: [document] })))
+    expect(sorted(recent.map((file) => file.toolId))).toEqual(ids)
+    const select = TOOLBOX_APPLICATION_CAPABILITIES.find((entry) => entry.id === 'select_toolbox_tool')!
+    const input = z.toJSONSchema(select.inputSchema) as unknown as { properties: { toolId: { anyOf: { enum?: string[] }[] } } }
+    const output = z.toJSONSchema(select.outputSchema) as unknown as { properties: { toolId: { anyOf: { enum?: string[] }[] }; surfaceId: { anyOf: { enum?: string[] }[] } } }
+    expect(sorted(input.properties.toolId.anyOf.flatMap((item) => item.enum ?? []))).toEqual(ids)
+    expect(sorted(output.properties.toolId.anyOf.flatMap((item) => item.enum ?? []))).toEqual(ids)
+    expect(sorted(output.properties.surfaceId.anyOf.flatMap((item) => item.enum ?? [])))
+      .toEqual(sorted(TOOL_CATALOG.tools.map((tool) => tool.surfaceId)))
+    expect(select.inputSchema.safeParse({ toolId: 'unregistered' }).success).toBe(false)
+  })
 
-describe('工具箱工具同源登记集合', () => {
-  it('类型、实际渲染分支、Surface、最近文件和能力输入/输出 schema 两两相等', () => {
-    const type = findNode(source('src/core/types/workspace.ts'),
-      (node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === 'ToolboxToolId')
-    if (!ts.isUnionTypeNode(type.type)) throw new Error('ToolboxToolId 应读取其真实类型来源')
-    const typeIds = type.type.types.map((node) => {
-      if (!ts.isLiteralTypeNode(node) || !ts.isStringLiteral(node.literal)) throw new Error('工具 ID 不是字符串类型')
-      return node.literal.text
+  it('临时登记探针，真实加载组件并打开最近文件；移除后所有派生入口消失', async () => {
+    const probe = {
+      id: 'registrationProbe', surfaceId: 'tool.registration_probe', entryId: 'registrationProbe',
+      titleKey: 'ui:probe.title', descriptionKey: 'ui:probe.description', icon: 'ICON_TOOL_IMAGE_EDIT',
+      actions: ['open', 'recent_files'], recentFiles: { documentKind: 'image_document' },
+      acceptedRefKinds: ['probe.document'], capabilities: [],
+    } as const satisfies ToolDescriptor
+    // 隔离装配目录就是一次临时注册，不修改生产全局或持久数据。
+    const catalog = createToolCatalog([...TOOL_DESCRIPTORS, probe])
+    const load = vi.fn(async () => ({ default: () => createElement('span', null, '探针工作面') }))
+    const open = vi.fn(async (_id: string): Promise<void> => {})
+    const runtime = createToolboxRuntime([probe], {
+      './toolboxTools/registrationProbe/entry.ts': { default: { loadComponent: load, openRecentFile: open } },
     })
-    const renderer = findNode(source('src/workspaces/ToolboxWorkspace.tsx'),
-      (node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === 'renderTool')
-    const branches = findNode(renderer, ts.isSwitchStatement)
-    const renderIds = branches.caseBlock.clauses.flatMap((clause) => {
-      if (!ts.isCaseClause(clause) || !ts.isStringLiteral(clause.expression)) return []
-      expect(clause.statements.some((statement) => ts.isReturnStatement(statement) && statement.expression)).toBe(true)
-      return [clause.expression.text]
-    })
-    const select = TOOLBOX_APPLICATION_CAPABILITIES.find((entry) => entry.id === 'select_toolbox_tool')
-    if (!select) throw new Error('缺少 select_toolbox_tool 登记')
-    // 用现有类型来源探测封闭 schema；再读运行时 enum 的所有 options，发现多登记的工具。
-    const enumIds = (schema: typeof select.inputSchema, field: string): string[] => {
-      const object = schema as unknown as { shape: Record<string, { unwrap: () => { options: string[] } }> }
-      return object.shape[field].unwrap().options
-    }
-    for (const toolId of typeIds) expect(select.inputSchema.safeParse({ toolId }).success).toBe(true)
-    const document = [{ id: 'registration-probe', name: '登记探测', updatedAt: 1 }]
-    const sets = {
-      type: sorted(typeIds),
-      render: sorted(renderIds),
-      surfaces: sorted(listApplicationSurfaces().flatMap((surface) => surface.toolId ? [surface.toolId] : [])),
-      recent: sorted(mergeToolboxRecentFiles(document, document, Number.POSITIVE_INFINITY, document).map((entry) => entry.toolId)),
-      inputSchema: sorted(enumIds(select.inputSchema, 'toolId')),
-      outputSchema: sorted(enumIds(select.outputSchema, 'toolId')),
-    }
-    const entries = Object.entries(sets)
-    expect(typeIds.length).toBeGreaterThan(0)
-    for (let index = 0; index < entries.length; index += 1) {
-      for (const [name, values] of entries.slice(index + 1)) {
-        expect(entries[index][1], `${entries[index][0]} 与 ${name} 登记漂移`).toEqual(values)
-      }
-    }
+    expect(load).not.toHaveBeenCalled()
+    render(createElement(runtime[0].component, { onBack: vi.fn() }))
+    expect(await screen.findByText('探针工作面')).toBeTruthy()
+    expect(load).toHaveBeenCalledOnce()
+    expect(createToolboxSurfaces(catalog.tools).find((surface) => surface.toolId === probe.id))
+      .toMatchObject({ id: probe.surfaceId, acceptedRefKinds: ['probe.document'] })
+    expect(catalog.selectionInputSchema.parse({ toolId: probe.id })).toEqual({ toolId: probe.id })
+    expect(z.object(catalog.selectionOutputShape).safeParse({ toolId: probe.id, surfaceId: probe.surfaceId }).success).toBe(true)
+    const providers = getToolboxRecentFileProviders(runtime)
+    const recent = mergeToolboxRecentFiles(providers.map((tool) => ({ toolId: tool.descriptor.id, documents: [document] })))
+    await providers[0].openRecentFile!(recent[0].projectId)
+    expect(open).toHaveBeenCalledWith(document.id)
+    cleanup()
+    // 卸除临时 descriptor 和目录模块，重新装配同一生产源。
+    const removed = createToolCatalog(catalog.tools.filter((tool) => tool.id !== probe.id))
+    expect(removed.get(probe.id)).toBeUndefined()
+    expect(removed.selectionInputSchema.safeParse({ toolId: probe.id }).success).toBe(false)
+    expect(removed.surfaceIdSchema.safeParse(probe.surfaceId).success).toBe(false)
+    expect(createToolboxSurfaces(removed.tools).map((surface) => surface.id)).not.toContain(probe.surfaceId)
+    const remaining = createToolboxRuntime(removed.tools)
+    expect(remaining.map((tool) => tool.descriptor.id)).not.toContain(probe.id)
+    expect(getToolboxRecentFileProviders(remaining).map((tool) => tool.descriptor.id)).not.toContain(probe.id)
+    expect(TOOL_CATALOG.get(probe.id)).toBeUndefined()
+  })
+
+  it('缺失加载器或最近文件打开器、重复登记当场拒绝', () => {
+    expect(() => createToolboxRuntime(TOOL_DESCRIPTORS, {})).toThrow('缺少渲染入口')
+    expect(() => createToolboxRuntime([TOOL_DESCRIPTORS[0]], {
+      './toolboxTools/audioEdit/entry.ts': { default: { loadComponent: async () => ({ default: () => null }) } },
+    })).toThrow('缺少最近文件打开器')
+    expect(() => createToolCatalog([...TOOL_DESCRIPTORS, TOOL_DESCRIPTORS[0]])).toThrow('重复')
   })
 })

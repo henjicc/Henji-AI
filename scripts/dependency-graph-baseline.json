@@ -263,11 +263,6 @@
   ],
   "forbiddenEdges": [
     {
-      "from": "src/core/application-control/domains/toolbox/toolboxApplicationCapabilities.ts",
-      "to": "src/features/imageEdit/application/imageEditControlCatalog.ts",
-      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
-    },
-    {
       "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
       "to": "src/features/imageMark/domain/geometry.ts",
       "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
@@ -875,7 +870,7 @@
       "to": "src/features/assistant/store/assistantUiStore.ts",
       "kind": "static",
       "specifier": "@/features/assistant/store/assistantUiStore",
-      "line": 41,
+      "line": 42,
       "cell": "audioEdit → assistant"
     },
     {
@@ -883,7 +878,7 @@
       "to": "src/features/documents/DocumentLibraryPage.tsx",
       "kind": "static",
       "specifier": "@/features/documents/DocumentLibraryPage",
-      "line": 38,
+      "line": 39,
       "cell": "audioEdit → documents"
     },
     {
@@ -891,7 +886,7 @@
       "to": "src/features/documents/embeddedDocuments.ts",
       "kind": "static",
       "specifier": "@/features/documents/embeddedDocuments",
-      "line": 39,
+      "line": 40,
       "cell": "audioEdit → documents"
     },
     {
@@ -899,7 +894,7 @@
       "to": "src/features/videoEdit/application/videoEditSourceRefs.ts",
       "kind": "static",
       "specifier": "@/features/videoEdit/application/videoEditSourceRefs",
-      "line": 66,
+      "line": 67,
       "cell": "audioEdit → videoEdit"
     },
     {
@@ -907,7 +902,7 @@
       "to": "src/features/videoEdit/panels/VideoEditSendMenu.tsx",
       "kind": "static",
       "specifier": "@/features/videoEdit/panels/VideoEditSendMenu",
-      "line": 65,
+      "line": 66,
       "cell": "audioEdit → videoEdit"
     },
     {
@@ -2963,7 +2958,7 @@
       "to": "src/features/application-control/capabilities/handlerTypes.ts",
       "kind": "type",
       "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 6,
+      "line": 7,
       "cell": "toolbox → application-control"
     },
     {
@@ -2971,7 +2966,7 @@
       "to": "src/features/application-control/capabilities/handlerUtils.ts",
       "kind": "static",
       "specifier": "@/features/application-control/capabilities/handlerUtils",
-      "line": 8,
+      "line": 9,
       "cell": "toolbox → application-control"
     },
     {
@@ -2979,7 +2974,7 @@
       "to": "src/features/navigation/application/surfaceCapabilityService.ts",
       "kind": "static",
       "specifier": "@/features/navigation/application/surfaceCapabilityService",
-      "line": 9,
+      "line": 10,
       "cell": "toolbox → navigation"
     },
     {
@@ -2987,7 +2982,7 @@
       "to": "src/features/cameraStage/store/cameraStageStore.ts",
       "kind": "static",
       "specifier": "@/features/cameraStage/store/cameraStageStore",
-      "line": 1,
+      "line": 3,
       "cell": "toolbox → cameraStage"
     },
     {
@@ -2995,40 +2990,16 @@
       "to": "src/features/imageEdit/tools/controlCatalog.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/tools/controlCatalog",
-      "line": 2,
+      "line": 4,
       "cell": "toolbox → imageEdit"
-    },
-    {
-      "from": "src/features/toolbox/toolboxRecentFiles.ts",
-      "to": "src/features/audioEdit/application/audioEditDocumentService.ts",
-      "kind": "dynamic",
-      "specifier": "@/features/audioEdit/application/audioEditDocumentService",
-      "line": 101,
-      "cell": "toolbox → audioEdit"
-    },
-    {
-      "from": "src/features/toolbox/toolboxRecentFiles.ts",
-      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
-      "kind": "dynamic",
-      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
-      "line": 108,
-      "cell": "toolbox → cameraStage"
     },
     {
       "from": "src/features/toolbox/toolboxRecentFiles.ts",
       "to": "src/features/documents/documentOperations.ts",
       "kind": "dynamic",
       "specifier": "@/features/documents/documentOperations",
-      "line": 67,
+      "line": 58,
       "cell": "toolbox → documents"
-    },
-    {
-      "from": "src/features/toolbox/toolboxRecentFiles.ts",
-      "to": "src/features/imageEdit/documents/imageDocumentWorkspace.ts",
-      "kind": "dynamic",
-      "specifier": "@/features/imageEdit/documents/imageDocumentWorkspace",
-      "line": 105,
-      "cell": "toolbox → imageEdit"
     },
     {
       "from": "src/features/videoEdit/application/applicationDomain.ts",
@@ -3775,9 +3746,9 @@
     "canvas → generation": 8,
     "canvas → imageEdit": 23,
     "canvas → navigation": 2,
+    "canvas → maskEditor": 8,
     "canvas → settings": 1,
     "canvas → imageMark": 6,
-    "canvas → maskEditor": 8,
     "canvas → videoEdit": 2,
     "documents → application-control": 3,
     "generation → application-control": 3,
@@ -3808,9 +3779,8 @@
     "settings → application-control": 1,
     "toolbox → application-control": 3,
     "toolbox → navigation": 1,
-    "toolbox → cameraStage": 2,
-    "toolbox → imageEdit": 2,
-    "toolbox → audioEdit": 1,
+    "toolbox → cameraStage": 1,
+    "toolbox → imageEdit": 1,
     "toolbox → documents": 1,
     "videoEdit → application-control": 11,
     "videoEdit → assets": 16,
@@ -3823,27 +3793,9 @@
     "videoEdit → imageEdit": 6,
     "videoEdit → imageMark": 1
   },
-  "exceptions": [
-    {
-      "reason": "R01 初次冻结现有架构债务，仅允许后续缩减",
-      "changes": [
-        "初次建立基线"
-      ]
-    },
-    {
-      "reason": "R01 首次基线口径校准：按体检仅豁免 feature 根 index，8 条嵌套桶仍冻结；业务源码未改",
-      "changes": [
-        "跨 feature 非 index 导入 canvas → imageEdit：23 > 基线 20；走公开 index 入口或提取纯契约。新增候选：src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx:17 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/canvas/imageEditV3/canvasEditV3Materialization.ts:3 → src/features/imageEdit/v3/export/index.ts (static)；src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts:14 → src/features/imageEdit/v3/export/index.ts (static)",
-        "跨 feature 非 index 导入 canvas → navigation：2 > 基线 1；走公开 index 入口或提取纯契约。新增候选：src/features/canvas/application/multiLayerDocumentNodeEditorApplicationService.ts:3 → src/features/navigation/application/index.ts (static)",
-        "跨 feature 非 index 导入 imageMark → imageEdit：40 > 基线 38；走公开 index 入口或提取纯契约。新增候选：src/features/imageMark/standalone/ImageMarkToolV3Host.tsx:12 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/imageMark/standalone/imageMarkV3RasterExport.ts:3 → src/features/imageEdit/v3/export/index.ts (static)",
-        "跨 feature 非 index 导入 maskEditor → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/maskEditor/v3/MaskEditorV3Host.tsx:32 → src/features/imageEdit/v3/editor/index.ts (static)",
-        "跨 feature 非 index 导入 videoEdit → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/videoEdit/application/videoEditCreativeSources.ts:15 → src/features/imageEdit/v3/export/index.ts (static)"
-      ]
-    }
-  ],
   "firstScreen": {
     "entry": "src/main.tsx",
-    "moduleCount": 975,
+    "moduleCount": 976,
     "heavyModules": []
   },
   "dynamicBackEdges": [
@@ -3890,6 +3842,24 @@
     {
       "from": "src/features/videoEdit/application/videoEditTracking.ts",
       "to": "src/features/videoEdit/application/videoEditSmartRegions.ts"
+    }
+  ],
+  "exceptions": [
+    {
+      "reason": "R01 初次冻结现有架构债务，仅允许后续缩减",
+      "changes": [
+        "初次建立基线"
+      ]
+    },
+    {
+      "reason": "R01 首次基线口径校准：按体检仅豁免 feature 根 index，8 条嵌套桶仍冻结；业务源码未改",
+      "changes": [
+        "跨 feature 非 index 导入 canvas → imageEdit：23 > 基线 20；走公开 index 入口或提取纯契约。新增候选：src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx:17 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/canvas/imageEditV3/canvasEditV3Materialization.ts:3 → src/features/imageEdit/v3/export/index.ts (static)；src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts:14 → src/features/imageEdit/v3/export/index.ts (static)",
+        "跨 feature 非 index 导入 canvas → navigation：2 > 基线 1；走公开 index 入口或提取纯契约。新增候选：src/features/canvas/application/multiLayerDocumentNodeEditorApplicationService.ts:3 → src/features/navigation/application/index.ts (static)",
+        "跨 feature 非 index 导入 imageMark → imageEdit：40 > 基线 38；走公开 index 入口或提取纯契约。新增候选：src/features/imageMark/standalone/ImageMarkToolV3Host.tsx:12 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/imageMark/standalone/imageMarkV3RasterExport.ts:3 → src/features/imageEdit/v3/export/index.ts (static)",
+        "跨 feature 非 index 导入 maskEditor → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/maskEditor/v3/MaskEditorV3Host.tsx:32 → src/features/imageEdit/v3/editor/index.ts (static)",
+        "跨 feature 非 index 导入 videoEdit → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/videoEdit/application/videoEditCreativeSources.ts:15 → src/features/imageEdit/v3/export/index.ts (static)"
+      ]
     }
   ]
 }

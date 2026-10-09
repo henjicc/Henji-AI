@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import type { ToolboxToolId } from '@/core/types/workspace'
+import { TOOLBOX_RUNTIME, type ToolboxRuntimeTool } from '@/workspaces/toolboxRuntime'
 import type { DocumentSummary } from '@/core/documents/types'
 import { selectToolboxTool } from '@/stores/navigationStore'
 
@@ -13,11 +14,11 @@ import { selectToolboxTool } from '@/stores/navigationStore'
 
 const logger = createLogger('features.toolbox.recent')
 
-export type ToolboxRecentTool = Extract<ToolboxToolId, 'audioEdit' | 'cameraStage' | 'imageMark'>
+export type ToolboxRecentTool = ToolboxToolId
 
-export interface ToolboxRecentFile {
+export interface ToolboxRecentFile<TToolId extends string = ToolboxRecentTool> {
   key: string
-  toolId: ToolboxRecentTool
+  toolId: TToolId
   projectId: string
   name: string
   updatedAt: number
@@ -27,68 +28,51 @@ export const TOOLBOX_RECENT_FILE_LIMIT = 5
 
 type RecentDocument = Pick<DocumentSummary, 'id' | 'name' | 'updatedAt'>
 
-export function mergeToolboxRecentFiles(
-  audioDocuments: readonly RecentDocument[],
-  cameraDocuments: readonly RecentDocument[],
-  limit = TOOLBOX_RECENT_FILE_LIMIT,
-  imageDocuments: readonly RecentDocument[] = [],
-): ToolboxRecentFile[] {
-  return [
-    ...audioDocuments.map((document) => ({
-      key: `audioEdit:${document.id}`,
-      toolId: 'audioEdit' as const,
-      projectId: document.id,
-      name: document.name,
-      updatedAt: document.updatedAt,
-    })),
-    ...cameraDocuments.map((project) => ({
-      key: `cameraStage:${project.id}`,
-      toolId: 'cameraStage' as const,
-      projectId: project.id,
-      name: project.name,
-      updatedAt: project.updatedAt,
-    })),
-    ...imageDocuments.map((document) => ({
-      key: `imageMark:${document.id}`,
-      toolId: 'imageMark' as const,
-      projectId: document.id,
-      name: document.name,
-      updatedAt: document.updatedAt,
-    })),
-  ]
+export interface ToolboxRecentSource<TToolId extends string = ToolboxRecentTool> {
+  toolId: TToolId
+  documents: readonly RecentDocument[]
+}
+
+export function mergeToolboxRecentFiles<TToolId extends string>(
+  sources: readonly ToolboxRecentSource<TToolId>[],
+  limit = Number.POSITIVE_INFINITY,
+): ToolboxRecentFile<TToolId>[] {
+  return sources.flatMap(({ toolId, documents }) => documents.map((document) => ({
+    key: `${toolId}:${document.id}`, toolId, projectId: document.id,
+    name: document.name, updatedAt: document.updatedAt,
+  })))
     .filter((file) => Number.isFinite(file.updatedAt))
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, Math.max(0, limit))
 }
 
-/** 读取三个工具的文档摘要（全部，按最近编辑排序）；任一来源失败只记日志，不拖垮其他来源与首页。 */
-export async function loadToolboxRecentFiles(): Promise<ToolboxRecentFile[]> {
-  // 按需加载文档操作模块，三个来源共用一次加载
+export function getToolboxRecentFileProviders<T extends ToolboxRuntimeTool>(tools: readonly T[]): readonly T[] {
+  return tools.filter((tool) => tool.descriptor.actions.includes('recent_files'))
+}
+
+/** 汇总已登记工具的文档摘要；单个来源失败保留其他来源，工程数量不设上限。 */
+export async function loadToolboxRecentFiles(
+  tools = TOOLBOX_RUNTIME,
+): Promise<ToolboxRecentFile[]> {
+  const providers = getToolboxRecentFileProviders(tools)
   const operations = import('@/features/documents/documentOperations')
-  const listDocuments = (kind: 'audio_edit' | 'camera_stage' | 'image_document') => operations
-    .then(({ getDocumentOperations }) => getDocumentOperations().listDocuments({
-      kind, container: { kind: 'any' }, includeDrafts: false, includeMissing: false,
-    }))
-  const [audio, camera, image] = await Promise.allSettled([
-    listDocuments('audio_edit'),
-    listDocuments('camera_stage'),
-    listDocuments('image_document'),
-  ])
-  for (const [source, result] of [['audioEdit', audio], ['cameraStage', camera], ['imageMark', image]] as const) {
+  const results = await Promise.allSettled(providers.map(async (tool) => {
+    const { getDocumentOperations } = await operations
+    return getDocumentOperations().listDocuments({
+      kind: tool.descriptor.recentFiles.documentKind, container: { kind: 'any' },
+      includeDrafts: false, includeMissing: false,
+    })
+  }))
+  return mergeToolboxRecentFiles(providers.map((tool, index) => {
+    const result = results[index]
     if (result.status === 'rejected') {
       logger.warn('工具首页最近文件读取失败', {
-        event: 'toolbox.recent_files.load.failed',
-        source,
+        event: 'toolbox.recent_files.load.failed', source: tool.descriptor.id,
         error: result.reason instanceof Error ? result.reason.message : String(result.reason),
       })
     }
-  }
-  return mergeToolboxRecentFiles(
-    audio.status === 'fulfilled' ? audio.value : [],
-    camera.status === 'fulfilled' ? camera.value : [],
-    Number.POSITIVE_INFINITY,
-    image.status === 'fulfilled' ? image.value : [],
-  )
+    return { toolId: tool.descriptor.id, documents: result.status === 'fulfilled' ? result.value : [] }
+  }))
 }
 
 /**
@@ -97,17 +81,9 @@ export async function loadToolboxRecentFiles(): Promise<ToolboxRecentFile[]> {
  */
 export async function openToolboxRecentFile(file: ToolboxRecentFile): Promise<void> {
   try {
-    if (file.toolId === 'audioEdit') {
-      const { openAudioEditDocument } = await import('@/features/audioEdit/application/audioEditDocumentService')
-      await openAudioEditDocument({ id: file.projectId })
-    } else if (file.toolId === 'imageMark') {
-      // 图片编辑页接手打开（离开当前文档时可能要询问保存），这里只递交请求。
-      const { requestImageDocumentInEditor } = await import('@/features/imageEdit/documents/imageDocumentWorkspace')
-      requestImageDocumentInEditor({ id: file.projectId })
-    } else {
-      const { openCameraStageDocument } = await import('@/features/cameraStage/projects/cameraStageProjectService')
-      await openCameraStageDocument({ id: file.projectId })
-    }
+    const provider = getToolboxRecentFileProviders(TOOLBOX_RUNTIME).find((tool) => tool.descriptor.id === file.toolId)
+    if (!provider?.openRecentFile) throw new Error(`工具 ${file.toolId} 没有最近文件打开入口`)
+    await provider.openRecentFile(file.projectId)
     logger.info('工具首页打开最近文件', { event: 'toolbox.recent_files.open.completed', toolId: file.toolId })
   } catch (error) {
     logger.error('工具首页打开最近文件失败', error, {

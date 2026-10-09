@@ -1,3 +1,4 @@
+import { TOOL_CATALOG, type ToolboxToolId } from '@/core/toolbox/toolCatalog'
 
 
 import { getToolboxState, listToolboxTools } from '@/features/toolbox/application/toolboxApplicationService'
@@ -20,12 +21,10 @@ export function registerToolboxCapabilityHandlers(registrar: ApplicationCapabili
   registrar.registerHandler('select_toolbox_tool', (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{
-      toolId: 'audioEdit' | 'cameraStage' | 'imageMark' | null
+      toolId: ToolboxToolId | null
     }>('select_toolbox_tool', input)
     if (parsed.toolId) {
-      const surfaceId = parsed.toolId === 'cameraStage'
-        ? 'tool.camera_stage'
-        : parsed.toolId === 'audioEdit' ? 'tool.audio_edit' : 'tool.image_edit'
+      const surfaceId = TOOL_CATALOG.get(parsed.toolId)!.surfaceId
       return { toolId: parsed.toolId, ...openApplicationSurface(surfaceId, context) }
     }
     // 关闭工具只回工具箱首页，不抢占用户当前所在工作区。
