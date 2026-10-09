@@ -11,7 +11,7 @@ export function distinctSubjectCandidates(candidates: ImageEditorV3SubjectCandid
   const masks = new Map<ImageEditorV3SubjectCandidate, Uint8Array>()
   const bytes = (candidate: ImageEditorV3SubjectCandidate): Uint8Array => {
     let data = masks.get(candidate)
-    if (!data) { data = new Uint8Array(candidate.mask.width * candidate.mask.height); for (const [start, length, value] of candidate.mask.runs) if (value >= 128) data.fill(1, start, start + length); masks.set(candidate, data) }
+    if (!data) { data = new Uint8Array(candidate.mask.width * candidate.mask.height); for (const [start, length, value] of candidate.mask.runs) if (value >= 0.5) data.fill(1, start, start + length); masks.set(candidate, data) }
     return data
   }
   const kept: ImageEditorV3SubjectCandidate[] = []
