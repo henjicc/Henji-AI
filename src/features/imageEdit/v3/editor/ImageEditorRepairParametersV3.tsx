@@ -13,7 +13,8 @@ export function ImageEditorRepairParametersV3({ bus, controller }: { bus: ImageE
   const session = useImageEditorSessionStoreV3(s => s.sessions[controller.sessionId])
   if (!view || !session) return null
   const removing = session.activeTool === 'remove'
-  const model = models.models.find(value => value.id === (view.quality === 'fine' ? 'image_inpainting_lama' : 'image_inpainting_migan'))
+  const repairModels = models.models.filter(value => ['image_inpainting_lama', 'image_inpainting_migan'].includes(value.id))
+  const model = view.quality === 'auto' ? repairModels.find(value => value.status === 'downloading') ?? repairModels.find(value => !!value.lastFailure && value.lastFailure !== 'cancelled') : repairModels.find(value => value.id === (view.quality === 'fine' ? 'image_inpainting_lama' : 'image_inpainting_migan'))
   const percent = model?.progress ? Math.floor(model.progress.receivedBytes / Math.max(1, model.progress.totalBytes) * 100) : 0
   return <div className="flex min-w-max items-center gap-3" data-repair-parameters>
     {removing ? <>
@@ -22,7 +23,7 @@ export function ImageEditorRepairParametersV3({ bus, controller }: { bus: ImageE
           disabled={view.busy} onChange={event => useImageEditorSessionStoreV3.getState().setToolSetting(controller.sessionId, 'brushSize', Number(event.currentTarget.value))} />
       </label>
       <div className={UI_SEGMENTED_TRACK_CLASS} role="group" aria-label={t('imageEditor.v3.repair.quality')}>
-        {(['fast', 'fine'] as const).map(quality => <UiOptionButton key={quality} variant="segment" active={view.quality === quality} disabled={view.busy} onClick={() => view.setQuality(quality)}>{t(`imageEditor.v3.repair.${quality}`)}</UiOptionButton>)}
+        {(['auto', 'fast', 'fine'] as const).map(quality => <UiOptionButton key={quality} variant="segment" active={view.quality === quality} disabled={view.busy} onClick={() => view.setQuality(quality)}>{t(`imageEditor.v3.repair.${quality}`)}</UiOptionButton>)}
       </div>
       <UiButton size="sm" disabled={!bus.getSnapshot().selection || view.busy} onClick={() => void view.run({ action: 'remove' })}>{t('imageEditor.v3.repair.remove-selection')}</UiButton>
       {model && model.status !== 'ready' ? <>

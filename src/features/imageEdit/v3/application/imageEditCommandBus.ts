@@ -71,6 +71,7 @@ export class ImageEditCommandBusV3 {
   private readonly persistenceListeners = new Set<(snapshot: ImageEditPersistenceSnapshotV3) => void>();
   private readonly resourceByteSizes = new Map<string, number>();
   private disposed = false;
+  private readonly lifecycleAbort = new AbortController();
   private mutationGuard: (() => void) | undefined;
 
   constructor(document: ImageEditDocumentV3, options: ImageEditCommandBusOptionsV3 = {}) {
@@ -102,6 +103,9 @@ export class ImageEditCommandBusV3 {
       history: { ...this.history.getState(), undoCount: this.sessionUndo.length, redoCount: this.sessionRedo.length },
     };
   }
+
+  /** 本地长任务绑定实例生命周期；释放即取消，迟到候选与补丁都不可提交。 */
+  getLifecycleSignal(): AbortSignal { return this.lifecycleAbort.signal; }
 
   subscribe(listener: ImageEditCommandBusListenerV3): () => void {
     this.listeners.add(listener);
@@ -270,6 +274,7 @@ export class ImageEditCommandBusV3 {
 
   dispose(): void {
     this.disposed = true;
+    this.lifecycleAbort.abort(new Error('DOCUMENT_RELEASED：图片文档实例已释放'));
     this.repository?.cancelAutosave(this.document.id);
     this.previewOverrides.clear();
     this.listeners.clear();

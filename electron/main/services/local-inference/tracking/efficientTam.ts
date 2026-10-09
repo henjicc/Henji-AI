@@ -122,18 +122,18 @@ export function etamMemoryPlan(frame: number, direction: 1 | -1, condFrames: rea
   return { memory, pointers }
 }
 
-export class EfficientTamSession {
+export class EfficientTamImageSession {
   private readonly image = new Float32Array(3 * ETAM_IMAGE_SIZE * ETAM_IMAGE_SIZE)
-  constructor(private readonly parts: EtamParts) {}
+  constructor(private readonly imageParts: Pick<EtamParts, 'imageEncoder' | 'maskDecoder'>) {}
 
   async encode(rgb: Uint8Array): Promise<EtamFeatures> {
-    const outputs = await this.parts.imageEncoder.run({ image: f32(etamImageTensor(rgb, this.image), [1, 3, ETAM_IMAGE_SIZE, ETAM_IMAGE_SIZE]) })
+    const outputs = await this.imageParts.imageEncoder.run({ image: f32(etamImageTensor(rgb, this.image), [1, 3, ETAM_IMAGE_SIZE, ETAM_IMAGE_SIZE]) })
     return { feat: output(outputs, 'vision_feat').slice(), nomem: output(outputs, 'vision_feat_nomem').slice() }
   }
 
-  private async decode(pixFeat: Float32Array, prompt: EtamPrompt, multimask: boolean, maskInput?: Float32Array): Promise<EtamFrameResult & { candidates?: Float32Array; iou: Float32Array }> {
+  protected async decode(pixFeat: Float32Array, prompt: EtamPrompt, multimask: boolean, maskInput?: Float32Array): Promise<EtamFrameResult & { candidates?: Float32Array; iou: Float32Array }> {
     const count = prompt.coords.length
-    const outputs = await this.parts.maskDecoder.run({
+    const outputs = await this.imageParts.maskDecoder.run({
       pix_feat: f32(pixFeat, [1, 256, 32, 32]),
       point_coords: f32(Float32Array.from(prompt.coords.flat()), [1, count, 2]),
       point_labels: f32(Float32Array.from(prompt.labels), [1, count]),
@@ -148,6 +148,17 @@ export class EfficientTamSession {
     }
   }
 
+  /** 静态图片只需要编码器与解码器，不建立视频记忆。 */
+  async promptImage(features: EtamFeatures, prompt: EtamPrompt): Promise<EtamFrameResult & { candidates?: Float32Array[]; candidateScores?: number[] }> {
+    const decoded = await this.decode(features.nomem, prompt, prompt.coords.length <= 1)
+    const candidates = decoded.candidates ? [1, 2, 3].map(index => decoded.candidates!.subarray(index * ETAM_LOW_RES * ETAM_LOW_RES, (index + 1) * ETAM_LOW_RES * ETAM_LOW_RES).slice()) : undefined
+    return { logits: decoded.logits, score: decoded.score, pointer: decoded.pointer, ...(candidates ? { candidates, candidateScores: [decoded.iou[1], decoded.iou[2], decoded.iou[3]] } : {}) }
+  }
+}
+
+export class EfficientTamSession extends EfficientTamImageSession {
+  constructor(private readonly parts: EtamParts) { super(parts) }
+
   /** 遮罩提示（官方 add_new_mask）：掩码就是遮罩本身，目标指针由解码器从遮罩提示得出，物体分数取 10。 */
   async maskPrompt(features: EtamFeatures, mask: Float32Array): Promise<EtamFrameResult> {
     if (!mask.some(value => value > 0)) throw new Error('遮罩提示是空的。')
@@ -161,9 +172,9 @@ export class EfficientTamSession {
    * 返回结果与 3 个候选（多掩码输出 1–3 的 logit，界面让用户挑）。
    */
   async prompt(features: EtamFeatures, prompt: EtamPrompt): Promise<EtamFrameResult & { candidates?: Float32Array[]; candidateScores?: number[] }> {
-    const decoded = await this.decode(features.nomem, prompt, prompt.coords.length <= 1)
-    const candidates = decoded.candidates ? [1, 2, 3].map(index => decoded.candidates!.subarray(index * ETAM_LOW_RES * ETAM_LOW_RES, (index + 1) * ETAM_LOW_RES * ETAM_LOW_RES).slice()) : undefined
-    const extra = candidates ? { candidates, candidateScores: [decoded.iou[1], decoded.iou[2], decoded.iou[3]] } : {}
+    const decoded = await this.promptImage(features, prompt)
+    const candidates = decoded.candidates
+    const extra = candidates ? { candidates, candidateScores: decoded.candidateScores } : {}
     if (prompt.candidate && candidates) {
       const chosen = await this.maskPrompt(features, etamUpsampleBinary(candidates[prompt.candidate - 1]))
       return { ...chosen, ...extra }

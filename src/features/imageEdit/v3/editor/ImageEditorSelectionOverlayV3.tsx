@@ -1,3 +1,4 @@
+import { useImageEditorSubjectV3 } from './ImageEditorSubjectContextV3'
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UiError } from '@/components/ui'
@@ -14,6 +15,7 @@ import { useImageEditorRepairV3 } from './ImageEditorRepairContextV3'
 export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller }): JSX.Element {
   const { t } = useTranslation('ui')
   const repair = useImageEditorRepairV3()
+  const subject = useImageEditorSubjectV3()
   const theme = useThemeTokens()
   const canvas = useRef<HTMLCanvasElement>(null)
   const sourceCanvas = useRef<HTMLCanvasElement>(null)
@@ -26,7 +28,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
   const gesture = useRef<{ tool: string; points: (readonly [number, number])[]; pointer?: CapturedEditorPointerV3; revision: number; selectionRevision: number } | null>(null)
   const draftFrame = useRef<number | null>(null)
   const snapshot = bus.getSnapshot()
-  const active = tool.startsWith('select-') || ((tool === 'remove' || tool === 'repair') && !repair?.busy)
+  const active = (tool.startsWith('select-') && !subject?.busy) || ((tool === 'remove' || tool === 'repair') && !repair?.busy)
   const cancel = () => { const current = gesture.current; gesture.current = null; if (current?.pointer) releaseEditorPointerV3(current.pointer); if (draftFrame.current !== null) cancelAnimationFrame(draftFrame.current); draftFrame.current = null; setDraft([]) }
   useEffect(() => {
     cancel()
@@ -70,6 +72,12 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
     if (!current || current.revision !== bus.getSnapshot().document.revision || current.selectionRevision !== bus.getSnapshot().selectionRevision) { cancel(); return }
     const inverse = invertAnnotationMatrixV3(geometry.sourceToOutput)
     const normalized = current.points.map(p => { const source = mapAnnotationPointV3(inverse, p); return { x: Math.max(0, Math.min(1, source[0] / controller.document.geometry.width)), y: Math.max(0, Math.min(1, source[1] / controller.document.geometry.height)) } })
+    if (current.tool === 'select-subject' || current.tool === 'select-subject-box') {
+      const a = normalized[0], b = normalized.at(-1)!
+      if (current.tool === 'select-subject') void subject?.run({ kind: 'point', points: [{ ...a, foreground: true }] })
+      else if (Math.abs(a.x - b.x) > 0 && Math.abs(a.y - b.y) > 0) void subject?.run({ kind: 'box', x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) })
+      cancel(); return
+    }
     if (current.tool === 'repair') {
       if (!bus.getSnapshot().selection) { setError(t('imageEditor.v3.repair.select-first')); cancel(); return }
       const a = normalized[0], b = normalized.at(-1)!
@@ -108,7 +116,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
     const current = gesture.current
     if (!current?.pointer || current.pointer.pointerId !== event.pointerId) return
     const p = point(event)
-    if (tool === 'select-rect' || tool === 'select-ellipse' || tool === 'repair') current.points = [current.points[0], p]
+    if (tool === 'select-rect' || tool === 'select-ellipse' || tool === 'select-subject-box' || tool === 'repair') current.points = [current.points[0], p]
     else {
       const rect = event.currentTarget.getBoundingClientRect()
       const samples = event.nativeEvent.getCoalescedEvents?.() ?? []
@@ -129,7 +137,12 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
       className={`absolute inset-0 h-full w-full touch-none ${active ? 'pointer-events-auto' : 'pointer-events-none'}`}
       onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (tool !== 'select-polygon' && gesture.current?.pointer?.pointerId === e.pointerId) { move(e); finish() } }}
       onDoubleClick={() => { if (tool === 'select-polygon') finish() }} onPointerCancel={cancel} onLostPointerCapture={cancel}>
-      {first && last ? tool === 'select-rect' ? <rect x={Math.min(first[0], last[0])} y={Math.min(first[1], last[1])} width={Math.abs(first[0] - last[0])} height={Math.abs(first[1] - last[1])} className="fill-accent/10 stroke-accent-text" />
+      {subject?.candidates.map((candidate, index) => {
+        const b = candidate.bounds
+        const points = [[b.x, b.y], [b.x + b.width, b.y], [b.x + b.width, b.y + b.height], [b.x, b.y + b.height]].map(([x, y]) => mapAnnotationPointV3(geometry.sourceToOutput, [x * controller.document.geometry.width, y * controller.document.geometry.height]))
+        return <g key={candidate.id} className="pointer-events-none"><polygon points={points.map(p => p.join(',')).join(' ')} className="fill-none stroke-accent-text" /><text x={points[0][0]} y={points[0][1]} className="fill-accent-text text-xs">{index + 1}</text></g>
+      })}
+      {first && last ? tool === 'select-rect' || tool === 'select-subject-box' ? <rect x={Math.min(first[0], last[0])} y={Math.min(first[1], last[1])} width={Math.abs(first[0] - last[0])} height={Math.abs(first[1] - last[1])} className="fill-accent/10 stroke-accent-text" />
         : tool === 'select-ellipse' ? <ellipse cx={(first[0] + last[0]) / 2} cy={(first[1] + last[1]) / 2} rx={Math.abs(first[0] - last[0]) / 2} ry={Math.abs(first[1] - last[1]) / 2} className="fill-accent/10 stroke-accent-text" />
           : <polyline points={draft.map(p => p.join(',')).join(' ')} className="fill-none stroke-accent-text" strokeWidth={tool === 'select-brush' || tool === 'remove' ? session?.toolSettings.brushSize : 1.5} strokeLinecap="round" strokeLinejoin="round" /> : null}
     </svg>

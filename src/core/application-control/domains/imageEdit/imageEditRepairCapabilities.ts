@@ -2,12 +2,20 @@ import { z } from 'zod'
 import { capabilityControl, capabilityOutputSchema, defineApplicationCapability } from '../shared/defineApplicationCapability'
 
 const layerRef = z.object({ kind: z.literal('image_edit.layer'), id: z.string().startsWith('v3:') }).strict()
+const selectionRegion = z.object({ kind: z.literal('selection'), ref: z.object({ kind: z.literal('image_edit.selection'), id: z.string().startsWith('v3:') }).strict() }).strict()
+const rectangleRegion = z.object({ kind: z.literal('rectangle'), x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).strict()
 const region = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('selection'), ref: z.object({ kind: z.literal('image_edit.selection'), id: z.string().startsWith('v3:') }).strict() }).strict(),
-  z.object({ kind: z.literal('rectangle'), x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).strict(),
+  z.object({ kind: z.literal('subject'), candidateId: z.string().min(1).optional() }).strict(),
+  z.object({ kind: z.literal('portrait'), candidateId: z.string().min(1).optional() }).strict(),
+  selectionRegion,
+  rectangleRegion,
 ])
-const baseInput = z.object({ targetRef: layerRef, region, quality: z.enum(['fast', 'fine']).default('fast') }).strict()
-export const imageEditRepairInputSchema = baseInput.extend({ sourceRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict() }).strict()
+const baseInput = z.object({ targetRef: layerRef, region, quality: z.enum(['auto', 'fast', 'fine']).default('auto') }).strict()
+const repairRegion = z.discriminatedUnion('kind', [
+  selectionRegion,
+  rectangleRegion,
+])
+export const imageEditRepairInputSchema = baseInput.extend({ region: repairRegion, sourceRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict() }).strict()
 const output = capabilityOutputSchema({ ref: layerRef, documentRef: z.object({ kind: z.literal('image_edit.document'), id: z.string() }).strict(), commandId: z.string(), verification: z.object({ verified: z.boolean() }).strict() })
 const shared = {
   version: 1, domain: 'image_edit' as const, side: 'frontend' as const, readOnly: false,
@@ -25,7 +33,7 @@ const shared = {
 }
 export const removeImageEditRegionCapability = defineApplicationCapability({ ...shared,
   id: 'remove_image_edit_region', title: '移除图片区域', aliases: ['修复', '移除物体', '去除杂物', 'remove object', 'inpaint'],
-  description: '修复：移除选区引用或画面比例矩形内的物体，在当前像素层生成非破坏补丁，一步撤销。快速档本地推理、小瑕疵自动经典修补；精细档更慢。只采样当前层，不烘焙上方调整。比例坐标属于未裁剪画面；仅支持标准色域，人物主体语义尚未开放。首次使用复用本地模型下载。完成后用返回文档引用观察或导出合成图检查。',
+  description: '修复：移除主体、人像、选区引用或画面比例矩形内的物体，在当前像素层生成非破坏补丁，一步撤销。默认自动按遮罩面积与背景重复纹理选择质量，小瑕疵使用经典修补，大面积或规则纹理使用精细档；可明确指定快速或精细。只采样当前层，不烘焙上方调整。比例坐标属于未裁剪画面；仅支持标准色域，多主体时先调用 select_image_edit_region 获取候选，未选定时可直接给 region.candidateId，已经选定时改用选区引用。首次使用复用本地模型下载。完成后用返回文档引用观察或导出合成图检查。',
   inputSchema: baseInput,
   resolveObservedEffects: (_input, output) => [{ effect: 'update', entityTypes: ['image_edit.layer'], propertyIds: [], targetRefs: [output.ref], count: 1, verified: output.verification.verified, evidence: [] }],
 })

@@ -1,3 +1,4 @@
+import { registerImageEditorV3SubjectIpc } from './image-editor-v3-subject'
 import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import type { ImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentTypes'
 import type {
@@ -362,6 +363,7 @@ export function registerImageEditorV3Ipc(): void {
     runRequest,
   })
   registerImageEditorV3BrushTileIpc({ store: getRuntime().brushTiles, guard, runRequest })
+  registerImageEditorV3SubjectIpc({ guard, runRequest })
   disposeRepair = registerImageEditorV3RepairIpc({ resources: getRuntime().resources, guard, runRequest })
   registerIpcHandler('imageEditorV3:document:list', parseImageEditorV3ListPayload, (payload, event) => (
     runRequest('document.list', payload.requestId, event.sender.id, async (signal) => {

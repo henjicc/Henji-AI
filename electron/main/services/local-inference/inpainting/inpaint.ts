@@ -1,3 +1,4 @@
+import { expandInpaintNetworkMask } from './networkMask'
 import { loadSharp } from '../../image/sharp-loader'
 import { loadTrackingOpenCv } from '../tracking/openCvTracking'
 import type { LocalModelRunner, LocalTensorInput } from '../analysis'
@@ -87,13 +88,15 @@ export async function runImageInpaint(job: ImageInpaintJob, deps: ImageInpaintDe
         const rw = Math.max(1, Math.round(job.roi.width * scale)); const rh = Math.max(1, Math.round(job.roi.height * scale))
         const resized = await sharp(rgb, { raw: { width: job.roi.width, height: job.roi.height, channels: 3 } }).resize(rw, rh).raw().toBuffer()
         const resizedMask = await sharp(mask, { raw: { width: job.roi.width, height: job.roi.height, channels: 1 } }).resize(rw, rh, { kernel: 'nearest' }).toColourspace('b-w').raw().toBuffer()
+        // 神经模型孔洞外扩约工作分辨率的0.6%；最终仍严格按原coverage提交。
+        const networkMask = await expandInpaintNetworkMask(new Uint8Array(resizedMask), rw, rh)
         const count = SIZE * SIZE
         const image = job.algorithm === 'migan' ? new Uint8Array(count * 3) : new Float32Array(count * 3)
         const holes = job.algorithm === 'migan' ? new Uint8Array(count) : new Float32Array(count)
         for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
           const index = y * SIZE + x
           const sourceIndex = Math.min(y, rh - 1) * rw + Math.min(x, rw - 1)
-          const hole = resizedMask[sourceIndex] > 0
+          const hole = networkMask[sourceIndex] > 0
           holes[index] = job.algorithm === 'migan' ? (hole ? 0 : 255) : (hole ? 1 : 0)
           for (let c = 0; c < 3; c++) image[c * count + index] = resized[sourceIndex * 3 + c] / (job.algorithm === 'migan' ? 1 : 255)
         }

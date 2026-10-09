@@ -639,6 +639,15 @@
       }
     },
     "v3": {
+      "subject": {
+        "auto": "Select subject",
+        "portrait": "Select people",
+        "choose": "Choose candidate",
+        "candidate": "Candidate {{number}} · {{area}}% of image",
+        "previous": "Previous",
+        "next": "Next",
+        "processing": "Finding subjects…"
+      },
       "title": "Image Editor",
       "previewAlt": "Image editor preview",
       "previewRenderFailed": "The preview could not refresh. Your edits are safe; keep editing or reopen the image to recover.",
@@ -760,6 +769,8 @@
         }
       },
       "tools": {
+        "select-subject": "Select subject by point",
+        "select-subject-box": "Select subject by box",
         "label": "Image editing tools",
         "move": "Move image or layer",
         "hand": "Pan canvas (Hand)",
@@ -846,6 +857,7 @@
         "failed": "The raster stroke was not saved: {{reason}}"
       },
       "repair": {
+        "auto": "Auto",
         "quality": "Repair quality", "fast": "Fast", "fine": "Fine",
         "remove-selection": "Remove selected content",
         "download-hint": "Download for first model repair · {{size}}",

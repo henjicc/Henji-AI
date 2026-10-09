@@ -639,6 +639,15 @@
       }
     },
     "v3": {
+      "subject": {
+        "auto": "选择主体",
+        "portrait": "选择人像",
+        "choose": "选择候选",
+        "candidate": "候选 {{number}} · 占画面 {{area}}%",
+        "previous": "上一页",
+        "next": "下一页",
+        "processing": "正在识别主体…"
+      },
       "title": "图片编辑",
       "previewAlt": "图片编辑预览",
       "previewRenderFailed": "预览暂时没能刷新，编辑内容不受影响。继续编辑或重新打开图片即可恢复。",
@@ -760,6 +769,8 @@
         }
       },
       "tools": {
+        "select-subject": "点选主体",
+        "select-subject-box": "框选主体",
         "label": "图片编辑工具",
         "move": "移动图像或图层",
         "hand": "移动画布（抓手）",
@@ -846,6 +857,7 @@
         "failed": "栅格笔画未写入：{{reason}}"
       },
       "repair": {
+        "auto": "自动",
         "quality": "修复质量", "fast": "快速", "fine": "精细",
         "remove-selection": "移除选区内容",
         "download-hint": "首次模型修复需下载 · {{size}}",

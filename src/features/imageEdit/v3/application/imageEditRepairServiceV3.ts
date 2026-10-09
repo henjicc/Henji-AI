@@ -1,3 +1,5 @@
+import { routeImageEditRepairQualityV3, imageEditRepairContextV3 } from '@/core/imageEdit/v3/repairQuality'
+import { selectImageEditRegionV3 } from './imageEditSubjectSelectionServiceV3'
 import { createImageEditorV3RequestId, persistImageEditorV3BrushTiles, repairImageEditorV3Raster, pinImageEditorV3RepairResources, releaseImageEditorV3RepairResources, ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import { appendImageEditSelectionV3, type ImageEditSelectionSessionV3 } from '@/core/imageEdit/v3/selection/session'
@@ -19,7 +21,9 @@ const logger = createLogger('features.image_edit_v3.repair')
 const active = new WeakSet<ImageEditCommandBusV3>()
 export interface ImageEditRepairOptionsV3 {
   action: 'remove' | 'repair'
-  quality?: 'fast' | 'fine'
+  quality?: 'auto' | 'fast' | 'fine'
+  semanticRegion?: 'subject' | 'portrait'
+  candidateId?: string
   /** 未裁剪画面比例矩形；省略时使用当前选区，不修改会话选区。 */
   rectangle?: { x: number; y: number; width: number; height: number }
   selection?: ImageEditSelectionSessionV3
@@ -32,18 +36,24 @@ export interface ImageEditRepairOptionsV3 {
 
 /** UI 与算法能力共用：采样当前像素层（含既有补丁，不烘焙蒙版/变换/上方调整），最后一次提交。 */
 export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerId: string, options: ImageEditRepairOptionsV3): Promise<{ layerId: string; commandId: string; durationMs: number; patchCount: number }> {
+  bus.getLifecycleSignal().throwIfAborted()
   if (active.has(bus)) throw new Error('这张图片正在修复，请先完成或取消当前修复')
   const start = bus.getSnapshot(), location = findImageEditV3LiveLayer(start.document, layerId)
   if (!location || location.layer.type !== 'raster' || location.layer.locked || location.ancestors.some(layer => layer.locked)
     || !location.layer.visible || location.ancestors.some(layer => !layer.visible)) throw new Error('请选择一个可见且未锁定的像素图层')
   const { document } = start, layer = location.layer
   if (document.color.workingSpace !== 'srgb' || document.color.hdrMetadata || !['srgb', 'linear'].includes(document.color.transferFunction)) throw new Error('当前修复仅支持标准色域图片；宽色域与 HDR 图片暂未开放修复')
-  const selection = options.rectangle ? appendImageEditSelectionV3(null, { type: 'rectangle', ...options.rectangle }, 'replace') : options.selection ?? start.selection
+  const recognized = options.semanticRegion ? await selectImageEditRegionV3(bus, layerId, { region: options.semanticRegion === 'portrait' ? { kind: 'portrait', quality: 'fine' } : { kind: 'subject' }, candidateId: options.candidateId, signal: options.signal, commit: false }) : null
+  if (active.has(bus)) throw new Error('这张图片正在修复，请先完成或取消当前修复')
+  if (recognized?.status === 'candidates') throw new Error('发现多个主体，请先调用 select_image_edit_region 按位置选择候选，再移除所选区域')
+  if (bus.getSnapshot().document.revision !== start.document.revision || bus.getSnapshot().selectionRevision !== start.selectionRevision) throw new Error('图片或选区已变化，请重新修复')
+  const selection = recognized?.selection ?? (options.rectangle ? appendImageEditSelectionV3(null, { type: 'rectangle', ...options.rectangle }, 'replace') : options.selection ?? start.selection)
   if (!selection) throw new Error('请先框选区域，或用移除画笔涂抹物体')
   if (options.action === 'repair' && !options.sourceRegion && !options.sourceOffset) throw new Error('请把选区拖到干净区域取样')
   const abort = new AbortController(), signal = abort.signal
   const cancel = (): void => abort.abort()
   options.signal?.addEventListener('abort', cancel, { once: true })
+  bus.getLifecycleSignal().addEventListener('abort', cancel, { once: true })
   if (options.signal?.aborted) abort.abort()
   const fresh = (): void => {
     signal.throwIfAborted()
@@ -57,7 +67,7 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
   const loader = createImageEditorRasterBrushTileLoaderV3({ document, layer, resourceByteSizes: sizes })
   const matrix = multiplyAnnotationMatricesV3(invertAnnotationMatrixV3(resolveAnnotationOutputGeometryV3(document).sourceToOutput), resolveAnnotationLayerToOutputMatrixV3(document, [layer.transform, ...location.ancestors.slice().reverse().map(parent => parent.transform)]))
   active.add(bus)
-  logger.info('区域修复开始', { event: 'image_edit.repair.start', context: { documentId: document.id, layerId, action: options.action, quality: options.quality ?? 'fast' } })
+  logger.info('区域修复开始', { event: 'image_edit.repair.start', context: { documentId: document.id, layerId, action: options.action, quality: options.quality ?? 'auto' } })
   let committed = false
   try {
     fresh()
@@ -65,10 +75,10 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
     const size = await loader.resolveStorageSize(signal)
     // 复用 ie3 的流式单通道遮罩/ROI；此遍只取实际 ROI，不把整幅遮罩留在内存。
     const exportMask = exportCurrentImageEditSelectionV3(bus, signal, { selection, size, matrix })
-    let count = 0
+    let count = 0, selectedPixels = 0
     const scans = Math.ceil(size.width / 512) * Math.ceil(size.height / 512)
     let block = await exportMask.next()
-    while (!block.done) { options.progress?.({ stage: 'selecting', done: ++count, total: scans }); block = await exportMask.next() }
+    while (!block.done) { for (const value of block.value.bitmap) selectedPixels += value / 255; options.progress?.({ stage: 'selecting', done: ++count, total: scans }); block = await exportMask.next() }
     const roi = block.value
     fresh()
     if (!roi) throw new Error('选区没有覆盖当前像素图层，请重新选择')
@@ -84,7 +94,7 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
       offset = { x: Math.round(target[0] - origin[0]), y: Math.round(target[1] - origin[1]) }
       if (roi.left + offset.x < 0 || roi.top + offset.y < 0 || roi.left + roi.width + offset.x > size.width || roi.top + roi.height + offset.y > size.height) throw new Error('来源区域超出图层边界，请把整个选区拖到图内')
     }
-    const quality = options.quality === 'fine' ? 'fine' : roi.width <= 32 && roi.height <= 32 ? 'blemish' : 'fast'
+    let quality = routeImageEditRepairQualityV3(options.quality ?? 'auto', roi, selectedPixels / (size.width * size.height))
     const leftTile = Math.floor(roi.left / 512), topTile = Math.floor(roi.top / 512)
     const rightTile = Math.ceil((roi.left + roi.width) / 512), bottomTile = Math.ceil((roi.top + roi.height) / 512)
     const total = (rightTile - leftTile) * (bottomTile - topTile)
@@ -107,14 +117,18 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
     let guide: { tile: Float32PremultipliedRgbaTile; x: number; y: number; scale: number } | undefined
     if (options.action === 'remove') {
       // 模型的固定工作分辨率不是图片尺寸上限。整块选区共享上下文，避免大物体内部瓦片没有已知像素。
-      const bounds = { x: Math.max(0, roi.left - 64), y: Math.max(0, roi.top - 64), width: 0, height: 0 }
-      bounds.width = Math.min(size.width, roi.left + roi.width + 64) - bounds.x
-      bounds.height = Math.min(size.height, roi.top + roi.height + 64) - bounds.y
+      const bounds = imageEditRepairContextV3(roi, size)
       const scale = Math.max(1, bounds.width / 640, bounds.height / 640)
       const proxy = { x: bounds.x, y: bounds.y, width: Math.ceil(bounds.width / scale), height: Math.ceil(bounds.height / scale) }
       const proxyMatrix = multiplyAnnotationMatricesV3(matrix, [scale, 0, 0, scale, bounds.x, bounds.y])
       const coverage = await maskClient.rasterize({ selection, size: document.geometry, region: { ...proxy, x: 0, y: 0 }, matrix: proxyMatrix }, signal)
       const bitmap = await sample(proxy, coverage, scale)
+      if ((options.quality ?? 'auto') === 'auto' && quality !== 'blemish') {
+        const analysis = await pixels.run({ type: 'structure', bitmap }, signal)
+        if (!analysis.structure) throw new Error('背景纹理分析结果缺失')
+        quality = routeImageEditRepairQualityV3('auto', roi, selectedPixels / (size.width * size.height), analysis.structure)
+        logger.info('修复质量已选择', { event: 'image_edit.repair.quality_route', context: { quality, area: selectedPixels / (size.width * size.height), ...analysis.structure } })
+      }
       const result = await repairImageEditorV3Raster({ requestId: createImageEditorV3RequestId('repair'), leaseId, width: proxy.width, height: proxy.height,
         rgba: bitmap.rgba.buffer as ArrayBuffer, mask: bitmap.mask.buffer as ArrayBuffer, quality }, signal,
         value => options.progress?.({ stage: value.stage === 'downloading' ? 'downloading' : 'processing', done: value.done, total: value.total }))
@@ -169,7 +183,8 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
     logger.warn('区域修复未提交', { event: 'image_edit.repair.failed', error, context: { documentId: document.id, cancelled: signal.aborted } })
     throw error
   } finally {
-    monitor(); options.signal?.removeEventListener('abort', cancel); maskClient.dispose(); pixels.dispose(); active.delete(bus)
+    monitor(); options.signal?.removeEventListener('abort', cancel)
+    bus.getLifecycleSignal().removeEventListener('abort', cancel); maskClient.dispose(); pixels.dispose(); active.delete(bus)
     try { await releaseImageEditorV3RepairResources(leaseId) } catch (error) { logger.warn('修复资源租约释放失败', { event: 'image_edit.repair.cleanup.failed', error }) }
     if (!committed) {
       const snapshot = bus.getPersistenceSnapshot()

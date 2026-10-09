@@ -1,3 +1,4 @@
+import { ImageEditorSubjectProviderV3 } from './ImageEditorSubjectContextV3'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -31,6 +32,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   }, [controller.document, controller.sessionId, onEditorContextChange])
 
   return (
+    <ImageEditorSubjectProviderV3 bus={bus} controller={controller}>
     <ImageEditorRepairProviderV3 bus={bus} controller={controller}>
     <div
       ref={rootRef}
@@ -85,6 +87,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
       </div>
     </div>
     </ImageEditorRepairProviderV3>
+    </ImageEditorSubjectProviderV3>
   )
 }
 

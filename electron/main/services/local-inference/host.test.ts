@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LocalInferenceHost, type LocalInferenceChild } from './host'
 import type { LocalInferenceEvent, LocalInferenceRequest, SmartRegionAnalysisJob, SmartRegionAnalysisResult } from './protocol'
+import type { ImageSubjectSelectionJob, ImageSubjectSelectionResult } from './subject-selection/protocol'
 import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
 
 class FakeChild extends EventEmitter implements LocalInferenceChild {
@@ -29,6 +30,20 @@ describe('本地推理宿主', () => {
     child.reply({ type: 'done', id: 'patch', result: patch })
     await expect(pending).resolves.toEqual(patch)
     expect(progress).toHaveBeenCalledWith(1, 4)
+    host.dispose()
+  })
+
+  it('主体选择复用同一宿主的去重、取消和结果通道', async () => {
+    const child = new FakeChild(), host = new LocalInferenceHost({ fork: () => child, log: vi.fn() })
+    const selection: ImageSubjectSelectionJob = { id: 'subject', width: 1, height: 1, rgba: new Uint8Array(4).buffer, region: { kind: 'subject' }, models: [], providers: ['cpu'] }
+    const pending = host.selectImageRegion(selection)
+    expect(child.sent[0]).toEqual({ type: 'select-image-region', job: selection })
+    await expect(host.selectImageRegion(selection)).rejects.toMatchObject({ code: 'inference' })
+    const result: ImageSubjectSelectionResult = { candidates: [], model: 'efficienttam', providers: ['cpu'], durationMs: 1, inferenceMs: 1 }
+    child.reply({ type: 'done', id: selection.id, result }); await expect(pending).resolves.toEqual(result)
+    const cancelled = host.selectImageRegion({ ...selection, id: 'cancel-subject' }); host.cancel('cancel-subject')
+    expect(child.sent.at(-1)).toEqual({ type: 'cancel', id: 'cancel-subject' })
+    child.reply({ type: 'failed', id: 'cancel-subject', code: 'cancelled', message: '取消' }); await expect(cancelled).rejects.toMatchObject({ code: 'cancelled' })
     host.dispose()
   })
 

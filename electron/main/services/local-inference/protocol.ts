@@ -1,3 +1,4 @@
+import type { ImageSubjectSelectionJob, ImageSubjectSelectionResult } from './subject-selection/protocol'
 import type { SmartRegionAnalysisKind, SmartRegionSummary } from '../../../../src/core/videoEdit/smartRegions'
 import type { LocalExecutionProvider } from './providers'
 import type { OnnxExtraOutput } from './tracking/onnxGraphOutputs'
@@ -47,6 +48,7 @@ export type LocalInferenceFailureCode = 'decode' | 'inference' | 'output' | 'can
 
 export type LocalInferenceRequest =
   | { type: 'analyze'; job: SmartRegionAnalysisJob }
+  | { type: 'select-image-region'; job: ImageSubjectSelectionJob }
   | { type: 'inpaint'; job: ImageInpaintJob }
   | { type: 'track'; job: TrackingJob }
   | { type: 'candidates'; job: TrackingCandidatesJob }
@@ -67,6 +69,6 @@ export interface SmartRegionAnalysisResult {
 export type LocalInferenceEvent =
   | { type: 'frames'; id: string; requestId: string; request: TrackingFrameRequest }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult }
+  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult }
   | { type: 'failed'; id: string; code: LocalInferenceFailureCode; message: string }
   | { type: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }

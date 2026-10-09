@@ -8,8 +8,8 @@ interface RepairView {
   busy: boolean
   error: string | null
   progress: { stage: string; percent: number } | null
-  quality: 'fast' | 'fine'
-  setQuality(value: 'fast' | 'fine'): void
+  quality: 'auto' | 'fast' | 'fine'
+  setQuality(value: 'auto' | 'fast' | 'fine'): void
   run(options: Omit<ImageEditRepairOptionsV3, 'quality' | 'signal' | 'progress'>): Promise<void>
   cancel(): void
 }
@@ -18,7 +18,7 @@ const RepairContext = createContext<RepairView | null>(null)
 export function useImageEditorRepairV3(): RepairView | null { return useContext(RepairContext) }
 
 export function ImageEditorRepairProviderV3({ bus, controller, children }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; children: ReactNode }): JSX.Element {
-  const [quality, setQuality] = useState<'fast' | 'fine'>('fast')
+  const [quality, setQuality] = useState<'auto' | 'fast' | 'fine'>('auto')
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<RepairView['progress']>(null)
   const abort = useRef<AbortController | null>(null)

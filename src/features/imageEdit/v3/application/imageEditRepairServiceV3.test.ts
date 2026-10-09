@@ -1,3 +1,5 @@
+import { encodeImageEditSelectionMaskV3 } from '@/core/imageEdit/v3/subjectSelection'
+import { analyzeImageEditRepairStructureV3 } from '@/core/imageEdit/v3/repairQuality'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
@@ -16,6 +18,8 @@ import { imageEditV3LayerRef, imageEditV3DocumentRef } from './imageEditDocument
 import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry'
 
 const state = vi.hoisted(() => ({ calls: [] as { width: number; sample: boolean; quality: string }[], afterWrite: null as (() => void) | null, fail: false, serial: 0 }))
+const selectSubject = vi.hoisted(() => vi.fn())
+vi.mock('./imageEditSubjectSelectionServiceV3', () => ({ selectImageEditRegionV3: selectSubject }))
 vi.mock('@/commands/imageEditorV3', async original => ({ ...await original<typeof import('@/commands/imageEditorV3')>(),
   pinImageEditorV3RepairResources: vi.fn(async () => undefined), releaseImageEditorV3RepairResources: vi.fn(async () => undefined),
   repairImageEditorV3Raster: async (request: { width: number; sample?: ArrayBuffer; quality: string }, signal: AbortSignal) => {
@@ -40,6 +44,7 @@ vi.mock('../execution/selectionRasterClientV3', () => ({ ImageEditSelectionRaste
 vi.mock('../execution/repairPixelsClientV3', () => ({ ImageEditRepairPixelsClientV3: class {
   async run(input: RepairPixelsRequestV3, signal: AbortSignal) {
     signal.throwIfAborted()
+    if (input.type === 'structure') return { structure: analyzeImageEditRepairStructureV3(input.bitmap) }
     if (input.type === 'merge') return { data: mergeImageEditRepairPatchV3(input.tile, input.origin, input.patch, input.bitmap, input.guide) }
     if (input.type === 'mask') input.bitmap.mask = Uint8Array.from(input.coverage, v => Math.round(v * 255))
     else copyImageEditRepairSourceV3(input.tile, input.origin, input.bitmap)
@@ -47,7 +52,7 @@ vi.mock('../execution/repairPixelsClientV3', () => ({ ImageEditRepairPixelsClien
   }
   dispose() {}
 } }))
-beforeEach(() => { installHarnessNativeStorage(); state.calls = []; state.fail = false; state.serial = 0; state.afterWrite = null })
+beforeEach(() => { installHarnessNativeStorage(); state.calls = []; state.fail = false; state.serial = 0; state.afterWrite = null; selectSubject.mockReset(); selectSubject.mockResolvedValue({ status: 'selected', candidates: [], selection: appendImageEditSelectionV3(null, encodeImageEditSelectionMaskV3(Uint8Array.of(0, 255, 0, 255), 2, 2), 'replace'), durationMs: 1 }) })
 afterEach(uninstallHarnessNativeStorage)
 function busFor(width = 1200) {
   const doc = createImageEditDocumentV3({ width, height: 128, documentId: crypto.randomUUID() })
@@ -90,4 +95,19 @@ describe('区域修复同源事务', () => {
       expect(bus.getPersistenceSnapshot().history.undo).toHaveLength(2)
     } finally { dispose(); bus.dispose() }
   })
+  it('正式主体/人像移除消费算法选区，歧义拒绝，成功只有一步作品撤销', async () => {
+    const bus = busFor(64), doc = bus.getSnapshot().document, original = bus.getSnapshot().selection
+    const dispose = registerPersistedImageEditTestSession('semantic-remove', bus), targetRef = imageEditV3LayerRef(doc.id, 'raster')
+    try {
+      selectSubject.mockResolvedValueOnce({ status: 'candidates', candidates: [{ id: 'one' }, { id: 'two' }], selection: null, durationMs: 1 })
+      const ambiguous = await executeApplicationCapabilityResult({ id: 'remove_image_edit_region', version: 1, input: { targetRef, region: { kind: 'subject' } } }, { signal: new AbortController().signal })
+      expect(ambiguous.ok).toBe(false); expect(bus.getSnapshot().document.revision).toBe(0)
+      const result = await executeApplicationCapabilityResult({ id: 'remove_image_edit_region', version: 1, input: { targetRef, region: { kind: 'portrait', candidateId: 'chosen' } } }, { signal: new AbortController().signal })
+      expect(result.ok, JSON.stringify(result)).toBe(true)
+      expect(selectSubject).toHaveBeenLastCalledWith(bus, 'raster', expect.objectContaining({ region: { kind: 'portrait', quality: 'fine' }, candidateId: 'chosen', commit: false }))
+      expect(bus.getSnapshot().selection).toEqual(original); expect(bus.getPersistenceSnapshot().history.undo).toHaveLength(1)
+      bus.undo(); expect(bus.getSnapshot().document.layers).toEqual(doc.layers)
+    } finally { dispose(); bus.dispose() }
+  })
+
 })

@@ -12,6 +12,8 @@ export type ImageEditorToolIdV3 =
   | 'select-lasso'
   | 'select-polygon'
   | 'select-brush'
+  | 'select-subject'
+  | 'select-subject-box'
   | 'remove'
   | 'repair'
   | 'annotation-text'
@@ -133,7 +135,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
 > = {
   full: {
     id: 'full',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...REPAIR_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ready('select-subject'), ready('select-subject-box'), ...REPAIR_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
@@ -163,7 +165,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   'canvas-edit': {
     id: 'canvas-edit',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...REPAIR_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ready('select-subject'), ready('select-subject-box'), ...REPAIR_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],

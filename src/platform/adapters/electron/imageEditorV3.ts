@@ -12,6 +12,7 @@ function getNativeImageEditorV3(): ImageEditorV3Platform {
 
 export function createElectronImageEditorV3(): ImageEditorV3Platform {
   return {
+    selectRasterRegion: request => { const method = getNativeImageEditorV3().selectRasterRegion; if (!method) throw new Error('主体选择不可用，请更新应用'); return method(request) },
     repairRaster: request => { const method = getNativeImageEditorV3().repairRaster; if (!method) throw new Error('图片修复不可用，请更新应用'); return method(request) },
     readRepairProgress: request => getNativeImageEditorV3().readRepairProgress?.(request) ?? Promise.resolve(null),
     pinRepairResources: request => { const method = getNativeImageEditorV3().pinRepairResources; if (!method) throw new Error('图片修复资源保护不可用'); return method(request) },

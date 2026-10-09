@@ -4,6 +4,24 @@ import { applyFastBlurV3, resolveFastBlurV3Geometry } from '../effects/fastBlur'
 import { createFloat32PremultipliedRgbaTile } from '../effects/contracts';
 
 function shapeCoverage(shape: ImageEditSelectionIntentShapeV3, size: { width: number; height: number }, region: ImageEditSelectionRegionV3): Float32Array {
+  if (shape.type === 'mask') {
+    const [a, b, c, d, e, f] = shape.matrix, determinant = a * d - b * c
+    const result = new Float32Array(region.width * region.height)
+    const at = (x: number, y: number): number => {
+      const index = Math.max(0, Math.min(shape.height - 1, y)) * shape.width + Math.max(0, Math.min(shape.width - 1, x))
+      let low = 0, high = shape.runs.length - 1
+      while (low <= high) { const middle = Math.floor((low + high) / 2), [start, length, value] = shape.runs[middle]; if (index < start) high = middle - 1; else if (index >= start + length) low = middle + 1; else return value / 255 }
+      return 0
+    }
+    for (let y = 0; y < region.height; y++) for (let x = 0; x < region.width; x++) {
+      const dx = (region.x + x + 0.5) / size.width - e, dy = (region.y + y + 0.5) / size.height - f
+      const nx = (d * dx - c * dy) / determinant, ny = (-b * dx + a * dy) / determinant
+      if (nx < 0 || nx >= 1 || ny < 0 || ny >= 1) continue
+      const sx = nx * shape.width - 0.5, sy = ny * shape.height - 0.5, ix = Math.floor(sx), iy = Math.floor(sy), tx = sx - ix, ty = sy - iy
+      result[y * region.width + x] = (at(ix, iy) * (1 - tx) + at(ix + 1, iy) * tx) * (1 - ty) + (at(ix, iy + 1) * (1 - tx) + at(ix + 1, iy + 1) * tx) * ty
+    }
+    return result
+  }
   if (shape.type !== 'brush') {
     const pixels = shape.type === 'lasso'
       ? { type: 'lasso' as const, points: shape.points.map(p => ({ x: p.x * size.width, y: p.y * size.height })) }

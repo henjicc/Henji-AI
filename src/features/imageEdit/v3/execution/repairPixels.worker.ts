@@ -1,11 +1,14 @@
+import { analyzeImageEditRepairStructureV3 } from '@/core/imageEdit/v3/repairQuality'
 import { copyImageEditRepairSourceV3, mergeImageEditRepairPatchV3, type ImageEditRepairBitmapV3 } from '@/core/imageEdit/v3/repair'
 import type { Float32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
 export type RepairPixelsRequestV3 = { type: 'source'; tile: Float32PremultipliedRgbaTile; origin: { x: number; y: number }; bitmap: ImageEditRepairBitmapV3 }
+  | { type: 'structure'; bitmap: ImageEditRepairBitmapV3 }
   | { type: 'mask'; bitmap: ImageEditRepairBitmapV3; coverage: Float32Array }
   | { type: 'merge'; tile: Float32PremultipliedRgbaTile; origin: { x: number; y: number }; patch: Float32PremultipliedRgbaTile; bitmap: ImageEditRepairBitmapV3; guide?: { x: number; y: number; scale: number } }
 self.onmessage = (event: MessageEvent<RepairPixelsRequestV3>): void => {
   try {
     const input = event.data
+    if (input.type === 'structure') { self.postMessage({ structure: analyzeImageEditRepairStructureV3(input.bitmap) }); return }
     if (input.type === 'source' || input.type === 'mask') {
       if (input.type === 'source') copyImageEditRepairSourceV3(input.tile, input.origin, input.bitmap)
       else input.bitmap.mask = Uint8Array.from(input.coverage, value => Math.round(value * 255))

@@ -532,3 +532,10 @@ export async function importImageEditorColorLutV3(requestId: string): Promise<{ 
   const result = await method({ requestId })
   return result.status === "completed" ? result.value : null
 }
+
+export async function selectImageEditorV3RasterRegion(request: import('@/platform/contracts/imageEditorV3').ImageEditorV3SubjectRequest, signal: AbortSignal): Promise<import('@/platform/contracts/imageEditorV3').ImageEditorV3SubjectResult> {
+  return runCancellable(request.requestId, signal, platform => {
+    if (!platform.selectRasterRegion) throw new Error('主体选择不可用，请更新应用')
+    return platform.selectRasterRegion(request)
+  })
+}

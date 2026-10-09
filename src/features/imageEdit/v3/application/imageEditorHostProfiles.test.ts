@@ -30,7 +30,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'hand',
       'zoom',
       'crop',
-      'select-rect', 'select-ellipse', 'select-lasso', 'select-polygon', 'select-brush',
+      'select-rect', 'select-ellipse', 'select-lasso', 'select-polygon', 'select-brush', 'select-subject', 'select-subject-box',
       'remove', 'repair',
       'annotation-text',
       'annotation-callout',

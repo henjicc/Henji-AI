@@ -11,6 +11,8 @@ import { ImageEditorSelectionOverlayV3 } from './ImageEditorSelectionOverlayV3'
 import type { ImageEditorV3Controller } from './types'
 import { appendImageEditSelectionV3 } from '@/core/imageEdit/v3/selection/session'
 
+const subjectView = vi.hoisted(() => ({ busy: false, candidates: [], run: vi.fn(async () => undefined) }))
+vi.mock('./ImageEditorSubjectContextV3', () => ({ useImageEditorSubjectV3: () => subjectView }))
 const repairView = vi.hoisted(() => ({ busy: false, run: vi.fn(async () => undefined) }))
 vi.mock('./ImageEditorRepairContextV3', () => ({ useImageEditorRepairV3: () => repairView }))
 
@@ -18,9 +20,9 @@ vi.mock('../execution/selectionRasterClientV3', () => ({ ImageEditSelectionRaste
   async rasterize() { return new Float32Array(32 * 16) }
   dispose() {}
 } }))
-beforeEach(() => { repairView.busy = false; repairView.run.mockClear(); useImageEditorSessionStoreV3.setState({ sessions: {} }); vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null) })
+beforeEach(() => { repairView.busy = false; repairView.run.mockClear(); subjectView.busy = false; subjectView.run.mockClear(); useImageEditorSessionStoreV3.setState({ sessions: {} }); vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null) })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
-function setup(tool: 'select-rect' | 'select-polygon' | 'select-brush' | 'remove' | 'repair') {
+function setup(tool: 'select-rect' | 'select-polygon' | 'select-brush' | 'remove' | 'repair' | 'select-subject' | 'select-subject-box') {
   const document = createImageEditDocumentV3({ width: 32, height: 16, documentId: 'selection-gesture' })
   document.layers = [createImageEditRasterLayerV3('r', '原图')]
   const bus = new ImageEditCommandBusV3(document)
@@ -78,4 +80,20 @@ it('修补要求既有选区，拖动到来源仅传比例偏移，不改变选�
   fireEvent.pointerUp(overlay, { pointerId: 2, clientX: 240, clientY: 120 })
   expect(repairView.run).toHaveBeenCalledWith({ action: 'repair', sourceOffset: { x: 0.5, y: 0.5 } })
   expect(bus.getSnapshot().selection).toEqual(selection); bus.dispose()
+})
+
+it('主体点选与框选只向同源作业传画面比例，取消手势不写选区', () => {
+  const point = setup('select-subject')
+  fireEvent.pointerDown(point.overlay, { button: 0, pointerId: 1, clientX: 80, clientY: 40 })
+  fireEvent.pointerUp(point.overlay, { pointerId: 1, clientX: 80, clientY: 40 })
+  expect(subjectView.run).toHaveBeenCalledWith({ kind: 'point', points: [{ x: 0.25, y: 0.25, foreground: true }] })
+  expect(point.bus.getSnapshot().selection).toBeNull(); point.bus.dispose(); cleanup()
+  const box = setup('select-subject-box')
+  fireEvent.pointerDown(box.overlay, { button: 0, pointerId: 2, clientX: 240, clientY: 120 })
+  fireEvent.pointerUp(box.overlay, { pointerId: 2, clientX: 80, clientY: 40 })
+  expect(subjectView.run).toHaveBeenLastCalledWith({ kind: 'box', x: 0.25, y: 0.25, width: 0.5, height: 0.5 })
+  subjectView.run.mockClear()
+  fireEvent.pointerDown(box.overlay, { button: 0, pointerId: 3, clientX: 80, clientY: 40 })
+  fireEvent.pointerCancel(box.overlay, { pointerId: 3 })
+  expect(subjectView.run).not.toHaveBeenCalled(); expect(box.bus.getSnapshot().history.undoCount).toBe(0); box.bus.dispose()
 })

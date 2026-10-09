@@ -39,6 +39,8 @@ const TOOL_ICONS: Record<ImageEditorToolIdV3, LucideIcon> = {
   'select-lasso': LassoSelect,
   'select-polygon': LassoSelect,
   'select-brush': Paintbrush,
+  'select-subject': WandSparkles,
+  'select-subject-box': Scan,
   remove: WandSparkles,
   repair: Bandage,
   'annotation-text': MessageSquareText,

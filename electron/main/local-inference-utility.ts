@@ -1,3 +1,5 @@
+import { runImageSubjectSelection } from './services/local-inference/subject-selection/segment'
+import type { ImageSubjectSelectionJob } from './services/local-inference/subject-selection/protocol'
 import fs from 'node:fs/promises'
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
 import { runSmartRegionAnalysis, SmartRegionAnalysisError } from './services/local-inference/analysis'
@@ -22,7 +24,7 @@ const log = (level: 'info' | 'warn', message: string, event: string, context: Re
 const renderedFrames = new RenderedTrackingFrames((id, requestId, request) => post({ type: 'frames', id, requestId, request }))
 
 let sessions: Promise<LocalModelSessions> | undefined
-type QueuedJob = { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob } | { type: 'inpaint'; job: ImageInpaintJob }
+type QueuedJob = { type: 'select-image-region'; job: ImageSubjectSelectionJob } | { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob } | { type: 'inpaint'; job: ImageInpaintJob }
 const queue: QueuedJob[] = []
 const controllers = new Map<string, AbortController>()
 let running = false
@@ -66,6 +68,21 @@ async function runTrack(entry: Extract<QueuedJob, { type: 'track' | 'candidates'
     const code = error instanceof TrackingError ? error.code : controller.signal.aborted ? 'cancelled' : 'inference'
     if (entry.type === 'track') await fs.rm(entry.job.outputPath, { force: true }).catch(() => undefined)
     post({ type: 'failed', id: job.id, code, message: error instanceof Error ? error.message.slice(0, 500) : String(error) })
+  } finally { controllers.delete(job.id) }
+}
+
+async function runSelectImageRegion(job: ImageSubjectSelectionJob): Promise<void> {
+  const controller = new AbortController(); controllers.set(job.id, controller)
+  try {
+    const result = await runImageSubjectSelection(job, {
+      openModel: async (model, providers, shape) => {
+        sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
+        return (await sessions).open(model, providers, shape)
+      }, signal: controller.signal, log, progress: (done, total) => post({ type: 'progress', id: job.id, done, total }),
+    })
+    post({ type: 'done', id: job.id, result })
+  } catch (error) {
+    post({ type: 'failed', id: job.id, code: controller.signal.aborted ? 'cancelled' : 'inference', message: error instanceof Error ? error.message.slice(0, 500) : '主体选择失败' })
   } finally { controllers.delete(job.id) }
 }
 
@@ -122,6 +139,7 @@ async function drain(): Promise<void> {
   try {
     for (let entry = queue.shift(); entry; entry = queue.shift()) {
       if (entry.type === 'analyze') await run(entry.job)
+      else if (entry.type === 'select-image-region') await runSelectImageRegion(entry.job)
       else if (entry.type === 'inpaint') await runInpaint(entry.job)
       else await runTrack(entry)
     }
@@ -131,7 +149,7 @@ async function drain(): Promise<void> {
 port.on('message', (event) => {
   const request = event.data as LocalInferenceRequest
   if (request.type === 'frames') { renderedFrames.reply(request.id, request.reply); return }
-  if (request.type === 'analyze' || request.type === 'track' || request.type === 'candidates' || request.type === 'inpaint') { queue.push(request); void drain() }
+  if (request.type === 'select-image-region' || request.type === 'analyze' || request.type === 'track' || request.type === 'candidates' || request.type === 'inpaint') { queue.push(request); void drain() }
   else if (request.type === 'cancel') {
     const index = queue.findIndex(entry => entry.job.id === request.id)
     if (index >= 0) { const [entry] = queue.splice(index, 1); post({ type: 'failed', id: entry.job.id, code: 'cancelled', message: '分析已取消。' }) }

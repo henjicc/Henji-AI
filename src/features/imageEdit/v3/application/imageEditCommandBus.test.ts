@@ -17,6 +17,12 @@ function createRepository(): ImageEditDocumentRepositoryV3 {
 }
 
 describe('图片编辑 V3 命令总线', () => {
+  it('释放实例取消本地长任务，重复释放不重复通知', () => {
+    const bus = new ImageEditCommandBusV3(createImageEditDocumentV3({ width: 32, height: 32 })), cancel = vi.fn();
+    bus.getLifecycleSignal().addEventListener('abort', cancel);
+    bus.dispose(); bus.dispose();
+    expect(cancel).toHaveBeenCalledTimes(1); expect(() => bus.getLifecycleSignal().throwIfAborted()).toThrow('DOCUMENT_RELEASED');
+  });
   it('后来写回相同几何也不能让旧事务撤销新的选区手势', () => {
     const bus = new ImageEditCommandBusV3(createImageEditDocumentV3({ width: 100, height: 100, documentId: 'selection-aba' }));
     const selection = appendImageEditSelectionV3(null, { type: 'rectangle', x: 0.2, y: 0.2, width: 0.5, height: 0.5 }, 'replace');

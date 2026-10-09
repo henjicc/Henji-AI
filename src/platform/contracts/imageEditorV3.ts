@@ -324,6 +324,7 @@ export type ImageEditorV3RasterPublication = 'document-preview' | 'standalone-im
 
 export interface ImageEditorV3Platform {
   /** 有界 SDR 工作块；所有路径和临时文件只在宿主内解析。 */
+  selectRasterRegion?(request: ImageEditorV3SubjectRequest): Promise<ImageEditorV3SubjectResult>
   repairRaster?(request: ImageEditorV3RepairRequest): Promise<{ patch: ImageEditorV3ResourceDescriptor; durationMs: number }>
   readRepairProgress?(request: { requestId: string }): Promise<ImageEditorV3RepairProgress | null>
   pinRepairResources?(request: { requestId: string; resourceRefs: ImageEditorV3ResourceRef[] }): Promise<void>
@@ -534,3 +535,25 @@ export interface ImageEditorV3RepairRequest {
   quality: 'fast' | 'fine' | 'blemish'
 }
 export interface ImageEditorV3RepairProgress { stage: 'resolving' | 'downloading' | 'processing' | 'publishing'; done: number; total: number }
+
+export interface ImageEditorV3SubjectRequest {
+  requestId: string
+  width: number
+  height: number
+  rgba: ArrayBuffer
+  region: import('../../core/imageEdit/v3/subjectSelection').ImageEditSubjectRegionV3
+}
+export interface ImageEditorV3SubjectCandidate {
+  id: string
+  mask: import('../../core/imageEdit/v3/subjectSelection').ImageEditSelectionMaskShapeV3
+  score: number
+  area: number
+  bounds: { x: number; y: number; width: number; height: number }
+}
+export interface ImageEditorV3SubjectResult {
+  candidates: ImageEditorV3SubjectCandidate[]
+  model: 'efficienttam' | 'rvm' | 'selfie'
+  providers: string[]
+  inferenceMs: number
+  durationMs: number
+}

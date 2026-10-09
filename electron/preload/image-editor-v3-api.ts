@@ -93,6 +93,7 @@ export function createImageEditorV3Api(
   nativePostMessage?: NativePostMessage,
 ): ImageEditorV3Platform {
   return {
+    selectRasterRegion: request => nativeInvoke('imageEditorV3:selection:infer', request),
     repairRaster: request => nativeInvoke('imageEditorV3:repair:run', request),
     readRepairProgress: request => nativeInvoke('imageEditorV3:repair:progress', request),
     pinRepairResources: request => nativeInvoke('imageEditorV3:repair:pin', request),

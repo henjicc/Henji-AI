@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { imageEditSelectionMaskShapeSchemaV3, validateImageEditSelectionMaskV3 } from '../subjectSelection';
 
 const ratio = z.number().finite().min(0).max(1);
 const point = z.object({ x: ratio, y: ratio }).strict();
@@ -7,8 +8,9 @@ export const imageEditSelectionShapeSchemaV3 = z.discriminatedUnion('type', [
   z.object({ type: z.literal('rectangle'), x: ratio, y: ratio, width: ratio, height: ratio }).strict(),
   z.object({ type: z.literal('ellipse'), x: ratio, y: ratio, width: ratio, height: ratio }).strict(),
   z.object({ type: z.literal('lasso'), points: z.array(point).min(3) }).strict(),
+  imageEditSelectionMaskShapeSchemaV3,
   z.object({ type: z.literal('brush'), points: z.array(point).min(1), radius: ratio.positive() }).strict(),
-]);
+]).refine(shape => shape.type !== 'mask' || validateImageEditSelectionMaskV3(shape), '主体遮罩数据或坐标变换无效');
 export const imageEditSelectionSessionSchemaV3 = z.object({
   operations: z.array(z.object({
     shape: imageEditSelectionShapeSchemaV3,
