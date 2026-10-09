@@ -39,7 +39,7 @@ describe('查看器 V3 快速标记宿主', () => {
     render(<ViewerMarkEditor imageUrl="C:/source.png" onClose={vi.fn()} onSave={save} onSessionChange={changed} />)
     await screen.findByTestId('v3-viewer-editor')
     expect(editorProps.profileId).toBe('quick')
-    expect(editorProps.document.version).toBe(3)
+    expect(editorProps.document.version).toBe(4)
     const document = await editGeometryAndMark()
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(save).toHaveBeenCalledOnce())

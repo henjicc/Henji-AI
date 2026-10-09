@@ -53,7 +53,7 @@ describe('CanvasToolProcessor 图片编辑分发', () => {
     const previewRef = `sha256:${'b'.repeat(64)}` as const;
     const fingerprint = `sha256:${'c'.repeat(64)}` as const;
     const document = {
-      version: 3 as const,
+      version: 4 as const,
       id: 'canvas-document',
       revision: 2,
       geometry: {
@@ -113,7 +113,7 @@ describe('CanvasToolProcessor 图片编辑分发', () => {
     });
     const { persistImageLocally } = await import('./imageData');
     expect(vi.mocked(persistImageLocally)).not.toHaveBeenCalledWith('source-image');
-  });
+  }, 20_000); // 首次动态加载会话适配模块的转换耗时约 5 秒，不是业务等待
 
   it('拒绝缺失或 stale 会话，并把取消信号传到权威加载', async () => {
     await expect(processor.process(NODE_TOOL_TYPES.edit, 'source-image', {}))
@@ -131,7 +131,7 @@ describe('CanvasToolProcessor 图片编辑分发', () => {
       revision: 3,
       previewRef: null,
       document: {
-        version: 3,
+        version: 4,
         id: 'canvas-document',
         revision: 3,
         geometry: {

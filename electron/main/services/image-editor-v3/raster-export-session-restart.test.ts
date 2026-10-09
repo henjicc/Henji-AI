@@ -113,7 +113,7 @@ async function createSnapshot(options: {
     revision: 4,
     resourceRefs: [resource.id, ...(iccRef ? [iccRef] : [])],
     document: {
-      version: 3,
+      version: 4,
       id: 'export-document',
       revision: 4,
       geometry: options.geometry ?? {
