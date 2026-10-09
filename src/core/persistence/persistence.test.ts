@@ -14,6 +14,7 @@ import { backupPersistenceSnapshot, persistenceBackupLocation } from './backup'
 import { parseImageEditDocumentV3 } from '../imageEdit/v3/documentCodec'
 import { imageWorkingCopySchema } from './imageSchemas'
 import { IMAGE_WORKING_VERSION } from './schemaVersions'
+import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '../imageEdit/v3/documentTypes'
 
 describe('持久格式逐版本链', () => {
   const schema = z.object({ label: z.string(), count: z.number() }).strict()
@@ -145,7 +146,7 @@ describe('所有登记格式的黄金样本', () => {
         if (format.id === 'image-working-copy' || format.id === 'image-package') {
           const working = format.id === 'image-package' ? (upgraded as { document: unknown }).document : upgraded
           const image = parseImageEditDocumentV3((working as { document: unknown }).document)
-          expect(image.version).toBe(IMAGE_WORKING_VERSION)
+          expect(image.version).toBe(IMAGE_EDIT_DOCUMENT_VERSION_V3)
           expect(image.layers[0]).toMatchObject({ type: 'raster', fillOpacity: .7, maskAttachment: { linked: false, density: .6 }, filters: [{ effectId: 'exposure', params: { stops: .4 } }] })
         }
       })

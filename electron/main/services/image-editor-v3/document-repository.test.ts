@@ -325,7 +325,7 @@ describe('ImageEditDocumentRepository', () => {
   it('历史独占瓦片在保存期间进入 live set，清空历史后可由 GC 回收', async () => {
     const resources = new ContentAddressedResourceStore(path.join(rootDir, 'resources'))
     const tile = await resources.putBuffer(Buffer.from('undo tile'))
-    const repository = new ImageEditDocumentRepository(path.join(rootDir, 'documents'))
+    const repository = new ImageEditDocumentRepository(path.join(rootDir, 'documents'), { resources })
     const initial: ImageEditDocumentV3 = {
       ...createImageEditDocumentV3({ width: 32, height: 32, documentId: 'history-gc' }),
       layers: [createImageEditRasterLayerV3('paint', '画笔')],
@@ -368,7 +368,7 @@ describe('ImageEditDocumentRepository', () => {
     })
     const liveAfterClear = new Set((await repository.list()).flatMap((entry) => entry.resourceRefs))
     const collected = await resources.garbageCollect(liveAfterClear, { minimumAgeMs: 0 })
-    expect(collected.deleted).toEqual([tile.id])
+    expect(collected.deleted).toContain(tile.id)
     expect(await resources.has(tile.id)).toBe(false)
   })
 })

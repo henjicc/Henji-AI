@@ -77,7 +77,8 @@ export interface HenjiImagePackageLimits {
 }
 
 export const DEFAULT_HENJI_IMAGE_PACKAGE_LIMITS: HenjiImagePackageLimits = {
-  maxEntries: 50_000,
+  // ZIP64 逐条流式读写；数量只受 JS 安全整数约束，不设历史/素材数量上限。
+  maxEntries: Number.MAX_SAFE_INTEGER,
   maxManifestBytes: 64 * 1024 * 1024,
   maxSingleResourceBytes: 4 * 1024 * 1024 * 1024,
   maxTotalBytes: 32 * 1024 * 1024 * 1024,
@@ -189,7 +190,7 @@ function parseThumbnail(value: unknown): HenjiImagePackageThumbnail | undefined 
 
 function parseExternalSources(value: unknown): HenjiImageExternalSource[] | undefined {
   if (value === undefined) return undefined
-  if (!Array.isArray(value) || value.length > 64) throw new Error('Invalid external source list')
+  if (!Array.isArray(value)) throw new Error('Invalid external source list')
   return value.map((entry) => {
     if (!isRecord(entry)) throw new Error('Invalid external source record')
     return {
@@ -239,7 +240,10 @@ export function validateHenjiImagePackageManifest(value: unknown): HenjiImagePac
   const externalById = new Map((externalSources ?? []).map((source) => (
     [`sha256:${source.sha256}` as ResourceId, source]
   )))
-  for (const historyResource of collectPersistedImageEditHistoryResourcesV3(document.history)) {
+  for (const page of document.historyCheckpoint?.pages ?? []) {
+    if (!ids.has(page.resourceId as ResourceId)) throw new Error('History pages must be embedded in the package')
+  }
+  for (const historyResource of collectPersistedImageEditHistoryResourcesV3(document.historyCheckpoint ?? document.history)) {
     if (historyResource.byteSize === null) continue
     const embedded = embeddedById.get(historyResource.resourceId as ResourceId)
     const external = externalById.get(historyResource.resourceId as ResourceId)

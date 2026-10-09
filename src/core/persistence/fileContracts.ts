@@ -1,5 +1,6 @@
 import { STORYBOARD_METADATA_VERSION, storyboardMetadataSchema } from './preferenceSchemas'
 import { z } from 'zod'
+import { IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, imageEditHistoryCheckpointSchemaV3 } from '../imageEdit/v3/historyPaging/schema'
 import type { PersistenceFormat } from './formats'
 import { formatMigrations } from './formatMigrations'
 import { imageDocumentHeaderSchema, imagePackageManifestSchema, imageWorkingCopySchema } from './imageSchemas'
@@ -12,6 +13,7 @@ function file(id: string, name: string, version: number, versionSource: string, 
 
 /** A light registry partition: runtime file readers must not load video/compiler or the whole inventory. */
 export const FILE_PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
+  file('image-history-checkpoint', '图片历史检查点', IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, 'ImageEditHistoryCheckpointV3.version', 'electron/main/services/image-editor-v3/history-pages/store.ts::readPage', imageEditHistoryCheckpointSchemaV3),
   file('image-header', '图片文档头', IMAGE_HEADER_VERSION, 'henji-document.json.version', 'electron/main/services/image-editor-v3/image-document/header.ts::parseImageDocumentHeader', imageDocumentHeaderSchema),
   file('image-package', '图片文档包', IMAGE_PACKAGE_VERSION, 'manifest.json.packageVersion', 'electron/main/services/image-editor-v3/package-types.ts::validateHenjiImagePackageManifest', imagePackageManifestSchema),
   file('image-working-copy', '图片工作副本', IMAGE_WORKING_VERSION, 'ImageEditDocumentEnvelope.formatVersion / document.version', 'electron/main/services/image-editor-v3/document-repository.ts::validateImageEditDocumentEnvelope', imageWorkingCopySchema),

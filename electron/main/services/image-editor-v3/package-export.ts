@@ -11,6 +11,8 @@ import { replaceFileAtomically } from '../fs/atomic-file'
 import type { ImageEditDocumentEnvelope, ResourceId } from './contracts'
 import type { ContentAddressedResourceStore } from './resource-store'
 import { KeyedSerialExecutor } from './serial-executor'
+import { ImageEditHistoryPageStoreV3 } from './history-pages/store'
+import { validateImageEditDocumentEnvelope } from './document-repository'
 import {
   HENJI_IMAGE_DOCUMENT_HEADER_ENTRY,
   HENJI_IMAGE_PACKAGE_FORMAT,
@@ -205,6 +207,25 @@ async function writeArchive(
  * 再在文档锁内核对版本后原子替换）。失败时删除暂存文件。返回写入的 manifest。
  */
 export async function writeHenjiImagePackageStaged(
+  request: Omit<ExportHenjiImagePackageRequest, 'targetPath'>,
+  stagedPath: string,
+): Promise<HenjiImagePackageManifest> {
+  const envelope = validateImageEditDocumentEnvelope(request.document)
+  const store = new ImageEditHistoryPageStoreV3(request.resourceStore)
+  const prepared = envelope.history ? await store.prepare(envelope.history, request.signal) : undefined
+  try {
+    const { history: _runtimeHistory, ...document } = envelope
+    if (prepared) {
+      const oldPages = new Set(document.historyCheckpoint?.pages.map(page => page.resourceId))
+      document.historyCheckpoint = prepared.checkpoint
+      document.resourceRefs = [...new Set([...document.resourceRefs.filter(ref => !oldPages.has(ref)), ...prepared.resourceIds])].sort()
+    }
+    if (document.historyCheckpoint) await store.validate(document.historyCheckpoint, request.signal)
+    return await writePreparedHenjiImagePackageStaged({ ...request, document }, stagedPath)
+  } finally { await prepared?.release() }
+}
+
+async function writePreparedHenjiImagePackageStaged(
   request: Omit<ExportHenjiImagePackageRequest, 'targetPath'>,
   stagedPath: string,
 ): Promise<HenjiImagePackageManifest> {

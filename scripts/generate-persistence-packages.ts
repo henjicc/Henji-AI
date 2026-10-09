@@ -12,6 +12,54 @@ import { parseDocumentText } from '../src/core/documents/envelope'
 import { encodePngWithStoryboardMetadata } from '../electron/main/services/image/png-metadata'
 import { loadSharp } from '../electron/main/services/image/sharp-loader'
 import { IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
+import { ImageEditDocumentRepository } from '../electron/main/services/image-editor-v3/document-repository'
+import { ImageEditCommandHistoryV3 } from '../src/core/imageEdit/v3/commandHistory'
+import { parseImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentCodec'
+import { IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3 } from '../src/core/imageEdit/v3/historyPaging/schema'
+import { createImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentFactory'
+
+/** 由正式保存与 ZIP 导出器生成分页历史黄金样本，不改写已有版本。 */
+export async function generateImageHistoryPersistenceFixtures(sourceFixture: string, root = process.cwd()): Promise<void> {
+  const source = JSON.parse(await fsp.readFile(sourceFixture, 'utf8')) as { document: Record<string, unknown>; createdAt: string }
+  // 样本作者复用既有图层/参数，正式读入口仍拒绝旧开发版本。
+  let document = parseImageEditDocumentV3({ ...source.document, version: createImageEditDocumentV3({ width: 1, height: 1 }).version })
+  const history = new ImageEditCommandHistoryV3()
+  for (const opacity of [.9, 1, .5]) document = history.execute(document, {
+    type: 'layer.update-common', commandId: `golden-opacity-${document.revision}`, expectedRevision: document.revision,
+    layerId: 'golden-layer', patch: { opacity },
+  })
+  document = history.undo(document).document
+  const temp = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-history-goldens-'))
+  try {
+    const resources = new ContentAddressedResourceStore(path.join(temp, 'resources'))
+    const repository = new ImageEditDocumentRepository(path.join(temp, 'documents'), { resources })
+    const working = await repository.create({ documentId: document.id, revision: document.revision,
+      document, history: history.createSnapshot(), now: new Date(source.createdAt) })
+    const persisted = await repository.loadCheckpoint(document.id)
+    const write = async (id: string, version: number, content: unknown): Promise<void> => {
+      const directory = path.join(root, 'tests/fixtures/persistence', id)
+      await fsp.mkdir(directory, { recursive: true })
+      await fsp.writeFile(path.join(directory, `v${version}.json`), `${JSON.stringify(content, null, 2)}\n`, { flag: 'wx' })
+    }
+    await write('image-working-copy', IMAGE_WORKING_VERSION, persisted)
+    await write('image-history-checkpoint', IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, persisted.historyCheckpoint)
+    const header = parseImageDocumentHeader(JSON.parse(await fsp.readFile(path.join(root, 'tests/fixtures/persistence/image-header/v1.json'), 'utf8')))
+    header.contentRevision = document.revision
+    const codec = new HenjiImagePackageCodec(resources)
+    const archive = path.join(temp, 'history.henjiimg')
+    const manifest = await codec.export({ targetPath: archive, document: working,
+      documentHeader: serializeImageDocumentHeader(header), now: new Date(source.createdAt) })
+    await write('image-package', IMAGE_PACKAGE_VERSION, manifest)
+    for (const id of ['document.image_document', 'image-package', 'image-header']) {
+      await fsp.copyFile(archive, path.join(root, 'tests/fixtures/persistence', id, `v${IMAGE_PACKAGE_VERSION}.henjiimg`), fs.constants.COPYFILE_EXCL)
+    }
+    const layerHeader = { format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: document.id, contentRevision: document.revision }
+    await write('canvas-layer-package', CANVAS_LAYER_PACKAGE_VERSION, layerHeader)
+    const layerArchive = path.join(temp, 'history.henjilayer')
+    await codec.export({ targetPath: layerArchive, document: persisted, documentHeader: JSON.stringify(layerHeader), now: new Date(source.createdAt) })
+    await fsp.copyFile(layerArchive, path.join(root, 'tests/fixtures/persistence/canvas-layer-package', `v${CANVAS_LAYER_PACKAGE_VERSION}.henjilayer`), fs.constants.COPYFILE_EXCL)
+  } finally { await fsp.rm(temp, { recursive: true, force: true }) }
+}
 
 /** Archive filenames follow the embedded package version, independently of header/kind versions. */
 export async function generateImagePersistencePackages(root = process.cwd()): Promise<void> {

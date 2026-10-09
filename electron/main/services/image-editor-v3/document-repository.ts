@@ -15,14 +15,17 @@ import {
   type ImageEditProjectReference,
   type ResourceId,
 } from './contracts'
-import { parseResourceId } from './resource-store'
+import { ContentAddressedResourceStore, parseResourceId } from './resource-store'
 import { KeyedSerialExecutor } from './serial-executor'
 import {
   mergePersistedImageEditResourceRefsV3,
   normalizePersistedImageEditDocumentV3,
   normalizePersistedImageEditHistoryV3,
+  normalizePersistedImageEditCheckpointV3,
+  ImageEditHistoryPageStoreV3,
 } from './history-persistence'
 import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
+import type { ImageEditHistoryCheckpointV3 } from '../../../../src/core/imageEdit/v3/historyPaging/checkpoint'
 
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
@@ -46,9 +49,11 @@ export interface CreateDocumentRequest {
   revision?: number
   document: unknown
   history?: ImageEditCommandHistorySnapshotV3 | null
+  historyCheckpoint?: ImageEditHistoryCheckpointV3
   resourceRefs?: readonly ResourceId[]
   previewRef?: ResourceId
   now?: Date
+  signal?: AbortSignal
 }
 
 export interface SaveDocumentRequest {
@@ -61,6 +66,7 @@ export interface SaveDocumentRequest {
   resourceRefs: readonly ResourceId[]
   previewRef?: ResourceId
   now?: Date
+  signal?: AbortSignal
 }
 
 export interface ForkDocumentRequest {
@@ -71,6 +77,7 @@ export interface ForkDocumentRequest {
 }
 
 export interface DocumentRepositoryDependencies {
+  resources?: ContentAddressedResourceStore
   writeAtomically?: (targetPath: string, content: Uint8Array) => Promise<void>
   maxDocumentBytes?: number
 }
@@ -97,7 +104,7 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
   if (!isRecord(value)) throw new Error('Invalid image edit document: expected object')
   const allowedKeys = new Set([
     'format', 'formatVersion', 'documentId', 'revision', 'createdAt', 'updatedAt',
-    'document', 'history', 'resourceRefs', 'previewRef',
+    'document', 'history', 'historyCheckpoint', 'resourceRefs', 'previewRef',
   ])
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
     throw new Error('Invalid image edit document: unknown field')
@@ -133,11 +140,12 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
     documentId,
     value.revision as number,
   )
+  const historyCheckpoint = normalizePersistedImageEditCheckpointV3(value.historyCheckpoint, documentId, value.revision as number)
   const refs = mergePersistedImageEditResourceRefsV3(
     document,
     normalizeResourceRefs(value.resourceRefs as ResourceId[]),
     normalizedPreviewRef,
-    history,
+    historyCheckpoint ?? history,
   )
   const result: ImageEditDocumentEnvelope = {
     format: IMAGE_EDIT_DOCUMENT_FORMAT,
@@ -148,15 +156,18 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
     updatedAt: value.updatedAt,
     document,
     ...(history ? { history } : {}),
+    ...(historyCheckpoint ? { historyCheckpoint } : {}),
     resourceRefs: refs,
     previewRef: normalizedPreviewRef,
   }
-  imageWorkingCopySchema.parse(result)
+  const { history: _runtimeHistory, ...persisted } = result
+  imageWorkingCopySchema.parse(persisted)
   return result
 }
 
 function serializeEnvelope(envelope: ImageEditDocumentEnvelope): Buffer {
-  return Buffer.from(`${JSON.stringify(envelope)}\n`, 'utf8')
+  const { history: _runtimeHistory, ...persisted } = envelope
+  return Buffer.from(`${JSON.stringify(persisted)}\n`, 'utf8')
 }
 
 export function toDocumentRef(documentId: string): `image-edit-v3:${string}` {
@@ -182,12 +193,16 @@ export class ImageEditDocumentRepository {
   private readonly executor = new KeyedSerialExecutor()
   private readonly writeAtomically: (targetPath: string, content: Uint8Array) => Promise<void>
   private readonly maxDocumentBytes: number
+  private readonly resources: ContentAddressedResourceStore
+  private readonly historyPages: ImageEditHistoryPageStoreV3
 
   constructor(
     readonly rootDir: string,
     dependencies: DocumentRepositoryDependencies = {},
   ) {
     this.writeAtomically = dependencies.writeAtomically ?? writeBufferAtomically
+    this.resources = dependencies.resources ?? new ContentAddressedResourceStore(path.join(rootDir, '.history-resources'))
+    this.historyPages = new ImageEditHistoryPageStoreV3(this.resources)
     this.maxDocumentBytes = dependencies.maxDocumentBytes ?? MAX_DOCUMENT_BYTES
     if (!Number.isSafeInteger(this.maxDocumentBytes) || this.maxDocumentBytes < 1) {
       throw new Error('Invalid image edit document byte limit')
@@ -228,6 +243,7 @@ export class ImageEditDocumentRepository {
           documentId,
           revision,
         ),
+        historyCheckpoint: normalizePersistedImageEditCheckpointV3(request.historyCheckpoint, documentId, revision),
         resourceRefs: [],
         previewRef: request.previewRef,
       }
@@ -235,14 +251,21 @@ export class ImageEditDocumentRepository {
         document,
         normalizeResourceRefs(request.resourceRefs ?? []),
         envelope.previewRef,
-        envelope.history,
+        envelope.historyCheckpoint ?? envelope.history,
       )
-      await this.persist(envelope, 'create')
+      await this.persist(envelope, 'create', request.signal)
       return envelope
     }))
   }
 
   async load(documentIdOrRef: string): Promise<ImageEditDocumentEnvelope> {
+    const envelope = await this.loadCheckpoint(documentIdOrRef)
+    if (envelope.historyCheckpoint) envelope.history = await this.historyPages.restore(envelope.historyCheckpoint)
+    return envelope
+  }
+
+  /** 保存、目录扫描与 GC 只读检查点，不把历史命令全部载入。 */
+  async loadCheckpoint(documentIdOrRef: string): Promise<ImageEditDocumentEnvelope> {
     const documentId = documentIdOrRef.startsWith(IMAGE_EDIT_DOCUMENT_REF_PREFIX)
       ? parseDocumentRef(documentIdOrRef)
       : validateDocumentId(documentIdOrRef)
@@ -262,7 +285,7 @@ export class ImageEditDocumentRepository {
   async save(request: SaveDocumentRequest): Promise<ImageEditDocumentEnvelope> {
     const documentId = validateDocumentId(request.documentId)
     return this.executor.run(documentId, () => this.withDocumentLock(documentId, async () => {
-      const current = await this.load(documentId)
+      const current = await this.loadCheckpoint(documentId)
       if (current.revision !== request.expectedRevision) {
         throw new DocumentRevisionConflictError(documentId, request.expectedRevision, current.revision)
       }
@@ -291,15 +314,16 @@ export class ImageEditDocumentRepository {
         updatedAt: (request.now ?? new Date()).toISOString(),
         document,
         history,
+        historyCheckpoint: undefined,
         resourceRefs: mergePersistedImageEditResourceRefsV3(
           document,
-          normalizeResourceRefs(request.resourceRefs),
+          normalizeResourceRefs(request.resourceRefs).filter(ref => !current.historyCheckpoint?.pages.some(page => page.resourceId === ref)),
           request.previewRef,
           history,
         ),
         previewRef: request.previewRef,
       }
-      await this.persist(envelope, 'save')
+      await this.persist(envelope, 'save', request.signal)
       return envelope
     }))
   }
@@ -310,7 +334,7 @@ export class ImageEditDocumentRepository {
    */
   async fork(request: ForkDocumentRequest): Promise<ImageEditDocumentEnvelope> {
     const targetDocumentId = validateDocumentId(request.targetDocumentId)
-    const source = await this.load(request.sourceDocumentRef)
+    const source = await this.loadCheckpoint(request.sourceDocumentRef)
     if (source.revision !== request.expectedRevision) {
       throw new DocumentRevisionConflictError(
         source.documentId,
@@ -328,6 +352,7 @@ export class ImageEditDocumentRepository {
       history: source.history
         ? { ...source.history, documentId: targetDocumentId }
         : undefined,
+      historyCheckpoint: source.historyCheckpoint ? { ...source.historyCheckpoint, documentId: targetDocumentId } : undefined,
       resourceRefs: source.resourceRefs,
       previewRef: source.previewRef,
       now: request.now,
@@ -347,19 +372,23 @@ export class ImageEditDocumentRepository {
   }
 
   async list(): Promise<ImageEditDocumentEnvelope[]> {
-    const entries = await fsp.readdir(this.rootDir, { withFileTypes: true }).catch(() => [])
+    const entries = await fsp.readdir(this.rootDir, { withFileTypes: true }).catch((error: unknown) => {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return []
+      throw error
+    })
     const envelopes: ImageEditDocumentEnvelope[] = []
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue
       const documentId = entry.name.slice(0, -'.json'.length)
       try {
-        envelopes.push(await this.load(documentId))
+        envelopes.push(await this.loadCheckpoint(documentId))
       } catch (error) {
-        logger.warn('跳过损坏的图片编辑文档', {
-          event: 'image_editor_v3.document.list.skipped',
+        logger.error('图片编辑文档根扫描失败', {
+          event: 'image_editor_v3.document.list.failed',
           context: { documentId },
           error,
         })
+        throw error
       }
     }
     return envelopes.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -394,7 +423,7 @@ export class ImageEditDocumentRepository {
     return this.executor.run(documentId, () => this.withDocumentLock(documentId, async () => {
       let current: ImageEditDocumentEnvelope
       try {
-        current = await this.load(documentId)
+        current = await this.loadCheckpoint(documentId)
       } catch (error) {
         if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false
         throw error
@@ -409,17 +438,35 @@ export class ImageEditDocumentRepository {
     return new DocumentAutosaveScheduler(this, delayMs)
   }
 
-  private async persist(envelope: ImageEditDocumentEnvelope, action: 'create' | 'save' | 'replace'): Promise<void> {
+  private async persist(envelope: ImageEditDocumentEnvelope, action: 'create' | 'save' | 'replace', signal?: AbortSignal): Promise<void> {
     logger.info('开始保存图片编辑文档', {
       event: `image_editor_v3.document.${action}.start`,
       context: { documentId: envelope.documentId, revision: envelope.revision },
     })
+    let release: (() => Promise<void>) | undefined
     try {
+      if (envelope.history) {
+        const prepared = await this.historyPages.prepare(envelope.history, signal)
+        release = prepared.release
+        const previousPages = new Set(envelope.historyCheckpoint?.pages.map(page => page.resourceId))
+        envelope.historyCheckpoint = prepared.checkpoint
+        envelope.resourceRefs = normalizeResourceRefs([...envelope.resourceRefs.filter(ref => !previousPages.has(ref)), ...prepared.resourceIds])
+      } else if (envelope.historyCheckpoint) {
+        const lease = await this.resources.acquireLease(envelope.resourceRefs)
+        release = () => lease.release()
+        await this.historyPages.validate(envelope.historyCheckpoint, signal)
+      }
+      const { history: _runtimeHistory, ...persisted } = envelope
+      imageWorkingCopySchema.parse(persisted)
       const serialized = serializeEnvelope(envelope)
       if (serialized.byteLength > this.maxDocumentBytes) {
         throw new Error(`Image edit document exceeds ${this.maxDocumentBytes} byte limit`)
       }
-      await this.writeAtomically(this.documentPath(envelope.documentId), serialized)
+      signal?.throwIfAborted()
+      await this.resources.publishReferences(async () => {
+        signal?.throwIfAborted()
+        await this.writeAtomically(this.documentPath(envelope.documentId), serialized)
+      })
       logger.info('图片编辑文档保存完成', {
         event: `image_editor_v3.document.${action}.completed`,
         context: { documentId: envelope.documentId, revision: envelope.revision },
@@ -431,7 +478,7 @@ export class ImageEditDocumentRepository {
         error,
       })
       throw error
-    }
+    } finally { await release?.() }
   }
 
   private async withDocumentLock<T>(documentId: string, operation: () => Promise<T>): Promise<T> {

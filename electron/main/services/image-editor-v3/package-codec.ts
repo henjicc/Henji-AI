@@ -36,7 +36,7 @@ export class HenjiImagePackageCodec {
 
   import(
     sourcePath: string,
-    options: { limits?: Partial<HenjiImagePackageLimits>; signal?: AbortSignal } = {},
+    options: { limits?: Partial<HenjiImagePackageLimits>; signal?: AbortSignal; restoreHistory?: boolean } = {},
   ): Promise<ImportedHenjiImagePackage> {
     return importHenjiImagePackage({
       sourcePath,
@@ -44,6 +44,7 @@ export class HenjiImagePackageCodec {
       sourceProvider: this.sourceProvider,
       limits: options.limits,
       signal: options.signal,
+      restoreHistory: options.restoreHistory,
     })
   }
 

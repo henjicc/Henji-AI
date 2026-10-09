@@ -96,7 +96,7 @@ function getRuntime(): ImageEditorV3Runtime {
   if (runtime) return runtime
   const paths = getImageEditorV3StoragePaths()
   const resources = new ContentAddressedResourceStore(paths.resourcesDir)
-  const documents = new ImageEditDocumentRepository(paths.documentsDir)
+  const documents = new ImageEditDocumentRepository(paths.documentsDir, { resources })
   const sources = new SharpSourceProvider(resources)
   const rasterExports = new RasterExportSessionManager(documents, resources)
   const packages = new HenjiImagePackageCodec(resources, sources)
@@ -297,7 +297,7 @@ async function runRequest<T>(
   }
 }
 
-async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string, unknown>> {
+async function saveDocument(payload: SaveDocumentPayload, signal: AbortSignal): Promise<Record<string, unknown>> {
   const services = getRuntime()
   const refs = [...new Set([...payload.resourceRefs, ...(payload.previewRef ? [payload.previewRef] : [])])]
   // 校验资源存在后必须一直持有 lease，直到文档引用已原子落盘。否则 GC 可以在
@@ -307,7 +307,7 @@ async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string
     await assertHistoryResourceSizes(payload.history)
     let current: ImageEditDocumentEnvelope | null
     try {
-      current = await services.documents.load(payload.documentId)
+      current = await services.documents.loadCheckpoint(payload.documentId)
     } catch (error) {
       if (!isNotFound(error)) throw error
       current = null
@@ -323,6 +323,7 @@ async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string
         history: payload.history,
         resourceRefs: payload.resourceRefs,
         previewRef: payload.previewRef,
+        signal,
       })
       return toReference(created)
     }
@@ -344,6 +345,7 @@ async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string
       history: payload.history,
       resourceRefs: payload.resourceRefs,
       previewRef: payload.previewRef,
+      signal,
     })
     return toReference(saved)
   } finally {
@@ -390,7 +392,7 @@ export function registerImageEditorV3Ipc(): void {
   registerIpcHandler('imageEditorV3:document:save', parseImageEditorV3SavePayload, (payload, event) => (
     runRequest('document.save', payload.requestId, event.sender.id, (signal) => {
       throwIfAborted(signal)
-      return saveDocument(payload)
+      return saveDocument(payload, signal)
     })
   ), guard)
   registerIpcHandler(
@@ -449,12 +451,16 @@ export function registerImageEditorV3Ipc(): void {
   })
   registerIpcHandler('imageEditorV3:resource:collectGarbage', parseImageEditorV3GarbageCollectPayload, (payload, event) => (
     runRequest('resource.collect_garbage', payload.requestId, event.sender.id, async () => {
-      const live = new Set<ResourceId>(payload.retainedResourceRefs)
-      for (const document of await getRuntime().documents.list()) {
-        for (const resourceRef of document.resourceRefs) live.add(resourceRef)
-        if (document.previewRef) live.add(document.previewRef)
-      }
-      const result = await getRuntime().resources.garbageCollect(live)
+      const result = await getRuntime().resources.garbageCollect(new Set(payload.retainedResourceRefs), {
+        resolveReferences: async () => {
+          const live = new Set<ResourceId>(payload.retainedResourceRefs)
+          for (const document of await getRuntime().documents.list()) {
+            for (const resourceRef of document.resourceRefs) live.add(resourceRef)
+            if (document.previewRef) live.add(document.previewRef)
+          }
+          return live
+        },
+      })
       return { deletedResourceRefs: result.deleted, reclaimedBytes: result.reclaimedBytes }
     })
   ), guard)

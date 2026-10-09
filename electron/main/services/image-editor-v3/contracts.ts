@@ -1,6 +1,7 @@
 import { IMAGE_WORKING_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import type { Readable } from 'node:stream'
 import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
+import type { ImageEditHistoryCheckpointV3 } from '../../../../src/core/imageEdit/v3/historyPaging/checkpoint'
 
 import type { SourceExifOrientation } from './source-orientation'
 
@@ -23,8 +24,9 @@ export interface ImageEditDocumentEnvelope {
   createdAt: string
   updatedAt: string
   document: unknown
-  /** 早期 V3/迁移文档可缺省；一旦新编辑产生持久命令便写入结构化快照。 */
+  /** 运行时适配同步命令总线；磁盘和归档只写 historyCheckpoint。 */
   history?: ImageEditCommandHistorySnapshotV3
+  historyCheckpoint?: ImageEditHistoryCheckpointV3
   resourceRefs: ResourceId[]
   previewRef?: ResourceId
 }

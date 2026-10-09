@@ -1,8 +1,8 @@
-import { IMAGE_WORKING_VERSION } from '../../persistence/schemaVersions'
 import type { ImageEditColorModeV3 } from './colorTypes';
 import type { ImageEditLayerV3 } from './layerTypes';
 
-export const IMAGE_EDIT_DOCUMENT_VERSION_V3 = IMAGE_WORKING_VERSION;
+/** 文档内容与工作副本外壳独立版本化；历史页改动不改变图层/几何内容。 */
+export const IMAGE_EDIT_DOCUMENT_VERSION_V3 = 4;
 
 export type ImageEditRotationV3 = 0 | 90 | 180 | 270;
 

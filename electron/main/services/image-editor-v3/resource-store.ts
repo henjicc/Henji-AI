@@ -27,6 +27,8 @@ export interface PutResourceResult extends ResourceDescriptor {
 export interface ResourceGarbageCollectionOptions {
   minimumAgeMs?: number
   dryRun?: boolean
+  /** 根扫描与作品发布共用租约屏障，避免扫描后才发布的新根被回收。 */
+  resolveReferences?: () => Promise<ReadonlySet<ResourceId>>
 }
 
 export interface ResourceGarbageCollectionResult {
@@ -367,6 +369,28 @@ export class ContentAddressedResourceStore {
         this.leaseCounts.set(resourceId, (this.leaseCounts.get(resourceId) ?? 0) + 1)
       }
     })
+    return this.reservedLease(unique)
+  }
+
+  /** 新不可变页先预留租约再发布字节，GC 的最低年龄为 0 也不能穿过发布窗口。 */
+  async putBufferLeased(bytes: Uint8Array, options: PutResourceOptions = {}): Promise<{ resource: PutResourceResult; lease: ResourceLease }> {
+    const id = `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}` as ResourceId
+    const lease = await this.reservePublication([id])
+    try { return { resource: await this.putBuffer(bytes, options), lease } }
+    catch (error) { await lease.release(); throw error }
+  }
+
+  /** 已验证清单中的不可变对象在首次发布前就保护；不假装对象已经存在。 */
+  async reservePublication(resourceIds: readonly ResourceId[]): Promise<ResourceLease> {
+    const unique = [...new Set(resourceIds)]
+    for (const resourceId of unique) parseResourceId(resourceId)
+    await this.executor.run('resource-leases', async () => {
+      for (const id of unique) this.leaseCounts.set(id, (this.leaseCounts.get(id) ?? 0) + 1)
+    })
+    return this.reservedLease(unique)
+  }
+
+  private reservedLease(unique: readonly ResourceId[]): ResourceLease {
     let released = false
     return {
       resourceIds: unique,
@@ -382,6 +406,10 @@ export class ContentAddressedResourceStore {
         })
       },
     }
+  }
+
+  async publishReferences(operation: () => Promise<void>): Promise<void> {
+    await this.executor.run('resource-leases', operation)
   }
 
   /**
@@ -410,6 +438,7 @@ export class ContentAddressedResourceStore {
     options: ResourceGarbageCollectionOptions = {},
   ): Promise<ResourceGarbageCollectionResult> {
     return this.executor.run('resource-leases', async () => {
+      const live = options.resolveReferences ? await options.resolveReferences() : referencedResourceIds
       const deleted: ResourceId[] = []
       const retainedByLease: ResourceId[] = []
       let reclaimedBytes = 0
@@ -422,7 +451,7 @@ export class ContentAddressedResourceStore {
         for (const entry of entries) {
           if (!entry.isFile() || !SHA256_PATTERN.test(entry.name)) continue
           const resourceId = `sha256:${entry.name}` as ResourceId
-          if (referencedResourceIds.has(resourceId)) continue
+          if (live.has(resourceId)) continue
           if ((this.leaseCounts.get(resourceId) ?? 0) > 0) {
             retainedByLease.push(resourceId)
             continue

@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 2,
-      "fingerprint": "28429b97bac340b10cf5ef9a110d71ccbf0de6796c943f99036281b429d507fc",
-      "supportedFrom": 2
+      "version": 3,
+      "fingerprint": "690b33f50c44a712a549debbc0dca607bb3b66ecc2cef1b44f739b68b700c390",
+      "supportedFrom": 3
     },
     "image-working-copy": {
-      "version": 4,
-      "fingerprint": "3d03750107b8e785fcd3b1e5587bb576055c84498fbb2f80665efe62b3f3db52",
-      "supportedFrom": 4
+      "version": 5,
+      "fingerprint": "7e63868b5b6f0470b240042ac46f99fd62179dc7173c3ae92fba9430e7a1eac3",
+      "supportedFrom": 5
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 2,
-      "fingerprint": "e8e19f3a9b9b626e2a58c87ac03ab8cbd5c5166c5e4fe917143310c810aedb86",
-      "supportedFrom": 2
+      "version": 3,
+      "fingerprint": "2b1bcbd2c4943fe56a6d83cfe059719f5c3d036fac57ef846aaed4ecc46efb67",
+      "supportedFrom": 3
     },
     "keystore": {
       "version": 1,
@@ -179,6 +179,11 @@
     "storyboard-metadata": {
       "version": 1,
       "fingerprint": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe",
+      "supportedFrom": 1
+    },
+    "image-history-checkpoint": {
+      "version": 1,
+      "fingerprint": "d0b02a406edba526dc32f55cc50f835ecca398cea803f8a58b51db85b2be7ba9",
       "supportedFrom": 1
     }
   },
@@ -661,6 +666,60 @@
       "reason": "t120-B1b 删除旧资源蒙版，统一稀疏蒙版及共同字段，开发期断代不迁移",
       "previousFingerprint": "caa906d2fd945abe742bce9da6e0c90b108e08adb1e0083bad565ca1d5af6a80",
       "fingerprint": "e8e19f3a9b9b626e2a58c87ac03ab8cbd5c5166c5e4fe917143310c810aedb86",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T17:54:46.253Z",
+      "format": "image-package",
+      "version": 3,
+      "reason": "开发期图片历史改为检查点与不可变资源页，删除 inline 历史落盘，不保留旧版本读取分支",
+      "previousFingerprint": "28429b97bac340b10cf5ef9a110d71ccbf0de6796c943f99036281b429d507fc",
+      "fingerprint": "9b2b3146bef5fd5cb80548146be0ade17f0864dfaedda5e4096e949a6460ce54",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T17:54:46.254Z",
+      "format": "image-working-copy",
+      "version": 5,
+      "reason": "开发期图片历史改为检查点与不可变资源页，删除 inline 历史落盘，不保留旧版本读取分支",
+      "previousFingerprint": "3d03750107b8e785fcd3b1e5587bb576055c84498fbb2f80665efe62b3f3db52",
+      "fingerprint": "a10d70f9b8fb530dd3ac00ffa380254d896ea551d934c76b30979a999fd5973d",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T17:54:46.254Z",
+      "format": "canvas-layer-package",
+      "version": 3,
+      "reason": "开发期图片历史改为检查点与不可变资源页，删除 inline 历史落盘，不保留旧版本读取分支",
+      "previousFingerprint": "e8e19f3a9b9b626e2a58c87ac03ab8cbd5c5166c5e4fe917143310c810aedb86",
+      "fingerprint": "62f9870511b37abff697f8574509f0d21230eedd1f0fe7e88a59722d6b3738aa",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T17:59:11.660Z",
+      "format": "image-package",
+      "version": 3,
+      "reason": "历史页只改变工作副本外壳；图片内容版本独立保持 4，黄金样本按正式构造器重新生成",
+      "previousFingerprint": "9b2b3146bef5fd5cb80548146be0ade17f0864dfaedda5e4096e949a6460ce54",
+      "fingerprint": "690b33f50c44a712a549debbc0dca607bb3b66ecc2cef1b44f739b68b700c390",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T17:59:11.662Z",
+      "format": "image-working-copy",
+      "version": 5,
+      "reason": "历史页只改变工作副本外壳；图片内容版本独立保持 4，黄金样本按正式构造器重新生成",
+      "previousFingerprint": "a10d70f9b8fb530dd3ac00ffa380254d896ea551d934c76b30979a999fd5973d",
+      "fingerprint": "7e63868b5b6f0470b240042ac46f99fd62179dc7173c3ae92fba9430e7a1eac3",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T17:59:11.662Z",
+      "format": "canvas-layer-package",
+      "version": 3,
+      "reason": "历史页只改变工作副本外壳；图片内容版本独立保持 4，黄金样本按正式构造器重新生成",
+      "previousFingerprint": "62f9870511b37abff697f8574509f0d21230eedd1f0fe7e88a59722d6b3738aa",
+      "fingerprint": "2b1bcbd2c4943fe56a6d83cfe059719f5c3d036fac57ef846aaed4ecc46efb67",
       "waivedFixtureVersions": []
     }
   ]

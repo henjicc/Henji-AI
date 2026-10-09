@@ -15,6 +15,7 @@ import type {
 } from './contracts'
 import type { ContentAddressedResourceStore } from './resource-store'
 import { sourceMediaType } from './source-metadata'
+import { ImageEditHistoryPageStoreV3 } from './history-pages/store'
 import {
   DEFAULT_HENJI_IMAGE_PACKAGE_LIMITS,
   HENJI_IMAGE_DOCUMENT_HEADER_ENTRY,
@@ -42,6 +43,8 @@ export interface ImportHenjiImagePackageRequest {
   sourceProvider?: SourceProvider
   limits?: Partial<HenjiImagePackageLimits>
   signal?: AbortSignal
+  /** 同步总线消费方可显式恢复；作品解包/保存只校验页，不全量恢复。 */
+  restoreHistory?: boolean
 }
 
 export interface ImportedHenjiImagePackage {
@@ -270,6 +273,7 @@ export async function importHenjiImagePackage(
   await request.resourceStore.initialize()
   const stagingDir = await fsp.mkdtemp(path.join(request.resourceStore.rootDir, '.henjiimg-import-'))
   logger.info('开始导入可编辑图片包', { event: 'image_editor_v3.package.import.start' })
+  let preparationLease: ResourceLease | undefined
   try {
     const staged = await stageArchive(sourcePath, stagingDir, limits, request.signal)
     const manifestEntry = staged.get(HENJI_IMAGE_PACKAGE_MANIFEST)
@@ -278,6 +282,10 @@ export async function importHenjiImagePackage(
     const upgraded = await upgradeStoredFile(sourcePath, 'image-package', raw, raw && typeof raw === 'object' && 'packageVersion' in raw ? raw.packageVersion : 0)
     const manifest = validateHenjiImagePackageManifest(upgraded)
     verifyManifestEntries(manifest, staged)
+    preparationLease = await request.resourceStore.reservePublication([
+      ...manifest.resources.map(resource => resource.resourceId),
+      ...(manifest.externalSources ?? []).map(source => `sha256:${source.sha256}` as ResourceId),
+    ])
     const resources: ResourceDescriptor[] = []
     for (const resource of manifest.resources) {
       throwIfAborted(request.signal)
@@ -318,6 +326,13 @@ export async function importHenjiImagePackage(
     const resourceLease = await request.resourceStore.acquireLease(
       resources.map((resource) => resource.id),
     )
+    try {
+      if (manifest.document.historyCheckpoint) {
+        const pages = new ImageEditHistoryPageStoreV3(request.resourceStore)
+        await pages.validate(manifest.document.historyCheckpoint, request.signal)
+        if (request.restoreHistory !== false) manifest.document.history = await pages.restore(manifest.document.historyCheckpoint, request.signal)
+      }
+    } catch (error) { await resourceLease.release(); throw error }
     logger.info('可编辑图片包导入完成', {
       event: 'image_editor_v3.package.import.completed',
       context: {
@@ -334,6 +349,7 @@ export async function importHenjiImagePackage(
     })
     throw error
   } finally {
+    await preparationLease?.release()
     await fsp.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined)
   }
 }

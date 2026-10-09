@@ -1,0 +1,18 @@
+{
+  "format": "henji-image-history",
+  "version": 1,
+  "documentId": "golden-image",
+  "headRevision": 4,
+  "snapshotVersion": 2,
+  "position": 2,
+  "total": 3,
+  "pages": [
+    {
+      "resourceId": "sha256:f93ce013f03c1ea2fec29cd6d4e40fc4e28dd7cef3bf46ccf5c33057b7de1e3f",
+      "byteSize": 1064,
+      "start": 0,
+      "count": 3
+    }
+  ],
+  "resources": []
+}

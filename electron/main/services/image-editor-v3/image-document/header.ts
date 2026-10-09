@@ -183,5 +183,6 @@ export function withImageEditDocumentId(envelope: ImageEditDocumentEnvelope, doc
     documentId,
     document: body,
     ...(envelope.history ? { history: { ...envelope.history, documentId } } : {}),
+    ...(envelope.historyCheckpoint ? { historyCheckpoint: { ...envelope.historyCheckpoint, documentId } } : {}),
   }
 }

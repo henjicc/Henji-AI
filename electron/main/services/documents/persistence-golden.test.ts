@@ -12,6 +12,8 @@ import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSc
 import { readStoryboardMetadataFromPng } from '../image/png-metadata'
 import { compileCodeMaterial } from '../../../../src/core/videoEdit/codeMaterial/compiler'
 import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION } from '../../../../src/core/persistence/schemaVersions'
+import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
+import type { ImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentTypes'
 
 let environment: TestEnvironment | undefined
 afterEach(async () => { await environment?.cleanup(); environment = undefined })
@@ -26,9 +28,18 @@ describe('正式读入口打开黄金归档与源码', () => {
       const original = await fsp.readFile(source)
       const imported = await codec.import(source)
       try {
-        expect(imageWorkingCopySchema.safeParse(imported.manifest.document).success).toBe(true)
+        const { history: _runtimeHistory, ...persisted } = imported.manifest.document
+        expect(imageWorkingCopySchema.safeParse(persisted).success).toBe(true)
         expect(imported.manifest.packageVersion).toBe(IMAGE_PACKAGE_VERSION)
         expect(imported.manifest.document.formatVersion).toBe(IMAGE_WORKING_VERSION)
+        expect(imported.manifest.document.historyCheckpoint).toMatchObject({ total: 3, position: 2 })
+        expect(imported.manifest.document.history?.redo).toHaveLength(1)
+        const history = new ImageEditCommandHistoryV3()
+        const document = imported.manifest.document.document as ImageEditDocumentV3
+        history.restore(document, imported.manifest.document.history)
+        const redone = history.redo(document).document
+        expect(redone.layers[0].opacity).toBe(.5)
+        expect(history.undo(history.undo(history.undo(redone).document).document).document.layers[0].opacity).toBe(1)
         const layers = (imported.manifest.document.document as { layers: Array<{ id: string; type: string; adjustmentId?: string }> }).layers
         expect(layers[0]).toMatchObject({ id: 'golden-layer', type: 'raster', fillOpacity: .7, maskAttachment: { linked: false, density: .6 }, filters: [{ effectId: 'exposure', params: { stops: .4 } }] })
         expect(layers).toHaveLength(4)

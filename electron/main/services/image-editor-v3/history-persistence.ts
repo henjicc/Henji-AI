@@ -8,6 +8,7 @@ import { collectImageEditJsonResourceIdsV3 } from '../../../../src/core/imageEdi
 import type { ImageEditHistoryResourceReferenceV3 } from '../../../../src/core/imageEdit/v3/commandTypes'
 import type { ResourceId } from './contracts'
 import { parseResourceId } from './resource-store'
+import { decodeImageEditHistoryCheckpointV3, type ImageEditHistoryCheckpointV3 } from '../../../../src/core/imageEdit/v3/historyPaging/checkpoint'
 export { ImageEditHistoryPageStoreV3 } from './history-pages/store'
 
 export function normalizePersistedImageEditDocumentV3(
@@ -66,16 +67,24 @@ export function normalizePersistedImageEditHistoryV3(
 }
 
 export function collectPersistedImageEditHistoryResourcesV3(
-  history: ImageEditCommandHistorySnapshotV3 | undefined,
+  history: ImageEditCommandHistorySnapshotV3 | ImageEditHistoryCheckpointV3 | undefined,
 ): ImageEditHistoryResourceReferenceV3[] {
+  if (history && 'format' in history) return [...history.resources, ...history.pages.map(page => ({ resourceId: page.resourceId, byteSize: page.byteSize }))]
   return history ? retainedResources(history) : []
+}
+
+export function normalizePersistedImageEditCheckpointV3(value: unknown, documentId: string, revision: number): ImageEditHistoryCheckpointV3 | undefined {
+  if (value === undefined) return undefined
+  const checkpoint = decodeImageEditHistoryCheckpointV3(value)
+  if (checkpoint.documentId !== documentId || checkpoint.headRevision !== revision) throw new Error('Image edit history checkpoint head does not match its document envelope')
+  return checkpoint
 }
 
 export function mergePersistedImageEditResourceRefsV3(
   document: unknown,
   declared: readonly ResourceId[],
   previewRef: ResourceId | undefined,
-  history: ImageEditCommandHistorySnapshotV3 | undefined,
+  history: ImageEditCommandHistorySnapshotV3 | ImageEditHistoryCheckpointV3 | undefined,
 ): ResourceId[] {
   const additional = [
     ...declared,

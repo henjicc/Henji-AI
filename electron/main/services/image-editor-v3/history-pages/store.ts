@@ -31,21 +31,32 @@ export class ImageEditHistoryPageStoreV3 {
     logger.info('开始保存图片历史页', { event: 'image_edit.history.pages.prepare.start', context: { documentId: snapshot.documentId } });
     const release = async (): Promise<void> => { for (const lease of leases) await lease.release(); };
     try {
-      const retained = mergeImageEditHistoryResourceReferencesV3([...snapshot.undo, ...snapshot.redo].flatMap(entry => entry.resources));
-      if (retained.length) leases.push(await this.resources.acquireLease(retained.map(entry => entry.resourceId as ResourceId)));
-      checkpoint.resources = retained;
+      const retained = new Map<string, number | null>();
       let start = 0;
       for (const page of splitImageEditHistoryPagesV3(snapshot)) {
         signal?.throwIfAborted();
+        const pageResources = mergeImageEditHistoryResourceReferencesV3(page.undo.flatMap(entry => entry.resources));
+        const newRefs = pageResources.filter(ref => !retained.has(ref.resourceId));
+        if (newRefs.length) leases.push(await this.resources.acquireLease(newRefs.map(ref => ref.resourceId as ResourceId)));
+        for (const ref of newRefs) {
+          if (ref.byteSize !== null && (await this.resources.describe(ref.resourceId as ResourceId)).byteLength !== ref.byteSize) throw new Error(`History resource byte length mismatch: ${ref.resourceId}`);
+        }
+        for (const ref of pageResources) {
+          const previous = retained.get(ref.resourceId);
+          if (previous !== undefined && previous !== null && ref.byteSize !== null && previous !== ref.byteSize) throw new Error('历史资源引用冲突');
+          retained.set(ref.resourceId, previous ?? ref.byteSize);
+        }
         const bytes = Buffer.from(stringifyImageEditCommandHistorySnapshotV3(page), 'utf8');
-        const stored = await this.resources.putBuffer(bytes, { mediaType: 'application/vnd.henji.image-history+json', maxBytes: IMAGE_EDIT_HISTORY_PAGE_MAX_BYTES_V3, signal });
-        leases.push(await this.resources.acquireLease([stored.id]));
+        const publication = await this.resources.putBufferLeased(bytes, { mediaType: 'application/vnd.henji.image-history+json', maxBytes: IMAGE_EDIT_HISTORY_PAGE_MAX_BYTES_V3, signal });
+        const stored = publication.resource;
+        leases.push(publication.lease);
         checkpoint.pages.push({ resourceId: stored.id, byteSize: stored.byteLength, start, count: page.undo.length });
         start += page.undo.length;
         // I/O 及调度按页执行；资源保留元数据不复制像素，不阻塞主进程长循环。
         await new Promise<void>(resolve => setImmediate(resolve));
       }
       signal?.throwIfAborted();
+      checkpoint.resources = mergeImageEditHistoryResourceReferencesV3([...retained].map(([resourceId, byteSize]) => ({ resourceId, byteSize })));
       decodeImageEditHistoryCheckpointV3(checkpoint);
       const resourceIds = [...new Set([...checkpoint.resources.map(entry => entry.resourceId), ...checkpoint.pages.map(entry => entry.resourceId)])] as ResourceId[];
       logger.info('图片历史页保存完成', { event: 'image_edit.history.pages.prepare.completed', context: { documentId: snapshot.documentId, pages: checkpoint.pages.length } });
@@ -82,6 +93,27 @@ export class ImageEditHistoryPageStoreV3 {
       signal?.throwIfAborted();
       return page.undo;
     } finally { await lease.release(); }
+  }
+
+  /** 校验归档/副本逐页内容与资源全集，内存只保留当前页。 */
+  async validate(checkpointValue: unknown, signal?: AbortSignal): Promise<void> {
+    const checkpoint = decodeImageEditHistoryCheckpointV3(checkpointValue);
+    const refs = new Map<string, number | null>();
+    const ids = new Set<string>();
+    let previousRevision = -1;
+    for (let index = 0; index < checkpoint.pages.length; index++) {
+      for (const entry of await this.readValidatedPage(checkpoint, index, signal)) {
+        if (ids.has(entry.forward.commandId)) throw new Error('历史分页包含重复命令');
+        if (entry.forward.expectedRevision <= previousRevision) throw new Error('历史分页命令顺序无效');
+        previousRevision = entry.forward.expectedRevision;
+        ids.add(entry.forward.commandId);
+        for (const ref of entry.resources) refs.set(ref.resourceId, ref.byteSize);
+      }
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    const retained = mergeImageEditHistoryResourceReferencesV3([...refs].map(([resourceId, byteSize]) => ({ resourceId, byteSize })));
+    if (JSON.stringify(retained) !== JSON.stringify(checkpoint.resources)) throw new Error('历史页资源与检查点不一致');
+    signal?.throwIfAborted();
   }
 
   /** 正式打开适配口；需要全量恢复的现有同步总线按页读取，未来可直接消费 readPage。 */

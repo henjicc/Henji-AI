@@ -246,7 +246,7 @@ export class ImageDocumentService {
     await this.touch(id)
     const existing = await this.options.catalog.listDocuments({ kind: KIND.id, includeDrafts: true, includeMissing: true })
     if (existing.some((row) => row.id === id)) throw new DocumentLocationError('图片文档 ID 已被占用。')
-    const working = await this.options.documents.load(id)
+    const working = await this.options.documents.loadCheckpoint(id)
     this.options.validateDocument(working)
     const { folder, locale } = await this.folderFor(request.container)
     const now = this.now().toISOString()
@@ -328,7 +328,7 @@ export class ImageDocumentService {
     request.signal?.throwIfAborted()
     const id = request.target.id
     await this.touch(id)
-    const working = await this.options.documents.load(id)
+    const working = await this.options.documents.loadCheckpoint(id)
     this.options.validateDocument(working)
     let located = await this.locate(request.target)
     const link = await this.options.links.read(id)
@@ -472,7 +472,7 @@ export class ImageDocumentService {
 
   private async loadWorking(id: string): Promise<ImageEditDocumentEnvelope | null> {
     try {
-      const envelope = await this.options.documents.load(id)
+      const envelope = await this.options.documents.loadCheckpoint(id)
       this.options.validateDocument(envelope)
       return envelope
     } catch (error) {
@@ -485,7 +485,7 @@ export class ImageDocumentService {
 
   private async importPackage(located: LocatedPackage): Promise<ImageEditDocumentEnvelope> {
     const id = located.header.id
-    const imported = await this.options.packages.import(located.path)
+    const imported = await this.options.packages.import(located.path, { restoreHistory: false })
     try {
       if (imported.missingExternalSources.length > 0) {
         throw new ImageDocumentHeaderError('这份图片文档引用了不在包里的外部图片，无法打开。')
