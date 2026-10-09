@@ -1,0 +1,3844 @@
+{
+  "version": 1,
+  "cycles": [
+    {
+      "members": [
+        "src/components/ui/index.ts",
+        "src/components/ui/params/ParamField.tsx",
+        "src/components/ui/params/ParamList.tsx"
+      ],
+      "edges": [
+        {
+          "from": "src/components/ui/index.ts",
+          "to": "src/components/ui/params/ParamField.tsx"
+        },
+        {
+          "from": "src/components/ui/index.ts",
+          "to": "src/components/ui/params/ParamList.tsx"
+        },
+        {
+          "from": "src/components/ui/params/ParamField.tsx",
+          "to": "src/components/ui/index.ts"
+        },
+        {
+          "from": "src/components/ui/params/ParamList.tsx",
+          "to": "src/components/ui/index.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/core/persistence/formatMigrations.ts",
+        "src/core/theme/themeMigration.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/core/persistence/formatMigrations.ts",
+          "to": "src/core/theme/themeMigration.ts"
+        },
+        {
+          "from": "src/core/theme/themeMigration.ts",
+          "to": "src/core/persistence/formatMigrations.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/core/videoEdit/audioContent.ts",
+        "src/core/videoEdit/document.ts",
+        "src/core/videoEdit/textTranscript.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/core/videoEdit/audioContent.ts",
+          "to": "src/core/videoEdit/document.ts"
+        },
+        {
+          "from": "src/core/videoEdit/document.ts",
+          "to": "src/core/videoEdit/textTranscript.ts"
+        },
+        {
+          "from": "src/core/videoEdit/textTranscript.ts",
+          "to": "src/core/videoEdit/audioContent.ts"
+        },
+        {
+          "from": "src/core/videoEdit/textTranscript.ts",
+          "to": "src/core/videoEdit/document.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/features/application-control/applicationDomains.ts",
+        "src/features/application-control/capabilities/applicationControlRegistry.ts",
+        "src/features/cameraStage/application/applicationDomain.ts",
+        "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
+        "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/features/application-control/applicationDomains.ts",
+          "to": "src/features/cameraStage/application/applicationDomain.ts"
+        },
+        {
+          "from": "src/features/application-control/capabilities/applicationControlRegistry.ts",
+          "to": "src/features/application-control/applicationDomains.ts"
+        },
+        {
+          "from": "src/features/cameraStage/application/applicationDomain.ts",
+          "to": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts"
+        },
+        {
+          "from": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
+          "to": "src/features/application-control/capabilities/applicationControlRegistry.ts"
+        },
+        {
+          "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
+          "to": "src/features/cameraStage/application/applicationDomain.ts"
+        },
+        {
+          "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
+          "to": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/features/application-control/hostContext/hostContext.ts",
+        "src/features/videoEdit/application/videoEditAnnotations.ts",
+        "src/features/videoEdit/application/videoEditCodeElementEditing.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/features/application-control/hostContext/hostContext.ts",
+          "to": "src/features/videoEdit/application/videoEditCodeElementEditing.ts"
+        },
+        {
+          "from": "src/features/videoEdit/application/videoEditAnnotations.ts",
+          "to": "src/features/application-control/hostContext/hostContext.ts"
+        },
+        {
+          "from": "src/features/videoEdit/application/videoEditCodeElementEditing.ts",
+          "to": "src/features/videoEdit/application/videoEditAnnotations.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/features/assets/application/applicationDomain.ts",
+        "src/features/assets/application/registerAssetCapabilityHandlers.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/features/assets/application/applicationDomain.ts",
+          "to": "src/features/assets/application/registerAssetCapabilityHandlers.ts"
+        },
+        {
+          "from": "src/features/assets/application/registerAssetCapabilityHandlers.ts",
+          "to": "src/features/assets/application/applicationDomain.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/features/canvas/application/canvasApplicationService.ts",
+        "src/features/canvas/application/canvasBatchService.ts",
+        "src/features/canvas/application/canvasMutationService.ts",
+        "src/features/canvas/application/canvasNodeGenerationConfig.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/features/canvas/application/canvasApplicationService.ts",
+          "to": "src/features/canvas/application/canvasBatchService.ts"
+        },
+        {
+          "from": "src/features/canvas/application/canvasBatchService.ts",
+          "to": "src/features/canvas/application/canvasApplicationService.ts"
+        },
+        {
+          "from": "src/features/canvas/application/canvasBatchService.ts",
+          "to": "src/features/canvas/application/canvasMutationService.ts"
+        },
+        {
+          "from": "src/features/canvas/application/canvasMutationService.ts",
+          "to": "src/features/canvas/application/canvasApplicationService.ts"
+        },
+        {
+          "from": "src/features/canvas/application/canvasMutationService.ts",
+          "to": "src/features/canvas/application/canvasNodeGenerationConfig.ts"
+        },
+        {
+          "from": "src/features/canvas/application/canvasNodeGenerationConfig.ts",
+          "to": "src/features/canvas/application/canvasApplicationService.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/features/canvas/application/canvasDomainExecutors.ts",
+        "src/features/canvas/application/canvasExecutionService.ts",
+        "src/features/canvas/application/generationNodeExecutor.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/features/canvas/application/canvasDomainExecutors.ts",
+          "to": "src/features/canvas/application/generationNodeExecutor.ts"
+        },
+        {
+          "from": "src/features/canvas/application/canvasExecutionService.ts",
+          "to": "src/features/canvas/application/canvasDomainExecutors.ts"
+        },
+        {
+          "from": "src/features/canvas/application/generationNodeExecutor.ts",
+          "to": "src/features/canvas/application/canvasExecutionService.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/features/documents/documentOperations.ts",
+        "src/features/documents/documentSessionRegistry.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/features/documents/documentOperations.ts",
+          "to": "src/features/documents/documentSessionRegistry.ts"
+        },
+        {
+          "from": "src/features/documents/documentSessionRegistry.ts",
+          "to": "src/features/documents/documentOperations.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/features/videoEdit/application/videoEditCodeState.ts",
+        "src/features/videoEdit/application/videoEditCodeStorage.ts",
+        "src/features/videoEdit/application/videoEditFonts.ts",
+        "src/features/videoEdit/application/videoEditService.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/features/videoEdit/application/videoEditCodeState.ts",
+          "to": "src/features/videoEdit/application/videoEditCodeStorage.ts"
+        },
+        {
+          "from": "src/features/videoEdit/application/videoEditCodeStorage.ts",
+          "to": "src/features/videoEdit/application/videoEditCodeState.ts"
+        },
+        {
+          "from": "src/features/videoEdit/application/videoEditCodeStorage.ts",
+          "to": "src/features/videoEdit/application/videoEditService.ts"
+        },
+        {
+          "from": "src/features/videoEdit/application/videoEditFonts.ts",
+          "to": "src/features/videoEdit/application/videoEditCodeState.ts"
+        },
+        {
+          "from": "src/features/videoEdit/application/videoEditService.ts",
+          "to": "src/features/videoEdit/application/videoEditCodeState.ts"
+        },
+        {
+          "from": "src/features/videoEdit/application/videoEditService.ts",
+          "to": "src/features/videoEdit/application/videoEditFonts.ts"
+        }
+      ]
+    },
+    {
+      "members": [
+        "src/features/videoEdit/application/videoEditMaskEditing.ts",
+        "src/features/videoEdit/application/videoEditTrackingEditing.ts"
+      ],
+      "edges": [
+        {
+          "from": "src/features/videoEdit/application/videoEditMaskEditing.ts",
+          "to": "src/features/videoEdit/application/videoEditTrackingEditing.ts"
+        },
+        {
+          "from": "src/features/videoEdit/application/videoEditTrackingEditing.ts",
+          "to": "src/features/videoEdit/application/videoEditMaskEditing.ts"
+        }
+      ]
+    }
+  ],
+  "forbiddenEdges": [
+    {
+      "from": "src/core/application-control/domains/toolbox/toolboxApplicationCapabilities.ts",
+      "to": "src/features/imageEdit/application/imageEditControlCatalog.ts",
+      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
+    },
+    {
+      "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
+      "to": "src/features/imageMark/domain/geometry.ts",
+      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
+    },
+    {
+      "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
+      "to": "src/features/imageMark/render/canvasAdapter.ts",
+      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
+    },
+    {
+      "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
+      "to": "src/features/imageMark/render/drawMarks.ts",
+      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
+    },
+    {
+      "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
+      "to": "src/features/imageMark/render/orientedImage.ts",
+      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
+    },
+    {
+      "from": "src/core/services/generationSubmissionConfirmation.ts",
+      "to": "src/stores/alertDialogStore.ts",
+      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
+    }
+  ],
+  "featureEdges": [
+    {
+      "from": "src/features/application-control/applicationCloseService.ts",
+      "to": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/audioEditProjectInstances",
+      "line": 1,
+      "cell": "application-control → audioEdit"
+    },
+    {
+      "from": "src/features/application-control/applicationCloseService.ts",
+      "to": "src/features/cameraStage/application/cameraStageProjectRuntime.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/application/cameraStageProjectRuntime",
+      "line": 5,
+      "cell": "application-control → cameraStage"
+    },
+    {
+      "from": "src/features/application-control/applicationCloseService.ts",
+      "to": "src/features/canvas/application/canvasProjectInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasProjectInstances",
+      "line": 4,
+      "cell": "application-control → canvas"
+    },
+    {
+      "from": "src/features/application-control/applicationCloseService.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 6,
+      "cell": "application-control → documents"
+    },
+    {
+      "from": "src/features/application-control/applicationCloseService.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 7,
+      "cell": "application-control → imageEdit"
+    },
+    {
+      "from": "src/features/application-control/applicationCloseService.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentLoading.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentLoading",
+      "line": 8,
+      "cell": "application-control → imageEdit"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/assets/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/applicationDomain",
+      "line": 3,
+      "cell": "application-control → assets"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/assistant/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/assistant/application/applicationDomain",
+      "line": 9,
+      "cell": "application-control → assistant"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/audioEdit/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/applicationDomain",
+      "line": 11,
+      "cell": "application-control → audioEdit"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/cameraStage/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/application/applicationDomain",
+      "line": 2,
+      "cell": "application-control → cameraStage"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/canvas/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/applicationDomain",
+      "line": 1,
+      "cell": "application-control → canvas"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/canvas/application/imageEditDocumentProjectionBinding.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/imageEditDocumentProjectionBinding",
+      "line": 17,
+      "cell": "application-control → canvas"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/documents/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/application/applicationDomain",
+      "line": 13,
+      "cell": "application-control → documents"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/generation/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/applicationDomain",
+      "line": 6,
+      "cell": "application-control → generation"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/imageEdit/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/application/applicationDomain",
+      "line": 4,
+      "cell": "application-control → imageEdit"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentBindings.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentBindings",
+      "line": 16,
+      "cell": "application-control → imageEdit"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/imageMark/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/application/applicationDomain",
+      "line": 5,
+      "cell": "application-control → imageMark"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/localModels/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/localModels/application/applicationDomain",
+      "line": 14,
+      "cell": "application-control → localModels"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/navigation/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/applicationDomain",
+      "line": 10,
+      "cell": "application-control → navigation"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/settings/application-control/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/settings/application-control/applicationDomain",
+      "line": 7,
+      "cell": "application-control → settings"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/toolbox/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/toolbox/application/applicationDomain",
+      "line": 8,
+      "cell": "application-control → toolbox"
+    },
+    {
+      "from": "src/features/application-control/applicationDomains.ts",
+      "to": "src/features/videoEdit/application/applicationDomain.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/applicationDomain",
+      "line": 12,
+      "cell": "application-control → videoEdit"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/assets/store/assetLibraryStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/store/assetLibraryStore",
+      "line": 15,
+      "cell": "application-control → assets"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/audioEditProjectInstances",
+      "line": 1,
+      "cell": "application-control → audioEdit"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/audioEdit/store/audioEditStore.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/store/audioEditStore",
+      "line": 29,
+      "cell": "application-control → audioEdit"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/cameraStage/store/cameraStageStore.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/store/cameraStageStore",
+      "line": 24,
+      "cell": "application-control → cameraStage"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/canvas/application/canvasApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasApplicationService",
+      "line": 17,
+      "cell": "application-control → canvas"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/canvas/application/canvasMediaTransfer.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasMediaTransfer",
+      "line": 18,
+      "cell": "application-control → canvas"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/canvas/domain/nodeRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/domain/nodeRegistry",
+      "line": 19,
+      "cell": "application-control → canvas"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 2,
+      "cell": "application-control → documents"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/generation/application/generationModelFields.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationModelFields",
+      "line": 27,
+      "cell": "application-control → generation"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/generation/store/generationDraftStore.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/store/generationDraftStore",
+      "line": 28,
+      "cell": "application-control → generation"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 26,
+      "cell": "application-control → imageEdit"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/imageMark/application/imageMarkSessionAccess.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/application/imageMarkSessionAccess",
+      "line": 25,
+      "cell": "application-control → imageMark"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/videoEdit/application/videoEditCodeElementEditing.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditCodeElementEditing",
+      "line": 5,
+      "cell": "application-control → videoEdit"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/videoEdit/application/videoEditCodeElements.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditCodeElements",
+      "line": 4,
+      "cell": "application-control → videoEdit"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/videoEdit/application/videoEditService.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditService",
+      "line": 3,
+      "cell": "application-control → videoEdit"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/videoEdit/application/videoEditStyleKits.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditStyleKits",
+      "line": 6,
+      "cell": "application-control → videoEdit"
+    },
+    {
+      "from": "src/features/assets/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 1,
+      "cell": "assets → application-control"
+    },
+    {
+      "from": "src/features/assets/application/assetCanvasApplicationService.ts",
+      "to": "src/features/canvas/application/assetMediaAssignment.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/assetMediaAssignment",
+      "line": 1,
+      "cell": "assets → canvas"
+    },
+    {
+      "from": "src/features/assets/application/assetCanvasApplicationService.ts",
+      "to": "src/features/canvas/application/canvasApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasApplicationService",
+      "line": 2,
+      "cell": "assets → canvas"
+    },
+    {
+      "from": "src/features/assets/application/assetCanvasApplicationService.ts",
+      "to": "src/features/canvas/application/canvasPersistenceService.ts",
+      "kind": "type",
+      "specifier": "@/features/canvas/application/canvasPersistenceService",
+      "line": 8,
+      "cell": "assets → canvas"
+    },
+    {
+      "from": "src/features/assets/application/assetCanvasApplicationService.ts",
+      "to": "src/features/canvas/application/canvasQueryService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasQueryService",
+      "line": 3,
+      "cell": "assets → canvas"
+    },
+    {
+      "from": "src/features/assets/application/registerAssetCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 3,
+      "cell": "assets → application-control"
+    },
+    {
+      "from": "src/features/assets/application/registerAssetCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 4,
+      "cell": "assets → application-control"
+    },
+    {
+      "from": "src/features/assets/application/registerAssetCapabilityHandlers.ts",
+      "to": "src/features/application-control/hostContext/hostContext.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/hostContext/hostContext",
+      "line": 5,
+      "cell": "assets → application-control"
+    },
+    {
+      "from": "src/features/assets/components/AssetCardMenu.tsx",
+      "to": "src/features/videoEdit/panels/VideoEditSendMenu.tsx",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/panels/VideoEditSendMenu",
+      "line": 10,
+      "cell": "assets → videoEdit"
+    },
+    {
+      "from": "src/features/assets/components/AssetPreviewOverlay.tsx",
+      "to": "src/features/videoEdit/application/videoEditCodeAssets.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditCodeAssets",
+      "line": 14,
+      "cell": "assets → videoEdit"
+    },
+    {
+      "from": "src/features/assets/components/AssetPreviewOverlay.tsx",
+      "to": "src/features/videoEdit/application/videoEditService.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditService",
+      "line": 13,
+      "cell": "assets → videoEdit"
+    },
+    {
+      "from": "src/features/assistant/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 1,
+      "cell": "assistant → application-control"
+    },
+    {
+      "from": "src/features/assistant/conversation/assistantAttachments.ts",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 11,
+      "cell": "assistant → assets"
+    },
+    {
+      "from": "src/features/assistant/conversation/assistantAttachments.ts",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 7,
+      "cell": "assistant → assets"
+    },
+    {
+      "from": "src/features/assistant/conversation/AssistantComposer.tsx",
+      "to": "src/features/canvas/application/canvasMediaTransfer.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasMediaTransfer",
+      "line": 16,
+      "cell": "assistant → canvas"
+    },
+    {
+      "from": "src/features/assistant/embedded/EmbeddedConversation.tsx",
+      "to": "src/features/application-control/hostContext/hostContext.ts",
+      "kind": "static",
+      "specifier": "../../application-control/hostContext/hostContext",
+      "line": 10,
+      "cell": "assistant → application-control"
+    },
+    {
+      "from": "src/features/assistant/embedded/EmbeddedConversation.tsx",
+      "to": "src/features/audioEdit/AudioEditAssistantAction.tsx",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/AudioEditAssistantAction",
+      "line": 17,
+      "cell": "assistant → audioEdit"
+    },
+    {
+      "from": "src/features/assistant/results/openAssistantResult.ts",
+      "to": "src/features/canvas/application/canvasApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasApplicationService",
+      "line": 2,
+      "cell": "assistant → canvas"
+    },
+    {
+      "from": "src/features/audioEdit/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 3,
+      "cell": "audioEdit → application-control"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditAssistant.ts",
+      "to": "src/features/application-control/hostContext/hostContext.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/hostContext/hostContext",
+      "line": 2,
+      "cell": "audioEdit → application-control"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditAssistant.ts",
+      "to": "src/features/assistant/store/assistantUiStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assistant/store/assistantUiStore",
+      "line": 1,
+      "cell": "audioEdit → assistant"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditDocumentService.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 4,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditDocumentService.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 5,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "to": "src/features/documents/documentErrors.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentErrors",
+      "line": 15,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "to": "src/features/documents/documentSession.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSession",
+      "line": 16,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 17,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 18,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/audioEditReflection.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 12,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/registerAudioEditCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 4,
+      "cell": "audioEdit → application-control"
+    },
+    {
+      "from": "src/features/audioEdit/application/registerAudioEditCapabilityHandlers.ts",
+      "to": "src/features/canvas/application/canvasDownloadService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasDownloadService",
+      "line": 5,
+      "cell": "audioEdit → canvas"
+    },
+    {
+      "from": "src/features/audioEdit/application/registerAudioEditCapabilityHandlers.ts",
+      "to": "src/features/documents/documentCovers.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentCovers",
+      "line": 10,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/registerAudioEditCapabilityHandlers.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 8,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/registerAudioEditCapabilityHandlers.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 9,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/application/registerAudioEditCapabilityHandlers.ts",
+      "to": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceCapabilityService",
+      "line": 12,
+      "cell": "audioEdit → navigation"
+    },
+    {
+      "from": "src/features/audioEdit/AudioEditApp.tsx",
+      "to": "src/features/assistant/store/assistantUiStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assistant/store/assistantUiStore",
+      "line": 41,
+      "cell": "audioEdit → assistant"
+    },
+    {
+      "from": "src/features/audioEdit/AudioEditApp.tsx",
+      "to": "src/features/documents/DocumentLibraryPage.tsx",
+      "kind": "static",
+      "specifier": "@/features/documents/DocumentLibraryPage",
+      "line": 38,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/AudioEditApp.tsx",
+      "to": "src/features/documents/embeddedDocuments.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/embeddedDocuments",
+      "line": 39,
+      "cell": "audioEdit → documents"
+    },
+    {
+      "from": "src/features/audioEdit/AudioEditApp.tsx",
+      "to": "src/features/videoEdit/application/videoEditSourceRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditSourceRefs",
+      "line": 66,
+      "cell": "audioEdit → videoEdit"
+    },
+    {
+      "from": "src/features/audioEdit/AudioEditApp.tsx",
+      "to": "src/features/videoEdit/panels/VideoEditSendMenu.tsx",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/panels/VideoEditSendMenu",
+      "line": 65,
+      "cell": "audioEdit → videoEdit"
+    },
+    {
+      "from": "src/features/cameraStage/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 1,
+      "cell": "cameraStage → application-control"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageApplicationService.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 2,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
+      "to": "src/features/application-control/capabilities/applicationControlRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/applicationControlRegistry",
+      "line": 6,
+      "cell": "cameraStage → application-control"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 8,
+      "cell": "cameraStage → application-control"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
+      "to": "src/features/application-control/hostContext/hostContext.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/hostContext/hostContext",
+      "line": 5,
+      "cell": "cameraStage → application-control"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageProjectRuntime.ts",
+      "to": "src/features/documents/documentErrors.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentErrors",
+      "line": 5,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageProjectRuntime.ts",
+      "to": "src/features/documents/documentSession.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSession",
+      "line": 6,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageProjectRuntime.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 7,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageProjectRuntime.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 8,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageRenderCapabilityAdapter.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 9,
+      "cell": "cameraStage → application-control"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageRenderCapabilityAdapter.ts",
+      "to": "src/features/canvas/application/cameraStageRenderApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/cameraStageRenderApplicationService",
+      "line": 2,
+      "cell": "cameraStage → canvas"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageRenderCapabilityAdapter.ts",
+      "to": "src/features/canvas/application/canvasQueryService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasQueryService",
+      "line": 5,
+      "cell": "cameraStage → canvas"
+    },
+    {
+      "from": "src/features/cameraStage/application/cameraStageRenderCapabilityAdapter.ts",
+      "to": "src/features/canvas/domain/canvasNodes.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/domain/canvasNodes",
+      "line": 6,
+      "cell": "cameraStage → canvas"
+    },
+    {
+      "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 6,
+      "cell": "cameraStage → application-control"
+    },
+    {
+      "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 8,
+      "cell": "cameraStage → application-control"
+    },
+    {
+      "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
+      "to": "src/features/application-control/hostContext/hostContext.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/hostContext/hostContext",
+      "line": 2,
+      "cell": "cameraStage → application-control"
+    },
+    {
+      "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 14,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 13,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
+      "to": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceCapabilityService",
+      "line": 9,
+      "cell": "cameraStage → navigation"
+    },
+    {
+      "from": "src/features/cameraStage/CameraStageApp.tsx",
+      "to": "src/features/documents/DocumentLibraryPage.tsx",
+      "kind": "static",
+      "specifier": "@/features/documents/DocumentLibraryPage",
+      "line": 5,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/CameraStageApp.tsx",
+      "to": "src/features/documents/embeddedDocuments.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/embeddedDocuments",
+      "line": 6,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/CameraStageEditor.tsx",
+      "to": "src/features/assets/services/cameraStageAssetCollection.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/cameraStageAssetCollection",
+      "line": 7,
+      "cell": "cameraStage → assets"
+    },
+    {
+      "from": "src/features/cameraStage/CameraStageEditor.tsx",
+      "to": "src/features/documents/embeddedDocuments.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/embeddedDocuments",
+      "line": 35,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/hooks/useCameraStageAutosave.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 2,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/hooks/useCameraStageAutosave.ts",
+      "to": "src/features/documents/useDocumentSessionState.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/useDocumentSessionState",
+      "line": 3,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "to": "src/features/documents/documentErrors.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentErrors",
+      "line": 3,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 4,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 5,
+      "cell": "cameraStage → documents"
+    },
+    {
+      "from": "src/features/canvas/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 5,
+      "cell": "canvas → application-control"
+    },
+    {
+      "from": "src/features/canvas/application/assetGroupApplicationService.ts",
+      "to": "src/features/assets/drag/assetDragPayload.ts",
+      "kind": "type",
+      "specifier": "@/features/assets/drag/assetDragPayload",
+      "line": 5,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/application/cameraStageRenderApplicationService.ts",
+      "to": "src/features/assets/services/cameraStageAssetCollection.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/cameraStageAssetCollection",
+      "line": 10,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/application/cameraStageRenderApplicationService.ts",
+      "to": "src/features/cameraStage/application/cameraStageProjectRuntime.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/application/cameraStageProjectRuntime",
+      "line": 11,
+      "cell": "canvas → cameraStage"
+    },
+    {
+      "from": "src/features/canvas/application/cameraStageRenderApplicationService.ts",
+      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
+      "line": 12,
+      "cell": "canvas → cameraStage"
+    },
+    {
+      "from": "src/features/canvas/application/canvasDocumentEnvironment.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 3,
+      "cell": "canvas → documents"
+    },
+    {
+      "from": "src/features/canvas/application/canvasGenerationTaskRecord.ts",
+      "to": "src/features/generation/application/generationPreparationService.ts",
+      "kind": "type",
+      "specifier": "@/features/generation/application/generationPreparationService",
+      "line": 5,
+      "cell": "canvas → generation"
+    },
+    {
+      "from": "src/features/canvas/application/canvasGenerationTaskRecord.ts",
+      "to": "src/features/generation/application/generationTaskStatusRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationTaskStatusRegistry",
+      "line": 6,
+      "cell": "canvas → generation"
+    },
+    {
+      "from": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "to": "src/features/generation/application/generationPreparationService.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationPreparationService",
+      "line": 7,
+      "cell": "canvas → generation"
+    },
+    {
+      "from": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "to": "src/features/generation/application/generationPreparationService.ts",
+      "kind": "type",
+      "specifier": "@/features/generation/application/generationPreparationService",
+      "line": 6,
+      "cell": "canvas → generation"
+    },
+    {
+      "from": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "to": "src/features/generation/application/generationTaskStatusRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationTaskStatusRegistry",
+      "line": 24,
+      "cell": "canvas → generation"
+    },
+    {
+      "from": "src/features/canvas/application/canvasMediaDownload.ts",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 7,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/application/canvasNodeGenerationConfig.ts",
+      "to": "src/features/generation/application/generationPreparationService.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationPreparationService",
+      "line": 4,
+      "cell": "canvas → generation"
+    },
+    {
+      "from": "src/features/canvas/application/canvasProjectInstances.ts",
+      "to": "src/features/documents/documentErrors.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentErrors",
+      "line": 9,
+      "cell": "canvas → documents"
+    },
+    {
+      "from": "src/features/canvas/application/canvasProjectInstances.ts",
+      "to": "src/features/documents/documentSession.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSession",
+      "line": 10,
+      "cell": "canvas → documents"
+    },
+    {
+      "from": "src/features/canvas/application/canvasProjectInstances.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 11,
+      "cell": "canvas → documents"
+    },
+    {
+      "from": "src/features/canvas/application/canvasSessionState.ts",
+      "to": "src/features/documents/documentSession.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSession",
+      "line": 4,
+      "cell": "canvas → documents"
+    },
+    {
+      "from": "src/features/canvas/application/generationResultCanvasApplicationService.ts",
+      "to": "src/features/generation/application/generationResultSource.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationResultSource",
+      "line": 11,
+      "cell": "canvas → generation"
+    },
+    {
+      "from": "src/features/canvas/application/generationResultCanvasApplicationService.ts",
+      "to": "src/features/imageEdit/application/imageEditApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/application/imageEditApplicationService",
+      "line": 10,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/application/imageEditDocumentProjectionBinding.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentBindings.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentBindings",
+      "line": 1,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/application/multiLayerDocumentLifecycleService.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 8,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/application/multiLayerDocumentNodeEditorApplicationService.ts",
+      "to": "src/features/navigation/application/index.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application",
+      "line": 3,
+      "cell": "canvas → navigation"
+    },
+    {
+      "from": "src/features/canvas/application/multiLayerDocumentNodeExportOperation.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
+      "line": 3,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/application/multiLayerDocumentNodeGenerationAdapter.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 13,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/application/multiLayerDocumentNodeGenerationAdapter.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentLoading.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentLoading",
+      "line": 12,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/application/multiLayerDocumentPersistenceConfirmation.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOwner.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOwner",
+      "line": 3,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/application/registerCanvasCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 25,
+      "cell": "canvas → application-control"
+    },
+    {
+      "from": "src/features/canvas/application/registerCanvasCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 26,
+      "cell": "canvas → application-control"
+    },
+    {
+      "from": "src/features/canvas/application/registerCanvasCapabilityHandlers.ts",
+      "to": "src/features/application-control/hostContext/hostContext.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/hostContext/hostContext",
+      "line": 24,
+      "cell": "canvas → application-control"
+    },
+    {
+      "from": "src/features/canvas/application/registerCanvasCapabilityHandlers.ts",
+      "to": "src/features/assets/application/assetCanvasApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetCanvasApplicationService",
+      "line": 18,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/application/registerCanvasCapabilityHandlers.ts",
+      "to": "src/features/documents/documentCovers.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentCovers",
+      "line": 13,
+      "cell": "canvas → documents"
+    },
+    {
+      "from": "src/features/canvas/application/registerCanvasCapabilityHandlers.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 12,
+      "cell": "canvas → documents"
+    },
+    {
+      "from": "src/features/canvas/application/registerCanvasCapabilityHandlers.ts",
+      "to": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceCapabilityService",
+      "line": 37,
+      "cell": "canvas → navigation"
+    },
+    {
+      "from": "src/features/canvas/domain/defaultModels.ts",
+      "to": "src/features/settings/modelDefaultsManager.ts",
+      "kind": "static",
+      "specifier": "@/features/settings/modelDefaultsManager",
+      "line": 2,
+      "cell": "canvas → settings"
+    },
+    {
+      "from": "src/features/canvas/domain/outpaintGeometry.ts",
+      "to": "src/features/imageMark/domain/types.ts",
+      "kind": "type",
+      "specifier": "@/features/imageMark/domain/types",
+      "line": 1,
+      "cell": "canvas → imageMark"
+    },
+    {
+      "from": "src/features/canvas/generation/runGeneration.ts",
+      "to": "src/features/generation/application/taskServerId.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/taskServerId",
+      "line": 9,
+      "cell": "canvas → generation"
+    },
+    {
+      "from": "src/features/canvas/hooks/useCanvasAssetDrop.ts",
+      "to": "src/features/assets/drag/assetDragPayload.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/drag/assetDragPayload",
+      "line": 5,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/hooks/useCanvasDuplication.ts",
+      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
+      "line": 12,
+      "cell": "canvas → cameraStage"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 1,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3",
+      "line": 13,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
+      "line": 51,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOwner.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOwner",
+      "line": 52,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceQueue.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceQueue",
+      "line": 18,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/editor/index.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/editor",
+      "line": 17,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/canvasEditV3Materialization.ts",
+      "to": "src/features/imageEdit/v3/export/index.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/export",
+      "line": 3,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/canvasEditV3Materialization.ts",
+      "to": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExport",
+      "line": 7,
+      "cell": "canvas → imageMark"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/canvasEditV3Session.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 6,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/canvasEditV3Session.ts",
+      "to": "src/features/imageMark/standalone/imageMarkV3Source.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/standalone/imageMarkV3Source",
+      "line": 26,
+      "cell": "canvas → imageMark"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
+      "to": "src/features/imageMark/standalone/imageMarkV3Source.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/standalone/imageMarkV3Source",
+      "line": 15,
+      "cell": "canvas → imageMark"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/MultiLayerDocumentEditorDialog.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOwner.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOwner",
+      "line": 27,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/MultiLayerDocumentEditorDialog.tsx",
+      "to": "src/features/imageEdit/v3/store/imageEditorInteractionStoreV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/store/imageEditorInteractionStoreV3",
+      "line": 19,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/MultiLayerDocumentEditorDialog.tsx",
+      "to": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/store/imageEditorSessionStoreV3",
+      "line": 20,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
+      "line": 13,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts",
+      "to": "src/features/imageEdit/v3/export/index.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/export",
+      "line": 14,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts",
+      "to": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExport",
+      "line": 18,
+      "cell": "canvas → imageMark"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportSelection.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
+      "line": 3,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportSelection.ts",
+      "to": "src/features/imageEdit/v3/editor/layerTreeV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/editor/layerTreeV3",
+      "line": 5,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportSelection.ts",
+      "to": "src/features/imageEdit/v3/store/imageEditorInteractionStoreV3.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/store/imageEditorInteractionStoreV3",
+      "line": 4,
+      "cell": "canvas → imageEdit"
+    },
+    {
+      "from": "src/features/canvas/nodes/cameraStage/CameraStageNodeDialog.tsx",
+      "to": "src/features/cameraStage/application/cameraStageProjectRuntime.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/application/cameraStageProjectRuntime",
+      "line": 17,
+      "cell": "canvas → cameraStage"
+    },
+    {
+      "from": "src/features/canvas/nodes/cameraStage/CameraStageNodeDialog.tsx",
+      "to": "src/features/cameraStage/CameraStageEditor.tsx",
+      "kind": "dynamic",
+      "specifier": "@/features/cameraStage/CameraStageEditor",
+      "line": 11,
+      "cell": "canvas → cameraStage"
+    },
+    {
+      "from": "src/features/canvas/nodes/cameraStage/CameraStageNodeDialog.tsx",
+      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
+      "line": 12,
+      "cell": "canvas → cameraStage"
+    },
+    {
+      "from": "src/features/canvas/nodes/CameraStageNode.tsx",
+      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
+      "line": 32,
+      "cell": "canvas → cameraStage"
+    },
+    {
+      "from": "src/features/canvas/nodes/ElementEditGenerationNode.tsx",
+      "to": "src/features/maskEditor/types.ts",
+      "kind": "type",
+      "specifier": "@/features/maskEditor/types",
+      "line": 19,
+      "cell": "canvas → maskEditor"
+    },
+    {
+      "from": "src/features/canvas/nodes/localRedraw/LocalRedrawWorkbenchStage.tsx",
+      "to": "src/features/maskEditor/maskDocument.ts",
+      "kind": "static",
+      "specifier": "@/features/maskEditor/maskDocument",
+      "line": 7,
+      "cell": "canvas → maskEditor"
+    },
+    {
+      "from": "src/features/canvas/nodes/localRedraw/LocalRedrawWorkbenchStage.tsx",
+      "to": "src/features/maskEditor/MaskEditorCanvas.tsx",
+      "kind": "static",
+      "specifier": "@/features/maskEditor/MaskEditorCanvas",
+      "line": 6,
+      "cell": "canvas → maskEditor"
+    },
+    {
+      "from": "src/features/canvas/nodes/localRedraw/LocalRedrawWorkbenchStage.tsx",
+      "to": "src/features/maskEditor/types.ts",
+      "kind": "type",
+      "specifier": "@/features/maskEditor/types",
+      "line": 8,
+      "cell": "canvas → maskEditor"
+    },
+    {
+      "from": "src/features/canvas/nodes/localRedraw/LocalRedrawWorkbenchStage.tsx",
+      "to": "src/features/maskEditor/useMaskEditorSession.ts",
+      "kind": "static",
+      "specifier": "@/features/maskEditor/useMaskEditorSession",
+      "line": 9,
+      "cell": "canvas → maskEditor"
+    },
+    {
+      "from": "src/features/canvas/nodes/localRedraw/useLocalRedrawMaskAutosave.ts",
+      "to": "src/features/maskEditor/maskDocument.ts",
+      "kind": "static",
+      "specifier": "@/features/maskEditor/maskDocument",
+      "line": 5,
+      "cell": "canvas → maskEditor"
+    },
+    {
+      "from": "src/features/canvas/nodes/localRedraw/useLocalRedrawMaskAutosave.ts",
+      "to": "src/features/maskEditor/maskExport.ts",
+      "kind": "static",
+      "specifier": "@/features/maskEditor/maskExport",
+      "line": 6,
+      "cell": "canvas → maskEditor"
+    },
+    {
+      "from": "src/features/canvas/nodes/localRedraw/useLocalRedrawMaskAutosave.ts",
+      "to": "src/features/maskEditor/types.ts",
+      "kind": "type",
+      "specifier": "@/features/maskEditor/types",
+      "line": 7,
+      "cell": "canvas → maskEditor"
+    },
+    {
+      "from": "src/features/canvas/nodes/outpaint/OutpaintStage.tsx",
+      "to": "src/features/imageMark/shared/CropOverlayBox.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageMark/shared/CropOverlayBox",
+      "line": 7,
+      "cell": "canvas → imageMark"
+    },
+    {
+      "from": "src/features/canvas/params/MediaInputRow.tsx",
+      "to": "src/features/assets/drag/assetDragPayload.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/drag/assetDragPayload",
+      "line": 28,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/projects/CanvasLibrary.tsx",
+      "to": "src/features/documents/DocumentLibraryPage.tsx",
+      "kind": "static",
+      "specifier": "@/features/documents/DocumentLibraryPage",
+      "line": 4,
+      "cell": "canvas → documents"
+    },
+    {
+      "from": "src/features/canvas/ui/AssetGroupFocusOverlay.tsx",
+      "to": "src/features/assets/drag/assetDragPayload.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/drag/assetDragPayload",
+      "line": 19,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/ui/NodeActionToolbar.tsx",
+      "to": "src/features/assets/hooks/useAddToAssetLibrary.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/hooks/useAddToAssetLibrary",
+      "line": 54,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/ui/NodeActionToolbar.tsx",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 55,
+      "cell": "canvas → assets"
+    },
+    {
+      "from": "src/features/canvas/ui/NodeActionToolbar.tsx",
+      "to": "src/features/videoEdit/application/videoEditSourceRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditSourceRefs",
+      "line": 58,
+      "cell": "canvas → videoEdit"
+    },
+    {
+      "from": "src/features/canvas/ui/NodeActionToolbar.tsx",
+      "to": "src/features/videoEdit/panels/VideoEditSendMenu.tsx",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/panels/VideoEditSendMenu",
+      "line": 57,
+      "cell": "canvas → videoEdit"
+    },
+    {
+      "from": "src/features/documents/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 1,
+      "cell": "documents → application-control"
+    },
+    {
+      "from": "src/features/documents/application/registerDocumentsCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 10,
+      "cell": "documents → application-control"
+    },
+    {
+      "from": "src/features/documents/application/registerDocumentsCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 11,
+      "cell": "documents → application-control"
+    },
+    {
+      "from": "src/features/generation/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 2,
+      "cell": "generation → application-control"
+    },
+    {
+      "from": "src/features/generation/application/generationApplicationService.ts",
+      "to": "src/features/settings/modelDefaultsManager.ts",
+      "kind": "static",
+      "specifier": "@/features/settings/modelDefaultsManager",
+      "line": 3,
+      "cell": "generation → settings"
+    },
+    {
+      "from": "src/features/generation/application/generationMediaReferences.ts",
+      "to": "src/features/imageEdit/application/imageEditApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/application/imageEditApplicationService",
+      "line": 5,
+      "cell": "generation → imageEdit"
+    },
+    {
+      "from": "src/features/generation/application/generationReflection.ts",
+      "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/canvas/application/canvasGenerationTaskService",
+      "line": 200,
+      "cell": "generation → canvas"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 17,
+      "cell": "generation → application-control"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 18,
+      "cell": "generation → application-control"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/canvas/application/canvasGenerationTaskService",
+      "line": 185,
+      "cell": "generation → canvas"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/canvas/application/canvasGenerationTaskService",
+      "line": 209,
+      "cell": "generation → canvas"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/canvas/application/canvasGenerationTaskService",
+      "line": 215,
+      "cell": "generation → canvas"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/canvas/application/canvasGenerationTaskService",
+      "line": 221,
+      "cell": "generation → canvas"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/canvas/application/canvasGenerationTaskService",
+      "line": 227,
+      "cell": "generation → canvas"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/canvas/application/canvasGenerationTaskService",
+      "line": 233,
+      "cell": "generation → canvas"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/canvas/application/canvasGenerationTaskService",
+      "line": 51,
+      "cell": "generation → canvas"
+    },
+    {
+      "from": "src/features/generation/application/registerGenerationCapabilityHandlers.ts",
+      "to": "src/features/settings/modelDefaultsManager.ts",
+      "kind": "static",
+      "specifier": "@/features/settings/modelDefaultsManager",
+      "line": 15,
+      "cell": "generation → settings"
+    },
+    {
+      "from": "src/features/imageEdit/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 1,
+      "cell": "imageEdit → application-control"
+    },
+    {
+      "from": "src/features/imageEdit/application/imageEditApplicationService.ts",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 9,
+      "cell": "imageEdit → assets"
+    },
+    {
+      "from": "src/features/imageEdit/application/imageEditDocumentBuilder.ts",
+      "to": "src/features/imageMark/domain/geometry.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/geometry",
+      "line": 28,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/application/imageSourceCapabilityService.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 12,
+      "cell": "imageEdit → application-control"
+    },
+    {
+      "from": "src/features/imageEdit/application/imageSourceCapabilityService.ts",
+      "to": "src/features/generation/application/generationResultSource.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationResultSource",
+      "line": 8,
+      "cell": "imageEdit → generation"
+    },
+    {
+      "from": "src/features/imageEdit/application/imageSourceCapabilityService.ts",
+      "to": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceCapabilityService",
+      "line": 13,
+      "cell": "imageEdit → navigation"
+    },
+    {
+      "from": "src/features/imageEdit/application/registerImageEditCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 18,
+      "cell": "imageEdit → application-control"
+    },
+    {
+      "from": "src/features/imageEdit/application/registerImageEditCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 21,
+      "cell": "imageEdit → application-control"
+    },
+    {
+      "from": "src/features/imageEdit/application/registerImageEditCapabilityHandlers.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 22,
+      "cell": "imageEdit → documents"
+    },
+    {
+      "from": "src/features/imageEdit/application/registerImageEditCapabilityHandlers.ts",
+      "to": "src/features/imageMark/standalone/blankImage.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/standalone/blankImage",
+      "line": 24,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/application/registerImageEditCapabilityHandlers.ts",
+      "to": "src/features/imageMark/standalone/imageDocumentFromSource.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/standalone/imageDocumentFromSource",
+      "line": 25,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/application/registerImageEditCapabilityHandlers.ts",
+      "to": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceCapabilityService",
+      "line": 26,
+      "cell": "imageEdit → navigation"
+    },
+    {
+      "from": "src/features/imageEdit/documents/imageDocumentPersistence.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 17,
+      "cell": "imageEdit → documents"
+    },
+    {
+      "from": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 318,
+      "cell": "imageEdit → documents"
+    },
+    {
+      "from": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "to": "src/features/documents/documentPromptStore.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentPromptStore",
+      "line": 5,
+      "cell": "imageEdit → documents"
+    },
+    {
+      "from": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "to": "src/features/documents/documentSession.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSession",
+      "line": 6,
+      "cell": "imageEdit → documents"
+    },
+    {
+      "from": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 7,
+      "cell": "imageEdit → documents"
+    },
+    {
+      "from": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 8,
+      "cell": "imageEdit → documents"
+    },
+    {
+      "from": "src/features/imageEdit/editor/ImageEditor.tsx",
+      "to": "src/features/imageMark/editor/MarkEditor.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageMark/editor/MarkEditor",
+      "line": 7,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/editor/ImageEditor.tsx",
+      "to": "src/features/imageMark/editor/shared.ts",
+      "kind": "type",
+      "specifier": "@/features/imageMark/editor/shared",
+      "line": 8,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/editor/ImageEditor.tsx",
+      "to": "src/features/imageMark/render/orientedImage.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/render/orientedImage",
+      "line": 9,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/editor/useImageEditorSession.ts",
+      "to": "src/features/imageMark/editor/MarkEditor.tsx",
+      "kind": "type",
+      "specifier": "@/features/imageMark/editor/MarkEditor",
+      "line": 16,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/editor/useImageEditorSession.ts",
+      "to": "src/features/imageMark/editor/useMarkHistory.ts",
+      "kind": "type",
+      "specifier": "@/features/imageMark/editor/useMarkHistory",
+      "line": 17,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/execution/browserImageEditExecution.ts",
+      "to": "src/features/imageMark/render/exportMarkedImage.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/render/exportMarkedImage",
+      "line": 9,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "to": "src/features/imageMark/editor/shared.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/editor/shared",
+      "line": 4,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/tools/geometry/GeometryInspector.tsx",
+      "to": "src/features/imageMark/domain/geometry.ts",
+      "kind": "type",
+      "specifier": "@/features/imageMark/domain/geometry",
+      "line": 12,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/tools/geometry/GeometryInspector.tsx",
+      "to": "src/features/imageMark/editor/shared.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/editor/shared",
+      "line": 11,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/tools/geometry/GeometryInspector.tsx",
+      "to": "src/features/imageMark/editor/useMarkEditorContext.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/editor/useMarkEditorContext",
+      "line": 13,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/application/imageEditDocumentCatalog.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 2,
+      "cell": "imageEdit → documents"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
+      "to": "src/features/imageMark/domain/geometry.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/geometry",
+      "line": 12,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
+      "to": "src/features/imageMark/domain/metrics.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/metrics",
+      "line": 13,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
+      "to": "src/features/imageMark/domain/types.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/types",
+      "line": 11,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
+      "to": "src/features/imageMark/render/drawMarks.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/render/drawMarks",
+      "line": 19,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
+      "to": "src/features/imageMark/shared/TextEditOverlay.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageMark/shared/TextEditOverlay",
+      "line": 20,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationParametersV3.tsx",
+      "to": "src/features/imageMark/domain/geometry.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/geometry",
+      "line": 21,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationParametersV3.tsx",
+      "to": "src/features/imageMark/domain/metrics.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/metrics",
+      "line": 23,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationParametersV3.tsx",
+      "to": "src/features/imageMark/domain/types.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/types",
+      "line": 22,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationPropertiesV3.tsx",
+      "to": "src/features/imageMark/domain/geometry.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/geometry",
+      "line": 7,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationPropertiesV3.tsx",
+      "to": "src/features/imageMark/domain/metrics.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/metrics",
+      "line": 9,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationPropertiesV3.tsx",
+      "to": "src/features/imageMark/domain/types.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/types",
+      "line": 8,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorCropOverlayV3.tsx",
+      "to": "src/features/imageMark/shared/CropOverlayBox.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageMark/shared/CropOverlayBox",
+      "line": 4,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
+      "to": "src/features/imageMark/domain/arrowGeometry.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/arrowGeometry",
+      "line": 8,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
+      "to": "src/features/imageMark/domain/geometry.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/geometry",
+      "line": 9,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
+      "to": "src/features/imageMark/domain/metrics.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/metrics",
+      "line": 10,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
+      "to": "src/features/imageMark/shared/ArrowCurveControl.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageMark/shared/ArrowCurveControl",
+      "line": 14,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
+      "to": "src/features/imageMark/shared/markShapes.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageMark/shared/markShapes",
+      "line": 15,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
+      "to": "src/features/imageMark/shared/nodeSync.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/shared/nodeSync",
+      "line": 16,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
+      "to": "src/features/imageMark/shared/textEditorState.ts",
+      "kind": "type",
+      "specifier": "@/features/imageMark/shared/textEditorState",
+      "line": 17,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/useImageEditorAnnotationTextV3.ts",
+      "to": "src/features/imageMark/domain/metrics.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/metrics",
+      "line": 7,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/useImageEditorAnnotationTextV3.ts",
+      "to": "src/features/imageMark/domain/types.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/types",
+      "line": 6,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/editor/useImageEditorAnnotationTextV3.ts",
+      "to": "src/features/imageMark/shared/textEditorState.ts",
+      "kind": "type",
+      "specifier": "@/features/imageMark/shared/textEditorState",
+      "line": 14,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/execution/previewPixelsV3.ts",
+      "to": "src/features/imageMark/render/drawMarks.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/render/drawMarks",
+      "line": 16,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/execution/viewportCompositePixelsV3.ts",
+      "to": "src/features/imageMark/render/drawMarks.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/render/drawMarks",
+      "line": 21,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/export/annotations.ts",
+      "to": "src/features/imageMark/render/drawMarks.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/render/drawMarks",
+      "line": 9,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
+      "to": "src/features/imageMark/domain/metrics.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/metrics",
+      "line": 6,
+      "cell": "imageEdit → imageMark"
+    },
+    {
+      "from": "src/features/imageMark/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 1,
+      "cell": "imageMark → application-control"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
+      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
+      "line": 17,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 19,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
+      "line": 20,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
+      "line": 1,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
+      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
+      "line": 12,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 14,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
+      "line": 15,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
+      "line": 1,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkDocumentMutationExecutor.ts",
+      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
+      "line": 10,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkReflection.ts",
+      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
+      "line": 11,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkReflection.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentCatalog.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentCatalog",
+      "line": 13,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkReflection.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 12,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkReflection.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentLoading.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentLoading",
+      "line": 15,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkReflection.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
+      "line": 14,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkReflection.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
+      "line": 19,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkSessionAccess.ts",
+      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
+      "line": 3,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkSessionAccess.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 4,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/imageMarkStoreLedger.ts",
+      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
+      "line": 3,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/application/registerImageMarkCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 3,
+      "cell": "imageMark → application-control"
+    },
+    {
+      "from": "src/features/imageMark/application/registerImageMarkCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 4,
+      "cell": "imageMark → application-control"
+    },
+    {
+      "from": "src/features/imageMark/application/registerImageMarkCapabilityHandlers.ts",
+      "to": "src/features/imageEdit/store/imageEditSessionStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditSessionStore",
+      "line": 1,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/editor/MarkEditor.tsx",
+      "to": "src/features/imageEdit/shell/ImageEditorShell.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/shell/ImageEditorShell",
+      "line": 27,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/imageDocumentFromSource.ts",
+      "to": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/documents/imageDocumentRuntime",
+      "line": 10,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkTool.tsx",
+      "to": "src/features/documents/DocumentLibraryPage.tsx",
+      "kind": "static",
+      "specifier": "@/features/documents/DocumentLibraryPage",
+      "line": 8,
+      "cell": "imageMark → documents"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkTool.tsx",
+      "to": "src/features/documents/embeddedDocuments.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/embeddedDocuments",
+      "line": 9,
+      "cell": "imageMark → documents"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkTool.tsx",
+      "to": "src/features/imageEdit/documents/imageDocumentPersistence.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/documents/imageDocumentPersistence",
+      "line": 24,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkTool.tsx",
+      "to": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/documents/imageDocumentRuntime",
+      "line": 16,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkTool.tsx",
+      "to": "src/features/imageEdit/documents/imageDocumentWorkspace.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/documents/imageDocumentWorkspace",
+      "line": 28,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkTool.tsx",
+      "to": "src/features/imageEdit/store/imageEditorHandoffStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditorHandoffStore",
+      "line": 15,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkToolV3Host.tsx",
+      "to": "src/features/documents/embeddedDocuments.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/embeddedDocuments",
+      "line": 13,
+      "cell": "imageMark → documents"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkToolV3Host.tsx",
+      "to": "src/features/imageEdit/v3/editor/index.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/editor",
+      "line": 12,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkToolV3ToolbarActions.tsx",
+      "to": "src/features/imageEdit/v3/editor/readinessPresentationV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/editor/readinessPresentationV3",
+      "line": 5,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkToolV3ToolbarActions.tsx",
+      "to": "src/features/videoEdit/application/videoEditFrameEdit.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditFrameEdit",
+      "line": 10,
+      "cell": "imageMark → videoEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkToolV3ToolbarActions.tsx",
+      "to": "src/features/videoEdit/application/videoEditSourceRefs.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditSourceRefs",
+      "line": 11,
+      "cell": "imageMark → videoEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/ImageMarkToolV3ToolbarActions.tsx",
+      "to": "src/features/videoEdit/panels/VideoEditSendMenu.tsx",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/panels/VideoEditSendMenu",
+      "line": 9,
+      "cell": "imageMark → videoEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditorHostProfiles",
+      "line": 8,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
+      "to": "src/features/imageEdit/v3/export/index.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/export",
+      "line": 3,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Actions.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditorHostProfiles",
+      "line": 9,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Actions.ts",
+      "to": "src/features/imageEdit/v3/editor/readinessPresentationV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/editor/readinessPresentationV3",
+      "line": 10,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "to": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/documents/imageDocumentRuntime",
+      "line": 20,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 1,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3",
+      "line": 21,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
+      "line": 2,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOwner.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOwner",
+      "line": 3,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceQueue.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceQueue",
+      "line": 27,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "to": "src/features/imageEdit/v3/editor/types.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/editor/types",
+      "line": 26,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/viewer/ViewerMarkEditor.tsx",
+      "to": "src/features/imageEdit/editor/ImageEditor.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/editor/ImageEditor",
+      "line": 13,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/imageMark/viewer/ViewerMarkEditor.tsx",
+      "to": "src/features/imageEdit/execution/browserImageEditExecution.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/execution/browserImageEditExecution",
+      "line": 12,
+      "cell": "imageMark → imageEdit"
+    },
+    {
+      "from": "src/features/localModels/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 1,
+      "cell": "localModels → application-control"
+    },
+    {
+      "from": "src/features/localModels/application/localModelCapabilities.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 4,
+      "cell": "localModels → application-control"
+    },
+    {
+      "from": "src/features/maskEditor/MaskEditorCanvas.tsx",
+      "to": "src/features/imageMark/domain/penGeometry.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/domain/penGeometry",
+      "line": 18,
+      "cell": "maskEditor → imageMark"
+    },
+    {
+      "from": "src/features/maskEditor/MaskEditorModal.tsx",
+      "to": "src/features/imageEdit/shell/ImageEditorShell.tsx",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/shell/ImageEditorShell",
+      "line": 11,
+      "cell": "maskEditor → imageEdit"
+    },
+    {
+      "from": "src/features/maskEditor/maskExport.ts",
+      "to": "src/features/imageMark/render/tracePenPath.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/render/tracePenPath",
+      "line": 4,
+      "cell": "maskEditor → imageMark"
+    },
+    {
+      "from": "src/features/maskEditor/v3/MaskEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
+      "line": 1,
+      "cell": "maskEditor → imageEdit"
+    },
+    {
+      "from": "src/features/maskEditor/v3/MaskEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3",
+      "line": 28,
+      "cell": "maskEditor → imageEdit"
+    },
+    {
+      "from": "src/features/maskEditor/v3/MaskEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
+      "line": 112,
+      "cell": "maskEditor → imageEdit"
+    },
+    {
+      "from": "src/features/maskEditor/v3/MaskEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/application/imageEditPersistenceQueue.ts",
+      "kind": "type",
+      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceQueue",
+      "line": 33,
+      "cell": "maskEditor → imageEdit"
+    },
+    {
+      "from": "src/features/maskEditor/v3/MaskEditorV3Host.tsx",
+      "to": "src/features/imageEdit/v3/editor/index.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/editor",
+      "line": 32,
+      "cell": "maskEditor → imageEdit"
+    },
+    {
+      "from": "src/features/navigation/application/applicationDomain.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 2,
+      "cell": "navigation → application-control"
+    },
+    {
+      "from": "src/features/navigation/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 5,
+      "cell": "navigation → application-control"
+    },
+    {
+      "from": "src/features/navigation/application/applicationDomain.ts",
+      "to": "src/features/application-control/hostContext/hostContext.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/hostContext/hostContext",
+      "line": 7,
+      "cell": "navigation → application-control"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 10,
+      "cell": "navigation → application-control"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 7,
+      "cell": "navigation → assets"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
+      "line": 2,
+      "cell": "navigation → cameraStage"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "to": "src/features/cameraStage/store/cameraStageStore.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/store/cameraStageStore",
+      "line": 3,
+      "cell": "navigation → cameraStage"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "to": "src/features/canvas/application/canvasApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasApplicationService",
+      "line": 4,
+      "cell": "navigation → canvas"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "to": "src/features/videoEdit/application/videoEditReflection.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditReflection",
+      "line": 9,
+      "cell": "navigation → videoEdit"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "to": "src/features/videoEdit/application/videoEditService.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditService",
+      "line": 8,
+      "cell": "navigation → videoEdit"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceNavigationService.ts",
+      "to": "src/features/assets/store/assetLibraryStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/store/assetLibraryStore",
+      "line": 3,
+      "cell": "navigation → assets"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceNavigationService.ts",
+      "to": "src/features/assistant/store/assistantUiStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assistant/store/assistantUiStore",
+      "line": 4,
+      "cell": "navigation → assistant"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceObservation.ts",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 6,
+      "cell": "navigation → assets"
+    },
+    {
+      "from": "src/features/navigation/application/surfaceObservation.ts",
+      "to": "src/features/assistant/conversation/assistantAttachments.ts",
+      "kind": "static",
+      "specifier": "@/features/assistant/conversation/assistantAttachments",
+      "line": 9,
+      "cell": "navigation → assistant"
+    },
+    {
+      "from": "src/features/onboarding/application/onboardingManager.ts",
+      "to": "src/features/settings/modelDefaultsManager.ts",
+      "kind": "static",
+      "specifier": "@/features/settings/modelDefaultsManager",
+      "line": 10,
+      "cell": "onboarding → settings"
+    },
+    {
+      "from": "src/features/onboarding/components/OnboardingModal.tsx",
+      "to": "src/features/generation/store/generationDraftStore.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/store/generationDraftStore",
+      "line": 43,
+      "cell": "onboarding → generation"
+    },
+    {
+      "from": "src/features/onboarding/components/OnboardingModal.tsx",
+      "to": "src/features/settings/modelDefaultsManager.ts",
+      "kind": "static",
+      "specifier": "@/features/settings/modelDefaultsManager",
+      "line": 44,
+      "cell": "onboarding → settings"
+    },
+    {
+      "from": "src/features/settings/application-control/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 2,
+      "cell": "settings → application-control"
+    },
+    {
+      "from": "src/features/toolbox/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 1,
+      "cell": "toolbox → application-control"
+    },
+    {
+      "from": "src/features/toolbox/application/registerToolboxCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 6,
+      "cell": "toolbox → application-control"
+    },
+    {
+      "from": "src/features/toolbox/application/registerToolboxCapabilityHandlers.ts",
+      "to": "src/features/application-control/capabilities/handlerUtils.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/capabilities/handlerUtils",
+      "line": 8,
+      "cell": "toolbox → application-control"
+    },
+    {
+      "from": "src/features/toolbox/application/registerToolboxCapabilityHandlers.ts",
+      "to": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceCapabilityService",
+      "line": 9,
+      "cell": "toolbox → navigation"
+    },
+    {
+      "from": "src/features/toolbox/application/toolboxApplicationService.ts",
+      "to": "src/features/cameraStage/store/cameraStageStore.ts",
+      "kind": "static",
+      "specifier": "@/features/cameraStage/store/cameraStageStore",
+      "line": 1,
+      "cell": "toolbox → cameraStage"
+    },
+    {
+      "from": "src/features/toolbox/application/toolboxApplicationService.ts",
+      "to": "src/features/imageEdit/tools/controlCatalog.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/tools/controlCatalog",
+      "line": 2,
+      "cell": "toolbox → imageEdit"
+    },
+    {
+      "from": "src/features/toolbox/toolboxRecentFiles.ts",
+      "to": "src/features/audioEdit/application/audioEditDocumentService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/audioEdit/application/audioEditDocumentService",
+      "line": 101,
+      "cell": "toolbox → audioEdit"
+    },
+    {
+      "from": "src/features/toolbox/toolboxRecentFiles.ts",
+      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
+      "line": 108,
+      "cell": "toolbox → cameraStage"
+    },
+    {
+      "from": "src/features/toolbox/toolboxRecentFiles.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 67,
+      "cell": "toolbox → documents"
+    },
+    {
+      "from": "src/features/toolbox/toolboxRecentFiles.ts",
+      "to": "src/features/imageEdit/documents/imageDocumentWorkspace.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/imageEdit/documents/imageDocumentWorkspace",
+      "line": 105,
+      "cell": "toolbox → imageEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/applicationDomain.ts",
+      "to": "src/features/application-control/domainModule.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/domainModule",
+      "line": 12,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/applicationDomain.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 47,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/applicationDomain.ts",
+      "to": "src/features/documents/documentCovers.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentCovers",
+      "line": 24,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/applicationDomain.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 25,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/applicationDomain.ts",
+      "to": "src/features/navigation/application/surfaceCapabilityService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceCapabilityService",
+      "line": 26,
+      "cell": "videoEdit → navigation"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditAnnotations.ts",
+      "to": "src/features/application-control/hostContext/hostContext.ts",
+      "kind": "static",
+      "specifier": "@/features/application-control/hostContext/hostContext",
+      "line": 6,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditAnnotations.ts",
+      "to": "src/features/assistant/conversation/assistantAttachments.ts",
+      "kind": "static",
+      "specifier": "@/features/assistant/conversation/assistantAttachments",
+      "line": 4,
+      "cell": "videoEdit → assistant"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditAnnotations.ts",
+      "to": "src/features/assistant/store/assistantUiStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assistant/store/assistantUiStore",
+      "line": 3,
+      "cell": "videoEdit → assistant"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditAssetReferences.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 2,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditAutoSubtitles.ts",
+      "to": "src/features/audioEdit/application/audioEditApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/audioEditApplicationService",
+      "line": 19,
+      "cell": "videoEdit → audioEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditAutoSubtitles.ts",
+      "to": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/audioEditProjectInstances",
+      "line": 18,
+      "cell": "videoEdit → audioEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCodeAssets.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 13,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCodeElementEditing.ts",
+      "to": "src/features/assistant/store/assistantUiStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assistant/store/assistantUiStore",
+      "line": 8,
+      "cell": "videoEdit → assistant"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCodeImageGeneration.ts",
+      "to": "src/features/generation/application/generationApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationApplicationService",
+      "line": 9,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditComposition.ts",
+      "to": "src/features/documents/embeddedDocuments.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/embeddedDocuments",
+      "line": 5,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditComposition.ts",
+      "to": "src/features/generation/application/generationResultSource.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationResultSource",
+      "line": 6,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditComposition.ts",
+      "to": "src/features/navigation/application/surfaceNavigationService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceNavigationService",
+      "line": 7,
+      "cell": "videoEdit → navigation"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 9,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 8,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/audioEdit/application/audioEditApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/audioEditApplicationService",
+      "line": 10,
+      "cell": "videoEdit → audioEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/audioEditProjectInstances",
+      "line": 11,
+      "cell": "videoEdit → audioEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/canvas/application/canvasQueryService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasQueryService",
+      "line": 5,
+      "cell": "videoEdit → canvas"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/canvas/application/graphOutputResolver.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/graphOutputResolver",
+      "line": 6,
+      "cell": "videoEdit → canvas"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/canvas/domain/canvasNodes.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/domain/canvasNodes",
+      "line": 7,
+      "cell": "videoEdit → canvas"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 18,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/generation/application/generationResultSource.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationResultSource",
+      "line": 4,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/documents/imageDocumentRuntime",
+      "line": 16,
+      "cell": "videoEdit → imageEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/imageEdit/v3/export/index.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/v3/export",
+      "line": 15,
+      "cell": "videoEdit → imageEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
+      "to": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
+      "kind": "static",
+      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExport",
+      "line": 14,
+      "cell": "videoEdit → imageMark"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditDocumentAlgorithm.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 3,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditDrop.ts",
+      "to": "src/features/assets/drag/assetDragPayload.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/drag/assetDragPayload",
+      "line": 13,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditExportCapability.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 2,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditExportCapability.ts",
+      "to": "src/features/canvas/application/canvasDownloadService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasDownloadService",
+      "line": 8,
+      "cell": "videoEdit → canvas"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditFrameEdit.ts",
+      "to": "src/features/imageEdit/store/imageEditorHandoffStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditorHandoffStore",
+      "line": 2,
+      "cell": "videoEdit → imageEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditFrameEdit.ts",
+      "to": "src/features/navigation/application/surfaceNavigationService.ts",
+      "kind": "static",
+      "specifier": "@/features/navigation/application/surfaceNavigationService",
+      "line": 3,
+      "cell": "videoEdit → navigation"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditFrameObservation.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 10,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditFrameObservation.ts",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 9,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditImageLinks.ts",
+      "to": "src/features/imageEdit/documents/imageDocumentPersistence.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/documents/imageDocumentPersistence",
+      "line": 5,
+      "cell": "videoEdit → imageEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditImageLinks.ts",
+      "to": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/documents/imageDocumentRuntime",
+      "line": 6,
+      "cell": "videoEdit → imageEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditInPlaceCapability.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 9,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditInPlaceCapability.ts",
+      "to": "src/features/generation/application/generationApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationApplicationService",
+      "line": 10,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditInPlaceGeneration.ts",
+      "to": "src/features/generation/application/generationApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationApplicationService",
+      "line": 10,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditNestCapability.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 3,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditOutputs.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 4,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditOutputs.ts",
+      "to": "src/features/assets/services/assetCollectionService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/services/assetCollectionService",
+      "line": 5,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditPlacementRecovery.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 4,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditProjectCover.ts",
+      "to": "src/features/documents/documentCovers.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentCovers",
+      "line": 5,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditProxyCapability.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 2,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditResultCapability.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 5,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditResultSend.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 8,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditResultTarget.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 12,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditResultTarget.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 13,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditSceneCapability.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 3,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditService.ts",
+      "to": "src/features/documents/documentErrors.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentErrors",
+      "line": 20,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditService.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 24,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditService.ts",
+      "to": "src/features/documents/documentSession.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSession",
+      "line": 21,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditService.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 22,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditService.ts",
+      "to": "src/features/documents/documentSessionTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionTypes",
+      "line": 23,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditSourceRefs.ts",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 2,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditSourceRefs.ts",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 3,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditSpeedCapability.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 4,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditStyleKitCapabilities.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 4,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditStyleReference.ts",
+      "to": "src/features/assets/application/assetApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/application/assetApplicationService",
+      "line": 6,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditSubtitleCapability.ts",
+      "to": "src/features/application-control/capabilities/handlerTypes.ts",
+      "kind": "type",
+      "specifier": "@/features/application-control/capabilities/handlerTypes",
+      "line": 3,
+      "cell": "videoEdit → application-control"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditTextEditing.ts",
+      "to": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/audioEditProjectInstances",
+      "line": 7,
+      "cell": "videoEdit → audioEdit"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditWorkspaceTransfer.ts",
+      "to": "src/features/imageEdit/store/imageEditorHandoffStore.ts",
+      "kind": "static",
+      "specifier": "@/features/imageEdit/store/imageEditorHandoffStore",
+      "line": 2,
+      "cell": "videoEdit → imageEdit"
+    },
+    {
+      "from": "src/features/videoEdit/panels/CodeImageGenerationPanel.tsx",
+      "to": "src/features/generation/domain/generationDraft.ts",
+      "kind": "type",
+      "specifier": "@/features/generation/domain/generationDraft",
+      "line": 10,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/panels/CodeImageGenerationPanel.tsx",
+      "to": "src/features/generation/store/generationDraftStore.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/store/generationDraftStore",
+      "line": 11,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/panels/CodeParameterPanel.tsx",
+      "to": "src/features/assets/store/assetLibraryStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/store/assetLibraryStore",
+      "line": 4,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditCanvasSendDialog.tsx",
+      "to": "src/features/canvas/application/canvasPersistenceService.ts",
+      "kind": "static",
+      "specifier": "@/features/canvas/application/canvasPersistenceService",
+      "line": 8,
+      "cell": "videoEdit → canvas"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditCanvasSendDialog.tsx",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 4,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditInPlaceDialog.tsx",
+      "to": "src/features/generation/application/generationApplicationService.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/application/generationApplicationService",
+      "line": 15,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditInPlaceDialog.tsx",
+      "to": "src/features/generation/domain/generationDraft.ts",
+      "kind": "type",
+      "specifier": "@/features/generation/domain/generationDraft",
+      "line": 13,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditInPlaceDialog.tsx",
+      "to": "src/features/generation/store/generationDraftStore.ts",
+      "kind": "static",
+      "specifier": "@/features/generation/store/generationDraftStore",
+      "line": 14,
+      "cell": "videoEdit → generation"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditProjectDocuments.tsx",
+      "to": "src/features/documents/documentErrors.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentErrors",
+      "line": 8,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditProjectDocuments.tsx",
+      "to": "src/features/documents/documentKindPresentation.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentKindPresentation",
+      "line": 9,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditProjectDocuments.tsx",
+      "to": "src/features/documents/documentPackageActions.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentPackageActions",
+      "line": 10,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/panels/VideoEditStyleKitsPanel.tsx",
+      "to": "src/features/assets/store/assetLibraryStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/store/assetLibraryStore",
+      "line": 7,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditApp.tsx",
+      "to": "src/features/assets/store/assetLibraryStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/store/assetLibraryStore",
+      "line": 25,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditApp.tsx",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 28,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditPreview.tsx",
+      "to": "src/features/assets/store/assetLibraryStore.ts",
+      "kind": "static",
+      "specifier": "@/features/assets/store/assetLibraryStore",
+      "line": 47,
+      "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditProjectsPage.tsx",
+      "to": "src/features/documents/documentCovers.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentCovers",
+      "line": 19,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditProjectsPage.tsx",
+      "to": "src/features/documents/documentErrors.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentErrors",
+      "line": 10,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditProjectsPage.tsx",
+      "to": "src/features/documents/documentOperations.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentOperations",
+      "line": 11,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditProjectsPage.tsx",
+      "to": "src/features/documents/documentPackageActions.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/documentPackageActions",
+      "line": 12,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditProjectsPage.tsx",
+      "to": "src/features/documents/documentSessionRegistry.ts",
+      "kind": "type",
+      "specifier": "@/features/documents/documentSessionRegistry",
+      "line": 13,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditProjectsPage.tsx",
+      "to": "src/features/documents/useDocumentLibrary.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/useDocumentLibrary",
+      "line": 14,
+      "cell": "videoEdit → documents"
+    },
+    {
+      "from": "src/features/videoEdit/VideoEditProjectsPage.tsx",
+      "to": "src/features/documents/useLeftoverDrafts.ts",
+      "kind": "static",
+      "specifier": "@/features/documents/useLeftoverDrafts",
+      "line": 15,
+      "cell": "videoEdit → documents"
+    }
+  ],
+  "featureMatrix": {
+    "application-control → audioEdit": 4,
+    "application-control → cameraStage": 3,
+    "application-control → canvas": 6,
+    "application-control → documents": 3,
+    "application-control → imageEdit": 5,
+    "application-control → assets": 2,
+    "application-control → assistant": 1,
+    "application-control → generation": 3,
+    "application-control → imageMark": 2,
+    "application-control → localModels": 1,
+    "application-control → navigation": 1,
+    "application-control → settings": 1,
+    "application-control → toolbox": 1,
+    "application-control → videoEdit": 5,
+    "assets → application-control": 4,
+    "assets → canvas": 4,
+    "assets → videoEdit": 3,
+    "assistant → application-control": 2,
+    "assistant → assets": 2,
+    "assistant → canvas": 2,
+    "assistant → audioEdit": 1,
+    "audioEdit → application-control": 3,
+    "audioEdit → assistant": 2,
+    "audioEdit → documents": 12,
+    "audioEdit → canvas": 1,
+    "audioEdit → navigation": 1,
+    "audioEdit → videoEdit": 2,
+    "cameraStage → application-control": 8,
+    "cameraStage → documents": 15,
+    "cameraStage → canvas": 3,
+    "cameraStage → navigation": 1,
+    "cameraStage → assets": 1,
+    "canvas → application-control": 4,
+    "canvas → assets": 9,
+    "canvas → cameraStage": 7,
+    "canvas → documents": 8,
+    "canvas → generation": 8,
+    "canvas → imageEdit": 23,
+    "canvas → navigation": 2,
+    "canvas → settings": 1,
+    "canvas → imageMark": 6,
+    "canvas → maskEditor": 8,
+    "canvas → videoEdit": 2,
+    "documents → application-control": 3,
+    "generation → application-control": 3,
+    "generation → settings": 2,
+    "generation → imageEdit": 1,
+    "generation → canvas": 8,
+    "imageEdit → application-control": 4,
+    "imageEdit → assets": 1,
+    "imageEdit → imageMark": 39,
+    "imageEdit → generation": 1,
+    "imageEdit → navigation": 2,
+    "imageEdit → documents": 8,
+    "imageMark → application-control": 3,
+    "imageMark → imageEdit": 40,
+    "imageMark → documents": 3,
+    "imageMark → videoEdit": 3,
+    "localModels → application-control": 2,
+    "maskEditor → imageMark": 2,
+    "maskEditor → imageEdit": 6,
+    "navigation → application-control": 4,
+    "navigation → assets": 3,
+    "navigation → cameraStage": 2,
+    "navigation → canvas": 1,
+    "navigation → videoEdit": 2,
+    "navigation → assistant": 2,
+    "onboarding → settings": 2,
+    "onboarding → generation": 1,
+    "settings → application-control": 1,
+    "toolbox → application-control": 3,
+    "toolbox → navigation": 1,
+    "toolbox → cameraStage": 2,
+    "toolbox → imageEdit": 2,
+    "toolbox → audioEdit": 1,
+    "toolbox → documents": 1,
+    "videoEdit → application-control": 11,
+    "videoEdit → assets": 16,
+    "videoEdit → documents": 28,
+    "videoEdit → navigation": 3,
+    "videoEdit → assistant": 3,
+    "videoEdit → audioEdit": 5,
+    "videoEdit → generation": 10,
+    "videoEdit → canvas": 5,
+    "videoEdit → imageEdit": 6,
+    "videoEdit → imageMark": 1
+  },
+  "exceptions": [
+    {
+      "reason": "R01 初次冻结现有架构债务，仅允许后续缩减",
+      "changes": [
+        "初次建立基线"
+      ]
+    },
+    {
+      "reason": "R01 首次基线口径校准：按体检仅豁免 feature 根 index，8 条嵌套桶仍冻结；业务源码未改",
+      "changes": [
+        "跨 feature 非 index 导入 canvas → imageEdit：23 > 基线 20；走公开 index 入口或提取纯契约。新增候选：src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx:17 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/canvas/imageEditV3/canvasEditV3Materialization.ts:3 → src/features/imageEdit/v3/export/index.ts (static)；src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts:14 → src/features/imageEdit/v3/export/index.ts (static)",
+        "跨 feature 非 index 导入 canvas → navigation：2 > 基线 1；走公开 index 入口或提取纯契约。新增候选：src/features/canvas/application/multiLayerDocumentNodeEditorApplicationService.ts:3 → src/features/navigation/application/index.ts (static)",
+        "跨 feature 非 index 导入 imageMark → imageEdit：40 > 基线 38；走公开 index 入口或提取纯契约。新增候选：src/features/imageMark/standalone/ImageMarkToolV3Host.tsx:12 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/imageMark/standalone/imageMarkV3RasterExport.ts:3 → src/features/imageEdit/v3/export/index.ts (static)",
+        "跨 feature 非 index 导入 maskEditor → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/maskEditor/v3/MaskEditorV3Host.tsx:32 → src/features/imageEdit/v3/editor/index.ts (static)",
+        "跨 feature 非 index 导入 videoEdit → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/videoEdit/application/videoEditCreativeSources.ts:15 → src/features/imageEdit/v3/export/index.ts (static)"
+      ]
+    }
+  ]
+}

@@ -123,6 +123,8 @@ npx vitest run
 
 ## 三、哪些测试值得保留
 
+- 改动导入路径、模块边界或依赖装配时跑 `npm run check:dependency-graph`；修改该门禁时另跑 `node --test scripts/check-dependency-graph.test.cjs`，基线只允许缩减，新增例外必须通过 `dependency-graph:baseline -- --accept-new <理由>` 留下审查理由。
+
 优先保留或补充：
 
 - 修复过的真实缺陷，且测试能阻止同类回归

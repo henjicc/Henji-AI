@@ -206,12 +206,15 @@ export async function executeImageEditCpuAdjustmentNodeV3(
       workingSpace: source.workingSpace,
     }, { mask });
   }
-  const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
-  return applyHslAdjustment(perceptual, {
-    hueDegrees: numberParameter(node, 'hueDegrees', 0),
-    saturation: numberParameter(node, 'saturation', 0),
-    lightness: numberParameter(node, 'lightness', 0),
-  }, { mask });
+  if (node.definitionId === 'adjustment.hsl') {
+    const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
+    return applyHslAdjustment(perceptual, {
+      hueDegrees: numberParameter(node, 'hueDegrees', 0),
+      saturation: numberParameter(node, 'saturation', 0),
+      lightness: numberParameter(node, 'lightness', 0),
+    }, { mask });
+  }
+  throw new Error(`CPU 执行器不支持调整节点 ${node.definitionId}`);
 }
 
 export async function executeImageEditCpuEffectNodeV3(

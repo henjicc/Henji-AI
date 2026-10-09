@@ -1,5 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const { createImportResolver, readResolvedImports, assistantImportViolation } = require('./lib/resolvedImports.cjs')
 
 const root = path.resolve(__dirname, '..')
 const sourceRoots = ['src', 'electron']
@@ -112,6 +113,7 @@ function relativeFiles(directory, prefix = '') {
 }
 
 const failures = []
+const resolveImport = createImportResolver(root)
 for (const relative of obsoleteFiles) {
   if (fs.existsSync(path.join(root, relative))) failures.push(`旧文件仍存在：${relative}`)
 }
@@ -144,8 +146,9 @@ for (const protectedRoot of protectedExecutionRoots) {
 for (const name of ['registry.ts', 'applicationControlRegistry.ts']) {
   const file = path.join(root, 'src/features/application-control/capabilities', name)
   const source = fs.readFileSync(file, 'utf8')
-  if (/from\s+['"]@\/(?:stores\/|features\/(?!application-control\/))/.test(source)) {
-    failures.push(`公共注册器直接依赖业务实现，须从领域模块装配：${name}`)
+  for (const edge of readResolvedImports(file, root, resolveImport)) {
+    const violation = assistantImportViolation(edge)
+    if (violation) failures.push(`${violation}：${name}:${edge.line} → ${edge.to}`)
   }
   if (/exposures\.includes\(['"]assistant['"]\)/.test(source)) {
     failures.push(`公共注册器隐式扩展调用面：${name}`)
@@ -163,10 +166,10 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control', 'd
 
 for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) {
   if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) continue
-  const source = fs.readFileSync(file, 'utf8')
   const relative = path.relative(root, file).replaceAll('\\', '/')
-  if (/from\s+['"]@\/(?:components|stores|features\/assistant)\//.test(source)) {
-    failures.push(`Application API 核心跨层导入：${relative}`)
+  for (const edge of readResolvedImports(file, root, resolveImport)) {
+    const violation = assistantImportViolation(edge)
+    if (violation) failures.push(`${violation}：${relative}:${edge.line} → ${edge.to}`)
   }
 }
 
