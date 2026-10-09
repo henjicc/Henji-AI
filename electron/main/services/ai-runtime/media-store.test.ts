@@ -81,10 +81,10 @@ describe('AI Runtime 受管媒体所有权', () => {
     expect(first).toEqual({ filePath, created: true })
     expect(second).toEqual({ filePath, created: true })
 
-    releaseManagedGenerationMediaPaths([filePath])
+    await releaseManagedGenerationMediaPaths([filePath])
     await expect(fs.stat(filePath)).resolves.toBeDefined()
 
-    releaseManagedGenerationMediaPaths([filePath])
+    await releaseManagedGenerationMediaPaths([filePath])
     await expect(fs.stat(filePath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 

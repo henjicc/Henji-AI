@@ -5,11 +5,11 @@ vi.mock('./path-utils', async (importOriginal) => {
   const original = await importOriginal<typeof import('./path-utils')>()
   return {
     ...original,
-    persistImageBytesTracked: vi.fn((bytes: Buffer, extension: string) => ({
+    persistImageBytesTracked: vi.fn(async (bytes: Buffer, extension: string) => ({
       filePath: `/managed/${createHash('md5').update(bytes).digest('hex')}.${extension}`,
       created: true,
     })),
-    rollbackPersistedImageBytes: vi.fn(),
+    rollbackPersistedImageBytes: vi.fn(async () => undefined),
   }
 })
 
@@ -111,13 +111,30 @@ describe('composeLayerStack', () => {
     const sharp = await loadSharp()
     const base = await sharp({ create: { width: 2, height: 2, channels: 3, background: { r: 0, g: 0, b: 0 } } }).jpeg().toBuffer()
     vi.mocked(persistImageBytesTracked)
-      .mockImplementationOnce(() => ({ filePath: '/managed/base.jpg', created: true }))
-      .mockImplementationOnce(() => { throw new Error('磁盘已满') })
+      .mockImplementationOnce(async () => ({ filePath: '/managed/base.jpg', created: true }))
+      .mockImplementationOnce(async () => { throw new Error('磁盘已满') })
     await expect(composeLayerStack({
       requestId: 'compose-rollback',
       stackId: 'rollback',
       layers: [{ sourceOutputIndex: 0, source: dataUrl('image/jpeg', base), zIndex: 0, role: 'base', declaredWidth: 2, declaredHeight: 2, declaredFormat: 'jpeg' }],
     })).rejects.toThrow(/磁盘已满/)
     expect(rollbackPersistedImageBytes).toHaveBeenCalledWith({ filePath: '/managed/base.jpg', created: true })
+  })
+
+  it('异步落盘期间取消时等待当前写入结束并回滚，不继续写合成与缩略图', async () => {
+    const controller = new AbortController()
+    const sharp = await loadSharp()
+    const base = await sharp({ create: { width: 2, height: 2, channels: 3, background: { r: 0, g: 0, b: 0 } } }).jpeg().toBuffer()
+    vi.mocked(persistImageBytesTracked).mockImplementationOnce(async () => {
+      controller.abort()
+      return { filePath: '/managed/canceled-base.jpg', created: true }
+    })
+    await expect(composeLayerStack({
+      requestId: 'compose-async-cancel',
+      stackId: 'async-cancel',
+      layers: [{ sourceOutputIndex: 0, source: dataUrl('image/jpeg', base), zIndex: 0, role: 'base', declaredWidth: 2, declaredHeight: 2, declaredFormat: 'jpeg' }],
+    }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(persistImageBytesTracked).toHaveBeenCalledTimes(1)
+    expect(rollbackPersistedImageBytes).toHaveBeenCalledWith({ filePath: '/managed/canceled-base.jpg', created: true })
   })
 })

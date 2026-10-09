@@ -76,7 +76,7 @@ export const electronCredentialStore: CredentialStore = {
  * （`defaultFilename`）三者都是纯字符串/字节处理，不依赖任何 Electron 专属能力，任务 2.4
  * 把它们统一收进了 `packages/ai-sdk/src/upload/media-binary.ts` 并导出——这里不再维护一份
  * 独立拷贝（2.1 产出时的实现就是这份要被替换掉的临时拷贝，语义完全一致，直接复用即可）。
- * 本文件只保留 Electron 独有的部分：本地文件系统读取（`fs.readFileSync`）与路径处理
+ * 本文件只保留 Electron 独有的部分：异步本地文件系统读取与路径处理
  * （`path.basename`，取文件名——这一步不是"推断 MIME"，SDK 侧没有对应函数）。
  */
 export const electronMediaReader: MediaReader = {
@@ -95,7 +95,15 @@ export const electronMediaReader: MediaReader = {
     if (!localPath) {
       throw new Error(`Unsupported media ref: ${ref}`)
     }
-    const bytes = fs.readFileSync(localPath)
+    let bytes: Buffer
+    mainLogger.debug('读取 SDK 本地媒体开始', { event: 'sdk.media.read.start' })
+    try {
+      bytes = await fs.promises.readFile(localPath)
+      mainLogger.debug('读取 SDK 本地媒体完成', { event: 'sdk.media.read.completed', context: { byteLength: bytes.length } })
+    } catch (error) {
+      mainLogger.error('读取 SDK 本地媒体失败', { event: 'sdk.media.read.failed', error })
+      throw error
+    }
     const mimeType = inferMimeFromPath(localPath)
     return {
       bytes,

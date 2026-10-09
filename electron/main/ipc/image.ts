@@ -196,13 +196,13 @@ export function registerImageIpc(): void {
     const record = parseRecord(input)
     return { filePaths: readStringArray(record, 'filePaths') }
   }, ({ filePaths }) => {
-    releaseManagedImagePaths(filePaths)
+    return releaseManagedImagePaths(filePaths)
   })
   registerIpcHandler<ReleaseLayerStackResourcesPayload, void>('image:releaseManagedGenerationMedia', (input) => {
     const record = parseRecord(input)
     return { filePaths: readStringArray(record, 'filePaths') }
   }, ({ filePaths }) => {
-    releaseManagedGenerationMediaPaths(filePaths)
+    return releaseManagedGenerationMediaPaths(filePaths)
   })
 }
 

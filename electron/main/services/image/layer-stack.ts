@@ -1,8 +1,7 @@
-import { createHash } from 'node:crypto'
-
 import { createMainLogger } from '../logging'
 import { loadSharp } from './sharp-loader'
 import {
+  hashImageBytes,
   persistImageBytesTracked,
   rollbackPersistedImageBytes,
   type PersistedImageBytes,
@@ -63,7 +62,7 @@ export async function composeLayerStack(
           height,
           hasAlpha: metadata.hasAlpha === true,
           byteLength: source.bytes.byteLength,
-          sha256: digest(source.bytes),
+          sha256: await hashImageBytes(source.bytes, 'sha256'),
           placement,
         },
       })
@@ -104,34 +103,39 @@ export async function composeLayerStack(
         item.resource.filePath = item.input.source
         continue
       }
-      const persisted = persistImageBytesTracked(item.bytes, item.input.declaredFormat === 'jpeg' ? 'jpg' : item.input.declaredFormat)
+      throwIfAborted(signal)
+      const persisted = await persistImageBytesTracked(item.bytes, item.input.declaredFormat === 'jpeg' ? 'jpg' : item.input.declaredFormat)
       persistedEntries.push(persisted)
       item.resource.filePath = persisted.filePath
     }
-    const persistedComposite = persistImageBytesTracked(compositeBytes, 'png')
+    throwIfAborted(signal)
+    const persistedComposite = await persistImageBytesTracked(compositeBytes, 'png')
     persistedEntries.push(persistedComposite)
-    const persistedThumbnail = persistImageBytesTracked(thumbnailBytes, 'webp')
+    throwIfAborted(signal)
+    const persistedThumbnail = await persistImageBytesTracked(thumbnailBytes, 'webp')
     persistedEntries.push(persistedThumbnail)
+    throwIfAborted(signal)
     const result = {
       stackId: payload.stackId,
       canvasWidth: base.resource.width,
       canvasHeight: base.resource.height,
       resources: prepared.map((item) => item.resource),
       compositePath: persistedComposite.filePath,
-      compositeSha256: digest(compositeBytes),
+      compositeSha256: await hashImageBytes(compositeBytes, 'sha256'),
       thumbnailPath: persistedThumbnail.filePath,
-      thumbnailSha256: digest(thumbnailBytes),
+      thumbnailSha256: await hashImageBytes(thumbnailBytes, 'sha256'),
       thumbnailWidth,
       thumbnailHeight,
       createdFilePaths: persistedEntries.filter((entry) => entry.created).map((entry) => entry.filePath),
     }
+    throwIfAborted(signal)
     logger.info('图层栈合成完成', {
       event: 'image.layer_stack.compose.completed',
       context: { stackId: payload.stackId, layerCount: prepared.length, durationMs: Math.round(performance.now() - startedAt) },
     })
     return result
   } catch (error) {
-    for (const entry of persistedEntries.reverse()) rollbackPersistedImageBytes(entry)
+    for (const entry of persistedEntries.reverse()) await rollbackPersistedImageBytes(entry)
     logger.error('图层栈合成失败', {
       event: 'image.layer_stack.compose.failed',
       context: { stackId: payload.stackId, durationMs: Math.round(performance.now() - startedAt) },
@@ -199,10 +203,6 @@ function normalizeFormat(value: string | undefined): 'png' | 'jpeg' | 'webp' | n
   if (value === 'jpg' || value === 'jpeg') return 'jpeg'
   if (value === 'png' || value === 'webp') return value
   return null
-}
-
-function digest(bytes: Buffer): string {
-  return createHash('sha256').update(bytes).digest('hex')
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

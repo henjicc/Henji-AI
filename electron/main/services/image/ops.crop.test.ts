@@ -5,7 +5,7 @@ import { loadSharp } from './sharp-loader'
 // 替换落盘边界；解码、方向归一化与像素裁剪均走正式实现。
 vi.mock('./path-utils', async (importOriginal) => ({
   ...await importOriginal<typeof import('./path-utils')>(),
-  persistImageBytes: (bytes: Buffer) => `data:image/png;base64,${bytes.toString('base64')}`,
+  persistImageBytes: async (bytes: Buffer) => `data:image/png;base64,${bytes.toString('base64')}`,
 }))
 
 const dataUrl = (bytes: Buffer) => `data:image/png;base64,${bytes.toString('base64')}`

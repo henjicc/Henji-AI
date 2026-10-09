@@ -245,7 +245,7 @@ export async function prepareLocalRedraw(
       .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
       .png()
       .toBuffer()
-    const persistedCrop = persistImageBytesTracked(cropBytes, 'png')
+    const persistedCrop = await persistImageBytesTracked(cropBytes, 'png')
     const cropSource = persistedCrop.filePath
     logger.info('局部重绘裁剪完成', {
       event: 'image.local_redraw.prepare.completed',

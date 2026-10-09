@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { OverlayOptions, Region } from 'sharp'
 import { loadSharp } from './sharp-loader'
 import {
+  encodeImageBase64,
   normalizeExtension,
   persistImageBytes,
   persistImageBytesTracked,
@@ -50,13 +51,17 @@ export {
 export async function splitImage(imageBase64: string, rows: number, cols: number, lineThickness = 0): Promise<string[]> {
   const bytes = decodeBase64Payload(imageBase64)
   const frames = await splitBuffer(bytes, rows, cols, lineThickness)
-  return frames.map((frame) => `data:image/png;base64,${frame.toString('base64')}`)
+  const sources: string[] = []
+  for (const frame of frames) sources.push(`data:image/png;base64,${await encodeImageBase64(frame)}`)
+  return sources
 }
 
 export async function splitImageSource(source: string, rows: number, cols: number, lineThickness = 0): Promise<string[]> {
   const { bytes } = await resolveSourceBytes(source)
   const frames = await splitBuffer(bytes, rows, cols, lineThickness)
-  return frames.map((frame) => persistImageBytes(frame, 'png'))
+  const paths: string[] = []
+  for (const frame of frames) paths.push(await persistImageBytes(frame, 'png'))
+  return paths
 }
 
 export async function prepareNodeImageSource(source: string, maxPreviewDimension = 512): Promise<PrepareNodeImageSourceResultDto> {
@@ -132,7 +137,7 @@ export async function embedPanoramaImageMetadata(source: string): Promise<Panora
     const { bytes, extension } = await resolveSourceBytes(source)
     const result = await embedPanoramaMetadataInImage(bytes, extension)
     const outputExtension = result.format === 'jpeg' ? 'jpg' : result.format
-    const imagePath = persistImageBytes(result.bytes, outputExtension)
+    const imagePath = await persistImageBytes(result.bytes, outputExtension)
     logger.info('写入全景元数据完成', {
       event: 'image.panorama_metadata.embed.completed',
       context: {
@@ -178,8 +183,8 @@ export async function compressImageSource(
     .jpeg({ quality: Math.round((opts.quality ?? 0.85) * 100) })
     .toBuffer()
 
-  const fullPath = persistImageBytes(outputBytes, 'jpg')
-  const dataUrl = `data:image/jpeg;base64,${outputBytes.toString('base64')}`
+  const fullPath = await persistImageBytes(outputBytes, 'jpg')
+  const dataUrl = `data:image/jpeg;base64,${await encodeImageBase64(outputBytes)}`
   return { fullPath, dataUrl }
 }
 
@@ -228,7 +233,7 @@ export async function mergeStoryboardImages(payload: MergeStoryboardImagesPayloa
   const metadata = buildStoryboardMetadata(payload, layout.frameCount)
   const encoded = await encodePngWithStoryboardMetadata(png, metadata)
   return {
-    imagePath: persistImageBytes(encoded, 'png'),
+    imagePath: await persistImageBytes(encoded, 'png'),
     canvasWidth: layout.canvasWidth,
     canvasHeight: layout.canvasHeight,
     cellWidth: layout.cellWidth,
@@ -271,7 +276,7 @@ async function prepareFromBytes(bytes: Buffer, extension: string, maxPreviewDime
   const meta = await sharp(bytes).metadata()
   const width = Math.max(1, meta.width ?? 1)
   const height = Math.max(1, meta.height ?? 1)
-  const persisted = [persistImageBytesTracked(bytes, extension)]
+  const persisted = [await persistImageBytesTracked(bytes, extension)]
   try {
     const imagePath = persisted[0].filePath
     const safeMax = Math.max(64, Math.floor(maxPreviewDimension))
@@ -284,7 +289,7 @@ async function prepareFromBytes(bytes: Buffer, extension: string, maxPreviewDime
       }
     }
     const preview = await sharp(bytes).resize(safeMax, safeMax, { fit: 'inside' }).jpeg({ quality: 86 }).toBuffer()
-    persisted.push(persistImageBytesTracked(preview, 'jpg'))
+    persisted.push(await persistImageBytesTracked(preview, 'jpg'))
     return {
       imagePath,
       previewImagePath: persisted[1].filePath,
@@ -292,7 +297,7 @@ async function prepareFromBytes(bytes: Buffer, extension: string, maxPreviewDime
       createdFilePaths: persisted.filter((entry) => entry.created).map((entry) => entry.filePath),
     }
   } catch (error) {
-    persisted.reverse().forEach(rollbackPersistedImageBytes)
+    for (const entry of persisted.reverse()) await rollbackPersistedImageBytes(entry)
     throw error
   }
 }

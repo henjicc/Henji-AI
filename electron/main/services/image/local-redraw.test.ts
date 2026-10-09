@@ -4,8 +4,8 @@ vi.mock('./path-utils', async (importOriginal) => {
   const original = await importOriginal<typeof import('./path-utils')>()
   return {
     ...original,
-    persistImageBytes: vi.fn((bytes: Buffer) => `data:image/png;base64,${bytes.toString('base64')}`),
-    persistImageBytesTracked: vi.fn((bytes: Buffer) => ({
+    persistImageBytes: vi.fn(async (bytes: Buffer) => `data:image/png;base64,${bytes.toString('base64')}`),
+    persistImageBytesTracked: vi.fn(async (bytes: Buffer) => ({
       filePath: `data:image/png;base64,${bytes.toString('base64')}`,
       created: true,
     })),
@@ -104,7 +104,7 @@ describe('局部重绘裁剪与回贴', () => {
     const maskPixels = Buffer.alloc(80 * 80 * 4, 255)
     for (let y = 30; y < 50; y += 1) for (let x = 30; x < 50; x += 1) maskPixels[(y * 80 + x) * 4 + 3] = 0
     const mask = await sharp(maskPixels, { raw: { width: 80, height: 80, channels: 4 } }).png().toBuffer()
-    vi.mocked(persistImageBytesTracked).mockReturnValueOnce({
+    vi.mocked(persistImageBytesTracked).mockResolvedValueOnce({
       filePath: '/managed/existing-crop.png',
       created: false,
     })
