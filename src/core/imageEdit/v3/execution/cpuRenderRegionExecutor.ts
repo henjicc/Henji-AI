@@ -35,6 +35,7 @@ import {
   executeImageEditCpuAdjustmentNodeV3,
   executeImageEditCpuEffectNodeV3,
   imageEditCpuRenderNodeBlendModeV3,
+  imageEditPixelContextV3,
 } from './cpuRenderPlanExecutor'
 
 export interface ImageEditCpuRegionRenderContextV3 extends ImageEditCpuSamplingContextV3 {
@@ -147,6 +148,10 @@ function effectInputRegion(
   >,
 ): ImageEditRect {
   const definition = context.registry.get(node.definitionId)
+  if (definition?.inputRegion) return definition.inputRegion(node.parameters, {
+    referenceSize: { width: Number(node.parameters.referenceWidth), height: Number(node.parameters.referenceHeight) },
+    outputSize: context.size, quality: node.parameters.effectQuality === 'interactive' ? 'interactive' : 'final',
+  }, outputRegion)
   const scale = Math.min(context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1)
   const contextMip = Math.max(0, Math.log2(1 / scale))
   const parameterMip = node.parameters.mip
@@ -158,12 +163,7 @@ function effectInputRegion(
   const halo = Math.max(0, Math.ceil(definition?.localHalo?.(node.parameters, mip) ?? 0))
   const expanded = halo > 0 ? expandImageEditRectV3(outputRegion, halo, context.size) : outputRegion
   let alignment = 1
-  if (node.definitionId === 'effect.gaussian-blur') {
-    alignment = 2 ** resolveGaussianBlurV2Geometry({
-      radius: numberParameter(node, 'radius', 0),
-      mip,
-    }).pyramidLevel
-  } else if (node.definitionId === 'effect.blur-v1') {
+  if (node.definitionId === 'effect.blur-v1') {
     alignment = 2 ** resolveGaussianBlurV2Geometry({
       radius: numberParameter(node, 'radiusPixels', 0),
       mip: 0,
@@ -342,10 +342,12 @@ export async function executeImageEditCpuRenderRegionPlanV3(
       }
       const expanded = effectInputRegion(node, region, context)
       const source = await render(inputNode(nodes, node, 0), expanded)
-      const mask = await sampleMask(node, expanded)
+      const regional = !!context.registry.get(node.definitionId)?.inputRegion
+      const mask = await sampleMask(node, regional ? region : expanded)
       const processed = node.definitionId.startsWith('adjustment.')
         ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask, context.loadColorLut, { origin: [expanded.x, expanded.y], size: [context.size.width, context.size.height] })
         : await executeImageEditCpuEffectNodeV3(node, source, mask, {
+            evaluation: { ...imageEditPixelContextV3(node, source), outputSize: context.size, inputRegion: expanded, outputRegion: regional ? region : expanded },
             executeCustomEffect: context.executeCustomEffect
               ? (effectNode, effectSource, effectMask) => context.executeCustomEffect!(
                   effectNode,
@@ -355,14 +357,14 @@ export async function executeImageEditCpuRenderRegionPlanV3(
                 )
               : undefined,
           })
-      const original = convertFloat32TileColorDomainV3(source, processed.colorDomain)
+      const original = convertFloat32TileColorDomainV3(regional ? cropImageEditRgbaRegionV3(source, expanded, region) : source, processed.colorDomain)
       const mixed = mixEffectLayerV3(
         original,
         processed,
         imageEditCpuRenderNodeBlendModeV3(node),
         numberParameter(node, 'opacity', 1),
       )
-      return regionKey(expanded) === regionKey(region)
+      return regional || regionKey(expanded) === regionKey(region)
         ? mixed
         : cropImageEditRgbaRegionV3(mixed, expanded, region)
     })()

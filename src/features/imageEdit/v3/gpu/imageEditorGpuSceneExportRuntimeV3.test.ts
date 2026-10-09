@@ -60,6 +60,9 @@ describe('ImageEditorGpuSceneExportRuntimeV3', () => {
     const events: ImageEditorGpuSceneWorkerEventV3[] = []
     const budgets: number[] = []
     const exported = compositor()
+    const previewScene = scene()
+    previewScene.graph = [{ kind: 'effect', nodeId: 'blur', layerId: 'blur', fingerprint: 'preview', inputNodeId: 'source',
+      definitionId: 'effect.gaussian_blur', parameters: { effectQuality: 'interactive', sigma_fraction_height: .009 }, opacity: 1, blendMode: 'normal', mask: null }]
     exported.readExportLinearPixels = vi.fn(async function (
       this: ImageEditorGpuRasterCompositorV3Like,
     ) {
@@ -89,10 +92,12 @@ describe('ImageEditorGpuSceneExportRuntimeV3', () => {
           renderX: 1, renderY: 0, renderWidth: 1, renderHeight: 1,
           coreOffsetX: 0, coreOffsetY: 0 },
       ],
-    }, scene())
+    }, previewScene)
 
     await vi.waitFor(() => expect(events.filter((event) => event.type === 'export-tile')).toHaveLength(1))
     expect(budgets).toEqual([156])
+    expect(exported.syncScene).toHaveBeenCalledWith(expect.objectContaining({ graph: [expect.objectContaining({ parameters: expect.objectContaining({ effectQuality: 'final' }) })] }))
+    expect(previewScene.graph[0]).toMatchObject({ parameters: { effectQuality: 'interactive' } })
     expect(exported.readExportLinearPixels).toHaveBeenCalledTimes(1)
     runtime.acknowledge('export-1', 0, 0)
     await vi.waitFor(() => expect(events.filter((event) => event.type === 'export-tile')).toHaveLength(2))

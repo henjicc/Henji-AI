@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { ManagedWebGpuDevice } from '@/core/imageEdit/webgpu/deviceManager'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditAdjustmentLayerV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorGpuRasterCompositorV3Like } from './imageEditorGpuRasterCompositorV3'
 import {
   IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
@@ -48,6 +48,16 @@ function managedDevice(device: GpuDevice, generation: number): ManagedWebGpuDevi
 }
 
 describe('ImageEditorGpuSceneRuntimeV3 fallback', () => {
+  it('登记不支持的节点携带具体原因进入既有可恢复失败通道', () => {
+    const events: ImageEditorGpuSceneWorkerEventV3[] = []
+    const runtime = new ImageEditorGpuSceneRuntimeV3(event => events.push(event))
+    const document = createImageEditDocumentV3({ width: 16, height: 16 })
+    const resourceRef = `sha256:${'a'.repeat(64)}` as const
+    document.layers = [createImageEditRasterLayerV3('source', '源', resourceRef), createImageEditAdjustmentLayerV3('unknown', '未知', 'unknown-probe', {})]
+    runtime.handle({ type: 'sync-scene', sceneGeneration: 1, document, resourceDescriptors: [{ resourceRef, byteLength: 1024, mediaType: 'image/png' }] })
+    expect(events).toContainEqual(expect.objectContaining({ type: 'failed', code: 'composition-not-ready', recoverable: true, message: expect.stringMatching(/GPU 不支持.*unknown-probe/) }))
+    runtime.dispose()
+  })
   it('效果执行失败发布可恢复失败且dispose释放合成资源', async () => {
     const events: ImageEditorGpuSceneWorkerEventV3[] = []
     const compositor = fakeCompositor({ render: vi.fn(async () => {

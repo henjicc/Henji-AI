@@ -12,7 +12,7 @@ import { BUILTIN_STYLE_KITS } from '../src/core/videoEdit/styleKitPresets'
 import { BUILTIN_TITLE_TEMPLATES } from '../src/core/videoEdit/titleTemplates'
 import { VIDEO_EDIT_EXPORT_PRESETS } from '../src/core/videoEdit/exportPresets'
 import { videoEditTextStyleSchema } from '../src/core/videoEdit/text'
-import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
 import { createDefaultImageEditColorModeV3 } from '../src/core/imageEdit/v3/colorTypes'
 import { createThemePayloadV2 } from '../src/core/theme/themeMigration'
 import { DEFAULT_THEME_SEED } from '../src/core/theme/themeEngine'
@@ -42,6 +42,7 @@ videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const image = createImageEditDocumentV3({ width: 64, height: 48, documentId: 'golden-image', color: createDefaultImageEditColorModeV3() })
 image.layers.push(createImageEditRasterLayerV3('golden-layer', '空白图层'))
+image.layers.push(createImageEditEffectLayerV3('golden-shared-gaussian', '高斯模糊', 'gaussian_blur', { sigma_fraction_height: .009, axis: 'horizontal', edge_mode: 'transparent' }))
 const working = { format: 'henji-image-edit', formatVersion: 3, documentId: image.id, revision: 0, createdAt: timestamp, updatedAt: timestamp, document: image, resourceRefs: [] }
 const values: Record<string, unknown> = {
   'document.video_edit': videoContent,

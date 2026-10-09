@@ -1,3 +1,7 @@
+import { ParamField, ParamList, type ParamGesture, type ParamFieldSpec } from '@/components/ui'
+import { builtinParameterFields, readBuiltinField, writeBuiltinField } from '@/components/ui/params/fieldSpec'
+import { listImagingEffects, type RegisteredImagingEffect } from '@/core/imaging/effects/registry'
+import type { ImageEditEffectLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { ImageEditorColorGradeParametersV3 } from './ImageEditorColorGradeParametersV3'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -198,9 +202,11 @@ export function ImageEditorEffectParametersV3({
   const params = layerParams(layer)
   if (!params) return null
   const sliders: Array<[string, number, number, number, number]> = []
+  const shared = layer.type === 'effect' ? listImagingEffects().find(effect => effect.id === layer.effectId && effect.hosts.includes('image')) : undefined
+  if (shared && layer.type === 'effect') return <SharedEffectParameters controller={controller} layer={layer} descriptor={shared} disabled={disabled} />
 
   if (layer.type === 'effect'
-    && (layer.effectId === 'image.fast-blur-v3' || layer.effectId === 'image.gaussian-blur-v2')) {
+    && layer.effectId === 'image.fast-blur-v3') {
     sliders.push(['radius', readNumber(params, 'radius', 12), 0, 1000, 0.5])
   } else if (layer.type === 'effect' && layer.effectId === 'image.diffusion') {
     for (const key of ['strength', 'glowRange', 'highlightResponse', 'softness'] as const) {
@@ -403,4 +409,42 @@ export function ImageEditorEffectParametersV3({
       ))}
     </>
   )
+}
+
+/** 共享描述只投影既有控件与事务；不引入第二份 Gaussian 字段表。 */
+function SharedEffectParameters({ controller, layer, descriptor, disabled }: {
+  controller: ImageEditorV3Controller; layer: ImageEditEffectLayerV3; descriptor: RegisteredImagingEffect; disabled: boolean;
+}): JSX.Element {
+  const id = useId()
+  const previewId = `${controller.sessionId}:${layer.id}:${id}`
+  const [draft, setDraft] = useState(layer.params)
+  const latest = useRef(layer.params)
+  const active = useRef(false)
+  const frame = useRef<number | null>(null)
+  const cancelFrame = (): void => { if (frame.current !== null) cancelAnimationFrame(frame.current); frame.current = null }
+  useEffect(() => { if (!active.current) { latest.current = layer.params; setDraft(layer.params) } }, [layer.params])
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); controller.clearParameterPreview(previewId) }, [controller, previewId])
+  const fields = builtinParameterFields(descriptor.parameters).map(field => ({ ...field, animatable: false as const }))
+  const cancel = (): void => { cancelFrame(); active.current = false; controller.clearParameterPreview(previewId); latest.current = layer.params; setDraft(layer.params) }
+  useEffect(() => { if (disabled) cancel() }, [disabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  const finish = (): void => {
+    if (disabled || !active.current) return
+    cancelFrame(); active.current = false; controller.commitLayerParamsPreview(previewId, layer.id, latest.current)
+  }
+  const gesture = (field: ParamFieldSpec): ParamGesture => ({
+    begin: () => { if (!disabled) active.current = true }, active: () => active.current,
+    write: value => {
+      if (disabled) return
+      active.current = true
+      latest.current = { ...latest.current, ...writeBuiltinField(field, value) }; setDraft(latest.current)
+      if (frame.current === null) frame.current = requestAnimationFrame(() => {
+        frame.current = null; controller.setParameterPreview(previewId, layer.id, latest.current)
+      })
+    }, finish, cancel,
+    atomic: value => { if (disabled) return; active.current = true; latest.current = { ...latest.current, ...writeBuiltinField(field, value) }; setDraft(latest.current); finish() },
+  })
+  return <ParamList fields={fields} values={Object.fromEntries(fields.map(field => [field.key, readBuiltinField(field, draft)]))}
+    contextKey={previewId} extras={Object.fromEntries(fields.map(field => [field.key, disabled]))}
+    renderControl={(field, value) => <ParamField field={field} value={value} gesture={gesture(field)} disabled={disabled} />}
+  />
 }

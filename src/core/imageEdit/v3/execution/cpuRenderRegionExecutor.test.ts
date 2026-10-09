@@ -2,7 +2,7 @@ import { executeImageEditCpuRenderPlanV3 } from './cpuRenderPlanExecutor'
 import { cropImageEditRgbaRegionV3 } from './affineTransform'
 import { describe, expect, it } from 'vitest'
 
-import { createImageEditAdjustmentLayerV3, createImageEditDocumentV3, createImageEditGroupLayerV3 } from '../documentFactory'
+import { createImageEditEffectLayerV3, createImageEditAdjustmentLayerV3, createImageEditDocumentV3, createImageEditGroupLayerV3 } from '../documentFactory'
 import { createFloat32MaskTile, createFloat32PremultipliedRgbaTile } from '../effects/contracts'
 import { createBuiltInImageEditRenderNodeRegistry } from '../builtInRenderNodes'
 import { compileImageEditRenderPlanV3 } from '../renderPlanCompiler'
@@ -91,4 +91,38 @@ it('共享 HSL 邻域跨任意分块保持完整文档金字塔网格（奇数�
   const reference = cropImageEditRgbaRegionV3(whole!, { x: 0, y: 0, width, height }, region)
   if (!result) throw new Error('Expected rendered region')
   result.data.forEach((value, i) => expect(value).toBeCloseTo(reference.data[i], 5))
+})
+
+it.each(['draft', 'stable', 'export'] as const)('%s 高斯完整网格与非对齐区域逐值相同，halo 不受 tile 尺寸影响', async quality => {
+  const width = 129, height = 131
+  const document = createImageEditDocumentV3({ width, height, sourceResourceId: `sha256:${'a'.repeat(64)}` })
+  document.layers.push(createImageEditEffectLayerV3('gaussian', '高斯', 'gaussian_blur', { sigma_fraction_height: .08, axis: 'horizontal', edge_mode: 'transparent' }))
+  const data = Float32Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 1 : (i % 31) / 31)
+  const source = createFloat32PremultipliedRgbaTile(width, height, 'linear-light', data)
+  const registry = createBuiltInImageEditRenderNodeRegistry()
+  const plan = compileImageEditRenderPlanV3(document, registry, quality)
+  const effect = plan.nodes.find(node => node.layerId === 'gaussian')!
+  expect(effect.parameters.effectQuality).toBe(quality === 'export' ? 'final' : 'interactive')
+  const whole = await executeImageEditCpuRenderPlanV3(plan, { loadRaster: async () => source, rasterizeAnnotations: async () => source })
+  const region = { x: 31, y: 65, width: 35, height: 33 }
+  const requested: object[] = []
+  const result = await executeImageEditCpuRenderRegionPlanV3(plan, region, {
+    size: { width, height }, registry,
+    loadRaster: async (_node, input) => { requested.push(input); return cropImageEditRgbaRegionV3(source, { x: 0, y: 0, width, height }, input) },
+    rasterizeAnnotations: async () => source,
+    createTransparent: input => createFloat32PremultipliedRgbaTile(input.width, input.height, 'linear-light', new Float32Array(input.width * input.height * 4)),
+    loadMask: async () => { throw new Error('无蒙版') },
+  })
+  expect(requested).not.toEqual([region])
+  expect(result?.data).toEqual(cropImageEditRgbaRegionV3(whole!, { x: 0, y: 0, width, height }, region).data)
+})
+
+it('stable 的效果质量由请求显式选择，缓存指纹区分档位', () => {
+  const document = createImageEditDocumentV3({ width: 129, height: 131, sourceResourceId: `sha256:${'a'.repeat(64)}` })
+  document.layers.push(createImageEditEffectLayerV3('gaussian', '高斯', 'gaussian_blur', {}))
+  const registry = createBuiltInImageEditRenderNodeRegistry()
+  const interactive = compileImageEditRenderPlanV3(document, registry, 'stable', 'interactive')
+  const final = compileImageEditRenderPlanV3(document, registry, 'stable', 'final')
+  expect(interactive.outputHash).not.toBe(final.outputHash)
+  expect(final.nodes.find(node => node.layerId === 'gaussian')?.parameters.effectQuality).toBe('final')
 })

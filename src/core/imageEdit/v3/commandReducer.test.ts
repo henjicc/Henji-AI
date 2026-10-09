@@ -388,7 +388,7 @@ describe('图片编辑 V3 命令归约器', () => {
       layerId: 'raster', patch: { transform: [1, 0, 0, 0, 0, 0] },
     })).toThrow(ImageEditCommandValidationErrorV3);
     const effectSource = createDocument([
-      createImageEditEffectLayerV3('effect', '效果', 'image.gaussian-blur-v2', { radius: 1 }),
+      createImageEditEffectLayerV3('effect', '效果', 'gaussian_blur', { sigma_fraction_height: .01 }),
     ]);
     expect(() => applyImageEditCommandV3(effectSource, {
       commandId: 'move-effect', expectedRevision: 0, type: 'layer.update-common',

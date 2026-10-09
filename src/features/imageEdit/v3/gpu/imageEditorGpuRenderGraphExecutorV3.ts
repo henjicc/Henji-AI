@@ -1,3 +1,4 @@
+import { createBuiltInImageEditRenderNodeRegistry } from '@/core/imageEdit/v3/builtInRenderNodes'
 import { mapImageEditOutputPixelToSourceV3, resolveImageEditOutputGeometryV3 } from '@/core/imageEdit/v3/outputGeometry'
 import { ImageEditorGpuColorGradeV3 } from './imageEditorGpuColorGradeV3'
 import { draw, frame, target, type Draw, type Gpu, type Target, type Texture } from 'vgpu'
@@ -212,6 +213,9 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
           node, input, mask, fingerprint, layout.viewport.zoom * layout.viewport.devicePixelRatio,
           effectRecipeSize,
           this.scene.color,
+          { referenceSize: { width: this.scene.width, height: this.scene.height },
+            outputSize: { width: input.size[0], height: input.size[1] },
+            quality: node.parameters.effectQuality === 'final' ? 'final' : 'interactive' },
         )
         preparedEffects.push(prepared)
         operations.push({ kind: 'effect', effect: prepared })
@@ -240,7 +244,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       }
       if (!input && !sourcePlan) throw new Error(`GPU RenderGraph 缺少节点输入：${node.nodeId}`)
       const size = imageEditorGpuOutputPixelSizeV3(layout)
-      const reuse = node.kind === 'adjustment' && node.adjustments[0]?.definitionId === 'adjustment.color-grade'
+      const reuse = node.kind === 'adjustment' && adjustmentKernel(node) === 'color-grade'
         && retained && retained.target.size[0] === size[0] && retained.target.size[1] === size[1]
       const output = reuse ? retained.target : target(this.gpu, {
         size: imageEditorGpuOutputPixelSizeV3(layout),
@@ -316,7 +320,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       this.retained.set(nodeId, replacement)
       this.stats.renderedNodeCount += 1
     }
-    const activeGrades = new Set(this.scene.graph.filter(node => node.kind === 'adjustment' && node.adjustments[0]?.definitionId === 'adjustment.color-grade').map(node => node.nodeId))
+    const activeGrades = new Set(this.scene.graph.filter(node => node.kind === 'adjustment' && adjustmentKernel(node) === 'color-grade').map(node => node.nodeId))
     for (const [id, grade] of this.grades) if (!activeGrades.has(id)) { grade.dispose(); this.grades.delete(id) }
     this.pruneRetained(new Set(this.scene.graph.filter((node) => !aliases.has(node.nodeId)).map((node) => node.nodeId)))
     return croppedOutput
@@ -359,7 +363,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         draws.set(this.normalDraw, task.target)
         if (task.backdrop) draws.set(this.copyDraw, task.target)
       } else if (task.node.kind === 'composite') draws.set(this.compositeDraw, task.target)
-      else if (task.node.adjustments[0]?.definitionId === 'adjustment.color-grade') {
+      else if (adjustmentKernel(task.node) === 'color-grade') {
         const renderer = this.grades.get(task.node.nodeId) ?? new ImageEditorGpuColorGradeV3(this.gpu, this.onPipelineCompiled)
         this.grades.set(task.node.nodeId, renderer)
         const scale = layout.viewport.zoom * layout.viewport.devicePixelRatio
@@ -375,7 +379,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
           basisY: [(nextY[0] - first[0]) / geometry.sourceWidth, (nextY[1] - first[1]) / geometry.sourceHeight],
         })
       }
-      else if (task.node.adjustments[0]?.definitionId === 'adjustment.curves') draws.set(this.curvesDraw, task.target)
+      else if (adjustmentKernel(task.node) === 'curves') draws.set(this.curvesDraw, task.target)
       else draws.set(this.adjustmentDraw, task.target)
     }
     for (const [drawable, compileTarget] of draws) {
@@ -419,9 +423,9 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         this.compositeDraw.group(0, this.bind(this.compositeDraw, [task.backdrop.color.view, input!.color.view, maskView, { buffer }]))
         currentFrame.pass(task.target, this.compositeDraw)
       }
-    } else if (task.node.adjustments[0]?.definitionId === 'adjustment.color-grade') {
+    } else if (adjustmentKernel(task.node) === 'color-grade') {
       this.grades.get(task.node.nodeId)!.encode(currentFrame)
-    } else if (task.node.adjustments[0]?.definitionId === 'adjustment.curves') {
+    } else if (adjustmentKernel(task.node) === 'curves') {
       const adjustment = task.node.adjustments[0]
       const { curve: curves, values } = imageEditorGpuGraphCurveValuesV3(adjustment)
       curveTexture = this.gpu.device.createTexture({ size: [4096, 4], format: 'r32float', usage: ['copy_dst', 'texture_binding'], label: `image-editor-curves:${task.node.layerId}` })
@@ -526,4 +530,8 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
 
 function sameDependencies(left: readonly unknown[], right: readonly unknown[]): boolean {
   return left.length === right.length && left.every((entry, index) => entry === right[index])
+}
+
+function adjustmentKernel(node: ImageEditorGpuRenderGraphNodeV3): string | undefined {
+  return node.kind === 'adjustment' ? createBuiltInImageEditRenderNodeRegistry().get(node.adjustments[0]?.definitionId)?.gpu?.kernel : undefined
 }

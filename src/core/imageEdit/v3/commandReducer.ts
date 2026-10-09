@@ -1,3 +1,4 @@
+import { parseImageEditSharedEffectParametersV3 } from './operationCatalog';
 import { parseImageColorGradeParams } from '../../imaging/adjustments/schema';
 import { sanitizeMarkItem } from '../markCodec';
 import {
@@ -370,6 +371,7 @@ function applyLayerContentCommand(
     }
     const params = cloneImageEditJsonObjectV3(command.params);
     if (!params) throw new ImageEditCommandValidationErrorV3('图层参数不是安全 JSON 对象');
+    if (location.layer.type === 'effect') parseImageEditSharedEffectParametersV3(location.layer.effectId, params);
     if (location.layer.type === 'adjustment' && location.layer.adjustmentId === 'color_grade') {
       parseImageColorGradeParams(params);
     }

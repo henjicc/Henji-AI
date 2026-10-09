@@ -1,26 +1,8 @@
+import { createBuiltInImageEditRenderNodeRegistry } from '../builtInRenderNodes';
+import type { ImageEditPixelExecutionContextV3 } from '../renderNodeDefinition';
 import type { AdjustmentCoordinates } from '../../../imaging/effects/cpu/colorGrade'
-import { applyImageColorGradeV3 } from '../effects/colorGrade';
 import type { CubeLut } from '../../../imaging/lut/cube';
-import {
-  DIFFUSION_V4_RECIPE_ADAPTER,
-  VGPU_GLOW_V4_RECIPE_ADAPTER,
-  applyCurvesAdjustment,
-  applyDiffusionV4,
-  applyExposureAdjustment,
-  applyFastBlurV3,
-  applyGaussianBlurV2,
-  applyLegacyGaussianBlurV1,
-  applyHslAdjustment,
-  applyTemperatureTintAdjustment,
-  applyVgpuGlowV4,
-  compileCurvesAdjustment,
-  createFloat32MaskTile,
-  mixProcessedWithMask,
-  type CurveControlPoint,
-  type CompiledCurvesAdjustment,
-  type Float32MaskTile,
-  type Float32PremultipliedRgbaTile,
-} from '../effects';
+import { createFloat32MaskTile, mixProcessedWithMask, type Float32MaskTile, type Float32PremultipliedRgbaTile } from '../effects/contracts';
 import type { ImageEditBlendModeV3, ImageEditMaskReferenceV3 } from '../layerTypes';
 import type { ImageEditRenderPlan, ImageEditRenderPlanNode } from '../renderPlan';
 import {
@@ -32,27 +14,6 @@ import {
   compositePremultipliedTilesV3,
   mixEffectLayerV3,
 } from './tileBlend';
-
-const MAX_COMPILED_CURVE_CACHE_ENTRIES = 64;
-const compiledCurveCache = new Map<string, CompiledCurvesAdjustment>();
-
-/** 生产 CPU/ROI 执行器真实覆盖的节点；新增注册节点但漏接执行器时由动态测试阻断。 */
-export const IMAGE_EDIT_TILED_CPU_NODE_IDS_V3: ReadonlySet<string> = new Set([
-  'source.raster',
-  'vector.annotation',
-  'effect.blur-v1',
-  'effect.gaussian-blur',
-  'effect.fast-blur',
-  'effect.diffusion',
-  'effect.vgpu-glow',
-  'adjustment.color-grade',
-  'adjustment.exposure',
-  'adjustment.curves',
-  'adjustment.temperature-tint',
-  'adjustment.hsl',
-  'composite.layer',
-  'group.isolated',
-]);
 
 export class ImageEditRenderNodeUnsupportedErrorV3 extends Error {
   constructor(readonly definitionId: string) {
@@ -106,45 +67,6 @@ export function imageEditCpuRenderNodeBlendModeV3(
     : 'normal';
 }
 
-function curvePoints(value: unknown): CurveControlPoint[] {
-  if (!Array.isArray(value)) return [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-  const points: CurveControlPoint[] = [];
-  for (const entry of value) {
-    if (
-      typeof entry === 'object'
-      && entry !== null
-      && 'x' in entry
-      && 'y' in entry
-      && typeof entry.x === 'number'
-      && typeof entry.y === 'number'
-    ) points.push({ x: entry.x, y: entry.y });
-  }
-  return points.length > 0 ? points : [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-}
-
-function compiledCurves(node: ImageEditRenderPlanNode): CompiledCurvesAdjustment {
-  const key = node.subtreeHash;
-  const cached = compiledCurveCache.get(key);
-  if (cached) {
-    compiledCurveCache.delete(key);
-    compiledCurveCache.set(key, cached);
-    return cached;
-  }
-  const compiled = compileCurvesAdjustment({
-    master: curvePoints(node.parameters.master),
-    red: curvePoints(node.parameters.red),
-    green: curvePoints(node.parameters.green),
-    blue: curvePoints(node.parameters.blue),
-  });
-  compiledCurveCache.set(key, compiled);
-  while (compiledCurveCache.size > MAX_COMPILED_CURVE_CACHE_ENTRIES) {
-    const oldest = compiledCurveCache.keys().next().value;
-    if (oldest === undefined) break;
-    compiledCurveCache.delete(oldest);
-  }
-  return compiled;
-}
-
 function isIdentityTransform(value: unknown): value is readonly number[] {
   return Array.isArray(value)
     && value.length === 6
@@ -175,95 +97,39 @@ function requireInput(
   return input;
 }
 
+export function listImageEditCpuNodeIdsV3(): ReadonlySet<string> {
+  return new Set(createBuiltInImageEditRenderNodeRegistry().list()
+    .filter(definition => definition.cpu || definition.hostExecution).map(definition => definition.id));
+}
+
+export function imageEditPixelContextV3(node: ImageEditRenderPlanNode, source: Float32PremultipliedRgbaTile): ImageEditPixelExecutionContextV3 {
+  const width = Number(node.parameters.referenceWidth ?? source.width);
+  const height = Number(node.parameters.referenceHeight ?? source.height);
+  return {
+    referenceSize: { width, height }, outputSize: { width: source.width, height: source.height },
+    quality: node.parameters.effectQuality === 'interactive' ? 'interactive' : 'final',
+    inputRegion: { x: 0, y: 0, width: source.width, height: source.height },
+    outputRegion: { x: 0, y: 0, width: source.width, height: source.height },
+  };
+}
+
 export async function executeImageEditCpuAdjustmentNodeV3(
-  node: ImageEditRenderPlanNode,
-  source: Float32PremultipliedRgbaTile,
-  mask: Float32MaskTile | undefined,
-  loadColorLut?: (ref: string) => Promise<CubeLut>,
-  coordinates?: AdjustmentCoordinates,
+  node: ImageEditRenderPlanNode, source: Float32PremultipliedRgbaTile, mask: Float32MaskTile | undefined,
+  loadColorLut?: (ref: string) => Promise<CubeLut>, coordinates?: AdjustmentCoordinates,
 ): Promise<Float32PremultipliedRgbaTile> {
-  if (node.definitionId === 'adjustment.color-grade') {
-    const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width, referenceHeight: _height, ...params } = node.parameters;
-    return applyImageColorGradeV3(source, params, mask, loadColorLut, coordinates ?? { origin: [0, 0], size: [Number(_width ?? source.width), Number(_height ?? source.height)] });
-  }
-  if (node.definitionId === 'adjustment.exposure') {
-    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
-    return applyExposureAdjustment(linear, {
-      stops: numberParameter(node, 'stops', 0),
-      offset: numberParameter(node, 'offset', 0),
-      gamma: numberParameter(node, 'gamma', 1),
-    }, { mask });
-  }
-  if (node.definitionId === 'adjustment.curves') {
-    const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
-    return applyCurvesAdjustment(perceptual, compiledCurves(node), { mask });
-  }
-  if (node.definitionId === 'adjustment.temperature-tint') {
-    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
-    return applyTemperatureTintAdjustment(linear, {
-      temperature: numberParameter(node, 'temperature', 0),
-      tint: numberParameter(node, 'tint', 0),
-      workingSpace: source.workingSpace,
-    }, { mask });
-  }
-  if (node.definitionId === 'adjustment.hsl') {
-    const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
-    return applyHslAdjustment(perceptual, {
-      hueDegrees: numberParameter(node, 'hueDegrees', 0),
-      saturation: numberParameter(node, 'saturation', 0),
-      lightness: numberParameter(node, 'lightness', 0),
-    }, { mask });
-  }
-  throw new Error(`CPU 执行器不支持调整节点 ${node.definitionId}`);
+  const definition = createBuiltInImageEditRenderNodeRegistry().get(node.definitionId);
+  if (!definition?.cpu) throw new ImageEditRenderNodeUnsupportedErrorV3(node.definitionId);
+  return definition.cpu(node, source, mask, { ...imageEditPixelContextV3(node, source), loadColorLut, coordinates });
 }
 
 export async function executeImageEditCpuEffectNodeV3(
-  node: ImageEditRenderPlanNode,
-  source: Float32PremultipliedRgbaTile,
-  mask: Float32MaskTile | undefined,
-  context: Pick<ImageEditCpuRenderContextV3, 'executeCustomEffect'>,
+  node: ImageEditRenderPlanNode, source: Float32PremultipliedRgbaTile, mask: Float32MaskTile | undefined,
+  context: Pick<ImageEditCpuRenderContextV3, 'executeCustomEffect'> & { evaluation?: ImageEditPixelExecutionContextV3 },
 ): Promise<Float32PremultipliedRgbaTile> {
-  if (node.definitionId === 'effect.blur-v1') {
-    const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
-    return applyLegacyGaussianBlurV1(
-      perceptual,
-      numberParameter(node, 'radiusPixels', 0),
-      { mask },
-    );
-  }
-  if (node.definitionId === 'effect.gaussian-blur') {
-    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
-    return applyGaussianBlurV2(linear, {
-      radius: numberParameter(node, 'radius', 0),
-      mip: numberParameter(node, 'mip', 0),
-    }, { mask });
-  }
-  if (node.definitionId === 'effect.fast-blur') {
-    if (context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
-    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
-    return applyFastBlurV3(linear, {
-      radius: numberParameter(node, 'radius', 0),
-      mip: numberParameter(node, 'mip', 0),
-    }, { mask });
-  }
-  if (node.definitionId === 'effect.diffusion') {
-    if (context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
-    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
-    return applyDiffusionV4(linear, DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(
-      DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
-      { width: source.width, height: source.height, quality: 'high' },
-    ), { mask });
-  }
-  if (node.definitionId === 'effect.vgpu-glow') {
-    if (context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
-    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
-    return applyVgpuGlowV4(linear, VGPU_GLOW_V4_RECIPE_ADAPTER.compileRecipe(
-      VGPU_GLOW_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
-      { width: source.width, height: source.height },
-    ), { mask });
-  }
-  if (context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
-  throw new ImageEditRenderNodeUnsupportedErrorV3(node.definitionId);
+  const definition = createBuiltInImageEditRenderNodeRegistry().get(node.definitionId);
+  if (!definition?.cpu) throw new ImageEditRenderNodeUnsupportedErrorV3(node.definitionId);
+  if (definition.globalAnalysis && context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
+  return definition.cpu(node, source, mask, context.evaluation ?? imageEditPixelContextV3(node, source));
 }
 
 async function executeComposite(

@@ -1,4 +1,4 @@
-import { IMAGE_EDITOR_GLOW_TINT_HEX } from '@/core/theme/colorTokens';
+import { IMAGE_EDITOR_GLOW_TINT_HEX } from '../theme/colorTokens';
 
 export type VgpuGlowLook = 'natural' | 'dreamy' | 'neon';
 export type VgpuGlowChromaticChannel = 'red' | 'green' | 'blue';

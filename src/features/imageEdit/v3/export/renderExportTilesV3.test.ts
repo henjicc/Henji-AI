@@ -34,8 +34,8 @@ describe('图片编辑 V3 分块导出渲染', () => {
     const blur = createImageEditEffectLayerV3(
       'blur',
       'Gaussian Blur',
-      'image.gaussian-blur-v2',
-      { radius: 1 },
+      'gaussian_blur',
+      { sigma_fraction_height: .25 },
     )
     const images = new Map([[SOURCE, solidImage(32, 4)]])
     const below = { ...base, layers: [base.layers[0], annotation, blur] }
@@ -171,8 +171,8 @@ describe('图片编辑 V3 分块导出渲染', () => {
     document.layers.push(createImageEditEffectLayerV3(
       'blur',
       '高斯模糊',
-      'image.gaussian-blur-v2',
-      { radius: 17 },
+      'gaussian_blur',
+      { sigma_fraction_height: 17 },
     ))
     const gradient: FakeImage = {
       width: 80,

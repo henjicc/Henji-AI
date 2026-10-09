@@ -37,9 +37,8 @@ async function render(quality: 'stable' | 'export'): Promise<Uint8Array> {
   document.layers = [
     createImageEditRasterLayerV3('source', 'source', 'sha256:source'),
     createImageEditAnnotationLayerV3('marks', 'marks'),
-    createImageEditEffectLayerV3('blur', 'blur', 'image.gaussian-blur-v2', {
-      radius: 0.8,
-      mip: 0,
+    createImageEditEffectLayerV3('blur', 'blur', 'gaussian_blur', {
+      sigma_fraction_height: .8,
     }),
   ];
   const output = await executeImageEditCpuRenderPlanV3(

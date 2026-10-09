@@ -17,7 +17,7 @@ const context = { exposure: 'assistant' as const, requestId: 'image-batch',
 
 it.each(['atomic', 'compensatable'] as const)('%s 整批仅保存一次；撤销保存失败不会重复撤销', async (transactionMode) => {
   const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: `batch-${transactionMode}` })
-  document.layers = [createImageEditEffectLayerV3('effect', '模糊', 'image.gaussian-blur-v2', { radius: 8 }), createImageEditGroupLayerV3('group', '组')]
+  document.layers = [createImageEditEffectLayerV3('effect', '模糊', 'gaussian_blur', { sigma_fraction_height: 1 }), createImageEditGroupLayerV3('group', '组')]
   const bus = new ImageEditCommandBusV3(document)
   const save = vi.fn(async (value: ImageEditDocumentV3) => ({ documentId: value.id, revision: value.revision, previewRef: null }))
   dispose = registerPersistedImageEditTestSession(`session-${transactionMode}`, bus, { save })

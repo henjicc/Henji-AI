@@ -58,12 +58,12 @@
     },
     "image-package": {
       "version": 1,
-      "fingerprint": "ab6cef02eb017a28af210e1f40b7bb9938df7a186eef3fd066fc2d655aaa0226",
+      "fingerprint": "79afffa04c4a2aef827dc09c019cf9e0143946a9908f4fd9eb304ca3810de41e",
       "supportedFrom": 1
     },
     "image-working-copy": {
       "version": 3,
-      "fingerprint": "aff7204ad4b2e8e1afa8cb736f42492665191a779e65879b960b2725f5fe1982",
+      "fingerprint": "8dab341e2a184551b0147478f6717bd49c6e9a0bb23ad5678d854ad905960e09",
       "supportedFrom": 3
     },
     "settings": {
@@ -133,7 +133,7 @@
     },
     "canvas-layer-package": {
       "version": 1,
-      "fingerprint": "b44ec5fdff7f7339ae3e56e3449c7441a77ff13befe04a49d2508c88f8d9483a",
+      "fingerprint": "85c005712fb98917a93e1dd8b49ab7b310fc4e11152c9257a199ec86739441fd",
       "supportedFrom": 1
     },
     "keystore": {
@@ -545,6 +545,33 @@
       "reason": "t100 修复创作落位身份被文档保存 schema 剥离，开发期直接登记 creativePlacements，无旧格式迁移",
       "previousFingerprint": "8845257f4d5248314ff9d8b9ef554c2e0ee7197d0bd463be9ccb5577c8899c99",
       "fingerprint": "054a07b7f2e30897b8a36e4de10a51fd5ea4c22614477c847b921b6cdc55748b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T03:44:24.775Z",
+      "format": "image-package",
+      "version": 1,
+      "reason": "t114 图片高斯采用共享 canonical 参数 schema 与登记派生，删除旧字段契约",
+      "previousFingerprint": "ab6cef02eb017a28af210e1f40b7bb9938df7a186eef3fd066fc2d655aaa0226",
+      "fingerprint": "79afffa04c4a2aef827dc09c019cf9e0143946a9908f4fd9eb304ca3810de41e",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T03:44:24.777Z",
+      "format": "image-working-copy",
+      "version": 3,
+      "reason": "t114 图片高斯采用共享 canonical 参数 schema 与登记派生，删除旧字段契约",
+      "previousFingerprint": "aff7204ad4b2e8e1afa8cb736f42492665191a779e65879b960b2725f5fe1982",
+      "fingerprint": "8dab341e2a184551b0147478f6717bd49c6e9a0bb23ad5678d854ad905960e09",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T03:44:24.777Z",
+      "format": "canvas-layer-package",
+      "version": 1,
+      "reason": "t114 图片高斯采用共享 canonical 参数 schema 与登记派生，删除旧字段契约",
+      "previousFingerprint": "b44ec5fdff7f7339ae3e56e3449c7441a77ff13befe04a49d2508c88f8d9483a",
+      "fingerprint": "85c005712fb98917a93e1dd8b49ab7b310fc4e11152c9257a199ec86739441fd",
       "waivedFixtureVersions": []
     }
   ]

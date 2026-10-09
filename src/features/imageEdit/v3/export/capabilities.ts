@@ -1,6 +1,6 @@
 import {
   IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
-  IMAGE_EDIT_TILED_CPU_NODE_IDS_V3,
+  listImageEditCpuNodeIdsV3,
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
   parseImageEditDocumentV3,
@@ -194,7 +194,7 @@ export function prepareImageEditorV3ExportRender(
   visitLayers(document.layers)
   const plan = compileImageEditRenderPlanV3(document, registry, 'export')
   const unsupported = plan.nodes.find((node) => (
-    !IMAGE_EDIT_TILED_CPU_NODE_IDS_V3.has(node.definitionId)
+    !listImageEditCpuNodeIdsV3().has(node.definitionId)
     || !registry.get(node.definitionId)?.qualities.includes('export')
   ))
   if (unsupported) {

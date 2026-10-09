@@ -1,11 +1,9 @@
+import { createBuiltInImageEditRenderNodeRegistry } from '@/core/imageEdit/v3/builtInRenderNodes'
 import { invertImageEditTransformV3 } from '@/core/imageEdit/v3/execution/affineTransform'
 import type { ImageEditBlendModeV3, ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import {
   imageEditorGpuCurveDataV3,
-  imageEditorGpuExposureParametersV3,
-  imageEditorGpuHslParametersV3,
-  imageEditorGpuTemperatureMatrixV3,
 } from './imageEditorGpuAdjustmentParametersV3'
 import {
   imageEditorGpuSourceColorUniformV3,
@@ -56,16 +54,17 @@ export function imageEditorGpuGraphAdjustmentValuesV3(node: ImageEditorGpuGraphA
   const first = node.adjustments[0]
   const mask = first.mask
   const values = new Float32Array(40)
-  const kind = first.definitionId === 'adjustment.exposure' ? 0
-    : first.definitionId === 'adjustment.temperature-tint' ? 1 : 2
-  values.set([kind, node.adjustments.length, first.opacity,
+  const binding = createBuiltInImageEditRenderNodeRegistry().get(first.definitionId)?.gpu
+  if (!binding?.pack || binding.uniformCode === undefined) throw new Error(`GPU 不支持 ${first.definitionId}：没有点式参数打包声明`)
+  const capacity = binding.fusedCapacity ?? 1
+  if (node.adjustments.length > capacity) throw new Error(`GPU 点式 pass 超出 uniform 容量 ${capacity}，需要分批`)
+  values.set([binding.uniformCode, node.adjustments.length, first.opacity,
     imageEditorGpuGraphBlendIndexV3(first.blendMode), mask ? 1 : 0,
     mask?.defaultValue ?? 1, mask?.inverted ? 1 : 0, 0])
-  if (kind === 0) first && node.adjustments.slice(0, 8).forEach((entry, index) => (
-    values.set(imageEditorGpuExposureParametersV3(entry.parameters), 8 + index * 4)
-  ))
-  else if (kind === 1) values.set(imageEditorGpuTemperatureMatrixV3(first.parameters), 8)
-  else values.set(imageEditorGpuHslParametersV3(first.parameters), 8)
+  node.adjustments.forEach((entry, index) => {
+    if (entry.definitionId !== first.definitionId) throw new Error('GPU 点式融合需要相同 kernel')
+    values.set(binding.pack!(entry.parameters), 8 + index * 4)
+  })
   return values
 }
 

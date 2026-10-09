@@ -76,8 +76,8 @@ describe('图片编辑 V3 实时 Application Control', () => {
     const effect = createImageEditEffectLayerV3(
       'blur-a',
       '模糊',
-      'image.gaussian-blur-v2',
-      { radius: 8 },
+      'gaussian_blur',
+      { sigma_fraction_height: 8 },
     )
     effect.mask = { resourceId: 'sha256:legacy-mask-a', inverted: false }
     document.layers = [raster, effect]
@@ -125,7 +125,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
       mutations: [
         { propertyId: 'image_edit.layer.name', operation: 'set', value: '背景模糊' },
         { propertyId: 'image_edit.layer.opacity', operation: 'set', value: 0.6 },
-        { propertyId: 'image_edit.layer.params', operation: 'set', value: { radius: 24 } },
+        { propertyId: 'image_edit.layer.params', operation: 'set', value: { sigma_fraction_height: 24 } },
       ],
     }, 'layer-a')
     expect(changed.status, JSON.stringify(changed)).toBe('completed')
@@ -133,7 +133,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
       id: effect.id,
       name: '背景模糊',
       opacity: 0.6,
-      params: { radius: 24 },
+      params: { sigma_fraction_height: 24 },
     })
 
     if (changed.status !== 'completed' || !changed.undoRef) throw new Error('LAYER_UNDO_REF_MISSING')
@@ -146,7 +146,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
     expect(bus.getSnapshot().document.layers[1]).toMatchObject({
       name: '模糊',
       opacity: 1,
-      params: { radius: 8 },
+      params: { sigma_fraction_height: 8 },
     })
 
     const maskRef = imageEditV3MaskRef(document.id, raster.id)

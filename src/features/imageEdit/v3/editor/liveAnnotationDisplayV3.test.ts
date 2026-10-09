@@ -34,7 +34,7 @@ describe('图片编辑 V3 即时标注显示分层', () => {
   it('只剥离位于效果上方的连续标注层', () => {
     const raster = createImageEditRasterLayerV3('raster', '原图', `sha256:${'a'.repeat(64)}`)
     const below = createImageEditAnnotationLayerV3('below', '效果下标注')
-    const blur = createImageEditEffectLayerV3('blur', '高斯模糊', 'image.gaussian-blur-v2', { radius: 20 })
+    const blur = createImageEditEffectLayerV3('blur', '高斯模糊', 'gaussian_blur', { sigma_fraction_height: .02 })
     const top = createImageEditAnnotationLayerV3('top', '即时标注')
     const result = splitLiveAnnotationDisplayV3(document([raster, below, blur, top]))
 
@@ -76,9 +76,9 @@ describe('图片编辑 V3 即时标注显示分层', () => {
       createImageEditAnnotationLayerV3('annotation', '标注'),
     ]))).toBeNull()
     const legacy = createImageEditEffectLayerV3(
-      'legacy-blur', '高斯模糊', 'image.gaussian-blur-v2', { radius: 12 },
+      'legacy-blur', '高斯模糊', 'gaussian_blur', { sigma_fraction_height: .012 },
     )
-    expect(resolveLiveBlurRadiusV3(document([legacy]))).toBe(12)
+    expect(resolveLiveBlurRadiusV3(document([legacy]))).toBeNull()
   })
 
   it('只对最上方辉光提供保持画布几何不变的即时反馈参数', () => {

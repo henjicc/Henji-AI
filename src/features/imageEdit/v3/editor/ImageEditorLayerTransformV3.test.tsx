@@ -174,8 +174,8 @@ describe('图片编辑 V3 图层变换交互', () => {
     const effect = createImageEditEffectLayerV3(
       'blur',
       '高斯模糊',
-      'image.gaussian-blur-v2',
-      { radiusPixels: 8 },
+      'gaussian_blur',
+      { sigma_fraction_height: .01 },
     )
     const changes: ImageEditDocumentV3[] = []
     const rendered = renderEditor(createDocument([raster, effect]), {

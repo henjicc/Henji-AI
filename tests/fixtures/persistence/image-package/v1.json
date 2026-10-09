@@ -148,6 +148,31 @@
             "vignette_feather": 50
           },
           "renderable": true
+        },
+        {
+          "id": "golden-shared-gaussian",
+          "name": "高斯模糊",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "effect",
+          "effectId": "gaussian_blur",
+          "params": {
+            "sigma_fraction_height": 0.009,
+            "axis": "horizontal",
+            "edge_mode": "transparent"
+          },
+          "renderable": true
         }
       ]
     },

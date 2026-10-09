@@ -418,8 +418,9 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
         requestId: event.requestId ?? undefined,
         context: {
           sessionId: this.options.sessionId,
-          code: event.code,
-          recoverable: event.recoverable,
+            code: event.code,
+            reason: event.message,
+            recoverable: event.recoverable,
           diagnosticDeviceAcquireCount: event.diagnostics?.deviceAcquireCount,
           diagnosticSurfaceFrameCount: event.diagnostics?.surfaceFrameCount,
         },

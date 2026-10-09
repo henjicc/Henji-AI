@@ -21,6 +21,17 @@ export function resolveImageEditorGpuEffectViewportV3(
   const grades = scene.graph.flatMap(node => node.kind === 'adjustment' ? node.adjustments.filter(adjustment => adjustment.definitionId === 'adjustment.color-grade') : [])
   if (effects.length === 0 && grades.length === 0) return { layout, cropOffset: [0, 0], expanded: false }
   const viewport = layout.viewport
+  // 当前 retained graph 的处理纹理与合成纹理同尺寸。共享高斯必须保持全局中心网格，
+  // 因此先求值完整文档，再用既有 crop pass 取视口/导出 tile；设备预算不足走 CPU。
+  if (effects.some(node => node.definitionId === 'effect.gaussian_blur')) {
+    const scale = viewport.zoom * viewport.devicePixelRatio
+    const width = Math.max(1, Math.ceil(scene.width * scale))
+    const height = Math.max(1, Math.ceil(scene.height * scale))
+    return { expanded: true, cropOffset: [Math.round(viewport.documentX * scale), Math.round(viewport.documentY * scale)],
+      layout: { ...layout, stageWidth: width / viewport.devicePixelRatio, stageHeight: height / viewport.devicePixelRatio,
+        viewportKey: `${layout.viewportKey}:gaussian-global:${width}:${height}`,
+        viewport: { ...viewport, documentX: 0, documentY: 0, width: width / viewport.devicePixelRatio, height: height / viewport.devicePixelRatio } } }
+  }
   const scale = viewport.zoom * viewport.devicePixelRatio
   const output = resolveImageEditOutputGeometryV3(scene.geometry)
   const endX = viewport.documentX + viewport.width / viewport.zoom
@@ -30,7 +41,7 @@ export function resolveImageEditorGpuEffectViewportV3(
   const gradeNeighbors = grades.some(grade => colorGradeSpatialSupport(grade.parameters, scene.geometry.height * scale) > 0)
   const hasGlobal = gradeNeighbors || effects.some((node) => {
     if (node.definitionId === 'effect.diffusion' || node.definitionId === 'effect.vgpu-glow') return true
-    if (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur') {
+    if (node.definitionId === 'effect.blur-v1') {
       return gaussianSupport(node, scale) > 256
     }
     if (node.definitionId !== 'effect.fast-blur') return false
@@ -45,7 +56,7 @@ export function resolveImageEditorGpuEffectViewportV3(
     bottom = Math.max(0, Math.round((Math.max(endY, gradeNeighbors ? (output.rotate === 90 || output.rotate === 270 ? output.sourceWidth : output.sourceHeight) - output.cropY : output.outputHeight) - endY) * scale))
   } else {
     const halo = effects.reduce((sum, node) => {
-      if (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur') {
+      if (node.definitionId === 'effect.blur-v1') {
         return sum + gaussianSupport(node, scale)
       }
       if (node.definitionId !== 'effect.fast-blur') return sum

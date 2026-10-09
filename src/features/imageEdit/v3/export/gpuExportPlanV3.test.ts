@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
 import { createDefaultVgpuGlowOperationParams } from '@/core/imageEdit/vgpuGlowParams'
 import type { ImageEditRenderPlan, ImageEditRenderPlanNode } from '@/core/imageEdit/v3'
+import { resolveImageGaussianPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
+import { gaussianParameterSchema } from '@/core/imaging/effects/gaussian'
 import {
   createImageEditorGpuExportPlanV3,
   imageEditorGpuScatterSupportV3,
@@ -30,6 +32,16 @@ function plan(nodes: readonly ImageEditRenderPlanNode[]): ImageEditRenderPlan {
 }
 
 describe('GPU 分块导出 support 规划', () => {
+  it('canonical 高斯使用完整文档 final halo，不进入近似残差或截为 256px', () => {
+    const params = gaussianParameterSchema.parse({ sigma_fraction_height: .08 })
+    const renderPlan = plan([node('effect.gaussian_blur', params)])
+    const expected = resolveImageGaussianPlan(params, { referenceSize: { width: 8192, height: 4096 }, outputSize: { width: 8192, height: 4096 }, quality: 'final' })
+    const output = createImageEditorGpuExportPlanV3({ plan: renderPlan, width: 8192, height: 4096, tileSize: 512 })
+    expect(output.halo).toBe(Math.max(...expected.halo))
+    expect(output.halo).toBeGreaterThan(256)
+    expect(output.multiscaleAnalysis).toBeUndefined()
+    expect(output.tiles[0].renderWidth).toBe(Math.min(8192, 512 + output.halo))
+  })
   it('按正式WGSL downsample/upsample采样链计算有限support', () => {
     expect(imageEditorGpuScatterSupportV3(2, 1)).toBe(3)
     expect(imageEditorGpuScatterSupportV3(4, 1)).toBe(12)

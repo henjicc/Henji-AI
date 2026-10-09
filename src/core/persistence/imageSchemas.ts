@@ -1,3 +1,4 @@
+import { listImagingEffects } from '../imaging/effects/registry'
 import { imageColorGradeParamsSchema } from '../imaging/adjustments/schema'
 import { z } from 'zod'
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '../imageEdit/v3/documentTypes'
@@ -16,7 +17,15 @@ const common = { id: identifier, name: z.string(), visible: z.boolean(), locked:
 export const imageLayerSchema: z.ZodType = z.lazy(() => z.discriminatedUnion('type', [
   z.object({ ...common, type: z.literal('raster'), source: z.union([z.object({ kind: z.literal('empty') }), z.object({ kind: z.literal('resource'), resourceId: identifier })]), tiles: z.record(z.string(), identifier) }),
   z.object({ ...common, type: z.literal('annotation'), annotations: z.array(jsonObject) }),
-  z.object({ ...common, type: z.literal('effect'), effectId: identifier, params: jsonObject, renderable: z.boolean(), legacyOperation: z.object({ sourceVersion: z.literal(2), operation: jsonObject }).optional() }),
+  z.object({ ...common, type: z.literal('effect'), effectId: identifier,
+    params: z.union([jsonObject, ...listImagingEffects().filter(effect => effect.hosts.includes('image')).map(effect => effect.parameterSchema)]),
+    renderable: z.boolean(), legacyOperation: z.object({ sourceVersion: z.literal(2), operation: jsonObject }).optional(),
+  }).superRefine((layer, context) => {
+    const descriptor = listImagingEffects().find(effect => effect.id === layer.effectId && effect.hosts.includes('image'))
+    if (!descriptor) return
+    const result = descriptor.parameterSchema.safeParse(layer.params)
+    if (!result.success) for (const issue of result.error.issues) context.addIssue({ ...issue, path: ['params', ...issue.path] })
+  }),
   z.object({ ...common, type: z.literal('adjustment'), adjustmentId: identifier, params: z.union([jsonObject, imageColorGradeParamsSchema]), renderable: z.boolean() }).superRefine((layer, context) => {
     if (layer.adjustmentId === 'color_grade') {
       const result = imageColorGradeParamsSchema.safeParse(layer.params)

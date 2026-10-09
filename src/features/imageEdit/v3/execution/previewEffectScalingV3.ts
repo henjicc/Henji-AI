@@ -5,25 +5,26 @@ const MAX_BLUR_PREVIEW_MIP = 3
 const MIN_BLUR_RADIUS_AT_PREVIEW_MIP = 4
 const MAX_DISPLAY_PIXELS_PER_BLUR_PREVIEW_PIXEL = 3
 
-function finiteRadius(layer: ImageEditLayerV3): number | null {
+function finiteRadius(layer: ImageEditLayerV3, height: number): number | null {
   if (layer.type !== 'effect' || !layer.visible || !layer.renderable || layer.opacity <= 0) return null
   const value = layer.effectId === 'image.blur'
     ? layer.params.radiusPixels
-    : layer.effectId === 'image.gaussian-blur-v2' || layer.effectId === 'image.fast-blur-v3'
+    : layer.effectId === 'gaussian_blur' ? Number(layer.params.sigma_fraction_height) * height
+    : layer.effectId === 'image.fast-blur-v3'
       ? layer.params.radius
       : null
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
-function maximumVisibleBlurRadius(layers: readonly ImageEditLayerV3[]): number {
+function maximumVisibleBlurRadius(layers: readonly ImageEditLayerV3[], height: number): number {
   let maximum = 0
   for (const layer of layers) {
     if (!layer.visible || layer.opacity <= 0) continue
     if (layer.type === 'group') {
-      maximum = Math.max(maximum, maximumVisibleBlurRadius(layer.children))
+      maximum = Math.max(maximum, maximumVisibleBlurRadius(layer.children, height))
       continue
     }
-    maximum = Math.max(maximum, finiteRadius(layer) ?? 0)
+    maximum = Math.max(maximum, finiteRadius(layer, height) ?? 0)
   }
   return maximum
 }
@@ -63,7 +64,7 @@ export function resolveImageEditorBlurPreviewMipV3(
   document: ImageEditDocumentV3,
   viewport: { zoom: number; devicePixelRatio: number },
 ): number | undefined {
-  const radius = maximumVisibleBlurRadius(document.layers)
+  const radius = maximumVisibleBlurRadius(document.layers, document.geometry.height)
   if (radius <= 0) return undefined
   const physicalPixelsPerDocumentPixel = viewport.zoom * viewport.devicePixelRatio
   if (!Number.isFinite(physicalPixelsPerDocumentPixel) || physicalPixelsPerDocumentPixel <= 0) {
@@ -91,7 +92,7 @@ function scaleLayers(
   return layers.map((layer) => {
     if (layer.type === 'group') return { ...layer, children: scaleLayers(layer.children, scale) }
     if (layer.type === 'effect'
-      && (layer.effectId === 'image.gaussian-blur-v2' || layer.effectId === 'image.fast-blur-v3')) {
+      && layer.effectId === 'image.fast-blur-v3') {
       return {
         ...layer,
         params: {

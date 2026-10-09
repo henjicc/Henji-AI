@@ -100,8 +100,7 @@ function dependencyPlan(
     nodes: plan.nodes
       .filter((node) => needed.has(node.id))
       .map((node): ImageEditRenderPlanNode => {
-        if (node.definitionId === 'effect.gaussian-blur'
-          || node.definitionId === 'effect.fast-blur') {
+        if (node.definitionId === 'effect.fast-blur') {
           return { ...node, parameters: { ...node.parameters, mip } }
         }
         if (node.definitionId === 'effect.blur-v1') {

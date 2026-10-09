@@ -31,6 +31,7 @@ interface CompileState {
   layerEvaluationOrder: string[];
   color: Readonly<ImageEditColorModeV3>;
   sequence: number;
+  effectQuality: 'interactive' | 'final';
   referenceWidth: number;
   referenceHeight: number;
 }
@@ -161,7 +162,7 @@ function compileEffectLayer(
     path,
     definitionId,
     [belowNodeId],
-    { ...layer.params, ...commonParameters(layer), ...(definitionId === 'adjustment.color-grade' ? { referenceWidth: state.referenceWidth, referenceHeight: state.referenceHeight } : {}) },
+    { ...layer.params, ...commonParameters(layer), referenceWidth: state.referenceWidth, referenceHeight: state.referenceHeight, effectQuality: state.effectQuality },
   ) ?? belowNodeId;
 }
 
@@ -268,6 +269,7 @@ export function compileImageEditRenderPlanV3(
   document: ImageEditDocumentV3,
   registry: ImageEditRenderNodeRegistry,
   quality: ImageEditRenderQuality,
+  effectQuality: 'interactive' | 'final' = quality === 'export' ? 'final' : 'interactive',
 ): ImageEditRenderPlan {
   const state: CompileState = {
     registry,
@@ -275,6 +277,7 @@ export function compileImageEditRenderPlanV3(
     diagnostics: [],
     layerEvaluationOrder: [],
     color: document.color,
+    effectQuality,
     sequence: 0, referenceWidth: document.geometry.width, referenceHeight: document.geometry.height,
   };
   const outputNodeId = compileLayers(state, document.layers, [], null);
@@ -283,6 +286,7 @@ export function compileImageEditRenderPlanV3(
     : 'transparent';
   const outputHash = createImageEditRenderHash(hashObject({
     rootHash,
+    quality,
     color: document.color,
     geometry: document.geometry,
   }));

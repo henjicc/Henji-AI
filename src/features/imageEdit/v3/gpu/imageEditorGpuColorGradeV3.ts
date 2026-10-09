@@ -53,7 +53,7 @@ export class ImageEditorGpuColorGradeV3 {
     this.passes.push({ draw: drawable, target: output })
   }
   async prepare(adjustment: ImageEditorGpuGraphAdjustmentV3, input: Target, output: Target, mask: Target | null, color: ImageEditColorModeV3, view: { origin: readonly [number, number]; size: readonly [number, number]; basisX: readonly [number, number]; basisY: readonly [number, number] }): Promise<void> {
-    const { opacity: _opacity, blendMode: _blend, transform: _transform, referenceWidth: _width, referenceHeight: _height, ...value } = adjustment.parameters
+    const { opacity: _opacity, blendMode: _blend, transform: _transform, referenceWidth: _width, referenceHeight: _height, effectQuality: _quality, ...value } = adjustment.parameters
     const params = imageColorGradeRuntimeParams(value)
     assertImageColorGradeLutDomain(color, params)
     const plan = planColorGrade(params, input.size[0], input.size[1], view.size)

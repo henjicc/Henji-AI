@@ -24,8 +24,8 @@ describe('图片编辑 V3 viewport 实际采样网格', () => {
     document.layers.push(createImageEditEffectLayerV3(
       'effect',
       '效果',
-      'image.gaussian-blur-v2',
-      { radius: 2 },
+      'gaussian_blur',
+      { sigma_fraction_height: .02 },
     ))
     const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
     const effect = plan.nodes.find((node) => node.definitionId.startsWith('effect.'))

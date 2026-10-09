@@ -1,3 +1,4 @@
+import { parseImageEditSharedEffectParametersV3 } from './operationCatalog';
 import { parseImageColorGradeParams } from '../../imaging/adjustments/schema';
 import {
   createDefaultImageEditColorModeV3,
@@ -88,7 +89,7 @@ export function createImageEditEffectLayerV3(
     ...createImageEditLayerCommonV3(id, name),
     type: 'effect',
     effectId,
-    params,
+    params: parseImageEditSharedEffectParametersV3(effectId, params),
     renderable,
   };
 }

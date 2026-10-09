@@ -68,8 +68,8 @@ export class ImageEditorGpuGaussianBlurRendererV3 {
       this.prepared.push({ effect: instance, target: destination })
       source = destination; sourceWindow = window
     }
-    this.output = output
-    return output
+    this.output = plan.passes.length ? output : input
+    return this.output
   }
 
   async compile(): Promise<void> {

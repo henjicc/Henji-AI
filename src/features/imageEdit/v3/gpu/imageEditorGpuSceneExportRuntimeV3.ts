@@ -84,7 +84,9 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
     const total = this.options.sessionBudgetBytes ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3
     const available = Math.max(1, total - previewBytes)
     const compositor = this.options.createCompositor(available)
-    compositor.syncScene(scene)
+    const finalScene: ImageEditorGpuRasterSceneV3 = { ...scene, graph: scene.graph.map(node => node.kind === 'effect'
+      ? { ...node, fingerprint: `${node.fingerprint}:final`, parameters: { ...node.parameters, effectQuality: 'final' } } : node) }
+    compositor.syncScene(finalScene)
     const job: ExportJobV3 = {
       request,
       compositor,
@@ -282,7 +284,9 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
       - (job.compositor.estimatedResidentGpuBytes?.() ?? 0) - bytes)
     const compositor = this.options.createCompositor(available)
     try {
-      compositor.syncScene(scene)
+      const finalScene: ImageEditorGpuRasterSceneV3 = { ...scene, graph: scene.graph.map(node => node.kind === 'effect'
+      ? { ...node, fingerprint: `${node.fingerprint}:final`, parameters: { ...node.parameters, effectQuality: 'final' } } : node) }
+    compositor.syncScene(finalScene)
       compositor.updateExportViewport?.(fullAnalysisLayout(job.request.requestId, analysis, scene))
       await this.waitForResources(job, compositor)
       this.assertCompositorBudget(job, compositor, bytes)

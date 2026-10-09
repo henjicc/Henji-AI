@@ -127,7 +127,7 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     document.layers = [
       raster(111, '源'),
       createImageEditEffectLayerV3(
-        `gaussian-${radius}`, '高斯模糊', 'image.gaussian-blur-v2', { radius },
+        `gaussian-${radius}`, '高斯模糊', 'gaussian_blur', { sigma_fraction_height: radius / HEIGHT },
       ),
     ]
     const result = await compareDocument(document, tiles([111]))

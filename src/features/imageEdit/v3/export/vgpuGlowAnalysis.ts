@@ -88,8 +88,7 @@ function dependencyPlan(
     ...plan,
     nodes: plan.nodes
       .filter((node) => needed.has(node.id))
-      .map((node) => node.definitionId === 'effect.gaussian-blur'
-        || node.definitionId === 'effect.fast-blur'
+      .map((node) => node.definitionId === 'effect.fast-blur'
         ? { ...node, parameters: { ...node.parameters, mip } }
         : node),
     passes: [],

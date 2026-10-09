@@ -1,9 +1,10 @@
+import { gaussianParametersFromNodeV3 } from '@/core/imageEdit/v3/builtInRenderNodes'
+import { resolveImageGaussianPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
 import {
   createBuiltInImageEditRenderNodeRegistry,
   mapImageEditOutputPixelToSourceV3,
   resolveImageEditOutputGeometryV3,
   resolveImageEditOutputSourceRectV3,
-  resolveGaussianBlurV2Geometry,
   type ImageEditDocumentV3,
   type ImageEditRect,
   type ImageEditRenderPlan,
@@ -58,13 +59,12 @@ export function resolveImageEditorV3ExportNeighborhood(
     const definition = registry.get(node.definitionId)
     const localHalo = definition?.localHalo?.(node.parameters, 0) ?? 0
     if (localHalo > 0) halo += Math.ceil(localHalo)
-    if (node.definitionId === 'effect.gaussian-blur') {
-      const radiusValue = node.parameters.radius
-      const radius = typeof radiusValue === 'number' && Number.isFinite(radiusValue)
-        ? Math.max(0, radiusValue)
-        : 0
-      const geometry = resolveGaussianBlurV2Geometry({ radius, mip: 0 })
-      alignment = Math.max(alignment, 2 ** geometry.pyramidLevel)
+    if (node.definitionId === 'effect.gaussian_blur') {
+      const gaussian = resolveImageGaussianPlan(gaussianParametersFromNodeV3(node.parameters), {
+        referenceSize: { width: plan.geometry.width, height: plan.geometry.height },
+        outputSize: { width: plan.geometry.width, height: plan.geometry.height }, quality: 'final',
+      })
+      alignment = Math.max(alignment, ...gaussian.alignment)
     }
   }
   return { halo, alignment }

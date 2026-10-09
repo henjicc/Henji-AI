@@ -1,3 +1,5 @@
+import { gaussianParametersFromNodeV3 } from '@/core/imageEdit/v3/builtInRenderNodes'
+import { resolveImageGaussianPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
@@ -39,12 +41,16 @@ export function resolveImageEditorGpuExportHaloV3(
 ): number {
   let halo = 0
   for (const node of plan.nodes) {
-    if (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur') {
+    if (node.definitionId === 'effect.gaussian_blur') {
+      halo += Math.max(...resolveImageGaussianPlan(gaussianParametersFromNodeV3(node.parameters), { referenceSize: { width: plan.geometry.width, height: plan.geometry.height }, outputSize: { width, height }, quality: 'final' }).halo)
+      continue
+    }
+    if (node.definitionId === 'effect.blur-v1') {
       const legacy = node.definitionId === 'effect.blur-v1'
       const radius = finite(node.parameters[legacy ? 'radiusPixels' : 'radius'])
       const mip = legacy ? 0 : finite(node.parameters.mip)
       halo += resolveGaussianBlurV2Geometry({
-        radius: legacy ? Math.min(120, radius) : radius,
+        radius: radius,
         mip,
       }).haloInDocumentPixels
       continue
@@ -88,7 +94,8 @@ export function createImageEditorGpuExportPlanV3(options: {
   tileSize: number
 }): ImageEditorGpuExportPlanV3 {
   const halo = resolveImageEditorGpuExportHaloV3(options.plan, options.width, options.height)
-  const multiscale = halo > IMAGE_EDITOR_GPU_EXPORT_LOCAL_HALO_V3
+  const exactGaussian = options.plan.nodes.some(node => node.definitionId === 'effect.gaussian_blur')
+  const multiscale = !exactGaussian && halo > IMAGE_EDITOR_GPU_EXPORT_LOCAL_HALO_V3
   const executionHalo = multiscale ? IMAGE_EDITOR_GPU_EXPORT_LOCAL_HALO_V3 : halo
   const columns = Math.ceil(options.width / options.tileSize)
   const rows = Math.ceil(options.height / options.tileSize)

@@ -16,7 +16,7 @@ const context = { exposure: 'assistant' as const, requestId: 'transaction-scope-
   permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
 async function fixture() {
   const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: `concurrency-${crypto.randomUUID()}` })
-  document.layers = [createImageEditEffectLayerV3('effect', '原名称', 'image.gaussian-blur-v2', { radius: 8 })]
+  document.layers = [createImageEditEffectLayerV3('effect', '原名称', 'gaussian_blur', { sigma_fraction_height: 1 })]
   const bus = new ImageEditCommandBusV3(document)
   const save = vi.fn(async (doc: ImageEditDocumentV3) => ({ documentId: doc.id, revision: doc.revision, previewRef: null }))
   dispose = registerPersistedImageEditTestSession(`session-${document.id}`, bus, { save })

@@ -43,17 +43,18 @@ function json(value: unknown): ImageEditJsonObjectV3 {
   return JSON.parse(JSON.stringify(value)) as ImageEditJsonObjectV3
 }
 
-it('高斯预算不再把 120px 以上截断；mip 只在内部像素 ABI 缩放一次', () => {
+it('高斯预算保留完整 halo，并随完整输出网格缩小', () => {
   const source = `sha256:${'b'.repeat(64)}` as const
   const estimate = (radius: number, mip: number): number => {
     const document = createImageEditDocumentV3({ width: 1600, height: 1000 })
-    document.layers = [createImageEditRasterLayerV3('source', '源', source), createImageEditEffectLayerV3('blur', '高斯', 'image.gaussian-blur-v2', { radius, mip })]
+    document.layers = [createImageEditRasterLayerV3('source', '源', source), createImageEditEffectLayerV3('blur', '高斯', 'gaussian_blur', { sigma_fraction_height: radius / 1000 })]
     const compiled = compileImageEditorGpuRasterSceneV3(document, [{ resourceRef: source, byteLength: 6400000, mediaType: 'image/png' }])
     if (!compiled.supported) throw new Error(compiled.reason)
-    return estimateImageEditorGpuGraphResidentBytesV3(compiled.scene, [1600, 1000])
+    return estimateImageEditorGpuGraphResidentBytesV3(compiled.scene, [Math.ceil(1600 / 2 ** mip), Math.ceil(1000 / 2 ** mip)])
   }
-  expect(estimate(240, 0)).toBeGreaterThan(estimate(120, 0))
-  expect(estimate(240, 1)).toBe(estimate(120, 0))
+  // 宽核会选择更深金字塔，scratch 不是 sigma 的单调函数；不能再统一截为 120px。
+  expect(estimate(240, 0)).not.toBe(estimate(120, 0))
+  expect(estimate(240, 1)).toBeLessThan(estimate(120, 0))
 })
 
 it('共享调整的边界与 ping-pong target 进入预算；中性不保留额外 target', () => {

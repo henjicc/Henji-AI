@@ -1,3 +1,4 @@
+import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import {
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
@@ -65,8 +66,7 @@ export interface ImageEditorGpuGraphCompositeNodeV3 extends ImageEditorGpuGraphN
 }
 
 export interface ImageEditorGpuGraphAdjustmentV3 {
-  definitionId: 'adjustment.exposure' | 'adjustment.curves'
-    | 'adjustment.temperature-tint' | 'adjustment.hsl' | 'adjustment.color-grade'
+  definitionId: string
   parameters: ImageEditJsonObjectV3
   opacity: number
   blendMode: ImageEditBlendModeV3
@@ -82,8 +82,7 @@ export interface ImageEditorGpuGraphAdjustmentNodeV3 extends ImageEditorGpuGraph
 export interface ImageEditorGpuGraphEffectNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
   kind: 'effect'
   inputNodeId: string
-  definitionId: 'effect.blur-v1' | 'effect.gaussian-blur'
-    | 'effect.fast-blur' | 'effect.diffusion' | 'effect.vgpu-glow'
+  definitionId: string
   parameters: ImageEditJsonObjectV3
   opacity: number
   blendMode: ImageEditBlendModeV3
@@ -119,7 +118,6 @@ export type ImageEditorGpuRasterSceneCompilationV3 =
   | { supported: true; scene: ImageEditorGpuRasterSceneV3 }
   | { supported: false; reason: string }
 
-const registry = createBuiltInImageEditRenderNodeRegistry()
 
 /**
  * 把 CPU RenderPlan 真值投影为会话 retained GPU RenderGraph。大图 source 仍由
@@ -129,11 +127,17 @@ export function compileImageEditorGpuRasterSceneV3(
   document: ImageEditDocumentV3,
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[],
   sourcePyramids?: Readonly<Record<string, ImageEditorV3PyramidDescriptor>>,
+  quality: ImageEditRenderQuality = 'stable',
 ): ImageEditorGpuRasterSceneCompilationV3 {
   const descriptors = new Map(resourceDescriptors.map((entry) => [entry.resourceRef, entry]))
-  const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
+  const registry = createBuiltInImageEditRenderNodeRegistry()
+  const plan = compileImageEditRenderPlanV3(document, registry, quality)
   if (plan.diagnostics.some((entry) => entry.code !== 'empty-effect-scope')) {
     return { supported: false, reason: plan.diagnostics.map((entry) => entry.message).join('；') }
+  }
+  if (plan.nodes.some(node => node.definitionId === 'effect.gaussian_blur')
+    && (document.geometry.crop !== null || document.geometry.orientation.rotate !== 0 || document.geometry.orientation.mirrored)) {
+    return { supported: false, reason: '高斯模糊需要完整源网格，当前裁剪/朝向组合由 CPU 精确执行' }
   }
   const graph: ImageEditorGpuRenderGraphNodeV3[] = []
   const required = new Map<string, ImageEditorGpuSceneTileKeyV3>()
@@ -146,7 +150,7 @@ export function compileImageEditorGpuRasterSceneV3(
     for (const pass of plan.passes) {
       const nodes = pass.nodeIds.map((id) => planNodeMap.get(id)).filter(isPlanNode)
       if (nodes.length === 0) continue
-      if (canFuseExposure(nodes)) {
+      if (canFuseGpuAdjustments(nodes)) {
         const last = nodes[nodes.length - 1]
         graph.push({
           kind: 'adjustment', nodeId: last.id, layerId: last.layerId,
@@ -253,18 +257,15 @@ function compileNode(
       fingerprint: node.subtreeHash, inputNodeId: node.inputNodeIds[0],
     }
   }
-  if (node.definitionId.startsWith('adjustment.')) {
+  const binding = createBuiltInImageEditRenderNodeRegistry().get(node.definitionId)?.gpu
+  if (binding?.kind === 'adjustment') {
     return {
       kind: 'adjustment', nodeId: node.id, layerId: node.layerId,
       fingerprint: node.subtreeHash, inputNodeId: node.inputNodeIds[0],
       adjustments: [adjustment(node, descriptors, required)],
     }
   }
-  if (node.definitionId === 'effect.blur-v1'
-    || node.definitionId === 'effect.gaussian-blur'
-    || node.definitionId === 'effect.fast-blur'
-    || node.definitionId === 'effect.diffusion'
-    || node.definitionId === 'effect.vgpu-glow') {
+  if (binding?.kind === 'effect') {
     const mask = compileMask(node.mask, descriptors, required)
     if (typeof mask === 'string') return mask
     return {
@@ -274,7 +275,7 @@ function compileNode(
       opacity: numberParameter(node, 'opacity', 1), blendMode: blendParameter(node), mask,
     }
   }
-  return `图层 ${node.layerId} 的 ${node.definitionId} 未映射到 GPU`
+  return `图层 ${node.layerId} 的 ${node.definitionId} 未声明 GPU kernel，不能执行`
 }
 
 function adjustment(
@@ -284,8 +285,8 @@ function adjustment(
 ): ImageEditorGpuGraphAdjustmentV3 {
   const mask = compileMask(node.mask, descriptors, required)
   if (typeof mask === 'string') throw new Error(mask)
-  if (!['adjustment.exposure', 'adjustment.curves', 'adjustment.temperature-tint', 'adjustment.hsl', 'adjustment.color-grade'].includes(node.definitionId)) {
-    throw new Error(`调整图层 ${node.layerId} 未映射到 GPU`)
+  if (createBuiltInImageEditRenderNodeRegistry().get(node.definitionId)?.gpu?.kind !== 'adjustment') {
+    throw new Error(`GPU 不支持调整节点 ${node.definitionId}：未声明 GPU kernel`)
   }
   return {
     definitionId: node.definitionId as ImageEditorGpuGraphAdjustmentV3['definitionId'],
@@ -347,9 +348,11 @@ function addRequired(map: Map<string, ImageEditorGpuSceneTileKeyV3>, key: ImageE
   map.set(`${key.format}:${key.resourceRef}:${key.mip}:${key.tileX}:${key.tileY}:${key.contentVersion}`, key)
 }
 
-function canFuseExposure(nodes: readonly ImageEditRenderPlanNode[]): boolean {
-  return nodes.length > 1 && nodes.length <= 8 && nodes.every((node) => node.definitionId === 'adjustment.exposure'
-    && node.mask === null && numberParameter(node, 'opacity', 1) === 1 && blendParameter(node) === 'normal')
+function canFuseGpuAdjustments(nodes: readonly ImageEditRenderPlanNode[]): boolean {
+  const binding = createBuiltInImageEditRenderNodeRegistry().get(nodes[0].definitionId)?.gpu
+  return nodes.length > 1 && nodes.length <= (binding?.fusedCapacity ?? 1)
+    && nodes.every(node => node.definitionId === nodes[0].definitionId && node.mask === null
+      && numberParameter(node, 'opacity', 1) === 1 && blendParameter(node) === 'normal')
 }
 
 function collectRasterLayers(

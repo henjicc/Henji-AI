@@ -12,6 +12,7 @@ import { decodeCodeAsset, encodeCodeAsset } from '../videoEdit/codeAsset'
 import { parseVersionedPersistenceJson, readLocalPersistenceJson, readStoredPersistenceJson } from './versionedJson'
 import { backupPersistenceSnapshot, persistenceBackupLocation } from './backup'
 import { parseImageEditDocumentV3 } from '../imageEdit/v3/documentCodec'
+import { imageWorkingCopySchema } from './imageSchemas'
 
 describe('持久格式逐版本链', () => {
   const schema = z.object({ label: z.string(), count: z.number() }).strict()
@@ -76,6 +77,15 @@ describe('持久格式逐版本链', () => {
 })
 
 describe('Schema结构指纹', () => {
+  it('图片高斯黄金样本保留 canonical 参数，旧半径字段明确拒绝', () => {
+    const raw = JSON.parse(fs.readFileSync('tests/fixtures/persistence/image-working-copy/v3.json', 'utf8')) as { document: { layers: Array<{ type: string; effectId?: string; params?: Record<string, unknown> }> } }
+    const effect = raw.document.layers.find(layer => layer.effectId === 'gaussian_blur')
+    expect(effect?.params).toEqual({ sigma_fraction_height: .009, axis: 'horizontal', edge_mode: 'transparent' })
+    expect(imageWorkingCopySchema.safeParse(raw).success).toBe(true)
+    if (!effect) throw new Error('缺少 canonical 高斯黄金样本')
+    effect.params = { radius: 12, mip: 0 }
+    expect(imageWorkingCopySchema.safeParse(raw).success).toBe(false)
+  })
   it('字段声明顺序不影响；类型、默认值、必填/可选和未知字段策略变化都会改变', () => {
     const hash = (schema: z.ZodType): string => persistenceSchemaStructure({ data: schema })
     const base = z.object({ label: z.string(), count: z.number().default(1) }).strict()

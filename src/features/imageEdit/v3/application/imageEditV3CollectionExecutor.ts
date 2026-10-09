@@ -30,8 +30,6 @@ type CollectionEntityType = 'image_edit.layer' | 'image_edit.group'
 
 const logger = createLogger('features.imageEdit.v3.application_collection')
 const UNDO_PREFIX = 'image-edit-v3-collection-undo:'
-const EFFECT_IDS = new Set(listCreatableImageEditOperationIdsV3('effect'))
-const ADJUSTMENT_IDS = new Set(listCreatableImageEditOperationIdsV3('adjustment'))
 
 interface UndoPayload {
   entityType: CollectionEntityType
@@ -74,6 +72,7 @@ function createLayer(properties: Record<string, JsonValue>): ImageEditLayerV3 {
     return createImageEditAnnotationLayerV3(id, name)
   }
   if (type === 'effect') {
+    const EFFECT_IDS = new Set(listCreatableImageEditOperationIdsV3('effect'))
     const effectId = requiredString(definitionId, 'definition_id')
     if (!EFFECT_IDS.has(effectId)) {
       throw new Error(`INVALID_INPUT：不支持的效果 ${effectId}；可用 ${[...EFFECT_IDS].join('、')}。`)
@@ -81,6 +80,7 @@ function createLayer(properties: Record<string, JsonValue>): ImageEditLayerV3 {
     return createImageEditEffectLayerV3(id, name, effectId, requiredParams(params))
   }
   if (type === 'adjustment') {
+    const ADJUSTMENT_IDS = new Set(listCreatableImageEditOperationIdsV3('adjustment'))
     const adjustmentId = requiredString(definitionId, 'definition_id')
     if (!ADJUSTMENT_IDS.has(adjustmentId)) {
       throw new Error(`INVALID_INPUT：不支持的调整 ${adjustmentId}；可用 ${[...ADJUSTMENT_IDS].join('、')}。`)

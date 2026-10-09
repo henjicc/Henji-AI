@@ -21,7 +21,7 @@ export interface GaussianBlurV2Geometry {
   readonly radiusAtPyramidLevel: number
 }
 export const GAUSSIAN_BLUR_V2_CONTRACT: CpuReferenceKernelContract = {
-  id: 'effect.gaussian-blur', version: 2, inputColorDomain: 'linear-light', outputColorDomain: 'linear-light', alpha: 'premultiplied', precision: 'float32', maskMix: 'source-to-processed',
+  id: 'effect.gaussian_blur', version: 2, inputColorDomain: 'linear-light', outputColorDomain: 'linear-light', alpha: 'premultiplied', precision: 'float32', maskMix: 'source-to-processed',
 }
 /** 仅保留旧 dispatch 的输入输出包装；滤波语义统一为线性光，没有半径封顶。 */
 export const LEGACY_GAUSSIAN_BLUR_V1_CONTRACT: CpuReferenceKernelContract = {

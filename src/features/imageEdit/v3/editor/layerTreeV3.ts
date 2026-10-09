@@ -1,8 +1,4 @@
-import { parseImageColorGradeParams } from '@/core/imaging/adjustments/schema'
-import {
-  createDefaultDiffusionOperationParams,
-  createDefaultVgpuGlowOperationParams,
-} from '@/core/imageEdit'
+import { createImageEditOperationParametersV3 } from '@/core/imageEdit/v3/operationCatalog'
 import {
   createImageEditAdjustmentLayerV3,
   createImageEditAnnotationLayerV3,
@@ -14,7 +10,6 @@ import {
 import type { ImageEditWorkingSpaceV3 } from '@/core/imageEdit/v3/colorTypes'
 import type {
   ImageEditGroupLayerV3,
-  ImageEditJsonObjectV3,
   ImageEditLayerV3,
 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorLayerKindV3 } from '../application/imageEditorHostProfiles'
@@ -193,33 +188,6 @@ export function createImageEditDuplicateIdMapV3(layer: ImageEditLayerV3): Record
   return idMap
 }
 
-function toJsonObject(value: object): ImageEditJsonObjectV3 {
-  return JSON.parse(JSON.stringify(value)) as ImageEditJsonObjectV3
-}
-
-function effectParameters(effectId: string): ImageEditJsonObjectV3 {
-  if (effectId === 'image.fast-blur-v3') return { radius: 12 }
-  if (effectId === 'image.gaussian-blur-v2') return { radius: 12 }
-  if (effectId === 'image.diffusion') return toJsonObject(createDefaultDiffusionOperationParams())
-  if (effectId === 'image.vgpu-glow') return toJsonObject(createDefaultVgpuGlowOperationParams())
-  return {}
-}
-
-function adjustmentParameters(
-  adjustmentId: string,
-  workingSpace: ImageEditWorkingSpaceV3,
-): ImageEditJsonObjectV3 {
-  if (adjustmentId === 'color_grade') return parseImageColorGradeParams({})
-  if (adjustmentId === 'exposure') return { stops: 0, offset: 0, gamma: 1 }
-  if (adjustmentId === 'curves') {
-    const identity = [{ x: 0, y: 0 }, { x: 1, y: 1 }]
-    return { master: identity, red: identity, green: identity, blue: identity }
-  }
-  if (adjustmentId === 'temperature-tint') return { temperature: 0, tint: 0, workingSpace }
-  if (adjustmentId === 'hsl') return { hueDegrees: 0, saturation: 0, lightness: 0 }
-  return {}
-}
-
 export function createImageEditLayerFromChoiceV3(
   choice: ImageEditLayerCreationChoiceV3,
   workingSpace: ImageEditWorkingSpaceV3,
@@ -230,13 +198,13 @@ export function createImageEditLayerFromChoiceV3(
   if (choice.kind === 'group') return createImageEditGroupLayerV3(id, choice.name)
   if (choice.kind === 'effect') {
     const effectId = choice.subtype ?? 'image.fast-blur-v3'
-    return createImageEditEffectLayerV3(id, choice.name, effectId, effectParameters(effectId))
+    return createImageEditEffectLayerV3(id, choice.name, effectId, createImageEditOperationParametersV3(effectId, workingSpace))
   }
   const adjustmentId = choice.subtype ?? 'exposure'
   return createImageEditAdjustmentLayerV3(
     id,
     choice.name,
     adjustmentId,
-    adjustmentParameters(adjustmentId, workingSpace),
+    createImageEditOperationParametersV3(adjustmentId, workingSpace),
   )
 }

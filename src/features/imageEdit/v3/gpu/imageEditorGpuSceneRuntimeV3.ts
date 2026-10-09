@@ -114,6 +114,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
             request.sourcePyramids,
           )
           this.scene = compilation.supported ? compilation.scene : null
+          if (!compilation.supported) this.emitFailure('composition-not-ready', null, `GPU 不支持，转 CPU：${compilation.reason}`, true)
           this.states.peek()?.compositor.syncScene(this.scene)
           refreshImageEditorGpuSceneViewportProtectionsV3(
             this.resources, this.states.peek()?.compositor ?? null,

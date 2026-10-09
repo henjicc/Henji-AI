@@ -28,8 +28,8 @@ function documentWithLayers(): ImageEditDocumentV3 {
   const blur = createImageEditEffectLayerV3(
     'blur',
     '模糊',
-    'image.gaussian-blur-v2',
-    { radius: 20 },
+    'gaussian_blur',
+    { sigma_fraction_height: .002 },
   )
   return {
     ...createImageEditDocumentV3({ width: 20_000, height: 10_000, documentId: 'preview-doc' }),
@@ -68,7 +68,7 @@ describe('ImageEditor V3 瞬态预览文档', () => {
           kind: 'parameter',
           targetId: 'blur',
           baseRevision: 7,
-          value: { radius: 72 },
+          value: { sigma_fraction_height: .0072 },
         },
       },
     })
@@ -76,7 +76,7 @@ describe('ImageEditor V3 瞬态预览文档', () => {
     expect(projected).not.toBe(document)
     expect(projected.revision).toBe(7)
     expect(document.layers[2].type === 'effect' && document.layers[2].params).toBe(originalParams)
-    expect(projected.layers[2]).toMatchObject({ type: 'effect', params: { radius: 72 } })
+    expect(projected.layers[2]).toMatchObject({ type: 'effect', params: { sigma_fraction_height: .0072 } })
   })
 
   it('过期覆盖被忽略，裁剪覆盖只投影输出几何', () => {
@@ -86,7 +86,7 @@ describe('ImageEditor V3 瞬态预览文档', () => {
       previewOverrides: {
         stale: {
           id: 'stale', kind: 'parameter', targetId: 'blur', baseRevision: 6,
-          value: { radius: 99 },
+          value: { sigma_fraction_height: .0099 },
         },
         crop: {
           id: 'crop', kind: 'crop', targetId: document.id, baseRevision: 7,
@@ -100,7 +100,7 @@ describe('ImageEditor V3 瞬态预览文档', () => {
     expect(projected.revision).toBe(document.revision)
     expect(projected.geometry.crop).toEqual({ x: 10, y: 20, width: 800, height: 600 })
     expect(projected.geometry.orientation).toEqual({ rotate: 90, mirrored: true })
-    expect(projected.layers[2]).toMatchObject({ params: { radius: 20 } })
+    expect(projected.layers[2]).toMatchObject({ params: { sigma_fraction_height: .002 } })
   })
 
   it('图层求值顺序决定模糊是否处理标注', () => {

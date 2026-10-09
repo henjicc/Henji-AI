@@ -155,7 +155,7 @@ describe('图片编辑 V3 独立导出派生视图', () => {
     const group = createImageEditGroupLayerV3('group', '素材组')
     group.children = [
       document.layers[0],
-      createImageEditEffectLayerV3('blur', '模糊', 'image.gaussian-blur-v2', { radius: 1 }),
+      createImageEditEffectLayerV3('blur', '模糊', 'gaussian_blur', { sigma_fraction_height: .01 }),
     ]
     document.layers = [group]
     const view = createImageEditExportTargetViewV3(document, { kind: 'layer-group', layerId: 'group' })

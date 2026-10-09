@@ -57,8 +57,8 @@ describe('V3 CPU RenderPlan 执行器', () => {
     const blur = createImageEditEffectLayerV3(
       'blur',
       '高斯模糊',
-      'image.gaussian-blur-v2',
-      { radius: 0.8, mip: 0 },
+      'gaussian_blur',
+      { sigma_fraction_height: .8 },
     );
 
     const blurredMarks = await render(document([source, marks, blur]));

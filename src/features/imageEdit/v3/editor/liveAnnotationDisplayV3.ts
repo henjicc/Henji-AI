@@ -47,7 +47,7 @@ export function resolveLiveBlurRadiusV3(
 ): number | null {
   const top = [...document.layers].reverse().find((layer) => layer.visible)
   if (top?.type !== 'effect'
-    || (top.effectId !== 'image.fast-blur-v3' && top.effectId !== 'image.gaussian-blur-v2')) return null
+    || top.effectId !== 'image.fast-blur-v3') return null
   const radius = top.params.radius
   return typeof radius === 'number' && Number.isFinite(radius) && radius > 0 ? radius : null
 }

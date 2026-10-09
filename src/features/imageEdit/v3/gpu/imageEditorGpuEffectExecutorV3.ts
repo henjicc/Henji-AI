@@ -1,3 +1,6 @@
+import { createBuiltInImageEditRenderNodeRegistry, gaussianParametersFromNodeV3 } from '@/core/imageEdit/v3/builtInRenderNodes'
+import { resolveImageGaussianPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
+import type { EffectEvaluationContext } from '@/core/imaging/effects/descriptor'
 import { effect, target, type Effect, type Gpu, type Target, type Texture } from 'vgpu'
 
 import type { ImageEditorGpuGraphEffectNodeV3 } from './imageEditorGpuRasterSceneCompilerV3'
@@ -65,19 +68,16 @@ export class ImageEditorGpuEffectExecutorV3 {
     outputPixelsPerDocumentPixel = 1,
     effectRecipeSize?: readonly [number, number],
     documentColor?: ImageEditColorModeV3,
+    evaluation?: EffectEvaluationContext,
   ): ImageEditorGpuPreparedEffectV3 {
-    const dependencies = [input, mask]
+    const dependencies = [input, mask, evaluation?.quality, evaluation?.outputSize.width, evaluation?.outputSize.height]
     const existing = this.retained.get(node.nodeId)
     const direct = node.opacity === 1 && node.blendMode === 'normal' && node.mask === null
     const rendererKey = `${node.nodeId}:${node.definitionId}`
-    const renderer = this.renderers.get(rendererKey)
-      ?? (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur'
-        ? new ImageEditorGpuGaussianBlurRendererV3(this.gpu, this.targets, this.onCompiled)
-        : node.definitionId === 'effect.fast-blur'
-        ? new ImageEditorGpuFastBlurRendererV3(this.gpu, this.targets, this.onCompiled)
-        : node.definitionId === 'effect.diffusion'
-          ? new ImageEditorGpuDiffusionRendererV3(this.gpu, this.targets, this.onCompiled)
-          : new ImageEditorGpuGlowRendererV3(this.gpu, this.targets, this.onCompiled))
+    const kernel = createBuiltInImageEditRenderNodeRegistry().get(node.definitionId)?.gpu?.kernel
+    const binding = kernel ? EFFECT_KERNELS[kernel] : undefined
+    if (!binding) throw new Error(`GPU 不支持效果 ${node.definitionId}：没有宿主 kernel 绑定`)
+    const renderer = this.renderers.get(rendererKey) ?? binding.create(this.gpu, this.targets, this.onCompiled)
     this.renderers.set(rendererKey, renderer)
     if (existing && existing.fingerprint === fingerprint && sameDependencies(existing.dependencies, dependencies)) {
       return { rendererKey, node, input, mask, output: existing.output, processed: existing.output,
@@ -88,38 +88,8 @@ export class ImageEditorGpuEffectExecutorV3 {
       label: `image-editor-graph-effect:${node.nodeId}`,
     })
     const processedOutput = direct ? output : this.targets.full(2, input.size)
-    const processed = node.definitionId === 'effect.blur-v1'
-      || node.definitionId === 'effect.gaussian-blur'
-      ? (renderer as ImageEditorGpuGaussianBlurRendererV3).prepare(
-        input,
-        numberParameter(node.parameters[
-          node.definitionId === 'effect.blur-v1' ? 'radiusPixels' : 'radius'
-        ], 0) * outputPixelsPerDocumentPixel,
-        node.definitionId === 'effect.blur-v1' ? 0 : numberParameter(node.parameters.mip, 0),
-        processedOutput,
-        node.definitionId === 'effect.blur-v1',
-        IMAGE_EDITOR_GPU_TRANSFER_CODE_V3[documentColor?.transferFunction ?? 'srgb'],
-        documentColor?.hdrMetadata?.referenceWhiteNits ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
-      )
-      : node.definitionId === 'effect.fast-blur'
-      ? (renderer as ImageEditorGpuFastBlurRendererV3).prepare(
-        input, numberParameter(node.parameters.radius, 0) * outputPixelsPerDocumentPixel
-          / (2 ** numberParameter(node.parameters.mip, 0)),
-        processedOutput,
-      )
-      : node.definitionId === 'effect.diffusion'
-        ? (renderer as ImageEditorGpuDiffusionRendererV3).prepare(input,
-          DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(
-            DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
-            { width: effectRecipeSize?.[0] ?? input.size[0],
-              height: effectRecipeSize?.[1] ?? input.size[1], quality: 'high' },
-          ), processedOutput)
-        : (renderer as ImageEditorGpuGlowRendererV3).prepare(input,
-          VGPU_GLOW_V4_RECIPE_ADAPTER.compileRecipe(
-            VGPU_GLOW_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
-            { width: effectRecipeSize?.[0] ?? input.size[0],
-              height: effectRecipeSize?.[1] ?? input.size[1] },
-          ), processedOutput)
+    const processed = binding.prepare(renderer, { node, input, output: processedOutput,
+      scale: outputPixelsPerDocumentPixel, recipeSize: effectRecipeSize, color: documentColor, evaluation })
     const finalOutput = direct ? processed : output
     const ownsOutput = finalOutput === output
     if (!ownsOutput) output.color.destroy()
@@ -197,4 +167,53 @@ function blendIndex(mode: ImageEditorGpuGraphEffectNodeV3['blendMode']): number 
 }
 function sameDependencies(left: readonly unknown[], right: readonly unknown[]): boolean {
   return left.length === right.length && left.every((entry, index) => entry === right[index])
+}
+
+interface EffectKernelPreparation {
+  node: ImageEditorGpuGraphEffectNodeV3;
+  input: Target;
+  output: Target;
+  scale: number;
+  recipeSize?: readonly [number, number];
+  color?: ImageEditColorModeV3;
+  evaluation?: EffectEvaluationContext;
+}
+interface EffectKernelBinding {
+  create(gpu: Gpu, targets: ImageEditorGpuEffectTargetPoolV3, compiled: () => void): ImageEditorGpuTargetEffectRendererV3;
+  prepare(renderer: ImageEditorGpuTargetEffectRendererV3, context: EffectKernelPreparation): Target;
+}
+/** 绑定 GPU 宿主 ABI，与 operation ID 无关；未知 kernel 明确失败。 */
+const EFFECT_KERNELS: Readonly<Record<string, EffectKernelBinding>> = {
+  gaussian: {
+    create: (gpu, pool, compiled) => new ImageEditorGpuGaussianBlurRendererV3(gpu, pool, compiled),
+    prepare: (renderer, context) => {
+      if (!context.evaluation) throw new Error('GPU 高斯缺少完整文档网格与质量档')
+      const plan = resolveImageGaussianPlan(gaussianParametersFromNodeV3(context.node.parameters), context.evaluation)
+      return (renderer as ImageEditorGpuGaussianBlurRendererV3).prepareResolved(context.input, plan, context.output)
+    },
+  },
+  'legacy-gaussian': {
+    create: (gpu, pool, compiled) => new ImageEditorGpuGaussianBlurRendererV3(gpu, pool, compiled),
+    prepare: (renderer, context) => (renderer as ImageEditorGpuGaussianBlurRendererV3).prepare(
+      context.input, numberParameter(context.node.parameters.radiusPixels, 0) * context.scale, 0,
+      context.output, true, IMAGE_EDITOR_GPU_TRANSFER_CODE_V3[context.color?.transferFunction ?? 'srgb'],
+      context.color?.hdrMetadata?.referenceWhiteNits ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3),
+  },
+  'fast-blur': {
+    create: (gpu, pool, compiled) => new ImageEditorGpuFastBlurRendererV3(gpu, pool, compiled),
+    prepare: (renderer, context) => (renderer as ImageEditorGpuFastBlurRendererV3).prepare(context.input,
+      numberParameter(context.node.parameters.radius, 0) * context.scale / 2 ** numberParameter(context.node.parameters.mip, 0), context.output),
+  },
+  diffusion: {
+    create: (gpu, pool, compiled) => new ImageEditorGpuDiffusionRendererV3(gpu, pool, compiled),
+    prepare: (renderer, context) => (renderer as ImageEditorGpuDiffusionRendererV3).prepare(context.input,
+      DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(context.node.parameters),
+        { width: context.recipeSize?.[0] ?? context.input.size[0], height: context.recipeSize?.[1] ?? context.input.size[1], quality: 'high' }), context.output),
+  },
+  glow: {
+    create: (gpu, pool, compiled) => new ImageEditorGpuGlowRendererV3(gpu, pool, compiled),
+    prepare: (renderer, context) => (renderer as ImageEditorGpuGlowRendererV3).prepare(context.input,
+      VGPU_GLOW_V4_RECIPE_ADAPTER.compileRecipe(VGPU_GLOW_V4_RECIPE_ADAPTER.parseParameters(context.node.parameters),
+        { width: context.recipeSize?.[0] ?? context.input.size[0], height: context.recipeSize?.[1] ?? context.input.size[1] }), context.output),
+  },
 }

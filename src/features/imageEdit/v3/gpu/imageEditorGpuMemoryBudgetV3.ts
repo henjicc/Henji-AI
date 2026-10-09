@@ -1,3 +1,5 @@
+import { resolveImageGaussianPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
+import { gaussianParametersFromNodeV3 } from '@/core/imageEdit/v3/builtInRenderNodes'
 import { planColorGrade, isNeutralAdjustmentPlan } from '@/core/imaging/adjustments/plan'
 import { imageColorGradeRuntimeParams } from '@/core/imaging/adjustments/schema'
 import {
@@ -33,7 +35,7 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
       for (const adjustment of node.adjustments) {
         if (adjustment.mask) masks.add(adjustment.mask.maskId)
         if (adjustment.definitionId === 'adjustment.color-grade') {
-          const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width, referenceHeight: _height, ...value } = adjustment.parameters
+          const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width, referenceHeight: _height, effectQuality: _quality, ...value } = adjustment.parameters
           const plan = planColorGrade(imageColorGradeRuntimeParams(value), size[0], size[1])
           if (!isNeutralAdjustmentPlan(plan)) adjustmentScratchBytes += 3 * fullLinearBytes
             + plan.scratch.reduce((sum, surface) => sum + surface.width * surface.height * LINEAR_BYTES_PER_PIXEL, 0)
@@ -63,7 +65,10 @@ function estimateEffectsBytes(
   let maximumPyramidBytes = 0
   let gaussianScratchBytes = 0
   for (const node of nodes) {
-    if (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur') {
+    if (node.definitionId === 'effect.gaussian_blur') {
+      gaussianScratchBytes += resolveImageGaussianPlan(gaussianParametersFromNodeV3(node.parameters), { referenceSize: { width: Number(node.parameters.referenceWidth), height: Number(node.parameters.referenceHeight) }, outputSize: { width: size[0], height: size[1] }, quality: node.parameters.effectQuality === 'final' ? 'final' : 'interactive' }).scratchBytes
+    }
+    if (node.definitionId === 'effect.blur-v1') {
       const radiusKey = node.definitionId === 'effect.blur-v1' ? 'radiusPixels' : 'radius'
       const rawRadius = node.parameters[radiusKey]
       const rawMip = node.definitionId === 'effect.blur-v1' ? 0 : node.parameters.mip
