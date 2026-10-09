@@ -6,6 +6,8 @@ import { planColorGrade } from '@/core/imaging/adjustments/plan'
 import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
 import { planGlowPro } from './glowPro'
 import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
+import { GAUSSIAN_EFFECT, gaussianParameterSchema, type GaussianParameters, type ResolvedGaussianPlan } from '@/core/imaging/effects/gaussian'
+import type { EffectEvaluationContext, EffectQuality, EffectSize } from '@/core/imaging/effects/descriptor'
 
 /**
  * 把一个内置效果实例翻译成 GPU 工序（纯函数，可单测）：每道工序是一个着色器入口、输入、输出和 16 个 float 的参数。
@@ -25,7 +27,7 @@ export interface VideoEditBuiltinPass {
   /** (目标宽, 目标高, 输入宽, 输入高, a.xyzw, b.xyzw, c.xyzw)。 */
   uniforms: Float32Array
 }
-export interface VideoEditBuiltinPlan { width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[] }
+export interface VideoEditBuiltinPlan { width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean }
 type Vec4 = readonly [number, number, number, number]
 const ZERO: Vec4 = [0, 0, 0, 0]
 const LINE_TAPS = 16
@@ -77,7 +79,9 @@ export function videoEditGrainSeed(frame: number): number { return (Math.max(0, 
  * `renderScale` is the drawn height over the sequence height (below 1 only at a reduced playback resolution, task 4.9).
  * Spatial amounts already follow the drawn height; it is needed only where a pixel is the smallest unit.
  */
-export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, frame: { width: number; height: number; frame: number; renderScale?: number }): VideoEditBuiltinPlan {
+export function resolveVideoGaussianPlan(parameters: GaussianParameters, context: EffectEvaluationContext): ResolvedGaussianPlan { return GAUSSIAN_EFFECT.resolve(parameters, context) }
+
+export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize }): VideoEditBuiltinPlan {
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
   const params = resolveVideoEditBuiltinParams(instance)
@@ -87,10 +91,23 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
   switch (instance.id) {
     case 'color_grade': return planColorGrade(params, width, height)
     case 'gaussian_blur': {
-      const sigma = number(params, 'strength') / 100 * 0.06 * H / 2
-      const dimensions = params.dimensions
-      plan.gaussian('input', 'output', dimensions === 'vertical' ? 0 : sigma, dimensions === 'horizontal' ? 0 : sigma, params.repeat_edges !== false)
-      break
+      const scale = frame.renderScale ?? 1
+      const referenceSize = frame.referenceSize ?? { width: Math.round(width / scale), height: Math.round(height / scale) }
+      const resolvedGaussian = resolveVideoGaussianPlan(gaussianParameterSchema.parse(params), { referenceSize, outputSize: { width, height }, quality: frame.quality ?? 'interactive' })
+      if (resolvedGaussian.passes.every(pass => pass.operation.kind === 'copy')) { plan.pass('copy', 'input', 'output') }
+      else {
+        let source: VideoEditBuiltinTexture = plan.alloc()
+        plan.pass('gaussian_linear', 'input', source)
+        for (const step of resolvedGaussian.passes) {
+          const operation = step.operation; const target = plan.alloc(operation.width, operation.height)
+          plan.pass(operation.kind === 'blur' ? 'gaussian_blur' : 'gaussian_resample', source, target,
+            operation.kind === 'blur' ? [operation.axis === 'x' ? 1 : 0, operation.axis === 'y' ? 1 : 0, operation.sigma, operation.radius] : [step.sampleScale[0], step.sampleScale[1], 0, 0],
+            [params.edge_mode === 'clamp' ? 1 : 0, operation.sourceWidth, operation.sourceHeight, 0])
+          source = target
+        }
+        plan.pass('gaussian_encoded', source, 'output')
+      }
+      return { width, height, scratch: plan.scratch, passes: plan.passes, resolvedGaussian, linearScratch: true }
     }
     case 'directional_blur': {
       const length = number(params, 'length') / 100 * 0.1 * H

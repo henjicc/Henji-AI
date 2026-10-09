@@ -42,9 +42,9 @@ describe('图片编辑 V3 瓦片几何', () => {
     ]);
   });
 
-  it('将文档坐标模糊半径转换为当前 mip 的三倍标准差 halo', () => {
-    expect(gaussianBlurHalo(24, 0)).toBe(72);
-    expect(gaussianBlurHalo(24, 2)).toBe(18);
+  it('将文档坐标模糊半径转换为当前 mip 的共享 final support', () => {
+    expect(gaussianBlurHalo(24, 0)).toBe(104);
+    expect(gaussianBlurHalo(24, 2)).toBe(24);
   });
 
   it('只规划 200MP 瓦片数量和最坏工作集，并在预算允许时合并 supertile', () => {
@@ -57,15 +57,15 @@ describe('图片编辑 V3 瓦片几何', () => {
 
     expect(plan).toMatchObject({
       storageGrid: { width: 40, height: 20 },
-      executionGrid: { width: 20, height: 10 },
+      executionGrid: { width: 40, height: 20 },
       storageTileCount: 800,
-      executionUnitCount: 200,
-      executionTileSize: 1024,
-      halo: 192,
-      maxSourceRegion: { width: 1408, height: 1408 },
-      usesSupertile: true,
+      executionUnitCount: 800,
+      executionTileSize: 512,
+      halo: 278,
+      maxSourceRegion: { width: 1068, height: 1068 },
+      usesSupertile: false,
     });
-    expect(plan.estimatedWorkingSetBytes).toBe(31_719_424);
+    expect(plan.estimatedWorkingSetBytes).toBe(18_249_984);
   });
 
   it('supertile 超出单元预算时回退到 512，连单瓦片都容不下则拒绝规划', () => {

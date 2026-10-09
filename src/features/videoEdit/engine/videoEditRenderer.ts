@@ -1,3 +1,4 @@
+import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { createLogger } from '@/core/logging'
 import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
@@ -346,7 +347,7 @@ export class VideoEditRenderer {
    * picture at its source time or the frame fails (`videoEditExportPictures.ts`); `singleFrameReads` counts the layers
    * a single-frame read decided because the sequential reader's picture was not exact.
    */
-  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender): Promise<{ canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; completion: Promise<void> }> {
+  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive'): Promise<{ canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; completion: Promise<void> }> {
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
     const nestedContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), bytes: 0 }
@@ -420,7 +421,7 @@ export class VideoEditRenderer {
         const sourceFrame = videoEditNestedFrame(document, clip, child, frame)
         const childFrame = frame < clip.start || frame >= clip.start + clip.duration ? Math.min(videoEditDuration(child) - 1, sourceFrame) : sourceFrame
         const childKey = child.multicam ? `${child.id}:${clip.multicamCameraId ?? child.multicam.cameras[0].id}` : child.id
-        const key = `${childKey}:${childFrame}`
+        const key = `${quality}:${childKey}:${childFrame}`
         let picture = nestedContext.pictures.get(key)
         if (!picture) {
           const size = videoEditRenderSize(child.width, child.height, this.renderDivisor)
@@ -437,7 +438,7 @@ export class VideoEditRenderer {
           const keys = nestedContext.keys.get(childKey) ?? new Set<string>(); keys.add(targetKey); nestedContext.keys.set(childKey, keys)
           const renderer = entry.renderer
           picture = entry.tail.catch(() => undefined).then(async () => {
-            const result = await renderer.render(childFrame, sequential && !clip.reverse, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: childKey })
+            const result = await renderer.render(childFrame, sequential && !clip.reverse, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: childKey }, quality)
             if (!result.presented || !result.nestedPicture) throw new DOMException('旧嵌套画面已取消。', 'AbortError')
             effectErrors.push(...(result.effectErrors ?? []))
             timestamps.push(...result.sourceTimestamps); blankPictures += result.blankPictures; singleFrameReads += result.singleFrameReads
@@ -542,7 +543,7 @@ export class VideoEditRenderer {
     const nestedPicture = nestedRender ? await (await this.compositor.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, 'rgba16float') : undefined
     try {
       const drawn = this.drawDocument(document)
-      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline, document, nestedPicture, onEffectError) : await this.compositor.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
+      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline, document, nestedPicture, onEffectError, quality) : await this.compositor.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
     } catch (error) {
       if (canPresent()) throw error
       result = { presented: false, completion: Promise.resolve() }

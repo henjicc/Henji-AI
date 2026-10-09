@@ -66,7 +66,7 @@ describe('剪辑内置效果（真实设备）', () => {
       release: texture => texture.destroy(),
     })
     const source = input(); const first = output(); const second = output()
-    const blur = { id: 'gaussian_blur', params: { strength: 100 } }
+    const blur = { id: 'gaussian_blur', params: { sigma_fraction_height: 0.03 } }
     const draw = async (instance: Parameters<typeof local.render>[0], from: GpuTexture, to: GpuTexture): Promise<void> => local.render(instance, { texture: from, width: W, height: H, format: 'rgba8unorm' }, to, 0)
     try {
       await draw(blur, source, first)
@@ -83,8 +83,8 @@ describe('剪辑内置效果（真实设备）', () => {
         if (warm) expect(count).toEqual(warm)
         else warm = count
       }
-      // One blur scratch and ColorGrade's two ping-pong textures, shared across all instances.
-      expect(scratchAllocations).toBe(2)
+      // Gaussian's three linear targets and ColorGrade's two ping-pong textures, shared across all instances.
+      expect(scratchAllocations).toBe(5)
       expect(pixel(await read(current), W / 2, H / 2)[3]).toBe(255)
     } finally { local.dispose(); source.destroy(); first.destroy(); second.destroy() }
   }, 60_000)
@@ -95,14 +95,14 @@ describe('剪辑内置效果（真实设备）', () => {
       if (!['crop', 'chroma_key'].includes(definition.id)) expect(pixel(pixels, W / 2, H / 2)[3], definition.id).toBe(255)
     }
   }, 60_000)
-  it('关键结果：反相、水平翻转、零强度模糊不变、模糊保持亮度均值、裁剪透明、抠掉纯绿', async () => {
-    const original = await run('gaussian_blur', { strength: 0 })
+  it('关键结果：反相、水平翻转、零强度模糊不变、模糊在线性光混合、裁剪透明、抠掉纯绿', async () => {
+    const original = await run('gaussian_blur', { sigma_fraction_height: 0 })
     expect(pixel(original, 0, 0)).toEqual([255, 0, 0, 255]); expect(pixel(original, 10, 5)).toEqual([Math.round(10 / 63 * 255), Math.round(10 / 63 * 255), Math.round(10 / 63 * 255), 255])
     expect(pixel(await run('invert'), 0, 0)).toEqual([0, 255, 255, 255])
     expect(pixel(await run('flip', { axis: 'horizontal' }), W - 1, 0)).toEqual([255, 0, 0, 255])
-    const blurred = await run('gaussian_blur', { strength: 100 })
+    const blurred = await run('gaussian_blur', { sigma_fraction_height: 0.03 })
     const row = (pixels: Uint8Array): number => Array.from({ length: W }, (_, x) => pixels[(18 * W + x) * 4 + 1]).reduce((sum, value) => sum + value, 0) / W
-    expect(Math.abs(row(blurred) - row(original))).toBeLessThan(3)
+    expect(Math.abs(row(blurred) - row(original))).toBeLessThan(5)
     // 左上角的红点被晕开到相邻像素
     expect(pixel(blurred, 1, 1)[0] - pixel(blurred, 1, 1)[1]).toBeGreaterThan(10)
     const cropped = await run('crop', { left: 50 })

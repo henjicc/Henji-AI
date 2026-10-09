@@ -36,7 +36,7 @@ function fixture(): ReturnType<typeof createVideoEditDocument> {
 it('过冲在消费范围内夹取，拆分后仍可保存且与原曲线逐帧一致', () => {
   const document = fixture(); const original = document.sequences[0].clips[0]
   original.curves = { opacity: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: 100, value: 1, interpolation: 'linear' }] }
-  original.effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {}, curves: { strength: [{ ...original.curves.opacity![0], value: 0 }, { time: 100, value: 100, interpolation: 'linear' }] } } }]
+  original.effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {}, curves: { sigma_fraction_height: [{ ...original.curves.opacity![0], value: 0 }, { time: 100, value: 100, interpolation: 'linear' }] } } }]
   expect(evaluateVideoEditClip(original, 50).opacity).toBe(1)
   const sequence = splitVideoEditClip(document.sequences[0], 'clip', 50)
   expect(videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })).toBeTruthy()
@@ -44,7 +44,7 @@ it('过冲在消费范围内夹取，拆分后仍可保存且与原曲线逐帧�
     const clipped = evaluateVideoEditClip(sequence.clips[frame < 50 ? 0 : 1], frame)
     const before = evaluateVideoEditClip(original, frame)
     expect(clipped.opacity).toBeCloseTo(before.opacity, 7)
-    expect(clipped.effects![0].builtin!.params.strength).toBeCloseTo(Number(before.effects![0].builtin!.params.strength), 5)
+    expect(clipped.effects![0].builtin!.params.sigma_fraction_height).toBeCloseTo(Number(before.effects![0].builtin!.params.sigma_fraction_height), 5)
   }
   sequence.clips[1].curves!.opacity![0].easeValues = [0, 99]
   expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })).toThrow()

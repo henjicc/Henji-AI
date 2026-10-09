@@ -12,6 +12,7 @@ import { VIDEO_EDIT_COLOR_GRADE } from './colorGrade'
 import { parseColorGradeCurve } from './colorGradeCurves'
 import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
+import { GAUSSIAN_EFFECT } from '../imaging/effects/gaussian'
 
 export type { ImagingParamValue as VideoEditBuiltinParamValue, ImagingParams as VideoEditBuiltinParams, ImagingUnit as VideoEditBuiltinUnit, ImagingParam as VideoEditBuiltinParam } from '../imaging/parameterDefinition'
 import { IMAGING_UNIT_LABELS, type ImagingParamValue as VideoEditBuiltinParamValue, type ImagingParam as VideoEditBuiltinParam, type ImagingParams as VideoEditBuiltinParams, type ImagingUnit as VideoEditBuiltinUnit } from '../imaging/parameterDefinition'
@@ -40,15 +41,9 @@ const angle = (key: string, name: string, fallback: number, min: number, max: nu
 const percent = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'percent', min: 0, max: 100, step: 1, default: fallback, tooltip, description })
 /** 参数构造（过渡参数登记复用，量纲与内置效果一致）。 */
 export { strength as videoEditStrengthParam, percent as videoEditPercentParam }
-const repeatEdges: VideoEditBuiltinParam = { key: 'repeat_edges', name: '重复边缘像素', type: 'boolean', default: true, tooltip: '开启时画面边缘不会变透明', description: 'true 时取画面外的颜色用最近的边缘像素（边缘不发虚、不透出下层）；false 时边缘向外渐隐成透明。' }
 
 const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
-  { id: 'gaussian_blur', name: '高斯模糊', group: 'blur', tooltip: '均匀柔化整个画面，可只模糊水平或垂直方向', description: '均匀模糊画面，用于背景虚化、柔化、遮挡细节。模糊半径随画面高度缩放，任意分辨率观感一致。',
-    params: [
-      strength('strength', '模糊度', 30, '模糊程度，0 不模糊', '0 不模糊；10 ≈ 轻微柔化；30 ≈ 背景虚化；60 ≈ 强烈虚化只剩色块；100 ≈ 几乎看不出轮廓（半径约为画面高度的 6%）。'),
-      { key: 'dimensions', name: '模糊方向', type: 'enum', default: 'both', options: [{ value: 'both', label: '水平和垂直' }, { value: 'horizontal', label: '水平' }, { value: 'vertical', label: '垂直' }], tooltip: '只沿一个方向模糊时画面会被拉出拖影', description: 'both 两个方向同时模糊；horizontal 只水平；vertical 只垂直。' },
-      repeatEdges,
-    ] },
+  { id: GAUSSIAN_EFFECT.id, name: GAUSSIAN_EFFECT.name, group: 'blur', tooltip: '均匀柔化整个画面，可只模糊水平或垂直方向', description: GAUSSIAN_EFFECT.description, params: GAUSSIAN_EFFECT.parameters },
   { id: 'directional_blur', name: '方向模糊', group: 'blur', tooltip: '沿一个方向拉出拖影，表现快速移动', description: '沿指定角度做线性拖影模糊，用于速度感、晃动感。',
     params: [
       angle('direction', '方向', 0, -180, 180, '拖影的方向，0° 为水平', '拖影方向角度：0 水平，90 垂直，45 斜向；正负 180 等价。'),

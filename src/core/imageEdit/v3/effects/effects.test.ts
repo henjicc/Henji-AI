@@ -81,18 +81,14 @@ describe('图片编辑 V3 Float32 效果契约', () => {
 });
 
 describe('Gaussian Blur v2 CPU 参考实现', () => {
-  it('以文档坐标计算半径、ceil(3r) halo 和大半径金字塔', () => {
+  it('以共享 final 计划计算文档坐标 support 与金字塔', () => {
     expect(resolveGaussianBlurV2Geometry({
       radius: 160,
       mip: 2,
-      pyramidTargetRadius: 16,
-    })).toEqual({
+    })).toMatchObject({
       radiusInDocumentPixels: 160,
       radiusAtMip: 40,
-      haloInDocumentPixels: 480,
-      haloAtMip: 120,
       pyramidLevel: 2,
-      radiusAtPyramidLevel: 10,
     });
     expect(GAUSSIAN_BLUR_V2_CONTRACT).toMatchObject({
       version: 2,
@@ -199,8 +195,8 @@ describe('Blur v3 快速 CPU 后备', () => {
   });
 });
 
-describe('旧版 Blur v1 像素兼容内核', () => {
-  it('保持感知域、预乘 alpha 与旧版 120px 半径封顶契约', () => {
+describe('legacy Blur v1 委托共享高斯', () => {
+  it('输入输出包装保持预乘域，线性滤波不再有120px封顶', () => {
     const source = createFloat32PremultipliedRgbaTile(
       3,
       1,
@@ -214,7 +210,7 @@ describe('旧版 Blur v1 像素兼容内核', () => {
     const capped = applyLegacyGaussianBlurV1(source, 320);
     const legacyMaximum = applyLegacyGaussianBlurV1(source, 120);
 
-    expect(capped.data).toEqual(legacyMaximum.data);
+    expect(capped.data).not.toEqual(legacyMaximum.data);
     expect(capped.data[0]).toBeGreaterThan(0);
     expect(capped.data[4]).toBeLessThan(1);
     expect(LEGACY_GAUSSIAN_BLUR_V1_CONTRACT).toMatchObject({

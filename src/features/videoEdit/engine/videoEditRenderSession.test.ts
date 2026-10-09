@@ -29,11 +29,11 @@ class FakeWorker {
   constructor() { workers.push(this) }
   postMessage(message: RenderRequest, transfer: unknown[] = []) {
     this.messages.push({ message, transfer })
-    if ('id' in message && message.id) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, presented: true } } as MessageEvent))
+    if ('id' in message && message.id) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, presented: true, ...(message.kind === 'render' ? { bitmap: { close: vi.fn() } } : {}) } } as MessageEvent))
   }
 }
 vi.stubGlobal('Worker', FakeWorker)
-vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
+vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { drawImage: vi.fn() } } })
 
 const { VideoEditRenderSession } = await import('./videoEditRenderSession')
 function composition(): VideoEditComposition {
@@ -53,6 +53,18 @@ beforeEach(() => {
   platform.connect.mockReset().mockResolvedValue({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })
   platform.disconnect.mockReset()
   platform.allowRoot.mockClear(); platform.dirname.mockClear()
+})
+
+it('预览请求 interactive，正式导出入口请求 final，复用同一 Worker 链路', async () => {
+  const session = new VideoEditRenderSession(composition())
+  await session.present(0)
+  await session.render(1, true)
+  const renders = workers[0].messages.map(value => value.message).filter(value => value.kind === 'render')
+  expect(renders).toEqual([
+    expect.objectContaining({ kind: 'render', frame: 0, quality: 'interactive' }),
+    expect.objectContaining({ kind: 'render', frame: 1, sequential: true, quality: 'final' }),
+  ])
+  await session.dispose()
 })
 
 it('60 effect moves send only effect deltas, without media/source/font payloads; structural edits resync', async () => {

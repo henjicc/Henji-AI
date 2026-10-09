@@ -38,7 +38,7 @@ afterEach(async () => {
   for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id)
   vi.restoreAllMocks(); uninstallHarnessNativeStorage(); localStorage.clear()
 })
-const effect = () => videoEditEffectSchema.parse({ id: 'effect', name: '高斯模糊', enabled: true, amount: .5, builtin: { id: 'gaussian_blur', params: { strength: 60 } } })
+const effect = () => videoEditEffectSchema.parse({ id: 'effect', name: '高斯模糊', enabled: true, amount: .5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.018 } } })
 
 it('双击内置效果添加到当前片段，并把新增效果交给停靠宿主定位', () => {
   const added = vi.fn(); const onError = vi.fn()
@@ -140,10 +140,10 @@ it('保存入口允许选择是否保留手绘遮罩；保存副本参数不随�
   render(<VideoEditEffectPresetDialog effects={[source]} initialName="局部柔化" onClose={close} />)
   fireEvent.click(screen.getByRole('switch', { name: '保存手绘遮罩' }))
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  source.builtin!.params.strength = 10
+  source.builtin!.params.sigma_fraction_height = 10
   expect(screen.queryByRole('alert')?.textContent).toBeUndefined()
   expect(close).toHaveBeenCalledOnce()
-  expect(useVideoEditEffectLibraryStore.getState().presets[0].effects[0]).toMatchObject({ builtin: { params: { strength: 60 } }, mask: source.mask })
+  expect(useVideoEditEffectLibraryStore.getState().presets[0].effects[0]).toMatchObject({ builtin: { params: { sigma_fraction_height: 0.018 } }, mask: source.mask })
 })
 
 it('取消勾选全部效果或清空名称时禁用保存，Enter 也不会写入；取消不保存', () => {

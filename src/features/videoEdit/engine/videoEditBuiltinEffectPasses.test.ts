@@ -10,7 +10,7 @@ import { VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES, VIDEO_EDIT_BUILTIN_EFFECT_SHADER } f
 const plan = (id: string, params: Record<string, unknown>, width = 1920, height = 1080, frame = 0): VideoEditBuiltinPlan => planVideoEditBuiltinEffect({ id, params: params as Record<string, number> }, { width, height, frame })
 /** 一道工序的全尺寸像素 sigma：降采样倍数 × 低分辨率 sigma。 */
 function blurSigmas(result: VideoEditBuiltinPlan): number[] {
-  return result.passes.filter(pass => pass.entry === 'blur').map(pass => pass.uniforms[6] * result.width / pass.uniforms[2])
+  return result.passes.filter(pass => pass.entry === 'gaussian_blur').map(pass => pass.uniforms[6] * result.width / pass.uniforms[2])
 }
 
 describe('内置效果工序与参数打包', () => {
@@ -32,23 +32,23 @@ describe('内置效果工序与参数打包', () => {
     }
   })
   it('高斯模糊按画面高度换算：不同渲染尺寸下相对模糊量相同；大半径先降采样，每道取样数有上限', () => {
-    const full = plan('gaussian_blur', { strength: 100 }); const quarter = plan('gaussian_blur', { strength: 100 }, 480, 270)
-    expect(full.passes.filter(pass => pass.entry === 'copy').length).toBeGreaterThan(2)
-    expect(full.passes.filter(pass => pass.entry === 'blur').every(pass => pass.uniforms[7] <= 10)).toBe(true)
+    const full = plan('gaussian_blur', { sigma_fraction_height: 0.03 }); const quarter = plan('gaussian_blur', { sigma_fraction_height: 0.03 }, 480, 270)
+    expect(full.passes.filter(pass => pass.entry === 'gaussian_resample').length).toBeGreaterThan(2)
+    expect(full.passes.filter(pass => pass.entry === 'gaussian_blur').every(pass => pass.uniforms[7] <= 10)).toBe(true)
     // 低分辨率工序里的 sigma × 降采样倍数，加上降采样本身的模糊，约等于要求的全尺寸 sigma（画面高度的 3%）
     expect(Math.max(...blurSigmas(full))).toBeLessThan(0.03 * 1080)
     expect(Math.abs(Math.max(...blurSigmas(full)) / 1080 / (Math.max(...blurSigmas(quarter)) / 270) - 1)).toBeLessThan(.05)
     // 小半径不降采样，横竖两道直接写输出
-    const light = plan('gaussian_blur', { strength: 5 })
-    expect(light.passes.map(pass => pass.entry)).toEqual(['blur', 'blur'])
-    expect(light.passes[0].uniforms.slice(4, 6)).toEqual(new Float32Array([1 / 1920, 0]))
-    expect(light.passes[1].uniforms.slice(4, 6)).toEqual(new Float32Array([0, 1 / 1080]))
+    const light = plan('gaussian_blur', { sigma_fraction_height: 0.0015 })
+    expect(light.passes.map(pass => pass.entry)).toEqual(['gaussian_linear', 'gaussian_blur', 'gaussian_blur', 'gaussian_encoded'])
+    expect(light.passes[1].uniforms.slice(4, 6)).toEqual(new Float32Array([1, 0]))
+    expect(light.passes[2].uniforms.slice(4, 6)).toEqual(new Float32Array([0, 1]))
     // 只模糊水平方向时垂直方向不降采样
-    const horizontal = plan('gaussian_blur', { strength: 100, dimensions: 'horizontal' })
+    const horizontal = plan('gaussian_blur', { sigma_fraction_height: 0.03, axis: 'horizontal' })
     expect(horizontal.scratch.every(size => size.height === 1080)).toBe(true)
-    expect(horizontal.passes.filter(pass => pass.entry === 'blur').every(pass => pass.uniforms[5] === 0)).toBe(true)
-    expect(plan('gaussian_blur', { strength: 0 }).passes.map(pass => pass.entry)).toEqual(['copy'])
-    expect(plan('gaussian_blur', { strength: 30, repeat_edges: false }).passes.find(pass => pass.entry === 'blur')!.uniforms[8]).toBe(0)
+    expect(horizontal.passes.filter(pass => pass.entry === 'gaussian_blur').every(pass => pass.uniforms[5] === 0)).toBe(true)
+    expect(plan('gaussian_blur', { sigma_fraction_height: 0 }).passes.map(pass => pass.entry)).toEqual(['copy'])
+    expect(plan('gaussian_blur', { sigma_fraction_height: 0.009, edge_mode: 'transparent' }).passes.find(pass => pass.entry === 'gaussian_blur')!.uniforms[8]).toBe(0)
   })
   it('颜色与风格化参数换算：曝光是线性增益，黑白是零饱和度，色度抠像传入色度坐标，马赛克块按画面高度', () => {
     expect([...plan('exposure', { exposure: 1 }).passes[0].uniforms.slice(4, 7)]).toEqual([2, 2, 2])

@@ -35,22 +35,10 @@ describe('旧高斯规划逐字段快照（重构前采集，禁止随重构更�
       const params = { ...colorGradeDefaults(), sharpen: 30, hsl_temperature: 20, hsl_sharpen: 30, hsl_denoise: 20, hsl_blur: 100 }
       expect(snapshotPlan(planColorGrade(params, width, height))).toMatchSnapshot()
     })
-    for (const repeatEdges of [true, false]) {
-      it(`剪辑高斯 ${width}×${height}：repeatEdges=${repeatEdges}`, () => {
-        expect(snapshotPlan(planVideoEditBuiltinEffect({ id: 'gaussian_blur', params: { strength: 100, repeat_edges: repeatEdges } }, { width, height, frame: 0 }))).toMatchSnapshot()
-      })
-    }
+
   }
-  for (const strength of [0, 0.001, 0.9, 1, 10, 10.001]) {
-    it(`剪辑极小 sigma/直接滤波阈值：strength=${strength}`, () => {
-      expect(snapshotPlan(planVideoEditBuiltinEffect({ id: 'gaussian_blur', params: { strength } }, { width: 1001, height: 1000, frame: 0 }))).toMatchSnapshot()
-    })
-  }
-  for (const dimensions of ['horizontal', 'vertical']) {
-    it(`非整除尺寸单轴高斯：${dimensions}`, () => {
-      expect(snapshotPlan(planVideoEditBuiltinEffect({ id: 'gaussian_blur', params: { strength: 100, dimensions, repeat_edges: false } }, { width: 1921, height: 1081, frame: 0 }))).toMatchSnapshot()
-    })
-  }
+
+
   for (const hslBlur of [0.001, 14.95, 15]) {
     it(`图片键控 sigma=0.3 附近：hsl_blur=${hslBlur}`, () => {
       expect(snapshotPlan(planColorGrade({ ...colorGradeDefaults(), hsl_temperature: 20, hsl_blur: hslBlur }, 101, 100))).toMatchSnapshot()

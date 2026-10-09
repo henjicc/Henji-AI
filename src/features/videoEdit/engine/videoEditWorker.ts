@@ -1,3 +1,4 @@
+import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { VideoEditProxyFrames } from './videoEditProxyFrames'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'
 import { VideoEditRenderer } from './videoEditRenderer'
@@ -33,7 +34,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
   | { kind: 'dispose' }
-  | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number; readRgb?: { width: number; height: number } }
+  | { kind: 'render'; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number; readRgb?: { width: number; height: number } }
   | { kind: 'audio'; start: number; duration: number }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
@@ -128,7 +129,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
         renderer.updateParameters(request.update); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
-        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline)
+        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality)
         const finish = async (): Promise<void> => {
           const start = performance.now()
           for (const message of result.effectErrors ?? []) if (!effectWarnings.has(message)) log('warn', message, 'video_edit.effect.skipped', { sequenceId: renderer?.document.id, frame: request.frame })

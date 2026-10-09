@@ -1,3 +1,4 @@
+import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { verifiedVideoEditProxySources } from '../application/videoEditProxy'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
@@ -140,10 +141,10 @@ export class VideoEditRenderSession {
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
-  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }): Promise<RenderResponse> {
+  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive'): Promise<RenderResponse> {
     await this.ready
     const document = this.document
-    const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, ...(readRgb ? { readRgb } : {}) }, [], submitted)
+    const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(readRgb ? { readRgb } : {}) }, [], submitted)
     if (result.presented) this.lastPresentedFrame = frame
     const at = result.presented ? videoEditMaskUpdateTime(document.id, document.revision) : undefined
     if (at !== undefined && result.presented) {
@@ -152,14 +153,14 @@ export class VideoEditRenderSession {
     }
     return result
   }
-  async renderBitmap(frame: number, sequential = false, scrubbing = false): Promise<RenderResponse & { bitmap: ImageBitmap }> {
-    const result = await this.present(frame, sequential, scrubbing)
+  async renderBitmap(frame: number, sequential = false, scrubbing = false, quality: EffectQuality = 'interactive'): Promise<RenderResponse & { bitmap: ImageBitmap }> {
+    const result = await this.present(frame, sequential, scrubbing, undefined, undefined, undefined, quality)
     if (!result.bitmap) throw new Error('剪辑渲染没有返回画面。')
     return { ...result, bitmap: result.bitmap }
   }
   /** Export frames: sequential renders on this session's full-size canvas (task 2.4: exact pictures or a failure). */
   async render(frame: number, sequential = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; singleFrameReads: number }> {
-    const result = await this.renderBitmap(frame, sequential)
+    const result = await this.renderBitmap(frame, sequential, false, 'final')
     try { this.canvas.getContext('2d')!.drawImage(result.bitmap, 0, 0) } finally { result.bitmap.close() }
     return { canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0 }
   }

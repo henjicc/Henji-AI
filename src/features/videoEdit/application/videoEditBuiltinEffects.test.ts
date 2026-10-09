@@ -83,7 +83,7 @@ it('效果面板拖放或双击：同一效果加到所选全部画面片段，�
   const history = owner.past.length
   const created = applyVideoEditBuiltinEffect(id, sequenceId, clipIds, 'gaussian_blur')
   expect(created).toHaveLength(2); expect(owner.past).toHaveLength(history + 1)
-  for (const clip of getActiveVideoEditSequence(owner).clips) expect(clip.effects).toEqual([expect.objectContaining({ name: '高斯模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: { strength: 30, dimensions: 'both', repeat_edges: true } } })])
+  for (const clip of getActiveVideoEditSequence(owner).clips) expect(clip.effects).toEqual([expect.objectContaining({ name: '高斯模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.009, axis: 'both', edge_mode: 'clamp' } } })])
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.every(clip => !clip.effects?.length)).toBe(true)
   const track = getActiveVideoEditSequence(owner).clips[0].track
   editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, tracks: sequence.tracks.map(value => value.index === track ? { ...value, locked: true } : value) })) }))
@@ -116,20 +116,20 @@ it('助手经通用实体读写：读内置效果目录与参数语义，创建�
     const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:gaussian_blur` }, ['video_edit.builtin_effect.name', 'video_edit.builtin_effect.params'])
     const properties = (catalog as { properties: Record<string, unknown> }).properties
     expect(properties['video_edit.builtin_effect.name']).toBe('高斯模糊')
-    expect(properties['video_edit.builtin_effect.params']).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'strength', min: 0, max: 100, default: 30, unit: 'strength' })]))
+    expect(properties['video_edit.builtin_effect.params']).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'sigma_fraction_height', min: 0, default: 0.009, unit: 'fraction_height' })]))
     const clipRef = { kind: 'video_edit.clip', id: `${id}:${clipIds[0]}` }
     const baseline = await app.read(clipRef)
-    const created = await app.call('change_application_entities', { summary: '背景虚化', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:gaussian_blur', 'video_edit.effect.parameters': { strength: 45 } } }] }] }, baseline.revisions as Record<string, number>)
+    const created = await app.call('change_application_entities', { summary: '背景虚化', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:gaussian_blur', 'video_edit.effect.parameters': { sigma_fraction_height: 0.0135 } } }] }] }, baseline.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
     const effect = getActiveVideoEditSequence(owner).clips[0].effects![0]
-    expect(effect.builtin).toEqual({ id: 'gaussian_blur', params: { strength: 45 } })
+    expect(effect.builtin).toEqual({ id: 'gaussian_blur', params: { sigma_fraction_height: 0.0135 } })
     const ref = { kind: 'video_edit.effect', id: `${id}:${effect.id}` }
-    expect((await app.read(ref, ['video_edit.effect.definition_id', 'video_edit.effect.parameters', 'video_edit.effect.version_id'])).properties).toMatchObject({ 'video_edit.effect.definition_id': 'effect:gaussian_blur', 'video_edit.effect.parameters': { strength: 45 }, 'video_edit.effect.version_id': '' })
-    const changed = await app.change(ref, { 'video_edit.effect.parameters': { strength: 70, dimensions: 'horizontal' } }); expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
-    expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params).toEqual({ strength: 70, dimensions: 'horizontal' })
-    const rejected = await app.change(ref, { 'video_edit.effect.parameters': { strength: 170 } })
-    expect(rejected.ok).toBe(false); expect(JSON.stringify(rejected)).toContain('0–100')
-    expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.strength).toBe(70)
+    expect((await app.read(ref, ['video_edit.effect.definition_id', 'video_edit.effect.parameters', 'video_edit.effect.version_id'])).properties).toMatchObject({ 'video_edit.effect.definition_id': 'effect:gaussian_blur', 'video_edit.effect.parameters': { sigma_fraction_height: 0.0135 }, 'video_edit.effect.version_id': '' })
+    const changed = await app.change(ref, { 'video_edit.effect.parameters': { sigma_fraction_height: 0.021, axis: 'horizontal' } }); expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params).toEqual({ sigma_fraction_height: 0.021, axis: 'horizontal' })
+    const rejected = await app.change(ref, { 'video_edit.effect.parameters': { sigma_fraction_height: -1 } })
+    expect(rejected.ok).toBe(false); expect(JSON.stringify(rejected)).toContain('0–')
+    expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.sigma_fraction_height).toBe(0.021)
     const before = await app.read(clipRef)
     const removed = await app.call('change_application_entities', { summary: '去掉模糊', changes: [{ kind: 'remove_items', entityType: 'video_edit.effect', parent: clipRef, targets: [ref] }] }, before.revisions as Record<string, number>)
     expect(removed, JSON.stringify(removed)).toMatchObject({ ok: true })

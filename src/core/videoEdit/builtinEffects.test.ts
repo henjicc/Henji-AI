@@ -24,10 +24,10 @@ describe('内置效果登记', () => {
     expect(parseVideoEditBuiltinRefId('effect:gaussian_blur')).toBe('gaussian_blur'); expect(parseVideoEditBuiltinRefId('gaussian_blur')).toBe('gaussian_blur'); expect(parseVideoEditBuiltinRefId('effect:nope')).toBeUndefined()
   })
   it('严格校验越界、错类型与未知参数并列出可用范围；界面写入时夹进范围', () => {
-    expect(normalizeVideoEditBuiltinParams('gaussian_blur', { strength: 45 })).toEqual({ strength: 45, dimensions: 'both', repeat_edges: true })
-    expect(() => normalizeVideoEditBuiltinParams('gaussian_blur', { strength: 120 })).toThrow('超出范围 0–100')
-    expect(() => normalizeVideoEditBuiltinParams('gaussian_blur', { radius: 3 })).toThrow('可用参数：strength、dimensions、repeat_edges')
-    expect(() => normalizeVideoEditBuiltinParams('gaussian_blur', { dimensions: 'diagonal' })).toThrow('both、horizontal、vertical')
+    expect(normalizeVideoEditBuiltinParams('gaussian_blur', { sigma_fraction_height: 0.0135 })).toEqual({ sigma_fraction_height: 0.0135, axis: 'both', edge_mode: 'clamp' })
+    expect(() => normalizeVideoEditBuiltinParams('gaussian_blur', { sigma_fraction_height: -1 })).toThrow('超出范围 0–')
+    expect(() => normalizeVideoEditBuiltinParams('gaussian_blur', { radius: 3 })).toThrow('可用参数：sigma_fraction_height、axis、edge_mode')
+    expect(() => normalizeVideoEditBuiltinParams('gaussian_blur', { axis: 'diagonal' })).toThrow('both、horizontal、vertical')
     expect(() => normalizeVideoEditBuiltinParams('nope')).toThrow('可用：gaussian_blur')
     expect(normalizeVideoEditBuiltinParams('exposure', { exposure: 9 }, undefined, true)).toEqual({ exposure: 4 })
     // 颜色由测试拼出（颜色字面量只允许登记在主题文件）
@@ -39,10 +39,10 @@ describe('内置效果登记', () => {
   })
   it('效果链一项必须是代码滤镜或内置效果之一；智能区域只用于内置画面效果，参数有范围', () => {
     const base = { id: 'e', name: '模糊', enabled: true, amount: 1 }
-    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: { strength: 30 } } }).success).toBe(true)
+    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.009 } } }).success).toBe(true)
     expect(videoEditEffectSchema.safeParse(base).success).toBe(false)
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, code: { definitionId: 'd', versionId: 'v', parameters: {} } }).success).toBe(false)
-    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: { strength: 300 } } }).error?.issues[0].message).toContain('超出范围')
+    expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: -0.1 } } }).error?.issues[0].message).toContain('超出范围')
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'face' } }).success).toBe(true)
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'mosaic', params: {} }, mask: { regionId: 'background', invert: true, feather: 20, expand: -10 } }).success).toBe(true)
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'sky' } }).success).toBe(false)

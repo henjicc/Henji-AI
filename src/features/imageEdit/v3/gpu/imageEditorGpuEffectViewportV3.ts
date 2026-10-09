@@ -81,7 +81,7 @@ function gaussianSupport(
   const legacy = node.definitionId === 'effect.blur-v1'
   const radius = finiteParameter(node.parameters[legacy ? 'radiusPixels' : 'radius']) * scale
   const mip = legacy ? 0 : finiteParameter(node.parameters.mip)
-  return resolveGaussianBlurV2Geometry({ radius: legacy ? Math.min(120, radius) : radius, mip }).haloAtMip
+  return resolveGaussianBlurV2Geometry({ radius, mip }).haloAtMip
 }
 
 function finiteParameter(value: unknown): number {

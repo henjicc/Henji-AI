@@ -7,6 +7,7 @@ import type { CubeLut } from '@/core/videoEdit/cubeLut'
 import type { ColorLutAsset } from '@/core/videoEdit/colorLutAsset'
 import { fetchVideoEditColorLut } from './videoEditColorLutSource'
 import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
+import type { EffectQuality, EffectSize } from '@/core/imaging/effects/descriptor'
 
 export type VideoEditLutLoader = (asset: ColorLutAsset) => Promise<CubeLut>
 const loadLut: VideoEditLutLoader = fetchVideoEditColorLut
@@ -31,25 +32,30 @@ export class VideoEditBuiltinEffectsGpu {
   private readonly scratch: Scratch[] = []
   private readonly uniforms: GpuBuffer[] = []
   private layout?: unknown
+  private gaussianLayout?: unknown
   private module?: unknown
   private fallbackLut?: GpuTexture
   private readonly lookups = new Map<string, { texture: GpuTexture; cube?: CubeLut; used: boolean }>()
   private disposed = false
   passes = 0
   constructor(private readonly device: GpuDevice, private readonly sampler: unknown, private readonly allocator: VideoEditBuiltinScratchAllocator, private readonly lutLoader: VideoEditLutLoader = loadLut) {}
-  private pipelineLayout(): unknown {
-    if (this.layout) return this.layout
+  private pipelineLayout(gaussian = false): unknown {
+    const existing = gaussian ? this.gaussianLayout : this.layout
+    if (existing) return existing
     const device = this.device as GpuDevice & Partial<LayoutDevice>
     if (!device.createBindGroupLayout || !device.createPipelineLayout) throw new Error('GPU设备不支持内置效果绑定。')
     const group = device.createBindGroupLayout({ entries: [
-      { binding: 0, visibility: 2, texture: { sampleType: 'float' } },
+      { binding: 0, visibility: 2, texture: { sampleType: gaussian ? 'unfilterable-float' : 'float' } },
       { binding: 1, visibility: 2, sampler: { type: 'filtering' } },
       { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 64 } },
       { binding: 3, visibility: 2, texture: { sampleType: 'float' } },
       { binding: 4, visibility: 2, texture: { sampleType: 'float', viewDimension: '3d' } },
       { binding: 5, visibility: 2, texture: { sampleType: 'float' } },
     ] })
-    return this.layout = device.createPipelineLayout({ bindGroupLayouts: [group] })
+    const layout = device.createPipelineLayout({ bindGroupLayouts: [group] })
+    if (gaussian) this.gaussianLayout = layout
+    else this.layout = layout
+    return layout
   }
   private pipeline(entry: VideoEditBuiltinEffectEntry, format: string): Promise<GpuRenderPipeline> {
     const key = `${entry}\u0000${format}`
@@ -60,7 +66,7 @@ export class VideoEditBuiltinEffectsGpu {
         let pipeline: GpuRenderPipeline
         try {
           this.module ??= this.device.createShaderModule({ code: VIDEO_EDIT_BUILTIN_EFFECT_SHADER })
-          pipeline = this.device.createRenderPipeline({ layout: this.pipelineLayout(), vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+          pipeline = this.device.createRenderPipeline({ layout: this.pipelineLayout(entry.startsWith('gaussian_')), vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
         } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
         const error = await this.device.popErrorScope()
         if (error) throw new Error(`内置效果管线编译失败：${error.message}`)
@@ -83,8 +89,8 @@ export class VideoEditBuiltinEffectsGpu {
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
   /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
-  async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = []): Promise<void> {
-    await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale }), input.format, input.texture, output, undefined, luts)
+  async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize): Promise<void> {
+    await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts)
   }
   /**
    * 带参数的视频过渡（4.7）：`outgoing` 前一段、`incoming` 后一段（单侧过渡两者可以是同一纹理，空着的一侧由参数标记），
@@ -101,7 +107,8 @@ export class VideoEditBuiltinEffectsGpu {
     return texture
   }
   private async execute(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly ColorLutAsset[] = []): Promise<void> {
-    const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, format)))
+    const scratchFormat = plan.linearScratch ? plan.resolvedGaussian?.intermediateFormat ?? 'rgba16float' : format
+    const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, pass.target === 'output' ? format : scratchFormat)))
     if (this.disposed) throw new Error('原调色渲染已关闭。')
     // Resolve all resources before recording, so missing LUT never silently becomes identity.
     const lookups: Array<{ texture: GpuTexture; cube?: CubeLut } | undefined> = []
@@ -128,7 +135,7 @@ export class VideoEditBuiltinEffectsGpu {
     }
     this.fallbackLut ??= this.upload(new Float32Array([0, 0, 0, 1]), 1, 1, true)
     const taken = new Set<Scratch>()
-    const scratch = plan.scratch.map(value => this.take(value.width, value.height, format, taken))
+    const scratch = plan.scratch.map(value => this.take(value.width, value.height, scratchFormat, taken))
     const texture = (ref: VideoEditBuiltinTexture): GpuTexture => ref === 'input' ? input : ref === 'second' ? second ?? input : ref === 'output' ? output : scratch[ref]
     const encoder = this.device.createCommandEncoder()
     plan.passes.forEach((pass, index) => {
@@ -175,5 +182,6 @@ export class VideoEditBuiltinEffectsGpu {
     this.scratch.length = 0
     for (const buffer of this.uniforms) buffer.destroy()
     this.uniforms.length = 0; this.pipelines.clear(); this.layout = undefined; this.module = undefined
+    this.gaussianLayout = undefined
   }
 }

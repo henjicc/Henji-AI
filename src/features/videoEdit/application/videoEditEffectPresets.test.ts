@@ -57,12 +57,13 @@ it('贝塞尔过冲预设应用到较短片段，修剪后参数仍可持久保�
   const { owner, id, sequenceId, pictures } = await project()
   const clip = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[0])!
   const effect = makeVideoEditBuiltinEffect('gaussian_blur')
-  effect.builtin!.curves = { strength: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: (clip.duration - 1) * 2, value: 100, interpolation: 'linear' }] }
+  effect.builtin!.curves = { sigma_fraction_height: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: (clip.duration - 1) * 2, value: 0.03, interpolation: 'linear' }] }
   const preset = useVideoEditEffectLibraryStore.getState().savePreset('模糊动画', [effect])
   expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [clip.id], `preset:${preset.id}`)).not.toThrow()
-  const points = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects![0].builtin!.curves!.strength
-  expect(points.at(-1)).toMatchObject({ time: clip.duration - 1, value: 100 })
-  expect(points[0].easeValues).toEqual([0, 100])
+  const points = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects![0].builtin!.curves!.sigma_fraction_height
+  expect(points.at(-1)?.time).toBe(clip.duration - 1)
+  expect(points.at(-1)?.value).toBeCloseTo(0.07125, 6)
+  expect(points[0].easeValues).toEqual([0, 0.03])
 })
 it('收藏、参数组合、重命名与删除经本机设置持久保存；写失败不发布新状态', () => {
   const disk = storage(); const first = createVideoEditEffectLibraryStore(disk)
@@ -99,7 +100,7 @@ it('保存参数强度开关与作用区域；手绘形状可选保存，跟踪�
 
 it('预设组合拖放/双击共用应用入口，长链跨片段一步撤销；媒介不匹配拒绝', async () => {
   const { owner, id, sequenceId, pictures, sound } = await project()
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('画面组合', [makeVideoEditBuiltinEffect('gaussian_blur', { strength: 65 }), { ...makeVideoEditBuiltinEffect('mosaic'), amount: .3, enabled: false }])
+  const preset = useVideoEditEffectLibraryStore.getState().savePreset('画面组合', [makeVideoEditBuiltinEffect('gaussian_blur', { sigma_fraction_height: 0.0195 }), { ...makeVideoEditBuiltinEffect('mosaic'), amount: .3, enabled: false }])
   const templateRef = `preset:${preset.id}`
   const before = owner.past.length
   const created = applyVideoEditBuiltinEffect(id, sequenceId, [...pictures, sound], templateRef)

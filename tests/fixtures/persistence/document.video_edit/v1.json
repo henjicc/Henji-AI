@@ -146,7 +146,9 @@
                 "builtin": {
                   "id": "gaussian_blur",
                   "params": {
-                    "strength": 10
+                    "sigma_fraction_height": 0.003,
+                    "axis": "both",
+                    "edge_mode": "clamp"
                   }
                 }
               }

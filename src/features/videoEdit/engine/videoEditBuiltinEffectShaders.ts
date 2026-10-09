@@ -9,12 +9,34 @@
  */
 import { ADJUSTMENT_PASSES_WGSL } from '@/core/imaging/effects/wgsl/adjustmentPasses'
 import { GLOW_PRO_ENTRIES, GLOW_PRO_WGSL } from './glowPro'
+import { GAUSSIAN_WGSL } from '@/core/imaging/effects/wgsl/gaussian'
 const LEGACY_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_basic', 'color_grade_creative', 'color_grade_curve', 'color_grade_wheel', 'color_grade_vignette', 'color_grade_hue_curve', 'color_grade_lut'] as const
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...LEGACY_EFFECT_ENTRIES, 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_PRO_ENTRIES] as const
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...LEGACY_EFFECT_ENTRIES, 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_PRO_ENTRIES] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
 ${ADJUSTMENT_PASSES_WGSL}
+${GAUSSIAN_WGSL}
+@fragment fn gaussian_linear(v: Vertex) -> @location(0) vec4f {
+ let c = textureLoad(source, vec2i(v.position.xy), 0);
+ if (c.a <= 0.0) { return vec4f(0.0); }
+ let straight = c.rgb / c.a; let x = abs(straight);
+ let rgb = sign(straight) * select(pow((x + 0.055) / 1.055, vec3f(2.4)), x / 12.92, x <= vec3f(0.04045));
+ return vec4f(rgb * c.a, c.a);
+}
+@fragment fn gaussian_encoded(v: Vertex) -> @location(0) vec4f {
+ let c = textureLoad(source, vec2i(v.position.xy), 0);
+ if (c.a <= 0.0) { return vec4f(0.0); }
+ let straight = c.rgb / c.a; let x = abs(straight);
+ let rgb = sign(straight) * select(1.055 * pow(x, vec3f(1.0 / 2.4)) - 0.055, x * 12.92, x <= vec3f(0.0031308));
+ return vec4f(rgb * c.a, c.a);
+}
+@fragment fn gaussian_blur(v: Vertex) -> @location(0) vec4f {
+ return gaussianConvolve(source, v.position.xy - 0.5, u.a.xy, u.a.z, i32(u.a.w), vec2i(u.b.yz), u.b.x > 0.5, vec2i(0));
+}
+@fragment fn gaussian_resample(v: Vertex) -> @location(0) vec4f {
+ return gaussianSample(source, v.position.xy * u.a.xy - 0.5, vec2i(u.b.yz), u.b.x > 0.5, vec2i(0));
+}
 /** 等权直线取样（方向模糊）：a = (每步 u, 每步 v, 取样数)，以当前像素为中心。 */
 @fragment fn line(v: Vertex) -> @location(0) vec4f {
  let uv = uvOf(v); let n = i32(u.a.z); let middle = (u.a.z - 1.0) * 0.5;

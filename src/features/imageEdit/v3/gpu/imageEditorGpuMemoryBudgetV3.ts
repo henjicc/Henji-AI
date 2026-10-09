@@ -4,7 +4,7 @@ import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
 } from '@/core/imageEdit/v3/effects'
-import { resolveGaussianBlurV2Geometry } from '@/core/imageEdit/v3/effects/gaussianBlur'
+import { resolveGaussianPixelPlan } from '@/core/imageEdit/v3/effects/gaussianBlur'
 import type {
   ImageEditorGpuGraphEffectNodeV3,
   ImageEditorGpuRasterSceneV3,
@@ -61,18 +61,18 @@ function estimateEffectsBytes(
   const fullBytes = pixels(size) * LINEAR_BYTES_PER_PIXEL
   let scratchTargets = 0
   let maximumPyramidBytes = 0
+  let gaussianScratchBytes = 0
   for (const node of nodes) {
     if (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur') {
-      scratchTargets = Math.max(scratchTargets, 3)
       const radiusKey = node.definitionId === 'effect.blur-v1' ? 'radiusPixels' : 'radius'
       const rawRadius = node.parameters[radiusKey]
       const rawMip = node.definitionId === 'effect.blur-v1' ? 0 : node.parameters.mip
       const radius = typeof rawRadius === 'number' && Number.isFinite(rawRadius)
-        ? Math.max(0, node.definitionId === 'effect.blur-v1' ? Math.min(120, rawRadius) : rawRadius)
+        ? Math.max(0, rawRadius)
         : 0
       const mip = typeof rawMip === 'number' && Number.isFinite(rawMip) ? Math.max(0, rawMip) : 0
-      const level = resolveGaussianBlurV2Geometry({ radius, mip }).pyramidLevel
-      maximumPyramidBytes = Math.max(maximumPyramidBytes, gaussianPyramidBytes(size, level))
+      // final 的 fp32 中间窗口归各 Gaussian renderer 持有，不能按共享 fp16 金字塔估算。
+      gaussianScratchBytes += resolveGaussianPixelPlan({ radius: radius / (2 ** mip), mip: 0 }, size[0], size[1]).scratchBytes
     }
     if (node.definitionId === 'effect.fast-blur') scratchTargets = Math.max(scratchTargets, 2)
     if (node.definitionId === 'effect.diffusion') {
@@ -97,17 +97,7 @@ function estimateEffectsBytes(
       scratchTargets = Math.max(scratchTargets, 3)
     }
   }
-  return (nodes.length + scratchTargets) * fullBytes + maximumPyramidBytes
-}
-
-function gaussianPyramidBytes(size: readonly [number, number], levels: number): number {
-  let current = size
-  let total = 0
-  for (let index = 0; index < levels; index += 1) {
-    current = [Math.max(1, Math.ceil(current[0] / 2)), Math.max(1, Math.ceil(current[1] / 2))]
-    total += pixels(current) * LINEAR_BYTES_PER_PIXEL * (index === levels - 1 ? 2 : 1)
-  }
-  return total
+  return (nodes.length + scratchTargets) * fullBytes + maximumPyramidBytes + gaussianScratchBytes
 }
 
 function pyramidBytes(

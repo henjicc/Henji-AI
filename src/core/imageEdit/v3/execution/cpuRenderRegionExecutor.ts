@@ -165,7 +165,7 @@ function effectInputRegion(
     }).pyramidLevel
   } else if (node.definitionId === 'effect.blur-v1') {
     alignment = 2 ** resolveGaussianBlurV2Geometry({
-      radius: Math.min(120, Math.max(0, numberParameter(node, 'radiusPixels', 0))),
+      radius: numberParameter(node, 'radiusPixels', 0),
       mip: 0,
     }).pyramidLevel
   }

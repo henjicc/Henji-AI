@@ -1,3 +1,5 @@
+import { resolveGaussianBlurV2Geometry } from './effects/gaussianBlur'
+
 export const IMAGE_EDIT_STORAGE_TILE_SIZE = 512;
 export const IMAGE_EDIT_SUPERTILE_SIZE = 1024;
 
@@ -182,7 +184,7 @@ export function gaussianBlurHalo(radiusInDocumentPixels: number, mip: number): n
   if (!Number.isFinite(radiusInDocumentPixels) || radiusInDocumentPixels < 0) {
     throw new Error('模糊半径不能为负数');
   }
-  return Math.ceil((radiusInDocumentPixels / (2 ** mip)) * 3);
+  return resolveGaussianBlurV2Geometry({ radius: radiusInDocumentPixels, mip }).haloAtMip;
 }
 
 /**
