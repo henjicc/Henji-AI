@@ -50,7 +50,8 @@ describe('图片编辑 V3 失效传播', () => {
       kind: 'content', layerId: 'source', mip: 0,
       dirtyRect: { x: 100, y: 100, width: 20, height: 20 },
     }, registry);
-    expect(result.dirtyRect).toEqual({ x: 76, y: 76, width: 68, height: 68 });
+    // 共享高斯计划按 final 的 4σ 支持取 halo：sigma 8 → 32px。
+    expect(result.dirtyRect).toEqual({ x: 68, y: 68, width: 84, height: 84 });
     expect(result.invalidatedAnalysisNodeIds).toHaveLength(1);
     expect(result.retainedUnderlyingCaches).toBe(true);
   });
@@ -67,7 +68,8 @@ describe('图片编辑 V3 失效传播', () => {
       dirtyRect: { x: 100, y: 100, width: 20, height: 20 },
     }, registry);
 
-    expect(result.dirtyRect).toEqual({ x: 28, y: 28, width: 164, height: 164 });
+    // 两层累加：sigma 16 的 64px + sigma 8 的 32px。
+    expect(result.dirtyRect).toEqual({ x: 4, y: 4, width: 212, height: 212 });
   });
 
   it('只改变裁剪窗口时保留全部底层缓存', () => {

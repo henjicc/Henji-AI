@@ -38,7 +38,8 @@ function compare(actual: Float32Array, expected: Float32Array, maxBudget = 0.002
   expect(Math.sqrt(sum / actual.length)).toBeLessThan(rmseBudget)
 }
 describe('两宿主高斯真实设备符合性', () => {
-  it('1080p/4K interactive/final 热执行定向测量（非产品数量限制）', async () => {
+  // 性能测量只在本机显式开启（HENJI_GPU_MEASURE=1）；CI 软件渲染器下 4K 测量会超时且数字无意义。
+  it.skipIf(!process.env.HENJI_GPU_MEASURE)('1080p/4K interactive/final 热执行定向测量（非产品数量限制）', async () => {
     const measurements = []
     for (const [width, height] of [[1920, 1080], [3840, 2160]]) {
       const source = target(gpu, { size: [width, height], format: 'rgba16float' })
