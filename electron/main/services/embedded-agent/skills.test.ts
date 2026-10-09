@@ -16,7 +16,8 @@ const signal = new AbortController().signal
 describe('内置提示词技能使用正式文件注册与读取', () => {
   it('创作索引与每个可路由模块有界，主文件链接都能经正式加载入口读取', async () => {
     const catalog = await embeddedSkillCatalog()
-    expect(Buffer.byteLength(catalog.instructions, 'utf8')).toBeLessThan(2000)
+    // 六个技能仍只披露名称与触发条件，预算与外部 MCP 元数据索引一致。
+    expect(Buffer.byteLength(catalog.instructions, 'utf8')).toBeLessThan(2500)
     for (const name of ['prompt-optimization', 'cinematic-director', 'short-drama']) {
       const main = (await callEmbeddedSkill({ name, reason: '验证路由' }, signal)).data
       expect(main.bytes).toBeLessThan(4500)
@@ -46,7 +47,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     }
   })
   it('关闭设置后清单消失，旧工具调用也不能读取；恢复立即可用', async () => {
-    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench']
+    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench', 'image-edit-workbench']
     expect(await embeddedSkillCatalog()).toEqual({ tools: [], instructions: '' })
     await expect(callEmbeddedSkill({ name: 'prompt-optimization', reason: '旧调用' }, signal)).rejects.toThrow('停用')
     state.disabled = []
@@ -103,6 +104,37 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     await expect(callEmbeddedSkill({ name: 'video-edit-workbench', reason: '旧调用' }, signal)).rejects.toThrow('停用')
     state.disabled = []
     expect((await callEmbeddedSkill({ name: 'video-edit-workbench', reason: '恢复启用' }, signal)).data.name).toBe('video-edit-workbench')
+  })
+
+  it('图片编辑从元数据触发，四篇参考按需读取，停用与取消保持原契约', async () => {
+    const catalog = await embeddedSkillCatalog()
+    expect(catalog.instructions).toContain('image-edit-workbench')
+    expect(catalog.instructions).toContain('修补瑕疵')
+    expect(catalog.instructions).not.toContain('params.exposure')
+    const main = (await callEmbeddedSkill({ name: 'image-edit-workbench', reason: '修图并交付' }, signal)).data
+    const references = ['references/adjust.md', 'references/layers-export.md', 'references/repair.md', 'references/select.md']
+    expect(main.name).toBe('image-edit-workbench')
+    expect(main.source).toBe('builtin')
+    expect(main.content).toContain('trust=builtin')
+    expect(main.bytes).toBeLessThanOrEqual(6144)
+    expect(main.referencePaths).toEqual(references)
+    expect(main.content).not.toContain('params.exposure')
+    for (const reference of references) {
+      const result = (await callEmbeddedSkill({ name: 'image-edit-workbench', path: reference, reason: '当前修图步骤' }, signal)).data
+      expect(result.path).toBe(reference)
+      expect(result.content).toContain('trust=builtin')
+      expect(result.bytes).toBeLessThanOrEqual(8 * 1024)
+    }
+    await expect(callEmbeddedSkill({ name: 'image-edit-workbench', path: 'references/../SKILL.md', reason: '越界' }, signal)).rejects.toThrow()
+    await expect(callEmbeddedSkill({ name: 'image-edit-workbench', path: 'references/missing.md', reason: '错误路径' }, signal)).rejects.toThrow('references/repair.md')
+    const cancelled = new AbortController(); cancelled.abort(new Error('停止修图'))
+    await expect(callEmbeddedSkill({ name: 'image-edit-workbench', reason: '已取消' }, cancelled.signal)).rejects.toThrow('停止修图')
+    state.disabled = ['image-edit-workbench']
+    expect((await embeddedSkillCatalog()).instructions).not.toMatch(/"name"\s*:\s*"image-edit-workbench"/)
+    expect((await embeddedSkillCatalog()).instructions).toContain('video-edit-workbench')
+    await expect(callEmbeddedSkill({ name: 'image-edit-workbench', reason: '旧调用' }, signal)).rejects.toThrow('停用')
+    state.disabled = []
+    expect((await callEmbeddedSkill({ name: 'image-edit-workbench', reason: '恢复' }, signal)).data.name).toBe('image-edit-workbench')
   })
 
   it('剪辑代码素材技能进入索引，正文只路由，参考按需读取，停用后不可用且其他技能不受影响', async () => {

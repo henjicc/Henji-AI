@@ -53,7 +53,7 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     const data = await f.contract()
     const names = data.skills!.index.map(item => item.name)
     expect(data.skills!.tool).toBe('load_assistant_skill')
-    expect(names).toEqual(expect.arrayContaining(['video-edit-code-creation', 'video-edit-workbench', 'prompt-optimization']))
+    expect(names).toEqual(expect.arrayContaining(['video-edit-code-creation', 'video-edit-workbench', 'image-edit-workbench', 'prompt-optimization']))
     // 依赖已删除旧协议的内置技能不对任何智能体开放。
     expect(names).not.toContain('图片生成')
     for (const item of data.skills!.index) expect(Object.keys(item).sort()).toEqual(['description', 'name'])
@@ -132,6 +132,40 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     f.connections.revoke(f.caller.id)
     await f.server.revoke(f.caller.id)
     await expect(f.client.callTool({ name: 'load_assistant_skill', arguments: { name: 'video-edit-workbench', reason: '撤销后' } })).rejects.toThrow()
+  })
+
+  it('图片编辑技能按需加载四篇参考，停用、路径与连接撤销均拒绝旧调用', async () => {
+    const f = await fixture()
+    const metadata = (await f.contract()).skills!.index.find(item => item.name === 'image-edit-workbench')
+    expect(metadata?.description).toContain('修补瑕疵')
+    expect(Object.keys(metadata!).sort()).toEqual(['description', 'name'])
+    const main = await f.call({ name: 'image-edit-workbench', reason: '修图与图片交付' })
+    expect(main.isError, main.text).toBe(false)
+    expect(main.body.data).toMatchObject({ name: 'image-edit-workbench', path: null, source: 'builtin' })
+    expect(main.body.data!.content).toContain('trust=builtin')
+    expect(main.body.data!.content).not.toContain('params.exposure')
+    expect(main.body.data!.bytes).toBeLessThanOrEqual(6144)
+    const references = ['references/adjust.md', 'references/layers-export.md', 'references/repair.md', 'references/select.md']
+    expect(main.body.data!.referencePaths).toEqual(references)
+    for (const reference of references) {
+      const result = await f.call({ name: 'image-edit-workbench', path: reference, reason: '当前步骤' })
+      expect(result.isError, result.text).toBe(false)
+      expect(result.body.data).toMatchObject({ path: reference, source: 'builtin' })
+      expect(result.body.data!.content).toContain('trust=builtin')
+      expect(result.body.data!.bytes).toBeLessThanOrEqual(8 * 1024)
+    }
+    expect((await f.call({ name: 'image-edit-workbench', path: 'references/../SKILL.md', reason: '越界' })).isError).toBe(true)
+    expect((await f.call({ name: 'image-edit-workbench', path: 'references/missing.md', reason: '缺失' })).body.error?.message).toContain('references/repair.md')
+    state.disabled = ['image-edit-workbench']
+    expect((await f.contract()).skills!.index.map(item => item.name)).not.toContain('image-edit-workbench')
+    expect((await f.contract()).skills!.index.map(item => item.name)).toContain('video-edit-workbench')
+    expect((await f.call({ name: 'image-edit-workbench', reason: '旧调用' })).body.error?.message).toContain('SKILL_DISABLED')
+    state.disabled = []
+    expect((await f.call({ name: 'image-edit-workbench', reason: '恢复' })).isError).toBe(false)
+    expect(f.hostCalls).toHaveLength(0)
+    f.connections.revoke(f.caller.id)
+    await f.server.revoke(f.caller.id)
+    await expect(f.client.callTool({ name: 'load_assistant_skill', arguments: { name: 'image-edit-workbench', reason: '撤销后' } })).rejects.toThrow()
   })
 
   it('越界路径、未准入、停用与不存在的参考都被拒绝，并给出可改道的选项', async () => {
