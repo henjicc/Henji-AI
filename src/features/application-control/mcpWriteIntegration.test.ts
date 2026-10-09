@@ -86,12 +86,12 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
      * 公开写入范围来自反射注册表的派生结果，不是 MCP 侧的前缀白名单。
      * 声明了 writeExclusion 的实体在派发前就被拒绝，并且指得出改用哪条发现路径。
      */
-    const excluded = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), baselineIds, summary: '越界写入', changes: [{ kind: 'set_properties', entityType: 'image_edit.document', target: { kind: 'image_edit.document', id: 'doc-1' }, properties: { name: 'x' } }] } })
+    const excluded = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), baselineIds, summary: '越界写入', changes: [{ kind: 'set_properties', entityType: 'image_edit.preview', target: { kind: 'image_edit.preview', id: 'preview-1' }, properties: { name: 'x' } }] } })
     expect(excluded.isError).toBe(true)
     expect(JSON.stringify(excluded)).toContain('不属于公开业务写入范围')
     expect(JSON.stringify(excluded)).toContain('describe_application_contract')
     expect(bridge.writableEntityTypes().has('settings.registry')).toBe(true)
-    expect(bridge.writableEntityTypes().has('image_edit.document')).toBe(false)
+    expect(bridge.writableEntityTypes().has('image_edit.preview')).toBe(false)
 
     const operationId = randomUUID()
     const contrast = original === 'soft' ? 'strong' : 'soft'
