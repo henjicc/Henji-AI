@@ -4,6 +4,7 @@ import '@/tests/imageEditDocumentFixture'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { requireImageEditDocumentInstanceV3 } from '../application/imageEditDocumentInstances'
 import { useState } from 'react'
+import { VirtuosoMockContext } from 'react-virtuoso'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -197,7 +198,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     const document = createImageEditDocumentV3({ width: 640, height: 480, documentId: 'locked-ui' })
     document.layers = [createImageEditRasterLayerV3('outside', '外部层'), group]
     const rendered = render(
-      <div style={{ width: 1000, height: 700 }}>
+      <VirtuosoMockContext.Provider value={{ viewportHeight: 264, itemHeight: 44 }}><div style={{ width: 1000, height: 700 }}>
         <ImageEditorV3
           sourceImageUrl="preview.png"
           document={document}
@@ -205,11 +206,14 @@ describe('ImageEditorV3 lifecycle guards', () => {
           previewRenderer={previewRenderer}
           onDocumentChange={vi.fn()}
         />
-      </div>,
+      </div></VirtuosoMockContext.Provider>,
     )
     fireEvent.click(await screen.findByRole('button', { name: '展开图层组' }))
-    const selects = rendered.container.querySelectorAll<HTMLButtonElement>('[data-layer-select]')
-    fireEvent.click(Array.from(selects).find((button) => button.textContent?.includes('锁定组子层')) as HTMLButtonElement)
+    const layerButton = (name: string): HTMLButtonElement | undefined => Array.from(
+      rendered.container.querySelectorAll<HTMLButtonElement>('[data-layer-select]'),
+    ).find((button) => button.textContent?.includes(name))
+    await waitFor(() => expect(layerButton('锁定组子层')).toBeDefined())
+    fireEvent.click(layerButton('锁定组子层') as HTMLButtonElement)
     fireEvent.click(screen.getByRole('tab', { name: '基础' }))
 
     expect((screen.getByRole('switch', { name: '可见' }) as HTMLButtonElement).disabled).toBe(true)
@@ -219,8 +223,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     expect((screen.getByRole('button', { name: '删除所选图层' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: '复制图层' }) as HTMLButtonElement).disabled).toBe(true)
 
-    const outside = Array.from(selects).find((button) => button.textContent?.includes('外部层'))
-    fireEvent.click(outside as HTMLButtonElement, { ctrlKey: true })
+    fireEvent.click(layerButton('外部层') as HTMLButtonElement, { ctrlKey: true })
     expect((screen.getByRole('button', { name: '删除所选图层' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
