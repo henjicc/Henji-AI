@@ -11,25 +11,36 @@ import { packageComponentSource, type CodeComponentMetadata } from '../src/core/
 import { parseDocumentText } from '../src/core/documents/envelope'
 import { encodePngWithStoryboardMetadata } from '../electron/main/services/image/png-metadata'
 import { loadSharp } from '../electron/main/services/image/sharp-loader'
+import { IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
+
+/** Archive filenames follow the embedded package version, independently of header/kind versions. */
+export async function generateImagePersistencePackages(root = process.cwd()): Promise<void> {
+  const fixture = (id: string, file: string): string => path.join(root, 'tests/fixtures/persistence', id, file)
+  const read = async (id: string, version: number): Promise<unknown> => JSON.parse(await fsp.readFile(fixture(id, `v${version}.json`), 'utf8')) as unknown
+  const resources = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-persistence-resources-'))
+  try {
+    const codec = new HenjiImagePackageCodec(new ContentAddressedResourceStore(resources))
+    const working = validateImageEditDocumentEnvelope(await read('image-working-copy', IMAGE_WORKING_VERSION))
+    const header = serializeImageDocumentHeader(parseImageDocumentHeader(await read('image-header', IMAGE_HEADER_VERSION)))
+    const image = path.join(resources, '黄金图片.henjiimg')
+    await codec.export({ targetPath: image, document: working, documentHeader: header, now: new Date('2026-10-09T00:00:00.000Z') })
+    for (const id of ['document.image_document', 'image-package', 'image-header']) {
+      await fsp.copyFile(image, fixture(id, `v${IMAGE_PACKAGE_VERSION}.henjiimg`), fs.constants.COPYFILE_EXCL)
+    }
+    const layer = path.join(resources, '黄金图层.henjilayer')
+    await codec.export({ targetPath: layer, document: working, documentHeader: JSON.stringify(await read('canvas-layer-package', CANVAS_LAYER_PACKAGE_VERSION)), now: new Date('2026-10-09T00:00:00.000Z') })
+    await fsp.copyFile(layer, fixture('canvas-layer-package', `v${CANVAS_LAYER_PACKAGE_VERSION}.henjilayer`), fs.constants.COPYFILE_EXCL)
+  } finally { await fsp.rm(resources, { recursive: true, force: true }) }
+}
 
 /** Explicit authoring only. Current formal exporters generate archives; existing goldens never change. */
 export async function generatePersistencePackages(root = process.cwd(), only?: 'project-package', projectTarget?: string): Promise<void> {
   const fixture = (id: string, file = 'v1.json'): string => path.join(root, 'tests/fixtures/persistence', id, file)
   const read = (id: string, file?: string): unknown => JSON.parse(fs.readFileSync(fixture(id, file), 'utf8')) as unknown
   const env = createTestEnvironment()
-  const resources = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-persistence-resources-'))
   try {
     if (!only) {
-    const codec = new HenjiImagePackageCodec(new ContentAddressedResourceStore(resources))
-    const working = validateImageEditDocumentEnvelope(read('image-working-copy', 'v3.json'))
-    const header = serializeImageDocumentHeader(parseImageDocumentHeader(read('image-header')))
-    const image = path.join(env.outside, '黄金图片.henjiimg')
-    await codec.export({ targetPath: image, document: working, documentHeader: header, now: new Date('2026-10-09T00:00:00.000Z') })
-    for (const id of ['document.image_document', 'image-package', 'image-header']) await fsp.copyFile(image, fixture(id, 'v1.henjiimg'), fs.constants.COPYFILE_EXCL)
-    const layer = path.join(env.outside, '黄金图层.henjilayer')
-    await codec.export({ targetPath: layer, document: working, documentHeader: JSON.stringify(read('canvas-layer-package')), now: new Date('2026-10-09T00:00:00.000Z') })
-    await fsp.copyFile(layer, fixture('canvas-layer-package', 'v1.henjilayer'), fs.constants.COPYFILE_EXCL)
-
+      await generateImagePersistencePackages(root)
     }
     const code = read('code-asset') as { codeSources: { source: string }[] }
     const source = code.codeSources[0].source
@@ -47,7 +58,7 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
     await service.saveDocument({ target: { id: current.meta.id }, expectedRevision: current.meta.revision, content: golden })
     const exported = await service.exportProjectPackage({ projectId: project.id })
     await fsp.copyFile(exported.path, projectTarget ?? fixture('project-package', 'v1.henjipack'), fs.constants.COPYFILE_EXCL)
-  } finally { await env.cleanup(); await fsp.rm(resources, { recursive: true, force: true }) }
+  } finally { await env.cleanup() }
 }
 
 export async function generateStoryboardGolden(root = process.cwd()): Promise<void> {

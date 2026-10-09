@@ -13,6 +13,7 @@ import { parseVersionedPersistenceJson, readLocalPersistenceJson, readStoredPers
 import { backupPersistenceSnapshot, persistenceBackupLocation } from './backup'
 import { parseImageEditDocumentV3 } from '../imageEdit/v3/documentCodec'
 import { imageWorkingCopySchema } from './imageSchemas'
+import { IMAGE_WORKING_VERSION } from './schemaVersions'
 
 describe('持久格式逐版本链', () => {
   const schema = z.object({ label: z.string(), count: z.number() }).strict()
@@ -78,7 +79,7 @@ describe('持久格式逐版本链', () => {
 
 describe('Schema结构指纹', () => {
   it('图片高斯黄金样本保留 canonical 参数，旧半径字段明确拒绝', () => {
-    const raw = JSON.parse(fs.readFileSync('tests/fixtures/persistence/image-working-copy/v3.json', 'utf8')) as { document: { layers: Array<{ type: string; effectId?: string; params?: Record<string, unknown> }> } }
+    const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/image-working-copy/v${IMAGE_WORKING_VERSION}.json`, 'utf8')) as { document: { layers: Array<{ type: string; effectId?: string; params?: Record<string, unknown> }> } }
     const effect = raw.document.layers.find(layer => layer.effectId === 'gaussian_blur')
     expect(effect?.params).toEqual({ sigma_fraction_height: .009, axis: 'horizontal', edge_mode: 'transparent' })
     expect(imageWorkingCopySchema.safeParse(raw).success).toBe(true)
@@ -87,7 +88,7 @@ describe('Schema结构指纹', () => {
     expect(imageWorkingCopySchema.safeParse(raw).success).toBe(false)
   })
   it('V3 黄金样本的标注、几何可读，V2 文档、legacy 载荷及旧模糊不能进入当前落盘', () => {
-    const raw = JSON.parse(fs.readFileSync('tests/fixtures/persistence/image-working-copy/v3.json', 'utf8'))
+    const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/image-working-copy/v${IMAGE_WORKING_VERSION}.json`, 'utf8'))
     expect(parseImageEditDocumentV3(raw.document)).toMatchObject({ geometry: { orientation: { rotate: 90, mirrored: true }, crop: { width: 32, height: 40 } }, layers: [{}, {}, {}, { type: 'annotation', annotations: [{ id: 'golden-mark' }] }] })
     const effect = raw.document.layers.find((layer: { type: string }) => layer.type === 'effect')
     effect.legacyOperation = { sourceVersion: 2, operation: { type: 'blur' } }
@@ -112,6 +113,17 @@ describe('所有登记格式的黄金样本', () => {
     const directory = path.resolve('tests/fixtures/persistence', format.id)
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {
       const version = Number(file.slice(1, -5))
+      const floor = baseline.formats[format.id as keyof typeof baseline.formats]?.supportedFrom ?? 1
+      if (version < floor) {
+        it(`${format.id} ${file}低于支持下限v${floor}，明确拒绝为旧版本`, () => {
+          const raw: unknown = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'))
+          expect(() => upgradePersistenceContent(format, raw, version)).toThrowError(expect.objectContaining({
+            code: 'unsupported-version', formatId: format.id, fromVersion: version,
+          }))
+          expect(() => upgradePersistenceContent(format, raw, version)).toThrow('旧版本格式')
+        })
+        continue
+      }
       it(`${format.id} ${file}读取后升级至v${format.version}，通过当前schema`, () => {
         const raw: unknown = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'))
         let content = raw
@@ -130,7 +142,12 @@ describe('所有登记格式的黄金样本', () => {
           expect(document.sequences[0].transitions?.[0].rightClipId).toBe(clip.id)
         }
         if (format.id === 'code-asset') expect(decodeCodeAsset(encodeCodeAsset(format.schema.parse(upgraded) as ReturnType<typeof decodeCodeAsset>)).sourceVersion.files[0].hash).toHaveLength(64)
-        if (format.id === 'image-working-copy') expect(parseImageEditDocumentV3((upgraded as { document: unknown }).document).layers[0].type).toBe('raster')
+        if (format.id === 'image-working-copy' || format.id === 'image-package') {
+          const working = format.id === 'image-package' ? (upgraded as { document: unknown }).document : upgraded
+          const image = parseImageEditDocumentV3((working as { document: unknown }).document)
+          expect(image.version).toBe(IMAGE_WORKING_VERSION)
+          expect(image.layers[0]).toMatchObject({ type: 'raster', fillOpacity: .7, maskAttachment: { linked: false, density: .6 }, filters: [{ effectId: 'exposure', params: { stops: .4 } }] })
+        }
       })
     }
   }

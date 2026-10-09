@@ -12,12 +12,12 @@ import { BUILTIN_STYLE_KITS } from '../src/core/videoEdit/styleKitPresets'
 import { BUILTIN_TITLE_TEMPLATES } from '../src/core/videoEdit/titleTemplates'
 import { VIDEO_EDIT_EXPORT_PRESETS } from '../src/core/videoEdit/exportPresets'
 import { videoEditTextStyleSchema } from '../src/core/videoEdit/text'
-import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3, createImageEditAdjustmentLayerV3, createImageEditAnnotationLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
 import { createDefaultImageEditColorModeV3 } from '../src/core/imageEdit/v3/colorTypes'
 import { IMAGE_WORKING_VERSION, IMAGE_PACKAGE_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
 import { createThemePayloadV2 } from '../src/core/theme/themeMigration'
 import { DEFAULT_THEME_SEED } from '../src/core/theme/themeEngine'
-import { DEFAULT_THEME_COLOR_SCHEME_HEX, SETTINGS_ACCENT_HEX } from '../src/core/theme/colorTokens'
+import { BLACK_HEX, DEFAULT_THEME_COLOR_SCHEME_HEX, SETTINGS_ACCENT_HEX } from '../src/core/theme/colorTokens'
 
 const timestamp = '2026-10-09T00:00:00.000Z'
 const source = "export default { apiVersion: 1, languageVersion: 3, name: \"黄金代码\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 4, seed: 1, parameters: { label: { type: \"text\", title: \"标题\", default: \"黄金样本\", maxLength: 200 }, size: { type: \"number\", title: \"字号\", default: 24, min: 1, max: 72, step: 1, unit: \"px\" } }, render(ctx) { return [rect({ id: \"golden-box\", x: 0, y: 0, width: 100, height: 100, fill: [0, 0, 0, 1] })]; } };\n"
@@ -48,20 +48,28 @@ image.layers[0].maskAttachment.linked = false
 image.layers[0].maskAttachment.density = .6
 image.layers[0].filters = [{ id: 'golden-local-grade', operationType: 'adjustment', effectId: 'exposure',
   params: { stops: .4 }, enabled: true, opacity: .8, blendMode: 'normal', mask: null }]
+image.layers.push(createImageEditAdjustmentLayerV3('golden-shared-grade', '共享调整', 'color_grade', {
+  exposure: .25, curve_red_points: [{ x: 0, y: 0 }, { x: 50, y: 60 }, { x: 100, y: 100 }], shadow_hue: 230, shadow_strength: 12, hsl_saturation: -15,
+}))
 image.layers.push(createImageEditEffectLayerV3('golden-shared-gaussian', '高斯模糊', 'gaussian_blur', { sigma_fraction_height: .009, axis: 'horizontal', edge_mode: 'transparent' }))
+const annotation = createImageEditAnnotationLayerV3('golden-quick-marks', '快速标记')
+annotation.annotations.push({ id: 'golden-mark', type: 'rect', x: 10, y: 20, width: 12, height: 14, stroke: BLACK_HEX, lineWidth: 2 })
+image.layers.push(annotation)
+image.geometry.orientation = { rotate: 90, mirrored: true }
+image.geometry.crop = { x: 1, y: 2, width: 32, height: 40 }
 const working = { format: 'henji-image-edit', formatVersion: IMAGE_WORKING_VERSION, documentId: image.id, revision: 0, createdAt: timestamp, updatedAt: timestamp, document: image, resourceRefs: [] }
 const values: Record<string, unknown> = {
   'document.video_edit': videoContent,
   'document.canvas': { nodes: [{ id: 'golden-node', type: 'textDisplay', position: { x: 0, y: 0 }, data: { text: '黄金样本' } }], edges: [] },
   'document.audio_edit': { source: { mediaType: 'audio', sourcePath: '/persistence-project/素材/voice.wav', audioPath: '/persistence-project/素材/voice.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '参考稿', transcript: [{ id: 'word', text: '你好', startFrame: 0, endFrame: 24000, included: true, locked: false, granularity: 'word' }], suggestions: [], vstEnabled: false, cuts: [{ id: 'cut', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }], processorChain: [] },
   'document.camera_stage': { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }], activeCameraId: 'camera', sceneSettings: { sky: {} }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }] },
-  'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 64, height: 48, layers: 1 },
+  'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id }),
   'project-package': { format: 'henji-package', version: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },
   'code-version': { id: 'code-version', ...sourceVersion },
   'code-component': { schemaVersion: 1, name: '组件', version: 1, description: '黄金组件', exports: ['value'], imports: [] },
   'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], parameters: { label: '黄金样本' }, curves: {}, images: [] }),
-  'image-header': { format: 'henji-image-document', version: 1, id: image.id, revision: 0, kindVersion: 1, createdAt: timestamp, updatedAt: timestamp, contentRevision: 0, emptyUntilRevision: 0, summary: { width: 64, height: 48, layers: 1 } },
+  'image-header': { format: 'henji-image-document', version: 1, id: image.id, revision: 0, kindVersion: 1, createdAt: timestamp, updatedAt: timestamp, contentRevision: 0, emptyUntilRevision: 0, summary: { width: 32, height: 40, layers: image.layers.length } },
   'image-package': { packageFormat: 'henjiimg', packageVersion: IMAGE_PACKAGE_VERSION, createdAt: timestamp, document: working, resources: [] },
   'image-working-copy': working,
   settings: { providerKeyStatus: { kie: false }, uploadProvider: 'kie', uploadFallbackEnabled: false, canvasLodLevel: 'balanced', videoEditBinsFirst: true },

@@ -11,6 +11,7 @@ import { readImageDocumentPackageHeader } from '../image-editor-v3/image-documen
 import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSchemas'
 import { readStoryboardMetadataFromPng } from '../image/png-metadata'
 import { compileCodeMaterial } from '../../../../src/core/videoEdit/codeMaterial/compiler'
+import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION } from '../../../../src/core/persistence/schemaVersions'
 
 let environment: TestEnvironment | undefined
 afterEach(async () => { await environment?.cleanup(); environment = undefined })
@@ -20,24 +21,40 @@ describe('正式读入口打开黄金归档与源码', () => {
   it('图片文档和画布图层包通过真实ZIP读取，保留图层与文档头，不改写原件', async () => {
     environment = createTestEnvironment()
     const codec = new HenjiImagePackageCodec(new ContentAddressedResourceStore(path.join(environment.outside, 'resources')))
-    for (const [id, file] of [['document.image_document', 'v1.henjiimg'], ['image-package', 'v1.henjiimg'], ['canvas-layer-package', 'v1.henjilayer']]) {
+    for (const [id, file] of [['document.image_document', `v${IMAGE_PACKAGE_VERSION}.henjiimg`], ['image-package', `v${IMAGE_PACKAGE_VERSION}.henjiimg`], ['canvas-layer-package', `v${CANVAS_LAYER_PACKAGE_VERSION}.henjilayer`]]) {
       const source = fixture(id, file)
       const original = await fsp.readFile(source)
       const imported = await codec.import(source)
       try {
         expect(imageWorkingCopySchema.safeParse(imported.manifest.document).success).toBe(true)
+        expect(imported.manifest.packageVersion).toBe(IMAGE_PACKAGE_VERSION)
+        expect(imported.manifest.document.formatVersion).toBe(IMAGE_WORKING_VERSION)
         const layers = (imported.manifest.document.document as { layers: Array<{ id: string; type: string; adjustmentId?: string }> }).layers
-        expect(layers[0]).toMatchObject({ id: 'golden-layer', type: 'raster' })
+        expect(layers[0]).toMatchObject({ id: 'golden-layer', type: 'raster', fillOpacity: .7, maskAttachment: { linked: false, density: .6 }, filters: [{ effectId: 'exposure', params: { stops: .4 } }] })
         expect(layers).toHaveLength(4)
         expect(layers[1]).toMatchObject({ type: 'adjustment', adjustmentId: 'color_grade' })
         expect(layers[2]).toMatchObject({ type: 'effect', effectId: 'gaussian_blur' })
         expect(layers[3]).toMatchObject({ type: 'annotation', annotations: [{ id: 'golden-mark' }] })
         expect(imported.manifest.document.document).toMatchObject({ geometry: { orientation: { rotate: 90, mirrored: true }, crop: { x: 1, y: 2, width: 32, height: 40 } } })
         expect(imported.documentHeader).toBeDefined()
+        const header: unknown = JSON.parse(imported.documentHeader!.toString('utf8'))
+        expect(header).toMatchObject(id === 'canvas-layer-package'
+          ? { format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: 'golden-image' }
+          : { format: 'henji-image-document', version: 1, id: 'golden-image', summary: { width: 32, height: 40, layers: 4 } })
       } finally { await imported.resourceLease.release() }
       expect(await fsp.readFile(source)).toEqual(original)
     }
-    expect((await readImageDocumentPackageHeader(fixture('image-header', 'v1.henjiimg'))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 32, height: 40, layers: 4 } })
+    expect((await readImageDocumentPackageHeader(fixture('image-header', `v${IMAGE_PACKAGE_VERSION}.henjiimg`))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 32, height: 40, layers: 4 } })
+  })
+  it('开发期放弃的旧图片与画布图层 ZIP 明确拒绝为旧版本，不改写原件', async () => {
+    environment = createTestEnvironment()
+    const codec = new HenjiImagePackageCodec(new ContentAddressedResourceStore(path.join(environment.outside, 'resources')))
+    for (const [id, file] of [['document.image_document', 'v1.henjiimg'], ['image-package', 'v1.henjiimg'], ['canvas-layer-package', 'v1.henjilayer']]) {
+      const source = fixture(id, file)
+      const original = await fsp.readFile(source)
+      await expect(codec.import(source)).rejects.toMatchObject({ code: 'unsupported-version', formatId: 'image-package', fromVersion: 1 })
+      expect(await fsp.readFile(source)).toEqual(original)
+    }
   })
   it('真实项目包导入后剪辑内容和代码文件可读，保留效果、字幕与调色', async () => {
     environment = createTestEnvironment()

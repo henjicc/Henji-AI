@@ -3,6 +3,7 @@ import { ANNOTATION_DEFAULT_STROKE_HEX, ANNOTATION_DEFAULT_TEXT_HEX, BLACK_HEX, 
 import { createDefaultDiffusionOperationParams, createDefaultVgpuGlowOperationParams } from '@/core/imageEdit';
 import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory';
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes';
+import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '@/core/imageEdit/v3/documentTypes';
 import type { ImageEditEffectLayerV3 } from '@/core/imageEdit/v3/layerTypes';
 import type { MarkItem } from '@/core/imageEdit/types';
 function annotations(document: ImageEditDocumentV3): MarkItem[] { return document.layers.flatMap(layer => layer.type === 'annotation' ? layer.annotations : []); }
@@ -279,6 +280,6 @@ describe('智能助手图片编辑适配', () => {
     const updated = buildImageEditDocumentFromControlOperations(Array.from({ length: 40 }, (_, index) => ({ kind: 'mark', item: { id: `mark-${index}`, type: 'text', x: 2, y: 3, text: '保留', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 12 } })), { width: 100, height: 100 }, existing);
     expect(updated.layers[0]).toEqual(existing.layers[0]);
     expect(annotations(updated)).toHaveLength(40);
-    expect(updated.version).toBe(3);
+    expect(updated.version).toBe(IMAGE_EDIT_DOCUMENT_VERSION_V3);
   });
 });
