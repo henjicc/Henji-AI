@@ -1,3 +1,4 @@
+import type { PaintBrush, PaintDab, PaintPoint, PaintSurface, PaintTarget } from '../../../imaging/paint';
 import type { ImageEditColorDomain } from '../renderNodeDefinition';
 import type { ImageEditTransferFunctionV3, ImageEditWorkingSpaceV3 } from '../colorTypes';
 import type { ImageEditTileCoordinate } from '../tileGeometry';
@@ -10,7 +11,7 @@ export const IMAGE_EDIT_BRUSH_TILE_SIZE_V3 = 512;
 
 export type ImageEditBrushToolV3 = 'brush' | 'eraser';
 
-export interface ImageEditBrushPointV3 {
+export interface ImageEditBrushPointV3 extends PaintPoint {
   /** mip 0 图片坐标。 */
   x: number;
   y: number;
@@ -28,12 +29,7 @@ export interface BufferedImageEditBrushPointV3 {
   pressure: number;
 }
 
-export interface ImageEditBrushShapeV3 {
-  /** mip 0 图片像素中的直径。 */
-  size: number;
-  hardness: number;
-  opacity: number;
-}
+export interface ImageEditBrushShapeV3 extends PaintBrush {}
 
 export interface ImageEditRgbaBrushTargetV3 {
   kind: 'raster-rgba';
@@ -81,6 +77,8 @@ export interface ImageEditBrushStrokeOptionsV3 {
   shape: ImageEditBrushShapeV3;
   target: ImageEditBrushTargetV3;
   loadTile: ImageEditBrushTileLoaderV3;
+  loadCoverage?: (coordinate: ImageEditTileCoordinate, signal: AbortSignal) => Promise<Float32Array>;
+  rasterize?: (surface: PaintSurface, dabs: readonly PaintDab[], shape: PaintBrush, target: PaintTarget, tool: ImageEditBrushToolV3, signal: AbortSignal) => Promise<boolean>;
   minScreenDistance?: number;
   simplifyScreenTolerance?: number;
   simplifyPressureTolerance?: number;

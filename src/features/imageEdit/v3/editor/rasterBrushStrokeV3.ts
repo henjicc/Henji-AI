@@ -6,6 +6,7 @@ import { ImageEditBrushStrokeSessionV3 } from '@/core/imageEdit/v3/brush/strokeS
 import { materializeImageEditBrushTileDeltaV3 } from '@/core/imageEdit/v3/brush/tileDelta'
 import type {
   ImageEditBrushPointV3,
+  ImageEditBrushStrokeOptionsV3,
   ImageEditBrushShapeV3,
   ImageEditBrushStrokeResultV3,
   ImageEditBrushTargetV3,
@@ -31,6 +32,8 @@ export interface ImageEditorRasterBrushStrokeOptionsV3 {
   shape: ImageEditBrushShapeV3
   target: ImageEditBrushTargetV3
   loadTile: ImageEditBrushTileLoaderV3
+  loadCoverage?: ImageEditBrushStrokeOptionsV3['loadCoverage']
+  rasterize?: ImageEditBrushStrokeOptionsV3['rasterize']
   resolveStorageSize?: (signal: AbortSignal) => Promise<ImageEditSize>
   resourceByteSizes: Map<string, number>
   onPreviewTiles: (changes: readonly ImageEditBrushTileChangeV3[]) => void
@@ -87,6 +90,8 @@ export class ImageEditorRasterBrushStrokeV3 {
       shape: options.shape,
       target: options.target,
       loadTile: options.loadTile,
+      loadCoverage: options.loadCoverage,
+      rasterize: options.rasterize,
       minScreenDistance: 0.75,
       simplifyScreenTolerance: 0.75,
       simplifyPressureTolerance: 0.02,
@@ -185,9 +190,8 @@ export class ImageEditorRasterBrushStrokeV3 {
       if (this.isCancelled()) return null
       this.state = 'failed'
       this.options.bus.clearPreview(this.previewId)
-      logger.error('栅格笔画手势失败', {
+      logger.error('栅格笔画手势失败', error, {
         event: 'image_editor_v3.raster_brush.stroke.failed',
-        error,
         context: { commandId: this.commandId, layerId: this.options.layerId },
       })
       throw error

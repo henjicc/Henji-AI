@@ -76,6 +76,21 @@ const rasterTarget = {
 };
 
 describe('ImageEditBrushStrokeSessionV3', () => {
+  it('相同压感/倾角采样在不同批次刷新后得到相同瓦片字节与尾点', async () => {
+    const canvas = { width: 1024, height: 24 };
+    const points = [{ x: 500, y: 12, pressure: .2, tiltX: 20 }, { x: 511, y: 12, pressure: .5, tiltX: 40 }, { x: 525, y: 12, pressure: 1, tiltX: 0 }]
+      .map(p => ({ ...p, screenX: p.x, screenY: p.y }));
+    const run = async (split: boolean) => {
+      const session = new ImageEditBrushStrokeSessionV3({ canvas, tool: 'brush', target: rasterTarget,
+        shape: { size: 8, hardness: .5, opacity: .4, flow: .3, smoothing: .5, texture: .2, scatter: .2, seed: 95, tilt: true }, loadTile: rgbaLoader(canvas, []) });
+      if (split) for (const p of points) { session.appendCoalescedPoints([p]); await session.renderPending(); }
+      else { session.appendCoalescedPoints(points); await session.renderPending(); }
+      return session.finish();
+    };
+    const first = await run(false), second = await run(true);
+    expect(first?.changes.map(c => c.tileKey)).toEqual(['0/0/0', '0/1/0']);
+    expect(second?.changes.map(c => [...c.tile.data])).toEqual(first?.changes.map(c => [...c.tile.data]));
+  });
   const oldResourceId = `sha256:${'a'.repeat(64)}`;
   const newResourceId = `sha256:${'b'.repeat(64)}`;
   it('跨越 512 边界时只读取并修改相邻两块 RGBA 瓦片', async () => {

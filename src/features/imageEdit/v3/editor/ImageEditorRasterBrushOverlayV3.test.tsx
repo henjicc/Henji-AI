@@ -39,6 +39,14 @@ vi.mock('@/commands/imageEditorV3', async (importOriginal) => {
   return { ...original, persistImageEditorV3BrushTiles: bridge.persistBrushTiles }
 })
 
+vi.mock('../tools/paint/workerClient', async () => {
+  const { rasterizePaintDabs } = await import('@/core/imaging/paint');
+  return { PaintWorkerClient: class {
+    rasterize = async (...args: Parameters<typeof rasterizePaintDabs>) => rasterizePaintDabs(...args);
+    dispose(): void {}
+  } };
+});
+
 class ImageDataStub {
   readonly colorSpace = 'srgb'
   constructor(
@@ -191,7 +199,8 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
     }))
 
     fireEvent.click(screen.getByRole('button', { name: '编辑蒙版' }))
-    fireEvent.click(screen.getByRole('button', { name: '擦除' }))
+    fireEvent.click(screen.getByRole('button', { name: '绘制' }))
+    fireEvent.click(screen.getByRole('option', { name: '擦除' }))
     const overlay = await waitFor(() => (
       rendered.container.querySelector('[data-raster-brush-overlay]') as SVGSVGElement
     ))

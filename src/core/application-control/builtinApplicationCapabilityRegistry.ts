@@ -1,3 +1,4 @@
+import { paintImageEditTargetCapability } from './domains/imageEdit/imageEditPaintCapabilities'
 import { convertImageEditFilterScopeCapability } from './domains/imageEdit/imageEditFilterCapabilities'
 import { computeImageEditSelectionCapability } from './domains/imageEdit/imageEditAdvancedSelectionCapabilities'
 import { selectImageEditRegionCapability } from './domains/imageEdit/imageEditSubjectCapabilities'
@@ -57,6 +58,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...IMAGE_MARK_APPLICATION_CAPABILITIES,
   applyImageEditSelectionCapability,
   computeImageEditSelectionCapability,
+  paintImageEditTargetCapability,
   convertImageEditFilterScopeCapability,
   ...IMAGE_EDIT_REPAIR_CAPABILITIES,
   selectImageEditRegionCapability,

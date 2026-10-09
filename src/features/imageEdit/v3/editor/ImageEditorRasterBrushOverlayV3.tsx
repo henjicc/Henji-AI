@@ -1,3 +1,7 @@
+import { UiError, UiPanel } from '@/components/ui'
+import { PaintWorkerClient } from '../tools/paint/workerClient'
+import { createPaintSelectionClip } from '../tools/paint/selectionClip'
+import { imageEditPaintBrushV3 } from '../tools/paint/settings'
 import type { ImageEditBrushPointV3, ImageEditBrushTileChangeV3 } from '@/core/imageEdit/v3/brush/contracts'
 import { linearPreviewTileToImageDataV3 } from '@/features/imageEdit/v3/execution/previewPixelsV3'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -41,11 +45,13 @@ interface ActiveRasterBrushGestureV3 {
   inverseMatrix: AnnotationMatrixV3
   pointer: CapturedEditorPointerV3
   documentId: string
+  selectionRevision: number
   documentRevision: number
   selectedLayerIdsKey: string
   tool: ImageEditorBrushToolIdV3
   phase: 'drawing' | 'finishing'
   committedRevision?: number
+  disposeCompute: () => void
 }
 
 function RasterBrushTileCanvasV3({ change }: { change: ImageEditBrushTileChangeV3 }): JSX.Element {
@@ -108,6 +114,7 @@ export function ImageEditorRasterBrushOverlayV3({
   const selectedLayerIds = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_IDS,
   )
+  const editTarget = useImageEditorSessionStoreV3(state => state.sessions[controller.sessionId]?.editTarget ?? 'pixels')
   const settings = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.toolSettings,
   )
@@ -118,7 +125,7 @@ export function ImageEditorRasterBrushOverlayV3({
   const brushTool = activeTool === 'raster-brush'
     || activeTool === 'eraser'
     || activeTool === 'mask-edit'
-  const selectedLayerIdsKey = selectedLayerIds.join('\u0000')
+  const selectedLayerIdsKey = selectedLayerIds.join('\u0000') + editTarget + (settings?.maskMode ?? '')
 
   useEffect(() => {
     for (const [resourceId, byteSize] of Object.entries(resourceByteSizes ?? {})) {
@@ -135,6 +142,7 @@ export function ImageEditorRasterBrushOverlayV3({
       selectedLayerIds,
       activeTool,
       maskMode: settings?.maskMode ?? 'paint',
+      editTarget, color: settings?.paintColor, maskValue: settings?.paintMaskValue,
       resourceByteSizes: resourceSizesRef.current,
     })
     if (!resolved.ready) return null
@@ -144,7 +152,7 @@ export function ImageEditorRasterBrushOverlayV3({
       tileResources: resolved.target.tileResources,
     })
     return tiles.size > 0 ? { matrix: resolved.target.matrix, tiles } : null
-  }, [activeTool, brushTool, bus, selectedLayerIds, settings?.maskMode])
+  }, [activeTool, brushTool, bus, selectedLayerIds, settings?.maskMode, editTarget, settings?.paintColor, settings?.paintMaskValue])
 
   const refreshCommittedOverlay = useCallback((): void => {
     setOverlay(resolveCommittedOverlay())
@@ -194,6 +202,7 @@ export function ImageEditorRasterBrushOverlayV3({
       screenX: sample.clientX,
       screenY: sample.clientY,
       pressure: pressureOf(sample),
+      tiltX: sample.tiltX ?? 0, tiltY: sample.tiltY ?? 0,
     }
   }), [clientToLayer])
 
@@ -204,6 +213,7 @@ export function ImageEditorRasterBrushOverlayV3({
     releaseEditorPointerV3(current.pointer)
     current.queue.stop()
     current.stroke.cancel()
+    current.disposeCompute()
     refreshCommittedOverlay()
   }, [refreshCommittedOverlay])
 
@@ -215,6 +225,7 @@ export function ImageEditorRasterBrushOverlayV3({
       releaseEditorPointerV3(current.pointer)
       current.queue.stop()
       current.stroke.cancel()
+      current.disposeCompute()
     }
   }, [])
 
@@ -249,6 +260,11 @@ export function ImageEditorRasterBrushOverlayV3({
     selectedLayerIdsKey,
   ])
 
+  useEffect(() => bus.subscribe(() => {
+    const current = gestureRef.current
+    if (current && bus.getSnapshot().selectionRevision !== current.selectionRevision) cancelGesture()
+  }), [bus, cancelGesture])
+
   useEffect(() => bindPointerAvailability?.('raster', () => !gestureRef.current), [bindPointerAvailability])
 
   const moveGesture = (event: ReactPointerEvent<SVGSVGElement>): void => {
@@ -280,11 +296,13 @@ export function ImageEditorRasterBrushOverlayV3({
         if (gestureRef.current === current) setFailure(null)
       } catch (error) {
         current.stroke.cancel()
+        current.disposeCompute()
         if (gestureRef.current === current) {
           setFailure(t('imageEditor.v3.rasterBrush.failed', { reason: errorMessage(error) }))
         }
       } finally {
         current.queue.stop()
+            current.disposeCompute()
         if (gestureRef.current === current) {
           gestureRef.current = null
           releaseEditorPointerV3(current.pointer)
@@ -319,6 +337,7 @@ export function ImageEditorRasterBrushOverlayV3({
       selectedLayerIds,
       activeTool,
       maskMode: settings?.maskMode ?? 'paint',
+      editTarget, color: settings?.paintColor, maskValue: settings?.paintMaskValue,
       resourceByteSizes: resourceSizesRef.current,
     })
     if (!resolved.ready) {
@@ -335,17 +354,17 @@ export function ImageEditorRasterBrushOverlayV3({
     })
     setOverlay({ matrix, tiles: existingTiles })
     const tool = activeTool as ImageEditorBrushToolIdV3
+    const compute = new PaintWorkerClient()
+    const clip = createPaintSelectionClip(document, bus.getSnapshot().selection, matrix, target.resolveStorageSize ?? (async () => document.geometry))
     const stroke = new ImageEditorRasterBrushStrokeV3({
       bus,
       document,
       layerId: target.layerId,
       destination: target.destination,
       tool: target.tool,
-      shape: {
-        size: settings?.brushSize ?? 32,
-        opacity: settings?.brushOpacity ?? 1,
-        hardness: settings?.brushHardness ?? 0.8,
-      },
+      shape: settings ? imageEditPaintBrushV3(settings) : { size: 32, opacity: 1, hardness: .8 },
+      rasterize: compute.rasterize,
+      loadCoverage: clip.read,
       target: target.target,
       loadTile: target.loadTile,
       resolveStorageSize: target.resolveStorageSize,
@@ -378,9 +397,11 @@ export function ImageEditorRasterBrushOverlayV3({
       pointer: captureEditorPointerV3(event.currentTarget, event.pointerId),
       documentId: document.id,
       documentRevision: document.revision,
+      selectionRevision: bus.getSnapshot().selectionRevision,
       selectedLayerIdsKey,
       tool,
       phase: 'drawing',
+      disposeCompute: () => { compute.dispose(); clip.dispose() },
     }
     gestureRef.current = current
     current.queue.enqueue(samplesToPoints(current, [event]))
@@ -422,14 +443,7 @@ export function ImageEditorRasterBrushOverlayV3({
           ) : null}
         </svg>
       ) : null}
-      {failure ? (
-        <div
-          role="alert"
-          className="ui-glass pointer-events-none absolute left-1/2 top-3 max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg px-3 py-2 text-xs text-text1"
-        >
-          {failure}
-        </div>
-      ) : null}
+      {failure ? <UiPanel className="absolute left-1/2 top-3 max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 px-4"><UiError size="sm" message={failure} /></UiPanel> : null}
     </>
   )
 }

@@ -13,7 +13,9 @@ describe('参数与图层蒙版同核', () => {
     const region = { x: 0, y: 0, width: 4, height: 2 };
     const coverage = rasterizeQuickMaskCoverage(document, region);
     const program = quickMaskRegionProgram(document);
-    const selection = { ...program, operations: [{ shape: program.operations[0].shape, combine: 'replace' as const }] };
+    const first = program.operations[0];
+    if (first.kind !== 'region') throw new Error('fixture');
+    const selection = { ...first.program, operations: [{ shape: first.program.operations[0].shape, combine: 'replace' as const }] };
     // Here the shape is a rectangle; compressed/brush adaptation is covered by the core suite.
     const shape = selection.operations[0].shape;
     if (shape.type !== 'rectangle') throw new Error('fixture');

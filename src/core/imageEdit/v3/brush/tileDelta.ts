@@ -76,7 +76,7 @@ function sumBytes(resources: readonly ImageEditBrushResourceReferenceV3[]): numb
  * 旧、新哈希都必须保留到对应 undo/redo 条目被裁剪为止。
  */
 export function materializeImageEditBrushTileDeltaV3(
-  stroke: ImageEditBrushStrokeResultV3,
+  stroke: { changes: readonly Pick<ImageEditBrushStrokeResultV3['changes'][number], 'tileKey' | 'oldResource'>[] },
   options: MaterializeImageEditBrushDeltaOptionsV3,
 ): MaterializedImageEditBrushDeltaV3 {
   if (!options.commandId || !options.layerId) throw new Error('画笔命令 ID 与图层 ID 不能为空');

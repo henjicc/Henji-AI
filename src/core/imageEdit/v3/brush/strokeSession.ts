@@ -10,7 +10,6 @@ import {
   type ImageEditTileCoordinate,
 } from '../tileGeometry';
 import type {
-  BufferedImageEditBrushPointV3,
   ImageEditBrushPointBufferStatsV3,
   ImageEditBrushPointV3,
   ImageEditBrushResourceReferenceV3,
@@ -23,10 +22,7 @@ import type {
 } from './contracts';
 import { IMAGE_EDIT_BRUSH_TILE_SIZE_V3 } from './contracts';
 import { ImageEditBrushPointBufferV3 } from './pointBuffer';
-import {
-  imageEditBrushSegmentBoundsV3,
-  rasterizeImageEditBrushSegmentV3,
-} from './rasterize';
+import { PaintDabGenerator, paintDabBounds, rasterizePaintDabs, validatePaintBrush, type PaintDab, type PaintSurface } from '../../../imaging/paint';
 import { simplifyImageEditBrushPointsV3 } from './simplify';
 
 type StrokeState = 'active' | 'finishing' | 'completed' | 'cancelled' | 'failed';
@@ -37,6 +33,7 @@ interface WorkingTile {
   tile: ImageEditBrushTileV3;
   oldResource: ImageEditBrushResourceReferenceV3 | null;
   changed: boolean;
+  surface: PaintSurface;
 }
 
 export function imageEditBrushTileKeyV3(coordinate: ImageEditTileCoordinate): string {
@@ -61,6 +58,7 @@ function assertOptions(options: ImageEditBrushStrokeOptionsV3): void {
     || options.shape.opacity < 0 || options.shape.opacity > 1) {
     throw new Error('画笔不透明度必须位于 0～1');
   }
+  validatePaintBrush(options.shape);
   if (typeof options.loadTile !== 'function') throw new Error('画笔缺少瓦片读取器');
   if (options.target.kind === 'mask') {
     const value = options.target.brushValue ?? 1;
@@ -185,14 +183,15 @@ export class ImageEditBrushStrokeSessionV3 {
   private readonly pointBuffer: ImageEditBrushPointBufferV3;
   private readonly abortController = new AbortController();
   private readonly working = new Map<string, WorkingTile>();
-  private pendingPoints: BufferedImageEditBrushPointV3[] = [];
-  private lastRenderedPoint: BufferedImageEditBrushPointV3 | null = null;
-  private renderedIncrementally = false;
+  private pendingPoints: ImageEditBrushPointV3[] = [];
+  private readonly generator: PaintDabGenerator;
   private rendering = false;
   private state: StrokeState = 'active';
 
   constructor(private readonly options: ImageEditBrushStrokeOptionsV3) {
     assertOptions(options);
+    this.options = { ...options, shape: { ...options.shape }, target: cloneTarget(options.target) };
+    this.generator = new PaintDabGenerator(this.options.shape);
     this.pointBuffer = new ImageEditBrushPointBufferV3(options.minScreenDistance);
   }
 
@@ -226,9 +225,12 @@ export class ImageEditBrushStrokeSessionV3 {
     this.assertActive();
     if (this.rendering) throw new Error('画笔增量栅格化不能并发执行');
     this.rendering = true;
-    this.renderedIncrementally = true;
+
     try {
       return await this.renderPendingPoints(false);
+    } catch (error) {
+      if (!this.isCancelled()) this.state = 'failed';
+      throw error;
     } finally {
       this.rendering = false;
     }
@@ -250,12 +252,7 @@ export class ImageEditBrushStrokeSessionV3 {
       return null;
     }
     try {
-      if (!this.renderedIncrementally) {
-        this.pendingPoints = [];
-        await this.renderSegments(points);
-      } else {
-        await this.renderPendingPoints(true);
-      }
+      await this.renderPendingPoints(true);
       return this.createResult(points.length, bufferStats);
     } catch (error) {
       if (this.isCancelled()) return null;
@@ -264,47 +261,29 @@ export class ImageEditBrushStrokeSessionV3 {
     }
   }
 
-  private async renderSegments(
-    points: readonly BufferedImageEditBrushPointV3[],
-    dirtyKeys?: Set<string>,
-    startPoint?: BufferedImageEditBrushPointV3 | null,
-  ): Promise<void> {
-    if (points.length === 0) return;
-    const sequence = startPoint ? [startPoint, ...points] : points;
-    const working = this.working;
-    const segmentCount = Math.max(1, sequence.length - 1);
-    for (let index = 0; index < segmentCount; index += 1) {
-      if (this.state === 'cancelled') return;
-      const start = sequence.length === 1 ? sequence[0] : sequence[index];
-      const end = sequence.length === 1 ? sequence[0] : sequence[index + 1];
-      const bounds = imageEditBrushSegmentBoundsV3(start, end, this.options.shape.size);
-      if (!bounds) continue;
-      const coordinates = enumerateTilesForRect(
-        this.options.canvas,
-        0,
-        bounds,
-        IMAGE_EDIT_BRUSH_TILE_SIZE_V3,
-      );
-      for (const coordinate of coordinates) {
-        const tile = await this.getWorkingTile(working, coordinate);
-        if (this.isCancelled()) return;
-        const region = createTileRegion(
-          this.options.canvas,
-          coordinate,
-          0,
-          IMAGE_EDIT_BRUSH_TILE_SIZE_V3,
-        );
-        const changed = rasterizeImageEditBrushSegmentV3(
-          { tile: tile.tile, originX: region.outputRect.x, originY: region.outputRect.y },
-          start,
-          end,
-          this.options.shape,
-          this.options.target,
-          this.options.tool,
-        );
-        tile.changed = changed || tile.changed;
-        if (changed) dirtyKeys?.add(imageEditBrushTileKeyV3(coordinate));
+  private async renderDabs(dabs: readonly PaintDab[], dirtyKeys: Set<string>): Promise<void> {
+    const target = this.options.target.kind === 'mask'
+      ? { kind: 'mask' as const, value: this.options.target.brushValue ?? 1 }
+      : { kind: 'rgba' as const, color: this.options.target.premultipliedColor };
+    const batches = new Map<string, { coordinate: ImageEditTileCoordinate; dabs: PaintDab[] }>();
+    for (const dab of dabs) {
+      if (dab.radius <= 0 || dab.flow <= 0) continue;
+      for (const coordinate of enumerateTilesForRect(this.options.canvas, 0, paintDabBounds(dab), IMAGE_EDIT_BRUSH_TILE_SIZE_V3)) {
+        const key = imageEditBrushTileKeyV3(coordinate);
+        const batch = batches.get(key) ?? { coordinate, dabs: [] };
+        batch.dabs.push(dab); batches.set(key, batch);
       }
+    }
+    for (const [key, batch] of batches) {
+      if (this.isCancelled()) return;
+      const entry = await this.getWorkingTile(this.working, batch.coordinate);
+      if (this.isCancelled()) return;
+      const changed = this.options.rasterize
+        ? await this.options.rasterize(entry.surface, batch.dabs, this.options.shape, target, this.options.tool, this.abortController.signal)
+        : rasterizePaintDabs(entry.surface, batch.dabs, this.options.shape, target, this.options.tool);
+      if (this.isCancelled()) return;
+      entry.changed = changed || entry.changed;
+      if (changed) dirtyKeys.add(key);
     }
   }
 
@@ -339,42 +318,21 @@ export class ImageEditBrushStrokeSessionV3 {
     };
   }
 
-  private async renderPendingPoints(includeTrailingPoint: boolean): Promise<ImageEditBrushTileChangeV3[]> {
-    if (includeTrailingPoint) {
-      const latest = this.pointBuffer.getLast();
-      if (latest && this.lastRenderedPoint && !this.samePoint(latest, this.lastRenderedPoint)) {
-        const pendingLast = this.pendingPoints[this.pendingPoints.length - 1];
-        if (!pendingLast || !this.samePoint(pendingLast, latest)) this.pendingPoints.push(latest);
-      }
-    }
+  private async renderPendingPoints(finish: boolean): Promise<ImageEditBrushTileChangeV3[]> {
     const points = this.pendingPoints;
     this.pendingPoints = [];
-    if (points.length === 0) return [];
+    const dabs = this.generator.append(points);
+    if (finish) dabs.push(...this.generator.finish());
     const dirtyKeys = new Set<string>();
-    await this.renderSegments(points, dirtyKeys, this.lastRenderedPoint);
+    await this.renderDabs(dabs, dirtyKeys);
     if (this.isCancelled()) return [];
-    this.lastRenderedPoint = points[points.length - 1];
-    return [...dirtyKeys]
-      .map((key) => this.working.get(key))
-      .filter((entry): entry is WorkingTile => Boolean(entry?.changed))
-      .map((entry) => this.toChange(entry));
+    return [...dirtyKeys].map(key => this.toChange(this.working.get(key)!));
   }
 
   private appendBufferedPoint(point: ImageEditBrushPointV3): void {
-    const retained = this.pointBuffer.append(point);
-    const latest = this.pointBuffer.getLast();
-    if (!latest) return;
-    if (retained) this.pendingPoints.push(latest);
-    else if (this.pendingPoints.length > 0) this.pendingPoints[this.pendingPoints.length - 1] = latest;
-  }
-
-  private samePoint(
-    left: BufferedImageEditBrushPointV3,
-    right: BufferedImageEditBrushPointV3,
-  ): boolean {
-    return left.x === right.x && left.y === right.y
-      && left.screenX === right.screenX && left.screenY === right.screenY
-      && left.pressure === right.pressure;
+    this.pointBuffer.append(point);
+    // Preserve the raw stylus stream for replay. Screen thinning is metrics only.
+    this.pendingPoints.push({ ...point });
   }
 
   private toChange(entry: WorkingTile): ImageEditBrushTileChangeV3 {
@@ -402,16 +360,15 @@ export class ImageEditBrushStrokeSessionV3 {
     );
     const snapshot = await this.options.loadTile(coordinate, this.abortController.signal);
     if (this.isCancelled()) throw new Error('画笔操作已取消');
+    const tile = cloneAndValidateTile(snapshot, this.options.target, region.outputRect.width, region.outputRect.height);
+    const clip = await this.options.loadCoverage?.(coordinate, this.abortController.signal);
+    if (this.isCancelled()) throw new Error('画笔操作已取消');
     const entry: WorkingTile = {
-      coordinate: { ...coordinate },
-      tile: cloneAndValidateTile(
-        snapshot,
-        this.options.target,
-        region.outputRect.width,
-        region.outputRect.height,
-      ),
+      coordinate: { ...coordinate }, tile,
       oldResource: snapshot.resource ? { ...snapshot.resource } : null,
       changed: false,
+      surface: { width: tile.width, height: tile.height, originX: region.outputRect.x, originY: region.outputRect.y,
+        before: new Float32Array(tile.data), output: tile.data, coverage: new Float32Array(tile.width * tile.height), clip },
     };
     working.set(key, entry);
     return entry;

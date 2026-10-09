@@ -43,6 +43,8 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'raster-brush',
       'eraser',
       'mask-edit',
+      'paint-gradient',
+      'paint-fill',
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
       .toEqual(getReadyImageEditorToolIdsV3(profile))
@@ -70,7 +72,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     expect(mask.adjustments).toEqual([])
     expect(getReadyImageEditorToolIdsV3(mask)).toEqual([
       'move', 'hand', 'zoom', 'select-rect', 'select-ellipse', 'select-lasso',
-      'raster-brush', 'eraser', 'mask-edit',
+      'raster-brush', 'eraser', 'mask-edit', 'paint-gradient', 'paint-fill',
     ])
     expect(mask.saveActions).toEqual(['save-document'])
   })

@@ -1,7 +1,6 @@
 import { createLogger } from '@/core/logging';
 import { canvasToDataUrl } from '@/services/imageSource';
-import { evaluateRegionProgram } from '@/core/imaging/regions';
-import { quickMaskRegionProgram } from './regionAdapter';
+import { quickMaskRegionProgram, evaluateQuickMaskProgram } from './regionAdapter';
 import type { MaskEditorDocument } from './types';
 import { MaskRegionRasterizer } from './regionWorkerClient';
 
@@ -23,7 +22,7 @@ export function renderMaskDocument(context: MaskRenderContext, document: MaskEdi
   const program = quickMaskRegionProgram(document);
   for (let y = 0; y < document.height; y += 512) for (let x = 0; x < document.width; x += 512) {
     const region = { x, y, width: Math.min(512, document.width - x), height: Math.min(512, document.height - y) };
-    const coverage = evaluateRegionProgram(program, document, region);
+    const coverage = evaluateQuickMaskProgram(program, region);
     writeCoverage(context, coverage, region);
   }
 }

@@ -1,3 +1,4 @@
+import { paintColorInDocument } from '../tools/paint/color'
 import type {
   ImageEditBrushTargetV3,
   ImageEditBrushTileLoaderV3,
@@ -41,9 +42,12 @@ export function resolveImageEditorBrushEditingTargetV3(input: {
   selectedLayerIds: readonly string[]
   activeTool: ImageEditorBrushToolIdV3
   maskMode: 'paint' | 'erase'
+  editTarget?: 'pixels' | 'mask'
+  color?: string
+  maskValue?: number
   resourceByteSizes: ReadonlyMap<string, number>
 }): ImageEditorBrushEditingTargetResolutionV3 {
-  if (input.activeTool === 'mask-edit') {
+  if (input.activeTool === 'mask-edit' || input.editTarget === 'mask') {
     const resolved = resolveImageEditorMaskBrushLayerV3(input.document, input.selectedLayerIds)
     if (!resolved.ready) return resolved
     const { layer, matrix, inverseMatrix } = resolved.target
@@ -56,8 +60,8 @@ export function resolveImageEditorBrushEditingTargetV3(input: {
         inverseMatrix,
         tileResources: layer.mask.tiles,
         destination: { kind: 'mask', maskId: layer.mask.maskId },
-        tool: input.maskMode === 'erase' ? 'eraser' : 'brush',
-        target: createImageEditorMaskBrushTargetV3(),
+        tool: input.activeTool === 'eraser' || (input.activeTool === 'mask-edit' && input.maskMode === 'erase') ? 'eraser' : 'brush',
+        target: { ...createImageEditorMaskBrushTargetV3(), brushValue: input.maskValue ?? 1 },
         loadTile: createImageEditorMaskBrushTileLoaderV3({
           document: input.document,
           mask: layer.mask,
@@ -82,7 +86,8 @@ export function resolveImageEditorBrushEditingTargetV3(input: {
       tileResources: layer.tiles,
       destination: { kind: 'raster' },
       tool: input.activeTool === 'eraser' ? 'eraser' : 'brush',
-      target: createImageEditorRasterBrushTargetV3(input.document),
+      target: { ...createImageEditorRasterBrushTargetV3(input.document),
+        ...(input.color ? { premultipliedColor: paintColorInDocument(input.document, input.color) } : {}) },
       loadTile,
       resolveStorageSize: loadTile.resolveStorageSize,
     },

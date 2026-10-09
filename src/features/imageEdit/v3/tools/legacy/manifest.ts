@@ -1,4 +1,4 @@
-import { ArrowUpRight, Bandage, CircleDashed, Crop, Eraser, Hand, LassoSelect, MessageSquareText, Move, Paintbrush, Scan, VectorSquare, WandSparkles, ZoomIn } from 'lucide-react'
+import { ArrowUpRight, Bandage, CircleDashed, Crop, Hand, LassoSelect, MessageSquareText, Move, Paintbrush, Scan, VectorSquare, WandSparkles, ZoomIn } from 'lucide-react'
 import type { ToolManifest } from '../../toolFramework/toolManifest'
 import type { ImageEditorHostProfileIdV3 } from '../../application/imageEditorHostProfiles'
 
@@ -11,7 +11,6 @@ const cropping = { id: 'crop', order: 1 }
 const selection = { id: 'selection', order: 2, collapsed: true, labelKey: 'imageEditor.v3.selection.overlay', expandedProfiles: ['mask'] as const }
 const repair = { id: 'repair', order: 3 }
 const annotation = { id: 'annotation', order: 4, collapsed: true, labelKey: 'imageEditor.v3.tools.annotation', triggerId: 'annotation' }
-const paint = { id: 'paint', order: 5 }
 
 const specs = {
   move: { icon: Move, group: navigation, profiles: all, input: 'move', cursor: 'cursor-default', shortcut: 'KeyV' },
@@ -38,9 +37,6 @@ const specs = {
   'annotation-number': { icon: MessageSquareText, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
   'annotation-pen': { icon: Paintbrush, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
   'annotation-mosaic': { icon: MessageSquareText, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
-  'raster-brush': { icon: Paintbrush, group: paint, profiles: painting, input: 'overlay', cursor: 'cursor-crosshair', shortcut: 'KeyB', requiresRasterTarget: true },
-  eraser: { icon: Eraser, group: paint, profiles: painting, input: 'overlay', cursor: 'cursor-crosshair', shortcut: 'KeyE', requiresRasterTarget: true },
-  'mask-edit': { icon: CircleDashed, group: paint, profiles: painting, input: 'overlay', cursor: 'cursor-crosshair' },
 } as const
 
 declare module '../../toolFramework/types' {
@@ -72,9 +68,6 @@ const intents: Record<keyof typeof specs, string> = {
   'annotation-number': '在指定位置添加序号标记。',
   'annotation-pen': '在图层上绘制手写标记路径。',
   'annotation-mosaic': '添加像素化或模糊的遮盖标记。',
-  'raster-brush': '在当前栅格图层绘画，保留压感和整笔撤销。',
-  eraser: '擦除当前栅格图层像素，保留压感和整笔撤销。',
-  'mask-edit': '在当前图层蒙版上绘制或擦除覆盖。',
 }
 
 export const legacyToolManifest: readonly ToolManifest[] = (Object.keys(specs) as (keyof typeof specs)[]).map(id => ({

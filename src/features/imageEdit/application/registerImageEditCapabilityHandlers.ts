@@ -1,3 +1,5 @@
+import { paintImageEditTargetCapability } from '@/core/application-control/domains/imageEdit/imageEditPaintCapabilities'
+import { paintImageEditTargetV3 } from '../v3/tools/paint/service'
 import { convertImageEditFilterScopeCapability } from '@/core/application-control/domains/imageEdit/imageEditFilterCapabilities'
 import { prepareImageEditFilterConversionV3, commitImageEditFilterConversionV3 } from '../v3/filterWorkspace/service'
 import { findImageEditLayerLocationV3 } from '../v3/editor/layerTreeV3'
@@ -9,7 +11,7 @@ import { selectImageEditRegionCapability } from '@/core/application-control/doma
 import { selectImageEditRegionV3 } from '../v3/application/imageEditSubjectSelectionServiceV3'
 import { retryImageEditDocumentSaveV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
-import { splitImageEditV3LayerRef, imageEditV3LayerRef, findImageEditV3LiveLayer } from '../v3/application/imageEditDocumentRefs'
+import { splitImageEditV3LayerRef, imageEditV3LayerRef, imageEditV3MaskRef, findImageEditV3LiveLayer } from '../v3/application/imageEditDocumentRefs'
 import { applyImageEditSelectionCapability } from '@/core/application-control/domains/imageEdit/imageEditSelectionCapabilities'
 import { applyImageEditSelectionV3 } from '../v3/application/imageEditSelectionServiceV3'
 import { IMAGE_EDIT_REPAIR_CAPABILITIES, repairImageEditRegionCapability, imageEditRepairInputSchema } from '@/core/application-control/domains/imageEdit/imageEditRepairCapabilities'
@@ -35,6 +37,22 @@ import { releaseImageDocument } from '@/features/imageEdit/documents/imageDocume
 import { requestImageDocumentInEditor } from '@/features/imageEdit/documents/imageDocumentWorkspace'
 
 export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  registrar.registerHandler(paintImageEditTargetCapability.id, async (input, context) => {
+    const parsed = paintImageEditTargetCapability.inputSchema.parse(input)
+    const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
+    const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'paint-image', context.signal) : undefined
+    return runImageEditPersistedOperationV3(documentId, access, async () => {
+      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
+      if (access && persistenceOwner?.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const commandId = await paintImageEditTargetV3(bus, layerId, parsed.destination, parsed.operation, context.signal)
+      const current = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
+      const head = bus.getPersistenceSnapshot().history.undo.at(-1)?.forward
+      const tiles = parsed.destination === 'mask' ? current?.layer.mask?.tiles : current?.layer.type === 'raster' ? current.layer.tiles : undefined
+      return { ref: parsed.destination === 'mask' ? imageEditV3MaskRef(documentId, layerId) : imageEditV3LayerRef(documentId, layerId), changed: commandId !== null, commandId,
+        verification: { verified: commandId === null || (head?.commandId === commandId && (head.type === 'raster.apply-tile-delta' || head.type === 'mask.apply-tile-delta') && head.changes.every(change => tiles?.[change.tileKey] === change.resourceId)) } }
+    })
+  })
+
   registrar.registerHandler(convertImageEditFilterScopeCapability.id, async (input, context) => {
     const parsed = convertImageEditFilterScopeCapability.inputSchema.parse(input)
     const target = parsed.targetRef.kind === 'image_edit.layer_filter' ? splitImageEditV3FilterRef(parsed.targetRef) : splitImageEditV3LayerRef(parsed.targetRef)

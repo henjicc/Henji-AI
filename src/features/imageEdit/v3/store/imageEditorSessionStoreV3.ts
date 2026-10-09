@@ -1,7 +1,9 @@
+import type { PaintBrush } from '@/core/imaging/paint';
+import { PAINT_DYNAMICS_DEFAULTS } from '../tools/paint/settings';
 import { create } from 'zustand'
 
 import type { ImageEditSelectionCombineModeV3 } from '@/core/imageEdit/v3/selection'
-import { ANNOTATION_DEFAULT_STROKE_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { ANNOTATION_DEFAULT_STROKE_HEX, WHITE_HEX, BLACK_HEX } from '@/core/theme/colorTokens'
 import { DEFAULT_MOSAIC_STRENGTH_PERCENT } from '@/core/imageEdit/constraints'
 import {
   DEFAULT_LINE_WIDTH_PERCENT,
@@ -14,6 +16,12 @@ export interface ImageEditorToolSettingsV3 {
   brushSize: number
   brushOpacity: number
   brushHardness: number
+  brushDynamics: Omit<PaintBrush, 'size' | 'opacity' | 'hardness'>
+  paintColor: string
+  paintEndColor: string
+  paintMaskValue: number
+  paintMaskEnd: number
+  paintGradientKind: 'linear' | 'radial'
   maskMode: 'paint' | 'erase'
   selectionCombineMode: ImageEditSelectionCombineModeV3
   annotationLineWidthPercent: number
@@ -72,6 +80,12 @@ const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
   brushSize: 32,
   brushOpacity: 1,
   brushHardness: 0.8,
+  brushDynamics: PAINT_DYNAMICS_DEFAULTS,
+  paintColor: BLACK_HEX,
+  paintEndColor: WHITE_HEX,
+  paintMaskValue: 1,
+  paintMaskEnd: 0,
+  paintGradientKind: 'linear',
   maskMode: 'paint',
   selectionCombineMode: 'replace',
   annotationLineWidthPercent: DEFAULT_LINE_WIDTH_PERCENT,
@@ -137,7 +151,7 @@ export const useImageEditorSessionStoreV3 = create<ImageEditorSessionStoreV3>((s
   setActiveTool: (sessionId, activeTool) => set((state) => {
     const session = state.sessions[sessionId]
     if (!session || session.activeTool === activeTool) return state
-    const editTarget = activeTool === 'mask-edit' ? 'mask' : activeTool === 'raster-brush' || activeTool === 'eraser' ? 'pixels' : session.editTarget
+    const editTarget = activeTool === 'mask-edit' ? 'mask' : session.editTarget
     return { sessions: { ...state.sessions, [sessionId]: { ...session, activeTool, editTarget } } }
   }),
 
