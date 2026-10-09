@@ -20,6 +20,7 @@ import {
 } from '@/features/application-control/capabilities/applicationControlRegistry'
 
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
+import { ImageEditV3DocumentMutationExecutor } from './imageEditV3MutationExecutors'
 
 const accessContext: ApplicationControlAccessContext = {
   exposure: 'assistant',
@@ -60,6 +61,52 @@ async function commitStep(
 }
 
 describe('图片编辑 V3 实时 Application Control', () => {
+  it('多步历史导航失败时逆序补偿游标，混合新编辑在写入前拒绝', async () => {
+    const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'history-compensation' })
+    document.layers = [createImageEditRasterLayerV3('content', '内容')]
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerPersistedImageEditTestSession('history-compensation-session', bus))
+    for (let index = 0; index < 3; index++) bus.dispatch({ type: 'layer.update-common', layerId: 'content',
+      commandId: `compensate-name-${index}`, expectedRevision: bus.getSnapshot().document.revision, patch: { name: `编辑 ${index}` } })
+    const executor = new ImageEditV3DocumentMutationExecutor()
+    const target = imageEditV3DocumentRef(document.id)
+    const step = (value: number) => ({ kind: 'mutation' as const, target, entityType: 'image_edit.document', expectedRevisions: {},
+      mutations: [{ propertyId: 'image_edit.document.history_position', operation: 'set' as const, value }] })
+    await expect(executor.applyAtomic([step(1), step(2), step(999)], executionContext)).rejects.toThrow('0～3')
+    expect(bus.getHistoryView()).toMatchObject({ position: 3, total: 3 })
+    expect(bus.getSnapshot().document.layers[0].name).toBe('编辑 2')
+    const before = bus.getSnapshot().document
+    await expect(executor.applyAtomic([step(1), { ...step(1), mutations: [{ propertyId: 'image_edit.document.orientation', operation: 'set', value: { rotate: 90, mirrored: false } }] }], executionContext)).rejects.toThrow('独立事务')
+    expect(bus.getSnapshot().document).toBe(before)
+  })
+  it('历史位置经正式描述、权限、通用属性写入、读回与撤销，不新增恢复工具', async () => {
+    const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'history-reflection' })
+    document.layers = [createImageEditRasterLayerV3('content', '内容')]
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerPersistedImageEditTestSession('history-reflection-session', bus))
+    for (let index = 0; index < 3; index++) bus.dispatch({ type: 'layer.update-common', layerId: 'content',
+      commandId: `history-name-${index}`, expectedRevision: bus.getSnapshot().document.revision, patch: { name: `编辑 ${index}` } })
+    const reflection = getApplicationReflectionRegistry()
+    const target = imageEditV3DocumentRef(document.id)
+    const propertyId = 'image_edit.document.history_position'
+    const described = reflection.describe({ entityTypes: ['image_edit.document'] }, accessContext)
+    expect(described.properties.find(field => field.id === propertyId)?.readOnlyReason).toBeUndefined()
+    const before = await reflection.readEntity(target, [propertyId, 'image_edit.document.history_entries'], accessContext)
+    expect(before.properties[propertyId]).toBe(3)
+    expect(before.properties['image_edit.document.history_entries']).toHaveLength(4)
+    const result = await commitStep('恢复第一处编辑', before.revisions, { kind: 'mutation', target,
+      entityType: 'image_edit.document', expectedRevisions: before.revisions,
+      mutations: [{ propertyId, operation: 'set', value: 1 }] }, 'history-position')
+    expect(result.status, JSON.stringify(result)).toBe('completed')
+    expect((await reflection.readEntity(target, [propertyId], accessContext)).properties[propertyId]).toBe(1)
+    expect(bus.getSnapshot().document.layers[0].name).toBe('编辑 0')
+    if (result.status !== 'completed' || !result.undoRef) throw new Error('缺少历史恢复撤销引用')
+    const undone = await getApplicationControlExecutionEngine().undo({ undoRef: result.undoRef,
+      expectedRevisions: result.resultingRevisions, idempotencyKey: 'history-position-undo' }, executionContext)
+    expect(undone.status, JSON.stringify(undone)).toBe('completed')
+    expect(bus.getHistoryView()).toMatchObject({ position: 3, total: 3 })
+    expect((await reflection.readEntity(target, [propertyId], { ...accessContext, permissions: new Set() })).properties).toEqual({})
+  })
   it('滤镜子集合经正式事务增删、参数和开关排序读回、持久历史及撤销', async () => {
     const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'filter-entities' })
     document.layers = [createImageEditRasterLayerV3('content', '内容')]

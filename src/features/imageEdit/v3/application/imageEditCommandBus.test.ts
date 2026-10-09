@@ -221,7 +221,7 @@ describe('图片编辑 V3 命令总线', () => {
     expectLatestResources();
   });
 
-  it('把历史淘汰释放事件从总线公开给 GC 编排层', () => {
+  it('清空历史后沿现有入口通知 GC，同时保护文档当前资源', () => {
     const resource = `sha256:${'4'.repeat(64)}`;
     const repository = createRepository();
     const released = vi.fn();
@@ -230,7 +230,7 @@ describe('图片编辑 V3 命令总线', () => {
       {
         repository,
         resourceByteSizes: { [resource]: 1_024 },
-        history: { maxCommands: 1, onResourcesReleased: released },
+        history: { onResourcesReleased: released },
       },
     );
     bus.dispatch({
@@ -244,8 +244,10 @@ describe('图片编辑 V3 命令总线', () => {
       layer: createImageEditRasterLayerV3('empty', '空图层'),
     });
 
+    expect(released).not.toHaveBeenCalled();
+    bus.clearHistory();
     expect(released).toHaveBeenCalledWith({
-      reason: 'prune',
+      reason: 'clear',
       resources: [{ resourceId: resource, byteSize: 1_024 }],
     });
     expect(repository.scheduleGarbageCollection).toHaveBeenCalledWith(

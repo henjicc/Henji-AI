@@ -8,6 +8,7 @@ import { collectImageEditJsonResourceIdsV3 } from '../../../../src/core/imageEdi
 import type { ImageEditHistoryResourceReferenceV3 } from '../../../../src/core/imageEdit/v3/commandTypes'
 import type { ResourceId } from './contracts'
 import { parseResourceId } from './resource-store'
+export { ImageEditHistoryPageStoreV3 } from './history-pages/store'
 
 export function normalizePersistedImageEditDocumentV3(
   value: unknown,

@@ -90,7 +90,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
-    panels: ['layers', 'properties'],
+    panels: ['layers', 'properties', 'history'],
     layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document', 'export-raster'],
     hdrReadiness: {
@@ -105,7 +105,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     layerKinds: ['effect'],
     effects: CORE_EFFECTS.filter(({ id }) => id !== 'image.vgpu-glow'),
     adjustments: [],
-    panels: ['layers', 'properties'],
+    panels: ['layers', 'properties', 'history'],
     layerControls: ['blend-mode'],
     saveActions: ['save-document', 'export-raster'],
     hdrReadiness: {
@@ -120,7 +120,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
-    panels: ['layers', 'properties'],
+    panels: ['layers', 'properties', 'history'],
     layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document'],
     hdrReadiness: {
@@ -135,7 +135,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     layerKinds: ['raster'],
     effects: [],
     adjustments: [],
-    panels: ['layers', 'properties'],
+    panels: ['layers', 'properties', 'history'],
     layerControls: ['mask'],
     saveActions: ['save-document'],
     hdrReadiness: HDR_LIMITATION,

@@ -78,8 +78,6 @@ function snapshot(): ImageEditCommandBusSnapshotV3 {
       retainedResourceCount: 0,
       retainedResourceBytes: 0,
       unknownResourceCount: 0,
-      maxCommands: 200,
-      maxBytes: 2 * 1024 * 1024 * 1024,
     },
   }
 }

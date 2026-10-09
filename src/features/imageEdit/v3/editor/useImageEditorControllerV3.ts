@@ -290,11 +290,13 @@ export function useImageEditorControllerV3(
         })
       },
       undo: () => { binding.bus.undo() },
+      historyPort: binding.bus,
+      historyResourceDescriptors: props.resourceDescriptors,
       redo: () => { binding.bus.redo() },
       canUndo: historyState.undoCount > 0,
       canRedo: historyState.redoCount > 0,
     }
-  }, [binding.bus, document, historyState.redoCount, historyState.undoCount, profile, sessionId])
+  }, [binding.bus, document, historyState.redoCount, historyState.undoCount, profile, props.resourceDescriptors, sessionId])
 
   return { controller, bus: binding.bus }
 }

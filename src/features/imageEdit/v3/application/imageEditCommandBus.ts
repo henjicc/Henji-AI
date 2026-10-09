@@ -17,8 +17,14 @@ import { isImageEditTransformInvertibleV3 } from '@/core/imageEdit/v3/execution/
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences';
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier';
 import { imageEditSelectionSessionSchemaV3, type ImageEditSelectionSessionV3 } from '@/core/imageEdit/v3/selection/session';
+import { applyImageEditCommandV3 } from '@/core/imageEdit/v3/commandReducer';
+import { withImageEditCommandRevisionV3 } from '@/core/imageEdit/v3/commandTypes';
+import { projectImageEditHistoryCommandV3, type ImageEditHistoryRowV3, type ImageEditHistoryViewV3, type ImageEditHistoryJumpOptionsV3 } from '@/core/imageEdit/v3/historyPaging/projection';
+import { createLogger } from '@/core/logging';
 
-type SessionHistoryEntry = { commandId: string } | { selectionCommandId: number; before: ImageEditSelectionSessionV3 | null; after: ImageEditSelectionSessionV3 | null };
+const historyLogger = createLogger('features.imageEdit.v3.history');
+
+type SessionHistoryEntry = { commandId: string; projection: ReturnType<typeof projectImageEditHistoryCommandV3> } | { selectionCommandId: number; before: ImageEditSelectionSessionV3 | null; after: ImageEditSelectionSessionV3 | null };
 
 export type ImageEditPreviewOverrideKindV3 =
   | 'parameter'
@@ -73,14 +79,17 @@ export class ImageEditCommandBusV3 {
   private disposed = false;
   private readonly lifecycleAbort = new AbortController();
   private mutationGuard: (() => void) | undefined;
+  private historyGeneration = 0;
+  private historyJumpActive = false;
 
   constructor(document: ImageEditDocumentV3, options: ImageEditCommandBusOptionsV3 = {}) {
     this.document = document;
     this.history = new ImageEditCommandHistoryV3(options.history);
     if (options.historySnapshot) this.history.restore(document, options.historySnapshot);
     else this.history.clear(document);
-    this.sessionUndo = this.history.createSnapshot().undo.map(entry => ({ commandId: entry.forward.commandId }));
-    this.sessionRedo = this.history.createSnapshot().redo.map(entry => ({ commandId: entry.forward.commandId }));
+    const restored = this.history.createSnapshot();
+    this.sessionUndo = restored.undo.map(entry => ({ commandId: entry.forward.commandId, projection: projectImageEditHistoryCommandV3(entry.forward) }));
+    this.sessionRedo = restored.redo.map(entry => ({ commandId: entry.forward.commandId, projection: projectImageEditHistoryCommandV3(entry.forward) }));
     this.repository = options.repository;
     this.onPersistentChange = options.onPersistentChange;
     for (const [resourceId, byteSize] of Object.entries(options.resourceByteSizes ?? {})) {
@@ -124,6 +133,108 @@ export class ImageEditCommandBusV3 {
     return Object.fromEntries(this.resourceByteSizes);
   }
 
+  getHistoryView(): ImageEditHistoryViewV3 {
+    return { position: this.sessionUndo.length, total: this.sessionUndo.length + this.sessionRedo.length, generation: this.historyGeneration };
+  }
+
+  readHistoryPage(offset: number, limit = 64): ImageEditHistoryRowV3[] {
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 256) {
+      throw new RangeError('历史分页范围无效');
+    }
+    const rows: ImageEditHistoryRowV3[] = [];
+    const total = this.sessionUndo.length + this.sessionRedo.length;
+    // 页数是单次投影工作预算，不限制用户历史数量。
+    for (let index = offset; index < Math.min(total + 1, offset + limit); index++) {
+      if (index === 0) {
+        if (offset === 0) rows.push({ position: 0, key: 'initial', kind: 'initial', labelKey: 'imageEditor.v3.history.initial', label: '开始编辑', targetName: null });
+        continue;
+      }
+      const entry = index <= this.sessionUndo.length ? this.sessionUndo[index - 1]
+        : this.sessionRedo[this.sessionRedo.length - (index - this.sessionUndo.length)];
+      if ('commandId' in entry) {
+        rows.push({ position: index, key: entry.commandId, kind: 'document', ...entry.projection });
+      } else if (index >= offset) rows.push({ position: index, key: `selection-${entry.selectionCommandId}`, kind: 'selection', labelKey: entry.after ? 'imageEditor.v3.history.selection' : 'imageEditor.v3.history.clearSelection', label: entry.after ? '调整选区' : '取消选区', targetName: null });
+    }
+    return rows;
+  }
+
+  /** 失败／取消前只计算临时结果；完成时原子发布文档、选区和唯一历史游标。 */
+  async jumpToHistory(position: number, options: ImageEditHistoryJumpOptionsV3 = {}): Promise<boolean> {
+    this.assertMutable();
+    if (this.historyJumpActive) throw new Error('正在恢复历史，请等待完成或取消后重试');
+    if (position === this.getHistoryView().position) return false;
+    this.historyJumpActive = true;
+    historyLogger.info('开始恢复图片历史', { event: 'image_edit.history.jump.start', context: { documentId: this.document.id, position } });
+    try {
+      const candidate = await this.evaluateHistoryPosition(position, options);
+      candidate.assertCurrent();
+      this.assertMutable();
+      this.history.publishPosition(candidate.document, candidate.commandPosition, candidate.sourceDocument);
+      this.document = candidate.document;
+      this.selection = candidate.selection;
+      this.selectionRevision += candidate.selectionSteps;
+      this.sessionUndo = candidate.timeline.slice(0, position);
+      this.sessionRedo = candidate.timeline.slice(position).reverse();
+      this.previewOverrides.clear();
+      this.historyGeneration++;
+      if (candidate.document !== candidate.sourceDocument) this.persistChange(candidate.sourceDocument.revision);
+      this.emit();
+      historyLogger.info('图片历史恢复完成', { event: 'image_edit.history.jump.completed', context: { documentId: this.document.id, position } });
+      return true;
+    } catch (error) {
+      historyLogger.warn('图片历史恢复未完成', { event: 'image_edit.history.jump.failed', error });
+      throw error;
+    } finally { this.historyJumpActive = false; }
+  }
+
+  /** 缩略图消费同一历史求值器；不移动游标、清除预览或触发保存。 */
+  async readHistoryDocument(position: number, signal?: AbortSignal): Promise<ImageEditDocumentV3> {
+    const candidate = await this.evaluateHistoryPosition(position, { signal });
+    candidate.assertCurrent();
+    return candidate.document;
+  }
+
+  private async evaluateHistoryPosition(position: number, options: ImageEditHistoryJumpOptionsV3) {
+    const view = this.getHistoryView();
+    if (!Number.isSafeInteger(position) || position < 0 || position > view.total) throw new RangeError(`历史位置必须在 0～${view.total} 之间`);
+    const sourceDocument = this.document;
+    const sourceSelectionRevision = this.selectionRevision;
+    const sourceGeneration = this.historyGeneration;
+    const timeline = [...this.sessionUndo, ...[...this.sessionRedo].reverse()];
+    let document = sourceDocument;
+    let selection = this.selection;
+    let commandPosition = this.history.getState().undoCount;
+    let selectionSteps = 0;
+    const direction = position < view.position ? -1 : 1;
+    const total = Math.abs(position - view.position);
+    const assertCurrent = (): void => {
+      options.signal?.throwIfAborted();
+      this.lifecycleAbort.signal.throwIfAborted();
+      if (this.document !== sourceDocument || this.selectionRevision !== sourceSelectionRevision || this.historyGeneration !== sourceGeneration) {
+        throw new Error('历史已继续编辑，请重新选择要恢复的位置');
+      }
+    };
+      assertCurrent();
+      options.onProgress?.(0, total);
+      await (options.yieldControl?.() ?? new Promise<void>(resolve => setTimeout(resolve, 0)));
+      for (let completed = 0; completed < total; completed++) {
+        assertCurrent();
+        const index = direction < 0 ? view.position - completed - 1 : view.position + completed;
+        const entry = timeline[index];
+        if ('commandId' in entry) {
+          const commandEntry = this.history.getEntryAt(direction < 0 ? commandPosition - 1 : commandPosition);
+          if (commandEntry?.forward.commandId !== entry.commandId) throw new Error('文档历史与会话时间线不一致');
+          const command = direction < 0 ? commandEntry.inverse : commandEntry.forward;
+          document = applyImageEditCommandV3(document, withImageEditCommandRevisionV3(command, document.revision), { allowLegacyResourceMetadata: true }).document;
+          commandPosition += direction;
+        } else { selection = direction < 0 ? entry.before : entry.after; selectionSteps++; }
+        options.onProgress?.(completed + 1, total);
+        if ((completed + 1) % 16 === 0) await (options.yieldControl?.() ?? new Promise<void>(resolve => setTimeout(resolve, 0)));
+      }
+      assertCurrent();
+      return { document, selection, timeline, commandPosition, sourceDocument, selectionSteps, assertCurrent };
+  }
+
   subscribePersistence(listener: (snapshot: ImageEditPersistenceSnapshotV3) => void): () => void {
     this.persistenceListeners.add(listener);
     return () => this.persistenceListeners.delete(listener);
@@ -145,11 +256,12 @@ export class ImageEditCommandBusV3 {
       }
       nextByteSizes.set(resource.resourceId, resource.byteSize);
     }
-    this.document = this.history.execute(this.document, prepared);
-    this.sessionUndo.push({ commandId: prepared.commandId });
+    const nextDocument = this.history.execute(this.document, prepared);
+    if (nextDocument === this.document) return this.document;
+    this.document = nextDocument;
+    this.sessionUndo.push({ commandId: prepared.commandId, projection: projectImageEditHistoryCommandV3(prepared) });
+    this.historyGeneration++;
     this.sessionRedo = [];
-    const retainedCommands = new Set(this.history.createSnapshot().undo.map(entry => entry.forward.commandId));
-    this.sessionUndo = this.sessionUndo.filter(entry => !('commandId' in entry) || retainedCommands.has(entry.commandId));
     this.resourceByteSizes.clear();
     nextByteSizes.forEach((byteSize, resourceId) => this.resourceByteSizes.set(resourceId, byteSize));
     this.persistChange(previousRevision);
@@ -189,7 +301,10 @@ export class ImageEditCommandBusV3 {
       throw new Error('预览覆盖对应的文档版本已经变化');
     }
     this.previewOverrides.delete(id);
-    return this.dispatch(command);
+    const document = this.document;
+    const next = this.dispatch(command);
+    if (next === document) this.emit();
+    return next;
   }
 
   undo(): boolean {
@@ -198,13 +313,14 @@ export class ImageEditCommandBusV3 {
     if (!entry) return false;
     if (!('commandId' in entry)) {
       this.sessionUndo.pop(); this.sessionRedo.push(entry);
-      this.selection = entry.before; this.selectionRevision++; this.emit(); return true;
+      this.selection = entry.before; this.selectionRevision++; this.historyGeneration++; this.previewOverrides.clear(); this.emit(); return true;
     }
     const previousRevision = this.document.revision;
     const transition = this.history.undo(this.document);
     if (!transition.changed) return false;
     this.document = transition.document;
     this.sessionUndo.pop(); this.sessionRedo.push(entry);
+    this.historyGeneration++;
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
     this.flushReleasedResources();
@@ -219,7 +335,8 @@ export class ImageEditCommandBusV3 {
     const transition = this.history.undoCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
     this.document = transition.document;
-    this.sessionRedo.push(...this.sessionUndo.splice(-commandIdsNewestFirst.length).reverse());
+    for (const entry of this.sessionUndo.splice(-commandIdsNewestFirst.length).reverse()) this.sessionRedo.push(entry);
+    this.historyGeneration++;
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
     this.flushReleasedResources();
@@ -235,6 +352,7 @@ export class ImageEditCommandBusV3 {
     if (!transition.changed) return false;
     this.document = transition.document;
     this.sessionUndo.splice(-commandIdsNewestFirst.length);
+    this.historyGeneration++;
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
     this.flushReleasedResources();
@@ -248,13 +366,14 @@ export class ImageEditCommandBusV3 {
     if (!entry) return false;
     if (!('commandId' in entry)) {
       this.sessionRedo.pop(); this.sessionUndo.push(entry);
-      this.selection = entry.after; this.selectionRevision++; this.emit(); return true;
+      this.selection = entry.after; this.selectionRevision++; this.historyGeneration++; this.previewOverrides.clear(); this.emit(); return true;
     }
     const previousRevision = this.document.revision;
     const transition = this.history.redo(this.document);
     if (!transition.changed) return false;
     this.document = transition.document;
     this.sessionRedo.pop(); this.sessionUndo.push(entry);
+    this.historyGeneration++;
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
     this.flushReleasedResources();
@@ -266,6 +385,7 @@ export class ImageEditCommandBusV3 {
     this.assertMutable();
     this.history.clear(this.document);
     this.sessionUndo = []; this.sessionRedo = [];
+    this.historyGeneration++;
     this.previewOverrides.clear();
     this.persistChange(this.document.revision);
     this.flushReleasedResources();
@@ -295,6 +415,7 @@ export class ImageEditCommandBusV3 {
     const hadDocumentRedo = this.history.getState().redoCount > 0;
     const selectionCommandId = this.selectionRevision + 1;
     this.sessionUndo.push({ selectionCommandId, before: this.selection, after });
+    this.historyGeneration++;
     this.sessionRedo = []; this.history.discardRedo();
     this.selection = after; this.selectionRevision++;
     if (hadDocumentRedo) this.persistChange(this.document.revision);
@@ -336,6 +457,7 @@ export class ImageEditCommandBusV3 {
   }
 
   private emit(): void {
+    // 位置或分叉更新用于使面板缓存失效；预览不会创建历史项。
     const snapshot = this.getSnapshot();
     for (const listener of this.listeners) listener(snapshot);
   }

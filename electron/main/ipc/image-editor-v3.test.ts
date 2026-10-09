@@ -244,7 +244,7 @@ describe('图片编辑 V3 IPC 边界', () => {
         undo: Array.from({ length: 201 }, () => snapshot.redo[0]),
         redo: [],
       },
-    })).toThrow('数量超过上限')
+    })).toThrow('历史命令 ID 重复')
   })
 
   it('透传 16/32 位瓦片请求，并在 IPC 边界限制 halo 与坐标', () => {

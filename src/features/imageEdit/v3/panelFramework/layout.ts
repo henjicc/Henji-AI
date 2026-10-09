@@ -154,5 +154,11 @@ export function resetImageEditorDockLayoutV3(
     api.addPanel({ id: IMAGE_EDITOR_PREVIEW_PANEL_V3, component: IMAGE_EDITOR_PREVIEW_PANEL_V3, renderer: 'always', position: { referenceGroup: previewGroup, direction: 'within' } })
   }
   for (const definition of definitions) showImageEditorPanelV3(api, definition, title(definition))
+  // 同组新增标签不抢走该组默认面板的焦点；历史仍可从标签或面板菜单打开。
+  const activeGroups = new Set<string>()
+  for (const definition of definitions) {
+    const panel = api.getPanel(definition.id)
+    if (panel && !activeGroups.has(panel.group.id)) { activeGroups.add(panel.group.id); panel.api.setActive() }
+  }
   api.getPanel(IMAGE_EDITOR_PREVIEW_PANEL_V3)?.api.setActive()
 }

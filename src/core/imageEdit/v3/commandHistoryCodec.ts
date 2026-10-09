@@ -48,21 +48,17 @@ export interface ImageEditCommandHistorySnapshotV3 {
 
 export interface DecodeImageEditHistorySnapshotOptionsV3 {
   maxJsonBytes?: number;
-  maxCommands?: number;
-  maxBytes?: number;
 }
 
 export interface DecodedImageEditHistorySnapshotV3 {
   snapshot: ImageEditCommandHistorySnapshotV3;
-  /** V1 的未知资源大小不会伪装成 0；null 表示只能兼容读取，下一次新写会淘汰它。 */
+  /** 未知资源大小不会伪装成 0，也不会因预算估算而静默丢弃历史。 */
   retainedBytes: number | null;
   knownRetainedBytes: number;
   unknownResourceCount: number;
 }
 
 export class InvalidImageEditHistorySnapshotV3Error extends Error {}
-const DEFAULT_MAX_COMMANDS = 200;
-const DEFAULT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const COMMON_LAYER_KEYS = ['id', 'name', 'visible', 'locked', 'opacity', 'fillOpacity', 'clipping', 'maskAttachment', 'filters', 'blendMode', 'transform', 'mask'];
 
@@ -119,13 +115,10 @@ function parseSafeJson(value: unknown, maxBytes: number): unknown {
   } catch {
     fail('历史快照 JSON 无效');
   }
-  let visited = 0;
   const visit = (entry: unknown, depth: number): void => {
-    visited += 1;
-    if (visited > 1_000_000 || depth > 80) fail('历史快照结构超限');
+    if (depth > 80) fail('历史快照结构超限');
     if (typeof entry === 'string' && entry.length > 1_000_000) fail('历史快照字符串超限');
     if (Array.isArray(entry)) {
-      if (entry.length > 100_000) fail('历史快照数组超限');
       entry.forEach((child) => visit(child, depth + 1));
     } else if (isRecord(entry)) {
       for (const [key, child] of Object.entries(entry)) {
@@ -204,7 +197,7 @@ function validateBase(command: Record<string, unknown>, keys: readonly string[])
 }
 
 function validateCommandResourceDescriptors(value: unknown, label: string): void {
-  if (!Array.isArray(value) || value.length > 100_000) fail(`${label}无效`);
+  if (!Array.isArray(value)) fail(`${label}无效`);
   value.forEach((resource, index) => {
     if (!isRecord(resource)) fail(`${label}无效`);
     exactKeys(resource, ['resourceId', 'byteSize'], label);
@@ -265,7 +258,7 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
     case 'layer.duplicate': {
       validateBase(command, ['layerId', 'parentId', 'index', 'idMap', ...(command.resources === undefined ? [] : ['resources'])]); nonEmptyString(command.layerId, '图层 ID');
       validateNullableId(command.parentId, '父图层 ID'); validateIndex(command.index, '图层位置');
-      if (!isRecord(command.idMap) || Object.keys(command.idMap).length > 10_000) fail('图层副本 ID 映射无效');
+      if (!isRecord(command.idMap)) fail('图层副本 ID 映射无效');
       Object.entries(command.idMap).forEach(([key, entry]) => {
         nonEmptyString(key, '原图层 ID'); nonEmptyString(entry, '副本图层 ID');
       });
@@ -276,7 +269,7 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
     }
     case 'layer.group':
       validateBase(command, ['layerIds', 'group', ...(command.resources === undefined ? [] : ['resources'])]);
-      if (!Array.isArray(command.layerIds) || command.layerIds.length === 0 || command.layerIds.length > 10_000) fail('待分组图层无效');
+      if (!Array.isArray(command.layerIds) || command.layerIds.length === 0) fail('待分组图层无效');
       command.layerIds.forEach((id) => nonEmptyString(id, '待分组图层 ID'));
       if (new Set(command.layerIds).size !== command.layerIds.length) fail('待分组图层 ID 重复');
       validateLayer(command.group, 'group');
@@ -353,7 +346,7 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
       );
       nonEmptyString(command.layerId, '图层 ID');
       if (command.type === 'mask.apply-tile-delta') nonEmptyString(command.maskId, '蒙版 ID');
-      if (!Array.isArray(command.changes) || command.changes.length === 0 || command.changes.length > 100_000) fail('瓦片增量无效');
+      if (!Array.isArray(command.changes) || command.changes.length === 0) fail('瓦片增量无效');
       const tileKeys = new Set<string>();
       command.changes.forEach((change) => {
         if (!isRecord(change)) fail('瓦片增量无效');
@@ -432,12 +425,8 @@ export function decodeImageEditCommandHistorySnapshotV3(
   options: DecodeImageEditHistorySnapshotOptionsV3 = {},
 ): DecodedImageEditHistorySnapshotV3 {
   const maxJsonBytes = options.maxJsonBytes ?? IMAGE_EDIT_HISTORY_SNAPSHOT_DEFAULT_MAX_JSON_BYTES_V3;
-  const maxCommands = options.maxCommands ?? DEFAULT_MAX_COMMANDS;
-  const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
-  if (!Number.isSafeInteger(maxCommands) || maxCommands < 0 || !Number.isSafeInteger(maxBytes) || maxBytes < 0) {
-    fail('历史恢复上限无效');
-  }
-  const parsed = parseSafeJson(value, maxJsonBytes);
+  // 字符串输入受单次解码预算保护；结构化输入逐条验证，历史总量不受 JSON 单块限制。
+  const parsed = typeof value === 'string' ? parseSafeJson(value, maxJsonBytes) : value;
   if (!isRecord(parsed)) fail('历史快照无效');
   exactKeys(parsed, ['version', 'documentId', 'headRevision', 'undo', 'redo'], '历史快照');
   if (parsed.version !== IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3
@@ -447,9 +436,8 @@ export function decodeImageEditCommandHistorySnapshotV3(
   const documentId = nonEmptyString(parsed.documentId, '历史文档 ID', 256);
   const headRevision = safeInteger(parsed.headRevision, '历史头 revision');
   if (!Array.isArray(parsed.undo) || !Array.isArray(parsed.redo)) fail('历史栈无效');
-  if (parsed.undo.length + parsed.redo.length > maxCommands) fail('历史命令数量超过上限');
-  const undo = parsed.undo.map((entry) => parseEntry(entry, strictResources));
-  const redo = parsed.redo.map((entry) => parseEntry(entry, strictResources));
+  const undo = parsed.undo.map((entry) => parseEntry(parseSafeJson(entry, maxJsonBytes), strictResources));
+  const redo = parsed.redo.map((entry) => parseEntry(parseSafeJson(entry, maxJsonBytes), strictResources));
   const forwardIds = new Set<string>();
   for (const entry of [...undo, ...redo]) {
     if (forwardIds.has(entry.forward.commandId)) fail('历史命令 ID 重复');
@@ -472,7 +460,6 @@ export function decodeImageEditCommandHistorySnapshotV3(
   } catch {
     return fail('历史保留字节数溢出');
   }
-  if (retained.knownBytes > maxBytes) fail('历史字节数超过上限');
   return {
     snapshot: { version, documentId, headRevision, undo, redo },
     retainedBytes: retained.unknownResourceCount > 0 ? null : retained.knownBytes,

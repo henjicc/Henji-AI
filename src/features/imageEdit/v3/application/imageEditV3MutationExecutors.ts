@@ -35,12 +35,32 @@ const UNDO_PREFIX = 'image-edit-v3-undo:'
 
 import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
 import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
+import { IMAGE_EDIT_HISTORY_FIELDS_V3, type ImageEditHistoryMutationDraftV3 } from './imageEditHistoryFields'
 
 interface UndoPayload {
   entityType: 'image_edit.document' | 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask' | 'image_edit.layer_filter'
   documentId: string
   targetId: string
   commandIdsNewestFirst: string[]
+  historyJump?: { before: number; after: number; keys: string[] }
+}
+
+function historyKeys(documentId: string): string[] {
+  const { bus } = requireImageEditDocumentInstanceV3(documentId)
+  const keys: string[] = []
+  for (let offset = 0; offset <= bus.getHistoryView().total; offset += 64) {
+    for (const row of bus.readHistoryPage(offset)) keys.push(row.key)
+  }
+  return keys
+}
+
+function assertHistoryJumpCurrent(payload: UndoPayload): void {
+  if (!payload.historyJump) return
+  const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
+  if (bus.getHistoryView().position !== payload.historyJump.after
+    || JSON.stringify(historyKeys(payload.documentId)) !== JSON.stringify(payload.historyJump.keys)) {
+    throw new Error('历史已经继续编辑，不能撤销过期恢复操作')
+  }
 }
 
 function encodeUndo(payload: UndoPayload): string {
@@ -56,6 +76,9 @@ function decodeUndo(token: string): UndoPayload {
     || typeof value.targetId !== 'string'
     || !Array.isArray(value.commandIdsNewestFirst)
     || value.commandIdsNewestFirst.some((item) => typeof item !== 'string')
+    || (value.historyJump !== undefined && (!Number.isSafeInteger(value.historyJump.before) || value.historyJump.before < 0
+      || !Number.isSafeInteger(value.historyJump.after) || value.historyJump.after < 0
+      || !Array.isArray(value.historyJump.keys) || value.historyJump.keys.some(key => typeof key !== 'string')))
   ) {
     throw new Error('IMAGE_EDIT_V3_UNDO_INVALID')
   }
@@ -66,6 +89,7 @@ function completed(
   step: MutationStep,
   documentId: string,
   commandIds: string[],
+  historyJump?: UndoPayload['historyJump'],
 ): ApplicationCompletedStepResult {
   const revision = getImageEditDocumentCatalogRevisionV3()
   return {
@@ -84,13 +108,16 @@ function completed(
       documentId,
       targetId: step.target.id,
       commandIdsNewestFirst: [...commandIds].reverse(),
+      ...(historyJump ? { historyJump } : {}),
     }),
   }
 }
 
 async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
   const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
-  if (!bus.undoCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_UNDO_EMPTY')
+  assertHistoryJumpCurrent(payload)
+  if (payload.commandIdsNewestFirst.length && !bus.undoCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_UNDO_EMPTY')
+  if (payload.historyJump) await bus.jumpToHistory(payload.historyJump.before)
   const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
@@ -107,7 +134,9 @@ async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedSt
 
 async function rollbackPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
   const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
-  if (!bus.rollbackCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_ROLLBACK_EMPTY')
+  assertHistoryJumpCurrent(payload)
+  if (payload.commandIdsNewestFirst.length && !bus.rollbackCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_ROLLBACK_EMPTY')
+  if (payload.historyJump) await bus.jumpToHistory(payload.historyJump.before)
   const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
@@ -133,7 +162,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
   abstract readonly propertyOperations: ApplicationMutationExecutor['propertyOperations']
   readonly effectContract = { direct: [], cascades: [] }
 
-  abstract createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[] }>
+  abstract createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number }>
 
   async apply(step: MutationStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const { documentId } = mutationDocumentIdentity(step.target, this.entityType)
@@ -148,17 +177,21 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
       entityType: step.entityType,
       targetId: step.target.id,
     })
-    const { documentId, commands } = await this.createCommands(step)
+    const { documentId, commands, historyPosition } = await this.createCommands(step)
     const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const applied: string[] = []
+    const historyBefore = bus.getHistoryView().position
+    let historyChanged = false
     try {
       assertImageEditPersistenceCurrentV3(documentId)
+      if (historyPosition !== undefined) historyChanged = await bus.jumpToHistory(historyPosition, { signal: context.signal })
       for (const command of commands) {
         if (context.signal?.aborted) throw new Error('CANCELLED')
-        bus.dispatch({ ...command, expectedRevision: bus.getSnapshot().document.revision })
-        applied.push(command.commandId)
+        const previous = bus.getSnapshot().document
+        const next = bus.dispatch({ ...command, expectedRevision: previous.revision })
+        if (next !== previous) applied.push(command.commandId)
       }
-      const result = completed(step, documentId, applied)
+      const result = completed(step, documentId, applied, historyChanged ? { before: historyBefore, after: bus.getHistoryView().position, keys: historyKeys(documentId) } : undefined)
       logger.info('图片编辑 V3 属性写入完成', {
         event: 'image_edit.v3.application_mutation.apply.completed',
         requestId: context.requestId,
@@ -169,6 +202,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
       return result
     } catch (error) {
       if (applied.length > 0) bus.rollbackCommands([...applied].reverse())
+      if (historyChanged) await bus.jumpToHistory(historyBefore)
       logger.error('图片编辑 V3 属性写入失败', {
         event: 'image_edit.v3.application_mutation.apply.failed',
         requestId: context.requestId,
@@ -184,6 +218,10 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
     steps: MutationStep[],
     context: ApplicationExecutionContext,
   ): Promise<ApplicationCompletedStepResult[]> {
+    const hasNavigation = steps.some(step => step.mutations.some(mutation => mutation.propertyId === 'image_edit.document.history_position'))
+    if (hasNavigation && steps.some(step => step.mutations.some(mutation => mutation.propertyId !== 'image_edit.document.history_position'))) {
+      throw new Error('恢复历史和创建新编辑请拆成独立事务；新编辑会替换重做分支，不能纳入同一原子恢复')
+    }
     const { documentId } = mutationDocumentIdentity(steps[0].target, this.entityType)
     if (steps.some((step) => mutationDocumentIdentity(step.target, this.entityType).documentId !== documentId)) {
       throw new Error('图片编辑原子修改只能针对同一文档，请拆分不同文档的操作')
@@ -360,13 +398,21 @@ export class ImageEditV3MaskMutationExecutor extends ImageEditV3MutationExecutor
 export class ImageEditV3DocumentMutationExecutor extends ImageEditV3MutationExecutorBase {
   readonly entityType = 'image_edit.document'
   private readonly writers = fieldWriterTable(IMAGE_EDIT_V3_DOCUMENT_FIELDS)
-  readonly writableProperties = writableProperties(this.writers)
-  readonly propertyOperations = propertyOperations(this.writers)
+  private readonly historyWriters = fieldWriterTable(IMAGE_EDIT_HISTORY_FIELDS_V3)
+  readonly writableProperties = new Set([...writableProperties(this.writers), ...writableProperties(this.historyWriters)])
+  readonly propertyOperations = new Map([...propertyOperations(this.writers), ...propertyOperations(this.historyWriters)])
 
-  async createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[] }> {
+  async createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number }> {
     const { documentId } = splitImageEditV3DocumentRef(step.target)
     const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const document = bus.getSnapshot().document
+    const historyMutations = step.mutations.filter(mutation => this.historyWriters[mutation.propertyId])
+    if (historyMutations.length) {
+      if (historyMutations.length !== step.mutations.length) throw new Error('恢复历史与修改画面请使用按顺序排列的独立 changes，避免修改被恢复操作覆盖')
+      const draft: ImageEditHistoryMutationDraftV3 = {}
+      await applyWriterTable(this.historyWriters, draft, historyMutations)
+      return { documentId, commands: [], historyPosition: draft.position }
+    }
     const geometry = structuredClone(document.geometry)
     await applyWriterTable(this.writers, geometry, step.mutations)
     const orientationChanged = geometry.orientation.rotate !== document.geometry.orientation.rotate

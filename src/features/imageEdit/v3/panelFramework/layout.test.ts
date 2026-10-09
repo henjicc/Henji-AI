@@ -34,6 +34,17 @@ beforeEach(() => {
 afterEach(() => { api.dispose(); host.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('图片停靠布局（真实 Dockview API）', () => {
+  it('历史同组标签不替换默认图层，显式打开才激活且关闭后可重开', () => {
+    const history: ImageEditorPanelDefinitionV3 = { id: 'history', order: 2, title: '历史', titleKey: 'history', component: () => null, defaultPlacement: 'tab' }
+    resetImageEditorDockLayoutV3(api, [...definitions, history], definition => definition.title)
+    expect(api.getPanel('history')!.group).toBe(api.getPanel('layers')!.group)
+    expect(api.getPanel('layers')!.group.activePanel?.id).toBe('layers')
+    showImageEditorPanelV3(api, history, history.title)
+    expect(api.getPanel('history')!.group.activePanel?.id).toBe('history')
+    api.getPanel('history')!.api.close()
+    showImageEditorPanelV3(api, history, history.title)
+    expect(api.panels.filter(panel => panel.id === 'history')).toHaveLength(1)
+  })
   it('关闭重开保留同工作区布局，其他工作区独立且读取快照不可变', () => {
     const toolbox = imageEditorWorkspaceLayoutStoreV3('layout-test-toolbox')
     toolbox.save('full', { dock: api.toJSON(), collapsed: ['layers'] })

@@ -1,13 +1,11 @@
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3,
-  IMAGE_EDIT_HISTORY_DEFAULT_MAX_COMMANDS_V3,
   ImageEditCommandHistoryV3,
 } from './commandHistory';
 import { InvalidImageEditHistorySnapshotV3Error } from './commandHistoryCodec';
 import { applyImageEditCommandV3, ImageEditRevisionConflictErrorV3 } from './commandReducer';
-import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from './documentFactory';
+import { createImageEditDocumentV3, createImageEditRasterLayerV3, createImageEditEffectLayerV3 } from './documentFactory';
 import type { ImageEditDocumentV3 } from './documentTypes';
 import { createImageEditSparseMaskReferenceV3 } from './layerTypes';
 
@@ -69,13 +67,19 @@ function createStrictMaskHistoryFixture() {
 }
 
 describe('图片编辑 V3 命令历史', () => {
+  it('同值参数的键顺序不同不形成空历史或裁掉 redo', () => {
+    const document = createPaintDocument();
+    document.layers.push(createImageEditEffectLayerV3('effect', '效果', 'exposure', { stops: 1, nested: { a: 1, b: 2 } }));
+    const history = new ImageEditCommandHistoryV3(); history.clear(document);
+    const next = history.execute(document, { type: 'layer.update-params', layerId: 'effect', commandId: 'same-params',
+      expectedRevision: document.revision, params: { nested: { b: 2, a: 1 }, stops: 1 } });
+    expect(next).toBe(document); expect(history.getState().undoCount).toBe(0);
+  });
   it('随机瓦片命令全部撤销后回到原始文档，清理后资源归零', () => {
     fc.assert(fc.property(
       fc.array(fc.integer({ min: 1, max: 1_000_000 }), { minLength: 1, maxLength: 80 }),
       (byteSizes) => {
         const history = new ImageEditCommandHistoryV3({
-          maxCommands: 100,
-          maxBytes: 100_000_000,
         });
         const initial = createPaintDocument();
         let current = initial;
@@ -131,44 +135,17 @@ describe('图片编辑 V3 命令历史', () => {
     expect(redone.document.revision).toBe(3);
   });
 
-  it('默认上限固定为 200 条或 2GiB，并按命令数和真实资源字节先到者裁剪', () => {
-    expect(IMAGE_EDIT_HISTORY_DEFAULT_MAX_COMMANDS_V3).toBe(200);
-    expect(IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3).toBe(2 * 1024 * 1024 * 1024);
-
-    const commandLimited = new ImageEditCommandHistoryV3({ maxCommands: 2, maxBytes: 1_000_000 });
-    let commandDocument = createPaintDocument();
-    for (let index = 0; index < 3; index += 1) {
-      commandDocument = addTile(commandLimited, commandDocument, index, 16);
-    }
-    expect(commandLimited.getState()).toMatchObject({ undoCount: 2, retainedResourceCount: 2 });
-
-    const byteLimited = new ImageEditCommandHistoryV3({ maxCommands: 10, maxBytes: 7_000 });
-    const byteDocument = addTile(byteLimited, createPaintDocument(), 0, 5_000);
-    addTile(byteLimited, byteDocument, 1, 5_000);
-    expect(byteLimited.getState()).toMatchObject({ undoCount: 1, retainedResourceBytes: 5_000 });
-  });
-
-  it('单个多 GiB 资源不能通过整数或未知字节绕过 2GiB 门槛', () => {
+  it('超过旧 200 条或 2GiB 不裁掉历史，保存重开仍能撤销最早操作', () => {
     const history = new ImageEditCommandHistoryV3();
-    const changed = addTile(
-      history,
-      createPaintDocument(),
-      0,
-      IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3,
-    );
-    expect(changed.layers[0]).toMatchObject({ tiles: { '0/0/0': 'sha256:0' } });
-    expect(history.getState()).toMatchObject({
-      undoCount: 0,
-      retainedBytes: 0,
-      retainedResourceBytes: 0,
-    });
-    expect(history.takeReleasedResourceEvents()).toEqual([{
-      reason: 'prune',
-      resources: [{
-        resourceId: 'sha256:0',
-        byteSize: IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3,
-      }],
-    }]);
+    let document = createPaintDocument();
+    for (let index = 0; index < 257; index++) document = addTile(history, document, index, 16);
+    document = addTile(history, document, 257, 3 * 1024 * 1024 * 1024);
+    expect(history.getState()).toMatchObject({ undoCount: 258, retainedResourceCount: 258 });
+    expect(history.takeReleasedResourceEvents()).toEqual([]);
+    const reopened = new ImageEditCommandHistoryV3();
+    reopened.restore(document, history.createSnapshot());
+    for (let index = 0; index < 258; index++) document = reopened.undo(document).document;
+    expect(document.layers).toEqual(createPaintDocument().layers);
   });
 
   it('跨相邻笔画去重资源预算，同时保留旧、新瓦片的真实大小', () => {
@@ -211,20 +188,15 @@ describe('图片编辑 V3 命令历史', () => {
     });
   });
 
-  it('裁剪、清空和清空 redo 时只通知真正失去历史租约的资源', () => {
+  it('清空和清空 redo 时只通知真正失去历史租约的资源', () => {
     const released = vi.fn();
     const history = new ImageEditCommandHistoryV3({
-      maxCommands: 1,
-      maxBytes: 1_000_000,
       onResourcesReleased: released,
     });
     let document = createPaintDocument();
     document = addTile(history, document, 0, 100);
     document = addTile(history, document, 1, 200);
-    expect(released).toHaveBeenLastCalledWith({
-      reason: 'prune',
-      resources: [{ resourceId: 'sha256:0', byteSize: 100 }],
-    });
+    expect(released).not.toHaveBeenCalled();
 
     const undone = history.undo(document);
     document = history.execute(undone.document, {
@@ -242,10 +214,10 @@ describe('图片编辑 V3 命令历史', () => {
     history.clear(document);
     expect(released).toHaveBeenLastCalledWith({
       reason: 'clear',
-      resources: [{ resourceId: 'sha256:replacement', byteSize: 300 }],
+      resources: [{ resourceId: 'sha256:0', byteSize: 100 }, { resourceId: 'sha256:replacement', byteSize: 300 }],
     });
     expect(history.takeReleasedResourceEvents().map((event) => event.reason)).toEqual([
-      'prune', 'redo-cleared', 'clear',
+      'redo-cleared', 'clear',
     ]);
   });
 
@@ -399,7 +371,7 @@ describe('图片编辑 V3 命令历史', () => {
   });
 
   it('拒绝未知字段、篡改大小、危险键、超限和未知版本，失败时不污染现有历史', () => {
-    const history = new ImageEditCommandHistoryV3({ maxCommands: 2, maxBytes: 100_000 });
+    const history = new ImageEditCommandHistoryV3();
     const document = addTile(history, createPaintDocument(), 0, 128);
     const baseline = history.stringifySnapshot();
     const snapshot = history.createSnapshot() as unknown as Record<string, unknown>;
@@ -414,8 +386,6 @@ describe('图片编辑 V3 命令历史', () => {
       undo: [{ ...undo[0], metadataBytes: 1 }],
     })).toThrow(InvalidImageEditHistorySnapshotV3Error);
     expect(() => history.restore(document, JSON.parse('{"version":1,"documentId":"x","headRevision":0,"undo":[],"redo":[],"__proto__":{}}')))
-      .toThrow(InvalidImageEditHistorySnapshotV3Error);
-    expect(() => new ImageEditCommandHistoryV3({ maxCommands: 0 }).restore(document, baseline))
       .toThrow(InvalidImageEditHistorySnapshotV3Error);
     expect(history.stringifySnapshot()).toBe(baseline);
   });
@@ -465,13 +435,10 @@ describe('图片编辑 V3 命令历史', () => {
     });
     expect(continued.revision).toBe(deleted.revision + 1);
     expect(legacy.getState()).toMatchObject({
-      undoCount: 1,
-      unknownResourceCount: 0,
+      undoCount: 2,
+      unknownResourceCount: 1,
     });
-    expect(legacy.createSnapshot().version).toBe(2);
-    expect(legacy.takeReleasedResourceEvents()).toContainEqual({
-      reason: 'prune',
-      resources: [{ resourceId: resource, byteSize: null }],
-    });
+    expect(legacy.createSnapshot().version).toBe(1);
+    expect(legacy.takeReleasedResourceEvents()).toEqual([]);
   });
 });

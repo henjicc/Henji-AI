@@ -1,4 +1,5 @@
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
+import { IMAGE_EDIT_HISTORY_FIELDS_V3 } from './imageEditHistoryFields'
 import { listImageEditDocumentEntitiesV3 } from './imageEditDocumentCatalog'
 import {
   fieldDescriptors,
@@ -64,6 +65,7 @@ function property(
 
 export const IMAGE_EDIT_V3_DOCUMENT_PROPERTIES: ApplicationPropertyDescriptor[] = [
   ...fieldDescriptors(IMAGE_EDIT_V3_DOCUMENT_FIELDS),
+  ...fieldDescriptors(IMAGE_EDIT_HISTORY_FIELDS_V3),
   property('image_edit.document', 'revision', '文档修订号', { kind: 'integer', hardRange: { min: 0 } }),
   property('image_edit.document', 'width', '画布宽度', { kind: 'integer', hardRange: { min: 1 } }),
   property('image_edit.document', 'height', '画布高度', { kind: 'integer', hardRange: { min: 1 } }),
@@ -239,9 +241,11 @@ export class ImageEditV3ReflectionProvider {
     let values: Record<string, JsonValue>
     if (this.entityType === 'image_edit.document') {
       const { documentId } = splitImageEditV3DocumentRef(ref)
-      const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
+      const bus = requireImageEditDocumentInstanceV3(documentId).bus
+      const document = bus.getSnapshot().document
       values = {
         ...fieldReadValues(IMAGE_EDIT_V3_DOCUMENT_FIELDS, document.geometry),
+        ...fieldReadValues(IMAGE_EDIT_HISTORY_FIELDS_V3.filter(field => !request.propertyIds || request.propertyIds.includes(field.propertyId)), bus),
         'image_edit.document.revision': document.revision,
         'image_edit.document.width': document.geometry.width,
         'image_edit.document.height': document.geometry.height,

@@ -19,12 +19,9 @@ import {
   type ImageEditHistoryEntrySnapshotV3,
 } from './commandHistoryCodec';
 import type { ImageEditDocumentV3 } from './documentTypes';
-
-export const IMAGE_EDIT_HISTORY_DEFAULT_MAX_COMMANDS_V3 = 200;
-export const IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3 = 2 * 1024 * 1024 * 1024;
+import { serializeImageEditRenderValue, type ImageEditHashValue } from './renderHash';
 
 export type ImageEditHistoryResourceReleaseReasonV3 =
-  | 'prune'
   | 'redo-cleared'
   | 'rollback'
   | 'clear'
@@ -36,8 +33,6 @@ export interface ImageEditHistoryResourcesReleasedEventV3 {
 }
 
 export interface ImageEditCommandHistoryOptionsV3 {
-  maxCommands?: number;
-  maxBytes?: number;
   maxSnapshotJsonBytes?: number;
   onResourcesReleased?: (event: ImageEditHistoryResourcesReleasedEventV3) => void;
 }
@@ -49,8 +44,6 @@ export interface ImageEditCommandHistoryStateV3 {
   retainedResourceCount: number;
   retainedResourceBytes: number | null;
   unknownResourceCount: number;
-  maxCommands: number;
-  maxBytes: number;
 }
 
 export interface ImageEditHistoryTransitionV3 {
@@ -102,13 +95,19 @@ function hasStrictResourceMetadata(command: ImageEditCommandV3): boolean {
   return true;
 }
 
+function commandChangesState(forward: ImageEditCommandV3, inverse: ImageEditCommandV3): boolean {
+  if (forward.type !== inverse.type) return true;
+  const { commandId: _id, expectedRevision: _revision, ...after } = forward;
+  const { commandId: _inverseId, expectedRevision: _inverseRevision, ...before } = inverse;
+  return serializeImageEditRenderValue(JSON.parse(JSON.stringify(after)) as ImageEditHashValue)
+    !== serializeImageEditRenderValue(JSON.parse(JSON.stringify(before)) as ImageEditHashValue);
+}
+
 /**
  * 命令历史只保存正向命令、逆向补丁和资源哈希/大小，不嵌入像素。
  * 一个命令就是一个历史单位；画笔手势应在结束时提交单个 tile-delta 命令。
  */
 export class ImageEditCommandHistoryV3 {
-  private readonly maxCommands: number;
-  private readonly maxBytes: number;
   private readonly maxSnapshotJsonBytes: number | undefined;
   private readonly onResourcesReleased: ImageEditCommandHistoryOptionsV3['onResourcesReleased'];
   private readonly undoEntries: ImageEditHistoryEntrySnapshotV3[] = [];
@@ -118,14 +117,6 @@ export class ImageEditCommandHistoryV3 {
   private headRevision: number | null = null;
 
   constructor(options: ImageEditCommandHistoryOptionsV3 = {}) {
-    this.maxCommands = validateLimit(
-      options.maxCommands ?? IMAGE_EDIT_HISTORY_DEFAULT_MAX_COMMANDS_V3,
-      '历史命令上限'
-    );
-    this.maxBytes = validateLimit(
-      options.maxBytes ?? IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3,
-      '历史字节上限'
-    );
     this.maxSnapshotJsonBytes = options.maxSnapshotJsonBytes === undefined
       ? undefined
       : validateLimit(options.maxSnapshotJsonBytes, '历史快照 JSON 上限');
@@ -140,6 +131,8 @@ export class ImageEditCommandHistoryV3 {
     const retainedBefore = this.resourceMap();
     const hadRedo = this.redoEntries.length > 0;
     const result = applyImageEditCommandV3(document, command);
+    // 无变化的手势／参数提交不推进 revision、不分叉 redo，也不留下空历史。
+    if (!commandChangesState(command, result.inverse)) return document;
     const releaseCandidates = this.mergeResourceMap(retainedBefore, result.historyResources);
     this.redoEntries.length = 0;
     this.undoEntries.push(cloneEntry({
@@ -148,20 +141,18 @@ export class ImageEditCommandHistoryV3 {
       metadataBytes: result.historyMetadataBytes,
       resources: result.historyResources,
     }));
-    const pruned = this.pruneOldest();
     this.track(result.document);
-    if (hadRedo || pruned) {
-      this.notifyReleased(releaseCandidates, hadRedo ? 'redo-cleared' : 'prune');
-    }
+    if (hadRedo) this.notifyReleased(releaseCandidates, 'redo-cleared');
     return result.document;
   }
 
   undo(document: ImageEditDocumentV3): ImageEditHistoryTransitionV3 {
     this.assertHead(document);
-    const entry = this.undoEntries.pop();
+    const entry = this.undoEntries.at(-1);
     if (!entry) return { document, changed: false };
     const command = withImageEditCommandRevisionV3(entry.inverse, document.revision);
     const result = applyImageEditCommandV3(document, command, { allowLegacyResourceMetadata: true });
+    this.undoEntries.pop();
     this.redoEntries.push(entry);
     this.track(result.document);
     return { document: result.document, changed: true };
@@ -223,13 +214,36 @@ export class ImageEditCommandHistoryV3 {
 
   redo(document: ImageEditDocumentV3): ImageEditHistoryTransitionV3 {
     this.assertHead(document);
-    const entry = this.redoEntries.pop();
+    const entry = this.redoEntries.at(-1);
     if (!entry) return { document, changed: false };
     const command = withImageEditCommandRevisionV3(entry.forward, document.revision);
     const result = applyImageEditCommandV3(document, command, { allowLegacyResourceMetadata: true });
+    this.redoEntries.pop();
     this.undoEntries.push(entry);
     this.track(result.document);
     return { document: result.document, changed: true };
+  }
+
+  /** 有界投影／跳转读取，不为面板克隆整份持久快照。 */
+  getEntryAt(position: number): ImageEditHistoryEntrySnapshotV3 | undefined {
+    if (!Number.isSafeInteger(position) || position < 0) return undefined;
+    return position < this.undoEntries.length ? this.undoEntries[position]
+      : this.redoEntries[this.redoEntries.length - 1 - (position - this.undoEntries.length)];
+  }
+
+  /** 总线已逐命令验证临时结果后，一次发布历史游标；不创建另一撤销栈。 */
+  publishPosition(document: ImageEditDocumentV3, position: number, expectedHead: ImageEditDocumentV3): void {
+    this.assertHead(expectedHead);
+    const total = this.undoEntries.length + this.redoEntries.length;
+    if (!Number.isSafeInteger(position) || position < 0 || position > total || document.id !== expectedHead.id) {
+      throw new ImageEditCommandValidationErrorV3('历史位置无效');
+    }
+    if (position < this.undoEntries.length) {
+      while (this.undoEntries.length > position) this.redoEntries.push(this.undoEntries.pop()!);
+    } else if (position > this.undoEntries.length) {
+      while (this.undoEntries.length < position) this.undoEntries.push(this.redoEntries.pop()!);
+    }
+    this.track(document);
   }
 
   clear(document?: ImageEditDocumentV3): void {
@@ -281,8 +295,10 @@ export class ImageEditCommandHistoryV3 {
     }
     this.assertSnapshotApplies(document, decoded.snapshot);
     const retainedBefore = this.resourceMap();
-    this.undoEntries.splice(0, this.undoEntries.length, ...decoded.snapshot.undo.map(cloneEntry));
-    this.redoEntries.splice(0, this.redoEntries.length, ...decoded.snapshot.redo.map(cloneEntry));
+    this.undoEntries.length = 0;
+    this.redoEntries.length = 0;
+    for (const entry of decoded.snapshot.undo) this.undoEntries.push(cloneEntry(entry));
+    for (const entry of decoded.snapshot.redo) this.redoEntries.push(cloneEntry(entry));
     this.track(document);
     this.notifyReleased(retainedBefore, 'restore');
   }
@@ -315,8 +331,6 @@ export class ImageEditCommandHistoryV3 {
         ? null
         : resourceTotals.bytes,
       unknownResourceCount: resourceTotals.unknownResourceCount,
-      maxCommands: this.maxCommands,
-      maxBytes: this.maxBytes,
     };
   }
 
@@ -337,20 +351,6 @@ export class ImageEditCommandHistoryV3 {
   ): Map<string, ImageEditHistoryResourceReferenceV3> {
     const merged = mergeImageEditHistoryResourceReferencesV3([...current.values(), ...added]);
     return new Map(merged.map((resource) => [resource.resourceId, resource]));
-  }
-
-  private pruneOldest(): boolean {
-    let pruned = false;
-    while (
-      this.undoEntries.length + this.redoEntries.length > this.maxCommands
-      || this.getState().retainedBytes === null
-      || (this.getState().retainedBytes ?? 0) > this.maxBytes
-    ) {
-      const removed = this.undoEntries.shift();
-      if (!removed) break;
-      pruned = true;
-    }
-    return pruned;
   }
 
   private notifyReleased(
@@ -374,8 +374,6 @@ export class ImageEditCommandHistoryV3 {
 
   private decodeOptions(): DecodeImageEditHistorySnapshotOptionsV3 {
     return {
-      maxCommands: this.maxCommands,
-      maxBytes: this.maxBytes,
       ...(this.maxSnapshotJsonBytes === undefined ? {} : { maxJsonBytes: this.maxSnapshotJsonBytes }),
     };
   }

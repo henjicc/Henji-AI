@@ -6,18 +6,18 @@ export type ImageEditHashValue =
   | readonly ImageEditHashValue[]
   | { readonly [key: string]: ImageEditHashValue };
 
-function stableSerialize(value: ImageEditHashValue): string {
+export function serializeImageEditRenderValue(value: ImageEditHashValue): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+  if (Array.isArray(value)) return `[${value.map(serializeImageEditRenderValue).join(',')}]`;
   const record = value as { readonly [key: string]: ImageEditHashValue };
   return `{${Object.keys(record).sort().map((key) => (
-    `${JSON.stringify(key)}:${stableSerialize(record[key])}`
+    `${JSON.stringify(key)}:${serializeImageEditRenderValue(record[key])}`
   )).join(',')}}`;
 }
 
 /** 快速稳定哈希只用于缓存身份，不作为资源内容的加密摘要。 */
 export function createImageEditRenderHash(value: ImageEditHashValue): string {
-  const text = stableSerialize(value);
+  const text = serializeImageEditRenderValue(value);
   let high = 0x9e3779b9;
   let low = 0x811c9dc5;
   for (let index = 0; index < text.length; index += 1) {
