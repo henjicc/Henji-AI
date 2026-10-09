@@ -34,7 +34,7 @@ it.each([16, 640])('真实资源和文档保存→新实例重开→预览规划
   let document = createImageEditDocumentV3({ width: 64, height: 64, documentId: 'roundtrip', sourceResourceId: source.id })
   const layerId = document.layers[0].id
   const history = new ImageEditCommandHistoryV3()
-  const repository = new ImageEditDocumentRepository(path.join(directory, 'documents'))
+  const repository = new ImageEditDocumentRepository(path.join(directory, 'documents'), { resources: store })
   await repository.create({ documentId: document.id, document })
   document = history.execute(document, { type: 'raster.apply-tile-delta', layerId, commandId: 'paint', expectedRevision: 0,
     changes: [{ tileKey, previousResourceId: null, previousByteSize: 0, resourceId: brush.resourceId, byteSize: brush.byteSize }] })
@@ -42,8 +42,8 @@ it.each([16, 640])('真实资源和文档保存→新实例重开→预览规划
     if (undo) document = history.undo(document).document
     await repository.save({ documentId: document.id, expectedRevision: document.revision - 1,
       document, resourceRefs: [], history: history.createSnapshot() })
-    const reloaded = await new ImageEditDocumentRepository(path.join(directory, 'documents')).load(document.id)
     const reopenedStore = new ContentAddressedResourceStore(path.join(directory, 'resources'))
+    const reloaded = await new ImageEditDocumentRepository(path.join(directory, 'documents'), { resources: reopenedStore }).load(document.id)
     const reopenedBrushes = new ImageEditBrushTileStoreV3(reopenedStore)
     const readTile = vi.spyOn(reopenedBrushes, 'readTile')
     const resources = await describeImageEditorV3DocumentResources(reloaded.document as ImageEditDocumentV3,
@@ -126,13 +126,14 @@ it('真实滤镜蒙版及共同属性保存后重开；删除滤镜的持久历�
   const history = new ImageEditCommandHistoryV3()
   document = history.execute(document, { type: 'layer.update-common', commandId: 'remove-filter', expectedRevision: 0, layerId: 'content',
     patch: { filters: [] }, resources: [{ resourceId: mask.resourceId, byteSize: mask.byteSize }] })
-  const repository = new ImageEditDocumentRepository(path.join(directory, 'documents'))
+  const repository = new ImageEditDocumentRepository(path.join(directory, 'documents'), { resources: store })
   await repository.create({ documentId: document.id, revision: document.revision, document, history: history.createSnapshot(), resourceRefs: [] })
-  const reloaded = await new ImageEditDocumentRepository(path.join(directory, 'documents')).load(document.id)
+  const reopenedStore = new ContentAddressedResourceStore(path.join(directory, 'resources'))
+  const reloaded = await new ImageEditDocumentRepository(path.join(directory, 'documents'), { resources: reopenedStore }).load(document.id)
   const restoredDocument = reloaded.document as ImageEditDocumentV3
   expect(restoredDocument.layers[1]).toMatchObject({ fillOpacity: .4, clipping: true, maskAttachment: content.maskAttachment, filters: [] })
   const descriptors = await describeImageEditorV3DocumentResources(restoredDocument, reloaded.history, reloaded.resourceRefs,
-    ref => store.describe(ref), brushes, new AbortController().signal)
+    ref => reopenedStore.describe(ref), new ImageEditBrushTileStoreV3(reopenedStore), new AbortController().signal)
   expect(descriptors.find(item => item.resourceRef === mask.resourceId)?.mediaType).toBe('application/x-henji-brush-tile-v3')
   const restored = new ImageEditCommandHistoryV3(); restored.restore(restoredDocument, reloaded.history)
   const undone = restored.undo(restoredDocument).document
