@@ -26,6 +26,7 @@ export interface ViewerMarkEditorProps {
 /** 查看器仅裁剪工具集合；文档、命令、历史、保存及导出均复用 V3。 */
 export function ViewerMarkEditor({ imageUrl, session, onClose, onSave, onSessionChange }: ViewerMarkEditorProps): JSX.Element {
   const { t } = useTranslation('ui')
+  const { t: tCommon } = useTranslation('common')
   const repository = useMemo(() => new ImageEditorV3CommandRepository(), [])
   const [prepared, setPrepared] = useState<Prepared | null>(null)
   const [failed, setFailed] = useState(false)
@@ -130,6 +131,7 @@ export function ViewerMarkEditor({ imageUrl, session, onClose, onSave, onSession
     <div className="h-full w-full bg-window">
       {failed && <UiError title={t('imageEditor.v3.host.notifications.autosaveFailed')} message={t('imageEditor.v3.host.notifications.saveBeforeReplaceFailed')} onRetry={() => void handleSave()} />}
       <ImageEditorV3
+        layoutWorkspaceId="viewer"
         key={prepared.document.id}
         sourceImageUrl={prepared.sourceUrl}
         document={prepared.document}
@@ -141,8 +143,8 @@ export function ViewerMarkEditor({ imageUrl, session, onClose, onSave, onSession
         onDocumentChange={document => setPrepared(current => current ? { ...current, document } : current)}
         onPersistenceChange={snapshot => { persistenceRef.current = snapshot }}
         toolbarActions={<>
-          <UiButton variant="secondary" disabled={saving} onClick={() => void handleClose()}>{t('common.close', '关闭')}</UiButton>
-          <UiButton variant="primary" disabled={saving} onClick={() => void handleSave()}>{t('common.save')}</UiButton>
+          <UiButton variant="secondary" disabled={saving} onClick={() => void handleClose()}>{tCommon('close')}</UiButton>
+          <UiButton variant="primary" disabled={saving} onClick={() => void handleSave()}>{tCommon('save')}</UiButton>
         </>}
         className="h-full"
       />

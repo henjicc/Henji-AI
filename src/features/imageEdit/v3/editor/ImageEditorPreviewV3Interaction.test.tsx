@@ -412,6 +412,9 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
     ).toEqual([document.layers[0].id]))
     const liveSession = requireImageEditDocumentInstanceV3(document.id)
+    // Dockview 初始化也安排布局帧；此处只度量后续移动手势的草稿合并。
+    requestFrame.mockClear()
+    cancelFrame.mockClear()
     fireEvent.pointerDown(surface, {
       pointerId: 51, isPrimary: true, button: 0, clientX: 10, clientY: 10,
     })

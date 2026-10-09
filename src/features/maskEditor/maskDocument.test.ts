@@ -130,4 +130,33 @@ describe('maskDocument', () => {
       height: 60,
     });
   });
+
+  it('超过 40 次仍全部可撤销，历史仅保存增量且空提交不破坏重做', () => {
+    let state = createMaskHistoryState(createEmptyMaskDocument('source', 100, 100));
+    for (let i = 0; i < 85; i++) state = reduceMaskHistory(state, { type: 'commit', document: appendMaskStroke(state.document,
+      { id: String(i), mode: 'paint', size: 8, points: [{ x: i, y: i }] }) });
+    expect(state.undoStack).toHaveLength(85);
+    expect(state.undoStack.every(delta => delta.added.length === 1 && delta.removed.length === 0)).toBe(true);
+    for (let i = 0; i < 85; i++) state = reduceMaskHistory(state, { type: 'undo' });
+    expect(state.document.strokes).toHaveLength(0);
+    const emptyCommit = reduceMaskHistory(state, { type: 'commit', document: { ...state.document, strokes: [] } });
+    expect(emptyCommit).toBe(state);
+    for (let i = 0; i < 85; i++) state = reduceMaskHistory(state, { type: 'redo' });
+    expect(state.document.strokes.map(mark => mark.id)).toEqual(Array.from({ length: 85 }, (_, i) => String(i)));
+    const cleared = reduceMaskHistory(state, { type: 'commit', document: { ...state.document, strokes: [] } });
+    expect(reduceMaskHistory(cleared, { type: 'undo' }).document).toEqual(state.document);
+  });
+
+  it('外部提交缓冲不能改变历史，并且编辑撤销后新提交会分叉', () => {
+    let state = createMaskHistoryState(createEmptyMaskDocument('source', 100, 100));
+    const mark = { id: 'one', mode: 'paint' as const, size: 8, points: [{ x: 2, y: 2 }] };
+    const submitted = appendMaskStroke(state.document, mark);
+    state = reduceMaskHistory(state, { type: 'commit', document: submitted });
+    submitted.strokes[0].points[0].x = 90;
+    expect(state.document.strokes[0].points[0].x).toBe(2);
+    state = reduceMaskHistory(state, { type: 'undo' });
+    state = reduceMaskHistory(state, { type: 'commit', document: appendMaskStroke(state.document, { ...mark, id: 'two' }) });
+    expect(state.redoStack).toHaveLength(0);
+    expect(reduceMaskHistory(state, { type: 'redo' })).toBe(state);
+  });
 });

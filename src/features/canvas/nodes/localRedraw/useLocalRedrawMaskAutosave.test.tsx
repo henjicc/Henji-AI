@@ -10,18 +10,18 @@ import { useLocalRedrawMaskAutosave } from './useLocalRedrawMaskAutosave';
 const {
   persistImageSourceTracked,
   releaseManagedGenerationMedia,
-  exportMaskDocumentToPng,
+  exportMaskDocumentToPngAsync,
 } = vi.hoisted(() => ({
   persistImageSourceTracked: vi.fn(async () => ({
     imagePath: '/managed/mask-latest.png',
     createdFilePaths: ['/managed/mask-latest.png'],
   })),
   releaseManagedGenerationMedia: vi.fn(async () => undefined),
-  exportMaskDocumentToPng: vi.fn(() => 'data:image/png;base64,bWFzaw=='),
+  exportMaskDocumentToPngAsync: vi.fn(async (_document: MaskEditorDocument, _signal?: AbortSignal) => 'data:image/png;base64,bWFzaw=='),
 }));
 
 vi.mock('@/commands/image', () => ({ persistImageSourceTracked }));
-vi.mock('@/features/maskEditor/maskExport', () => ({ exportMaskDocumentToPng }));
+vi.mock('@/features/maskEditor/maskExport', () => ({ exportMaskDocumentToPngAsync }));
 vi.mock('@/platform/runtime', () => ({
   getPlatform: () => ({ image: { releaseManagedGenerationMedia } }),
   isDesktopRuntime: () => false,
@@ -69,7 +69,8 @@ beforeEach(() => {
   });
   releaseManagedGenerationMedia.mockReset();
   releaseManagedGenerationMedia.mockResolvedValue(undefined);
-  exportMaskDocumentToPng.mockClear();
+  exportMaskDocumentToPngAsync.mockReset();
+  exportMaskDocumentToPngAsync.mockResolvedValue('data:image/png;base64,bWFzaw==');
 });
 
 afterEach(() => {
@@ -78,6 +79,47 @@ afterEach(() => {
 });
 
 describe('局部重绘遮罩自动保存', () => {
+  it('修改目标时取消旧区域导出，并跳过迟到计算的落盘', async () => {
+    const first = deferred<string>();
+    exportMaskDocumentToPngAsync.mockReturnValueOnce(first.promise);
+    const onPersist = vi.fn();
+    const rendered = renderHook(
+      ({ document }) => useLocalRedrawMaskAutosave({ document, ready: true, onPersist }),
+      { initialProps: { document: documentWith([]) } },
+    );
+    rendered.rerender({ document: documentWith(['first']) });
+    await waitFor(() => expect(exportMaskDocumentToPngAsync).toHaveBeenCalledTimes(1));
+    const signal = exportMaskDocumentToPngAsync.mock.calls[0][1];
+    expect(signal?.aborted).toBe(false);
+    rendered.rerender({ document: documentWith(['latest']) });
+    expect(signal?.aborted).toBe(true);
+    await act(async () => { first.resolve('data:image/png;base64,c3RhbGU='); await first.promise; });
+    await waitFor(() => expect(onPersist).toHaveBeenCalledTimes(1));
+    expect(persistImageSourceTracked).toHaveBeenCalledTimes(1);
+    expect(persistImageSourceTracked).toHaveBeenCalledWith('data:image/png;base64,bWFzaw==');
+    expect(onPersist).toHaveBeenCalledWith(expect.objectContaining({ document: expect.objectContaining({
+      strokes: [expect.objectContaining({ id: 'latest' })],
+    }) }));
+  });
+
+  it('卸载时取消区域导出，迟到完成不落盘也不转移给节点', async () => {
+    const first = deferred<string>();
+    exportMaskDocumentToPngAsync.mockReturnValueOnce(first.promise);
+    const onPersist = vi.fn();
+    const rendered = renderHook(
+      ({ document }) => useLocalRedrawMaskAutosave({ document, ready: true, onPersist }),
+      { initialProps: { document: documentWith([]) } },
+    );
+    rendered.rerender({ document: documentWith(['first']) });
+    await waitFor(() => expect(exportMaskDocumentToPngAsync).toHaveBeenCalledTimes(1));
+    const signal = exportMaskDocumentToPngAsync.mock.calls[0][1];
+    rendered.unmount();
+    expect(signal?.aborted).toBe(true);
+    await act(async () => { first.resolve('data:image/png;base64,c3RhbGU='); await first.promise; });
+    expect(persistImageSourceTracked).not.toHaveBeenCalled();
+    expect(onPersist).not.toHaveBeenCalled();
+  });
+
   it('跳过初始载入，并把连续修改合并为最后一版自动保存', async () => {
     const onPersist = vi.fn();
     const initialDocument = documentWith([]);

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- Node 精确测试与正式巡检采用 CommonJS。 */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -121,7 +122,12 @@ test('弹窗清理每个弹窗只关闭一次，保存失败保留现场且不�
     const button = { last() { return this }, count: async () => 1, isEnabled: async () => true,
       click: async () => { clicks += 1; if (mode === 'closed') visible = false } }
     const dialog = { last() { return this }, count: async () => Number(visible),
-      elementHandle: async () => element, getByRole: () => button }
+      elementHandle: async () => element, getByRole: (_role, { name }) => {
+        assert.equal(name.test('关闭编辑器'), true)
+        assert.equal(name.test('关闭图层面板'), false)
+        assert.equal(name.test('关闭属性面板'), false)
+        return button
+      } }
     const empty = { count: async () => 0 }
     const page = { keyboard: { press: async () => assert.fail('有弹窗时不得先Escape触发重复保存') },
       waitForTimeout: async (delay) => { clock += delay },
@@ -149,7 +155,7 @@ test('窗口证据拒绝场景放大和CSS缩放漂移，下一场景恢复尺�
 test('截图按内容DIP辨别实际1x或显示器密度，拒绝带黑边的3200×2000', async () => {
   const sharp = require('sharp')
   const evidence = { content: { width: 1440, height: 900 }, renderer: { width: 1440, height: 900, dpr: 2 }, nativeScaleFactor: 2 }
-  const png = (width, height) => sharp({ create: { width, height, channels: 4, background: '#000000' } }).png().toBuffer()
+  const png = (width, height) => sharp({ create: { width, height, channels: 4, background: 'black' } }).png().toBuffer()
   assert.deepEqual(await inspectInspectionScreenshot(await png(2880, 1800), evidence),
     { width: 2880, height: 1800, captureScale: 2, captureMethod: 'electron-capture-page', monitorScale: 2 })
   assert.equal((await inspectInspectionScreenshot(await png(1440, 900), evidence)).captureScale, 1)
@@ -162,7 +168,7 @@ test('0.9页面缩放分别核对外框、CSS、effective DPR与native scale，�
     renderer: { width: 1600, height: 1000, dpr: 1.7999999523162842 } }
   assert.equal(assertInspectionWindowEvidence(requested, evidence, evidence), evidence)
   const sharp = require('sharp')
-  const png = (width, height) => sharp({ create: { width, height, channels: 3, background: '#000000' } }).png().toBuffer()
+  const png = (width, height) => sharp({ create: { width, height, channels: 3, background: 'black' } }).png().toBuffer()
   assert.equal((await inspectInspectionScreenshot(await png(2880, 1800), evidence)).captureScale, 2)
   await assert.rejects(inspectInspectionScreenshot(await png(3200, 2000), evidence), /截图像素尺寸不匹配/)
   assert.throws(() => assertInspectionWindowEvidence(requested, evidence, { ...evidence, nativeScaleFactor: 1.8 }), /尺寸发生漂移/)

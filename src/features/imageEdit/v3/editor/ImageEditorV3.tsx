@@ -3,25 +3,23 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { exportDiagnosticBundle } from '@/commands/logging'
-import { UiButton, UiError, UiErrorBoundary } from '@/components/ui'
+import { UiButton, UiError, UiErrorBoundary, UiToolbar } from '@/components/ui'
 import { ImageEditorCommandBarV3 } from './ImageEditorCommandBarV3'
-import { ImageEditorFloatingPanelsV3 } from './ImageEditorFloatingPanelsV3'
+import { ImageEditorShellV3 } from '../shell/ImageEditorShellV3'
+import { imageEditorWorkspaceLayoutStoreV3 } from '../panelFramework/layout'
+import { builtInToolRegistration } from '../toolFramework/builtInRegistry'
 import { ImageEditorPreviewV3 } from './ImageEditorPreviewV3'
 import { ImageEditorToolRailV3 } from './ImageEditorToolRailV3'
 import type { ImageEditorV3Props } from './types'
 import { useImageEditorControllerV3 } from './useImageEditorControllerV3'
-import { useImageEditorHistoryShortcutsV3 } from './useImageEditorHistoryShortcutsV3'
 import { createImageEditorDiagnosticSummaryV3 } from './imageEditorDiagnosticSummaryV3'
 import { ImageEditorRepairProviderV3 } from './ImageEditorRepairContextV3'
 
 function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const { controller, bus } = useImageEditorControllerV3(props)
+  const { t } = useTranslation('ui')
   const rootRef = useRef<HTMLDivElement>(null)
-  useImageEditorHistoryShortcutsV3(rootRef, controller)
   const { onEditorContextChange } = props
-  const showLayers = controller.profile.panels.includes('layers')
-  const showProperties = controller.profile.panels.includes('properties')
-  const showSidebar = showLayers || showProperties
 
   useEffect(() => {
     onEditorContextChange?.({
@@ -39,7 +37,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
       tabIndex={-1}
       onPointerDownCapture={(event) => {
         const target = event.target instanceof Element ? event.target : null
-        if (!target?.closest('button, input, textarea, select, a, [contenteditable]')) {
+        if (!target?.closest('button, input, textarea, select, a, [contenteditable], [role="tab"], [role="separator"], .dv-tabs-and-actions-container')) {
           rootRef.current?.focus({ preventScroll: true })
         }
       }}
@@ -47,32 +45,23 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
       data-host-profile={controller.profile.id}
       className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-gap text-text1 ${props.className ?? ''}`}
     >
-      <ImageEditorCommandBarV3
+      {builtInToolRegistration.failed ? <>
+        <UiToolbar variant="command" trailing={props.toolbarActions}>{props.toolbarLeading}</UiToolbar>
+        <UiError className="flex-1" message={t('imageEditor.v3.tools.loadFailed')} />
+      </> : <ImageEditorShellV3
         controller={controller}
-        bus={bus}
-        toolbarLeading={props.toolbarLeading}
-        toolbarActions={props.toolbarActions}
-      />
-      <div className="relative flex min-h-0 min-w-0 flex-1">
-        <ImageEditorToolRailV3 controller={controller} />
-        {showSidebar ? (
-          <ImageEditorFloatingPanelsV3
+        layoutStore={imageEditorWorkspaceLayoutStoreV3(props.layoutWorkspaceId ?? props.profileId)}
+        commandBar={panelActions => (
+          <ImageEditorCommandBarV3
             controller={controller}
-            showLayers={showLayers}
-            showProperties={showProperties}
-          >
-            <ImageEditorPreviewV3
-              sourceImageUrl={props.sourceImageUrl}
-              previewRenderer={props.previewRenderer}
-              annotationOverlay={props.annotationOverlay}
-              resourceByteSizes={props.resourceByteSizes}
-              resourceDescriptors={props.resourceDescriptors}
-              onPackageThumbnailChange={props.onPackageThumbnailChange}
-              bus={bus}
-              controller={controller}
-            />
-          </ImageEditorFloatingPanelsV3>
-        ) : (
+            bus={bus}
+            toolbarLeading={props.toolbarLeading}
+            toolbarActions={props.toolbarActions}
+            panelActions={panelActions}
+          />
+        )}
+        toolRail={<ImageEditorToolRailV3 controller={controller} />}
+        preview={(
           <ImageEditorPreviewV3
             sourceImageUrl={props.sourceImageUrl}
             previewRenderer={props.previewRenderer}
@@ -84,7 +73,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
             controller={controller}
           />
         )}
-      </div>
+      />}
     </div>
     </ImageEditorRepairProviderV3>
     </ImageEditorSubjectProviderV3>

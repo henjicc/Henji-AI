@@ -16,7 +16,7 @@ export function ImageEditorRepairParametersV3({ bus, controller }: { bus: ImageE
   const repairModels = models.models.filter(value => ['image_inpainting_lama', 'image_inpainting_migan'].includes(value.id))
   const model = view.quality === 'auto' ? repairModels.find(value => value.status === 'downloading') ?? repairModels.find(value => !!value.lastFailure && value.lastFailure !== 'cancelled') : repairModels.find(value => value.id === (view.quality === 'fine' ? 'image_inpainting_lama' : 'image_inpainting_migan'))
   const percent = model?.progress ? Math.floor(model.progress.receivedBytes / Math.max(1, model.progress.totalBytes) * 100) : 0
-  return <div className="flex min-w-max items-center gap-3" data-repair-parameters>
+  return <div className="flex min-w-max shrink-0 items-center gap-3 whitespace-nowrap" data-repair-parameters>
     {removing ? <>
       <label className="flex items-center gap-2 text-xs text-text2">{t('imageEditor.v3.toolSettings.size')}
         <UiRangeInput aria-label={t('imageEditor.v3.toolSettings.size')} min={1} max={Math.min(controller.document.geometry.width, controller.document.geometry.height)} step={1} value={session.toolSettings.brushSize}

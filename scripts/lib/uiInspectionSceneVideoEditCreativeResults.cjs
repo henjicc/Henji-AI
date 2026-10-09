@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检采用 CommonJS 场景工厂。 */
 const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -161,9 +162,12 @@ function createVideoEditCreativeResultsScene(context) {
         const sendMenu = page.getByRole('button', { name: /加入剪辑/ })
         await page.locator('[data-image-editor-v3-host-state]').waitFor({ state: 'detached', timeout: 60000 })
         await sendMenu.waitFor({ state: 'visible', timeout: 60000 })
+        const imageEditor = page.locator('[data-image-editor-v3]:visible').last()
+        await imageEditor.locator('[data-raster-pasteboard-layer][data-raster-source-ready="true"]').waitFor({ state: 'attached', timeout: 30000 })
+        await imageEditor.locator('.animate-spin').waitFor({ state: 'hidden', timeout: 30000 })
         evidence.timings.frameToEditorMs = performance.now() - at
         await shot('creative-image-editor-opened')
-        await sendMenu.click(); const backfill = page.getByRole('menuitem', { name: /回填到原剪辑位置/ })
+        await sendMenu.click(); const backfill = page.getByRole('menuitem', { name: /替换回剪辑（原位置一帧）/ })
         await backfill.waitFor({ state: 'visible' }); evidence.imageReturnLabel = await backfill.innerText(); at = performance.now(); await backfill.click()
         // 编辑当前帧 = 一份图片文档：片段来源引用图片文档本身（保持链接，写回后自动重新渲染）
         const edited = await savedClip(page, file, clip => clip.creativeSource?.type === 'document' && /\.henjiimg$/i.test(clip.creativeSource.docRef.path), '图片编辑结果没有回填原帧位置')
@@ -216,6 +220,7 @@ function createVideoEditCreativeResultsScene(context) {
         }
         const resultNode = page.locator(`.react-flow__node[data-id="${resultNodeId}"]`); await resultNode.waitFor({ state: 'visible', timeout: 15000 }); await resultNode.click()
         at = performance.now(); await page.getByRole('button', { name: '加入剪辑', exact: true }).click()
+        await page.getByRole('menuitem', { name: /^加入播放头/ }).click()
         const staged = await savedClip(page, file, clip => clip.creativeSource?.type === 'document' && clip.creativeSource.part === resultNodeId, '三维正式渲染没有回填序列')
         evidence.timings.cameraStageMs = performance.now() - at
         assert.equal(staged.clip.start, 360)

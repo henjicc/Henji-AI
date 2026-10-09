@@ -1,122 +1,34 @@
 import { createLogger } from '@/core/logging';
-import { WHITE_HEX } from '@/core/theme/colorTokens';
 import { canvasToDataUrl } from '@/services/imageSource';
-import { tracePenPath, type PenPathContext } from '@/features/imageMark/render/tracePenPath';
-import { createMaskBrushRenderLayers } from './brushHardness';
-import { isMaskStroke, resolveMaskShapeBounds } from './maskDocument';
-import type { MaskEditorDocument, MaskMark, MaskShape, MaskStroke } from './types';
+import { evaluateRegionProgram } from '@/core/imaging/regions';
+import { quickMaskRegionProgram } from './regionAdapter';
+import type { MaskEditorDocument } from './types';
+import { MaskRegionRasterizer } from './regionWorkerClient';
 
 const logger = createLogger('features.maskEditor.export');
 
-type MaskRenderContext = PenPathContext & Pick<
-  CanvasRenderingContext2D,
-  | 'arc'
-  | 'clearRect'
-  | 'fill'
-  | 'fillRect'
-  | 'ellipse'
-  | 'closePath'
-  | 'restore'
-  | 'save'
-  | 'stroke'
-  | 'globalCompositeOperation'
-  | 'globalAlpha'
-  | 'fillStyle'
-  | 'strokeStyle'
-  | 'lineCap'
-  | 'lineJoin'
-  | 'lineWidth'
->;
+type MaskRenderContext = Pick<CanvasRenderingContext2D, 'createImageData' | 'putImageData'>;
 
-function traceMaskStroke(context: MaskRenderContext, stroke: MaskStroke, size: number): void {
-  const points = stroke.points.flatMap((point) => [point.x, point.y]);
-  if (points.length === 2) {
-    context.beginPath();
-    context.arc(points[0], points[1], size / 2, 0, Math.PI * 2);
-    context.fill();
-    return;
+function writeCoverage(context: MaskRenderContext, coverage: Float32Array, region: { x: number; y: number; width: number; height: number }): void {
+  const image = context.createImageData(region.width, region.height);
+  for (let i = 0; i < coverage.length; i++) {
+    image.data.fill(255, i * 4, i * 4 + 3);
+    image.data[i * 4 + 3] = Math.round((1 - coverage[i]) * 255);
   }
-  tracePenPath(context, points);
-  context.stroke();
+  context.putImageData(image, region.x, region.y);
 }
 
-function fillMaskShape(context: MaskRenderContext, shape: MaskShape): void {
-  if (shape.kind === 'rectangle') {
-    const [start, end] = shape.points;
-    context.fillRect(
-      Math.min(start.x, end.x),
-      Math.min(start.y, end.y),
-      Math.abs(end.x - start.x),
-      Math.abs(end.y - start.y)
-    );
-    return;
+/** Parameter masks are opaque white outside the edited region; coverage is inverted only at PNG encoding. */
+export function renderMaskDocument(context: MaskRenderContext, document: MaskEditorDocument): void {
+  const program = quickMaskRegionProgram(document);
+  for (let y = 0; y < document.height; y += 512) for (let x = 0; x < document.width; x += 512) {
+    const region = { x, y, width: Math.min(512, document.width - x), height: Math.min(512, document.height - y) };
+    const coverage = evaluateRegionProgram(program, document, region);
+    writeCoverage(context, coverage, region);
   }
-  if (shape.kind === 'circle') {
-    const [start, end] = shape.points;
-    const bounds = resolveMaskShapeBounds('circle', start, end);
-    const radius = bounds.width / 2;
-    if (radius === 0) return;
-    context.beginPath();
-    context.ellipse(
-      bounds.x + radius,
-      bounds.y + radius,
-      radius,
-      radius,
-      0,
-      0,
-      Math.PI * 2
-    );
-    context.fill();
-    return;
-  }
-  context.beginPath();
-  context.moveTo(shape.points[0].x, shape.points[0].y);
-  shape.points.slice(1).forEach((point) => context.lineTo(point.x, point.y));
-  context.closePath();
-  context.fill();
 }
 
-function renderMaskMark(context: MaskRenderContext, mark: MaskMark): void {
-  context.globalCompositeOperation = mark.mode === 'paint' ? 'destination-out' : 'source-over';
-  if (isMaskStroke(mark)) {
-    createMaskBrushRenderLayers(mark.size, mark.hardness).forEach((layer) => {
-      context.globalAlpha = layer.opacity;
-      context.lineWidth = layer.size;
-      traceMaskStroke(context, mark, layer.size);
-    });
-    return;
-  }
-  context.globalAlpha = 1;
-  fillMaskShape(context, mark);
-}
-
-/**
- * GPT Image 遮罩语义：未涂抹区域 alpha=255；用户涂抹区域 alpha=0。
- * 橡皮擦以 source-over 白色恢复不透明区，因而文档可按操作顺序无损重放。
- */
-export function renderMaskDocument(
-  context: MaskRenderContext,
-  document: MaskEditorDocument
-): void {
-  context.clearRect(0, 0, document.width, document.height);
-  context.globalCompositeOperation = 'source-over';
-  context.globalAlpha = 1;
-  context.fillStyle = WHITE_HEX;
-  context.fillRect(0, 0, document.width, document.height);
-
-  document.strokes.forEach((stroke) => {
-    if (stroke.points.length === 0) return;
-    context.save();
-    context.fillStyle = WHITE_HEX;
-    context.strokeStyle = WHITE_HEX;
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    renderMaskMark(context, stroke);
-    context.restore();
-  });
-}
-
-export function exportMaskDocumentToPng(document: MaskEditorDocument): string {
+export async function exportMaskDocumentToPngAsync(document: MaskEditorDocument, signal?: AbortSignal): Promise<string> {
   const startedAt = performance.now();
   logger.info('遮罩导出开始', {
     event: 'mask_editor.export.start',
@@ -132,7 +44,21 @@ export function exportMaskDocumentToPng(document: MaskEditorDocument): string {
     if (!context) {
       throw new Error('无法初始化遮罩画布');
     }
-    renderMaskDocument(context, document);
+    const rasterizer = new MaskRegionRasterizer(document);
+    const cancel = (): void => rasterizer.dispose();
+    signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      for (let y = 0; y < document.height; y += 512) for (let x = 0; x < document.width; x += 512) {
+        if (signal?.aborted) throw new Error('遮罩导出已取消');
+        const region = { x, y, width: Math.min(512, document.width - x), height: Math.min(512, document.height - y) };
+        const coverage = await rasterizer.read(region, document);
+        if (signal?.aborted) throw new Error('遮罩导出已取消');
+        writeCoverage(context, coverage, region);
+      }
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+      rasterizer.dispose();
+    }
     const dataUrl = canvasToDataUrl(canvas);
     logger.info('遮罩导出完成', {
       event: 'mask_editor.export.completed',

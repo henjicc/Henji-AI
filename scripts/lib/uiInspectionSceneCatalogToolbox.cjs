@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检启动器使用 CommonJS 场景工厂。 */
 const { createAudioEditScene } = require('./uiInspectionSceneAudioEdit.cjs')
 const { createAudioEditHomeScene } = require('./uiInspectionSceneAudioEditHome.cjs')
 const { createAudioEditInteractionScene } = require('./uiInspectionSceneAudioEditInteraction.cjs')
@@ -69,7 +70,7 @@ function createToolboxScenes(context) {
           const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
           await surface.waitFor({ state: 'visible', timeout: 12000 })
           const addLayerButton = page.getByRole('button', { name: /^(添加图层|Add layer)$/i })
-          const dropTarget = surface.locator('.border-dashed').first()
+          const dropTarget = surface.locator('[data-project-library-drop]').first()
           await Promise.race([
             addLayerButton.waitFor({ state: 'visible', timeout: 12000 }),
             dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
@@ -184,7 +185,9 @@ function createToolboxScenes(context) {
         await intensity.focus()
         for (let index = 0; index < 6; index += 1) await intensity.press('ArrowRight')
         await settlePage(page, 1200)
-        await page.getByRole('button', { name: '返回工具' }).click()
+        await page.getByRole('button', { name: '返回图片文档列表', exact: true }).click()
+        await page.getByRole('button', { name: '不保存', exact: true }).click()
+        await page.getByRole('button', { name: '返回工具', exact: true }).click()
         await openGlowEditor()
         const radius = page.getByRole('slider', { name: '半径' })
         await radius.fill('0.78')
@@ -334,13 +337,13 @@ function createToolboxScenes(context) {
       surface: '工具箱',
       name: '图片编辑器 V3-发布候选核心路径',
       writesUserData: true,
-      setup: async (page, app) => {
+      setup: async (page, app, { capture }) => {
         const startedAt = new Date().toISOString()
         await setupToolbox(page)
         await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
         const host = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
         await host.waitFor({ state: 'visible', timeout: 12000 })
-        const dropTarget = host.locator('.border-dashed').first()
+        const dropTarget = host.locator('[data-project-library-drop]').first()
         const editor = host.locator('[data-image-editor-v3]')
         await Promise.race([
           dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
@@ -402,23 +405,27 @@ function createToolboxScenes(context) {
         ), undefined, { timeout: 15000 }).catch(() => {
           throw new Error('图片编辑器打开后，移动能力在 15 秒内没有就绪')
         })
-        await page.waitForFunction(() => (
-          document.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') === 'viewport'
+        await page.waitForFunction((root) => (
+          root.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') === 'viewport'
             && (() => {
-              const frame = document.querySelector('[data-raster-display-frame]')
-              const source = document.querySelector('[data-raster-pasteboard-layer]')
+              const frame = root.querySelector('[data-raster-display-frame]')
+              const source = root.querySelector('[data-raster-pasteboard-layer]')
               return frame instanceof HTMLElement
                 && source?.getAttribute('data-raster-source-ready') === 'true'
                 && frame.querySelector('[data-presentation-front-surface]') instanceof HTMLCanvasElement
                 && frame.querySelector('[data-presentation-safety-surface]') instanceof HTMLCanvasElement
             })()
-        ), undefined, { timeout: 15000 }).catch(async () => {
+        ), await editor.elementHandle(), { timeout: 15000 }).catch(async () => {
           const state = await editor.evaluate((root) => ({
             displaySource: root.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') ?? null,
             hasDisplayFrame: Boolean(root.querySelector('[data-raster-display-frame]')),
             presentationSurfaceCount: root.querySelectorAll('[data-presentation-surface]').length,
             frontSurfaceCount: root.querySelectorAll('[data-presentation-front-surface]').length,
             safetySurfaceCount: root.querySelectorAll('[data-presentation-safety-surface]').length,
+            sourceReady: root.querySelector('[data-raster-pasteboard-layer]')?.getAttribute('data-raster-source-ready'),
+            source: [...root.querySelectorAll('[data-raster-pasteboard-layer] img')].map(image => ({
+              src: image.src.slice(0, 180), complete: image.complete, width: image.naturalWidth,
+            })),
           }))
           throw new Error(`图片编辑器打开后，常驻显示表面在 15 秒内没有就绪：${JSON.stringify(state)}`)
         })
@@ -563,117 +570,36 @@ function createToolboxScenes(context) {
         await page.keyboard.press('Escape')
         await layerAddMenu.waitFor({ state: 'hidden', timeout: 1000 })
 
-        const rightDock = editor.locator('[data-editor-panel-dock="right"]')
-        const dockedPanels = rightDock.locator('[data-docked-editor-panel]')
-        if (await dockedPanels.count() !== 2) {
-          throw new Error('图层与属性没有在右侧停靠区上下组合')
-        }
-        const initialDockOrder = await dockedPanels.evaluateAll((panels) => (
-          panels.map((panel) => panel.getAttribute('data-editor-panel-id'))
-        ))
-        if (initialDockOrder.join(',') !== 'layers,properties') {
-          throw new Error(`右侧停靠顺序错误：${initialDockOrder.join(',')}`)
-        }
+        const workspace = editor.locator('[data-editor-panel-workspace]')
+        if (await workspace.locator('[data-docked-editor-panel]').count() !== 2) throw new Error('图层与属性必须完整停靠')
         const parametersTab = editor.getByRole('tab', { name: /^(参数|Parameters)$/i })
-        const basicsTab = editor.getByRole('tab', { name: /^(基础|Basics)$/i })
-        if (await parametersTab.getAttribute('aria-selected') !== 'true') {
-          throw new Error('新选择图层后没有默认打开参数 Tab')
-        }
-        await basicsTab.click()
+        await editor.getByRole('tab', { name: /^(基础|Basics)$/i }).click()
         await editor.getByRole('textbox', { name: /^(名称|Name)$/i }).waitFor({ state: 'visible' })
         await parametersTab.click()
-
-        const dockWidthSeparator = rightDock.locator('[data-panel-resize-axis="horizontal"]')
-        const [dockBeforeResize, dockWidthHandleBox] = await Promise.all([
-          rightDock.boundingBox(),
-          dockWidthSeparator.boundingBox(),
-        ])
-        if (!dockBeforeResize || !dockWidthHandleBox) throw new Error('无法读取面板宽度拖动边缘')
-        await page.mouse.move(
-          dockWidthHandleBox.x + dockWidthHandleBox.width / 2,
-          dockWidthHandleBox.y + dockWidthHandleBox.height / 2,
-        )
-        await page.mouse.down()
-        await page.mouse.move(dockWidthHandleBox.x - 48, dockWidthHandleBox.y + 40, { steps: 5 })
-        await page.mouse.up()
-        const dockAfterResize = await rightDock.boundingBox()
-        if (!dockAfterResize || dockAfterResize.width < dockBeforeResize.width + 40) {
-          throw new Error('拖动右侧面板内边缘没有调整面板宽度')
-        }
-
-        const dockSplitSeparator = rightDock.locator('[data-panel-resize-axis="vertical"]')
-        const [layerPanelBeforeSplit, splitHandleBox] = await Promise.all([
-          rightDock.locator('[data-editor-panel-id="layers"]').boundingBox(),
-          dockSplitSeparator.boundingBox(),
-        ])
-        if (!layerPanelBeforeSplit || !splitHandleBox) throw new Error('无法读取面板上下分隔条')
-        await page.mouse.move(splitHandleBox.x + splitHandleBox.width / 2, splitHandleBox.y + 4)
-        await page.mouse.down()
-        await page.mouse.move(splitHandleBox.x + splitHandleBox.width / 2, splitHandleBox.y + 64, { steps: 5 })
-        await page.mouse.up()
-        const layerPanelAfterSplit = await rightDock.locator('[data-editor-panel-id="layers"]').boundingBox()
-        if (!layerPanelAfterSplit || layerPanelAfterSplit.height < layerPanelBeforeSplit.height + 48) {
-          throw new Error('拖动上下分隔条没有调整图层与属性面板高度')
-        }
-        const propertiesPanel = editor.locator('[data-editor-panel-id="properties"]')
-        let propertiesHandle = propertiesPanel.locator('[data-editor-panel-handle]')
-        const [panelBefore, handleBox] = await Promise.all([
-          propertiesPanel.boundingBox(),
-          propertiesHandle.boundingBox(),
-        ])
-        if (!panelBefore || !handleBox) throw new Error('无法读取停靠属性面板位置')
-        await page.mouse.move(handleBox.x + 30, handleBox.y + handleBox.height / 2)
-        await page.mouse.down()
-        await page.mouse.move(
-          handleBox.x - 240,
-          handleBox.y + handleBox.height / 2 - 80,
-          { steps: 5 },
-        )
-        await page.mouse.up()
-        await propertiesPanel.evaluate((panel) => {
-          if (panel.getAttribute('data-panel-mode') !== 'floating') {
-            throw new Error('属性面板拖离停靠区后没有切换为浮窗')
-          }
-          if (!panel.classList.contains('ui-glass')) {
-            throw new Error('浮动属性面板没有使用画布玻璃表面')
-          }
+        const separator = workspace.locator('.dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash:not(.dv-disabled):visible').first()
+        const before = await preview.boundingBox(), sash = await separator.boundingBox()
+        if (!before || !sash) throw new Error('缺少 Dockview 分隔条')
+        const sashHit = await separator.evaluate(element => {
+          const rect = element.getBoundingClientRect()
+          return { class: element.className, rect: rect.toJSON(), hit: document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.outerHTML.slice(0, 300) }
         })
-        const panelAfter = await propertiesPanel.boundingBox()
-        if (!panelAfter
-          || panelAfter.x >= panelBefore.x - 120
-          || panelAfter.y >= panelBefore.y - 30) {
-          throw new Error('属性面板没有从停靠区跟随标题栏拖出')
-        }
-
-        const workspaceBox = await editor.locator('[data-editor-panel-workspace]').boundingBox()
-        propertiesHandle = propertiesPanel.locator('[data-editor-panel-handle]')
-        const floatingHandleBox = await propertiesHandle.boundingBox()
-        if (!workspaceBox || !floatingHandleBox) throw new Error('无法读取面板重新停靠范围')
-        await page.mouse.move(
-          floatingHandleBox.x + 30,
-          floatingHandleBox.y + floatingHandleBox.height / 2,
-        )
+        await page.mouse.move(sash.x + sash.width / 2, sash.y + sash.height / 2)
         await page.mouse.down()
-        await page.mouse.move(
-          workspaceBox.x + workspaceBox.width - 8,
-          workspaceBox.y + workspaceBox.height - 48,
-          { steps: 8 },
-        )
-        await editor.locator('[data-editor-panel-dock-preview="right"]')
-          .waitFor({ state: 'visible', timeout: 3000 })
+        await page.mouse.move(sash.x - 48, sash.y + sash.height / 2, { steps: 12 })
         await page.mouse.up()
-        await propertiesPanel.evaluate((panel) => {
-          if (panel.getAttribute('data-panel-mode') !== 'docked'
-            || panel.getAttribute('data-panel-dock-edge') !== 'right') {
-            throw new Error('属性面板拖到右边缘后没有自动吸附')
-          }
-        })
-        const recombinedOrder = await rightDock.locator('[data-docked-editor-panel]').evaluateAll((panels) => (
-          panels.map((panel) => panel.getAttribute('data-editor-panel-id'))
-        ))
-        if (recombinedOrder.join(',') !== 'layers,properties') {
-          throw new Error(`属性面板没有组合到图层面板下方：${recombinedOrder.join(',')}`)
+        await settlePage(page)
+        const after = await preview.boundingBox()
+        if (!after || Math.abs(after.width - before.width) < 12) throw new Error(`分隔条没有调整真实预览宽度：${JSON.stringify({ before, after, sashHit })}`)
+        const panelMenu = async label => {
+          await editor.getByRole('button', { name: /^(面板|Panels)$/i }).click()
+          await page.getByRole('menuitem', { name: label }).click()
+          await settlePage(page)
         }
+        await panelMenu(/^(浮动属性面板|Float Properties panel)$/i)
+        await editor.locator('[data-editor-panel-id="properties"][data-panel-mode="floating"]').waitFor({ state: 'visible' })
+        if (capture) await capture('properties-floating')
+        await panelMenu(/^(停靠属性面板|Dock Properties panel)$/i)
+        await panelMenu(/^(恢复默认布局|Restore default layout)$/i)
 
         const annotationTool = editor.locator('[data-tool-id="annotation"]')
         const annotationToolBox = await annotationTool.boundingBox()
@@ -846,10 +772,22 @@ function createToolboxScenes(context) {
         let moveClip = null
         let moveBaseline = null
         let movePatch = null
+        const captureComposition = async () => {
+            // 变换框和缩放控件可合法画在文档外；只从像素裁切判定中移除它们，保留全部呈现画布与文档外零变化断言。
+          const style = await page.addStyleTag({ content: '[data-layer-transform-controls], [data-viewport-control] { visibility: hidden !important; }' })
+          try {
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+            return await captureRegionPixels(app, page, moveClip)
+          } finally {
+            await style.evaluate(element => element.remove())
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+          }
+        }
         if (gpuMove) {
           moveClip = await preview.boundingBox()
           if (!moveClip) throw new Error('GPU 拖动判定前无法读取预览范围')
-          moveBaseline = await captureRegionPixels(app, page, moveClip)
+          moveBaseline = await captureComposition()
+          await capture('move-baseline')
           movePatch = selectFeaturePatch({
             anchorBox: initialViewportContentBox,
             visibleBox: intersectBoxes(initialViewportContentBox, moveClip),
@@ -1156,7 +1094,7 @@ function createToolboxScenes(context) {
         }, gpuMove)
         if (gpuMove) {
           // 合成结果判定裁切：文档外的取样点在移动前后必须一模一样（图层移出文档的部分不得画出来）
-          const settledComposite = await captureRegionPixels(app, page, moveClip)
+          const settledComposite = await captureComposition()
           clippingState.compositeOutsideSamples = 0
           clippingState.compositeOutsideChanged = []
           const { frameRect, documentRect } = clippingState
@@ -1175,7 +1113,10 @@ function createToolboxScenes(context) {
               const offset = (py * moveBaseline.width + px) * moveBaseline.channels
               const delta = Math.max(...[0, 1, 2].map((channel) => Math.abs(
                 moveBaseline.data[offset + channel] - settledComposite.data[offset + channel])))
-              if (delta > 10) clippingState.compositeOutsideChanged.push({ clientX, clientY, delta })
+              if (delta > 10) clippingState.compositeOutsideChanged.push({ clientX, clientY, delta,
+                before: [...moveBaseline.data.subarray(offset, offset + 3)],
+                after: [...settledComposite.data.subarray(offset, offset + 3)],
+              })
             }
           }
         }
@@ -1188,6 +1129,7 @@ function createToolboxScenes(context) {
           || (clippingState.outsideSamples > 0 && clippingState.maxOutsideAlpha !== 0)
           || (!gpuMove && clippingState.transferredCanvasCount !== 0)
           || (gpuMove && (clippingState.compositeOutsideSamples === 0 || clippingState.compositeOutsideChanged.length !== 0))) {
+          await capture('clipping-failed')
           throw new Error(`移动后的常驻表面没有严格裁切：${JSON.stringify(clippingState)}`)
         }
 

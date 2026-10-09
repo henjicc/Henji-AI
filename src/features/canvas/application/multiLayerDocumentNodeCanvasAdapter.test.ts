@@ -10,6 +10,8 @@ import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEd
 import { createMultiLayerDocumentExportCanvasPort, createMultiLayerDocumentProjectionCanvasPort } from './multiLayerDocumentNodeCanvasAdapter';
 
 import { requireCanvasProjectInstance } from './canvasProjectInstances';
+const release = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ image: { releaseLayerStackResources: release } }) }))
 
 const oldSession = {
   kind: 'image-edit-v3' as const,
@@ -110,8 +112,7 @@ describe('多图层文档节点投影 CAS', () => {
   })
 
   it('一次提交会话、预览与比例，保持节点身份、位置、连线和画布历史不变', async () => {
-    const release = vi.fn(async () => undefined)
-    const port = createMultiLayerDocumentProjectionCanvasPort({ releaseReplacedLocalImages: release })
+    const port = createMultiLayerDocumentProjectionCanvasPort()
     const before = useCanvasStore.getState()
     const beforeNode = before.nodes[0]
     const beforeEdges = before.edges
@@ -140,20 +141,20 @@ describe('多图层文档节点投影 CAS', () => {
       url: newImageUrl,
       previewUrl: newImageUrl,
     }])
-    expect(release).toHaveBeenCalledWith([
-      '/managed/old-composite.png',
-      '/managed/old-preview.webp',
-    ])
     expect(canvasSaveSpy()).toHaveBeenCalledOnce()
   })
 
-  it('旧平面资源释放失败不回滚已经提交的节点状态', async () => {
-    const port = createMultiLayerDocumentProjectionCanvasPort({
-      releaseReplacedLocalImages: vi.fn(async () => { throw new Error('lease busy') }),
-    })
+  it('替换预览不删除仍被其他节点与撤销历史引用的本地素材', async () => {
+    release.mockClear()
+    const shared = { ...node(), id: 'shared-input', type: CANVAS_NODE_TYPES.upload, data: { imageUrl: oldSession.sourceUrl } }
+    const current = useCanvasStore.getState()
+    useCanvasStore.setState({ nodes: [...current.nodes, shared], history: { past: [{ nodes: current.nodes, edges: current.edges }], future: [] } })
+    const port = createMultiLayerDocumentProjectionCanvasPort()
 
     await expect(port.commitMaterializedProjection(commitInput())).resolves.toBeUndefined()
     expect(useCanvasStore.getState().nodes[0].data.imageUrl).toBe(newImageUrl)
+    expect(release).not.toHaveBeenCalled()
+    expect(useCanvasStore.getState().nodes.find(candidate => candidate.id === shared.id)?.data.imageUrl).toBe(oldSession.sourceUrl)
   })
 
   it.each([
@@ -170,9 +171,7 @@ describe('多图层文档节点投影 CAS', () => {
   ])('%s 时拒绝覆盖并保留既有状态', async (_label, arrange) => {
     arrange()
     const before = useCanvasStore.getState().nodes
-    const port = createMultiLayerDocumentProjectionCanvasPort({
-      releaseReplacedLocalImages: vi.fn(async () => undefined),
-    })
+    const port = createMultiLayerDocumentProjectionCanvasPort()
 
     await expect(port.commitMaterializedProjection(commitInput())).rejects.toMatchObject({
       code: 'DOCUMENT_CONFLICT',

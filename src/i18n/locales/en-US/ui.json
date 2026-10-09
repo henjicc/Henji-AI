@@ -670,12 +670,18 @@
       "panels": {
         "expand": "Expand {{title}}",
         "collapse": "Collapse {{title}}",
-        "leftDock": "Left docked panels",
-        "rightDock": "Right docked panels",
-        "leftDockPreview": "Release to dock on the left",
-        "rightDockPreview": "Release to dock on the right",
-        "resizeWidth": "Resize docked panel width",
-        "resizeSections": "Resize stacked panel heights"
+        "menu": "Panels",
+        "show": "Show {{title}} panel",
+        "close": "Close {{title}} panel",
+        "float": "Float {{title}} panel",
+        "dock": "Dock {{title}} panel",
+        "defaultLayout": "Restore default layout",
+        "layoutFailed": "The panel layout could not be restored. The default layout is ready.",
+        "layoutFailedMessage": "Your edits are safe. Keep editing or restore the default layout.",
+        "saveFailed": "The panel layout could not be saved",
+        "saveFailedMessage": "Your edits are safe. The previous layout may return when you reopen the editor.",
+        "maximize": "Maximize panel",
+        "restoreSize": "Restore panel size"
       },
       "recovery": {
         "title": "The image editor encountered a problem",
@@ -771,7 +777,7 @@
           "title": "Image Edit",
           "describe": "{{width}} × {{height}} · {{layers}} layers",
           "emptyTitle": "Open an image, or create a blank one",
-          "emptyDescription": "You can also drop an image here. New images are saved as image documents you can come back to anytime.",
+          "emptyDescription": "New images are saved as image documents you can come back to anytime.",
           "recovery": {
             "title": "Recover changes from last time?",
             "message": "“{{name}}” was not closed properly. Changes from {{workingTime}} are still kept by the app; the file holds the version saved at {{fileTime}}.",
@@ -783,6 +789,7 @@
         }
       },
       "tools": {
+        "loadFailed": "The editing tools could not load. Close and reopen the editor to try again.",
         "select-subject": "Select subject by point",
         "select-subject-box": "Select subject by box",
         "label": "Image editing tools",

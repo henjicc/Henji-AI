@@ -7,7 +7,6 @@ import type {
   MaskStroke,
 } from './types';
 
-export const MASK_HISTORY_LIMIT = 40;
 export const MASK_POINT_MIN_DISTANCE = 0.75;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -211,10 +210,15 @@ export function hasPaintedMask(document: MaskEditorDocument): boolean {
   return document.strokes.some((stroke) => stroke.mode === 'paint' && stroke.points.length > 0);
 }
 
+export interface MaskHistoryDelta {
+  index: number;
+  removed: MaskMark[];
+  added: MaskMark[];
+}
 export interface MaskHistoryState {
   document: MaskEditorDocument;
-  undoStack: MaskEditorDocument[];
-  redoStack: MaskEditorDocument[];
+  undoStack: MaskHistoryDelta[];
+  redoStack: MaskHistoryDelta[];
 }
 
 export type MaskHistoryAction =
@@ -227,35 +231,50 @@ export function createMaskHistoryState(document: MaskEditorDocument): MaskHistor
   return { document: cloneMaskDocument(document), undoStack: [], redoStack: [] };
 }
 
-export function reduceMaskHistory(
-  state: MaskHistoryState,
-  action: MaskHistoryAction
-): MaskHistoryState {
-  if (action.type === 'reset') {
-    return createMaskHistoryState(action.document);
-  }
+function sameMark(left: MaskMark, right: MaskMark): boolean {
+  return left === right || (left.id === right.id && left.kind === right.kind && left.mode === right.mode
+    && (!isMaskStroke(left) || (isMaskStroke(right) && left.size === right.size && left.hardness === right.hardness))
+    && left.points.length === right.points.length
+    && left.points.every((point, i) => point.x === right.points[i].x && point.y === right.points[i].y));
+}
+
+function applyHistoryDelta(document: MaskEditorDocument, delta: MaskHistoryDelta, reverse: boolean): MaskEditorDocument {
+  const removed = reverse ? delta.added : delta.removed;
+  const added = reverse ? delta.removed : delta.added;
+  return { ...document, strokes: [
+    ...document.strokes.slice(0, delta.index), ...added,
+    ...document.strokes.slice(delta.index + removed.length),
+  ] };
+}
+
+/** Reversible mark deltas retain every operation without copying the complete document per history entry. */
+export function reduceMaskHistory(state: MaskHistoryState, action: MaskHistoryAction): MaskHistoryState {
+  if (action.type === 'reset') return createMaskHistoryState(action.document);
   if (action.type === 'commit') {
-    return {
-      document: cloneMaskDocument(action.document),
-      undoStack: [...state.undoStack, cloneMaskDocument(state.document)].slice(-MASK_HISTORY_LIMIT),
-      redoStack: [],
+    const next = action.document, previous = state.document;
+    if (next.sourceRef !== previous.sourceRef || next.width !== previous.width || next.height !== previous.height) {
+      throw new Error('源图或尺寸改变时必须重新打开遮罩会话');
+    }
+    let prefix = 0, suffix = 0;
+    while (prefix < previous.strokes.length && prefix < next.strokes.length && sameMark(previous.strokes[prefix], next.strokes[prefix])) prefix++;
+    while (suffix < previous.strokes.length - prefix && suffix < next.strokes.length - prefix
+      && sameMark(previous.strokes[previous.strokes.length - 1 - suffix], next.strokes[next.strokes.length - 1 - suffix])) suffix++;
+    if (prefix === previous.strokes.length && prefix === next.strokes.length) return state;
+    const delta: MaskHistoryDelta = {
+      index: prefix,
+      removed: previous.strokes.slice(prefix, previous.strokes.length - suffix),
+      added: cloneMaskDocument({ ...next, strokes: next.strokes.slice(prefix, next.strokes.length - suffix) }).strokes,
     };
+    return { document: applyHistoryDelta(previous, delta, false), undoStack: [...state.undoStack, delta], redoStack: [] };
   }
-  if (action.type === 'undo') {
-    const previous = state.undoStack[state.undoStack.length - 1];
-    if (!previous) return state;
-    return {
-      document: cloneMaskDocument(previous),
-      undoStack: state.undoStack.slice(0, -1),
-      redoStack: [...state.redoStack, cloneMaskDocument(state.document)].slice(-MASK_HISTORY_LIMIT),
-    };
-  }
-  const next = state.redoStack[state.redoStack.length - 1];
-  if (!next) return state;
+  const reverse = action.type === 'undo';
+  const entries = reverse ? state.undoStack : state.redoStack;
+  const delta = entries[entries.length - 1];
+  if (!delta) return state;
   return {
-    document: cloneMaskDocument(next),
-    undoStack: [...state.undoStack, cloneMaskDocument(state.document)].slice(-MASK_HISTORY_LIMIT),
-    redoStack: state.redoStack.slice(0, -1),
+    document: applyHistoryDelta(state.document, delta, reverse),
+    undoStack: reverse ? state.undoStack.slice(0, -1) : [...state.undoStack, delta],
+    redoStack: reverse ? [...state.redoStack, delta] : state.redoStack.slice(0, -1),
   };
 }
 

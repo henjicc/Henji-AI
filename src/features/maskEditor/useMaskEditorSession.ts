@@ -3,7 +3,7 @@ import { useCallback, useEffect, useReducer, useRef, useState, type RefObject } 
 import { createLogger } from '@/core/logging';
 import { loadImageElement } from '@/services/imageSource';
 import { DEFAULT_MASK_BRUSH_HARDNESS } from './brushHardness';
-import { exportMaskDocumentToPng } from './maskExport';
+import { exportMaskDocumentToPngAsync } from './maskExport';
 import {
   appendMaskStroke,
   cloneMaskDocument,
@@ -63,6 +63,7 @@ export function useMaskEditorSession({
   const [mode, setMode] = useState<MaskStrokeMode>('paint');
   const [brushSize, setBrushSize] = useState(32);
   const [brushHardness, setBrushHardness] = useState(DEFAULT_MASK_BRUSH_HARDNESS);
+  const confirmationRef = useRef<AbortController | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [history, dispatchHistory] = useReducer(
@@ -72,6 +73,8 @@ export function useMaskEditorSession({
 
   useEffect(() => {
     if (!active) {
+      confirmationRef.current?.abort();
+      dispatchHistory({ type: 'reset', document: createEmptyMaskDocument('', 1, 1) });
       setLoadState({ status: 'idle' });
       setConfirmError(null);
       setIsConfirming(false);
@@ -123,7 +126,7 @@ export function useMaskEditorSession({
           error: message,
         });
       });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; confirmationRef.current?.abort(); };
   }, [active, loadAttempt, sourceImage]);
 
   const commitMark = useCallback((mark: MaskMark) => {
@@ -142,6 +145,9 @@ export function useMaskEditorSession({
   }, [history.document]);
 
   const confirm = useCallback(async () => {
+    if (confirmationRef.current) return;
+    const confirmController = new AbortController();
+    confirmationRef.current = confirmController;
     const startedAt = performance.now();
     setIsConfirming(true);
     setConfirmError(null);
@@ -152,7 +158,8 @@ export function useMaskEditorSession({
       strokeCount: history.document.strokes.length,
     });
     try {
-      const maskDataUrl = exportMaskDocumentToPng(history.document);
+      const maskDataUrl = await exportMaskDocumentToPngAsync(history.document, confirmController.signal);
+      if (confirmController.signal.aborted) return;
       if (onConfirm) {
         await onConfirm({
           document: cloneMaskDocument(history.document),
@@ -169,6 +176,7 @@ export function useMaskEditorSession({
         elapsedMs: Math.round(performance.now() - startedAt),
       });
     } catch (error) {
+      if (confirmController.signal.aborted) return;
       const message = error instanceof Error ? error.message : String(error);
       setConfirmError(message);
       logger.error('遮罩编辑确认失败', {
@@ -179,6 +187,7 @@ export function useMaskEditorSession({
         error: message,
       });
     } finally {
+      if (confirmationRef.current === confirmController) confirmationRef.current = null;
       setIsConfirming(false);
     }
   }, [history.document, onConfirm]);

@@ -1626,7 +1626,7 @@
       "to": "src/features/assets/services/assetCollectionService.ts",
       "kind": "static",
       "specifier": "@/features/assets/services/assetCollectionService",
-      "line": 14,
+      "line": 15,
       "cell": "imageEdit → assets"
     },
     {
@@ -2342,28 +2342,12 @@
       "cell": "localModels → application-control"
     },
     {
-      "from": "src/features/maskEditor/MaskEditorCanvas.tsx",
-      "to": "src/features/imageMark/domain/penGeometry.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/penGeometry",
-      "line": 18,
-      "cell": "maskEditor → imageMark"
-    },
-    {
       "from": "src/features/maskEditor/MaskEditorModal.tsx",
       "to": "src/features/imageEdit/shell/ImageEditorShell.tsx",
       "kind": "static",
       "specifier": "@/features/imageEdit/shell/ImageEditorShell",
       "line": 11,
       "cell": "maskEditor → imageEdit"
-    },
-    {
-      "from": "src/features/maskEditor/maskExport.ts",
-      "to": "src/features/imageMark/render/tracePenPath.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/render/tracePenPath",
-      "line": 4,
-      "cell": "maskEditor → imageMark"
     },
     {
       "from": "src/features/maskEditor/v3/MaskEditorV3Host.tsx",
@@ -3370,7 +3354,6 @@
     "imageMark → documents": 3,
     "imageMark → videoEdit": 3,
     "localModels → application-control": 2,
-    "maskEditor → imageMark": 2,
     "maskEditor → imageEdit": 6,
     "navigation → application-control": 4,
     "navigation → assets": 3,

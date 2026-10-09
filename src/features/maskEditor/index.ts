@@ -9,7 +9,7 @@ export type {
   MaskEditorV3HostHandle,
   MaskEditorV3HostProps,
 } from './v3/MaskEditorV3Host';
-export { exportMaskDocumentToPng, renderMaskDocument } from './maskExport';
+export { exportMaskDocumentToPngAsync, renderMaskDocument } from './maskExport';
 export {
   createMaskBrushRenderLayers,
   DEFAULT_MASK_BRUSH_HARDNESS,

@@ -53,6 +53,7 @@ function renderEditor(
         sourceImageUrl="preview.png"
         document={document}
         profileId="full"
+        layoutWorkspaceId={`test-transform-${crypto.randomUUID()}`}
         onDocumentChange={options.onDocumentChange}
         onPersistenceChange={options.onPersistenceChange}
         previewRenderer={interactionPreview}
@@ -78,7 +79,9 @@ function mockViewportRect(element: Element): void {
 describe('图片编辑 V3 图层变换交互', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
+    installKonvaCanvasTestContext()
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800))
     useImageEditorSessionStoreV3.setState({ sessions: {} })
     useImageEditorInteractionStoreV3.setState({
       layerDragBySession: {},
@@ -150,7 +153,11 @@ describe('图片编辑 V3 图层变换交互', () => {
     const rendered = renderEditor(createDocument([annotation]), {
       onDocumentChange: (next) => changes.push(next),
     })
-    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+    const surface = await waitFor(() => {
+      const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+      expect(surface).toBeTruthy()
+      return surface!
+    })
     const viewportContent = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
     if (!surface || !viewportContent) throw new Error('测试缺少视口')
     mockViewportRect(viewportContent)
@@ -181,7 +188,11 @@ describe('图片编辑 V3 图层变换交互', () => {
     const rendered = renderEditor(createDocument([raster, effect]), {
       onDocumentChange: (next) => changes.push(next),
     })
-    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+    const surface = await waitFor(() => {
+      const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+      expect(surface).toBeTruthy()
+      return surface!
+    })
     const viewportContent = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
     if (!surface || !viewportContent) throw new Error('测试缺少视口')
     mockViewportRect(viewportContent)
@@ -209,7 +220,11 @@ describe('图片编辑 V3 图层变换交互', () => {
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
       { onDocumentChange: (next) => changes.push(next) },
     )
-    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+    const surface = await waitFor(() => {
+      const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+      expect(surface).toBeTruthy()
+      return surface!
+    })
     const viewportContent = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
     if (!surface || !viewportContent) throw new Error('测试缺少视口')
     mockViewportRect(viewportContent)
@@ -235,7 +250,7 @@ describe('图片编辑 V3 图层变换交互', () => {
     fireEvent.pointerUp(surface, { pointerId: 6, clientX: 10, clientY: 10 })
     expect(changes).toHaveLength(0)
 
-    fireEvent.click(screen.getByRole('tab', { name: '基础' }))
+    fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
     fireEvent.click(screen.getByRole('switch', { name: '锁定' }))
     await waitFor(() => expect(changes).toHaveLength(1))
     fireEvent.pointerDown(surface, {
@@ -262,7 +277,7 @@ describe('图片编辑 V3 图层变换交互', () => {
 
     const scaleX = screen.getByRole('spinbutton', { name: '水平缩放 (%)' })
     fireEvent.change(scaleX, { target: { value: '0' } })
-    expect(screen.getByRole('status').textContent).toContain('缩放不能为零')
+    expect(screen.getByText(/缩放不能为零/)).toBeTruthy()
     fireEvent.blur(scaleX)
     expect(changes).toHaveLength(1)
   })
@@ -289,7 +304,7 @@ describe('图片编辑 V3 图层变换交互', () => {
     const rotate = rendered.container.querySelector('[data-layer-transform-handle="rotate"]')!
     fireEvent.pointerDown(rotate, { pointerId: 41, isPrimary: true, button: 0, clientX: 300, clientY: 0 })
     fireEvent.pointerMove(surface, { pointerId: 41, clientX: 468.75, clientY: 168.75 })
-    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.keyDown(rendered.container.querySelector('[data-image-editor-v3]')!, { key: 'Escape', code: 'Escape' })
     fireEvent.pointerUp(surface, { pointerId: 41 })
     expect(changes).toHaveLength(1)
     fireEvent.pointerDown(rotate, { pointerId: 42, isPrimary: true, button: 0, clientX: 300, clientY: 0 })

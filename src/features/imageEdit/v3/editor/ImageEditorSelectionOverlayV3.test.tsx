@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import '@/tests/imageEditDocumentFixture'
 import { fireEvent, render, cleanup, act } from '@testing-library/react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
@@ -9,6 +9,7 @@ import { getImageEditorHostProfileV3 } from '../application/imageEditorHostProfi
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorSelectionOverlayV3 } from './ImageEditorSelectionOverlayV3'
 import type { ImageEditorV3Controller } from './types'
+import type { ToolKeyboardBinding, ToolKeyboardHandler } from '../toolFramework/types'
 import { appendImageEditSelectionV3 } from '@/core/imageEdit/v3/selection/session'
 
 const subjectView = vi.hoisted(() => ({ busy: false, candidates: [], run: vi.fn(async () => undefined) }))
@@ -28,10 +29,12 @@ function setup(tool: 'select-rect' | 'select-polygon' | 'select-brush' | 'remove
   const bus = new ImageEditCommandBusV3(document)
   useImageEditorSessionStoreV3.getState().ensureSession('test-selection', [tool], 'r', tool)
   function Editor() {
+    const keyboard = useRef<ToolKeyboardHandler>()
+    const bindKeyboard = useCallback<ToolKeyboardBinding>((_slot, handler) => { keyboard.current = handler; return () => { keyboard.current = undefined } }, [])
     const [snapshot, setSnapshot] = useState(bus.getSnapshot())
     useEffect(() => bus.subscribe(() => setSnapshot(bus.getSnapshot())), [])
     const controller = { sessionId: 'test-selection', document: snapshot.document, profile: getImageEditorHostProfileV3('full') } as ImageEditorV3Controller
-    return <div data-image-editor-v3><ImageEditorSelectionOverlayV3 controller={controller} bus={bus} /></div>
+    return <div data-image-editor-v3 onKeyDown={event => keyboard.current?.(event.nativeEvent)}><ImageEditorSelectionOverlayV3 controller={controller} bus={bus} bindKeyboard={bindKeyboard} /></div>
   }
   const result = render(<Editor />), overlay = result.container.querySelector('svg')!
   vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 160, width: 320, height: 160, toJSON: () => ({}) })

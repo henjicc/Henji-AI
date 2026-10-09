@@ -39,6 +39,22 @@ afterEach(() => {
 });
 
 describe('useMaskEditorSession', () => {
+  it('取消或关闭参数会话不确认、不修改调用方文档，并释放临时历史', async () => {
+    const original = createDocument('original'), onConfirm = vi.fn();
+    const { result, rerender } = renderHook(({ active }) => useMaskEditorSession({
+      sourceImage: '/managed/source.png', initialDocument: original, active, onConfirm,
+    }), { initialProps: { active: true } });
+    await waitFor(() => expect(result.current.readyImage).toBeTruthy());
+    act(() => result.current.commitMark(createDocument('new').strokes[0]));
+    rerender({ active: false });
+    expect(result.current.history.undoStack).toHaveLength(0);
+    expect(result.current.history.document.strokes).toHaveLength(0);
+    expect(original.strokes.map(mark => mark.id)).toEqual(['original']);
+    expect(onConfirm).not.toHaveBeenCalled();
+    rerender({ active: true });
+    await waitFor(() => expect(result.current.readyImage).toBeTruthy());
+    expect(result.current.history.document).toEqual(original);
+  });
   it('常驻的多个节点只让当前节点响应快捷键，切换时不重载或丢失工具和撤销记录', async () => {
     const { result, rerender } = renderHook(({ firstSelected }) => ({
       first: useMaskEditorSession({ sourceImage: '/managed/source.png', keyboardEnabled: firstSelected }),

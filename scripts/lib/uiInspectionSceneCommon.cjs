@@ -22,7 +22,8 @@ function attachUiInspectionCommon(context) {
           const failure = (await element.textContent())?.match(/保存失败[^\n]{0,100}|重试关闭|save failed[^\n]{0,100}|retry clos(?:e|ing)/i)
           if (failure) throw new Error(`上一场景弹窗清理失败：${failure[0]}；停止自动重试，保留现场`)
           if (!requestedClose) {
-            const closeButton = dialog.getByRole('button', { name: /关闭|Close/i }).last()
+            // Dockview 面板有“关闭图层/属性面板”，不能把它们当成宿主弹窗关闭。
+            const closeButton = dialog.getByRole('button', { name: /^(关闭编辑器|Close editor|关闭|Close)$/i }).last()
             if (!(await closeButton.count())) {
               await page.keyboard.press('Escape')
               requestedClose = true

@@ -11,10 +11,10 @@ import type {
   ResourceDescriptor,
   ResourceId,
   ResourceLease,
-  SourceImageMetadata,
   SourceProvider,
 } from './contracts'
 import type { ContentAddressedResourceStore } from './resource-store'
+import { sourceMediaType } from './source-metadata'
 import {
   DEFAULT_HENJI_IMAGE_PACKAGE_LIMITS,
   HENJI_IMAGE_DOCUMENT_HEADER_ENTRY,
@@ -92,20 +92,6 @@ function resolveLimits(overrides?: Partial<HenjiImagePackageLimits>): HenjiImage
   return limits
 }
 
-function mediaTypeForMetadata(metadata: SourceImageMetadata): string | null {
-  switch (metadata.format?.toLowerCase()) {
-    case 'png': return 'image/png'
-    case 'jpeg':
-    case 'jpg': return 'image/jpeg'
-    case 'webp': return 'image/webp'
-    case 'tiff': return 'image/tiff'
-    case 'avif': return 'image/avif'
-    case 'heif': return 'image/heif'
-    case 'gif': return 'image/gif'
-    default: return null
-  }
-}
-
 function mediaTypesMatch(expected: string, actual: string): boolean {
   if (expected === actual) return true
   return (expected === 'image/avif' || expected === 'image/heif')
@@ -120,7 +106,7 @@ async function assertExternalSourceMedia(
 ): Promise<string | undefined> {
   if (!sourceProvider) return externalSource.mediaType
   const metadata = await sourceProvider.readMetadata(resourceId, signal)
-  const actualMediaType = mediaTypeForMetadata(metadata)
+  const actualMediaType = sourceMediaType(metadata)
   if (!actualMediaType) throw new Error(`Unsupported external image media: ${metadata.format ?? 'unknown'}`)
   if (externalSource.mediaType && !mediaTypesMatch(externalSource.mediaType, actualMediaType)) {
     throw new Error(

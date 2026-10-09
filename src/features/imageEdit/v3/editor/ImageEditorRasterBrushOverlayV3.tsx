@@ -78,13 +78,17 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+import type { ToolPointerAvailabilityBinding } from '../toolFramework/types'
+
 export function ImageEditorRasterBrushOverlayV3({
   bus,
   controller,
   resourceByteSizes,
   basePreviewDocumentId,
   basePreviewRevision,
+  bindPointerAvailability,
 }: {
+  bindPointerAvailability?: ToolPointerAvailabilityBinding
   bus: ImageEditCommandBusV3
   controller: ImageEditorV3Controller
   resourceByteSizes?: Readonly<Record<string, number>>
@@ -244,6 +248,8 @@ export function ImageEditorRasterBrushOverlayV3({
     brushTool,
     selectedLayerIdsKey,
   ])
+
+  useEffect(() => bindPointerAvailability?.('raster', () => !gestureRef.current), [bindPointerAvailability])
 
   const moveGesture = (event: ReactPointerEvent<SVGSVGElement>): void => {
     const current = gestureRef.current

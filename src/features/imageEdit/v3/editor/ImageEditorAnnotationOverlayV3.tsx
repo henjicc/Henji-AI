@@ -40,6 +40,8 @@ import { ImageEditorLiveAnnotationLayersV3 } from './ImageEditorLiveAnnotationLa
 import { useImageEditorAnnotationTextV3 } from './useImageEditorAnnotationTextV3'
 import type { ImageEditorV3Controller } from './types'
 
+import type { ToolKeyboardBinding } from '../toolFramework/types'
+
 interface DrawGestureV3 {
   entry: EditableAnnotationLayerV3 | null
   matrix: AnnotationMatrixV3
@@ -54,9 +56,11 @@ const EMPTY_IDS: readonly string[] = []
 export function ImageEditorAnnotationOverlayV3({
   controller,
   enabled = true,
+  bindKeyboard,
 }: {
   controller: ImageEditorV3Controller
   enabled?: boolean
+  bindKeyboard?: ToolKeyboardBinding
 }): JSX.Element | null {
   const { t } = useTranslation('ui')
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -359,14 +363,13 @@ export function ImageEditorAnnotationOverlayV3({
   }
 
   useEffect(() => {
-    if (!interactive) return
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+    if (!interactive || !bindKeyboard) return
+    const handleKeyDown = (event: KeyboardEvent): boolean => {
       if ((event.key === 'Delete' || event.key === 'Backspace') && selection && selectedEntry && !selectedEntry.locked) {
         event.preventDefault()
         controller.deleteAnnotation(selection.layerId, selection.annotationId)
         selectAnnotation(controller.sessionId, null)
+        return true
       } else if (event.key.startsWith('Arrow') && selectedItem && selectedEntry && !selectedEntry.locked) {
         event.preventDefault()
         const step = event.shiftKey ? 10 : 1
@@ -379,11 +382,12 @@ export function ImageEditorAnnotationOverlayV3({
           ? selectedItem.points[1]
           : selectedItem.y
         commitItem(selectedEntry, updateMarkPosition(selectedItem, x + dx, y + dy))
+        return true
       }
+      return false
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [commitItem, controller, interactive, selectAnnotation, selectedEntry, selectedItem, selection])
+    return bindKeyboard('annotation', handleKeyDown)
+  }, [bindKeyboard, commitItem, controller, interactive, selectAnnotation, selectedEntry, selectedItem, selection])
 
   if (!shouldRender) return null
 

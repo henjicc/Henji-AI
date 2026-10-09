@@ -13,6 +13,7 @@ interface ImageEditorCommandBarV3Props {
   bus: ImageEditCommandBusV3
   toolbarLeading?: React.ReactNode
   toolbarActions?: React.ReactNode
+  panelActions?: React.ReactNode
 }
 
 /**
@@ -26,6 +27,7 @@ export function ImageEditorCommandBarV3({
   bus,
   toolbarLeading,
   toolbarActions,
+  panelActions,
 }: ImageEditorCommandBarV3Props): JSX.Element {
   const { t } = useTranslation('ui')
   const activeTool = useImageEditorSessionStoreV3(
@@ -91,6 +93,7 @@ export function ImageEditorCommandBarV3({
           className="flex min-w-0 shrink-0 items-center gap-1.5"
         >
           {toolbarActions}
+          {panelActions}
         </div>
       )}
     >

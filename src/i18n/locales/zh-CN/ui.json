@@ -670,12 +670,18 @@
       "panels": {
         "expand": "展开{{title}}",
         "collapse": "收起{{title}}",
-        "leftDock": "左侧停靠面板",
-        "rightDock": "右侧停靠面板",
-        "leftDockPreview": "释放以停靠到左侧",
-        "rightDockPreview": "释放以停靠到右侧",
-        "resizeWidth": "调整停靠面板宽度",
-        "resizeSections": "调整上下停靠面板高度"
+        "menu": "面板",
+        "show": "显示{{title}}面板",
+        "close": "关闭{{title}}面板",
+        "float": "浮动{{title}}面板",
+        "dock": "停靠{{title}}面板",
+        "defaultLayout": "恢复默认布局",
+        "layoutFailed": "面板布局无法恢复，已使用默认布局",
+        "layoutFailedMessage": "图片编辑内容不受影响。你可以继续编辑或恢复默认布局。",
+        "saveFailed": "面板布局未能保存",
+        "saveFailedMessage": "图片编辑内容不受影响，下次打开时可能恢复原布局。",
+        "maximize": "最大化面板",
+        "restoreSize": "恢复面板大小"
       },
       "recovery": {
         "title": "图片编辑器遇到问题",
@@ -771,7 +777,7 @@
           "title": "图片编辑",
           "describe": "{{width}} × {{height}} · {{layers}} 个图层",
           "emptyTitle": "打开已有图片，或创建一张空白图片",
-          "emptyDescription": "也可以把图片拖到这里。新建的图片会存成图片文档，可以随时回来继续编辑。",
+          "emptyDescription": "新建的图片会存成图片文档，可以随时回来继续编辑。",
           "recovery": {
             "title": "恢复上次没写回的修改？",
             "message": "“{{name}}”上次没有正常关闭，程序里还留着 {{workingTime}} 的修改；文件里是 {{fileTime}} 保存的版本。",
@@ -783,6 +789,7 @@
         }
       },
       "tools": {
+        "loadFailed": "图片编辑工具无法加载，请关闭后重新打开编辑器。",
         "select-subject": "点选主体",
         "select-subject-box": "框选主体",
         "label": "图片编辑工具",

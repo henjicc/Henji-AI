@@ -1,32 +1,10 @@
+import { toolManifestRegistration } from '../toolFramework/toolManifest';
+import type { ImageEditorRegisteredToolId } from '../toolFramework/types';
 import { listCreatableImageEditOperationIdsV3 } from '@/core/imageEdit/v3/operationCatalog';
 
 export type ImageEditorHostProfileIdV3 = 'full' | 'quick' | 'canvas-edit' | 'mask';
 
-export type ImageEditorToolIdV3 =
-  | 'move'
-  | 'hand'
-  | 'zoom'
-  | 'crop'
-  | 'select-rect'
-  | 'select-ellipse'
-  | 'select-lasso'
-  | 'select-polygon'
-  | 'select-brush'
-  | 'select-subject'
-  | 'select-subject-box'
-  | 'remove'
-  | 'repair'
-  | 'annotation-text'
-  | 'annotation-callout'
-  | 'annotation-arrow'
-  | 'annotation-rect'
-  | 'annotation-ellipse'
-  | 'annotation-number'
-  | 'annotation-pen'
-  | 'annotation-mosaic'
-  | 'raster-brush'
-  | 'eraser'
-  | 'mask-edit';
+export type ImageEditorToolIdV3 = ImageEditorRegisteredToolId;
 
 export type ImageEditorPanelIdV3 = 'layers' | 'properties' | 'histogram' | 'color' | 'history';
 export type ImageEditorLayerControlV3 = 'blend-mode' | 'mask';
@@ -91,38 +69,11 @@ const ready = <TId extends string>(id: TId): ImageEditorCapabilityV3<TId> => ({
   readiness: { state: 'ready' },
 });
 
-const MOVE_TOOL = ready('move');
-const HAND_TOOL = ready('hand');
-const ZOOM_TOOL = ready('zoom');
-const NAVIGATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
-  MOVE_TOOL,
-  HAND_TOOL,
-  ZOOM_TOOL,
-];
-const SELECTION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
-  ready('select-rect'),
-  ready('select-ellipse'),
-  ready('select-lasso'),
-  ready('select-polygon'),
-  ready('select-brush'),
-];
-const ANNOTATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
-  ready('annotation-text'),
-  ready('annotation-callout'),
-  ready('annotation-arrow'),
-  ready('annotation-rect'),
-  ready('annotation-ellipse'),
-  ready('annotation-number'),
-  ready('annotation-pen'),
-  ready('annotation-mosaic'),
-];
-const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
-  ready('raster-brush'),
-  ready('eraser'),
-  ready('mask-edit'),
-];
-const RASTER_PAINT_TOOLS = RASTER_TOOLS.filter(({ id }) => id !== 'mask-edit');
-const REPAIR_TOOLS = [ready('remove'), ready('repair')] as const;
+const registeredTools = (profileId: ImageEditorHostProfileIdV3): readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] => {
+  // 失败时保留会话焦点以展示正式错误；空登记器不接受任何编辑输入。
+  if (toolManifestRegistration.failed) return [ready('move')];
+  return toolManifestRegistration.registry.list().filter(tool => tool.profiles.includes(profileId)).map(tool => ready(tool.id));
+};
 const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] =
   listCreatableImageEditOperationIdsV3('effect').map(ready);
 const HDR_LIMITATION: ImageEditorCapabilityReadinessV3 = {
@@ -135,7 +86,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
 > = {
   full: {
     id: 'full',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ready('select-subject'), ready('select-subject-box'), ...REPAIR_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
+    get tools() { return registeredTools('full'); },
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
@@ -150,7 +101,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   quick: {
     id: 'quick',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
+    get tools() { return registeredTools('quick'); },
     layerKinds: ['effect'],
     effects: CORE_EFFECTS.filter(({ id }) => id !== 'image.vgpu-glow'),
     adjustments: [],
@@ -165,7 +116,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   'canvas-edit': {
     id: 'canvas-edit',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ready('select-subject'), ready('select-subject-box'), ...REPAIR_TOOLS, ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
+    get tools() { return registeredTools('canvas-edit'); },
     layerKinds: ['raster', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: ['color_grade'],
@@ -180,7 +131,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   mask: {
     id: 'mask',
-    tools: [...NAVIGATION_TOOLS, ...SELECTION_TOOLS.filter(t => t.id !== 'select-polygon' && t.id !== 'select-brush'), ...RASTER_TOOLS],
+    get tools() { return registeredTools('mask'); },
     layerKinds: ['raster'],
     effects: [],
     adjustments: [],

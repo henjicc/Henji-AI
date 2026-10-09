@@ -288,7 +288,8 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
       )
     }
     return (
-      <ImageEditorV3
+    <ImageEditorV3
+      layoutWorkspaceId="mask"
         sourceImageUrl={sourceImageUrl}
         document={state.value.document}
         historySnapshot={state.value.persistence.history}

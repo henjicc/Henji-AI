@@ -12,7 +12,9 @@ import { captureEditorPointerV3, releaseEditorPointerV3, type CapturedEditorPoin
 import type { ImageEditorV3Controller } from './types'
 import { useImageEditorRepairV3 } from './ImageEditorRepairContextV3'
 
-export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller }): JSX.Element {
+import type { ToolKeyboardBinding } from '../toolFramework/types'
+
+export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; bindKeyboard?: ToolKeyboardBinding }): JSX.Element {
   const { t } = useTranslation('ui')
   const repair = useImageEditorRepairV3()
   const subject = useImageEditorSubjectV3()
@@ -32,16 +34,15 @@ export function ImageEditorSelectionOverlayV3({ bus, controller }: { bus: ImageE
   const cancel = () => { const current = gesture.current; gesture.current = null; if (current?.pointer) releaseEditorPointerV3(current.pointer); if (draftFrame.current !== null) cancelAnimationFrame(draftFrame.current); draftFrame.current = null; setDraft([]) }
   useEffect(() => {
     cancel()
-    const key = (event: KeyboardEvent) => {
-      const target = event.target instanceof Element ? event.target : null
-      if (!target || !svg.current?.closest('[data-image-editor-v3]')?.contains(target) || target.closest('input,textarea,select,[contenteditable="true"]')) return
-      if (event.key === 'Escape') cancel()
-      if (event.key === 'Enter' && gesture.current?.tool === 'select-polygon') finish()
-    }
-    window.addEventListener('keydown', key)
-    return () => { window.removeEventListener('keydown', key); const current = gesture.current; gesture.current = null; if (current?.pointer) releaseEditorPointerV3(current.pointer); if (draftFrame.current !== null) cancelAnimationFrame(draftFrame.current); draftFrame.current = null }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在切换工具/作品或权威选区时取消当前手势。
+    return () => { const current = gesture.current; gesture.current = null; if (current?.pointer) releaseEditorPointerV3(current.pointer); if (draftFrame.current !== null) cancelAnimationFrame(draftFrame.current); draftFrame.current = null }
   }, [tool, controller.document.revision, snapshot.selectionRevision])
+  const finishRef = useRef(finish)
+  finishRef.current = finish
+  useEffect(() => bindKeyboard?.('selection', event => {
+    if (event.key !== 'Enter' || gesture.current?.tool !== 'select-polygon') return false
+    finishRef.current()
+    return true
+  }), [bindKeyboard])
   useEffect(() => {
     if (!canvas.current) return
     canvas.current.width = 0

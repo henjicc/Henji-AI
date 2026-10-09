@@ -51,8 +51,8 @@ import { getProgramStoreDir } from '../services/appBasePaths'
 import { getUserDataLayout } from '../services/appPaths'
 import { getDocumentService, resolveContainerInternalFolder } from '../services/documents/runtime'
 import {
-  createImageEditorV3ResourceMediaUrl,
   imageEditorV3ResourceObjectPath,
+  readImageEditorV3SourceMediaUrl,
 } from '../services/image-editor-v3/resource-media-url'
 import { ImageDocumentService, ImageDocumentWorkingCopyLinks } from '../services/image-editor-v3/image-document'
 import { CanvasLayerPackageService } from '../services/image-editor-v3/canvas-layers/canvas-layer-packages'
@@ -134,10 +134,7 @@ function getRuntime(): ImageEditorV3Runtime {
       logger: createMainLogger('main.image_editor_v3.image_document'),
       validateDocument: (document) => { validateSnapshotDocument(document) },
       resourceFilePath: imageEditorV3ResourceObjectPath,
-      resourceMediaUrl: async (resourceId) => {
-        const descriptor = await resources.describe(resourceId)
-        return descriptor.mediaType ? createImageEditorV3ResourceMediaUrl(resourceId, descriptor.mediaType) : null
-      },
+      resourceMediaUrl: (resourceId) => readImageEditorV3SourceMediaUrl(resourceId, sources),
     }),
     // 画布多图层节点的内嵌图片文档（3.4）：工作副本照旧在本仓库，写回时打包进画布所在容器的 .henji/
     canvasLayers: new CanvasLayerPackageService({

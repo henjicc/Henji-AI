@@ -53,6 +53,8 @@ export type ImageEditorV3PreviewRenderer = (
 ) => ImageEditorV3PreviewOutput
 
 export interface ImageEditorV3Props {
+  /** 布局只归工作区会话，不进作品或撤销历史。 */
+  layoutWorkspaceId?: string
   /** 缺省为仅预览宿主；正式可写宿主必须提供自己的唯一保存队列。 */
   persistenceHost?: import('../application/imageEditPersistenceOwner').ImageEditPersistenceHostV3
   sourceImageUrl: string

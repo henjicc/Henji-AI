@@ -1,151 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createEmptyMaskDocument } from './maskDocument';
 import { renderMaskDocument } from './maskExport';
+import { rasterizeQuickMaskCoverage } from './regionAdapter';
 
-function createRecordingContext() {
-  const composites: GlobalCompositeOperation[] = [];
-  const globalAlphas: number[] = [];
-  const lineWidths: number[] = [];
-  const filledRectComposites: GlobalCompositeOperation[] = [];
-  const context = {
-    globalCompositeOperation: 'source-over' as GlobalCompositeOperation,
-    globalAlpha: 1,
-    fillStyle: '',
-    strokeStyle: '',
-    lineCap: 'butt' as CanvasLineCap,
-    lineJoin: 'miter' as CanvasLineJoin,
-    lineWidth: 1,
-    beginPath: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    quadraticCurveTo: vi.fn(),
-    bezierCurveTo: vi.fn(),
-    arc: vi.fn(),
-    ellipse: vi.fn(),
-    closePath: vi.fn(),
-    clearRect: vi.fn(),
-    fillRect: vi.fn(() => {
-      filledRectComposites.push(context.globalCompositeOperation);
-    }),
-    save: vi.fn(),
-    restore: vi.fn(),
-    fill: vi.fn(() => {
-      composites.push(context.globalCompositeOperation);
-      globalAlphas.push(context.globalAlpha);
-      lineWidths.push(context.lineWidth);
-    }),
-    stroke: vi.fn(() => {
-      composites.push(context.globalCompositeOperation);
-      globalAlphas.push(context.globalAlpha);
-      lineWidths.push(context.lineWidth);
-    }),
-  };
-  return { context, composites, filledRectComposites, globalAlphas, lineWidths };
-}
-
-describe('renderMaskDocument', () => {
-  it('先生成同尺寸不透明底，再将涂抹区置透明、橡皮擦区恢复不透明', () => {
-    const document = {
-      ...createEmptyMaskDocument('source-a', 640, 480),
-      strokes: [
-        {
-          id: 'paint',
-          mode: 'paint' as const,
-          size: 40,
-          points: [{ x: 100, y: 120 }, { x: 140, y: 160 }],
-        },
-        {
-          id: 'erase',
-          mode: 'erase' as const,
-          size: 12,
-          points: [{ x: 120, y: 140 }],
-        },
-      ],
-    };
-    const recording = createRecordingContext();
-
-    renderMaskDocument(recording.context, document);
-
-    expect(recording.context.clearRect).toHaveBeenCalledWith(0, 0, 640, 480);
-    expect(recording.context.fillRect).toHaveBeenCalledWith(0, 0, 640, 480);
-    expect(recording.composites).toEqual(['destination-out', 'source-over']);
-    expect(recording.globalAlphas).toEqual([1, 1]);
-    expect(recording.lineWidths).toEqual([40, 12]);
-    expect(recording.context.arc).toHaveBeenCalledWith(120, 140, 6, 0, Math.PI * 2);
+describe('参数蒙版导出', () => {
+  it('按共享 float32 覆盖编码透明区；擦除恢复不透明而画外仍为原始区域', () => {
+    const document = { ...createEmptyMaskDocument('source', 8, 4), strokes: [
+      { id: 'paint', kind: 'rectangle' as const, mode: 'paint' as const, points: [{ x: 0.25, y: 0 }, { x: 6, y: 4 }] },
+      { id: 'erase', kind: 'rectangle' as const, mode: 'erase' as const, points: [{ x: 2, y: 0 }, { x: 4, y: 4 }] },
+    ] };
+    const image = { width: 8, height: 4, data: new Uint8ClampedArray(8 * 4 * 4), colorSpace: 'srgb' as const };
+    const context = { createImageData: vi.fn(() => image), putImageData: vi.fn() };
+    renderMaskDocument(context, document);
+    expect(context.putImageData).toHaveBeenCalledWith(image, 0, 0);
+    const coverage = rasterizeQuickMaskCoverage(document, { x: 0, y: 0, width: 8, height: 4 });
+    expect(Array.from({ length: coverage.length }, (_, i) => image.data[i * 4 + 3])).toEqual([...coverage].map(v => Math.round((1 - v) * 255)));
+    expect(image.data[3]).toBe(64); expect(image.data[2 * 4 + 3]).toBe(255); expect(image.data[5 * 4 + 3]).toBe(0);
   });
-
-  it('复用平滑笔迹路径而不是按预览与导出分别实现采样', () => {
-    const document = {
-      ...createEmptyMaskDocument('source-a', 100, 100),
-      strokes: [{
-        id: 'curve',
-        mode: 'paint' as const,
-        size: 8,
-        points: [{ x: 1, y: 1 }, { x: 10, y: 10 }, { x: 20, y: 5 }, { x: 30, y: 20 }],
-      }],
-    };
-    const recording = createRecordingContext();
-
-    renderMaskDocument(recording.context, document);
-
-    expect(recording.context.quadraticCurveTo).toHaveBeenCalled();
-    expect(recording.context.stroke).toHaveBeenCalledTimes(1);
-  });
-
-  it('低硬度画笔以多层透明度形成羽化，但硬芯仍完全写入遮罩', () => {
-    const document = {
-      ...createEmptyMaskDocument('source-a', 100, 100),
-      strokes: [{
-        id: 'soft-brush',
-        mode: 'paint' as const,
-        size: 40,
-        hardness: 0.25,
-        points: [{ x: 10, y: 10 }, { x: 80, y: 80 }],
-      }],
-    };
-    const recording = createRecordingContext();
-
-    renderMaskDocument(recording.context, document);
-
-    expect(recording.context.stroke).toHaveBeenCalledTimes(8);
-    expect(recording.lineWidths[0]).toBe(40);
-    expect(recording.lineWidths.at(-1)).toBe(10);
-    expect(recording.globalAlphas[0]).toBeLessThan(recording.globalAlphas.at(-1) ?? 0);
-    expect(recording.globalAlphas.at(-1)).toBe(1);
-  });
-
-  it('矩形、圆形和自由框选都导出为透明区域，自由框选自动闭合', () => {
-    const document = {
-      ...createEmptyMaskDocument('source-a', 200, 160),
-      strokes: [
-        {
-          id: 'rectangle',
-          kind: 'rectangle' as const,
-          mode: 'paint' as const,
-          points: [{ x: 10, y: 20 }, { x: 70, y: 80 }],
-        },
-        {
-          id: 'circle',
-          kind: 'circle' as const,
-          mode: 'erase' as const,
-          points: [{ x: 80, y: 30 }, { x: 160, y: 110 }],
-        },
-        {
-          id: 'lasso',
-          kind: 'lasso' as const,
-          mode: 'paint' as const,
-          points: [{ x: 20, y: 100 }, { x: 60, y: 140 }, { x: 100, y: 120 }],
-        },
-      ],
-    };
-    const recording = createRecordingContext();
-
-    renderMaskDocument(recording.context, document);
-
-    expect(recording.context.fillRect).toHaveBeenCalledWith(10, 20, 60, 60);
-    expect(recording.filledRectComposites).toEqual(['source-over', 'destination-out']);
-    expect(recording.context.ellipse).toHaveBeenCalledWith(120, 70, 40, 40, 0, 0, Math.PI * 2);
-    expect(recording.context.closePath).toHaveBeenCalledTimes(1);
-    expect(recording.composites).toEqual(['source-over', 'destination-out']);
+  it('软边和连续平滑路径导出有半透明边缘、实心中心；分块保持同一覆盖', () => {
+    const document = { ...createEmptyMaskDocument('source', 530, 20), strokes: [{ id: 'soft', mode: 'paint' as const,
+      size: 12, hardness: 0.25, points: [{ x: 490, y: 10 }, { x: 512, y: 10 }, { x: 525, y: 10 }] }] };
+    const region = { x: 500, y: 4, width: 25, height: 12 };
+    const whole = rasterizeQuickMaskCoverage(document, region);
+    const a = rasterizeQuickMaskCoverage(document, { ...region, width: 12 });
+    const b = rasterizeQuickMaskCoverage(document, { ...region, x: 512, width: 13 });
+    for (let y = 0; y < 12; y++) for (let x = 0; x < 25; x++) expect(whole[y * 25 + x]).toBe(x < 12 ? a[y * 12 + x] : b[y * 13 + x - 12]);
+    expect(whole.some(v => v > 0 && v < 1)).toBe(true); expect(whole.some(v => v === 1)).toBe(true);
   });
 });

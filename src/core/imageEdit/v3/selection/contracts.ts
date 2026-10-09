@@ -3,44 +3,16 @@ import type { Float32MaskTile } from '../effects/contracts';
 import type { ImageEditTileCoordinate } from '../tileGeometry';
 
 export const IMAGE_EDIT_SELECTION_TILE_SIZE_V3 = 512 as const;
-export const IMAGE_EDIT_SELECTION_AA_SAMPLES_PER_AXIS_V3 = 4 as const;
-
-export interface ImageEditSelectionPointV3 {
-  x: number;
-  y: number;
-}
-
-export interface ImageEditSelectionRectV3 {
-  type: 'rectangle';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface ImageEditSelectionEllipseV3 {
-  type: 'ellipse';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface ImageEditSelectionLassoV3 {
-  type: 'lasso';
-  points: readonly ImageEditSelectionPointV3[];
-}
-
-export type ImageEditSelectionShapeV3 =
-  | ImageEditSelectionRectV3
-  | ImageEditSelectionEllipseV3
-  | ImageEditSelectionLassoV3;
-
-export type ImageEditSelectionCombineModeV3 =
-  | 'replace'
-  | 'add'
-  | 'subtract'
-  | 'intersect';
+export { REGION_AA_SAMPLES_PER_AXIS as IMAGE_EDIT_SELECTION_AA_SAMPLES_PER_AXIS_V3 } from '../../../imaging/regions/contracts';
+export type {
+  RegionPoint as ImageEditSelectionPointV3,
+} from '../../../imaging/regions/contracts';
+import type { RegionGeometry, RegionCombine } from '../../../imaging/regions/contracts';
+export type ImageEditSelectionRectV3 = Extract<RegionGeometry, { type: 'rectangle' }>;
+export type ImageEditSelectionEllipseV3 = Extract<RegionGeometry, { type: 'ellipse' }>;
+export type ImageEditSelectionLassoV3 = Extract<RegionGeometry, { type: 'lasso' }>;
+export type ImageEditSelectionShapeV3 = RegionGeometry;
+export type ImageEditSelectionCombineModeV3 = Exclude<RegionCombine, 'paint' | 'erase'>;
 
 export interface ImageEditSelectionMaskResourceReferenceV3 {
   resourceId: string;

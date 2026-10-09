@@ -30,6 +30,27 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 
+// jsdom 没有 PointerEvent；保持真实按钮/坐标/指针身份，避免新输入路由收到普通 Event。
+class PointerEventStub extends MouseEvent {
+  readonly pointerId: number
+  readonly pointerType: string
+  readonly isPrimary: boolean
+  readonly pressure: number
+  readonly tiltX = 0
+  readonly tiltY = 0
+  readonly twist = 0
+
+  constructor(type: string, init: PointerEventInit = {}) {
+    super(type, init)
+    this.pointerId = init.pointerId ?? 0
+    this.pointerType = init.pointerType ?? 'mouse'
+    this.isPrimary = init.isPrimary ?? true
+    this.pressure = init.pressure ?? 0.5
+  }
+
+  getCoalescedEvents(): PointerEvent[] { return [] }
+}
+
 function createDocument(
   layers: ImageEditLayerV3[],
   geometry: { width: number; height: number } = { width: 1600, height: 900 },
@@ -105,6 +126,7 @@ describe('ImageEditorV3 floating panels and annotations', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    vi.stubGlobal('PointerEvent', PointerEventStub)
     useImageEditorSessionStoreV3.setState({ sessions: {} })
     useImageEditorInteractionStoreV3.setState({
       layerDragBySession: {},
@@ -121,52 +143,19 @@ describe('ImageEditorV3 floating panels and annotations', () => {
     vi.unstubAllGlobals()
   })
 
-  it('停靠面板可拖出为浮窗，并在右边缘按上下顺序重新组合', async () => {
+  it('通过面板菜单浮动并贴回属性面板，保持唯一内容与预览', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800))
     const rendered = renderEditor(createDocument([createImageEditRasterLayerV3('raster', '底图')]))
-    const workspace = rendered.container.querySelector<HTMLElement>('[data-editor-panel-workspace]')
-    const properties = rendered.container.querySelector<HTMLElement>('[data-editor-panel-id="properties"]')
-    const handle = properties?.querySelector<HTMLElement>('[data-editor-panel-handle]')
-    expect(workspace && properties && handle).toBeTruthy()
-    vi.spyOn(workspace as HTMLElement, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800,
-      toJSON: () => ({}),
-    })
-    vi.spyOn(properties as HTMLElement, 'getBoundingClientRect').mockReturnValue({
-      x: 800, y: 400, left: 800, top: 400, right: 1200, bottom: 800, width: 400, height: 400,
-      toJSON: () => ({}),
-    })
-
-    fireEvent.pointerDown(handle as HTMLElement, {
-      pointerId: 11, button: 0, isPrimary: true, clientX: 900, clientY: 420,
-    })
-    fireEvent.pointerMove(window, { pointerId: 11, clientX: 500, clientY: 120 })
-    fireEvent.pointerUp(window, { pointerId: 11, clientX: 500, clientY: 120 })
-    const floating = await waitFor(() => rendered.container.querySelector<HTMLElement>(
-      '[data-editor-panel-id="properties"][data-panel-mode="floating"]',
-    ))
-    expect(floating).toBeTruthy()
-
-    vi.spyOn(floating as HTMLElement, 'getBoundingClientRect').mockReturnValue({
-      x: 400, y: 100, left: 400, top: 100, right: 800, bottom: 700, width: 400, height: 600,
-      toJSON: () => ({}),
-    })
-    const layerPanel = rendered.container.querySelector<HTMLElement>('[data-editor-panel-id="layers"]')
-    vi.spyOn(layerPanel as HTMLElement, 'getBoundingClientRect').mockReturnValue({
-      x: 800, y: 0, left: 800, top: 0, right: 1200, bottom: 800, width: 400, height: 800,
-      toJSON: () => ({}),
-    })
-    const floatingHandle = floating?.querySelector<HTMLElement>('[data-editor-panel-handle]')
-    fireEvent.pointerDown(floatingHandle as HTMLElement, {
-      pointerId: 12, button: 0, isPrimary: true, clientX: 500, clientY: 120,
-    })
-    fireEvent.pointerMove(window, { pointerId: 12, clientX: 1190, clientY: 700 })
-    expect(rendered.container.querySelector('[data-editor-panel-dock-preview="right"]')).toBeTruthy()
-    fireEvent.pointerUp(window, { pointerId: 12, clientX: 1190, clientY: 700 })
-
-    await waitFor(() => expect(rendered.container.querySelectorAll('[data-docked-editor-panel]')).toHaveLength(2))
-    expect([...rendered.container.querySelectorAll('[data-docked-editor-panel]')].map(
-      (panel) => panel.getAttribute('data-editor-panel-id'),
-    )).toEqual(['layers', 'properties'])
+    const preview = rendered.container.querySelector('[data-preview-surface]')
+    fireEvent.click(screen.getByRole('button', { name: '面板' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '浮动属性面板' }))
+    await waitFor(() => expect(rendered.container.querySelector('[data-editor-panel-id="properties"][data-panel-mode="floating"]')).toBeTruthy())
+    expect(rendered.container.querySelectorAll('[data-editor-panel-id="properties"]')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: '面板' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '停靠属性面板' }))
+    await waitFor(() => expect(rendered.container.querySelector('[data-editor-panel-id="properties"][data-panel-mode="docked"]')).toBeTruthy())
+    expect(rendered.container.querySelectorAll('[data-editor-panel-id="properties"]')).toHaveLength(1)
+    expect(rendered.container.querySelector('[data-preview-surface]')).toBe(preview)
   })
 
   it('标注位于模糊下方时不进入清晰实时层，交由基础预览统一合成', async () => {

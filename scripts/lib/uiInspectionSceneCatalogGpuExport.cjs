@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检采用 CommonJS 场景工厂。 */
 const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
 
 function createGpuExportScenes(context) {
@@ -28,7 +29,7 @@ function createGpuExportScenes(context) {
         throw new Error(message)
       }
 
-      const { dialog, editor } = await openCanvasImageEditorV3Fixture({
+      const { editor } = await openCanvasImageEditorV3Fixture({
         page, context, width: 1600, height: 1000, label: '分块导出文档',
       })
       const initialFrame = await waitForLogEvent(
@@ -120,7 +121,6 @@ function createGpuExportScenes(context) {
     name: '画布节点-图片编辑器导出原子回退',
     writesUserData: true,
     setup: async (page, _app, inspection) => {
-      const startedAt = new Date().toISOString()
       const { dialog, editor, fixture } = await openCanvasImageEditorV3Fixture({
         page, context, width: 1024, height: 640, label: '导出故障重试文档',
       })
@@ -131,6 +131,8 @@ function createGpuExportScenes(context) {
           ?.getAttribute('data-preview-presentation-backend') === 'webgpu-surface'
       ), undefined, { timeout: 30000 })
 
+      const startedAt = new Date().toISOString()
+      const documentId = fixture.documentRef.slice('image-edit-v3:'.length)
       await page.evaluate(() => window.dispatchEvent(new CustomEvent(
         'henji:image-editor-gpu-scene-diagnostic',
         { detail: { failNextExportAfterTiles: 1 } },
@@ -147,14 +149,24 @@ function createGpuExportScenes(context) {
       const deadline = Date.now() + 60000
       let evidence = null
       while (!evidence && Date.now() < deadline) {
-        evidence = await page.evaluate(async ({ afterTimestamp }) => {
+        evidence = await page.evaluate(async ({ afterTimestamp, documentId }) => {
           const result = await window.henjiNative.logging.queryLogEvents({
             date: new Date().toISOString().slice(0, 10),
             afterTimestamp,
             limit: 500,
           })
+          const starts = result.events.filter((event) => (
+            event.event === 'image_editor_v3.raster_export.session.started'
+            && event.context?.documentId === documentId
+          ))
+          const sessionIds = new Set(starts.map(event => event.requestId))
+          const gpuRequestIds = new Set(result.events.filter(event => (
+            event.event === 'image_editor_v3.gpu_export.started'
+            && event.context?.documentId === documentId
+          )).map(event => event.requestId))
           const failures = result.events.filter((event) => (
             event.event === 'image_editor_v3.gpu_export.failed'
+            && gpuRequestIds.has(event.requestId)
             && Number(event.context?.completedTiles) === 1
           ))
           const retryRequests = result.events.filter((event) => (
@@ -162,16 +174,16 @@ function createGpuExportScenes(context) {
           ))
           const backendRetries = result.events.filter((event) => (
             event.event === 'image_editor_v3.raster_export.backend_retry'
-          ))
-          const starts = result.events.filter((event) => (
-            event.event === 'image_editor_v3.raster_export.session.started'
+            && sessionIds.has(event.requestId)
           ))
           const discarded = result.events.filter((event) => (
             event.event === 'image_editor_v3.raster_export.session.cancelled'
+            && sessionIds.has(event.requestId)
             && event.context?.reason === 'render_backend_retry'
           ))
           const published = result.events.filter((event) => (
             event.event === 'image_editor_v3.managed_raster.completed'
+            && event.context?.documentId === documentId
           ))
           if (failures.length !== 1 || retryRequests.length !== 1
             || backendRetries.length !== 1 || starts.length !== 2
@@ -183,7 +195,7 @@ function createGpuExportScenes(context) {
             discardedSessionId: discarded[0]?.requestId,
             publishedSessionId: published[0]?.requestId,
           }
-        }, { afterTimestamp: startedAt })
+        }, { afterTimestamp: startedAt, documentId })
         if (!evidence) await page.waitForTimeout(100)
       }
       if (!evidence
@@ -192,7 +204,12 @@ function createGpuExportScenes(context) {
         || evidence.discardedSessionId === evidence.publishedSessionId
         || !evidence.sessionIds.includes(evidence.discardedSessionId)
         || !evidence.sessionIds.includes(evidence.publishedSessionId)) {
-        throw new Error(`GPU导出失败后没有原子重启完整CPU会话：${JSON.stringify(evidence)}`)
+        const exportEvents = await page.evaluate(async afterTimestamp => {
+          const result = await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10), afterTimestamp, keyword: 'image_editor_v3', limit: 500 })
+          return result.events.filter(event => /gpu_export|raster_export|managed_raster/.test(event.event ?? ''))
+            .map(event => ({ event: event.event, requestId: event.requestId, context: event.context }))
+        }, startedAt)
+        throw new Error(`GPU导出失败后没有原子重启完整CPU会话：${JSON.stringify({ evidence, exportEvents })}`)
       }
 
       await page.waitForFunction(({ selector, previous }) => {

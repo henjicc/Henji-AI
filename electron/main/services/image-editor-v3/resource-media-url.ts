@@ -1,8 +1,9 @@
 import path from 'node:path'
 
 import { getImageEditorV3StoragePaths } from './runtime-storage'
-import type { ResourceId } from './contracts'
+import type { ResourceId, SourceProvider } from './contracts'
 import { parseResourceId } from './resource-store'
+import { sourceMediaType } from './source-metadata'
 
 export const IMAGE_EDITOR_V3_MEDIA_HOST = 'image-editor-v3'
 
@@ -19,6 +20,17 @@ function normalizeMediaType(value: string): string {
   const mediaType = value.trim().toLowerCase()
   if (!IMAGE_MEDIA_TYPES.has(mediaType)) throw new Error('Unsupported image editor media type')
   return mediaType
+}
+
+/** CAS 描述不保存 MIME；重开文档时从权威源文件头恢复，不能依赖导入时的临时描述。 */
+export async function readImageEditorV3SourceMediaUrl(
+  resourceId: ResourceId,
+  sources: Pick<SourceProvider, 'readMetadata'>,
+): Promise<string | null> {
+  const mediaType = sourceMediaType(await sources.readMetadata(resourceId))
+  return mediaType && IMAGE_MEDIA_TYPES.has(mediaType)
+    ? createImageEditorV3ResourceMediaUrl(resourceId, mediaType)
+    : null
 }
 
 export function imageEditorV3ResourceObjectPath(resourceId: ResourceId): string {

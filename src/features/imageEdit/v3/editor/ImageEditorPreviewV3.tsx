@@ -2,13 +2,13 @@ import { AlertTriangle, LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createLogger } from '@/core/logging'
-
+import { imageEditorToolRegistry } from '../toolFramework/builtInRegistry'
+import { useToolInputRouter } from '../toolFramework/useToolInputRouter'
 import type { ImageEditCommandBusSnapshotV3, ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 import { useImageEditorDisplayPipelineV3, useImageEditorThumbnailPrefetchV3 } from '../execution'
 import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3'
 import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLeaseV3'
-import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
 import { ImageEditorLayerControlsV3 } from './ImageEditorLayerControlsV3'
 import { ImageEditorLayerControlsPresentationV3 } from './layerControlsPresentationV3'
 import { useImageEditorLayerPickingV3 } from './useImageEditorLayerPickingV3'
@@ -18,13 +18,9 @@ import {
   ImageEditorFramePreviewV3,
   ImageEditorUrlPreviewV3,
 } from './ImageEditorPreviewOutputV3'
-import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
-import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
-import { ImageEditorSelectionOverlayV3 } from './ImageEditorSelectionOverlayV3'
 import { ImageEditorViewportChromeV3 } from './ImageEditorViewportChromeV3'
 import { ImageEditorRasterPresentationV3 } from './ImageEditorRasterPresentationV3'
 import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
-import { ImageEditorCropOverlayV3 } from './ImageEditorCropOverlayV3'
 import type {
   ImageEditorV3Controller,
   ImageEditorV3PreviewOutput,
@@ -334,9 +330,17 @@ export function ImageEditorPreviewV3({
     viewportComposite.session.updateViewport(nextLayout)
   }, [outputGeometry, updateRasterSourceFrame, viewportComposite.session])
 
+  const inputRouter = useToolInputRouter(surfaceRef, controller, activeTool, bus, {
+    referenceGrid: outputGeometry,
+    toReference: (point) => {
+      const viewport = viewportLayout?.viewport
+      return viewport ? { x: point.x / viewport.zoom + viewport.documentX,
+        y: point.y / viewport.zoom + viewport.documentY } : point
+    },
+  })
   const navigation = useImageEditorViewportNavigationGestureV3(
     controller.sessionId,
-    activeTool,
+    inputRouter.effectiveTool,
     surfaceRef,
     viewportContentRef,
     zoom,
@@ -348,7 +352,7 @@ export function ImageEditorPreviewV3({
   ), [outputGeometry, viewportLayout])
   const layerMoveHandlers = useImageEditorLayerMoveGestureV3(
     controller,
-    navigation.effectiveTool,
+    inputRouter.effectiveTool,
     viewportContentRef,
     acquireMoveFeedback,
     releaseMoveFeedback,
@@ -378,13 +382,11 @@ export function ImageEditorPreviewV3({
     },
   )
 
-  const navigationCursor = navigation.effectiveTool === 'hand'
-    ? 'cursor-grab active:cursor-grabbing'
-    : navigation.effectiveTool === 'zoom'
-      ? 'cursor-zoom-in'
-      : navigation.effectiveTool === 'move'
-        ? 'cursor-default'
-        : ''
+  inputRouter.connect({
+    navigation: { down: navigation.onPointerDown, move: navigation.onPointerMove, up: navigation.onPointerUp, cancel: navigation.onPointerCancel },
+    move: { down: layerMoveHandlers.onPointerDownCapture, move: layerMoveHandlers.onPointerMoveCapture, up: layerMoveHandlers.onPointerUpCapture, cancel: layerMoveHandlers.onPointerCancelCapture },
+  })
+  const navigationCursor = imageEditorToolRegistry.get(inputRouter.effectiveTool)?.cursor ?? ''
 
   return (
     <main
@@ -409,24 +411,16 @@ export function ImageEditorPreviewV3({
         : Object.keys(snapshot.previewOverrides).length}
       data-preview-output-width={outputGeometry.width}
       data-preview-output-height={outputGeometry.height}
-      data-active-navigation-tool={navigation.effectiveTool === 'hand' || navigation.effectiveTool === 'zoom'
-        ? navigation.effectiveTool
+      data-active-navigation-tool={inputRouter.effectiveTool === 'hand' || inputRouter.effectiveTool === 'zoom'
+        ? inputRouter.effectiveTool
         : undefined}
-      data-temporary-hand={navigation.temporaryHandActive ? 'active' : undefined}
-      data-move-availability={navigation.effectiveTool === 'move'
+      data-temporary-hand={inputRouter.temporaryHandActive ? 'active' : undefined}
+      data-move-availability={inputRouter.effectiveTool === 'move'
         ? layerMoveHandlers.unavailableReason ?? 'ready'
         : undefined}
       className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-gap ${navigationCursor}`}
-      style={{ touchAction: ['hand', 'zoom', 'move'].includes(navigation.effectiveTool) ? 'none' : undefined }}
-      onPointerDownCapture={layerMoveHandlers.onPointerDownCapture}
-      onPointerMoveCapture={layerMoveHandlers.onPointerMoveCapture}
-      onPointerUpCapture={layerMoveHandlers.onPointerUpCapture}
-      onPointerCancelCapture={layerMoveHandlers.onPointerCancelCapture}
-      onLostPointerCapture={layerMoveHandlers.onPointerCancelCapture}
-      onPointerDown={navigation.onPointerDown}
-      onPointerMove={navigation.onPointerMove}
-      onPointerUp={navigation.onPointerUp}
-      onPointerCancel={navigation.onPointerCancel}
+      style={{ touchAction: ['hand', 'zoom', 'move'].includes(inputRouter.effectiveTool) ? 'none' : undefined }}
+      {...inputRouter.handlers}
     >
       {!previewRenderer && documentFrame ? (
         <div
@@ -477,29 +471,18 @@ export function ImageEditorPreviewV3({
           ) : previewRenderer && output.kind === 'frame' ? (
             <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
           ) : previewRenderer && output.kind === 'content' ? output.content : null}
-          {activeTool === 'crop' && viewportLayout ? (
-            <ImageEditorCropOverlayV3
-              controller={controller}
-              projectedDocument={projectedDocument}
-              geometry={outputGeometry}
-              stageWidth={viewportLayout.stageWidth}
-              stageHeight={viewportLayout.stageHeight}
-            />
-          ) : null}
-          <ImageEditorAnnotationOverlayV3 controller={controller} />
-          <ImageEditorRasterBrushOverlayV3
-            bus={bus}
-            controller={controller}
-            resourceByteSizes={resourceByteSizes}
-            basePreviewDocumentId={basePreviewDocumentId}
-            basePreviewRevision={basePreviewRevision}
-          />
-          {controller.profile.id === 'mask' ? <ImageEditorSelectionMaskOverlayV3
-            bus={bus}
-            controller={controller}
-            resourceByteSizes={resourceByteSizes}
-          /> : <ImageEditorSelectionOverlayV3 bus={bus} controller={controller} />}
-          {navigation.effectiveTool === 'move' ? (
+          {imageEditorToolRegistry.overlays().map(slot => {
+            const active = imageEditorToolRegistry.get(activeTool)?.overlays?.includes(slot)
+            if (slot.activeOnly && !active) return null
+            if (slot.requiresLayout && !viewportLayout) return null
+            return <div key={`${slot.id}:${inputRouter.overlayResetVersions[slot.id] ?? 0}`} className="contents" data-tool-overlay-slot={slot.id}>
+              {slot.render({ bus, controller, bindKeyboard: inputRouter.bindKeyboard, bindPointerAvailability: inputRouter.bindPointerAvailability, projectedDocument, geometry: outputGeometry,
+                stageWidth: viewportLayout?.stageWidth ?? 0, stageHeight: viewportLayout?.stageHeight ?? 0,
+                resourceByteSizes, basePreviewDocumentId: basePreviewDocumentId ?? null,
+                basePreviewRevision: basePreviewRevision ?? null })}
+            </div>
+          })}
+          {inputRouter.effectiveTool === 'move' ? (
             <ImageEditorLayerControlsV3 presentation={layerControlsPresentation} document={controller.document}
               layerId={selectedLayerId} bounds={selectedLayerId ? layerBounds(selectedLayerId) : null}
               outputWidth={outputGeometry.width} outputHeight={outputGeometry.height} zoom={zoom} />
@@ -529,7 +512,7 @@ export function ImageEditorPreviewV3({
           <span>{t('imageEditor.v3.previewRenderFailed')}</span>
         </div>
       ) : null}
-      {navigation.effectiveTool === 'move' && layerMoveHandlers.unavailableReason
+      {inputRouter.effectiveTool === 'move' && layerMoveHandlers.unavailableReason
         && layerMoveHandlers.unavailableReason !== 'select-one' ? (
         <div
           role="status"

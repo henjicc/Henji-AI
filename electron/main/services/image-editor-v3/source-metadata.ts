@@ -1,6 +1,20 @@
 import type { SourceImageMetadata } from './contracts'
 import { readAssociatedNclxCicp } from './isobmff-cicp'
 
+export function sourceMediaType(metadata: Pick<SourceImageMetadata, 'format'>): string | null {
+  switch (metadata.format?.toLowerCase()) {
+    case 'png': return 'image/png'
+    case 'jpeg':
+    case 'jpg': return 'image/jpeg'
+    case 'webp': return 'image/webp'
+    case 'tiff': return 'image/tiff'
+    case 'avif': return 'image/avif'
+    case 'heif': return 'image/heif'
+    case 'gif': return 'image/gif'
+    default: return null
+  }
+}
+
 export function sourceBitsPerSample(metadata: { bitsPerSample?: number; depth?: string }): number {
   if (
     Number.isSafeInteger(metadata.bitsPerSample)

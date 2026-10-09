@@ -483,6 +483,21 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(rasterImage.style.transform).toBe('matrix(1, 0, 0, 1, 19.53125, 7.8125)')
     fireEvent.pointerCancel(surface, { pointerId: 43 })
     expect(feedback.style.transform).toBe('')
+
+    // 无操作与取消不能把已有重做分支当成一次新编辑丢弃。
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+    expect(liveSession.bus.getSnapshot().history.redoCount).toBe(1)
+    fireEvent.pointerDown(surface, {
+      pointerId: 44, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerUp(surface, { pointerId: 44, clientX: 10, clientY: 10 })
+    expect(liveSession.bus.getSnapshot().history.redoCount).toBe(1)
+    fireEvent.pointerDown(surface, {
+      pointerId: 45, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 45, clientX: 35, clientY: 20, ctrlKey: true })
+    fireEvent.pointerCancel(surface, { pointerId: 45 })
+    expect(liveSession.bus.getSnapshot().history.redoCount).toBe(1)
   })
 
 })

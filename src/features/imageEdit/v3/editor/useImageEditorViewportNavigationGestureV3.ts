@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, RefObject } from 'react'
 
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
@@ -12,12 +12,6 @@ import {
 import { useImageEditorViewportWheelV3 } from './useImageEditorViewportWheelV3'
 
 const ZERO_PAN: ImageEditorViewportPanV3 = { x: 0, y: 0 }
-
-function acceptsSpaceInput(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest(
-    'input, select, textarea, [contenteditable="true"], [role="textbox"], [role="slider"]',
-  ))
-}
 
 export function useImageEditorViewportNavigationGestureV3(
   sessionId: string,
@@ -33,10 +27,9 @@ export function useImageEditorViewportNavigationGestureV3(
   ) => void,
 ) {
   const gestureRef = useRef<ImageEditorNavigationGestureV3 | null>(null)
-  const [temporaryHandActive, setTemporaryHandActive] = useState(false)
   const setViewportPan = useImageEditorInteractionStoreV3((state) => state.setViewportPan)
   const setViewportTransform = useImageEditorInteractionStoreV3((state) => state.setViewportTransform)
-  const effectiveTool: ImageEditorToolIdV3 = temporaryHandActive ? 'hand' : activeTool
+  const effectiveTool = activeTool
 
   const applyViewportTransform = useCallback((
     nextZoom: number,
@@ -58,27 +51,6 @@ export function useImageEditorViewportNavigationGestureV3(
     setViewportTransform(sessionId, { zoom: 1, pan: ZERO_PAN })
     applyViewportTransform(1, ZERO_PAN)
   }, [activeTool, applyViewportTransform, sessionId, setViewportTransform])
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.code !== 'Space' || event.repeat || acceptsSpaceInput(event.target)) return
-      event.preventDefault()
-      setTemporaryHandActive(true)
-    }
-    const handleKeyUp = (event: KeyboardEvent): void => {
-      if (event.code !== 'Space') return
-      setTemporaryHandActive(false)
-    }
-    const clearTemporaryHand = (): void => setTemporaryHandActive(false)
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    window.addEventListener('blur', clearTemporaryHand)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-      window.removeEventListener('blur', clearTemporaryHand)
-    }
-  }, [])
 
   const zoomAroundClientPoint = useCallback((
     clientX: number,
@@ -194,7 +166,6 @@ export function useImageEditorViewportNavigationGestureV3(
 
   return {
     effectiveTool,
-    temporaryHandActive,
     onPointerDown,
     onPointerMove,
     onPointerUp,

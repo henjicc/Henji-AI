@@ -1,7 +1,4 @@
-import { createLogger } from '@/core/logging'
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
-import { isLikelyLocalImagePath } from '@/services/imageSource'
-import { getPlatform } from '@/platform/runtime'
 import { withCanvasProjectRuntime } from './canvasProjectRuntime'
 import type { CanvasTransactionRuntime } from './canvasPersistenceService'
 
@@ -15,11 +12,8 @@ import {
   type MultiLayerDocumentNodeCanvasPort,
 } from './multiLayerDocumentNodeApplicationContracts'
 
-const logger = createLogger('features.canvas.multi_layer_document_projection_cas')
-
 interface CanvasAdapterDependencies {
   runtime?: CanvasTransactionRuntime
-  releaseReplacedLocalImages?: (filePaths: string[]) => Promise<void>
 }
 
 async function inProject<T>(projectId: string, runtime: CanvasTransactionRuntime | undefined, execute: (runtime: CanvasTransactionRuntime) => Promise<T>): Promise<T> {
@@ -105,9 +99,6 @@ export function createMultiLayerDocumentExportCanvasPort(runtime?: CanvasTransac
 export function createMultiLayerDocumentProjectionCanvasPort(
   dependencies: CanvasAdapterDependencies = {},
 ): MultiLayerDocumentProjectionCanvasPort {
-  const releaseReplacedLocalImages = dependencies.releaseReplacedLocalImages
-    ?? ((filePaths) => getPlatform().image.releaseLayerStackResources(filePaths))
-
   return {
     async commitLegacyMigration(input): Promise<'committed' | 'already-committed'> {
       return inProject(input.projectId, dependencies.runtime, async (runtime) => {
@@ -173,8 +164,6 @@ export function createMultiLayerDocumentProjectionCanvasPort(
         }
         let committed = false
         let conflictMessage = '多图层文档节点已被删除'
-        let replacedImageUrl: string | null = null
-        let replacedPreviewImageUrl: string | null = null
         runtime.store.setState((state) => {
           const nodeIndex = state.nodes.findIndex((node) => node.id === input.nodeId)
           if (nodeIndex < 0) return {}
@@ -200,10 +189,6 @@ export function createMultiLayerDocumentProjectionCanvasPort(
             return {}
           }
 
-          replacedImageUrl = typeof node.data.imageUrl === 'string' ? node.data.imageUrl : null
-          replacedPreviewImageUrl = typeof node.data.previewImageUrl === 'string'
-            ? node.data.previewImageUrl
-            : null
           const nodes = [...state.nodes]
           nodes[nodeIndex] = {
             ...node,
@@ -229,28 +214,8 @@ export function createMultiLayerDocumentProjectionCanvasPort(
         }
         await confirmCanvasPersistence(input.projectId)
 
-        const replacedSources: Array<string | null> = [
-          replacedImageUrl,
-          replacedPreviewImageUrl,
-        ]
-        const replacedLocalImages = [...new Set(replacedSources.filter((source): source is string => (
-          typeof source === 'string'
-          && source !== input.projection.imageUrl
-          && source !== input.projection.previewImageUrl
-          && isLikelyLocalImagePath(source)
-        )))]
-        if (replacedLocalImages.length === 0) return
-        await releaseReplacedLocalImages(replacedLocalImages).catch((error) => {
-          logger.error('旧多图层节点平面资源释放失败', error, {
-            event: 'canvas.multi_layer_document.projection.replaced_resource_release.failed',
-            projectId: input.projectId,
-            nodeId: input.nodeId,
-            context: {
-              cleanupCandidate: true,
-              resourceCount: replacedLocalImages.length,
-            },
-          })
-        })
+        // 旧预览路径可能属于输入素材、其他节点或撤销历史；路径本身不提供删除所有权。
+        // 此处只更新投影。受管文档像素由引用 GC 回收，失败导出的临时文件按 ownedFilePaths 回滚。
       })
     },
   }

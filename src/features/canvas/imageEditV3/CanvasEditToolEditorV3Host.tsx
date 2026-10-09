@@ -385,6 +385,7 @@ export function CanvasEditToolEditorV3Host({
       className="h-[min(76vh,900px)]"
     >
       <ImageEditorV3
+        layoutWorkspaceId="canvas"
       sourceImageUrl={sourceImageUrl}
       document={bootstrap.document}
       historySnapshot={bootstrap.history}

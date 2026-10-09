@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检采用 CommonJS 场景工厂。 */
 const sharp = require('sharp')
 
 function createGpuAnnotationScenes(context) {
@@ -8,17 +9,20 @@ function createGpuAnnotationScenes(context) {
     surface: '工具箱',
     name: '图片编辑器-GPU标注缓存',
     writesUserData: true,
-    setup: async (page) => {
+    setup: async (page, _app, inspection) => {
       await setupToolbox(page)
       await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
       const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
       await surface.waitFor({ state: 'visible', timeout: 12000 })
       const editor = surface.locator('[data-image-editor-v3]')
-      const dropTarget = surface.locator('.border-dashed').first()
+      const dropTarget = surface.locator('[data-project-library-state]').first()
       await Promise.race([
         editor.waitFor({ state: 'visible', timeout: 12000 }),
         dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
-      ])
+      ]).catch(async error => {
+        await inspection.capture('input-not-ready')
+        throw new Error(`${error.message}; 宿主输入状态：${await surface.innerText()}`)
+      })
       const previousEditor = await editor.isVisible() ? await editor.elementHandle() : null
       const importTarget = previousEditor ? editor : dropTarget
       await importTarget.evaluate(async (element) => {
@@ -40,6 +44,7 @@ function createGpuAnnotationScenes(context) {
           dataTransfer: transfer }))
       })
       if (previousEditor) {
+        await page.getByRole('button', { name: /^(不保存|Don't save)$/i }).click()
         await page.waitForFunction((element) => !element.isConnected, previousEditor, { timeout: 20000 })
       }
       await editor.waitFor({ state: 'visible', timeout: 20000 })

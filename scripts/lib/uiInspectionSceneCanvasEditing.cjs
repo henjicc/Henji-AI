@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检场景使用 CommonJS 工厂。 */
 const {
   selectOverlappingReactFlowNode,
   verifyHiddenBackgroundRasterStack,
@@ -480,6 +481,7 @@ function attachUiInspectionCanvasEditing(context) {
       settlePage,
       inspection,
     })
+    // eslint-disable-next-line no-console -- 正式巡检输出提交延迟证据，不进入产品界面。
     console.log(`[image-editor-gpu-baseline] ${JSON.stringify({
       fixture: 'synthetic-complex-layer-graph',
       path: 'webgpu-surface-transient-transform',
@@ -812,6 +814,7 @@ function attachUiInspectionCanvasEditing(context) {
         layerPackages: layerPaths.length,
         layerFilesPresent,
         missing: exported.missingPaths.length,
+        missingPaths: exported.missingPaths,
       }
     }, { targetProjectId: projectId, targetNodeId: fixture.nodeId })
     if (!packageRoundTrip.importedId

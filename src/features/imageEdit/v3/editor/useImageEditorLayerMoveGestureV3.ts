@@ -227,18 +227,6 @@ export function useImageEditorLayerMoveGestureV3(
   }, [activeTool, release])
   useEffect(() => () => release(false), [release])
   useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && gestureRef.current) {
-        // 先于外层弹窗处理 Esc：取消手势不能顺带关闭编辑器。
-        event.preventDefault(); event.stopPropagation(); release(false)
-      }
-    }
-    const onBlur = (): void => release(false)
-    window.addEventListener('keydown', onKey, true)
-    window.addEventListener('blur', onBlur)
-    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('blur', onBlur) }
-  }, [release])
-  useEffect(() => {
     const gesture = gestureRef.current
     if (!gesture) return
     const location = findImageEditLayerLocationV3(controller.document.layers, gesture.layerId)

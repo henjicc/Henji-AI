@@ -48,7 +48,7 @@ export async function createAttachedImageEditPersistenceFixture() {
     saveAndMaterialize: materialize, rollbackMaterialization: unavailable, finalizeMaterialization: async () => true,
     forkDocument: unavailable, markReleaseCandidate: unavailable, materializeExportTarget: unavailable, releaseExportRaster: unavailable }
   const saveProjection: typeof saveMultiLayerDocumentAfterEditing = (input, runtime) => createMultiLayerDocumentNodeApplicationService({ documentPort,
-      canvasPort: { ...createMultiLayerDocumentProjectionCanvasPort({ runtime, releaseReplacedLocalImages: async () => undefined }),
+      canvasPort: { ...createMultiLayerDocumentProjectionCanvasPort({ runtime }),
         createExportedImageNode: unavailable } }).saveMaterializedProjection(input)
   const confirmation = createMultiLayerDocumentPersistenceConfirmation({ projectId, nodeId: 'attached-node', documentRef: initialSession.documentRef }, { saveProjection })
   const queue = new ImageEditPersistenceV3Queue({ repository, initialReference: initial, initialHistory: bus.getPersistenceSnapshot().history })

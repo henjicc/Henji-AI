@@ -82,6 +82,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
 
   return (
     <ImageEditorV3
+      layoutWorkspaceId="toolbox"
       sourceImageUrl={host.sourceImageUrl}
       document={host.bootstrap.document}
       historySnapshot={host.bootstrap.history}

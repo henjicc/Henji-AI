@@ -182,12 +182,6 @@
       "reason": "节点标题改名输入框的最小宽度：短标题时仍能看到光标与 4 个字"
     },
     {
-      "file": "src/features/imageEdit/v3/editor/ImageEditorFloatingPanelsV3.tsx",
-      "category": "arbitraryValue",
-      "values": ["w-[25rem]"],
-      "reason": "图片编辑浮动面板：除图层面板（w-60）外默认 400 宽，拖动停靠时的预览框与面板同宽"
-    },
-    {
       "file": "src/features/logs/components/RequestChainView.tsx",
       "category": "arbitraryValue",
       "values": ["-left-[5px]"],

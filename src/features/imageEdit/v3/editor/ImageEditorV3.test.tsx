@@ -7,6 +7,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
+import { UiButton } from '@/components/ui'
+import { builtInToolRegistration } from '../toolFramework/builtInRegistry'
 import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
@@ -85,6 +87,22 @@ function ControlledEditor({
 }
 
 describe('ImageEditorV3 professional shell', () => {
+  it('工具登记失败仍保留宿主关闭入口且不展示工具', async () => {
+    const close = vi.fn()
+    const previous = builtInToolRegistration.failed
+    builtInToolRegistration.failed = true
+    try {
+      const view = render(<ImageEditorV3 sourceImageUrl="preview.png" document={createDocument([])}
+        profileId="full" onDocumentChange={() => undefined}
+        toolbarLeading={<UiButton onClick={close}>关闭编辑器</UiButton>} />)
+      expect(screen.getByText('图片编辑工具无法加载，请关闭后重新打开编辑器。')).toBeTruthy()
+      expect(view.container.querySelector('[data-tool-id]')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: /^关闭编辑器$/ }))
+      expect(close).toHaveBeenCalledOnce()
+    } finally {
+      builtInToolRegistration.failed = previous
+    }
+  })
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
@@ -571,37 +589,23 @@ describe('ImageEditorV3 professional shell', () => {
     expect(controls.getByRole('slider', { name: '核心白热' })).toBeTruthy()
   })
 
-  it('停靠区支持拖动宽度边缘和上下分隔线调整尺寸', async () => {
+  it('面板关闭后仍可从同一命令带重开并恢复默认布局', async () => {
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
-    const workspace = rendered.container.querySelector<HTMLElement>('[data-editor-panel-workspace]')
-    const dock = rendered.container.querySelector<HTMLElement>('[data-editor-panel-dock="right"]')
-    if (!workspace || !dock) throw new Error('停靠区未挂载')
-    vi.spyOn(workspace, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800,
-      toJSON: () => ({}),
-    })
-    vi.spyOn(dock, 'getBoundingClientRect').mockReturnValue({
-      x: 800, y: 0, left: 800, top: 0, right: 1200, bottom: 800, width: 400, height: 800,
-      toJSON: () => ({}),
-    })
-    const widthHandle = screen.getByRole('separator', { name: '调整停靠面板宽度' })
-    fireEvent.pointerDown(widthHandle, {
-      pointerId: 21, button: 0, isPrimary: true, clientX: 800, clientY: 200,
-    })
-    fireEvent.pointerMove(window, { pointerId: 21, clientX: 700, clientY: 200 })
-    fireEvent.pointerUp(window, { pointerId: 21, clientX: 700, clientY: 200 })
-    expect(dock.style.width).toBe('500px')
-
-    const splitHandle = screen.getByRole('separator', { name: '调整上下停靠面板高度' })
-    fireEvent.pointerDown(splitHandle, {
-      pointerId: 22, button: 0, isPrimary: true, clientX: 900, clientY: 400,
-    })
-    fireEvent.pointerMove(window, { pointerId: 22, clientX: 900, clientY: 560 })
-    fireEvent.pointerUp(window, { pointerId: 22, clientX: 900, clientY: 560 })
-    const firstSection = dock.querySelector<HTMLElement>('[data-editor-panel-id="layers"]')?.parentElement
-    expect(firstSection?.style.flex).toContain('70%')
+    const preview = rendered.container.querySelector('[data-preview-surface]')
+    fireEvent.click(await screen.findByRole('button', { name: '关闭图层面板' }))
+    fireEvent.click(screen.getByRole('button', { name: '关闭属性面板' }))
+    expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: '面板' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '显示图层面板' }))
+    await screen.findByRole('button', { name: '关闭图层面板' })
+    fireEvent.click(screen.getByRole('button', { name: '面板' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
+    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(2))
+    expect(rendered.container.querySelector('[data-preview-surface]')).toBe(preview)
+    expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: '撤销' }).hasAttribute('disabled')).toBe(true)
   })
 
 })

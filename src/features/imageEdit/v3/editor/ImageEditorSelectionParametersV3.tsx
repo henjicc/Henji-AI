@@ -29,7 +29,7 @@ export function ImageEditorSelectionParametersV3({ bus, controller }: { bus: Ima
     } catch (cause) { if (!task.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { abort.current = null; setBusy(false) }
   }
-  return <div className="flex min-w-max items-center gap-3" data-selection-parameters>
+  return <div className="flex min-w-max shrink-0 items-center gap-3 whitespace-nowrap" data-selection-parameters>
     {session?.activeTool.startsWith('select-subject') ? <ImageEditorSubjectParametersV3 /> : null}
     <div role="group" aria-label={t('imageEditor.v3.selection.combineMode')} className={UI_SEGMENTED_TRACK_CLASS}>
       {(['replace', 'add', 'subtract', 'intersect'] as const).map(mode => <UiOptionButton key={mode} variant="segment" active={session?.toolSettings.selectionCombineMode === mode}

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { persistImageSourceTracked } from '@/commands/image';
 import { createLogger } from '@/core/logging';
 import { cloneMaskDocument, hasPaintedMask, type MaskEditorDocument } from '@/features/maskEditor/document';
-import { exportMaskDocumentToPng } from '@/features/maskEditor/maskExport';
+import { exportMaskDocumentToPngAsync } from '@/features/maskEditor/maskExport';
 import { getPlatform } from '@/platform/runtime';
 
 const logger = createLogger('features.canvas.local-redraw-workbench');
@@ -56,6 +56,7 @@ export function useLocalRedrawMaskAutosave({
   const savingRef = useRef(false);
   const latestRevisionRef = useRef(0);
   const pendingRef = useRef<AutosaveJob | null>(null);
+  const exportControllerRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onPersistRef = useRef(onPersist);
   const drainRef = useRef<() => Promise<void>>(async () => undefined);
@@ -90,7 +91,16 @@ export function useLocalRedrawMaskAutosave({
         try {
           let maskSource: string | null = null;
           if (hasPaintedMask(job.document)) {
-            const persisted = await persistImageSourceTracked(exportMaskDocumentToPng(job.document));
+            const exportController = new AbortController();
+            exportControllerRef.current = exportController;
+            let dataUrl: string;
+            try {
+              dataUrl = await exportMaskDocumentToPngAsync(job.document, exportController.signal);
+            } finally {
+              if (exportControllerRef.current === exportController) exportControllerRef.current = null;
+            }
+            if (!mountedRef.current || job.revision !== latestRevisionRef.current) continue;
+            const persisted = await persistImageSourceTracked(dataUrl);
             maskSource = persisted.imagePath;
             createdFilePaths = persisted.createdFilePaths;
           }
@@ -114,6 +124,7 @@ export function useLocalRedrawMaskAutosave({
           });
         } catch (error) {
           await releaseAutosavePaths(createdFilePaths, job.revision, 'failed');
+          if (!mountedRef.current || job.revision !== latestRevisionRef.current) continue;
           const message = error instanceof Error ? error.message : String(error);
           if (mountedRef.current && job.revision === latestRevisionRef.current) {
             pendingRef.current = job;
@@ -144,6 +155,7 @@ export function useLocalRedrawMaskAutosave({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      exportControllerRef.current?.abort();
       clearTimer();
       pendingRef.current = null;
     };
@@ -158,6 +170,7 @@ export function useLocalRedrawMaskAutosave({
     if (observedDocumentRef.current === document) return;
     observedDocumentRef.current = document;
     latestRevisionRef.current += 1;
+    exportControllerRef.current?.abort();
     pendingRef.current = {
       revision: latestRevisionRef.current,
       document: cloneMaskDocument(document),
