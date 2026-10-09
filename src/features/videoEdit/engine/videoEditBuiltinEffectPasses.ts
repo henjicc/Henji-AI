@@ -3,6 +3,7 @@ import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositin
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 import { planColorGrade } from '@/core/imaging/adjustments/plan'
+import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
 import { planGlowPro } from './glowPro'
 import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 
@@ -27,9 +28,6 @@ export interface VideoEditBuiltinPass {
 export interface VideoEditBuiltinPlan { width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[] }
 type Vec4 = readonly [number, number, number, number]
 const ZERO: Vec4 = [0, 0, 0, 0]
-/** 一维高斯工序里允许的最大 sigma（输入像素）；更大时先降采样。 */
-const MAX_DIRECT_SIGMA = 3
-const MAX_LEVELS = 7
 const LINE_TAPS = 16
 
 class Planner {
@@ -52,28 +50,15 @@ class Planner {
    * 降采样与放大本身带来的模糊（方差）从剩余 sigma 里扣掉，整体仍是要求的 sigma。只模糊一个方向时另一方向不降采样。
    */
   gaussian(source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, sigmaX: number, sigmaY: number, repeatEdges: boolean): void {
-    let current = source; let [width, height] = this.size(source)
-    let factorX = 1; let factorY = 1; let varianceX = 0; let varianceY = 0
-    for (let level = 0; level < MAX_LEVELS; level++) {
-      const halveX = sigmaX / factorX > MAX_DIRECT_SIGMA && width >= 16
-      const halveY = sigmaY / factorY > MAX_DIRECT_SIGMA && height >= 16
-      if (!halveX && !halveY) break
-      if (halveX) { varianceX += factorX ** 2 / 4; factorX *= 2; width = Math.ceil(width / 2) }
-      if (halveY) { varianceY += factorY ** 2 / 4; factorY *= 2; height = Math.ceil(height / 2) }
-      const next = this.alloc(width, height); this.pass('copy', current, next); current = next
-    }
-    const residual = (sigma: number, factor: number, variance: number): number => Math.sqrt(Math.max(0, sigma ** 2 - variance - (factor > 1 ? factor ** 2 / 6 : 0))) / factor
-    const steps: Array<{ axis: 'x' | 'y'; sigma: number }> = [{ axis: 'x' as const, sigma: residual(sigmaX, factorX, varianceX) }, { axis: 'y' as const, sigma: residual(sigmaY, factorY, varianceY) }].filter(step => step.sigma >= 0.3)
-    const upsample = factorX > 1 || factorY > 1
-    if (!steps.length && !upsample) { this.pass('copy', current, target); return }
-    steps.forEach((step, index) => {
-      const last = index === steps.length - 1 && !upsample
-      const next = last ? target : this.alloc(width, height)
-      const radius = Math.min(32, Math.ceil(step.sigma * 3))
-      this.pass('blur', current, next, [step.axis === 'x' ? 1 / width : 0, step.axis === 'y' ? 1 / height : 0, step.sigma, radius], [repeatEdges ? 1 : 0, 0, 0, 0])
+    const [width, height] = this.size(source); const [targetWidth, targetHeight] = this.size(target)
+    const { passes } = planGaussian({ width, height, sigmaX, sigmaY, repeatEdges, targetSize: { width: targetWidth, height: targetHeight } })
+    let current = source
+    passes.forEach((step, index) => {
+      const next = index === passes.length - 1 ? target : this.alloc(step.width, step.height)
+      if (step.kind === 'blur') this.pass('blur', current, next, [step.axis === 'x' ? 1 / step.sourceWidth : 0, step.axis === 'y' ? 1 / step.sourceHeight : 0, step.sigma, step.radius], [step.repeatEdges ? 1 : 0, 0, 0, 0])
+      else this.pass('copy', current, next)
       current = next
     })
-    if (upsample) this.pass('copy', current, target)
   }
   /** 两道等权取样组成的平滑直线模糊：第二道填满第一道取样之间的空隙（等效 16×16 次取样）。 */
   line(source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, dx: number, dy: number): void {

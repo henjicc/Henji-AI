@@ -1,13 +1,12 @@
 import { COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HSL_CORRECTION_KEYS, COLOR_GRADE_HUE_CURVES, COLOR_GRADE_WHEEL_REGIONS, colorGradeWhiteBalance } from './colorGrade'
 import { colorGradeCurveLut, colorGradeCurvePoints, parseColorGradeCurve } from './curves'
+import { MAX_GAUSSIAN_DIRECT_SIGMA as MAX_DIRECT_SIGMA, MAX_GAUSSIAN_LEVELS as MAX_LEVELS, planGaussian } from './gaussianPlan'
 export type AdjustmentPassEntry = 'copy' | 'blur' | 'unsharp' | 'color_grade_basic' | 'color_grade_creative' | 'color_grade_curve' | 'color_grade_hue_curve' | 'color_grade_wheel' | 'color_grade_vignette' | 'color_grade_lut' | 'color_grade_hsl_key' | 'color_grade_hsl_correct' | 'color_grade_linear' | 'color_grade_hsl_sharpen'
 export type AdjustmentTexture = 'input' | 'output' | number
 export interface AdjustmentPass { entry: AdjustmentPassEntry; source: AdjustmentTexture; target: AdjustmentTexture; original?: AdjustmentTexture; mask?: AdjustmentTexture; uniforms: Float32Array; lookup?: { kind: 'curve'; data: Float32Array } | { kind: 'cube'; ref: string } }
 export interface AdjustmentPlan { width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: AdjustmentPass[] }
 type Vec4 = readonly [number, number, number, number]
 const ZERO: Vec4 = [0, 0, 0, 0]
-const MAX_DIRECT_SIGMA = 3
-const MAX_LEVELS = 7
 class Planner {
   readonly scratch: Array<{ width: number; height: number }> = []
   readonly passes: AdjustmentPass[] = []
@@ -28,28 +27,15 @@ class Planner {
    * 降采样与放大本身带来的模糊（方差）从剩余 sigma 里扣掉，整体仍是要求的 sigma。只模糊一个方向时另一方向不降采样。
    */
   gaussian(source: AdjustmentTexture, target: AdjustmentTexture, sigmaX: number, sigmaY: number, repeatEdges: boolean): void {
-    let current = source; let [width, height] = this.size(source)
-    let factorX = 1; let factorY = 1; let varianceX = 0; let varianceY = 0
-    for (let level = 0; level < MAX_LEVELS; level++) {
-      const halveX = sigmaX / factorX > MAX_DIRECT_SIGMA && width >= 16
-      const halveY = sigmaY / factorY > MAX_DIRECT_SIGMA && height >= 16
-      if (!halveX && !halveY) break
-      if (halveX) { varianceX += factorX ** 2 / 4; factorX *= 2; width = Math.ceil(width / 2) }
-      if (halveY) { varianceY += factorY ** 2 / 4; factorY *= 2; height = Math.ceil(height / 2) }
-      const next = this.alloc(width, height); this.pass('copy', current, next); current = next
-    }
-    const residual = (sigma: number, factor: number, variance: number): number => Math.sqrt(Math.max(0, sigma ** 2 - variance - (factor > 1 ? factor ** 2 / 6 : 0))) / factor
-    const steps: Array<{ axis: 'x' | 'y'; sigma: number }> = [{ axis: 'x' as const, sigma: residual(sigmaX, factorX, varianceX) }, { axis: 'y' as const, sigma: residual(sigmaY, factorY, varianceY) }].filter(step => step.sigma >= 0.3)
-    const upsample = factorX > 1 || factorY > 1
-    if (!steps.length && !upsample) { this.pass('copy', current, target); return }
-    steps.forEach((step, index) => {
-      const last = index === steps.length - 1 && !upsample
-      const next = last ? target : this.alloc(width, height)
-      const radius = Math.min(32, Math.ceil(step.sigma * 3))
-      this.pass('blur', current, next, [step.axis === 'x' ? 1 / width : 0, step.axis === 'y' ? 1 / height : 0, step.sigma, radius], [repeatEdges ? 1 : 0, 0, 0, 0])
+    const [width, height] = this.size(source); const [targetWidth, targetHeight] = this.size(target)
+    const { passes } = planGaussian({ width, height, sigmaX, sigmaY, repeatEdges, targetSize: { width: targetWidth, height: targetHeight } })
+    let current = source
+    passes.forEach((step, index) => {
+      const next = index === passes.length - 1 ? target : this.alloc(step.width, step.height)
+      if (step.kind === 'blur') this.pass('blur', current, next, [step.axis === 'x' ? 1 / step.sourceWidth : 0, step.axis === 'y' ? 1 / step.sourceHeight : 0, step.sigma, step.radius], [step.repeatEdges ? 1 : 0, 0, 0, 0])
+      else this.pass('copy', current, next)
       current = next
     })
-    if (upsample) this.pass('copy', current, target)
   }
 }
 
