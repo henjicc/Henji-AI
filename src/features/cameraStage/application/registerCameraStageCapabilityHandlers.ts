@@ -1,4 +1,4 @@
-import { configureCameraStageControlDependencies } from './applicationDomain'
+import { configureCameraStageControlDependencies } from './cameraStageControlDependencies'
 import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
 
 import { CAMERA_STAGE_RENDER_CAPABILITY_ID, CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, WAIT_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageRenderApplicationCapabilities'

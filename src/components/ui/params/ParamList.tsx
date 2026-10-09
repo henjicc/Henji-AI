@@ -1,6 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
-import { UiButton, UiGroup, UiIconButton, UiTooltipText } from '@/components/ui'
+import { UiButton, UiIconButton } from '../primitives'
+import { UiGroup, UiTooltipText } from '../layout'
 import type { CodeParameterValue } from '@/core/imaging/parameterTypes'
 import type { ParamFieldSpec } from './fieldSpec'
 

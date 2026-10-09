@@ -1,6 +1,9 @@
+import type { ApplicationControlExecutionEngine } from '@/core/application-control'
 import type { ApplicationCallerGrant } from '@/core/application-control/callerContext'
 
 export interface CapabilityExecutionContext {
+  /** 装配层注入同一事务引擎，领域适配器不回引组合根。 */
+  getExecutionEngine?: () => ApplicationControlExecutionEngine
   /** 可信宿主注入；工具输入不能覆盖。缺省仅供保留的旧助手适配器。 */
   callerGrant?: ApplicationCallerGrant
   signal: AbortSignal

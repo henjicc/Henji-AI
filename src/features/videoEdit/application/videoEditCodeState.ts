@@ -1,4 +1,4 @@
-import './videoEditCodeStorage'
+import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
 import { codeVersionContentKey, documentCodeSourceResolver, verifyCodeSourceReferences, loadCodeSourceReferences, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { VideoEditCodeCompiler } from '../engine/videoEditCodeCompiler'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
@@ -14,6 +14,7 @@ export type VideoEditCodeMetadata = Map<string, Checked>
 const states = new WeakMap<object, VideoEditCodeMetadata>()
 let compiler: VideoEditCodeCompiler | undefined
 export function compileVideoEditCode(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
+  initializeVideoEditCodeSourceRuntime()
   compiler ??= new VideoEditCodeCompiler()
   return compiler.compile(source, signal)
 }
@@ -45,6 +46,7 @@ export function readVideoEditCodeProgram(owner: object, document: VideoEditDocum
   return states.get(owner)!.get(instance.versionId)!.program
 }
 export async function ensureVideoEditCodeDocumentMetadata(owner: object, document: VideoEditDocument, signal?: AbortSignal): Promise<void> {
+  initializeVideoEditCodeSourceRuntime()
   const references = videoEditCodeReferences(document)
   for (const instance of references) if (!states.get(owner)?.has(instance.versionId)) {
     const manifest = document.codeMaterials!.find(definition => definition.id === instance.definitionId)!.versions.find(version => version.id === instance.versionId)!
@@ -71,6 +73,7 @@ function put(entries: VideoEditCodeMetadata, definitionId: string, version: Code
  * checked when explicitly requested; it is never executed or trusted as IR. */
 export async function prepareVideoEditCodeMetadata(document: VideoEditDocument): Promise<VideoEditCodeMetadata> {
   const metadata: VideoEditCodeMetadata = new Map()
+  initializeVideoEditCodeSourceRuntime()
   const references = videoEditCodeReferences(document)
   for (const instance of references) if (!metadata.has(instance.versionId)) {
     const manifest = document.codeMaterials!.find(definition => definition.id === instance.definitionId)!.versions.find(version => version.id === instance.versionId)!
@@ -94,6 +97,7 @@ export function readVideoEditCodeParameterMetadata(owner: object, document: Vide
 export async function ensureVideoEditCodeParameterMetadata(owner: object, document: VideoEditDocument, definitionId: string, versionId: string): Promise<void> {
   const manifest = document.codeMaterials?.find(definition => definition.id === definitionId)?.versions.find(version => version.id === versionId)
   if (!manifest) throw new Error('固定源码版本不存在。')
+  initializeVideoEditCodeSourceRuntime()
   await loadCodeSourceReferences(manifest)
   const version = codeMaterialSource(document, { definitionId, versionId, parameters: {} })
   const known = states.get(owner)?.get(versionId)

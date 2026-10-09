@@ -1,5 +1,5 @@
 import { getPlatform } from '@/platform/runtime'
-import { installCodeSourceReader, rememberCodeSource, loadCodeSourceReferences, addressCodeMaterialFiles, resolveCodeMaterialFiles, type CodeMaterialFiles, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
+import { rememberCodeSource, loadCodeSourceReferences, addressCodeMaterialFiles, resolveCodeMaterialFiles, type CodeMaterialFiles, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { pinCodeComponentImports, expandPinnedCodeComponents, codeComponentExportNames, codeComponentNameSchema, componentSourceMetadata, rewriteCodeComponentImports, type CodeComponentVersion, type CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { assetCodeSourceResolver, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
@@ -8,7 +8,7 @@ import { compileVideoEditCode } from './videoEditCodeState'
 import { listVideoEditInstances, requireVideoEditInstance, publishVideoEdit } from './videoEditService'
 import { videoEditDocumentSchema } from '@/core/videoEdit/document'
 
-installCodeSourceReader(file => getPlatform().documents.readCodeFile(file))
+import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
 export async function projectCodeComponents(projectId: string): Promise<CodeComponent[]> {
   const owner = requireVideoEditInstance(projectId)
   const components = await getPlatform().documents.listCodeComponents({ id: projectId, path: owner.session.documentMeta.path })
@@ -23,6 +23,7 @@ export async function withdrawProjectCodeComponents(projectId: string, versions:
 export async function prepareCodeVersionPublication(projectId: string, files: CodeMaterialFiles, name?: string, pinnedImports?: CodeComponentPin[]): Promise<CodeVersionPublication> {
   const owner = requireVideoEditInstance(projectId); const target = { id: projectId, path: owner.session.documentMeta.path }
   const imports = pinnedImports ?? pinCodeComponentImports(files, await projectCodeComponents(projectId))
+  initializeVideoEditCodeSourceRuntime()
   await loadCodeSourceReferences({ files: [], imports })
   return { imports, name, async write(definitionId, materialName, contents, folder) {
     const result = await getPlatform().documents.writeCodeVersion({ target, definitionId, name: materialName, contents, ...(folder ? { folder } : {}) })
@@ -38,6 +39,7 @@ export async function publishProjectCodeComponent(projectId: string, input: { na
   const exports = codeComponentExportNames(source)
   const contents: CodeMaterialFiles = { entry: '__check.ts', files: { '__check.ts': 'export default {languageVersion:3,apiVersion:1,name:"组件检查",kind:"generator",mode:"static",width:16,height:16,durationSeconds:1,seed:1,parameters:{},render(ctx){return [];}}', 'component.ts': source } }
   const imports = pinCodeComponentImports(contents, await projectCodeComponents(projectId), name)
+  initializeVideoEditCodeSourceRuntime()
   await loadCodeSourceReferences({ files: [], imports }); signal?.throwIfAborted()
   await compileVideoEditCode(expandPinnedCodeComponents(contents, imports, documentCodeSourceResolver()), signal)
   signal?.throwIfAborted()

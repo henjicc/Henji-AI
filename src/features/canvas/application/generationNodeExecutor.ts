@@ -42,7 +42,7 @@ import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgr
 import { useCanvasStore } from '@/stores/canvasStore'
 import { withCanvasProjectRuntime } from './canvasProjectRuntime'
 import { createCanvasGenerationTaskRecord, canvasGenerationTaskControls } from './canvasGenerationTaskRecord'
-import { retainCanvasTaskExecutor } from './canvasExecutionService'
+import { retainCanvasTaskExecutor } from './canvasTaskExecutors'
 import type { CanvasTransactionRuntime } from './canvasPersistenceService'
 import type { CanvasNodeExecutionScheduler } from './canvasExecutionContracts'
 

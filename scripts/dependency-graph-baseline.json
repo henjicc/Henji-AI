@@ -3,31 +3,6 @@
   "cycles": [
     {
       "members": [
-        "src/components/ui/index.ts",
-        "src/components/ui/params/ParamField.tsx",
-        "src/components/ui/params/ParamList.tsx"
-      ],
-      "edges": [
-        {
-          "from": "src/components/ui/index.ts",
-          "to": "src/components/ui/params/ParamField.tsx"
-        },
-        {
-          "from": "src/components/ui/index.ts",
-          "to": "src/components/ui/params/ParamList.tsx"
-        },
-        {
-          "from": "src/components/ui/params/ParamField.tsx",
-          "to": "src/components/ui/index.ts"
-        },
-        {
-          "from": "src/components/ui/params/ParamList.tsx",
-          "to": "src/components/ui/index.ts"
-        }
-      ]
-    },
-    {
-      "members": [
         "src/core/persistence/formatMigrations.ts",
         "src/core/theme/themeMigration.ts"
       ],
@@ -64,199 +39,6 @@
         {
           "from": "src/core/videoEdit/textTranscript.ts",
           "to": "src/core/videoEdit/document.ts"
-        }
-      ]
-    },
-    {
-      "members": [
-        "src/features/application-control/applicationDomains.ts",
-        "src/features/application-control/capabilities/applicationControlRegistry.ts",
-        "src/features/cameraStage/application/applicationDomain.ts",
-        "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
-        "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts"
-      ],
-      "edges": [
-        {
-          "from": "src/features/application-control/applicationDomains.ts",
-          "to": "src/features/cameraStage/application/applicationDomain.ts"
-        },
-        {
-          "from": "src/features/application-control/capabilities/applicationControlRegistry.ts",
-          "to": "src/features/application-control/applicationDomains.ts"
-        },
-        {
-          "from": "src/features/cameraStage/application/applicationDomain.ts",
-          "to": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts"
-        },
-        {
-          "from": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
-          "to": "src/features/application-control/capabilities/applicationControlRegistry.ts"
-        },
-        {
-          "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
-          "to": "src/features/cameraStage/application/applicationDomain.ts"
-        },
-        {
-          "from": "src/features/cameraStage/application/registerCameraStageCapabilityHandlers.ts",
-          "to": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts"
-        }
-      ]
-    },
-    {
-      "members": [
-        "src/features/application-control/hostContext/hostContext.ts",
-        "src/features/videoEdit/application/videoEditAnnotations.ts",
-        "src/features/videoEdit/application/videoEditCodeElementEditing.ts"
-      ],
-      "edges": [
-        {
-          "from": "src/features/application-control/hostContext/hostContext.ts",
-          "to": "src/features/videoEdit/application/videoEditCodeElementEditing.ts"
-        },
-        {
-          "from": "src/features/videoEdit/application/videoEditAnnotations.ts",
-          "to": "src/features/application-control/hostContext/hostContext.ts"
-        },
-        {
-          "from": "src/features/videoEdit/application/videoEditCodeElementEditing.ts",
-          "to": "src/features/videoEdit/application/videoEditAnnotations.ts"
-        }
-      ]
-    },
-    {
-      "members": [
-        "src/features/assets/application/applicationDomain.ts",
-        "src/features/assets/application/registerAssetCapabilityHandlers.ts"
-      ],
-      "edges": [
-        {
-          "from": "src/features/assets/application/applicationDomain.ts",
-          "to": "src/features/assets/application/registerAssetCapabilityHandlers.ts"
-        },
-        {
-          "from": "src/features/assets/application/registerAssetCapabilityHandlers.ts",
-          "to": "src/features/assets/application/applicationDomain.ts"
-        }
-      ]
-    },
-    {
-      "members": [
-        "src/features/canvas/application/canvasApplicationService.ts",
-        "src/features/canvas/application/canvasBatchService.ts",
-        "src/features/canvas/application/canvasMutationService.ts",
-        "src/features/canvas/application/canvasNodeGenerationConfig.ts"
-      ],
-      "edges": [
-        {
-          "from": "src/features/canvas/application/canvasApplicationService.ts",
-          "to": "src/features/canvas/application/canvasBatchService.ts"
-        },
-        {
-          "from": "src/features/canvas/application/canvasBatchService.ts",
-          "to": "src/features/canvas/application/canvasApplicationService.ts"
-        },
-        {
-          "from": "src/features/canvas/application/canvasBatchService.ts",
-          "to": "src/features/canvas/application/canvasMutationService.ts"
-        },
-        {
-          "from": "src/features/canvas/application/canvasMutationService.ts",
-          "to": "src/features/canvas/application/canvasApplicationService.ts"
-        },
-        {
-          "from": "src/features/canvas/application/canvasMutationService.ts",
-          "to": "src/features/canvas/application/canvasNodeGenerationConfig.ts"
-        },
-        {
-          "from": "src/features/canvas/application/canvasNodeGenerationConfig.ts",
-          "to": "src/features/canvas/application/canvasApplicationService.ts"
-        }
-      ]
-    },
-    {
-      "members": [
-        "src/features/canvas/application/canvasDomainExecutors.ts",
-        "src/features/canvas/application/canvasExecutionService.ts",
-        "src/features/canvas/application/generationNodeExecutor.ts"
-      ],
-      "edges": [
-        {
-          "from": "src/features/canvas/application/canvasDomainExecutors.ts",
-          "to": "src/features/canvas/application/generationNodeExecutor.ts"
-        },
-        {
-          "from": "src/features/canvas/application/canvasExecutionService.ts",
-          "to": "src/features/canvas/application/canvasDomainExecutors.ts"
-        },
-        {
-          "from": "src/features/canvas/application/generationNodeExecutor.ts",
-          "to": "src/features/canvas/application/canvasExecutionService.ts"
-        }
-      ]
-    },
-    {
-      "members": [
-        "src/features/documents/documentOperations.ts",
-        "src/features/documents/documentSessionRegistry.ts"
-      ],
-      "edges": [
-        {
-          "from": "src/features/documents/documentOperations.ts",
-          "to": "src/features/documents/documentSessionRegistry.ts"
-        },
-        {
-          "from": "src/features/documents/documentSessionRegistry.ts",
-          "to": "src/features/documents/documentOperations.ts"
-        }
-      ]
-    },
-    {
-      "members": [
-        "src/features/videoEdit/application/videoEditCodeState.ts",
-        "src/features/videoEdit/application/videoEditCodeStorage.ts",
-        "src/features/videoEdit/application/videoEditFonts.ts",
-        "src/features/videoEdit/application/videoEditService.ts"
-      ],
-      "edges": [
-        {
-          "from": "src/features/videoEdit/application/videoEditCodeState.ts",
-          "to": "src/features/videoEdit/application/videoEditCodeStorage.ts"
-        },
-        {
-          "from": "src/features/videoEdit/application/videoEditCodeStorage.ts",
-          "to": "src/features/videoEdit/application/videoEditCodeState.ts"
-        },
-        {
-          "from": "src/features/videoEdit/application/videoEditCodeStorage.ts",
-          "to": "src/features/videoEdit/application/videoEditService.ts"
-        },
-        {
-          "from": "src/features/videoEdit/application/videoEditFonts.ts",
-          "to": "src/features/videoEdit/application/videoEditCodeState.ts"
-        },
-        {
-          "from": "src/features/videoEdit/application/videoEditService.ts",
-          "to": "src/features/videoEdit/application/videoEditCodeState.ts"
-        },
-        {
-          "from": "src/features/videoEdit/application/videoEditService.ts",
-          "to": "src/features/videoEdit/application/videoEditFonts.ts"
-        }
-      ]
-    },
-    {
-      "members": [
-        "src/features/videoEdit/application/videoEditMaskEditing.ts",
-        "src/features/videoEdit/application/videoEditTrackingEditing.ts"
-      ],
-      "edges": [
-        {
-          "from": "src/features/videoEdit/application/videoEditMaskEditing.ts",
-          "to": "src/features/videoEdit/application/videoEditTrackingEditing.ts"
-        },
-        {
-          "from": "src/features/videoEdit/application/videoEditTrackingEditing.ts",
-          "to": "src/features/videoEdit/application/videoEditMaskEditing.ts"
         }
       ]
     }
@@ -537,18 +319,18 @@
     },
     {
       "from": "src/features/application-control/hostContext/hostContext.ts",
-      "to": "src/features/videoEdit/application/videoEditCodeElementEditing.ts",
-      "kind": "static",
-      "specifier": "@/features/videoEdit/application/videoEditCodeElementEditing",
-      "line": 5,
-      "cell": "application-control → videoEdit"
-    },
-    {
-      "from": "src/features/application-control/hostContext/hostContext.ts",
       "to": "src/features/videoEdit/application/videoEditCodeElements.ts",
       "kind": "static",
       "specifier": "@/features/videoEdit/application/videoEditCodeElements",
       "line": 4,
+      "cell": "application-control → videoEdit"
+    },
+    {
+      "from": "src/features/application-control/hostContext/hostContext.ts",
+      "to": "src/features/videoEdit/application/videoEditCodeElementSummary.ts",
+      "kind": "static",
+      "specifier": "@/features/videoEdit/application/videoEditCodeElementSummary",
+      "line": 5,
       "cell": "application-control → videoEdit"
     },
     {
@@ -897,18 +679,10 @@
     },
     {
       "from": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
-      "to": "src/features/application-control/capabilities/applicationControlRegistry.ts",
-      "kind": "static",
-      "specifier": "@/features/application-control/capabilities/applicationControlRegistry",
-      "line": 6,
-      "cell": "cameraStage → application-control"
-    },
-    {
-      "from": "src/features/cameraStage/application/cameraStageCapabilityAdapter.ts",
       "to": "src/features/application-control/capabilities/handlerTypes.ts",
       "kind": "type",
       "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 8,
+      "line": 7,
       "cell": "cameraStage → application-control"
     },
     {
@@ -3076,7 +2850,7 @@
       "to": "src/features/assistant/store/assistantUiStore.ts",
       "kind": "static",
       "specifier": "@/features/assistant/store/assistantUiStore",
-      "line": 8,
+      "line": 7,
       "cell": "videoEdit → assistant"
     },
     {
@@ -3708,7 +3482,7 @@
     "audioEdit → canvas": 1,
     "audioEdit → navigation": 1,
     "audioEdit → videoEdit": 2,
-    "cameraStage → application-control": 8,
+    "cameraStage → application-control": 7,
     "cameraStage → documents": 15,
     "cameraStage → canvas": 3,
     "cameraStage → navigation": 1,
@@ -3769,7 +3543,7 @@
   },
   "firstScreen": {
     "entry": "src/main.tsx",
-    "moduleCount": 983,
+    "moduleCount": 979,
     "heavyModules": []
   },
   "dynamicBackEdges": [

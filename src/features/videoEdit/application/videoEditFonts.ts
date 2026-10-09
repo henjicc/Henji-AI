@@ -5,10 +5,12 @@ import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDo
 import { codeMaterialSource, codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { fontLibrarySnapshot, loadFontLibrary, prepareFontPayloads, validateFontName, type FontPayload } from '@/platform/fonts'
 import { compileVideoEditCode } from './videoEditCodeState'
+import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
 import { createLogger } from '@/core/logging'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 const logger = createLogger('features.videoEdit.fonts')
 export async function videoEditFontUses(document: VideoEditDocument | VideoEditComposition): Promise<VideoEditFontUse[]> {
+  initializeVideoEditCodeSourceRuntime()
   const metadata = new Map<string, Awaited<ReturnType<typeof compileVideoEditCode>>>()
   const read: CodeMaterialMetadataReader = instance => metadata.get(instance.versionId)!
   // Collect only font parameter declarations; compile through the existing cached compiler worker.

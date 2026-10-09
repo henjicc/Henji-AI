@@ -1,12 +1,12 @@
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { createCameraStageReflectionRegistrations } from './cameraStageReflection'
-import { CAMERA_STAGE_MUTATION_ENTITY_TYPES, CameraStageMutationExecutor, CameraStageMotionOperationExecutor, type CameraStageControlExecutorDependencies } from './cameraStageControlExecutors'
+import { CAMERA_STAGE_MUTATION_ENTITY_TYPES, CameraStageMutationExecutor, CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'
 import { CameraStagePlacementOperationExecutor } from './cameraStagePlacementExecutor'
 import { CameraStageStateKeyframeCollectionExecutor } from './cameraStageStateKeyframeCollectionExecutor'
 import { registerCameraStageCapabilityHandlers } from './registerCameraStageCapabilityHandlers'
 
-let dependencies: CameraStageControlExecutorDependencies = { readRevision: () => 0, bumpRevision: () => undefined }
-export function configureCameraStageControlDependencies(value: CameraStageControlExecutorDependencies): void { dependencies = value }
+import { dependencies } from './cameraStageControlDependencies'
+export { configureCameraStageControlDependencies } from './cameraStageControlDependencies'
 
 export const cameraStageApplicationDomain: ApplicationDomainModule = {
   id: 'cameraStage',

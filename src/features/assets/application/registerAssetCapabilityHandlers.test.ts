@@ -17,7 +17,7 @@ vi.mock('@/features/application-control/hostContext/hostContext', () => ({
   getHostScopeRevisions: () => ({ assets: 7 }),
   notifyHostScopeChanged: mocks.notifyHostScopeChanged,
 }))
-vi.mock('@/features/assets/application/applicationDomain', () => ({
+vi.mock('@/features/assets/application/assetControlDependencies', () => ({
   configureAssetMutationDependencies: (dependencies: typeof mocks.configuredDependencies) => {
     mocks.configuredDependencies = dependencies
   },

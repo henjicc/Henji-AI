@@ -1,3 +1,4 @@
+import { cameraStageMoveSchema } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 import { z } from 'zod'
 
 import type {
@@ -290,12 +291,7 @@ const vec3Schema = z.object({ x: z.number(), y: z.number(), z: z.number() }).str
 const motionInputSchema = z.object({
   projectId: z.string().min(1),
   cameraId: z.string().min(1),
-  move: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('orbit'), degrees: z.number().min(1).max(1440), direction: z.enum(['cw', 'ccw']) }).strict(),
-    z.object({ kind: z.enum(['dollyIn', 'dollyOut']), distanceRatio: z.number().min(0.05).max(20) }).strict(),
-    z.object({ kind: z.literal('truck'), offset: z.number().min(-10_000).max(10_000) }).strict(),
-    z.object({ kind: z.literal('crane'), height: z.number().min(-10_000).max(10_000) }).strict(),
-  ]),
+  move: cameraStageMoveSchema,
   targetObjectId: z.string().min(1).optional(),
   targetPoint: vec3Schema.optional(),
   startStateKeyframeId: z.string().min(1).optional(),

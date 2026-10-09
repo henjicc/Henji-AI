@@ -1,5 +1,4 @@
 import type { VideoEditCompositeTarget } from './videoEditCompositing'
-import { setVideoEditTrackingEditing } from './videoEditTrackingEditing'
 
 /*
  * 节目监视器上正在编辑哪个效果的遮罩（任务 4.10，视图状态，不进剪辑文件与撤销）：
@@ -16,9 +15,6 @@ export interface VideoEditMaskEditingTarget extends VideoEditCompositeTarget {
   pen?: boolean
 }
 
-let current: VideoEditMaskEditingTarget | null = null
-let revision = 0
-const listeners = new Set<() => void>()
 let lastUpdate: { sequenceId: string; revision: number; at: number } | undefined
 /** 性能诊断时间戳，不属于产品状态；一次只保留最近的遮罩更新。 */
 export function recordVideoEditMaskUpdate(sequenceId: string, revision: number, at = performance.now()): void { lastUpdate = { sequenceId, revision, at } }
@@ -28,12 +24,4 @@ export function videoEditMaskUpdateTime(sequenceId: string, revision: number): n
   return at
 }
 
-export function getVideoEditMaskEditing(): VideoEditMaskEditingTarget | null { return current }
-export function videoEditMaskEditingRevision(): number { return revision }
-export function subscribeVideoEditMaskEditing(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
-export function setVideoEditMaskEditing(target: VideoEditMaskEditingTarget | null): void {
-  if (target) setVideoEditTrackingEditing(null)
-  if (JSON.stringify(target) === JSON.stringify(current)) return
-  current = target; revision++
-  for (const listener of listeners) listener()
-}
+export { getVideoEditMaskEditing, videoEditMaskEditingRevision, subscribeVideoEditMaskEditing, setVideoEditMaskEditing } from './videoEditMonitorEditing'

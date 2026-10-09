@@ -7,7 +7,7 @@ import { maintainMultiLayerDocumentReleaseCandidates } from './multiLayerDocumen
 import { createLogger } from '@/core/logging'
 
 import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
-import type { HostErrorCode } from '@/core/application-control/hostContracts'
+import { CanvasApplicationError } from './canvasApplicationError'
 import {
   CANVAS_NODE_TYPES,
   DEFAULT_NODE_WIDTH,
@@ -30,7 +30,7 @@ import {
   type RowMediaKind,
 } from '../domain/socketTypes'
 import { validateParamConnection } from './graphValueResolver'
-import { undoCanvasBatch } from './canvasBatchService'
+import { undoCanvasBatch } from './canvasBatchUndo'
 import {
   getAuthoritativeIncomingEdge,
   wouldCreateCanvasCycle,
@@ -49,17 +49,7 @@ interface UndoRecord extends CanvasUndoPersistenceState {
   historyDepth: number
 }
 
-export class CanvasApplicationError extends Error {
-  constructor(
-    readonly code: HostErrorCode,
-    message: string,
-    readonly recoverable = true,
-    readonly details?: Record<string, unknown>
-  ) {
-    super(message)
-    this.name = 'CanvasApplicationError'
-  }
-}
+export { CanvasApplicationError } from './canvasApplicationError'
 
 type CanvasNodeFocusHandler = (nodeId: string) => Promise<void> | void
 

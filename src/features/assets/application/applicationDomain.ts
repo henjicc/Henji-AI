@@ -1,12 +1,12 @@
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { createAssetReflectionRegistrations } from './assetReflection'
-import { AssetMutationExecutor, type AssetMutationDependencies } from './assetMutationExecutor'
+import { AssetMutationExecutor } from './assetMutationExecutor'
 import { AssetLibraryMutationExecutor } from './assetLibraryMutationExecutor'
 import { AssetLibraryCollectionExecutor } from './assetLibraryCollectionExecutor'
 import { registerAssetCapabilityHandlers } from './registerAssetCapabilityHandlers'
 
-let dependencies: AssetMutationDependencies = { readRevision: () => 0, bumpRevision: () => undefined }
-export function configureAssetMutationDependencies(value: AssetMutationDependencies): void { dependencies = value }
+import { dependencies } from './assetControlDependencies'
+export { configureAssetMutationDependencies } from './assetControlDependencies'
 
 export const assetsApplicationDomain: ApplicationDomainModule = {
   id: 'assets',

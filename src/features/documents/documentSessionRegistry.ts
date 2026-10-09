@@ -14,7 +14,7 @@ import type {
 import { createLogger, type Logger } from '@/core/logging/logger'
 
 import { isDocumentServiceError, toError } from './documentErrors'
-import { getDocumentOperations } from './documentOperations'
+import { markSessionDocumentOpened } from './documentOperationChanges'
 import { resolveDocumentPersistence } from './documentPersistence'
 import { dialogDocumentSessionPrompter } from './documentPromptStore'
 import { DEFAULT_DOCUMENT_SESSION_TIMING, DocumentSession, type DocumentSessionTiming } from './documentSession'
@@ -76,7 +76,7 @@ const defaultCommands: DocumentSessionCommands = {
   trashProject: documentCommands.trashProject,
   listProjects: documentCommands.listProjects,
   // 经通用文档操作服务：记完通知项目页重读（后台从助手等入口打开时列表也即时更新）
-  markDocumentOpened: (docId) => getDocumentOperations().markDocumentOpened(docId),
+  markDocumentOpened: markSessionDocumentOpened,
 }
 
 /** 路径所在的文件夹（Windows 与 POSIX 分隔符都认）。 */

@@ -22,25 +22,15 @@ interface CanvasBatchPlan {
   committed: boolean
 }
 
-interface CanvasBatchUndo extends CanvasUndoPersistenceState {
-  undoRef: string
-  projectId: string
-  beforeNodes: CanvasNode[]
-  beforeEdges: CanvasEdge[]
-  beforeHistory: CanvasHistoryState
-  beforeSelectedNodeId: string | null
-  afterNodes: CanvasNode[]
-  afterEdges: CanvasEdge[]
-}
-
 // canvasStore 的节点与连线写入始终替换数组引用。事务冲突检测直接保存快照引用即可；
 // 若在这里序列化整张画布，工具条每创建一个轻量节点都会同步遍历全部节点、媒体数据与历史，
 // 其耗时会随项目体量增长，并阻塞 React 提交新节点的首帧。
 
 const plans = new Map<string, CanvasBatchPlan>()
-const undos = new Map<string, CanvasBatchUndo>()
+import { canvasBatchUndos as undos } from './canvasBatchUndo'
+export { undoCanvasBatch } from './canvasBatchUndo'
 import { pauseCanvasProjectPersistence } from './canvasPersistenceService';
-import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasUndoPersistenceState, type CanvasTransactionRuntime } from './canvasPersistenceService';
+import { confirmCanvasPersistence, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasTransactionRuntime } from './canvasPersistenceService';
 const PLAN_TTL_MS = 15 * 60_000
 const logger = createLogger('features.canvas.batch')
 
@@ -367,26 +357,6 @@ export async function commitCanvasBatch(planRef: string): Promise<Record<string,
   }
 }
 
-export async function undoCanvasBatch(projectId: string, undoRef: string): Promise<Record<string, unknown> | null> {
-  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
-  const record = undos.get(undoRef)
-  if (!record) return null
-  requireCanvasProjectInstance(projectId)
-  await runPersistedCanvasUndo(projectId, undoRef, () => {
-    const canvas = requireCanvasProjectInstance(projectId).store.getState()
-    if (
-      record.projectId !== projectId
-      || canvas.nodes !== record.afterNodes
-      || canvas.edges !== record.afterEdges
-    ) {
-      throw new CanvasApplicationError('STALE_CONTEXT', '批量操作后画布已发生其它变化，该批量撤销引用失效')
-    }
-    canvas.setCanvasData(record.beforeNodes, record.beforeEdges, record.beforeHistory)
-    canvas.setSelectedNode(record.beforeSelectedNodeId)
-  }, record)
-  undos.delete(undoRef)
-  return { projectId, undoRef, operation: 'batch', status: 'undone' }
-}
 
 export function resetCanvasBatchStateForTests(): void {
   plans.clear()

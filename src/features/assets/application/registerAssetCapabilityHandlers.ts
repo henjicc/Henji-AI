@@ -3,7 +3,7 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
 import { getHostScopeRevisions } from '@/features/application-control/hostContext/hostContext'
-import { configureAssetMutationDependencies } from '@/features/assets/application/applicationDomain'
+import { configureAssetMutationDependencies } from './assetControlDependencies'
 
 interface AssetQueryInput {
   mediaType?: 'image' | 'video' | 'audio' | 'code'

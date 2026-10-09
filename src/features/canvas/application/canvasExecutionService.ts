@@ -79,7 +79,7 @@ interface CanvasRunControl {
 
 const logger = createLogger('features.canvas.execution')
 const executors = new Map<string, CanvasRegisteredExecutor>()
-const taskExecutors = new Map<string, CanvasRegisteredExecutor>()
+import { canvasTaskExecutors as taskExecutors } from './canvasTaskExecutors'
 const activeNodeRuns = new Map<string, ActiveNodeRun>()
 let processingLimiter = createCanvasExecutionLimiter(4)
 let generationLimiter = createCanvasExecutionLimiter(readGenerationConcurrency())
@@ -114,13 +114,7 @@ export function registerCanvasNodeExecutor(
   }
 }
 
-/** 任务持有执行器直到业务结束，页面挂载/卸载不能替换在途执行器。 */
-export function retainCanvasTaskExecutor(projectId: string, nodeId: string, executor: CanvasRegisteredExecutor): () => void {
-  const key = activeNodeKey(projectId, nodeId)
-  if (taskExecutors.has(key)) throw new Error('此节点已有任务执行器，不能重复接管')
-  taskExecutors.set(key, executor)
-  return () => { if (taskExecutors.get(key) === executor) taskExecutors.delete(key) }
-}
+export { retainCanvasTaskExecutor } from './canvasTaskExecutors'
 
 function getExecutor(nodeId: string, projectId = useProjectStore.getState().currentProjectId): CanvasRegisteredExecutor | undefined {
   return taskExecutors.get(activeNodeKey(projectId, nodeId))

@@ -3,7 +3,6 @@ import { cameraStageApplicationService, type CameraStageObjectUpdate } from '@/f
 import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/features/cameraStage/application/cameraStageVerification'
 
 import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
-import { getApplicationControlExecutionEngine } from '@/features/application-control/capabilities/applicationControlRegistry'
 
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
@@ -58,7 +57,8 @@ async function executeOperation(
   evidenceFact: string,
 ): Promise<Record<string, unknown>> {
   assertBaseRevision(revision)
-  const engine = getApplicationControlExecutionEngine()
+  const engine = context.getExecutionEngine?.()
+  if (!engine) throw new Error('CAPABILITY_NOT_READY:事务引擎尚未装配。')
   const appContext = executionContext(context)
   const plan = await engine.plan({
     summary: capabilityId === 'place_camera_stage_object' ? '复用或布置三维场景对象' : '应用摄像机语义运镜',
@@ -85,7 +85,8 @@ async function executeMutation(
   context: CapabilityExecutionContext,
 ): Promise<Record<string, unknown>> {
   assertBaseRevision(input.revision)
-  const engine = getApplicationControlExecutionEngine()
+  const engine = context.getExecutionEngine?.()
+  if (!engine) throw new Error('CAPABILITY_NOT_READY:事务引擎尚未装配。')
   const appContext = executionContext(context)
   const plan = await engine.plan({
     summary: input.summary,

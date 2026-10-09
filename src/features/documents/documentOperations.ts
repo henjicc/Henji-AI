@@ -36,6 +36,7 @@ import { isDocumentServiceError, toError } from './documentErrors'
 import { setEmbeddedHost, type EmbeddedHost } from './embeddedDocuments'
 import { getDocumentSessionRegistry, type DocumentSessionRegistry } from './documentSessionRegistry'
 import type { DocumentSessionCommands } from './documentSessionTypes'
+import { createDocumentOperationChanges, defaultDocumentOperationChanges } from './documentOperationChanges'
 
 /*
  * 通用文档操作（存储底座 2.5）：项目页卡片右键与智能助手共用的唯一领域服务。
@@ -144,6 +145,7 @@ export class DocumentStandaloneNotAllowedError extends Error {
 }
 
 export interface DocumentOperationsOptions {
+  changes?: ReturnType<typeof createDocumentOperationChanges>
   commands?: DocumentOperationCommands
   /** 文档会话登记表；省略时取应用唯一的那一个（第一次用到时才创建）。 */
   registry?: DocumentSessionRegistry
@@ -212,10 +214,10 @@ export class DocumentOperations {
   private readonly busyChecks = new Map<DocumentKindId, DocumentBusyCheck>()
   private readonly creators = new Map<DocumentKindId, DocumentCreator>()
   private readonly embedHosts = new Map<DocumentKindId, (documentId: string) => Promise<EmbeddedHost>>()
-  private readonly listeners = new Set<() => void>()
-  private currentRevision = 0
+  private readonly changes: ReturnType<typeof createDocumentOperationChanges>
 
   constructor(options: DocumentOperationsOptions = {}) {
+    this.changes = options.changes ?? createDocumentOperationChanges()
     this.commands = options.commands ?? defaultDocumentOperationCommands
     this.providedRegistry = options.registry
     this.kinds = options.kinds ?? documentKindRegistry
@@ -224,12 +226,11 @@ export class DocumentOperations {
 
   /** 每次写入（改名、移动、副本、回收站、新建）加一；页面刷新与助手并发基线共用。 */
   revision(): number {
-    return this.currentRevision
+    return this.changes.revision()
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener)
-    return () => { this.listeners.delete(listener) }
+    return this.changes.subscribe(listener)
   }
 
   /** 登记某类文档的打开方式；返回取消登记函数。同一类型只保留最后登记的那个。 */
@@ -635,8 +636,7 @@ export class DocumentOperations {
   }
 
   private changed(): void {
-    this.currentRevision += 1
-    for (const listener of [...this.listeners]) listener()
+    this.changes.changed()
   }
 }
 
@@ -644,7 +644,7 @@ let defaultOperations: DocumentOperations | null = null
 
 /** 应用里唯一的通用文档操作服务（页面与助手共用）。 */
 export function getDocumentOperations(): DocumentOperations {
-  if (!defaultOperations) defaultOperations = new DocumentOperations()
+  if (!defaultOperations) defaultOperations = new DocumentOperations({ changes: defaultDocumentOperationChanges })
   return defaultOperations
 }
 

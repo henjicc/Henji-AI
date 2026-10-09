@@ -16,7 +16,10 @@ import type { ApplicationDomainModule } from './domainModule'
 import { configureImageEditDocumentProjectionResolverV3 } from '@/features/imageEdit/v3/application/imageEditDocumentBindings'
 import { resolveCanvasImageEditDocumentProjection } from '@/features/canvas/application/imageEditDocumentProjectionBinding'
 
-configureImageEditDocumentProjectionResolverV3(resolveCanvasImageEditDocumentProjection)
+/** 由应用注册/反射装配点调用；仅导入领域目录不配置跨域绑定。 */
+export function initializeApplicationDomainBindings(): void {
+  configureImageEditDocumentProjectionResolverV3(resolveCanvasImageEditDocumentProjection)
+}
 
 export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [
   canvasApplicationDomain,

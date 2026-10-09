@@ -30,6 +30,8 @@ import { updateVideoEditProjectCover } from './videoEditProjectCover'
 import { videoEditInPlaceRecordsSchema, type VideoEditInPlaceRecord } from '@/core/videoEdit/inPlacePersistence'
 import { VIDEO_EDIT_FOCUSABLE_PANELS, type VideoEditFocusablePanel } from '@/core/videoEdit/panels'
 
+import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
+
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
   selectedClipIds: string[]
@@ -666,6 +668,7 @@ function sessionError(session: DocumentSession): string | null {
 
 /** 把一个已打开的剪辑文档会话接成实例：附着内容、同步名称，会话结束时自动拆掉。 */
 async function bindVideoEditSession(session: DocumentSession, focus: boolean): Promise<VideoEditInstance> {
+  initializeVideoEditCodeSourceRuntime()
   const existing = instances.get(session.id)
   if (existing && existing.session === session && !session.isEnded) { if (focus) focusVideoEdit(session.id); return existing }
   const loaded = videoEditDocumentFromContent(session.getContent(), session.documentMeta)

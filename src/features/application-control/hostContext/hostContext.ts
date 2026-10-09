@@ -2,7 +2,7 @@ import { getAudioEditRevision } from '@/features/audioEdit/application/audioEdit
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
-import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementEditing'
+import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementSummary'
 import { styleKitHostSummary } from '@/features/videoEdit/application/videoEditStyleKits'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,

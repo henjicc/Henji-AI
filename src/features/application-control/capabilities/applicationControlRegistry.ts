@@ -1,13 +1,14 @@
 import { ApplicationControlExecutionEngine, ApplicationReflectionRegistry } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { BUILTIN_APPLICATION_CAPABILITIES } from '@/core/application-control/builtinApplicationCapabilityRegistry'
-import { APPLICATION_DOMAINS } from '../applicationDomains'
+import { APPLICATION_DOMAINS, initializeApplicationDomainBindings } from '../applicationDomains'
 
 let registry: ApplicationReflectionRegistry | undefined
 let executionEngine: ApplicationControlExecutionEngine | undefined
 
 export function getApplicationReflectionRegistry(): ApplicationReflectionRegistry {
   if (registry) return registry
+  initializeApplicationDomainBindings()
   const next = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION)
   for (const domain of APPLICATION_DOMAINS) for (const registration of domain.entities()) {
     try { next.register(registration) }

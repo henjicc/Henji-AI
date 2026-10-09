@@ -1,4 +1,4 @@
-import { APPLICATION_DOMAINS } from '../applicationDomains'
+import { APPLICATION_DOMAINS, initializeApplicationDomainBindings } from '../applicationDomains'
 
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 
@@ -13,7 +13,7 @@ import { capabilityVerificationEnvelope } from '@/core/application-control/capab
 import { transactionFailureFacts } from '@/core/application-control/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { applicationCallerAccess, assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
-import { getApplicationReflectionRegistry } from './applicationControlRegistry'
+import { getApplicationReflectionRegistry, getApplicationControlExecutionEngine } from './applicationControlRegistry'
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/shared/applicationReflectionApplicationCapabilities'
 
@@ -108,6 +108,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     }
     const result = await handler(input, {
       ...context,
+      getExecutionEngine: getApplicationControlExecutionEngine,
       expectedRevisions: invocation.expectedRevisions,
     })
     const snapshot = createHostContextSnapshot()
@@ -137,6 +138,7 @@ function registerBuiltins(): void {
   }
 }
 
+initializeApplicationDomainBindings()
 registerBuiltins()
 for (const domain of APPLICATION_DOMAINS) domain.registerCapabilities(registry)
 
