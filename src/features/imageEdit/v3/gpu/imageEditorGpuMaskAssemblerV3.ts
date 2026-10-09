@@ -54,9 +54,10 @@ export class ImageEditorGpuMaskAssemblerV3 {
     plan: ImageEditorGpuGraphSourcePlanV3,
     transform: ImageEditTransformV3,
     layout: ImageEditorViewportLayoutV3,
+    globalPixelGrid = false,
   ): ImageEditorGpuPreparedMaskV3 {
     const fingerprint = [mask.maskId, mask.defaultValue, mask.inverted,
-      transform.join(','), layout.viewportKey,
+      transform.join(','), layout.viewportKey, globalPixelGrid,
       layout.viewport.documentX, layout.viewport.documentY, layout.viewport.zoom,
       layout.viewport.devicePixelRatio, layout.viewport.width, layout.viewport.height,
       ...plan.plan.tiles.map((tile) => tile.key.contentVersion)].join(':')
@@ -66,13 +67,15 @@ export class ImageEditorGpuMaskAssemblerV3 {
       return { cacheKey, mask, target: existing.target, fingerprint, dependencies, plan, transform,
         buffers: existing.buffers, pending: false }
     }
+    const size = imageEditorGpuOutputPixelSizeV3(layout)
+    const output = existing?.target ?? target(this.gpu, {
+      size, format: 'rgba16float', clearColor: [mask.defaultValue, mask.defaultValue, mask.defaultValue, 1],
+      label: `image-editor-graph-mask:${mask.maskId}`,
+    })
+    output.resize(size)
     return {
       cacheKey, mask, fingerprint, dependencies, plan, transform, buffers: [], pending: true,
-      target: target(this.gpu, {
-        size: imageEditorGpuOutputPixelSizeV3(layout), format: 'rgba16float',
-        clearColor: [mask.defaultValue, mask.defaultValue, mask.defaultValue, 1],
-        label: `image-editor-graph-mask:${mask.maskId}`,
-      }),
+      target: output,
     }
   }
 
@@ -86,8 +89,8 @@ export class ImageEditorGpuMaskAssemblerV3 {
     })
   }
 
-  updateCamera(layout: ImageEditorViewportLayoutV3, geometry: ImageEditCanvasGeometryV3): void {
-    this.gpu.gpu.queue.writeBuffer(this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, geometry))
+  updateCamera(layout: ImageEditorViewportLayoutV3, geometry: ImageEditCanvasGeometryV3, globalPixelGrid = false): void {
+    this.gpu.gpu.queue.writeBuffer(this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, geometry, globalPixelGrid))
   }
 
   encode(currentFrame: ReturnType<typeof import('vgpu').frame>, prepared: ImageEditorGpuPreparedMaskV3): void {
@@ -121,7 +124,10 @@ export class ImageEditorGpuMaskAssemblerV3 {
     for (const entry of prepared) {
       if (!entry.pending) continue
       const previous = this.retained.get(entry.cacheKey)
-      if (previous) this.destroy(previous)
+      if (previous) {
+        for (const buffer of previous.buffers) buffer.destroy()
+        if (previous.target !== entry.target) previous.target.color.destroy()
+      }
       this.retained.set(entry.cacheKey, {
         target: entry.target, fingerprint: entry.fingerprint,
         dependencies: entry.dependencies, buffers: entry.buffers,
@@ -140,6 +146,11 @@ export class ImageEditorGpuMaskAssemblerV3 {
   discard(prepared: readonly ImageEditorGpuPreparedMaskV3[]): void {
     for (const entry of prepared) {
       if (!entry.pending) continue
+      const previous = this.retained.get(entry.cacheKey)
+      if (previous?.target === entry.target) {
+        for (const buffer of previous.buffers) buffer.destroy()
+        this.retained.delete(entry.cacheKey)
+      }
       for (const buffer of entry.buffers) buffer.destroy()
       entry.target.color.destroy()
     }

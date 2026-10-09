@@ -56,6 +56,23 @@ function compositor(overrides: Partial<ImageEditorGpuRasterCompositorV3Like> = {
 }
 
 describe('ImageEditorGpuSceneExportRuntimeV3', () => {
+  it('等待资源时可取消，迟到上传不继续导出且释放独立compositor', async () => {
+    const events: ImageEditorGpuSceneWorkerEventV3[] = []
+    const key = { resourceRef: `sha256:${'a'.repeat(64)}` as const, mip: 0, tileX: 0, tileY: 0, contentVersion: 'source' }
+    const exported = compositor({ missingResources: vi.fn(() => [key]) })
+    const runtime = new ImageEditorGpuSceneExportRuntimeV3({ emit: event => events.push(event),
+      createCompositor: () => exported, previewCompositor: () => null, previewResource: () => null,
+      currentSceneGeneration: () => 1, deviceGeneration: () => 1 })
+    runtime.start({ type: 'export', requestId: 'cancel', sceneGeneration: 1, quality: 'export',
+      description: { width: 2, height: 1, bitDepth: 8, sampleFormat: 'uint', colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight' },
+      outputTiles: [{ tileX: 0, tileY: 0, x: 0, y: 0, width: 2, height: 1, renderX: 0, renderY: 0, renderWidth: 2, renderHeight: 1, coreOffsetX: 0, coreOffsetY: 0 }] }, scene())
+    await vi.waitFor(() => expect(events.some(event => event.type === 'tiles-needed')).toBe(true))
+    runtime.cancel('cancel')
+    runtime.upload('cancel', [])
+    await vi.waitFor(() => expect(exported.dispose).toHaveBeenCalledOnce())
+    expect(exported.readExportLinearPixels).not.toHaveBeenCalled()
+    expect(events.some(event => event.type === 'failed' || event.type === 'export-tile')).toBe(false)
+  })
   it('扣除预览常驻量、逐tile回读并等待sink确认后推进', async () => {
     const events: ImageEditorGpuSceneWorkerEventV3[] = []
     const budgets: number[] = []
@@ -99,6 +116,7 @@ describe('ImageEditorGpuSceneExportRuntimeV3', () => {
     expect(exported.syncScene).toHaveBeenCalledWith(expect.objectContaining({ graph: [expect.objectContaining({ parameters: expect.objectContaining({ effectQuality: 'final' }) })] }))
     expect(previewScene.graph[0]).toMatchObject({ parameters: { effectQuality: 'interactive' } })
     expect(exported.readExportLinearPixels).toHaveBeenCalledTimes(1)
+    expect(exported.updateExportViewport).toHaveBeenCalledWith(expect.objectContaining({ viewport: expect.objectContaining({ width: 1, height: 1 }) }), [2, 1])
     runtime.acknowledge('export-1', 0, 0)
     await vi.waitFor(() => expect(events.filter((event) => event.type === 'export-tile')).toHaveLength(2))
     expect(exported.readExportLinearPixels).toHaveBeenCalledTimes(2)

@@ -17,6 +17,7 @@ interface ImageEditorGpuViewportPlansInputV3 {
   plannedMasks: Map<string, ImageEditorGpuPlannedLayerV3>
   /** 导出已显式携带有限 support halo，不再扩成整图预览域。 */
   expandEffects?: boolean
+  workingLayout?: ImageEditorViewportLayoutV3
 }
 
 export function replanImageEditorGpuViewportTilesV3(
@@ -25,9 +26,9 @@ export function replanImageEditorGpuViewportTilesV3(
   input.plannedLayers.clear()
   input.plannedMasks.clear()
   if (!input.scene || !input.layout) return
-  const workingLayout = input.expandEffects === false
+  const workingLayout = input.workingLayout ?? (input.expandEffects === false
     ? input.layout
-    : resolveImageEditorGpuEffectViewportV3(input.scene, input.layout).layout
+    : resolveImageEditorGpuEffectViewportV3(input.scene, input.layout).layout)
   for (const layer of input.scene.layers) {
     if (!layer.visible || layer.opacity <= 0) continue
     const transform = input.transientTransforms.get(layer.layerId) ?? layer.transform

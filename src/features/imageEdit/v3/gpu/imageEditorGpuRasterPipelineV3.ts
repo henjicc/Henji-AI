@@ -44,7 +44,9 @@ import type {
 import { ImageEditorGpuRasterPresentationV3 } from './imageEditorGpuRasterPresentationV3'
 import { resolveImageEditorGpuEffectViewportV3 } from './imageEditorGpuEffectViewportV3'
 import { estimateImageEditorGpuGraphResidentBytesV3 } from './imageEditorGpuMemoryBudgetV3'
+import { planImageEditorGpuGaussianRegionsV3, usesImageEditorGpuGaussianRegionsV3 } from './imageEditorGpuGaussianRegionsV3'
 import { replanImageEditorGpuViewportTilesV3 } from './imageEditorGpuViewportPlansV3'
+import type { GaussianRegion } from '@/core/imaging/effects/cpu/gaussian'
 import { collectImageEditorGpuRequiredResourceKeysV3, findImageEditorGpuPlannedTileV3,
   pruneImageEditorGpuRetainedStatesV3,
   refreshImageEditorGpuAtlasStatsV3 } from './imageEditorGpuRasterPipelineStateV3'
@@ -79,6 +81,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   private scene: ImageEditorGpuRasterSceneV3 | null = null
   private layout: ImageEditorViewportLayoutV3 | null = null
   private expandEffects = true
+  private gaussianEnvelope: { key: string; input: GaussianRegion } | null = null
+  private workingEffectViewport: ReturnType<typeof resolveImageEditorGpuEffectViewportV3> | null = null
   private effectRecipeSize: readonly [number, number] | null = null
   private rasterCompilePromise: Promise<void> | null = null
   private frameQueue: Promise<void> = Promise.resolve()
@@ -168,7 +172,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     layout: ImageEditorViewportLayoutV3,
     effectRecipeSize?: readonly [number, number],
   ): void {
-    this.setViewport(layout, false, effectRecipeSize ?? null)
+    this.setViewport(layout, !!this.scene?.graph.some(node => node.kind === 'effect' && node.definitionId === 'effect.gaussian_blur'), effectRecipeSize ?? null)
   }
   private setViewport(
     layout: ImageEditorViewportLayoutV3,
@@ -184,16 +188,35 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
         this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, this.scene.geometry),
       )
     }
-    const effectViewport = this.scene && expandEffects
-      ? resolveImageEditorGpuEffectViewportV3(this.scene, layout)
-      : { layout, expanded: false }
+    const interactiveGaussian = this.scene && usesImageEditorGpuGaussianRegionsV3(this.scene)
+      && this.scene.graph.every(node => node.kind !== 'effect' || node.parameters.effectQuality !== 'final')
+    const viewport = layout.viewport
+    const envelopeKey = `${this.scene?.width}:${this.scene?.height}:${viewport.documentX}:${viewport.documentY}:${viewport.width}:${viewport.height}:${viewport.zoom}:${viewport.devicePixelRatio}`
+    let effectViewport = this.scene && expandEffects
+      ? resolveImageEditorGpuEffectViewportV3(this.scene, layout, interactiveGaussian && this.gaussianEnvelope?.key === envelopeKey ? this.gaussianEnvelope.input : undefined, effectRecipeSize ?? undefined)
+      : { layout, cropOffset: [0, 0] as const, expanded: false }
+    // 只在同一视口拖参数时保留已满足的窗口，避免纹理反复 resize；缩小显著时释放。
+    if (interactiveGaussian && this.gaussianEnvelope?.key === envelopeKey) {
+      const required = resolveImageEditorGpuEffectViewportV3(this.scene!, layout, undefined, effectRecipeSize ?? undefined)
+      const size = imageEditorGpuOutputPixelSizeV3(effectViewport.layout)
+      const requiredSize = imageEditorGpuOutputPixelSizeV3(required.layout)
+      const bytes = estimateImageEditorGpuGraphResidentBytesV3(this.scene!, size, planImageEditorGpuGaussianRegionsV3(this.scene!, layout, effectRecipeSize ?? undefined))
+      if (size[0] * size[1] > requiredSize[0] * requiredSize[1] * 2 || bytes + this.atlas.snapshot().allocatedBytes > this.memoryBudgetBytes) effectViewport = required
+    }
+    if (interactiveGaussian) {
+      const working = effectViewport.layout.viewport, scale = viewport.zoom * viewport.devicePixelRatio
+      const size = imageEditorGpuOutputPixelSizeV3(effectViewport.layout)
+      this.gaussianEnvelope = { key: envelopeKey, input: { x: Math.round(working.documentX * scale), y: Math.round(working.documentY * scale), width: size[0], height: size[1] } }
+    } else this.gaussianEnvelope = null
+    this.workingEffectViewport = effectViewport
     const workingLayout = effectViewport.layout
     const [width, height] = imageEditorGpuOutputPixelSizeV3(workingLayout)
     const cropBytes = effectViewport.expanded
       ? imageEditorGpuOutputPixelSizeV3(layout)[0] * imageEditorGpuOutputPixelSizeV3(layout)[1] * 8
       : 0
     this.reservedOutputBytes = this.scene?.requiresRenderGraph
-      ? estimateImageEditorGpuGraphResidentBytesV3(this.scene, [width, height]) + cropBytes
+      ? estimateImageEditorGpuGraphResidentBytesV3(this.scene, [width, height], usesImageEditorGpuGaussianRegionsV3(this.scene)
+        ? planImageEditorGpuGaussianRegionsV3(this.scene, layout, effectRecipeSize ?? undefined) : undefined) + cropBytes
       : width * height * LINEAR_AND_PRESENT_BYTES_PER_PIXEL
     this.atlas.setMemoryBudgetBytes(Math.max(0, this.memoryBudgetBytes - this.reservedOutputBytes))
     this.replanTiles()
@@ -323,9 +346,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     if (!this.scene || !this.layout) throw new Error('GPU Scene 缺少场景或视口')
     const missing = this.missingResources(resolve)
     if (missing.length > 0) throw new Error(`GPU Scene 缺少 ${missing.length} 个源纹理`)
-    const effectViewport = this.expandEffects
-      ? resolveImageEditorGpuEffectViewportV3(this.scene, this.layout)
-      : { layout: this.layout, cropOffset: [0, 0] as const, expanded: false }
+    const effectViewport = this.workingEffectViewport ?? { layout: this.layout, cropOffset: [0, 0] as const, expanded: false }
     const [width, height] = imageEditorGpuOutputPixelSizeV3(effectViewport.layout)
     if (width > this.maxTextureDimension2D || height > this.maxTextureDimension2D) {
       throw new Error(`GPU Scene 输出 ${width}×${height} 超过设备 2D 纹理限制`)
@@ -473,6 +494,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       previousMips: this.previousMips, plannedLayers: this.plannedLayers,
       plannedMasks: this.plannedMasks,
       expandEffects: this.expandEffects,
+      workingLayout: this.workingEffectViewport?.layout,
     })
   }
   private refreshAtlasStats(): void {

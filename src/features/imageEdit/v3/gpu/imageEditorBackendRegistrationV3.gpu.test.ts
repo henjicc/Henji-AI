@@ -11,11 +11,17 @@ import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3
 import { ImageEditorGpuRasterCompositorV3 } from './imageEditorGpuRasterCompositorV3'
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
 import { imageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocolV3'
+import { measureImageGaussianRegionsV3 } from './imageEditorGpuGaussianMeasurementsV3.testSupport'
+import { appendFileSync } from 'node:fs'
 
 let gpu: Gpu
 const errors: string[] = []
 beforeAll(async () => { gpu = await init(); gpu.onError(error => { errors.push(String(error)) }) })
 afterAll(() => gpu?.dispose())
+
+it.skipIf(process.env.HENJI_GPU_MEASURE !== '1' || !!process.env.CI)('t117 本机大图区域高斯性能', async () => {
+  await measureImageGaussianRegionsV3(gpu)
+}, 600_000)
 
 const cases: Array<[string, ImageEditJsonObjectV3]> = [
   ['exposure', { stops: .3, offset: .01, gamma: 1.1 }],
@@ -62,10 +68,17 @@ it.each(['stable', 'export'] as const)('%s 正式图片登记的 CPU/GPU 同参�
         expect(candidate.some(value => value > .1), id).toBe(true)
         let maximum = 0, squared = 0
         candidate.forEach((value, index) => { const error = Math.abs(value - reference[index]); maximum = Math.max(maximum, error); squared += error * error })
-        // 整条预览链含源解码、Gaussian 多工序及图层合成的 fp16 写入；核单测的预算不包含这些写入。
-        // final 使用 R13 SDR 标准；interactive 整链额外保留一个 fp16 量化步长的 RMSE 预算。
+        if (process.env.HENJI_GPU_PRECISION_PATH && id === 'gaussian_blur') {
+          const channelRmse = Array.from({ length: 4 }, (_, channel) => {
+            let squared = 0, bias = 0
+            for (let i = channel; i < candidate.length; i += 4) { const delta = candidate[i] - reference[i]; squared += delta * delta; bias += delta }
+            return { rmse: Math.sqrt(squared / (candidate.length / 4)), bias: bias / (candidate.length / 4) }
+          })
+          appendFileSync(process.env.HENJI_GPU_PRECISION_PATH, JSON.stringify({ quality, params, maximum, rmse: Math.sqrt(squared / candidate.length), channelRmse }) + '\n')
+        }
+        // 金字塔使用 fp32，避免整条预览链多次 fp16 写入累计；两档整链恢复同一 RMSE 门槛。
         expect(maximum, `${id}:${JSON.stringify(params)}`).toBeLessThan(id === 'color_grade' ? 2 / 255 : .002)
-        expect(Math.sqrt(squared / candidate.length), id).toBeLessThan(id === 'color_grade' ? 1 / 255 : id === 'gaussian_blur' && quality === 'stable' ? .001 : .0005)
+        expect(Math.sqrt(squared / candidate.length), id).toBeLessThan(id === 'color_grade' ? 1 / 255 : .0005)
         if (id === 'gaussian_blur' && params.sigma_fraction_height === .25) {
           // 真视口/tile 管线必须保留整幅计划的采样相位，不能把 tile 当作新的文档。
           const region = { x: 43, y: 47, width: 49, height: 53 }
@@ -83,3 +96,54 @@ it.each(['stable', 'export'] as const)('%s 正式图片登记的 CPU/GPU 同参�
     expect(errors).toEqual([])
   }
 }, 30000)
+
+it.each(['stable', 'export'] as const)('%s：真实区域/tile、mip、串联与混合保留整幅网格相位', async quality => {
+  const width = 509, height = 387
+  const resourceRef = `sha256:${'b'.repeat(64)}` as const
+  const maskRef = `sha256:${'c'.repeat(64)}` as const
+  const data = Uint8Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 128 + i % 127 : (i * 17) % 256)
+  const source: ImageEditorV3SourceTile = { resourceRef, mip: 0, tileX: 0, tileY: 0, width, height, halo: 0,
+    bitDepth: 8, sampleFormat: 'uint', numericRange: 'unorm8', channels: 4, byteOrder: 'little-endian', rowStride: width * 4,
+    colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight', orientationApplied: true, originX: 0, originY: 0, pixels: data.buffer }
+  for (const axis of ['both', 'horizontal', 'vertical']) for (const scale of [1, .75]) {
+    const document = createImageEditDocumentV3({ width, height })
+    const first = createImageEditEffectLayerV3('first', '高斯', 'gaussian_blur', { sigma_fraction_height: .003, axis, edge_mode: 'transparent' })
+    first.opacity = .81; first.mask = { resourceId: maskRef, inverted: true }
+    const second = createImageEditEffectLayerV3('second', '串联', 'gaussian_blur', { sigma_fraction_height: .03, axis, edge_mode: 'clamp' })
+    second.opacity = .73; second.blendMode = 'screen'
+    second.mask = { resourceId: maskRef, inverted: false }
+    const raster = createImageEditRasterLayerV3('source', '源', resourceRef)
+    raster.transform = [1.2, .15, -.2, .9, 12.3, -5.2]
+    document.layers = [raster, first,
+      createImageEditAdjustmentLayerV3('exposure', '曝光', 'exposure', { stops: .2 }), second]
+    const compiled = compileImageEditorGpuRasterSceneV3(document, [resourceRef, maskRef].map(resourceRef => ({ resourceRef, byteLength: data.byteLength, mediaType: 'image/png' })), undefined, quality)
+    if (!compiled.supported) throw new Error(compiled.reason)
+    const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+    const uploaded = new Map<string, ReturnType<typeof compositor.uploadTile>>()
+    const resolve = (key: Parameters<typeof imageEditorGpuSceneTileKeyV3>[0]): ReturnType<typeof compositor.uploadTile> | null => uploaded.get(imageEditorGpuSceneTileKeyV3(key)) ?? null
+    const render = async (x: number, y: number, w: number, h: number, exporting = false): Promise<Float32Array> => {
+      const layout = { stageWidth: w, stageHeight: h, viewportKey: `${x}:${y}:${w}:${h}:${exporting}`, viewport: { documentX: x / scale, documentY: y / scale, width: w, height: h, zoom: scale, devicePixelRatio: 1 } }
+      if (exporting) compositor.updateExportViewport(layout, [Math.ceil(width * scale), Math.ceil(height * scale)])
+      else compositor.updateViewport(layout)
+      for (const key of compositor.requiredResourceKeys()) if (!resolve(key)) uploaded.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key,
+        key.resourceRef === maskRef ? { ...source, resourceRef: maskRef } : source))
+      return await compositor.readLinearPixelsForTest(resolve)
+    }
+    try {
+      compositor.syncScene(compiled.scene)
+      const w = Math.ceil(width * scale), h = Math.ceil(height * scale)
+      const full = await render(0, 0, w, h)
+      for (const region of [{ x: 143, y: 107, width: 49, height: 53 }, { x: 0, y: 0, width: 43, height: 41 }, { x: w - 47, y: h - 39, width: 47, height: 39 }]) {
+        for (const exporting of [false, true]) {
+          const local = await render(region.x, region.y, region.width, region.height, exporting)
+          let maximum = 0
+          for (let y = 0; y < region.height; y++) for (let x = 0; x < region.width; x++) for (let c = 0; c < 4; c++) maximum = Math.max(maximum, Math.abs(local[(y * region.width + x) * 4 + c] - full[((region.y + y) * w + region.x + x) * 4 + c]))
+          expect(maximum, JSON.stringify({ axis, scale, region, exporting })).toBeLessThan(.00001)
+        }
+      }
+      const outside = await render(-10000, -10000, 20, 20)
+      expect(outside.every(value => value === 0)).toBe(true)
+      expect(compositor.snapshotStats().maximumGraphTargetWidth).toBeLessThanOrEqual(w)
+    } finally { for (const allocation of uploaded.values()) allocation.destroy(); compositor.dispose() }
+  }
+}, 60_000)

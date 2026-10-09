@@ -114,7 +114,9 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   let inverse = params.inverseLinear;
   let extra = params.inverseTranslationOpacity;
   let cameraParams = camera.documentOriginScale;
-  let outputPoint = position.xy / cameraParams.z + cameraParams.xy;
+  // 区域高斯先相加整数全局像素，再除缩放；整图与 ROI 使用相同 f32 运算顺序。
+  let outputPoint = select(position.xy / cameraParams.z + cameraParams.xy,
+    (position.xy + camera.orientation.zw) / cameraParams.z, cameraParams.w > 0.5);
   let documentPoint = outputToDocument(outputPoint);
   let sourcePoint = vec2f(
     inverse.x * documentPoint.x + inverse.z * documentPoint.y + extra.x,

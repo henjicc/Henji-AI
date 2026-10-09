@@ -43,13 +43,16 @@ export function imageEditorGpuOutputPixelSizeV3(
 export function imageEditorGpuCameraUniformV3(
   layout: ImageEditorViewportLayoutV3,
   geometry: ImageEditCanvasGeometryV3,
+  globalPixelGrid = false,
 ): Float32Array {
   const resolved = resolveImageEditOutputGeometryV3(geometry)
   const scale = layout.viewport.zoom * layout.viewport.devicePixelRatio
   const rotation = resolved.rotate === 90 ? 1 : resolved.rotate === 180 ? 2 : resolved.rotate === 270 ? 3 : 0
   return new Float32Array([
-    layout.viewport.documentX, layout.viewport.documentY, scale, 0,
+    layout.viewport.documentX, layout.viewport.documentY, scale, globalPixelGrid ? 1 : 0,
     resolved.sourceWidth, resolved.sourceHeight, resolved.cropX, resolved.cropY,
-    rotation, resolved.mirrored ? 1 : 0, 0, 0,
+    rotation, resolved.mirrored ? 1 : 0,
+    globalPixelGrid ? Math.round(layout.viewport.documentX * scale) : 0,
+    globalPixelGrid ? Math.round(layout.viewport.documentY * scale) : 0,
   ])
 }

@@ -11,15 +11,20 @@ import type {
   ImageEditorGpuGraphEffectNodeV3,
   ImageEditorGpuRasterSceneV3,
 } from './imageEditorGpuRasterSceneCompilerV3'
+import type { ImageEditorGpuGaussianRegionsV3 } from './imageEditorGpuGaussianRegionsV3'
+import { imageEditorGpuGaussianScratchBytesV3 } from './imageEditorGpuGaussianStorageV3'
+import { gaussianExecutionWindows } from '@/core/imaging/effects/cpu/gaussian'
 
 const LINEAR_BYTES_PER_PIXEL = 8
 const PRESENT_BYTES_PER_PIXEL = 4
-const MASK_BYTES_PER_PIXEL = 1
+// mask assembler 的合成输出为 rgba16float；atlas 源字节另由 atlas 自己计费。
+const MASK_BYTES_PER_PIXEL = LINEAR_BYTES_PER_PIXEL
 
 /** 按 renderer 真正常驻的全尺寸与金字塔尺寸计费，避免把每层都误算为全尺寸。 */
 export function estimateImageEditorGpuGraphResidentBytesV3(
   scene: ImageEditorGpuRasterSceneV3,
   size: readonly [number, number],
+  regions?: ImageEditorGpuGaussianRegionsV3,
 ): number {
   const fullLinearBytes = pixels(size) * LINEAR_BYTES_PER_PIXEL
   const semanticTargets = scene.graph.filter((node) => (
@@ -30,10 +35,10 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
   let adjustmentScratchBytes = 0
   const effectNodes: ImageEditorGpuGraphEffectNodeV3[] = []
   for (const node of scene.graph) {
-    if (node.kind === 'composite' && node.mask) masks.add(node.mask.maskId)
+    if (node.kind === 'composite' && node.mask) masks.add(`${node.nodeId}:${node.mask.maskId}`)
     if (node.kind === 'adjustment') {
       for (const adjustment of node.adjustments) {
-        if (adjustment.mask) masks.add(adjustment.mask.maskId)
+        if (adjustment.mask) masks.add(`${node.nodeId}:${adjustment.mask.maskId}`)
         if (adjustment.definitionId === 'adjustment.color-grade') {
           const { opacity: _opacity, blendMode: _blendMode, transform: _transform, referenceWidth: _width, referenceHeight: _height, effectQuality: _quality, ...value } = adjustment.parameters
           const plan = planColorGrade(imageColorGradeRuntimeParams(value), size[0], size[1])
@@ -46,18 +51,19 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
       }
     }
     if (node.kind !== 'effect') continue
-    if (node.mask) masks.add(node.mask.maskId)
+    if (node.mask) masks.add(`${node.nodeId}:${node.mask.maskId}`)
     effectNodes.push(node)
   }
   return pixels(size) * PRESENT_BYTES_PER_PIXEL
     + (semanticTargets + sourceScratchTargets) * fullLinearBytes
     + masks.size * pixels(size) * MASK_BYTES_PER_PIXEL
-    + estimateEffectsBytes(effectNodes, size) + adjustmentScratchBytes
+    + estimateEffectsBytes(effectNodes, size, regions) + adjustmentScratchBytes
 }
 
 function estimateEffectsBytes(
   nodes: readonly ImageEditorGpuGraphEffectNodeV3[],
   size: readonly [number, number],
+  regions?: ImageEditorGpuGaussianRegionsV3,
 ): number {
   if (nodes.length === 0) return 0
   const fullBytes = pixels(size) * LINEAR_BYTES_PER_PIXEL
@@ -66,7 +72,11 @@ function estimateEffectsBytes(
   let gaussianScratchBytes = 0
   for (const node of nodes) {
     if (node.definitionId === 'effect.gaussian_blur') {
-      gaussianScratchBytes += resolveImageGaussianPlan(gaussianParametersFromNodeV3(node.parameters), { referenceSize: { width: Number(node.parameters.referenceWidth), height: Number(node.parameters.referenceHeight) }, outputSize: { width: size[0], height: size[1] }, quality: node.parameters.effectQuality === 'final' ? 'final' : 'interactive' }).scratchBytes
+      const region = regions?.effects.get(node.nodeId)
+      gaussianScratchBytes += region
+        ? imageEditorGpuGaussianScratchBytesV3(region.plan, region.windows)
+          + region.output.width * region.output.height * LINEAR_BYTES_PER_PIXEL
+        : gaussianScratch(resolveImageGaussianPlan(gaussianParametersFromNodeV3(node.parameters), { referenceSize: { width: Number(node.parameters.referenceWidth), height: Number(node.parameters.referenceHeight) }, outputSize: { width: size[0], height: size[1] }, quality: node.parameters.effectQuality === 'final' ? 'final' : 'interactive' }))
     }
     if (node.definitionId === 'effect.blur-v1') {
       const radiusKey = node.definitionId === 'effect.blur-v1' ? 'radiusPixels' : 'radius'
@@ -77,7 +87,7 @@ function estimateEffectsBytes(
         : 0
       const mip = typeof rawMip === 'number' && Number.isFinite(rawMip) ? Math.max(0, rawMip) : 0
       // final 的 fp32 中间窗口归各 Gaussian renderer 持有，不能按共享 fp16 金字塔估算。
-      gaussianScratchBytes += resolveGaussianPixelPlan({ radius: radius / (2 ** mip), mip: 0 }, size[0], size[1]).scratchBytes
+      gaussianScratchBytes += gaussianScratch(resolveGaussianPixelPlan({ radius: radius / (2 ** mip), mip: 0 }, size[0], size[1]))
     }
     if (node.definitionId === 'effect.fast-blur') scratchTargets = Math.max(scratchTargets, 2)
     if (node.definitionId === 'effect.diffusion') {
@@ -103,6 +113,10 @@ function estimateEffectsBytes(
     }
   }
   return (nodes.length + scratchTargets) * fullBytes + maximumPyramidBytes + gaussianScratchBytes
+}
+
+function gaussianScratch(plan: ReturnType<typeof resolveImageGaussianPlan>): number {
+  return imageEditorGpuGaussianScratchBytesV3(plan, gaussianExecutionWindows(plan))
 }
 
 function pyramidBytes(

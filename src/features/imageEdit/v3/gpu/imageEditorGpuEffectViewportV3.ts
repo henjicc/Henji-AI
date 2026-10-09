@@ -4,6 +4,8 @@ import { resolveGaussianBlurV2Geometry } from '@/core/imageEdit/v3/effects/gauss
 import { resolveImageEditOutputGeometryV3 } from '@/core/imageEdit/v3/outputGeometry'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import type { ImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
+import { planImageEditorGpuGaussianRegionsV3, usesImageEditorGpuGaussianRegionsV3 } from './imageEditorGpuGaussianRegionsV3'
+import type { GaussianRegion } from '@/core/imaging/effects/cpu/gaussian'
 
 export interface ImageEditorGpuEffectViewportV3 {
   readonly layout: ImageEditorViewportLayoutV3
@@ -15,14 +17,31 @@ export interface ImageEditorGpuEffectViewportV3 {
 export function resolveImageEditorGpuEffectViewportV3(
   scene: ImageEditorGpuRasterSceneV3,
   layout: ImageEditorViewportLayoutV3,
+  retainedInput?: GaussianRegion,
+  outputSize?: readonly [number, number],
 ): ImageEditorGpuEffectViewportV3 {
   if (!scene.requiresRenderGraph) return { layout, cropOffset: [0, 0], expanded: false }
   const effects = scene.graph.filter((node) => node.kind === 'effect')
   const grades = scene.graph.flatMap(node => node.kind === 'adjustment' ? node.adjustments.filter(adjustment => adjustment.definitionId === 'adjustment.color-grade') : [])
   if (effects.length === 0 && grades.length === 0) return { layout, cropOffset: [0, 0], expanded: false }
   const viewport = layout.viewport
-  // 当前 retained graph 的处理纹理与合成纹理同尺寸。共享高斯必须保持全局中心网格，
-  // 因此先求值完整文档，再用既有 crop pass 取视口/导出 tile；设备预算不足走 CPU。
+  if (usesImageEditorGpuGaussianRegionsV3(scene)) {
+    const region = planImageEditorGpuGaussianRegionsV3(scene, layout, outputSize)
+    const scale = viewport.zoom * viewport.devicePixelRatio
+    const required = region.input
+    const x = Math.min(required.x, retainedInput?.x ?? required.x), y = Math.min(required.y, retainedInput?.y ?? required.y)
+    const input = { x, y, width: Math.max(required.x + required.width, retainedInput ? retainedInput.x + retainedInput.width : required.x + required.width) - x,
+      height: Math.max(required.y + required.height, retainedInput ? retainedInput.y + retainedInput.height : required.y + required.height) - y }
+    const offset = [region.origin[0] - input.x, region.origin[1] - input.y] as const
+    const working: ImageEditorViewportLayoutV3 = { ...layout,
+      stageWidth: input.width / viewport.devicePixelRatio, stageHeight: input.height / viewport.devicePixelRatio,
+      viewportKey: `${layout.viewportKey}:gaussian-region:${input.x}:${input.y}:${input.width}:${input.height}`,
+      viewport: { ...viewport, documentX: input.x / scale, documentY: input.y / scale,
+        width: input.width / viewport.devicePixelRatio, height: input.height / viewport.devicePixelRatio } }
+    return { layout: working, cropOffset: offset, expanded: input.width !== Math.ceil(viewport.width * viewport.devicePixelRatio)
+      || input.height !== Math.ceil(viewport.height * viewport.devicePixelRatio) || offset[0] !== 0 || offset[1] !== 0 }
+  }
+  // 混合其他空间核时保留其完整分析域；不能拿 Gaussian 的 halo 代替它的 support。
   if (effects.some(node => node.definitionId === 'effect.gaussian_blur')) {
     const scale = viewport.zoom * viewport.devicePixelRatio
     const width = Math.max(1, Math.ceil(scene.width * scale))

@@ -34,7 +34,8 @@ fn loadMask(coord: vec2i) -> f32 {
   return vec4f(positions[vi], 0, 1);
 }
 @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-  let outputPoint = position.xy / camera.documentOriginScale.z + camera.documentOriginScale.xy;
+  let outputPoint = select(position.xy / camera.documentOriginScale.z + camera.documentOriginScale.xy,
+    (position.xy + camera.orientation.zw) / camera.documentOriginScale.z, camera.documentOriginScale.w > 0.5);
   let documentPoint = outputToDocument(outputPoint);
   let inverse = params.inverseLinear;
   let sourcePoint = vec2f(

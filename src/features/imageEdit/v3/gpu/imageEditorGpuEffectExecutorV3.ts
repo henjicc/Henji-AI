@@ -14,6 +14,8 @@ import type { ImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
 import { IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3 } from '@/core/imageEdit/v3/colorTypes'
 import { IMAGE_EDITOR_GPU_TRANSFER_CODE_V3 } from './imageEditorGpuColorPipelineV3'
 import mixShader from './shaders/imageEditorGpuEffectMixV3.wgsl?raw'
+import type { GaussianRegion } from '@/core/imaging/effects/cpu/gaussian'
+import type { ImageEditorGpuGaussianRegionV3 } from './imageEditorGpuGaussianRegionsV3'
 
 export interface ImageEditorGpuPreparedEffectV3 {
   readonly rendererKey: string
@@ -69,6 +71,7 @@ export class ImageEditorGpuEffectExecutorV3 {
     effectRecipeSize?: readonly [number, number],
     documentColor?: ImageEditColorModeV3,
     evaluation?: EffectEvaluationContext,
+    region?: { input: GaussianRegion; gaussian: ImageEditorGpuGaussianRegionV3 },
   ): ImageEditorGpuPreparedEffectV3 {
     const dependencies = [input, mask, evaluation?.quality, evaluation?.outputSize.width, evaluation?.outputSize.height]
     const existing = this.retained.get(node.nodeId)
@@ -83,13 +86,14 @@ export class ImageEditorGpuEffectExecutorV3 {
       return { rendererKey, node, input, mask, output: existing.output, processed: existing.output,
         fingerprint, dependencies, renderer, pending: false, direct, ownsOutput: existing.ownsOutput }
     }
-    const output = target(this.gpu, {
+    const output = existing?.ownsOutput ? existing.output : target(this.gpu, {
       size: input.size, format: 'rgba16float', clearColor: [0, 0, 0, 0],
       label: `image-editor-graph-effect:${node.nodeId}`,
     })
+    output.resize(input.size)
     const processedOutput = direct ? output : this.targets.full(2, input.size)
     const processed = binding.prepare(renderer, { node, input, output: processedOutput,
-      scale: outputPixelsPerDocumentPixel, recipeSize: effectRecipeSize, color: documentColor, evaluation })
+      scale: outputPixelsPerDocumentPixel, recipeSize: effectRecipeSize, color: documentColor, evaluation, region })
     const finalOutput = direct ? processed : output
     const ownsOutput = finalOutput === output
     if (!ownsOutput) output.color.destroy()
@@ -126,7 +130,7 @@ export class ImageEditorGpuEffectExecutorV3 {
     for (const entry of prepared) {
       if (!entry.pending) continue
       const previous = this.retained.get(entry.node.nodeId)
-      if (previous?.ownsOutput) previous.output.color.destroy()
+      if (previous?.ownsOutput && previous.output !== entry.output) previous.output.color.destroy()
       this.retained.set(entry.node.nodeId, { output: entry.output, fingerprint: entry.fingerprint,
         dependencies: entry.dependencies, ownsOutput: entry.ownsOutput })
     }
@@ -147,7 +151,10 @@ export class ImageEditorGpuEffectExecutorV3 {
 
   discard(prepared: readonly ImageEditorGpuPreparedEffectV3[]): void {
     for (const entry of prepared) {
-      if (entry.pending && entry.ownsOutput) entry.output.color.destroy()
+      if (entry.pending && entry.ownsOutput) {
+        if (this.retained.get(entry.node.nodeId)?.output === entry.output) this.retained.delete(entry.node.nodeId)
+        entry.output.color.destroy()
+      }
     }
   }
 
@@ -177,6 +184,7 @@ interface EffectKernelPreparation {
   recipeSize?: readonly [number, number];
   color?: ImageEditColorModeV3;
   evaluation?: EffectEvaluationContext;
+  region?: { input: GaussianRegion; gaussian: ImageEditorGpuGaussianRegionV3 };
 }
 interface EffectKernelBinding {
   create(gpu: Gpu, targets: ImageEditorGpuEffectTargetPoolV3, compiled: () => void): ImageEditorGpuTargetEffectRendererV3;
@@ -188,6 +196,8 @@ const EFFECT_KERNELS: Readonly<Record<string, EffectKernelBinding>> = {
     create: (gpu, pool, compiled) => new ImageEditorGpuGaussianBlurRendererV3(gpu, pool, compiled),
     prepare: (renderer, context) => {
       if (!context.evaluation) throw new Error('GPU 高斯缺少完整文档网格与质量档')
+      if (context.region) return (renderer as ImageEditorGpuGaussianBlurRendererV3).prepareRegion(context.input,
+        context.region.gaussian.plan, context.output, context.region.input, context.region.gaussian.output)
       const plan = resolveImageGaussianPlan(gaussianParametersFromNodeV3(context.node.parameters), context.evaluation)
       return (renderer as ImageEditorGpuGaussianBlurRendererV3).prepareResolved(context.input, plan, context.output)
     },

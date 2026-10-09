@@ -29,6 +29,7 @@ import {
   type ImageEditorGpuPreparedEffectV3,
 } from './imageEditorGpuEffectExecutorV3'
 import { ImageEditorGpuEffectCropperV3 } from './imageEditorGpuEffectCropperV3'
+import { planImageEditorGpuGaussianRegionsV3, usesImageEditorGpuGaussianRegionsV3 } from './imageEditorGpuGaussianRegionsV3'
 import adjustmentShader from './shaders/imageEditorGpuGraphAdjustmentV3.wgsl?raw'
 import compositeShader from './shaders/imageEditorGpuGraphCompositeV3.wgsl?raw'
 import copyShader from './shaders/imageEditorGpuGraphCopyV3.wgsl?raw'
@@ -152,6 +153,8 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     awaitCompletion = true,
   ): Promise<Target | null> {
     if (!this.scene?.outputNodeId) return null
+    const regions = usesImageEditorGpuGaussianRegionsV3(this.scene)
+      ? planImageEditorGpuGaussianRegionsV3(this.scene, outputLayout, effectRecipeSize) : null
     const outputs = new Map<string, Target>()
     const fingerprints = new Map<string, string>()
     const tasks: GraphTask[] = []
@@ -178,7 +181,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         const transform = node.kind === 'composite'
           ? this.transientTransforms.get(node.layerId) ?? node.transform
           : [1, 0, 0, 1, 0, 0] as ImageEditTransformV3
-        const prepared = this.maskAssembler.prepare(cacheKey, mask, plan, transform, layout)
+        const prepared = this.maskAssembler.prepare(cacheKey, mask, plan, transform, layout, regions !== null)
         preparedMasks.push(prepared)
         activeMaskKeys.add(cacheKey)
         maskTargets.set(cacheKey, prepared.target)
@@ -190,7 +193,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         if (!plan) {
           throw new Error(`GPU RenderGraph 缺少源瓦片：${node.layerId}`)
         }
-        const fingerprint = `${this.fingerprint(node, fingerprints)}:${imageEditorGpuGraphViewportFingerprintV3(layout)}`
+        const fingerprint = `${this.fingerprint(node, fingerprints)}:${imageEditorGpuGraphViewportFingerprintV3(layout)}:global-grid:${regions !== null}`
         virtualSources.set(node.nodeId, { plan, fingerprint })
         fingerprints.set(node.nodeId, fingerprint)
         continue
@@ -214,8 +217,12 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
           effectRecipeSize,
           this.scene.color,
           { referenceSize: { width: this.scene.width, height: this.scene.height },
-            outputSize: { width: input.size[0], height: input.size[1] },
+            outputSize: { width: regions?.effects.has(node.nodeId) ? regions.outputSize[0] : input.size[0],
+              height: regions?.effects.has(node.nodeId) ? regions.outputSize[1] : input.size[1] },
             quality: node.parameters.effectQuality === 'final' ? 'final' : 'interactive' },
+          regions?.effects.has(node.nodeId) ? { input: { x: Math.round(layout.viewport.documentX * layout.viewport.zoom * layout.viewport.devicePixelRatio),
+            y: Math.round(layout.viewport.documentY * layout.viewport.zoom * layout.viewport.devicePixelRatio),
+            width: input.size[0], height: input.size[1] }, gaussian: regions.effects.get(node.nodeId)! } : undefined,
         )
         preparedEffects.push(prepared)
         operations.push({ kind: 'effect', effect: prepared })
@@ -244,14 +251,14 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       }
       if (!input && !sourcePlan) throw new Error(`GPU RenderGraph 缺少节点输入：${node.nodeId}`)
       const size = imageEditorGpuOutputPixelSizeV3(layout)
-      const reuse = node.kind === 'adjustment' && adjustmentKernel(node) === 'color-grade'
-        && retained && retained.target.size[0] === size[0] && retained.target.size[1] === size[1]
+      const reuse = retained !== undefined
       const output = reuse ? retained.target : target(this.gpu, {
         size: imageEditorGpuOutputPixelSizeV3(layout),
         format: 'rgba16float',
         clearColor: CLEAR,
         label: `image-editor-graph:${node.nodeId}`,
       })
+      output.resize(size)
       this.stats.maximumTargetWidth = Math.max(this.stats.maximumTargetWidth, output.size[0])
       this.stats.maximumTargetHeight = Math.max(this.stats.maximumTargetHeight, output.size[1])
       outputs.set(node.nodeId, output)
@@ -264,7 +271,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       operations.push({ kind: 'graph', task: tasks[tasks.length - 1] })
     }
     this.gpu.gpu.queue.writeBuffer(
-      this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, this.scene.geometry),
+      this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, this.scene.geometry, regions !== null),
     )
     if (tasks.some((task) => task.sourcePlan)) this.ensureSourceScratch(layout)
     const graphOutput = outputs.get(this.scene.outputNodeId) ?? null
@@ -280,7 +287,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     try {
       await Promise.all([this.compileTasks(tasks, layout), this.maskAssembler.compile(preparedMasks),
         this.effectExecutor.compile(preparedEffects), ...(cropNeeded ? [this.effectCropper.compile()] : [])])
-      this.maskAssembler.updateCamera(layout, this.scene.geometry)
+      this.maskAssembler.updateCamera(layout, this.scene.geometry, regions !== null)
       const submitted = operations.length > 0 || preparedMasks.some((entry) => entry.pending) || cropNeeded
         ? frame(this.gpu, (currentFrame) => {
           for (const mask of preparedMasks) this.maskAssembler.encode(currentFrame, mask)

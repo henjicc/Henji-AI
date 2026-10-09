@@ -15,6 +15,7 @@ import {
   type ImageEditorGpuSceneWorkerEventV3,
 } from './imageEditorGpuSceneProtocolV3'
 import type { Target } from 'vgpu'
+import { usesImageEditorGpuGaussianRegionsV3 } from './imageEditorGpuGaussianRegionsV3'
 import {
   cropImageEditorGpuExportCoreV3 as cropCore,
   imageEditorGpuExportAbortErrorV3 as abortError,
@@ -183,7 +184,11 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
     const globalLow = await this.prepareGlobalAnalysis(job, scene)
     for (let index = 0; index < tiles.length; index += 1) {
       this.assertCurrent(job)
-      const plan = tiles[index]!
+      // 区域 Gaussian compositor 自己反传 halo；只请求 core，避免把 halo 再模糊/扩一次。
+      const tile = tiles[index]!
+      const plan = usesImageEditorGpuGaussianRegionsV3(scene) ? { ...tile,
+        renderX: tile.x, renderY: tile.y, renderWidth: tile.width, renderHeight: tile.height,
+        coreOffsetX: 0, coreOffsetY: 0 } : tile
       job.compositor.updateExportViewport?.(
         exportLayout(job.request.requestId, plan, scene, job.request.description.width),
         [job.request.description.width, job.request.description.height],
