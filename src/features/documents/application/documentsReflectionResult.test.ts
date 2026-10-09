@@ -18,6 +18,8 @@ vi.mock('@/commands/documents', () => {
   }
   return {
     listDocuments: call('listDocuments'),
+    listDocumentsPage: call('listDocumentsPage'),
+    listProjectsPage: call('listProjectsPage'),
     readDocument: call('readDocument'),
     markDocumentOpened: async () => undefined,
     createDocument: call('createDocument'),

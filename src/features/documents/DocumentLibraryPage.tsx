@@ -376,6 +376,8 @@ export function DocumentLibraryPage({
         icon={PageIcon}
         emptyIcon={<PageIcon size={40} strokeWidth={1.5} aria-hidden="true" />}
         loading={library.loading}
+        total={library.total}
+        loadingMore={library.loadingMore}
         loadError={loadError}
         busy={busy || working}
         labels={pageLabels}

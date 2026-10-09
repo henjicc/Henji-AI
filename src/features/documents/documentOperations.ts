@@ -1,3 +1,4 @@
+import type { ListPage, ListPageRequest } from '@/core/documents/pagination'
 import * as documentCommands from '@/commands/documents'
 import { documentKindRegistry, type DocumentKindRegistry } from '@/core/documents/kinds'
 import type {
@@ -52,6 +53,8 @@ import type { DocumentSessionCommands } from './documentSessionTypes'
 
 /** 通用操作用到的文档命令；正式运行用 `@/commands/documents`，测试换成替身。 */
 export interface DocumentOperationCommands extends DocumentSessionCommands {
+  listDocumentsPage(query?: DocumentListQuery & ListPageRequest): Promise<ListPage<DocumentSummary>>
+  listProjectsPage(query?: ProjectListQuery & ListPageRequest): Promise<ListPage<ProjectSummary>>
   renameDocument(request: RenameDocumentRequest): Promise<DocumentMeta>
   moveDocument(request: MoveDocumentRequest): Promise<DocumentTransferResult>
   duplicateDocument(request: DuplicateDocumentRequest): Promise<DocumentTransferResult>
@@ -166,11 +169,13 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   trashDocument: documentCommands.trashDocument,
   deleteEmptyDraft: documentCommands.deleteEmptyDraft,
   listDocuments: documentCommands.listDocuments,
+  listDocumentsPage: documentCommands.listDocumentsPage,
   checkName: documentCommands.checkDocumentName,
   createProject: documentCommands.createProject,
   finalizeProject: documentCommands.finalizeProject,
   trashProject: documentCommands.trashProject,
   listProjects: documentCommands.listProjects,
+  listProjectsPage: documentCommands.listProjectsPage,
   markDocumentOpened: documentCommands.markDocumentOpened,
   renameDocument: documentCommands.renameDocument,
   moveDocument: documentCommands.moveDocument,
@@ -287,6 +292,14 @@ export class DocumentOperations {
   /** 该类型能否独立存放（不在任何项目里）；不能的类型没有“移出项目”。 */
   canStandalone(kind: DocumentKindId): boolean {
     return this.kinds.require(kind).standaloneFolderNames !== null
+  }
+
+  async listDocumentsPage(query: DocumentListQuery & ListPageRequest = {}): Promise<ListPage<DocumentSummary>> {
+    return this.commands.listDocumentsPage(query)
+  }
+
+  async listProjectsPage(query: ProjectListQuery & ListPageRequest = {}): Promise<ListPage<ProjectSummary>> {
+    return this.commands.listProjectsPage(query)
   }
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {

@@ -246,6 +246,8 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       icon={ICON_WORKSPACE_VIDEO_EDIT}
       emptyIcon={<ICON_WORKSPACE_VIDEO_EDIT size={40} strokeWidth={1.5} aria-hidden="true" />}
       loading={library.loading}
+        total={library.total}
+        loadingMore={library.loadingMore}
       loadError={loadError}
       busy={busy || working}
       labels={labels}

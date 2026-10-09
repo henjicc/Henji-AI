@@ -33,9 +33,26 @@ function encodeAssetPath(filePath: string): string {
 }
 
 function mediaUrl(filePath: string): string { return `henji-media://local/${encodeURIComponent(filePath)}` }
-function mapAsset(row: AssetRow): AssetDto {
-  const tags = (getDb().prepare('SELECT t.name FROM asset_tags t JOIN asset_tag_items ati ON ati.tag_id=t.id WHERE ati.asset_id=? ORDER BY t.name COLLATE NOCASE').all(row.id) as Array<{ name: string }>).map((item) => item.name)
-  const libraryIds = (getDb().prepare('SELECT library_id FROM asset_library_items WHERE asset_id=?').all(row.id) as Array<{ library_id: string }>).map((item) => item.library_id)
+// 999 is SQLite's portable minimum variable budget. It bounds each SQL batch,
+// never the number of assets or relations returned to the caller.
+const RELATION_BATCH_SIZE = 999
+type AssetRelations = Pick<AssetDto, 'tags' | 'libraryIds'>
+function loadAssetRelations(ids: readonly string[]): Map<string, AssetRelations> {
+  const result = new Map(ids.map((id) => [id, { tags: [] as string[], libraryIds: [] as string[] }]))
+  const db = getDb()
+  for (let start = 0; start < ids.length; start += RELATION_BATCH_SIZE) {
+    const batch = ids.slice(start, start + RELATION_BATCH_SIZE)
+    const placeholders = batch.map(() => '?').join(',')
+    const tags = db.prepare(`SELECT ati.asset_id, t.name FROM asset_tags t JOIN asset_tag_items ati ON ati.tag_id=t.id WHERE ati.asset_id IN (${placeholders}) ORDER BY t.name COLLATE NOCASE`).all(...batch) as Array<{ asset_id: string; name: string }>
+    const libraries = db.prepare(`SELECT asset_id, library_id FROM asset_library_items WHERE asset_id IN (${placeholders}) ORDER BY library_id`).all(...batch) as Array<{ asset_id: string; library_id: string }>
+    for (const tag of tags) result.get(tag.asset_id)?.tags.push(tag.name)
+    for (const library of libraries) result.get(library.asset_id)?.libraryIds.push(library.library_id)
+  }
+  return result
+}
+function mapAsset(row: AssetRow, relations?: AssetRelations): AssetDto {
+  const tags = relations?.tags ?? (getDb().prepare('SELECT t.name FROM asset_tags t JOIN asset_tag_items ati ON ati.tag_id=t.id WHERE ati.asset_id=? ORDER BY t.name COLLATE NOCASE').all(row.id) as Array<{ name: string }>).map((item) => item.name)
+  const libraryIds = relations?.libraryIds ?? (getDb().prepare('SELECT library_id FROM asset_library_items WHERE asset_id=?').all(row.id) as Array<{ library_id: string }>).map((item) => item.library_id)
   return { id: row.id, mediaType: row.media_type, displayName: row.display_name, filePath: row.file_path, displayUrl: mediaUrl(row.file_path), source: row.source, mimeType: row.mime_type, sizeBytes: row.size_bytes, width: row.width, height: row.height, durationSeconds: row.duration_seconds, thumbnailPath: row.thumbnail_path, thumbnailUrl: row.thumbnail_path ? mediaUrl(row.thumbnail_path) : null, inspectionStatus: row.inspection_status, inspectionError: row.inspection_error, fileModifiedAt: row.file_modified_at, contentIdentity: row.content_identity ?? null, lastUsedAt: row.last_used_at, createdAt: row.created_at, updatedAt: row.updated_at, tags, libraryIds }
 }
 function getAssetRow(id: string): AssetRow | undefined {
@@ -307,7 +324,7 @@ export function addAssetToLibrary(libraryId: string, assetId: string): void { ge
 export function removeAssetFromLibrary(libraryId: string, assetId: string): void { getDb().prepare('DELETE FROM asset_library_items WHERE library_id=? AND asset_id=?').run(libraryId, assetId) }
 export function listTags(): string[] { return (getDb().prepare('SELECT name FROM asset_tags ORDER BY name COLLATE NOCASE').all() as Array<{ name: string }>).map((row) => row.name) }
 export function setAssetTags(assetId: string, tags: string[]): AssetDto {
-  const normalized = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))].slice(0, 32)
+  const normalized = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))]
   getDb().transaction(() => {
     getDb().prepare('DELETE FROM asset_tag_items WHERE asset_id=?').run(assetId)
     const insertTag = getDb().prepare('INSERT OR IGNORE INTO asset_tags (id,name,created_at) VALUES (?,?,?)')
@@ -332,13 +349,14 @@ export function queryAssets(query: AssetQuery): AssetPageDto {
   const clause = where.length ? ` WHERE ${where.join(' AND ')}` : ''
   const total = (getDb().prepare(`SELECT COUNT(*) total FROM assets a${join}${clause}`).get(...params) as { total: number }).total
   const offset = (query.page - 1) * query.pageSize
-  const order = query.sort === 'recent' ? 'COALESCE(a.last_used_at,0) DESC, a.created_at DESC' : 'a.created_at DESC'
+  const order = query.sort === 'recent' ? 'COALESCE(a.last_used_at,0) DESC, a.created_at DESC, a.id' : 'a.created_at DESC, a.id'
   const rows = decodeAssetRows(getDb().prepare(`SELECT a.* FROM assets a${join}${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, query.pageSize, offset) as StoredAssetRow[])
   for (const row of rows) {
     allowMediaRoot(path.dirname(row.file_path))
     if (row.thumbnail_path) allowMediaRoot(path.dirname(row.thumbnail_path))
   }
-  return { items: rows.map(mapAsset), total, page: query.page, pageSize: query.pageSize }
+  const relations = loadAssetRelations(rows.map((row) => row.id))
+  return { items: rows.map((row) => mapAsset(row, relations.get(row.id)!)), total, page: query.page, pageSize: query.pageSize }
 }
 
 /** 资产原文件的绝对路径（MCP 媒体读取用）；资产不存在返回 null。 */

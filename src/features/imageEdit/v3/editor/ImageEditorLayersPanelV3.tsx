@@ -8,7 +8,7 @@ import {
 import type { MouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Virtuoso } from 'react-virtuoso'
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton } from '@/components/ui'
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag'
@@ -113,7 +113,9 @@ export function ImageEditorLayersPanelV3({
   const [creationProgress, setCreationProgress] = useState(0)
   const creationAbort = useRef<AbortController | null>(null)
   useEffect(() => () => creationAbort.current?.abort(), [])
-  const layerViewportRef = useRef<HTMLDivElement>(null)
+  const layerViewportRef = useRef<HTMLDivElement | null>(null)
+  const listRef = useRef<VirtuosoHandle>(null)
+  const pendingFocus = useRef<number | null>(null)
   const selectedLayerIds = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS,
   )
@@ -157,10 +159,24 @@ export function ImageEditorLayersPanelV3({
     isCustomDragging: false,
     files: rows.map((row) => row.layer.id),
     layout: 'vertical',
+    virtualVertical: true,
+    dragThreshold: 5,
     dragBoundaryRef: layerViewportRef,
     allowButtonTarget: true,
     onReorder: reorderRows,
   })
+  const focusPendingRow = useCallback(() => {
+    const index = pendingFocus.current
+    if (index === null) return
+    const button = itemRefs.current[index]?.querySelector<HTMLButtonElement>('[data-layer-select]')
+    if (button) { button.focus(); pendingFocus.current = null }
+  }, [itemRefs])
+
+  useEffect(() => {
+    if (dragState.isDragging || dragState.isDropping) return
+    const index = rows.findIndex(row => row.layer.id === selectedLayerIds[0])
+    if (index >= 0) listRef.current?.scrollIntoView({ index })
+  }, [rows, selectedLayerIds, dragState.isDragging, dragState.isDropping])
 
   const addChoice = (choice: ImageEditLayerCreationChoiceV3): void => {
     if (creationAbort.current) return
@@ -361,23 +377,40 @@ export function ImageEditorLayersPanelV3({
       </div>
 
       <div
-        ref={layerViewportRef}
         role="tree"
         aria-label={t('imageEditor.v3.layers.title')}
         aria-multiselectable="true"
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="min-h-0 flex-1 overflow-hidden"
+        onKeyDownCapture={(event) => {
+          if (event.metaKey || event.ctrlKey || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
+          const button = (event.target as HTMLElement).closest('[data-layer-select]')
+          if (!button) return
+          const index = itemRefs.current.findIndex(element => element?.contains(button))
+          if (index < 0) return
+          event.preventDefault(); event.stopPropagation()
+          const target = event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1
+            : Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowUp' ? -1 : 1)))
+          pendingFocus.current = target
+          listRef.current?.scrollIntoView({ index: target })
+          focusPendingRow()
+        }}
       >
         {rows.length === 0 ? (
           <p className="px-4 py-8 text-center text-xs text-text2">
             {t('imageEditor.v3.layers.empty')}
           </p>
-        ) : rows.length > 50 ? (
+        ) : (
           <Virtuoso
+            ref={listRef}
+            initialItemCount={Math.min(12, rows.length)}
+            computeItemKey={(_index, row) => row.layer.id}
+            rangeChanged={() => requestAnimationFrame(focusPendingRow)}
+            scrollerRef={(element) => { layerViewportRef.current = element instanceof HTMLDivElement ? element : null }}
             data={rows}
             itemContent={(index, row) => renderRow(row, index)}
             className="h-full"
           />
-        ) : rows.map(renderRow)}
+        )}
       </div>
     </section>
   )

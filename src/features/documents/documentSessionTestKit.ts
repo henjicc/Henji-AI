@@ -1,3 +1,4 @@
+import { pageList, type ListPageRequest } from '@/core/documents/pagination'
 import { z } from 'zod'
 import { sha256HexString } from '@/utils/save/hash'
 import type { DocumentsPlatform } from '@/platform/contracts/documents'
@@ -346,6 +347,14 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     if (!this.missingIds.has(docId)) throw namedError('DocumentLocationError', '这份文档的文件还在，不能只从列表移除。')
     this.documents.delete(docId)
     this.missingIds.delete(docId)
+  }
+
+  async listDocumentsPage(query: DocumentListQuery & ListPageRequest = {}) {
+    return pageList(await this.listDocuments(query), query, row => ({ time: row.updatedAt, name: row.name, id: row.id }))
+  }
+
+  async listProjectsPage(query: ProjectListQuery & ListPageRequest = {}) {
+    return pageList(await this.listProjects(query), query, row => ({ time: row.createdAt, name: row.name, id: row.id }))
   }
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {

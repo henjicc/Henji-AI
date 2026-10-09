@@ -1,3 +1,5 @@
+import type { ListPage, ListPageRequest } from '../../../../src/core/documents/pagination'
+import type { ProjectListQuery } from '../../../../src/core/documents/types'
 import type { DocumentKindId, DocumentListSummary, FolderLocale } from '../../../../src/core/documents/types'
 
 /*
@@ -70,6 +72,9 @@ export interface DocumentCatalog {
   getDocument(id: string): IndexedDocument | null
   getDocumentByPath(path: string): IndexedDocument | null
   listDocuments(filter?: IndexedDocumentFilter): IndexedDocument[]
+  listDocumentsPage(filter?: IndexedDocumentFilter, page?: ListPageRequest): ListPage<IndexedDocument>
+  getProjectsByIds(ids: readonly string[]): IndexedProject[]
+  getProjectDocumentCounts(ids: readonly string[]): Map<string, number>
   /** 按 ID 写入；同一位置原有的其他 ID 记录会被替换（文件已换成另一份文档）。 */
   upsertDocument(row: IndexedDocument): void
   removeDocument(id: string): void
@@ -81,6 +86,7 @@ export interface DocumentCatalog {
   getProject(id: string): IndexedProject | null
   getProjectByPath(path: string): IndexedProject | null
   listProjects(): IndexedProject[]
+  listProjectsPage(filter?: ProjectListQuery, page?: ListPageRequest): ListPage<IndexedProject>
   upsertProject(row: IndexedProject): void
   /** 删除项目记录及其文档记录。 */
   removeProject(id: string): void

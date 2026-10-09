@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react'
+import { VirtuosoGridMockContext } from 'react-virtuoso'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
@@ -197,4 +198,20 @@ describe('资产库空态与失败态（5.6 第二批）', () => {
     fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.retry' }))
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
+})
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  HTMLElement.prototype.scrollTo = () => undefined
+})
+
+it('1000 张资产只挂载视口卡片，批量选择仍按资产 ID', async () => {
+  const items = Array.from({ length: 1000 }, (_, index) => ({ ...asset, id: `scale-${index}`, displayName: `资产${index}` }))
+  mocks.query.mockResolvedValue({ items, total: 1000, page: 1, pageSize: 1000 })
+  const view = render(<VirtuosoGridMockContext.Provider value={{ viewportHeight: 360, viewportWidth: 640, itemHeight: 180, itemWidth: 160 }}><AssetLibrarySurface mode="workspace" /></VirtuosoGridMockContext.Provider>)
+  await waitFor(() => expect(view.container.querySelectorAll('[data-asset-card]').length).toBeGreaterThan(0))
+  expect(view.container.querySelectorAll('[data-asset-card]').length).toBeLessThan(50)
+  act(() => useAssetLibraryStore.getState().enterBatchMode())
+  fireEvent.click(view.container.querySelector('[data-asset-id="scale-0"] [data-variant="cover"]') ?? view.container.querySelector('[data-asset-id="scale-0"]')!)
+  expect(useAssetLibraryStore.getState().batchSelectedIds).toContain('scale-0')
 })

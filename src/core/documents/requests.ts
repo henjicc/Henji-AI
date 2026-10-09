@@ -1,3 +1,4 @@
+import { MAX_DOCUMENT_PAGE_SIZE } from './pagination'
 import { z } from 'zod'
 
 import { documentIdSchema } from './envelope'
@@ -192,4 +193,14 @@ export const writeDocumentSessionStateRequestSchema: z.ZodType<WriteDocumentSess
   docId: documentIdSchema,
   key: sessionStateKeySchema,
   value: z.unknown(),
+}).strict()
+
+// Bounds each IPC response's work, never the total collection.
+const listPageShape = { cursor: z.string().optional(), pageSize: z.number().int().min(1).max(MAX_DOCUMENT_PAGE_SIZE).optional() }
+export const documentListPageQuerySchema = z.object({
+  kind: kindSchema.optional(), container: containerFilterSchema.optional(),
+  includeDrafts: z.boolean().optional(), includeMissing: z.boolean().optional(), ...listPageShape,
+}).strict()
+export const projectListPageQuerySchema = z.object({
+  includeDrafts: z.boolean().optional(), includeMissing: z.boolean().optional(), ...listPageShape,
 }).strict()

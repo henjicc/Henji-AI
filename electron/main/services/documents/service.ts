@@ -1,3 +1,4 @@
+import type { ListPage, ListPageRequest } from '../../../../src/core/documents/pagination'
 import type { DocumentCodeFiles } from './code-files'
 import type {
   CreateDocumentRequest,
@@ -74,19 +75,32 @@ export class DocumentService implements DocumentsPlatform {
   publishCodeComponent: DocumentsPlatform['publishCodeComponent'] = request => this.parts.codeFiles.publish(request)
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {
+    const items: DocumentSummary[] = []
+    let cursor: string | undefined
+    do {
+      const page = await this.listDocumentsPage({ ...query, cursor })
+      items.push(...page.items)
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    return items
+  }
+
+  async listDocumentsPage(query: DocumentListQuery & ListPageRequest = {}): Promise<ListPage<DocumentSummary>> {
     const { workspace, covers } = this.parts
     const catalog = workspace.catalog
     const container = query.container ?? { kind: 'any' }
-    const rows = catalog.listDocuments({
+    const page = catalog.listDocumentsPage({
       kind: query.kind,
       projectId: container.kind === 'any' ? undefined : container.kind === 'user' ? null : container.projectId,
       includeDrafts: query.includeDrafts ?? true,
       includeMissing: query.includeMissing ?? true,
-    })
-    const projects = new Map(catalog.listProjects().map((project) => [project.id, project]))
+    }, query)
+    const rows = page.items
+    const projectIds = [...new Set(rows.flatMap((row) => row.projectId ? [row.projectId] : []))]
+    const projects = new Map(catalog.getProjectsByIds(projectIds).map((project) => [project.id, project]))
     const coverPaths = await covers.getMany(rows.map((row) => row.id))
     const userRoot = workspace.layout().root
-    return rows.map((row) => ({
+    return { ...page, items: rows.map((row) => ({
       id: row.id,
       kind: row.kind,
       name: row.name,
@@ -105,7 +119,7 @@ export class DocumentService implements DocumentsPlatform {
       coverPath: coverPaths.get(row.id) ?? null,
       summary: row.summary,
       lastOpenedAt: row.lastOpenedAt ?? null,
-    }))
+    })) }
   }
 
   /** 记一次打开（文档会话打开或新建文档时调用）：只写作品索引，文档所在的项目一并记上。 */
@@ -197,6 +211,10 @@ export class DocumentService implements DocumentsPlatform {
 
   async listProjects(query: ProjectListQuery = {}): Promise<ProjectSummary[]> {
     return this.parts.projects.list(query)
+  }
+
+  async listProjectsPage(query: ProjectListQuery & ListPageRequest = {}): Promise<ListPage<ProjectSummary>> {
+    return this.parts.projects.listPage(query)
   }
 
   createProject(request: CreateProjectRequest = {}): Promise<ProjectSummary> {

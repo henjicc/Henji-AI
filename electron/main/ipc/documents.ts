@@ -7,6 +7,7 @@ import {
   documentIdRequestSchema,
   documentLinkSchema,
   documentListQuerySchema,
+  documentListPageQuerySchema,
   documentSessionStateKeySchema,
   documentTargetSchema,
   duplicateDocumentRequestSchema,
@@ -21,6 +22,7 @@ import {
   pathRequestSchema,
   projectIdRequestSchema,
   projectListQuerySchema,
+  projectListPageQuerySchema,
   renameDocumentRequestSchema,
   renameProjectRequestSchema,
   saveDocumentCoverRequestSchema,
@@ -50,6 +52,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.listCodeComponents, parseWith(documentTargetSchema), target => service().listCodeComponents(target))
   registerIpcHandler(c.publishCodeComponent, parseWith(publishCodeComponentRequestSchema), request => service().publishCodeComponent(request))
   registerIpcHandler(c.listDocuments, parseWith(documentListQuerySchema, true), (query) => service().listDocuments(query))
+  registerIpcHandler(c.listDocumentsPage, parseWith(documentListPageQuerySchema, true), (query) => service().listDocumentsPage(query))
   registerIpcHandler(c.readDocument, parseWith(documentTargetSchema), (target) => service().readDocument(target))
   registerIpcHandler(c.createDocument, parseWith(createDocumentRequestSchema), (request) => service().createDocument(request))
   registerIpcHandler(c.saveDocument, parseWith(saveDocumentRequestSchema), (request) => service().saveDocument(request))
@@ -72,6 +75,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.readSessionState, parseWith(documentSessionStateKeySchema), (request) => service().readSessionState(request))
   registerIpcHandler(c.writeSessionState, parseWith(writeDocumentSessionStateRequestSchema), (request) => service().writeSessionState(request))
   registerIpcHandler(c.listProjects, parseWith(projectListQuerySchema, true), (query) => service().listProjects(query))
+  registerIpcHandler(c.listProjectsPage, parseWith(projectListPageQuerySchema, true), (query) => service().listProjectsPage(query))
   registerIpcHandler(c.createProject, parseWith(createProjectRequestSchema, true), (request) => service().createProject(request))
   registerIpcHandler(c.renameProject, parseWith(renameProjectRequestSchema), (request) => service().renameProject(request))
   registerIpcHandler(c.finalizeProject, parseWith(finalizeProjectRequestSchema), (request) => service().finalizeProject(request))

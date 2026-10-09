@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { ClipboardPaste, FilePlus2, FolderOpen, PackageOpen } from 'lucide-react';
 import { ProjectLibraryPage, type ProjectLibraryLabels } from './ProjectLibraryPage';
 import type { ProjectCardGridItem } from './ProjectCardGrid';
@@ -287,3 +287,8 @@ describe('ProjectLibraryPage', () => {
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith([items[0]]));
   });
 });
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  HTMLElement.prototype.scrollTo = () => undefined
+})

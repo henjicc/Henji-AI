@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { listenLogEvent, type LogEventPushDto } from '@/commands/logging'
 import { createLogger } from '@/core/logging'
 import type { DisplayLogEvent } from './eventDisplay'
@@ -25,6 +25,14 @@ class LogWindowStore {
   private paused = false
   private seq = 0
   private listeners = new Set<Listener>()
+  private snapshot: UseLogWindowStoreResult | null = null
+  private readonly pauseAction = (paused: boolean): void => this.setPaused(paused)
+  private readonly clearAction = (): void => this.clear()
+
+  getState(): UseLogWindowStoreResult {
+    return this.snapshot ??= { events: this.events, paused: this.paused, pausedCount: this.pausedBuffer.length,
+      setPaused: this.pauseAction, clear: this.clearAction }
+  }
 
   getSnapshot(): DisplayLogEvent[] {
     return this.events
@@ -46,6 +54,7 @@ class LogWindowStore {
   }
 
   private emit(): void {
+    this.snapshot = null
     this.listeners.forEach((listener) => listener())
   }
 
@@ -142,19 +151,15 @@ export interface UseLogWindowStoreResult {
 }
 
 /** 日志窗口专用 hook：挂载时建立订阅，返回当前事件缓冲与暂停/清空控制。 */
-export function useLogWindowStore(): UseLogWindowStoreResult {
-  const [, forceRender] = useState(0)
+const subscribeLogWindow = (listener: Listener): (() => void) => logWindowStore.subscribe(listener)
 
-  useEffect(() => {
-    ensureLogWindowSubscription()
-    return logWindowStore.subscribe(() => forceRender((tick) => tick + 1))
-  }, [])
-
-  return {
-    events: logWindowStore.getSnapshot(),
-    paused: logWindowStore.isPaused(),
-    pausedCount: logWindowStore.getPausedCount(),
-    setPaused: (paused) => logWindowStore.setPaused(paused),
-    clear: () => logWindowStore.clear(),
-  }
+export function useLogWindowStore(): UseLogWindowStoreResult
+export function useLogWindowStore<T>(selector: (state: UseLogWindowStoreResult) => T): T
+export function useLogWindowStore(selector?: (state: UseLogWindowStoreResult) => unknown): unknown {
+  useEffect(ensureLogWindowSubscription, [])
+  const getSnapshot = useCallback(() => {
+    const state = logWindowStore.getState()
+    return selector ? selector(state) : state
+  }, [selector])
+  return useSyncExternalStore(subscribeLogWindow, getSnapshot, getSnapshot)
 }

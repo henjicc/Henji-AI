@@ -1,3 +1,4 @@
+import type { ListPage, ListPageRequest } from '../../../../src/core/documents/pagination'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -62,15 +63,21 @@ export class ProjectService {
   }
 
   list(query: ProjectListQuery = {}): ProjectSummary[] {
+    const items: ProjectSummary[] = []
+    let cursor: string | undefined
+    do {
+      const page = this.listPage({ ...query, cursor })
+      items.push(...page.items)
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    return items
+  }
+
+  listPage(query: ProjectListQuery & ListPageRequest = {}): ListPage<ProjectSummary> {
     const catalog = this.workspace.catalog
-    const counts = new Map<string, number>()
-    for (const document of catalog.listDocuments({ includeMissing: false })) {
-      if (document.projectId) counts.set(document.projectId, (counts.get(document.projectId) ?? 0) + 1)
-    }
-    return catalog.listProjects()
-      .filter((project) => (query.includeDrafts ?? true) || !project.draft)
-      .filter((project) => (query.includeMissing ?? true) || !project.missing)
-      .map((project) => this.summary(project, counts.get(project.id) ?? 0))
+    const page = catalog.listProjectsPage(query, query)
+    const counts = catalog.getProjectDocumentCounts(page.items.map((project) => project.id))
+    return { ...page, items: page.items.map((project) => this.summary(project, counts.get(project.id) ?? 0)) }
   }
 
   /** 新建项目：没给名字时为草稿并自动起名；给了名字按用户输入处理（重名报错）。 */

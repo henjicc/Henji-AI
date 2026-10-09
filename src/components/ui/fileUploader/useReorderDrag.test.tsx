@@ -183,3 +183,28 @@ describe('useReorderDrag grid layout', () => {
     expect(state.getAttribute('data-current-y')).toBe('50');
   });
 });
+
+function VirtualHarness({ onReorder }: { onReorder: (from: number, to: number) => void }) {
+  const boundary = useRef<HTMLDivElement>(null)
+  const { itemRefs, handleMouseDown } = useReorderDrag({ disabled: false, isCustomDragging: false, files: Array.from({ length: 1000 }, (_, i) => String(i)), layout: 'vertical', virtualVertical: true, dragBoundaryRef: boundary, onReorder })
+  return <div ref={boundary} data-testid="virtual-boundary"><div data-testid="virtual-row" ref={element => {
+    itemRefs.current[10] = element
+    if (element) element.getBoundingClientRect = () => rect(0, 0, 100, 44)
+  }} onMouseDown={event => handleMouseDown(10, event)} /></div>
+}
+
+it('虚拟行滚动后可拖到未挂载的远处索引，不依赖全量 DOM', () => {
+  vi.useFakeTimers()
+  const onReorder = vi.fn()
+  const view = render(<VirtualHarness onReorder={onReorder} />)
+  const boundary = view.getByTestId('virtual-boundary')
+  boundary.getBoundingClientRect = () => rect(0, 0, 100, 264)
+  fireEvent.mouseDown(view.getByTestId('virtual-row'), { button: 0, clientX: 50, clientY: 22 })
+  fireEvent.mouseMove(window, { clientX: 50, clientY: 60 })
+  boundary.scrollTop = 4400
+  fireEvent.mouseMove(window, { clientX: 50, clientY: 66 })
+  fireEvent.mouseUp(window, { clientX: 50, clientY: 66 })
+  act(() => vi.advanceTimersByTime(150))
+  expect(onReorder).toHaveBeenCalledWith(10, 111)
+  cleanup(); vi.useRealTimers()
+})

@@ -1,3 +1,4 @@
+import { Virtuoso, VirtuosoGrid, type VirtuosoHandle, type VirtuosoGridHandle } from 'react-virtuoso';
 import React from 'react';
 import { ArrowDown, CheckSquare, FolderOpen, MoreHorizontal, Pencil, Square, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -84,6 +85,7 @@ export interface ProjectListColumnLabels {
 
 interface ProjectCardGridProps {
   items: ProjectCardGridItem[];
+  scrollParent?: HTMLElement;
   layout: ProjectLibraryView;
   busy?: boolean;
   icon?: LucideIcon;
@@ -153,6 +155,7 @@ function formatSize(bytes: number | undefined): string {
  */
 export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   items,
+  scrollParent,
   layout,
   busy = false,
   icon: Icon,
@@ -171,6 +174,34 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   showMenu,
   showMenuAt,
 }) => {
+  const hostRef = React.useRef<HTMLDivElement>(null);
+  const listRef = React.useRef<VirtuosoHandle>(null);
+  const gridRef = React.useRef<VirtuosoGridHandle>(null);
+  const pendingFocus = React.useRef<string | null>(null);
+  const focusPending = React.useCallback(() => {
+    if (!pendingFocus.current) return;
+    const button = Array.from(hostRef.current?.querySelectorAll<HTMLButtonElement>('[data-project-id]') ?? [])
+      .find(element => element.dataset.projectId === pendingFocus.current);
+    if (button) { button.focus(); pendingFocus.current = null; }
+  }, []);
+  const navigate = (event: React.KeyboardEvent): void => {
+    if (event.ctrlKey || event.metaKey || !['ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab'].includes(event.key)) return;
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-project-id]');
+    if (!button) return;
+    const current = items.findIndex(item => item.id === button.dataset.projectId);
+    if (current < 0) return;
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+      : current + ((event.key === 'ArrowUp' || (event.key === 'Tab' && event.shiftKey)) ? -1 : 1);
+    if (index < 0 || index >= items.length) return;
+    const target = items[index].id;
+    // Preserve ordinary tab stops while mounted; bridge only virtual boundaries.
+    if (event.key === 'Tab' && Array.from(hostRef.current?.querySelectorAll<HTMLElement>('[data-project-id]') ?? [])
+      .some(element => element.dataset.projectId === target)) return;
+    event.preventDefault(); event.stopPropagation(); pendingFocus.current = target;
+    if (layout === 'list') listRef.current?.scrollIntoView({ index });
+    else gridRef.current?.scrollToIndex({ index });
+    focusPending();
+  };
   const manageable = (item: ProjectCardGridItem): boolean => !item.draft && (canManage?.(item) ?? true);
   const buildMenuItems = (item: ProjectCardGridItem): MenuItem[] => {
     if (item.draft) {
@@ -336,7 +367,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
       )
     );
     return (
-      <div data-project-list-view className="flex flex-col">
+      <div ref={hostRef} onKeyDownCapture={navigate} data-project-list-view className="flex flex-col">
         <div className={`grid ${columnsClass} items-center gap-4 border-b border-line pb-1.5 ${selection.active ? 'pl-11' : 'pl-2.5'} pr-2.5`}>
           {headerCell(columns.name, 'name')}
           {hasLocation ? headerCell(columns.location) : null}
@@ -344,8 +375,14 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
           {hasSize ? headerCell(columns.size) : null}
           <span aria-hidden="true" />
         </div>
-        <div className="flex flex-col gap-0.5 pt-1">
-          {items.map((item) => {
+        <Virtuoso
+          ref={listRef}
+          rangeChanged={() => requestAnimationFrame(focusPending)}
+          customScrollParent={scrollParent}
+          data={items}
+          initialItemCount={Math.min(12, items.length)}
+          computeItemKey={(_index, item) => item.id}
+          itemContent={(_index, item) => {
             const time = timeSort === 'updated' ? item.updatedAt : item.createdAt;
             return (
               <div key={item.id} className="group relative min-w-0">
@@ -377,15 +414,24 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
                 </div>
               </div>
             );
-          })}
-        </div>
+          }}
+        />
       </div>
     );
   }
 
   return (
-    <div className={`grid ${PROJECT_GRID_COLUMNS_CLASS}`}>
-      {items.map((item) => (
+    <div ref={hostRef} onKeyDownCapture={navigate}>
+    <VirtuosoGrid
+      ref={gridRef}
+      rangeChanged={() => requestAnimationFrame(focusPending)}
+      customScrollParent={scrollParent}
+      data={items}
+      initialItemCount={Math.min(12, items.length)}
+      listClassName={`grid ${PROJECT_GRID_COLUMNS_CLASS}`}
+      itemClassName="min-w-0"
+      computeItemKey={(_index, item) => item.id}
+      itemContent={(_index, item) => (
         <div key={item.id} className="group relative min-w-0">
           <UiOptionButton
             {...commonButtonProps(item)}
@@ -404,16 +450,17 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
               <span className="truncate text-13 font-medium text-text1" title={item.name}>{item.name}</span>
               {item.status ? (
                 <span className="truncate text-xs text-danger-text" title={item.status}>{item.status}</span>
-              ) : item.metaLine ? (
-                <span className="truncate text-xs text-text3" title={item.metaLine}>{item.metaLine}</span>
-              ) : null}
+              ) : (
+                <span className="min-h-4 truncate text-xs text-text3" title={item.metaLine}>{item.metaLine}</span>
+              )}
             </span>
           </UiOptionButton>
           <div className={`absolute top-2 ${selection.active ? 'left-2' : 'right-2'}`}>
             {renderOverlay(item, 'media')}
           </div>
         </div>
-      ))}
+      )}
+    />
     </div>
   );
 };

@@ -132,6 +132,8 @@ interface ProjectLibraryPageProps {
   /** 本机视图偏好（网格/列表）的存储名，每个页面一个 */
   persistKey: string;
   items: ProjectCardGridItem[];
+  total?: number;
+  loadingMore?: boolean;
   /** 意外退出留下的未保存草稿：排在最前，左栏多一个「未保存草稿」分类 */
   drafts?: ProjectCardGridItem[];
   /** 草稿移到回收站（经过同一个确认对话框） */
@@ -204,6 +206,8 @@ export function ProjectLibraryPage({
   description,
   persistKey,
   items,
+  total = items.length,
+  loadingMore = false,
   drafts = [],
   onDiscardDraft,
   icon,
@@ -232,6 +236,8 @@ export function ProjectLibraryPage({
   const [dragOver, setDragOver] = useState(false);
   const dragDepthRef = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [scrollParent, setScrollParent] = useState<HTMLElement | undefined>();
+  const scrollRef = useCallback((element: HTMLElement | null) => setScrollParent(element ?? undefined), []);
   const createButtonRef = useRef<HTMLButtonElement>(null);
 
   const [query, setQuery] = useState('');
@@ -268,7 +274,7 @@ export function ProjectLibraryPage({
 
   // 「全部」的数量只在没有位置筛选时可数；筛选期间沿用上一次的数
   const allCountRef = useRef(0);
-  if (!filtering) allCountRef.current = items.length + drafts.length;
+  if (!filtering) allCountRef.current = total + drafts.length;
   const allCount = allCountRef.current;
 
   const changeView = (next: ProjectLibraryView): void => {
@@ -524,17 +530,18 @@ export function ProjectLibraryPage({
     >
       {rail}
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-auto px-6 py-6 xl:px-8">
+      <main ref={scrollRef} className="flex min-w-0 flex-1 flex-col overflow-auto px-6 py-6 xl:px-8">
         <UiPageHeader
           className="mb-6"
           title={description ? <UiTooltipText tooltip={description}>{title}</UiTooltipText> : title}
-          meta={showTools ? labels.count(visibleItems.length) : undefined}
+          meta={showTools ? labels.count(activeCategory === 'all' && !searching ? total + drafts.length : visibleItems.length) : undefined}
           onBack={onBack}
           backLabel={backLabel}
           actions={headerActions}
         />
 
         {banner}
+        {loadingMore && !loading ? <UiLoading size="sm" /> : null}
 
         {loadError ? (
           <UiError className="flex-1" title={loadError.title} message={loadError.message} onRetry={loadError.onRetry} />
@@ -553,6 +560,7 @@ export function ProjectLibraryPage({
         ) : (
           <ProjectCardGrid
             items={visibleItems}
+            scrollParent={scrollParent}
             layout={view}
             busy={busy}
             icon={icon}

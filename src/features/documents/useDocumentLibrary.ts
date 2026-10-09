@@ -108,6 +108,8 @@ export interface UseDocumentLibraryOptions {
 
 export interface DocumentLibraryState {
   items: DocumentCardItem[]
+  total: number
+  loadingMore: boolean
   /** 可选作筛选与“移到项目”目标的项目（已保存、文件夹在）。 */
   projects: ProjectSummary[]
   filter: DocumentLibraryFilter
@@ -125,29 +127,57 @@ export function useDocumentLibrary({ kind, describe, operations: provided }: Use
   const [documents, setDocuments] = useState<DocumentSummary[]>([])
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [filter, setFilter] = useState<DocumentLibraryFilter>(ALL_DOCUMENTS_FILTER)
+  const [total, setTotal] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const sequence = useRef(0)
   const filterKey = documentLibraryFilterValue(filter)
+  const currentQuery = useRef(`${kind}:${filterKey}`)
 
   const reload = useCallback(async (): Promise<void> => {
     const seq = ++sequence.current
+    const queryKey = `${kind}:${filterKey}`
+    if (queryKey !== currentQuery.current) {
+      currentQuery.current = queryKey
+      setDocuments([]); setTotal(0); setLoading(true)
+    }
     try {
-      const [listed, projectList] = await Promise.all([
-        operations.listDocuments({ kind, container: documentLibraryFilterToContainer(parseDocumentLibraryFilter(filterKey)), includeDrafts: false, includeMissing: true }),
-        operations.listProjects({ includeDrafts: false, includeMissing: false }),
+      setLoadingMore(true)
+      const query = { kind, container: documentLibraryFilterToContainer(parseDocumentLibraryFilter(filterKey)), includeDrafts: false, includeMissing: true }
+      await Promise.all([
+        (async () => {
+          let cursor: string | undefined
+          const listed = new Map<string, DocumentSummary>()
+          do {
+            const page = await operations.listDocumentsPage({ ...query, cursor })
+            if (seq !== sequence.current) return
+            for (const row of page.items) listed.set(row.id, row)
+            setDocuments([...listed.values()]); setTotal(page.total); setLoading(false); setError(null)
+            cursor = page.nextCursor ?? undefined
+          } while (cursor)
+        })(),
+        (async () => {
+          let cursor: string | undefined
+          const listed = new Map<string, ProjectSummary>()
+          do {
+            const page = await operations.listProjectsPage({ includeDrafts: false, includeMissing: false, cursor })
+            if (seq !== sequence.current) return
+            for (const row of page.items) listed.set(row.id, row)
+            setProjects([...listed.values()])
+            cursor = page.nextCursor ?? undefined
+          } while (cursor)
+        })(),
       ])
-      if (seq !== sequence.current) return
-      setDocuments(listed)
-      setProjects(projectList)
-      setError(null)
     } catch (raw) {
       if (seq !== sequence.current) return
       const failure = toError(raw)
+      sequence.current += 1
+      setLoading(false); setLoadingMore(false)
       logger.warn('读取文档列表失败', { event: 'documents.library.list.failed', error: failure, context: { kind } })
       setError(failure)
     } finally {
-      if (seq === sequence.current) setLoading(false)
+      if (seq === sequence.current) { setLoading(false); setLoadingMore(false) }
     }
   }, [operations, kind, filterKey])
 
@@ -159,16 +189,16 @@ export function useDocumentLibrary({ kind, describe, operations: provided }: Use
     })
   }, [operations, kind])
 
-  useEffect(() => { void reload() }, [reload])
+  useEffect(() => { void reload(); return () => { sequence.current += 1 } }, [reload])
   useEffect(() => operations.subscribe(() => { void reload() }), [operations, reload])
 
   // 所选项目被删除或改成别处后回到“全部”
   useEffect(() => {
-    if (filter.kind === 'project' && !loading && !projects.some((project) => project.id === filter.projectId)) setFilter(ALL_DOCUMENTS_FILTER)
-  }, [filter, projects, loading])
+    if (filter.kind === 'project' && !error && !loading && !loadingMore && !projects.some((project) => project.id === filter.projectId)) setFilter(ALL_DOCUMENTS_FILTER)
+  }, [filter, projects, loading, loadingMore, error])
 
   const items = useMemo(() => toDocumentCardItems(documents, { t, describe }), [documents, t, describe])
-  return { items, projects, filter, setFilter, loading, error, reload }
+  return { items, total, loadingMore, projects, filter, setFilter, loading, error, reload }
 }
 
 /** 项目卡片项。 */
@@ -202,6 +232,8 @@ export function toProjectCardItems(projects: readonly ProjectSummary[], t: TFunc
 
 export interface ProjectLibraryState {
   items: ProjectCardItem[]
+  total: number
+  loadingMore: boolean
   loading: boolean
   error: Error | null
   reload: () => Promise<void>
@@ -212,6 +244,8 @@ export function useProjectLibrary(options: { operations?: DocumentOperations } =
   const { t } = useTranslation('ui')
   const operations = options.operations ?? getDocumentOperations()
   const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [total, setTotal] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const sequence = useRef(0)
@@ -219,17 +253,23 @@ export function useProjectLibrary(options: { operations?: DocumentOperations } =
   const reload = useCallback(async (): Promise<void> => {
     const seq = ++sequence.current
     try {
-      const listed = await operations.listProjects({ includeDrafts: false, includeMissing: true })
-      if (seq !== sequence.current) return
-      setProjects(listed)
-      setError(null)
+      setLoadingMore(true)
+      let cursor: string | undefined
+      const listed = new Map<string, ProjectSummary>()
+      do {
+        const page = await operations.listProjectsPage({ includeDrafts: false, includeMissing: true, cursor })
+        if (seq !== sequence.current) return
+        for (const row of page.items) listed.set(row.id, row)
+        setProjects([...listed.values()]); setTotal(page.total); setLoading(false); setError(null)
+        cursor = page.nextCursor ?? undefined
+      } while (cursor)
     } catch (raw) {
       if (seq !== sequence.current) return
       const failure = toError(raw)
       logger.warn('读取项目列表失败', { event: 'documents.library.projects.failed', error: failure })
       setError(failure)
     } finally {
-      if (seq === sequence.current) setLoading(false)
+      if (seq === sequence.current) { setLoading(false); setLoadingMore(false) }
     }
   }, [operations])
 
@@ -239,9 +279,9 @@ export function useProjectLibrary(options: { operations?: DocumentOperations } =
     })
   }, [operations])
 
-  useEffect(() => { void reload() }, [reload])
+  useEffect(() => { void reload(); return () => { sequence.current += 1 } }, [reload])
   useEffect(() => operations.subscribe(() => { void reload() }), [operations, reload])
 
   const items = useMemo(() => toProjectCardItems(projects, t), [projects, t])
-  return { items, loading, error, reload }
+  return { items, total, loadingMore, loading, error, reload }
 }

@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useState } from 'react'
 import { BrainCircuit, ListTree } from 'lucide-react'
 import { queryLogEvents } from '@/commands/logging'
@@ -15,6 +16,7 @@ import { AssistantTracePanel } from './components/AssistantTracePanel'
 const logger = createLogger('features.logs.LogsPanel')
 /** 历史模式链路查询的单次上限：远大于实际单条请求链路的事件数量（通常几条到十几条）。 */
 const CHAIN_QUERY_LIMIT = 500
+const EMPTY_LIVE_EVENTS: DisplayLogEvent[] = []
 
 /**
  * 日志窗口页面编排：接线数据源（实时 `logStore` / 历史 `useLogHistoryQuery`）、过滤状态、
@@ -28,9 +30,13 @@ const CHAIN_QUERY_LIMIT = 500
  * 前端只对历史结果补一层 `errorOnly`（服务端不支持的字段，语义见 `useLogHistoryQuery.ts`）。
  */
 export function LogsPanel(): JSX.Element {
-  const { events: liveEvents, paused, pausedCount, setPaused, clear } = useLogWindowStore()
   const [surface, setSurface] = useState<'events' | 'assistant'>('events')
   const [mode, setMode] = useState<LogViewMode>('live')
+  const { events: liveEvents, paused, pausedCount, setPaused, clear } = useLogWindowStore(useShallow((state) => ({
+    events: mode === 'live' || surface === 'assistant' ? state.events : EMPTY_LIVE_EVENTS,
+    paused: mode === 'live' && state.paused, pausedCount: mode === 'live' ? state.pausedCount : 0,
+    setPaused: state.setPaused, clear: state.clear,
+  })))
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('all')
   const [domainFilter, setDomainFilter] = useState('all')

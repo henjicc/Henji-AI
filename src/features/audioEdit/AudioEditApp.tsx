@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import {
@@ -230,18 +231,38 @@ export interface AudioEditAppProps { onBack?: () => void }
 
 export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element {
   const { showNotification } = useNotification()
-  const state = useAudioEditStore()
+  const state = useAudioEditStore(useShallow((state) => ({
+    project: state.project,
+    selectedBlockIds: state.selectedBlockIds,
+    busy: state.busy,
+    future: state.future,
+    past: state.past,
+    redo: state.redo,
+    undo: state.undo,
+    saveError: state.saveError,
+    setBlocksIncluded: state.setBlocksIncluded,
+    setReferenceScript: state.setReferenceScript,
+    setSelectedBlockIds: state.setSelectedBlockIds,
+    setVstEnabled: state.setVstEnabled,
+  })))
   const { project, selectedBlockIds } = state
   useEffect(() => { if (project?.id) openAssistant() }, [project?.id])
   const [asrModels, setAsrModels] = useState<AudioEditAsrModel[]>([])
   const [processors, setProcessors] = useState<AudioEditProcessorDescriptor[]>([])
   const [busy, setBusy] = useState(false)
   const textSearch = useAudioEditTextSearch(project)
+  const deliveryProject = useRef(project)
+  deliveryProject.current = project
+  const source = project?.source
+  const transcript = project?.transcript
+  const cuts = project?.cuts
+  const xmlFrameRate = project?.xmlFrameRate
+  const deliveryInput = useMemo(() => source && transcript ? { source, transcript, cuts, xmlFrameRate } : null, [source, transcript, cuts, xmlFrameRate])
   const delivery = useMemo<AudioEditDelivery>(() => {
-    if (!project) return { timeline: null, error: '' }
-    try { return { timeline: compileAudioEditXmlTimeline(project), error: '' } }
+    if (!deliveryInput) return { timeline: null, error: '' }
+    try { return { timeline: compileAudioEditXmlTimeline({ ...deliveryProject.current!, ...deliveryInput }), error: '' } }
     catch (error) { return { timeline: null, error: error instanceof Error ? error.message : '无法交付 XML' } }
-  }, [project])
+  }, [deliveryInput])
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
   const [navigationTarget, setNavigationTarget] = useState<{ frame: number } | null>(null)
   const [tasks, setTasks] = useState<AudioEditTask[]>([])
@@ -255,7 +276,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const [selectionOnly, setSelectionOnly] = useState(false)
   const [sourceError, setSourceError] = useState('')
   const disabled = busy || state.busy
-  const selectedBlocks = project?.transcript.filter((block) => selectedBlockIds.includes(block.id)) ?? []
+  const selectedBlocks = useMemo(() => { const selected = new Set(selectedBlockIds); return project?.transcript.filter((block) => selected.has(block.id)) ?? [] }, [project?.transcript, selectedBlockIds])
   const range = selectionOnly ? waveSelection ?? (selectedBlocks.length ? { startFrame: Math.min(...selectedBlocks.map((block) => block.startFrame)), endFrame: Math.max(...selectedBlocks.map((block) => block.endFrame)) } : undefined) : undefined
   const silencePreview = useAudioEditSilencePreview(project, range, Boolean(project) && !disabled && !sourceError)
   const normalizationGain = useMemo(() => calculatePreviewGain(waveformPeaks), [waveformPeaks])

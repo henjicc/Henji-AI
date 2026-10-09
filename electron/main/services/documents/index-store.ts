@@ -1,3 +1,5 @@
+import { listPageSize, readListCursor, type ListPage, type ListPageRequest } from '../../../../src/core/documents/pagination'
+import type { ProjectListQuery } from '../../../../src/core/documents/types'
 import type Database from 'better-sqlite3'
 
 import { isDocumentKindId, type DocumentListSummary } from '../../../../src/core/documents/types'
@@ -135,6 +137,17 @@ export class DocumentIndexStore implements DocumentCatalog {
   }
 
   listDocuments(filter: IndexedDocumentFilter = {}): IndexedDocument[] {
+    const items: IndexedDocument[] = []
+    let cursor: string | undefined
+    do {
+      const page = this.listDocumentsPage(filter, { cursor })
+      items.push(...page.items)
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    return items
+  }
+
+  listDocumentsPage(filter: IndexedDocumentFilter = {}, page: ListPageRequest = {}): ListPage<IndexedDocument> {
     const clauses: string[] = []
     const params: unknown[] = []
     if (filter.kind) { clauses.push('kind = ?'); params.push(filter.kind) }
@@ -143,8 +156,19 @@ export class DocumentIndexStore implements DocumentCatalog {
     if (filter.includeDrafts === false) clauses.push('draft = 0')
     if (filter.includeMissing === false) clauses.push('missing = 0')
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
-    const rows = this.db.prepare(`SELECT * FROM ${T.documents} ${where} ORDER BY updated_at DESC, name`).all(...params) as DocumentRow[]
-    return rows.map(toDocument).filter((row): row is IndexedDocument => row !== null)
+    const total = (this.db.prepare(`SELECT COUNT(*) total FROM ${T.documents} ${where}`).get(...params) as { total: number }).total
+    const cursor = readListCursor(page.cursor)
+    if (cursor) {
+      clauses.push('(updated_at < ? OR (updated_at = ? AND (name > ? OR (name = ? AND id > ?))))')
+      params.push(cursor.time, cursor.time, cursor.name, cursor.name, cursor.id)
+    }
+    const size = listPageSize(page)
+    const rows = this.db.prepare(`SELECT * FROM ${T.documents} ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY updated_at DESC, name, id LIMIT ?`).all(...params, size + 1) as DocumentRow[]
+    const included = rows.slice(0, size)
+    const last = included[included.length - 1]
+    return { items: included.map(toDocument).filter((row): row is IndexedDocument => row !== null), total,
+      nextCursor: rows.length > size && last ? JSON.stringify({ time: last.updated_at, name: last.name, id: last.id }) : null }
+
   }
 
   upsertDocument(row: IndexedDocument): void {
@@ -215,8 +239,54 @@ export class DocumentIndexStore implements DocumentCatalog {
   }
 
   listProjects(): IndexedProject[] {
-    const rows = this.db.prepare(`SELECT * FROM ${T.projects} ORDER BY created_at DESC, name`).all() as ProjectRow[]
-    return rows.map(toProject)
+    const items: IndexedProject[] = []
+    let cursor: string | undefined
+    do {
+      const page = this.listProjectsPage({}, { cursor })
+      items.push(...page.items)
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    return items
+  }
+
+  listProjectsPage(filter: ProjectListQuery = {}, page: ListPageRequest = {}): ListPage<IndexedProject> {
+    const clauses: string[] = []
+    const params: unknown[] = []
+    if (filter.includeDrafts === false) clauses.push('draft = 0')
+    if (filter.includeMissing === false) clauses.push('missing = 0')
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+    const total = (this.db.prepare(`SELECT COUNT(*) total FROM ${T.projects} ${where}`).get() as { total: number }).total
+    const cursor = readListCursor(page.cursor)
+    if (cursor) {
+      clauses.push('(created_at < ? OR (created_at = ? AND (name > ? OR (name = ? AND id > ?))))')
+      params.push(cursor.time, cursor.time, cursor.name, cursor.name, cursor.id)
+    }
+    const size = listPageSize(page)
+    const rows = this.db.prepare(`SELECT * FROM ${T.projects} ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY created_at DESC, name, id LIMIT ?`).all(...params, size + 1) as ProjectRow[]
+    const included = rows.slice(0, size)
+    const last = included[included.length - 1]
+    return { items: included.map(toProject), total,
+      nextCursor: rows.length > size && last ? JSON.stringify({ time: last.created_at, name: last.name, id: last.id }) : null }
+  }
+
+  getProjectsByIds(ids: readonly string[]): IndexedProject[] {
+    const result: IndexedProject[] = []
+    for (let start = 0; start < ids.length; start += 999) {
+      const batch = ids.slice(start, start + 999) // SQLite portable variable budget, not a collection limit.
+      const rows = this.db.prepare(`SELECT * FROM ${T.projects} WHERE id IN (${batch.map(() => '?').join(',')})`).all(...batch) as ProjectRow[]
+      result.push(...rows.map(toProject))
+    }
+    return result
+  }
+
+  getProjectDocumentCounts(ids: readonly string[]): Map<string, number> {
+    const result = new Map<string, number>()
+    for (let start = 0; start < ids.length; start += 999) {
+      const batch = ids.slice(start, start + 999)
+      const rows = this.db.prepare(`SELECT project_id, COUNT(*) count FROM ${T.documents} WHERE missing = 0 AND project_id IN (${batch.map(() => '?').join(',')}) GROUP BY project_id`).all(...batch) as Array<{ project_id: string; count: number }>
+      for (const row of rows) result.set(row.project_id, row.count)
+    }
+    return result
   }
 
   upsertProject(row: IndexedProject): void {

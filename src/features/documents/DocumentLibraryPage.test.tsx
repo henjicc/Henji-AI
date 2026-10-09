@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
 import type { DocumentKindDescriptor } from '@/core/documents/kinds'
@@ -180,4 +180,9 @@ describe('卡片右键', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '移到回收站' }))
     await waitFor(() => expect(commands.trashed).toContain(standalone.id))
   })
+})
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  HTMLElement.prototype.scrollTo = () => undefined
 })

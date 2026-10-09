@@ -1,3 +1,4 @@
+import { VirtuosoGrid } from 'react-virtuoso'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { FolderPlus, GripVertical, LoaderCircle, Settings2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiOptionButton, UiPageHeader, UiRangeInput } from '@/components/ui'
@@ -71,7 +72,9 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [batchBusy, setBatchBusy] = useState(false)
   const [batchError, setBatchError] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [scrollParent, setScrollParent] = useState<HTMLDivElement | undefined>()
+  const attachScroll = useCallback((element: HTMLDivElement | null) => { scrollRef.current = element; setScrollParent(element ?? undefined) }, [])
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const queryVersionRef = useRef(0)
   const loadingMoreRef = useRef(false)
@@ -353,10 +356,10 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               {onClose && <UiIconButton className="shrink-0" title={t('assetLibrary.close')} aria-label={t('assetLibrary.close')} onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
             </header>
           )}
-          <div ref={scrollRef} onContextMenu={handleBlankContextMenu} className={`relative isolate min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${mode === 'workspace' ? 'p-4' : 'px-3 pb-3 pt-1'}`}>
+          <div ref={attachScroll} onContextMenu={handleBlankContextMenu} className={`relative isolate min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${mode === 'workspace' ? 'p-4' : 'px-3 pb-3 pt-1'}`}>
             {loading && page.items.length === 0 ? (
               <div className={`absolute overflow-hidden ${mode === 'workspace' ? 'inset-4' : 'inset-3'}`} aria-busy="true">
-                <div className="grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square rounded-lg bg-panel motion-safe:animate-pulse" />)}</div>
+                <div className="grid gap-x-3 gap-y-4" style={{ '--asset-grid-columns': `repeat(auto-fill,minmax(min(${cardSize}px,100%),1fr))` } as React.CSSProperties}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square rounded-lg bg-panel motion-safe:animate-pulse" />)}</div>
               </div>
             ) : error ? (
               <UiError
@@ -375,8 +378,15 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               />
             ) : (
               <>
-                <div className={`grid gap-x-3 gap-y-4 transition-opacity duration-120 ${loading ? 'pointer-events-none opacity-60' : 'opacity-100'}`} aria-busy={loading} style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>
-                  {page.items.map((asset) => (
+                <div className={`transition-opacity duration-120 ${loading ? 'pointer-events-none opacity-60' : 'opacity-100'}`} aria-busy={loading} style={{ '--asset-grid-columns': `repeat(auto-fill,minmax(min(${cardSize}px,100%),1fr))` } as React.CSSProperties}>
+                  <VirtuosoGrid
+                    customScrollParent={scrollParent}
+                    data={page.items}
+                    initialItemCount={Math.min(12, page.items.length)}
+                    listClassName="grid gap-x-3 gap-y-4 [grid-template-columns:var(--asset-grid-columns)]"
+                    itemClassName="min-w-0"
+                    computeItemKey={(_index, asset) => asset.id}
+                    itemContent={(_index, asset) => (
                     <AssetCard
                       key={asset.id}
                       asset={asset}
@@ -394,7 +404,8 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
                       onPreview={setPreviewAsset}
                       onRename={rename}
                     />
-                  ))}
+                    )}
+                  />
                 </div>
                 <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 motion-safe:animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
               </>

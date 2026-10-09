@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import React from 'react'
 import { UiFormRow, UiRangeInput, UiSwitch } from '@/components/ui'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
@@ -14,7 +15,18 @@ import { useI18n } from '@/hooks/useI18n'
  */
 const AssetLibrarySection: React.FC = () => {
   const { t } = useI18n('settings')
-  const s = useSettingsStore()
+  const s = useSettingsStore(useShallow((state) => ({
+    assetTabAction: state.assetTabAction,
+    assetPanelPosition: state.assetPanelPosition,
+    assetEdgeTriggerEnabled: state.assetEdgeTriggerEnabled,
+    assetTriggerEdge: state.assetTriggerEdge,
+    assetEdgeDelayMs: state.assetEdgeDelayMs,
+    setAssetTabAction: state.setAssetTabAction,
+    setAssetPanelPosition: state.setAssetPanelPosition,
+    setAssetEdgeTriggerEnabled: state.setAssetEdgeTriggerEnabled,
+    setAssetTriggerEdge: state.setAssetTriggerEdge,
+    setAssetEdgeDelayMs: state.setAssetEdgeDelayMs,
+  })))
 
   const tabActionOptions = [
     { value: 'floating' as const, label: t('sections.assetLibrary.floating') },

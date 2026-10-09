@@ -17,7 +17,7 @@ import { createDocumentsApi } from '../../preload/documents-api'
 import { registerDocumentsIpc } from './documents'
 
 const METHODS: Array<keyof DocumentsPlatform> = [
-  'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument', 'moveDocument',
+  'listDocumentsPage', 'listProjectsPage', 'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument', 'moveDocument',
   'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'resolveDocumentLink', 'checkName',
   'getDocumentCover', 'saveDocumentCover', 'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject',
   'trashProject', 'registerExternalProject', 'registerExternalDocument', 'forgetExternalLocation', 'revealProject',
@@ -44,6 +44,7 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
     const target = { id: 'doc-1', path: '/work/a.henji-canvas' }
     const calls: Array<[keyof DocumentsPlatform, unknown[], unknown[]]> = [
       ['listDocuments', [undefined], [{}]],
+      ['listDocumentsPage', [{ kind: 'canvas', cursor: 'cursor', pageSize: 17 }], [{ kind: 'canvas', cursor: 'cursor', pageSize: 17 }]],
       ['listDocuments', [{ kind: 'canvas', container: { kind: 'project', projectId: 'p1' }, includeDrafts: false }], [{ kind: 'canvas', container: { kind: 'project', projectId: 'p1' }, includeDrafts: false }]],
       ['readDocument', [target], [target]],
       ['createDocument', [{ kind: 'canvas', container: { kind: 'user' } }], [{ kind: 'canvas', container: { kind: 'user' } }]],
@@ -64,6 +65,7 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
       ['readSessionState', [{ docId: 'doc-1', key: 'canvas.viewport' }], [{ docId: 'doc-1', key: 'canvas.viewport' }]],
       ['writeSessionState', [{ docId: 'doc-1', key: 'canvas.viewport', value: { x: 1 } }], [{ docId: 'doc-1', key: 'canvas.viewport', value: { x: 1 } }]],
       ['listProjects', [undefined], [{}]],
+      ['listProjectsPage', [{ pageSize: 17 }], [{ pageSize: 17 }]],
       ['createProject', [undefined], [{}]],
       ['renameProject', [{ projectId: 'p1', name: '新' }], [{ projectId: 'p1', name: '新' }]],
       ['finalizeProject', [{ projectId: 'p1', name: '新', parentFolder: '/elsewhere' }], [{ projectId: 'p1', name: '新', parentFolder: '/elsewhere' }]],

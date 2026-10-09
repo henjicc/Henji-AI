@@ -1,3 +1,5 @@
+import { pageList, type ListPageRequest } from '../../../../src/core/documents/pagination'
+import type { ProjectListQuery } from '../../../../src/core/documents/types'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
@@ -55,6 +57,20 @@ export class MemoryDocumentCatalog implements DocumentCatalog {
       .sort((left, right) => right.updatedAt - left.updatedAt || left.name.localeCompare(right.name))
   }
 
+  listDocumentsPage(filter: IndexedDocumentFilter = {}, page: ListPageRequest = {}) {
+    return pageList(this.listDocuments(filter), page, row => ({ time: row.updatedAt, name: row.name, id: row.id }))
+  }
+
+  getProjectsByIds(ids: readonly string[]): IndexedProject[] {
+    return ids.flatMap(id => this.projects.has(id) ? [this.projects.get(id)!] : [])
+  }
+
+  getProjectDocumentCounts(ids: readonly string[]): Map<string, number> {
+    const counts = new Map<string, number>()
+    for (const row of this.documents.values()) if (!row.missing && row.projectId && ids.includes(row.projectId)) counts.set(row.projectId, (counts.get(row.projectId) ?? 0) + 1)
+    return counts
+  }
+
   upsertDocument(row: IndexedDocument): void {
     const key = keyOf(row.path)
     for (const [id, existing] of this.documents) if (id !== row.id && keyOf(existing.path) === key) this.documents.delete(id)
@@ -92,6 +108,10 @@ export class MemoryDocumentCatalog implements DocumentCatalog {
 
   listProjects(): IndexedProject[] {
     return [...this.projects.values()]
+  }
+
+  listProjectsPage(filter: ProjectListQuery = {}, page: ListPageRequest = {}) {
+    return pageList(this.listProjects().filter(row => (filter.includeDrafts !== false || !row.draft) && (filter.includeMissing !== false || !row.missing)), page, row => ({ time: row.createdAt, name: row.name, id: row.id }))
   }
 
   upsertProject(row: IndexedProject): void {

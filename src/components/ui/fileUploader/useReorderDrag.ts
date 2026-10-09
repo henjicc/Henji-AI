@@ -21,6 +21,8 @@ interface UseReorderDragParams {
   allowButtonTarget?: boolean
   /** 按下后移动多少像素才算开始拖动；默认 25 适合缩略图卡片，紧凑的行列表（行距小于 25）要传小值，否则拖到相邻一行永远不会开始拖动。 */
   dragThreshold?: number
+  /** Equal-height virtual rows: resolve destinations from scroll offset, including unmounted rows. */
+  virtualVertical?: boolean
   onReorder?: (from: number, to: number) => void
   onDragStateChange?: (isDragging: boolean) => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
@@ -46,6 +48,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
     dragBoundaryRef,
     allowButtonTarget = false,
     dragThreshold = 25,
+    virtualVertical = false,
     onReorder,
     onDragStateChange,
     onImageClick
@@ -56,6 +59,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
   const sawDragMoveRef = useRef(false)
   const dropTimer = useRef<ReturnType<typeof setTimeout>>()
   const itemRefs = useRef<(HTMLDivElement | null)[]>([])
+  const originalScrollTopRef = useRef(0)
   // 拖拽开始那一刻（尚未有任何让位位移）缓存的原始几何，命中判定全程用这份快照而不是实时 rect。
   // 否则一旦目标项被视觉上让位位移过，它的实时 rect 已经偏离自己的原始槛位，
   // 鼠标往回拖时再也找不到"回到原位"的判定锚点，会出现只能单向让位、换不回去的问题。
@@ -143,7 +147,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
 
       // 注意：这里不跳过 i === from。拖拽项自己的原始槛位也是一个候选目标——
       // 没有它，一旦换到别的位置，缺了"回到原位"这个候选，少于 3 项时就再也换不回去了。
-      for (let i = 0; i < itemRefs.current.length; i += 1) {
+      for (let i = 0; !virtualVertical && i < itemRefs.current.length; i += 1) {
         const rect = originalRectsRef.current[i]
         if (!rect) continue
         const targetCenterX = rect.left + rect.width / 2
@@ -159,6 +163,13 @@ export function useReorderDrag(params: UseReorderDragParams) {
         }
       }
 
+      if (virtualVertical && layout === 'vertical' && draggingOriginal.height > 0) {
+        const scrollDelta = (dragBoundaryRef?.current?.scrollTop ?? 0) - originalScrollTopRef.current
+        newToIndex = Math.max(0, Math.min(files.length - 1,
+          from + Math.round((currentY - dragStateRef.current.startY + scrollDelta) / draggingOriginal.height)))
+        minDist = 0
+      }
+
       const threshold = layout === 'grid'
         ? Math.max(draggingOriginal.width, draggingOriginal.height)
         : layout === 'vertical'
@@ -170,9 +181,27 @@ export function useReorderDrag(params: UseReorderDragParams) {
       dragStateRef.current = next
       setDragState(next)
     }
-    const handleMouseMove = (e: MouseEvent) => { sawDragMoveRef.current = true; update(e) }
+    let pointer: MouseEvent | undefined
+    let scrollFrame: number | undefined
+    const autoScroll = (): void => {
+      const container = dragBoundaryRef?.current
+      const boundary = dragBoundaryRectRef.current
+      const height = originalRectsRef.current[dragState.fromIndex ?? 0]?.height ?? 0
+      if (pointer && container && boundary && height > 0) {
+        const direction = pointer.clientY < boundary.top + height ? -1
+          : pointer.clientY > boundary.bottom - height ? 1 : 0
+        if (direction) {
+          const next = Math.max(0, Math.min(container.scrollHeight - container.clientHeight, container.scrollTop + direction * height / 4))
+          if (next !== container.scrollTop) { container.scrollTop = next; update(pointer) }
+        }
+      }
+      scrollFrame = eventWindow.requestAnimationFrame(autoScroll)
+    }
+    const handleMouseMove = (e: MouseEvent) => { pointer = e; sawDragMoveRef.current = true; update(e) }
+    if (virtualVertical) scrollFrame = eventWindow.requestAnimationFrame(autoScroll)
 
     const handleMouseUp = (e: MouseEvent) => {
+      if (scrollFrame !== undefined) eventWindow.cancelAnimationFrame(scrollFrame)
       if (!sawDragMoveRef.current) update(e)
       const { fromIndex, toIndex } = dragStateRef.current
       if (fromIndex !== null && toIndex !== null && fromIndex !== toIndex) {
@@ -189,10 +218,11 @@ export function useReorderDrag(params: UseReorderDragParams) {
     eventWindow.addEventListener('mousemove', handleMouseMove)
     eventWindow.addEventListener('mouseup', handleMouseUp)
     return () => {
+      if (scrollFrame !== undefined) eventWindow.cancelAnimationFrame(scrollFrame)
       eventWindow.removeEventListener('mousemove', handleMouseMove)
       eventWindow.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [dragState.isDragging, dragState.fromIndex, layout, onReorder, resetDragState])
+  }, [dragState.isDragging, dragState.fromIndex, layout, onReorder, resetDragState, virtualVertical, dragBoundaryRef, files.length])
 
   useEffect(() => {
     if (dragState.fromIndex === null) return
@@ -229,13 +259,17 @@ export function useReorderDrag(params: UseReorderDragParams) {
           : deltaX > dragThreshold || deltaY > dragThreshold
       if (crossedDragThreshold) {
         // 此刻还没有任何让位位移发生，是缓存"原始槛位"几何的唯一安全时机
-        originalRectsRef.current = itemRefs.current.map((el) =>
-          el ? (() => {
-            const rect = el.getBoundingClientRect()
-            return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
-          })() : null
-        )
+        const measure = (element: HTMLDivElement | null) => {
+          if (!element) return null
+          const rect = element.getBoundingClientRect()
+          return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+        }
+        if (virtualVertical) {
+          originalRectsRef.current = []
+          originalRectsRef.current[dragState.fromIndex!] = measure(itemRefs.current[dragState.fromIndex!] ?? null)
+        } else originalRectsRef.current = itemRefs.current.map(measure)
         if (dragBoundaryRef?.current) {
+          originalScrollTopRef.current = dragBoundaryRef.current.scrollTop
           const rect = dragBoundaryRef.current.getBoundingClientRect()
           dragBoundaryRectRef.current = {
             left: rect.left,
@@ -283,6 +317,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
     files,
     layout,
     dragThreshold,
+    virtualVertical,
     onImageClick,
     resetDragState
   ])

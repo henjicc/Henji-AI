@@ -1,3 +1,4 @@
+import type { ListPage, ListPageRequest } from '@/core/documents/pagination'
 import { getPlatform } from '@/platform'
 import type {
   CreateDocumentRequest,
@@ -192,4 +193,12 @@ export async function exportProjectPackage(request: ExportProjectPackageRequest)
 /** 导入单文件包（4.1）：文档包放进给定容器，项目包放进“项目”文件夹；ID 冲突换新。 */
 export async function importDocumentPackage(request: ImportPackageRequest): Promise<PackageImportResult> {
   return await documents().importPackage(request)
+}
+
+export async function listDocumentsPage(query?: DocumentListQuery & ListPageRequest): Promise<ListPage<DocumentSummary>> {
+  return await documents().listDocumentsPage(query)
+}
+
+export async function listProjectsPage(query?: ProjectListQuery & ListPageRequest): Promise<ListPage<ProjectSummary>> {
+  return await documents().listProjectsPage(query)
 }

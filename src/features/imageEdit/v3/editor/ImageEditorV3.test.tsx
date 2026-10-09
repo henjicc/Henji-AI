@@ -2,6 +2,7 @@
 
 import '@/tests/imageEditDocumentFixture'
 import { useState } from 'react'
+import { VirtuosoMockContext } from 'react-virtuoso'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -44,7 +45,7 @@ function renderEditor(
   } = {},
 ) {
   return render(
-    <div style={{ width: 1200, height: 800 }}>
+    <VirtuosoMockContext.Provider value={{ viewportHeight: 264, itemHeight: 44 }}><div style={{ width: 1200, height: 800 }}>
       <ImageEditorV3
         sourceImageUrl="preview.png"
         document={document}
@@ -53,7 +54,7 @@ function renderEditor(
         onPersistenceChange={options.onPersistenceChange}
         previewRenderer={options.previewRenderer}
       />
-    </div>,
+    </div></VirtuosoMockContext.Provider>,
   )
 }
 
@@ -430,7 +431,7 @@ describe('ImageEditorV3 professional shell', () => {
     ))
     expect(rows).toHaveLength(2)
     expect(rendered.container.querySelector('[data-layer-drag-handle]')).toBeNull()
-    const layerViewport = rendered.container.querySelector<HTMLElement>('[role="tree"]')
+    const layerViewport = rendered.container.querySelector<HTMLElement>('[data-layers-panel] [data-virtuoso-scroller]')
     if (!layerViewport) throw new Error('图层列表视口未挂载')
     layerViewport.getBoundingClientRect = () => ({
       x: 0,

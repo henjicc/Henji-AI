@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n/config'
 import { DocumentOperations } from '@/features/documents/documentOperations'
 import { createTestRegistry } from '@/features/documents/documentSessionTestKit'
@@ -117,4 +117,9 @@ describe('剪辑项目页', () => {
     fireEvent.click(await screen.findByText('从列表移除'))
     await waitFor(() => expect(kit.commands.projects.has(external.id)).toBe(false))
   })
+})
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  HTMLElement.prototype.scrollTo = () => undefined
 })

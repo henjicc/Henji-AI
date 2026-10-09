@@ -1,3 +1,4 @@
+import type { ListPage, ListPageRequest } from '../../core/documents/pagination'
 import type { CodeFileReference } from '../../core/videoEdit/codeMaterial/sources'
 import type { CodeComponent, CodeComponentVersion } from '../../core/videoEdit/codeMaterial/components'
 import type { WithdrawCodeComponentRequest, WriteCodeVersionRequest, PublishCodeComponentRequest } from '../../core/videoEdit/codeMaterial/storageContract'
@@ -60,6 +61,7 @@ export interface DocumentsPlatform {
   publishCodeComponent(request: PublishCodeComponentRequest): Promise<CodeComponentVersion>
   /** 列出文档（查作品索引；按类型、容器、草稿与缺失筛选），按更新时间倒序。 */
   listDocuments(query?: DocumentListQuery): Promise<DocumentSummary[]>
+  listDocumentsPage(query?: DocumentListQuery & ListPageRequest): Promise<ListPage<DocumentSummary>>
   /** 读取文档：内容里的位置已换回绝对路径，并授权媒体协议读取所在外部容器与外部引用目录。 */
   readDocument(target: DocumentTarget): Promise<DocumentReadResult>
   createDocument(request: CreateDocumentRequest): Promise<DocumentReadResult>
@@ -98,6 +100,7 @@ export interface DocumentsPlatform {
   writeSessionState(request: WriteDocumentSessionStateRequest): Promise<void>
 
   listProjects(query?: ProjectListQuery): Promise<ProjectSummary[]>
+  listProjectsPage(query?: ProjectListQuery & ListPageRequest): Promise<ListPage<ProjectSummary>>
   /** 新建项目：不给名字时以草稿建在“项目”文件夹里并自动起名。 */
   createProject(request?: CreateProjectRequest): Promise<ProjectSummary>
   renameProject(request: RenameProjectRequest): Promise<ProjectSummary>
@@ -130,6 +133,7 @@ export const DOCUMENT_IPC_CHANNELS = {
   listCodeComponents: 'documents:code:listComponents',
   publishCodeComponent: 'documents:code:publishComponent',
   listDocuments: 'documents:list',
+  listDocumentsPage: 'documents:listPage',
   readDocument: 'documents:read',
   createDocument: 'documents:create',
   saveDocument: 'documents:save',
@@ -152,6 +156,7 @@ export const DOCUMENT_IPC_CHANNELS = {
   readSessionState: 'documents:sessionState:read',
   writeSessionState: 'documents:sessionState:write',
   listProjects: 'documents:projects:list',
+  listProjectsPage: 'documents:projects:listPage',
   createProject: 'documents:projects:create',
   renameProject: 'documents:projects:rename',
   finalizeProject: 'documents:projects:finalize',
