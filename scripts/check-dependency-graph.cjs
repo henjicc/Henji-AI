@@ -7,6 +7,14 @@ const { createImportResolver, readResolvedImports, sourceFiles, slash } = requir
 const edgeKey = (edge) => `${edge.from} → ${edge.to}`
 const sortEdges = (edges) => edges.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), 'en'))
 
+// 已收口的纯子域：类型、静态值、动态值和 re-export 均不得依赖界面实现。
+// core/services 等 renderer-only 编排不以整个 core 为纯层；仍受原冻结规则约束。
+const PURE_CORE_DIRECTORIES = ['imageEdit', 'imaging', 'application-control', 'documents', 'toolbox']
+function isPureCoreViolation({ from, to }) {
+  return PURE_CORE_DIRECTORIES.some((directory) => from.startsWith(`src/core/${directory}/`))
+    && /^src\/(?:features|stores|components)\//.test(to)
+}
+
 // 明确守住首屏代码加载边界；纯几何/文档/调度契约不因名字含 GPU 被误拦。
 const FIRST_SCREEN_HEAVY_PACKAGES = [
   'konva', 'react-konva', 'vgpu', 'onnxruntime-web', 'onnxruntime-node', 'onnxruntime-common',
@@ -76,6 +84,7 @@ function forbiddenReason(edge) {
     && /(?:^|\/)(?:components|stores?|electron)\/|^src\/features\/assistant\//.test(to)) {
     return 'Application API 必须调用方中立；提取纯契约或依赖注入'
   }
+  if (isPureCoreViolation(edge)) return '纯 core 子域不得依赖 features/stores/components；提取共享实现或依赖注入'
   if (from.startsWith('src/core/') && /^src\/(?:features|stores)\//.test(to)) return 'core 反向依赖被冻结；把纯契约移至 core 或注入领域实现'
   return null
 }
@@ -176,7 +185,8 @@ function compare(current, baseline) {
   }
   const oldForbidden = new Set(baseline.forbiddenEdges.map(edgeKey))
   for (const edge of current.forbiddenEdges) {
-    if (!oldForbidden.has(edgeKey(edge))) failures.push(`新增禁止跨层边：${edgeKey(edge)}；${edge.reason}。`)
+    if (isPureCoreViolation(edge)) failures.push(`纯 core 禁止跨层边：${edgeKey(edge)}；${edge.reason}。`)
+    else if (!oldForbidden.has(edgeKey(edge))) failures.push(`新增禁止跨层边：${edgeKey(edge)}；${edge.reason}。`)
   }
   for (const [cell, count] of Object.entries(current.featureMatrix)) {
     const limit = baseline.featureMatrix[cell] ?? 0
@@ -192,6 +202,7 @@ function compare(current, baseline) {
 }
 
 function writeBaseline(filename, current, baseline, reason) {
+  if (current.forbiddenEdges.some(isPureCoreViolation)) throw new Error('纯 core 禁止跨层边不得登记基线或 --accept-new 例外')
   const failures = baseline ? compare(current, baseline) : ['初次建立基线']
   if (baseline?.firstScreen) {
     const oldHeavy = new Set(baseline.firstScreen.heavyModules.map((item) => item.target))
@@ -227,5 +238,5 @@ async function main(argv = process.argv.slice(2)) {
 }
 
 module.exports = { scan, compare, forbiddenReason, featureCell, writeBaseline, cyclePath, firstScreenReachability,
-  FIRST_SCREEN_HEAVY_PACKAGES, FIRST_SCREEN_HEAVY_MODULE_PREFIXES }
+  FIRST_SCREEN_HEAVY_PACKAGES, FIRST_SCREEN_HEAVY_MODULE_PREFIXES, PURE_CORE_DIRECTORIES }
 if (require.main === module) main().catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1 })

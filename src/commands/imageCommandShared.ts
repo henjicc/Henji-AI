@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { isDesktopRuntime } from '@/platform/runtime'
+import { decodeMediaFileUrl } from '@/utils/mediaFileUrl'
 import {
   dirname,
   mkdir,
@@ -86,24 +87,14 @@ export function isBlobUrl(source: string): boolean {
 
 export function isLikelyLocalPath(source: string): boolean {
   if (!source) return false;
-  if (source.startsWith('asset:') || source.startsWith('tauri:')) return false;
+  if (source.startsWith('asset:')) return false;
   if (isDataUrl(source) || isHttpUrl(source) || isBlobUrl(source)) return false;
   if (source.startsWith(FILE_URL_PREFIX)) return true;
   return LOCAL_PATH_PATTERN.test(source);
 }
 
 export function decodeFileUrl(source: string): string {
-  if (!source.startsWith(FILE_URL_PREFIX)) {
-    return source;
-  }
-
-  try {
-    const url = new URL(source);
-    const decoded = decodeURIComponent(url.pathname);
-    return decoded.replace(/^\/([A-Za-z]:[\\/])/, '$1');
-  } catch {
-    return source;
-  }
+  return decodeMediaFileUrl(source);
 }
 
 export function normalizeLocalPath(source: string): string {

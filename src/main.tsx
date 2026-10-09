@@ -10,8 +10,11 @@ import GlobalContextMenuProvider from './contexts/GlobalContextMenuProvider'
 import './i18n'  // 初始化 i18n
 import { createLogger, initLoggerConfig } from '@/core/logging'
 import { UiErrorBoundary } from '@/components/ui'
+import { configureGenerationSubmissionConfirmation } from '@/core/services/generationSubmissionConfirmation'
+import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 
 initLoggerConfig()
+configureGenerationSubmissionConfirmation(requestAlertConfirmation)
 
 // 渲染层全局兜底错误捕获：未捕获异常/未处理拒绝此前不落日志，界面白屏时无从追查。
 // 只记录，不吞错——异常仍按浏览器默认行为继续传播。

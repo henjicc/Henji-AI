@@ -1,4 +1,4 @@
-import { toDisplaySrc } from '@/platform/desktopApi'
+import { resolveImageDisplayUrl } from '@/services/imageSource'
 import type { GenerateResult } from '@/core/providers/base'
 import {
   AUDIO_ACCEPT_LIST,
@@ -74,23 +74,7 @@ export function parseAudioError(file: File): string | undefined {
 }
 
 export function toDisplayAudioSrc(value: string): string {
-  const source = value.trim()
-  if (!source) return ''
-  if (
-    source.startsWith('http://') ||
-    source.startsWith('https://') ||
-    source.startsWith('blob:') ||
-    source.startsWith('data:') ||
-    source.startsWith('asset://') ||
-    source.startsWith('tauri://') ||
-    source.startsWith('http://asset.localhost/') ||
-    source.startsWith('https://asset.localhost/') ||
-    source.startsWith('http://tauri.localhost/') ||
-    source.startsWith('https://tauri.localhost/')
-  ) {
-    return source
-  }
-  return toDisplaySrc(source.replace(/\\/g, '/'))
+  return resolveImageDisplayUrl(value)
 }
 
 export function extractVoiceId(metadata: DynamicValue): string {

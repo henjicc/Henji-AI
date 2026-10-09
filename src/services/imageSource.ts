@@ -1,6 +1,7 @@
 import { isDesktopRuntime } from '@/platform/runtime';
 import { toDisplaySrc } from '@/platform/desktopApi';
 import { loadImage, persistImageSource } from '@/commands/image';
+import { decodeMediaFileUrl } from '@/utils/mediaFileUrl';
 
 /**
  * 通用图片源助手:显示链接解析、本地化、元素加载、DataUrl 转换。
@@ -25,7 +26,6 @@ export function isLikelyLocalImagePath(imageUrl: string): boolean {
     lower.startsWith('https://') ||
     lower.startsWith('blob:') ||
     lower.startsWith('asset:') ||
-    lower.startsWith('tauri:') ||
     lower.startsWith('file://')
   ) {
     return false;
@@ -35,23 +35,14 @@ export function isLikelyLocalImagePath(imageUrl: string): boolean {
 }
 
 export function resolveImageDisplayUrl(imageUrl: string): string {
+  imageUrl = imageUrl.trim();
   const lower = imageUrl.toLowerCase();
   if (lower.startsWith('file://')) {
     if (!isNativeImageRuntime()) {
       return imageUrl;
     }
 
-    try {
-      const parsed = new URL(imageUrl);
-      const decodedPathname = decodeURIComponent(parsed.pathname);
-      const normalizedPath = decodedPathname.replace(/^\/([A-Za-z]:[\\/])/, '$1');
-      if (!normalizedPath) {
-        return imageUrl;
-      }
-      return toDisplaySrc(normalizedPath);
-    } catch {
-      return imageUrl;
-    }
+    return toDisplaySrc(decodeMediaFileUrl(imageUrl));
   }
 
   if (!isLikelyLocalImagePath(imageUrl)) {
@@ -128,7 +119,7 @@ export async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
     return await blobToDataUrl(localBlob);
   }
 
-  const response = await fetch(imageUrl);
+  const response = await fetch(toFetchableMediaUrl(imageUrl));
   if (!response.ok) {
     throw new Error('无法下载图片数据');
   }

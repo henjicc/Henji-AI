@@ -261,33 +261,7 @@
       ]
     }
   ],
-  "forbiddenEdges": [
-    {
-      "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
-      "to": "src/features/imageMark/domain/geometry.ts",
-      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
-    },
-    {
-      "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
-      "to": "src/features/imageMark/render/canvasAdapter.ts",
-      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
-    },
-    {
-      "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
-      "to": "src/features/imageMark/render/drawMarks.ts",
-      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
-    },
-    {
-      "from": "src/core/imageEdit/worker/webgpuRuntime.ts",
-      "to": "src/features/imageMark/render/orientedImage.ts",
-      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
-    },
-    {
-      "from": "src/core/services/generationSubmissionConfirmation.ts",
-      "to": "src/stores/alertDialogStore.ts",
-      "reason": "core 反向依赖被冻结；把纯契约移至 core 或注入领域实现"
-    }
-  ],
+  "forbiddenEdges": [],
   "featureEdges": [
     {
       "from": "src/features/application-control/applicationCloseService.ts",
@@ -1226,6 +1200,14 @@
       "cell": "canvas → assets"
     },
     {
+      "from": "src/features/canvas/application/canvasMutationService.ts",
+      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
+      "kind": "dynamic",
+      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
+      "line": 182,
+      "cell": "canvas → cameraStage"
+    },
+    {
       "from": "src/features/canvas/application/canvasNodeGenerationConfig.ts",
       "to": "src/features/generation/application/generationPreparationService.ts",
       "kind": "static",
@@ -1432,14 +1414,6 @@
       "specifier": "@/features/assets/drag/assetDragPayload",
       "line": 5,
       "cell": "canvas → assets"
-    },
-    {
-      "from": "src/features/canvas/hooks/useCanvasDuplication.ts",
-      "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
-      "kind": "static",
-      "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
-      "line": 12,
-      "cell": "canvas → cameraStage"
     },
     {
       "from": "src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx",
@@ -3795,7 +3769,7 @@
   },
   "firstScreen": {
     "entry": "src/main.tsx",
-    "moduleCount": 976,
+    "moduleCount": 983,
     "heavyModules": []
   },
   "dynamicBackEdges": [

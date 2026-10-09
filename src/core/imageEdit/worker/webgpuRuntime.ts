@@ -22,10 +22,10 @@ import type {
   ImageEditWorkerCapabilities,
   ImageEditWorkerSource,
 } from './protocol'
-import { drawMarkItems } from '@/features/imageMark/render/drawMarks'
-import { createImageEditCanvas } from '@/features/imageMark/render/canvasAdapter'
-import { renderOrientedImage } from '@/features/imageMark/render/orientedImage'
-import { clampCropRect } from '@/features/imageMark/domain/geometry'
+import { drawMarkItems } from '../marks/drawMarks'
+import { createImageEditCanvas } from '../marks/canvasAdapter'
+import { renderOrientedImage } from '../marks/orientedImage'
+import { clampCropRect } from '../marks/geometry'
 import { decodeSource } from './webgpuRuntimeSupport'
 import {
   WorkerWebGpuRuntimeBackend,

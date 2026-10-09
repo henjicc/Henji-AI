@@ -5,7 +5,7 @@ const path = require('node:path')
 const { test } = require('node:test')
 const madge = require('madge')
 const { scan, compare, forbiddenReason, writeBaseline, firstScreenReachability,
-  FIRST_SCREEN_HEAVY_PACKAGES, FIRST_SCREEN_HEAVY_MODULE_PREFIXES } = require('./check-dependency-graph.cjs')
+  FIRST_SCREEN_HEAVY_PACKAGES, FIRST_SCREEN_HEAVY_MODULE_PREFIXES, PURE_CORE_DIRECTORIES } = require('./check-dependency-graph.cjs')
 const { createImportResolver, readResolvedImports, assistantImportViolation } = require('./lib/resolvedImports.cjs')
 
 const fixture = path.join(__dirname, '__fixtures__/dependency-graph')
@@ -78,6 +78,38 @@ test('relative/dynamic/re-export/type-only 新增跨层边失败，DTO 不误报
   assert.ok(forbiddenReason({ from: 'src/components/probe.ts', to: 'src/core/providers/base/ProviderHandler.ts', kind: 'static' }))
   write(root, 'src/core/application-control/probe.ts', "export const lazy = () => import('@/components/probe')")
   assert.ok(compare(await scan(root), baseline).some((failure) => failure.includes('Application API 必须调用方中立')))
+})
+
+test('纯 core 子域禁止所有导入形式，并且基线及 accept-new 不能豁免', async (t) => {
+  const root = workspace(t)
+  for (const directory of ['features', 'stores', 'components']) {
+    write(root, `src/${directory}/probe.ts`, 'export const value = 1; export interface State {}')
+  }
+  const baseline = await scan(root)
+  for (const directory of PURE_CORE_DIRECTORIES) {
+    for (const target of ['features', 'stores', 'components']) {
+      for (const source of [
+        `import { value } from '@/${target}/probe'; export { value }`,
+        `import type { State } from '../../${target}/probe'; export type { State }`,
+        `export { value } from '../../${target}/probe'`,
+        `export const lazy = () => import('../../${target}/probe')`,
+      ]) {
+        const file = `src/core/${directory}/probe.ts`
+        write(root, file, source)
+        const edge = readResolvedImports(path.join(root, file), root)[0]
+        assert.ok(forbiddenReason(edge), `${directory}/${target}: ${source}`)
+      }
+    }
+    write(root, `src/core/${directory}/probe.ts`, "export { value } from '@/core/shared'")
+  }
+  write(root, 'src/core/shared.ts', 'export const value = 1')
+  assert.deepEqual(compare(await scan(root), baseline), [])
+  write(root, 'src/core/imageEdit/probe.ts', "export { value } from '@/features/probe'")
+  const current = await scan(root)
+  assert.ok(compare(current, current).some((failure) => failure.includes('纯 core 禁止跨层边')))
+  assert.throws(() => writeBaseline(path.join(root, 'baseline.json'), current, current, '请求豁免'), /不得登记/)
+  // 不扩大 renderer-only core 的纯层定义，已有冻结边仍可缩减。
+  assert.equal(forbiddenReason({ from: 'src/core/services/probe.ts', to: 'src/components/probe.ts', kind: 'type' }), null)
 })
 
 test('G-01 注册器和核心检查覆盖 alias/relative/dynamic/type/reexport', (t) => {

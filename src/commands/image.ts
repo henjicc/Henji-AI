@@ -1,4 +1,5 @@
 import { getPlatform } from '@/platform/runtime'
+import { renderImagePreviewDataUrl } from '@/core/imageEdit/preview'
 import type {
   ComposeLocalRedrawResult,
   LocalRedrawContext,
@@ -212,34 +213,6 @@ export async function splitImageSource(
   }
 }
 
-function renderPreviewDataUrl(
-  image: HTMLImageElement,
-  sourceDataUrl: string,
-  maxDimension: number
-): string {
-  const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
-  if (longestSide <= maxDimension) {
-    return sourceDataUrl;
-  }
-
-  const scale = maxDimension / longestSide;
-  const targetWidth = Math.max(1, Math.round(image.naturalWidth * scale));
-  const targetHeight = Math.max(1, Math.round(image.naturalHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return sourceDataUrl;
-  }
-
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-  context.drawImage(image, 0, 0, targetWidth, targetHeight);
-  return canvas.toDataURL('image/jpeg', 0.86);
-}
-
 export async function prepareNodeImageSource(
   source: string,
   maxPreviewDimension = 512
@@ -262,7 +235,7 @@ export async function prepareNodeImageSource(
   const aspectRatio = reduceAspectRatio(image.naturalWidth, image.naturalHeight);
 
   const safeMax = Math.max(64, Math.floor(maxPreviewDimension));
-  const previewDataUrl = renderPreviewDataUrl(image, dataUrl, safeMax);
+  const previewDataUrl = renderImagePreviewDataUrl(image, dataUrl, safeMax, 'image/jpeg');
   const previewImagePath = previewDataUrl === dataUrl
     ? imagePath
     : await persistImageSource(previewDataUrl);

@@ -4,7 +4,7 @@ import type { MediaPlatform } from '@/platform/contracts/media'
 const MEDIA_SCHEME = 'henji-media'
 
 function isDisplayUrl(source: string): boolean {
-  return /^(https?:|data:|blob:|file:|asset:|tauri:|henji-media:)/i.test(source)
+  return /^(https?:|data:|blob:|file:|asset:|henji-media:)/i.test(source)
 }
 
 function toMediaUrl(localPath: string): string {

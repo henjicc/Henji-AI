@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { isDesktopRuntime } from '@/platform/runtime';
+import { renderImagePreviewDataUrl, type ImagePreviewMime } from '@/core/imageEdit/preview';
 
 const logger = createLogger('features.canvas.application.imageData')
 
@@ -156,7 +157,7 @@ export async function detectAspectRatio(imageUrl: string): Promise<string> {
   return reduceAspectRatio(image.naturalWidth, image.naturalHeight);
 }
 
-function resolvePreviewMimeType(imageUrl: string): string {
+function resolvePreviewMimeType(imageUrl: string): ImagePreviewMime {
   if (imageUrl.startsWith('data:image/png')) {
     return 'image/png';
   }
@@ -166,39 +167,6 @@ function resolvePreviewMimeType(imageUrl: string): string {
   return 'image/jpeg';
 }
 
-function renderPreviewDataUrl(
-  image: HTMLImageElement,
-  sourceDataUrl: string,
-  maxDimension: number
-): string {
-  const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
-  if (longestSide <= maxDimension) {
-    return sourceDataUrl;
-  }
-
-  const scale = maxDimension / longestSide;
-  const targetWidth = Math.max(1, Math.round(image.naturalWidth * scale));
-  const targetHeight = Math.max(1, Math.round(image.naturalHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return sourceDataUrl;
-  }
-
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-  context.drawImage(image, 0, 0, targetWidth, targetHeight);
-
-  const mimeType = resolvePreviewMimeType(sourceDataUrl);
-  if (mimeType === 'image/jpeg') {
-    return canvas.toDataURL(mimeType, 0.86);
-  }
-  return canvas.toDataURL(mimeType);
-}
-
 export async function createPreviewDataUrl(
   imageUrl: string,
   maxDimension = DEFAULT_PREVIEW_MAX_DIMENSION
@@ -206,7 +174,7 @@ export async function createPreviewDataUrl(
   const normalizedDataUrl = await imageUrlToDataUrl(imageUrl);
   const image = await loadImageElement(normalizedDataUrl);
   const safeMaxDimension = Math.max(64, Math.floor(maxDimension));
-  return renderPreviewDataUrl(image, normalizedDataUrl, safeMaxDimension);
+  return renderImagePreviewDataUrl(image, normalizedDataUrl, safeMaxDimension, resolvePreviewMimeType(normalizedDataUrl));
 }
 
 export async function prepareNodeImage(
@@ -233,7 +201,7 @@ export async function prepareNodeImage(
   const normalizedDataUrl = await imageUrlToDataUrl(persistedImagePath);
   const image = await loadImageElement(normalizedDataUrl);
   const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
-  const previewDataUrl = renderPreviewDataUrl(image, normalizedDataUrl, safeMaxDimension);
+  const previewDataUrl = renderImagePreviewDataUrl(image, normalizedDataUrl, safeMaxDimension, resolvePreviewMimeType(normalizedDataUrl));
   const previewImagePath =
     previewDataUrl === normalizedDataUrl
       ? persistedImagePath

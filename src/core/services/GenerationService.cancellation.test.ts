@@ -4,7 +4,8 @@ import { registry } from '@/core/ModelRegistry'
 import { aiCancelTask, aiContinuePolling, aiGenerate } from '@/commands/aiRuntime'
 import { GenerationService } from './GenerationService'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
-import { useAlertDialogStore, showAlertDialog } from '@/stores/alertDialogStore'
+import { useAlertDialogStore, showAlertDialog, requestAlertConfirmation } from '@/stores/alertDialogStore'
+import { configureGenerationSubmissionConfirmation } from './generationSubmissionConfirmation'
 import { ttsPresentation } from '@/models/presentation/tts'
 
 vi.mock('@/commands/aiRuntime', () => ({
@@ -13,6 +14,7 @@ vi.mock('@/commands/aiRuntime', () => ({
 }))
 const service = GenerationService.getInstance()
 beforeEach(() => {
+  configureGenerationSubmissionConfirmation(requestAlertConfirmation)
   vi.clearAllMocks()
   useAlertDialogStore.setState({ queue: [] })
   vi.spyOn(service, 'getProgressEstimate').mockResolvedValue(null)
