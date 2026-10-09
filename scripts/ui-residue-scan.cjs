@@ -83,6 +83,17 @@ function toRelative(file) {
   return path.relative(ROOT, file).replace(/\\/g, '/')
 }
 
+/** 把 import.meta.glob 的相对或 `/` 根模式解析成仓内相对路径正则，返回命中的已知源文件。 */
+function globMatches(pattern, importer, known) {
+  const base = pattern.startsWith('/') ? pattern.slice(1)
+    : path.posix.normalize(path.posix.join(path.posix.dirname(importer), pattern))
+  const source = base.split(/(\*\*\/|\*)/).map((part) => (
+    part === '**/' ? '(?:.*/)?' : part === '*' ? '[^/]*' : part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+  )).join('')
+  const regex = new RegExp(`^${source}$`)
+  return [...known].filter((file) => regex.test(file))
+}
+
 function walk(dir, predicate, result = []) {
   if (!fs.existsSync(dir)) return result
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -159,9 +170,14 @@ function collectFindings(options) {
     const referencedByTests = new Set()
     for (const importer of importerFiles) {
       const target = isTestFile(importer) ? referencedByTests : referencedByCode
-      for (const specifier of extractImportSpecifiers(readText(importer))) {
+      const text = readText(importer)
+      for (const specifier of extractImportSpecifiers(text)) {
         const resolved = resolveImport(specifier, importer, known)
         if (resolved && resolved !== importer) target.add(resolved)
+      }
+      // Vite import.meta.glob 自动发现的入口（如工具箱 toolboxTools/*/entry.ts）同样算被引用
+      for (const match of text.matchAll(/import\.meta\.glob(?:<[^>]*>)?\(\s*['"`]([^'"`]+)['"`]/g)) {
+        for (const file of globMatches(match[1], importer, known)) if (file !== importer) target.add(file)
       }
     }
     for (const html of walk(ROOT, (name, full) => name.endsWith('.html') && !full.includes(`${path.sep}out${path.sep}`)
