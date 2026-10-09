@@ -13,6 +13,7 @@ import type { HenjiImagePackageCodec } from '../package-codec'
 import { stagedPackagePathFor } from '../package-export'
 import { withImageEditDocumentId } from '../image-document/header'
 import { readPackageDocumentHeaderBytes } from '../image-document/package-file'
+import { KeyedSerialExecutor } from '../serial-executor'
 
 /*
  * 画布多图层节点的内嵌图片文档（3.4）。
@@ -78,6 +79,7 @@ export interface CanvasLayerCommitRequest {
    * 省略时不清理。
    */
   retainedDocumentIds?: readonly string[]
+  signal?: AbortSignal
 }
 
 export interface CanvasLayerCommitResult {
@@ -191,6 +193,7 @@ const RELEASE_RECHECK_MS = 5 * 60 * 1000
 
 export class CanvasLayerPackageService {
   readonly links: CanvasLayerLinks
+  private readonly commits = new KeyedSerialExecutor()
   /** 画布 ID → 上次全部保留的候选与时间。 */
   private readonly keptCandidates = new Map<string, { key: string; at: number }>()
 
@@ -256,6 +259,11 @@ export class CanvasLayerPackageService {
 
   /** 画布写回时：把每份内嵌文档写成容器 `.henji/canvas-layers/` 里的包；已是最新的不写。 */
   async commit(request: CanvasLayerCommitRequest): Promise<CanvasLayerCommitResult> {
+    return this.commits.run(request.canvasId, () => this.commitPackages(request))
+  }
+
+  private async commitPackages(request: CanvasLayerCommitRequest): Promise<CanvasLayerCommitResult> {
+    request.signal?.throwIfAborted()
     const { packages, written } = await this.writePackages(request)
     const released = request.retainedDocumentIds
       ? await this.releaseUnreferenced(request.canvasId, new Set([...request.retainedDocumentIds, ...request.documentIds]))
@@ -315,6 +323,7 @@ export class CanvasLayerPackageService {
     const folder = path.join(await this.options.resolveInternalFolder(request.container), CANVAS_LAYER_FOLDER_NAME)
     await fsp.mkdir(folder, { recursive: true })
     for (const rawId of request.documentIds) {
+      request.signal?.throwIfAborted()
       const id = assertDocumentId(rawId)
       const working = await this.loadWorking(id)
       if (!working) {
@@ -340,7 +349,7 @@ export class CanvasLayerPackageService {
         }
       }
       try {
-        await this.writePackage(working, target)
+        await this.writePackage(working, target, request.signal)
         const after = await fsp.stat(target)
         await this.links.write({ documentId: id, ownerCanvasId: owner, packagePath: target, fileSize: after.size, fileModifiedAt: after.mtimeMs, committedWorkingRevision: working.revision })
         packages[id] = target
@@ -356,11 +365,12 @@ export class CanvasLayerPackageService {
     return { packages, written }
   }
 
-  private async writePackage(working: ImageEditDocumentEnvelope, target: string): Promise<void> {
+  private async writePackage(working: ImageEditDocumentEnvelope, target: string, signal?: AbortSignal): Promise<void> {
     const header: CanvasLayerHeader = { format: HEADER_FORMAT, version: HEADER_VERSION, documentId: working.documentId, contentRevision: working.revision }
     const stagedPath = stagedPackagePathFor(target)
     try {
-      await this.options.packages.writeStaged({ document: working, documentHeader: `${JSON.stringify(header)}\n` }, stagedPath)
+      await this.options.packages.writeStaged({ document: working, documentHeader: `${JSON.stringify(header)}\n`, signal }, stagedPath)
+      signal?.throwIfAborted()
       await replaceFileAtomically(stagedPath, target)
     } finally {
       await fsp.rm(stagedPath, { force: true }).catch(() => undefined)

@@ -322,6 +322,9 @@ export class ContentAddressedResourceStore {
     const source = this.openReadStream(resourceId)
     const verifier = new ResourceIntegrityTransform(parseResourceId(resourceId))
     source.once('error', (error) => verifier.destroy(error))
+    // pipe() does not close its source when a consumer cancels the verifier.
+    // A failed/cancelled package must release the underlying file handle too.
+    verifier.once('close', () => source.destroy())
     return source.pipe(verifier)
   }
 

@@ -3,11 +3,14 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import type { Readable } from 'node:stream'
+import { performance } from 'node:perf_hooks'
 
 import { createMainLogger } from '../logging'
 import { replaceFileAtomically } from '../fs/atomic-file'
 import type { ImageEditDocumentEnvelope, ResourceId } from './contracts'
 import type { ContentAddressedResourceStore } from './resource-store'
+import { KeyedSerialExecutor } from './serial-executor'
 import {
   HENJI_IMAGE_DOCUMENT_HEADER_ENTRY,
   HENJI_IMAGE_PACKAGE_FORMAT,
@@ -22,6 +25,7 @@ import {
 } from './package-types'
 
 const logger = createMainLogger('main.image_editor_v3.package')
+const exportsByPath = new KeyedSerialExecutor()
 
 export interface ExportHenjiImagePackageRequest {
   targetPath: string
@@ -33,6 +37,8 @@ export interface ExportHenjiImagePackageRequest {
   /** 图片文档头（3.5）：序列化好的 `henji-document.json` 内容；省略时不写这个条目。 */
   documentHeader?: string
   signal?: AbortSignal
+  /** Internal progress port; callers can display saved resources without a second save implementation. */
+  onProgress?: (completedResources: number, totalResources: number) => void
   now?: Date
 }
 
@@ -40,6 +46,10 @@ function abortError(): Error {
   const error = new Error('.henjiimg export was cancelled')
   error.name = 'AbortError'
   return error
+}
+
+function checkAbort(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError()
 }
 
 function normalizeThumbnailExtension(extension: string): 'png' | 'webp' {
@@ -112,13 +122,16 @@ async function buildManifest(
 async function writeArchive(
   stagedPath: string,
   manifest: HenjiImagePackageManifest,
+  serializedManifest: string,
   request: ExportHenjiImagePackageRequest,
 ): Promise<void> {
-  if (request.signal?.aborted) throw abortError()
+  checkAbort(request.signal)
   await new Promise<void>((resolve, reject) => {
     const output = fs.createWriteStream(stagedPath, { flags: 'wx', mode: 0o600 })
     const archive = new ZipArchive({ zlib: { level: 6 } })
     let settled = false
+    let failure: unknown
+    let activeInput: Readable | undefined
     const settle = (error?: unknown): void => {
       if (settled) return
       settled = true
@@ -126,35 +139,64 @@ async function writeArchive(
       if (error) reject(error)
       else resolve()
     }
-    const onAbort = (): void => {
+    const fail = (error: unknown): void => {
+      failure ??= error
       archive.abort()
-      output.destroy(abortError())
+      activeInput?.destroy()
+      output.destroy()
     }
-    output.once('close', () => settle())
-    output.once('error', settle)
-    archive.once('error', settle)
-    archive.once('warning', settle)
+    const onAbort = (): void => {
+      fail(abortError())
+    }
+    // Wait for the output handle to close before cleaning up the staged file.
+    output.once('close', () => settle(failure))
+    output.once('error', fail)
+    archive.on('error', fail)
+    archive.on('warning', fail)
     request.signal?.addEventListener('abort', onAbort, { once: true })
     archive.pipe(output)
-    archive.append(`${JSON.stringify(manifest)}\n`, { name: HENJI_IMAGE_PACKAGE_MANIFEST })
+    archive.append(serializedManifest, { name: HENJI_IMAGE_PACKAGE_MANIFEST })
     if (request.documentHeader !== undefined) {
       archive.append(request.documentHeader, { name: HENJI_IMAGE_DOCUMENT_HEADER_ENTRY })
     }
-    for (const resource of manifest.resources) {
-      // 图片/瓦片通常已经压缩，store 避免对 200MP 资源重复执行高成本 deflate。
-      archive.append(request.resourceStore.openVerifiedReadStream(resource.resourceId), {
-        name: resource.path,
-        store: true,
-      })
-    }
-    if (manifest.thumbnail && request.thumbnail) {
-      archive.append(Buffer.from(
-        request.thumbnail.bytes.buffer,
-        request.thumbnail.bytes.byteOffset,
-        request.thumbnail.bytes.byteLength,
-      ), { name: manifest.thumbnail.path })
-    }
-    void archive.finalize().catch(settle)
+    void (async () => {
+      let completed = 0
+      for (const resource of manifest.resources) {
+        checkAbort(request.signal)
+        if (failure) throw failure
+        // Open just one verified resource at a time. append() queues streams;
+        // eagerly opening every resource would retain a handle/buffer per tile.
+        await new Promise<void>((done, failed) => {
+          const onEntry = (entry: { name: string }): void => {
+            if (entry.name !== resource.path) return
+            cleanup()
+            done()
+          }
+          const onFailure = (error: unknown): void => { cleanup(); failed(error) }
+          const onClose = (): void => onFailure(failure ?? new Error('Package output closed before its resource'))
+          const cleanup = (): void => {
+            archive.off('entry', onEntry)
+            archive.off('error', onFailure)
+            output.off('close', onClose)
+          }
+          archive.on('entry', onEntry)
+          archive.once('error', onFailure)
+          output.once('close', onClose)
+          activeInput = request.resourceStore.openVerifiedReadStream(resource.resourceId)
+          activeInput.once('error', fail)
+          archive.append(activeInput, { name: resource.path, store: true })
+        })
+        activeInput = undefined
+        request.onProgress?.(++completed, manifest.resources.length)
+      }
+      checkAbort(request.signal)
+      if (manifest.thumbnail && request.thumbnail) {
+        archive.append(Buffer.from(request.thumbnail.bytes.buffer,
+          request.thumbnail.bytes.byteOffset, request.thumbnail.bytes.byteLength),
+        { name: manifest.thumbnail.path, store: true })
+      }
+      await archive.finalize()
+    })().catch(fail)
   })
 }
 
@@ -166,13 +208,24 @@ export async function writeHenjiImagePackageStaged(
   request: Omit<ExportHenjiImagePackageRequest, 'targetPath'>,
   stagedPath: string,
 ): Promise<HenjiImagePackageManifest> {
+  checkAbort(request.signal)
+  const started = performance.now()
   const resourceInputs = uniqueResourceInputs({ ...request, targetPath: stagedPath })
   const resourceIds = resourceInputs.map((resource) => resource.resourceId)
   const lease = await request.resourceStore.acquireLease(resourceIds)
   try {
     await fsp.mkdir(path.dirname(stagedPath), { recursive: true })
     const manifest = await buildManifest({ ...request, targetPath: stagedPath }, resourceInputs)
-    await writeArchive(stagedPath, manifest, { ...request, targetPath: stagedPath })
+    checkAbort(request.signal)
+    const manifestMs = performance.now() - started
+    const serializationStarted = performance.now()
+    const serializedManifest = `${JSON.stringify(manifest)}\n`
+    const serializationMs = performance.now() - serializationStarted
+    const archiveStarted = performance.now()
+    await writeArchive(stagedPath, manifest, serializedManifest, { ...request, targetPath: stagedPath })
+    checkAbort(request.signal)
+    const archiveMs = performance.now() - archiveStarted
+    const syncStarted = performance.now()
     // Windows 不允许通过只读句柄执行 FlushFileBuffers。
     const staged = await fsp.open(stagedPath, 'r+')
     try {
@@ -180,6 +233,14 @@ export async function writeHenjiImagePackageStaged(
     } finally {
       await staged.close()
     }
+    checkAbort(request.signal)
+    logger.info('图片包暂存完成', {
+      event: 'image_editor_v3.package.staged.completed',
+      context: { documentId: request.document.documentId, revision: request.document.revision,
+        manifestMs, serializationMs, archiveMs, syncMs: performance.now() - syncStarted,
+        elapsedMs: performance.now() - started, resourceCount: manifest.resources.length,
+        resourceBytes: manifest.resources.reduce((sum, resource) => sum + resource.byteLength, 0) },
+    })
     return manifest
   } catch (error) {
     await fsp.rm(stagedPath, { force: true }).catch(() => undefined)
@@ -202,6 +263,10 @@ export async function exportHenjiImagePackage(
 ): Promise<HenjiImagePackageManifest> {
   const targetPath = request.targetPath.trim()
   if (!targetPath) throw new Error('.henjiimg export target path is empty')
+  return exportsByPath.run(path.resolve(targetPath), () => exportPackage(request, targetPath))
+}
+
+async function exportPackage(request: ExportHenjiImagePackageRequest, targetPath: string): Promise<HenjiImagePackageManifest> {
   const stagedPath = stagedPackagePathFor(targetPath)
   logger.info('开始保存可编辑图片包', {
     event: 'image_editor_v3.package.export.start',
@@ -212,6 +277,7 @@ export async function exportHenjiImagePackage(
   })
   try {
     const manifest = await writeHenjiImagePackageStaged(request, stagedPath)
+    checkAbort(request.signal)
     await replaceFileAtomically(stagedPath, targetPath)
     logger.info('可编辑图片包保存完成', {
       event: 'image_editor_v3.package.export.completed',

@@ -57,12 +57,13 @@ export function registerImageEditorV3ImageDocumentIpc(
     ))
   ), guard)
   registerIpcHandler('imageEditorV3:imageDocument:commit', parseImageEditorV3CommitImageDocumentPayload, (payload, event) => (
-    runRequest('image_document.commit', payload.requestId, event.sender.id, () => (
+    runRequest('image_document.commit', payload.requestId, event.sender.id, (signal) => (
       imageDocuments().commit({
         target: payload.target,
         expectedRevision: payload.expectedRevision,
         ...(payload.force ? { force: true } : {}),
         ...(payload.thumbnail ? { thumbnail: payload.thumbnail } : {}),
+        signal,
       })
     ))
   ), guard)
@@ -72,8 +73,8 @@ export function registerImageEditorV3ImageDocumentIpc(
     ))
   ), guard)
   registerIpcHandler('imageEditorV3:canvasLayers:commit', parseImageEditorV3CanvasLayersCommitPayload, (payload, event) => (
-    runRequest('canvas_layers.commit', payload.requestId, event.sender.id, () => (
-      canvasLayers().commit({ canvasId: payload.canvasId, container: payload.container, documentIds: payload.documentIds, retainedDocumentIds: payload.retainedDocumentIds })
+    runRequest('canvas_layers.commit', payload.requestId, event.sender.id, (signal) => (
+      canvasLayers().commit({ canvasId: payload.canvasId, container: payload.container, documentIds: payload.documentIds, retainedDocumentIds: payload.retainedDocumentIds, signal })
     ))
   ), guard)
 }

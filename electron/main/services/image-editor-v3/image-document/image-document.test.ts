@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createImageEditDocumentV3,
@@ -133,6 +133,46 @@ function ready(result: ImageDocumentOpenResult | ImageDocumentRecoveryRequired):
   if (result.status !== 'ready') throw new Error('expected ready')
   return result
 }
+
+it('同文档并发写回按顺序核对版本，只打包一次；无变化不打开资源流', async () => {
+  await workingCopy('ordered-save')
+  const created = await service.create({ documentId: 'ordered-save', container: { kind: 'user' }, emptyUntilRevision: null })
+  await editWorkingCopy('ordered-save')
+  const write = vi.spyOn(packages, 'writeStaged')
+  const target = { id: 'ordered-save', path: created.read.meta.path }
+  const results = await Promise.allSettled([
+    service.commit({ target, expectedRevision: 0 }),
+    service.commit({ target, expectedRevision: 0 }),
+  ])
+  expect(results[0].status).toBe('fulfilled')
+  expect(results[1].status).toBe('rejected')
+  expect(write).toHaveBeenCalledTimes(1)
+  const open = vi.spyOn(resources, 'openVerifiedReadStream')
+  expect((await service.commit({ target, expectedRevision: 1 })).unchanged).toBe(true)
+  expect(open).not.toHaveBeenCalled()
+  write.mockRestore()
+  open.mockRestore()
+})
+
+it('暂存包完成后取消也不替换原文档，工作副本修改保留', async () => {
+  await workingCopy('cancel-save')
+  const created = await service.create({ documentId: 'cancel-save', container: { kind: 'user' }, emptyUntilRevision: null })
+  await editWorkingCopy('cancel-save')
+  const original = await fsp.readFile(created.read.meta.path)
+  const controller = new AbortController()
+  const writeStaged = packages.writeStaged.bind(packages)
+  const write = vi.spyOn(packages, 'writeStaged').mockImplementation(async (request, stagedPath) => {
+    const result = await writeStaged(request, stagedPath)
+    controller.abort()
+    return result
+  })
+  await expect(service.commit({ target: { id: 'cancel-save', path: created.read.meta.path }, expectedRevision: 0,
+    signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' })
+  expect(await fsp.readFile(created.read.meta.path)).toEqual(original)
+  expect((await documents.load('cancel-save')).revision).toBe(1)
+  expect((await fsp.readdir(path.dirname(created.read.meta.path))).filter((name) => name.endsWith('.tmp'))).toEqual([])
+  write.mockRestore()
+})
 
 describe('图片文档新建与适配器', () => {
   it('新建草稿写进“图片文档/未命名图片 N.henjiimg”，头里有 ID、草稿标记与摘要；适配器能读', async () => {

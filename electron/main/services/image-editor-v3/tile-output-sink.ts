@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { performance } from 'node:perf_hooks'
 
 import { createMainLogger } from '../logging'
 import { replaceFileAtomically } from '../fs/atomic-file'
@@ -134,14 +135,17 @@ export abstract class FileTileOutputSinkBase implements TileOutputSink {
       // Windows 的 FlushFileBuffers 需要可写句柄；只读句柄调用 fsync 会返回 EPERM。
       // staged 文件由当前事务独占创建，因此用 r+ 不会扩大目标文件的写权限边界。
       const handle = await fsp.open(stagedPath, 'r+')
+      const syncStarted = performance.now()
       try {
         await handle.sync()
       } finally {
         await handle.close()
       }
       this.assertActive(generation, 'completing')
+      const syncMs = performance.now() - syncStarted
       // 发布是一个不可取消的极短原子区间；进入前发生的 cancel 都已由代际检查拦截。
       this.state = 'publishing'
+      const publishStarted = performance.now()
       await replaceFileAtomically(stagedPath, this.targetPath)
       this.state = 'completed'
       logger.info('流式导出图片完成', {
@@ -150,6 +154,8 @@ export abstract class FileTileOutputSinkBase implements TileOutputSink {
           documentId: this.description.documentId,
           revision: this.description.revision,
           byteLength: stats.size,
+          syncMs,
+          publishMs: performance.now() - publishStarted,
         },
       })
     } catch (error) {

@@ -101,6 +101,34 @@ async function freshMachine(): Promise<void> {
 
 const user: DocumentContainerRef = { kind: 'user' }
 
+it('同画布并发保存排队，第二次走未改动快速路径', async () => {
+  await workingCopy('ordered-layer')
+  const results = await Promise.all([
+    service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['ordered-layer'] }),
+    service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['ordered-layer'] }),
+  ])
+  expect(results.map((result) => result.written)).toEqual([1, 0])
+})
+
+it('画布暂存包完成后的取消保持原包与工作副本', async () => {
+  await workingCopy('cancel-layer')
+  const initial = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['cancel-layer'] })
+  const target = initial.packages['cancel-layer']
+  const original = await fsp.readFile(target)
+  await editWorkingCopy('cancel-layer')
+  const controller = new AbortController()
+  const writeStaged = HenjiImagePackageCodec.prototype.writeStaged
+  vi.spyOn(HenjiImagePackageCodec.prototype, 'writeStaged').mockImplementation(async function (this: HenjiImagePackageCodec, request, stagedPath) {
+    const result = await writeStaged.call(this, request, stagedPath)
+    controller.abort()
+    return result
+  })
+  await expect(service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['cancel-layer'], signal: controller.signal }))
+    .rejects.toMatchObject({ name: 'AbortError' })
+  expect(await fsp.readFile(target)).toEqual(original)
+  expect((await documents.load('cancel-layer')).revision).toBe(1)
+})
+
 describe('画布内嵌图片文档的包', () => {
   it('写回：写进容器 .henji/canvas-layers/，工作副本没变时不重写，改了再写', async () => {
     await workingCopy('layer-a')

@@ -1,5 +1,6 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { performance } from 'node:perf_hooks'
 
 import { documentKindRegistry } from '../../../../../src/core/documents/kinds'
 import type { ImageDocumentContent } from '../../../../../src/core/documents/kinds/imageDocument'
@@ -31,6 +32,7 @@ import type { ImageEditDocumentEnvelope, ResourceId } from '../contracts'
 import type { ImageEditDocumentRepository } from '../document-repository'
 import type { HenjiImagePackageCodec } from '../package-codec'
 import { stagedPackagePathFor } from '../package-export'
+import { KeyedSerialExecutor } from '../serial-executor'
 import {
   IMAGE_DOCUMENT_HEADER_FORMAT,
   IMAGE_DOCUMENT_HEADER_VERSION,
@@ -169,6 +171,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class ImageDocumentService {
   /** 本次运行里打开、新建、写回过的图片文档：回收时一律跳过（可能还开着）。 */
   private readonly touched = new Set<string>()
+  private readonly commits = new KeyedSerialExecutor()
 
   constructor(private readonly options: ImageDocumentServiceOptions) {}
 
@@ -297,7 +300,32 @@ export class ImageDocumentService {
     expectedRevision: number
     force?: boolean
     thumbnail?: ImageDocumentThumbnailInput
+    signal?: AbortSignal
   }): Promise<ImageDocumentCommitResult> {
+    const started = performance.now()
+    this.logger.info('开始写回图片文档', { event: 'image_document.commit.start', context: { documentId: request.target.id } })
+    try {
+      const result = await this.commits.run(request.target.id, () => this.commitWorkingCopy(request))
+      this.logger.info('图片文档保存确认完成', { event: 'image_document.commit.confirmed', context: {
+        documentId: request.target.id, elapsedMs: performance.now() - started, unchanged: result.unchanged,
+      } })
+      return result
+    } catch (error) {
+      this.logger.error('图片文档写回失败', { event: 'image_document.commit.failed', context: {
+        documentId: request.target.id, elapsedMs: performance.now() - started,
+      }, error })
+      throw error
+    }
+  }
+
+  private async commitWorkingCopy(request: {
+    target: DocumentTarget
+    expectedRevision: number
+    force?: boolean
+    thumbnail?: ImageDocumentThumbnailInput
+    signal?: AbortSignal
+  }): Promise<ImageDocumentCommitResult> {
+    request.signal?.throwIfAborted()
     const id = request.target.id
     await this.touch(id)
     const working = await this.options.documents.load(id)
@@ -332,8 +360,10 @@ export class ImageDocumentService {
           document: working,
           documentHeader: serializeImageDocumentHeader(header),
           ...(request.thumbnail ? { thumbnail: request.thumbnail } : {}),
+          signal: request.signal,
         }, stagedPath)
         const published = await this.exclusive(id, async () => {
+          request.signal?.throwIfAborted()
           const current = await this.locate(request.target)
           if (!request.force && current.header.revision !== request.expectedRevision) {
             throw new DocumentRevisionConflictError(id, request.expectedRevision, current.header.revision)
@@ -342,6 +372,7 @@ export class ImageDocumentService {
           if (current.path !== located.path || current.header.draft !== located.header.draft || current.header.revision !== located.header.revision) {
             return { retry: current }
           }
+          request.signal?.throwIfAborted()
           await replaceFileAtomically(stagedPath, current.path)
           return { retry: null }
         })

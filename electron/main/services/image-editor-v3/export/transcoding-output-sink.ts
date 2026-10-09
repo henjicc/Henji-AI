@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { performance } from 'node:perf_hooks'
 
 import type SharpType from 'sharp'
 
@@ -154,6 +155,7 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
   private hdrEncoder: StreamingHdrAvifEncoder | undefined
   private readonly tileSize: number
   private cancelRequested = false
+  private intermediateWriteMs = 0
 
   constructor(
     targetPath: string,
@@ -170,6 +172,7 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     description: TileOutputDescription,
   ): Promise<void> {
     this.cancelRequested = false
+    this.intermediateWriteMs = 0
     const metadata = await prepareExportMetadata(description, this.exportOptions)
     if (requiresStreamingHdrAvifEncoder(description, this.exportOptions.format)) {
       const encoder = new StreamingHdrAvifEncoder(stagedPath, description, {
@@ -195,7 +198,11 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     this.intermediatePath = intermediatePath
     const writer = new IncrementalBigTiffWriter(intermediatePath, {
       tileSize: resolveSafeTiffTileSize(this.tileSize, description),
-      compressionLevel: this.exportOptions.compressionLevel,
+      // This file is transient input to libvips. Compressing it first costs one
+      // deflate + inflate pass over every pixel before the final encoder runs.
+      // Level 0 keeps the same lossless TIFF contract; final output still uses
+      // the user's requested compression level.
+      compressionLevel: 0,
       iccProfile: metadata.iccProfile,
     })
     this.writer = writer
@@ -216,7 +223,9 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
       return
     }
     if (!this.writer) throw new Error('Transcode source writer has not started')
+    const started = performance.now()
     await this.writer.writeTile(tile)
+    this.intermediateWriteMs += performance.now() - started
   }
 
   protected async onComplete(
@@ -230,7 +239,9 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     const writer = this.writer
     const intermediatePath = this.intermediatePath
     if (!writer || !intermediatePath) throw new Error('Transcode source writer has not started')
+    const syncStarted = performance.now()
     await writer.complete()
+    const intermediateSyncMs = performance.now() - syncStarted
     let pipeline: SharpInstance | undefined
     try {
       const sharp = await loadRequiredSharp(this.exportOptions.format)
@@ -245,7 +256,15 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
         resolveSafeTiffTileSize(this.tileSize, description),
       )
       this.pipeline = pipeline
+      const encodeStarted = performance.now()
       await pipeline.toFile(stagedPath)
+      logger.info('图片栅格编码完成', {
+        event: 'image_editor_v3.export.transcode.completed',
+        context: { documentId: description.documentId, revision: description.revision,
+          width: description.width, height: description.height, format: this.exportOptions.format,
+          intermediateWriteMs: this.intermediateWriteMs, intermediateSyncMs,
+          encodeMs: performance.now() - encodeStarted },
+      })
     } catch (error) {
       if (this.cancelRequested) throw createAbortError()
       throw error
