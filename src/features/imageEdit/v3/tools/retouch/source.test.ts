@@ -47,4 +47,4 @@ it('4K/8K 同一跨瓦片修复结果一致，稀疏读取、选区边界及旧�
   expect(outputs[0]).toEqual(outputs[2]); expect(outputs[1]).toEqual(outputs[3]);
   await fs.mkdir('.reality/t119-11-quality', { recursive: true });
   await fs.writeFile('.reality/t119-11-quality/sparse-stroke-metrics.json', JSON.stringify(timings, null, 2));
-});
+}, 30_000); // 4K/8K 真实尺寸稀疏读取在 CI 共享机器上约需 5–15 秒
