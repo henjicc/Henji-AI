@@ -7,6 +7,7 @@ import { GENERAL_APPLICATION_SETTING_DEFINITIONS } from './generalSettingDefinit
 import { INTERFACE_APPLICATION_SETTING_DEFINITIONS } from './interfaceSettingDefinitions'
 import { PROTECTED_APPLICATION_SETTING_DEFINITIONS } from './protectedSettingDefinitions'
 import type { ApplicationSettingDefinition, SettingChangePlan } from './types'
+import { restoreApplicationSetting } from './definitionFactories'
 
 const logger = createLogger('features.settings.application_control')
 const MAX_SETTING_PLANS = 64
@@ -14,6 +15,7 @@ const DEFAULT_MODEL_PROPERTY_IDS = [
   'generation.default_image_model',
   'generation.default_video_model',
   'generation.default_audio_model',
+  'transcription.default_model',
 ] as const
 
 const definitions = [
@@ -23,7 +25,8 @@ const definitions = [
 const definitionMap = new Map(definitions.map((definition) => [definition.id, definition]))
 if (definitionMap.size !== definitions.length) throw new Error('应用设置定义 ID 重复')
 
-const plans = new Map<string, SettingChangePlan>()
+type InternalSettingChangePlan = SettingChangePlan & { restoreOriginalValues?: true }
+const plans = new Map<string, InternalSettingChangePlan>()
 let revision = 0
 
 useSettingsStore.subscribe((state, previous) => {
@@ -73,19 +76,20 @@ function affectedDefinitions(changes: SettingChangePlan['changes']): Application
   })
 }
 
-function applySettingChangesAtomically(changes: SettingChangePlan['changes']): void {
+function applySettingChangesAtomically(changes: SettingChangePlan['changes'], restoreOriginalValues = false): void {
   const affected = affectedDefinitions(changes)
   const beforeValues = new Map(affected.map((definition) => [definition.id, definition.read()]))
   try {
     for (const change of changes) {
       const definition = definitionMap.get(change.id)
       if (!definition) throw new Error('NOT_FOUND')
-      definition.write(change.after)
+      if (restoreOriginalValues) restoreApplicationSetting(definition, change.after)
+      else definition.write(change.after)
     }
   } catch (error) {
     for (const definition of affected) {
       const before = beforeValues.get(definition.id)
-      if (before !== undefined && definition.read() !== before) definition.write(before)
+      if (before !== undefined && definition.read() !== before) restoreApplicationSetting(definition, before)
     }
     throw error
   }
@@ -197,7 +201,7 @@ export function applyApplicationSettingsChange(planRef: string): {
   const affected = affectedDefinitions(plan.changes)
   const beforeValues = new Map(affected.map((definition) => [definition.id, definition.read()]))
   try {
-    applySettingChangesAtomically(plan.changes)
+    applySettingChangesAtomically(plan.changes, plan.restoreOriginalValues)
   } catch (error) {
     logger.error('设置提交失败', error, {
       event: 'settings.apply.failed',
@@ -222,9 +226,10 @@ export function applyApplicationSettingsChange(planRef: string): {
       requiresRestart: planned?.requiresRestart ?? definition.requiresRestart,
     }]
   })
-  const undoPlan: SettingChangePlan = {
+  const undoPlan: InternalSettingChangePlan = {
     planRef: createPlanRef(),
     revision,
+    restoreOriginalValues: true,
     changes: actualChanges.map((change) => ({ ...change, before: change.after, after: change.before })),
   }
   plans.set(undoPlan.planRef, undoPlan)

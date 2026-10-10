@@ -130,21 +130,27 @@
     "primaryProvider": "默认供应商",
     "primaryProviderHint": "新建节点时优先使用这个供应商；如果它不提供某类模型，会回退到其他可用供应商。",
     "defaultsTitle": "默认模型",
-    "defaultsDescription": "新建生成任务和画布节点时使用。图片、视频、音频分别设置，同一模型在不同供应商之间会自动对应。",
+    "defaultsDescription": "生成与录制讲解分别选择默认模型。修改只影响之后开始的任务。",
     "defaultModelHint": "保存的是模型本身，而不是某个供应商的接口。留空时由当前默认供应商自动选择。",
     "defaultModels": {
       "image": "默认图片模型",
       "video": "默认视频模型",
-      "audio": "默认音频模型"
+      "audio": "默认音频模型",
+      "transcription": "默认转写模型"
     },
     "mediaTypes": {
       "image": "图片",
       "video": "视频",
-      "audio": "音频"
+      "audio": "音频",
+      "transcription": "转写"
     },
     "notSet": "未设置",
-    "defaultsCleared": "新供应商不提供原先的{{types}}默认模型，相关设置已清空，请重新选择。",
+    "defaultsCleared": "默认供应商已更改，{{types}}默认选择已清空，请重新选择。",
     "onboardingTitle": "首次设置引导",
-    "description": "重新打开欢迎流程。已保存的默认项和平台密钥不会被清除。"
+    "description": "重新打开欢迎流程。已保存的默认项和平台密钥不会被清除。",
+    "transcriptionAuto": "自动选择",
+    "transcriptionHint": "仅列出已配置、能处理本地录音并返回词、字或句时间的模型。录音会发送给所选供应商，可能产生费用；开始转写前确认实际模型与费用。",
+    "transcriptionUnavailable": "请在供应商设置中配置支持带时间转写的模型，例如百炼文件转写。",
+    "modelUnavailable": "模型不可用，请配置或重选"
   }
 }

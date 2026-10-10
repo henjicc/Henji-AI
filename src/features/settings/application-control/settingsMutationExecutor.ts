@@ -12,6 +12,7 @@ import { ApplicationPersistenceBoundaryFailure, ApplicationPersistenceFailure } 
 import { getSettingsRegistryRevision, listApplicationSettingDefinitions } from './settingsApplicationService'
 import { SETTINGS_ENTITY_TYPE } from './settingsReflection'
 import type { SettingValue } from './types'
+import { restoreApplicationSetting } from './definitionFactories'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 interface SettingsUndoEntry { values: Array<{ id: string; value: SettingValue }> }
@@ -20,6 +21,7 @@ const DEFAULT_MODEL_PROPERTY_IDS = [
   'generation.default_image_model',
   'generation.default_video_model',
   'generation.default_audio_model',
+  'transcription.default_model',
 ] as const
 
 const DEFAULT_MODEL_CASCADE_DECLARATIONS = DEFAULT_MODEL_PROPERTY_IDS.map((propertyId) => ({
@@ -119,7 +121,10 @@ export class SettingsMutationExecutor implements ApplicationMutationExecutor {
       const restoreErrors: unknown[] = []
       for (const stepValues of [...completed].reverse()) {
         for (const item of [...stepValues].reverse()) {
-          try { definitions.get(item.id)?.write(item.before) } catch (failure) { restoreErrors.push(failure) }
+          try {
+            const definition = definitions.get(item.id)
+            if (definition) restoreApplicationSetting(definition, item.before)
+          } catch (failure) { restoreErrors.push(failure) }
         }
       }
       logger.error('设置事务失败', error, {
@@ -192,7 +197,10 @@ export class SettingsMutationExecutor implements ApplicationMutationExecutor {
     const definitions = new Map(listApplicationSettingDefinitions().map((definition) => [definition.id, definition]))
     logger.info('设置撤销开始', { event: 'settings.transaction.undo.start', requestId: context.requestId })
     try {
-      for (const item of [...entry.values].reverse()) definitions.get(item.id)?.write(item.value)
+      for (const item of [...entry.values].reverse()) {
+        const definition = definitions.get(item.id)
+        if (definition) restoreApplicationSetting(definition, item.value)
+      }
       this.undoEntries.delete(undoToken)
       const revision = getSettingsRegistryRevision()
       logger.info('设置撤销完成', {

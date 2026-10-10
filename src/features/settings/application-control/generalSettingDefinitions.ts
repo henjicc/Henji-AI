@@ -17,6 +17,7 @@ import { STARTUP_WORKSPACE_IDS } from '@/core/types/workspace'
 import { GENERATION_MODEL_DESCRIPTIONS } from '@/core/modelCatalog/generationModelDescriptions'
 import { API_KEY_PROVIDER_IDS } from '@/core/config/providers'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
+import { ASR_CATALOG, isTimestampedLocalAsr } from '@/core/audioEdit/asrCatalog'
 
 import { storageSetting, storeSetting } from './definitionFactories'
 import type { ApplicationSettingDefinition } from './types'
@@ -27,6 +28,16 @@ const DEFAULT_MODEL_ID_SCHEMA = z.enum([
 ] as [string, ...string[]])
 
 export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
+  storeSetting({
+    id: 'transcription.default_model', title: '默认转写模型',
+    description: '设置录制讲解使用的带词、字或句时间的转写模型；使用完整模型标识。只允许已配置且能处理本地录音的模型。auto 优先默认供应商，再选择可用模型；明确选择失效时必须重选。修改不影响已开始的转写。',
+    aliases: ['默认语音识别模型', '讲解转写模型', 'ASR', 'default transcription model'],
+    schema: z.enum(['auto', ...ASR_CATALOG.filter(isTimestampedLocalAsr).map((entry) => entry.descriptor.id)] as [string, ...string[]]),
+    defaultValue: 'auto', target: { tab: 'workspace', sectionId: 'workspace-generation' },
+    requiresReload: false, requiresRestart: false, sensitive: false,
+    restore: (value) => modelDefaultsManager.restoreTranscriptionModelId(value === 'auto' ? '' : z.string().parse(value)),
+  }, () => modelDefaultsManager.getSnapshot().models.transcription || 'auto',
+  (value) => modelDefaultsManager.setDefaultModel('transcription', value === 'auto' ? '' : value)),
   storeSetting({
     id: 'general.primary_provider', title: '默认供应商', description: '设置新节点与首次任务优先使用的模型供应商，不会隐藏其他供应商。',
     aliases: ['主供应商', '首选供应商', '默认平台', 'primary provider', 'default provider'], schema: z.enum(API_KEY_PROVIDER_IDS), defaultValue: 'kie',

@@ -1,4 +1,4 @@
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 
 import Dropdown from '@/components/ui/Dropdown'
 import { UI_TEXT_META_CLASS, UiFormRow, UiGroup } from '@/components/ui'
@@ -7,13 +7,14 @@ import { getI18nText } from '@/core/types/I18nText'
 import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
 import {
   modelDefaultsManager,
-  type DefaultModelMediaType,
+  type DefaultModelPurpose,
 } from '@/features/settings/modelDefaultsManager'
 import { useI18n } from '@/hooks/useI18n'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { getProviderDisplayName } from '@/utils/modelHelpers'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 
-const DEFAULT_MODEL_MEDIA_TYPES: DefaultModelMediaType[] = ['image', 'video', 'audio']
+const DEFAULT_MODEL_MEDIA_TYPES: DefaultModelPurpose[] = ['image', 'video', 'audio', 'transcription']
 
 /** 默认供应商与按媒体类型的默认模型：新建生成任务、画布节点时使用（设置 › 工作区 › 生成）。 */
 export default function DefaultModelsSection(): JSX.Element {
@@ -23,7 +24,16 @@ export default function DefaultModelsSection(): JSX.Element {
     modelDefaultsManager.getSnapshot,
     modelDefaultsManager.getSnapshot,
   )
-  const [clearedMediaTypes, setClearedMediaTypes] = useState<DefaultModelMediaType[]>([])
+  const [clearedMediaTypes, setClearedMediaTypes] = useState<DefaultModelPurpose[]>([])
+  const previousDefaults = useRef(defaults)
+  useEffect(() => {
+    const previous = previousDefaults.current
+    if (previous.providerId !== defaults.providerId) {
+      setClearedMediaTypes(DEFAULT_MODEL_MEDIA_TYPES.filter((purpose) => previous.models[purpose] && !defaults.models[purpose]))
+    }
+    previousDefaults.current = defaults
+  }, [defaults])
+  const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus)
   const providerOptions = API_KEY_PROVIDERS.map((provider) => ({
     value: provider.id,
     label: getProviderDisplayName(provider.id),
@@ -31,20 +41,26 @@ export default function DefaultModelsSection(): JSX.Element {
 
   const modelOptions = useMemo(() => Object.fromEntries(
     DEFAULT_MODEL_MEDIA_TYPES.map((mediaType) => {
-      const options = modelDefaultsManager.listProviderModels(mediaType, defaults.providerId)
+      const options = (mediaType === 'transcription'
+        ? modelDefaultsManager.listTranscriptionModels((providerId) => providerKeyStatus[providerId] === true).map((entry) => ({
+          value: entry.descriptor.id,
+          label: `${entry.descriptor.modelId} · ${getProviderDisplayName(entry.descriptor.providerIds?.[0] ?? '')}`,
+        }))
+        : modelDefaultsManager.listProviderModels(mediaType, defaults.providerId)
         .map((model) => ({
           value: model.meta.canonicalModelId,
           label: getI18nText(model.meta.name, currentLanguage) || model.meta.canonicalModelId,
-        }))
+        })))
         .sort((left, right) => left.label.localeCompare(right.label, currentLanguage))
       return [
         mediaType,
-        [{ value: '', label: t('settings.notSet') }, ...options],
+        [{ value: '', label: t(mediaType === 'transcription' ? 'settings.transcriptionAuto' : 'settings.notSet') }, ...options],
       ]
     }),
-  ) as Record<DefaultModelMediaType, Array<{ value: string; label: string }>>, [
+  ) as Record<DefaultModelPurpose, Array<{ value: string; label: string }>>, [
     currentLanguage,
     defaults.providerId,
+    providerKeyStatus,
     t,
   ])
 
@@ -71,16 +87,23 @@ export default function DefaultModelsSection(): JSX.Element {
       {DEFAULT_MODEL_MEDIA_TYPES.map((mediaType) => {
         const options = modelOptions[mediaType]
         const selectedCanonicalId = defaults.models[mediaType]
+        let resolvedDisplay: string | undefined
+        if (mediaType === 'transcription' && !selectedCanonicalId) {
+          try {
+            const selected = modelDefaultsManager.resolveTranscriptionModelId()
+            resolvedDisplay = options.find((option) => option.value === selected)?.label
+          } catch { /* 未配置时保留自动选择，下面提供配置提示。 */ }
+        }
         return (
           <UiFormRow
             key={mediaType}
             label={t(`settings.defaultModels.${mediaType}`)}
-            info={t('settings.defaultModelHint')}
+            info={t(mediaType === 'transcription' ? 'settings.transcriptionHint' : 'settings.defaultModelHint')}
             inline
           >
             <Dropdown
               value={selectedCanonicalId}
-              display={options.find((option) => option.value === selectedCanonicalId)?.label}
+              display={resolvedDisplay ?? options.find((option) => option.value === selectedCanonicalId)?.label ?? t('settings.modelUnavailable')}
               options={options}
               onSelect={(value) => {
                 modelDefaultsManager.setDefaultModel(mediaType, value)
@@ -91,6 +114,9 @@ export default function DefaultModelsSection(): JSX.Element {
           </UiFormRow>
         )
       })}
+      {modelOptions.transcription.length === 1 ? (
+        <p className={UI_TEXT_META_CLASS}>{t('settings.transcriptionUnavailable')}</p>
+      ) : null}
       {clearedMediaTypes.length > 0 ? (
         <p className={UI_TEXT_META_CLASS}>
           {t('settings.defaultsCleared', {

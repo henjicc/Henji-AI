@@ -130,21 +130,27 @@
     "primaryProvider": "Default provider",
     "primaryProviderHint": "New nodes prefer this provider. If it has no model for a media type, Henji AI falls back to another available provider.",
     "defaultsTitle": "Default models",
-    "defaultsDescription": "Used for new generation tasks and canvas nodes. Set images, video and audio separately; the same model is matched automatically across providers.",
+    "defaultsDescription": "Choose default models for generation and recorded explanations. Changes apply to future tasks.",
     "defaultModelHint": "This saves the model itself, not a provider-specific endpoint. Leave it unset to let the default provider choose.",
     "defaultModels": {
       "image": "Default image model",
       "video": "Default video model",
-      "audio": "Default audio model"
+      "audio": "Default audio model",
+      "transcription": "Default transcription model"
     },
     "mediaTypes": {
       "image": "image",
       "video": "video",
-      "audio": "audio"
+      "audio": "audio",
+      "transcription": "transcription"
     },
     "notSet": "Not set",
-    "defaultsCleared": "The new provider does not offer the previous default {{types}} model. The affected defaults were cleared; choose replacements if needed.",
+    "defaultsCleared": "The default provider changed. The default {{types}} selections were cleared; choose replacements if needed.",
     "onboardingTitle": "First-time setup guide",
-    "description": "Reopen the welcome flow. Saved defaults and provider keys are preserved."
+    "description": "Reopen the welcome flow. Saved defaults and provider keys are preserved.",
+    "transcriptionAuto": "Automatic",
+    "transcriptionHint": "Lists configured models that accept local recordings and return word, character or segment times. Recordings are sent to the selected provider and may incur charges. Confirm the actual model and cost before transcription.",
+    "transcriptionUnavailable": "Configure a provider with timestamped transcription, such as Bailian file transcription.",
+    "modelUnavailable": "Model unavailable; configure or reselect"
   }
 }

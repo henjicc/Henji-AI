@@ -10,7 +10,7 @@ import {
 import {
   ModelDefaultsManager,
   modelDefaultsManager,
-  type DefaultModelMediaType,
+  type DefaultModelPurpose,
 } from '@/features/settings/modelDefaultsManager'
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
 
@@ -259,7 +259,7 @@ export class OnboardingManager {
     this.update({ activeStepId: previousStepId })
   }
 
-  setPrimaryProvider(providerId: ApiKeyProvider): DefaultModelMediaType[] {
+  setPrimaryProvider(providerId: ApiKeyProvider): DefaultModelPurpose[] {
     return this.defaultsManager.setProvider(providerId)
   }
 

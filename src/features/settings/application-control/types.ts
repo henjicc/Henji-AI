@@ -17,6 +17,8 @@ export interface ApplicationSettingDefinition {
   sensitive: boolean
   read: () => SettingValue
   write: (value: SettingValue) => void
+  /** 仅用于内部回滚/撤销；恢复已存在的值，不重新判断资源是否可用。 */
+  restore?: (value: SettingValue) => void
 }
 
 export interface SettingChangePlan {

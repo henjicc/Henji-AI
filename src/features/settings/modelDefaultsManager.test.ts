@@ -95,6 +95,7 @@ describe('ModelDefaultsManager', () => {
       image: '',
       video: 'shared-video',
       audio: '',
+      transcription: '',
     })
   })
 
@@ -105,5 +106,30 @@ describe('ModelDefaultsManager', () => {
 
     expect(() => manager.setDefaultModel('image', 'missing-image'))
       .toThrow('DEFAULT_MODEL_NOT_AVAILABLE:image:missing-image:available=available-image')
+  })
+
+  it('转写复用同一设置保存重开、拒绝失效选择，供应商变化清空', () => {
+    const storage = new MemoryStorage()
+    let configured = true
+    const manager = new ModelDefaultsManager(storage, catalog([]), (provider) => provider === 'bailian' && configured)
+    manager.setDefaultModel('transcription', 'bailian.speech-recognition.qwen3-asr-flash-filetrans')
+    const reopened = new ModelDefaultsManager(storage, catalog([]), (provider) => provider === 'bailian' && configured)
+    expect(reopened.getSnapshot().models.transcription).toBe(manager.getSnapshot().models.transcription)
+    expect(reopened.resolveTranscriptionModelId()).toBe('bailian.speech-recognition.qwen3-asr-flash-filetrans')
+    configured = false
+    expect(() => reopened.resolveTranscriptionModelId()).toThrow('ASR_MODEL_UNAVAILABLE')
+    expect(() => reopened.setDefaultModel('transcription', 'bailian.speech-recognition.fun-asr')).toThrow('DEFAULT_MODEL_NOT_AVAILABLE')
+    expect(reopened.setProvider('fal')).toEqual(['transcription'])
+    expect(reopened.getSnapshot().models.transcription).toBe('')
+  })
+
+  it('未设置转写时按主供应商优先自动选实际可用模型，排除文本与远端输入', () => {
+    const manager = new ModelDefaultsManager(new MemoryStorage(), catalog([]), () => true)
+    manager.setProvider('bailian')
+    expect(manager.resolveTranscriptionModelId()).toBe('bailian.speech-recognition.fun-asr')
+    expect(manager.listTranscriptionModels().map((entry) => entry.descriptor.modelId))
+      .not.toContain('seedasr-2.0-file')
+    expect(() => manager.setDefaultModel('transcription', 'bailian.speech-recognition.qwen3-asr-flash'))
+      .toThrow('DEFAULT_MODEL_NOT_AVAILABLE')
   })
 })

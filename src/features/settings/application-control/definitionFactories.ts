@@ -5,6 +5,11 @@ import type { ApplicationSettingDefinition, SettingValue } from './types'
 
 export const hexSettingSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/)
 
+export function restoreApplicationSetting(definition: ApplicationSettingDefinition, value: SettingValue): void {
+  const restore = definition.restore ?? definition.write
+  restore(value)
+}
+
 export function storeSetting<TValue extends SettingValue>(
   definition: Omit<ApplicationSettingDefinition, 'schema' | 'defaultValue' | 'read' | 'write'> & {
     schema: z.ZodType<TValue>

@@ -4,18 +4,27 @@ import { formatMigrations } from '@/core/persistence/formatMigrations'
 import { registry } from '@/core/ModelRegistry'
 import { createLogger } from '@/core/logging'
 import type { ModelDefinition, ModelTag } from '@/core/types'
+import { z } from 'zod'
+import { listTimestampedLocalAsr, resolveTimestampedLocalAsr, type AsrCatalogEntry } from '@/core/audioEdit/asrCatalog'
+import { useSettingsStore } from '@/stores/settingsStore'
 import {
   API_KEY_PROVIDERS,
   type ApiKeyProvider,
 } from '@/core/config/providers'
 
 export type DefaultModelMediaType = 'image' | 'video' | 'audio'
+export type DefaultModelPurpose = DefaultModelMediaType | 'transcription'
+
+// 持久格式登记/baseline 由拥有 core/persistence 的总管理者同步；这里只组合既有 schema。
+export const transcriptionModelDefaultsSchema = modelDefaultsSchema.extend({
+  models: modelDefaultsSchema.shape.models.extend({ transcription: z.string() }),
+})
 
 export const MODEL_DEFAULTS_STORAGE_KEY = 'henji-model-defaults'
 export const MODEL_DEFAULTS_STATE_VERSION = MODEL_DEFAULTS_VERSION
 
 const DEFAULT_PROVIDER: ApiKeyProvider = 'kie'
-const MEDIA_TYPES: DefaultModelMediaType[] = ['image', 'video', 'audio']
+const MEDIA_TYPES: DefaultModelPurpose[] = ['image', 'video', 'audio', 'transcription']
 const LEGACY_ONBOARDING_STORAGE_KEY = 'henji-onboarding-state'
 
 const PREFERRED_CANONICAL_MODEL_IDS: Record<DefaultModelMediaType, string[]> = {
@@ -30,7 +39,7 @@ const providerIds = new Set<ApiKeyProvider>(API_KEY_PROVIDERS.map((provider) => 
 export interface ModelDefaultsStateV1 {
   version: 1
   providerId: ApiKeyProvider
-  models: Record<DefaultModelMediaType, string>
+  models: Record<DefaultModelPurpose, string>
 }
 
 export interface ModelDefaultsStorage {
@@ -58,7 +67,7 @@ function createInitialState(storage: ModelDefaultsStorage): ModelDefaultsStateV1
   return {
     version: MODEL_DEFAULTS_STATE_VERSION,
     providerId,
-    models: { image: '', video: '', audio: '' },
+    models: { image: '', video: '', audio: '', transcription: '' },
   }
 }
 
@@ -77,6 +86,7 @@ function normalizeState(value: unknown): ModelDefaultsStateV1 | null {
       image: typeof rawModels.image === 'string' ? rawModels.image : '',
       video: typeof rawModels.video === 'string' ? rawModels.video : '',
       audio: typeof rawModels.audio === 'string' ? rawModels.audio : '',
+      transcription: typeof rawModels.transcription === 'string' ? rawModels.transcription : '',
     },
   }
 }
@@ -115,8 +125,9 @@ export class ModelDefaultsManager {
   constructor(
     private readonly storage: ModelDefaultsStorage,
     private readonly catalog: ModelDefaultsCatalog = registry,
+    private readonly isAsrConfigured: (providerId: string) => boolean = (providerId) => useSettingsStore.getState().providerKeyStatus[providerId] === true,
   ) {
-    this.storage = guardedPlainStorage(MODEL_DEFAULTS_STORAGE_KEY, { id: 'model-defaults', name: '默认生成模型', version: MODEL_DEFAULTS_VERSION, schema: modelDefaultsSchema, migrations: formatMigrations('model-defaults') }, storage, error => logger.warn('默认模型格式无法读取，原数据保留', { event: 'model_defaults.load.failed', error: String(error) }))
+    this.storage = guardedPlainStorage(MODEL_DEFAULTS_STORAGE_KEY, { id: 'model-defaults', name: '默认模型', version: MODEL_DEFAULTS_VERSION, schema: transcriptionModelDefaultsSchema, migrations: formatMigrations('model-defaults') }, storage, error => logger.warn('默认模型格式无法读取，原数据保留', { event: 'model_defaults.load.failed', error: String(error) }))
     this.state = loadState(this.storage)
     this.snapshot = this.copySnapshot()
     if (storage.getItem(MODEL_DEFAULTS_STORAGE_KEY) === null) this.persist()
@@ -143,7 +154,16 @@ export class ModelDefaultsManager {
     })
   }
 
-  setProvider(providerId: ApiKeyProvider): DefaultModelMediaType[] {
+  listTranscriptionModels(isConfigured = this.isAsrConfigured): AsrCatalogEntry[] {
+    return listTimestampedLocalAsr(isConfigured)
+  }
+
+  /** 自动选择优先主供应商；显式失效的选择必须由人重选，不能换收费模型。 */
+  resolveTranscriptionModelId(): string {
+    return resolveTimestampedLocalAsr(this.isAsrConfigured, this.state.models.transcription, this.state.providerId).descriptor.id
+  }
+
+  setProvider(providerId: ApiKeyProvider): DefaultModelPurpose[] {
     if (!providerIds.has(providerId)) throw new Error(`DEFAULT_PROVIDER_NOT_AVAILABLE:${providerId}`)
     if (providerId === this.state.providerId) return []
     logger.info('默认供应商修改开始', {
@@ -151,6 +171,7 @@ export class ModelDefaultsManager {
       providerId,
     })
     const clearedMediaTypes = MEDIA_TYPES.filter((mediaType) => {
+      if (mediaType === 'transcription') return Boolean(this.state.models.transcription)
       const canonicalModelId = this.state.models[mediaType]
       return Boolean(canonicalModelId)
         && !this.listProviderModels(mediaType, providerId)
@@ -183,15 +204,25 @@ export class ModelDefaultsManager {
     return clearedMediaTypes
   }
 
-  setDefaultModel(mediaType: DefaultModelMediaType, canonicalModelId: string): void {
+  setDefaultModel(mediaType: DefaultModelPurpose, canonicalModelId: string): void {
     const normalized = canonicalModelId.trim()
-    const availableModels = this.listProviderModels(mediaType)
-    if (normalized && !availableModels.some((model) => model.meta.canonicalModelId === normalized)) {
-      const availableIds = availableModels.map((model) => model.meta.canonicalModelId)
+    const availableIds = mediaType === 'transcription'
+      ? this.listTranscriptionModels().map((entry) => entry.descriptor.id)
+      : this.listProviderModels(mediaType).map((model) => model.meta.canonicalModelId)
+    if (normalized && !availableIds.includes(normalized)) {
       throw new Error(
         `DEFAULT_MODEL_NOT_AVAILABLE:${mediaType}:${normalized}:available=${availableIds.join(',') || 'none'}`,
       )
     }
+    this.writeDefaultModel(mediaType, normalized)
+  }
+
+  /** 内部事务恢复只还原原值；凭据撤销不能使撤销偷偷丢掉显式选择。不会执行转写。 */
+  restoreTranscriptionModelId(value: string): void {
+    this.writeDefaultModel('transcription', value)
+  }
+
+  private writeDefaultModel(mediaType: DefaultModelPurpose, normalized: string): void {
     if (this.state.models[mediaType] === normalized) return
     logger.info('默认模型修改开始', {
       event: 'model_defaults.model.change.start',
