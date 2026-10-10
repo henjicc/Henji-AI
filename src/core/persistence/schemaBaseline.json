@@ -58,12 +58,12 @@
     },
     "image-package": {
       "version": 11,
-      "fingerprint": "c504b6aec73e949eaa1ea515cfc90ce3d2d6df6a6964adc431a62c0104156c8a",
+      "fingerprint": "5fa776635a671cda19e6458e8fc2f0f4f3ee5f9fcb3cf1322c22cd8535d808d2",
       "supportedFrom": 11
     },
     "image-working-copy": {
       "version": 13,
-      "fingerprint": "fe3aef47f834dbdedbf1553259a9bc02bf789da0bf4fd2bf2b846b64df381ae4",
+      "fingerprint": "c154dc100c4474fa3b69aae88faedbee71a57f0946c490e75ba6df4c7069bfde",
       "supportedFrom": 13
     },
     "settings": {
@@ -133,7 +133,7 @@
     },
     "canvas-layer-package": {
       "version": 11,
-      "fingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
+      "fingerprint": "b593bfcca4f7a1049defc3b7906cdc5136d6ccf236ec62129cc345652b82d793",
       "supportedFrom": 11
     },
     "keystore": {
@@ -1024,6 +1024,33 @@
       "reason": "t119-17 新增可撤销颜色契约命令；指定和转换 profile 的原稿及历史按新开发格式保存，不兼容旧工作副本",
       "previousFingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
       "fingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T20:17:35.364Z",
+      "format": "image-package",
+      "version": 11,
+      "reason": "t142 马赛克滤镜进入共享效果内核，图片渲染节点 schema 扩展，开发期采用新格式",
+      "previousFingerprint": "c504b6aec73e949eaa1ea515cfc90ce3d2d6df6a6964adc431a62c0104156c8a",
+      "fingerprint": "5fa776635a671cda19e6458e8fc2f0f4f3ee5f9fcb3cf1322c22cd8535d808d2",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T20:17:35.366Z",
+      "format": "image-working-copy",
+      "version": 13,
+      "reason": "t142 马赛克滤镜进入共享效果内核，图片渲染节点 schema 扩展，开发期采用新格式",
+      "previousFingerprint": "fe3aef47f834dbdedbf1553259a9bc02bf789da0bf4fd2bf2b846b64df381ae4",
+      "fingerprint": "c154dc100c4474fa3b69aae88faedbee71a57f0946c490e75ba6df4c7069bfde",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T20:17:35.366Z",
+      "format": "canvas-layer-package",
+      "version": 11,
+      "reason": "t142 马赛克滤镜进入共享效果内核，图片渲染节点 schema 扩展，开发期采用新格式",
+      "previousFingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
+      "fingerprint": "b593bfcca4f7a1049defc3b7906cdc5136d6ccf236ec62129cc345652b82d793",
       "waivedFixtureVersions": []
     }
   ]
