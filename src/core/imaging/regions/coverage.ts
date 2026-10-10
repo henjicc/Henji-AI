@@ -1,3 +1,4 @@
+import { inverseAffine } from '../transforms';
 import type { Coverage, RegionCombine, RegionRect, RegionTransform } from './contracts';
 
 export function throwIfRegionAborted(signal?: AbortSignal): void {
@@ -48,8 +49,5 @@ export function sampleRegionCoverage(coverage: Coverage, x: number, y: number, d
 
 export function invertRegionTransform(matrix: RegionTransform): RegionTransform {
   if (!matrix.every(Number.isFinite)) throw new Error('区域变换必须为有限数');
-  const [a, b, c, d, e, f] = matrix, determinant = a * d - b * c;
-  if (!Number.isFinite(determinant) || determinant === 0) throw new Error('区域变换不可逆');
-  return [d / determinant, -b / determinant, -c / determinant, a / determinant,
-    (c * f - d * e) / determinant, (b * e - a * f) / determinant];
+  try { return inverseAffine(matrix,0); } catch { throw new Error('区域变换不可逆'); }
 }

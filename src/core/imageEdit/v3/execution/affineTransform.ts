@@ -1,3 +1,4 @@
+import { inverseAffine, mapAffine, composeAffine } from '../../../imaging/transforms';
 import {
   createFloat32MaskTile,
   createFloat32PremultipliedRgbaTile,
@@ -48,16 +49,7 @@ export function invertImageEditTransformV3(
   transform: readonly number[],
 ): ImageEditTransformV3 {
   assertImageEditTransformInvertibleV3(transform)
-  const [a, b, c, d, e, f] = transform
-  const determinant = a * d - b * c
-  return [
-    d / determinant,
-    -b / determinant,
-    -c / determinant,
-    a / determinant,
-    (c * f - d * e) / determinant,
-    (b * e - a * f) / determinant,
-  ]
+  return inverseAffine(transform)
 }
 
 export function mapImageEditTransformPointV3(
@@ -65,10 +57,7 @@ export function mapImageEditTransformPointV3(
   x: number,
   y: number,
 ): readonly [number, number] {
-  return [
-    transform[0] * x + transform[2] * y + transform[4],
-    transform[1] * x + transform[3] * y + transform[5],
-  ]
+  return mapAffine(transform, [x, y])
 }
 
 /** 返回 `outer(inner(point))`。 */
@@ -78,16 +67,7 @@ export function multiplyImageEditTransformsV3(
 ): ImageEditTransformV3 {
   assertImageEditTransformInvertibleV3(outer)
   assertImageEditTransformInvertibleV3(inner)
-  const [a1, b1, c1, d1, e1, f1] = outer
-  const [a2, b2, c2, d2, e2, f2] = inner
-  return [
-    a1 * a2 + c1 * b2,
-    b1 * a2 + d1 * b2,
-    a1 * c2 + c1 * d2,
-    b1 * c2 + d1 * d2,
-    a1 * e2 + c1 * f2 + e1,
-    b1 * e2 + d1 * f2 + f1,
-  ]
+  return composeAffine(outer, inner)
 }
 
 /**

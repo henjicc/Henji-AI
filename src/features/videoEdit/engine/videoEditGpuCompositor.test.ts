@@ -26,6 +26,15 @@ it('预览及离屏导出写同一透视矩阵，普通片段清空矩阵且不�
   await compositor.dispose()
 })
 afterEach(() => { vi.unstubAllGlobals(); state.format = 'rgba8unorm' })
+it('GPU validation failure rejects the frame receipt instead of reporting a blank frame as successful', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  const project = createVideoEditDocument('合成错误')
+  await compositor.code()
+  device.popErrorScope.mockResolvedValueOnce({ message: 'invalid draw binding' })
+  const result = await compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)
+  await expect(result.completion).rejects.toThrow('invalid draw binding')
+  await compositor.dispose()
+})
 vi.mock('@/core/imageEdit/webgpu/deviceManager', () => ({ ImageEditWebGpuDeviceManager: class {
   onDeviceLost() {}
   async acquire() { state.acquisitions++; return { device: state.device!, provider: { getPreferredCanvasFormat: () => state.format } } }

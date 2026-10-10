@@ -51,6 +51,7 @@ export function resolveImageEditorBrushEditingTargetV3(input: {
     const resolved = resolveImageEditorMaskBrushLayerV3(input.document, input.selectedLayerIds)
     if (!resolved.ready) return resolved
     const { layer, matrix, inverseMatrix } = resolved.target
+    if(layer.deformation && layer.maskAttachment.linked) return {ready:false,reason:'deformed'}
     return {
       ready: true,
       target: {
@@ -73,6 +74,7 @@ export function resolveImageEditorBrushEditingTargetV3(input: {
   const resolved = resolveImageEditorRasterBrushLayerV3(input.document, input.selectedLayerIds)
   if (!resolved.ready) return resolved
   const { layer, matrix, inverseMatrix } = resolved.target
+  if(layer.deformation) return {ready:false,reason:'deformed'}
   const loadTile = createImageEditorRasterBrushTileLoaderV3({
     document: input.document, layer, resourceByteSizes: input.resourceByteSizes,
   })

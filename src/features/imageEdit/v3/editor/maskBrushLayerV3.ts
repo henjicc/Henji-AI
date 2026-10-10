@@ -1,3 +1,4 @@
+import { inverseAffine } from '@/core/imaging/transforms';
 import { imageEditLayerMaskTransformV3 } from '@/core/imageEdit/v3/renderContracts/maskTransform'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
@@ -22,17 +23,7 @@ export type ImageEditorMaskLayerResolutionV3 =
     }
 
 function invert(matrix: AnnotationMatrixV3): AnnotationMatrixV3 | null {
-  const [a, b, c, d, e, f] = matrix
-  const determinant = a * d - b * c
-  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-8) return null
-  return [
-    d / determinant,
-    -b / determinant,
-    -c / determinant,
-    a / determinant,
-    (c * f - d * e) / determinant,
-    (b * e - a * f) / determinant,
-  ]
+  try { return inverseAffine(matrix) } catch { return null }
 }
 
 /** 编辑矩阵复用共同附件契约：链接蒙版随内容变换，解绑蒙版使用独立变换。 */

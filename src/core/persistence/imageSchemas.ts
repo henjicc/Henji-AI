@@ -1,6 +1,7 @@
 import { imageEditSparseMaskSchemaV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3 } from '../imageEdit/v3/layerModel/semantics'
 import { listImagingEffects } from '../imaging/effects/registry'
 import { imageColorGradeParamsSchema } from '../imaging/adjustments/schema'
+import { deformationSchema } from '../imaging/transforms';
 import { z } from 'zod'
 import { imageEditHistoryCheckpointSchemaV3 } from '../imageEdit/v3/historyPaging/schema'
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '../imageEdit/v3/documentTypes'
@@ -13,7 +14,7 @@ const jsonObject = z.record(z.string(), z.json())
 const resource = z.string().regex(/^sha256:[a-f0-9]{64}$/)
 const chromaticity = z.object({ x: z.number(), y: z.number() })
 const hdrMetadata = z.object({ standard: z.enum(['pq', 'hlg']), referenceWhiteNits: z.number(), cicp: z.object({ colorPrimaries: z.number(), transferCharacteristics: z.number(), matrixCoefficients: z.number(), fullRange: z.boolean() }), contentLight: z.object({ maxContentLightLevelNits: z.number(), maxFrameAverageLightLevelNits: z.number() }).optional(), masteringDisplay: z.object({ red: chromaticity, green: chromaticity, blue: chromaticity, whitePoint: chromaticity, maxLuminanceNits: z.number(), minLuminanceNits: z.number() }).optional() })
-const common = { id: identifier, name: z.string(), visible: z.boolean(), locked: z.boolean(), opacity: z.number().min(0).max(1), fillOpacity: z.number().min(0).max(1), clipping: z.boolean(), maskAttachment: imageEditMaskAttachmentSchemaV3, filters: imageEditLayerFiltersSchemaV3, blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay', 'soft-light']), transform: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]), mask: imageEditSparseMaskSchemaV3.nullable() }
+const common = { deformation: deformationSchema.nullable().optional(), id: identifier, name: z.string(), visible: z.boolean(), locked: z.boolean(), opacity: z.number().min(0).max(1), fillOpacity: z.number().min(0).max(1), clipping: z.boolean(), maskAttachment: imageEditMaskAttachmentSchemaV3, filters: imageEditLayerFiltersSchemaV3, blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay', 'soft-light']), transform: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]), mask: imageEditSparseMaskSchemaV3.nullable() }
 export const imageLayerSchema: z.ZodType = z.lazy(() => z.discriminatedUnion('type', [
   z.object({ ...common, type: z.literal('raster'), source: z.union([z.object({ kind: z.literal('empty') }), z.object({ kind: z.literal('resource'), resourceId: identifier })]), tiles: z.record(z.string(), identifier) }),
   z.object({ ...common, type: z.literal('annotation'), annotations: z.array(jsonObject) }),

@@ -7,6 +7,7 @@ import {
   type ImageEditTransformV3,
 } from '@/core/imageEdit/v3'
 
+import { translateAffine, identityDeformation } from '@/core/imaging/transforms';
 import {
   mapAnnotationPointV3,
   resolveAnnotationLayerToOutputMatrixV3,
@@ -126,12 +127,8 @@ export function resolveImageEditRasterLayerOutputBoundsV3(
     layerTransform,
     ...location.ancestors.slice().reverse().map((ancestor) => ancestor.transform),
   ])
-  const corners = [
-    mapAnnotationPointV3(matrix, [0, 0]),
-    mapAnnotationPointV3(matrix, [document.geometry.width, 0]),
-    mapAnnotationPointV3(matrix, [0, document.geometry.height]),
-    mapAnnotationPointV3(matrix, [document.geometry.width, document.geometry.height]),
-  ]
+  const points=location.layer.deformation?.points??identityDeformation('perspective').points;
+  const corners=points.map(point=>mapAnnotationPointV3(matrix,[point[0]*document.geometry.width,point[1]*document.geometry.height]));
   const xs = corners.map(([x]) => x)
   const ys = corners.map(([, y]) => y)
   return {
@@ -147,10 +144,7 @@ export function translateImageEditLayerTransformV3(
   deltaX: number,
   deltaY: number,
 ): ImageEditTransformV3 {
-  const next: ImageEditTransformV3 = [
-    transform[0], transform[1], transform[2], transform[3],
-    transform[4] + deltaX, transform[5] + deltaY,
-  ]
+  const next = translateAffine(transform, [deltaX, deltaY])
   if (!isImageEditTransformInvertibleV3(next)) throw new Error('图层变换矩阵不可逆')
   return next
 }

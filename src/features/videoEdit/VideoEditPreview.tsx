@@ -188,6 +188,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let meter: ReturnType<typeof createVideoEditAudioMeter> | undefined
     let lastRequested = -1
     let lastFrame = -1
+    let appliedFonts = renderer.fontPresentationRevision
     let lastScrubbing = false
     let clockStart = 0
     let clockPerformanceStart = 0
@@ -272,6 +273,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         const command = videoEditProgramCommandIdentity(instance.document.id)
         const document = findActiveVideoEditSequence(current)
         if (!document) { stopAudio(); return }
+        if (appliedFonts !== renderer.fontPresentationRevision) { appliedFonts = renderer.fontPresentationRevision; lastRequested = -1 }
         requestCommand = command; requestDocument = document
         if (failedDocument) {
           if (failedDocument === document && failedFrame === current.frame && Date.now() < failedRetryAt) { timer = setTimeout(() => { void loop() }, 250); return }
@@ -280,15 +282,18 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (appliedDocument !== document) {
           const parameterUpdate = captureFull === 0 && videoEditParameterUpdate(appliedDocument, document)
           // One latest parameter snapshot per display period. Intermediate moves never enter the Worker queue.
-          if (parameterUpdate && performance.now() - lastParameterUpdate < (displayPeriod ?? 1000 / 60)) {
-            timer = setTimeout(() => { void loop() }, Math.max(1, (displayPeriod ?? 1000 / 60) - (performance.now() - lastParameterUpdate))); return
+          const parameterPeriod = displayPeriod ?? 1000 / 60
+          const parameterTick = Math.floor(performance.now() / parameterPeriod) * parameterPeriod
+          if (parameterUpdate && parameterTick <= lastParameterUpdate) {
+            timer = setTimeout(() => { void loop() }, Math.max(1, lastParameterUpdate + parameterPeriod - performance.now())); return
           }
           if (!parameterUpdate || videoEditParameterAffectsAudio(appliedDocument, parameterUpdate)) { stopAudio(); wasPlaying = false }
           if (parameterUpdate) renderer.invalidateDocument(document.revision)
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
+          // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
+          if (parameterUpdate) lastParameterUpdate = parameterTick
           await renderer.updateDocument(document, captureFull > 0); await audioRenderer?.updateDocument(document); appliedDocument = document; lastRequested = -1
-          if (parameterUpdate) lastParameterUpdate = performance.now()
-          else lastFrame = -1
+          if (!parameterUpdate) lastFrame = -1
           if (stopped) return
         }
         const proxySignature = captureFull > 0 ? 'original' : videoEditProxySignature(instance.document.id)

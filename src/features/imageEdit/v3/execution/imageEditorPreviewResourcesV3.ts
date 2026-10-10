@@ -1,4 +1,5 @@
 import {
+  createImageEditorV3RequestId,
   prewarmImageEditorV3SourcePyramid,
   readImageEditorV3FastProxy,
 } from '@/commands/imageEditorV3'
@@ -72,8 +73,6 @@ export interface ImageEditorPreviewResourceLoaderOptionsV3 {
   pyramidDescriptorReader?: ImageEditorPreviewPyramidDescriptorReaderV3
   pyramidPrewarmer?: ImageEditorPreviewPyramidPrewarmerV3
   proxyCacheMaxBytes?: number
-  /** 同一 session 下区分 display、thumbnail 等资源请求，避免 IPC requestId 冲突。 */
-  requestIdScope?: string
   pyramidPrewarmEnabled?: boolean
 }
 
@@ -120,7 +119,6 @@ export class ImageEditorPreviewResourceLoaderV3 {
   private readonly pyramidPrewarms = new Map<string, AbortController>()
   private readonly startedPyramidPrewarms = new Set<string>()
   private proxyCacheBytes = 0
-  private prewarmSequence = 0
   private disposed = false
 
   constructor(private readonly options: ImageEditorPreviewResourceLoaderOptionsV3) {
@@ -137,7 +135,7 @@ export class ImageEditorPreviewResourceLoaderV3 {
 
   async load(
     requests: readonly ImageEditorPreviewProxyResourceRequestV3[],
-    requestId: string,
+    _requestId: string,
     bitDepth: 8 | 16 | 32,
     signal: AbortSignal,
   ): Promise<ImageEditorLoadedProxyResourcesV3> {
@@ -160,7 +158,7 @@ export class ImageEditorPreviewResourceLoaderV3 {
         const loaded = await raceWithAbort(this.loadProxy(
           key,
           request,
-          `${requestId}:resource:${request.resourceId.slice(7, 19)}`,
+          createImageEditorV3RequestId('preview-resource'),
         ), signal)
         const proxy = loaded.proxy
         if (this.disposed || signal.aborted) throw abortError(signal)
@@ -253,7 +251,7 @@ export class ImageEditorPreviewResourceLoaderV3 {
     const controller = new AbortController()
     this.startedPyramidPrewarms.add(resourceRef)
     this.pyramidPrewarms.set(resourceRef, controller)
-    const prefix = `${this.options.sessionId}:${this.options.requestIdScope ?? 'display'}:pyramid:${++this.prewarmSequence}`
+    const prefix = createImageEditorV3RequestId('preview-pyramid')
     void this.pyramidDescriptorReader({
       requestId: `${prefix}:pyramid-describe`,
       resourceRef,

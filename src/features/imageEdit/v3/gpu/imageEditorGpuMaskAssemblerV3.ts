@@ -1,3 +1,5 @@
+import { packDeformation, prepareDeformation, type Deformation } from '@/core/imaging/transforms';
+import { DEFORMATION_WGSL } from '@/core/imaging/transforms/wgsl';
 import { draw, target, type Draw, type Gpu, type Target } from 'vgpu'
 
 import { invertImageEditTransformV3 } from '@/core/imageEdit/v3/execution/affineTransform'
@@ -21,6 +23,7 @@ export interface ImageEditorGpuPreparedMaskV3 {
   readonly fingerprint: string
   readonly dependencies: readonly unknown[]
   readonly plan: ImageEditorGpuGraphSourcePlanV3
+  readonly warp: Float32Array
   readonly transform: ImageEditTransformV3
   readonly buffers: NativeBuffer[]
   readonly pending: boolean
@@ -41,11 +44,12 @@ export class ImageEditorGpuMaskAssemblerV3 {
   private readonly cameraBuffer: NativeBuffer
   private cameraBindGroup: NativeBindGroup | null = null
   private readonly retained = new Map<string, RetainedMaskV3>()
+  private geometry: ImageEditCanvasGeometryV3 | null = null
   private compiled = false
 
   constructor(private readonly gpu: Gpu, private readonly onCompiled: () => void) {
-    this.drawable = draw(gpu, { shader: maskShader, vertices: 3, label: 'image-editor-graph-mask-tile' })
-    this.background = draw(gpu, { shader: maskShader, vertices: 3,
+    this.drawable = draw(gpu, { shader: DEFORMATION_WGSL + maskShader, vertices: 3, label: 'image-editor-graph-mask-tile' })
+    this.background = draw(gpu, { shader: DEFORMATION_WGSL + maskShader, vertices: 3,
       entry: { vertex: 'vs_main', fragment: 'fs_background' }, label: 'image-editor-graph-mask-domain' })
     this.cameraBuffer = gpu.gpu.createBuffer({
       size: 48, usage: BUFFER_UNIFORM | BUFFER_COPY_DST, label: 'image-editor-graph-mask-camera',
@@ -59,8 +63,12 @@ export class ImageEditorGpuMaskAssemblerV3 {
     transform: ImageEditTransformV3,
     layout: ImageEditorViewportLayoutV3,
     globalPixelGrid = false,
+    deformation?: Deformation | null,
+    local?: ImageEditTransformV3,
+    referenceGeometry?: ImageEditCanvasGeometryV3,
   ): ImageEditorGpuPreparedMaskV3 {
-    const fingerprint = [mask.maskId, mask.defaultValue, mask.inverted,
+    const warp = packDeformation(prepareDeformation(deformation), 1, 1, local);
+    const fingerprint = [JSON.stringify(referenceGeometry), JSON.stringify(deformation), local?.join(), mask.maskId, mask.defaultValue, mask.inverted,
       transform.join(','), layout.viewportKey, globalPixelGrid,
       layout.viewport.documentX, layout.viewport.documentY, layout.viewport.zoom,
       layout.viewport.devicePixelRatio, layout.viewport.width, layout.viewport.height,
@@ -68,17 +76,17 @@ export class ImageEditorGpuMaskAssemblerV3 {
     const dependencies = [...plan.resources]
     const existing = this.retained.get(cacheKey)
     if (existing && existing.fingerprint === fingerprint && sameDependencies(existing.dependencies, dependencies)) {
-      return { cacheKey, mask, target: existing.target, fingerprint, dependencies, plan, transform,
+      return { cacheKey, mask, target: existing.target, fingerprint, dependencies, plan, transform, warp,
         buffers: existing.buffers, pending: false }
     }
     const size = imageEditorGpuOutputPixelSizeV3(layout)
     const output = existing?.target ?? target(this.gpu, {
-      size, format: 'rgba16float', clearColor: [mask.defaultValue, mask.defaultValue, mask.defaultValue, 1],
+      size, format: 'r32float', clearColor: [mask.defaultValue, mask.defaultValue, mask.defaultValue, 1],
       label: `image-editor-graph-mask:${mask.maskId}`,
     })
     output.resize(size)
     return {
-      cacheKey, mask, fingerprint, dependencies, plan, transform, buffers: [], pending: true,
+      cacheKey, mask, fingerprint, dependencies, plan, transform, warp, buffers: [], pending: true,
       target: output,
     }
   }
@@ -97,12 +105,17 @@ export class ImageEditorGpuMaskAssemblerV3 {
   }
 
   updateCamera(layout: ImageEditorViewportLayoutV3, geometry: ImageEditCanvasGeometryV3, globalPixelGrid = false): void {
+    this.geometry = geometry;
     this.gpu.gpu.queue.writeBuffer(this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, geometry, globalPixelGrid))
   }
 
   encode(currentFrame: ReturnType<typeof import('vgpu').frame>, prepared: ImageEditorGpuPreparedMaskV3): void {
     if (!prepared.pending) return
     this.drawable.group(1, this.cameraBindGroup!)
+    const warp = prepared.warp.slice();
+    const geometry = this.geometry!; warp[1] = geometry.width; warp[2] = geometry.height;
+    const warpBuffer = this.gpu.gpu.createBuffer({ size: warp.byteLength, usage: 0x80 | BUFFER_COPY_DST });
+    this.gpu.gpu.queue.writeBuffer(warpBuffer, 0, warp); prepared.buffers.push(warpBuffer);
     const inverse = invertImageEditTransformV3(prepared.transform)
     const backgroundBuffer = this.uniform(new Float32Array([
       ...inverse.slice(0, 4), inverse[4], inverse[5], prepared.mask.defaultValue, 0,
@@ -110,7 +123,7 @@ export class ImageEditorGpuMaskAssemblerV3 {
     ]))
     prepared.buffers.push(backgroundBuffer)
     this.background.group(0, this.gpu.gpu.createBindGroup({ layout: this.background.layout(0),
-      entries: [{ binding: 1, resource: { buffer: backgroundBuffer } }] }))
+      entries: [{ binding: 1, resource: { buffer: backgroundBuffer } }, { binding: 2, resource: { buffer: warpBuffer } }] }))
     this.background.group(1, this.backgroundCamera!)
     const groups = prepared.plan.plan.tiles.map((tile, index) => {
       const resource = prepared.plan.resources[index]
@@ -124,7 +137,7 @@ export class ImageEditorGpuMaskAssemblerV3 {
       prepared.buffers.push(buffer)
       return this.gpu.gpu.createBindGroup({
         layout: this.drawable.layout(0),
-        entries: [{ binding: 0, resource: resource.textureView }, { binding: 1, resource: { buffer } }],
+        entries: [{ binding: 0, resource: resource.textureView }, { binding: 1, resource: { buffer } }, { binding: 2, resource: { buffer: warpBuffer } }],
       })
     })
     currentFrame.pass({

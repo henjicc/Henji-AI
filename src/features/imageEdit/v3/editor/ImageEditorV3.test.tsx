@@ -129,6 +129,30 @@ describe('ImageEditorV3 professional shell', () => {
     vi.unstubAllGlobals()
   })
 
+  it('变换命令带保持稳定，恢复原像素先预览且应用只写一次历史', async () => {
+    const layer = createImageEditRasterLayerV3('raster', '变形像素')
+    layer.deformation = { kind: 'perspective', points: [[.1, 0], [.9, 0], [1, 1], [0, 1]] }
+    const changed = vi.fn()
+    const view = renderEditor(createDocument([layer]), { onDocumentChange: changed })
+    const tool = view.container.querySelector('[data-tool-id="free-transform"]')
+    expect(tool).toBeTruthy()
+    fireEvent.click(tool!)
+    await waitFor(() => expect(view.container.querySelector('[data-transform-options]')).toBeTruthy())
+    const options = within(view.container.querySelector('[data-transform-options]') as HTMLElement)
+    fireEvent.click(options.getByRole('button', { name: '恢复原像素' }))
+    expect(changed).not.toHaveBeenCalled()
+    expect((options.getByRole('button', { name: '应用' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(options.getByRole('button', { name: '取消' }))
+    expect(changed).not.toHaveBeenCalled()
+    fireEvent.click(options.getByRole('button', { name: '恢复原像素' }))
+    fireEvent.click(options.getByRole('button', { name: '应用' }))
+    expect(changed).toHaveBeenCalledOnce()
+    expect(changed.mock.calls[0][0].layers[0].deformation).toBeNull()
+    expect(options.queryByRole('button', { name: '恢复原像素' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+    expect(changed.mock.calls.at(-1)?.[0].layers[0].deformation).toEqual(layer.deformation)
+  })
+
   it('按自上而下的视觉顺序展示根图层和嵌套组', async () => {
     const childBottom = createImageEditAnnotationLayerV3('child-bottom', '组内下层')
     const childTop = createImageEditAnnotationLayerV3('child-top', '组内上层')

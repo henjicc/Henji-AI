@@ -234,10 +234,10 @@ export class VideoEditRenderer {
   }
   /** Newly imported/replaced fonts must rebuild cached glyphs and nested text surfaces. */
   async invalidateFontResources(): Promise<void> {
-    await this.codeSources?.dispose(); this.codeSources = undefined
-    await this.compositor?.dispose(); this.compositor = undefined
-    for (const entry of this.nestedPictures.values()) await entry.renderer.invalidateFontResources()
     this.cancelPresentation()
+    await this.codeSources?.dispose(); this.codeSources = undefined
+    await this.compositor?.invalidateFontResources()
+    for (const entry of this.nestedPictures.values()) await entry.renderer.invalidateFontResources()
   }
   cancelPresentation(): void {
     this.presentationEpoch++; this.codeSources?.cancel(); this.compositor?.cancelPresentation()

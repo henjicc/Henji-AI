@@ -1,4 +1,5 @@
-import { imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3, imageEditSparseMaskSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
+import { deformationSchema } from '@/core/imaging/transforms';
+import { imageEditTransformSchemaV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3, imageEditSparseMaskSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
 import { z } from 'zod'
 import type { ImageEditCanvasGeometryV3 } from '@/core/imageEdit/v3/documentTypes'
 import type {
@@ -122,6 +123,7 @@ function createCommonFields(
   entityType: 'image_edit.layer' | 'image_edit.group',
 ): ApplicationFieldDefinition<ImageEditV3LayerFieldSource, ImageEditV3LayerMutationDraft>[] {
   return [
+  { propertyId: `${entityType}.transform`, descriptor: property(entityType, 'transform', '对象到父级的可逆仿射矩阵，顺序 a,b,c,d,x,y；移动、缩放、旋转与错切共用该值。', { kind: 'json', schemaRef: imageEditV3SchemaRef('property', `${entityType}.transform.value`) }), read: source => [...source.location.layer.transform], writer: { write(draft, mutation) { draft.commonPatch.transform = imageEditTransformSchemaV3.parse(mutation.value); } }, storeActions: [] },
     {
       propertyId: `${entityType}.document_ref`,
       descriptor: property(entityType, 'document_ref', '所属文档', {
@@ -306,6 +308,7 @@ export const IMAGE_EDIT_V3_LAYER_FIELDS: ApplicationFieldDefinition<
   ImageEditV3LayerMutationDraft
 >[] = [
   ...createCommonFields('image_edit.layer'),
+  { propertyId: 'image_edit.layer.deformation', descriptor: property('image_edit.layer', 'deformation', '非破坏透视或网格；控制点为对象空间比例，四角顺时针或网格逐行。清空恢复原像素。', { kind: 'json', schemaRef: imageEditV3SchemaRef('property', 'image_edit.layer.deformation.value') }, { nullable: true }), read: source => source.location.layer.deformation as JsonValue ?? null, writer: { write(draft, mutation) { draft.commonPatch.deformation = deformationSchema.nullable().parse(mutation.value); } }, storeActions: [] },
   {
     propertyId: 'image_edit.layer.type',
     descriptor: property('image_edit.layer', 'type', '类型', { kind: 'enum', values: LAYER_TYPES }, {

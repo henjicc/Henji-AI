@@ -11,6 +11,20 @@ function fixture() {
   project.sequences[0].clips = [makeVideoEditItemClip(project, 'item', project.sequences[0].id, { frame: 0 })]
   return videoEditComposition(project, project.sequences[0].id)
 }
+it('layout gestures share the incremental path without changing clocks, sources or fonts, including undo', () => {
+  const before = fixture()
+  const next = { ...before, revision: 180, clips: [{ ...before.clips[0], x: .3, y: .2, scale: .7, rotation: 25, anchorX: .2, anchorY: .8, opacity: .5 }] }
+  const update = videoEditParameterUpdate(before, next)!
+  expect(update.patches).toHaveLength(1)
+  expect(update.patches[0].layout).toEqual({ x: .3, y: .2, scale: .7, rotation: 25, anchorX: .2, anchorY: .8, opacity: .5 })
+  const applied = applyVideoEditParameterUpdate(before, structuredClone(update))
+  expect(applied.clips).toEqual(next.clips)
+  expect(applied.media).toBe(before.media)
+  expect(videoEditParameterNeedsFonts(before, update)).toBe(false)
+  expect(videoEditParameterAffectsAudio(before, update)).toBe(false)
+  expect(applyVideoEditParameterUpdate(applied, videoEditParameterUpdate(applied, { ...before, revision: 181 })!).clips).toEqual(before.clips)
+  expect(videoEditParameterUpdate(before, { ...next, clips: [{ ...next.clips[0], sourceInUs: 1000 }] })).toBeUndefined()
+})
 it.each(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(effect => [effect.id]))('%s shares the parameter protocol, including shader effects', id => {
   const before = fixture()
   before.clips[0].effects = [{ id: 'effect', name: id, amount: 1, enabled: true, builtin: { id, params: {} } }]

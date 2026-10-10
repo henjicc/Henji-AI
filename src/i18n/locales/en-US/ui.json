@@ -893,7 +893,10 @@
         "mask-edit": "Edit mask",
         "select-wand": "Magic wand",
         "select-color-range": "Color range",
-        "select-focus": "Focus area"
+        "select-focus": "Focus area",
+        "free-transform": "Free transform",
+        "perspective-transform": "Perspective",
+        "mesh-transform": "Mesh warp"
       },
       "layerControls": {
         "rotate": "Rotate layer",
@@ -953,7 +956,8 @@
         "locked": "The selected raster layer or its group is locked.",
         "hidden": "The selected raster layer or its group is hidden.",
         "singular": "The selected raster layer has a non-invertible transform.",
-        "failed": "The raster stroke was not saved: {{reason}}"
+        "failed": "The raster stroke was not saved: {{reason}}",
+        "deformed": "Restore source pixels before painting; independent masks remain editable."
       },
       "repair": {
         "auto": "Auto",
@@ -1192,6 +1196,22 @@
         "smooth": "Smooth",
         "feather": "Feather",
         "border": "Border"
+      },
+      "transform": {
+        "apply": "Apply",
+        "cancel": "Cancel",
+        "constraints": "Corners keep proportions; Shift: free scaling / 15° rotation",
+        "perspectiveHint": "Drag corners to adjust perspective; avoid coincident or folded points",
+        "meshHint": "Drag grid points; avoid folding",
+        "editOriginalFirst": "Clear perspective or mesh deformation before editing source pixels or a linked mask; reapply it after editing.",
+        "selectLayer": "Select an editable layer",
+        "selectRaster": "Select an editable pixel layer",
+        "corner": "Control point",
+        "rotate": "Rotate",
+        "pivot": "Rotation pivot",
+        "invalid": "Cannot apply this transform",
+        "recover": "Control points cannot overlap or fold. Adjust them or cancel to restore.",
+        "restore": "Restore source pixels"
       }
     }
   },

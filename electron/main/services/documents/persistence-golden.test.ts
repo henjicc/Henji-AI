@@ -41,7 +41,7 @@ describe('正式读入口打开黄金归档与源码', () => {
         expect(redone.layers[0].opacity).toBe(.5)
         expect(history.undo(history.undo(history.undo(redone).document).document).document.layers[0].opacity).toBe(1)
         const layers = (imported.manifest.document.document as { layers: Array<{ id: string; type: string; adjustmentId?: string }> }).layers
-        expect(layers[0]).toMatchObject({ id: 'golden-layer', type: 'raster', fillOpacity: .7, maskAttachment: { linked: false, density: .6 }, filters: [{ effectId: 'exposure', params: { stops: .4 } }] })
+        expect(layers[0]).toMatchObject({ id: 'golden-layer', type: 'raster', deformation: {kind:'perspective',points:[[.1,0],[.9,0],[1,1],[0,1]]}, fillOpacity: .7, maskAttachment: { linked: false, density: .6 }, filters: [{ effectId: 'exposure', params: { stops: .4 } }] })
         expect(layers).toHaveLength(4)
         expect(document.namedRegions).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'golden-region', name: '主体', selection: expect.objectContaining({ feather: .02 }) })]))
         const floatShape = document.namedRegions.find(region => region.id === 'golden-float32')!.selection.operations[0].shape

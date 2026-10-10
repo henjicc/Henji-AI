@@ -79,3 +79,5 @@ describe('图片编辑 V3 图层变换交互坐标', () => {
     expect(composeImageEditTransformV3({ ...fields, scaleXPercent: 0 })).toBeNull()
   })
 })
+
+it('网格内部外扩控制点进入吸附边界',()=>{const document=createImageEditDocumentV3({width:100,height:80});const layer=createImageEditRasterLayerV3('warp','warp','resource');layer.deformation={kind:'mesh',columns:3,rows:3,points:[[0,0],[.5,-.1],[1,0],[0,.5],[.5,.5],[1,.5],[0,1],[.5,1],[1,1]]};expect(resolveImageEditRasterLayerOutputBoundsV3(document,{layer,ancestors:[]})).toEqual({left:0,top:-8,right:100,bottom:80});});

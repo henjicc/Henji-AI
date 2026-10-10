@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 5,
-      "fingerprint": "405628a35c95525a6a8851e5bdf3d74d7d244949dc4c47f46969649d5b7c1548",
-      "supportedFrom": 5
+      "version": 6,
+      "fingerprint": "fd0c153b617255668cc5e10b988208fbd5d0b1cb511f8f53fd1e39869ca2b168",
+      "supportedFrom": 6
     },
     "image-working-copy": {
-      "version": 7,
-      "fingerprint": "e5d3c5cf8c28e8ae87c4b31532088d8a29e9a92af21145c0a90bbe0bef2d25a6",
-      "supportedFrom": 7
+      "version": 8,
+      "fingerprint": "cd946612a4108f69343edb5f63e38ec54948405e2f7a87f94759631b9777491b",
+      "supportedFrom": 8
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 5,
-      "fingerprint": "4c8e704ca8325baa78f56bd791c61e36bb55f946fa452f3d439811e7aeaa4f1b",
-      "supportedFrom": 5
+      "version": 6,
+      "fingerprint": "577471eb47527ea2c72d1258173b0d0a253ef32dd198a6a45d01e6fd8e249af6",
+      "supportedFrom": 6
     },
     "keystore": {
       "version": 1,
@@ -783,6 +783,33 @@
       "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
       "previousFingerprint": "cc27c0aa6e8fd94b7fcfec18ee6403e4d5841d48d8f0ee28506cac37d237b011",
       "fingerprint": "4c8e704ca8325baa78f56bd791c61e36bb55f946fa452f3d439811e7aeaa4f1b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T23:36:46.762Z",
+      "format": "image-package",
+      "version": 6,
+      "reason": "新增非破坏透视与网格变形，开发期统一新格式",
+      "previousFingerprint": "405628a35c95525a6a8851e5bdf3d74d7d244949dc4c47f46969649d5b7c1548",
+      "fingerprint": "fd0c153b617255668cc5e10b988208fbd5d0b1cb511f8f53fd1e39869ca2b168",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T23:36:46.763Z",
+      "format": "image-working-copy",
+      "version": 8,
+      "reason": "新增非破坏透视与网格变形，开发期统一新格式",
+      "previousFingerprint": "e5d3c5cf8c28e8ae87c4b31532088d8a29e9a92af21145c0a90bbe0bef2d25a6",
+      "fingerprint": "cd946612a4108f69343edb5f63e38ec54948405e2f7a87f94759631b9777491b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-09T23:36:46.763Z",
+      "format": "canvas-layer-package",
+      "version": 6,
+      "reason": "新增非破坏透视与网格变形，开发期统一新格式",
+      "previousFingerprint": "4c8e704ca8325baa78f56bd791c61e36bb55f946fa452f3d439811e7aeaa4f1b",
+      "fingerprint": "577471eb47527ea2c72d1258173b0d0a253ef32dd198a6a45d01e6fd8e249af6",
       "waivedFixtureVersions": []
     }
   ]

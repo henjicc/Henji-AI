@@ -1,3 +1,4 @@
+import { prepareDeformation, inverseDeformationBounds, mapAffine, inverseAffine, type Deformation } from '@/core/imaging/transforms';
 import { invertImageEditTransformV3 } from '@/core/imageEdit/v3/execution/affineTransform'
 import { imageEditRasterOverrideRectV3, resolveImageEditRasterSourceExtentV3, resolveImageEditRasterStorageSizeV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
@@ -27,6 +28,8 @@ export function planImageEditorGpuMaskTilesV3(
   mask: ImageEditorGpuGraphMaskV3,
   transform: ImageEditTransformV3,
   layout: ImageEditorViewportLayoutV3,
+  deformation?: Deformation | null,
+  local?: ImageEditTransformV3,
 ): ImageEditorGpuPlannedLayerV3 {
   if (Object.keys(mask.sparseTiles).length === 0) {
     return {
@@ -37,7 +40,7 @@ export function planImageEditorGpuMaskTilesV3(
   const planned = planImageEditorGpuRasterTilesV3(scene, {
     layerId: mask.maskId, sourceKind: 'raster', resourceRef: null,
     contentVersion: `mask:${mask.maskId}`, sparseTiles: mask.sparseTiles,
-    visible: true, opacity: 1, transform,
+    visible: true, opacity: 1, transform, deformation, deformationLocalTransform: local,
   }, layout, 0, false)
   return {
     ...planned,
@@ -73,6 +76,11 @@ export function planImageEditorGpuRasterTilesV3(
     [viewport.documentX, viewport.documentY], [right, viewport.documentY],
     [viewport.documentX, bottom], [right, bottom],
   ].map(([x, y]) => outputToLayerSource(inverse, geometry, x, y))
+  if (layer.deformation) {
+    const width=scene.geometry.width,height=scene.geometry.height;
+    const bounds=inverseDeformationBounds(prepareDeformation(layer.deformation),[Math.min(...points.map(p=>p[0]))/width,Math.min(...points.map(p=>p[1]))/height],[Math.max(...points.map(p=>p[0]))/width,Math.max(...points.map(p=>p[1]))/height]);
+    points.splice(0,points.length,...(bounds?[[bounds.min[0]*width,bounds.min[1]*height],[bounds.max[0]*width,bounds.min[1]*height],[bounds.min[0]*width,bounds.max[1]*height],[bounds.max[0]*width,bounds.max[1]*height]]:[[0,0]]).map(p=>mapAffine(inverseAffine(layer.deformationLocalTransform??[1,0,0,1,0,0]),[p[0],p[1]])));
+  }
   const minX = Math.min(...points.map((point) => point[0]))
   const minY = Math.min(...points.map((point) => point[1]))
   const maxX = Math.max(...points.map((point) => point[0]))
@@ -81,7 +89,7 @@ export function planImageEditorGpuRasterTilesV3(
     Math.hypot(layer.transform[0], layer.transform[1]),
     Math.hypot(layer.transform[2], layer.transform[3]),
   )
-  const sourceZoom = Math.max(Number.EPSILON, viewport.zoom * layerScale)
+  const sourceZoom = layer.deformation ? Math.max(1, viewport.zoom * layerScale) : Math.max(Number.EPSILON, viewport.zoom * layerScale)
   const pyramid = layer.sourcePyramid ?? createImageEditorGpuPyramidDescriptorV3(scene.width, scene.height)
   const sourceSize = pyramid.levels.find((level) => level.mip === 0)!
   const hasSparseOverrides = Object.keys(layer.sparseTiles).length > 0

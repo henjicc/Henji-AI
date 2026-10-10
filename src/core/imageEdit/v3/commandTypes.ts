@@ -52,6 +52,7 @@ export type ImageEditLayerCommonPatchV3 = Partial<{
   filters: ImageEditLayerFilterV3[];
   blendMode: ImageEditBlendModeV3;
   transform: ImageEditTransformV3;
+  deformation: import("../../imaging/transforms").Deformation | null;
 }>;
 
 export interface ImageEditLayerAddCommandV3 extends ImageEditCommandBaseV3 {

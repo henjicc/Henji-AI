@@ -1,3 +1,4 @@
+import { normalizeImageEditLayerCommonPatchV3 } from '@/core/imageEdit/v3/commandCommonPatch';
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { imageEditLayerFiltersSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
 import { createTileRegion, type ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
@@ -94,7 +95,9 @@ function applyLayerOverride(
   if (layer.id === override.targetId) {
     if (override.kind === 'parameter' && isRecord(override.value)) {
       const keys = Object.keys(override.value)
-      if (keys.length === 1 && (typeof override.value.opacity === 'number' || typeof override.value.fillOpacity === 'number')) {
+      if ('deformation' in override.value || 'transform' in override.value) {
+        next = { ...layer, ...normalizeImageEditLayerCommonPatchV3(override.value) };
+      } else if (keys.length === 1 && (typeof override.value.opacity === 'number' || typeof override.value.fillOpacity === 'number')) {
         const key = keys[0] as 'opacity' | 'fillOpacity'
         next = { ...layer, [key]: Math.min(1, Math.max(0, Number(override.value[key]))) }
       } else if (keys.length === 1 && isRecord(override.value.maskAttachment)) {

@@ -1,3 +1,4 @@
+import { inverseAffine } from '@/core/imaging/transforms';
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRasterLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { AnnotationMatrixV3 } from './annotationGeometryV3'
@@ -15,17 +16,7 @@ export type ImageEditorRasterLayerResolutionV3 =
   | { ready: false; reason: 'select-one' | 'not-raster' | 'locked' | 'hidden' | 'singular' }
 
 function invert(matrix: AnnotationMatrixV3): AnnotationMatrixV3 | null {
-  const [a, b, c, d, e, f] = matrix
-  const determinant = a * d - b * c
-  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-8) return null
-  return [
-    d / determinant,
-    -b / determinant,
-    -c / determinant,
-    a / determinant,
-    (c * f - d * e) / determinant,
-    (b * e - a * f) / determinant,
-  ]
+  try { return inverseAffine(matrix) } catch { return null }
 }
 
 export function resolveImageEditorRasterBrushLayerV3(

@@ -37,8 +37,9 @@ fn loadMask(coord: vec2i) -> f32 {
   let sourcePoint = sourcePosition(position.xy);
   let mipPoint = sourcePoint / params.tileOriginScaleLayer.z;
   let core = params.coreRect;
-  if (mipPoint.x < core.x || mipPoint.y < core.y
-    || mipPoint.x >= core.x + core.z || mipPoint.y >= core.y + core.w) { discard; }
+  let low = core.xy - select(vec2f(0.0), vec2f(0.5), core.xy == vec2f(0.0));
+  let high = core.xy + core.zw + select(vec2f(0.0), vec2f(0.5), core.xy + core.zw == camera.geometry.xy);
+  if (any(mipPoint < low) || any(mipPoint >= high)) { discard; }
   let local = mipPoint - params.tileOriginScaleLayer.xy - vec2f(0.5);
   let p0 = vec2i(floor(local));
   let f = fract(local);
@@ -54,10 +55,10 @@ fn sourcePosition(position: vec2f) -> vec2f {
     (position + camera.orientation.zw) / camera.documentOriginScale.z, camera.documentOriginScale.w > 0.5);
   let documentPoint = outputToDocument(outputPoint);
   let inverse = params.inverseLinear;
-  return vec2f(
+  return inverseWarp(vec2f(
     inverse.x * documentPoint.x + inverse.z * documentPoint.y + params.inverseTranslation.x,
     inverse.y * documentPoint.x + inverse.w * documentPoint.y + params.inverseTranslation.y
-  );
+  ));
 }
 
 fn domainCoverage(point: vec2i) -> f32 {

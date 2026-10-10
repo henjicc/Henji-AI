@@ -140,7 +140,7 @@ function validateLayerKeys(value: unknown): void {
         : value.type === 'adjustment' ? ['type', 'adjustmentId', 'params', 'renderable']
           : value.type === 'group' ? ['type', 'children', 'isolated']
             : fail('历史图层类型未知');
-  exactKeys(value, [...COMMON_LAYER_KEYS, ...specific], '历史图层');
+  exactKeysWithOptional(value, [...COMMON_LAYER_KEYS, ...specific], ['deformation'], '历史图层');
   if (value.mask !== null) {
     validateMask(value.mask, '历史图层蒙版');
   }

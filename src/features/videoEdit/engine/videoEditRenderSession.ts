@@ -39,8 +39,9 @@ export class VideoEditRenderSession {
   private readonly sentCodeSources = new Set<string>()
   private stopFonts?: () => void
   private fontSync = Promise.resolve()
-  private lastPresentedFrame?: number
-  private hasPresentationSurface = false
+  private fontRefresh?: Promise<void>
+  /** The view schedules font redraws through its existing frame loop, never an independent request stream. */
+  fontPresentationRevision = 0
   private syncFonts(document: VideoEditComposition): Promise<void> {
     const result = this.fontSync.catch(() => undefined).then(() => this.applyFonts(document))
     this.fontSync = result
@@ -59,6 +60,7 @@ export class VideoEditRenderSession {
     if (additions.length || removed || changed && this.fontsRevision >= 0) await this.request({ kind: 'fonts', fonts: additions, availableIds: [...usedIds], reset: changed && this.fontsRevision >= 0 })
     this.fontsRevision = revision
     this.fontIds = usedIds
+    if (additions.length || removed || changed) this.fontPresentationRevision++
   }
   private async authorizeLuts(document: VideoEditComposition): Promise<void> {
     for (const asset of document.colorLuts ?? []) {
@@ -98,7 +100,6 @@ export class VideoEditRenderSession {
     }
   }
   constructor(private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private readonly proxyProjectId?: string, private readonly exportProxies = false) {
-    this.hasPresentationSurface = Boolean(surface)
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
     this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage>) => {
@@ -112,7 +113,12 @@ export class VideoEditRenderSession {
     this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
     // Verify original media before dependent code/font preparation or opening a decoder channel.
     this.ready = this.content.check(document).then(() => Promise.all([this.selectProxies(), this.connectNative(), this.authorizeLuts(document), this.syncFonts(document)])).then(async ([, decode]) => this.request({ kind: 'init', document: this.mediaDocument(document), codeSources: await this.codeSources(document), previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : []))
-    this.stopFonts = subscribeFontLibrary(() => { if (!this.disposed && fontLibrarySnapshot().revision !== this.fontsRevision) void this.ready.then(async () => { await this.syncFonts(this.document); if (this.hasPresentationSurface && this.lastPresentedFrame !== undefined && !this.disposed) { const result = await this.present(this.lastPresentedFrame); result.bitmap?.close() } }).catch(error => logger.warn('剪辑字体更新失败', { event: 'video_edit.fonts.update.failed', error })) })
+    this.stopFonts = subscribeFontLibrary(() => {
+      if (this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return
+      this.fontRefresh = this.ready.then(async () => {
+        while (!this.disposed && fontLibrarySnapshot().revision !== this.fontsRevision) await this.syncFonts(this.document)
+      }).catch(error => logger.warn('剪辑字体更新失败', { event: 'video_edit.fonts.update.failed', error })).finally(() => { this.fontRefresh = undefined })
+    })
     void this.ready.catch(() => undefined)
   }
   private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
@@ -145,7 +151,6 @@ export class VideoEditRenderSession {
     await this.ready
     const document = this.document
     const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(readRgb ? { readRgb } : {}) }, [], submitted)
-    if (result.presented) this.lastPresentedFrame = frame
     const at = result.presented ? videoEditMaskUpdateTime(document.id, document.revision) : undefined
     if (at !== undefined && result.presented) {
       const durationMs = performance.now() - at

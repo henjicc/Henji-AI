@@ -1,3 +1,4 @@
+import { composeAffine, inverseAffine, mapAffine } from '@/core/imaging/transforms';
 import type {
   ImageEditCropRectV3,
   ImageEditDocumentV3,
@@ -20,40 +21,18 @@ export function multiplyAnnotationMatricesV3(
   outer: AnnotationMatrixV3,
   inner: AnnotationMatrixV3,
 ): AnnotationMatrixV3 {
-  const [a1, b1, c1, d1, e1, f1] = outer
-  const [a2, b2, c2, d2, e2, f2] = inner
-  return [
-    a1 * a2 + c1 * b2,
-    b1 * a2 + d1 * b2,
-    a1 * c2 + c1 * d2,
-    b1 * c2 + d1 * d2,
-    a1 * e2 + c1 * f2 + e1,
-    b1 * e2 + d1 * f2 + f1,
-  ]
+  return composeAffine(outer,inner)
 }
 
 export function invertAnnotationMatrixV3(matrix: AnnotationMatrixV3): AnnotationMatrixV3 {
-  const [a, b, c, d, e, f] = matrix
-  const determinant = a * d - b * c
-  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-8) {
-    throw new Error('标注图层变换矩阵不可逆')
-  }
-  return [
-    d / determinant,
-    -b / determinant,
-    -c / determinant,
-    a / determinant,
-    (c * f - d * e) / determinant,
-    (b * e - a * f) / determinant,
-  ]
+  try { return inverseAffine(matrix) } catch { throw new Error('标注图层变换矩阵不可逆') }
 }
 
 export function mapAnnotationPointV3(
   matrix: AnnotationMatrixV3,
   point: readonly [number, number],
 ): readonly [number, number] {
-  const [a, b, c, d, e, f] = matrix
-  return [a * point[0] + c * point[1] + e, b * point[0] + d * point[1] + f]
+  return mapAffine(matrix,point)
 }
 
 function orientationMatrix(

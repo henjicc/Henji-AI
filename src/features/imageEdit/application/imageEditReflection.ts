@@ -2,7 +2,8 @@ import { imageEditLayerFilterRegistrationV3 } from '../v3/application/imageEditL
 import { imageEditLayerMovesSchemaV3 } from '../v3/application/imageEditWorkflowFields'
 import { imageEditNamedRegionsSchemaV3 } from '@/core/imageEdit/v3/namedRegions'
 import { imageEditHistoryRowsSchemaV3 } from '../v3/application/imageEditHistoryFields'
-import { imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
+import { deformationSchema } from '@/core/imaging/transforms';
+import { imageEditTransformSchemaV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
 import { imageColorGradeJsonSchema } from '@/core/imaging/adjustments/schema'
 import { z } from 'zod'
 import { listImagingEffects } from '@/core/imaging/effects/registry'
@@ -205,7 +206,10 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
       { ref: imageEditV3SchemaRef('property', `${entityType}.mask_attachment.value`), value: z.toJSONSchema(imageEditMaskAttachmentSchemaV3, { io: 'input' }) as JsonValue },
       { ref: imageEditV3SchemaRef('property', `${entityType}.filters.value`), value: z.toJSONSchema(imageEditLayerFiltersSchemaV3, { io: 'input' }) as JsonValue },
     ] : []), ...(entityType === IMAGE_EDIT_ENTITY_TYPES.layer ? [{
-      ref: IMAGE_EDIT_V3_PARAMS_SCHEMA_REF,
+      ref: imageEditV3SchemaRef('property', 'image_edit.layer.deformation.value'), value: z.toJSONSchema(deformationSchema.nullable(), { io: 'input' }) as JsonValue,
+    }, { ref: imageEditV3SchemaRef('property', 'image_edit.group.transform.value'), value: z.toJSONSchema(imageEditTransformSchemaV3, { io: 'input' }) as JsonValue,
+    }, { ref: imageEditV3SchemaRef('property', 'image_edit.layer.transform.value'), value: z.toJSONSchema(imageEditTransformSchemaV3, { io: 'input' }) as JsonValue,
+    }, { ref: IMAGE_EDIT_V3_PARAMS_SCHEMA_REF,
       value: { type: 'object', description: '按 definition_id 选择对应字段定义；曲线为百分比控制点，LUT 为稳定资源引用。gaussian_blur 使用完整画面高度比例、方向与边缘处理；其他效果沿各自操作参数。', $defs: { color_grade: JSON.parse(JSON.stringify(imageColorGradeJsonSchema())) as JsonValue, ...Object.fromEntries(listImagingEffects().filter(effect => effect.hosts.includes('image')).map(effect => [effect.id, z.toJSONSchema(effect.parameterSchema, { io: 'input' }) as JsonValue])) } },
     }] : entityType === IMAGE_EDIT_ENTITY_TYPES.document ? [{
       ref: imageEditV3SchemaRef('property', 'image_edit.document.named_regions.value'),

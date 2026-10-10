@@ -189,6 +189,12 @@ function layerAvailability(
       writable = false
       reasons.push('图层已锁定；请先把 locked 设为 false。')
     }
+    if (writable && propertyId.endsWith('.transform') && !['raster','annotation','group'].includes(source.location.layer.type)) {
+      writable=false;reasons.push('仅像素、标注或图层组支持空间变换。');
+    }
+    if (writable && propertyId === 'image_edit.layer.deformation' && source.location.layer.type !== 'raster') {
+      writable = false; reasons.push('透视与网格变形需要像素图层；请先选择像素图层。');
+    }
     if (writable && propertyId === 'image_edit.layer.params') {
       const layer = source.location.layer
       if ((layer.type !== 'effect' && layer.type !== 'adjustment') || !layer.renderable) {

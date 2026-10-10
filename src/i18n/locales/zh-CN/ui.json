@@ -893,7 +893,10 @@
         "mask-edit": "编辑蒙版",
         "select-wand": "魔棒",
         "select-color-range": "色彩范围",
-        "select-focus": "焦点区域"
+        "select-focus": "焦点区域",
+        "free-transform": "自由变换",
+        "perspective-transform": "透视",
+        "mesh-transform": "网格变形"
       },
       "layerControls": {
         "rotate": "旋转图层",
@@ -953,7 +956,8 @@
         "locked": "所选栅格图层或其所在组已锁定，暂时不能绘制。",
         "hidden": "所选栅格图层或其所在组已隐藏，暂时不能绘制。",
         "singular": "所选栅格图层的变换不可逆，暂时不能绘制。",
-        "failed": "栅格笔画未写入：{{reason}}"
+        "failed": "栅格笔画未写入：{{reason}}",
+        "deformed": "请先恢复原像素再绘画；独立蒙版不受影响。"
       },
       "repair": {
         "auto": "自动",
@@ -1192,6 +1196,22 @@
         "smooth": "平滑",
         "feather": "羽化",
         "border": "边界"
+      },
+      "transform": {
+        "apply": "应用",
+        "cancel": "取消",
+        "constraints": "角点默认等比；Shift：自由缩放 / 15°旋转",
+        "perspectiveHint": "拖动四角调整透视，避免重合或折叠",
+        "meshHint": "拖动网格控制点，避免折叠",
+        "editOriginalFirst": "请先清除透视或网格变形，再编辑原像素或链接蒙版；编辑完成后可重新应用变形。",
+        "selectLayer": "请选择一个可编辑图层",
+        "selectRaster": "请选择一个可编辑像素图层",
+        "corner": "控制点",
+        "rotate": "旋转",
+        "pivot": "旋转锚点",
+        "invalid": "无法应用此变换",
+        "recover": "控制点不能重合或折叠。调整控制点，或取消以恢复。",
+        "restore": "恢复原像素"
       }
     }
   },

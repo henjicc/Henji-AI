@@ -302,6 +302,8 @@ export class VideoEditGpuCompositor {
     }
     const device = this.device
     const frames: VideoFrame[] = []
+    device.pushErrorScope('validation')
+    let scopeOpen = true
     try {
       const encoder = device.createCommandEncoder()
       const canvas = target ? undefined : this.context.getCurrentTexture()
@@ -380,13 +382,16 @@ export class VideoEditGpuCompositor {
         this.precision.frames++
       }
       device.queue.submit([encoder.finish()])
-      const completion = device.queue.onSubmittedWorkDone().finally(() => { frames.forEach(frame => frame.close()); this.uploads.delete(completion) })
+      const validation = device.popErrorScope(); scopeOpen = false
+      const completion = Promise.all([device.queue.onSubmittedWorkDone(), validation]).then(([, error]) => {
+        if (error) throw new Error(`剪辑 GPU 合成失败：${error.message}`)
+      }).finally(() => { frames.forEach(frame => frame.close()); this.uploads.delete(completion) })
       this.uploads.add(completion)
       const ids = new Set(clips.map(clip => clip.id))
       this.retainTextures(new Set([...this.protectedImages, ...pictures.flatMap((picture, index) => picture instanceof VideoSample || picture instanceof VideoEditGpuFrame || picture instanceof VideoEditCodePicture ? [] : [picture ? this.imageKey(picture) : `text:${clips[index].id}`])]))
       for (const [id, value] of this.uniforms) if (!ids.has(id) && !this.protectedUniforms.has(id)) { value.destroy(); this.uniforms.delete(id) }
       return { presented: true, completion }
-    } catch (error) { frames.forEach(frame => frame.close()); throw error }
+    } catch (error) { if (scopeOpen) await device.popErrorScope(); frames.forEach(frame => frame.close()); throw error }
   }
   async dispose(): Promise<void> {
     this.disposed = true
@@ -403,5 +408,13 @@ export class VideoEditGpuCompositor {
     this.textures.clear(); this.uniforms.clear(); if (!this.shared) this.manager.destroy()
   }
   cancelPresentation(): void { for (const finish of this.waits) finish() }
+  /** Font changes retire glyph/generated surfaces, while decoded pictures keep their owning device. */
+  async invalidateFontResources(): Promise<void> {
+    await Promise.allSettled([...this.uploads, ...this.copies])
+    await this.codeRuntime?.dispose(); this.codeRuntime = undefined
+    for (const [id, value] of this.textures) if (id.startsWith('text:')) {
+      value.texture.destroy(); this.textures.delete(id)
+    }
+  }
 }
 import { videoEditClipCenterPosition } from '@/core/videoEdit/clipGeometry'

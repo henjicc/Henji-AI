@@ -170,6 +170,7 @@ export interface TestEnvironmentOptions {
   catalog?: DocumentCatalog
   kinds?: DocumentKindRegistry
   adapters?: PackageAdapterRegistry
+  logger?: MainLogger
 }
 
 /**
@@ -215,7 +216,7 @@ export function createTestEnvironment(options: TestEnvironmentOptions = {}): Tes
     programRoots: () => [programRoot],
     catalog,
     storeDirectory: path.join(programRoot, 'DocumentStore'),
-    logger: () => silentLogger(),
+    logger: () => options.logger ?? silentLogger(),
     trashItem: async (target) => {
       trashed.push(target)
       await fsp.rm(target, { recursive: true, force: true })

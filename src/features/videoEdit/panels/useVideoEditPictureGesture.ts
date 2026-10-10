@@ -1,3 +1,4 @@
+import { translateAffine } from '@/core/imaging/transforms';
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, setVideoEditView, subscribeVideoEditView, updateVideoEditPicturePosition, videoEditProgramCommandIdentity, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
@@ -41,7 +42,8 @@ export function useVideoEditPictureGesture(instance: VideoEditInstance, enabled:
   const move = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const value = pointer.current; if (!value || event.pointerId !== value.pointerId) return
     if (!valid(value)) { cancel(); return }
-    try { updateVideoEditPicturePosition(value.gesture, value.sequenceId, value.clipId, { x: Math.max(-2, Math.min(2, value.offsetX + (event.clientX - value.x) / value.width)), y: Math.max(-2, Math.min(2, value.offsetY + (event.clientY - value.y) / value.height)) }) } catch (error) { cancel(); onError(error) }
+    const translated = translateAffine([1,0,0,1,value.offsetX,value.offsetY], [(event.clientX-value.x)/value.width,(event.clientY-value.y)/value.height]);
+    try { updateVideoEditPicturePosition(value.gesture, value.sequenceId, value.clipId, { x: Math.max(-2, Math.min(2, translated[4])), y: Math.max(-2, Math.min(2, translated[5])) }) } catch (error) { cancel(); onError(error) }
   }
   const up = (event: ReactPointerEvent<HTMLDivElement>): void => { const value = pointer.current; if (!value || event.pointerId !== value.pointerId) return; if (!valid(value)) { cancel(); return } move(event); if (pointer.current) { release(); pointer.current = undefined; finishVideoEditGesture(value.gesture) } }
   return { down, move, up, cancel }

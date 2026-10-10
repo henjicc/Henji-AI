@@ -204,6 +204,8 @@ describe('图片编辑 V3 实时 Application Control', () => {
     const filters = [{ id: 'local', operationType: 'adjustment', effectId: 'exposure', params: { stops: .4 }, enabled: true, opacity: .7, blendMode: 'normal', mask: null }]
     const attachment = { enabled: true, linked: false, density: .6, transform: [1, 0, 0, 1, 2, 0] }
     const mutations = [
+      { propertyId: 'image_edit.layer.deformation', operation: 'set' as const, value: { kind: 'perspective', points: [[.1,0],[.9,0],[1,1],[0,1]] } },
+      { propertyId: 'image_edit.layer.transform', operation: 'set' as const, value: [1,0,0,1,3,2] },
       { propertyId: 'image_edit.layer.fill_opacity', operation: 'set' as const, value: .4 },
       { propertyId: 'image_edit.layer.clipping', operation: 'set' as const, value: true },
       { propertyId: 'image_edit.layer.mask_attachment', operation: 'set' as const, value: attachment },

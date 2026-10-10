@@ -140,7 +140,6 @@ export class ImageEditorPreviewClientV3 {
         pyramidDescriptorReader: options.describePyramid,
         pyramidPrewarmer: options.prewarmPyramid,
         proxyCacheMaxBytes: options.proxyCacheMaxBytes,
-        requestIdScope: options.coalescingKey ?? 'display',
         pyramidPrewarmEnabled: options.pyramidPrewarmEnabled,
       })
     } catch (error) {

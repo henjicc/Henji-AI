@@ -1,3 +1,4 @@
+import { resolveDeformationSampling, resampleDeformation } from './deformationSampling';
 import { maskDensity } from '../../../imaging/compositing';
 import type { CubeLut } from '../../../imaging/lut/cube'
 import {
@@ -212,19 +213,20 @@ export function collectImageEditCpuRegionRequirementsV3(
         region,
         transform,
       )
-      if (node.mask) addRegion(masks, node.id, resolveImageEditCpuSamplingRegionV3(
+      if (node.mask) addRegion(masks, node.id, (resolveDeformationSampling(context, node, { kind: 'mask', ownerNode: node, reference: node.mask }, region) ?? resolveImageEditCpuSamplingRegionV3(
         context, { kind: 'mask', ownerNode: node, reference: node.mask }, region, maskNodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1),
-      ).region)
-      visit(content, transformed.region)
+      )).region)
+      const warped = resolveDeformationSampling(context, node, { kind: 'content', node: content }, region);
+      visit(content, warped?.region ?? transformed.region)
       return
     }
     const inputRegion = node.definitionId === 'group.isolated'
       ? region
       : effectInputRegion(node, region, context)
-    if (node.mask) addRegion(masks, node.id, resolveImageEditCpuSamplingRegionV3(
+    if (node.mask) addRegion(masks, node.id, (resolveDeformationSampling(context, node, { kind: 'mask', ownerNode: node, reference: node.mask }, region) ?? resolveImageEditCpuSamplingRegionV3(
       context, { kind: 'mask', ownerNode: node, reference: node.mask }, inputRegion,
       maskNodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1),
-    ).region)
+    )).region)
     visit(inputNode(nodes, node, 0), inputRegion)
   }
   const output = plan.outputNodeId ? nodes.get(plan.outputNodeId) : null
@@ -256,12 +258,14 @@ export async function executeImageEditCpuRenderRegionPlanV3(
     const requested = resolveImageEditCpuSamplingRegionV3(
       context, { kind: 'mask', ownerNode: node, reference: node.mask }, region, maskNodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1),
     )
+    const warped = resolveDeformationSampling(context, node, { kind: 'mask', ownerNode: node, reference: node.mask }, region);
+    if (warped) requested.region = warped.region;
     let sampled: Float32MaskTile
     if (requested.region.width === 0 || requested.region.height === 0) {
       sampled = createFloat32MaskTile(region.width, region.height, new Float32Array(region.width * region.height))
     } else {
       const mask = await context.loadMask(node.mask, node, requested.region)
-      sampled = isIdentityTransform(requested.transform) && regionKey(requested.region) === regionKey(region)
+      sampled = warped ? resampleDeformation(mask, region, warped) : isIdentityTransform(requested.transform) && regionKey(requested.region) === regionKey(region)
         ? mask
         : resampleImageEditMaskAffineV3(mask, requested.region, region, requested.transform)
     }
@@ -297,12 +301,15 @@ export async function executeImageEditCpuRenderRegionPlanV3(
           region,
           transform,
         )
+        const warped = resolveDeformationSampling(context, node, { kind: 'content', node: contentNode }, region);
+        if (warped) transformed.region = warped.region;
         let content = transformed.region.width > 0 && transformed.region.height > 0
           ? await render(contentNode, transformed.region)
           : context.createTransparent(region)
         // 恒等矩阵仍可能读取被源边界裁短（或采样 halo 扩大）的区域；
         // 只有像素坐标与范围都相同，才可以直接作为输出区域参与合成。
-        if (!isIdentityTransform(transformed.transform)
+        if (warped && transformed.region.width > 0 && transformed.region.height > 0) content = resampleDeformation(content, region, warped);
+        else if (!isIdentityTransform(transformed.transform)
           || regionKey(transformed.region) !== regionKey(region)) {
           if (transformed.region.width > 0 && transformed.region.height > 0) {
             content = resampleImageEditRgbaAffineV3(

@@ -1,3 +1,4 @@
+import { deformationSchema, type Deformation } from '@/core/imaging/transforms';
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import {
   compileImageEditRenderPlanV3,
@@ -19,6 +20,7 @@ export interface ImageEditorGpuRasterLayerV3 {
   layerId: string
   sourceKind: 'raster' | 'annotation'
   resourceRef: `sha256:${string}` | null
+  deformationLocalTransform?: ImageEditTransformV3
   sourcePyramid?: ImageEditorV3PyramidDescriptor
   contentVersion: string
   sparseTiles: Readonly<Record<string, {
@@ -28,6 +30,8 @@ export interface ImageEditorGpuRasterLayerV3 {
   }>>
   visible: boolean
   opacity: number
+  deformation?: Deformation | null
+  deformationTransform?: ImageEditTransformV3
   transform: ImageEditTransformV3
 }
 
@@ -62,6 +66,8 @@ export interface ImageEditorGpuGraphCompositeNodeV3 extends ImageEditorGpuGraphN
   maskDensity?: number
   backdropNodeId: string | null
   contentNodeId: string
+  deformation?: Deformation | null
+  deformationTransform?: ImageEditTransformV3
   transform: ImageEditTransformV3
   opacity: number
   blendMode: ImageEditBlendModeV3
@@ -194,7 +200,7 @@ export function compileImageEditorGpuRasterSceneV3(
     node.kind === 'adjustment'
     || node.kind === 'effect'
     || node.kind === 'alias'
-    || (node.kind === 'composite' && (node.blendMode !== 'normal' || node.mask !== null || node.clipping))
+    || (node.kind === 'composite' && (node.blendMode !== 'normal' || node.mask !== null || node.clipping || layers.some(layer => layer.deformation)))
   ))
   return {
     supported: true,
@@ -262,6 +268,8 @@ function compileNode(
       clipping: node.parameters.clipping === true,
       maskTransform: transformParameter(node.parameters.maskTransform ?? node.parameters.transform) ?? transform,
       maskDensity: numberParameter(node, 'maskDensity', 1),
+      deformation: node.parameters.maskDeformation ? deformationSchema.parse(node.parameters.maskDeformation) : null,
+      deformationTransform: transformParameter(node.parameters.deformationTransform) ?? transform,
       maskLinked: node.parameters.maskLinked !== false,
       maskLocalTransform: transformParameter(node.parameters.maskLocalTransform) ?? [1,0,0,1,0,0],
     }
@@ -393,6 +401,7 @@ function collectRasterLayers(
     output.push({
       layerId: layer.id,
       sourceKind: 'raster',
+      deformation: layer.deformation ?? null,
       resourceRef,
       contentVersion: resourceRef ? `${resourceRef}:${descriptors.get(resourceRef)!.byteLength}` : 'empty',
       sparseTiles,

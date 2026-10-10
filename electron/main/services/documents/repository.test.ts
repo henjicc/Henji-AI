@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createTestEnvironment, listFiles, type TestEnvironment } from './documents.test-support'
+import { createTestEnvironment, listFiles, silentLogger, type TestEnvironment } from './documents.test-support'
 
 let env: TestEnvironment
 
@@ -21,6 +21,20 @@ function write(target: string, bytes = 'x'): string {
 describe('文档仓库：新建与草稿', () => {
   beforeEach(() => { env = createTestEnvironment() })
   afterEach(async () => { await env.cleanup() })
+
+  it('canvas content-addressed image diagnostics are debug; absolute program paths and other protocols remain warnings', async () => {
+    await env.cleanup()
+    const logger = { ...silentLogger(), warn: vi.fn(), debug: vi.fn() }
+    env = createTestEnvironment({ logger })
+    const { service } = env.services
+    const created = await service.createDocument({ kind: 'canvas', container: { kind: 'user' } })
+    const managed = `henji-media://image-editor-v3/${'a'.repeat(64)}?mediaType=image%2Fpng`
+    const program = path.join(env.programRoot, 'private.png')
+    await service.saveDocument({ target: { id: created.meta.id, path: created.meta.path }, expectedRevision: 0, content: { image: managed, program, invalid: 'henji-media://image-editor-v3/not-a-hash' } })
+    const warning = logger.warn.mock.calls.find(([, meta]) => meta?.event === 'documents.content.program_references')
+    expect(warning?.[1]).toMatchObject({ context: { count: 2, sample: [program, 'henji-media://image-editor-v3/not-a-hash'] } })
+    expect(logger.debug).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'documents.content.managed_image_references', context: expect.objectContaining({ count: 1 }) }))
+  })
 
   it('新建的独立文档以草稿存进类型文件夹（用到时才建），自动名顺延', async () => {
     const { service } = env.services

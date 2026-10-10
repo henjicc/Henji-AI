@@ -88,7 +88,11 @@ async function observePicture(page, sequenceId, clip) {
       postMessage(message, transfer) {
         if (message?.document?.id === sequenceId && ['init', 'update'].includes(message.kind)) {
           const target = message.document.clips.find(value => value.id === clip.id)
-          this.picture.position = target ? { x: target.x, y: target.y } : null
+          this.picture.position = target ? { x: target.x, y: target.y, scale: target.scale, rotation: target.rotation } : null
+        }
+        if (message?.kind === 'parameters') {
+          const patch = message.update.patches.find(value => value.sequenceId === sequenceId && value.clipId === clip.id)
+          if (patch?.layout) this.picture.position = { ...patch.layout }
         }
         if (message?.kind === 'render' && this.picture.position) {
           const request = { id: message.id, frame: message.frame, submittedAt: performance.now(), position: { ...this.picture.position } }
@@ -135,10 +139,13 @@ function createVideoEditPictureGestureScene() {
         evidence.currentPhase = '原4K首次呈现与正式MCP原目标'; store()
         await observeWorkers(page); resourcesObserved = true
         await observePicture(page, sequence.id, target)
-        await observeSaves(app, file); savesObserved = true
         await button(page, '剪辑').click()
         await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-        const openedAt = performance.now(); await openVideoEditFile(page, file); await presented(page, 0)
+        const openedAt = performance.now(); const opened = await openVideoEditFile(page, file)
+        // 夹具被正式接口收养到作品目录后，原子写入发生在实际文档上，不在夹具镜像上。
+        evidence.documentFile = opened.file
+        await observeSaves(app, opened.file); savesObserved = true
+        await presented(page, 0)
         const canvas = page.getByLabel('剪辑画面', { exact: true })
         evidence.firstDecode = { openToPresentedMs: performance.now() - openedAt, ...(await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset }))) }
         assert.equal(evidence.firstDecode.width, 3840); assert.equal(evidence.firstDecode.height, 2160)
@@ -162,6 +169,14 @@ function createVideoEditPictureGestureScene() {
         await button(program, '更多节目操作').click(); await button(page, '移动画面').click(); await presented(page, 0)
         const beforeFile = JSON.stringify(readVideoEditFile(file)); const before = readProject(file)
         evidence.before = await png(page, path.join(root, 'before.png')); await shot('picture-gesture-before')
+        evidence.surface = await canvas.evaluate(canvas => {
+          const ancestors = []
+          for (let node = canvas; node && ancestors.length < 4; node = node.parentElement) {
+            const rect = node.getBoundingClientRect(); const css = getComputedStyle(node)
+            ancestors.push({ tag: node.tagName, classes: node.className, width: rect.width, height: rect.height, display: css.display, visibility: css.visibility, opacity: css.opacity })
+          }
+          return ancestors
+        }); store()
         evidence.resourcesBefore = await workerSnapshot(page)
         const baselineSaves = (await saveSnapshot(app)).length
         evidence.baselineSaves = baselineSaves
@@ -200,15 +215,20 @@ function createVideoEditPictureGestureScene() {
         }
         await page.evaluate(() => { window.__pictureGestureEvidence.stage = 'drag'; window.__pictureGestureEvidence.frames = [] })
         await input('mousePressed', start, 1)
+        if (process.env.HENJI_PROFILE_DRAG) { await inputSession.send('Profiler.enable'); await inputSession.send('Profiler.setSamplingInterval', { interval: 200 }); await inputSession.send('Profiler.start') }
         const cadenceStart = performance.now()
         const inputCount = 180
+        const dispatched = []
         for (let index = 1; index <= inputCount; index++) {
           // Same trusted Chromium input as Playwright, without its per-move HTML drag interception.
-          await input('mouseMoved', { x: start.x + box.width * .3 * index / inputCount, y: start.y + box.height * .2 * index / inputCount }, 1)
+          // A CDP acknowledgement can wait for Chromium's next draw; it must not clock the next input.
+          dispatched.push(input('mouseMoved', { x: start.x + box.width * .3 * index / inputCount, y: start.y + box.height * .2 * index / inputCount }, 1))
           const delay = cadenceStart + index * 1000 / 60 - performance.now()
           if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay))
           if (index % 60 === 0) assert.equal(JSON.stringify(readVideoEditFile(file)), beforeFile, '领域拖动草稿期间不能写入工程')
         }
+        await Promise.all(dispatched)
+        if (process.env.HENJI_PROFILE_DRAG) fs.writeFileSync(process.env.HENJI_PROFILE_DRAG, JSON.stringify((await inputSession.send('Profiler.stop')).profile))
         const endedAt = await page.evaluate(() => performance.now())
         assert.equal(JSON.stringify(readVideoEditFile(file)), beforeFile)
         assert.equal((await saveSnapshot(app)).length, baselineSaves, '连续更新期间原子发布次数必须为0')
@@ -265,6 +285,26 @@ function createVideoEditPictureGestureScene() {
         evidence.pixels = { moved: await comparePng(evidence.before.file, evidence.moved.file), undo: await comparePng(evidence.before.file, evidence.undo.file) }
         assert.ok(evidence.pixels.moved.changedChannels > 1000 && evidence.pixels.moved.rms > .2, '全分辨率像素须实际随画面移动变化')
         assert.equal(evidence.pixels.undo.equal, true, '一次Undo应精确恢复原4K像素')
+        evidence.directProperties = []
+        for (const [label, key, displacement] of [['缩放', 'scale', 30], ['旋转', 'rotation', 25]]) {
+          const input = page.getByRole('spinbutton', { name: label, exact: true }).first()
+          const bounds = await input.boundingBox(); assert.ok(bounds)
+          const baseline = readProject(file); const original = baseline.sequences[0].clips.find(clip => clip.id === target.id)
+          const at = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+          await page.mouse.move(at.x, at.y); await page.mouse.down()
+          await page.mouse.move(at.x + displacement, at.y, { steps: 12 }); await page.mouse.up()
+          const edited = await saved(page, file, document => document.sequences[0].clips.find(clip => clip.id === target.id)[key] !== original[key])
+          await page.waitForFunction(({ key, value }) => window.__pictureGestureEvidence.frames.at(-1)?.position[key] === value, { key, value: edited.sequences[0].clips.find(clip => clip.id === target.id)[key] })
+          const picture = await png(page, path.join(root, `${key}.png`)); await shot(`picture-gesture-${key}`)
+          const pixels = await comparePng(evidence.undo.file, picture.file)
+          assert.ok(pixels.changedChannels > 1000, `${label}必须改变实际节目像素`)
+          await button(page, '撤销').click()
+          await saved(page, file, document => isDeepStrictEqual(document.sequences[0].clips, baseline.sequences[0].clips))
+          await page.waitForFunction(({ key, value }) => window.__pictureGestureEvidence.frames.at(-1)?.position[key] === value, { key, value: original[key] })
+          const restoredPicture = await png(page, path.join(root, `${key}-undo.png`)); await shot(`picture-gesture-${key}-undo`)
+          assert.equal((await comparePng(evidence.undo.file, restoredPicture.file)).equal, true, `${label}一次撤销恢复原4K像素`)
+          evidence.directProperties.push({ label, key, value: edited.sequences[0].clips.find(clip => clip.id === target.id)[key], pixels })
+        }
         await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         for (const original of originals) { const stat = fs.statSync(original.file); assert.equal(stat.size, original.size); assert.equal(stat.mtimeMs, original.mtimeMs) }

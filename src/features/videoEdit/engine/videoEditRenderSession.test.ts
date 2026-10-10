@@ -72,10 +72,10 @@ it('60 effect moves send only effect deltas, without media/source/font payloads;
   document.clips = [videoEditClipSchema.parse({ id: 'clip', itemId: 'item', kind: 'video', name: '片段', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', effects: [{ id: 'grade', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {} } }] })]
   const session = new VideoEditRenderSession(document, 1280)
   await session.present(0)
-  for (let i = 1; i <= 60; i++) await session.updateDocument({ ...document, revision: i, clips: [{ ...document.clips[0], effects: [{ ...document.clips[0].effects![0], builtin: { id: 'color_grade', params: { exposure: i / 60 } } }] }] })
+  for (let i = 1; i <= 60; i++) await session.updateDocument({ ...document, revision: i, clips: [{ ...document.clips[0], x: i / 100, scale: 1 + i / 100, rotation: i, effects: [{ ...document.clips[0].effects![0], builtin: { id: 'color_grade', params: { exposure: i / 60 } } }] }] })
   const parameters = workers[0].messages.map(value => value.message).filter(value => value.kind === 'parameters')
   expect(parameters).toHaveLength(60)
-  expect(parameters[59]).toMatchObject({ update: { baseRevision: 59, revision: 60, patches: [{ clipId: 'clip', effects: [{ id: 'grade', value: { builtin: { params: { exposure: 1 } } } }] }] } })
+  expect(parameters[59]).toMatchObject({ update: { baseRevision: 59, revision: 60, patches: [{ clipId: 'clip', layout: { x: .6, scale: 1.6, rotation: 60 }, effects: [{ id: 'grade', value: { builtin: { params: { exposure: 1 } } } }] }] } })
   expect(parameters.every(value => !('document' in value) && !('codeSources' in value))).toBe(true)
   expect(workers[0].messages.filter(value => value.message.kind === 'update')).toHaveLength(0)
   await session.updateDocument({ ...document, revision: 61, width: 3840 })

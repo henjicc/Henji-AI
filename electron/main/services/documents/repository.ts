@@ -691,9 +691,18 @@ export class DocumentRepository {
 
   private warnProgramReferences(action: string, file: LoadedDocumentFile, report: LocationReport): void {
     if (!report.programReferences.length) return
+    // 画布内嵌图片的地址按内容哈希寻址，源资源随 canvas-layers 包携带，预览可从同一文档重建。
+    // 这不是机器绝对路径；其他内部协议和真正的程序目录路径仍须警告。
+    const managed = file.kind.id === 'canvas' ? report.programReferences.filter(value => /^henji-media:\/\/image-editor-v3\/[a-f0-9]{64}(?:\?mediaType=[^#]*)?$/.test(value)) : []
+    if (managed.length) this.logger.debug('画布使用受管图片资源引用，由内嵌图片文档恢复', {
+      event: 'documents.content.managed_image_references',
+      context: { action, documentId: file.header.id, count: managed.length },
+    })
+    const references = report.programReferences.filter(value => !managed.includes(value))
+    if (!references.length) return
     this.logger.warn('文档里出现程序目录的路径，换位置或拷给别人后会失效', {
       event: 'documents.content.program_references',
-      context: { action, documentId: file.header.id, kind: file.kind.id, count: report.programReferences.length, sample: report.programReferences.slice(0, 3) },
+      context: { action, documentId: file.header.id, kind: file.kind.id, count: references.length, sample: references.slice(0, 3) },
     })
   }
 

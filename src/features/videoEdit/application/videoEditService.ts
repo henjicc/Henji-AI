@@ -277,7 +277,8 @@ export function subscribeVideoEditDomain(listener: () => void): () => void { dom
 export function listVideoEditInstances(): VideoEditInstance[] { return [...instances.values()] }
 export function activeVideoEditInstance(): VideoEditInstance | undefined { return activeId ? instances.get(activeId) : undefined }
 export function requireVideoEditInstance(id: string): VideoEditInstance { const instance = instances.get(id); if (!instance) throw new Error('请先打开目标剪辑：在剪辑页打开所在项目，或用 open_document 打开这份剪辑（文档 ID 取自 list_documents）。'); return instance }
-export function publishVideoEdit(changed = false): void { revision++; if (changed) { domainRevision++; for (const listener of domainListeners) listener() } for (const listener of listeners) listener(); publishView() }
+function publishVideoEditDomain(): void { domainRevision++; for (const listener of domainListeners) listener() }
+export function publishVideoEdit(changed = false): void { revision++; if (changed) publishVideoEditDomain(); for (const listener of listeners) listener(); publishView() }
 export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); if (activeId && activeId !== id) { const previous = instances.get(activeId); if (previous) cancelVideoEditGesture(previous) } activeId = id; publishVideoEdit() }
 const compositions = new WeakMap<VideoEditDocument, Map<string, VideoEditComposition>>()
 /** 空项目不制造隐形序列；界面与查询先检查这个可选入口。 */
@@ -481,7 +482,11 @@ function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDo
   // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
   instance.document = { ...next, id: before.id, name: before.name, revision: instance.document.revision + 1 }
   if (!spatialOnly) { rescaleSequenceViews(instance, before); reconcileSequenceView(instance) }
-  instance.version++; publishVideoEdit(true)
+  instance.version++
+  // 受限手势草稿只刷新实时画面及叠层；结束/取消由 finishVideoEditGesture 统一刷新完整界面。
+  // 否则每个指针事件都会重绘时间线、项目列表和所有 Dock 面板。
+  if (spatialOnly) publishVideoEditDomain()
+  else publishVideoEdit(true)
   if (recordHistory) notifyVideoEditContent(instance)
   return instance.document
 }

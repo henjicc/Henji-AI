@@ -49,19 +49,22 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
     const resourceId = `sha256:${'9'.repeat(64)}` as const
     const describePyramid = vi.fn(async () => ({ tileSize: 512 as const, levels: [] }))
     const client = new ImageEditorPreviewClientV3({
-      sessionId: 'shared-session',
+      sessionId: `canvas-session:${'x'.repeat(128)}`,
       workerFactory: () => worker,
       renderScheduler: scheduler,
-      readFastProxy: async (request) => ({
+      readFastProxy: async (request) => {
+        expect(request.requestId).toMatch(/^[A-Za-z0-9:_-]{1,160}$/)
+        return ({
         resourceRef: request.resourceRef,
         width: 512,
         height: 384,
         mediaType: 'image/webp',
         bytes: new ArrayBuffer(8),
-      }),
+        })
+      },
       describePyramid,
       prewarmPyramid: async () => ({ plannedTiles: 0, completedTiles: 0, truncated: false }),
-      coalescingKey: 'thumbnail',
+      coalescingKey: `editor-thumbnails:${'y'.repeat(128)}`,
       taskKind: 'prefetch',
       purpose: 'thumbnail',
       priority: IMAGE_EDIT_RENDER_PRIORITY.prefetch,
@@ -76,13 +79,13 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
     await waitForRender(worker)
 
     expect(scheduler.tasks[0]).toMatchObject({
-      sessionId: 'shared-session',
-      coalescingKey: 'thumbnail',
+      sessionId: `canvas-session:${'x'.repeat(128)}`,
+      coalescingKey: `editor-thumbnails:${'y'.repeat(128)}`,
       kind: 'prefetch',
       purpose: 'thumbnail',
       priority: IMAGE_EDIT_RENDER_PRIORITY.prefetch,
     })
-    expect(scheduler.tasks[0]?.id).toContain(':thumbnail:preview:')
+    expect(scheduler.tasks[0]?.id).toContain(':preview:')
     expect(describePyramid).not.toHaveBeenCalled()
 
     const output = bitmap()

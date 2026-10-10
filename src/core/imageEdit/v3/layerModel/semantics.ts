@@ -1,3 +1,4 @@
+import { deformationSchema } from '../../../imaging/transforms';
 import { z } from 'zod';
 import { isImageEditTransformInvertibleV3 } from '../execution/affineTransform';
 import { createBuiltInImageEditRenderNodeRegistry } from '../builtInRenderNodes';
@@ -58,6 +59,10 @@ export function assertImageEditLayerSemanticsV3(layers: readonly ImageEditLayerV
       ids.add(layer.id);
       if (!Number.isFinite(layer.fillOpacity) || layer.fillOpacity < 0 || layer.fillOpacity > 1
         || typeof layer.clipping !== 'boolean') throw new Error('填充或剪贴属性无效');
+      if (layer.deformation) {
+        if (layer.type !== 'raster') throw new Error('透视与网格变形需要像素图层');
+        deformationSchema.parse(layer.deformation);
+      }
       imageEditMaskAttachmentSchemaV3.parse(layer.maskAttachment);
       imageEditLayerFiltersSchemaV3.parse(layer.filters);
       const content = layer.type === 'raster' || layer.type === 'annotation' || layer.type === 'group';

@@ -4,6 +4,7 @@ import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 export interface VideoEditParameterPatch {
   sequenceId: string
   clipId: string
+  layout?: Pick<VideoEditClip, 'x' | 'y' | 'scale' | 'rotation' | 'anchorX' | 'anchorY' | 'opacity'>
   effects?: Array<{ id: string; value: VideoEditEffect }>
   code?: VideoEditClip['code']
   graphic?: VideoEditClip['graphic']
@@ -26,6 +27,10 @@ export function videoEditParameterNeedsFonts(document: VideoEditComposition, upd
   })
 }
 const same = (left: unknown, right: unknown): boolean => left === right || JSON.stringify(left) === JSON.stringify(right)
+const layoutFields = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity'] as const
+function layout(clip: VideoEditClip): NonNullable<VideoEditParameterPatch['layout']> {
+  return { x: clip.x, y: clip.y, scale: clip.scale, rotation: clip.rotation, anchorX: clip.anchorX, anchorY: clip.anchorY, opacity: clip.opacity }
+}
 function unchanged(left: object, right: object, omit: readonly string[]): boolean {
   const a = left as Record<string, unknown>; const b = right as Record<string, unknown>
   return [...new Set([...Object.keys(a), ...Object.keys(b)])].every(key => omit.includes(key) || same(a[key], b[key]))
@@ -41,7 +46,7 @@ export function videoEditParameterUpdate(before: VideoEditComposition, next: Vid
     for (let i = 0; i < a.clips.length; i++) {
       const clip = a.clips[i]; const changed = b.clips[i]
       if (clip === changed) continue
-      if (!unchanged(clip, changed, ['effects', 'code', 'graphic'])) return false
+      if (!unchanged(clip, changed, ['effects', 'code', 'graphic', ...layoutFields])) return false
       if (!unchanged(clip.code ?? {}, changed.code ?? {}, ['parameters', 'curves'])) return false
       if (!unchanged(clip.graphic ?? {}, changed.graphic ?? {}, ['objects'])) return false
       const effects: VideoEditParameterPatch['effects'] = []
@@ -57,10 +62,11 @@ export function videoEditParameterUpdate(before: VideoEditComposition, next: Vid
         }
       }
       const patch: VideoEditParameterPatch = { sequenceId: a.id, clipId: clip.id }
+      if (!same(layout(clip), layout(changed))) patch.layout = layout(changed)
       if (effects.length) patch.effects = effects
       if (!same(clip.code, changed.code)) patch.code = changed.code
       if (!same(clip.graphic, changed.graphic)) patch.graphic = changed.graphic
-      if (patch.effects || patch.code || patch.graphic) patches.push(patch)
+      if (patch.layout || patch.effects || patch.code || patch.graphic) patches.push(patch)
     }
     return true
   }
@@ -79,7 +85,7 @@ export function applyVideoEditParameterUpdate(document: VideoEditComposition, up
   const clips = (sequenceId: string, values: VideoEditClip[]): VideoEditClip[] => values.map(clip => {
     const patch = update.patches.find(value => value.sequenceId === sequenceId && value.clipId === clip.id)
     if (!patch) return clip
-    return { ...clip, ...(patch.effects ? { effects: clip.effects?.map(effect => patch.effects!.find(value => value.id === effect.id)?.value ?? effect) } : {}), ...(patch.code ? { code: patch.code } : {}), ...(patch.graphic ? { graphic: patch.graphic } : {}) }
+    return { ...clip, ...patch.layout, ...(patch.effects ? { effects: clip.effects?.map(effect => patch.effects!.find(value => value.id === effect.id)?.value ?? effect) } : {}), ...(patch.code ? { code: patch.code } : {}), ...(patch.graphic ? { graphic: patch.graphic } : {}) }
   })
   return { ...document, revision: update.revision, clips: clips(document.id, document.clips), ...(document.sequences ? { sequences: document.sequences.map(sequence => update.patches.some(patch => patch.sequenceId === sequence.id) ? { ...sequence, clips: clips(sequence.id, sequence.clips) } : sequence) } : {}) }
 }

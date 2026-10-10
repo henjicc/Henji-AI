@@ -49,7 +49,7 @@ export function replanImageEditorGpuViewportTilesV3(
     for (const mask of masks) {
       if (!mask || input.plannedMasks.has(mask.maskId)) continue
       input.plannedMasks.set(mask.maskId, planImageEditorGpuMaskTilesV3(
-        input.scene, mask, transform, workingLayout,
+        input.scene, mask, node.kind === 'composite' && node.deformation ? input.transientTransforms.get(node.layerId) ?? node.deformationTransform ?? node.transform : node.kind === 'composite' ? node.maskTransform ?? transform : transform, workingLayout, node.kind === 'composite' ? node.deformation : null, node.kind === 'composite' ? node.maskLocalTransform : undefined,
       ))
     }
   }

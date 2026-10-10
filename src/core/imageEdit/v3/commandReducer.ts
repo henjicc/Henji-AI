@@ -126,6 +126,7 @@ function cloneLayer(layer: ImageEditLayerV3, idMap?: Readonly<Record<string, str
     filters: jsonClone(layer.filters),
     blendMode: layer.blendMode,
     transform: [...layer.transform],
+    ...(layer.deformation === undefined ? {} : { deformation: jsonClone(layer.deformation) }),
     mask: layer.mask ? cloneImageEditMaskReferenceV3(layer.mask) : null,
   };
   if (layer.type === 'raster') {
@@ -404,7 +405,7 @@ function applyLayerContentCommand(
     if (location.ancestors.some((ancestor) => ancestor.locked)) throw new ImageEditLayerLockedErrorV3(`图层所在组已锁定：${layerId}`);
     const inversePatch: ImageEditLayerCommonPatchV3 = {};
     for (const key of keys) {
-      Object.assign(inversePatch, { [key]: location.layer[key] });
+      Object.assign(inversePatch, { [key]: key === 'deformation' ? location.layer.deformation ?? null : location.layer[key] });
     }
     const nextLayer = { ...location.layer, ...patch } as ImageEditLayerV3;
     return { layers: replaceLayer(document.layers, location, nextLayer), inverse: { ...base, type: 'layer.update-common', layerId, patch: inversePatch,

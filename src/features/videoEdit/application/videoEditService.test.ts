@@ -14,7 +14,7 @@ import type { ApplicationExecutionContext } from '@/core/application-control'
 import { createHostContextSnapshot, retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
-import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition } from './videoEditService'
+import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition, subscribeVideoEditDomain } from './videoEditService'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 
@@ -76,6 +76,25 @@ it('受限画面位置草稿保留时间及锚定对象，保存等待释放并�
   expect(moved.captions![0].text).toBe('跟随'); expect(sequence.captions![0].text).toBe('跟随')
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips).toEqual(moved.clips)
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips).toEqual(sequence.clips)
+})
+it('画面手势实时通知渲染器，完整界面只在提交和取消时刷新', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  appendVideoEditClip(id)
+  const editor = vi.fn(); const view = vi.fn(); const domain = vi.fn()
+  const stops = [subscribeVideoEdit(editor), subscribeVideoEditView(view), subscribeVideoEditDomain(domain)]
+  try {
+    const gesture = beginVideoEditGesture(id)
+    for (let step = 1; step <= 60; step++) updateVideoEditPicturePosition(gesture, owner.activeSequenceId, owner.selection!, { x: step / 120, y: 0 })
+    expect(domain).toHaveBeenCalledTimes(60); expect(editor).not.toHaveBeenCalled(); expect(view).not.toHaveBeenCalled()
+    finishVideoEditGesture(gesture)
+    expect(domain).toHaveBeenCalledTimes(61); expect(editor).toHaveBeenCalled(); expect(view).toHaveBeenCalled()
+    editor.mockClear(); view.mockClear()
+    const cancelled = beginVideoEditGesture(id)
+    updateVideoEditPicturePosition(cancelled, owner.activeSequenceId, owner.selection!, { x: .7, y: 0 })
+    finishVideoEditGesture(cancelled, false)
+    expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(.5)
+    expect(domain).toHaveBeenCalledTimes(63); expect(editor).toHaveBeenCalledTimes(1); expect(view).toHaveBeenCalledTimes(1)
+  } finally { for (const stop of stops) stop() }
 })
 it('受限位置写入拒绝越界、额外属性、锁定和旧手势，应用关闭屏障同样生效', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequenceId = owner.activeSequenceId

@@ -1,3 +1,5 @@
+import { packDeformation, prepareDeformation } from '@/core/imaging/transforms';
+import { DEFORMATION_WGSL } from '@/core/imaging/transforms/wgsl';
 import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import { composeImageEditTransformsV3 } from '@/core/imageEdit/v3/renderContracts/maskTransform'
 import { createBuiltInImageEditRenderNodeRegistry } from '@/core/imageEdit/v3/builtInRenderNodes'
@@ -112,7 +114,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     maximumTargetWidth: 0, maximumTargetHeight: 0,
   }
   constructor(private readonly gpu: Gpu, private readonly onPipelineCompiled: () => void) {
-    this.sourceDraw = draw(gpu, { shader: sourceShader, vertices: 3, label: 'image-editor-graph-source' })
+    this.sourceDraw = draw(gpu, { shader: DEFORMATION_WGSL + sourceShader.replace('let sourcePoint = vec2f(', 'let affinePoint = vec2f(').replace('let sourceMipPoint = sourcePoint', 'let sourcePoint = inverseWarp(affinePoint);\n  let sourceMipPoint = sourcePoint'), vertices: 3, label: 'image-editor-graph-source' })
     this.copyDraw = draw(gpu, { shader: copyShader, vertices: 3, label: 'image-editor-graph-copy' })
     this.normalDraw = draw(gpu, { shader: normalShader, vertices: 3, blend: 'premultiplied', label: 'image-editor-graph-normal' })
     this.compositeDraw = draw(gpu, { shader: COMPOSITING_WGSL + compositeShader, vertices: 3, label: 'image-editor-graph-blend' })
@@ -187,7 +189,8 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
             ? composeImageEditTransformsV3(this.transientTransforms.get(node.layerId)!, node.maskLocalTransform ?? [1,0,0,1,0,0])
             : node.maskTransform ?? node.transform
           : (maskParameters?.maskTransform ?? [1, 0, 0, 1, 0, 0]) as unknown as ImageEditTransformV3
-        const prepared = this.maskAssembler.prepare(cacheKey, mask, plan, transform, layout, regions !== null)
+        const warped = node.kind === 'composite' ? node.deformation : null;
+        const prepared = this.maskAssembler.prepare(cacheKey, mask, plan, warped ? this.transientTransforms.get(node.layerId) ?? (node.kind === 'composite' ? node.deformationTransform ?? node.transform : transform) : transform, layout, regions !== null, warped, node.kind === 'composite' ? node.maskLocalTransform : undefined, this.scene.geometry)
         preparedMasks.push(prepared)
         activeMaskKeys.add(cacheKey)
         maskTargets.set(cacheKey, prepared.target)
@@ -357,7 +360,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     if (node.kind === 'source') {
       const transform = this.transientTransforms.get(node.layerId)
         ?? this.scene?.layers.find((layer) => layer.layerId === node.layerId)?.transform
-      return `${node.fingerprint}:${node.layerId}:${transform?.join(',')}:${createImageEditGeometryHashV3(this.scene!.geometry)}`
+      return `${node.fingerprint}:${node.layerId}:${transform?.join(',')}:${JSON.stringify(this.scene?.layers.find(layer => layer.layerId === node.layerId)?.deformation)}:${createImageEditGeometryHashV3(this.scene!.geometry)}`
     }
     const input = fingerprints.get(node.kind === 'composite' ? node.contentNodeId : node.inputNodeId) ?? 'missing'
     const backdrop = node.kind === 'composite' && node.backdropNodeId ? fingerprints.get(node.backdropNodeId) ?? 'missing' : 'transparent'
@@ -477,6 +480,10 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       entries: [{ binding: 0, resource: { buffer: this.cameraBuffer } }],
     })
     this.sourceDraw.group(1, this.cameraBindGroup)
+    const warp = packDeformation(prepareDeformation(layer.deformation), this.scene!.geometry.width, this.scene!.geometry.height);
+    const warpBuffer = this.gpu.gpu.createBuffer({ size: warp.byteLength, usage: 0x80 | BUFFER_COPY_DST });
+    this.gpu.gpu.queue.writeBuffer(warpBuffer, 0, warp);
+    buffers.push(warpBuffer);
     const draws = sourcePlan.plan.tiles.map((planned, index) => {
       const resource = sourcePlan.resources[index]
       if (!resource) throw new Error(`GPU RenderGraph 源图层 ${layerId} 缺少瓦片`)
@@ -485,7 +492,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         this.transientTransforms.get(layer.layerId) ?? layer.transform,
       ))
       buffers.push(buffer)
-      return this.bind(this.sourceDraw, [resource.textureView, { buffer }])
+      return this.bind(this.sourceDraw, [resource.textureView, { buffer }, { buffer: warpBuffer }])
     })
     currentFrame.pass({ target: output, clear: CLEAR }, (pass) => {
       for (const bindGroup of draws) {

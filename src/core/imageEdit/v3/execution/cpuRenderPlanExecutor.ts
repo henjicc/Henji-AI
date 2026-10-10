@@ -1,3 +1,4 @@
+import { resolveDeformationSampling, resampleDeformation } from './deformationSampling';
 import { maskDensity } from '../../../imaging/compositing';
 import { createBuiltInImageEditRenderNodeRegistry } from '../builtInRenderNodes';
 import type { ImageEditPixelExecutionContextV3 } from '../renderNodeDefinition';
@@ -24,6 +25,8 @@ export class ImageEditRenderNodeUnsupportedErrorV3 extends Error {
 }
 
 export interface ImageEditCpuRenderContextV3 {
+  /** Reference evaluation grid, distinct from the source bitmap dimensions. */
+  size?: { width: number; height: number };
   loadColorLut?: (ref: string) => Promise<CubeLut>;
   loadRaster(node: ImageEditRenderPlanNode): Promise<Float32PremultipliedRgbaTile>;
   rasterizeAnnotations(node: ImageEditRenderPlanNode): Promise<Float32PremultipliedRgbaTile>;
@@ -82,7 +85,10 @@ async function loadNodeMask(
   if (!context.loadMask) throw new Error(`图层蒙版没有可用的资源读取器：${node.layerId}`);
   let mask = await context.loadMask(node.mask, node);
   const transform = node.parameters.maskTransform ?? node.parameters.transform;
-  if (transform !== undefined && !isIdentityTransform(transform)) {
+  const size=context.size??{width:mask.width,height:mask.height},region={x:0,y:0,...size};
+  const warped=resolveDeformationSampling({size},node,{kind:'mask',ownerNode:node,reference:node.mask},region);
+  if(warped) mask=resampleDeformation(mask,region,{...warped,region:{x:0,y:0,width:mask.width,height:mask.height}});
+  else if (transform !== undefined && !isIdentityTransform(transform)) {
     if (!Array.isArray(transform) || !context.transformMask) throw new Error(`图层蒙版变换没有可用执行器：${node.layerId}`);
     mask = await context.transformMask(mask, transform.filter((entry): entry is number => typeof entry === 'number'), node);
   }
@@ -146,7 +152,10 @@ async function executeComposite(
   let content = requireInput(outputs, node, contentIndex);
   const transform = node.parameters.transform;
   const mask = await loadNodeMask(node, context);
-  if (!isIdentityTransform(transform)) {
+  const size=context.size??{width:content.width,height:content.height},region={x:0,y:0,...size};
+  const warped=resolveDeformationSampling({size},node,{kind:'content',node},region);
+  if(warped) content=resampleDeformation(content,region,{...warped,region:{x:0,y:0,width:content.width,height:content.height}});
+  else if (!isIdentityTransform(transform)) {
     if (!Array.isArray(transform) || !context.transformContent) {
       throw new Error(`图层变换没有可用执行器：${node.layerId}`);
     }

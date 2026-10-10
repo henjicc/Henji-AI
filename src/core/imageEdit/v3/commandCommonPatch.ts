@@ -1,3 +1,4 @@
+import { deformationSchema } from '../../imaging/transforms';
 import { ImageEditCommandValidationErrorV3 } from './commandErrors'
 import type { ImageEditLayerCommonPatchV3 } from './commandTypes'
 import { IMAGE_EDIT_BLEND_MODES_V3 } from './layerTypes'
@@ -7,7 +8,7 @@ import { imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3 } from '
 export function normalizeImageEditLayerCommonPatchV3(
   patch: ImageEditLayerCommonPatchV3,
 ): ImageEditLayerCommonPatchV3 {
-  const allowedKeys = new Set(['name', 'visible', 'locked', 'opacity', 'fillOpacity', 'clipping', 'maskAttachment', 'filters', 'blendMode', 'transform'])
+  const allowedKeys = new Set(['name', 'visible', 'locked', 'opacity', 'fillOpacity', 'clipping', 'maskAttachment', 'filters', 'blendMode', 'transform', 'deformation'])
   const keys = Object.keys(patch)
   if (keys.length === 0 || keys.some((key) => !allowedKeys.has(key))) {
     throw new ImageEditCommandValidationErrorV3('图层公共属性补丁为空或包含未知字段')
@@ -40,7 +41,9 @@ export function normalizeImageEditLayerCommonPatchV3(
   if (patch.transform !== undefined && !isImageEditTransformInvertibleV3(patch.transform)) {
     throw new ImageEditCommandValidationErrorV3('图层变换必须是可逆的有限仿射矩阵')
   }
+  const deformation = patch.deformation === undefined ? undefined : deformationSchema.nullable().parse(patch.deformation);
   return {
+    ...(deformation === undefined ? {} : { deformation }),
     ...(patch.name === undefined ? {} : { name: patch.name }),
     ...(patch.visible === undefined ? {} : { visible: patch.visible }),
     ...(patch.locked === undefined ? {} : { locked: patch.locked }),

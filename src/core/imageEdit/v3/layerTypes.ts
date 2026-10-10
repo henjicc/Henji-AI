@@ -1,3 +1,4 @@
+import type { Deformation } from '../../imaging/transforms';
 import type { MarkItem } from '../types';
 
 export type ImageEditBlendModeV3 =
@@ -51,6 +52,8 @@ export interface ImageEditLayerCommonV3 {
   filters: ImageEditLayerFilterV3[];
   blendMode: ImageEditBlendModeV3;
   transform: ImageEditTransformV3;
+  /** Non-destructive object-space deformation, sampled by the host at source time. */
+  deformation?: Deformation | null;
   mask: ImageEditMaskReferenceV3 | null;
 }
 

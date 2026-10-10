@@ -1,3 +1,4 @@
+import { deformationSchema } from '../../imaging/transforms';
 import { imageColorGradeParamsSchema } from '../../imaging/adjustments/schema';
 import { sanitizeMarkItem } from '../markCodec';
 import type { MarkItem } from '../types';
@@ -308,13 +309,14 @@ function parseMask(value: unknown): ImageEditMaskReferenceV3 | null | undefined 
 function parseCommon(value: Record<string, unknown>): ImageEditLayerCommonV3 | null {
   const transform = parseTransform(value.transform);
   const mask = parseMask(value.mask);
+  const deformation = deformationSchema.nullable().optional().safeParse(value.deformation);
   const attachment = imageEditMaskAttachmentSchemaV3.safeParse(value.maskAttachment);
   const filters = imageEditLayerFiltersSchemaV3.safeParse(value.filters);
   if (!isNonEmptyString(value.id) || typeof value.name !== 'string'
     || typeof value.visible !== 'boolean' || typeof value.locked !== 'boolean'
     || !isFiniteNumber(value.opacity) || value.opacity < 0 || value.opacity > 1
     || !IMAGE_EDIT_BLEND_MODES_V3.includes(value.blendMode as never)
-    || !transform || mask === undefined || !attachment.success || !filters.success
+    || !deformation.success || !transform || mask === undefined || !attachment.success || !filters.success
     || !isFiniteNumber(value.fillOpacity) || value.fillOpacity < 0 || value.fillOpacity > 1
     || typeof value.clipping !== 'boolean') return null;
   return {
@@ -325,6 +327,7 @@ function parseCommon(value: Record<string, unknown>): ImageEditLayerCommonV3 | n
     opacity: value.opacity,
     fillOpacity: value.fillOpacity,
     clipping: value.clipping,
+    ...(deformation.data === undefined ? {} : { deformation: deformation.data }),
     maskAttachment: attachment.data,
     filters: filters.data,
     blendMode: value.blendMode as ImageEditLayerCommonV3['blendMode'],

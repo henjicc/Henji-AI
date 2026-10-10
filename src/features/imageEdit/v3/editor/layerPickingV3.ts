@@ -1,3 +1,4 @@
+import { inverseDeform, prepareDeformation, rotateAffine, scaleAffineAtAnchor } from '@/core/imaging/transforms';
 import { imageEditLayerMaskTransformV3 } from '@/core/imageEdit/v3/renderContracts/maskTransform'
 import { maskDensity } from '@/core/imaging/compositing'
 import { invertImageEditTransformV3, mapImageEditTransformPointV3 } from '@/core/imageEdit/v3'
@@ -79,7 +80,9 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
   for (const location of flattenImageEditLayerTreeV3(document.layers, groups)) {
     const { layer, ancestors } = location
     if (layer.type !== 'raster' || [layer, ...ancestors].some((entry) => !entry.visible || entry.locked || entry.opacity === 0 || entry.fillOpacity === 0)) continue
-    const [x, y] = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, location)), ...point)
+    const raw = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, location)), ...point)
+    const normalized=inverseDeform(prepareDeformation(layer.deformation),[raw[0]/document.geometry.width,raw[1]/document.geometry.height]);if(!normalized)continue;
+    const [x,y]=[normalized[0]*document.geometry.width,normalized[1]*document.geometry.height]
     const tx = Math.floor(x / 512), ty = Math.floor(y / 512)
     const tile = layer.tiles[`0/${tx}/${ty}`]
     let alpha = tile ? sample(maps.get(tile), x - tx * 512, y - ty * 512)
@@ -90,7 +93,8 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
       const entry = index === 0 ? location : {
         ...location, layer: ancestors[index - 1], ancestors: ancestors.slice(0, index - 1),
       }
-      const local = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, entry, imageEditLayerMaskTransformV3(entry.layer))), ...point)
+      let local = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, entry, imageEditLayerMaskTransformV3(entry.layer))), ...point)
+      if(entry.layer.deformation && entry.layer.maskAttachment.linked) {local=mapImageEditTransformPointV3(invertImageEditTransformV3(entry.layer.maskAttachment.transform),x,y);}
       const mask = maskValue(entry.layer, ...local, maps)
       if (mask === undefined) return undefined
       alpha *= mask * entry.layer.opacity * entry.layer.fillOpacity
@@ -124,14 +128,7 @@ export function transformImageEditorLayerByHandleV3(start: ImageEditTransformV3,
   shift: boolean): ImageEditTransformV3 {
   if (handle === 'rotate') {
     const center = mapImageEditTransformPointV3(start, bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
-    let angle = Math.atan2(toParent[1] - center[1], toParent[0] - center[0])
-      - Math.atan2(fromParent[1] - center[1], fromParent[0] - center[0])
-    if (shift) angle = Math.round(angle / (Math.PI / 12)) * Math.PI / 12
-    const c = Math.cos(angle), s = Math.sin(angle)
-    const [a, b, d, e, x, y] = start
-    return [c * a - s * b, s * a + c * b, c * d - s * e, s * d + c * e,
-      center[0] + c * (x - center[0]) - s * (y - center[1]),
-      center[1] + s * (x - center[0]) + c * (y - center[1])]
+    return rotateAffine(start,center,fromParent,toParent,shift)
   }
   const inverse = invertImageEditTransformV3(start)
   const from = mapImageEditTransformPointV3(inverse, ...fromParent)
@@ -143,7 +140,5 @@ export function transformImageEditorLayerByHandleV3(start: ImageEditTransformV3,
   if (horizontal && vertical && !shift) sx = sy = Math.abs(sx - 1) > Math.abs(sy - 1) ? sx : sy
   const anchorX = bounds.x + (horizontal < 0 ? bounds.width : horizontal === 0 ? bounds.width / 2 : 0)
   const anchorY = bounds.y + (vertical < 0 ? bounds.height : vertical === 0 ? bounds.height / 2 : 0)
-  return [start[0] * sx, start[1] * sx, start[2] * sy, start[3] * sy,
-    start[4] + start[0] * anchorX * (1 - sx) + start[2] * anchorY * (1 - sy),
-    start[5] + start[1] * anchorX * (1 - sx) + start[3] * anchorY * (1 - sy)]
+  return scaleAffineAtAnchor(start,[anchorX,anchorY],[sx,sy])
 }

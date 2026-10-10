@@ -52,6 +52,9 @@ function commonParameters(layer: ImageEditLayerCommonV3): Record<string, unknown
     maskTransform: imageEditLayerMaskTransformV3(layer),
     maskLinked: layer.maskAttachment.linked,
     maskLocalTransform: layer.maskAttachment.transform,
+    deformation: layer.deformation ?? null,
+    deformationTransform: layer.transform,
+    maskDeformation: layer.maskAttachment.linked ? layer.deformation ?? null : null,
     maskDensity: layer.maskAttachment.density,
     blendMode: layer.blendMode,
     transform: [...layer.transform],
@@ -148,7 +151,7 @@ function compileContentLayer(
   if (!contentNodeId) return belowNodeId ?? '';
   const filtered = compileLayerFilters(state, layer, path, contentNodeId);
   return compositeContent(state, layer, path, filtered, belowNodeId, layer.filters.some(filter => filter.enabled)
-    ? { opacity: layer.opacity, transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3 } : {});
+    ? { opacity: layer.opacity, transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3, deformation: null } : {});
 }
 
 function compileEffectLayer(
@@ -231,7 +234,7 @@ function compileGroup(
   ) ?? isolatedOutput;
   const filtered = compileLayerFilters(state, layer, path, groupOutput);
   return compositeContent(state, layer, path, filtered, belowNodeId, layer.filters.some(filter => filter.enabled)
-    ? { opacity: layer.opacity, transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3 } : {});
+    ? { opacity: layer.opacity, transform: IMAGE_EDIT_IDENTITY_TRANSFORM_V3, deformation: null } : {});
 }
 
 function compileLayers(

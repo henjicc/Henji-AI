@@ -82,6 +82,7 @@ vi.mock('./videoEditGpuCompositor', async () => {
   async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) boundary.evaluatedClips = clips; boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); return { presented: true, completion: Promise.resolve() } }
   setPictureDivisor(divisor: number): void { boundary.divisors.push(divisor) }
   async dispose(): Promise<void> {}
+  async invalidateFontResources(): Promise<void> {}
   cancelPresentation(): void {}
   }
   return { VideoEditGpuCompositor: MockCompositor }
@@ -98,6 +99,17 @@ beforeEach(() => {
   boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
+})
+it('font refresh preserves paused decoded pictures on the same compositor device', async () => {
+  const renderer = new VideoEditRenderer(fixture(), 1920)
+  try {
+    await renderer.render(0)
+    const snapshots = boundary.snapshotCalls.length
+    await renderer.invalidateFontResources()
+    await renderer.render(0)
+    expect(boundary.snapshotCalls).toHaveLength(snapshots)
+    expect(boundary.pictures.length).toBeGreaterThan(0)
+  } finally { await renderer.dispose() }
 })
 it('真实转场窗口准备两端原视频余量，不改片段时钟，禁用轨道不产生转场或额外解码', async () => {
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
