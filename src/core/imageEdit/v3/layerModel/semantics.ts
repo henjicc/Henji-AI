@@ -1,3 +1,4 @@
+import {vectorPathContentSchema} from '../../../imaging/vectorContent';
 import { deformationSchema } from '../../../imaging/transforms';
 import { z } from 'zod';
 import { isImageEditTransformInvertibleV3 } from '../execution/affineTransform';
@@ -17,6 +18,7 @@ export const imageEditSparseMaskSchemaV3 = z.object({
   defaultValue: z.union([z.literal(0), z.literal(1)]),
   tiles: z.record(z.string().regex(/^0\/(?:0|[1-9]\d*)\/(?:0|[1-9]\d*)$/), z.string().min(1)),
   inverted: z.boolean(),
+  vectorPaths: vectorPathContentSchema.shape.operands.optional(),
 }).strict();
 
 export const imageEditMaskAttachmentSchemaV3 = z.object({
@@ -65,7 +67,7 @@ export function assertImageEditLayerSemanticsV3(layers: readonly ImageEditLayerV
       }
       imageEditMaskAttachmentSchemaV3.parse(layer.maskAttachment);
       imageEditLayerFiltersSchemaV3.parse(layer.filters);
-      const content = layer.type === 'raster' || layer.type === 'smart' || layer.type === 'annotation' || layer.type === 'group';
+      const content = layer.type === 'raster' || layer.type === 'smart' || layer.type === 'text' || layer.type === 'shape' || layer.type === 'path' || layer.type === 'group';
       if (!content && layer.filters.length) throw new Error('作用域滤镜层不能再挂内容滤镜；请添加独立滤镜层');
       if (layer.clipping && (!hasBase || !content)) throw new Error('剪贴层需要同组下方的内容基底');
       if (!layer.clipping) hasBase = content;

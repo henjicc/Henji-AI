@@ -408,7 +408,7 @@ async function renderCpuReference(
         const tile = tiles.get(resourceId(node))!
         return decodeInterleavedRgbaSourceTileV3({ ...tile, colorSpace: 'srgb' })
       },
-      rasterizeAnnotations: async () => { throw new Error('基础场景不含标注') },
+      rasterizeVectorContent: async () => { throw new Error('基础场景不含标注') },
       transformContent: async (tile, transform) => resampleImageEditRgbaAffineV3(tile, rect, rect, transform),
     },
   )

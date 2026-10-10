@@ -1,3 +1,4 @@
+import { richTextContentSchema, vectorPathContentSchema } from '../imaging/vectorContent';
 import { imageEditSparseMaskSchemaV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3 } from '../imageEdit/v3/layerModel/semantics'
 import { listImagingEffects } from '../imaging/effects/registry'
 import { imageColorGradeParamsSchema } from '../imaging/adjustments/schema'
@@ -20,7 +21,9 @@ const common = { deformation: deformationSchema.nullable().optional(), id: ident
 export const imageLayerSchema: z.ZodType = z.lazy(() => z.discriminatedUnion('type', [
   z.object({ ...common, type: z.literal('raster'), rasterCanvasSize: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).optional(), source: z.union([z.object({ kind: z.literal('empty') }), z.object({ kind: z.literal('resource'), resourceId: identifier })]), tiles: z.record(z.string(), identifier) }),
   z.object({ ...common, type: z.literal('smart'), source: z.union([z.object({ kind: z.literal('empty') }), z.object({ kind: z.literal('resource'), resourceId: identifier })]), tiles: z.record(z.string(), identifier), content: z.lazy(() => imageEditSmartContentSchemaV3(imageContentSchema as z.ZodType<ImageEditDocumentV3>)) }).strict(),
-  z.object({ ...common, type: z.literal('annotation'), annotations: z.array(jsonObject) }),
+  z.object({ ...common, type: z.literal('text'), content: richTextContentSchema }).strict(),
+  z.object({ ...common, type: z.literal('shape'), content: vectorPathContentSchema }).strict(),
+  z.object({ ...common, type: z.literal('path'), content: vectorPathContentSchema }).strict(),
   z.object({ ...common, type: z.literal('effect'), effectId: identifier,
     params: z.union([jsonObject, ...listImagingEffects().filter(effect => effect.hosts.includes('image')).map(effect => effect.parameterSchema)]),
     renderable: z.boolean(),

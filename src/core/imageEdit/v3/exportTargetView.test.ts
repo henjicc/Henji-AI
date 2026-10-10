@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createFloat32PremultipliedRgbaTile,
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
@@ -13,7 +13,7 @@ import type {
   ImageEditorV3ExportSourceTileRequest,
 } from '@/features/imageEdit/v3/export'
 import { renderImageEditorV3ExportTiles } from '@/features/imageEdit/v3/export'
-import { WHITE_HEX } from '@/core/theme/colorTokens'
+
 
 import {
   createImageEditExportTargetViewV3,
@@ -59,7 +59,7 @@ function sourceReader(images: ReadonlyMap<string, readonly Pixel[]>) {
 async function render(
   document: ReturnType<typeof createImageEditDocumentV3>,
   images: ReadonlyMap<string, readonly Pixel[]>,
-  rasterizeAnnotations?: (
+  rasterizeVectorContent?: (
     request: ImageEditorV3ExportAnnotationRasterizeRequest,
   ) => Promise<ReturnType<typeof createFloat32PremultipliedRgbaTile>>,
 ): Promise<Uint8Array> {
@@ -86,7 +86,7 @@ async function render(
     },
     readSourceTile: sourceReader(images),
     readBrushTiles: async requests => ({ tiles: requests.map(request => ({ tileKey: request.tileKey, tile: { storage: 'mask-float32' as const, width: images.get(MASK)!.length, height: 1, data: Float32Array.from(images.get(MASK)!, pixel => pixel[0] / 255) } })) }),
-    rasterizeAnnotations,
+    rasterizeVectorContent,
   })) {
     output.set(new Uint8Array(tile.pixels), tile.x * 4)
   }
@@ -177,38 +177,18 @@ describe('图片编辑 V3 独立导出派生视图', () => {
     }
   })
 
-  it('标注导出仅渲染稳定 ID 指定的单元素', async () => {
-    const document = createImageEditDocumentV3({ width: 4, height: 1, documentId: 'target-mark' })
-    const layer = createImageEditAnnotationLayerV3('marks', '标注')
-    layer.annotations = [
-      { id: 'first', type: 'rect', x: 0, y: 0, width: 1, height: 1, stroke: WHITE_HEX, lineWidth: 1 },
-      { id: 'second', type: 'text', x: 2, y: 0, text: '主标注', color: WHITE_HEX, fontSize: 12 },
-    ]
-    document.layers = [layer]
-    const view = createImageEditExportTargetViewV3(document, {
-      kind: 'annotation-element',
-      layerId: 'marks',
-      annotationId: 'second',
+  it('矢量导出仅渲染稳定图层引用指定的内容',async()=>{
+    const document=createImageEditDocumentV3({width:4,height:1,documentId:'vector-export'})
+    const first=createImageEditPathLayerV3('first','第一个'),second=createImageEditPathLayerV3('second','主标注')
+    document.layers=[first,second]
+    const view=createImageEditExportTargetViewV3(document,{kind:'content-layer',layerId:'second'})
+    const pixels=await render(view.document,new Map(),async({node,region,document:current})=>{
+      expect(node.parameters.type).toBe('shape')
+      const data=new Float32Array(region.width*region.height*4);data.set([1,1,1,1],8)
+      return createFloat32PremultipliedRgbaTile(region.width,region.height,'linear-light',data,current.color.workingSpace,current.color.transferFunction,203)
     })
-    const pixels = await render(view.document, new Map(), async ({ node, region, document: current }) => {
-      const items = Array.isArray(node.parameters.annotations) ? node.parameters.annotations : []
-      const data = new Float32Array(region.width * region.height * 4)
-      if (items.some((item) => typeof item === 'object' && item !== null && 'id' in item && item.id === 'second')) {
-        data.set([1, 1, 1, 1], 2 * 4)
-      }
-      return createFloat32PremultipliedRgbaTile(
-        region.width,
-        region.height,
-        'linear-light',
-        data,
-        current.color.workingSpace,
-        current.color.transferFunction,
-        203,
-      )
-    })
-    expect(view.displayName).toBe('主标注')
-    expect((view.document.layers[0] as typeof layer).annotations.map((item) => item.id)).toEqual(['second'])
-    expect(Array.from({ length: 4 }, (_, x) => pixels[x * 4 + 3])).toEqual([0, 0, 255, 0])
+    expect(view.displayName).toBe('主标注');expect(view.document.layers.map(layer=>layer.id)).toEqual(['second'])
+    expect(Array.from({length:4},(_,x)=>pixels[x*4+3])).toEqual([0,0,255,0])
   })
 
   it('对隐藏、空内容与缺失目标返回可诊断结果', () => {

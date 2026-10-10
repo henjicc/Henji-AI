@@ -251,7 +251,7 @@ async function cpuReference(doc: ImageEditDocumentV3, inputs: readonly Source[],
       const rgba = new Uint8Array(tile(input, 0, 0, 0, true).pixels)
       return createFloat32MaskTile(input.width, input.height, Float32Array.from({ length: input.width * input.height }, (_, index) => rgba[index * 4] / 255))
     },
-    rasterizeAnnotations: async () => { throw new Error('本组不含标注') },
+    rasterizeVectorContent: async () => { throw new Error('本组不含标注') },
     transformContent: async (input, transform) => resampleImageEditRgbaAffineV3(input, { x: 0, y: 0, width: input.width, height: input.height }, rect, transform),
     transformMask: async (input, transform) => resampleImageEditMaskAffineV3(input, { x: 0, y: 0, width: input.width, height: input.height }, rect, transform),
   })

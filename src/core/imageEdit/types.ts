@@ -9,7 +9,6 @@ export type MarkToolType =
   | 'pen'
   | 'text'
   | 'number'
-  | 'mosaic'
   | 'crop';
 
 export interface MarkShapeStyle {
@@ -79,27 +78,13 @@ export interface NumberMark {
   fontSize: number;
 }
 
-export type MosaicMode = 'pixel' | 'blur';
-
-export interface MosaicMark {
-  id: string;
-  type: 'mosaic';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  strengthPercent?: number;
-  mode?: MosaicMode;
-}
-
 export type MarkItem =
   | RectMark
   | EllipseMark
   | ArrowMark
   | PenMark
   | TextMark
-  | NumberMark
-  | MosaicMark;
+  | NumberMark;
 
 export type LabeledMark = RectMark | EllipseMark | ArrowMark;
 export type MarkRotation = 0 | 90 | 180 | 270;
@@ -115,14 +100,6 @@ export interface MarkCropRect {
   y: number;
   width: number;
   height: number;
-}
-
-/** 标注绘制与独立蒙版工具使用的几何投影，不作为持久图片文档。 */
-export interface ImageMarkDoc {
-  version: 1;
-  items: MarkItem[];
-  orientation: MarkOrientation;
-  crop: MarkCropRect | null;
 }
 
 export type DiffusionMode = 'black_mist' | 'white_mist' | 'glow';
@@ -208,15 +185,6 @@ export interface DiffusionOperationParams {
 
 export function createEmptyMarkOrientation(): MarkOrientation {
   return { rotate: 0, mirrored: false };
-}
-
-export function createEmptyMarkDoc(): ImageMarkDoc {
-  return {
-    version: 1,
-    items: [],
-    orientation: createEmptyMarkOrientation(),
-    crop: null,
-  };
 }
 
 export function isNeutralOrientation(orientation: MarkOrientation): boolean {

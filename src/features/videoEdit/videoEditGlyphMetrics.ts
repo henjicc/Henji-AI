@@ -34,7 +34,7 @@ export function measureVideoEditGlyph(text: string, fontSize: number, fontFamily
     if (!context) throw new CodeMaterialError('CONTEXT', '当前环境无法测量文字字形，请恢复画面环境后重试。')
     measure = context
   }
-  measure.font = `${fontSize}px ${fontFamily}`
+  measure.font = codeFont({text,fontSize,fontFamily,fontWeight:400,fontStyle:'normal',letterSpacing:0,lineHeight:1.2,maxWidth:0,wrap:false,maxLines:0})
   const measured = measure.measureText(text)
   if (![measured.width, measured.actualBoundingBoxLeft, measured.actualBoundingBoxRight].every(Number.isFinite) || measured.width < 0) throw new CodeMaterialError('CONTEXT', '文字字形测量结果无效，请恢复画面环境后重试。')
   const width = Math.max(1, Math.ceil(Math.max(measured.width, measured.actualBoundingBoxRight + measured.actualBoundingBoxLeft)) + 4)

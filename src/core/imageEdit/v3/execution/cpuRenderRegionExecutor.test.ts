@@ -49,7 +49,7 @@ describe('图片编辑 V3 区域 RenderPlan 仿射执行', () => {
             data,
           )
         },
-        rasterizeAnnotations: async (_node, region) => createFloat32PremultipliedRgbaTile(
+        rasterizeVectorContent: async (_node, region) => createFloat32PremultipliedRgbaTile(
           region.width,
           region.height,
           'linear-light',
@@ -80,12 +80,12 @@ it('共享 HSL 邻域跨任意分块保持完整文档金字塔网格（奇数�
   const source = createFloat32PremultipliedRgbaTile(width, height, 'linear-light', data)
   const registry = createBuiltInImageEditRenderNodeRegistry()
   const plan = compileImageEditRenderPlanV3(document, registry, 'export')
-  const whole = await executeImageEditCpuRenderPlanV3(plan, { loadRaster: async () => source, rasterizeAnnotations: async () => source })
+  const whole = await executeImageEditCpuRenderPlanV3(plan, { loadRaster: async () => source, rasterizeVectorContent: async () => source })
   const region = { x: 31, y: 65, width: 35, height: 67 }
   const result = await executeImageEditCpuRenderRegionPlanV3(plan, region, {
     size: { width, height }, registry,
     loadRaster: async (_node, requested) => cropImageEditRgbaRegionV3(source, { x: 0, y: 0, width, height }, requested),
-    rasterizeAnnotations: async () => source,
+    rasterizeVectorContent: async () => source,
     createTransparent: requested => createFloat32PremultipliedRgbaTile(requested.width, requested.height, 'linear-light', new Float32Array(requested.width * requested.height * 4)),
     loadMask: async () => { throw new Error('无蒙版') },
   })
@@ -104,13 +104,13 @@ it.each(['draft', 'stable', 'export'] as const)('%s 高斯完整网格与非对�
   const plan = compileImageEditRenderPlanV3(document, registry, quality)
   const effect = plan.nodes.find(node => node.layerId === 'gaussian')!
   expect(effect.parameters.effectQuality).toBe(quality === 'export' ? 'final' : 'interactive')
-  const whole = await executeImageEditCpuRenderPlanV3(plan, { loadRaster: async () => source, rasterizeAnnotations: async () => source })
+  const whole = await executeImageEditCpuRenderPlanV3(plan, { loadRaster: async () => source, rasterizeVectorContent: async () => source })
   const region = { x: 31, y: 65, width: 35, height: 33 }
   const requested: object[] = []
   const result = await executeImageEditCpuRenderRegionPlanV3(plan, region, {
     size: { width, height }, registry,
     loadRaster: async (_node, input) => { requested.push(input); return cropImageEditRgbaRegionV3(source, { x: 0, y: 0, width, height }, input) },
-    rasterizeAnnotations: async () => source,
+    rasterizeVectorContent: async () => source,
     createTransparent: input => createFloat32PremultipliedRgbaTile(input.width, input.height, 'linear-light', new Float32Array(input.width * input.height * 4)),
     loadMask: async () => { throw new Error('无蒙版') },
   })

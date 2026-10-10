@@ -44,7 +44,7 @@ export interface RenderNodeDefinition<TParameters extends object = object> {
   cpu?: ImageEditCpuPixelKernelV3;
   gpu?: ImageEditGpuKernelV3;
   /** 宿主源/合成节点没有像素 kernel，按类别交由宿主执行。 */
-  hostExecution?: 'source' | 'annotation' | 'composite' | 'alias';
+  hostExecution?: 'source' | 'vector' | 'composite' | 'alias';
   /** 点式节点只有在无蒙版、同颜色域且相邻时才允许融合。 */
   fusion: 'never' | 'pointwise-chain';
   localHalo?: (parameters: TParameters, mip: number) => number;

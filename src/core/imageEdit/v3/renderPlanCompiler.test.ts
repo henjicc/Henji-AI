@@ -1,3 +1,4 @@
+import {createImageEditTextLayerV3} from './documentFactory'
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from './documentTypes';
 import { describe, expect, it } from 'vitest';
 import { createDefaultImageEditColorModeV3 } from './colorTypes';
@@ -5,7 +6,7 @@ import type { ImageEditDocumentV3 } from './documentTypes';
 import {
   createImageEditLayerCommonV3,
   type ImageEditAdjustmentLayerV3,
-  type ImageEditAnnotationLayerV3,
+  type ImageEditTextLayerV3,
   type ImageEditEffectLayerV3,
   type ImageEditGroupLayerV3,
   type ImageEditRasterLayerV3,
@@ -23,15 +24,7 @@ function baseLayer(): ImageEditRasterLayerV3 {
   };
 }
 
-function annotationLayer(): ImageEditAnnotationLayerV3 {
-  return {
-    ...createImageEditLayerCommonV3('annotations', '标注'),
-    type: 'annotation',
-    annotations: [{
-      id: 'mark', type: 'text', x: 10, y: 20, text: 'A', color: 'red', fontSize: 24,
-    }],
-  };
-}
+function annotationLayer(): ImageEditTextLayerV3 {return createImageEditTextLayerV3('annotations','文字')}
 
 function blurLayer(): ImageEditEffectLayerV3 {
   return {

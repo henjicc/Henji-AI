@@ -1,3 +1,4 @@
+import {imageEditLayersFromMarkDraftV3} from '@/core/imageEdit/v3/layerEntries/vectorDraft'
 // @vitest-environment jsdom
 import { createCanvasTestProject, readCanvasTestProject } from '@/tests/canvasProjectFixture'
 import '@/tests/imageEditDocumentFixture'
@@ -11,7 +12,7 @@ import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEd
 import { useProjectStore } from '@/stores/projectStore'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createImageEditAnnotationLayerV3, createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditPathLayerV3, createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
 import { getPlatform } from '@/platform/runtime'
@@ -80,8 +81,8 @@ it('恢复的画布关联参与权限预检，没有原画布写权限时不修�
 
 it('直接发现未打开文档中的标注，无需先列出图片图层或打开编辑器', async () => {
   const document = createImageEditDocumentV3({ documentId: 'unopened-annotations', width: 100, height: 80 })
-  const layer = createImageEditAnnotationLayerV3('annotations', '标注')
-  layer.annotations = [{ id: 'rect', type: 'rect', x: 1, y: 2, width: 30, height: 40, stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 2 }]
+  const layer = createImageEditPathLayerV3('annotations', '标注')
+  Object.assign(layer, { ...imageEditLayersFromMarkDraftV3(([{ id: 'rect', type: 'rect', x: 1, y: 2, width: 30, height: 40, stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 2 }] as import('@/core/imageEdit/types').MarkItem[])[0])[0], id: layer.id, name: layer.name })
   document.layers = [layer]
   const snapshot = new ImageEditCommandBusV3(document).getPersistenceSnapshot()
   await getPlatform().imageEditorV3.saveDocument({ requestId: 'seed-unopened-annotations', document, expectedRevision: 0, history: snapshot.history, resourceRefs: [] })
@@ -89,8 +90,8 @@ it('直接发现未打开文档中的标注，无需先列出图片图层或打�
     resources: [], resourceRefs: [], previewRef: null, sourceFingerprint: `sha256:${'a'.repeat(64)}` })
   const harness = createApplicationHarness()
   try {
-    const result = await harness.requireResult('list_application_entities', { entityType: 'image_mark.annotation', limit: 10 })
-    expect(result.refs).toContainEqual({ kind: 'image_mark.annotation', id: 'v3:unopened-annotations:annotations:rect' })
+    const result = await harness.requireResult('list_application_entities', { entityType: 'image_edit.layer', limit: 10 })
+    expect(result.refs).toContainEqual({ kind: 'image_edit.layer', id: 'v3:unopened-annotations:annotations' })
     expect(requireImageEditDocumentInstanceV3(document.id).views).toBe(0)
   } finally { harness.dispose() }
 })

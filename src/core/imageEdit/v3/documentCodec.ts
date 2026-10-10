@@ -1,7 +1,6 @@
+import { richTextContentSchema, vectorPathContentSchema } from '../../imaging/vectorContent';
 import { deformationSchema } from '../../imaging/transforms';
 import { imageColorGradeParamsSchema } from '../../imaging/adjustments/schema';
-import { sanitizeMarkItem } from '../markCodec';
-import type { MarkItem } from '../types';
 import type {
   ImageEditBitDepthV3,
   ImageEditCicpMetadataV3,
@@ -25,7 +24,6 @@ import {
   IMAGE_EDIT_BLEND_MODES_V3,
   IMAGE_EDIT_MASK_TILE_SIZE_V3,
   type ImageEditAdjustmentLayerV3,
-  type ImageEditAnnotationLayerV3,
   type ImageEditEffectLayerV3,
   type ImageEditGroupLayerV3,
   type ImageEditJsonObjectV3,
@@ -290,11 +288,12 @@ function parseMask(value: unknown): ImageEditMaskReferenceV3 | null | undefined 
   if (!isRecord(value) || typeof value.inverted !== 'boolean') return undefined;
   if (value.kind === 'sparse-mask') {
     const tiles = parseTiles(value.tiles);
+    const vectorPaths = vectorPathContentSchema.shape.operands.optional().safeParse(value.vectorPaths);
     if (value.storage !== 'mask-float32'
       || !isNonEmptyString(value.maskId)
       || value.tileSize !== IMAGE_EDIT_MASK_TILE_SIZE_V3
       || (value.defaultValue !== 0 && value.defaultValue !== 1)
-      || !tiles) return undefined;
+      || !tiles || !vectorPaths.success) return undefined;
     return {
       kind: 'sparse-mask',
       storage: 'mask-float32',
@@ -303,6 +302,7 @@ function parseMask(value: unknown): ImageEditMaskReferenceV3 | null | undefined 
       defaultValue: value.defaultValue,
       tiles,
       inverted: value.inverted,
+      ...(vectorPaths.data ? { vectorPaths: vectorPaths.data } : {}),
     };
   }
   return undefined;
@@ -383,15 +383,13 @@ function parseLayer(value: unknown, depth: number): ImageEditLayerV3 | null {
     return { ...raster, type: 'smart', content: { id: value.content.id, origin: origin.data,
       document: contentDocument, width: value.content.width, height: value.content.height } };
   }
-  if (value.type === 'annotation') {
-    if (!Array.isArray(value.annotations)) return null;
-    const annotations: MarkItem[] = [];
-    for (const annotation of value.annotations) {
-      const parsed = sanitizeMarkItem(annotation);
-      if (!parsed) return null;
-      annotations.push(parsed);
-    }
-    return { ...common, type: 'annotation', annotations } satisfies ImageEditAnnotationLayerV3;
+  if (value.type === 'text') {
+    const content = richTextContentSchema.safeParse(value.content);
+    return content.success ? { ...common, type: 'text', content: content.data } : null;
+  }
+  if (value.type === 'shape' || value.type === 'path') {
+    const content = vectorPathContentSchema.safeParse(value.content);
+    return content.success ? { ...common, type: value.type, content: content.data } : null;
   }
   if (value.type === 'effect') {
     if (common.transform.some((entry, index) => entry !== [1, 0, 0, 1, 0, 0][index])) return null;

@@ -1,5 +1,7 @@
+import type {VectorPathOperand} from '../../imaging/vectorContent';
 import type { Deformation } from '../../imaging/transforms';
-import type { MarkItem } from '../types';
+import type { ImageEditVectorLayerV3 } from './layerEntries/vector';
+export type { ImageEditVectorLayerV3, ImageEditTextLayerV3, ImageEditShapeLayerV3, ImageEditPathLayerV3 } from './layerEntries/vector';
 import type { ImageEditSmartLayerV3 } from './smartContent/types';
 export type { ImageEditSmartLayerV3, ImageEditSmartContentV3, ImageEditSmartOriginV3 } from './smartContent/types';
 
@@ -36,6 +38,8 @@ export interface ImageEditSparseMaskReferenceV3 {
   /** `mip/x/y` → 内容寻址瓦片资源 ID。首版权威编辑只写 mip 0。 */
   tiles: Record<string, string>;
   inverted: boolean;
+  /** 可编辑路径为基底覆盖，稀疏画笔瓦片可局部覆盖；两者共用区域内核。 */
+  vectorPaths?: VectorPathOperand[];
 }
 
 export type ImageEditMaskReferenceV3 = ImageEditSparseMaskReferenceV3;
@@ -91,11 +95,6 @@ export interface ImageEditRasterLayerV3 extends ImageEditLayerCommonV3 {
   tiles: Record<string, string>;
 }
 
-export interface ImageEditAnnotationLayerV3 extends ImageEditLayerCommonV3 {
-  type: 'annotation';
-  annotations: MarkItem[];
-}
-
 export interface ImageEditEffectLayerV3 extends ImageEditLayerCommonV3 {
   type: 'effect';
   effectId: string;
@@ -121,7 +120,7 @@ export interface ImageEditGroupLayerV3 extends ImageEditLayerCommonV3 {
 export type ImageEditLayerV3 =
   | ImageEditRasterLayerV3
   | ImageEditSmartLayerV3
-  | ImageEditAnnotationLayerV3
+  | ImageEditVectorLayerV3
   | ImageEditEffectLayerV3
   | ImageEditAdjustmentLayerV3
   | ImageEditGroupLayerV3;
@@ -220,7 +219,7 @@ export function getImageEditMaskIdentityV3(mask: ImageEditMaskReferenceV3): stri
 export function cloneImageEditMaskReferenceV3(
   mask: ImageEditMaskReferenceV3,
 ): ImageEditMaskReferenceV3 {
-  return { ...mask, tiles: { ...mask.tiles } };
+  return { ...mask, tiles: { ...mask.tiles }, ...(mask.vectorPaths ? {vectorPaths:structuredClone(mask.vectorPaths)} : {}) };
 }
 
 export function collectImageEditLayerIdsV3(layers: readonly ImageEditLayerV3[]): string[] {

@@ -101,8 +101,6 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
       layerDragBySession: {},
       viewportZoomBySession: {},
       viewportPanBySession: {},
-      annotationSelectionBySession: {},
-      annotationPreviewBySession: {},
     })
     vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} })
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 500))

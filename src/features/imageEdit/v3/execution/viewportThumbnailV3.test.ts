@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createImageEditDocumentV3, createImageEditAnnotationLayerV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3'
+import { createImageEditDocumentV3, createImageEditPathLayerV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3'
 import { renderImageEditorViewportThumbnailV3, renderImageEditorThumbnailV3 } from './viewportThumbnailV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 import type { ImageEditorManagedPreviewResultV3 } from './imageEditorPreviewResultLeaseV3'
@@ -30,7 +30,7 @@ function fixture() {
 describe('缩略图单向复用视口成品', () => {
   it.each(['annotation', 'empty-brush'])('%s 无图片源仍保留原有缩略图路径，不要求不存在的源金字塔', async (kind) => {
     const value = fixture()
-    value.document.layers = [kind === 'annotation' ? createImageEditAnnotationLayerV3('annotation', '标注')
+    value.document.layers = [kind === 'annotation' ? createImageEditPathLayerV3('annotation', '标注')
       : createImageEditRasterLayerV3('empty', '空画笔')]
     const release = vi.fn(), dispose = vi.fn()
     const plain = { render: vi.fn(async (): Promise<ImageEditorManagedPreviewResultV3> => ({

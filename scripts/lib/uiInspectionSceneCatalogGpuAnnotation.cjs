@@ -70,9 +70,9 @@ function createGpuAnnotationScenes(context) {
       }
       const beforePixels = await sampleFront()
       const startedAt = new Date().toISOString()
-      await editor.locator('[data-tool-id="annotation"]').click()
-      await editor.getByRole('button', { name: /^(矩形标注|Rectangle annotation)$/i }).click()
-      const overlay = editor.locator('[data-annotation-editor-overlay]')
+      await editor.locator('[data-tool-id="vector"]').click()
+      await editor.getByRole('menuitem', { name: /^(矩形|Rectangle)$/i }).click()
+      const overlay = editor.locator('[data-vector-overlay]')
       await overlay.waitFor({ state: 'visible', timeout: 5000 })
       const [overlayBox, previewBox] = await Promise.all([overlay.boundingBox(), preview.boundingBox()])
       if (!overlayBox || !previewBox) throw new Error('GPU标注画布范围不可用')
@@ -84,7 +84,7 @@ function createGpuAnnotationScenes(context) {
       await page.mouse.down()
       await page.mouse.move(left + (right - left) * 0.58, top + (bottom - top) * 0.62, { steps: 8 })
       await page.mouse.up()
-      await editor.locator('[role="treeitem"][data-layer-type="annotation"]')
+      await editor.locator('[role="treeitem"][data-layer-type="shape"]')
         .waitFor({ state: 'visible', timeout: 10000 })
       await editor.locator('[data-tool-id="move"]').click()
       await settlePage(page, 300)
@@ -96,7 +96,7 @@ function createGpuAnnotationScenes(context) {
       await effectRow.click()
       await editor.getByRole('button', { name: /^(上移图层|Move layer up)$/i }).click()
       await settlePage(page, 300)
-      const annotationEditor = editor.locator('[data-annotation-editor-overlay]')
+      const annotationEditor = editor.locator('[data-vector-overlay]')
       const liveLayerCount = await annotationEditor.count() > 0
         ? await annotationEditor.getAttribute('data-live-annotation-layer-count') : '0'
       if (liveLayerCount !== '0') {
@@ -130,7 +130,7 @@ function createGpuAnnotationScenes(context) {
           presentation: value.getAttribute('data-preview-presentation-backend'),
           device: value.getAttribute('data-preview-device-status'),
         }))
-        const missingOverlay = editor.locator('[data-annotation-editor-overlay]')
+        const missingOverlay = editor.locator('[data-vector-overlay]')
         const liveCount = await missingOverlay.count() > 0
           ? await missingOverlay.getAttribute('data-live-annotation-layer-count') : '0'
         const layerTypes = await editor.locator('[role="treeitem"][data-layer-type]')
@@ -195,7 +195,7 @@ function createGpuAnnotationScenes(context) {
           )),
         }
       }, { afterTimestamp: startedAt, cacheTimestamp: cacheStartedAt })
-      const annotationRow = editor.locator('[role="treeitem"][data-layer-type="annotation"]')
+      const annotationRow = editor.locator('[role="treeitem"][data-layer-type="shape"]')
       const visibleGeneration = Number(await front.getAttribute('data-render-generation'))
       await annotationRow.getByRole('button', {
         name: /^(隐藏“标注图层”|Hide “Annotation layer”)$/i,

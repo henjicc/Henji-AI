@@ -1,3 +1,4 @@
+import {loadVectorFonts} from '@/services/vectorContent/fonts'
 import { loadImageColorLutV3 } from './imageColorLutV3'
 import {
   compileImageEditRenderPlanV3,
@@ -18,7 +19,7 @@ import {
   applyPreviewBrushTileReplacementsV3,
   createPreviewBrushTileMapV3,
   createTransparentPreviewTileV3,
-  rasterizePreviewAnnotationsV3,
+  rasterizePreviewVectorContentV3,
   rasterizePreviewLayerV3,
   resolveImageEditorPreviewDimensionsV3,
   transformPreviewTileV3,
@@ -58,6 +59,7 @@ export async function renderImageEditorPreviewTileV3(
   customEffects: ImageEditorPreviewCustomEffectsV3,
   signal: AbortSignal,
 ): Promise<ImageEditorPreviewRenderedTileV3> {
+  await loadVectorFonts(request.fonts ?? [])
   const dimensions = resolveImageEditorPreviewDimensionsV3(request.document, request.maxDimension)
   const plan = compileImageEditorPreviewPlanV3(
     request.document,
@@ -85,8 +87,8 @@ export async function renderImageEditorPreviewTileV3(
       brushTiles,
       dimensions,
     ),
-    rasterizeAnnotations: async (node) => convertSrgbProxyToPreviewWorkingSpaceV3(
-      rasterizePreviewAnnotationsV3(node, request.document, dimensions),
+    rasterizeVectorContent: async (node) => convertSrgbProxyToPreviewWorkingSpaceV3(
+      rasterizePreviewVectorContentV3(node, request.document, dimensions),
       request.document.color,
     ),
     loadMask: async (reference) => loadPreviewSparseMaskV3(reference, brushTiles, dimensions),

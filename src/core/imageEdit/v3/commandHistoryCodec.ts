@@ -1,6 +1,6 @@
 import { normalizeImageEditLayerCommonPatchV3 } from './commandCommonPatch';
 import type { ImageEditLayerCommonPatchV3 } from './commandTypes';
-import { sanitizeMarkItem } from '../markCodec';
+
 import {
   collectImageEditCommandResourceReferencesV3,
   mergeImageEditHistoryResourceReferencesV3,
@@ -136,7 +136,7 @@ function validateLayerKeys(value: unknown): void {
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史图层无效');
   const specific = value.type === 'smart' ? ['type', 'source', 'tiles', 'content']
     : value.type === 'raster' ? ['type', 'source', 'tiles']
-    : value.type === 'annotation' ? ['type', 'annotations']
+    : ['text', 'shape', 'path'].includes(value.type) ? ['type', 'content']
       : value.type === 'effect' ? ['type', 'effectId', 'params', 'renderable']
         : value.type === 'adjustment' ? ['type', 'adjustmentId', 'params', 'renderable']
           : value.type === 'group' ? ['type', 'children', 'isolated']
@@ -153,9 +153,6 @@ function validateLayerKeys(value: unknown): void {
       nonEmptyString(tileKey, '历史瓦片键', 128);
       nonEmptyString(resourceId, '历史瓦片资源 ID');
     });
-  } else if (value.type === 'annotation') {
-    if (!Array.isArray(value.annotations)) fail('历史标注图层无效');
-    value.annotations.forEach(validateAnnotation);
   }
   if (value.type === 'group') {
     if (!Array.isArray(value.children)) fail('历史图层组无效');
@@ -176,21 +173,6 @@ function validateLayer(value: unknown, expectedType?: ImageEditLayerV3['type']):
   if (!layer || (expectedType && layer.type !== expectedType)) fail('历史图层内容无效');
 }
 
-function validateAnnotation(value: unknown): void {
-  if (!isRecord(value) || typeof value.type !== 'string') fail('历史标注无效');
-  const common = ['id', 'type'];
-  const shape = value.type === 'rect' || value.type === 'ellipse'
-    ? ['x', 'y', 'width', 'height', 'stroke', 'lineWidth', 'label', 'labelFontSize', 'labelDx', 'labelDy', 'labelBackgroundColor']
-    : value.type === 'arrow'
-      ? ['points', 'curveControl', 'stroke', 'lineWidth', 'label', 'labelFontSize', 'labelDx', 'labelDy', 'labelBackgroundColor']
-      : value.type === 'pen' ? ['points', 'stroke', 'lineWidth']
-        : value.type === 'text' ? ['x', 'y', 'text', 'color', 'fontSize', 'backgroundColor']
-          : value.type === 'number' ? ['x', 'y', 'color', 'fontSize']
-            : value.type === 'mosaic' ? ['x', 'y', 'width', 'height', 'strengthPercent', 'mode']
-              : fail('历史标注类型未知');
-  exactKeysWithOptional(value, common, shape, '历史标注');
-  if (!sanitizeMarkItem(value)) fail('历史标注内容无效');
-}
 
 function validateBase(command: Record<string, unknown>, keys: readonly string[]): void {
   exactKeys(command, ['type', 'commandId', 'expectedRevision', ...keys], '历史命令');
@@ -358,17 +340,6 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
       }
       break;
     }
-    case 'annotation.add':
-      validateBase(command, ['layerId', 'index', 'annotation']); nonEmptyString(command.layerId, '图层 ID');
-      validateIndex(command.index, '标注位置'); validateAnnotation(command.annotation); break;
-    case 'annotation.update':
-      validateBase(command, ['layerId', 'annotationId', 'annotation']); nonEmptyString(command.layerId, '图层 ID');
-      nonEmptyString(command.annotationId, '标注 ID'); validateAnnotation(command.annotation);
-      if (!isRecord(command.annotation) || command.annotation.id !== command.annotationId) fail('更新标注 ID 不匹配');
-      break;
-    case 'annotation.delete':
-      validateBase(command, ['layerId', 'annotationId']); nonEmptyString(command.layerId, '图层 ID');
-      nonEmptyString(command.annotationId, '标注 ID'); break;
     case 'raster.apply-tile-delta':
     case 'mask.apply-tile-delta': {
       validateBase(

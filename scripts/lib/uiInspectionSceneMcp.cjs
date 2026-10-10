@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires, no-console -- 正式 Electron CommonJS 场景与诊断输出。 */
 const assert = require('node:assert/strict')
 const { Client } = require('@modelcontextprotocol/client')
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/client')
@@ -193,7 +194,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         await change([{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': 'MCP已保存画布' } }], [project])
         assert.equal((await read(projectRef, ['documents.document.name'])).data.properties['documents.document.name'], 'MCP已保存画布')
         // 直接检查正式存储，不把协议 ok 当作持久化证据。
-        const stored = await page.evaluate(async ({ libraryId, projectId }) => ({
+        const stored = await page.evaluate(async ({ projectId }) => ({
           libraries: await window.henjiNative.assetLibrary.listLibraries(),
           settings: JSON.parse(localStorage.getItem('settings-storage')),
           hiddenModels: localStorage.getItem('hidden_models'),
@@ -280,7 +281,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
          */
         const contract = await call('describe_application_contract', {})
         const writableDomains = contract.data.domains.filter((domain) => domain.writable).map((domain) => domain.id).sort()
-        for (const domain of ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'models', 'settings', 'memory']) {
+        for (const domain of ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'models', 'settings', 'memory']) {
           assert.ok(writableDomains.includes(domain), `缺少已声明写域 ${domain}：${JSON.stringify(writableDomains)}`)
         }
         assert.equal(contract.data.domains.some((domain) => domain.id === 'assistant_runtime'), false, '助手内部运行目录不得出现在外部契约')

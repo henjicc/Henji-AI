@@ -26,7 +26,7 @@ it('工程、文档与设置资源目录通过正式注册表读取，后台修�
   const detach = subscribeHostContext(() => { notifications++ })
   try {
     const dispatcher = { call: (_caller: string, name: string, input: Record<string, unknown> | undefined) => harness.call(name, input) }
-    const domains = buildExternalCapabilityInventory().filter(domain => ['canvas', 'camera_stage', 'image_edit', 'image_mark', 'settings'].includes(domain.id))
+    const domains = buildExternalCapabilityInventory().filter(domain => ['canvas', 'camera_stage', 'image_edit', 'settings'].includes(domain.id))
     let cursor: string | undefined
     const uris: string[] = []
     do {

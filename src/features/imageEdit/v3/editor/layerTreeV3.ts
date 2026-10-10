@@ -1,7 +1,7 @@
 import { createImageEditOperationParametersV3 } from '@/core/imageEdit/v3/operationCatalog'
 import {
   createImageEditAdjustmentLayerV3,
-  createImageEditAnnotationLayerV3,
+  createImageEditTextLayerV3, createImageEditPathLayerV3,
   createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
   createImageEditIdV3,
@@ -201,7 +201,8 @@ export function createImageEditLayerFromChoiceV3(
     return createEmptyImageEditSmartLayerV3(document, id, choice.name);
   }
   if (choice.kind === 'raster') return createImageEditRasterLayerV3(id, choice.name)
-  if (choice.kind === 'annotation') return createImageEditAnnotationLayerV3(id, choice.name)
+  if (choice.kind === 'text') return createImageEditTextLayerV3(id, choice.name)
+  if (choice.kind === 'shape' || choice.kind === 'path') return createImageEditPathLayerV3(id, choice.name, choice.kind)
   if (choice.kind === 'group') return createImageEditGroupLayerV3(id, choice.name)
   if (choice.kind === 'effect') {
     const effectId = choice.subtype ?? 'image.fast-blur-v3'

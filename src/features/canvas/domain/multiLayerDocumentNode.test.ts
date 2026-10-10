@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { imageEditV3AnnotationRef, imageEditV3GroupRef, imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
+import { imageEditV3GroupRef, imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from './canvasNodes'
 import { isEditableLayerStackResultNode, isUploadNode } from './canvasNodeGuards'
@@ -159,8 +159,8 @@ describe('多图层文档节点契约', () => {
       kind: 'layer-group', ref: imageEditV3GroupRef('multi-layer-doc', 'group-a'),
     })).toMatchObject({ kind: 'layer-group', ref: { kind: 'image_edit.group' } })
     expect(parseMultiLayerDocumentExportTarget({
-      kind: 'annotation-element', ref: imageEditV3AnnotationRef('multi-layer-doc', 'marks-a', 'mark-a'),
-    })).toMatchObject({ kind: 'annotation-element', ref: { kind: 'image_mark.annotation' } })
+      kind: 'content-layer', ref: imageEditV3LayerRef('multi-layer-doc', 'marks-a'),
+    })).toMatchObject({ kind: 'content-layer', ref: { kind: 'image_edit.layer' } })
   })
 
   it('对效果层和调整层返回明确的不支持原因', () => {

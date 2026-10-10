@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检使用 CommonJS。 */
+const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { imageEditInspectionModel } = require('./imageEditInspectionModel.cjs')
 async function openCanvasImageEditorV3Fixture({
   page,
@@ -12,6 +13,7 @@ async function openCanvasImageEditorV3Fixture({
   solidColor = null,
   foreground = null,
   annotations = [],
+  vectorLayers = [],
   /*
    * 后台文档验收要的是"数据已经种好、编辑器从没挂载过"这个初始状态：置 false 时种完就返回，
    * 不打开工程也不双击节点。调用方拿到 projectId 与 documentRef 后自行 reload，让直写存储的
@@ -105,11 +107,7 @@ async function openCanvasImageEditorV3Fixture({
           visible: true, locked: false, opacity: 1, blendMode: 'normal',
           transform: payload.foreground.transform, mask: null,
           source: { kind: 'resource', resourceId: foregroundSource.resource.resourceRef }, tiles: {},
-        }] : []), ...(payload.annotations.length ? [{
-          ...payload.model.common, id: 'reality-annotation-layer', name: '后台标注', type: 'annotation',
-          visible: true, locked: false, opacity: 1, blendMode: 'normal',
-          transform: [1, 0, 0, 1, 0, 0], mask: null, annotations: payload.annotations,
-        }] : [])],
+        }] : []), ...payload.vectorLayers],
       },
       expectedRevision: 0,
       history: null,
@@ -152,7 +150,7 @@ async function openCanvasImageEditorV3Fixture({
       sourceResourceRef: managed.resource.resourceRef,
       foregroundResourceRef: foregroundSource?.resource.resourceRef ?? null,
       sourceGeometry: { width: managed.metadata.width, height: managed.metadata.height } }
-  }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground, annotations, model: imageEditInspectionModel() })
+  }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground, vectorLayers: [...vectorLayers, ...annotations.flatMap(item => loadTypeScript('src/core/imageEdit/v3/layerEntries/vectorDraft.ts').imageEditLayersFromMarkDraftV3({ ...item, id: 'reality-annotation-layer' }))], model: imageEditInspectionModel() })
   if (!openEditor) return { dialog: null, editor: null, fixture, projectId }
   // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await context.reopenCanvasProjectFromStorage(page, projectId)

@@ -9,7 +9,7 @@ import { collectImageEditMaskResourceIdsV3, type ImageEditLayerV3 } from '../lay
 export function createImageEditLayerContentRegistryV3(): ImageEditLayerContentRegistryV3 {
   const registry = new ImageEditLayerContentRegistryV3();
   registerImageEditSmartContentV3(registry);
-  for (const type of ['raster', 'annotation', 'effect', 'adjustment', 'group'] as const) {
+  for (const type of ['raster', 'text', 'shape', 'path', 'effect', 'adjustment', 'group'] as const) {
     registry.register({ type, schema: imageLayerSchema as z.ZodType<ImageEditLayerV3>, resourceIds: layer => {
       const output = collectImageEditJsonResourceIdsV3(layer);
       if (layer.mask) output.push(...collectImageEditMaskResourceIdsV3(layer.mask));

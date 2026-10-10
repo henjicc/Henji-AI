@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditRasterLayerV3,
@@ -24,7 +24,7 @@ function documentWithLayers(): ImageEditDocumentV3 {
     ...createImageEditRasterLayerV3('raster', '底图', RESOURCE),
     mask: { ...createImageEditSparseMaskReferenceV3(MASK, false), tiles: { '0/0/0': MASK } },
   }
-  const annotation = createImageEditAnnotationLayerV3('annotations', '标注')
+  const annotation = createImageEditPathLayerV3('annotations', '标注')
   const blur = createImageEditEffectLayerV3(
     'blur',
     '模糊',

@@ -1,3 +1,4 @@
+import {rasterizeVectorCoverage} from '@/core/imaging/vectorContent';
 import { createFloat32MaskTile, type Float32MaskTile } from '@/core/imageEdit/v3/effects/contracts'
 import type { ImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorPreviewDimensionsV3 } from './previewPixelsV3'
@@ -44,8 +45,8 @@ export function loadPreviewSparseMaskV3(
   brushTiles: ReadonlyMap<string, ImageEditorPreviewBrushTileV3>,
   dimensions: ImageEditorPreviewDimensionsV3,
 ): Float32MaskTile {
-  const output = new Float32Array(dimensions.width * dimensions.height)
-  if (mask.defaultValue === 1) output.fill(1)
+  const output = mask.vectorPaths ? rasterizeVectorCoverage(mask.vectorPaths,{x:0,y:0,width:dimensions.width,height:dimensions.height},dimensions.scaleX,dimensions.scaleY) : new Float32Array(dimensions.width * dimensions.height)
+  if (!mask.vectorPaths && mask.defaultValue === 1) output.fill(1)
   for (const [tileKey, resourceId] of Object.entries(mask.tiles)) {
     const parts = tileKey.split('/')
     if (parts.length !== 3 || Number(parts[0]) !== 0) {

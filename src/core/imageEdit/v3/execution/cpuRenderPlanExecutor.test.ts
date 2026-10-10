@@ -1,7 +1,7 @@
 import { createImageEditSparseMaskReferenceV3 } from '../layerTypes'
 import { describe, expect, it } from 'vitest';
 import {
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditAdjustmentLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
@@ -47,14 +47,14 @@ async function render(documentValue: ImageEditDocumentV3) {
   );
   return executeImageEditCpuRenderPlanV3(plan, {
     loadRaster: async () => black3,
-    rasterizeAnnotations: async () => centerMark,
+    rasterizeVectorContent: async () => centerMark,
   });
 }
 
 describe('V3 CPU RenderPlan 执行器', () => {
   it('真实执行图层顺序：标注在模糊下方会被模糊，在上方保持清晰', async () => {
     const source = createImageEditRasterLayerV3('source', '原图', 'sha256:source');
-    const marks = createImageEditAnnotationLayerV3('marks', '标注');
+    const marks = createImageEditPathLayerV3('marks', '标注');
     const blur = createImageEditEffectLayerV3(
       'blur',
       '高斯模糊',
@@ -75,7 +75,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
 
   it('正式 Gaussian 比例参数委托共享 CPU 执行', async () => {
     const source = createImageEditRasterLayerV3('source', '原图', 'sha256:source');
-    const marks = createImageEditAnnotationLayerV3('marks', '标注');
+    const marks = createImageEditPathLayerV3('marks', '标注');
     const blur = createImageEditEffectLayerV3(
       'gaussian',
       '高斯模糊',
@@ -108,7 +108,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
     );
     const result = await executeImageEditCpuRenderPlanV3(plan, {
       loadRaster: async () => input,
-      rasterizeAnnotations: async () => { throw new Error('unexpected annotation'); },
+      rasterizeVectorContent: async () => { throw new Error('unexpected annotation'); },
       loadMask: async () => createFloat32MaskTile(2, 1, Float32Array.from([0, 1])),
     });
     expect(result?.data[0]).toBeCloseTo(0.25, 6);
@@ -117,7 +117,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
 
   it('隔离组不透明度只在组边界应用一次', async () => {
     const source = createImageEditRasterLayerV3('source', '原图', 'sha256:source');
-    const child = createImageEditAnnotationLayerV3('child', '白色标注');
+    const child = createImageEditPathLayerV3('child', '白色标注');
     const group = {
       ...createImageEditGroupLayerV3('group', '隔离组'),
       isolated: true,
@@ -133,7 +133,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
     );
     const result = await executeImageEditCpuRenderPlanV3(plan, {
       loadRaster: async () => sourceBlack,
-      rasterizeAnnotations: async () => white,
+      rasterizeVectorContent: async () => white,
     });
     expect(result?.data[0]).toBeCloseTo(0.5, 6);
     expect(result?.data[3]).toBeCloseTo(1, 6);
@@ -153,14 +153,14 @@ describe('V3 CPU RenderPlan 执行器', () => {
     const halfMask = createFloat32MaskTile(2, 1, Float32Array.from([0, 1]));
     const contentResult = await executeImageEditCpuRenderPlanV3(contentPlan, {
       loadRaster: async () => white,
-      rasterizeAnnotations: async () => { throw new Error('unexpected annotation'); },
+      rasterizeVectorContent: async () => { throw new Error('unexpected annotation'); },
       loadMask: async () => halfMask,
     });
     expect(contentResult?.data.slice(0, 4)).toEqual(Float32Array.from([0, 0, 0, 0]));
     expect(contentResult?.data.slice(4, 8)).toEqual(Float32Array.from([1, 1, 1, 1]));
 
     const backdrop = createImageEditRasterLayerV3('backdrop', '背景', 'sha256:backdrop');
-    const child = createImageEditAnnotationLayerV3('child', '组内内容');
+    const child = createImageEditPathLayerV3('child', '组内内容');
     const group = {
       ...createImageEditGroupLayerV3('masked-group', '带蒙版组'),
       isolated: true,
@@ -175,7 +175,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
     const black = tile(2, [0, 0, 0, 1, 0, 0, 0, 1]);
     const groupResult = await executeImageEditCpuRenderPlanV3(groupPlan, {
       loadRaster: async () => black,
-      rasterizeAnnotations: async () => white,
+      rasterizeVectorContent: async () => white,
       loadMask: async () => halfMask,
     });
     expect(groupResult?.data[0]).toBeCloseTo(0, 6);
@@ -185,7 +185,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
   it('在节点边界协作取消，不继续执行后续图层', async () => {
     const controller = new AbortController();
     const source = createImageEditRasterLayerV3('source', '原图', 'sha256:source');
-    const marks = createImageEditAnnotationLayerV3('marks', '标注');
+    const marks = createImageEditPathLayerV3('marks', '标注');
     const plan = compileImageEditRenderPlanV3(
       document([source, marks]),
       createBuiltInImageEditRenderNodeRegistry(),
@@ -195,7 +195,7 @@ describe('V3 CPU RenderPlan 执行器', () => {
     await expect(executeImageEditCpuRenderPlanV3(plan, {
       signal: controller.signal,
       loadRaster: async () => { controller.abort(); return black3; },
-      rasterizeAnnotations: async () => { annotations += 1; return centerMark; },
+      rasterizeVectorContent: async () => { annotations += 1; return centerMark; },
     })).rejects.toMatchObject({ name: 'AbortError' });
     expect(annotations).toBe(0);
   });

@@ -39,7 +39,7 @@ describe('图片编辑 V3 内置渲染节点', () => {
     });
     expect(diffusion?.localHalo?.({}, 0)).toBe(3);
     const gpuPlanNodeIds = [
-      'source.raster', 'vector.annotation',
+      'source.raster', 'vector.content',
       'effect.gaussian_blur', 'effect.fast-blur',
       'effect.diffusion', 'effect.vgpu-glow',
       'adjustment.exposure', 'adjustment.curves',

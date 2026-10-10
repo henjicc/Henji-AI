@@ -23,11 +23,11 @@ export function createImageEditorDiagnosticSummaryV3(
   }
   const visit = (entries: readonly ImageEditLayerV3[]): void => {
     for (const layer of entries) {
-      layers[layer.type === 'smart' ? 'raster' : layer.type] += 1
+      layers[layer.type === 'smart' ? 'raster' : ['text','shape','path'].includes(layer.type) ? 'annotation' : layer.type as 'raster'|'effect'|'adjustment'|'group'] += 1
       if (layer.mask) layers.masked += 1
       if (!layer.visible) layers.hidden += 1
       if (layer.locked) layers.locked += 1
-      if (layer.type === 'annotation') layers.annotationObjects += layer.annotations.length
+      if (['text','shape','path'].includes(layer.type)) layers.annotationObjects += 1
       if (layer.type === 'effect') layers.effectIds.push(layer.effectId)
       if (layer.type === 'group') visit(layer.children)
     }

@@ -898,7 +898,7 @@ const canvasEdgeRefSchema = applicationRefSchema.extend({
   kind: z.literal('canvas.edge'),
 }).strict()
 const imageEditExportTargetRefSchema = applicationRefSchema.extend({
-  kind: z.enum(['image_edit.layer', 'image_edit.group', 'image_mark.annotation']),
+  kind: z.enum(['image_edit.layer', 'image_edit.group', 'image_edit.layer']),
 }).strict()
 
 const exportImageEditTargetToCanvas = defineApplicationCapability({
@@ -924,10 +924,10 @@ const exportImageEditTargetToCanvas = defineApplicationCapability({
   parallelSafe: false,
   availability: ['指定画布存在', '来源节点是可编辑的多图层图片文档', '目标是受支持的稳定图片编辑引用'],
   prerequisites: [
-    '目标必须是当前文档内唯一明确的 image_edit.layer、image_edit.group 或 image_mark.annotation 稳定引用。',
+    '目标必须是当前文档内唯一明确的 image_edit.layer、image_edit.group 或 image_edit.layer 稳定引用。',
     '效果层、调整层、浮点精度或 HDR 文档不支持本操作。',
   ],
-  acceptsRefs: ['canvas.document', 'canvas.node', 'image_edit.layer', 'image_edit.group', 'image_mark.annotation'],
+  acceptsRefs: ['canvas.document', 'canvas.node', 'image_edit.layer', 'image_edit.group', 'image_edit.layer'],
   producesRefs: ['canvas.node', 'canvas.edge'],
   inputSchema: z.object({
     canvasRef: canvasDocumentRefSchema,

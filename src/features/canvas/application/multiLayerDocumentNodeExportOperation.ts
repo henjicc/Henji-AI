@@ -1,6 +1,6 @@
+import {splitImageEditV3LayerRef} from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { createLogger } from '@/core/logging'
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
-import { splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { parseMultiLayerDocumentExportTarget, type MultiLayerDocumentExportTarget } from '../domain/multiLayerDocumentNode'
 import { MultiLayerDocumentNodeApplicationError, type MultiLayerDocumentExportRaster, type MultiLayerDocumentNodeApplicationService, type MultiLayerDocumentNodeCanvasPort, type MultiLayerDocumentNodePort } from './multiLayerDocumentNodeApplicationContracts'
 import { retainsCanvasMutation } from './canvasPersistenceService'
@@ -37,9 +37,7 @@ function targetDocumentId(target: MultiLayerDocumentExportTarget): string {
   if (target.kind === 'layer-group') {
     return splitImageEditV3LayerRef(target.ref, 'image_edit.group').documentId
   }
-  if (target.kind === 'annotation-element') {
-    return splitImageEditV3AnnotationRef(target.ref).documentId
-  }
+
   return splitImageEditV3LayerRef(target.ref).documentId
 }
 

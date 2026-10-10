@@ -11,8 +11,7 @@ import {
 } from '@/core/imageEdit/v3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
-import type { MarkItem } from '@/core/imageEdit/types'
-import { drawMarkItems } from '@/features/imageMark/render/drawMarks'
+import { rasterizeVectorContent } from '@/services/vectorContent/raster'
 import type {
   ImageEditorPreviewBrushTileV3,
   ImageEditorPreviewProxyV3,
@@ -249,30 +248,13 @@ function replaceScaledBrushTile(
   }
 }
 
-export function rasterizePreviewAnnotationsV3(
+export function rasterizePreviewVectorContentV3(
   node: ImageEditRenderPlanNode,
   document: ImageEditDocumentV3,
   dimensions: ImageEditorPreviewDimensionsV3,
 ): Float32PremultipliedRgbaTile {
-  const annotations = Array.isArray(node.parameters.annotations)
-    ? node.parameters.annotations as MarkItem[]
-    : []
-  if (annotations.some((annotation) => annotation.type === 'mosaic')) {
-    throw new ImageEditorPreviewUnsupportedContentErrorV3(
-      '马赛克标注需要迁移为效果图层后才能在 V3 预览中求值',
-    )
-  }
   const { canvas, context } = createCanvas(dimensions.width, dimensions.height)
-  context.save()
-  context.scale(dimensions.scaleX, dimensions.scaleY)
-  drawMarkItems(
-    context,
-    annotations,
-    document.geometry.width,
-    document.geometry.height,
-    { canvasKind: 'offscreen' },
-  )
-  context.restore()
+  context.putImageData(rasterizeVectorContent(node.parameters, { x: 0, y: 0, width: dimensions.width, height: dimensions.height, scale: dimensions.scaleX }, { sourceVersion: String(document.revision), time: { kind: 'static' }, referenceGrid: document.geometry, quality: 'final', signal: undefined }), 0, 0)
   return imageDataToLinearPreviewTileV3(
     context.getImageData(0, 0, canvas.width, canvas.height),
   )

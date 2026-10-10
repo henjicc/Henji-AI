@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createImageEditAnnotationLayerV3, createImageEditDocumentV3, createImageEditGroupLayerV3,
+  createImageEditPathLayerV3, createImageEditDocumentV3, createImageEditGroupLayerV3,
   createImageEditRasterLayerV3, createTileRegion,
   ImageEditRenderScheduler, ImageEditResourceBudget, mipSize,
   type ImageEditDocumentV3,
@@ -41,7 +41,7 @@ async function render(
     minimumMip?: number
     descriptors?: Array<{ resourceRef: ImageEditorV3ResourceRef; byteLength: number; mediaType: string }>
     brushLoader?: ImageEditorPreviewBrushTileLoaderV3
-    rasterizeAnnotations?: ImageEditorViewportCompositeRendererDependenciesV3['rasterizeAnnotations']
+    rasterizeVectorContent?: ImageEditorViewportCompositeRendererDependenciesV3['rasterizeVectorContent']
   } = {},
 ): Promise<{
   reads: Array<{ resourceRef: string; mip: number; tileX: number }>
@@ -79,7 +79,7 @@ async function render(
       if (message.type !== 'render') return
       void renderImageEditorViewportCompositeV3(message, new AbortController().signal,
         (region) => { regions.push(region) }, {
-          ...(options.rasterizeAnnotations ? { rasterizeAnnotations: options.rasterizeAnnotations } : {}),
+          ...(options.rasterizeVectorContent ? { rasterizeVectorContent: options.rasterizeVectorContent } : {}),
         }).then(() => {
         emitCompletedFrame(this, message, { revision: document.revision, mip: message.plan.mip, width: 64, height: 64 },
           regions.map(({ outputRect }) => ({ outputRect, bitmap: bitmap(outputRect.width, outputRect.height) })))
@@ -154,9 +154,9 @@ describe('CPU 视口异尺寸源的完整外层入口', () => {
 
   it('无图片源的标注仍执行区域 RenderPlan，不被透明快路吞掉', async () => {
     const document = createImageEditDocumentV3({ width: 64, height: 64 })
-    document.layers = [createImageEditAnnotationLayerV3('annotation', '标注')]
+    document.layers = [createImageEditPathLayerV3('annotation', '标注')]
     const result = await render(document, new Map(), {
-      rasterizeAnnotations: (_node, _document, region) => {
+      rasterizeVectorContent: (_node, _document, region) => {
         const data = new Float32Array(region.width * region.height * 4)
         data.set([0.5, 0, 0, 0.5])
         return { width: region.width, height: region.height, storage: 'rgba-float32', alpha: 'premultiplied', colorDomain: 'linear-light',

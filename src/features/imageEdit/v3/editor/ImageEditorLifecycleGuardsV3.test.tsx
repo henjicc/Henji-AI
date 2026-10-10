@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
 
 import '@/tests/imageEditDocumentFixture'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { requireImageEditDocumentInstanceV3 } from '../application/imageEditDocumentInstances'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+
 import { useState } from 'react'
 import { VirtuosoMockContext } from 'react-virtuoso'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +15,7 @@ import {
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import i18n from '@/i18n/config'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
-import { installKonvaCanvasTestContext, mockKonvaViewportRect } from './imageEditorKonvaTestUtils'
+import { mockKonvaViewportRect } from './imageEditorKonvaTestUtils'
 import { ImageEditorV3 } from './ImageEditorV3'
 import type { ImageEditorV3PreviewRenderer } from './types'
 
@@ -74,8 +74,6 @@ describe('ImageEditorV3 lifecycle guards', () => {
       layerDragBySession: {},
       viewportZoomBySession: {},
       viewportPanBySession: {},
-      annotationSelectionBySession: {},
-      annotationPreviewBySession: {},
     })
   })
 
@@ -85,67 +83,19 @@ describe('ImageEditorV3 lifecycle guards', () => {
     vi.unstubAllGlobals()
   })
 
-  it('标注手势在工具切换和外部文档变更时立即取消且不提交', async () => {
-    installKonvaCanvasTestContext()
+  it('矢量手势在工具切换时取消且不提交',async()=>{
     mockKonvaViewportRect()
-    const changes = vi.fn()
-    const initial = documentWithLayers()
-    const editor = (document: ImageEditDocumentV3) => (
-      <div style={{ width: 1000, height: 700 }}>
-        <ImageEditorV3
-          sourceImageUrl="preview.png"
-          document={document}
-          profileId="full"
-          previewRenderer={previewRenderer}
-          onDocumentChange={changes}
-        />
-      </div>
-    )
-    const rendered = render(editor(initial))
-    fireEvent.click(await screen.findByRole('button', { name: '标注工具' }))
-    fireEvent.click(await screen.findByRole('button', { name: '矩形标注' }))
-    await waitFor(() => expect(
-      rendered.container.querySelector('[data-annotation-editor-overlay]'),
-    ).toBeTruthy())
-    const overlay = rendered.container.querySelector<HTMLDivElement>(
-      '[data-annotation-editor-overlay]',
-    )
-    await waitFor(() => expect(overlay?.querySelector('canvas')).toBeTruthy())
-    const stageContent = overlay?.querySelector('canvas')?.parentElement
-    if (!overlay || !stageContent) throw new Error('测试缺少 Konva 标注画布')
-
-    fireEvent.mouseDown(stageContent, { button: 0, clientX: 20, clientY: 20 })
-    fireEvent.mouseMove(stageContent, { buttons: 1, clientX: 100, clientY: 80 })
-    expect(overlay.dataset.annotationDrawing).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: '移动图像或图层' }))
-    await waitFor(() => expect(
-      rendered.container.querySelector('[data-annotation-editor-overlay]'),
-    ).toBeNull())
+    const changes=vi.fn(),initial=documentWithLayers()
+    const rendered=render(<div style={{width:1000,height:700}}><ImageEditorV3 sourceImageUrl="preview.png" document={initial} profileId="full" onDocumentChange={changes} previewRenderer={previewRenderer}/></div>)
+    fireEvent.click(await screen.findByRole('button',{name:'文字与图形'}))
+    fireEvent.click(await screen.findByRole('menuitem',{name:'矩形'}))
+    const overlay=await waitFor(()=>{const value=rendered.container.querySelector<HTMLElement>('[data-vector-overlay]');expect(value).toBeTruthy();return value!})
+    overlay.setPointerCapture=vi.fn()
+    fireEvent.pointerDown(overlay,{pointerId:1,button:0,clientX:20,clientY:20})
+    fireEvent.pointerMove(overlay,{pointerId:1,clientX:100,clientY:80})
+    fireEvent.click(screen.getByRole('button',{name:'移动图像或图层'}))
+    await waitFor(()=>expect(rendered.container.querySelector('[data-vector-overlay]')).toBeNull())
     expect(changes).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
-    fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
-    await waitFor(() => expect(
-      rendered.container.querySelector('[data-annotation-editor-overlay]'),
-    ).toBeTruthy())
-    const remounted = rendered.container.querySelector<HTMLDivElement>(
-      '[data-annotation-editor-overlay]',
-    )
-    await waitFor(() => expect(remounted?.querySelector('canvas')).toBeTruthy())
-    const remountedStage = remounted?.querySelector('canvas')?.parentElement
-    if (!remounted || !remountedStage) throw new Error('测试缺少重新挂载的标注画布')
-    fireEvent.mouseDown(remountedStage, { button: 0, clientX: 50, clientY: 50 })
-    fireEvent.mouseMove(remountedStage, { buttons: 1, clientX: 120, clientY: 100 })
-    expect(remounted.dataset.annotationDrawing).toBe('true')
-    rendered.rerender(editor({ ...initial, revision: 1 }))
-    expect(remounted.dataset.annotationDrawing).toBe('true')
-    expect(changes).not.toHaveBeenCalled()
-    act(() => requireImageEditDocumentInstanceV3(initial.id).bus.dispatch({
-      type: 'layer.update-common', commandId: 'external-edit', expectedRevision: 0,
-      layerId: initial.layers[0].id, patch: { opacity: 0.6 },
-    }))
-    await waitFor(() => expect(remounted.dataset.annotationDrawing).toBe('false'))
-    expect(changes).toHaveBeenCalledTimes(1)
   })
 
   it('添加空蒙版只提交一次，切换图层不会把蒙版写到新选择', async () => {

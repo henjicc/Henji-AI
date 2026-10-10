@@ -1,3 +1,4 @@
+import { richTextContentSchema, vectorPathContentSchema } from '@/core/imaging/vectorContent'
 import {
   applyWriterTable,
   fieldWriterTable,
@@ -338,6 +339,12 @@ function layerCommands(
       commandId: createImageEditIdV3('assistant-command'),
       expectedRevision: bus.getSnapshot().document.revision,
     })
+    if (draft.vectorContent) {
+      const layer=location.layer
+      if(layer.type==='text') commands.push({...base(),type:'layer.replace',layerId,layer:{...layer,content:richTextContentSchema.parse(draft.vectorContent)}})
+      else if(layer.type==='shape'||layer.type==='path') commands.push({...base(),type:'layer.replace',layerId,layer:{...layer,content:vectorPathContentSchema.parse(draft.vectorContent)}})
+      else throw new Error('此图层没有文字或矢量内容')
+    }
     if (Object.keys(draft.commonPatch).length > 0) {
       commands.push({ ...base(), type: 'layer.update-common', layerId, patch: draft.commonPatch })
     }
@@ -391,7 +398,9 @@ export class ImageEditV3MaskMutationExecutor extends ImageEditV3MutationExecutor
     if (!location?.layer.mask) throw new Error('NOT_FOUND')
     const draft: ImageEditV3MaskMutationDraft = {}
     await applyWriterTable(MASK_WRITERS, draft, step.mutations)
-    if (draft.inverted === undefined) throw new Error('NO_STATE_CHANGE')
+    if (draft.inverted === undefined && draft.vectorPaths === undefined) throw new Error('NO_STATE_CHANGE')
+    const mask=cloneImageEditMaskReferenceV3(location.layer.mask)
+    if(draft.vectorPaths!==undefined){if(draft.vectorPaths===null)delete mask.vectorPaths;else mask.vectorPaths=draft.vectorPaths}
     return {
       documentId,
       commands: [{
@@ -400,8 +409,8 @@ export class ImageEditV3MaskMutationExecutor extends ImageEditV3MutationExecutor
         type: 'layer.set-mask',
         layerId,
         mask: {
-          ...cloneImageEditMaskReferenceV3(location.layer.mask),
-          inverted: draft.inverted,
+          ...mask,
+          inverted: draft.inverted ?? mask.inverted,
         },
       }],
     }

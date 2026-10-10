@@ -15,6 +15,7 @@ import type {
 import type { ImageEditorRenderSnapshotV3 } from '../execution/imageEditorRenderSessionContractsV3'
 import type { ImageEditorV3ExportTileStream, RenderImageEditorV3ExportTilesRequest } from './contracts'
 import { createImageEditorGpuExportPlanV3 } from './gpuExportPlanV3'
+import { supportsImageEditorGpuMaskV3 } from '../gpu/imageEditorGpuRasterSceneCompilerV3'
 import { createLogger } from '@/core/logging'
 
 const nodeRegistry = createBuiltInImageEditRenderNodeRegistry()
@@ -129,6 +130,8 @@ export class ImageEditorGpuExportSessionV3 {
       || this.active) return null
     const requestId = `gpu-export:${request.sessionId ?? crypto.randomUUID()}`
     const plan = compileImageEditRenderPlanV3(request.document, nodeRegistry, 'export')
+    // CPU 区域核是可编辑路径蒙版的权威后端；预览回退后导出也直接选它。
+    if (plan.nodes.some(node => !supportsImageEditorGpuMaskV3(node.mask))) return null
     const activePlan = compileImageEditRenderPlanV3(snapshot.document, nodeRegistry, 'export')
     if (plan.outputHash !== activePlan.outputHash) return null
     const output = createImageEditorGpuExportPlanV3({

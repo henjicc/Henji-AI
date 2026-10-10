@@ -1,6 +1,5 @@
 import { collectImageEditJsonResourceIdsV3 } from './resourceReferences';
 import { createImageEditLayerContentRegistryV3 } from './layerEntries/base';
-import type { MarkItem } from '../types';
 import type {
   ImageEditCropRectV3,
   ImageEditDocumentV3,
@@ -149,26 +148,6 @@ export interface ImageEditGroupUpdateIsolationCommandV3 extends ImageEditCommand
   isolated: boolean;
 }
 
-export interface ImageEditAnnotationAddCommandV3 extends ImageEditCommandBaseV3 {
-  type: 'annotation.add';
-  layerId: string;
-  index: number;
-  annotation: MarkItem;
-}
-
-export interface ImageEditAnnotationUpdateCommandV3 extends ImageEditCommandBaseV3 {
-  type: 'annotation.update';
-  layerId: string;
-  annotationId: string;
-  annotation: MarkItem;
-}
-
-export interface ImageEditAnnotationDeleteCommandV3 extends ImageEditCommandBaseV3 {
-  type: 'annotation.delete';
-  layerId: string;
-  annotationId: string;
-}
-
 export interface ImageEditRasterTileChangeV3 {
   tileKey: string;
   /** 应用命令前的瓦片资源；用于校验 CAS 与保留撤销资源。 */
@@ -210,9 +189,6 @@ export type ImageEditLeafCommandV3 =
   | ImageEditLayerUpdateParamsCommandV3
   | ImageEditGroupUpdateIsolationCommandV3
   | ImageEditLayerSetMaskCommandV3
-  | ImageEditAnnotationAddCommandV3
-  | ImageEditAnnotationUpdateCommandV3
-  | ImageEditAnnotationDeleteCommandV3
   | ImageEditRasterTileDeltaCommandV3
   | ImageEditMaskTileDeltaCommandV3;
 

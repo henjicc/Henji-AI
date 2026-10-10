@@ -523,6 +523,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 按钮/输入/开关等 | `@/components/ui` 的 `Ui*` | 原生 `<button>/<input>` |
 | 提示词编辑 | `PromptEditor` | 自己拼 textarea |
 | 文件上传/排序 | `FileUploader` / `useReorderDrag` | 重写拖拽 |
+| 文字与矢量外观编辑 | `@/components/typography/TypographyPanel`（领域组合面板，共用字体、排版、填充、描边、阴影；宿主提供布局与预设 footer） | 图片、字幕、标题、代码文字另写同义参数与外观面板 |
 | 字体选择与样式预览 | `UiFontPicker`（本机/导入字体、中英文搜索、分类与虚拟列表、真实样式、收藏/最近/工程字体；`onPreview(null)` 恢复，`onSelect` 提交） | 手动输入字体名、三种通用族固定下拉、另造字体弹层 |
 | 音频播放 | `@/components/AudioPlayer` | 再写一个播放器 |
 | 全能调色曲线 / 色轮 | `UiCurveEditor` / `UiGradeWheel`（`@/components/ui`，受控值与开始/结束/取消手势；曲线可传领域采样器保留样条显示；色相区间用 `UiRangeSlider wrap`） | 自写曲线、色轮或区间控件 |

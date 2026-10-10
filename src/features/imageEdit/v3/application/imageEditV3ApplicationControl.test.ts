@@ -1,10 +1,13 @@
+import { BLACK_HEX } from '@/core/theme/colorTokens'
+import { rectanglePath } from '@/core/imaging/vectorContent'
+import { attachImageEditVectorMaskV3 } from '../tools/vector/service'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 
 import type { ApplicationControlAccessContext, ApplicationExecutionContext, JsonValue } from '@/core/application-control'
 import {
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
@@ -13,7 +16,6 @@ import {
 import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
-import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSessionAccess'
 
 import {
   getApplicationControlExecutionEngine,
@@ -25,7 +27,7 @@ import { ImageEditV3DocumentMutationExecutor } from './imageEditV3MutationExecut
 
 const accessContext: ApplicationControlAccessContext = {
   exposure: 'assistant',
-  permissions: new Set(['image_edit:read', 'image_edit:write', 'image_mark:read', 'image_mark:write']),
+  permissions: new Set(['image_edit:read', 'image_edit:write']),
   acceptedDataClasses: new Set(['C0', 'C1']),
 }
 
@@ -62,6 +64,31 @@ async function commitStep(
 }
 
 describe('图片编辑 V3 实时 Application Control', () => {
+  it('可编辑路径蒙版经同一坐标契约附着、公开 schema 读写并整体撤销', async () => {
+    const document = createImageEditDocumentV3({ width:100,height:100,documentId:'vector-mask-control' })
+    const target = createImageEditRasterLayerV3('target','目标')
+    target.transform = [2,0,0,2,5,6]; target.maskAttachment.linked = false
+    const path = createImageEditPathLayerV3('path','源路径')
+    path.transform = [1,0,0,1,10,20]
+    const group = createImageEditGroupLayerV3('group','源组'); group.transform = [1,0,0,1,3,4]; group.children = [path]
+    document.layers = [target,group]
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerPersistedImageEditTestSession('vector-mask-control-session',bus))
+    attachImageEditVectorMaskV3(document.id,path.id,target.id)
+    expect(bus.getSnapshot().document.layers[0].mask?.vectorPaths?.[0].path.commands[0]).toEqual({kind:'move',x:13,y:24})
+    const registry = getApplicationReflectionRegistry(), ref = imageEditV3MaskRef(document.id,target.id)
+    const description = registry.describe({entityTypes:['image_edit.mask']},accessContext)
+    const descriptor = description.properties.find(property=>property.id==='image_edit.mask.vector_paths')!
+    expect(descriptor.value.kind).toBe('json')
+    const before = await registry.readEntity(ref,['image_edit.mask.vector_paths'],accessContext)
+    const paths = [{operation:'replace',path:rectanglePath(20,10,30,40)}]
+    const updated = await commitStep('调整可编辑路径蒙版',before.revisions,{kind:'mutation',target:ref,entityType:'image_edit.mask',expectedRevisions:before.revisions,mutations:[{propertyId:descriptor.id,operation:'set',value:JSON.parse(JSON.stringify(paths)) as JsonValue}]},'vector-mask-control')
+    expect(updated.status,JSON.stringify(updated)).toBe('completed')
+    expect((await registry.readEntity(ref,[descriptor.id],accessContext)).properties[descriptor.id]).toEqual(paths)
+    if(updated.status!=='completed'||!updated.undoRef)throw new Error('缺少矢量蒙版撤销引用')
+    await getApplicationControlExecutionEngine().undo({undoRef:updated.undoRef,expectedRevisions:updated.resultingRevisions,idempotencyKey:'vector-mask-control-undo'},executionContext)
+    expect(bus.getSnapshot().document.layers[0].mask?.vectorPaths?.[0].path.commands[0]).toEqual({kind:'move',x:13,y:24})
+  })
   it('智能对象沿通用图层属性转换、读回与撤销，智能内容 schema 可发现', async () => {
     const document = createImageEditDocumentV3({ width: 16, height: 16, documentId: 'smart-reflection' })
     document.layers = [createImageEditRasterLayerV3('content', '内容')]
@@ -479,7 +506,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
 
   it('通用集合创建删除图层并把 V3 标注别名写回所属标注图层', async () => {
     const document = createImageEditDocumentV3({ width: 640, height: 480, documentId: 'assistant-v3-doc-b' })
-    document.layers = [createImageEditAnnotationLayerV3('annotations-b', '标注')]
+    document.layers = [createImageEditPathLayerV3('annotations-b', '标注')]
     const bus = new ImageEditCommandBusV3(document)
     disposers.push(registerPersistedImageEditTestSession('assistant-v3-session-b', bus))
     const registry = getApplicationReflectionRegistry()
@@ -560,70 +587,16 @@ describe('图片编辑 V3 实时 Application Control', () => {
       children: [expect.objectContaining({ type: 'adjustment', adjustmentId: 'exposure' })],
     })
 
-    const annotationLayerRef = imageEditV3LayerRef(document.id, 'annotations-b')
-    const markRevision = imageMarkRevision()
-    const createdAnnotation = await commitStep('在 V3 标注图层添加矩形', { image_mark: markRevision, image_edit: markRevision }, {
-      kind: 'collection',
-      parent: annotationLayerRef,
-      entityType: 'image_mark.annotation',
-      expectedRevisions: { image_mark: markRevision, image_edit: markRevision },
-      operation: {
-        kind: 'create',
-        items: [{ properties: {
-          'image_mark.annotation.type': 'rect',
-          'image_mark.annotation.data': {
-            x: 10, y: 12, width: 80, height: 50, stroke: 'red', lineWidth: 2,
-          },
-        } }],
-      },
-    }, 'annotation-b')
-    expect(createdAnnotation.status, JSON.stringify(createdAnnotation)).toBe('completed')
-    if (createdAnnotation.status !== 'completed') throw new Error('ANNOTATION_CREATE_FAILED')
-    const annotationRef = createdAnnotation.resultRefs[0]
-    if (!annotationRef) throw new Error('ANNOTATION_REF_MISSING')
-    expect(annotationRef?.id).toContain('v3:assistant-v3-doc-b:annotations-b:')
-    expect(createdAnnotation.effects).toEqual([
-      expect.objectContaining({ effect: 'create', entityType: 'image_mark.annotation' }),
-    ])
-    expect((bus.getSnapshot().document.layers[0] as { annotations?: unknown[] }).annotations).toHaveLength(1)
-
-    const annotationSnapshot = await registry.readEntity(annotationRef, undefined, accessContext)
-    const updatedAnnotation = await commitStep('修改 V3 矩形标注', annotationSnapshot.revisions, {
-      kind: 'mutation',
-      target: annotationRef,
-      entityType: 'image_mark.annotation',
-      expectedRevisions: annotationSnapshot.revisions,
-      mutations: [{
-        propertyId: 'image_mark.annotation.data',
-        operation: 'set',
-        value: { x: 20, y: 24, width: 96, height: 64, stroke: 'blue', lineWidth: 3 },
-      }],
-    }, 'update-annotation-b')
-    expect(updatedAnnotation.status, JSON.stringify(updatedAnnotation)).toBe('completed')
-    expect(updatedAnnotation.status === 'completed' ? updatedAnnotation.effects : []).toEqual([
-      expect.objectContaining({
-        effect: 'update',
-        entityType: 'image_mark.annotation',
-        propertyIds: ['image_mark.annotation.data'],
-      }),
-    ])
-    expect((bus.getSnapshot().document.layers[0] as {
-      annotations?: Array<{ x?: number; stroke?: string }>
-    }).annotations?.[0]).toMatchObject({ x: 20, stroke: 'blue' })
-
-    const beforeAnnotationRemove = await registry.readEntity(annotationRef, undefined, accessContext)
-    const removedAnnotation = await commitStep('删除 V3 矩形标注', beforeAnnotationRemove.revisions, {
-      kind: 'collection',
-      parent: annotationLayerRef,
-      entityType: 'image_mark.annotation',
-      expectedRevisions: beforeAnnotationRemove.revisions,
-      operation: { kind: 'remove', targets: [annotationRef] },
-    }, 'remove-annotation-b')
-    expect(removedAnnotation.status, JSON.stringify(removedAnnotation)).toBe('completed')
-    expect(removedAnnotation.status === 'completed' ? removedAnnotation.effects : []).toEqual([
-      expect.objectContaining({ effect: 'delete', entityType: 'image_mark.annotation' }),
-    ])
-    expect((bus.getSnapshot().document.layers[0] as { annotations?: unknown[] }).annotations).toHaveLength(0)
+    const vectorRef=imageEditV3LayerRef(document.id,'annotations-b')
+    const vectorSnapshot=await registry.readEntity(vectorRef,undefined,accessContext)
+    const content=createImageEditPathLayerV3('unused','形状').content
+    content.paint.fill={enabled:true,color:BLACK_HEX}
+    const updatedVector=await commitStep('修改矢量图层内容',vectorSnapshot.revisions,{
+      kind:'mutation',target:vectorRef,entityType:'image_edit.layer',expectedRevisions:vectorSnapshot.revisions,
+      mutations:[{propertyId:'image_edit.layer.content',operation:'set',value:content as unknown as import('@/core/application-control').JsonValue}],
+    },'vector-b')
+    expect(updatedVector.status,JSON.stringify(updatedVector)).toBe('completed')
+    expect(bus.getSnapshot().document.layers[0]).toMatchObject({type:'shape',content:{paint:{fill:{color:BLACK_HEX}}}})
 
     const beforeRemove = await registry.readEntity(effectRef, undefined, accessContext)
     const removedEffect = await commitStep('删除组内曝光调整', beforeRemove.revisions, {

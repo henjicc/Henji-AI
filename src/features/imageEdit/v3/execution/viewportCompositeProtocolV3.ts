@@ -1,3 +1,4 @@
+import type {FontPayload} from '@/platform/fonts'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type { ImageEditRect } from '@/core/imageEdit/v3/tileGeometry'
@@ -12,6 +13,7 @@ export interface ImageEditorViewportCompositeRenderRequestV3 {
   renderGeneration: number
   cameraSequence: number
   geometryHash: string
+  fonts?: FontPayload[]
   document: ImageEditDocumentV3
   quality: ImageEditRenderQuality
   phase?: 'coarse' | 'analysis' | 'target'

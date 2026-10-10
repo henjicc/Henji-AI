@@ -66,8 +66,8 @@ export type MultiLayerDocumentExportTarget =
       ref: ApplicationRef & { kind: 'image_edit.group' }
     }
   | {
-      kind: 'annotation-element'
-      ref: ApplicationRef & { kind: 'image_mark.annotation' }
+      kind: 'content-layer'
+      ref: ApplicationRef & { kind: 'image_edit.layer' }
     }
 
 export class MultiLayerDocumentNodeContractError extends Error {
@@ -252,8 +252,8 @@ export function parseMultiLayerDocumentExportTarget(
   if (candidate.kind === 'layer-group' && ref.kind === 'image_edit.group') {
     return { kind: 'layer-group', ref: ref as ApplicationRef & { kind: 'image_edit.group' } }
   }
-  if (candidate.kind === 'annotation-element' && ref.kind === 'image_mark.annotation') {
-    return { kind: 'annotation-element', ref: ref as ApplicationRef & { kind: 'image_mark.annotation' } }
+  if (candidate.kind === 'content-layer' && ref.kind === 'image_edit.layer') {
+    return { kind: 'content-layer', ref: ref as ApplicationRef & { kind: 'image_edit.layer' } }
   }
   throw new MultiLayerDocumentNodeContractError(
     'INVALID_EXPORT_TARGET',

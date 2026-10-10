@@ -1,3 +1,6 @@
+import {rasterizeVectorContent} from '@/services/vectorContent/raster'
+import {ensureVectorDocumentFonts} from '@/services/vectorContent/fonts'
+import type {ImageEditVectorLayerV3} from '@/core/imageEdit/v3/layerTypes'
 import { useEffect, useRef, useState } from 'react'
 import { createImageEditorV3RequestId, readImageEditorV3SourceMetadata, readImageEditorV3SourceTile, readImageEditorV3BrushTiles } from '@/commands/imageEditorV3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
@@ -7,7 +10,7 @@ import type { ImageEditorV3ResourceDescriptor, ImageEditorV3ResourceRef } from '
 import { createLayerAlphaMapV3, type LayerAlphaMapV3, type LayerAlphaMapsV3 } from './layerPickingV3'
 
 const logger = createLogger('features.image_edit.v3.layer_picking')
-interface PickResourceV3 { id: string; key: string; sparse: boolean; byteSize: number }
+interface PickResourceV3 { id: string; key: string; sparse: boolean; byteSize: number; vector?:ImageEditVectorLayerV3; width?:number; height?:number }
 
 /** 一个会话一份有界 Alpha 缓存；内容寻址不随 transform/revision 改变。 */
 export function useImageEditorLayerPickingV3(document: ImageEditDocumentV3,
@@ -22,6 +25,7 @@ export function useImageEditorLayerPickingV3(document: ImageEditDocumentV3,
   }
   const visit = (layers: readonly ImageEditLayerV3[]): void => {
     for (const layer of layers) {
+      if(layer.type==='text'||layer.type==='shape'||layer.type==='path') resources.set(`vector:${layer.id}`,{id:layer.id,key:`vector:${layer.id}`,sparse:false,byteSize:0,vector:layer,width:document.geometry.width,height:document.geometry.height})
       if (layer.type === 'raster' || layer.type === 'smart') {
         if (layer.source.kind === 'resource') add(layer.source.resourceId, false)
         Object.values(layer.tiles).forEach((id) => add(id, true))
@@ -38,9 +42,16 @@ export function useImageEditorLayerPickingV3(document: ImageEditDocumentV3,
     const abort = new AbortController()
     const plan = JSON.parse(resourceKey) as PickResourceV3[]
     const ids = new Set(plan.map(({ key }) => key))
-    for (const id of cache.current.keys()) if (!ids.has(id)) cache.current.delete(id)
+    for (const id of cache.current.keys()) if (!ids.has(id)||id.startsWith('vector:')) cache.current.delete(id)
     setMaps(new Map(cache.current))
-    const load = async ({ id, sparse, byteSize }: PickResourceV3): Promise<LayerAlphaMapV3> => {
+    const load = async ({ id, sparse, byteSize,vector,width:sourceWidth,height:sourceHeight }: PickResourceV3): Promise<LayerAlphaMapV3> => {
+      if(vector && sourceWidth && sourceHeight){
+        await ensureVectorDocumentFonts(document);abort.signal.throwIfAborted()
+        const scale=Math.min(1,512/Math.max(sourceWidth,sourceHeight)),width=Math.ceil(sourceWidth*scale),height=Math.ceil(sourceHeight*scale)
+        const pixels=rasterizeVectorContent(vector,{x:0,y:0,width,height,scale},{sourceVersion:String(document.revision),time:{kind:'static'},referenceGrid:document.geometry,quality:'interactive',signal:abort.signal}).data
+        const alpha=new Uint8Array(width*height);for(let i=0;i<alpha.length;i++)alpha[i]=pixels[i*4+3]
+        return createLayerAlphaMapV3(width,height,sourceWidth,sourceHeight,alpha)
+      }
       if (sparse) {
         const { tiles } = await readImageEditorV3BrushTiles({
           requestId: createImageEditorV3RequestId('layer-pick-brush'),
@@ -94,6 +105,6 @@ export function useImageEditorLayerPickingV3(document: ImageEditDocumentV3,
       logger.debug('图层命中数据准备结束', { event: 'image_editor_v3.layer_picking.completed', context: { readyCount: cache.current.size } })
     })()
     return () => abort.abort()
-  }, [document.id, resourceKey])
+  }, [document, resourceKey])
   return maps
 }

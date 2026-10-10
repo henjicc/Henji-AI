@@ -1,16 +1,20 @@
 import { loadImageEditorGpuSceneTileV3 } from './imageEditorGpuSceneTileLoaderV3'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditPathLayerV3 } from '@/core/imageEdit/v3/documentFactory'
+import { compileImageEditRenderPlanV3, createBuiltInImageEditRenderNodeRegistry } from '@/core/imageEdit/v3'
+import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
+import { createImageEditorGpuAnnotationResourceRefV3 } from '../gpu/imageEditorGpuRasterSceneCompilerV3'
 import type { ImageEditorV3SourceTileBatchItem } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import { renderImageEditorV3ExportTilesWithGpu } from '../export/gpuDefaultExportV3'
 import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
 
-const { readSourceTile, readSourceTiles } = vi.hoisted(() => ({
+const { readSourceTile, readSourceTiles, vectorRaster } = vi.hoisted(() => ({
   readSourceTile: vi.fn(),
   readSourceTiles: vi.fn(),
+  vectorRaster: vi.fn(),
 }))
 vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
@@ -19,6 +23,8 @@ vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
   readImageEditorV3SourceTile: readSourceTile,
 }))
 vi.mock('@/commands/imageEditorV3Tiles', () => ({ readImageEditorV3SourceTiles: readSourceTiles }))
+vi.mock('@/services/vectorContent/fonts', () => ({ensureVectorDocumentFonts:vi.fn(async()=>{})}))
+vi.mock('./viewportCompositePixelsV3', async importOriginal => ({...await importOriginal<typeof import('./viewportCompositePixelsV3')>(),rasterizeImageEditorViewportVectorContentV3:vectorRaster}))
 
 function clientHarness(): {
   client: ImageEditorGpuSceneClientV3Like
@@ -31,7 +37,7 @@ function clientHarness(): {
     })), uploadTiles: vi.fn(), updateTransientLayerTransform: vi.fn(),
     clearTransientLayerTransform: vi.fn(), updateViewport: vi.fn(), requestFrame: vi.fn(),
     subscribe: vi.fn((listener) => { subscribed = listener; return vi.fn() }), dispose: vi.fn(),
-    requestExport: vi.fn(), cancelExport: vi.fn(), acknowledgeExportTile: vi.fn(),
+    requestExport: vi.fn(), uploadExportTiles:vi.fn(), cancelExport: vi.fn(), acknowledgeExportTile: vi.fn(),
   } satisfies ImageEditorGpuSceneClientV3Like
   return {
     client,
@@ -89,6 +95,26 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
   beforeEach(() => {
     readSourceTile.mockReset()
     readSourceTiles.mockReset()
+    vectorRaster.mockReset()
+  })
+
+  it('预览与最终质量的矢量身份不同，导出仍由同一内容核供瓦片，不读取伪造磁盘资源', async () => {
+    const harness = clientHarness(), document = createImageEditDocumentV3({width:2,height:2})
+    document.layers = [createImageEditPathLayerV3('path','可编辑形状')]
+    const registry = createBuiltInImageEditRenderNodeRegistry()
+    const node = compileImageEditRenderPlanV3(document,registry,'export').nodes.find(node=>node.definitionId==='vector.content')!
+    const preview = compileImageEditRenderPlanV3(document,registry,'stable').nodes.find(node=>node.definitionId==='vector.content')!
+    const resourceRef = createImageEditorGpuAnnotationResourceRefV3(node)
+    expect(resourceRef).not.toBe(createImageEditorGpuAnnotationResourceRefV3(preview))
+    vectorRaster.mockReturnValue(createFloat32PremultipliedRgbaTile(2,2,'linear-light',new Float32Array(16)))
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3('vector-export',harness.client,vi.fn(),false)
+    try {
+      bridge.syncSnapshot({document,renderGeneration:1,geometryHash:'geometry',quality:'stable',resourceDescriptors:[]})
+      harness.listener({type:'tiles-needed',sceneGeneration:1,deviceGeneration:1,exportRequestId:'vector-output',keys:[{resourceRef,resourceKind:'generated-vector',format:'rgba16float',mip:0,tileX:0,tileY:0,contentVersion:'final'}]})
+      await vi.waitFor(()=>expect(harness.client.uploadExportTiles).toHaveBeenCalledOnce())
+      expect(vectorRaster).toHaveBeenCalledWith(node,document,{x:0,y:0,width:2,height:2},0,expect.any(AbortSignal))
+      expect(readSourceTile).not.toHaveBeenCalled();expect(readSourceTiles).not.toHaveBeenCalled()
+    } finally {bridge.dispose()}
   })
 
   it('拒绝把旧整图蒙版当作源图片读取', async () => {

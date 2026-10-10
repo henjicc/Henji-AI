@@ -9,7 +9,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
   it('完整宿主开放共享调整和图层组，保留原保存与导出权限', () => {
     const profile = getImageEditorHostProfileV3('full')
     expect(profile).toMatchObject({
-      layerKinds: ['raster', 'smart', 'effect', 'adjustment', 'group'],
+      layerKinds: ['raster', 'smart', 'text', 'shape', 'path', 'effect', 'adjustment', 'group'],
       adjustments: ['color_grade', 'exposure', 'curves', 'temperature-tint', 'hsl'],
       panels: ['layers', 'properties', 'history', 'channels', 'adjustments'],
       layerControls: ['blend-mode', 'mask'],
@@ -32,14 +32,6 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'crop',
       'select-rect', 'select-ellipse', 'select-lasso', 'select-polygon', 'select-brush', 'select-wand', 'select-color-range', 'select-focus', 'select-subject', 'select-subject-box',
       'remove', 'repair',
-      'annotation-text',
-      'annotation-callout',
-      'annotation-arrow',
-      'annotation-rect',
-      'annotation-ellipse',
-      'annotation-number',
-      'annotation-pen',
-      'annotation-mosaic',
       'raster-brush',
       'eraser',
       'mask-edit',
@@ -47,6 +39,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'paint-fill',
       'clone-stamp', 'healing-brush', 'content-aware-fill',
       'free-transform', 'perspective-transform', 'mesh-transform',
+      'vector-text', 'vector-rectangle', 'vector-ellipse', 'vector-arrow', 'vector-callout', 'vector-number', 'vector-path',
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
       .toEqual(getReadyImageEditorToolIdsV3(profile))
@@ -55,7 +48,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       hdrReadiness: { state: 'disabled' }, allowPackageExternalSources: false,
     })
     expect(getImageEditorHostProfileV3('quick')).toMatchObject({
-      layerKinds: ['effect'],
+      layerKinds: ['text', 'shape', 'path', 'effect'],
       adjustments: [],
     })
   })

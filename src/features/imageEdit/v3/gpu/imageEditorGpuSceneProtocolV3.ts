@@ -16,7 +16,7 @@ export const IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3 = 256 * 1024 * 1024
 export interface ImageEditorGpuSceneTileKeyV3 {
   resourceRef: ImageEditorV3ResourceRef
   /** compiler必须冻结读取语义；可选仅用于兼容旧测试/诊断消息。 */
-  resourceKind?: 'source-raster' | 'brush-tile' | 'sparse-mask' | 'generated-annotation'
+  resourceKind?: 'source-raster' | 'brush-tile' | 'sparse-mask' | 'generated-vector'
   mip: number
   tileX: number
   tileY: number

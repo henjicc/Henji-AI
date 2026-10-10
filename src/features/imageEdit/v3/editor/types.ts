@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import type { ImageEditLayerCommonPatchV3, ImageEditLayersMoveCommandV3 } from '@/core/imageEdit/v3/commandTypes'
 import type { ImageEditNamedRegionV3 } from '@/core/imageEdit/v3/namedRegions'
 
-import type { MarkItem } from '@/core/imageEdit/types'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import type {
   ImageEditorHostProfileIdV3,
@@ -105,9 +104,6 @@ export interface ImageEditorV3Controller {
     patch: ImageEditLayerCommonPatchV3,
   ) => void
   updateLayerParams: (layerId: string, params: ImageEditJsonObjectV3) => void
-  addAnnotation: (layerId: string, annotation: MarkItem, index?: number) => void
-  updateAnnotation: (layerId: string, annotationId: string, annotation: MarkItem) => void
-  deleteAnnotation: (layerId: string, annotationId: string) => void
   addLayer: (layer: ImageEditLayerV3, parentId: string | null, index: number, signal?: AbortSignal, onProgress?: (completed: number, total: number) => void) => void | Promise<void>
   deleteLayer: (layerId: string) => void
   duplicateLayer: (layerId: string, parentId: string | null, index: number) => string | null

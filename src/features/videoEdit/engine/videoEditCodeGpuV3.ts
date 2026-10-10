@@ -1,3 +1,5 @@
+import {paintMeasuredText} from '@/services/vectorContent/textRaster'
+import { polylinePath, traceVectorPath } from '@/core/imaging/vectorContent'
 import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { CodeMaterialError, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
@@ -103,16 +105,7 @@ export function rasterizeCodeShape(command: CodeDrawCommand, image: Omit<Image, 
   context.setLineDash(command.dash ?? [])
   if (command.kind === 'text') {
     if (!command.layout) throw new CodeMaterialError('CONTEXT', '文字缺少共享度量。')
-    const box = codeLocalBounds(command); context.font = command.layout.font; context.textBaseline = 'alphabetic'; context.textAlign = 'left'
-    const lineHeight = command.layout.fontSize * (command.lineHeight ?? 1.2)
-    const lineOffset = (row: number): number => {
-      const lineWidth = command.layout!.lineWidths?.[row] ?? command.layout!.width
-      return command.align === 'center' ? (box.width - lineWidth) / 2 : command.align === 'right' ? box.width - lineWidth : 0
-    }
-    const baselineOffset = command.layout.baselineOffset ?? lineHeight / 2
-    if (command.letterSpacing) {
-      command.layout.glyphs.forEach(glyph => { const x = box.x + glyph.x + lineOffset(Math.round(glyph.y / lineHeight)); const y = box.y + glyph.y + baselineOffset; if (command.stroke && command.strokeWidth) context.strokeText(glyph.text, x, y); context.fillText(glyph.text, x, y) })
-    } else command.layout.lines.forEach((line, row) => { const y = box.y + row * lineHeight + baselineOffset; const x = box.x + lineOffset(row); if (command.stroke && command.strokeWidth) context.strokeText(line, x, y); context.fillText(line, x, y) })
+    paintMeasuredText(context,command.layout,codeLocalBounds(command),command.layout.fontSize*(command.lineHeight??1.2),command.align??'left',Boolean(command.letterSpacing),command.stroke?command.strokeWidth:0)
     return canvas
   }
   context.beginPath()
@@ -120,10 +113,10 @@ export function rasterizeCodeShape(command: CodeDrawCommand, image: Omit<Image, 
   else if (command.kind === 'ellipse') context.ellipse(command.x + command.width / 2, command.y + command.height / 2, command.width / 2, command.height / 2, 0, 0, Math.PI * 2)
   else if (command.kind === 'line' || command.kind === 'path') {
     const paths = command.kind === 'path' ? command.points : [[[command.x1, command.y1], [command.x2, command.y2]] as [number, number][]]
-    for (const path of paths) { if (!path.length) continue; context.moveTo(...path[0]); path.slice(1).forEach(point => context.lineTo(...point)); if (command.kind === 'path' && command.closed) context.closePath() }
+    for (const path of paths) { if (!path.length) continue; traceVectorPath(context,polylinePath(path.map(([x,y])=>({x,y})),command.kind === 'path' && command.closed)) }
     if (command.kind === 'path') context.fill()
     context.beginPath()
-    for (const path of trimCodePath(paths, command.trimStart, command.trimEnd)) { context.moveTo(...path[0]); path.slice(1).forEach(point => context.lineTo(...point)) }
+    for (const path of trimCodePath(paths, command.trimStart, command.trimEnd)) traceVectorPath(context,polylinePath(path.map(([x,y])=>({x,y}))))
     if (command.kind === 'line') context.strokeStyle = canvasPaint(context, command.stroke ?? command.color)
     if (command.kind === 'line' || command.stroke && command.strokeWidth) context.stroke()
     return canvas

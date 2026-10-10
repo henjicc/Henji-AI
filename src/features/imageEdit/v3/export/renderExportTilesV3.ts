@@ -21,7 +21,7 @@ import {
 } from '@/core/imageEdit/v3'
 import type { ImageEditorV3RenderedExportTile } from '@/commands/imageEditorV3Export'
 import { createLogger } from '@/core/logging'
-import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
+import { rasterizeImageEditorV3ExportVectorContent } from './annotations'
 import {
   prepareImageEditorV3ExportRender,
   resolveImageEditorV3ExportReferenceWhiteNits,
@@ -319,8 +319,8 @@ async function* renderTiles(
                   node, region, mip: 0, document, sparsePlan: sparseRasterPlan,
                   signal: taskContext.signal, dependencies, budget, loadSource,
                 }),
-                rasterizeAnnotations: (node, region) => (
-                  dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
+                rasterizeVectorContent: (node, region) => (
+                  dependencies.rasterizeVectorContent ?? rasterizeImageEditorV3ExportVectorContent
                 )({ node, document, region, signal: taskContext.signal }),
                 loadMask: async (reference, _node, region) => {
                   const sparse = await loadImageEditorV3SparseMaskRegion(

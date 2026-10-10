@@ -43,7 +43,7 @@ describe('CPU 图层合成完整契约', () => {
           }
           return filled(requested, node.layerId === 'bamboo' ? [0, 1, 0, 1] : [0, 0, 1, 1])
         },
-        rasterizeAnnotations: async () => { throw new Error('没有标注') },
+        rasterizeVectorContent: async () => { throw new Error('没有标注') },
         loadMask: async () => { throw new Error('没有蒙版') },
       },
     )
@@ -78,7 +78,7 @@ describe('CPU 图层合成完整契约', () => {
         createTransparent: (region) => filled(region, [0, 0, 0, 0]),
         loadRaster: async (node, region) => filled(region, node.layerId === 'small'
           ? [1, 0, 0, 1] : [0, 0, 1, 1]),
-        rasterizeAnnotations: async () => { throw new Error('没有标注') },
+        rasterizeVectorContent: async () => { throw new Error('没有标注') },
         loadMask: async (_mask, _node, region) => createFloat32MaskTile(
           region.width, region.height, new Float32Array(region.width * region.height).fill(0.5),
         ),
@@ -105,7 +105,7 @@ describe('CPU 图层合成完整契约', () => {
             ? { width: 2, height: 1 } : document.geometry }),
         createTransparent: (region) => filled(region, [0, 0, 0, 0]),
         loadRaster: async (_node, region) => filled(region, [1, 0, 0, 1]),
-        rasterizeAnnotations: async () => { throw new Error('没有标注') },
+        rasterizeVectorContent: async () => { throw new Error('没有标注') },
         loadMask: async () => { throw new Error('没有蒙版') },
       },
     )
@@ -130,7 +130,7 @@ describe('CPU 图层合成完整契约', () => {
           ? [0, 0, 0, 1] : [1, 0.5, 0.25, 0.5]),
         'rec2020', node.layerId === 'base' ? 'pq' : 'linear', node.layerId === 'base' ? 100 : 200,
       ),
-      rasterizeAnnotations: async () => { throw new Error('没有标注') },
+      rasterizeVectorContent: async () => { throw new Error('没有标注') },
       loadMask: async () => { throw new Error('没有蒙版') },
     }
     const result = kind === 'region'

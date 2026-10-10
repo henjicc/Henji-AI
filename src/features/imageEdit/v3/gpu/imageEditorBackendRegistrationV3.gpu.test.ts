@@ -63,7 +63,7 @@ it.each(['stable', 'export'] as const)('%s 正式图片登记的 CPU/GPU 同参�
         const candidate = await compositor.readLinearPixelsForTest(key => uploaded.get(imageEditorGpuSceneTileKeyV3(key)) ?? null)
         const plan = compileImageEditRenderPlanV3(document, createBuiltInImageEditRenderNodeRegistry(), quality)
         const cpu = await executeImageEditCpuRenderPlanV3(plan, { loadRaster: async () => decodeInterleavedRgbaSourceTileV3({ ...source, colorSpace: 'srgb' }),
-          rasterizeAnnotations: async () => { throw new Error('无标注') } })
+          rasterizeVectorContent: async () => { throw new Error('无标注') } })
         if (!cpu) throw new Error('没有 CPU 结果')
         const reference = convertFloat32TileColorDomainV3(cpu, 'linear-light').data
         expect(candidate.some(value => value > .1), id).toBe(true)

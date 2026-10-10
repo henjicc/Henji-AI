@@ -54,6 +54,7 @@ export async function generateImageHistoryPersistenceFixtures(sourceFixture: str
     }
     const header = parseImageDocumentHeader(JSON.parse(await fsp.readFile(path.join(root, 'tests/fixtures/persistence/image-header/v1.json'), 'utf8')))
     header.contentRevision = document.revision
+    header.summary.layers = document.layers.length
     const codec = new HenjiImagePackageCodec(resources)
     const archive = path.join(temp, 'history.henjiimg')
     const manifest = await codec.export({ targetPath: archive, document: working,

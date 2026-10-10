@@ -42,7 +42,7 @@ export function resolveImageEditorDefaultLayerIdV3(
   ))?.layer.id
     ?? candidates.find(({ layer, interactive }) => interactive && (layer.type === 'raster' || layer.type === 'smart'))?.layer.id
     ?? candidates.find(({ layer, interactive }) => (
-      interactive && (layer.type === 'annotation' || layer.type === 'group')
+      interactive && (['text', 'shape', 'path'].includes(layer.type) || layer.type === 'group')
     ))?.layer.id
     ?? [...candidates].reverse().find(({ interactive }) => interactive)?.layer.id
     ?? candidates.at(-1)?.layer.id
@@ -157,39 +157,6 @@ export function useImageEditorControllerV3(
       },
       updateLayerParams: (layerId, params) => {
         binding.bus.dispatch({ ...commandBase(), type: 'layer.update-params', layerId, params })
-      },
-      addAnnotation: (layerId, annotation, index) => {
-        const location = findImageEditLayerLocationV3(
-          binding.bus.getSnapshot().document.layers,
-          layerId,
-        )
-        if (!location || location.layer.type !== 'annotation') {
-          throw new Error(`标注目标图层不存在：${layerId}`)
-        }
-        binding.bus.dispatch({
-          ...commandBase(),
-          type: 'annotation.add',
-          layerId,
-          index: index ?? location.layer.annotations.length,
-          annotation,
-        })
-      },
-      updateAnnotation: (layerId, annotationId, annotation) => {
-        binding.bus.dispatch({
-          ...commandBase(),
-          type: 'annotation.update',
-          layerId,
-          annotationId,
-          annotation,
-        })
-      },
-      deleteAnnotation: (layerId, annotationId) => {
-        binding.bus.dispatch({
-          ...commandBase(),
-          type: 'annotation.delete',
-          layerId,
-          annotationId,
-        })
       },
       addLayer: async (layer, parentId, index, signal, onProgress) => {
         await addImageEditLayerWithSelectionV3(binding.bus, layer, parentId, index, signal, onProgress)

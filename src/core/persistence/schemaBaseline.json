@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 7,
-      "fingerprint": "8a086adf32b6176a068ff66c7403c1495ae3b850313c6a49b0897de8af876ed0",
-      "supportedFrom": 7
+      "version": 8,
+      "fingerprint": "3db5294b62f36390c396f74c9a7c1cf92b6f92541c8f355c0c0bfec28e9892dc",
+      "supportedFrom": 8
     },
     "image-working-copy": {
-      "version": 9,
-      "fingerprint": "c135bb85272a4c3a6715780dec78c400c150c0d5023029589b40395db7f6a411",
-      "supportedFrom": 9
+      "version": 10,
+      "fingerprint": "1781d68487bae400aab9f93a017886aa17b2d5c6ee6fa849d447b22b471016ab",
+      "supportedFrom": 10
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 7,
-      "fingerprint": "d0cd170e9f45638bfe45884578d852031c5c5f26d3c28b6e8667fe24112ac9e8",
-      "supportedFrom": 7
+      "version": 8,
+      "fingerprint": "429c33aceb80fad97a1733b7a09ec0aca10d6e9fcc2f29955dd5a7bf94d0bbed",
+      "supportedFrom": 8
     },
     "keystore": {
       "version": 1,
@@ -838,6 +838,112 @@
       "previousFingerprint": "577471eb47527ea2c72d1258173b0d0a253ef32dd198a6a45d01e6fd8e249af6",
       "fingerprint": "d0cd170e9f45638bfe45884578d852031c5c5f26d3c28b6e8667fe24112ac9e8",
       "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T05:59:28.709Z",
+      "format": "image-package",
+      "version": 8,
+      "reason": "t119-14 开发期正式文字/形状/路径与可编辑矢量蒙版替换旧标注，不保留旧格式",
+      "previousFingerprint": "8a086adf32b6176a068ff66c7403c1495ae3b850313c6a49b0897de8af876ed0",
+      "fingerprint": "602aedb49e623262db4367cbca4e776b371103bccbfa58266bcfeb2bb230ccf2",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "at": "2026-10-10T05:59:28.711Z",
+      "format": "image-working-copy",
+      "version": 10,
+      "reason": "t119-14 开发期正式文字/形状/路径与可编辑矢量蒙版替换旧标注，不保留旧格式",
+      "previousFingerprint": "c135bb85272a4c3a6715780dec78c400c150c0d5023029589b40395db7f6a411",
+      "fingerprint": "c54c26256a99cedabb82f13389c786a0d61502fd811b2aaf326032ab32a51eb9",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "at": "2026-10-10T05:59:28.711Z",
+      "format": "canvas-layer-package",
+      "version": 8,
+      "reason": "t119-14 开发期正式文字/形状/路径与可编辑矢量蒙版替换旧标注，不保留旧格式",
+      "previousFingerprint": "d0cd170e9f45638bfe45884578d852031c5c5f26d3c28b6e8667fe24112ac9e8",
+      "fingerprint": "b1cd66edbe4444ab0809b02a27b9ca5fb458857d629690566c80619f7874b917",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "at": "2026-10-10T06:52:30.036Z",
+      "format": "image-package",
+      "version": 8,
+      "reason": "t119-14 正式文字与矢量内容统一，修正共享行距的作品空间说明；开发期不兼容旧标注格式",
+      "previousFingerprint": "602aedb49e623262db4367cbca4e776b371103bccbfa58266bcfeb2bb230ccf2",
+      "fingerprint": "3db5294b62f36390c396f74c9a7c1cf92b6f92541c8f355c0c0bfec28e9892dc",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "at": "2026-10-10T06:52:30.038Z",
+      "format": "image-working-copy",
+      "version": 10,
+      "reason": "t119-14 正式文字与矢量内容统一，修正共享行距的作品空间说明；开发期不兼容旧标注格式",
+      "previousFingerprint": "c54c26256a99cedabb82f13389c786a0d61502fd811b2aaf326032ab32a51eb9",
+      "fingerprint": "1781d68487bae400aab9f93a017886aa17b2d5c6ee6fa849d447b22b471016ab",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "at": "2026-10-10T06:52:30.038Z",
+      "format": "canvas-layer-package",
+      "version": 8,
+      "reason": "t119-14 正式文字与矢量内容统一，修正共享行距的作品空间说明；开发期不兼容旧标注格式",
+      "previousFingerprint": "b1cd66edbe4444ab0809b02a27b9ca5fb458857d629690566c80619f7874b917",
+      "fingerprint": "429c33aceb80fad97a1733b7a09ec0aca10d6e9fcc2f29955dd5a7bf94d0bbed",
+      "waivedFixtureVersions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
     }
   ]
 }

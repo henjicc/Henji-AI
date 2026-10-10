@@ -42,7 +42,7 @@ export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEven
         resolveSamplingGrid: (target) => grids.get(`${target.kind}:${target.kind === 'content' ? target.node.id : target.ownerNode.id}`),
         createTransparent: transparent,
         loadRaster: async (node, region) => await callback({ kind: 'raster', nodeId: node.id, region }) as Float32PremultipliedRgbaTile,
-        rasterizeAnnotations: async (node, region) => await callback({ kind: 'annotation', nodeId: node.id, region }) as Float32PremultipliedRgbaTile,
+        rasterizeVectorContent: async (node, region) => await callback({ kind: 'annotation', nodeId: node.id, region }) as Float32PremultipliedRgbaTile,
         loadMask: async (_ref, node, region) => await callback({ kind: 'mask', nodeId: node.id, region }) as Float32MaskTile,
         loadColorLut: async (ref) => await callback({ kind: 'lut', ref }) as CubeLut,
         executeCustomEffect: message.customEffects ? async (node, source, mask, region) =>

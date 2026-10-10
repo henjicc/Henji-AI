@@ -78,7 +78,7 @@ export function createImageEditorViewportSamplingGridResolverV3(
     }
     if (node.definitionId === 'composite.layer'
       || node.definitionId === 'group.isolated'
-      || node.definitionId === 'vector.annotation'
+      || node.definitionId === 'vector.content'
       || node.inputNodeIds.length !== 1) return fallback
     const input = nodes.get(node.inputNodeIds[0] ?? '')
     return input ? contentGrid(input, seen) : fallback

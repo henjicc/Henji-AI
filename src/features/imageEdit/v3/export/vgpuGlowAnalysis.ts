@@ -19,7 +19,7 @@ import {
 } from '@/core/imageEdit/v3'
 import { WorkerWebGpuRuntimeBackend } from '@/core/imageEdit/worker/webgpuRuntimeBackend'
 import type { VgpuGlowGlobalScatter } from '@/core/imageEdit/webgpu/vgpuGlowRenderer'
-import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
+import { rasterizeImageEditorV3ExportVectorContent } from './annotations'
 import { prepareImageEditorExportSourceGeometryV3 } from './sourceGeometry'
 import {
   resolveImageEditorV3ExportReferenceWhiteNits,
@@ -279,8 +279,8 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
             node: sourceNode, region: requestedRegion, mip, document, sparsePlan: sparseRasterPlan,
             signal, dependencies, budget, loadSource,
           }),
-          rasterizeAnnotations: (annotationNode, requestedRegion) => (
-            dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
+          rasterizeVectorContent: (annotationNode, requestedRegion) => (
+            dependencies.rasterizeVectorContent ?? rasterizeImageEditorV3ExportVectorContent
           )({ node: annotationNode, document, region: requestedRegion, mip, signal }),
           loadMask: async (reference, _maskNode, requestedRegion) => {
             const sparse = await loadImageEditorV3SparseMaskRegion(

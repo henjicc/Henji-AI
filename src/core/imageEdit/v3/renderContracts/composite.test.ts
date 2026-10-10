@@ -26,14 +26,14 @@ async function compare(source: ImageEditDocumentV3, region: ImageEditRect = full
   const plan = compileImageEditRenderPlanV3(source, registry, 'export');
   const full = await executeImageEditCpuRenderPlanV3(plan, {
     loadRaster: async node => rgba(fullRegion, node.layerId === 'base' ? [.2,0,0,.4] : [0,0,.5,.5]),
-    rasterizeAnnotations: async () => { throw new Error('无标注'); },
+    rasterizeVectorContent: async () => { throw new Error('无标注'); },
     loadMask: async () => createFloat32MaskTile(4,2,new Float32Array(8).fill(.5)),
   });
   const tiled = await executeImageEditCpuRenderRegionPlanV3(plan, region, {
     size: source.geometry, registry,
     createTransparent: requested => rgba(requested,[0,0,0,0]),
     loadRaster: async (node,requested) => rgba(requested, node.layerId === 'base' ? [.2,0,0,.4] : [0,0,.5,.5]),
-    rasterizeAnnotations: async () => { throw new Error('无标注'); },
+    rasterizeVectorContent: async () => { throw new Error('无标注'); },
     loadMask: async (_mask,_node,requested) => createFloat32MaskTile(requested.width,requested.height,new Float32Array(requested.width*requested.height).fill(.5)),
   });
   expect([...tiled!.data.slice(0,4)]).toEqual([...full!.data.slice(0,4)]);

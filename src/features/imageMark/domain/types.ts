@@ -3,7 +3,6 @@
  * 新增图片编辑能力统一从 `@/core/imageEdit` 消费核心契约。
  */
 export {
-  createEmptyMarkDoc,
   createEmptyMarkOrientation,
   isLabeledMark,
   isNeutralOrientation,
@@ -12,7 +11,6 @@ export {
 export type {
   ArrowMark,
   EllipseMark,
-  ImageMarkDoc,
   LabeledMark,
   MarkCropRect,
   MarkItem,
@@ -20,8 +18,6 @@ export type {
   MarkRotation,
   MarkShapeStyle,
   MarkToolType,
-  MosaicMark,
-  MosaicMode,
   NumberMark,
   PenMark,
   RectMark,

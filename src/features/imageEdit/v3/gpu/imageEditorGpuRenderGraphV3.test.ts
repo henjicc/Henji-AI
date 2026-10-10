@@ -325,7 +325,7 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
       compositor.updateViewport({ stageWidth: 12, stageHeight: 16, viewportKey: 'grade-crop', viewport: { documentX: 0, documentY: 0, width: 12, height: 16, zoom: 1, devicePixelRatio: 1 } })
       const uploaded = compositor.uploadTile(compositor.requiredResourceKeys()[0], source)
       const candidate = await compositor.readLinearPixelsForTest(() => uploaded)
-      const cpu = await executeImageEditCpuRenderPlanV3(compileImageEditRenderPlanV3(document, registry, 'export'), { loadRaster: async () => decodeInterleavedRgbaSourceTileV3({ ...source, colorSpace: 'srgb' }), rasterizeAnnotations: async () => { throw new Error('无标注') } })
+      const cpu = await executeImageEditCpuRenderPlanV3(compileImageEditRenderPlanV3(document, registry, 'export'), { loadRaster: async () => decodeInterleavedRgbaSourceTileV3({ ...source, colorSpace: 'srgb' }), rasterizeVectorContent: async () => { throw new Error('无标注') } })
       const geometry = resolveImageEditOutputGeometryV3(document.geometry)
       const reference = new Float32Array(12 * 16 * 4)
       for (let y = 0; y < 16; y++) for (let x = 0; x < 12; x++) {
@@ -509,7 +509,7 @@ async function compareDocument(
     loadRaster: async (node) => decodeInterleavedRgbaSourceTileV3({
       ...resources.get(resourceId(node))!, colorSpace: 'srgb',
     }),
-    rasterizeAnnotations: async () => { throw new Error('3.1 golden不含标注') },
+    rasterizeVectorContent: async () => { throw new Error('3.1 golden不含标注') },
     loadMask: async (mask) => {
       const resource = resources.get(Object.values(mask.tiles)[0])!
       const rgba = new Uint8Array(resource.pixels)

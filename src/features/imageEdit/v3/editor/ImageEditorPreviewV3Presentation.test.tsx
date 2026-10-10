@@ -109,8 +109,6 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       layerDragBySession: {},
       viewportZoomBySession: {},
       viewportPanBySession: {},
-      annotationSelectionBySession: {},
-      annotationPreviewBySession: {},
     })
     managedPreview.state = {
       result: null,

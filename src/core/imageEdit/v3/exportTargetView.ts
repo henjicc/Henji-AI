@@ -1,9 +1,8 @@
-import type { MarkItem } from '../types'
+
 
 import { parseImageEditDocumentV3, stringifyImageEditDocumentV3 } from './documentCodec'
 import type { ImageEditDocumentV3 } from './documentTypes'
 import type {
-  ImageEditAnnotationLayerV3,
   ImageEditGroupLayerV3,
   ImageEditLayerV3,
 } from './layerTypes'
@@ -11,7 +10,7 @@ import type {
 export type ImageEditExportTargetV3 =
   | { kind: 'raster-layer'; layerId: string }
   | { kind: 'layer-group'; layerId: string }
-  | { kind: 'annotation-element'; layerId: string; annotationId: string }
+  | { kind: 'content-layer'; layerId: string }
 
 export type ImageEditExportTargetContentStateV3 = 'rendered' | 'hidden' | 'empty'
 
@@ -59,20 +58,13 @@ function findLayer(
   return null
 }
 
-function annotationDisplayName(layer: ImageEditAnnotationLayerV3, item: MarkItem): string {
-  if (item.type === 'text' && item.text.trim()) return item.text.trim().slice(0, 80)
-  if ('label' in item && typeof item.label === 'string' && item.label.trim()) {
-    return item.label.trim().slice(0, 80)
-  }
-  return `${layer.name}·${item.type}`
-}
-
 function hasRenderableContent(layer: ImageEditLayerV3): boolean {
   if (!layer.visible) return false
   if (layer.type === 'raster' || layer.type === 'smart') {
     return layer.source.kind === 'resource' || Object.keys(layer.tiles).length > 0
   }
-  if (layer.type === 'annotation') return layer.annotations.length > 0
+  if (layer.type === 'text') return layer.content.paragraphs.some(p => p.runs.some(r => r.text.length > 0))
+  if (layer.type === 'shape' || layer.type === 'path') return layer.content.operands.length > 0
   if (layer.type === 'group') return layer.children.some(hasRenderableContent)
   return false
 }
@@ -131,7 +123,7 @@ export function createImageEditExportTargetViewV3(
   const location = targetLayerOrThrow(document, target.layerId)
   const path = [...location.ancestors.map((ancestor) => ancestor.id), location.layer.id]
 
-  if (target.kind === 'raster-layer') {
+  if (target.kind === 'raster-layer' || target.kind === 'content-layer') {
     if (location.layer.type === 'effect' || location.layer.type === 'adjustment') {
       throw new ImageEditExportTargetErrorV3(
         'UNSUPPORTED_EXPORT_TARGET',
@@ -140,7 +132,7 @@ export function createImageEditExportTargetViewV3(
           : '调整层依赖下方图层上下文，暂不支持单独导出',
       )
     }
-    if (location.layer.type !== 'raster') {
+    if (!['raster','smart','text','shape','path'].includes(location.layer.type)) {
       throw new ImageEditExportTargetErrorV3('TARGET_TYPE_MISMATCH', '导出目标不是栅格图层')
     }
     const root = wrapAncestors(location.layer, location.ancestors)
@@ -167,26 +159,5 @@ export function createImageEditExportTargetViewV3(
     }
   }
 
-  if (location.layer.type !== 'annotation') {
-    throw new ImageEditExportTargetErrorV3('TARGET_TYPE_MISMATCH', '标注元素不属于标注图层')
-  }
-  const annotation = location.layer.annotations.find((item) => item.id === target.annotationId)
-  if (!annotation) {
-    throw new ImageEditExportTargetErrorV3(
-      'TARGET_NOT_FOUND',
-      `找不到待导出标注：${target.annotationId}`,
-    )
-  }
-  const targetLayer: ImageEditAnnotationLayerV3 = {
-    ...location.layer,
-    annotations: [annotation],
-  }
-  const root = wrapAncestors(targetLayer, location.ancestors)
-  return {
-    document: immutableDocumentView(document, root),
-    displayName: annotationDisplayName(location.layer, annotation),
-    layerPath: path,
-    targetId: annotation.id,
-    contentState: contentState(targetLayer, location.ancestors),
-  }
+  throw new ImageEditExportTargetErrorV3('TARGET_TYPE_MISMATCH', '不支持的导出目标')
 }

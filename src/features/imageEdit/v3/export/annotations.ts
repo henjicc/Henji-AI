@@ -1,3 +1,4 @@
+import {ensureVectorDocumentFonts} from '@/services/vectorContent/fonts'
 import {
   IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   convertFloat32TileWorkingSpaceV3,
@@ -5,8 +6,7 @@ import {
   decodeSrgbExtended,
   type Float32PremultipliedRgbaTile,
 } from '@/core/imageEdit/v3'
-import type { MarkItem } from '@/core/imageEdit/types'
-import { drawMarkItems } from '@/features/imageMark/render/drawMarks'
+import { rasterizeVectorContent } from '@/services/vectorContent/raster'
 import {
   ImageEditorV3ExportCapabilityError,
   type ImageEditorV3ExportAnnotationRasterizeRequest,
@@ -43,9 +43,10 @@ function imageDataToLinearTile(
 }
 
 /** 只建立当前含 halo 的小画布；标注仍按完整文档坐标求值。 */
-export async function rasterizeImageEditorV3ExportAnnotations(
+export async function rasterizeImageEditorV3ExportVectorContent(
   request: ImageEditorV3ExportAnnotationRasterizeRequest,
 ): Promise<Float32PremultipliedRgbaTile> {
+  await ensureVectorDocumentFonts(request.document)
   throwIfAborted(request.signal)
   if (typeof OffscreenCanvas === 'undefined') {
     throw new ImageEditorV3ExportCapabilityError(
@@ -53,9 +54,6 @@ export async function rasterizeImageEditorV3ExportAnnotations(
       '当前渲染环境没有 OffscreenCanvas，无法保持可编辑标注的导出外观',
     )
   }
-  const annotations = Array.isArray(request.node.parameters.annotations)
-    ? request.node.parameters.annotations as MarkItem[]
-    : []
   const canvas = new OffscreenCanvas(request.region.width, request.region.height)
   const context = canvas.getContext('2d', { willReadFrequently: true })
   if (!context) {
@@ -64,18 +62,7 @@ export async function rasterizeImageEditorV3ExportAnnotations(
       '无法创建标注分块光栅化上下文',
     )
   }
-  const scale = 2 ** (request.mip ?? 0)
-  context.save()
-  context.translate(-request.region.x, -request.region.y)
-  context.scale(1 / scale, 1 / scale)
-  drawMarkItems(
-    context,
-    annotations,
-    request.document.geometry.width,
-    request.document.geometry.height,
-    { canvasKind: 'offscreen' },
-  )
-  context.restore()
+  context.putImageData(rasterizeVectorContent(request.node.parameters, { ...request.region, scale: 1 / (2 ** (request.mip ?? 0)) }, { sourceVersion: String(request.document.revision), time: { kind: 'static' }, referenceGrid: request.document.geometry, quality: 'final', signal: request.signal }), 0, 0)
   throwIfAborted(request.signal)
   const referenceWhiteNits = request.document.color.hdrMetadata?.referenceWhiteNits
     ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3

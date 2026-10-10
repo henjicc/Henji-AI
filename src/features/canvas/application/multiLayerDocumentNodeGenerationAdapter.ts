@@ -269,7 +269,7 @@ export interface MultiLayerDocumentTargetExportInput {
   canvasRef: ApplicationRef & { kind: 'canvas.document' }
   sourceNodeRef: ApplicationRef & { kind: 'canvas.node' }
   targetRef: ApplicationRef & {
-    kind: 'image_edit.layer' | 'image_edit.group' | 'image_mark.annotation'
+    kind: 'image_edit.layer' | 'image_edit.group'
   }
   signal?: AbortSignal
 }
@@ -297,10 +297,7 @@ function exportTargetFromRef(
   if (ref.kind === 'image_edit.group') {
     return { kind: 'layer-group', ref: { ...ref, kind: 'image_edit.group' } }
   }
-  if (ref.kind === 'image_mark.annotation') {
-    return { kind: 'annotation-element', ref: { ...ref, kind: 'image_mark.annotation' } }
-  }
-  return { kind: 'raster-layer', ref: { ...ref, kind: 'image_edit.layer' } }
+  return { kind: 'content-layer', ref: { ...ref, kind: 'image_edit.layer' } }
 }
 
 /** UI 与助手共享的唯一导出入口；同一 pending 目标复用 Promise，完成后再次调用仍会新建节点。 */

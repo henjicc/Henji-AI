@@ -162,7 +162,7 @@ describe('image edit application service', () => {
     if (!continuedPreview) throw new Error('CONTINUED_PREVIEW_NOT_STORED')
     const continuedDocument = parseImageEditDocumentV3(continuedPreview.document)
 
-    expect(continuedDocument.layers.filter(layer => layer.type === 'annotation')).toMatchObject([{ annotations: [{ id: 'existing-mark', type: 'rect' }] }])
+    expect(continuedDocument.layers.filter(layer => layer.type === 'shape')).toMatchObject([{ id:'existing-mark',type:'shape' }])
     expect(continuedDocument.layers.find(layer => layer.type === 'effect' && layer.effectId === 'image.diffusion')).toEqual(existingDocument.layers.find(layer => layer.type === 'effect'))
     expect(continuedDocument.layers.at(-1)).toMatchObject({ type: 'effect', visible: true, effectId: 'image.vgpu-glow', params: { look: 'neon' } })
     expect(dependencies.ingest).toHaveBeenCalledTimes(1)

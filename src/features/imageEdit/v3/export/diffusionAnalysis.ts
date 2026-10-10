@@ -17,7 +17,7 @@ import {
   type ImageEditRenderPlanNode,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
-import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
+import { rasterizeImageEditorV3ExportVectorContent } from './annotations'
 import { prepareImageEditorExportSourceGeometryV3 } from './sourceGeometry'
 import {
   resolveImageEditorV3ExportReferenceWhiteNits,
@@ -175,8 +175,8 @@ export async function buildImageEditorV3DiffusionAnalyses(
             node: node, region: requestedRegion, mip, document, sparsePlan: sparseRasterPlan,
             signal, dependencies, budget, loadSource,
           }),
-          rasterizeAnnotations: (node, requestedRegion) => (
-            dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
+          rasterizeVectorContent: (node, requestedRegion) => (
+            dependencies.rasterizeVectorContent ?? rasterizeImageEditorV3ExportVectorContent
           )({ node, document, region: requestedRegion, mip, signal }),
           loadMask: async (reference, _node, requestedRegion) => {
             const sparse = await loadImageEditorV3SparseMaskRegion(

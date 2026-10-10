@@ -50,7 +50,7 @@ export interface ImageEditCpuRegionRenderContextV3 extends ImageEditCpuSamplingC
     node: ImageEditRenderPlanNode,
     region: ImageEditRect,
   ): Promise<Float32PremultipliedRgbaTile>
-  rasterizeAnnotations(
+  rasterizeVectorContent(
     node: ImageEditRenderPlanNode,
     region: ImageEditRect,
   ): Promise<Float32PremultipliedRgbaTile>
@@ -201,7 +201,7 @@ export function collectImageEditCpuRegionRequirementsV3(
       addRegion(rasters, node.id, region)
       return
     }
-    if (node.definitionId === 'vector.annotation') return
+    if (node.definitionId === 'vector.content') return
     if (node.definitionId === 'composite.layer') {
       const contentIndex = node.inputNodeIds.length === 1 ? 0 : 1
       if (node.inputNodeIds.length > 1) visit(inputNode(nodes, node, 0), region)
@@ -286,7 +286,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
     const pending = (async (): Promise<Float32PremultipliedRgbaTile> => {
       throwIfAborted(context.signal)
       if (node.definitionId === 'source.raster') return context.loadRaster(node, region)
-      if (node.definitionId === 'vector.annotation') return context.rasterizeAnnotations(node, region)
+      if (node.definitionId === 'vector.content') return context.rasterizeVectorContent(node, region)
       if (node.definitionId === 'group.isolated') return render(inputNode(nodes, node, 0), region)
       if (node.definitionId === 'composite.layer') {
         const backdrop = node.inputNodeIds.length > 1

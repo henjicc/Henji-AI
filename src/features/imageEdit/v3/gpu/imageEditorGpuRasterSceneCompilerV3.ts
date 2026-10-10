@@ -19,7 +19,7 @@ import type { ImageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocol
 export interface ImageEditorGpuRasterLayerV3 {
   rasterCanvasSize?: { width: number; height: number }
   layerId: string
-  sourceKind: 'raster' | 'annotation'
+  sourceKind: 'raster' | 'vector'
   resourceRef: `sha256:${string}` | null
   deformationLocalTransform?: ImageEditTransformV3
   sourcePyramid?: ImageEditorV3PyramidDescriptor
@@ -246,11 +246,11 @@ function compileNode(
     if (key) addRequired(required, key)
     return { kind: 'source', nodeId: node.id, layerId: node.layerId, fingerprint: node.subtreeHash, resourceKey: key }
   }
-  if (node.definitionId === 'vector.annotation') {
+  if (node.definitionId === 'vector.content') {
     const resourceRef = createImageEditorGpuAnnotationResourceRefV3(node)
     return {
       kind: 'source', nodeId: node.id, layerId: node.layerId, fingerprint: node.subtreeHash,
-      resourceKey: { resourceRef, resourceKind: 'generated-annotation', mip: 0, tileX: 0, tileY: 0,
+      resourceKey: { resourceRef, resourceKind: 'generated-vector', mip: 0, tileX: 0, tileY: 0,
         contentVersion: annotationContentVersion(node), format: 'rgba16float' },
     }
   }
@@ -319,12 +319,17 @@ function adjustment(
   }
 }
 
+export function supportsImageEditorGpuMaskV3(mask: ImageEditMaskReferenceV3 | null): boolean {
+  return !mask?.vectorPaths
+}
+
 function compileMask(
   mask: ImageEditMaskReferenceV3 | null,
   descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
   required: Map<string, ImageEditorGpuSceneTileKeyV3>,
 ): ImageEditorGpuGraphMaskV3 | null | string {
   if (!mask) return null
+  if (!supportsImageEditorGpuMaskV3(mask)) return '可编辑路径蒙版使用共享区域合成'
   {
     const unsupported = Object.keys(mask.tiles).find((key) => !isMipZeroTileKey(key))
     if (unsupported) return `蒙版 ${mask.maskId} 的瓦片键无效：${unsupported}`
@@ -380,13 +385,13 @@ function collectRasterLayers(
       collectRasterLayers(layer.children, descriptors, planNodes, output)
       continue
     }
-    if (layer.type === 'annotation') {
+    if (['text','shape','path'].includes(layer.type)) {
       const planNode = planNodes.find((node) => (
-        node.layerId === layer.id && node.definitionId === 'vector.annotation'
+        node.layerId === layer.id && node.definitionId === 'vector.content'
       ))
       if (!planNode) continue
       output.push({
-        layerId: layer.id, sourceKind: 'annotation',
+        layerId: layer.id, sourceKind: 'vector',
         resourceRef: createImageEditorGpuAnnotationResourceRefV3(planNode),
         contentVersion: annotationContentVersion(planNode), sparseTiles: {},
         visible: layer.visible, opacity: layer.opacity * layer.fillOpacity, transform: [...layer.transform],
@@ -442,7 +447,7 @@ function isMipZeroTileKey(value: string): boolean {
 }
 
 function annotationContentVersion(node: ImageEditRenderPlanNode): string {
-  return `annotation-raster-v1:${node.subtreeHash}`
+  return `vector-raster-v1:${node.subtreeHash}`
 }
 
 /** 标注 GPU 瓦片使用可重复的合成资源身份，内容/字体/布局均由 subtreeHash 失效。 */

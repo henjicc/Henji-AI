@@ -8,7 +8,7 @@ import {
 } from './commandReducer';
 import {
   createImageEditAdjustmentLayerV3,
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
@@ -61,7 +61,7 @@ describe('图片编辑 V3 命令归约器', () => {
 
   it('把连续图层组成可逆嵌套组，且每次持久命令只增加一次 revision', () => {
     const raster = createImageEditRasterLayerV3('raster', '原图', 'sha256:source');
-    const marks = createImageEditAnnotationLayerV3('marks', '标注');
+    const marks = createImageEditPathLayerV3('marks', '标注');
     const paint = createImageEditRasterLayerV3('paint', '画笔');
     const source = createDocument([raster, marks, paint]);
     const group = createImageEditGroupLayerV3('group', '标注组');
@@ -87,7 +87,7 @@ describe('图片编辑 V3 命令归约器', () => {
   });
 
   it('拒绝修改锁定图层、移动到自身后代和过期 CAS', () => {
-    const locked = { ...createImageEditAnnotationLayerV3('locked', '锁定标注'), locked: true };
+    const locked = { ...createImageEditPathLayerV3('locked', '锁定标注'), locked: true };
     const nested = createImageEditGroupLayerV3('nested', '子组');
     const parent = { ...createImageEditGroupLayerV3('parent', '父组'), children: [nested] };
     const source = createDocument([locked, parent]);
@@ -105,7 +105,7 @@ describe('图片编辑 V3 命令归约器', () => {
   });
 
   it('支持深复制、公共属性、蒙版和标注 CRUD 的逆向补丁', () => {
-    const marks = createImageEditAnnotationLayerV3('marks', '标注');
+    const marks = createImageEditPathLayerV3('marks', '标注');
     const group = { ...createImageEditGroupLayerV3('group', '组'), children: [marks] };
     let document = createDocument([group]);
     const duplicated = applyImageEditCommandV3(document, {
@@ -130,23 +130,16 @@ describe('图片编辑 V3 命令归约器', () => {
       maskResources: [{ resourceId: 'sha256:mask', byteSize: 64 }],
       previousMaskResources: [],
     }).document;
+    const original = document.layers[1].type === 'group' ? document.layers[1].children[0] : null;
+    if (!original || original.type !== 'shape') throw new Error('缺少形状图层');
     const added = applyImageEditCommandV3(document, {
-      commandId: 'annotation',
-      expectedRevision: 3,
-      type: 'annotation.add',
-      layerId: 'marks-copy',
-      index: 0,
-      annotation: { id: 'text', type: 'text', x: 1, y: 2, text: 'V3', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 20 },
+      commandId: 'content', expectedRevision: 3, type: 'layer.replace', layerId: original.id,
+      layer: {...original,content:{...original.content,paint:{...original.content.paint,fill:{enabled:true,color:ANNOTATION_DEFAULT_TEXT_HEX}}}}, resources: [{resourceId:'sha256:mask',byteSize:64}],
     });
-    const copy = (added.document.layers[1].type === 'group' ? added.document.layers[1].children[0] : null);
-    expect(copy).toMatchObject({ opacity: 0.4, mask: { ...createImageEditSparseMaskReferenceV3('sha256:mask', true), tiles: { '0/0/0': 'sha256:mask' } } });
-    expect(copy?.type === 'annotation' ? copy.annotations : []).toHaveLength(1);
-
-    const removedAgain = applyImageEditCommandV3(added.document, added.inverse);
-    const copyAfterUndo = removedAgain.document.layers[1].type === 'group'
-      ? removedAgain.document.layers[1].children[0]
-      : null;
-    expect(copyAfterUndo?.type === 'annotation' ? copyAfterUndo.annotations : []).toEqual([]);
+    const copy = added.document.layers[1].type === 'group' ? added.document.layers[1].children[0] : null;
+    expect(copy).toMatchObject({opacity:.4,content:{paint:{fill:{color:ANNOTATION_DEFAULT_TEXT_HEX}}}});
+    const restored=applyImageEditCommandV3(added.document,added.inverse);
+    expect(restored.document.layers[1].type === 'group' && restored.document.layers[1].children[0]).toEqual(original);
   });
 
   it('栅格瓦片增量只保存内容哈希，并能原子恢复旧哈希', () => {

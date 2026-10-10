@@ -86,15 +86,6 @@ export function assertImageEditHistoryInversePairV3(
       )) fail('图层蒙版资源逆向补丁无效');
       break;
     }
-    case 'annotation.add':
-      if (inverse.type !== 'annotation.delete' || inverse.layerId !== forward.layerId
-        || inverse.annotationId !== forward.annotation.id) fail('新增标注逆向补丁无效'); break;
-    case 'annotation.delete':
-      if (inverse.type !== 'annotation.add' || inverse.layerId !== forward.layerId
-        || inverse.annotation.id !== forward.annotationId) fail('删除标注逆向补丁无效'); break;
-    case 'annotation.update':
-      if (inverse.type !== 'annotation.update' || inverse.layerId !== forward.layerId
-        || inverse.annotationId !== forward.annotationId) fail('更新标注逆向补丁无效'); break;
     case 'raster.apply-tile-delta': {
       if (inverse.type !== 'raster.apply-tile-delta' || inverse.layerId !== forward.layerId
         || inverse.changes.length !== forward.changes.length) fail('瓦片增量逆向补丁无效');

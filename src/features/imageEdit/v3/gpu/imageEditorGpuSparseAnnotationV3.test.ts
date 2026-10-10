@@ -1,3 +1,4 @@
+import {imageEditLayersFromMarkDraftV3} from '@/core/imageEdit/v3/layerEntries/vectorDraft'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { init, type Gpu } from 'vgpu/node'
 
@@ -5,7 +6,7 @@ import {
   compileImageEditRenderPlanV3,
   convertFloat32TileColorDomainV3,
   createBuiltInImageEditRenderNodeRegistry,
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditRasterLayerV3,
@@ -85,9 +86,9 @@ describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
   it('标注光栅纹理在重复帧命中GPU子图缓存', async () => {
     const width = 32; const height = 24
     const document = createImageEditDocumentV3({ width, height, documentId: 'annotation-cache' })
-    const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
-    annotation.annotations = [{ id: 'rect', type: 'rect', x: 4, y: 4, width: 12, height: 8,
-      stroke: WHITE_HEX, lineWidth: 2 }]
+    const annotation = createImageEditPathLayerV3('annotation', '标注')
+    Object.assign(annotation, { ...imageEditLayersFromMarkDraftV3(([{ id: 'rect', type: 'rect', x: 4, y: 4, width: 12, height: 8,
+      stroke: WHITE_HEX, lineWidth: 2 }] as import('@/core/imageEdit/types').MarkItem[])[0])[0], id: annotation.id, name: annotation.name })
     document.layers = [annotation]
     const compilation = compileImageEditorGpuRasterSceneV3(document, [])
     expect(compilation.supported).toBe(true)
@@ -122,9 +123,9 @@ describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
   it('标注位于效果下方时仍进入最终输出，显隐只失效相关子图', async () => {
     const width = 32; const height = 24; const baseRef = ref(121)
     const document = createImageEditDocumentV3({ width, height, documentId: 'annotation-visible' })
-    const annotation = createImageEditAnnotationLayerV3('annotation-visible', '标注图层')
-    annotation.annotations = [{ id: 'rect', type: 'rect', x: 4, y: 4, width: 12, height: 8,
-      stroke: WHITE_HEX, lineWidth: 2 }]
+    const annotation = createImageEditPathLayerV3('annotation-visible', '标注图层')
+    Object.assign(annotation, { ...imageEditLayersFromMarkDraftV3(([{ id: 'rect', type: 'rect', x: 4, y: 4, width: 12, height: 8,
+      stroke: WHITE_HEX, lineWidth: 2 }] as import('@/core/imageEdit/types').MarkItem[])[0])[0], id: annotation.id, name: annotation.name })
     document.layers = [
       createImageEditRasterLayerV3('annotation-base', '底图', baseRef),
       annotation,
@@ -143,7 +144,7 @@ describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
         } })
       const resources = new Map<string, ReturnType<typeof compositor.uploadTile>>()
       for (const key of compositor.requiredResourceKeys()) {
-        const tile = key.resourceKind === 'generated-annotation'
+        const tile = key.resourceKind === 'generated-vector'
           ? floatSourceTile(key, [1, 0, 0, 1], width, height)
           : constantSourceTile(key, [32, 48, 64, 255], width, height)
         resources.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key, tile))
@@ -165,9 +166,9 @@ describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
   it('多瓦片稀疏标注在效果链中保留非透明像素', async () => {
     const width = 1024; const height = 8; const baseRef = ref(122)
     const document = createImageEditDocumentV3({ width, height, documentId: 'annotation-sparse' })
-    const annotation = createImageEditAnnotationLayerV3('annotation-sparse', '标注图层')
-    annotation.annotations = [{ id: 'line', type: 'arrow', points: [508, 2, 516, 6],
-      stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 2 }]
+    const annotation = createImageEditPathLayerV3('annotation-sparse', '标注图层')
+    Object.assign(annotation, { ...imageEditLayersFromMarkDraftV3(([{ id: 'line', type: 'arrow', points: [508, 2, 516, 6],
+      stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 2 }] as import('@/core/imageEdit/types').MarkItem[])[0])[0], id: annotation.id, name: annotation.name })
     document.layers = [
       createImageEditRasterLayerV3('annotation-sparse-base', '底图', baseRef),
       annotation,
@@ -188,7 +189,7 @@ describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
       const resources = new Map<string, ReturnType<typeof compositor.uploadTile>>()
       for (const key of compositor.requiredResourceKeys()) {
         const tileWidth = 512
-        const tile = key.resourceKind === 'generated-annotation'
+        const tile = key.resourceKind === 'generated-vector'
           ? sparseFloatSourceTile(key, tileWidth, height)
           : constantSourceTile(key, [32, 48, 64, 255], tileWidth, height)
         resources.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key, tile))
@@ -287,7 +288,7 @@ describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
     const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
     const cpu = await executeImageEditCpuRenderPlanV3(plan, {
       loadRaster: async () => decodeInterleavedRgbaSourceTileV3({ ...source, colorSpace: 'srgb' }),
-      rasterizeAnnotations: async () => { throw new Error('halo golden不含标注') },
+      rasterizeVectorContent: async () => { throw new Error('halo golden不含标注') },
       loadMask: async () => { throw new Error('halo golden不含蒙版') },
     })
     if (!cpu) throw new Error('halo golden CPU无输出')

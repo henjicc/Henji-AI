@@ -18,12 +18,6 @@ const registry = createBuiltInImageEditRenderNodeRegistry()
 function visitLayers(layers: readonly ImageEditLayerV3[]): void {
   for (const layer of layers) {
     if (!layer.visible) continue
-    if (layer.type === 'annotation' && layer.annotations.some((item) => item.type === 'mosaic')) {
-      throw new ImageEditorV3ExportCapabilityError(
-        'MOSAIC_ANNOTATION_UNSUPPORTED',
-        `标注图层“${layer.name}”包含旧马赛克标注；请先迁移为效果图层`,
-      )
-    }
     if ((layer.type === 'effect' || layer.type === 'adjustment') && !layer.renderable) {
       throw new ImageEditorV3ExportCapabilityError(
         'RENDER_NODE_UNSUPPORTED',

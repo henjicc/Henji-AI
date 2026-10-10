@@ -879,7 +879,7 @@
         "remove": "Remove",
         "repair": "Repair",
         "select-lasso": "Lasso selection",
-        "annotation": "Annotation tools",
+        "annotation": "Text and graphics",
         "annotation-text": "Text annotation",
         "annotation-callout": "Callout annotation",
         "annotation-arrow": "Arrow annotation",
@@ -899,7 +899,14 @@
         "mesh-transform": "Mesh warp",
         "clone-stamp": "Clone stamp",
         "healing-brush": "Healing brush",
-        "content-aware-fill": "Content-aware fill"
+        "content-aware-fill": "Content-aware fill",
+        "vector-text": "Text",
+        "vector-rectangle": "Rectangle",
+        "vector-ellipse": "Ellipse",
+        "vector-arrow": "Arrow",
+        "vector-callout": "Callout",
+        "vector-number": "Number",
+        "vector-path": "Path"
       },
       "layerControls": {
         "rotate": "Rotate layer",
@@ -1055,7 +1062,10 @@
         "annotation": "Annotation layer",
         "effect": "Effect layer",
         "adjustment": "Adjustment layer",
-        "group": "Layer group"
+        "group": "Layer group",
+        "text": "Text",
+        "shape": "Shape",
+        "path": "Path"
       },
       "effect": {
         "image": {

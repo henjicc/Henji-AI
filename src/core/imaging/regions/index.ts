@@ -5,3 +5,5 @@ export * from './rasterize';
 export * from './evaluate';
 export * from './snapshot';
 export * from './source';
+
+export {rasterizeRegionContours} from './rasterize';

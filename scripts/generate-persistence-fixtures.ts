@@ -12,7 +12,7 @@ import { BUILTIN_STYLE_KITS } from '../src/core/videoEdit/styleKitPresets'
 import { BUILTIN_TITLE_TEMPLATES } from '../src/core/videoEdit/titleTemplates'
 import { VIDEO_EDIT_EXPORT_PRESETS } from '../src/core/videoEdit/exportPresets'
 import { videoEditTextStyleSchema } from '../src/core/videoEdit/text'
-import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3, createImageEditAdjustmentLayerV3, createImageEditAnnotationLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3, createImageEditAdjustmentLayerV3, createImageEditPathLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
 import { createDefaultImageEditColorModeV3 } from '../src/core/imageEdit/v3/colorTypes'
 import { embedImageEditRasterV3 } from '../src/core/imageEdit/v3/smartContent/commands'
 import { IMAGE_WORKING_VERSION, IMAGE_PACKAGE_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
@@ -55,8 +55,8 @@ image.layers.push(createImageEditAdjustmentLayerV3('golden-shared-grade', '共�
   exposure: .25, curve_red_points: [{ x: 0, y: 0 }, { x: 50, y: 60 }, { x: 100, y: 100 }], shadow_hue: 230, shadow_strength: 12, hsl_saturation: -15,
 }))
 image.layers.push(createImageEditEffectLayerV3('golden-shared-gaussian', '高斯模糊', 'gaussian_blur', { sigma_fraction_height: .009, axis: 'horizontal', edge_mode: 'transparent' }))
-const annotation = createImageEditAnnotationLayerV3('golden-quick-marks', '快速标记')
-annotation.annotations.push({ id: 'golden-mark', type: 'rect', x: 10, y: 20, width: 12, height: 14, stroke: BLACK_HEX, lineWidth: 2 })
+const annotation = createImageEditPathLayerV3('golden-quick-marks', '快速标记')
+annotation.content.paint.strokes=[{enabled:true,color:BLACK_HEX,width:2,position:'center'}]
 image.layers.push(annotation)
 image.layers[0] = embedImageEditRasterV3(image, 'golden-layer')
 image.layers.push({ ...structuredClone(image.layers[0]), id: 'golden-smart-instance', transform: [1, 0, 0, 1, 4, 2] })

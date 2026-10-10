@@ -50,17 +50,17 @@ describe('正式读入口打开黄金归档与源码', () => {
         expect(imported.manifest.document.history?.undo[0].forward.type).toBe('document.atomic')
         expect(layers[1]).toMatchObject({ type: 'adjustment', adjustmentId: 'color_grade' })
         expect(layers[2]).toMatchObject({ type: 'effect', effectId: 'gaussian_blur' })
-        expect(layers[3]).toMatchObject({ type: 'annotation', annotations: [{ id: 'golden-mark' }] })
+        expect(layers[3]).toMatchObject({ type:'shape', content:{operands:[{operation:'replace'}]} })
         expect(imported.manifest.document.document).toMatchObject({ geometry: { orientation: { rotate: 90, mirrored: true }, crop: { x: 1, y: 2, width: 32, height: 40 } } })
         expect(imported.documentHeader).toBeDefined()
         const header: unknown = JSON.parse(imported.documentHeader!.toString('utf8'))
         expect(header).toMatchObject(id === 'canvas-layer-package'
           ? { format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: 'golden-image' }
-          : { format: 'henji-image-document', version: 1, id: 'golden-image', summary: { width: 32, height: 40, layers: 4 } })
+          : { format: 'henji-image-document', version: 1, id: 'golden-image', summary: { width: 32, height: 40, layers: 5 } })
       } finally { await imported.resourceLease.release() }
       expect(await fsp.readFile(source)).toEqual(original)
     }
-    expect((await readImageDocumentPackageHeader(fixture('image-header', `v${IMAGE_PACKAGE_VERSION}.henjiimg`))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 32, height: 40, layers: 4 } })
+    expect((await readImageDocumentPackageHeader(fixture('image-header', `v${IMAGE_PACKAGE_VERSION}.henjiimg`))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 32, height: 40, layers: 5 } })
   })
   it('开发期放弃的旧图片与画布图层 ZIP 明确拒绝为旧版本，不改写原件', async () => {
     environment = createTestEnvironment()

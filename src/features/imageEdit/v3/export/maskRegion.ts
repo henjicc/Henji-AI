@@ -1,3 +1,4 @@
+import {rasterizeVectorCoverage} from '@/core/imaging/vectorContent';
 import {
   createImageEditorV3RequestId,
   readImageEditorV3BrushTiles,
@@ -114,8 +115,8 @@ export async function loadImageEditorV3SparseMaskRegion(
   if (!lease) throw new Error('图片导出资源账本无法预留蒙版解码空间')
   try {
     const tiles = await loadMaskTiles(references, signal, dependencies)
-    const output = new Float32Array(region.width * region.height)
-    if (reference.defaultValue === 1) output.fill(1)
+    const output = reference.vectorPaths ? rasterizeVectorCoverage(reference.vectorPaths,region,2**(-mip),2**(-mip),signal) : new Float32Array(region.width * region.height)
+    if (!reference.vectorPaths && reference.defaultValue === 1) output.fill(1)
     const scale = 2 ** mip
     for (let y = 0; y < region.height; y += 1) {
       throwIfAborted(signal)

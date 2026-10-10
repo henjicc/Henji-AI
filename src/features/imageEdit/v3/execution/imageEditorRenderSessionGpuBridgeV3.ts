@@ -119,9 +119,10 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.resourceDescriptors = new Map(snapshot.resourceDescriptors.map((entry) => [entry.resourceRef, entry]))
     this.document = structuredClone(snapshot.document)
     this.annotationNodes = new Map(
-      compileImageEditRenderPlanV3(snapshot.document, renderNodeRegistry, snapshot.quality).nodes
-        .filter((node) => node.definitionId === 'vector.annotation')
-        .map((node) => [createImageEditorGpuAnnotationResourceRefV3(node), node]),
+      [...new Set<ImageEditRenderQuality>([snapshot.quality, 'export'])].flatMap(quality =>
+        compileImageEditRenderPlanV3(snapshot.document, renderNodeRegistry, quality).nodes
+          .filter((node) => node.definitionId === 'vector.content')
+          .map((node) => [createImageEditorGpuAnnotationResourceRefV3(node), node] as const)),
     )
     this.exportSession.syncSnapshot(snapshot)
     this.client?.syncScene(snapshot)
@@ -387,7 +388,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         }] as const
         if (exportRequestId) this.client?.uploadExportTiles?.(generation, exportRequestId, upload)
         else this.client?.uploadTiles(generation, upload)
-        if (key.resourceKind === 'generated-annotation') {
+        if (key.resourceKind === 'generated-vector') {
           logger.info('完成图片编辑 GPU 标注纹理上传', {
             event: 'image_editor_v3.gpu_scene.annotation_texture_uploaded',
             context: {

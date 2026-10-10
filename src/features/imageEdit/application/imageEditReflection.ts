@@ -1,3 +1,4 @@
+import {richTextContentSchema,vectorPathContentSchema} from '@/core/imaging/vectorContent'
 import { imageEditLayerFilterRegistrationV3 } from '../v3/application/imageEditLayerFilterEntityV3'
 import { imageEditLayerMovesSchemaV3 } from '../v3/application/imageEditWorkflowFields'
 import { imageEditNamedRegionsSchemaV3 } from '@/core/imageEdit/v3/namedRegions'
@@ -211,7 +212,7 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
     }, { ref: imageEditV3SchemaRef('property', 'image_edit.group.transform.value'), value: z.toJSONSchema(imageEditTransformSchemaV3, { io: 'input' }) as JsonValue,
     }, { ref: imageEditV3SchemaRef('property', 'image_edit.layer.transform.value'), value: z.toJSONSchema(imageEditTransformSchemaV3, { io: 'input' }) as JsonValue,
     }, { ref: imageEditV3SchemaRef('property', 'image_edit.layer.smart_content.value'), value: z.toJSONSchema(imageContentSchema, { io: 'input' }) as JsonValue,
-    }, { ref: IMAGE_EDIT_V3_PARAMS_SCHEMA_REF,
+    }, { ref: imageEditV3SchemaRef('property','image_edit.layer.content.value'),value:z.toJSONSchema(z.union([richTextContentSchema,vectorPathContentSchema]),{io:'input'}) as JsonValue }, { ref: IMAGE_EDIT_V3_PARAMS_SCHEMA_REF,
       value: { type: 'object', description: '按 definition_id 选择对应字段定义；曲线为百分比控制点，LUT 为稳定资源引用。gaussian_blur 使用完整画面高度比例、方向与边缘处理；其他效果沿各自操作参数。', $defs: { color_grade: JSON.parse(JSON.stringify(imageColorGradeJsonSchema())) as JsonValue, ...Object.fromEntries(listImagingEffects().filter(effect => effect.hosts.includes('image')).map(effect => [effect.id, z.toJSONSchema(effect.parameterSchema, { io: 'input' }) as JsonValue])) } },
     }] : entityType === IMAGE_EDIT_ENTITY_TYPES.document ? [{
       ref: imageEditV3SchemaRef('property', 'image_edit.document.named_regions.value'),
@@ -225,7 +226,7 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
     }, {
       ref: imageEditV3SchemaRef('property', 'image_edit.document.color_mode.value'),
       value: { type: 'object', description: 'V3 文档的工作色域、位深、传递函数与 HDR 元数据。' },
-    }] : entityType === IMAGE_EDIT_ENTITY_TYPES.resource ? [{
+    }] : entityType === IMAGE_EDIT_ENTITY_TYPES.mask ? [{ref:imageEditV3SchemaRef('property','image_edit.mask.vector_paths.value'),value:z.toJSONSchema(vectorPathContentSchema.shape.operands.nullable(),{io:'input'}) as JsonValue}] : entityType === IMAGE_EDIT_ENTITY_TYPES.resource ? [{
       ref: imageEditV3SchemaRef('property', 'image_edit.resource.roles.value'),
       value: { type: 'array', items: { type: 'string' } },
     }] : [])],

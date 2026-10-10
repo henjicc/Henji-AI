@@ -1,3 +1,4 @@
+import {rasterizeVectorCoverage} from '@/core/imaging/vectorContent'
 import { inverseDeform, prepareDeformation, rotateAffine, scaleAffineAtAnchor } from '@/core/imaging/transforms';
 import { imageEditLayerMaskTransformV3 } from '@/core/imageEdit/v3/renderContracts/maskTransform'
 import { maskDensity } from '@/core/imaging/compositing'
@@ -60,7 +61,7 @@ function maskValue(layer: ImageEditLayerV3, x: number, y: number, maps: LayerAlp
   if (!mask || !layer.maskAttachment.enabled) return 1
   const tx = Math.floor(x / mask.tileSize), ty = Math.floor(y / mask.tileSize)
   const resourceId = mask.tiles[`0/${tx}/${ty}`]
-  const value = resourceId ? sample(maps.get(resourceId), x - tx * mask.tileSize, y - ty * mask.tileSize) : mask.defaultValue
+  const value = resourceId ? sample(maps.get(resourceId), x - tx * mask.tileSize, y - ty * mask.tileSize) : mask.vectorPaths ? rasterizeVectorCoverage(mask.vectorPaths,{x:Math.floor(x),y:Math.floor(y),width:1,height:1})[0] : mask.defaultValue
   return value === undefined ? undefined : maskDensity(mask.inverted ? 1 - value : value, layer.maskAttachment.density)
 }
 
@@ -79,14 +80,14 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
   expand(document.layers)
   for (const location of flattenImageEditLayerTreeV3(document.layers, groups)) {
     const { layer, ancestors } = location
-    if ((layer.type !== 'raster' && layer.type !== 'smart') || [layer, ...ancestors].some((entry) => !entry.visible || entry.locked || entry.opacity === 0 || entry.fillOpacity === 0)) continue
+    if (!['raster','smart','text','shape','path'].includes(layer.type) || [layer, ...ancestors].some((entry) => !entry.visible || entry.locked || entry.opacity === 0 || entry.fillOpacity === 0)) continue
     const raw = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, location)), ...point)
     const normalized=inverseDeform(prepareDeformation(layer.deformation),[raw[0]/document.geometry.width,raw[1]/document.geometry.height]);if(!normalized)continue;
     const [x,y]=[normalized[0]*document.geometry.width,normalized[1]*document.geometry.height]
     const tx = Math.floor(x / 512), ty = Math.floor(y / 512)
-    const tile = layer.tiles[`0/${tx}/${ty}`]
-    let alpha = tile ? sample(maps.get(tile), x - tx * 512, y - ty * 512)
-      : layer.source.kind === 'resource' ? sample(maps.get(layer.source.resourceId), x, y) : 0
+    const raster=layer.type==='raster'||layer.type==='smart'?layer:null
+    const tile=raster?.tiles[`0/${tx}/${ty}`]
+    let alpha=raster?(tile?sample(maps.get(tile),x-tx*512,y-ty*512):raster.source.kind==='resource'?sample(maps.get(raster.source.resourceId),x,y):0):sample(maps.get(`vector:${layer.id}`),x,y)
     if (alpha === 0) continue
     if (alpha === undefined) return undefined
     for (let index = 0; index <= ancestors.length; index += 1) {
@@ -99,7 +100,7 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
       if (mask === undefined) return undefined
       alpha *= mask * entry.layer.opacity * entry.layer.fillOpacity
     }
-    const sourceMap = tile ? maps.get(tile) : layer.source.kind === 'resource' ? maps.get(layer.source.resourceId) : undefined
+    const sourceMap = tile ? maps.get(tile) : raster?.source.kind === 'resource' ? maps.get(raster.source.resourceId) : maps.get(`vector:${layer.id}`)
     if (alpha >= (sourceMap?.hitThreshold ?? 1) / 255 * layer.opacity
       * ancestors.reduce((value, ancestor) => value * ancestor.opacity, 1)) return layer.id
   }
@@ -107,6 +108,7 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
 }
 
 export function imageEditorLayerContentBoundsV3(layer: ImageEditLayerV3, maps: LayerAlphaMapsV3): LayerContentBoundsV3 | null {
+  if(layer.type==='text'||layer.type==='shape'||layer.type==='path') return maps.get(`vector:${layer.id}`)?.bounds ?? null
   if (layer.type !== 'raster' && layer.type !== 'smart') return null
   const bounds: LayerContentBoundsV3[] = []
   const source = layer.source.kind === 'resource' ? maps.get(layer.source.resourceId)?.bounds : null

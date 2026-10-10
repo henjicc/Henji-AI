@@ -203,7 +203,7 @@ it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后�
 })
 describe('合成器共享图片候选生命周期', () => {
   it('文字/字幕/标题共享局部纹理，动画仅改变GPU几何，离屏导出写相同几何', async () => {
-    vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { save() {}, restore() {}, scale() {}, clearRect() {}, drawImage() {}, fillRect() {}, fillText() {}, strokeText() {}, measureText(text: string) { return { width: text.length * 70 } } } } })
+    vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { save() {}, restore() {}, scale() {}, beginPath() {}, fill() {}, clearRect() {}, drawImage() {}, fillRect() {}, fillText() {}, strokeText() {}, measureText(text: string) { return { width: text.length * 70 } } } } })
     const { compositor, device } = copyFixture(async () => {})
     const project = createVideoEditDocument('局部文字'); Object.assign(project.sequences[0], { width: 3840, height: 2160 })
     project.items.push({ id: 'text', kind: 'text', name: '文字' }); const document = videoEditComposition(project, project.sequences[0].id)
@@ -233,7 +233,7 @@ describe('合成器共享图片候选生命周期', () => {
     } finally { await compositor.dispose() }
   })
   it('代码与普通片段共享一次上传，满文字工作集切换图片先回收，不因旧预算阻塞', async () => {
-    vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { save() {}, restore() {}, clearRect() {}, drawImage() {}, fillRect() {}, fillText() {}, strokeText() {}, measureText(text: string) { return { width: text.length * 10 } } } } })
+    vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { save() {}, restore() {}, scale() {}, beginPath() {}, fill() {}, clearRect() {}, drawImage() {}, fillRect() {}, fillText() {}, strokeText() {}, measureText(text: string) { return { width: text.length * 10 } } } } })
     for (const [width, height, count] of [[3840, 2160, 8], [16, 16, 32]]) {
       const { compositor, device, destroyed } = copyFixture(async () => {})
       compositor.canvas.width = width; compositor.canvas.height = height

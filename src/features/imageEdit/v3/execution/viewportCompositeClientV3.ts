@@ -1,3 +1,4 @@
+import {prepareVectorDocumentFonts} from '@/services/vectorContent/fonts'
 import { imageEditorViewportResourceSizesV3, type ActiveViewportJobV3 } from './viewportCompositeJobV3'
 import {
   createTileRegion,
@@ -196,6 +197,8 @@ export class ImageEditorViewportCompositeClientV3 {
     const prepared = prepareImageEditorViewportCompositeV3(
       job.document, job.quality, job.resourceDescriptors,
     )
+    const fonts = await prepareVectorDocumentFonts(job.document)
+    this.assertActive(job)
     const wholeSource = job.analysisRequested === true
     const bitDepth = typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32
     job.prepared = prepared
@@ -332,6 +335,7 @@ export class ImageEditorViewportCompositeClientV3 {
             renderGeneration: job.renderGeneration,
             cameraSequence: job.cameraSequence,
             geometryHash: job.geometryHash,
+            fonts,
             document: job.document,
             quality: job.quality,
             phase: job.phase,

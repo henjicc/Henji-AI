@@ -12,7 +12,6 @@ import {
 import {
   createImageEditLayerCommonV3,
   type ImageEditAdjustmentLayerV3,
-  type ImageEditAnnotationLayerV3,
   type ImageEditEffectLayerV3,
   type ImageEditGroupLayerV3,
   type ImageEditJsonObjectV3,
@@ -64,17 +63,6 @@ export function createImageEditRasterLayerV3(
       ? { kind: 'resource', resourceId: sourceResourceId }
       : { kind: 'empty' },
     tiles: {},
-  };
-}
-
-export function createImageEditAnnotationLayerV3(
-  id: string,
-  name: string
-): ImageEditAnnotationLayerV3 {
-  return {
-    ...createImageEditLayerCommonV3(id, name),
-    type: 'annotation',
-    annotations: [],
   };
 }
 
@@ -139,3 +127,5 @@ export function createImageEditDocumentV3(
     namedRegions: [],
   };
 }
+
+export { createImageEditTextLayerV3, createImageEditPathLayerV3 } from './layerEntries/vector';

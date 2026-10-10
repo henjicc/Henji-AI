@@ -42,7 +42,7 @@ export function resolveImageEditLayerMoveUnavailableReasonV3(
   if (
     location.layer.type !== 'raster'
     && location.layer.type !== 'smart'
-    && location.layer.type !== 'annotation'
+    && !['text', 'shape', 'path'].includes(location.layer.type)
     && location.layer.type !== 'group'
   ) return 'unsupported'
   if (!location.layer.visible || location.ancestors.some((ancestor) => !ancestor.visible)) return 'hidden'

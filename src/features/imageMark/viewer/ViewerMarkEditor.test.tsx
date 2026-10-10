@@ -3,8 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ImageEditorV3Props } from '@/features/imageEdit/v3/editor/types'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import { createImageEditAnnotationLayerV3 } from '@/core/imageEdit/v3/documentFactory'
-import { BLACK_HEX } from '@/core/theme/colorTokens'
+import { createImageEditPathLayerV3 } from '@/core/imageEdit/v3/documentFactory'
+
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage, readHarnessImageEditDocument } from '@/tests/harnessNativeStorage'
 import { imageEditTestManagedSource, imageEditTestSnapshot } from '@/tests/imageEditV3SourceFixture'
 import { resetImageEditDocumentInstancesForTestsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
@@ -25,9 +25,9 @@ afterEach(() => { cleanup(); resetImageEditDocumentInstancesForTestsV3(); uninst
 async function editGeometryAndMark() {
   const bus = new ImageEditCommandBusV3(editorProps.document, { historySnapshot: editorProps.historySnapshot })
   bus.dispatch({ type: 'document.update-output-geometry', commandId: 'geometry', expectedRevision: 0, orientation: { rotate: 90, mirrored: true }, crop: { x: 1, y: 2, width: 30, height: 40 } })
-  const layer = createImageEditAnnotationLayerV3('marks', '标注')
+  const layer = createImageEditPathLayerV3('marks', '标注')
   bus.dispatch({ type: 'layer.add', commandId: 'layer', expectedRevision: 1, layer, parentId: null, index: 1 })
-  bus.dispatch({ type: 'annotation.add', commandId: 'mark', expectedRevision: 2, layerId: layer.id, index: 0, annotation: { id: 'mark', type: 'rect', x: 10, y: 20, width: 30, height: 40, stroke: BLACK_HEX, lineWidth: 2 } })
+  bus.dispatch({type:'layer.replace',commandId:'mark',expectedRevision:2,layerId:layer.id,layer:{...layer,name:'已编辑形状'}})
   const persistence = bus.getPersistenceSnapshot()
   await act(async () => { editorProps.onDocumentChange(persistence.document); editorProps.onPersistenceChange?.(persistence) })
   bus.dispose()
@@ -39,7 +39,7 @@ describe('查看器 V3 快速标记宿主', () => {
     render(<ViewerMarkEditor imageUrl="C:/source.png" onClose={vi.fn()} onSave={save} onSessionChange={changed} />)
     await screen.findByTestId('v3-viewer-editor')
     expect(editorProps.profileId).toBe('quick')
-    expect(editorProps.document.version).toBe(8)
+    expect(editorProps.document.version).toBe(9)
     const document = await editGeometryAndMark()
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(save).toHaveBeenCalledOnce())

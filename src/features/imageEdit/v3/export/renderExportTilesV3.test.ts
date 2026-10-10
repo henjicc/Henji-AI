@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DIFFUSION_V4_RECIPE_ADAPTER, ImageEditResourceBudget, createImageEditAnnotationLayerV3, createImageEditDocumentV3, createImageEditEffectLayerV3, type ImageEditDocumentV3 } from '@/core/imageEdit/v3'
+import { DIFFUSION_V4_RECIPE_ADAPTER, ImageEditResourceBudget, createImageEditPathLayerV3, createImageEditDocumentV3, createImageEditEffectLayerV3, type ImageEditDocumentV3 } from '@/core/imageEdit/v3'
 import { resolveImageEditorV3ExportSourceBitDepth } from './capabilities'
 import { type ImageEditorV3ExportSourceTileRequest } from './contracts'
 import { renderImageEditorV3ExportTiles } from './renderExportTilesV3'
@@ -30,7 +30,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
       documentId: 'layer-order',
       sourceResourceId: SOURCE,
     })
-    const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
+    const annotation = createImageEditPathLayerV3('annotation', '标注')
     const blur = createImageEditEffectLayerV3(
       'blur',
       'Gaussian Blur',
@@ -58,7 +58,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
       documentId: 'gaussian-export',
       sourceResourceId: SOURCE,
     })
-    const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
+    const annotation = createImageEditPathLayerV3('annotation', '标注')
     const blur = createImageEditEffectLayerV3(
       'gaussian',
       '高斯模糊',
@@ -85,7 +85,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
       documentId: 'diffusion-export',
       sourceResourceId: SOURCE,
     })
-    const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
+    const annotation = createImageEditPathLayerV3('annotation', '标注')
     const diffusion = createImageEditEffectLayerV3(
       'diffusion',
       '柔光',

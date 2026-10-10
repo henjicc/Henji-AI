@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, type Mock } from 'vitest'
 
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3'
+import { createImageEditDocumentV3, createImageEditPathLayerV3, createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3'
+import { rectanglePath } from '@/core/imaging/vectorContent'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 import type { ImageEditorGpuSceneExportRequestV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import { ImageEditorGpuExportSessionV3 } from './gpuExportSessionV3'
@@ -35,6 +36,20 @@ function request(document: ReturnType<typeof createImageEditDocumentV3>) {
 }
 
 describe('ImageEditorGpuExportSessionV3', () => {
+  it('可编辑路径蒙版直接选择CPU导出，不启动已回退的GPU场景', () => {
+    const gpu = client()
+    const session = new ImageEditorGpuExportSessionV3(gpu)
+    const document = createImageEditDocumentV3({ width: 16, height: 16 })
+    const layer = createImageEditPathLayerV3('masked-shape', '图形', 'shape')
+    layer.mask = { ...createImageEditSparseMaskReferenceV3('path-mask', false, 0),
+      vectorPaths: [{ operation: 'replace', path: rectanglePath(0, 0, 8, 8) }] }
+    document.layers.push(layer)
+    session.syncSnapshot({ document, renderGeneration: 1, geometryHash: 'a', quality: 'stable', resourceDescriptors: [] })
+    session.notifyDeviceUnavailable(new Error('GPU Scene 尚未准备完成'))
+    expect(session.render(request(document))).toBeNull()
+    expect(gpu.requestExport).not.toHaveBeenCalled()
+    session.dispose()
+  })
   it('设备已失败时切换快照不会清除立即失败门禁', async () => {
     const gpu = client()
     const session = new ImageEditorGpuExportSessionV3(gpu)

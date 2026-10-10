@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { UI_SEGMENTED_TRACK_CLASS, UiOptionButton, UiSwitch } from '@/components/ui'
 import type { ImageEditCommandBusV3 } from '../../application/imageEditCommandBus'
 import { useImageEditorSessionStoreV3 } from '../../store'
-import { ImageEditorAnnotationParametersV3 } from '../../editor/ImageEditorAnnotationParametersV3'
 import { findImageEditLayerLocationV3 } from '../../editor/layerTreeV3'
 import { imageEditorSelectionAllowedCombineModesV3 } from '../../editor/selectionMaskLayerV3'
 import type { ImageEditorV3Controller } from '../../editor/types'
@@ -38,8 +37,7 @@ export function LegacyToolOptions({
 
   if (!session) return null
   const moveLike = session.activeTool === 'move'
-  const annotationLike = session.activeTool.startsWith('annotation-') || moveLike
-  if (!moveLike && !annotationLike && !selectionLike) return null
+  if (!moveLike && !selectionLike) return null
 
   return (
     <div data-tool-parameters className="flex h-full min-w-max items-center gap-4">
@@ -57,7 +55,6 @@ export function LegacyToolOptions({
           />
         </label>
       ) : null}
-      {annotationLike ? <ImageEditorAnnotationParametersV3 controller={controller} /> : null}
       {selectionLike ? (
         <div
           role="group"

@@ -43,7 +43,7 @@ describe('CPU 区域合成的唯一采样网格契约', () => {
       createTransparent: (region: ImageEditRect) => rgba(region, () => [0, 0, 0, 0]),
       // 稀疏存储改变载入网格范围但不改变底图采样语义；未命中远处覆盖的ROI保留底图。
       loadRaster: vi.fn(async (_node, region: ImageEditRect) => rgba(region, (x, y) => x === 0 && y === 0 ? [1, 0, 0, 1] : [0, 0, 0, 0])),
-      rasterizeAnnotations: async () => { throw new Error('没有标注') },
+      rasterizeVectorContent: async () => { throw new Error('没有标注') },
       loadMask: async () => { throw new Error('没有蒙版') },
     }
     const expected = resampleImageEditRgbaAffineV3(rgba(sourceRect, () => [1, 0, 0, 1]), sourceRect, outputRegion, sourceToOutput)
@@ -70,7 +70,7 @@ describe('CPU 区域合成的唯一采样网格契约', () => {
           toEvaluation: [1 / 8, 0, 0, 1 / 8, 0, 0] } : undefined,
       createTransparent: (region) => rgba(region, () => [0, 0, 0, 0]),
       loadRaster: async (_node, region) => rgba(region, (x, y) => x === 0 && y === 0 ? [1, 0, 0, 1] : [0, 0, 0, 0]),
-      rasterizeAnnotations: async () => { throw new Error('没有标注') }, loadMask: async () => { throw new Error('没有蒙版') },
+      rasterizeVectorContent: async () => { throw new Error('没有标注') }, loadMask: async () => { throw new Error('没有蒙版') },
     })
     const alpha = resampleImageEditRgbaAffineV3(rgba(sourceRect, () => [1, 0, 0, 1]), sourceRect, outputRegion, sourceToOutput).data
     for (let index = 3; index < alpha.length; index += 4) {
@@ -94,7 +94,7 @@ describe('CPU 区域合成的唯一采样网格契约', () => {
           ? { size: sourceRect, toEvaluation: [1 / 8, 0, 0, 1 / 8, 0, 0] as const } : undefined,
       createTransparent: (region: ImageEditRect) => rgba(region, () => [0, 0, 0, 0]),
       loadRaster: async (_node: unknown, region: ImageEditRect) => rgba(region, () => [1, 0, 0, 1]),
-      rasterizeAnnotations: async () => { throw new Error('没有标注') }, loadMask,
+      rasterizeVectorContent: async () => { throw new Error('没有标注') }, loadMask,
     }
     const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
     const actual = await executeImageEditCpuRenderRegionPlanV3(plan, outputRegion, context)
@@ -129,7 +129,7 @@ describe('CPU 区域合成的唯一采样网格契约', () => {
           ? { size: { width: 1, height: 1 }, toEvaluation: [1, 0, 0, 1, 0, 0] } : undefined,
         createTransparent: (requested) => rgba(requested, () => [0, 0, 0, 0]),
         loadRaster: async (_node, requested) => rgba(requested, () => [1, 1, 1, 1]),
-        rasterizeAnnotations: async () => { throw new Error('没有标注') }, loadMask,
+        rasterizeVectorContent: async () => { throw new Error('没有标注') }, loadMask,
       },
     )
     expect(Array.from(actual!.data).filter((_value, index) => index % 4 === 3)).toEqual(expected)

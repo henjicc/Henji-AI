@@ -200,7 +200,7 @@ describe("共享透视与网格：真实GPU对照分块CPU导出", () => {
                         ] / 255,
                     ),
                   ),
-                rasterizeAnnotations: async () => {
+                rasterizeVectorContent: async () => {
                   throw new Error("unexpected annotation");
                 },
                 createTransparent: (region) =>

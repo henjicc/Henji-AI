@@ -10,7 +10,7 @@ import {
   Lock,
   SlidersHorizontal,
   Sparkles,
-  SquarePen,
+  Type, Shapes, PenTool,
   Unlock,
   Link,
   Unlink,
@@ -53,7 +53,7 @@ interface ImageEditorLayerRowV3Props {
 const TYPE_ICON = {
   smart: FileImage,
   raster: Image,
-  annotation: SquarePen,
+  text: Type, shape: Shapes, path: PenTool,
   effect: Sparkles,
   adjustment: SlidersHorizontal,
   group: Layers3,

@@ -9,7 +9,7 @@ export type ImageEditorToolIdV3 = ImageEditorRegisteredToolId;
 export type ImageEditorPanelIdV3 = 'layers' | 'properties' | 'histogram' | 'color' | 'history' | 'channels' | 'adjustments';
 export type ImageEditorLayerControlV3 = 'blend-mode' | 'mask';
 export type ImageEditorSaveActionV3 = 'save-document' | 'save-package' | 'export-raster';
-export type ImageEditorLayerKindV3 = 'raster' | 'smart' | 'annotation' | 'effect' | 'adjustment' | 'group';
+export type ImageEditorLayerKindV3 = 'raster' | 'smart' | 'text' | 'shape' | 'path' | 'effect' | 'adjustment' | 'group';
 
 export type ImageEditorCapabilityReadinessStateV3 = 'ready' | 'disabled' | 'limited';
 
@@ -87,7 +87,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   full: {
     id: 'full',
     get tools() { return registeredTools('full'); },
-    layerKinds: ['raster', 'smart', 'effect', 'adjustment', 'group'],
+    layerKinds: ['raster', 'smart', 'text', 'shape', 'path', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: listCreatableImageEditOperationIdsV3('adjustment'),
     panels: ['layers', 'properties', 'history', 'channels', 'adjustments'],
@@ -102,7 +102,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   quick: {
     id: 'quick',
     get tools() { return registeredTools('quick'); },
-    layerKinds: ['effect'],
+    layerKinds: ['text', 'shape', 'path', 'effect'],
     effects: CORE_EFFECTS.filter(({ id }) => id !== 'image.vgpu-glow'),
     adjustments: [],
     panels: ['layers', 'properties', 'history'],
@@ -117,7 +117,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   'canvas-edit': {
     id: 'canvas-edit',
     get tools() { return registeredTools('canvas-edit'); },
-    layerKinds: ['raster', 'smart', 'effect', 'adjustment', 'group'],
+    layerKinds: ['raster', 'smart', 'text', 'shape', 'path', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: listCreatableImageEditOperationIdsV3('adjustment'),
     panels: ['layers', 'properties', 'history', 'channels', 'adjustments'],

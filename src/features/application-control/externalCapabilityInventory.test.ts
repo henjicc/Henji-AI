@@ -10,7 +10,7 @@ import { buildExternalCapabilityInventory, externalReflectionPermissions } from 
  * 写成文档只在有人去读的时候成立，所以边界本身在这里被钉死：八个业务写域必须都可写、有意
  * 只读的域必须带得住理由、助手内部运行目录必须一个都不出现。
  */
-const BUSINESS_WRITE_DOMAINS = ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'models', 'settings', 'memory'] as const
+const BUSINESS_WRITE_DOMAINS = ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'models', 'settings', 'memory'] as const
 const INTENTIONAL_READ_ONLY_DOMAINS = ['storyboard', 'toolbox'] as const
 const NEVER_EXPOSED_DOMAINS = ['assistant_runtime', 'artifacts'] as const
 
@@ -61,7 +61,7 @@ describe('外部能力面派生自真实注册表', () => {
   it('公开写入范围与 writeExclusion 声明一致，排除项一个都不放行', () => {
     const writable = new Set(externalWritableEntityTypes(domains))
     // 真实写过的目标（2.1／2.2 的四域与后台链路）必须在范围内。
-    for (const type of ['settings.registry', 'generation.model', 'asset', 'asset.library', 'canvas.node', 'camera_stage.object', 'camera_stage.state_keyframe', 'image_edit.layer', 'image_mark.annotation']) {
+    for (const type of ['settings.registry', 'generation.model', 'asset', 'asset.library', 'canvas.node', 'camera_stage.object', 'camera_stage.state_keyframe', 'image_edit.layer']) {
       expect(writable.has(type), `${type} 应属于公开业务写入范围`).toBe(true)
     }
     // 声明了 writeExclusion 的实体一律在范围外，通用读改增删不能落到它们身上。

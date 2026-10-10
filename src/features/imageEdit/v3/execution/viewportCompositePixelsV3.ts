@@ -1,3 +1,4 @@
+import {rasterizeVectorCoverage} from '@/core/imaging/vectorContent';
 import { createImageEditRasterReplacementV3, addImageEditRasterReplacementV3, finishImageEditRasterReplacementV3 } from '@/core/imageEdit/v3/execution/rasterTileReplacement'
 import {
   IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
@@ -16,8 +17,7 @@ import {
   type ImageEditSize,
   type ImageEditSparseMaskReferenceV3,
 } from '@/core/imageEdit/v3'
-import type { MarkItem } from '@/core/imageEdit/types'
-import { drawMarkItems } from '@/features/imageMark/render/drawMarks'
+import { rasterizeVectorContent } from '@/services/vectorContent/raster'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorPreviewBrushTileV3 } from './previewProtocolV3'
 
@@ -235,8 +235,8 @@ export function loadImageEditorViewportSparseMaskV3(
   signal: AbortSignal,
 ): Float32MaskTile {
   const available = brushMap(tiles)
-  const output = new Float32Array(region.width * region.height)
-  output.fill(reference.defaultValue)
+  const output = reference.vectorPaths ? rasterizeVectorCoverage(reference.vectorPaths,region,2**(-mip),2**(-mip),signal) : new Float32Array(region.width * region.height)
+  if(!reference.vectorPaths) output.fill(reference.defaultValue)
   const scale = 2 ** mip
   for (const [tileKey, resourceId] of Object.entries(reference.tiles)) {
     const [mipValue, tileXValue, tileYValue, extra] = tileKey.split('/')
@@ -288,7 +288,7 @@ function imageDataToViewportTile(imageData: ImageData): Float32PremultipliedRgba
   return createFloat32PremultipliedRgbaTile(imageData.width, imageData.height, 'linear-light', data)
 }
 
-export function rasterizeImageEditorViewportAnnotationsV3(
+export function rasterizeImageEditorViewportVectorContentV3(
   node: ImageEditRenderPlanNode,
   document: ImageEditDocumentV3,
   region: ImageEditRect,
@@ -299,17 +299,7 @@ export function rasterizeImageEditorViewportAnnotationsV3(
   const canvas = new OffscreenCanvas(region.width, region.height)
   const context = canvas.getContext('2d', { willReadFrequently: true })
   if (!context) throw new Error('无法创建视口标注分块画布')
-  context.save()
-  context.translate(-region.x, -region.y)
-  context.scale(1 / (2 ** mip), 1 / (2 ** mip))
-  drawMarkItems(
-    context,
-    Array.isArray(node.parameters.annotations) ? node.parameters.annotations as MarkItem[] : [],
-    document.geometry.width,
-    document.geometry.height,
-    { canvasKind: 'offscreen' },
-  )
-  context.restore()
+  context.putImageData(rasterizeVectorContent(node.parameters, { ...region, scale: 1 / (2 ** mip) }, { sourceVersion: String(document.revision), time: { kind: 'static' }, referenceGrid: document.geometry, quality: 'interactive', signal }), 0, 0)
   throwIfAborted(signal)
   return convertFloat32TileWorkingSpaceV3(
     imageDataToViewportTile(context.getImageData(0, 0, region.width, region.height)),

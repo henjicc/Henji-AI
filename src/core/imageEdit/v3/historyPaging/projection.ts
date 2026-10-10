@@ -32,7 +32,6 @@ const labels: Record<ImageEditCommandV3['type'], string> = {
   'layer.duplicate': '复制图层', 'layer.group': '组合图层', 'layer.ungroup': '解散图层组',
   'layer.update-common': '调整图层', 'layer.update-params': '调整效果',
   'group.update-isolation': '调整图层组合成', 'layer.set-mask': '调整蒙版',
-  'annotation.add': '添加标注', 'annotation.update': '修改标注', 'annotation.delete': '删除标注',
   'raster.apply-tile-delta': '绘制像素', 'mask.apply-tile-delta': '绘制蒙版',
 };
 

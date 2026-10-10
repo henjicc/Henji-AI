@@ -1,3 +1,4 @@
+import { richTextContentSchema, vectorPathContentSchema, type RichTextContent, type VectorPathContent } from '@/core/imaging/vectorContent'
 import { deformationSchema } from '@/core/imaging/transforms';
 import { imageEditTransformSchemaV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3, imageEditSparseMaskSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
 import { z } from 'zod'
@@ -34,6 +35,7 @@ export interface ImageEditV3LayerFieldSource {
 }
 
 export interface ImageEditV3LayerMutationDraft {
+  vectorContent?: RichTextContent | VectorPathContent
   contentType?: 'raster' | 'smart'
   smartDocument?: ImageEditDocumentV3
   smartOrigin?: ImageEditSmartOriginV3 | null
@@ -51,6 +53,7 @@ export interface ImageEditV3MaskFieldSource {
 
 export interface ImageEditV3MaskMutationDraft {
   inverted?: boolean
+  vectorPaths?: import('@/core/imaging/vectorContent').VectorPathOperand[] | null
 }
 
 function digest(seed: string): string {
@@ -101,7 +104,7 @@ function property(
 const READ_ONLY_IDENTITY = '由当前打开的 V3 图片文档和图层树维护。'
 const BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'soft-light']
   .map((value) => ({ value, label: value }))
-const LAYER_TYPES = ['raster', 'smart', 'annotation', 'effect', 'adjustment']
+const LAYER_TYPES = ['raster', 'smart', 'text', 'shape', 'path', 'effect', 'adjustment']
   .map((value) => ({ value, label: value }))
 const PARAMS_SCHEMA_REF = imageEditV3SchemaRef('property', 'image_edit.layer.params.value')
 
@@ -315,6 +318,10 @@ export const IMAGE_EDIT_V3_LAYER_FIELDS: ApplicationFieldDefinition<
   ImageEditV3LayerMutationDraft
 >[] = [
   ...createCommonFields('image_edit.layer'),
+  { propertyId: 'image_edit.layer.content', descriptor: property('image_edit.layer', 'content', '文字段落与样式或矢量路径、布尔组合与填充描边阴影；坐标为作品空间，字体使用已登记名称', { kind:'json',schemaRef:imageEditV3SchemaRef('property','image_edit.layer.content.value') }, {nullable:true}),
+    read:source => ['text','shape','path'].includes(source.location.layer.type) ? (source.location.layer as import('@/core/imageEdit/v3/layerTypes').ImageEditVectorLayerV3).content as unknown as JsonValue : null,
+    writer:{write(draft,mutation){draft.vectorContent=z.union([richTextContentSchema,vectorPathContentSchema]).parse(mutation.value)}},storeActions:[] },
+
   { propertyId: 'image_edit.layer.deformation', descriptor: property('image_edit.layer', 'deformation', '非破坏透视或网格；控制点为对象空间比例，四角顺时针或网格逐行。清空恢复原像素。', { kind: 'json', schemaRef: imageEditV3SchemaRef('property', 'image_edit.layer.deformation.value') }, { nullable: true }), read: source => source.location.layer.deformation as JsonValue ?? null, writer: { write(draft, mutation) { draft.commonPatch.deformation = deformationSchema.nullable().parse(mutation.value); } }, storeActions: [] },
   {
     propertyId: 'image_edit.layer.type',
@@ -431,6 +438,12 @@ export const IMAGE_EDIT_V3_MASK_FIELDS: ApplicationFieldDefinition<
         .map((resourceId) => imageEditV3ResourceRef(source.documentId, resourceId))
       : [],
     storeActions: [],
+  },
+  {
+    propertyId:'image_edit.mask.vector_paths',
+    descriptor:property('image_edit.mask','vector_paths','可编辑路径覆盖与布尔组合；坐标为蒙版自身作品空间，null 清除路径基底并保留笔刷瓦片',{kind:'json',schemaRef:imageEditV3SchemaRef('property','image_edit.mask.vector_paths.value')},{nullable:true}),
+    read:source => source.location.layer.mask?.vectorPaths as unknown as JsonValue ?? null,
+    writer:{write(draft,mutation){draft.vectorPaths=vectorPathContentSchema.shape.operands.nullable().parse(mutation.value)}},storeActions:[],
   },
   {
     propertyId: 'image_edit.mask.inverted',

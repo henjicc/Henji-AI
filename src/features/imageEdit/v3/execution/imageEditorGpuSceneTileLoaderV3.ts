@@ -1,10 +1,11 @@
+import {ensureVectorDocumentFonts} from '@/services/vectorContent/fonts'
 import { enumerateTilesForRect, mipSize, type ImageEditDocumentV3, type ImageEditRenderPlanNode } from '@/core/imageEdit/v3'
 import { createImageEditorV3RequestId, readImageEditorV3BrushTiles, readImageEditorV3SourceTile } from '@/commands/imageEditorV3'
 import type { ImageEditorV3ResourceDescriptor, ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import { readImageEditorGpuBrushTilesV3 } from './imageEditorGpuBrushTileReaderV3'
 import { applyImageEditorViewportBrushTilesV3, createTransparentImageEditorViewportRegionV3,
-  loadImageEditorViewportSourceRegionV3, rasterizeImageEditorViewportAnnotationsV3,
+  loadImageEditorViewportSourceRegionV3, rasterizeImageEditorViewportVectorContentV3,
   viewportCompositeSourceTileKeyV3 } from './viewportCompositePixelsV3'
 import { floatPremultipliedTileToGpuSource } from './imageEditorGpuTileSourceV3'
 
@@ -58,7 +59,8 @@ export async function loadImageEditorGpuSceneTileV3(
   if (key.format === 'r8unorm' && key.resourceKind === 'source-raster') throw new Error('GPU 蒙版仅接受稀疏受管瓦片')
   const descriptor = context.resourceDescriptors.get(key.resourceRef)
   const annotation = context.annotationNodes.get(key.resourceRef)
-  if (key.resourceKind === 'generated-annotation' && annotation) {
+  if (key.resourceKind === 'generated-vector') {
+    if (!annotation) throw new Error('当前文字或路径绘制请求已失效，请重试。')
     const document = context.document
     if (!document) throw new Error('GPU Scene 标注光栅化缺少文档快照')
     const dimensions = mipSize(document.geometry, key.mip)
@@ -67,7 +69,8 @@ export async function loadImageEditorGpuSceneTileV3(
     const width = Math.min(dimensions.width, key.tileX * 512 + 513) - x
     const height = Math.min(dimensions.height, key.tileY * 512 + 513) - y
     if (width < 1 || height < 1) throw new Error('GPU Scene 标注瓦片超出文档范围')
-    const tile = rasterizeImageEditorViewportAnnotationsV3(
+    await ensureVectorDocumentFonts(document)
+    const tile = rasterizeImageEditorViewportVectorContentV3(
       annotation, document, { x, y, width, height }, key.mip, signal,
     )
     return floatPremultipliedTileToGpuSource(key, tile.data, width, height, { x, y })

@@ -1,12 +1,13 @@
+import {imageEditLayersFromMarkDraftV3} from '@/core/imageEdit/v3/layerEntries/vectorDraft'
 /** @vitest-environment jsdom */
 
 import '@/tests/imageEditDocumentFixture'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import Konva from 'konva'
+
 
 import {
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditRasterLayerV3,
@@ -19,7 +20,7 @@ import i18n from '@/i18n/config'
 
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorV3 } from './ImageEditorV3'
-import { installKonvaCanvasTestContext, mockKonvaViewportRect } from './imageEditorKonvaTestUtils'
+import { installKonvaCanvasTestContext } from './imageEditorKonvaTestUtils';
 import type { ImageEditorV3PreviewRenderer } from './types'
 
 class ResizeObserverStub {
@@ -87,8 +88,6 @@ describe('图片编辑 V3 图层变换交互', () => {
       layerDragBySession: {},
       viewportZoomBySession: {},
       viewportPanBySession: {},
-      annotationSelectionBySession: {},
-      annotationPreviewBySession: {},
     })
   })
 
@@ -98,57 +97,12 @@ describe('图片编辑 V3 图层变换交互', () => {
     vi.unstubAllGlobals()
   })
 
-  it('move 命中具体标注时保留单对象二次编辑，并只写一条对象历史', async () => {
-    installKonvaCanvasTestContext()
-    mockKonvaViewportRect()
-    const annotation = createImageEditAnnotationLayerV3('annotations', '标注')
-    annotation.annotations = [{
-      id: 'rect', type: 'rect', x: 40, y: 40, width: 160, height: 80,
-      stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 4,
-    }]
-    const changes: ImageEditDocumentV3[] = []
-    const persistence: ImageEditPersistenceSnapshotV3[] = []
-    const rendered = renderEditor(createDocument([annotation]), {
-      onDocumentChange: (next) => changes.push(next),
-      onPersistenceChange: (snapshot) => persistence.push(snapshot),
-    })
-    const stage = await waitFor(() => {
-      const current = Konva.stages.find((candidate) => (
-        rendered.container.contains(candidate.container())
-      ))
-      expect(current).toBeTruthy()
-      return current
-    })
-    const target = stage?.find('Rect').find((node) => node.draggable())
-    if (!target) throw new Error('测试缺少标注对象')
-
-    act(() => target.fire('click', { evt: new MouseEvent('click') }, true))
-    expect(changes).toHaveLength(0)
-    expect(rendered.container.querySelector('[data-selected-annotation-type="rect"]')).toBeTruthy()
-
-    act(() => {
-      target.position({ x: 140, y: 80 })
-      target.fire('dragend', {
-        target,
-        evt: new MouseEvent('mouseup'),
-      }, true)
-    })
-
-    await waitFor(() => expect(changes).toHaveLength(1))
-    const layer = changes[0].layers[0]
-    if (layer.type !== 'annotation') throw new Error('测试预期标注图层')
-    expect(layer.annotations[0]).toMatchObject({ x: 140, y: 80 })
-    expect(layer.transform).toEqual([1, 0, 0, 1, 0, 0])
-    expect(persistence).toHaveLength(1)
-    expect(persistence[0].history.undo).toHaveLength(1)
-  })
-
   it('move 在非对象背景拖动当前单选标注图层，并保持对象局部坐标', async () => {
-    const annotation = createImageEditAnnotationLayerV3('annotations', '标注')
-    annotation.annotations = [{
+    const annotation = createImageEditPathLayerV3('annotations', '标注')
+    Object.assign(annotation, { ...imageEditLayersFromMarkDraftV3(([{
       id: 'rect', type: 'rect', x: 40, y: 40, width: 160, height: 80,
       stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 4,
-    }]
+    }] as import('@/core/imageEdit/types').MarkItem[])[0])[0], id: annotation.id, name: annotation.name })
     const changes: ImageEditDocumentV3[] = []
     const rendered = renderEditor(createDocument([annotation]), {
       onDocumentChange: (next) => changes.push(next),
@@ -171,8 +125,8 @@ describe('图片编辑 V3 图层变换交互', () => {
 
     await waitFor(() => expect(changes).toHaveLength(1))
     const layer = changes[0].layers[0]
-    if (layer.type !== 'annotation') throw new Error('测试预期标注图层')
-    expect(layer.annotations[0]).toMatchObject({ x: 40, y: 40 })
+    if (layer.type !== 'shape') throw new Error('测试预期标注图层')
+    expect(layer.content.operands[0].path.commands[0]).toMatchObject({x:40,y:40})
     expect(layer.transform).toEqual([1, 0, 0, 1, 100, 40])
   })
 

@@ -3,13 +3,7 @@ import {
   ANNOTATION_DEFAULT_TEXT_HEX,
 } from '../theme/colorTokens';
 import {
-  createEmptyMarkDoc,
-  createEmptyMarkOrientation,
-  type ImageMarkDoc,
-  type MarkCropRect,
   type MarkItem,
-  type MarkOrientation,
-  type MarkRotation,
 } from './types';
 
 export function createMarkId(): string {
@@ -130,77 +124,5 @@ export function sanitizeMarkItem(item: unknown): MarkItem | null {
     };
   }
 
-  if (type === 'mosaic') {
-    if (!isFiniteNumber(item.x) || !isFiniteNumber(item.y) || !isFiniteNumber(item.width) || !isFiniteNumber(item.height)) return null;
-    return {
-      id,
-      type,
-      x: item.x,
-      y: item.y,
-      width: Math.max(0, item.width),
-      height: Math.max(0, item.height),
-      ...(isFiniteNumber(item.strengthPercent)
-        ? { strengthPercent: Math.max(0.1, item.strengthPercent) }
-        : {}),
-      ...(item.mode === 'blur' ? { mode: 'blur' as const } : {}),
-    };
-  }
-
   return null;
-}
-
-export function parseMarkItems(value: unknown): MarkItem[] {
-  let source = value;
-  if (typeof value === 'string') {
-    try {
-      source = JSON.parse(value) as unknown;
-    } catch {
-      return [];
-    }
-  }
-  if (!Array.isArray(source)) return [];
-  return source.map(sanitizeMarkItem).filter((item): item is MarkItem => item !== null);
-}
-
-export function stringifyMarkItems(items: MarkItem[]): string {
-  return JSON.stringify(items);
-}
-
-const VALID_ROTATIONS: MarkRotation[] = [0, 90, 180, 270];
-
-export function sanitizeMarkOrientation(value: unknown): MarkOrientation {
-  if (!isRecord(value)) return createEmptyMarkOrientation();
-  const rotate = isFiniteNumber(value.rotate) && VALID_ROTATIONS.includes(value.rotate as MarkRotation)
-    ? (value.rotate as MarkRotation)
-    : 0;
-  return { rotate, mirrored: value.mirrored === true };
-}
-
-export function sanitizeMarkCrop(value: unknown): MarkCropRect | null {
-  if (!isRecord(value)) return null;
-  if (!isFiniteNumber(value.x) || !isFiniteNumber(value.y) || !isFiniteNumber(value.width) || !isFiniteNumber(value.height) || value.width <= 0 || value.height <= 0) return null;
-  return { x: value.x, y: value.y, width: value.width, height: value.height };
-}
-
-export function parseMarkDoc(value: unknown): ImageMarkDoc {
-  let source = value;
-  if (typeof value === 'string') {
-    try {
-      source = JSON.parse(value) as unknown;
-    } catch {
-      return createEmptyMarkDoc();
-    }
-  }
-  if (Array.isArray(source)) return { ...createEmptyMarkDoc(), items: parseMarkItems(source) };
-  if (!isRecord(source)) return createEmptyMarkDoc();
-  return {
-    version: 1,
-    items: parseMarkItems(source.items),
-    orientation: sanitizeMarkOrientation(source.orientation),
-    crop: sanitizeMarkCrop(source.crop),
-  };
-}
-
-export function stringifyMarkDoc(doc: ImageMarkDoc): string {
-  return JSON.stringify(doc);
 }

@@ -5,68 +5,20 @@ import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes';
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '@/core/imageEdit/v3/documentTypes';
 import type { ImageEditEffectLayerV3 } from '@/core/imageEdit/v3/layerTypes';
-import type { MarkItem } from '@/core/imageEdit/types';
-function annotations(document: ImageEditDocumentV3): MarkItem[] { return document.layers.flatMap(layer => layer.type === 'annotation' ? layer.annotations : []); }
 function effect(document: ImageEditDocumentV3, id: string) { return document.layers.find((layer): layer is ImageEditEffectLayerV3 => layer.type === 'effect' && layer.effectId === id); }
 import { listImageEditorToolControls } from '@/features/imageEdit/tools/controlCatalog';
 import { buildImageEditDocumentFromControlOperations } from './imageEditDocumentBuilder';
 
 describe('智能助手图片编辑适配', () => {
-  it('保留原图空间标注并按 V3 朝向空间裁剪', () => {
-    const document = buildImageEditDocumentFromControlOperations([
-      {
-        kind: 'mark',
-        item: {
-          type: 'rect',
-          x: 10,
-          y: 20,
-          width: 30,
-          height: 40,
-          stroke: ANNOTATION_DEFAULT_STROKE_HEX,
-          lineWidth: 3,
-        },
-      },
-      { kind: 'rotate_cw', degrees: 90 },
-      { kind: 'crop', crop: { x: 10, y: 20, width: 100, height: 150 } },
-    ], { width: 400, height: 200 });
-
-    expect({ ...document.geometry, items: annotations(document) }).toMatchObject({
-      orientation: { rotate: 90, mirrored: false },
-      items: [{ type: 'rect', x: 10, y: 20, width: 30, height: 40 }],
-      crop: { x: 10, y: 20, width: 100, height: 150 },
-    });
-  });
-
-  it('兼容全部标注类型并为缺少 ID 的标注生成实例 ID', () => {
-    const items = [
-      { type: 'rect', x: 1, y: 2, width: 3, height: 4, stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 1, label: '说明', labelFontSize: 8, labelDx: 2, labelDy: 3, labelBackgroundColor: BLACK_HEX },
-      { type: 'ellipse', x: 1, y: 2, width: 3, height: 4, stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 1 },
-      { type: 'arrow', points: [1, 2, 3, 4], curveControl: [2, 1], stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 1 },
-      { type: 'pen', points: [1, 2, 3, 4], stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 1 },
-      { type: 'text', x: 1, y: 2, text: '说明', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 12, backgroundColor: BLACK_HEX },
-      { type: 'number', x: 1, y: 2, color: ANNOTATION_DEFAULT_STROKE_HEX, fontSize: 12 },
-      { type: 'mosaic', x: 1, y: 2, width: 3, height: 4, strengthPercent: 2, mode: 'blur' },
-    ];
-    const document = buildImageEditDocumentFromControlOperations(
-      items.map((item) => ({ kind: 'mark', item })),
-      { width: 100, height: 100 }
-    );
-    const markDoc = { items: annotations(document) };
-
-    expect(markDoc.items.map((item) => item.type)).toEqual([
-      'rect',
-      'ellipse',
-      'arrow',
-      'pen',
-      'text',
-      'number',
-      'mosaic',
-    ]);
-    expect(markDoc.items.every((item) => item.id.length > 0)).toBe(true);
-    expect(markDoc.items[0]).toMatchObject({ labelBackgroundColor: BLACK_HEX });
-    expect(markDoc.items[2]).toMatchObject({ curveControl: [2, 1] });
-    expect(markDoc.items[4]).toMatchObject({ backgroundColor: BLACK_HEX });
-  });
+  it('快速矩形与中文文字升级为正式图层，并保持原图坐标及输出几何',()=>{
+    const document=buildImageEditDocumentFromControlOperations([
+      {kind:'mark',item:{id:'rect',type:'rect',x:10,y:20,width:30,height:40,stroke:ANNOTATION_DEFAULT_STROKE_HEX,lineWidth:3}},
+      {kind:'mark',item:{id:'text',type:'text',x:40,y:50,text:'说明',color:ANNOTATION_DEFAULT_TEXT_HEX,fontSize:12,backgroundColor:BLACK_HEX}},
+      {kind:'rotate_cw',degrees:90},{kind:'crop',crop:{x:10,y:20,width:100,height:150}},
+    ],{width:400,height:200})
+    expect(document.layers).toMatchObject([{id:'rect',type:'shape',content:{operands:[{path:{commands:[{kind:'move',x:10,y:20},{kind:'line',x:40,y:20},{kind:'line',x:40,y:60},{kind:'line',x:10,y:60},{kind:'close'}]}}]}},{id:'text',type:'text',content:{paragraphs:[{runs:[{text:'说明',style:{background:{enabled:true,color:BLACK_HEX}}}]}]}}])
+    expect(document.geometry).toMatchObject({orientation:{rotate:90,mirrored:false},crop:{x:10,y:20,width:100,height:150}})
+  })
 
   it('按旋转后的真实尺寸拒绝越界或小于执行下限的裁剪，并给出可直接修正的信息', () => {
     expect(() => buildImageEditDocumentFromControlOperations([
@@ -279,7 +231,7 @@ describe('智能助手图片编辑适配', () => {
     existing.layers.push(createImageEditEffectLayerV3('existing', '柔光', 'image.diffusion', JSON.parse(JSON.stringify(createDefaultDiffusionOperationParams()))));
     const updated = buildImageEditDocumentFromControlOperations(Array.from({ length: 40 }, (_, index) => ({ kind: 'mark', item: { id: `mark-${index}`, type: 'text', x: 2, y: 3, text: '保留', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 12 } })), { width: 100, height: 100 }, existing);
     expect(updated.layers[0]).toEqual(existing.layers[0]);
-    expect(annotations(updated)).toHaveLength(40);
+    expect(updated.layers.filter(layer=>layer.type==='text')).toHaveLength(40);
     expect(updated.version).toBe(IMAGE_EDIT_DOCUMENT_VERSION_V3);
   });
 });

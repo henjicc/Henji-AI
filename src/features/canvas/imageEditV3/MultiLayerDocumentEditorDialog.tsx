@@ -16,7 +16,7 @@ import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { isEditableLayerStackResultNode } from '@/features/canvas/domain/canvasNodeGuards'
 import { parseMultiLayerDocumentNodeState } from '@/features/canvas/domain/multiLayerDocumentNode'
 import { imageEditToolPlugin } from '@/features/canvas/tools/builtInTools'
-import { useImageEditorInteractionStoreV3 } from '@/features/imageEdit/v3/store/imageEditorInteractionStoreV3'
+
 import { useImageEditorSessionStoreV3 } from '@/features/imageEdit/v3/store/imageEditorSessionStoreV3'
 import { useProjectStore } from '@/stores/projectStore'
 import {
@@ -72,16 +72,12 @@ export function MultiLayerDocumentEditorDialog({
   const selectedLayerIds = useImageEditorSessionStoreV3((state) => (
     editorContext ? state.sessions[editorContext.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS : EMPTY_LAYER_IDS
   ))
-  const annotationSelection = useImageEditorInteractionStoreV3((state) => (
-    editorContext ? state.annotationSelectionBySession[editorContext.sessionId] ?? null : null
-  ))
   const exportSelection = useMemo(() => editorContext
     ? resolveMultiLayerDocumentExportSelection({
         document: editorContext.document,
         selectedLayerIds,
-        annotationSelection,
       })
-    : { ready: false as const, reason: '编辑器仍在准备，请稍候' }, [annotationSelection, editorContext, selectedLayerIds])
+    : { ready: false as const, reason: '编辑器仍在准备，请稍候' }, [editorContext, selectedLayerIds])
 
   const requestClose = useCallback((): Promise<void> => {
     if (closePromiseRef.current) return closePromiseRef.current

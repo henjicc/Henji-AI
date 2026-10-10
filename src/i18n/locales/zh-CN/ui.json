@@ -879,7 +879,7 @@
         "remove": "移除",
         "repair": "修补",
         "select-lasso": "套索选择",
-        "annotation": "标注工具",
+        "annotation": "文字与图形",
         "annotation-text": "文字标注",
         "annotation-callout": "带文字标注",
         "annotation-arrow": "箭头标注",
@@ -899,7 +899,14 @@
         "mesh-transform": "网格变形",
         "clone-stamp": "仿制图章",
         "healing-brush": "修复画笔",
-        "content-aware-fill": "内容识别填充"
+        "content-aware-fill": "内容识别填充",
+        "vector-text": "文字",
+        "vector-rectangle": "矩形",
+        "vector-ellipse": "椭圆",
+        "vector-arrow": "箭头",
+        "vector-callout": "说明框",
+        "vector-number": "序号",
+        "vector-path": "路径"
       },
       "layerControls": {
         "rotate": "旋转图层",
@@ -1055,7 +1062,10 @@
         "annotation": "标注图层",
         "effect": "效果图层",
         "adjustment": "调整图层",
-        "group": "图层组"
+        "group": "图层组",
+        "text": "文字",
+        "shape": "形状",
+        "path": "路径"
       },
       "effect": {
         "image": {

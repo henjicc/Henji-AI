@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires, no-console, no-restricted-syntax -- Electron 取证夹具使用固定红蓝像素作断言，未进入产品配色。 */
 /**
  * 核心验收场景：用户在编辑 A 工程，外部连接读改保存另一个从未打开过的 B 工程里的图片文档。
  *
@@ -39,7 +40,7 @@ function createMcpBackgroundDocumentScenes(context) {
       const seeded = await openCanvasImageEditorV3Fixture({
         page, context, width: 640, height: 400, label: '后台文档底图', openEditor: false,
         annotations: [{ id: 'background-rect', type: 'rect', x: 20, y: 20, width: 100, height: 80,
-          stroke: 'red', lineWidth: 6 }],
+          stroke: '#ff0000', lineWidth: 6 }],
       })
       const step = (text) => console.log(`[MCP Reality] 后台文档：${text}`)
       step('夹具已种入 B 工程')
@@ -127,25 +128,25 @@ function createMcpBackgroundDocumentScenes(context) {
         assert.equal(projected.session.revision, 1, `画布预览没有跟上文档修订：${JSON.stringify(projected.session)}`)
         assert.equal(projected.session.documentRef, seeded.fixture.documentRef)
         // 标注也必须通过原文档引用发现、修改、保存，而不是借用当前编辑器的文档。
-        const annotationRef = { kind: 'image_mark.annotation', id: `v3:${documentId}:reality-annotation-layer:background-rect` }
-        const annotations = await callTool(client, 'list_application_entities', { entityType: 'image_mark.annotation', limit: 50 })
+        const annotationRef = { kind: 'image_edit.layer', id: `v3:${documentId}:reality-annotation-layer` }
+        const annotations = await callTool(client, 'list_application_entities', { entityType: 'image_edit.layer', limit: 50 })
         assert.ok(annotations.data.refs.some(ref => ref.id === annotationRef.id))
         const annotationRead = await callTool(client, 'read_application_entity', { ref: annotationRef,
-          propertyIds: ['image_mark.annotation.data'] })
-        assert.equal(annotationRead.data.properties['image_mark.annotation.data'].stroke, 'red')
+          propertyIds: ['image_edit.layer.content'] })
+        assert.equal(annotationRead.data.properties['image_edit.layer.content'].paint.strokes[0].color, '#ff0000')
         const marked = await callTool(client, 'change_application_entities', operationEnvelope([annotationRead], {
           summary: '后台修改 B 文档标注', changes: [{ kind: 'set_properties', entityType: annotationRef.kind,
-            target: annotationRef, properties: { 'image_mark.annotation.data': {
-              x: 40, y: 30, width: 120, height: 90, stroke: 'blue', lineWidth: 6,
+            target: annotationRef, properties: { 'image_edit.layer.content': {
+              ...annotationRead.data.properties['image_edit.layer.content'], operands:[{operation:'replace',path:{fillRule:'nonzero',commands:[{kind:'move',x:40,y:30},{kind:'line',x:160,y:30},{kind:'line',x:160,y:120},{kind:'line',x:40,y:120},{kind:'close'}]}}], paint:{...annotationRead.data.properties['image_edit.layer.content'].paint,strokes:[{enabled:true,color:'#0000ff',width:6,position:'center'}]},
             } } }],
         }))
         assert.equal(marked.executionState, 'completed', JSON.stringify(marked))
         const markedDocument = await page.evaluate(documentRef => window.henjiNative.imageEditorV3.loadDocument({
           requestId: `verify-mark-${crypto.randomUUID()}`, documentRef,
         }), seeded.fixture.documentRef)
-        const persistedMark = markedDocument.document.layers.find(layer => layer.id === 'reality-annotation-layer').annotations[0]
-        assert.equal(persistedMark.stroke, 'blue')
-        assert.equal(persistedMark.x, 40)
+        const persistedMark = markedDocument.document.layers.find(layer => layer.id === 'reality-annotation-layer').content
+        assert.equal(persistedMark.paint.strokes[0].color, '#0000ff')
+        assert.equal(persistedMark.operands[0].path.commands[0].x, 40)
         assert.equal((await readNodeSession(page, projectB, nodeId)).session.revision, markedDocument.document.revision)
 
         const exported = await callTool(client, 'export_image_edit_target_to_canvas', operationEnvelope([], {
@@ -206,7 +207,7 @@ function createMcpBackgroundDocumentScenes(context) {
       await editor.getByRole('button', { name: '撤销' }).click()
       await page.waitForFunction(async documentRef => {
         const loaded = await window.henjiNative.imageEditorV3.loadDocument({ requestId: `verify-undo-${crypto.randomUUID()}`, documentRef })
-        return loaded.document.layers.find(layer => layer.id === 'reality-annotation-layer').annotations[0].stroke === 'red'
+        return loaded.document.layers.find(layer => layer.id === 'reality-annotation-layer').content.paint.strokes[0].color === '#ff0000'
       }, seeded.fixture.documentRef)
       await editor.getByRole('button', { name: '撤销' }).click()
       await editor.locator(`[data-layer-id="${SOURCE_LAYER_ID}"]`).getByText('后台文档底图').waitFor({ state: 'visible', timeout: 15000 })
@@ -216,7 +217,7 @@ function createMcpBackgroundDocumentScenes(context) {
       await editor.getByRole('button', { name: '重做' }).click()
       await page.waitForFunction(async documentRef => {
         const loaded = await window.henjiNative.imageEditorV3.loadDocument({ requestId: `verify-redo-${crypto.randomUUID()}`, documentRef })
-        return loaded.document.layers.find(layer => layer.id === 'reality-annotation-layer').annotations[0].stroke === 'blue'
+        return loaded.document.layers.find(layer => layer.id === 'reality-annotation-layer').content.paint.strokes[0].color === '#0000ff'
       }, seeded.fixture.documentRef)
       await capture('redone-b')
       await settlePage(page, 400)

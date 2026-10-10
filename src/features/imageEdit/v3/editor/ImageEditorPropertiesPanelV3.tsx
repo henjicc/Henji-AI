@@ -1,3 +1,4 @@
+import { defaultTextStyle, vectorPathContentSchema } from '@/core/imaging/vectorContent'
 import { Plus, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -21,7 +22,8 @@ import {
 import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorEffectParametersV3 } from './ImageEditorEffectParametersV3'
-import { ImageEditorAnnotationPropertiesV3 } from './ImageEditorAnnotationPropertiesV3'
+import { VectorProperties } from '../tools/vector/VectorProperties'
+import { isImageEditVectorLayerV3 } from '@/core/imageEdit/v3/layerEntries/vector'
 import { ImageEditorLayerTransformPropertiesV3 } from './ImageEditorLayerTransformPropertiesV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { isImageEditLayerTransformableV3 } from './layerTransformV3'
@@ -235,7 +237,7 @@ export function ImageEditorPropertiesPanelV3({
       </UiGroup>
       ) : (
       <>
-        {editTarget !== 'mask' && (selected.type === 'raster' || selected.type === 'smart' || selected.type === 'annotation' || selected.type === 'group') ? (
+        {editTarget !== 'mask' && (selected.type === 'raster' || selected.type === 'smart' || isImageEditVectorLayerV3(selected) || selected.type === 'group') ? (
           <ImageEditorLayerTransformPropertiesV3
             controller={controller}
             layer={selected}
@@ -261,8 +263,8 @@ export function ImageEditorPropertiesPanelV3({
           </div>
         ) : null}
 
-        {editTarget !== 'mask' && selected.type === 'annotation' ? (
-          <ImageEditorAnnotationPropertiesV3
+        {editTarget !== 'mask' && isImageEditVectorLayerV3(selected) ? (
+          <VectorProperties
             controller={controller}
             layer={selected}
             locked={contentLocked}
@@ -280,6 +282,7 @@ export function ImageEditorPropertiesPanelV3({
               <UiFormRow density="compact" label={t('imageEditor.v3.workflow.maskEnabled')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.maskEnabled')} checked={selected.maskAttachment.enabled} disabled={contentLocked} onCheckedChange={enabled => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, enabled } })} /></UiFormRow>
               <UiFormRow density="compact" label={t('imageEditor.v3.workflow.maskLinked')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.maskLinked')} checked={selected.maskAttachment.linked} disabled={contentLocked} onCheckedChange={linked => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, linked } })} /></UiFormRow>
               <ImageEditorLayerScalarsV3 controller={controller} layer={selected} disabled={contentLocked} mask />
+              {editTarget === 'mask' && selected.mask.kind === 'sparse-mask' && selected.mask.vectorPaths && <VectorProperties controller={controller} locked={contentLocked} maskOnly layer={{ ...selected, type:'path', content:{ operands:selected.mask.vectorPaths, paint:{fill:defaultTextStyle(controller.document.geometry.height).fill,strokes:[],shadows:[]} } }} onContentChange={content => { if(selected.mask?.kind !== 'sparse-mask') return; controller.setLayerMask(selected.id, { ...selected.mask, vectorPaths:vectorPathContentSchema.parse(content).operands }) }} />}
               {editTarget === 'mask' ? <MaskTransformProperties layer={selected} disabled={contentLocked} controller={controller} /> : null}
               <UiFormRow density="compact" label={t('imageEditor.v3.properties.maskInverted')} inline>
                 <UiSwitch

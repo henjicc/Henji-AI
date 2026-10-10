@@ -1,3 +1,4 @@
+import { prepareVectorDocumentFonts } from '@/services/vectorContent/fonts'
 import type { ImageEditorManagedPreviewRequestV3, ImageEditorPreviewClientOptionsV3, ScheduledJobV3 } from './imageEditorPreviewClientTypesV3'
 import { createLogger } from '@/core/logging'
 import {
@@ -285,6 +286,7 @@ export class ImageEditorPreviewClientV3 {
       }))),
       this.brushTileLoader.load(brushRequests, job.document, job.abortController.signal),
     ])
+    const fonts = await prepareVectorDocumentFonts(job.document)
     this.assertActive(job)
     const event = await this.renderScheduler.schedule<ImageEditorPreviewWorkerEventV3>({
       id: job.renderTaskId,
@@ -307,6 +309,7 @@ export class ImageEditorPreviewClientV3 {
         maxDimension: job.maxDimension,
         proxies,
         brushTiles,
+        fonts,
       }, [
         ...proxies.map((proxy) => proxy.bytes),
         ...brushTiles.map((tile) => tile.bytes),

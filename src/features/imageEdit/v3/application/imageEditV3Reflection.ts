@@ -190,12 +190,13 @@ function layerAvailability(
       writable = false
       reasons.push('图层已锁定；请先把 locked 设为 false。')
     }
-    if (writable && propertyId.endsWith('.transform') && !['raster','smart','annotation','group'].includes(source.location.layer.type)) {
+    if (writable && propertyId.endsWith('.transform') && !['raster','smart','text','shape','path','group'].includes(source.location.layer.type)) {
       writable=false;reasons.push('仅像素、标注或图层组支持空间变换。');
     }
     if (writable && propertyId === 'image_edit.layer.deformation' && !['raster','smart'].includes(source.location.layer.type)) {
       writable = false; reasons.push('透视与网格变形需要像素图层；请先选择像素图层。');
     }
+    if(writable && propertyId === 'image_edit.layer.content' && !['text','shape','path'].includes(source.location.layer.type)){writable=false;reasons.push('请先选择文字、形状或路径图层。')}
     if (writable && propertyId === 'image_edit.layer.params') {
       const layer = source.location.layer
       if ((layer.type !== 'effect' && layer.type !== 'adjustment') || !layer.renderable) {
@@ -300,7 +301,7 @@ export class ImageEditV3ReflectionProvider {
     return {
       ref,
       entityType: this.entityType,
-      revisions: { image_edit: revision, ...(values['image_edit.layer.type'] === 'annotation' ? { image_mark: revision } : {}), ...imageEditPersistenceRevisionsV3(ref) },
+      revisions: { image_edit: revision, ...imageEditPersistenceRevisionsV3(ref) },
       properties: selectProperties(values, request.propertyIds),
       capturedAt: new Date().toISOString(),
     }

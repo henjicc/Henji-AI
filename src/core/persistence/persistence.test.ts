@@ -97,7 +97,7 @@ describe('Schema结构指纹', () => {
   })
   it('V3 黄金样本的标注、几何可读，V2 文档、legacy 载荷及旧模糊不能进入当前落盘', () => {
     const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/image-working-copy/v${IMAGE_WORKING_VERSION}.json`, 'utf8'))
-    expect(parseImageEditDocumentV3(raw.document)).toMatchObject({ geometry: { orientation: { rotate: 90, mirrored: true }, crop: { width: 32, height: 40 } }, layers: [{ type: 'smart' }, {}, {}, { type: 'annotation', annotations: [{ id: 'golden-mark' }] }, { type: 'smart' }] })
+    expect(parseImageEditDocumentV3(raw.document)).toMatchObject({ geometry: { orientation: { rotate: 90, mirrored: true }, crop: { width: 32, height: 40 } }, layers: [{ type: 'smart' }, {}, {}, { type:'shape',id:'golden-quick-marks' }, { type: 'smart' }] })
     const effect = raw.document.layers.find((layer: { type: string }) => layer.type === 'effect')
     effect.legacyOperation = { sourceVersion: 2, operation: { type: 'blur' } }
     expect(imageWorkingCopySchema.safeParse(raw).success).toBe(false)

@@ -1,3 +1,4 @@
+import {rasterizeVectorCoverage} from '@/core/imaging/vectorContent'
 import {
   createImageEditorV3RequestId,
   readImageEditorV3BrushTiles,
@@ -63,8 +64,8 @@ export function createImageEditorMaskBrushTileLoaderV3(
     const region = createTileRegion(options.document.geometry, coordinate, 0, options.mask.tileSize)
     const resourceId = options.mask.tiles[key]
     if (!resourceId) {
-      const data = new Float32Array(region.outputRect.width * region.outputRect.height)
-      if (options.mask.defaultValue === 1) data.fill(1)
+      const data=options.mask.vectorPaths?rasterizeVectorCoverage(options.mask.vectorPaths,region.outputRect,1,1,signal):new Float32Array(region.outputRect.width * region.outputRect.height)
+      if (!options.mask.vectorPaths && options.mask.defaultValue === 1) data.fill(1)
       return {
         tile: createFloat32MaskTile(region.outputRect.width, region.outputRect.height, data),
         resource: null,

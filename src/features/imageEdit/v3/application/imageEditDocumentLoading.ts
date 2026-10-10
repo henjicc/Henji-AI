@@ -78,7 +78,7 @@ export async function withImageEditDocumentInstanceV3<T>(documentId: string, exe
 }
 
 export async function ensureImageEditRefInstanceV3(ref: ApplicationRef): Promise<void> {
-  if ((!ref.kind.startsWith('image_edit.') && ref.kind !== 'image_mark.annotation') || !ref.id.startsWith('v3:')) {
+  if (!ref.kind.startsWith('image_edit.') || !ref.id.startsWith('v3:')) {
     throw new Error('NOT_FOUND')
   }
   const id = decodeURIComponent(ref.id.slice(3).split(':')[0])

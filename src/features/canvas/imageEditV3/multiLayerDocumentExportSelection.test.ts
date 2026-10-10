@@ -1,8 +1,9 @@
+import {imageEditLayersFromMarkDraftV3} from '@/core/imageEdit/v3/layerEntries/vectorDraft'
 import { describe, expect, it } from 'vitest'
 
 import {
   createImageEditAdjustmentLayerV3,
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
@@ -12,10 +13,10 @@ import {
 import { resolveMultiLayerDocumentExportSelection } from './multiLayerDocumentExportSelection'
 
 function document() {
-  const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
-  annotation.annotations = [{
+  const annotation = createImageEditPathLayerV3('annotation', '标注')
+  Object.assign(annotation, { ...imageEditLayersFromMarkDraftV3(([{
     id: 'mark-a', type: 'text', x: 1, y: 2, text: 'A', color: 'red', fontSize: 12,
-  }]
+  }] as import('@/core/imageEdit/types').MarkItem[])[0])[0], id: annotation.id, name: annotation.name })
   return {
     ...createImageEditDocumentV3({ width: 640, height: 480, documentId: 'export-document' }),
     layers: [
@@ -38,16 +39,8 @@ describe('多图层文档导出选择映射', () => {
     })).toMatchObject({ ready: true, targetRef: { kind } })
   })
 
-  it('只有选中具体标注元素时映射 image_mark.annotation', () => {
-    expect(resolveMultiLayerDocumentExportSelection({
-      document: document(),
-      selectedLayerIds: ['annotation'],
-    })).toMatchObject({ ready: false, reason: expect.stringContaining('具体元素') })
-    expect(resolveMultiLayerDocumentExportSelection({
-      document: document(),
-      selectedLayerIds: ['annotation'],
-      annotationSelection: { layerId: 'annotation', annotationId: 'mark-a' },
-    })).toMatchObject({ ready: true, targetRef: { kind: 'image_mark.annotation' } })
+  it('正式文字内容直接映射稳定图层引用',()=>{
+    expect(resolveMultiLayerDocumentExportSelection({document:document(),selectedLayerIds:['annotation']})).toMatchObject({ready:true,targetRef:{kind:'image_edit.layer'}})
   })
 
   it.each([

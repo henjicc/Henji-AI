@@ -163,7 +163,7 @@ export async function collectPixels(
   document: ImageEditDocumentV3,
   tileSize: number,
   images: ReadonlyMap<string, FakeImage>,
-  rasterizeAnnotations?: ReturnType<typeof annotationImpulse>,
+  rasterizeVectorContent?: ReturnType<typeof annotationImpulse>,
   managed?: {
     resourceDescriptors: Array<{
       resourceRef: `sha256:${string}`
@@ -196,7 +196,7 @@ export async function collectPixels(
     {
       readSourcePyramid: fakeSourcePyramidReader(images),
       readSourceTile: fakeSourceReader(images),
-      rasterizeAnnotations,
+      rasterizeVectorContent,
       readBrushTiles: async requests => ({ tiles: requests.map(({ tileKey, resource }) => {
         const image = images.get(resource.resourceId)
         if (!image) throw new Error(`missing fake mask ${resource.resourceId}`)

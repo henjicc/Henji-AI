@@ -1,4 +1,4 @@
-import { REGION_AA_SAMPLES_PER_AXIS, type RegionGeometry } from './contracts';
+import { REGION_AA_SAMPLES_PER_AXIS, type RegionGeometry, type RegionPoint } from './contracts';
 import { regionGeometryBounds } from './geometry';
 import { throwIfRegionAborted } from './coverage';
 
@@ -133,6 +133,8 @@ function rasterizeLassoCoverage(
   originY: number,
   shape: Extract<RegionGeometry, { type: 'lasso' }>,
   signal?: AbortSignal,
+  contours: readonly (readonly RegionPoint[])[] = [shape.points],
+  fillRule: 'nonzero' | 'evenodd' = 'evenodd',
 ): void {
   const bounds = regionGeometryBounds(shape);
   const [startY, endY] = clippedLocalRange(bounds.top, bounds.bottom, originY, height);
@@ -143,25 +145,19 @@ function rasterizeLassoCoverage(
     const fullPixelDifference = new Int16Array(width + 1);
     for (let sampleY = 0; sampleY < samples; sampleY += 1) {
       const documentY = originY + y + (sampleY + 0.5) / samples;
-      const intersections: number[] = [];
-      let previous = shape.points[shape.points.length - 1];
-      for (const current of shape.points) {
-        if ((current.y > documentY) !== (previous.y > documentY)) {
-          intersections.push(current.x
-            + ((documentY - current.y) * (previous.x - current.x))
-              / (previous.y - current.y));
+      const intersections: { x: number; winding: number }[] = [];
+      for(const points of contours) {
+        let previous=points[points.length-1];
+        for(const current of points){
+          if((current.y>documentY)!==(previous.y>documentY)) intersections.push({x:current.x+(documentY-current.y)*(previous.x-current.x)/(previous.y-current.y),winding:current.y>previous.y?1:-1});
+          previous=current;
         }
-        previous = current;
       }
-      intersections.sort((left, right) => left - right);
-      for (let index = 0; index + 1 < intersections.length; index += 2) {
-        addLassoSampleInterval(
-          partialCounts,
-          fullPixelDifference,
-          originX,
-          intersections[index],
-          intersections[index + 1],
-        );
+      intersections.sort((left,right)=>left.x-right.x);
+      let winding=0;
+      for(let index=0;index+1<intersections.length;index++){
+        winding += fillRule==='evenodd' ? 1 : intersections[index].winding;
+        if(fillRule==='evenodd' ? winding%2!==0 : winding!==0) addLassoSampleInterval(partialCounts,fullPixelDifference,originX,intersections[index].x,intersections[index+1].x);
       }
     }
     let fullSamples = 0;
@@ -191,3 +187,11 @@ export function rasterizeRegionGeometry(
   return output;
 }
 
+
+/** Compound contours share the exact same AA scanline kernel as selection lassos. */
+export function rasterizeRegionContours(width:number,height:number,originX:number,originY:number,contours:readonly (readonly RegionPoint[])[],fillRule:'nonzero'|'evenodd',signal?:AbortSignal):Float32Array {
+  const output=new Float32Array(width*height);
+  const valid=contours.filter(points=>points.length>=3);
+  if(valid.length) rasterizeLassoCoverage(output,width,height,originX,originY,{type:'lasso',points:valid.flat()},signal,valid,fillRule);
+  return output;
+}

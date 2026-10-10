@@ -95,7 +95,7 @@ export interface ImageEditorV3ExportRenderDependencies {
     request: ImageEditorV3ExportSourceTileRequest,
     signal: AbortSignal,
   ) => Promise<ImageEditorV3SourceTile>
-  rasterizeAnnotations?: (
+  rasterizeVectorContent?: (
     request: ImageEditorV3ExportAnnotationRasterizeRequest,
   ) => Promise<Float32PremultipliedRgbaTile>
   readBrushTiles?: (

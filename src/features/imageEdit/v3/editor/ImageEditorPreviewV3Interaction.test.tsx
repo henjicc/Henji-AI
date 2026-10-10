@@ -3,7 +3,7 @@ import '@/tests/imageEditDocumentFixture'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
@@ -113,8 +113,6 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       layerDragBySession: {},
       viewportZoomBySession: {},
       viewportPanBySession: {},
-      annotationSelectionBySession: {},
-      annotationPreviewBySession: {},
     })
     managedPreview.state = {
       result: null,
@@ -394,7 +392,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       documentId: 'draft-move-document',
       sourceResourceId: 'sha256:source',
     })
-    document.layers.push(createImageEditAnnotationLayerV3('annotation-layer', '标注'))
+    document.layers.push(createImageEditPathLayerV3('annotation-layer', '标注'))
     const changes = vi.fn()
     const rendered = render(
       <div style={{ width: 900, height: 600 }}>

@@ -1,3 +1,4 @@
+import { richTextContentSchema, vectorPathContentSchema } from '@/core/imaging/vectorContent'
 import type {
   ApplicationCollectionExecutor,
   ApplicationCompletedStepResult,
@@ -9,7 +10,7 @@ import type {
 } from '@/core/application-control'
 import {
   createImageEditAdjustmentLayerV3,
-  createImageEditAnnotationLayerV3,
+  createImageEditTextLayerV3, createImageEditPathLayerV3,
   createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
   createImageEditIdV3,
@@ -73,9 +74,10 @@ function createLayer(properties: Record<string, JsonValue>, document: ImageEditD
     if (definitionId !== null || params !== null) throw new Error('INVALID_INPUT：栅格图层的 definition_id 与 params 必须为 null。')
     return createImageEditRasterLayerV3(id, name)
   }
-  if (type === 'annotation') {
+  if (type === 'text' || type === 'shape' || type === 'path') {
     if (definitionId !== null || params !== null) throw new Error('INVALID_INPUT：标注图层的 definition_id 与 params 必须为 null。')
-    return createImageEditAnnotationLayerV3(id, name)
+    const content = fullProperty(properties, entityType, 'content')
+    return type === 'text' ? createImageEditTextLayerV3(id,name,content == null ? undefined : richTextContentSchema.parse(content)) : createImageEditPathLayerV3(id,name,type,content == null ? undefined : vectorPathContentSchema.parse(content))
   }
   if (type === 'effect') {
     const EFFECT_IDS = new Set(listCreatableImageEditOperationIdsV3('effect'))
@@ -93,7 +95,7 @@ function createLayer(properties: Record<string, JsonValue>, document: ImageEditD
     }
     return createImageEditAdjustmentLayerV3(id, name, adjustmentId, requiredParams(params))
   }
-  throw new Error('INVALID_INPUT：type 只能是 raster、annotation、effect 或 adjustment。')
+  throw new Error('INVALID_INPUT：type 只能是 raster、smart、text、shape、path、effect 或 adjustment。')
 }
 
 function createGroup(properties: Record<string, JsonValue>): ImageEditLayerV3 {

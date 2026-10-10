@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createImageEditAdjustmentLayerV3,
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
@@ -32,7 +32,7 @@ describe('ImageEditorRasterPasteboardV3', () => {
 
     expect(resolveImageEditorRasterPasteboardLayerV3(document)?.id).toBe(document.layers[0].id)
 
-    document.layers.push(createImageEditAnnotationLayerV3('annotation', '标注'))
+    document.layers.push(createImageEditPathLayerV3('annotation', '标注'))
     expect(resolveImageEditorRasterPasteboardLayerV3(document)).toBeNull()
 
     document.layers[1].visible = false

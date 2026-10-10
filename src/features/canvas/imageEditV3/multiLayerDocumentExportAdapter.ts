@@ -10,7 +10,7 @@ import {
   type ImageEditExportTargetV3,
   type ImageEditExportTargetViewV3,
 } from '@/core/imageEdit/v3'
-import { splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
+import { splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { createImageMarkV3RasterExportSpec } from '@/features/imageMark/standalone/imageMarkV3RasterExportSpec'
 import { getPlatform } from '@/platform/runtime'
 import { loadCanvasImageEditExportRenderer } from './loadCanvasImageEditExportRenderer'
@@ -51,10 +51,7 @@ function toCoreTarget(target: MultiLayerDocumentExportTarget): ImageEditExportTa
     const { layerId } = splitImageEditV3LayerRef(target.ref, 'image_edit.group')
     return { kind: target.kind, layerId }
   }
-  if (target.kind === 'annotation-element') {
-    const { layerId, annotationId } = splitImageEditV3AnnotationRef(target.ref)
-    return { kind: target.kind, layerId, annotationId }
-  }
+
   const { layerId } = splitImageEditV3LayerRef(target.ref)
   return { kind: target.kind, layerId }
 }

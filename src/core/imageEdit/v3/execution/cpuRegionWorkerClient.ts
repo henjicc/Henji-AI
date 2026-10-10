@@ -72,7 +72,7 @@ export class ImageEditCpuRegionWorkerClientV3 {
         const node = job.plan.nodes.find((entry) => entry.id === request.nodeId)
         if (!node) throw new Error('CPU Worker 请求未知节点')
         if (request.kind === 'raster') value = await job.context.loadRaster(node, request.region)
-        else if (request.kind === 'annotation') value = await job.context.rasterizeAnnotations(node, request.region)
+        else if (request.kind === 'annotation') value = await job.context.rasterizeVectorContent(node, request.region)
         else if (request.kind === 'mask') {
           if (!node.mask) throw new Error('CPU Worker 请求缺少蒙版的节点')
           value = await job.context.loadMask(node.mask, node, request.region)

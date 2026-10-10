@@ -173,7 +173,7 @@ export async function renderImageEditorCpuGoldenV3(
     loadRaster: async (node) => patternTile(
       width, height, fixture.resourceSeeds.get(resourceId(node)) ?? 1, fixture.document,
     ),
-    rasterizeAnnotations: async () => patternTile(width, height, 97, fixture.document),
+    rasterizeVectorContent: async () => patternTile(width, height, 97, fixture.document),
     loadMask: async () => {
       const data = Float32Array.from({ length: width * height }, (_, index) => (
         ((index % width) + Math.floor(index / width)) % 17 < 11 ? 1 : 0.2

@@ -3,6 +3,7 @@ import { Hand } from 'lucide-react'
 import type { ToolDefinition } from './types'
 
 const state = vi.hoisted(() => ({ tools: [] as ToolDefinition[], manifests: [] as ToolDefinition[], failed: false, error: vi.fn() }))
+vi.mock('../toolEntries/vector',()=>({tools:[]}))
 vi.mock('../toolEntries/transform', () => ({ tools: [] }))
 vi.mock('../toolEntries/paint', () => ({ tools: [] }))
 vi.mock('../toolEntries/retouch', () => ({ tools: [] }))

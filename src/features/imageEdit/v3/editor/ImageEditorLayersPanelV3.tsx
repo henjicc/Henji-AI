@@ -71,7 +71,7 @@ function resolveCreationIndex(
 ): number {
   if (choice.kind !== 'effect' && choice.kind !== 'adjustment') return layers.length
   let index = layers.length
-  while (index > 0 && layers[index - 1].type === 'annotation') index -= 1
+  while (index > 0 && ['text','shape','path'].includes(layers[index - 1].type)) index -= 1
   return index
 }
 

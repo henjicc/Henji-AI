@@ -1,6 +1,5 @@
 import { parseImageEditSharedEffectParametersV3 } from './operationCatalog';
 import { parseImageColorGradeParams } from '../../imaging/adjustments/schema';
-import { sanitizeMarkItem } from '../markCodec';
 import {
   cloneImageEditMaskReferenceV3,
   collectImageEditLayerIdsV3,
@@ -138,9 +137,8 @@ function cloneLayer(layer: ImageEditLayerV3, idMap?: Readonly<Record<string, str
   if (layer.type === 'smart') {
     return { ...common, type: 'smart', source: { ...layer.source }, tiles: { ...layer.tiles }, content: structuredClone(layer.content) };
   }
-  if (layer.type === 'annotation') {
-    return { ...common, type: 'annotation', annotations: jsonClone(layer.annotations) };
-  }
+  if (layer.type === 'text') return { ...layer, ...common, content: jsonClone(layer.content) };
+  if (layer.type === 'shape' || layer.type === 'path') return { ...layer, ...common, content: jsonClone(layer.content) };
   if (layer.type === 'effect') {
     return {
       ...common,
@@ -495,34 +493,6 @@ function applyLayerContentCommand(
         ...invertImageEditSetMaskResourceMetadataV3(resourceMetadata),
       },
     };
-  }
-  if (
-    command.type === 'annotation.add'
-    || command.type === 'annotation.update'
-    || command.type === 'annotation.delete'
-  ) {
-    if (location.layer.type !== 'annotation') throw new ImageEditCommandValidationErrorV3('目标不是标注图层');
-    const annotations = [...location.layer.annotations];
-    if (command.type === 'annotation.add') {
-      assertIndex(command.index, annotations.length);
-      if (annotations.some((entry) => entry.id === command.annotation.id)) throw new ImageEditCommandValidationErrorV3('标注 ID 重复');
-      const annotation = sanitizeMarkItem(command.annotation);
-      if (!annotation) throw new ImageEditCommandValidationErrorV3('标注内容无效');
-      annotations.splice(command.index, 0, annotation);
-      return { layers: replaceLayer(document.layers, location, { ...location.layer, annotations }), inverse: { ...base, type: 'annotation.delete', layerId, annotationId: command.annotation.id } };
-    }
-    const index = annotations.findIndex((entry) => entry.id === command.annotationId);
-    if (index < 0) throw new ImageEditCommandValidationErrorV3(`标注不存在：${command.annotationId}`);
-    const previous = annotations[index];
-    if (command.type === 'annotation.delete') {
-      annotations.splice(index, 1);
-      return { layers: replaceLayer(document.layers, location, { ...location.layer, annotations }), inverse: { ...base, type: 'annotation.add', layerId, index, annotation: jsonClone(previous) } };
-    }
-    if (command.annotation.id !== command.annotationId) throw new ImageEditCommandValidationErrorV3('更新标注时不能修改 ID');
-    const annotation = sanitizeMarkItem(command.annotation);
-    if (!annotation) throw new ImageEditCommandValidationErrorV3('标注内容无效');
-    annotations[index] = annotation;
-    return { layers: replaceLayer(document.layers, location, { ...location.layer, annotations }), inverse: { ...base, type: 'annotation.update', layerId, annotationId: command.annotationId, annotation: jsonClone(previous) } };
   }
   if (command.type === 'raster.apply-tile-delta') {
     if (location.layer.type !== 'raster') throw new ImageEditCommandValidationErrorV3('目标不是栅格图层');

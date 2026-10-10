@@ -1,3 +1,4 @@
+import type {FontPayload} from '@/platform/fonts'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 
@@ -23,6 +24,7 @@ export interface ImageEditorPreviewRenderRequestV3 {
   requestId: string
   sequence: number
   sessionId: string
+  fonts?: FontPayload[]
   document: ImageEditDocumentV3
   quality: ImageEditRenderQuality
   maxDimension: number

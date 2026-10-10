@@ -1,3 +1,4 @@
+import { isImageEditVectorLayerV3 } from './layerEntries/vector';
 import { imageEditLayerMaskTransformV3 } from './renderContracts/maskTransform';
 import { assertImageEditLayerSemanticsV3 } from './layerModel/semantics';
 import { evaluationCacheIdentity, type EvaluationContext } from '../../imaging/evaluation';
@@ -139,15 +140,15 @@ function compositeContent(
 
 function compileContentLayer(
   state: CompileState,
-  layer: Extract<ImageEditLayerV3, { type: 'raster' | 'smart' | 'annotation' }>,
+  layer: Extract<ImageEditLayerV3, { type: 'raster' | 'smart' | 'text' | 'shape' | 'path' }>,
   path: readonly string[],
   belowNodeId: string | null,
 ): string {
-  const definitionId = layer.type !== 'annotation' ? 'source.raster' : 'vector.annotation';
-  const contentParameters: Record<string, unknown> = layer.type !== 'annotation'
+  const definitionId = !isImageEditVectorLayerV3(layer) ? 'source.raster' : 'vector.content';
+  const contentParameters: Record<string, unknown> = !isImageEditVectorLayerV3(layer)
     ? { source: layer.source, tiles: layer.tiles, colorMode: state.color,
       ...(layer.type === 'smart' ? { rasterCanvasSize: { width: layer.content.width, height: layer.content.height } } : layer.rasterCanvasSize ? { rasterCanvasSize: layer.rasterCanvasSize } : {}) }
-    : { annotations: layer.annotations, colorMode: state.color };
+    : { type: layer.type, content: layer.content, colorMode: state.color };
   const contentNodeId = appendNode(state, layer, path, definitionId, [], contentParameters, null);
   if (!contentNodeId) return belowNodeId ?? '';
   const filtered = compileLayerFilters(state, layer, path, contentNodeId);
@@ -273,7 +274,7 @@ function compileLayers(
 }
 
 function compileSingleLayer(state: CompileState, layer: ImageEditLayerV3, path: readonly string[], below: string | null): string | null {
-  if (layer.type === 'raster' || layer.type === 'smart' || layer.type === 'annotation') return compileContentLayer(state, layer, path, below) || below;
+  if (layer.type === 'raster' || layer.type === 'smart' || isImageEditVectorLayerV3(layer)) return compileContentLayer(state, layer, path, below) || below;
   if (layer.type === 'effect' || layer.type === 'adjustment') return compileEffectLayer(state, layer, path, below);
   return compileGroup(state, layer, path, below);
 }

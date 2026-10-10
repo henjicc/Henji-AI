@@ -1,6 +1,7 @@
+import { imageEditLayersFromMarkDraftV3 } from '@/core/imageEdit/v3/layerEntries/vectorDraft'
 import { imageEditMarkItemSchema, imageEditPreviewOperationsSchema } from './imageEditControlCatalog'
 import { createDefaultDiffusionOperationParams, createDefaultVgpuGlowOperationParams, applyDiffusionPresetForSelection, applyVgpuGlowLook, createMarkId, type DiffusionOperationParams, type VgpuGlowOperationParams, type MarkItem } from '@/core/imageEdit'
-import { createImageEditAnnotationLayerV3, createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditCommandV3 } from '@/core/imageEdit/v3/commandTypes'
 import type { ImageEditJsonObjectV3 } from '@/core/imageEdit/v3/layerTypes'
@@ -19,7 +20,6 @@ export function buildImageEditDocumentFromControlOperations(values: readonly unk
     const layer = createImageEditEffectLayerV3(createImageEditIdV3('effect'), id, id, params)
     dispatch({ ...base(), type: 'layer.add', layer, parentId: null, index: bus.getSnapshot().document.layers.length })
   }
-  let annotationLayerId: string | null = null
   try {
     for (const operation of operations) {
       const document = bus.getSnapshot().document
@@ -96,14 +96,9 @@ export function buildImageEditDocumentFromControlOperations(values: readonly unk
 
       const parsed = imageEditMarkItemSchema.parse(operation.item)
       const item = { ...parsed, id: parsed.id ?? createMarkId() } as MarkItem
-      if (!annotationLayerId) {
-        const layer = createImageEditAnnotationLayerV3(createImageEditIdV3('annotation-layer'), '标注')
-        annotationLayerId = layer.id
+      for (const layer of imageEditLayersFromMarkDraftV3(item)) {
         dispatch({ ...base(), type: 'layer.add', layer, parentId: null, index: bus.getSnapshot().document.layers.length })
       }
-      const layer = bus.getSnapshot().document.layers.find(candidate => candidate.id === annotationLayerId)
-      if (!layer || layer.type !== 'annotation') throw new Error('标注图层不存在')
-      dispatch({ ...base(), type: 'annotation.add', layerId: layer.id, annotation: item, index: layer.annotations.length })
     }
     return bus.getSnapshot().document
   } finally { bus.dispose() }

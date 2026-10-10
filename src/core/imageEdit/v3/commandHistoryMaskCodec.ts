@@ -1,3 +1,4 @@
+import {imageEditSparseMaskSchemaV3} from './layerModel/semantics';
 import { IMAGE_EDIT_MASK_TILE_SIZE_V3 } from './layerTypes';
 
 const MASK_ID_MAX_LENGTH = 512;
@@ -26,8 +27,9 @@ export function getImageEditHistoryMaskValidationErrorV3(
   if (!isRecord(value)) return `${label}无效`;
   if (value.kind === 'sparse-mask') {
     if (!hasExactKeys(value, [
-      'kind', 'storage', 'maskId', 'tileSize', 'defaultValue', 'tiles', 'inverted',
+      'kind', 'storage', 'maskId', 'tileSize', 'defaultValue', 'tiles', 'inverted', ...(value.vectorPaths===undefined?[]:['vectorPaths']),
     ])) return `${label}包含未知字段或缺少字段`;
+    if(value.vectorPaths!==undefined && !imageEditSparseMaskSchemaV3.safeParse(value).success) return `${label}矢量路径无效`;
     if (value.storage !== 'mask-float32' || value.tileSize !== IMAGE_EDIT_MASK_TILE_SIZE_V3) {
       return `${label}存储契约无效`;
     }

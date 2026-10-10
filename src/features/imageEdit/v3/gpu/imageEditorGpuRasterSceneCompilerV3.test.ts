@@ -1,7 +1,8 @@
+import {imageEditLayersFromMarkDraftV3} from '@/core/imageEdit/v3/layerEntries/vectorDraft'
 import { describe, expect, it } from 'vitest'
 
 import {
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditGroupLayerV3,
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3'
@@ -66,11 +67,11 @@ describe('compileImageEditorGpuRasterSceneV3', () => {
     const brushB = `sha256:${'2'.repeat(64)}` as const
     const paint = createImageEditRasterLayerV3('paint', '画笔')
     paint.tiles = { '0/1/0': brushA, '0/2/1': brushB }
-    const marks = createImageEditAnnotationLayerV3('marks', '标注')
-    marks.annotations = [{
+    const marks = createImageEditPathLayerV3('marks', '标注')
+    Object.assign(marks, { ...imageEditLayersFromMarkDraftV3(([{
       id: 'mark-1', type: 'rect', x: 10, y: 20, width: 30, height: 40,
       stroke: WHITE_HEX, lineWidth: 2,
-    }]
+    }] as import('@/core/imageEdit/types').MarkItem[])[0])[0], id: marks.id, name: marks.name })
     document.layers = [paint, marks]
     const result = compileImageEditorGpuRasterSceneV3(document, descriptors([brushA, brushB]))
     expect(result.supported).toBe(true)
@@ -80,7 +81,7 @@ describe('compileImageEditorGpuRasterSceneV3', () => {
       sparseTiles: { '0/1/0': { resourceRef: brushA }, '0/2/1': { resourceRef: brushB } },
     })
     expect(result.scene.layers.find((layer) => layer.layerId === 'marks')).toMatchObject({
-      sourceKind: 'annotation',
+      sourceKind: 'vector',
     })
     expect(result.scene.graph.filter((node) => node.kind === 'source')).toHaveLength(2)
   })
@@ -90,17 +91,16 @@ describe('compileImageEditorGpuRasterSceneV3', () => {
     const fixture = createImageEditorGpuBaselineFixturesV3()[0]
     const document = structuredClone(fixture.document)
     const raster = createImageEditRasterLayerV3('base', '底图', base)
-    const marks = createImageEditAnnotationLayerV3('marks', '标注')
-    marks.annotations = [{ id: 'text-1', type: 'text', x: 12, y: 18, text: 'GPU',
-      fontSize: 16, color: WHITE_HEX }]
+    const marks = createImageEditPathLayerV3('marks', '标注')
+    Object.assign(marks, { ...imageEditLayersFromMarkDraftV3(([{ id: 'text-1', type: 'text', x: 12, y: 18, text: 'GPU',
+      fontSize: 16, color: WHITE_HEX }] as import('@/core/imageEdit/types').MarkItem[])[0])[0], id: marks.id, name: marks.name })
     document.layers = [raster, marks]
     const first = compileImageEditorGpuRasterSceneV3(document, descriptors([base]))
     const repeated = compileImageEditorGpuRasterSceneV3(structuredClone(document), descriptors([base]))
     const changedDocument = structuredClone(document)
     const changedMarks = changedDocument.layers[1]
-    if (changedMarks.type !== 'annotation') throw new Error('测试标注层类型异常')
-    const changedText = changedMarks.annotations[0]
-    if (changedText.type !== 'text') throw new Error('测试文字标注类型异常')
+    if (changedMarks.type !== 'text') throw new Error('测试标注层类型异常')
+    const changedText = changedMarks.content.paragraphs[0].runs[0]
     changedText.text = 'GPU changed'
     const changed = compileImageEditorGpuRasterSceneV3(changedDocument, descriptors([base]))
     expect(first.supported && repeated.supported && changed.supported).toBe(true)

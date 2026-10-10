@@ -22,7 +22,6 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
-import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSessionAccess'
 import { getImageEditDocumentCatalogRevisionV3, subscribeImageEditDocumentInstancesV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { getGenerationModelsRevision } from '@/features/generation/application/generationModelFields'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
@@ -49,7 +48,6 @@ const scopeRevisions: HostScopeRevisions = {
   surface: 0,
   generation_draft: 0,
   models: 0,
-  image_mark: 0,
   image_edit: 0,
   audio_edit: 0,
   video_edit: 0,
@@ -84,7 +82,6 @@ function syncAssetDomainRevision(): void {
 function syncPulledRevisions(): void {
   scopeRevisions.generation_draft = useGenerationDraftStore.getState().revision
   scopeRevisions.models = getGenerationModelsRevision()
-  scopeRevisions.image_mark = imageMarkRevision()
   scopeRevisions.image_edit = getImageEditDocumentCatalogRevisionV3()
   scopeRevisions.audio_edit = getAudioEditRevision()
   scopeRevisions.video_edit = videoEditDomainRevision()

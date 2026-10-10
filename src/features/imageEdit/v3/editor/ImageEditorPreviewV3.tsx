@@ -369,7 +369,6 @@ export function ImageEditorPreviewV3({
         // 自定义预览宿主不提供资源读取契约，仍允许显式选择后的变换。
         if (!resourceDescriptors?.length) return selectedLayerId
         const picked = pickImageEditorLayerV3(controller.document, point, alphaMaps)
-        if (picked) useImageEditorInteractionStoreV3.getState().selectAnnotation(controller.sessionId, null)
         return picked
       },
       bounds: layerBounds,

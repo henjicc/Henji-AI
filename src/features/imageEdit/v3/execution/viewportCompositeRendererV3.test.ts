@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createFloat32PremultipliedRgbaTile,
   createImageEditAdjustmentLayerV3,
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditSparseMaskReferenceV3,
@@ -154,8 +154,8 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
       sourceResourceId: RESOURCE,
       idFactory: () => 'source',
     })
-    document.layers.push(createImageEditAnnotationLayerV3('annotation', '标注'))
-    const rasterizeAnnotations = vi.fn((_node, _document, region, mip) => {
+    document.layers.push(createImageEditPathLayerV3('annotation', '标注'))
+    const rasterizeVectorContent = vi.fn((_node, _document, region, mip) => {
       const data = new Float32Array(region.width * region.height * 4)
       for (let offset = 0; offset < data.length; offset += 4) data.set([0.5, 0, 0, 0.5], offset)
       expect(mip).toBe(0)
@@ -172,12 +172,12 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
         expect(tile.data[0]).toBeCloseTo(0.5, 5)
         expect(tile.data[3]).toBeCloseTo(1, 5)
       },
-      { rasterizeAnnotations },
+      { rasterizeVectorContent },
     )
 
     expect(rendered).toBe(1)
-    expect(rasterizeAnnotations).toHaveBeenCalledWith(
-      expect.objectContaining({ definitionId: 'vector.annotation' }),
+    expect(rasterizeVectorContent).toHaveBeenCalledWith(
+      expect.objectContaining({ definitionId: 'vector.content' }),
       document,
       { x: 0, y: 0, width: 4, height: 4 },
       0,

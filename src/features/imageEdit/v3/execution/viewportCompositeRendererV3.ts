@@ -1,3 +1,4 @@
+import {loadVectorFonts} from '@/services/vectorContent/fonts'
 import { loadImageColorLutV3 } from './imageColorLutV3'
 import {
   compileImageEditRenderPlanV3,
@@ -26,7 +27,7 @@ import {
   decodeImageEditorViewportSourceTileV3,
   loadImageEditorViewportSourceRegionV3,
   loadImageEditorViewportSparseMaskV3,
-  rasterizeImageEditorViewportAnnotationsV3,
+  rasterizeImageEditorViewportVectorContentV3,
   viewportCompositeSourceTileKeyV3,
 } from './viewportCompositePixelsV3'
 import { createImageEditorViewportSamplingGridResolverV3 } from './viewportCompositeSamplingGridV3'
@@ -39,7 +40,7 @@ export interface ImageEditorViewportRenderedRegionV3 {
 }
 
 export interface ImageEditorViewportCompositeRendererDependenciesV3 {
-  rasterizeAnnotations?: typeof rasterizeImageEditorViewportAnnotationsV3
+  rasterizeVectorContent?: typeof rasterizeImageEditorViewportVectorContentV3
   customEffects?: ImageEditorPreviewCustomEffectsV3
   globalAnalyses?: ImageEditorViewportGlobalAnalysisCacheV3
 }
@@ -116,6 +117,7 @@ export async function renderImageEditorViewportCompositeV3(
     || request.plan.mipSize.width !== imageEditOutputMipSizeV3(request.document.geometry, request.plan.mip).width
     || request.plan.mipSize.height !== imageEditOutputMipSizeV3(request.document.geometry, request.plan.mip).height
   ) throw new Error('视口合成计划与文档几何不一致')
+  await loadVectorFonts(request.fonts ?? [])
   const originalPlan = compileImageEditRenderPlanV3(request.document, registry, request.quality)
   const sourceTiles = new Map(request.sourceTiles.map((tile) => [
     viewportCompositeSourceTileKeyV3(tile),
@@ -149,8 +151,8 @@ export async function renderImageEditorViewportCompositeV3(
     request.quality,
   )
   if (plan.diagnostics.length > 0) throw new Error('视口合成计划包含不可渲染图层')
-  const rasterizeAnnotations = dependencies.rasterizeAnnotations
-    ?? rasterizeImageEditorViewportAnnotationsV3
+  const rasterizeVectorContent = dependencies.rasterizeVectorContent
+    ?? rasterizeImageEditorViewportVectorContentV3
   const customEffects = dependencies.customEffects ?? new ImageEditorPreviewCustomEffectsV3()
   const ownsCustomEffects = dependencies.customEffects === undefined
   const originalById = new Map(originalPlan.nodes.map((node) => [node.id, node]))
@@ -236,7 +238,7 @@ export async function renderImageEditorViewportCompositeV3(
             resolveImageEditRasterCanvasV3(node.parameters, request.document.geometry), Object.keys(node.parameters.tiles as Record<string, unknown>)),
         )
       },
-      rasterizeAnnotations: async (node, region) => rasterizeAnnotations(
+      rasterizeVectorContent: async (node, region) => rasterizeVectorContent(
         node,
         request.document,
         region,

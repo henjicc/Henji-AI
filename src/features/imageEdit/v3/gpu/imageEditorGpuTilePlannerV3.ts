@@ -148,20 +148,20 @@ export function planImageEditorGpuRasterTilesV3(
     const mipDimensions = (override ? planningPyramid : pyramid).levels.find((level) => level.mip === plannedMip)
     // 非覆盖区只请求真实源覆盖的瓦片；源范围之外是透明，不是一个可解码瓦片。
     if (!mipDimensions || tile.tileX >= mipDimensions.columns || tile.tileY >= mipDimensions.rows) return []
-    if (!override && !layer.resourceRef && layer.sourceKind !== 'annotation') return []
+    if (!override && !layer.resourceRef && layer.sourceKind !== 'vector') return []
     const resourceRef = override?.resourceRef ?? layer.resourceRef
     if (!resourceRef) return []
     const key: ImageEditorGpuSceneTileKeyV3 = {
       resourceRef,
       resourceKind: override
         ? 'brush-tile'
-        : layer.sourceKind === 'annotation' ? 'generated-annotation' : 'source-raster',
+        : layer.sourceKind === 'vector' ? 'generated-vector' : 'source-raster',
       mip: plannedMip,
       tileX: tile.tileX,
       tileY: tile.tileY,
       contentVersion: override?.contentVersion ?? layer.contentVersion,
       ...(override ? { resourceByteLength: override.byteLength } : {}),
-      ...(override || layer.sourceKind === 'annotation' ? { format: 'rgba16float' as const } : {}),
+      ...(override || layer.sourceKind === 'vector' ? { format: 'rgba16float' as const } : {}),
     }
     if (rasterSamplingHalo && hasSparseOverrides && layer.sourceKind === 'raster') {
       const coreWidth = overrideRect?.width ?? Math.min(512, mipDimensions.width - tile.tileX * 512)

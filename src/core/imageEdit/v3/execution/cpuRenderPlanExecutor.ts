@@ -29,7 +29,7 @@ export interface ImageEditCpuRenderContextV3 {
   size?: { width: number; height: number };
   loadColorLut?: (ref: string) => Promise<CubeLut>;
   loadRaster(node: ImageEditRenderPlanNode): Promise<Float32PremultipliedRgbaTile>;
-  rasterizeAnnotations(node: ImageEditRenderPlanNode): Promise<Float32PremultipliedRgbaTile>;
+  rasterizeVectorContent(node: ImageEditRenderPlanNode): Promise<Float32PremultipliedRgbaTile>;
   loadMask?(reference: ImageEditMaskReferenceV3, node: ImageEditRenderPlanNode): Promise<Float32MaskTile>;
   transformContent?(
     content: Float32PremultipliedRgbaTile,
@@ -183,7 +183,7 @@ export async function executeImageEditCpuRenderPlanV3(
     throwIfAborted(context.signal);
     let output: Float32PremultipliedRgbaTile;
     if (node.definitionId === 'source.raster') output = await context.loadRaster(node);
-    else if (node.definitionId === 'vector.annotation') output = await context.rasterizeAnnotations(node);
+    else if (node.definitionId === 'vector.content') output = await context.rasterizeVectorContent(node);
     else if (node.definitionId === 'composite.layer') output = await executeComposite(node, outputs, context);
     else if (node.definitionId === 'group.isolated') output = requireInput(outputs, node);
     else {

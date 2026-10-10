@@ -1,4 +1,4 @@
-import { ArrowUpRight, Bandage, CircleDashed, Crop, Hand, LassoSelect, MessageSquareText, Move, Paintbrush, Scan, VectorSquare, WandSparkles, ZoomIn } from 'lucide-react'
+import { Bandage, CircleDashed, Crop, Hand, LassoSelect, Move, Paintbrush, Scan, VectorSquare, WandSparkles, ZoomIn } from 'lucide-react'
 import type { ToolManifest } from '../../toolFramework/toolManifest'
 import type { ImageEditorHostProfileIdV3 } from '../../application/imageEditorHostProfiles'
 
@@ -10,7 +10,6 @@ const navigation = { id: 'navigation', order: 0 }
 const cropping = { id: 'crop', order: 1 }
 const selection = { id: 'selection', order: 2, collapsed: true, labelKey: 'imageEditor.v3.selection.overlay', expandedProfiles: ['mask'] as const }
 const repair = { id: 'repair', order: 3, collapsed: true, labelKey: 'imageEditor.v3.retouch.group' }
-const annotation = { id: 'annotation', order: 4, collapsed: true, labelKey: 'imageEditor.v3.tools.annotation', triggerId: 'annotation' }
 
 const specs = {
   move: { icon: Move, group: navigation, profiles: all, input: 'move', cursor: 'cursor-default', shortcut: 'KeyV' },
@@ -29,14 +28,6 @@ const specs = {
   'select-subject-box': { icon: Scan, group: selection, profiles: editing, input: 'overlay', cursor: 'cursor-crosshair' },
   remove: { icon: WandSparkles, group: repair, profiles: editing, input: 'overlay', cursor: 'cursor-crosshair', requiresRasterTarget: true },
   repair: { icon: Bandage, group: repair, profiles: editing, input: 'overlay', cursor: 'cursor-crosshair', requiresRasterTarget: true },
-  'annotation-text': { icon: MessageSquareText, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-text', shortcut: 'KeyT' },
-  'annotation-callout': { icon: MessageSquareText, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
-  'annotation-arrow': { icon: ArrowUpRight, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
-  'annotation-rect': { icon: VectorSquare, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
-  'annotation-ellipse': { icon: CircleDashed, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
-  'annotation-number': { icon: MessageSquareText, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
-  'annotation-pen': { icon: Paintbrush, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
-  'annotation-mosaic': { icon: MessageSquareText, group: annotation, profiles: marking, input: 'overlay', cursor: 'cursor-crosshair' },
 } as const
 
 declare module '../../toolFramework/types' {
@@ -60,17 +51,8 @@ const intents: Record<keyof typeof specs, string> = {
   'select-subject-box': '框出主体搜索范围，由已有主体服务生成选区。',
   remove: '刷选要移除的区域，委托已有本地移除服务并回填当前图层。',
   repair: '从当前选区拖到供体位置，委托已有修补服务回填当前图层。',
-  'annotation-text': '在图层上添加可编辑文字标记，输入期间保留文字与输入法快捷键。',
-  'annotation-callout': '添加带文字的矩形或椭圆说明框。',
-  'annotation-arrow': '添加箭头标记并调整端点和弯曲控制点。',
-  'annotation-rect': '添加矩形标记。',
-  'annotation-ellipse': '添加椭圆标记。',
-  'annotation-number': '在指定位置添加序号标记。',
-  'annotation-pen': '在图层上绘制手写标记路径。',
-  'annotation-mosaic': '添加像素化或模糊的遮盖标记。',
 }
 
 export const legacyToolManifest: readonly ToolManifest[] = (Object.keys(specs) as (keyof typeof specs)[]).map(id => ({
   ...specs[id], id, labelKey: `imageEditor.v3.tools.${id}`, description: intents[id], aliases: [id],
-  ...(specs[id].group.id === 'annotation' ? { legacyFinalMove: true } : {}),
 }))

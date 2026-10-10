@@ -27,7 +27,7 @@ function fixture() {
   const context: ImageEditCpuRegionRenderContextV3 = { size: document.geometry, registry,
     createTransparent: (rect) => createFloat32PremultipliedRgbaTile(rect.width, rect.height,
       'linear-light', new Float32Array(rect.width * rect.height * 4)),
-    loadRaster: async (_node, rect) => rgba(rect), rasterizeAnnotations: async (_node, rect) => rgba(rect),
+    loadRaster: async (_node, rect) => rgba(rect), rasterizeVectorContent: async (_node, rect) => rgba(rect),
     loadMask: async (_ref, _node, rect) => createFloat32MaskTile(rect.width, rect.height, new Float32Array(rect.width * rect.height).fill(.4)) }
   const output = { rect: region, geometry: resolveImageEditOutputGeometryV3(document.geometry),
     description: { bitDepth: 8 as const, colorSpace: 'srgb' as const, transferFunction: 'srgb' as const, alphaMode: 'straight' as const } }

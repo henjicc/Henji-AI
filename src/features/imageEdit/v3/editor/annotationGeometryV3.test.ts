@@ -8,7 +8,6 @@ import {
   resolveAnnotationOutputGeometryV3,
   resolveAnnotationRelativeSizeBaseV3,
 } from './annotationGeometryV3'
-import { simplifyAnnotationPenPointsV3 } from './annotationModelV3'
 
 describe('V3 标注输出坐标', () => {
   it('按镜像、90 度方向和裁剪顺序映射并可逆', () => {
@@ -37,9 +36,4 @@ describe('V3 标注输出坐标', () => {
     expect(mapAnnotationPointV3(matrix, [10, 10])).toEqual([20, 29])
   })
 
-  it('在笔画结束时移除屏幕容差内的冗余共线点', () => {
-    expect(simplifyAnnotationPenPointsV3([
-      0, 0, 1, 0.05, 2, -0.04, 3, 0,
-    ], 0.1)).toEqual([0, 0, 3, 0])
-  })
 })

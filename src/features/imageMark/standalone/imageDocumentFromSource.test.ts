@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createImageEditAnnotationLayerV3, createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditPathLayerV3, createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import { parseImageEditDocumentV3, stringifyImageEditDocumentV3 } from '@/core/imageEdit/v3/documentCodec'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
@@ -10,7 +10,7 @@ import { createImageDocumentFromSource } from './imageDocumentFromSource'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage, readHarnessImageEditDocument } from '@/tests/harnessNativeStorage'
 import { imageEditTestManagedSource, IMAGE_EDIT_TEST_SOURCE_REF } from '@/tests/imageEditV3SourceFixture'
 import { annotationImpulse, collectPixels, type FakeImage } from '@/features/imageEdit/v3/export/renderExportTestFixtures'
-import { BLACK_HEX } from '@/core/theme/colorTokens'
+
 const io = vi.hoisted(() => ({ ingest: vi.fn(), create: vi.fn() }))
 vi.mock('@/commands/imageEditorV3', async importOriginal => ({ ...await importOriginal<typeof import('@/commands/imageEditorV3')>(), ingestImageEditorV3Source: io.ingest }))
 vi.mock('@/features/imageEdit/documents/imageDocumentRuntime', () => ({ createImageDocument: io.create }))
@@ -18,14 +18,14 @@ beforeEach(() => { vi.clearAllMocks(); installHarnessNativeStorage(); io.ingest.
 afterEach(uninstallHarnessNativeStorage)
 it('新建空白直接保存 V3 初始文档，外来 V3 图层和几何不经旧版本中转', async () => {
   const blank = await createImageDocumentFromSource({ url: 'C:/blank.png', blank: true })
-  expect(readHarnessImageEditDocument(blank.id)?.document).toMatchObject({ version: 8, revision: 0, geometry: { width: 64, height: 48 }, layers: [{ type: 'raster', source: { kind: 'resource', resourceId: IMAGE_EDIT_TEST_SOURCE_REF } }] })
+  expect(readHarnessImageEditDocument(blank.id)?.document).toMatchObject({ version: 9, revision: 0, geometry: { width: 64, height: 48 }, layers: [{ type: 'raster', source: { kind: 'resource', resourceId: IMAGE_EDIT_TEST_SOURCE_REF } }] })
   expect(io.create).toHaveBeenCalledWith({ documentId: blank.id, emptyUntilRevision: 0 }, { kind: 'user' })
   const incoming = createImageEditDocumentV3({ width: 64, height: 48, sourceResourceId: IMAGE_EDIT_TEST_SOURCE_REF })
-  incoming.layers.push(createImageEditAnnotationLayerV3('handoff', '标注'))
+  incoming.layers.push(createImageEditPathLayerV3('handoff', '标注'))
   incoming.geometry.orientation.rotate = 90; incoming.revision = 4
   io.ingest.mockRejectedValueOnce(new Error('原图地址已失效'))
   const opened = await createImageDocumentFromSource({ url: 'C:/input.png', document: incoming })
-  expect(readHarnessImageEditDocument(opened.id)?.document).toMatchObject({ version: 8, revision: 0, geometry: incoming.geometry, layers: incoming.layers })
+  expect(readHarnessImageEditDocument(opened.id)?.document).toMatchObject({ version: 9, revision: 0, geometry: incoming.geometry, layers: incoming.layers })
   expect(incoming.revision).toBe(4)
   expect(io.ingest).toHaveBeenCalledTimes(1)
 })
@@ -43,9 +43,9 @@ it('查看器、画布、工具箱入口对同一图片执行朝向/裁剪/标�
     const bus = new ImageEditCommandBusV3(document)
     try {
       bus.dispatch({ type: 'document.update-output-geometry', commandId: 'geometry', expectedRevision: 0, orientation: { rotate: 90, mirrored: true }, crop: { x: 1, y: 2, width: 32, height: 40 } })
-      const layer = createImageEditAnnotationLayerV3('marks', '标注')
+      const layer = createImageEditPathLayerV3('marks', '标注')
       bus.dispatch({ type: 'layer.add', commandId: 'layer', expectedRevision: 1, layer, parentId: null, index: 1 })
-      bus.dispatch({ type: 'annotation.add', commandId: 'mark', expectedRevision: 2, layerId: layer.id, index: 0, annotation: { id: 'mark', type: 'rect', x: 3, y: 2, width: 2, height: 2, stroke: BLACK_HEX, lineWidth: 1 } })
+      bus.dispatch({type:'layer.replace',commandId:'mark',expectedRevision:2,layerId:layer.id,layer:{...layer,name:'已编辑形状'}})
       const snapshot = bus.getPersistenceSnapshot()
       await repository.save(snapshot.document, { expectedRevision: 0, history: snapshot.history })
       const stored = readHarnessImageEditDocument(document.id)!.document

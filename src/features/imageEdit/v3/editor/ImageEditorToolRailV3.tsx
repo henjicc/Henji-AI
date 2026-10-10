@@ -25,7 +25,7 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
       const tools = definitions.filter(tool => tool.group.id === group.id)
       const collapsed = group.collapsed && !group.expandedProfiles?.includes(controller.profile.id)
       const current = tools.find(tool => tool.id === session?.activeTool)
-        ?? tools.find(tool => tool.id === session?.toolSettings.annotationTool) ?? tools[0]
+        ?? tools[0]
       const CurrentIcon = current.icon
       return <div key={group.id} role="toolbar" aria-orientation="vertical" className={`flex flex-col gap-1 ${index > 0 ? 'mt-2 pt-2' : ''}`}>
         {collapsed ? <PanelTrigger menuSelection="single" panelPadding="menu" panelWidthLabels={tools.map(tool => t(tool.labelKey))} closeOnPanelClick renderPanel={() =>

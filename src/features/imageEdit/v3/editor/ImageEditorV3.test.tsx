@@ -10,7 +10,7 @@ import i18n from '@/i18n/config'
 import { UiButton } from '@/components/ui'
 import { builtInToolRegistration } from '../toolFramework/builtInRegistry'
 import {
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
@@ -118,8 +118,6 @@ describe('ImageEditorV3 professional shell', () => {
       layerDragBySession: {},
       viewportZoomBySession: {},
       viewportPanBySession: {},
-      annotationSelectionBySession: {},
-      annotationPreviewBySession: {},
     })
   })
 
@@ -154,8 +152,8 @@ describe('ImageEditorV3 professional shell', () => {
   })
 
   it('按自上而下的视觉顺序展示根图层和嵌套组', async () => {
-    const childBottom = createImageEditAnnotationLayerV3('child-bottom', '组内下层')
-    const childTop = createImageEditAnnotationLayerV3('child-top', '组内上层')
+    const childBottom = createImageEditPathLayerV3('child-bottom', '组内下层')
+    const childTop = createImageEditPathLayerV3('child-top', '组内上层')
     const group = {
       ...createImageEditGroupLayerV3('group', '组'),
       children: [childBottom, childTop],
@@ -420,8 +418,8 @@ describe('ImageEditorV3 professional shell', () => {
 
   it('图层树支持方向键聚焦和修饰键重排', async () => {
     const changes: ImageEditDocumentV3[] = []
-    const bottom = createImageEditAnnotationLayerV3('bottom', '下层')
-    const top = createImageEditAnnotationLayerV3('top', '上层')
+    const bottom = createImageEditPathLayerV3('bottom', '下层')
+    const top = createImageEditPathLayerV3('top', '上层')
     const rendered = renderEditor(
       createDocument([bottom, top]),
       { onDocumentChange: (next) => changes.push(next) },
@@ -467,8 +465,8 @@ describe('ImageEditorV3 professional shell', () => {
     const changes: ImageEditDocumentV3[] = []
     const rendered = renderEditor(
       createDocument([
-        createImageEditAnnotationLayerV3('bottom', '下层'),
-        createImageEditAnnotationLayerV3('top', '上层'),
+        createImageEditPathLayerV3('bottom', '下层'),
+        createImageEditPathLayerV3('top', '上层'),
       ]),
       { onDocumentChange: (next) => changes.push(next) },
     )
@@ -548,10 +546,10 @@ describe('ImageEditorV3 professional shell', () => {
     expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
       ?.toolSettings.snappingEnabled).toBe(false)
 
-    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
-    const annotationParameters = rendered.container.querySelector('[data-tool-parameters]')
-    expect(annotationParameters?.closest('[data-command-bar]')).toBe(commandBar)
-    expect(rendered.container.querySelectorAll('[data-tool-parameters]')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: '文字与图形' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '矩形' }))
+    expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
+    expect(rendered.container.querySelector('[data-context-bar]')).toBeNull()
 
     const preview = rendered.container.querySelector('[data-preview-surface]')
     const dockedPanels = rendered.container.querySelectorAll('[data-docked-editor-panel]')
@@ -571,23 +569,13 @@ describe('ImageEditorV3 professional shell', () => {
     expect(rendered.container.querySelector('img[src="preview.png"]')).toBeNull()
   })
 
-  it('把标注收进单一入口，并在从属参数带切换具体标注工具', async () => {
-    const rendered = renderEditor(
-      createDocument([createImageEditRasterLayerV3('raster', '底图')]),
-    )
-    expect(rendered.container.querySelector('[data-tool-id="annotation"]')).toBeTruthy()
-    expect(rendered.container.querySelector('[data-tool-id="annotation-arrow"]')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
-    expect(screen.getByRole('group', { name: '标注类型' })).toBeTruthy()
-    const annotationToolGroup = screen.getByRole('group', { name: '标注类型' })
-    expect(annotationToolGroup.querySelectorAll('[data-annotation-tool-id]')).toHaveLength(8)
-    expect(annotationToolGroup.textContent).toBe('')
-    expect(screen.getByRole('button', { name: '打码' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
-    const session = Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
-    expect(session.activeTool).toBe('annotation-rect')
-    expect(session.toolSettings.annotationTool).toBe('annotation-rect')
+  it('文字与图形共用单一工具入口和正式内容工具',()=>{
+    const rendered=renderEditor(createDocument([createImageEditRasterLayerV3('raster','原图','sha256:source')]))
+    expect(rendered.container.querySelector('[data-tool-id="vector"]')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'文字与图形'}))
+    expect(screen.getByRole('menu',{name:'文字与图形'})).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem',{name:'矩形'}))
+    expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0].activeTool).toBe('vector-rectangle')
   })
 
   it('属性默认打开参数 Tab，基础 Tab 单独承载名称与通用开关', async () => {

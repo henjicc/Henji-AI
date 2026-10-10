@@ -22,7 +22,7 @@ afterEach(() => { vi.unstubAllGlobals() })
 it('实际宽度和ink bounds共同决定尺寸、边距，复用不可变数值结果', () => {
   width = 20.2; left = 3; right = 25.1
   const metrics = measureVideoEditGlyph('字', 20, 'sans-serif')
-  expect(metrics).toEqual({ width: 33, height: 34, offsetX: 5, font: '20px sans-serif' })
+  expect(metrics).toEqual({ width: 33, height: 34, offsetX: 5, font: 'normal 400 20px sans-serif' })
   expect(Object.isFrozen(metrics)).toBe(true)
   expect(measureVideoEditGlyph('字', 20, 'sans-serif')).toBe(metrics)
   expect(calls).toBe(1)

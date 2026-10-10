@@ -278,7 +278,7 @@ async function cpuReference(document: ImageEditDocumentV3): Promise<Float32Array
     loadRaster: async () => decodeInterleavedRgbaSourceTileV3(
       fullSourceTile() as Parameters<typeof decodeInterleavedRgbaSourceTileV3>[0],
     ),
-    rasterizeAnnotations: async () => { throw new Error('测试不含标注') },
+    rasterizeVectorContent: async () => { throw new Error('测试不含标注') },
     loadMask: async () => { throw new Error('测试不含蒙版') },
     transformContent: async (tile, transform) => resampleImageEditRgbaAffineV3(
       tile, rect, rect, transform,

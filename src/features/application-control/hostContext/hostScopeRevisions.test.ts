@@ -156,7 +156,7 @@ describe('宿主作用域 revision', () => {
     expect(getHostScopeRevisions().toolbox).toBeGreaterThan(before.toolbox)
   })
 
-  it('V3 命令总线变化同时推进 image_edit 与标注兼容基线', () => {
+  it('V3 命令总线变化推进唯一 image_edit 基线，不发布被替代的标注域', () => {
     const document = createImageEditDocumentV3({
       width: 320,
       height: 200,
@@ -174,7 +174,7 @@ describe('宿主作用域 revision', () => {
     try {
       const opened = getHostScopeRevisions()
       expect(opened.image_edit).toBe(before.image_edit + 1)
-      expect(opened.image_mark).toBe(before.image_mark + 1)
+      expect(opened).not.toHaveProperty('image_mark')
 
       bus.dispatch({
         commandId: 'host-scope-v3-update',
@@ -186,7 +186,7 @@ describe('宿主作用域 revision', () => {
 
       const changed = getHostScopeRevisions()
       expect(changed.image_edit).toBe(opened.image_edit + 1)
-      expect(changed.image_mark).toBe(opened.image_mark + 1)
+      expect(changed).not.toHaveProperty('image_mark')
     } finally {
       dispose()
       bus.dispose()

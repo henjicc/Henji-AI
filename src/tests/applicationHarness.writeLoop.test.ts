@@ -5,7 +5,7 @@ import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import type { ApplicationMutationExecutor, ApplicationRef } from '@/core/application-control';
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry';
-import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditAnnotationLayerV3 } from '@/core/imageEdit/v3/documentFactory';
+import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditPathLayerV3 } from '@/core/imageEdit/v3/documentFactory';
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus';
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -29,8 +29,8 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
   document.layers = [createImageEditEffectLayerV3('effect', '模糊', 'gaussian_blur', { sigma_fraction_height: 0.1 })]
   const bus = new ImageEditCommandBusV3(document)
   const dispose = registerPersistedImageEditTestSession('application-write-loop', bus, new ImageEditorV3CommandRepository())
-  const annotationLayer = createImageEditAnnotationLayerV3('marks', '标注');
-  annotationLayer.annotations.push({ id: 'mark', type: 'text', x: 0, y: 0, text: '初始', fontSize: 12, color: BLACK_HEX });
+  const annotationLayer = createImageEditPathLayerV3('marks', '标注');
+  annotationLayer.content.paint.fill={enabled:true,color:BLACK_HEX};
   bus.dispatch({ type: 'layer.add', commandId: 'add-marks', expectedRevision: bus.getSnapshot().document.revision, layer: annotationLayer, parentId: null, index: 1 });
   try {
     setCanvasTestProjectState({ currentProject: null, currentProjectId: null })
@@ -70,7 +70,6 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'canvas', ref: canvasNodeRef, property: 'canvas.node.display_name', value: '公共画布节点已改名' },
       { domain: 'camera_stage', ref: { kind: 'camera_stage.scene', id: cameraDocumentId }, property: 'camera_stage.scene.sky_color', value: BLACK_HEX },
       { domain: 'models', ref: await first('generation.model'), property: 'generation.model.hidden', value: true },
-      { domain: 'image_mark', ref: await first('image_mark.annotation'), property: 'image_mark.annotation.data', value: { x: 1, y: 2, text: '已改', fontSize: 12, color: BLACK_HEX } },
       { domain: 'image_edit', ref: { kind: 'image_edit.layer', id: `v3:${document.id}:effect` }, property: 'image_edit.layer.opacity', value: 0.42 },
       { domain: 'assets', ref: (library.resultRefs as ApplicationRef[])[0], property: 'asset.library.name', value: '公共素材已改名' },
       // 口播名就是文件名（3.3，改名走 documents.document.name）；口播写域以参考稿验证内容写入与持久化
@@ -101,7 +100,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     }
     expect(useSettingsStore.getState().themeSelection.contrast).toBe('strong')
     expect(bus.getSnapshot().document.layers[0].opacity).toBe(0.42)
-    expect(bus.getSnapshot().document.layers[1]).toMatchObject({ annotations: [{ text: '已改' }] })
+    expect(bus.getSnapshot().document.layers[1]).toMatchObject({ type:'shape', content:{paint:{fill:{color:BLACK_HEX}}} })
     const canvasContent = harnessDocumentStore().stored(canvasDocumentId)?.content as { nodes: Array<{ data: { displayName?: string } }> }
     expect(canvasContent.nodes[0].data.displayName).toBe('公共画布节点已改名')
     const cameraContent = harnessDocumentStore().stored(cameraDocumentId)?.content as { sceneSettings: { sky: { color: string } } }

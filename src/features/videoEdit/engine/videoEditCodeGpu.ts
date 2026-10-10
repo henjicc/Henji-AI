@@ -1,4 +1,5 @@
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
+import { paintNativeText } from '@/services/vectorContent/textRaster'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
@@ -258,7 +259,7 @@ export class VideoEditCodeGpu {
     }
     const canvas = new OffscreenCanvas(width, height); const context = canvas.getContext('2d')!
     context.font = metrics.font; context.fillStyle = 'white'; context.textBaseline = 'middle'
-    context.fillText(command.text, metrics.offsetX, height / 2)
+    paintNativeText(context, command.text, metrics.offsetX, height / 2)
     const texture = this.texture(width, height)
     try { this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture, premultipliedAlpha: false }, [width, height]) }
     catch (error) { texture.destroy(); this.bytes -= width * height * 4; throw error }

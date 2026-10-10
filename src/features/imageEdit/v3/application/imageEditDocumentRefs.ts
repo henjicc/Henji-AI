@@ -59,16 +59,6 @@ export function imageEditV3ResourceRef(documentId: string, resourceId: string): 
   return { kind: 'image_edit.resource', id: `${V3_REF_PREFIX}${encodePart(documentId)}:${encodePart(resourceId)}` }
 }
 
-export function imageEditV3AnnotationRef(
-  documentId: string,
-  layerId: string,
-  annotationId: string,
-): ApplicationRef {
-  return {
-    kind: 'image_mark.annotation',
-    id: `${V3_REF_PREFIX}${encodePart(documentId)}:${encodePart(layerId)}:${encodePart(annotationId)}`,
-  }
-}
 
 export function isImageEditV3Ref(ref: ApplicationRef): boolean {
   return ref.id.startsWith(V3_REF_PREFIX)
@@ -95,14 +85,6 @@ export function splitImageEditV3ResourceRef(ref: ApplicationRef): {
   return { documentId, resourceId }
 }
 
-export function splitImageEditV3AnnotationRef(ref: ApplicationRef): {
-  documentId: string
-  layerId: string
-  annotationId: string
-} {
-  const [documentId, layerId, annotationId] = parts(ref, 'image_mark.annotation', 3)
-  return { documentId, layerId, annotationId }
-}
 
 export function findImageEditV3LiveLayer(
   document: ImageEditDocumentV3,

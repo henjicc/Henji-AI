@@ -37,11 +37,6 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/generation/application/generationModelMutationExecutor.test.ts', title: '通过统一计划提交把模型隐藏，值真的落到 hidden_models，且可撤销' },
     { file: 'src/features/generation/application/generationDraftMutationExecutor.test.ts', title: '助手写提示词、换模型，草稿真的变了，且可撤销' },
   ],
-  image_mark: [
-    { file: 'src/features/imageMark/application/imageMarkReflection.test.ts', title: '打开编辑器后能读到默认文档，改裁剪与旋转可撤销' },
-    { file: 'src/features/imageMark/application/imageMarkReflection.test.ts', title: '能新建一条矩形标注、改它的颜色与位置，再删掉它' },
-    { file: 'src/features/imageMark/application/imageMarkReflection.test.ts', title: '多会话隔离：往一个会话写标注不影响另一个会话' },
-  ],
   image_edit: [
     { file: 'src/features/imageEdit/v3/application/imageEditV3ApplicationControl.test.ts', title: '实时 V3 图层属性和蒙版反相经通用事务写回同一命令总线并可撤销' },
     { file: 'src/features/imageEdit/v3/application/imageEditV3ApplicationControl.test.ts', title: '通用集合创建删除图层并把 V3 标注别名写回所属标注图层' },
@@ -74,7 +69,6 @@ const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = 
   assets: 3,
   canvas: 2,
   generation: 2,
-  image_mark: 3,
   image_edit: 3,
   camera_stage: 3,
   audio_edit: 2,

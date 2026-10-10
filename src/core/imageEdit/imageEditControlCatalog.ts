@@ -1,19 +1,13 @@
 import { z } from 'zod'
 import { gaussianParameterSchema } from '../imaging/effects/gaussian'
-import {
-  MAX_MOSAIC_STRENGTH_PERCENT,
-  MIN_MOSAIC_STRENGTH_PERCENT,
-} from './constraints'
-
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/
-const MAX_PEN_POINT_VALUES = 4_096
 const hexColorSchema = z.string()
   .regex(HEX_COLOR_PATTERN)
   .describe('颜色格式为井号加六位十六进制字符。')
 
 const markLabelSchema = {
-  label: z.string().trim().min(1).max(500).optional(),
-  labelFontSize: z.number().finite().min(8).max(1000).optional(),
+  label: z.string().trim().min(1).optional(),
+  labelFontSize: z.number().finite().min(8).optional(),
   labelDx: z.number().finite().optional(),
   labelDy: z.number().finite().optional(),
   labelBackgroundColor: hexColorSchema.optional(),
@@ -21,17 +15,16 @@ const markLabelSchema = {
 
 const markStyleSchema = {
   stroke: hexColorSchema,
-  lineWidth: z.number().finite().min(1).max(100),
+  lineWidth: z.number().finite().positive(),
 }
 
 const imageEditMarkItemUnionSchema = z.discriminatedUnion('type', [
   z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('rect'), x: z.number().finite(), y: z.number().finite(), width: z.number().finite().positive(), height: z.number().finite().positive(), ...markStyleSchema, ...markLabelSchema }).strict(),
   z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('ellipse'), x: z.number().finite(), y: z.number().finite(), width: z.number().finite().positive(), height: z.number().finite().positive(), ...markStyleSchema, ...markLabelSchema }).strict(),
   z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('arrow'), points: z.tuple([z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite()]), curveControl: z.tuple([z.number().finite(), z.number().finite()]).optional(), ...markStyleSchema, ...markLabelSchema }).strict(),
-  z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('pen'), points: z.array(z.number().finite()).min(4).max(MAX_PEN_POINT_VALUES).refine((points) => points.length % 2 === 0, 'points 必须成对出现'), ...markStyleSchema }).strict(),
-  z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('text'), x: z.number().finite(), y: z.number().finite(), text: z.string().max(10_000), color: hexColorSchema, fontSize: z.number().finite().min(10).max(1000), backgroundColor: hexColorSchema.optional() }).strict(),
-  z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('number'), x: z.number().finite(), y: z.number().finite(), color: hexColorSchema, fontSize: z.number().finite().min(10).max(1000) }).strict(),
-  z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('mosaic'), x: z.number().finite(), y: z.number().finite(), width: z.number().finite().positive(), height: z.number().finite().positive(), strengthPercent: z.number().finite().min(MIN_MOSAIC_STRENGTH_PERCENT).max(MAX_MOSAIC_STRENGTH_PERCENT).optional(), mode: z.enum(['pixel', 'blur']).optional() }).strict(),
+  z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('pen'), points: z.array(z.number().finite()).min(4).refine((points) => points.length % 2 === 0, 'points 必须成对出现'), ...markStyleSchema }).strict(),
+  z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('text'), x: z.number().finite(), y: z.number().finite(), text: z.string(), color: hexColorSchema, fontSize: z.number().finite().min(10), backgroundColor: hexColorSchema.optional() }).strict(),
+  z.object({ id: z.string().min(1).max(120).optional(), type: z.literal('number'), x: z.number().finite(), y: z.number().finite(), color: hexColorSchema, fontSize: z.number().finite().min(10) }).strict(),
 ])
 
 const MARK_LABEL_DEPENDENT_FIELDS = [

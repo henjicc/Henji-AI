@@ -281,11 +281,6 @@ export function useImageEditorLayerMoveGestureV3(
         if (shape && shape.name() !== 'mark-background') return
       }
     }
-    if (
-      selectedLocation?.layer.type === 'annotation'
-      && event.target instanceof Element
-      && event.target.closest('[data-annotation-editor-overlay]')
-    ) return
     const handleName = event.target instanceof Element
       ? event.target.closest<HTMLElement>('[data-layer-transform-handle]')?.dataset.layerTransformHandle : undefined
     const handle = LAYER_TRANSFORM_HANDLES_V3.find((entry) => entry === handleName) ?? null

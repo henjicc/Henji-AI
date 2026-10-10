@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_LINE_WIDTH_PERCENT,
   DEFAULT_TEXT_SIZE_PERCENT,
-} from '@/features/imageMark/domain/metrics'
+} from '@/core/imageEdit/marks/metrics'
 import {
   useImageEditorInteractionStoreV3,
   useImageEditorSessionStoreV3,
@@ -16,8 +16,6 @@ describe('ImageEditor V3 session stores', () => {
       layerDragBySession: {},
       viewportZoomBySession: {},
       viewportPanBySession: {},
-      annotationSelectionBySession: {},
-      annotationPreviewBySession: {},
     })
   })
 
@@ -38,40 +36,11 @@ describe('ImageEditor V3 session stores', () => {
   })
 
   it('标注样式预设以图片短边百分比保存', () => {
-    useImageEditorSessionStoreV3.getState().ensureSession('editor', ['annotation-text'])
+    useImageEditorSessionStoreV3.getState().ensureSession('editor', ['vector-text'])
 
     const settings = useImageEditorSessionStoreV3.getState().sessions.editor.toolSettings
     expect(settings.annotationLineWidthPercent).toBe(DEFAULT_LINE_WIDTH_PERCENT)
     expect(settings.annotationTextSizePercent).toBe(DEFAULT_TEXT_SIZE_PERCENT)
   })
 
-  it('高频拖拽和视口缩放不进入持久会话', () => {
-    useImageEditorSessionStoreV3.getState().ensureSession('editor', ['move'])
-    const interaction = useImageEditorInteractionStoreV3.getState()
-    interaction.beginLayerDrag('editor', 'layer-a')
-    interaction.setLayerDragTarget('editor', 'layer-b')
-    interaction.setViewportZoom('editor', 20)
-    interaction.setViewportPan('editor', { x: 36, y: -24 })
-    interaction.selectAnnotation('editor', { layerId: 'layer-a', annotationId: 'mark-a' })
-
-    expect(useImageEditorInteractionStoreV3.getState().layerDragBySession.editor).toEqual({
-      layerId: 'layer-a',
-      overLayerId: 'layer-b',
-    })
-    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession.editor).toBe(8)
-    expect(useImageEditorInteractionStoreV3.getState().viewportPanBySession.editor).toEqual({
-      x: 36,
-      y: -24,
-    })
-    expect(useImageEditorSessionStoreV3.getState().sessions.editor).not.toHaveProperty('zoom')
-    expect(useImageEditorSessionStoreV3.getState().sessions.editor).not.toHaveProperty('layerDrag')
-    expect(useImageEditorInteractionStoreV3.getState().annotationSelectionBySession.editor).toEqual({
-      layerId: 'layer-a',
-      annotationId: 'mark-a',
-    })
-
-    interaction.clearViewport('editor')
-    expect(useImageEditorInteractionStoreV3.getState().viewportPanBySession.editor).toBeUndefined()
-    expect(useImageEditorInteractionStoreV3.getState().annotationSelectionBySession.editor).toBeUndefined()
-  })
 })

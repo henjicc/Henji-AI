@@ -2,7 +2,7 @@ import pixelmatch from 'pixelmatch';
 import { describe, expect, it } from 'vitest';
 
 import {
-  createImageEditAnnotationLayerV3,
+  createImageEditPathLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
   createImageEditRasterLayerV3,
@@ -36,7 +36,7 @@ async function render(quality: 'stable' | 'export'): Promise<Uint8Array> {
   const document = createImageEditDocumentV3({ width: 3, height: 1, documentId: 'pixel-golden' });
   document.layers = [
     createImageEditRasterLayerV3('source', 'source', 'sha256:source'),
-    createImageEditAnnotationLayerV3('marks', 'marks'),
+    createImageEditPathLayerV3('marks', 'marks'),
     createImageEditEffectLayerV3('blur', 'blur', 'gaussian_blur', {
       sigma_fraction_height: .8,
     }),
@@ -45,7 +45,7 @@ async function render(quality: 'stable' | 'export'): Promise<Uint8Array> {
     compileImageEditRenderPlanV3(document, createBuiltInImageEditRenderNodeRegistry(), quality),
     {
       loadRaster: async () => SOURCE,
-      rasterizeAnnotations: async () => CENTER_MARK,
+      rasterizeVectorContent: async () => CENTER_MARK,
     },
   );
   if (!output) throw new Error('Expected rendered output');

@@ -42,7 +42,7 @@ const definitions: readonly RenderNodeDefinition[] = [
     estimateBytes: (context) => estimateRgbaTileBytes(context),
   },
   {
-    id: 'vector.annotation', hostExecution: 'annotation', version: 1, category: 'vector', color: PASSTHROUGH_PREMULTIPLIED,
+    id: 'vector.content', hostExecution: 'vector', version: 1, category: 'vector', color: PASSTHROUGH_PREMULTIPLIED,
     qualities: ['draft', 'stable', 'export'], backends: ['webgpu', 'browser-canvas', 'cpu-libvips'],
     fusion: 'never', invalidation: 'tile',
     estimateBytes: (context) => estimateRgbaTileBytes(context),
