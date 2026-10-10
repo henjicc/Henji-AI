@@ -74,7 +74,8 @@ describe('filmstrip frame service', () => {
   })
 
   it('batches frames of one source and height into one process, shares duplicates, and serves the second request from disk', async () => {
-    const frames = service()
+    // 四个请求经异步内容识别后才入队；慢机器上 2ms 收集窗口可能把它们拆成两批
+    const frames = service({ gatherMs: 50 })
     const results = await Promise.all([2, 0.5, 1, 2].map(seconds => frames.frame({ source: 'D:/clip.mp4', timeUs: seconds * 1_000_000, height: 48 })))
     expect(spawned).toHaveLength(1)
     expect(outputsOf(spawned[0].args).map(item => item.time)).toEqual([0.5, 1, 2])
