@@ -1,4 +1,6 @@
 import { FILE_PERSISTENCE_FORMATS } from './fileContracts'
+import { creativeIntentPageSchema } from '../creativeIntent/pages'
+import { storedMotionCandidateSchema } from '../creativeIntent/persistence'
 import { z } from 'zod'
 import { DOCUMENT_KINDS } from '../documents/kinds'
 import { documentEnvelopeSchema } from '../documents/envelope'
@@ -38,6 +40,8 @@ function format(id: string, name: string, version: number, versionSource: string
 
 /** Single inventory. SQL payloads inherit the existing SQLite ledger, never a parallel ledger. */
 export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
+  format('creative-intent-page', '创作意图原稿页', 1, 'CreativeIntentPage.version', 'src/features/videoEdit/application/videoEditMotionResources.ts::readMotionPages', creativeIntentPageSchema),
+  format('creative-intent-candidate', '创作意图候选', 1, 'StoredMotionCandidate.version', 'src/features/videoEdit/application/videoEditMotionResources.ts::readMotionCandidate', storedMotionCandidateSchema),
   ...FILE_PERSISTENCE_FORMATS,
   ...DOCUMENT_KINDS.map(kind => ({ ...format(`document.${kind.id}`, kind.untitledNames.zh.replace('未命名', ''), kind.version, 'DocumentEnvelope.kindVersion',
     kind.storage === 'package' ? 'electron/main/services/image-editor-v3/image-document/image-document-service.ts' : 'electron/main/services/documents/document-file.ts::decodeDocumentContent',

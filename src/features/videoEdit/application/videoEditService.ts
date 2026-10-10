@@ -1,4 +1,6 @@
 import { persistenceMessage } from '@/core/persistence/messages'
+import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
+import { creativeIntentsSchema, creativeIntentLiveResources, type CreativeIntents } from '@/core/creativeIntent/persistence'
 import { pruneCodeSources, assertCodeSourcesUnchanged } from '@/core/videoEdit/codeMaterial/sources'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { copyVideoEditSequence } from '@/core/videoEdit/sequenceCopy'
@@ -64,6 +66,9 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   frame: number
   playing: boolean
   playbackDirection: 1 | -1
+  /** 仅节目采集的播放速度；不会修改素材速度或作品时间。 */
+  motionRecording?: boolean
+  playbackRate?: 1 | 0.5 | 0.25
   scrubbing?: boolean
   busy: boolean
   activePanel: VideoEditFocusablePanel
@@ -114,6 +119,14 @@ interface GestureState {
 }
 const gestures = new WeakMap<VideoEditInstance, GestureState>()
 const closing = new WeakMap<VideoEditInstance, Promise<void>>()
+const closePreparations = new WeakMap<VideoEditInstance, () => Promise<void>>()
+const preparingClose = new WeakMap<VideoEditInstance, Promise<void>>()
+
+/** 领域活动在文档保存屏障前封存自己的待写数据；失败时保留会话供重试。 */
+export function registerVideoEditClosePreparation(instance: VideoEditInstance, prepare: () => Promise<void>): () => void {
+  closePreparations.set(instance, prepare)
+  return () => { if (closePreparations.get(instance) === prepare) closePreparations.delete(instance) }
+}
 const programCommands = new WeakMap<VideoEditInstance, object>()
 export function videoEditProgramCommandIdentity(id: string): object {
   const owner = requireVideoEditInstance(id); let command = programCommands.get(owner)
@@ -142,9 +155,21 @@ export function beginVideoEditGesture(projectId: string): VideoEditGesture {
 function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0, inPlaceGenerations: undefined }) === JSON.stringify({ ...right, revision: 0, inPlaceGenerations: undefined }) }
 function withInPlaceMetadata(document: VideoEditDocument, current: VideoEditDocument): VideoEditDocument {
   const next = { ...document }
+  if (current.creativeIntents) next.creativeIntents = current.creativeIntents
+  else delete next.creativeIntents
   if (current.inPlaceGenerations?.length) next.inPlaceGenerations = current.inPlaceGenerations
   else delete next.inPlaceGenerations
   return next
+}
+/** 页已封存后才发布头；采集不会产生作品撤销步，也不会清空重做。 */
+export function updateVideoEditCreativeIntents(id: string, head: CreativeIntents): void {
+  assertApplicationWritesAllowed()
+  const owner = requireVideoEditInstance(id); assertVideoEditWritable(owner)
+  if (gestures.has(owner)) throw new Error('请先完成当前参数调整。')
+  const creativeIntents = creativeIntentsSchema.parse(head)
+  if ([...creativeIntents.drafts, ...creativeIntents.sessions].some(draft => draft.ownerRef.kind !== 'document.video_edit' || draft.ownerRef.id !== id)) throw new Error('原稿归属与当前剪辑不符，请恢复原文件。')
+  owner.document = { ...owner.document, creativeIntents }; owner.version++
+  notifyVideoEditContent(owner); publishVideoEdit()
 }
 /** 任务元数据沿用会话保存屏障，不增加撤销步、不清空重做，也不推进剪辑内容版本。 */
 export function updateVideoEditInPlaceMetadata(id: string, records: readonly VideoEditInPlaceRecord[]): void {
@@ -519,7 +544,7 @@ export function validateVideoEditProgramControl(id: string, values: VideoEditPro
  * 只改视图选区，不进撤销历史。调用方显式指定选区、或正在拖动参数时不覆盖。
  */
 function followPlayheadSelection(instance: VideoEditInstance, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing' | 'scrubbing' | 'playbackDirection'>>): typeof values {
-  if (!instance.activeSequenceId || values.frame === undefined || values.selection !== undefined || gestures.has(instance) || !useSettingsStore.getState().videoEditSelectionFollowsPlayhead) return values
+  if (!instance.activeSequenceId || instance.motionRecording || values.frame === undefined || values.selection !== undefined || gestures.has(instance) || !useSettingsStore.getState().videoEditSelectionFollowsPlayhead) return values
   const selection = videoEditClipUnderPlayhead(getActiveVideoEditSequence(instance), values.frame)
   return selection === instance.selection ? values : { ...values, selection }
 }
@@ -541,6 +566,12 @@ export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInsta
   if (selectionChanged || elementSelectionChanged) publishVideoEdit(programCommand)
   else { if (programCommand) domainRevision++; publishView() }
   return command
+}
+/** A speed change starts a fresh renderer clock from the current presented frame. */
+export function setVideoEditPlaybackRate(id: string, rate: 1 | .5 | .25): void {
+  const owner = requireVideoEditInstance(id)
+  if (owner.playbackRate === rate) return
+  owner.playbackRate = rate; programCommands.set(owner, {}); domainRevision++; publishView()
 }
 /**
  * Sequence In/Out marks select the half-open exported range (Out is exclusive, as marked by the O command);
@@ -633,7 +664,7 @@ export function videoEditDocumentContent(document: VideoEditDocument): VideoEdit
 }
 /** 文档内容 → 剪辑（完整 schema 校验）；内容读不懂时报错，原文件不动。 */
 export function videoEditDocumentFromContent(content: unknown, meta: { id: string; name: string }, revision = 0): VideoEditDocument {
-  const raw = { format: 'henji-video-project', version: 2, id: meta.id, name: meta.name, revision, ...(typeof content === 'object' && content !== null ? content : {}) }
+  const raw = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: meta.id, name: meta.name, revision, ...(typeof content === 'object' && content !== null ? content : {}) }
   const parsed = videoEditDocumentSchema.safeParse(raw)
   // schema 路径是诊断信息，不是用户语言，只进日志
   if (!parsed.success) {
@@ -696,7 +727,11 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   contentListeners.set(instance, listeners)
   const adapter: DocumentContentAdapter<VideoEditDocumentContent> = {
     // 参数调整进行中时写调整前的内容；提交后再标脏保存
-    getContent: () => videoEditDocumentContent(withInPlaceMetadata(gestures.get(instance)?.before ?? instance.document, instance.document)),
+    getContent: () => {
+      const document = withInPlaceMetadata(gestures.get(instance)?.before ?? instance.document, instance.document)
+      if (document.creativeIntents) document.creativeIntents = { ...document.creativeIntents, resources: creativeIntentLiveResources([document.creativeIntents, ...instance.past.map(d => d.creativeIntents), ...instance.future.map(d => d.creativeIntents)]) }
+      return videoEditDocumentContent(document)
+    },
     receiveContent: (content) => {
       // 冲突后“重新载入”、收集素材改写了引用：按新内容重建，撤销历史不跨版本
       cancelVideoEditGesture(instance)
@@ -881,6 +916,17 @@ async function renameMainAfterSave(previous: ProjectSummary, mainId: string): Pr
  */
 export function closeVideoEditProject(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
+  const preparation = preparingClose.get(instance)
+  if (preparation) return preparation
+  const prepare = closePreparations.get(instance)
+  if (prepare) {
+    const operation = Promise.resolve().then(prepare).then(() => {
+      preparingClose.delete(instance)
+      return closeVideoEditProject(id)
+    }).finally(() => { preparingClose.delete(instance) })
+    preparingClose.set(instance, operation)
+    return operation
+  }
   const previous = closing.get(instance)
   if (previous) return previous
   if (instance.busy || activities.get(instance)?.size) return Promise.reject(new Error(videoEditBusyReason(id) ?? '请等待处理完成。'))
@@ -913,6 +959,8 @@ export function videoEditBusyReason(id: string): string | null {
   if (instance.busy) return '请等待导出完成或取消导出。'
   if ([...activities.get(instance) ?? []].some(value => value.startsWith('export:'))) return '仍有待导出的项目，请等待完成或在导出列表取消。'
   if ([...activities.get(instance) ?? []].some(value => value.startsWith('code-image-generation:'))) return '请等待图片生成完成，或在图片参数处取消生成。'
+  if ([...activities.get(instance) ?? []].some(value => value.startsWith('动作示范:'))) return '请先结束示范，保存原稿后再离开。'
+  if ([...activities.get(instance) ?? []].some(value => value.startsWith('整理动作:'))) return '请等待动作整理完成，或取消整理。'
   if (activities.get(instance)?.size) return '请等待字幕处理完成或在字幕面板取消。'
   if (gestures.has(instance)) return '请先完成当前参数调整。'
   return null

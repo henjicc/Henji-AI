@@ -3,6 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { PERSISTENCE_FORMATS } from '../src/core/persistence/formats'
+import { createMotionFixture } from '../src/core/creativeIntent/fixtures/motionFixtures'
+import { optimizeMotionDraft } from '../src/core/creativeIntent/candidates'
 import { buildDocumentEnvelope } from '../src/core/documents/envelope'
 import { buildProjectManifest } from '../src/core/documents/projectManifest'
 import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema } from '../src/core/videoEdit/document'
@@ -64,6 +66,8 @@ image.geometry.orientation = { rotate: 90, mirrored: true }
 image.geometry.crop = { x: 1, y: 2, width: 32, height: 40 }
 const working = { format: 'henji-image-edit', formatVersion: IMAGE_WORKING_VERSION, documentId: image.id, revision: 0, createdAt: timestamp, updatedAt: timestamp, document: image, resourceRefs: [] }
 const values: Record<string, unknown> = {
+  'creative-intent-page': (() => { const { draft, samples } = createMotionFixture('S01').input; return { version: 1, kind: 'samples', ownerRef: draft.ownerRef, sourceDigest: draft.sourceDigest, monoSpanUs: [samples[0].monoUs, samples[samples.length - 1].monoUs], seqSpan: [samples[0].seq, samples[samples.length - 1].seq], count: samples.length, entries: samples } })(),
+  'creative-intent-candidate': { version: 1, ...optimizeMotionDraft(createMotionFixture('S01').input).candidates[0] },
   'document.video_edit': videoContent,
   'document.canvas': { nodes: [{ id: 'golden-node', type: 'textDisplay', position: { x: 0, y: 0 }, data: { text: '黄金样本' } }], edges: [] },
   'document.audio_edit': { source: { mediaType: 'audio', sourcePath: '/persistence-project/素材/voice.wav', audioPath: '/persistence-project/素材/voice.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '参考稿', transcript: [{ id: 'word', text: '你好', startFrame: 0, endFrame: 24000, included: true, locked: false, granularity: 'word' }], suggestions: [], vstEnabled: false, cuts: [{ id: 'cut', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }], processorChain: [] },

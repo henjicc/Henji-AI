@@ -17,8 +17,8 @@ function fixture() {
 }
 
 describe('字幕与标记的半开锚定', () => {
-  it('旧v2可读；真实移动跟随clip，序列对象保持原时钟', () => {
-    expect(videoEditDocumentSchema.parse(createVideoEditDocument('旧剪辑')).sequences[0].captions).toBeUndefined()
+  it('当前格式未添加字幕时可读；真实移动跟随clip，序列对象保持原时钟', () => {
+    expect(videoEditDocumentSchema.parse(createVideoEditDocument('剪辑')).sequences[0].captions).toBeUndefined()
     const { document, sequence } = fixture()
     const next = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['clip'], mode: 'move', delta: 100 })
     expect(next.captions).toMatchObject([{ start: 150, duration: 50 }, { start: 5 }])

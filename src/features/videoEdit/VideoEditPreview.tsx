@@ -19,18 +19,21 @@ import { videoEditParameterUpdate, videoEditParameterAffectsAudio } from './engi
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { isDomNode } from '@/utils/crossRealmDom'
-import { activeVideoEditInstance, getActiveVideoEditSequence, findActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
-import { alignVideoEditClockToDisplay, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame } from './engine/videoEditDisplayClock'
+import { alignVideoEditClockToDisplay, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditLiveFrame } from './engine/videoEditDisplayClock'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
 import { VideoEditMaskOverlay } from './panels/VideoEditMaskOverlay'
 import { VideoEditTextOverlay } from './panels/VideoEditTextOverlay'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
+import { useVideoEditMotionGesture } from './panels/useVideoEditMotionGesture'
+import { VideoEditMotionControls, VideoEditMotionOverlay } from './panels/VideoEditMotionControls'
+import { videoMotionComposition, videoMotionState, recordVideoMotionPresentation, setVideoMotionOptions, subscribeVideoMotion, pauseVideoMotion } from './application/videoEditMotionDraft'
 import { VideoEditInOutDuration, VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
 import { useMonitorZoom } from './panels/useMonitorZoom'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
@@ -123,6 +126,23 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   }, [])
   const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
   const picture = useVideoEditPictureGesture(instance, visible && mode === 'move', onError)
+  const motionGesture = useVideoEditMotionGesture(instance, onError)
+  const temporaryMotionMode = useRef<'navigate' | 'demonstrate'>()
+  const motionRecording = useSyncExternalStore(subscribeVideoMotion, () => videoMotionState(instance)?.status === 'recording')
+  useEffect(() => {
+    const target = host.current?.ownerDocument.defaultView ?? window
+    const restore = (): void => { const mode = temporaryMotionMode.current; temporaryMotionMode.current = undefined; if (mode && listVideoEditInstances().includes(instance)) setVideoMotionOptions(instance.document.id, { mode }) }
+    const down = (event: KeyboardEvent): void => {
+      const state = videoMotionState(instance)
+      if (event.key !== 'Alt' || state?.status !== 'recording') return
+      if (!temporaryMotionMode.current) { temporaryMotionMode.current = state.mode; setVideoMotionOptions(instance.document.id, { mode: state.mode === 'navigate' ? 'demonstrate' : 'navigate' }) }
+      event.preventDefault()
+    }
+    const up = (event: KeyboardEvent): void => { if (event.key === 'Alt') restore() }
+    const blur = (): void => { restore(); if (videoMotionState(instance)?.status === 'recording') pauseVideoMotion(instance.document.id) }
+    target.addEventListener('keydown', down, true); target.addEventListener('keyup', up, true); target.addEventListener('blur', blur)
+    return () => { target.removeEventListener('keydown', down, true); target.removeEventListener('keyup', up, true); target.removeEventListener('blur', blur); restore() }
+  }, [instance])
   useEffect(() => { if (instance.tool === 'type') setMode('select') }, [instance.tool])
   const changeMode = useCallback((next: VideoEditAnnotationMode): void => {
     if (instance.tool === 'type') setVideoEditTimelineView(instance.document.id, { tool: 'select' })
@@ -169,11 +189,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const renderer = new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen(), undefined, instance.document.id); session.current = renderer
     const unsubscribe = subscribeVideoEditDomain(() => {
       if (stopped) return
-      const next = findActiveVideoEditSequence(instance)
+      const next = videoMotionComposition(instance)
       const parameters = next && videoEditParameterUpdate(appliedDocument, next)
       if (!parameters || videoEditParameterAffectsAudio(appliedDocument, parameters)) {
         if (next !== appliedDocument) { stopAudio(); setLevels([]) }
-        renderer.invalidateDocument(instance.document.revision)
+        renderer.invalidateDocument(next?.revision ?? instance.document.revision)
       }
     })
     const unsubscribeView = subscribeVideoEditView(() => {
@@ -183,6 +203,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let audioRenderer: VideoEditRenderSession | undefined
     let appliedProxy = videoEditProxySignature(instance.document.id)
     let appliedDocument = initialDocument
+    let appliedSequence = instance.document.sequences.find(sequence => sequence.id === initialDocument.id)
+    const unsubscribeMotion = subscribeVideoMotion(() => {
+      if (stopped || videoMotionState(instance)?.status !== 'recording') return
+      const next = videoMotionComposition(instance)
+      // 取消旧姿态等待未来帧的 deadline；仍由同一个循环和同一个画布呈现最新快照。
+      if (next && next !== appliedDocument) renderer.invalidateDocument(next.revision)
+    })
     let timer: ReturnType<typeof setTimeout>
     let audio: AudioContext | undefined
     let meter: ReturnType<typeof createVideoEditAudioMeter> | undefined
@@ -241,19 +268,22 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.presentedFrame = String(target)
       surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor)
+      if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: initialDocument.id, at: performance.now(), scrubbing })
       if (failedDocument === undefined) { setRenderFailure(null); failedRetryMs = 2000 }
       return true
     }
     const unregisterCapture = registerVideoEditProgramCapture(instance, initialDocument.id, async (request, signal) => {
+      const picture = videoMotionComposition(instance)
       const current = (): void => {
         signal?.throwIfAborted(); request.assertCurrent()
         if (stopped || session.current !== renderer || canvas.current !== surface || !surface.isConnected) throw new Error('节目面板已关闭，请重新打开后选帧。')
+        if (videoMotionComposition(instance) !== picture) throw new Error('示范或候选画面已改变，请重新选帧。')
       }
       const start = performance.now()
       // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
       captureFull++
       try {
-        while (appliedProxy !== 'original' || appliedDocument !== request.document || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(request.document.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
+        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
           current()
           if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
           await new Promise(resolve => setTimeout(resolve, 5))
@@ -271,7 +301,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       try {
         const current = requireVideoEditInstance(instance.document.id)
         const command = videoEditProgramCommandIdentity(instance.document.id)
-        const document = findActiveVideoEditSequence(current)
+        const document = videoMotionComposition(current)
         if (!document) { stopAudio(); return }
         if (appliedFonts !== renderer.fontPresentationRevision) { appliedFonts = renderer.fontPresentationRevision; lastRequested = -1 }
         requestCommand = command; requestDocument = document
@@ -280,6 +310,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           failedDocument = undefined
         }
         if (appliedDocument !== document) {
+          const sequence = current.document.sequences.find(sequence => sequence.id === initialDocument.id)
+          const liveProjection = videoMotionState(current)?.status === 'recording' && sequence === appliedSequence && document.media === appliedDocument.media && document.items === appliedDocument.items
           const parameterUpdate = captureFull === 0 && videoEditParameterUpdate(appliedDocument, document)
           // One latest parameter snapshot per display period. Intermediate moves never enter the Worker queue.
           const parameterPeriod = displayPeriod ?? 1000 / 60
@@ -287,13 +319,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (parameterUpdate && parameterTick <= lastParameterUpdate) {
             timer = setTimeout(() => { void loop() }, Math.max(1, lastParameterUpdate + parameterPeriod - performance.now())); return
           }
-          if (!parameterUpdate || videoEditParameterAffectsAudio(appliedDocument, parameterUpdate)) { stopAudio(); wasPlaying = false }
+          if ((!parameterUpdate && !liveProjection) || parameterUpdate && videoEditParameterAffectsAudio(appliedDocument, parameterUpdate)) { stopAudio(); wasPlaying = false }
           if (parameterUpdate) renderer.invalidateDocument(document.revision)
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
           // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
           if (parameterUpdate) lastParameterUpdate = parameterTick
-          await renderer.updateDocument(document, captureFull > 0); await audioRenderer?.updateDocument(document); appliedDocument = document; lastRequested = -1
-          if (!parameterUpdate) lastFrame = -1
+          await renderer.updateDocument(document, captureFull > 0); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; lastRequested = -1
+          if (!parameterUpdate && !liveProjection) lastFrame = -1
           if (stopped) return
         }
         const proxySignature = captureFull > 0 ? 'original' : videoEditProxySignature(instance.document.id)
@@ -316,7 +348,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const initialFrame = current.frame
           const requestedAt = performance.now()
           // 声音设备与第一帧并行准备：AudioContext 启动（Windows 首次可达上百毫秒）不再排在第一帧之后。
-          const audioReady = direction === 1 && audibleVideoEditClips(document).length ? (async (): Promise<void> => {
+          const audioReady = direction === 1 && (current.playbackRate ?? 1) === 1 && audibleVideoEditClips(document).length ? (async (): Promise<void> => {
             audio ??= new AudioContext({ sampleRate: document.sampleRate }); await audio.resume()
             const before = audio.currentTime; const waiting = performance.now()
             while (audio.currentTime === before && performance.now() - waiting < 1000 && !stopped) await new Promise(resolve => setTimeout(resolve, 2))
@@ -326,7 +358,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (!stopped) setEffectFailure(initialResult.effectErrors?.join('\n') ?? null)
           if (stopped) return
           if (initialResult.presented === true) recordPresentation(initialFrame, initialResult, requestedAt, false, document.revision)
-          if (!current.playing || !listVideoEditInstances().includes(instance) || findActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
+          if (!current.playing || !listVideoEditInstances().includes(instance) || videoMotionComposition(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented === false) { lastFrame = -1; lastRequested = -1; wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented !== true) recordPresentation(initialFrame, initialResult, requestedAt, false, document.revision)
           const phaseFirst = performance.now()
@@ -335,7 +367,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (audioReady) {
             await audioReady
             if (stopped) return
-            if (!current.playing || !listVideoEditInstances().includes(instance) || findActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
+            if (!current.playing || !listVideoEditInstances().includes(instance) || videoMotionComposition(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
             if (audio) meter ??= createVideoEditAudioMeter(audio, document.channels)
           }
           if (stopped) return
@@ -348,7 +380,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const clockNow = performance.now(); const audioNow = audio?.currentTime ?? 0
           const clockAt = vsync !== undefined && displayPeriod ? alignVideoEditClockToDisplay(clockNow + lead * 1000, vsync, displayPeriod) : clockNow + lead * 1000
           clockStart = audioNow + (clockAt - clockNow) / 1000; startFrame = initialFrame; audioScheduler.start(initialFrame / document.fps)
-          if (!current.playing || findActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
+          if (!current.playing || videoMotionComposition(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           clockPerformanceStart = clockAt
           surface.dataset.playStartPhases = JSON.stringify({ at: phaseStart, yieldMs: phaseYield - phaseStart, firstFrameMs: phaseFirst - phaseYield, audioMs: clockNow - phaseFirst })
           surface.dataset.playClockStartAt = String(clockPerformanceStart)
@@ -357,30 +389,31 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (!current.playing && wasPlaying) stopAudio()
         wasPlaying = current.playing
         if (current.playing) {
-          const timelineTime = startFrame / document.fps + direction * (performance.now() - clockPerformanceStart) / 1000
+          const timelineTime = startFrame / document.fps + direction * (current.playbackRate ?? 1) * (performance.now() - clockPerformanceStart) / 1000
           if (direction === 1 ? timelineTime >= videoEditDuration(document) / document.fps && lastFrame >= videoEditDuration(document) - 1 : timelineTime <= 0 && lastFrame <= 0) { setVideoEditView(instance.document.id, { playing: false }, true); stopAudio() }
-          if (direction === 1 && audio && meter && audibleVideoEditClips(document).length) {
+          if (direction === 1 && (current.playbackRate ?? 1) === 1 && audio && meter && audibleVideoEditClips(document).length) {
             audioScheduler.pump({
               context: audio, destination: meter.input, origin: clockStart - startFrame / document.fps, timelineTime, endTime: videoEditDuration(document) / document.fps,
               mix: (from, duration) => {
                 const block = firstBlock; firstBlock = undefined
                 return block?.document === document && block.from === from && block.duration === duration ? block.buffer : (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration)
               },
-              isCurrent: () => !stopped && listVideoEditInstances().includes(instance) && findActiveVideoEditSequence(instance) === document && videoEditProgramCommandIdentity(instance.document.id) === command,
+              isCurrent: () => !stopped && listVideoEditInstances().includes(instance) && videoMotionComposition(instance) === document && videoEditProgramCommandIdentity(instance.document.id) === command,
               onError: error => { setVideoEditView(instance.document.id, { playing: false }, true); onError(error) },
             })
           }
         }
         const playing = current.playing
-        const target = playing ? direction === 1 ? Math.max(startFrame, Math.min(videoEditDuration(document) - 1, Math.max(lastFrame, submittedFrame) + 1)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
+        const liveRecording = playing && videoMotionState(current)?.status === 'recording'
+        const target = liveRecording ? videoEditLiveFrame(startFrame, performance.now() - clockPerformanceStart, document.fps, current.playbackRate ?? 1, direction, videoEditDuration(document)) : playing ? direction === 1 ? Math.max(startFrame, Math.min(videoEditDuration(document) - 1, Math.max(lastFrame, submittedFrame) + 1)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
         if (target !== lastRequested || (!!current.scrubbing !== lastScrubbing && !current.scrubbing)) {
           const scrubbing = !!current.scrubbing
           const requestedAt = performance.now()
-          const deadline = playing ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps * 1000 : undefined
+          const deadline = playing && !liveRecording ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps / (current.playbackRate ?? 1) * 1000 : undefined
           lastRequested = target
           // 正向播放与拖动一样两帧流水：这一帧一提交给 GPU 就去准备下一帧，不等它画完再往返一趟，
           // 否则每帧都赶不上下一次刷新，画面成对出现（一帧晚、下一帧紧跟着补上，前一帧根本没显示）。
-          const pipelined = playing && direction === 1
+          const pipelined = playing && direction === 1 && !liveRecording
           if (pipelined) playbackInFlight++
           const result = await renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
             if (pipelined) { submittedFrame = target; if (playbackInFlight >= 2) return }
@@ -391,16 +424,16 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             // A completed seek is useful while the pointer keeps moving. Only a different
             // document/lifetime invalidates it; the next iteration reads the latest target.
             if (stopped || !listVideoEditInstances().includes(instance)) return
-            if (findActiveVideoEditSequence(current) !== document) {
+            if (videoMotionComposition(current) !== document) {
               // An already submitted draw cannot be undone by a later parameter edit.
               // Report that same-surface fact without advancing the new document's clock.
               if (result.presented === true) recordPresentation(target, result, requestedAt, scrubbing, document.revision)
-              const latest = findActiveVideoEditSequence(current)
+              const latest = videoMotionComposition(current)
               if (result.presented === true && pipelined && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(current.document.id) === command && latest && videoEditParameterUpdate(document, latest)) lastFrame = Math.max(lastFrame, target)
               if (!scheduled) timer = setTimeout(() => { void loop() }, 0)
               return
             }
-            if (result.presented === false) { lastFrame = -1; lastRequested = -1; if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
+            if (result.presented === false) { if (!liveRecording) lastFrame = -1; lastRequested = -1; if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             if (!recordPresentation(target, result, requestedAt, scrubbing, document.revision)) { if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             setEffectFailure(result.effectErrors?.join('\n') ?? null)
             lastFrame = target; lastScrubbing = scrubbing
@@ -427,7 +460,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (!stopped && !scheduled) timer = setTimeout(() => { void loop() }, current.playing ? 0 : 2)
       } catch (error) {
         if (stopped || !listVideoEditInstances().includes(instance)) return
-        if (findActiveVideoEditSequence(instance) !== requestDocument || videoEditProgramCommandIdentity(instance.document.id) !== requestCommand) { timer = setTimeout(() => { void loop() }, 0); return }
+        if (videoMotionComposition(instance) !== requestDocument || videoEditProgramCommandIdentity(instance.document.id) !== requestCommand) { timer = setTimeout(() => { void loop() }, 0); return }
         setVideoEditView(instance.document.id, { playing: false }, true)
         // Shown on the program monitor itself and cleared by the next presented frame.
         logger.warn('节目画面渲染失败', { event: 'video_edit.preview.render_failed', error, context: { projectId: instance.document.id, revision: requestDocument.revision, cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined } })
@@ -440,7 +473,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let retired = false
     stopCurrent = (): void => {
       if (retired) return
-      retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
+      retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
       programReleases.set(instance, Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()]))
       surface.remove(); if (canvas.current === surface) canvas.current = null
     }
@@ -535,13 +568,14 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const rect = event.currentTarget.getBoundingClientRect(); const point = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height))) }
           annotationMenu.showMenu(event, [{ id: 'ask', label: '让助手改这里', icon: <PenLine size={14} />, disabled: instance.playing, onClick: () => { void askAssistantAtVideoEditFrame(instance.document.id, point).catch(onError) } }])
         }}
-          onPointerDown={event => { if (mode === 'move') picture.down(event) }} onPointerMove={picture.move}
-          onPointerCancel={picture.cancel} onLostPointerCapture={picture.cancel} onPointerUp={event => { if (mode === 'move') picture.up(event) }} />
-        <VideoEditMaskOverlay instance={instance} onError={onError} />
+          onPointerDown={event => { if (videoMotionState(instance)?.status === 'recording') motionGesture.down(event); else if (mode === 'move') picture.down(event) }} onPointerMove={event => { motionGesture.move(event); picture.move(event) }}
+          onPointerCancel={() => { motionGesture.cancel(); picture.cancel() }} onLostPointerCapture={() => { motionGesture.cancel(); picture.cancel() }} onPointerUp={event => { motionGesture.up(event); if (mode === 'move') picture.up(event) }} />
+        <VideoEditMotionOverlay owner={instance} />
+        {!motionRecording && <><VideoEditMaskOverlay instance={instance} onError={onError} />
         <VideoEditTrackingOverlay instance={instance} onError={onError} />
         <VideoEditTextOverlay instance={instance} onError={onError} enabled={visible && mode === 'select'} />
         <VideoEditAnnotationOverlay instance={instance} mode={mode} onError={onError} />
-        <VideoEditCodeElementOverlay instance={instance} enabled={visible && mode === 'select'} onError={onError} />
+        <VideoEditCodeElementOverlay instance={instance} enabled={visible && mode === 'select'} onError={onError} /></>}
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
       {(preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
@@ -567,6 +601,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
     <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
       <VideoEditAnnotationQueueButton instance={instance} />
+      <VideoEditMotionControls owner={instance} onError={onError} />
       <ContextMenu surface="glass" visible={annotationMenu.menuVisible} items={annotationMenu.menuItems} position={annotationMenu.menuPosition} onClose={annotationMenu.hideMenu} />
       <PanelTrigger label="标注" display={PROGRAM_MODES.find(item => item.id === mode)?.title ?? '选择'} appearance="quiet" panelWidth="content" closeOnPanelClick renderPanel={() => <div role="group" aria-label="标注工具">{PROGRAM_MODES.map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" active={mode === id} onClick={() => changeMode(id)}><Icon size={14} />{title}</UiOptionButton>)}<UiOptionButton variant="menu" onClick={() => { void askAssistantAtVideoEditFrame(instance.document.id).catch(onError) }}>让助手改这里</UiOptionButton></div>} />
       {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13" />}

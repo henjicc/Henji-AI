@@ -217,7 +217,9 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
               const fileName = `${sizeLabel}-${scene.id}-${suffix}.png`
               const actual = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
               let pixels
-              const bytes = await captureInspectionPage(app.app, targetPage, { onEvidence: (value) => { pixels = value } })
+              const clip = scene.captureRegion ? await targetPage.locator(scene.captureRegion).boundingBox() : undefined
+              if (scene.captureRegion && !clip) throw new Error(`截图区域不可见：${scene.captureRegion}`)
+              const bytes = await captureInspectionPage(app.app, targetPage, { clip, onEvidence: (value) => { pixels = value } })
               fs.writeFileSync(path.join(outDir, fileName), bytes)
               await assertInspectionWindowSize(app, size, windowEvidence.baseline)
               windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
@@ -235,7 +237,9 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             const fileName = `${sizeLabel}-${scene.id}.png`
             windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             let pixels
-            const bytes = await captureInspectionPage(app.app, app.page, { onEvidence: (value) => { pixels = value } })
+            const clip = scene.captureRegion ? await app.page.locator(scene.captureRegion).boundingBox() : undefined
+            if (scene.captureRegion && !clip) throw new Error(`截图区域不可见：${scene.captureRegion}`)
+            const bytes = await captureInspectionPage(app.app, app.page, { clip, onEvidence: (value) => { pixels = value } })
             fs.writeFileSync(path.join(outDir, fileName), bytes)
             await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,

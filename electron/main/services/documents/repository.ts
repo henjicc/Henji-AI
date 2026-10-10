@@ -60,6 +60,7 @@ import {
   ProjectNotFoundError,
 } from './errors'
 import { collectContainerMedia, copyKeepingBoth, rewriteContentPaths, transferContainerMedia } from './media-transfer'
+import { rehomeVideoMotionResources } from './video-motion-resources'
 import { checkEntryName, readEntryNameKeys, requireEntryName } from './name-check'
 import type { PackageAdapterRegistry, PackageDocumentAdapter, PackageDocumentHeaderPatch } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
@@ -400,7 +401,8 @@ export class DocumentRepository {
       })
       copiedFiles = transfer.copied
       missingPaths = transfer.missingPaths
-      const content = this.validateContent(file.kind, rewriteContentPaths(decoded.content, transfer.mapping, this.workspace.style))
+      const relocated = rewriteContentPaths(decoded.content, transfer.mapping, this.workspace.style)
+      const content = this.validateContent(file.kind, file.kind.id === 'video_edit' ? await rehomeVideoMotionResources(relocated, file.header.id, id, destination.root) : relocated)
       const encoded = this.encode(destination, content)
       const now = this.workspace.now().toISOString()
       const written = await this.writeNewDocumentFile(folder, file.kind, (fileName) => this.withHeader(original, {

@@ -34,6 +34,7 @@ import { readEntryNameKeys } from './name-check'
 import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
 import { upgradePersistenceContent } from '../../../../src/core/persistence/migrations'
 import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
+import { rehomeVideoMotionResources } from './video-motion-resources'
 import type { PackageAdapterRegistry } from './package-adapters'
 import type { ProjectService } from './projects'
 import type { DocumentRepository } from './repository'
@@ -434,7 +435,8 @@ export class DocumentPackageService {
       for (const { path: filePath, file } of documents) {
         const nextId = idMap.get(file.header.id)
         if (file.envelope) {
-          const content = idMap.size ? remapDocumentLinks(file.envelope.content, idMap) : file.envelope.content
+          const linked = idMap.size ? remapDocumentLinks(file.envelope.content, idMap) : file.envelope.content
+          const content = nextId && file.kind.id === 'video_edit' ? await rehomeVideoMotionResources(linked, file.header.id, nextId, staging) : linked
           if (!nextId && content === file.envelope.content) continue
           const envelope = buildDocumentEnvelope({ ...file.envelope, draft: file.envelope.draft === true, id: nextId ?? file.envelope.id, content })
           await writeBufferAtomically(filePath, Buffer.from(serializeDocumentEnvelope(envelope), 'utf8'))

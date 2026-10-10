@@ -2,9 +2,9 @@
   "releasedCompatibility": false,
   "formats": {
     "document.video_edit": {
-      "version": 1,
-      "fingerprint": "054a07b7f2e30897b8a36e4de10a51fd5ea4c22614477c847b921b6cdc55748b",
-      "supportedFrom": 1
+      "version": 2,
+      "fingerprint": "fa15389dd5ecaecd141ec3d75cb0898024e16082588085bfe58d0e157de74349",
+      "supportedFrom": 2
     },
     "document.canvas": {
       "version": 1,
@@ -185,6 +185,16 @@
       "version": 2,
       "fingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46",
       "supportedFrom": 2
+    },
+    "creative-intent-page": {
+      "version": 1,
+      "fingerprint": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64",
+      "supportedFrom": 1
+    },
+    "creative-intent-candidate": {
+      "version": 1,
+      "fingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152",
+      "supportedFrom": 1
     }
   },
   "devBreaks": [
@@ -1025,6 +1035,17 @@
       "previousFingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
       "fingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
       "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T18:22:54.826Z",
+      "format": "document.video_edit",
+      "version": 2,
+      "reason": "t144 剪辑超级关键帧草稿与不可变页接线，开发期采用新格式",
+      "previousFingerprint": "054a07b7f2e30897b8a36e4de10a51fd5ea4c22614477c847b921b6cdc55748b",
+      "fingerprint": "fa15389dd5ecaecd141ec3d75cb0898024e16082588085bfe58d0e157de74349",
+      "waivedFixtureVersions": [
+        1
+      ]
     },
     {
       "at": "2026-10-10T20:17:35.364Z",

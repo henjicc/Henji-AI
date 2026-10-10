@@ -5,7 +5,7 @@ import { checkCancelled, CreativeIntentError, prepareMotionTakes, type Computati
 import { evaluateVideoEditKeyframes } from '../videoEdit/keyframes'
 import { inverseAffine, mapAffine } from '../imaging/transforms'
 
-export const MOTION_ALGORITHM_VERSION = 'p1-schneider-native/1'
+export const MOTION_ALGORITHM_VERSION = 'p1-schneider-native/2'
 export interface MotionCandidate { id: string; label: string; identity: CandidateIdentity; motions: CompiledMotion[] }
 export interface MotionCandidateResult { candidates: MotionCandidate[]; unavailable: { family: string; code: string; refs: readonly string[]; message: string }[] }
 export interface OptimizeMotionInput { draft: MotionDraft; samples: readonly MotionSample[]; mappings: Record<string, MotionCompileContext>; selectedTakeIds?: readonly string[]; intent?: MotionIntent }

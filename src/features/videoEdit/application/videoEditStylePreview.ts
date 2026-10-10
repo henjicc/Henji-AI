@@ -30,7 +30,7 @@ async function render(kit: StyleKit, sampleId: string, size: { width: number; he
   const versionId = crypto.randomUUID(); const definitionId = crypto.randomUUID(); const itemId = crypto.randomUUID()
   const sequence = { ...createVideoEditSequence('风格预览'), ...size, styleKitId: kit.id }
   const code = { definitionId, versionId, parameters: {} }
-  const document: VideoEditDocument = { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name: '风格预览', revision: 0, media: [], bins: [], items: [{ id: itemId, name: sample.name, kind: 'code', code }], sequences: [sequence], styleKits: [kit], codeMaterials: [{ id: definitionId, name: sample.name, defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: 1, languageVersion: 3 }] }] }
+  const document: VideoEditDocument = { format: 'henji-video-project', version: 3, id: crypto.randomUUID(), name: '风格预览', revision: 0, media: [], bins: [], items: [{ id: itemId, name: sample.name, kind: 'code', code }], sequences: [sequence], styleKits: [kit], codeMaterials: [{ id: definitionId, name: sample.name, defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: 1, languageVersion: 3 }] }] }
   sequence.clips = [makeVideoEditItemClip(document, itemId, sequence.id, { frame: 0 }, () => program)]
   const frame = Math.min(sequence.clips[0].duration - 1, Math.round(Math.min(program.durationSeconds / 2, .15 + kit.tokens.motion.enterDuration) * sequence.frameRate.numerator / sequence.frameRate.denominator))
   const bitmap = await trialVideoEditCodeFrames([{ document: videoEditComposition(document, sequence.id), frame }], signal, true)

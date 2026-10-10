@@ -34,3 +34,9 @@ export function alignVideoEditClockToDisplay(target: number, vsync: number, peri
   const phase = (((target - vsync) % period) + period) % period
   return target + (((period / 2 - phase) % period) + period) % period
 }
+
+/** 示范中按现有播放时钟重画已到时刻，不把最新姿态排到下一张未来帧之后。 */
+export function videoEditLiveFrame(start: number, elapsedMs: number, fps: number, rate: number, direction: 1 | -1, duration: number): number {
+  const steps = Math.floor(Math.max(0, elapsedMs) * fps * rate / 1000)
+  return Math.max(0, Math.min(duration - 1, start + direction * steps))
+}

@@ -436,6 +436,20 @@ function createGenerationSettingsScenes(context) {
       },
     },
     {
+      id: 'settings-default-models',
+      surface: '设置',
+      name: '设置-默认模型',
+      captureRegion: '#workspace-generation > div > div:first-child',
+      setup: async (page) => {
+        await setupSettings(page)
+        await clickNamedButton(page, /^(工作区|Workspaces)$/i)
+        const group = page.locator('#workspace-generation > div > div:first-child')
+        await group.scrollIntoViewIfNeeded()
+        await group.getByText(/默认转写模型|Default transcription model/, { exact: true }).waitFor()
+        await settlePage(page)
+      },
+    },
+    {
       id: 'settings-workspace',
       surface: '设置',
       name: '设置-工作区',

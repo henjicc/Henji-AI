@@ -1,6 +1,7 @@
 import { createVideoEditTestProject as createVideoEditProject } from './application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { act, render, cleanup, fireEvent } from '@testing-library/react'
+import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
@@ -10,28 +11,56 @@ import { VideoEditPreview } from './VideoEditPreview'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
-const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
-vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined) }))
+import { startVideoMotion, setVideoMotionOptions, setVideoMotionPointer, videoMotionState, videoMotionComposition } from './application/videoEditMotionDraft'
+const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
+vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
   constructor() { pixel.sessions++ }
   updateDocument = pixel.update
-  invalidateDocument = vi.fn()
+  invalidateDocument = pixel.invalidate
   dispose = pixel.dispose
   mixAudio = pixel.mixAudio
   setRenderDivisor = pixel.scale
   armPlayback = vi.fn(async () => undefined)
   setSmartRegions = vi.fn()
-  present(frame: number, sequential?: boolean, _scrubbing?: boolean, _deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, resolve, reject, submitted })) }
+  present(frame: number, sequential?: boolean, _scrubbing?: boolean, deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, deadline, resolve, reject, submitted })) }
 } }))
 beforeEach(() => {
-  vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined); pixel.scale.mockReset(); pixel.scale.mockResolvedValue(undefined); localStorage.clear(); resetVideoEditPlaybackResolutionCache()
+  vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.invalidate.mockClear(); pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined); pixel.scale.mockReset(); pixel.scale.mockResolvedValue(undefined); localStorage.clear(); resetVideoEditPlaybackResolutionCache()
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/preview.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.stubGlobal('OffscreenCanvas', class {})
   HTMLCanvasElement.prototype.transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas))
 })
-afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+afterEach(async () => { cleanup(); vi.useRealTimers(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+it('半速示范重画当前时刻且取消旧姿态，覆盖已有曲线不会重启播放时钟', async () => {
+  vi.stubGlobal('crypto', webcrypto)
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+  const testStart = Date.now(); vi.spyOn(performance, 'now').mockImplementation(() => Date.now() - testStart)
+  const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
+  const sequence = getActiveVideoEditSequence(owner); const clip = sequence.clips[0]
+  editVideoSequence(owner.document.id, sequence.id, doc => ({ ...doc, clips: doc.clips.map(c => ({ ...c, curves: { x: [{ time: 0, value: 0, interpolation: 'linear' }] } })) }))
+  setVideoEditView(owner.document.id, { selection: clip.id, frame: 20 })
+  await startVideoMotion(owner.document.id, 'record'); setVideoMotionOptions(owner.document.id, { speed: .5 })
+  setVideoEditView(owner.document.id, { playing: true })
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [20 / 30], presented: true }) })
+  const canvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  const clock = canvas.dataset.playClockStartAt
+  expect(clock).toBeDefined()
+  act(() => { setVideoMotionPointer(owner.document.id, true); videoMotionState(owner)!.pose.position = [.7, .5]; setVideoMotionOptions(owner.document.id, { mode: 'navigate' }) })
+  expect(pixel.invalidate).toHaveBeenLastCalledWith(videoMotionComposition(owner)!.revision)
+  await act(async () => { await vi.advanceTimersByTimeAsync(2) })
+  expect(pixel.requests[1]).toMatchObject({ frame: 20, deadline: undefined, sequential: false })
+  await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [20 / 30], presented: true }); await vi.advanceTimersByTimeAsync(200) })
+  expect(canvas.dataset.playClockStartAt).toBe(clock)
+  expect(pixel.requests[2].frame).toBe(21)
+  expect(pixel.sessions).toBe(1)
+  act(() => { setVideoMotionPointer(owner.document.id, false); setVideoEditView(owner.document.id, { playing: false }) })
+})
 it('文字工具接管原标注模式，退出文字后节目工具可继续切换', async () => {
   const instance = await createVideoEditProject(); const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
   await act(async () => { await Promise.resolve() })

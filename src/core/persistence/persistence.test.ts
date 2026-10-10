@@ -141,7 +141,7 @@ describe('所有登记格式的黄金样本', () => {
         const upgraded = upgradePersistenceContent(format, content, version)
         expect(format.schema.safeParse(upgraded).success).toBe(true)
         if (format.id === 'document.video_edit') {
-          const document = videoEditDocumentSchema.parse({ format: 'henji-video-project', version: 2, id: 'golden', name: '黄金样本', revision: 0, ...(upgraded as object) })
+          const document = videoEditDocumentSchema.parse({ format: 'henji-video-project', version: 3, id: 'golden', name: '黄金样本', revision: 0, ...(upgraded as object) })
           const clip = document.sequences[0].clips[0]
           expect(document.codeMaterials?.[0].versions[0].files[0].hash).toHaveLength(64)
           expect(clip.effects?.map(effect => effect.builtin?.id)).toEqual(['color_grade', 'gaussian_blur'])

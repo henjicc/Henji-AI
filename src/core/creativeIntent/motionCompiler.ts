@@ -41,8 +41,10 @@ export function compileMotionTake(take: PreparedTake, context: MotionCompileCont
   const tolerance: Record<MotionCurveKey, number> = { x: .00025, y: .00025, scale: .0005, rotation: .025, anchorX: .0001, anchorY: .0001 }
   // x conversion can use a non-square reference. Enforce 0.05% of short edge in native space.
   const [w, h] = take.target.compositionSize; const inv = inverseAffine(context.positionToNative); const short = Math.min(w, h)
-  const sensitivity = Math.hypot(inv[0] * w / short, inv[1] * h / short) + Math.hypot(inv[2] * w / short, inv[3] * h / short)
-  tolerance.x = tolerance.y = .00035 / sensitivity
+  // Allocate the geometry budget to each column of the actual inverse mapping.
+  // The sum of both worst-case vector errors stays below 0.05% of the short edge.
+  tolerance.x = .00025 / Math.hypot(inv[0] * w / short, inv[1] * h / short)
+  tolerance.y = .00025 / Math.hypot(inv[2] * w / short, inv[3] * h / short)
   for (const key of keys) tolerance[key] *= 1 - .9 * options.fidelity
   const useIntent = options.intent && options.intent.kind !== 'follow_path'
   const points: FramePose[] = useIntent ? [] : source

@@ -58,7 +58,7 @@ function subdivideNative(samples: readonly ScalarSample[], tolerance: number, co
   while (pending.length) {
     checkCancelled(control)
     const [a, b] = pending.pop()!; const segment = samples.slice(a, b + 1); const probes = intentSamples(segment, reference); const fitted = nativeCubic(probes)
-    if (fitted && scalarError(probes, fitted, false).maxError <= tolerance * .5) output.push(fitted[0])
+    if (fitted && scalarError(probes, fitted, false).maxError <= tolerance) output.push(fitted[0])
     else if (b - a <= 2) output.push(...segment.slice(0, -1).map(p => ({ time: p.time, value: p.value, interpolation: 'linear' as const })))
     else { const middle = Math.floor((a + b) / 2); pending.push([middle, b], [a, middle]) }
   }
@@ -94,7 +94,7 @@ export function fitScalarCurve(samples: readonly ScalarSample[], tolerance: numb
     // Refining the two scalar handles in the native basis avoids changing the recorded timing.
     const probes = intentSamples(segment, reference)
     const refined = nativeCubic(probes)
-    if (refined && scalarError(probes, refined, false).maxError <= tolerance * .5) { result.push(refined[0]); continue }
+    if (refined && scalarError(probes, refined, false).maxError <= tolerance) { result.push(refined[0]); continue }
     const proposals = fitCurve(segment.map(p => [(p.time - start) / span, p.value]), tolerance * tolerance * .04, () => checkCancelled(control))
     const native: VideoEditKeyframe[] = []
     let legal = true

@@ -48,7 +48,7 @@ function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProg
  * export. Its bounded temporary session is always released before publication. */
 function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader, media: VideoEditMedia[] = [], endpoints = false): Array<{ document: VideoEditComposition; frame: number }> {
   const sequence = createVideoEditSequence('源码候选检查')
-  const document: VideoEditDocument = { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name: sequence.name, revision: 0, media, bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
+  const document: VideoEditDocument = { format: 'henji-video-project', version: 3, id: crypto.randomUUID(), name: sequence.name, revision: 0, media, bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
   const frames = candidates.flatMap(candidate => {
     const program = read(candidate.filter ?? candidate.item.code!)
     sequence.width = program.width; sequence.height = program.height

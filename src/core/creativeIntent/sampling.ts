@@ -14,7 +14,7 @@ export interface PreparedTake { takeId: string; target: MotionTarget; points: Fr
 export function prepareMotionTakes(draft: MotionDraft, raw: readonly MotionSample[], selectedTakeIds?: readonly string[], control: ComputationControl = {}): PreparedTake[] {
   const takes = new Map(draft.takes.map(t => [t.id, t])); const targets = new Map(draft.targets.map(t => [refKey(t.ref), t]))
   const clocks = new Map(draft.clockSegments.map(s => [s.id, s]))
-  const brokenTakes = new Set(draft.takes.filter(t => draft.clockSegments.some(c => c.mode === 'gap' && c.monoSpanUs[0] < t.monoSpanUs[1] && c.monoSpanUs[1] > t.monoSpanUs[0] || c.mode === 'seek' && c.monoSpanUs[0] > t.monoSpanUs[0] && c.monoSpanUs[0] < t.monoSpanUs[1])).map(t => t.id))
+  const brokenTakes = new Set(draft.takes.filter(t => draft.clockSegments.some(c => c.mode === 'gap' && c.monoSpanUs[0] < t.monoSpanUs[1] && c.monoSpanUs[1] > t.monoSpanUs[0] || !t.placement && c.mode === 'seek' && c.monoSpanUs[0] > t.monoSpanUs[0] && c.monoSpanUs[0] < t.monoSpanUs[1])).map(t => t.id))
   const selected = selectedTakeIds && new Set(selectedTakeIds)
   if (selected?.size !== selectedTakeIds?.length || selected && [...selected].some(id => !takes.has(id))) throw new CreativeIntentError('take-selection', selectedTakeIds ?? [], '采用的示范段不存在或重复')
   const bySample = new Map<string, MotionSample>(); const groups = new Map<string, MotionSample[]>()
@@ -28,7 +28,8 @@ export function prepareMotionTakes(draft: MotionDraft, raw: readonly MotionSampl
     if (clockIssue) throw new CreativeIntentError('sample-clock', [s.sampleId, s.clockSegmentRef], clockIssue)
     if (s.monoUs < t.monoSpanUs[0] || s.monoUs > t.monoSpanUs[1]) throw new CreativeIntentError('take-clock', [s.sampleId, t.id], '采样不属于示范墙钟区间')
     if (draft.mode === 'static' && s.timeline !== null) throw new CreativeIntentError('static-timeline', [s.sampleId], '图片没有时间轴')
-    if (s.timeline && (s.timeline.visitRef !== t.visitRef || !t.timelineRange || s.timeline.frame < Math.min(...t.timelineRange) || s.timeline.frame > Math.max(...t.timelineRange))) throw new CreativeIntentError('take-visit', [s.sampleId, t.id], '访问身份或时间轴超出示范段')
+    // Explicit timed placement authors poses at separate visits; raw clocks/visits remain untouched.
+    if (s.timeline && (!t.placement && s.timeline.visitRef !== t.visitRef || !t.timelineRange || s.timeline.frame < Math.min(...t.timelineRange) || s.timeline.frame > Math.max(...t.timelineRange))) throw new CreativeIntentError('take-visit', [s.sampleId, t.id], '访问身份或时间轴超出示范段')
     if (t.intent !== 'demonstrate' || selected && !selected.has(t.id) || !s.confirmed) continue
     if (brokenTakes.has(t.id)) throw new CreativeIntentError('take-gap', [t.id], '采集缺口或跳转须拆示范段，不补造路径')
     if (s.quality !== 'presented' || s.timeline === null) throw new CreativeIntentError('missing-presentation', [s.sampleId], '动画必须采用实际呈现帧，不能按墙钟推算')
