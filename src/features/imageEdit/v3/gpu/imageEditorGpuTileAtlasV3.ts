@@ -252,12 +252,13 @@ function nonNegativeInteger(value: number, name: string): number {
   return value
 }
 
+// 同步标量转换复用位模式缓冲；不能为每个通道分配两个 TypedArray。
+const float16Scratch = new Float32Array(1)
+const float16Bits = new Uint32Array(float16Scratch.buffer)
 /** IEEE-754 round-to-nearest-even f32 → binary16。 */
 export function float32ToFloat16(value: number): number {
-  const scratch = new Float32Array(1)
-  const bits = new Uint32Array(scratch.buffer)
-  scratch[0] = value
-  const word = bits[0]
+  float16Scratch[0] = value
+  const word = float16Bits[0]
   const sign = (word >>> 16) & 0x8000
   const exponent = (word >>> 23) & 0xff
   const mantissa = word & 0x7fffff

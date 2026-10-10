@@ -46,6 +46,7 @@ import { resolveImageEditorGpuEffectViewportV3 } from './imageEditorGpuEffectVie
 import { estimateImageEditorGpuGraphResidentBytesV3 } from './imageEditorGpuMemoryBudgetV3'
 import { planImageEditorGpuGaussianRegionsV3, usesImageEditorGpuGaussianRegionsV3 } from './imageEditorGpuGaussianRegionsV3'
 import { replanImageEditorGpuViewportTilesV3 } from './imageEditorGpuViewportPlansV3'
+import { resolveImageEditorGpuPreviewFallbackV3 } from './imageEditorGpuPreviewFallbackV3'
 import type { GaussianRegion } from '@/core/imaging/effects/cpu/gaussian'
 import { collectImageEditorGpuRequiredResourceKeysV3, findImageEditorGpuPlannedTileV3,
   pruneImageEditorGpuRetainedStatesV3,
@@ -76,6 +77,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   private readonly layers = new Map<string, RetainedLayerStateV3>()
   private readonly transientTransforms = new Map<string, ImageEditTransformV3>()
   private readonly plannedLayers = new Map<string, ImageEditorGpuPlannedLayerV3>()
+  private readonly requestedLayers = new Map<string, ImageEditorGpuPlannedLayerV3>()
+  private previewFallback = false
   private readonly plannedMasks = new Map<string, ImageEditorGpuPlannedLayerV3>()
   private readonly previousMips = new Map<string, number>()
   private scene: ImageEditorGpuRasterSceneV3 | null = null
@@ -216,7 +219,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       : 0
     this.reservedOutputBytes = this.scene?.requiresRenderGraph
       ? estimateImageEditorGpuGraphResidentBytesV3(this.scene, [width, height], usesImageEditorGpuGaussianRegionsV3(this.scene)
-        ? planImageEditorGpuGaussianRegionsV3(this.scene, layout, effectRecipeSize ?? undefined) : undefined) + cropBytes
+        ? planImageEditorGpuGaussianRegionsV3(this.scene, layout, effectRecipeSize ?? undefined) : undefined,
+        workingLayout.viewport.zoom * workingLayout.viewport.devicePixelRatio) + cropBytes
       : width * height * LINEAR_AND_PRESENT_BYTES_PER_PIXEL
     this.atlas.setMemoryBudgetBytes(Math.max(0, this.memoryBudgetBytes - this.reservedOutputBytes))
     this.replanTiles()
@@ -244,14 +248,23 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     return allocation
   }
   requiredResourceKeys(layerId?: string): readonly ImageEditorGpuSceneTileKeyV3[] {
-    return collectImageEditorGpuRequiredResourceKeysV3(
+    const displayed = collectImageEditorGpuRequiredResourceKeysV3(
       this.plannedLayers, this.plannedMasks, layerId,
     )
+    const requested = collectImageEditorGpuRequiredResourceKeysV3(this.requestedLayers, this.plannedMasks, layerId)
+    return [...new Map([...displayed, ...requested].map(key => [JSON.stringify(key), key])).values()]
   }
   missingResources(
     resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null,
   ): ImageEditorGpuSceneTileKeyV3[] {
-    return this.requiredResourceKeys().filter((key) => !resolve(key))
+    const requested = collectImageEditorGpuRequiredResourceKeysV3(this.requestedLayers, this.plannedMasks)
+    const missing = requested.filter(key => !resolve(key))
+    this.previewFallback = Boolean(this.scene && this.layout && resolveImageEditorGpuPreviewFallbackV3(this.scene,
+      this.workingEffectViewport?.layout ?? this.layout, this.requestedLayers, this.plannedLayers, this.transientTransforms, key => Boolean(resolve(key))))
+    return missing
+  }
+  canRenderPreview(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): boolean {
+    return collectImageEditorGpuRequiredResourceKeysV3(this.plannedLayers, this.plannedMasks).every(key => Boolean(resolve(key)))
   }
   async render(
     resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null,
@@ -259,7 +272,10 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     acceptsSurfaceSubmit: () => boolean,
   ): Promise<ImageEditorGpuRasterFrameV3> {
     return await this.enqueueFrame(async () => {
+      const compositionStarted = performance.now()
       const output = await this.compose(resolve, false)
+      const compositionMs = performance.now() - compositionStarted
+      const presentationStarted = performance.now()
       this.reportedError = null
       const presentation = await this.presentation.render(
         output,
@@ -275,7 +291,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
         this.stats.imageBitmapFrameCount += 1
         if (presentation.surfaceFailureReason) this.stats.directSurfaceFailureCount += 1
       }
-      const stats = this.snapshotStats()
+      const stats = { ...this.snapshotStats(), previewFallback: this.previewFallback, compositionMs, presentationMs: performance.now() - presentationStarted }
       const usedResourceKeys = this.requiredResourceKeys()
       return presentation.kind === 'webgpu-surface'
         ? { presentation, stats, usedResourceKeys }
@@ -319,6 +335,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     const graph = this.graph.snapshotStats()
     return {
       ...this.stats,
+      previewFallback: this.previewFallback,
       renderedGraphNodeCount: graph.renderedNodeCount,
       graphCacheHitCount: graph.cacheHitCount,
       invalidatedGraphNodeCount: graph.invalidatedNodeCount,
@@ -345,7 +362,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     this.assertUsable()
     if (!this.scene || !this.layout) throw new Error('GPU Scene 缺少场景或视口')
     const missing = this.missingResources(resolve)
-    if (missing.length > 0) throw new Error(`GPU Scene 缺少 ${missing.length} 个源纹理`)
+    if (missing.length > 0 && !this.canRenderPreview(resolve)) throw new Error(`GPU Scene 缺少 ${missing.length} 个源纹理`)
     const effectViewport = this.workingEffectViewport ?? { layout: this.layout, cropOffset: [0, 0] as const, expanded: false }
     const [width, height] = imageEditorGpuOutputPixelSizeV3(effectViewport.layout)
     if (width > this.maxTextureDimension2D || height > this.maxTextureDimension2D) {
@@ -496,6 +513,9 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       expandEffects: this.expandEffects,
       workingLayout: this.workingEffectViewport?.layout,
     })
+    this.requestedLayers.clear()
+    for (const [id, plan] of this.plannedLayers) this.requestedLayers.set(id, plan)
+    this.previewFallback = false
   }
   private refreshAtlasStats(): void {
     refreshImageEditorGpuAtlasStatsV3(this.stats, this.atlas.snapshot(), this.plannedLayers)

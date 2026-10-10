@@ -28,7 +28,8 @@ export function reconcileImageEditorV3ResourceDescriptors(
   retainedResources: readonly ImageEditHistoryResourceReferenceV3[],
 ): ImageEditorV3ResourceDescriptor[] {
   const retainedById = new Map(retainedResources.map((resource) => [resource.resourceId, resource]))
-  const currentBrushResources = collectImageEditResourceRolesV3(document).sparse
+  const roles = collectImageEditResourceRolesV3(document)
+  const currentBrushResources = roles.sparse
   const reachableIds = new Set([
     ...collectImageEditJsonResourceIdsV3(document),
     ...retainedById.keys(),
@@ -40,12 +41,13 @@ export function reconcileImageEditorV3ResourceDescriptors(
   for (const resource of retainedResources) {
     if (resource.byteSize === null) continue
     const existing = descriptors.get(resource.resourceId)
-    if (!currentBrushResources.has(resource.resourceId)
-      && existing?.mediaType !== IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE) continue
+    const sparse = currentBrushResources.has(resource.resourceId)
+      || existing?.mediaType === IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE
+    if (!sparse && !roles.images.has(resource.resourceId)) continue
     descriptors.set(resource.resourceId, {
       resourceRef: resource.resourceId as ImageEditorV3ResourceRef,
       byteLength: resource.byteSize,
-      mediaType: IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE,
+      mediaType: sparse ? IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE : existing?.mediaType ?? null,
     })
   }
   return [...descriptors.values()]

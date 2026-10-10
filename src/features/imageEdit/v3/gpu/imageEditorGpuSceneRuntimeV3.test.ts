@@ -87,7 +87,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     })
     runtime.handle({ ...initializeRequest(), diagnosticInitializationFailure: true })
     runtime.handle({
-      type: 'sync-scene', sceneGeneration: 3,
+      type: 'sync-scene', quality: 'stable', sceneGeneration: 3,
       document: createImageEditDocumentV3({ width: 16, height: 16 }), resourceDescriptors: [],
     })
 
@@ -190,7 +190,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     })
     runtime.handle(initializeRequest())
     runtime.handle({
-      type: 'sync-scene',
+      type: 'sync-scene', quality: 'stable',
       sceneGeneration: 4,
       document: createImageEditDocumentV3({ width: 32, height: 32 }),
       resourceDescriptors: [],
@@ -201,7 +201,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     const latestDocument = createImageEditDocumentV3({ width: 64, height: 64 })
     latestDocument.layers = [createImageEditRasterLayerV3('latest', '最新图层', resourceRef)]
     runtime.handle({
-      type: 'sync-scene',
+      type: 'sync-scene', quality: 'stable',
       sceneGeneration: 5,
       document: latestDocument,
       resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
@@ -286,7 +286,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     runtime.handle(initializeRequest())
     runtime.handle({ type: 'attach-presentation-surface', surfaceGeneration: 1, canvas: offscreen })
     runtime.handle({
-      type: 'sync-scene', sceneGeneration: 1,
+      type: 'sync-scene', quality: 'stable', sceneGeneration: 1,
       document: createImageEditDocumentV3({ width: 32, height: 24 }), resourceDescriptors: [],
     })
     runtime.handle({
@@ -327,7 +327,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     })
     runtime.handle(initializeRequest())
     runtime.handle({
-      type: 'sync-scene', sceneGeneration: 2,
+      type: 'sync-scene', quality: 'stable', sceneGeneration: 2,
       document: createImageEditDocumentV3({ width: 16, height: 16 }), resourceDescriptors: [],
     })
     runtime.handle({
@@ -382,7 +382,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     document.layers = [createImageEditRasterLayerV3('layer', '图层', resourceRef)]
     runtime.handle(initializeRequest())
     runtime.handle({
-      type: 'sync-scene',
+      type: 'sync-scene', quality: 'stable',
       sceneGeneration: 1,
       document,
       resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
@@ -430,7 +430,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     document.layers = [createImageEditRasterLayerV3('layer', '图层', resourceRef)]
     runtime.handle(initializeRequest())
     runtime.handle({
-      type: 'sync-scene', sceneGeneration: 1, document,
+      type: 'sync-scene', quality: 'stable', sceneGeneration: 1, document,
       resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
     })
     await vi.waitFor(() => expect(runtime.getStatus()).toBe('ready'))

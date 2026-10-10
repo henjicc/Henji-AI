@@ -50,7 +50,10 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     expect(getImageEditorHostProfileV3('quick')).toMatchObject({
       layerKinds: ['text', 'shape', 'path', 'effect'],
       adjustments: [],
+      layerControls: ['blend-mode', 'mask'],
     })
+    expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('quick'))).toEqual(expect.arrayContaining(['select-rect', 'select-brush', 'mask-edit']))
+    expect(getImageEditorHostProfileV3('quick').effects).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'mosaic', readiness: { state: 'ready' } })]))
   })
 
   it('新版模糊与其他发布效果都可新建，遮罩兼容宿主只暴露蒙版所需工具', () => {

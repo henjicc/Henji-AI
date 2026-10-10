@@ -112,6 +112,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
             request.document,
             request.resourceDescriptors,
             request.sourcePyramids,
+            request.quality,
           )
           this.scene = compilation.supported ? compilation.scene : null
           if (!compilation.supported) this.emitFailure('composition-not-ready', null, `GPU 不支持，转 CPU：${compilation.reason}`, true)
@@ -382,8 +383,10 @@ export class ImageEditorGpuSceneRuntimeV3 {
         deviceGeneration: state.managed.generation,
         keys: missing,
       })
-      this.emitFailure('composition-not-ready', request.requestId, 'GPU Scene 等待源纹理', true)
-      return
+      if (!state.compositor.canRenderPreview?.(resolve)) {
+        this.emitFailure('composition-not-ready', request.requestId, 'GPU Scene 等待源纹理', true)
+        return
+      }
     }
     try {
       const result = await state.compositor.render(

@@ -18,6 +18,7 @@ import type {
   ImageEditorManagedViewportCompositeV3,
 } from './viewportCompositeTypesV3'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
+import { traceImageEditorStageV3 } from './interactionTraceV3'
 
 export type ImageEditorRenderSessionWorkLayoutV3 = ImageEditorViewportLayoutV3 & {
   cameraSequence: number
@@ -62,6 +63,7 @@ export class ImageEditorRenderSessionWorkV3 {
     viewKey: string,
   ): Promise<void> {
     const startedAt = now()
+    traceImageEditorStageV3(snapshot.document.id, snapshot.interactionTrace, 'cpu-start', { phase: 'draft', renderGeneration: snapshot.renderGeneration })
     try {
       const result = await this.dependencies.clients.draft.render(
         createImageEditorDraftRequestV3(snapshot, layout),
@@ -77,6 +79,7 @@ export class ImageEditorRenderSessionWorkV3 {
         result.release()
         return
       }
+      traceImageEditorStageV3(snapshot.document.id, snapshot.interactionTrace, 'cpu-ready', { phase: 'draft', renderGeneration: snapshot.renderGeneration })
       this.dependencies.acceptDraft(result)
       logImageEditorRenderSessionPhaseV3(
         'draft', snapshot, layout.cameraSequence, startedAt, now(), result.mip,

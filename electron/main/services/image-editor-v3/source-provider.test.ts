@@ -42,6 +42,23 @@ afterEach(async () => {
 })
 
 describe('SharpSourceProvider', () => {
+  it('GPU halo 相邻瓦片共用一次有界条带解码，不同 halo 不误用缓存', async () => {
+    const width = 1536, height = 1200, pixels = Buffer.alloc(width * height * 3)
+    for (let y=0;y<height;y++) for (let x=0;x<width;x++) { const offset=(y*width+x)*3; pixels[offset]=y%256; pixels[offset+1]=x%256; pixels[offset+2]=80 }
+    const encoded = await sharp(pixels,{raw:{width,height,channels:3}}).png().toBuffer()
+    const resource = await store.putBuffer(encoded,{mediaType:'image/png'})
+    const loader = vi.fn(loadSharp), provider = new SharpSourceProvider(store,{sharpLoader:loader,derivedCache:null})
+    await provider.readMetadata(resource.id); loader.mockClear()
+    const [left,right] = await Promise.all([0,1].map(tileX => provider.readTile({resourceId:resource.id,mip:0,tileX,tileY:1,halo:1})))
+    expect(loader).toHaveBeenCalledOnce()
+    expect(left).toMatchObject({width:513,height:514,originX:0,originY:511})
+    expect(right).toMatchObject({width:514,height:514,originX:511,originY:511})
+    expect([...right.pixels.subarray(0,4)]).toEqual([255,255,80,255])
+    const wider = await provider.readTile({resourceId:resource.id,mip:0,tileX:1,tileY:1,halo:3})
+    expect(loader).toHaveBeenCalledTimes(2)
+    expect(wider).toMatchObject({width:518,height:518,originX:509,originY:509})
+    expect([...wider.pixels.subarray(0,4)]).toEqual([253,253,80,255])
+  })
   it.each([
     {
       label: 'baseline JPEG',

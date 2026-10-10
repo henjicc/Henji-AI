@@ -16,6 +16,17 @@ const BRUSH = `sha256:${'b'.repeat(64)}` as const
 const STALE = `sha256:${'c'.repeat(64)}` as const
 
 describe('ImageEditor V3 受控资源描述符', () => {
+  it('宿主初始描述没有新导入图片与选区蒙版时从权威用途和命令字节数补齐', () => {
+    const raster = createImageEditRasterLayerV3('pasted', '粘贴图片', SOURCE)
+    raster.mask = { ...createImageEditSparseMaskReferenceV3('mask', false, 0), tiles: { '0/0/0': BRUSH } }
+    const document = { ...createImageEditDocumentV3({ width: 512, height: 512 }), layers: [raster] }
+    expect(reconcileImageEditorV3ResourceDescriptors(document, [], [
+      { resourceId: SOURCE, byteSize: 4096 }, { resourceId: BRUSH, byteSize: 128 }, { resourceId: STALE, byteSize: 64 },
+    ])).toEqual([
+      { resourceRef: SOURCE, byteLength: 4096, mediaType: null },
+      { resourceRef: BRUSH, byteLength: 128, mediaType: IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE },
+    ])
+  })
   it('保留文档资源并用持久 brush 返回值补齐 mediaType/byteLength，同时清理不可达项', () => {
     const raster = createImageEditRasterLayerV3('raster', '底图', SOURCE)
     raster.tiles['0/0/0'] = BRUSH

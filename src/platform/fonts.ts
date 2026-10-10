@@ -88,6 +88,8 @@ export function readFontPayload(face: FontFaceInfo): Promise<FontPayload> {
   return pending
 }
 export async function prepareFontPayloads(names: readonly string[]): Promise<FontPayload[]> {
+  // CSS 通用字体由浏览器解析，既没有可传递字体字节，也无需等待系统字体目录扫描。
+  if (names.every(name => GENERIC_FONT_FACES.some(face => fontMatchesName(face, name)))) return []
   await loadFontLibrary()
   const faces = [...new Map(names.map(name => resolveFont(name)).filter((face): face is FontFaceInfo => Boolean(face && !face.id.startsWith('generic:'))).map(face => [face.id, face])).values()]
   return Promise.all(faces.map(readFontPayload))

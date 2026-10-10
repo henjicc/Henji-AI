@@ -123,8 +123,25 @@ export function readClipboardText(): string {
  * 走已有的文件列表读取。判断顺序放在这里而不是各调用方，避免每个界面各写一遍。
  * 剪贴板里没有图片时返回 null，由调用方决定怎么提示。
  */
+async function readNativeClipboardImage(expectWrittenImage = false): Promise<ReturnType<typeof clipboard.readImage>> {
+  let image = clipboard.readImage()
+  // Windows 暂时无法打开剪贴板时，readImage 和 availableFormats 都可能为空。
+  // 格式枚举不能作为是否重读的门槛；始终短暂让出主线程后有界重读。
+  const startedAt = performance.now()
+  let deferredReads = 0
+  while (image.isEmpty() && performance.now() - startedAt < 250) {
+    await new Promise<void>(resolve => setTimeout(resolve, 16))
+    image = clipboard.readImage()
+    deferredReads++
+  }
+  if (deferredReads) logger.info('剪贴板图片延后读回', {
+    event: 'clipboard.image_read.deferred', context: { expectWrittenImage, deferredReads, durationMs: Math.round(performance.now() - startedAt), found: !image.isEmpty() },
+  })
+  return image
+}
+
 export async function readClipboardImage(): Promise<ClipboardImageDto | null> {
-  const image = clipboard.readImage()
+  const image = await readNativeClipboardImage()
   if (!image.isEmpty()) {
     return {
       dataUrl: image.toDataURL(),
@@ -181,6 +198,8 @@ async function writeClipboardImage(readBytes: () => Promise<Buffer>, inputKind: 
       event: 'clipboard.image_write.decoded', context: { ...context, rssBytes: process.memoryUsage().rss },
     })
     clipboard.writeImage(image)
+    stage = 'confirm'
+    if ((await readNativeClipboardImage(true)).isEmpty()) throw new Error('系统暂时无法读回复制的图片，请重试')
     logger.info('图片复制完成', {
       event: 'clipboard.image_write.completed', context: { ...context, durationMs: Math.round(performance.now() - startedAt) },
     })

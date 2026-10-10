@@ -106,7 +106,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     effects: CORE_EFFECTS.filter(({ id }) => id !== 'image.vgpu-glow'),
     adjustments: [],
     panels: ['layers', 'properties', 'history'],
-    layerControls: ['blend-mode'],
+    layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document', 'export-raster'],
     hdrReadiness: {
       state: 'disabled',

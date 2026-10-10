@@ -70,6 +70,7 @@ describe('图片编辑 V3 内置渲染节点', () => {
       'image.diffusion',
       'image.vgpu-glow',
       'gaussian_blur',
+      'mosaic',
     ]);
   });
 });

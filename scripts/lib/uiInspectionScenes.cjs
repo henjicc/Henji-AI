@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检启动器使用 CommonJS 场景工厂。 */
 const { createImageEditDocumentSizeScene } = require('./uiInspectionSceneImageEditDocumentSize.cjs')
 const { createImageEditCommonWorkflowsScene } = require('./uiInspectionSceneImageEditCommonWorkflows.cjs')
+const { createImageEditCommonFeaturesScene, createImageEditQuickMosaicScene } = require('./uiInspectionSceneImageEditCommonFeatures.cjs')
 const { createImageEditColorExportScene } = require('./uiInspectionSceneImageEditColorExport.cjs')
 const { createImageEditVectorTextScene } = require('./uiInspectionSceneImageEditVectorText.cjs')
 const { createImageEditPaintTargetsScene, createImageEditPaintParameterScene, createImageEditPaintCrossTilesScene } = require('./uiInspectionSceneImageEditPaintTargets.cjs')
@@ -21,6 +22,7 @@ const { createVideoEditScrubScene } = require('./uiInspectionSceneVideoEditScrub
 const { createVideoEditPlayStartScene } = require('./uiInspectionSceneVideoEditPlayStart.cjs')
 const { createVideoEditFilmstripScene } = require('./uiInspectionSceneVideoEditFilmstrip.cjs')
 const { createVideoEditTimelineScene } = require('./uiInspectionSceneVideoEditTimeline.cjs')
+const { createVideoEditMotionDraftScene } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
 const { createVideoEditMonitorScene } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { createVideoEditPictureGestureScene } = require('./uiInspectionSceneVideoEditPictureGesture.cjs')
 const { createVideoEditLayoutScene } = require('./uiInspectionSceneVideoEditLayout.cjs')
@@ -125,6 +127,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditPlayStartScene(),
     createVideoEditFilmstripScene(),
     createVideoEditTimelineScene(),
+    createVideoEditMotionDraftScene(),
     createVideoEditMonitorScene(),
     createVideoEditPictureGestureScene(),
     createVideoEditLayoutScene(),
@@ -181,6 +184,9 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createImageEditRegionHostsScene(context),
     createImageEditDocumentSizeScene(context),
     createImageEditCommonWorkflowsScene(context),
+    createImageEditCommonFeaturesScene(context),
+    createImageEditCommonFeaturesScene(context, true),
+    createImageEditQuickMosaicScene(context),
     createImageEditCommonWorkflowsScene(context, true),
     createImageEditCommonWorkflowsScene(context, false, true),
     createImageEditCommonWorkflowsScene(context, true, true),

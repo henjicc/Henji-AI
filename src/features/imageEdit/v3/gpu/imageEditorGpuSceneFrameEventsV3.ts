@@ -21,7 +21,7 @@ export function createImageEditorGpuSceneFrameDeliveryV3(
     cameraSequence: request.cameraSequence,
     interactionSequence: request.interactionSequence,
     surfaceGeneration: result.presentation.surfaceGeneration,
-    quality: request.quality,
+    quality: result.stats.previewFallback ? 'draft' as const : request.quality,
     diagnostics: result.stats,
   }
   if (result.presentation.kind === 'webgpu-surface') {

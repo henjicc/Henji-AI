@@ -3,10 +3,11 @@ import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerT
 import '@/tests/imageEditDocumentFixture'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditTextLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { useImageEditorLayerPickingV3 } from './useImageEditorLayerPickingV3'
 
-const reader = vi.hoisted(() => ({ metadata: vi.fn(), tile: vi.fn(), brush: vi.fn() }))
+const reader = vi.hoisted(() => ({ metadata: vi.fn(), tile: vi.fn(), brush: vi.fn(), vector: vi.fn(), dispose: vi.fn() }))
+vi.mock('../execution/vectorRasterClientV3', () => ({ ImageEditorVectorRasterClientV3: class { rasterize = reader.vector; dispose = reader.dispose; warm = vi.fn() } }))
 vi.mock('@/commands/imageEditorV3', () => ({
   createImageEditorV3RequestId: () => 'pick-test',
   readImageEditorV3SourceMetadata: reader.metadata,
@@ -59,5 +60,21 @@ describe('图层命中资源生命周期', () => {
     await act(async () => { finish({ width: 100, height: 100, hasAlpha: false }) })
     expect(result.current.size).toBe(0)
     expect(reader.metadata.mock.calls[0][1].aborted).toBe(true)
+  })
+
+  it('矢量命中缓存只随内容或画布变化，移动和调色保留缓存，卸载释放后台计算', async () => {
+    const document = createImageEditDocumentV3({ width: 3840, height: 2160 })
+    const text = createImageEditTextLayerV3('text', '文字')
+    document.layers = [text]
+    reader.vector.mockImplementation(async (_node, _doc, rect) => ({ data: new Uint8ClampedArray(rect.width * rect.height * 4).fill(255) }))
+    const { result, rerender, unmount } = renderHook(({ doc }) => useImageEditorLayerPickingV3(doc, []), { initialProps: { doc: document } })
+    await waitFor(() => expect(result.current.size).toBe(1))
+    expect(reader.vector.mock.calls[0][2]).toEqual({ x: 0, y: 0, width: 480, height: 270 })
+    expect(reader.vector.mock.calls[0][3]).toBe(3)
+    const moved = { ...document, revision: 2, layers: [{ ...text, transform: [1,0,0,1,42,18] as typeof text.transform, opacity: .7 }] }
+    rerender({ doc: moved }); expect(reader.vector).toHaveBeenCalledOnce()
+    rerender({ doc: { ...moved, geometry: { ...document.geometry, width: 4096 } } })
+    await waitFor(() => expect(reader.vector).toHaveBeenCalledTimes(2))
+    unmount(); expect(reader.dispose).toHaveBeenCalledOnce()
   })
 })

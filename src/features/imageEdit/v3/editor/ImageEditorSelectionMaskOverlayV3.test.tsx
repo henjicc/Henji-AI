@@ -134,10 +134,13 @@ describe('ImageEditorSelectionMaskOverlayV3', () => {
     ).toBe(false))
   })
 
-  it('quick 不开放选择，full 开放独立选择，mask 仍使用蒙版工具', async () => {
+  it('quick 与 full 开放独立选择，mask 仍使用蒙版工具', async () => {
     const quick = render(<ControlledSelectionEditor profileId="quick" onDocumentChange={() => undefined} />)
     await screen.findByRole('button', { name: '裁剪' })
-    expect(quick.container.querySelector('[data-tool-id="select-rect"]')).toBeNull()
+    expect(quick.container.querySelector('[data-tool-id="select-rect"]')).not.toBeNull()
+    fireEvent.click(quick.container.querySelector('[data-tool-id="mask-edit"]')!)
+    fireEvent.click(await screen.findByRole('button', { name: /^蒙版$/ }))
+    expect(screen.queryByRole('option', { name: /^像素$/ })).toBeNull()
     quick.unmount()
 
     const full = render(<ControlledSelectionEditor profileId="full" onDocumentChange={() => undefined} />)

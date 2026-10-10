@@ -6,6 +6,7 @@ import { UiIconButton, UiToolbar } from '@/components/ui'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorToolParametersV3 } from './ImageEditorToolParametersV3'
+import { ImageEditorClipboardV3 } from './ImageEditorClipboardV3'
 import type { ImageEditorV3Controller } from './types'
 
 interface ImageEditorCommandBarV3Props {
@@ -110,6 +111,7 @@ export function ImageEditorCommandBarV3({
       >
         <Undo2 className="h-4 w-4" />
       </UiIconButton>
+      <ImageEditorClipboardV3 bus={bus} controller={controller} />
       <UiIconButton size="lg"
         className="shrink-0"
         disabled={!controller.canRedo}

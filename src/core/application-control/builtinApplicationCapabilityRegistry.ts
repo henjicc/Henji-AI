@@ -1,4 +1,5 @@
 import { resampleImageEditCapability } from './domains/imageEdit/imageEditGeometryCapabilities'
+import { imageEditClipboardCapability } from './domains/imageEdit/imageEditClipboardCapabilities'
 import { paintImageEditTargetCapability } from './domains/imageEdit/imageEditPaintCapabilities'
 import { convertImageEditFilterScopeCapability } from './domains/imageEdit/imageEditFilterCapabilities'
 import { computeImageEditSelectionCapability } from './domains/imageEdit/imageEditAdvancedSelectionCapabilities'
@@ -59,6 +60,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...CAMERA_STAGE_APPLICATION_CAPABILITIES,
   ...IMAGE_MARK_APPLICATION_CAPABILITIES,
   applyImageEditSelectionCapability,
+  imageEditClipboardCapability,
   computeImageEditSelectionCapability,
   paintImageEditTargetCapability,
   convertImageEditFilterScopeCapability,

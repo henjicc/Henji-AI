@@ -151,6 +151,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     })
     const request = {
       type: 'sync-scene',
+      quality: snapshot.quality,
       sceneGeneration: snapshot.renderGeneration,
       document: snapshot.document,
       resourceDescriptors: snapshot.resourceDescriptors,

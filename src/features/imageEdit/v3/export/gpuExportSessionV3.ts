@@ -142,7 +142,7 @@ export class ImageEditorGpuExportSessionV3 {
       requestId,
       events: [],
       wake: null,
-      // 初始化中的设备可等待 ready；已知不可用的设备在创建流前直接选择 CPU。
+      // 初始化中的设备可等待 ready；已知不可用的设备由选择器转入 CPU 事务回退。
       error: request.signal?.aborted ? abortError(request.signal.reason) : null,
       errorDiagnostic: false,
       completed: false,
@@ -174,6 +174,12 @@ export class ImageEditorGpuExportSessionV3 {
     this.unregister()
     this.failActive(new Error('GPU Scene 会话已销毁'))
     this.snapshot = null
+  }
+
+  /** 无匹配会话与已有失败会话是不同结果；后者不能再次创建 GPU Worker。 */
+  getDeviceFailure(request: RenderImageEditorV3ExportTilesRequest): Error | null {
+    return this.snapshot?.document.id === request.document.id
+      && this.snapshot.document.revision === request.document.revision ? this.deviceFailure : null
   }
 
   reject(requestId: string, error: Error): void {
@@ -318,9 +324,15 @@ export class ImageEditorGpuExportSessionV3 {
 export function renderImageEditorV3ExportTilesFromActiveGpuScene(
   request: RenderImageEditorV3ExportTilesRequest,
 ): ImageEditorV3ExportTileStream | null {
+  let failure: Error | null = null
   for (const session of sessions.get(key(request.document.id, request.document.revision)) ?? []) {
     const stream = session.render(request)
     if (stream) return stream
+    failure ??= session.getDeviceFailure(request)
+  }
+  if (failure) {
+    const error = failure
+    return { [Symbol.asyncIterator]() { return { async next() { throw error } } } }
   }
   return null
 }

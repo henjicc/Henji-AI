@@ -27,7 +27,7 @@ const logger = createMainLogger('main.image_editor_v3.source_ingest')
 const MAX_SOURCE_URL_CHARACTERS = 8_192
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308])
 const IMAGE_MEDIA_TYPE_PATTERN = /^image\/[a-z0-9][a-z0-9.+-]{0,63}$/
-const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+const INVALID_BASE64_CHARACTER = /[^A-Za-z0-9+/]/
 const RELEASE_IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/tiff', 'image/avif', 'image/heif', 'image/heic'])
 
 export const IMAGE_EDITOR_V3_SOURCE_INGEST_LIMITS: ImageEditorV3SourceIngestLimits = {
@@ -238,10 +238,13 @@ function parseDataUrl(raw: string, maxBytes: number): { bytes: Buffer; mediaType
   ) {
     throw new Error('Image data URL must contain a supported raster MIME type and canonical base64')
   }
-  if (!payload || payload.length > Math.ceil(maxBytes / 3) * 4 + 4 || !BASE64_PATTERN.test(payload)) {
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0
+  // 大图片不能经过重复捕获组：V8 正则回溯栈会随完整 payload 增长。
+  // 字符集合一次线性扫描，尾部 padding 与四字节对齐单独校验。
+  if (!payload || payload.length % 4 !== 0 || payload.length > Math.ceil(maxBytes / 3) * 4 + 4
+    || INVALID_BASE64_CHARACTER.test(payload.slice(0, payload.length - padding))) {
     throw new Error('Image data URL contains invalid or oversized base64')
   }
-  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0
   const decodedLength = (payload.length / 4) * 3 - padding
   if (!Number.isSafeInteger(decodedLength) || decodedLength > maxBytes) {
     throw new Error(`Image data URL exceeds maximum byte length of ${maxBytes}`)

@@ -1,4 +1,6 @@
 import { registerImageEditGeometryHandlers } from './registerImageEditGeometryHandlers'
+import { imageEditClipboardCapability } from '@/core/application-control/domains/imageEdit/imageEditClipboardCapabilities'
+import { copyImageEditClipboardV3, pasteImageEditClipboardV3 } from '../v3/application/imageEditClipboardV3'
 import { paintImageEditTargetCapability } from '@/core/application-control/domains/imageEdit/imageEditPaintCapabilities'
 import { paintImageEditTargetV3 } from '../v3/tools/paint/service'
 import { convertImageEditFilterScopeCapability } from '@/core/application-control/domains/imageEdit/imageEditFilterCapabilities'
@@ -39,6 +41,26 @@ import { requestImageDocumentInEditor } from '@/features/imageEdit/documents/ima
 import { registerImageEditOutpaintHandlers } from './registerImageEditOutpaintHandlers'
 
 export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  registrar.registerHandler(imageEditClipboardCapability.id, async (input, context) => {
+    const parsed = imageEditClipboardCapability.inputSchema.parse(input)
+    const { documentId } = splitImageEditV3DocumentRef(parsed.documentRef)
+    const { bus } = requireImageEditDocumentInstanceV3(documentId)
+    if (parsed.action === 'paste') {
+      const executionContext = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'clipboard-paste', context.signal) : undefined
+      return runImageEditPersistedOperationV3(documentId, executionContext, async () => {
+        const layerId = await pasteImageEditClipboardV3(bus, context.signal)
+        return { ref: imageEditV3LayerRef(documentId, layerId), verified: Boolean(findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)) }
+      })
+    }
+    const layerIds = (parsed.layerRefs ?? []).map(ref => {
+      const target = splitImageEditV3LayerRef(ref)
+      if (target.documentId !== documentId) throw new Error('复制图层必须属于指定图片文档')
+      if (!findImageEditV3LiveLayer(bus.getSnapshot().document, target.layerId)) throw new Error('复制图层不存在，请重新读取')
+      return target.layerId
+    })
+    await copyImageEditClipboardV3(bus, layerIds, parsed.action === 'copy_merged', context.signal)
+    return { ref: parsed.documentRef, verified: true }
+  })
   registerImageEditOutpaintHandlers(registrar)
   registerImageEditGeometryHandlers(registrar)
   registrar.registerHandler(paintImageEditTargetCapability.id, async (input, context) => {

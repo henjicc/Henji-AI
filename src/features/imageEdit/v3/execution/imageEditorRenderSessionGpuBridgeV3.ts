@@ -30,6 +30,8 @@ import type {
 import type { ImageEditorV3ExportTileStream, RenderImageEditorV3ExportTilesRequest } from '../export/contracts'
 import type { ImageEditorPresentationSurfaceTransferV3 } from './imageEditorPresentationSurfaceV3'
 import { ImageEditorGpuExportSessionV3 } from '../export/gpuExportSessionV3'
+import { currentImageEditorInteractionV3, traceImageEditorStageV3, type ImageEditorInteractionTraceV3 } from './interactionTraceV3'
+import { ImageEditorVectorRasterClientV3 } from './vectorRasterClientV3'
 const logger = createLogger('features.image_edit.v3.gpu_scene_bridge')
 const GPU_SOURCE_TILE_BATCH_SIZE = 16
 const renderNodeRegistry = createBuiltInImageEditRenderNodeRegistry()
@@ -38,6 +40,7 @@ type GpuPresentableFrameV3 = Extract<
   { type: 'frame-ready' | 'surface-frame-ready' }
 >
 export class ImageEditorRenderSessionGpuBridgeV3 {
+  private readonly vectorRaster = new ImageEditorVectorRasterClientV3()
   private readonly client: ImageEditorGpuSceneClientV3Like | null
   private unsubscribe: () => void
   private sceneGeneration = 0
@@ -63,6 +66,8 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   private tileRetryTimer: ReturnType<typeof setTimeout> | null = null
   private interactionEventTimestamp: number | null = null
   private inFlightEventTimestamp: number | null = null
+  private interactionTrace: ImageEditorInteractionTraceV3 | undefined
+  private inFlightTrace: ImageEditorInteractionTraceV3 | undefined
   private pendingTransform: {
     layerId: string
     transform: ImageEditTransformV3 | null
@@ -86,6 +91,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.client = injectedClient === undefined
       ? createDefaultImageEditorGpuSceneClientV3(sessionId)
       : injectedClient
+    if (this.client) this.vectorRaster.warm()
     this.exportSession = new ImageEditorGpuExportSessionV3(this.client, diagnosticRenderingEnabled)
     this.unsubscribe = this.client?.subscribe((event) => this.handleEvent(event))
       ?? (() => undefined)
@@ -113,6 +119,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.frameInFlight = false
     this.pendingTransform = null
     this.interactionEventTimestamp = snapshot.eventTimestamp ?? null
+    this.interactionTrace = snapshot.interactionTrace
     this.quality = snapshot.quality
     this.sourceBitDepth = snapshot.document.color.bitDepth === 8
       ? 8
@@ -126,6 +133,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
           .map((node) => [createImageEditorGpuAnnotationResourceRefV3(node), node] as const)),
     )
     this.exportSession.syncSnapshot(snapshot)
+    traceImageEditorStageV3(snapshot.document.id, snapshot.interactionTrace, 'plan', { renderGeneration: snapshot.renderGeneration, quality: snapshot.quality })
     // A tile-only scene can report resources-ready synchronously. Its sequence
     // gate resets the camera to zero, so synchronize the camera before rendering.
     this.syncingSnapshot = true
@@ -146,6 +154,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   updateViewport(cameraSequence: number, layout: ImageEditorViewportLayoutV3): void {
     this.cameraSequence = cameraSequence
     this.layout = layout
+    if (this.document) this.interactionTrace = currentImageEditorInteractionV3(this.document.id)
     if (this.sceneGeneration > 0) {
       this.client?.updateViewport(this.sceneGeneration, cameraSequence, layout)
       this.frameInFlight = false
@@ -161,12 +170,14 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   ): void {
     if (this.sceneGeneration <= 0 || interactionSequence < this.latestInteractionSequence) return
     this.latestInteractionSequence = interactionSequence
+    if (this.document) this.interactionTrace = currentImageEditorInteractionV3(this.document.id)
     this.interactionEventTimestamp = eventTimestamp ?? null
     this.pendingTransform = { layerId, transform: [...transform], interactionSequence }
   }
   clearTransientLayerTransform(layerId: string, interactionSequence: number): void {
     if (this.sceneGeneration <= 0 || interactionSequence < this.latestInteractionSequence) return
     this.latestInteractionSequence = interactionSequence
+    if (this.document) this.interactionTrace = currentImageEditorInteractionV3(this.document.id)
     this.interactionEventTimestamp = null
     this.pendingTransform = { layerId, transform: null, interactionSequence }
   }
@@ -185,6 +196,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.unsubscribe()
     this.unsubscribe = () => undefined
     this.exportSession.dispose()
+    this.vectorRaster.dispose()
     this.client?.dispose()
   }
 
@@ -201,6 +213,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       return
     }
     if (event.type === 'tiles-needed') {
+      if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'tiles-needed', { count: event.keys.length, kinds: [...new Set(event.keys.map(key => key.resourceKind))] })
       this.queueTileLoad(event)
       return
     }
@@ -218,6 +231,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         ? null
         : Math.max(0, performance.now() - this.inFlightEventTimestamp)
       this.inFlightEventTimestamp = null
+      if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'gpu-ready', { renderGeneration: event.sceneGeneration, ...event.diagnostics })
       let presented: boolean | 'deferred' = false
       if (event.type === 'frame-ready') try {
         presented = layout ? this.presentFrame?.(event, layout, eventToPresentMs) ?? false : false
@@ -237,6 +251,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       if (this.diagnosticRenderingEnabled) logger.info('图片编辑 GPU Scene 帧完成', frameLog)
       else logger.debug('图片编辑 GPU Scene 帧完成', frameLog)
       if (presented) {
+        if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'present', { backend: 'gpu', quality: event.quality, renderGeneration: event.sceneGeneration })
         this.publish({
           deviceStatus: 'ready',
           compositionBackend: 'gpu',
@@ -284,6 +299,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       return
     }
     if (event.type === 'failed') {
+      if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'gpu-failed', { code: event.code, message: event.message, loading: this.loadingTiles.size })
       this.frameInFlight = false
       if (event.code === 'scene-resources-failed') {
         this.sceneResourcesReady = false
@@ -332,6 +348,8 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.pendingFrame = false
     this.frameInFlight = true
     this.inFlightEventTimestamp = this.interactionEventTimestamp
+    this.inFlightTrace = this.interactionTrace
+    if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'gpu-start', { renderGeneration: this.sceneGeneration })
     this.client.requestFrame(
       this.sceneGeneration, this.cameraSequence, this.interactionSequence, this.quality,
     )
@@ -387,8 +405,10 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         const tile = await loadImageEditorGpuSceneTileV3(key, signal, {
           document: this.document, resourceDescriptors: this.resourceDescriptors,
           annotationNodes: this.annotationNodes, sourceBitDepth: this.sourceBitDepth,
+          rasterizeVectorImage: (node, document, region, mip, signal) => this.vectorRaster.rasterize(node, document, region, mip, signal),
           readBrushTiles: this.readBrushTiles,
         })
+        if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'tile-ready', { kind: key.resourceKind, mip: key.mip, x: key.tileX, y: key.tileY })
         if (signal.aborted || this.disposed || generation !== this.sceneGeneration) return
         const upload = [{
           key, tile,
@@ -416,6 +436,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       for (let offset = 0; offset < dynamicKeys.length; offset += GPU_SOURCE_TILE_BATCH_SIZE) {
         if (signal.aborted || this.disposed || generation !== this.sceneGeneration) return
         const keyBatch = dynamicKeys.slice(offset, offset + GPU_SOURCE_TILE_BATCH_SIZE)
+        if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'tile-request', { count: keyBatch.length, mip: keyBatch[0]?.mip })
         const batch = await readImageEditorV3SourceTiles({
           requestId: createImageEditorV3RequestId('gpu-scene-tiles'),
           tiles: keyBatch.map((key, index) => ({
@@ -435,10 +456,12 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
             protections: ['viewport'] as const,
           }
         })
+        if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'tile-ready', { count: batch.tiles.length, mip: keyBatch[0]?.mip })
         if (exportRequestId) this.client?.uploadExportTiles?.(generation, exportRequestId, upload)
         else this.client?.uploadTiles(generation, upload)
       }
       if (!exportRequestId) {
+        this.pendingFrame = true
         this.clearTileRetry()
         if (this.tileResourcesFailed) {
           this.tileResourcesFailed = false

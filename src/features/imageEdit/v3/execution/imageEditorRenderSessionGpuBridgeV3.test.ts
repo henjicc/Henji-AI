@@ -11,10 +11,11 @@ import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuScen
 import { renderImageEditorV3ExportTilesWithGpu } from '../export/gpuDefaultExportV3'
 import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
 
-const { readSourceTile, readSourceTiles, vectorRaster } = vi.hoisted(() => ({
+const { readSourceTile, readSourceTiles, vectorRaster, vectorImage } = vi.hoisted(() => ({
   readSourceTile: vi.fn(),
   readSourceTiles: vi.fn(),
   vectorRaster: vi.fn(),
+  vectorImage: vi.fn(() => ({ data: new Uint8ClampedArray(16), width: 2, height: 2 })),
 }))
 vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
@@ -24,7 +25,7 @@ vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
 }))
 vi.mock('@/commands/imageEditorV3Tiles', () => ({ readImageEditorV3SourceTiles: readSourceTiles }))
 vi.mock('@/services/vectorContent/fonts', () => ({ensureVectorDocumentFonts:vi.fn(async()=>{})}))
-vi.mock('./viewportCompositePixelsV3', async importOriginal => ({...await importOriginal<typeof import('./viewportCompositePixelsV3')>(),rasterizeImageEditorViewportVectorContentV3:vectorRaster}))
+vi.mock('./viewportCompositePixelsV3', async importOriginal => ({...await importOriginal<typeof import('./viewportCompositePixelsV3')>(),rasterizeImageEditorViewportVectorContentV3:vectorRaster,rasterizeImageEditorViewportVectorImageV3:vectorImage}))
 
 function clientHarness(): {
   client: ImageEditorGpuSceneClientV3Like
@@ -115,7 +116,7 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
       bridge.syncSnapshot({document,renderGeneration:1,geometryHash:'geometry',quality:snapshotQuality,resourceDescriptors:[]})
       harness.listener({type:'tiles-needed',sceneGeneration:1,deviceGeneration:1,exportRequestId:'vector-output',keys:[{resourceRef,resourceKind:'generated-vector',format:'rgba16float',mip:0,tileX:0,tileY:0,contentVersion:'final'}]})
       await vi.waitFor(()=>expect(harness.client.uploadExportTiles).toHaveBeenCalledOnce())
-      expect(vectorRaster).toHaveBeenCalledWith(node,document,{x:0,y:0,width:2,height:2},0,expect.any(AbortSignal))
+      expect(vectorImage).toHaveBeenCalledWith(node,document,{x:0,y:0,width:2,height:2},0,expect.any(AbortSignal))
       expect(readSourceTile).not.toHaveBeenCalled();expect(readSourceTiles).not.toHaveBeenCalled()
     } finally {bridge.dispose()}
   })

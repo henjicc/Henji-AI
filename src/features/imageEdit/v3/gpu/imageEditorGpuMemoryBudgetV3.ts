@@ -25,6 +25,7 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
   scene: ImageEditorGpuRasterSceneV3,
   size: readonly [number, number],
   regions?: ImageEditorGpuGaussianRegionsV3,
+  effectScale?: number,
 ): number {
   const fullLinearBytes = pixels(size) * LINEAR_BYTES_PER_PIXEL
   const semanticTargets = scene.graph.filter((node) => (
@@ -57,20 +58,32 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
   return pixels(size) * PRESENT_BYTES_PER_PIXEL
     + (semanticTargets + sourceScratchTargets) * fullLinearBytes
     + masks.size * pixels(size) * MASK_BYTES_PER_PIXEL
-    + estimateEffectsBytes(effectNodes, size, regions) + adjustmentScratchBytes
+    + estimateEffectsBytes(effectNodes, size, regions, scene.height, effectScale) + adjustmentScratchBytes
 }
 
 function estimateEffectsBytes(
   nodes: readonly ImageEditorGpuGraphEffectNodeV3[],
   size: readonly [number, number],
   regions?: ImageEditorGpuGaussianRegionsV3,
+  referenceHeight = 0,
+  effectScale?: number,
 ): number {
   if (nodes.length === 0) return 0
   const fullBytes = pixels(size) * LINEAR_BYTES_PER_PIXEL
   let scratchTargets = 0
   let maximumPyramidBytes = 0
   let gaussianScratchBytes = 0
+  let mosaicGridBytes = 0
   for (const node of nodes) {
+    if (node.definitionId === 'effect.mosaic') {
+      // ROI 可以从色块中间开始，最多多覆盖一个块；按真实缩小网格计费。
+      // 没有完整文档缩放契约的调用方仍保留像素网格的保守预算。
+      const fraction = Number(node.parameters.block_fraction_height)
+      const block = effectScale !== undefined && Number.isFinite(fraction)
+        ? Math.max(1, Math.round(fraction * Math.max(1, Math.round(referenceHeight * effectScale)))) : 1
+      mosaicGridBytes += Math.min(size[0], Math.ceil(size[0] / block) + 1)
+        * Math.min(size[1], Math.ceil(size[1] / block) + 1) * LINEAR_BYTES_PER_PIXEL
+    }
     if (node.definitionId === 'effect.gaussian_blur') {
       const region = regions?.effects.get(node.nodeId)
       gaussianScratchBytes += region
@@ -101,7 +114,7 @@ function estimateEffectsBytes(
       scratchTargets = Math.max(scratchTargets, 3)
     }
   }
-  return (nodes.length + scratchTargets) * fullBytes + maximumPyramidBytes + gaussianScratchBytes
+  return (nodes.length + scratchTargets) * fullBytes + maximumPyramidBytes + gaussianScratchBytes + mosaicGridBytes
 }
 
 function gaussianScratch(plan: ReturnType<typeof resolveImageGaussianPlan>): number {

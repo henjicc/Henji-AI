@@ -295,16 +295,21 @@ export function rasterizeImageEditorViewportVectorContentV3(
   mip: number,
   signal: AbortSignal,
 ): Float32PremultipliedRgbaTile {
+  return convertFloat32TileWorkingSpaceV3(imageDataToViewportTile(rasterizeImageEditorViewportVectorImageV3(node, document, region, mip, signal)), document.color.workingSpace)
+}
+
+/** Canvas 标注本身就是 SDR RGBA；GPU 可直接接收，避免先解码再上传浮点。 */
+export function rasterizeImageEditorViewportVectorImageV3(
+  node: ImageEditRenderPlanNode,
+  document: ImageEditDocumentV3,
+  region: ImageEditRect,
+  mip: number,
+  signal: AbortSignal,
+): ImageData {
   throwIfAborted(signal)
-  const canvas = new OffscreenCanvas(region.width, region.height)
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context) throw new Error('无法创建视口标注分块画布')
-  context.putImageData(rasterizeVectorContent(node.parameters, { ...region, scale: 1 / (2 ** mip) }, { sourceVersion: String(document.revision), time: { kind: 'static' }, referenceGrid: document.geometry, quality: 'interactive', signal }), 0, 0)
+  const image = rasterizeVectorContent(node.parameters, { ...region, scale: 1 / (2 ** mip) }, { sourceVersion: String(document.revision), time: { kind: 'static' }, referenceGrid: document.geometry, quality: 'interactive', signal })
   throwIfAborted(signal)
-  return convertFloat32TileWorkingSpaceV3(
-    imageDataToViewportTile(context.getImageData(0, 0, region.width, region.height)),
-    document.color.workingSpace,
-  )
+  return image
 }
 
 

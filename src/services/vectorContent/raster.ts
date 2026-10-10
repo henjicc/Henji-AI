@@ -32,6 +32,13 @@ function renderVectorContent(value: unknown, region: VectorRasterRegion, evaluat
     const content = vectorPathContentSchema.parse(candidate.content);
     const { paint } = content;
     const drawCoverage = (target: OffscreenCanvasRenderingContext2D): void => {
+      // 单路径的覆盖直接交给浏览器原生栅格器；布尔组合仍用共享区域内核。
+      const operand = content.operands[0];
+      if (content.operands.length === 1 && (operand.operation === 'replace' || operand.operation === 'add')) {
+        target.save(); target.translate(-origin.x, -origin.y); target.fillStyle = WHITE_HEX;
+        target.beginPath(); traceVectorPath(target, operand.path); target.fill(operand.path.fillRule); target.restore();
+        return;
+      }
       const coverage = rasterizeVectorCoverage(content.operands, region, scale, scale, evaluation.signal);
       const image = new ImageData(region.width, region.height);
       for(let i=0;i<coverage.length;i++){image.data[i*4]=255;image.data[i*4+1]=255;image.data[i*4+2]=255;image.data[i*4+3]=Math.round(coverage[i]*255);}

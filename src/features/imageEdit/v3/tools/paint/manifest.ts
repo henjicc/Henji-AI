@@ -14,5 +14,5 @@ const definitions = [
 declare module '../../toolFramework/types' {
   interface ImageEditorToolCatalog extends Record<typeof definitions[number]['id'], true> {}
 }
-export const toolManifest: readonly ToolManifest[] = definitions.map(definition => ({ ...definition, group, profiles,
+export const toolManifest: readonly ToolManifest[] = definitions.map(definition => ({ ...definition, group, profiles: definition.id === 'mask-edit' ? [...profiles, 'quick'] : profiles,
   labelKey: `imageEditor.v3.tools.${definition.id}`, aliases: [definition.id], cursor: 'cursor-crosshair', input: 'overlay' }));

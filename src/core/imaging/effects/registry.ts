@@ -1,4 +1,5 @@
 import { GAUSSIAN_EFFECT } from './gaussian'
+import { MOSAIC_EFFECT } from './mosaic'
 import type { EffectDescriptor } from './descriptor'
 
 /** 语义登记包含未迁移的独立模型；未声明 executor 的项不能假称跨宿主可执行。 */
@@ -8,7 +9,7 @@ export const DISTINCT_BLUR_MODELS = [
   { id: 'shaders.Blur', name: '模糊（着色器）', colorDomain: 'backend-defined', alpha: 'backend-defined', temporal: 'none', hosts: ['video'], backend: { kind: 'shaders-component', module: 'shaders/core/Blur' }, implementation: 'upstream-component', status: 'host-owned' },
 ] as const
 export type RegisteredImagingEffect = Omit<EffectDescriptor<unknown, unknown>, 'resolve'>
-const descriptors = new Map<string, RegisteredImagingEffect>([[GAUSSIAN_EFFECT.id, GAUSSIAN_EFFECT]])
+const descriptors = new Map<string, RegisteredImagingEffect>([[GAUSSIAN_EFFECT.id, GAUSSIAN_EFFECT], [MOSAIC_EFFECT.id, MOSAIC_EFFECT]])
 export function listImagingEffects(): readonly RegisteredImagingEffect[] { return [...descriptors.values()] }
 /** 登记返回作用域释放函数，测试/可选效果卸载不会留下可创建操作。 */
 export function registerImagingEffect<Parameters, Plan>(descriptor: EffectDescriptor<Parameters, Plan>): () => void {

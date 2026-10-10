@@ -97,5 +97,9 @@ describe('GPU tile atlas', () => {
     expect(float32ToFloat16(2.5)).toBe(0x4100)
     expect(float32ToFloat16(-0.25)).toBe(0xb400)
     expect(float32ToFloat16(1)).toBe(0x3c00)
+    for (let pass = 0; pass < 100; pass++) {
+      expect([0, -0, 1 / 2 ** 24, 1 + 1 / 2048, 1 + 3 / 2048, 65504].map(float32ToFloat16))
+        .toEqual([0, 0x8000, 1, 0x3c00, 0x3c02, 0x7bff])
+    }
   })
 })

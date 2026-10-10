@@ -305,11 +305,11 @@ export class SharpSourceProvider implements SourceProvider {
 
     // mip0 的横向相邻块共享一次原生全宽条带解码，避免 PNG/JPEG 从文件头重复扫描。
     // 只保留两个有界条带，不建立完整 RGBA 表面；HDR 与缩放继续走原区域契约。
-    if (mip === 0 && halo === 0 && (bitDepth !== 32 || metadata.colorSpace === 'display-p3')
+    if (mip === 0 && (bitDepth !== 32 || metadata.colorSpace === 'display-p3')
       && metadata.width > IMAGE_EDIT_TILE_SIZE && metadata.height > IMAGE_EDIT_TILE_SIZE) {
       const stripeStride = metadata.width * 4 * (bitDepth / 8)
       const stripe = await this.decodeStripes.read(
-        `${request.resourceId}:${tileY}:${bitDepth}`,
+        `${request.resourceId}:${originY}:${outputHeight}:${bitDepth}`,
         stripeStride * outputHeight,
         async (signal) => {
           const started = performance.now()

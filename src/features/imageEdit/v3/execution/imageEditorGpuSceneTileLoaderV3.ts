@@ -4,12 +4,14 @@ import { createImageEditorV3RequestId, readImageEditorV3BrushTiles, readImageEdi
 import type { ImageEditorV3ResourceDescriptor, ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import { readImageEditorGpuBrushTilesV3 } from './imageEditorGpuBrushTileReaderV3'
+const preparedFonts = new WeakMap<ImageEditDocumentV3, Promise<void>>()
 import { applyImageEditorViewportBrushTilesV3, createTransparentImageEditorViewportRegionV3,
-  loadImageEditorViewportSourceRegionV3, rasterizeImageEditorViewportVectorContentV3,
+  loadImageEditorViewportSourceRegionV3, rasterizeImageEditorViewportVectorContentV3, rasterizeImageEditorViewportVectorImageV3,
   viewportCompositeSourceTileKeyV3 } from './viewportCompositePixelsV3'
 import { floatPremultipliedTileToGpuSource } from './imageEditorGpuTileSourceV3'
 
 export interface ImageEditorGpuSceneTileLoaderContextV3 {
+  rasterizeVectorImage?: (node: ImageEditRenderPlanNode, document: ImageEditDocumentV3, region: { x: number; y: number; width: number; height: number }, mip: number, signal: AbortSignal) => Promise<ImageData>
   document: ImageEditDocumentV3 | null
   resourceDescriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>
   annotationNodes: ReadonlyMap<string, ImageEditRenderPlanNode>
@@ -69,7 +71,24 @@ export async function loadImageEditorGpuSceneTileV3(
     const width = Math.min(dimensions.width, key.tileX * 512 + 513) - x
     const height = Math.min(dimensions.height, key.tileY * 512 + 513) - y
     if (width < 1 || height < 1) throw new Error('GPU Scene 标注瓦片超出文档范围')
-    await ensureVectorDocumentFonts(document)
+    if (!context.rasterizeVectorImage || context.sourceBitDepth !== 8 || document.color.workingSpace !== 'srgb') {
+      let fonts = preparedFonts.get(document)
+      if (!fonts) {
+        fonts = ensureVectorDocumentFonts(document)
+        preparedFonts.set(document, fonts)
+        void fonts.catch(() => preparedFonts.delete(document))
+      }
+      await fonts
+    }
+    if (context.sourceBitDepth === 8 && document.color.workingSpace === 'srgb') {
+      const image = context.rasterizeVectorImage
+        ? await context.rasterizeVectorImage(annotation, document, { x, y, width, height }, key.mip, signal)
+        : rasterizeImageEditorViewportVectorImageV3(annotation, document, { x, y, width, height }, key.mip, signal)
+      return { resourceRef: key.resourceRef, mip: key.mip, tileX: key.tileX, tileY: key.tileY,
+        halo: 1, width, height, channels: 4, bitDepth: 8, sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian',
+        rowStride: width * 4, colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight', orientationApplied: true,
+        originX: x, originY: y, pixels: image.data.slice().buffer }
+    }
     const tile = rasterizeImageEditorViewportVectorContentV3(
       annotation, document, { x, y, width, height }, key.mip, signal,
     )

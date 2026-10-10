@@ -38,13 +38,13 @@ import { resolveImageEditLayerMovesV3 } from '../panels/layers/treeDrop'
 import { selectImageEditTargetV3 } from '../panels/layers/editTarget'
 import { ImageEditThumbnailsV3 } from '../panels/thumbnails'
 import { useImageEditorDisposableV3 } from '../execution/useImageEditorDisposableV3'
+import { listImageEditFilterChoicesV3 } from '../filterWorkspace/catalog'
 
 interface ImageEditorLayersPanelV3Props {
   controller: ImageEditorV3Controller
   embedded?: boolean
 }
 
-const EFFECT_SUBTYPES = ['image.fast-blur-v3', 'image.diffusion', 'image.vgpu-glow'] as const
 const ADJUSTMENT_SUBTYPES = ['color_grade', 'exposure', 'curves', 'temperature-tint', 'hsl'] as const
 const EMPTY_LAYER_IDS: readonly string[] = []
 
@@ -77,16 +77,17 @@ function resolveCreationIndex(
 
 function getCreationChoices(
   controller: ImageEditorV3Controller,
-  translate: (key: string) => string,
+  translate: (key: string, options?: { defaultValue: string }) => string,
 ): ImageEditorLayerCreationCapabilityV3[] {
   const choices: ImageEditorLayerCreationCapabilityV3[] = []
   for (const kind of controller.profile.layerKinds) {
     if (kind === 'effect') {
-      for (const subtype of EFFECT_SUBTYPES) {
+      for (const effect of listImageEditFilterChoicesV3(controller.profile).filter(choice => choice.kind === 'effect')) {
+        const subtype = effect.id
         const capability = controller.profile.effects.find(({ id }) => id === subtype)
         if (capability) {
           choices.push({
-            choice: { kind, subtype, name: translate(`imageEditor.v3.effect.${subtype}`) },
+            choice: { kind, subtype, name: translate(effect.titleKey, { defaultValue: effect.title }) },
             readiness: capability.readiness,
           })
         }
@@ -119,7 +120,7 @@ export function ImageEditorLayersPanelV3({
   const { t } = useTranslation('ui')
   const thumbnailResource = useMemo(() => {
     const renderer = controller.historyPort ? new ImageEditThumbnailsV3({ sessionId: controller.sessionId,
-      historyResourceDescriptors: controller.historyResourceDescriptors }) : null
+      historyPort: controller.historyPort, historyResourceDescriptors: controller.historyResourceDescriptors }) : null
     return { renderer, dispose: () => renderer?.dispose() }
   }, [controller.sessionId, controller.historyResourceDescriptors, controller.historyPort])
   useImageEditorDisposableV3(thumbnailResource)

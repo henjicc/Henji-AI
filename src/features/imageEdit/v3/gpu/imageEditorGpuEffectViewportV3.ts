@@ -71,6 +71,7 @@ export function resolveImageEditorGpuEffectViewportV3(
     bottom = Math.max(0, Math.round((Math.max(endY, gradeNeighbors ? (output.rotate === 90 || output.rotate === 270 ? output.sourceWidth : output.sourceHeight) - output.cropY : output.outputHeight) - endY) * scale))
   } else {
     const halo = effects.reduce((sum, node) => {
+      if (node.definitionId === 'effect.mosaic') return sum + Math.max(1, Math.round(finiteParameter(node.parameters.block_fraction_height) * scene.height * scale))
       if (node.definitionId !== 'effect.fast-blur') return sum
       const radius = finiteParameter(node.parameters.radius)
       const mip = finiteParameter(node.parameters.mip)

@@ -6,6 +6,7 @@ import {
 import type { ImageEditorRenderSnapshotV3 } from './imageEditorRenderSessionContractsV3'
 import { imageEditorRenderResultMatchesViewV3 } from './imageEditorRenderSessionIdentityV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
+import { traceImageEditorStageV3 } from './interactionTraceV3'
 
 interface PresentationLayoutV3 extends ImageEditorViewportLayoutV3 {
   cameraSequence: number
@@ -45,7 +46,7 @@ export function presentImageEditorRenderSessionFrameV3(options: {
     ? currentDraft
     : reusableClearStable
   if (!fallback && !target) return null
-  return compositor.present(
+  const presented = compositor.present(
     fallback,
     target,
     layout,
@@ -53,4 +54,6 @@ export function presentImageEditorRenderSessionFrameV3(options: {
     snapshot.document.geometry,
     snapshot.geometryHash,
   )
+  if (presented && (currentStable || currentDraft)) traceImageEditorStageV3(snapshot.document.id, snapshot.interactionTrace, 'present', { backend: 'cpu', quality: currentStable ? 'stable' : 'draft', renderGeneration: snapshot.renderGeneration })
+  return presented
 }

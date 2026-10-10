@@ -8,6 +8,9 @@ import type { ImageEditorGpuTileAtlasAllocationV3 } from './imageEditorGpuTileAt
 export type ImageEditorGpuRasterTextureV3 = ImageEditorGpuTileAtlasAllocationV3
 
 export interface ImageEditorGpuRasterCompositorStatsV3 {
+  compositionMs?: number
+  presentationMs?: number
+  previewFallback?: boolean
   uploadCount: number
   pipelineCompileCount: number
   frameCount: number
@@ -67,6 +70,7 @@ export interface ImageEditorGpuRasterCompositorV3Like {
   uploadTile(key: ImageEditorGpuSceneTileKeyV3, tile: ImageEditorV3SourceTile): ImageEditorGpuRasterTextureV3
   requiredResourceKeys(layerId?: string): readonly ImageEditorGpuSceneTileKeyV3[]
   missingResources(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): ImageEditorGpuSceneTileKeyV3[]
+  canRenderPreview?(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): boolean
   render(
     resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null,
     surfaceGeneration: number,

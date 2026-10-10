@@ -1,6 +1,6 @@
 import { ImageEditorSubjectProviderV3 } from './ImageEditorSubjectContextV3'
 import { SelectionAdvancedProviderV3 } from '../tools/selectionAdvanced/SelectionAdvancedContext'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { exportDiagnosticBundle } from '@/commands/logging'
@@ -16,12 +16,28 @@ import { useImageEditorControllerV3 } from './useImageEditorControllerV3'
 import { createImageEditorDiagnosticSummaryV3 } from './imageEditorDiagnosticSummaryV3'
 import { ImageEditorRepairProviderV3 } from './ImageEditorRepairContextV3'
 import { SmartContentProviderV3 } from '../smartContent/SmartContentContext'
+import { attachImageEditorInteractionTraceV3, currentImageEditorInteractionV3, traceImageEditorStageV3 } from '../execution/interactionTraceV3'
+import { reconcileImageEditorV3ResourceDescriptors, createImageEditorV3ResourceByteSizes } from '../application/imageEditorResourceDescriptorsV3'
 
 function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const { controller, bus } = useImageEditorControllerV3(props)
   const { t } = useTranslation('ui')
   const rootRef = useRef<HTMLDivElement>(null)
   const { onEditorContextChange } = props
+  const resourceDescriptors = useMemo(() => reconcileImageEditorV3ResourceDescriptors(
+    controller.document, props.resourceDescriptors ?? [],
+    Object.entries(bus.getResourceByteSizes()).map(([resourceId, byteSize]) => ({ resourceId, byteSize })),
+  ), [bus, controller.document, props.resourceDescriptors])
+  const resourceByteSizes = useMemo(() => createImageEditorV3ResourceByteSizes(resourceDescriptors), [resourceDescriptors])
+
+  useEffect(() => {
+    if (!rootRef.current) return
+    const detach = attachImageEditorInteractionTraceV3(rootRef.current, controller.document.id)
+    const unsubscribe = bus.subscribe(() => traceImageEditorStageV3(
+      controller.document.id, currentImageEditorInteractionV3(controller.document.id), 'command',
+    ))
+    return () => { detach(); unsubscribe() }
+  }, [bus, controller.document.id])
 
   useEffect(() => {
     onEditorContextChange?.({
@@ -73,8 +89,8 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
             sourceImageUrl={props.sourceImageUrl}
             previewRenderer={props.previewRenderer}
             annotationOverlay={props.annotationOverlay}
-            resourceByteSizes={props.resourceByteSizes}
-            resourceDescriptors={props.resourceDescriptors}
+            resourceByteSizes={resourceByteSizes}
+            resourceDescriptors={resourceDescriptors}
             onPackageThumbnailChange={props.onPackageThumbnailChange}
             bus={bus}
             controller={controller}

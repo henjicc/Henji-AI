@@ -40,6 +40,10 @@ beforeEach(() => {
       return worker
     }
     if (url.pathname.endsWith('/imageEditorGpuScene.worker.ts')) return new FakeWorker()
+    // 空导出文档也会预热标注 Worker；该替身不能冒充 GPU Scene 或 CPU 回退线程。
+    if (url.pathname.endsWith('/vectorRaster.worker.ts')) return {
+      onmessage: null, onerror: null, postMessage: vi.fn(), terminate: vi.fn(),
+    }
     throw new Error(`未适配的测试 Worker：${url.pathname}`)
   }))
 })

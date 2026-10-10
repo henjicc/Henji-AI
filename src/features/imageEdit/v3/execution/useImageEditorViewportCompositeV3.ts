@@ -10,6 +10,7 @@ import {
 } from './imageEditorRenderSessionV3'
 import type { ImageEditorViewportTransformV3 } from './viewportTilePlannerV3'
 import { useImageEditorDisposableV3 } from './useImageEditorDisposableV3'
+import { currentImageEditorInteractionV3, traceImageEditorStageV3 } from './interactionTraceV3'
 
 const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = []
 
@@ -114,7 +115,9 @@ export function useImageEditorViewportCompositeV3(
       quality: Object.keys(snapshot.previewOverrides).length > 0 ? 'draft' : 'stable',
       resourceDescriptors: stableResourceDescriptors,
       eventTimestamp: typeof performance === 'undefined' ? Date.now() : performance.now(),
+      interactionTrace: currentImageEditorInteractionV3(document.id),
     })
+    traceImageEditorStageV3(document.id, currentImageEditorInteractionV3(document.id), 'snapshot', { renderGeneration })
   }, [
     document,
     enabled,

@@ -234,6 +234,19 @@ describe('ImageEditorV3SourceIngestor', () => {
     }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
   })
 
+  it('多兆字节剪贴板 base64 无正则栈溢出，错误字符和 padding 仍拒绝', async () => {
+    const ingestor = new ImageEditorV3SourceIngestor(resources, sourceProvider())
+    const bytes = Buffer.alloc(2 * 1024 * 1024 + 1, 137)
+    const payload = bytes.toString('base64')
+    const result = await ingestor.ingest({ kind: 'data-url', dataUrl: `data:image/png;base64,${payload}` })
+    expect(result.resource.byteLength).toBe(bytes.length)
+    await expect(fsp.readFile(resources.getFilesystemPath(result.resource.id))).resolves.toEqual(bytes)
+    for (const invalid of [`${payload.slice(0, -4)}!!!!`, 'AQ=I', 'AQI===', 'AQID\n', 'AQI']) {
+      await expect(ingestor.ingest({ kind: 'data-url', dataUrl: `data:image/png;base64,${invalid}` }))
+        .rejects.toThrow('invalid or oversized base64')
+    }
+  })
+
   it('响应头到达后，首个响应体字节超时会取消流并清理暂存文件', async () => {
     const cancel = vi.fn()
     const body = new ReadableStream<Uint8Array>({

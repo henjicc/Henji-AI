@@ -4,6 +4,7 @@ import { ImageEditorPreviewClientV3 } from '../execution/imageEditorPreviewClien
 import { acquireImageEditorSessionResourceBudgetV3 } from '../execution/imageEditorSessionResourceBudgetV3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditMemoryLease } from '@/core/imageEdit/v3/resourceBudget'
+import { reconcileImageEditorV3ResourceDescriptors } from '../application/imageEditorResourceDescriptorsV3'
 
 /** 缩略图复用正式合成 Worker，串行调度；有界缓存只淘汰派生图片，不裁图层或历史。 */
 export class ImageEditThumbnailsV3 {
@@ -41,8 +42,11 @@ export class ImageEditThumbnailsV3 {
       if (existing) return existing.url
       const document = await resolveDocument()
       signal.throwIfAborted()
+      const resourceDescriptors = reconcileImageEditorV3ResourceDescriptors(document,
+        this.controller.historyResourceDescriptors ?? [],
+        Object.entries(this.controller.historyPort?.getResourceByteSizes?.() ?? {}).map(([resourceId, byteSize]) => ({ resourceId, byteSize })))
       const result = await this.client.render({ document, quality: 'stable', maxDimension: 64,
-        resourceDescriptors: this.controller.historyResourceDescriptors ?? [] })
+        resourceDescriptors })
       let decoded: ImageBitmap | null = null
       try {
         signal.throwIfAborted()

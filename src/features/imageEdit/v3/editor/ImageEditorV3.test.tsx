@@ -90,6 +90,14 @@ function ControlledEditor({
 }
 
 describe('ImageEditorV3 professional shell', () => {
+  it('快速标记的新增图层菜单从共享登记器开放马赛克并使用默认比例', async () => {
+    const changes = vi.fn()
+    renderEditor(createDocument([createImageEditRasterLayerV3('base', '底图')]), { profileId:'quick', onDocumentChange:changes })
+    fireEvent.click(await screen.findByRole('button', {name:'添加图层'}))
+    fireEvent.click(await screen.findByRole('menuitem', {name:'马赛克'}))
+    await waitFor(() => expect(changes).toHaveBeenCalled())
+    expect(changes.mock.calls.at(-1)?.[0].layers.at(-1)).toMatchObject({type:'effect',effectId:'mosaic',params:{block_fraction_height:.02}})
+  })
   it('工具登记失败仍保留宿主关闭入口且不展示工具', async () => {
     const close = vi.fn()
     const previous = builtInToolRegistration.failed

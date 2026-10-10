@@ -7,6 +7,7 @@ import type { ImageEditorRenderSessionClientDependenciesV3 } from './imageEditor
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
+import type { ImageEditorInteractionTraceV3 } from './interactionTraceV3'
 
 export interface ImageEditorRenderSnapshotV3 {
   document: ImageEditDocumentV3
@@ -15,6 +16,7 @@ export interface ImageEditorRenderSnapshotV3 {
   quality: ImageEditRenderQuality
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
   eventTimestamp?: number
+  interactionTrace?: ImageEditorInteractionTraceV3
 }
 
 export interface ImageEditorRenderSessionDiagnosticsV3 {

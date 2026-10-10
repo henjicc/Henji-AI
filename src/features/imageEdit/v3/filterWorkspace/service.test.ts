@@ -17,6 +17,18 @@ function setup() {
   return new ImageEditCommandBusV3(document);
 }
 describe('filter workspace uses the document history', () => {
+  it.each(['content', 'below'] as const)('马赛克 %s 复用选区蒙版、比例参数和单次撤销', async scope => {
+    const bus = setup(), original = bus.getSnapshot().document
+    bus.setSelection({ operations: [], feather: 0, inverted: true })
+    const mask = createImageEditSparseMaskReferenceV3('mosaic-region'); mask.tiles['0/0/0'] = resource
+    materialize.mockResolvedValue({ mask, resources: [{ resourceId: resource, byteSize: 4096 }] })
+    const id = await addImageEditFilterV3(bus, 'top', { id: 'mosaic', kind: 'effect', title: '马赛克', titleKey: 'mosaic', available: true }, scope, '马赛克')
+    const layers = bus.getSnapshot().document.layers
+    const filter = scope === 'content' ? layers[1].filters[0] : layers[2]
+    expect(filter).toMatchObject({ id, ...(scope === 'below' ? { type: 'effect' } : {}), effectId: 'mosaic', params: { block_fraction_height: .02 }, mask: { tiles: { '0/0/0': resource } } })
+    await bus.undo(); expect(bus.getSnapshot().document.layers).toEqual(original.layers)
+    await bus.redo(); expect(bus.getSnapshot().document.layers).toEqual(layers)
+  })
   it('supports ordinary content layers, order, toggle and one-command undo', async () => {
     const bus = setup();
     const first = await addImageEditFilterV3(bus, 'top', choice, 'content', '高斯模糊');

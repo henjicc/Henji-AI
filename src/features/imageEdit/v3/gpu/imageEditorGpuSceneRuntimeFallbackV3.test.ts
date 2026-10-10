@@ -54,7 +54,7 @@ describe('ImageEditorGpuSceneRuntimeV3 fallback', () => {
     const document = createImageEditDocumentV3({ width: 16, height: 16 })
     const resourceRef = `sha256:${'a'.repeat(64)}` as const
     document.layers = [createImageEditRasterLayerV3('source', '源', resourceRef), createImageEditAdjustmentLayerV3('unknown', '未知', 'unknown-probe', {})]
-    runtime.handle({ type: 'sync-scene', sceneGeneration: 1, document, resourceDescriptors: [{ resourceRef, byteLength: 1024, mediaType: 'image/png' }] })
+    runtime.handle({ type: 'sync-scene', quality: 'stable', sceneGeneration: 1, document, resourceDescriptors: [{ resourceRef, byteLength: 1024, mediaType: 'image/png' }] })
     expect(events).toContainEqual(expect.objectContaining({ type: 'failed', code: 'composition-not-ready', recoverable: true, message: expect.stringMatching(/GPU 不支持.*unknown-probe/) }))
     runtime.dispose()
   })
@@ -72,7 +72,7 @@ describe('ImageEditorGpuSceneRuntimeV3 fallback', () => {
       compositorFactory: () => compositor,
     })
     runtime.handle(initializeRequest())
-    runtime.handle({ type: 'sync-scene', sceneGeneration: 1,
+    runtime.handle({ type: 'sync-scene', quality: 'stable', sceneGeneration: 1,
       document: createImageEditDocumentV3({ width: 16, height: 16 }), resourceDescriptors: [] })
     runtime.handle({ type: 'update-viewport', sceneGeneration: 1, cameraSequence: 1,
       layout: { stageWidth: 16, stageHeight: 16, viewportKey: 'effect-failure',
@@ -104,7 +104,7 @@ describe('ImageEditorGpuSceneRuntimeV3 fallback', () => {
       compositorFactory: () => compositor,
     })
     runtime.handle(initializeRequest())
-    runtime.handle({ type: 'sync-scene', sceneGeneration: 1,
+    runtime.handle({ type: 'sync-scene', quality: 'stable', sceneGeneration: 1,
       document: createImageEditDocumentV3({ width: 16, height: 16 }), resourceDescriptors: [] })
     await vi.waitFor(() => expect(runtime.getStatus()).toBe('ready'))
     const updateViewport = (cameraSequence: number) => runtime.handle({

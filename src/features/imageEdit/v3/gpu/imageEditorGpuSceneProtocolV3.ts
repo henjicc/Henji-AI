@@ -62,6 +62,7 @@ export interface ImageEditorGpuSceneInitializeRequestV3 {
 
 export interface ImageEditorGpuSceneSyncRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
   type: 'sync-scene'
+  quality: ImageEditRenderQuality
   document: ImageEditDocumentV3
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
   /** 主进程按资源身份读取的 EXIF 方向应用后源金字塔；不能用文档尺寸推测。 */

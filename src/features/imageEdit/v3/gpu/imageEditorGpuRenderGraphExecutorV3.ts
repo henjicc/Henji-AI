@@ -232,6 +232,8 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
           regions?.effects.has(node.nodeId) ? { input: { x: Math.round(layout.viewport.documentX * layout.viewport.zoom * layout.viewport.devicePixelRatio),
             y: Math.round(layout.viewport.documentY * layout.viewport.zoom * layout.viewport.devicePixelRatio),
             width: input.size[0], height: input.size[1] }, gaussian: regions.effects.get(node.nodeId)! } : undefined,
+          [Math.round(layout.viewport.documentX * layout.viewport.zoom * layout.viewport.devicePixelRatio),
+            Math.round(layout.viewport.documentY * layout.viewport.zoom * layout.viewport.devicePixelRatio)],
         )
         preparedEffects.push(prepared)
         operations.push({ kind: 'effect', effect: prepared })

@@ -14,6 +14,8 @@ import { colorGradeCpuV3, exposureCpuV3, curvesCpuV3, temperatureCpuV3, hslCpuV3
 import { imageEditorGpuExposureParametersV3, imageEditorGpuHslParametersV3, imageEditorGpuTemperatureMatrixV3 } from './gpuAdjustmentPacking';
 import { colorGradeSpatialSupport } from '../../imaging/adjustments/plan'
 import { resolveFastBlurV3Geometry } from './effects/fastBlur';
+import { MOSAIC_EFFECT, mosaicParameterSchema, resolveMosaicPlan, mosaicInputRegion } from '../../imaging/effects/mosaic';
+import { executeMosaicCpu } from '../../imaging/effects/cpu/mosaic';
 import {
   ImageEditRenderNodeRegistry,
   estimateRgbaTileBytes,
@@ -137,6 +139,18 @@ const sharedBindings = new Map<string, ImageEditSharedEffectBindingV3>([[GAUSSIA
     return Math.max(...plan.halo);
   },
   estimateBytes: context => estimateRgbaTileBytes(context, 3),
+}], [MOSAIC_EFFECT.id, {
+  cpu: (node, source, mask, context) => {
+    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
+    const plan = resolveMosaicPlan(mosaicParameterSchema.parse(imageEditOperationParametersV3(node.parameters)), context);
+    const data = executeMosaicCpu(plan, { ...context.inputRegion, data: linear.data }, context.outputRegion);
+    return mixProcessedWithMask(cropImageEditRgbaRegionV3(linear, context.inputRegion, context.outputRegion),
+      createFloat32PremultipliedRgbaTile(context.outputRegion.width, context.outputRegion.height, 'linear-light', data, linear.workingSpace, linear.transferFunction, linear.referenceWhiteNits), mask);
+  },
+  inputRegion: (parameters, context, output) => mosaicInputRegion(resolveMosaicPlan(mosaicParameterSchema.parse(imageEditOperationParametersV3(parameters)), context), output),
+  localHalo: (parameters, mip) => Math.ceil(Number((parameters as Record<string, unknown>).referenceHeight) * Number((parameters as Record<string, unknown>).block_fraction_height) / 2 ** mip),
+  gpu: { kind: 'effect', kernel: 'mosaic' },
+  estimateBytes: context => estimateRgbaTileBytes(context, 2),
 }]]);
 
 /** 剥离宿主运行参数后仍用严格共享 schema；未知作品参数在正式写入处拒绝。 */

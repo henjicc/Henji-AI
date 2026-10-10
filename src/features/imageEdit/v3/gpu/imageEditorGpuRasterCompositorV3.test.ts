@@ -22,6 +22,7 @@ import {
   type ImageEditorGpuBaselineFixtureV3,
 } from '../testing/imageEditorGpuBaselineV3'
 import { ImageEditorGpuRasterCompositorV3 } from './imageEditorGpuRasterCompositorV3'
+import { createImageEditorGpuPyramidDescriptorV3 } from './imageEditorGpuTilePlannerV3'
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
 import type { ImageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocolV3'
 import { imageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocolV3'
@@ -37,6 +38,40 @@ beforeAll(async () => {
 afterAll(() => gpu?.dispose())
 
 describe('ImageEditorGpuRasterCompositorV3（真实 WebGPU）', () => {
+  it('相机改变时先呈现已有低 mip，并在精细瓦片到达后退出预览；不复用其他内容版本', async () => {
+    const resourceRef = `sha256:${'b'.repeat(64)}` as const
+    const document = createImageEditDocumentV3({ width: 64, height: 64 })
+    document.layers = [createImageEditRasterLayerV3('source','原图',resourceRef)]
+    const compiled = compileImageEditorGpuRasterSceneV3(document, [{ resourceRef, byteLength: 16384, mediaType: 'image/png' }], { [resourceRef]: createImageEditorGpuPyramidDescriptorV3(64,64) })
+    if (!compiled.supported) throw new Error(compiled.reason)
+    const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+    const cached = new Map<string, ReturnType<typeof compositor.uploadTile>>()
+    const resolve = (key: ImageEditorGpuSceneTileKeyV3) => cached.get(imageEditorGpuSceneTileKeyV3(key)) ?? null
+    const layout = (zoom: number) => ({ stageWidth: 32, stageHeight: 32, viewportKey: String(zoom), viewport: { width: 32, height: 32, documentX: 0, documentY: 0, zoom, devicePixelRatio: 1 } })
+    const upload = (key: ImageEditorGpuSceneTileKeyV3) => {
+      const size = 64 / 2 ** key.mip
+      const pixels = new Uint8Array(size * size * 4).fill(255)
+      cached.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key, { resourceRef, mip: key.mip, tileX: 0, tileY: 0, width: size, height: size, halo: 0,
+        channels: 4, bitDepth: 8, sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian', rowStride: size * 4, colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight', orientationApplied: true, originX: 0, originY: 0, pixels: pixels.buffer }))
+    }
+    try {
+      compositor.syncScene(compiled.scene); compositor.updateViewport(layout(.5))
+      compositor.requiredResourceKeys().forEach(upload)
+      compositor.updateViewport(layout(1))
+      const missing = compositor.missingResources(resolve)
+      expect(missing.length).toBeGreaterThan(0); expect(missing.every(key => key.mip === 0)).toBe(true)
+      expect(compositor.canRenderPreview(resolve)).toBe(true)
+      const preview = await compositor.readLinearPixelsForTest(resolve)
+      expect(preview[(10 * 32 + 10) * 4]).toBeCloseTo(1, 3)
+      expect(compositor.snapshotStats().previewFallback).toBe(true)
+      missing.forEach(upload); expect(compositor.missingResources(resolve)).toEqual([])
+      const final = await compositor.readLinearPixelsForTest(resolve)
+      expect(final[(10 * 32 + 10) * 4]).toBeCloseTo(1, 3)
+      expect(compositor.snapshotStats().previewFallback).toBe(false)
+      expect(compositor.missingResources(() => null).length).toBeGreaterThan(0)
+      expect(compositor.canRenderPreview(() => null)).toBe(false)
+    } finally { for (const value of cached.values()) value.destroy(); compositor.dispose() }
+  })
   it('64像素白图改变视口尺寸后呈现重绑真实纹理，后续导出不受过期绑定污染', async () => {
     const output = target(gpu, { size: [64, 64], format: 'rgba16float' })
     const presentation = new ImageEditorGpuRasterPresentationV3(gpu, () => undefined)

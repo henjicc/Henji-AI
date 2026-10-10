@@ -47,6 +47,19 @@ function json(value: unknown): ImageEditJsonObjectV3 {
   return JSON.parse(JSON.stringify(value)) as ImageEditJsonObjectV3
 }
 
+it('马赛克缩小网格按完整文档缩放计费，局部视口额外保留跨块边缘', () => {
+  const source = `sha256:${'f'.repeat(64)}` as const
+  const document = createImageEditDocumentV3({ width: 3840, height: 2160 })
+  document.layers = [createImageEditRasterLayerV3('source', '源', source),
+    createImageEditEffectLayerV3('mosaic', '马赛克', 'mosaic', { block_fraction_height: .04 })]
+  const compiled = compileImageEditorGpuRasterSceneV3(document, [{ resourceRef: source, byteLength: 3840 * 2160 * 4, mediaType: 'image/png' }])
+  if (!compiled.supported) throw new Error(compiled.reason)
+  const conservative = estimateImageEditorGpuGraphResidentBytesV3(compiled.scene, [1251, 1124])
+  const precise = estimateImageEditorGpuGraphResidentBytesV3(compiled.scene, [1251, 1124], undefined, .5)
+  const block = Math.round(.04 * 2160 * .5)
+  expect(conservative - precise).toBe(1251 * 1124 * 8 - (Math.ceil(1251 / block) + 1) * (Math.ceil(1124 / block) + 1) * 8)
+})
+
 it('高斯预算保留完整 halo，并随完整输出网格缩小', () => {
   const source = `sha256:${'b'.repeat(64)}` as const
   const estimate = (radius: number, mip: number): number => {

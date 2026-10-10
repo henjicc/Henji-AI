@@ -6,6 +6,9 @@ import { effect, target, type Effect, type Gpu, type Target, type Texture } from
 
 import type { ImageEditorGpuGraphEffectNodeV3 } from './imageEditorGpuRasterSceneCompilerV3'
 import { ImageEditorGpuFastBlurRendererV3 } from './imageEditorGpuFastBlurRendererV3'
+import { ImageEditorGpuMosaicRendererV3 } from './imageEditorGpuMosaicRendererV3'
+import { mosaicParameterSchema, resolveMosaicPlan } from '@/core/imaging/effects/mosaic'
+import { imageEditOperationParametersV3 } from '@/core/imageEdit/v3/renderContracts/operationParameters'
 import { ImageEditorGpuDiffusionRendererV3 } from './imageEditorGpuDiffusionRendererV3'
 import { ImageEditorGpuGlowRendererV3 } from './imageEditorGpuGlowRendererV3'
 import { ImageEditorGpuGaussianBlurRendererV3 } from './imageEditorGpuGaussianBlurRendererV3'
@@ -73,6 +76,7 @@ export class ImageEditorGpuEffectExecutorV3 {
     documentColor?: ImageEditColorModeV3,
     evaluation?: EffectEvaluationContext,
     region?: { input: GaussianRegion; gaussian: ImageEditorGpuGaussianRegionV3 },
+    origin: readonly [number, number] = [0, 0],
   ): ImageEditorGpuPreparedEffectV3 {
     const dependencies = [input, mask, evaluation?.quality, evaluation?.outputSize.width, evaluation?.outputSize.height]
     const existing = this.retained.get(node.nodeId)
@@ -94,7 +98,7 @@ export class ImageEditorGpuEffectExecutorV3 {
     output.resize(input.size)
     const processedOutput = direct ? output : this.targets.full(2, input.size)
     const processed = binding.prepare(renderer, { node, input, output: processedOutput,
-      scale: outputPixelsPerDocumentPixel, recipeSize: effectRecipeSize, color: documentColor, evaluation, region })
+      scale: outputPixelsPerDocumentPixel, recipeSize: effectRecipeSize, color: documentColor, evaluation, region, origin })
     const finalOutput = direct ? processed : output
     const ownsOutput = finalOutput === output
     if (!ownsOutput) output.color.destroy()
@@ -186,6 +190,7 @@ interface EffectKernelPreparation {
   color?: ImageEditColorModeV3;
   evaluation?: EffectEvaluationContext;
   region?: { input: GaussianRegion; gaussian: ImageEditorGpuGaussianRegionV3 };
+  origin: readonly [number, number];
 }
 interface EffectKernelBinding {
   create(gpu: Gpu, targets: ImageEditorGpuEffectTargetPoolV3, compiled: () => void): ImageEditorGpuTargetEffectRendererV3;
@@ -193,6 +198,19 @@ interface EffectKernelBinding {
 }
 /** 绑定 GPU 宿主 ABI，与 operation ID 无关；未知 kernel 明确失败。 */
 const EFFECT_KERNELS: Readonly<Record<string, EffectKernelBinding>> = {
+  mosaic: {
+    create: (gpu, _pool, compiled) => new ImageEditorGpuMosaicRendererV3(gpu, compiled),
+    prepare: (renderer, context) => {
+      if (!context.evaluation) throw new Error('GPU 马赛克缺少完整文档网格')
+      const plan = resolveMosaicPlan(mosaicParameterSchema.parse(imageEditOperationParametersV3(context.node.parameters)), {
+        ...context.evaluation, outputSize: {
+          width: Math.max(1, Math.round(context.evaluation.referenceSize.width * context.scale)),
+          height: Math.max(1, Math.round(context.evaluation.referenceSize.height * context.scale)),
+        },
+      })
+      return (renderer as ImageEditorGpuMosaicRendererV3).prepare(context.input, context.output, plan, context.origin)
+    },
+  },
   gaussian: {
     create: (gpu, pool, compiled) => new ImageEditorGpuGaussianBlurRendererV3(gpu, pool, compiled),
     prepare: (renderer, context) => {

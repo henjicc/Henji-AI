@@ -39,7 +39,7 @@ export function PaintOptionsV3({ controller }: ToolOptionsProps): JSX.Element | 
   const mask = session.editTarget === 'mask' || session.activeTool === 'mask-edit';
   return <div data-paint-options className="flex h-full min-w-max items-center gap-3">
     <Dropdown size="sm" value={mask ? 'mask' : 'pixels'} display={label(mask ? 'mask' : 'pixels')}
-      options={(['pixels', 'mask'] as const).map(value => ({ value, label: label(value) }))}
+      options={(['pixels', 'mask'] as const).filter(value => value !== 'pixels' || controller.profile.tools.some(tool => tool.id === 'raster-brush' && tool.readiness.state === 'ready')).map(value => ({ value, label: label(value) }))}
       onSelect={value => { store.setEditTarget(controller.sessionId, value as 'pixels' | 'mask'); if (value === 'pixels' && session.activeTool === 'mask-edit') store.setActiveTool(controller.sessionId, 'raster-brush'); }} />
     {session.activeTool === 'mask-edit' && <Dropdown size="sm" value={settings.maskMode} display={label(settings.maskMode)}
       options={(['paint', 'erase'] as const).map(value => ({ value, label: label(value) }))}
