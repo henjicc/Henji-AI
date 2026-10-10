@@ -41,7 +41,9 @@ export class FontService {
     const changed = JSON.stringify(result.faces) !== JSON.stringify(this.faces)
     this.faces = result.faces
     if (changed) { this.revision++; for (const window of BrowserWindow.getAllWindows()) window.webContents.send(FONTS_IPC.changed) }
-    if (result.failures.length) logger.warn('部分字体无法读取', { event: 'fonts.scan.partial', context: { failures: result.failures } })
+    // OS directories can contain unsupported or damaged font files. A catalog scan skips those
+    // candidates; explicit import/read failures still use their existing error paths.
+    if (result.failures.length) logger.debug('字体目录中跳过不可解析的文件', { event: 'fonts.scan.partial', context: { failures: result.failures } })
     const roots = fontDirectories()
     for (const directory of new Set([...roots, this.library, ...this.faces.map(face => path.dirname(face.path))])) {
       if (this.watched.has(directory)) continue

@@ -4,11 +4,12 @@ const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeomet
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
+const { buildSync } = require('esbuild')
 const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { observeNativeWaveforms, nativeWaveformSnapshot, waitNativeWaveformsReleased, restoreNativeWaveformObservers } = require('./uiInspectionSceneVideoEditMonitorResources.cjs')
-const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
+const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, seedVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const panel = (page, id) => page.locator(`[data-video-edit-panel="${id}"]`).first()
@@ -131,34 +132,41 @@ function createVideoEditMonitorScene() {
         const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
         evidence.currentPhase = '生成并探测独立音视频控制样本'; store()
         const controls = generatedControls(root, ffmpegPath, ffprobePath); evidence.controls = controls
-        const project = readProject(path.resolve('node_modules/.cache/video-edit-code-controls/code-project.henji-video'))
-        const pressure = readProject(path.resolve('node_modules/.cache/video-edit-scrub-original/scrub.henji-video'))
-        const originalPaths = [...new Set([...project.media, ...pressure.media].map(media => media.path))]
-        evidence.originalPaths = originalPaths.map(file => ({ file, size: fs.statSync(file).size, mtimeMs: fs.statSync(file).mtimeMs }))
-        const pressureProbe = mediaProbe(ffprobePath, pressure.media.find(media => media.kind === 'video').path)
+        // Prior scenes are media sources only; their cached document schemas are not monitor fixtures.
+        const previousMedia = readProject(path.resolve('node_modules/.cache/video-edit-code-controls/code-project.henji-video')).media
+        const original = readProject(path.resolve('node_modules/.cache/video-edit-scrub-original/scrub.henji-video')).media.find(media => media.kind === 'video')
+        const pressureProbe = mediaProbe(ffprobePath, original.path)
         assert.ok(!pressureProbe.streams.some(stream => stream.codec_type === 'audio'), '原 intro4K60 已确认无音轨，不能伪造 hasAudio')
         const pressureVideo = pressureProbe.streams.find(stream => stream.codec_type === 'video')
         assert.equal(pressureVideo.width, 3840); assert.equal(pressureVideo.height, 2160); assert.equal(pressureVideo.avg_frame_rate, '60/1')
         evidence.originalVideoProbe = pressureProbe
-        project.id = 'monitor-mixed'; project.name = '源范围与字幕真实混剪'; project.revision = 0; project.sequences = [project.sequences[0]]
-        const sequence = project.sequences[0]; sequence.id = 'monitor-sequence'; sequence.name = '4K60 音画与字幕'; sequence.annotations = []; sequence.captions = []; sequence.markers = []
-        sequence.sampleRate = 48000; sequence.channels = 2
-        sequence.tracks = Array.from({ length: 8 }, (_, index) => ({ id: `monitor-track-${index}`, index, name: index === 0 ? '单声道声音' : index === 1 ? '立体声声音' : index === 7 ? '源声音目标' : index === 6 ? '源画面目标' : `画面 ${index}`, kind: [0, 1, 7].includes(index) ? 'audio' : 'video', locked: false, enabled: true, muted: false, solo: false, height: 32, syncLocked: true }))
-        sequence.clips.forEach(clip => { if (clip.track > 0) clip.track++ })
+        const factoryFile = path.join(root, 'fixture-factory.cjs')
+        buildSync({ entryPoints: [path.join(__dirname, 'uiInspectionVideoEditMonitorFixtures.ts')], bundle: true, platform: 'node', format: 'cjs', packages: 'external', outfile: factoryFile })
+        delete require.cache[factoryFile]
+        const { dynamicSource, staticSource } = require('./uiInspectionVideoEditCodeControls.cjs')
+        const { project, pressure } = require(factoryFile).createMonitorFixtures(root, previousMedia, original, [dynamicSource, staticSource])
+        // Code readers authorize the owning project's 代码 directory, not a cache fixture folder.
+        // Publish through the same document API as the editor before opening the seeded project.
+        const seeded = await seedVideoEditProject(page, project)
+        project.codeMaterials = await page.evaluate(async ({ id, definitions, sources }) => {
+          const documents = window.henjiNative.documents
+          for (const [index, definition] of definitions.entries()) {
+            const version = definition.versions[0]
+            const written = await documents.writeCodeVersion({ target: { id }, definitionId: definition.id, name: definition.name,
+              contents: { entry: 'main.ts', files: { 'main.ts': sources[index] } } })
+            definition.folder = written.folder; version.files = written.files
+          }
+          return definitions
+        }, { id: seeded.documentId, definitions: project.codeMaterials, sources: [dynamicSource, staticSource] })
+        const originalPaths = [...new Set([...project.media, ...pressure.media].map(media => media.path))]
+        evidence.originalPaths = originalPaths.map(file => ({ file, size: fs.statSync(file).size, mtimeMs: fs.statSync(file).mtimeMs }))
+        const sequence = project.sequences[0]; const pressureSequence = pressure.sequences[0]
         const baseVideo = sequence.clips.find(clip => clip.kind === 'video'); const baseAudio = sequence.clips.find(clip => clip.kind === 'audio')
         const basePaths = project.media.map(media => media.path); const codeSources = project.codeMaterials.map(material => material.versions)
         assert.equal(sequence.width, 3840); assert.equal(sequence.height, 2160); assert.deepEqual(sequence.frameRate, { numerator: 60, denominator: 1 })
         for (const media of project.media.filter(media => media.kind === 'video')) media.hasAudio = mediaProbe(ffprobePath, media.path).streams.some(stream => stream.codec_type === 'audio')
-        fs.writeFileSync(file, JSON.stringify(project))
-        pressure.id = 'monitor-pressure'; pressure.name = '监视器32轨500片段原素材4K60'; pressure.revision = 0
-        pressure.sequences = [pressure.sequences[0]]; const pressureSequence = pressure.sequences[0]; pressureSequence.id = 'monitor-pressure-sequence'
-        pressure.media.forEach(media => { if (media.kind === 'video') { media.hasAudio = false; media.frameRate = { numerator: 60, denominator: 1 } } })
-        pressureSequence.tracks = Array.from({ length: 32 }, (_, index) => ({ id: `monitor-pressure-track-${index}`, name: index ? `视频 ${index}` : '音频 1', index, kind: index ? 'video' : 'audio', locked: false, enabled: true, muted: false, solo: false, height: 32, syncLocked: true }))
-        assert.equal(pressureSequence.clips.length, 3)
-        pressureSequence.clips.push(...Array.from({ length: 497 }, (_, index) => ({ ...pressureSequence.clips[0], id: `monitor-offscreen-${index}`, start: 3600 + index * 4, duration: 2, track: 31 })))
-        pressureSequence.captions = Array.from({ length: 500 }, (_, index) => ({ id: `monitor-caption-${index}`, start: 7200 + index * 2, duration: 1, text: `范围字幕 ${index}` }))
-        fs.writeFileSync(pressureFile, JSON.stringify(pressure))
-        const open = async target => { await dialogs(app, [target], target); await openVideoEditFile(page, target); await presented(page, 0) }
+        fs.writeFileSync(file, JSON.stringify(project)); fs.writeFileSync(pressureFile, JSON.stringify(pressure))
+        const open = async target => { evidence.currentOpen = target; store(); await dialogs(app, [target], target); await openVideoEditFile(page, target); await presented(page, 0); delete evidence.currentOpen }
         await button(page, '剪辑').click()
         if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click()
@@ -414,12 +422,15 @@ function createVideoEditMonitorScene() {
           if (activeSubtitleFrames.includes(value)) { assert.ok(difference.changedChannels > 1000 && difference.maximumDelta > 10, '字幕首帧、内部和末帧必须实际烧录中文像素'); const outside = await pixelDifference(current.file, bareFrames.get(value).file, { left: 0, top: 0, width: 3840, height: 1300 }); assert.ok(outside.equal, '字幕不能改变范围外的画面') }
           else assert.ok(difference.equal, '半开字幕范围的前一帧和出点帧不能残留字幕')
         }
-        const srtOutput = path.join(root, 'captions.srt'); const vttOutput = path.join(root, 'captions.vtt')
+        const srtOutput = path.join(root, `captions-${Date.now()}.srt`); const exportDirectory = path.join(seeded.projectPath, '导出')
         await dialogs(app, [file], srtOutput); await button(content, '导入或导出字幕').click(); await page.getByRole('menuitem', { name: '导出 SRT（序列时间）', exact: true }).click()
         await poll(page, async () => fs.existsSync(srtOutput) ? fs.readFileSync(srtOutput, 'utf8') : '', value => value.includes('Agent 字幕 · 中文验收'), '手动SRT导出未写出')
-        await dialogs(app, [file], vttOutput)
+        const previousVtt = new Set(fs.existsSync(exportDirectory) ? fs.readdirSync(exportDirectory) : [])
         const subtitleExport = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, format: 'vtt' }))
         assert.equal(subtitleExport.executionState, 'completed', JSON.stringify(subtitleExport)); assert.equal(subtitleExport.verificationState, 'verified', JSON.stringify(subtitleExport))
+        const createdVtt = fs.readdirSync(exportDirectory).filter(name => name.endsWith('.vtt') && !previousVtt.has(name))
+        assert.equal(createdVtt.length, 1, '公共字幕导出须在当前项目产生一份新文件，不能读取前次缓存')
+        const vttOutput = path.join(exportDirectory, createdVtt[0])
         const srt = fs.readFileSync(srtOutput, 'utf8'); const vtt = fs.readFileSync(vttOutput, 'utf8')
         assert.match(srt, /00:00:00,533 --> 00:00:01,467/); assert.match(vtt, /00:00:00\.533 --> 00:00:01\.467/); assert.ok(vtt.startsWith('WEBVTT'))
         assert.match(srt, /00:00:02,000 --> 00:00:02,500/); assert.match(vtt, /00:00:02\.000 --> 00:00:02\.500/)
@@ -427,7 +438,9 @@ function createVideoEditMonitorScene() {
         document = await saved(page, file, value => value.sequences[0].markers[0].frame === 46 && value.sequences[0].captions[0].text === 'Agent 字幕 · 中文验收')
         assert.deepEqual(document.codeMaterials.map(material => material.versions), codeSources, '字幕编辑不得修改固定作者源码')
         assert.ok(!document.sequences[0].clips.some(clip => clip.id.startsWith('caption:')), '烧录用合成文字片段不能进入持久工程')
-        const snapshot = structuredClone(document); await shot('monitor-caption-and-marker-agent-loop')
+        const snapshot = structuredClone(document)
+        await page.getByRole('menu', { name: '字幕文件', includeHidden: true }).waitFor({ state: 'detached' }); await frame(60)
+        await shot('monitor-caption-and-marker-agent-loop')
         await button(page, '关闭项目').click(); await waitReleased(page); await waitNativeWaveformsReleased(app, page); await open(file)
         assert.deepEqual(readProject(file), snapshot); await frame(60)
         const reopen = await png(page, path.join(root, 'caption-reopened-60.png')); assert.ok((await pixelDifference(reopen.file, path.join(root, 'caption-boundary-60.png'))).equal)
@@ -437,14 +450,21 @@ function createVideoEditMonitorScene() {
         for (const value of subtitleFrames) { await frame(value); previewFrames.set(value, await png(page, path.join(root, `preview-${value}.png`))) }
         for (const settings of [{ rate: 48000, channels: 2 }, { rate: 44100, channels: 1 }]) {
           if (settings.rate !== 48000) await change(sequenceRef, { 'video_edit.sequence.sample_rate': settings.rate, 'video_edit.sequence.channels': settings.channels })
-          const output = path.join(root, `caption-4k60-${settings.rate}-${settings.channels}-${Date.now()}.mp4`)
+          let output = path.join(root, `caption-4k60-${settings.rate}-${settings.channels}-${Date.now()}.mp4`)
           await dialogs(app, [file], output)
           const startedAt = performance.now()
+          let submittedJobId
           if (settings.rate === 48000) await confirmVideoEditExport(page, () => shot('monitor-export-dialog'))
           // 完整 settings 严格校验、不做设备适配；H.264 4K60 在部分设备上只有软件编码可用，这里显式选软件编码。
-          else { const result = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, exports: [{ settings: { ...(await read({ kind: 'video_edit.export_preset', id: 'builtin:sequence' }, ['video_edit.export_preset.settings'])).data.properties['video_edit.export_preset.settings'], loudness: null, captionMode: 'burn', encoderPreference: 'software' } }] })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
-          const task = await poll(page, () => callTool(client, 'query_video_edit_export', { documentRef: projectRef }), value => ['completed', 'failed', 'cancelled'].includes(value.data.task?.state), '正式视频导出没有结束', 2400)
+          else { const result = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.document.name'])], { documentRef: projectRef, exports: [{ settings: { ...(await read({ kind: 'video_edit.export_preset', id: 'builtin:sequence' }, ['video_edit.export_preset.settings'])).data.properties['video_edit.export_preset.settings'], loudness: null, captionMode: 'burn', encoderPreference: 'software' } }] })); assert.equal(result.executionState, 'completed', JSON.stringify(result)); submittedJobId = result.result.data.queue[0].id }
+          const task = await poll(page, () => callTool(client, 'query_video_edit_export', { documentRef: projectRef }), value => ['completed', 'failed', 'cancelled'].includes(submittedJobId ? value.data.queue.find(job => job.id === submittedJobId)?.state : value.data.task?.state), '本次正式视频导出没有结束', 2400)
           assert.equal(task.data.task.state, 'completed', JSON.stringify(task))
+          if (submittedJobId) {
+            const job = task.data.queue.find(job => job.id === submittedJobId)
+            assert.equal(job.state, 'completed'); assert.equal(job.taskId, task.data.task.id); assert.ok(job.assetRef)
+            const asset = await page.evaluate(id => window.henjiNative.assetLibrary.inspectAsset(id), job.assetRef.id)
+            assert.equal(asset.inspectionStatus, 'ready'); output = asset.filePath
+          }
           const metadata = mediaProbe(ffprobePath, output); const video = metadata.streams.find(stream => stream.codec_type === 'video'); const audio = metadata.streams.find(stream => stream.codec_type === 'audio')
           assert.equal(video.width, 3840); assert.equal(video.height, 2160); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 180)
           assert.equal(Number(audio.sample_rate), settings.rate); assert.equal(audio.channels, settings.channels); assert.ok(Math.abs(Number(metadata.format.duration) - 3) < .1)
