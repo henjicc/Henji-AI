@@ -11,7 +11,7 @@ import { createMultiLayerDocumentExportCanvasPort, createMultiLayerDocumentProje
 
 import { requireCanvasProjectInstance } from './canvasProjectInstances';
 const release = vi.hoisted(() => vi.fn(async () => undefined))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ image: { releaseLayerStackResources: release } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ image: { releaseLayerStackResources: release } }) }))
 
 const oldSession = {
   kind: 'image-edit-v3' as const,

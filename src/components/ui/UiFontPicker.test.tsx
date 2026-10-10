@@ -7,7 +7,7 @@ import { UiFontPicker } from './UiFontPicker'
 import { loadFontLibrary, fontLibrarySnapshot } from '@/platform/fonts'
 
 const boundary = vi.hoisted(() => ({ faces: [] as FontFaceInfo[], saved: vi.fn(), read: vi.fn(), imported: vi.fn(), removed: vi.fn() }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({
   fonts: { list: async () => ({ faces: boundary.faces, revision: 1 }), onChanged: () => () => undefined, readFace: boundary.read, importFiles: boundary.imported, remove: boundary.removed },
   settings: { get: async () => null, set: boundary.saved },
 }) }))

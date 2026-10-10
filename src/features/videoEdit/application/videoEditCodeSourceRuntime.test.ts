@@ -3,7 +3,7 @@ import type { CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 
 const mocks = vi.hoisted(() => ({ install: vi.fn(), read: vi.fn() }))
 vi.mock('@/core/videoEdit/codeMaterial/sources', () => ({ installCodeSourceReader: mocks.install }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ documents: { readCodeFile: mocks.read } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ documents: { readCodeFile: mocks.read } }) }))
 
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
 

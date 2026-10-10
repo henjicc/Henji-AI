@@ -12,7 +12,7 @@ vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
   deleteImageEditorV3DocumentIfRevision: mocks.deleteIfRevision,
 }))
-vi.mock('@/platform/runtime', () => ({
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false,
   isUiInspectionReadOnly: () => true,
   getPlatform: () => ({ imageEditorV3: { collectGarbage: mocks.collectGarbage } }),
 }))

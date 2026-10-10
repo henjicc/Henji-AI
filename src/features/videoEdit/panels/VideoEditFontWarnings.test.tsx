@@ -6,7 +6,7 @@ import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 import { VideoEditFontWarnings } from './VideoEditFontWarnings'
 const boundary = vi.hoisted(() => ({ imported: vi.fn(), warn: vi.fn() }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ fonts: { list: async () => ({ faces: [], revision: 0 }), importFiles: boundary.imported, onChanged: () => () => undefined }, settings: { get: async () => null } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ fonts: { list: async () => ({ faces: [], revision: 0 }), importFiles: boundary.imported, onChanged: () => () => undefined }, settings: { get: async () => null } }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: boundary.warn, error: vi.fn() }) }))
 afterEach(cleanup)
 it('工程及导出共用缺字体提示，包含字体、受影响字幕和回退，导入后提示消失', async () => {

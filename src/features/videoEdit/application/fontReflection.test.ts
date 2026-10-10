@@ -9,7 +9,7 @@ import { changedVideoEditFonts, validateVideoEditFontChanges } from './videoEdit
 import { createVideoEditDocument, createVideoEditSequence, type VideoEditClip } from '@/core/videoEdit/document'
 import { defaultVideoEditTextStyle } from '@/core/videoEdit/text'
 
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ fonts: { list: async () => ({ revision: 1, faces: [{ ...GENERIC_FONT_FACES[0], id: 'cjk', family: 'MyFont', localizedFamily: '我的字体', fullName: 'MyFont Regular', imported: true }] }), onChanged: () => () => undefined }, settings: { get: async () => null } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ fonts: { list: async () => ({ revision: 1, faces: [{ ...GENERIC_FONT_FACES[0], id: 'cjk', family: 'MyFont', localizedFamily: '我的字体', fullName: 'MyFont Regular', imported: true }] }), onChanged: () => () => undefined }, settings: { get: async () => null } }) }))
 it('只读 font 实体支持分页和名称/分类/中文字形筛选，不暴露文件路径', async () => {
   const registry = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION); registry.register(createFontRegistration())
   const access = { exposure: 'assistant' as const, permissions: new Set(['video_edit:read']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }

@@ -9,7 +9,7 @@ import { derivedMediaStateKey } from '@/core/params/derivedMediaState'
 import { UI_FIELD_INLINE_ROW_CLASS, UiFieldLayoutContext } from '@/components/ui'
 import { DerivedMediaParamControl } from './DerivedMediaParamControl'
 
-vi.mock('@/platform/runtime', () => ({ isUiInspectionReadOnly: () => true }))
+vi.mock('@/platform/runtime', () => ({ isUiInspectionReadOnly: () => true, isDesktopRuntime: () => false }))
 vi.mock('@/features/maskEditor', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/features/maskEditor')>()
   const { useUiFieldLayout } = await import('@/components/ui')
