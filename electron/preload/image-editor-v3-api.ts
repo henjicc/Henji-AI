@@ -93,6 +93,9 @@ export function createImageEditorV3Api(
   nativePostMessage?: NativePostMessage,
 ): ImageEditorV3Platform {
   return {
+    writeLayoutResource: request => nativeInvoke('imageEditorV3:layout:write', request),
+    readLayoutResource: request => nativeInvoke('imageEditorV3:layout:read', request),
+    releaseLayoutResources: request => nativeInvoke('imageEditorV3:layout:release', request),
     selectRasterRegion: request => nativeInvoke('imageEditorV3:selection:infer', request),
     repairRaster: request => nativeInvoke('imageEditorV3:repair:run', request),
     readRepairProgress: request => nativeInvoke('imageEditorV3:repair:progress', request),

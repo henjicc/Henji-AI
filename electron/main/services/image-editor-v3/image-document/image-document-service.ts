@@ -43,7 +43,6 @@ import {
   parseImageDocumentHeaderBytes,
   serializeImageDocumentHeader,
   summarizeImageEditDocument,
-  withImageEditDocumentId,
   type HenjiImageDocumentHeader,
 } from './header'
 import { readImageDocumentPackageHeader } from './package-file'
@@ -492,9 +491,10 @@ export class ImageDocumentService {
       }
       const header = imported.documentHeader ? parseImageDocumentHeaderBytes(imported.documentHeader) : legacyImageDocumentHeader(imported.manifest.document, imported.manifest.createdAt)
       if (header.id !== id) throw new DocumentNotFoundError(id)
-      const envelope = withImageEditDocumentId(imported.manifest.document, id)
-      this.options.validateDocument(envelope)
-      const working = await this.options.documents.replace(envelope)
+      const rebound = await this.options.documents.rebind(imported.manifest.document, id)
+      try {
+      this.options.validateDocument(rebound.envelope)
+      const working = await this.options.documents.replace(rebound.envelope)
       await this.options.links.write({
         documentId: id, packageRevision: located.header.revision, fileSize: located.fileSize, fileModifiedAt: located.fileModifiedAt, committedWorkingRevision: working.revision,
       })
@@ -507,6 +507,7 @@ export class ImageDocumentService {
       }
       this.logger.info('图片文档已解包到工作副本', { event: 'image_document.import.completed', context: { documentId: id, revision: working.revision, legacy: located.legacy } })
       return working
+      } finally { await rebound.release() }
     } finally {
       await imported.resourceLease.release()
     }

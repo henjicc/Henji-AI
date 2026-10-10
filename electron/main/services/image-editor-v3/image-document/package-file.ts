@@ -2,6 +2,12 @@ import { parsePersistenceJson, upgradeStoredFile } from '../../persistence/store
 import { ZipArchive } from 'archiver'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { ContentAddressedResourceStore } from '../resource-store'
+import { importHenjiImagePackage } from '../package-import'
+import { exportHenjiImagePackage } from '../package-export'
+import { rebindImageLayoutDocument } from '../layout-rebind'
 import type { Readable } from 'node:stream'
 import type * as yauzl from 'yauzl'
 
@@ -137,6 +143,23 @@ export async function rewriteImageDocumentPackageHeader(
     id: nextId,
     draft: nextDraft,
     updatedAt: now().toISOString(),
+  }
+  if (nextId !== current.header.id) {
+    // Use the existing streaming archive path so page digests, history and manifest stay atomic.
+    const temporary = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-image-rebind-'))
+    try {
+      const store = new ContentAddressedResourceStore(path.join(temporary, 'resources'))
+      const imported = await importHenjiImagePackage({sourcePath:filePath,resourceStore:store,restoreHistory:false})
+      try {
+        const rebound = await rebindImageLayoutDocument(imported.manifest.document,nextId,store)
+        try {
+          await exportHenjiImagePackage({targetPath:filePath,document:rebound.envelope,resourceStore:store,documentHeader:serializeImageDocumentHeader(header),
+            externalSources:imported.manifest.externalSources,
+            ...(imported.thumbnail&&imported.manifest.thumbnail?{thumbnail:{bytes:imported.thumbnail,mediaType:imported.manifest.thumbnail.mediaType,extension:imported.manifest.thumbnail.mediaType.slice('image/'.length)}}:{})})
+        } finally {await rebound.release()}
+      } finally {await imported.resourceLease.release()}
+    } finally {await fsp.rm(temporary,{recursive:true,force:true})}
+    return header
   }
   const stagedPath = stagedPackagePathFor(filePath)
   const archive = await openZip(filePath)

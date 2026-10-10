@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "id": "align",
+  "label": "按真实边缘整理",
+  "identity": {
+    "sourceDraftDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "algorithmVersion": "image-layout/1",
+    "requestKey": "layout:0",
+    "ownerRef": {
+      "kind": "image_edit.document",
+      "id": "v3:golden-image"
+    },
+    "targetBases": [
+      {
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-layer"
+        },
+        "baseDigest": "sha256:54f89a1ba44fa5b5cbbc7fb1b26a5a273288b7b586652ef828ccf31ee8bc1835",
+        "geometryDigest": "sha256:bb75bc6e199ca5c3fa9089f7b1b4b0922b90f68facf17833ff9206eabb39d081"
+      },
+      {
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-quick-marks"
+        },
+        "baseDigest": "sha256:54f89a1ba44fa5b5cbbc7fb1b26a5a273288b7b586652ef828ccf31ee8bc1835",
+        "geometryDigest": "sha256:bb75bc6e199ca5c3fa9089f7b1b4b0922b90f68facf17833ff9206eabb39d081"
+      },
+      {
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-smart-instance"
+        },
+        "baseDigest": "sha256:fbd55258720720a217495099d5dae92113dcedcd855a5a3ebc8528110dab186e",
+        "geometryDigest": "sha256:23d2f24dba40dfbe49ae4f874e2c5b6e389c8621fa0cf0109ea9aad1e7a99c7c"
+      }
+    ]
+  },
+  "changes": [
+    {
+      "targetRef": {
+        "kind": "image_edit.layer",
+        "id": "v3:golden-image:golden-layer"
+      },
+      "affine": [
+        0,
+        -1,
+        -1,
+        0,
+        47,
+        62
+      ],
+      "delta": [
+        0,
+        0
+      ]
+    },
+    {
+      "targetRef": {
+        "kind": "image_edit.layer",
+        "id": "v3:golden-image:golden-quick-marks"
+      },
+      "affine": [
+        0,
+        -1,
+        -1,
+        0,
+        47,
+        62
+      ],
+      "delta": [
+        0,
+        0
+      ]
+    },
+    {
+      "targetRef": {
+        "kind": "image_edit.layer",
+        "id": "v3:golden-image:golden-smart-instance"
+      },
+      "affine": [
+        0,
+        -1,
+        -1,
+        0,
+        45,
+        58
+      ],
+      "delta": [
+        0,
+        0
+      ]
+    }
+  ],
+  "maxConstraintError": 0
+}

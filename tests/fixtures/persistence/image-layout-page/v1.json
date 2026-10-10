@@ -1,0 +1,264 @@
+{
+  "version": 1,
+  "kind": "image-layout",
+  "ownerRef": {
+    "kind": "image_edit.document",
+    "id": "v3:golden-image"
+  },
+  "sourceDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "baseDigest": "sha256:7385e5f6f34f3c951121e33e94248f93f28694716c4c9a794f84ce4ca5ba401f",
+  "entries": [
+    {
+      "layerId": "golden-layer",
+      "sample": {
+        "seq": 0,
+        "monoUs": 0,
+        "timeline": null,
+        "clockSegmentRef": "static",
+        "unavailableReason": "static",
+        "sampleId": "golden-layout:0",
+        "takeRef": "golden-layout-take",
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-layer"
+        },
+        "pose": {
+          "position": [
+            0.734375,
+            1.2916666666666667
+          ],
+          "rotationTurns": -0.25,
+          "scaleXY": [
+            1,
+            1
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ]
+        },
+        "gestureKind": "place",
+        "quality": "presented",
+        "confirmed": true,
+        "event": "up"
+      },
+      "item": {
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-layer"
+        },
+        "affine": [
+          0,
+          -1,
+          -1,
+          0,
+          47,
+          62
+        ],
+        "worldCorners": [
+          [
+            47,
+            62
+          ],
+          [
+            47,
+            30
+          ],
+          [
+            7,
+            30
+          ],
+          [
+            7,
+            62
+          ]
+        ],
+        "translationLocked": true
+      },
+      "localAffine": [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "parentAffine": [
+        0,
+        -1,
+        -1,
+        0,
+        47,
+        62
+      ]
+    },
+    {
+      "layerId": "golden-quick-marks",
+      "sample": {
+        "seq": 1,
+        "monoUs": 1,
+        "timeline": null,
+        "clockSegmentRef": "static",
+        "unavailableReason": "static",
+        "sampleId": "golden-layout:1",
+        "takeRef": "golden-layout-take",
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-quick-marks"
+        },
+        "pose": {
+          "position": [
+            0.734375,
+            1.2916666666666667
+          ],
+          "rotationTurns": -0.25,
+          "scaleXY": [
+            1,
+            1
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ]
+        },
+        "gestureKind": "place",
+        "quality": "presented",
+        "confirmed": true,
+        "event": "up"
+      },
+      "item": {
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-quick-marks"
+        },
+        "affine": [
+          0,
+          -1,
+          -1,
+          0,
+          47,
+          62
+        ],
+        "worldCorners": [
+          [
+            47,
+            62
+          ],
+          [
+            47,
+            30
+          ],
+          [
+            7,
+            30
+          ],
+          [
+            7,
+            62
+          ]
+        ],
+        "translationLocked": false
+      },
+      "localAffine": [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "parentAffine": [
+        0,
+        -1,
+        -1,
+        0,
+        47,
+        62
+      ]
+    },
+    {
+      "layerId": "golden-smart-instance",
+      "sample": {
+        "seq": 2,
+        "monoUs": 2,
+        "timeline": null,
+        "clockSegmentRef": "static",
+        "unavailableReason": "static",
+        "sampleId": "golden-layout:2",
+        "takeRef": "golden-layout-take",
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-smart-instance"
+        },
+        "pose": {
+          "position": [
+            0.703125,
+            1.2083333333333333
+          ],
+          "rotationTurns": -0.25,
+          "scaleXY": [
+            1,
+            1
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ]
+        },
+        "gestureKind": "place",
+        "quality": "presented",
+        "confirmed": true,
+        "event": "up"
+      },
+      "item": {
+        "targetRef": {
+          "kind": "image_edit.layer",
+          "id": "v3:golden-image:golden-smart-instance"
+        },
+        "affine": [
+          0,
+          -1,
+          -1,
+          0,
+          45,
+          58
+        ],
+        "worldCorners": [
+          [
+            45,
+            58
+          ],
+          [
+            45,
+            26
+          ],
+          [
+            5,
+            26
+          ],
+          [
+            5,
+            58
+          ]
+        ],
+        "translationLocked": false
+      },
+      "localAffine": [
+        1,
+        0,
+        0,
+        1,
+        4,
+        2
+      ],
+      "parentAffine": [
+        0,
+        -1,
+        -1,
+        0,
+        47,
+        62
+      ]
+    }
+  ]
+}

@@ -12,6 +12,9 @@ function getNativeImageEditorV3(): ImageEditorV3Platform {
 
 export function createElectronImageEditorV3(): ImageEditorV3Platform {
   return {
+    writeLayoutResource: request => { const method = getNativeImageEditorV3().writeLayoutResource; if (!method) throw new Error('随手摆资源保存不可用'); return method(request) },
+    readLayoutResource: request => { const method = getNativeImageEditorV3().readLayoutResource; if (!method) throw new Error('随手摆资源读取不可用'); return method(request) },
+    releaseLayoutResources: request => { const method = getNativeImageEditorV3().releaseLayoutResources; if (!method) throw new Error('随手摆资源释放不可用'); return method(request) },
     selectRasterRegion: request => { const method = getNativeImageEditorV3().selectRasterRegion; if (!method) throw new Error('主体选择不可用，请更新应用'); return method(request) },
     repairRaster: request => { const method = getNativeImageEditorV3().repairRaster; if (!method) throw new Error('图片修复不可用，请更新应用'); return method(request) },
     readRepairProgress: request => getNativeImageEditorV3().readRepairProgress?.(request) ?? Promise.resolve(null),

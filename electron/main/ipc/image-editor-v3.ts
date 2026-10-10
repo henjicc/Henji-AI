@@ -58,6 +58,8 @@ import { ImageDocumentService, ImageDocumentWorkingCopyLinks } from '../services
 import { CanvasLayerPackageService } from '../services/image-editor-v3/canvas-layers/canvas-layer-packages'
 import { decodeImageEditHistoryCheckpointV3 } from '../../../src/core/imageEdit/v3/historyPaging/checkpoint'
 import { collectImageEditResourceRolesV3 } from '../../../src/core/imageEdit/v3/resourceRoles'
+import { imageLayoutResourceSchema, IMAGE_LAYOUT_RESOURCE_MAX_BYTES, readImageLayoutResource } from '../services/image-editor-v3/layout-resources'
+import { parseResourceId } from '../services/image-editor-v3/resource-store'
 
 export {
   parseImageEditorV3FastProxyPayload,
@@ -367,6 +369,56 @@ async function saveDocument(payload: SaveDocumentPayload, signal: AbortSignal): 
 
 export function registerImageEditorV3Ipc(): void {
   const guard = assertTrustedMainRenderer
+  const layoutLeases = new Map<string, { release: (() => Promise<void>)[] }>()
+  const layoutSenders = new Set<number>()
+  const releaseLayout = async (key: string): Promise<void> => {
+    const entry = layoutLeases.get(key)
+    layoutLeases.delete(key)
+    if (entry) await Promise.all(entry.release.map(release => release()))
+  }
+  registerIpcHandler('imageEditorV3:layout:write', input => {
+    const base = parseImageEditorV3BasePayload(input)
+    if (!input || typeof input !== 'object' || !('value' in input)) throw new Error('随手摆资源缺失')
+    if (!('leaseId' in input) || typeof input.leaseId !== 'string' || !input.leaseId.length || input.leaseId.length > 256) throw new Error('随手摆保存会话无效')
+    return { ...base, leaseId: input.leaseId, value: imageLayoutResourceSchema.parse(input.value) }
+  }, (payload, event) => runRequest('layout.write', payload.requestId, event.sender.id, async signal => {
+    const key = `${event.sender.id}:${payload.leaseId}`
+    const session = layoutLeases.get(key) ?? { release: [] }
+    layoutLeases.set(key, session)
+    if (!layoutSenders.has(event.sender.id)) {
+      layoutSenders.add(event.sender.id)
+      const cleanup = (): void => {
+        layoutSenders.delete(event.sender.id)
+        for (const key of layoutLeases.keys()) if (key.startsWith(`${event.sender.id}:`)) void releaseLayout(key)
+        event.sender.removeListener('destroyed', cleanup)
+        event.sender.removeListener('render-process-gone', cleanup)
+        event.sender.removeListener('did-start-loading', cleanup)
+      }
+      event.sender.once('destroyed', cleanup)
+      event.sender.once('render-process-gone', cleanup)
+      event.sender.once('did-start-loading', cleanup)
+    }
+    const bytes = Buffer.from(JSON.stringify(payload.value), 'utf8')
+    const publication = await getRuntime().resources.putBufferLeased(bytes, { mediaType: 'application/vnd.henji.layout+json', maxBytes: IMAGE_LAYOUT_RESOURCE_MAX_BYTES, signal })
+    if (event.sender.isDestroyed() || layoutLeases.get(key) !== session) {
+      await publication.lease.release()
+      throw new Error('图片编辑窗口或整理任务已关闭')
+    }
+    session.release.push(() => publication.lease.release())
+    const resource = publication.resource
+    return { resourceRef: resource.id, byteLength: resource.byteLength, mediaType: resource.mediaType ?? null }
+  }), guard)
+  registerIpcHandler('imageEditorV3:layout:release', input => {
+    const base = parseImageEditorV3BasePayload(input)
+    if (!input || typeof input !== 'object' || !('leaseId' in input) || typeof input.leaseId !== 'string') throw new Error('随手摆保存会话无效')
+    return { ...base, leaseId: input.leaseId }
+  }, (payload, event) => releaseLayout(`${event.sender.id}:${payload.leaseId}`), guard)
+  registerIpcHandler('imageEditorV3:layout:read', input => {
+    const base = parseImageEditorV3BasePayload(input)
+    if (!input || typeof input !== 'object' || !('resourceRef' in input) || typeof input.resourceRef !== 'string') throw new Error('随手摆资源引用无效')
+    parseResourceId(input.resourceRef)
+    return { ...base, resourceRef: input.resourceRef as ResourceId }
+  }, (payload, event) => runRequest('layout.read', payload.requestId, event.sender.id, () => readImageLayoutResource(getRuntime().resources, payload.resourceRef)), guard)
   registerIpcHandler('imageEditorV3:history:page', input => {
     const base = parseImageEditorV3BasePayload(input)
     if (!input || typeof input !== 'object' || !('checkpoint' in input) || !('pageIndex' in input)

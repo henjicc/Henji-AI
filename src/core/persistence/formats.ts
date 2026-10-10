@@ -1,6 +1,7 @@
 import { FILE_PERSISTENCE_FORMATS } from './fileContracts'
 import { creativeIntentPageSchema } from '../creativeIntent/pages'
 import { storedMotionCandidateSchema } from '../creativeIntent/persistence'
+import { imageLayoutPageSchema, imageLayoutCandidateSchema } from '../imageEdit/v3/layoutDraft'
 import { z } from 'zod'
 import { DOCUMENT_KINDS } from '../documents/kinds'
 import { documentEnvelopeSchema } from '../documents/envelope'
@@ -40,6 +41,8 @@ function format(id: string, name: string, version: number, versionSource: string
 
 /** Single inventory. SQL payloads inherit the existing SQLite ledger, never a parallel ledger. */
 export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
+  format('image-layout-page', '随手摆原稿几何页', 1, 'ImageLayoutPage.version', 'src/features/imageEdit/v3/application/imageEditLayoutResources.ts', imageLayoutPageSchema),
+  format('image-layout-candidate', '随手摆候选', 1, 'ImageLayoutCandidate.version', 'src/features/imageEdit/v3/application/imageEditLayoutResources.ts', imageLayoutCandidateSchema),
   format('creative-intent-page', '创作意图原稿页', 1, 'CreativeIntentPage.version', 'src/features/videoEdit/application/videoEditMotionResources.ts::readMotionPages', creativeIntentPageSchema),
   format('creative-intent-candidate', '创作意图候选', 1, 'StoredMotionCandidate.version', 'src/features/videoEdit/application/videoEditMotionResources.ts::readMotionCandidate', storedMotionCandidateSchema),
   ...FILE_PERSISTENCE_FORMATS,

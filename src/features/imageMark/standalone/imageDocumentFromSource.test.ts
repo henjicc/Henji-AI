@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createImageEditPathLayerV3, createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import { parseImageEditDocumentV3, stringifyImageEditDocumentV3 } from '@/core/imageEdit/v3/documentCodec'
+import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '@/core/imageEdit/v3/documentTypes'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { prepareImageEditManagedSessionV3 } from '@/features/imageEdit/v3/application/imageEditManagedSessionV3'
@@ -18,14 +19,14 @@ beforeEach(() => { vi.clearAllMocks(); installHarnessNativeStorage(); io.ingest.
 afterEach(uninstallHarnessNativeStorage)
 it('新建空白直接保存 V3 初始文档，外来 V3 图层和几何不经旧版本中转', async () => {
   const blank = await createImageDocumentFromSource({ url: 'C:/blank.png', blank: true })
-  expect(readHarnessImageEditDocument(blank.id)?.document).toMatchObject({ version: 10, revision: 0, geometry: { width: 64, height: 48 }, layers: [{ type: 'raster', source: { kind: 'resource', resourceId: IMAGE_EDIT_TEST_SOURCE_REF } }] })
+  expect(readHarnessImageEditDocument(blank.id)?.document).toMatchObject({ version: IMAGE_EDIT_DOCUMENT_VERSION_V3, revision: 0, geometry: { width: 64, height: 48 }, layers: [{ type: 'raster', source: { kind: 'resource', resourceId: IMAGE_EDIT_TEST_SOURCE_REF } }] })
   expect(io.create).toHaveBeenCalledWith({ documentId: blank.id, emptyUntilRevision: 0 }, { kind: 'user' })
   const incoming = createImageEditDocumentV3({ width: 64, height: 48, sourceResourceId: IMAGE_EDIT_TEST_SOURCE_REF })
   incoming.layers.push(createImageEditPathLayerV3('handoff', '标注'))
   incoming.geometry.orientation.rotate = 90; incoming.revision = 4
   io.ingest.mockRejectedValueOnce(new Error('原图地址已失效'))
   const opened = await createImageDocumentFromSource({ url: 'C:/input.png', document: incoming })
-  expect(readHarnessImageEditDocument(opened.id)?.document).toMatchObject({ version: 10, revision: 0, geometry: incoming.geometry, layers: incoming.layers })
+  expect(readHarnessImageEditDocument(opened.id)?.document).toMatchObject({ version: IMAGE_EDIT_DOCUMENT_VERSION_V3, revision: 0, geometry: incoming.geometry, layers: incoming.layers })
   expect(incoming.revision).toBe(4)
   expect(io.ingest).toHaveBeenCalledTimes(1)
 })

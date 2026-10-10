@@ -547,6 +547,18 @@ export function applyImageEditCommandV3(
     throw new ImageEditCommandValidationErrorV3('图片文档 revision 无效或已耗尽');
   }
   const nextRevision = document.revision + 1;
+  if (command.type === 'document.set-creative-intents') {
+    const candidate = { ...document, revision: nextRevision };
+    if (command.intents === null) delete candidate.creativeIntents;
+    else candidate.creativeIntents = command.intents;
+    const validated = parseImageEditDocumentV3(candidate);
+    assertImageEditStructuralCommandResourcesV3(document, command);
+    const inverse: ImageEditCommandV3 = { ...inverseBase(command, nextRevision), type: command.type,
+      intents: structuredClone(document.creativeIntents ?? null), resources: structuredClone(command.resources) };
+    const history = calculateImageEditCommandHistoryResourcesV3(command, inverse);
+    const historyMetadataBytes = new TextEncoder().encode(JSON.stringify([command, inverse])).byteLength;
+    return { document: validated, inverse, historyMetadataBytes, historyResources: history.resources, historyBytes: historyMetadataBytes + history.bytes };
+  }
   if (command.type === 'document.atomic') {
     if (!command.commands.length || command.commands.some(child => (child as ImageEditCommandV3).type === 'document.atomic')
       || new Set(command.commands.map(child => child.commandId)).size !== command.commands.length) throw new ImageEditCommandValidationErrorV3('原子命令必须包含不重复的非嵌套操作');

@@ -29,6 +29,7 @@ const labels: Record<ImageEditCommandV3['type'], string> = {
   'layer.replace': '更新图层内容',
   'document.atomic': '转换滤镜范围',
   'document.set-named-regions': '管理通道', 'layer.move-many': '移动图层',
+  'document.set-creative-intents': '随手摆草稿',
   'document.update-output-geometry': '调整画面',
   'layer.add': '添加图层', 'layer.delete': '删除图层', 'layer.move': '移动图层',
   'layer.duplicate': '复制图层', 'layer.group': '组合图层', 'layer.ungroup': '解散图层组',
@@ -38,6 +39,7 @@ const labels: Record<ImageEditCommandV3['type'], string> = {
 };
 
 export function projectImageEditHistoryCommandV3(command: ImageEditCommandV3): Pick<ImageEditHistoryRowV3, 'labelKey' | 'label' | 'targetName'> {
+  if (command.type === 'document.atomic' && command.commands.some(value => value.type === 'document.set-creative-intents')) return { labelKey: 'imageEditor.v3.history.commands.document.set-creative-intents', label: '整理图片布局', targetName: null };
   if (command.type === 'document.atomic' && command.commands.some(value => value.type === 'document.set-color')) return { labelKey: 'imageEditor.v3.history.commands.document.set-color', label: labels['document.set-color'], targetName: null };
   const targetName = command.type === 'layer.add' ? command.layer.name
     : command.type === 'layer.group' ? command.group.name

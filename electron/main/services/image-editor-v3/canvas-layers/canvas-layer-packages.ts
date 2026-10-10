@@ -11,7 +11,6 @@ import type { ImageEditDocumentEnvelope } from '../contracts'
 import type { ImageEditDocumentRepository } from '../document-repository'
 import type { HenjiImagePackageCodec } from '../package-codec'
 import { stagedPackagePathFor } from '../package-export'
-import { withImageEditDocumentId } from '../image-document/header'
 import { readPackageDocumentHeaderBytes } from '../image-document/package-file'
 import { KeyedSerialExecutor } from '../serial-executor'
 
@@ -381,12 +380,14 @@ export class CanvasLayerPackageService {
     const imported = await this.options.packages.import(packagePath)
     try {
       if (imported.missingExternalSources.length > 0) throw new Error('内嵌图片文档引用了不在包里的外部图片。')
-      const envelope = withImageEditDocumentId(imported.manifest.document, documentId)
-      this.options.validateDocument(envelope)
-      const working = await this.options.documents.replace(envelope)
+      const rebound = await this.options.documents.rebind(imported.manifest.document, documentId)
+      try {
+      this.options.validateDocument(rebound.envelope)
+      const working = await this.options.documents.replace(rebound.envelope)
       const stat = await fsp.stat(packagePath)
       await this.links.write({ documentId, ownerCanvasId: canvasId, packagePath, fileSize: stat.size, fileModifiedAt: stat.mtimeMs, committedWorkingRevision: working.revision })
       this.logger.info('画布内嵌图片文档已按包解出', { event: 'canvas_layers.prepare.imported', context: { canvasId, documentId, revision: working.revision } })
+      } finally { await rebound.release() }
     } finally {
       await imported.resourceLease.release()
     }

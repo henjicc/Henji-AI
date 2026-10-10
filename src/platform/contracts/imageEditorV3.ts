@@ -331,6 +331,9 @@ export interface ImageEditorV3Platform {
   repairRaster?(request: ImageEditorV3RepairRequest): Promise<{ patch: ImageEditorV3ResourceDescriptor; durationMs: number }>
   readRepairProgress?(request: { requestId: string }): Promise<ImageEditorV3RepairProgress | null>
   pinRepairResources?(request: { requestId: string; resourceRefs: ImageEditorV3ResourceRef[] }): Promise<void>
+  writeLayoutResource?(request: { requestId: string; leaseId: string; value: unknown }): Promise<ImageEditorV3ResourceDescriptor>
+  readLayoutResource?(request: { requestId: string; resourceRef: ImageEditorV3ResourceRef }): Promise<unknown>
+  releaseLayoutResources?(request: { requestId: string; leaseId: string }): Promise<void>
   releaseRepairResources?(request: { requestId: string }): Promise<void>
   listDocuments(request: {
     requestId: string

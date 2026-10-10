@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 11,
-      "fingerprint": "5fa776635a671cda19e6458e8fc2f0f4f3ee5f9fcb3cf1322c22cd8535d808d2",
-      "supportedFrom": 11
+      "version": 12,
+      "fingerprint": "d24265348b8ddb698917da8773afa0814a46e2de0ce468bac138ad15036347bf",
+      "supportedFrom": 12
     },
     "image-working-copy": {
-      "version": 13,
-      "fingerprint": "c154dc100c4474fa3b69aae88faedbee71a57f0946c490e75ba6df4c7069bfde",
-      "supportedFrom": 13
+      "version": 14,
+      "fingerprint": "edccddcd3e5923baaff55ec1f673bad096525be666f7d6900380d2a1cfb28301",
+      "supportedFrom": 14
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 11,
-      "fingerprint": "b593bfcca4f7a1049defc3b7906cdc5136d6ccf236ec62129cc345652b82d793",
-      "supportedFrom": 11
+      "version": 12,
+      "fingerprint": "cc0b5d94094b475c989d8c74348b37b06cae0c7765eb93b3cec06f272dc600d8",
+      "supportedFrom": 12
     },
     "keystore": {
       "version": 1,
@@ -194,6 +194,16 @@
     "creative-intent-candidate": {
       "version": 1,
       "fingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152",
+      "supportedFrom": 1
+    },
+    "image-layout-page": {
+      "version": 1,
+      "fingerprint": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d",
+      "supportedFrom": 1
+    },
+    "image-layout-candidate": {
+      "version": 1,
+      "fingerprint": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee",
       "supportedFrom": 1
     }
   },
@@ -1072,6 +1082,33 @@
       "reason": "t142 马赛克滤镜进入共享效果内核，图片渲染节点 schema 扩展，开发期采用新格式",
       "previousFingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
       "fingerprint": "b593bfcca4f7a1049defc3b7906cdc5136d6ccf236ec62129cc345652b82d793",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T22:12:05.737Z",
+      "format": "image-package",
+      "version": 12,
+      "reason": "t147 图片布局草稿头、不可变几何页与候选接入正式存储，开发期升版不迁移旧数据",
+      "previousFingerprint": "5fa776635a671cda19e6458e8fc2f0f4f3ee5f9fcb3cf1322c22cd8535d808d2",
+      "fingerprint": "d24265348b8ddb698917da8773afa0814a46e2de0ce468bac138ad15036347bf",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T22:12:05.739Z",
+      "format": "image-working-copy",
+      "version": 14,
+      "reason": "t147 图片布局草稿头、不可变几何页与候选接入正式存储，开发期升版不迁移旧数据",
+      "previousFingerprint": "c154dc100c4474fa3b69aae88faedbee71a57f0946c490e75ba6df4c7069bfde",
+      "fingerprint": "edccddcd3e5923baaff55ec1f673bad096525be666f7d6900380d2a1cfb28301",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T22:12:05.739Z",
+      "format": "canvas-layer-package",
+      "version": 12,
+      "reason": "t147 图片布局草稿头、不可变几何页与候选接入正式存储，开发期升版不迁移旧数据",
+      "previousFingerprint": "b593bfcca4f7a1049defc3b7906cdc5136d6ccf236ec62129cc345652b82d793",
+      "fingerprint": "cc0b5d94094b475c989d8c74348b37b06cae0c7765eb93b3cec06f272dc600d8",
       "waivedFixtureVersions": []
     }
   ]

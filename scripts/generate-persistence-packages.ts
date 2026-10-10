@@ -19,6 +19,7 @@ import { ImageEditCommandHistoryV3 } from '../src/core/imageEdit/v3/commandHisto
 import { parseImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentCodec'
 import { IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3 } from '../src/core/imageEdit/v3/historyPaging/schema'
 import { createImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentFactory'
+import { getImageLayoutFixtureResources } from './generate-persistence-fixtures'
 
 /** 由正式保存与 ZIP 导出器生成分页历史黄金样本，不改写已有版本。 */
 export async function generateImageHistoryPersistenceFixtures(sourceFixture: string, root = process.cwd()): Promise<void> {
@@ -47,6 +48,9 @@ export async function generateImageHistoryPersistenceFixtures(sourceFixture: str
   const temp = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-history-goldens-'))
   try {
     const resources = new ContentAddressedResourceStore(path.join(temp, 'resources'))
+    for (const body of getImageLayoutFixtureResources()) {
+      await resources.putBuffer(Buffer.from(JSON.stringify(body)), {mediaType:'application/vnd.henji.layout+json'})
+    }
     const repository = new ImageEditDocumentRepository(path.join(temp, 'documents'), { resources })
     const working = await repository.create({ documentId: document.id, revision: document.revision,
       document, history: history.createSnapshot(), now: new Date(source.createdAt) })

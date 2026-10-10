@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { exportDiagnosticBundle } from '@/commands/logging'
 import { UiButton, UiError, UiErrorBoundary, UiToolbar } from '@/components/ui'
 import { ImageEditorCommandBarV3 } from './ImageEditorCommandBarV3'
+import { ImageEditorLayoutOverlayV3 } from './ImageEditorLayoutOverlayV3'
 import { ImageEditorShellV3 } from '../shell/ImageEditorShellV3'
 import { imageEditorWorkspaceLayoutStoreV3 } from '../panelFramework/layout'
 import { builtInToolRegistration } from '../toolFramework/builtInRegistry'
@@ -88,7 +89,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
           <ImageEditorPreviewV3
             sourceImageUrl={props.sourceImageUrl}
             previewRenderer={props.previewRenderer}
-            annotationOverlay={props.annotationOverlay}
+            annotationOverlay={<>{props.annotationOverlay}{(props.profileId==='full'||props.profileId==='canvas-edit')&&<ImageEditorLayoutOverlayV3 bus={bus}/>}</>}
             resourceByteSizes={resourceByteSizes}
             resourceDescriptors={resourceDescriptors}
             onPackageThumbnailChange={props.onPackageThumbnailChange}

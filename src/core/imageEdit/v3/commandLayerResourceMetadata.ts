@@ -8,6 +8,7 @@ import {
 import type { ImageEditDocumentV3 } from './documentTypes'
 import { collectImageEditMaskResourceIdsV3 } from './layerTypes'
 import { collectImageEditJsonResourceIdsV3 } from './resourceReferences'
+import { creativeIntentLiveResources } from '../../creativeIntent/persistence'
 
 type StructuralCommandV3 = Extract<ImageEditCommandV3, {
   type: 'layer.add' | 'layer.replace' | 'layer.delete' | 'layer.duplicate' | 'layer.group' | 'layer.ungroup'
@@ -77,6 +78,13 @@ export function assertImageEditStructuralCommandResourcesV3(
   command: ImageEditCommandV3,
   allowLegacyMissing = false,
 ): void {
+  if (command.type === 'document.set-creative-intents') {
+    const live = creativeIntentLiveResources([document.creativeIntents, command.intents ?? undefined]);
+    const descriptors = assertDescriptors(command.resources, live.map(r => r.resourceId).sort(), '草稿资源元数据');
+    const sizes = new Map(live.map(r => [r.resourceId, r.bytes]));
+    if (descriptors.some(r => sizes.get(r.resourceId) !== r.byteSize)) throw new ImageEditCommandValidationErrorV3('草稿资源大小与目录不符');
+    return;
+  }
   if (command.type === 'document.set-color') {
     const ids = sortedUnique([document.color.iccProfileResourceId, command.color.iccProfileResourceId].filter((value): value is string => value !== null));
     if (ids.length || command.resources) assertDescriptors(command.resources, ids, '颜色命令资源元数据');

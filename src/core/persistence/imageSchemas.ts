@@ -4,6 +4,7 @@ import { listImagingEffects } from '../imaging/effects/registry'
 import { imageColorGradeParamsSchema } from '../imaging/adjustments/schema'
 import { deformationSchema } from '../imaging/transforms';
 import { z } from 'zod'
+import { creativeIntentsSchema } from '../creativeIntent/persistence'
 import { imageEditHistoryCheckpointSchemaV3 } from '../imageEdit/v3/historyPaging/schema'
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '../imageEdit/v3/documentTypes'
 import type { ImageEditDocumentV3 } from '../imageEdit/v3/documentTypes'
@@ -48,6 +49,7 @@ export const imageContentSchema = z.object({
   color: z.object({ workingSpace: z.enum(['srgb', 'display-p3', 'rec2020']), bitDepth: z.union([z.literal(8), z.literal(16), z.literal('float16'), z.literal('float32')]), transferFunction: z.enum(['srgb', 'linear', 'pq', 'hlg']), hdrMetadata: hdrMetadata.nullable(), iccProfileResourceId: identifier.nullable() }),
   layers: z.array(imageLayerSchema),
   namedRegions: imageEditNamedRegionsSchemaV3,
+  creativeIntents: creativeIntentsSchema.optional(),
 })
 export const imageWorkingCopySchema = z.object({ format: z.literal('henji-image-edit'), formatVersion: z.literal(IMAGE_WORKING_VERSION), documentId: identifier, revision: integer, createdAt: z.string(), updatedAt: z.string(), document: imageContentSchema, historyCheckpoint: imageEditHistoryCheckpointSchemaV3.optional(), resourceRefs: z.array(resource), previewRef: resource.optional() }).strict()
 export const imageDocumentHeaderSchema = z.object({ format: z.literal('henji-image-document'), version: z.literal(IMAGE_HEADER_VERSION), id: identifier, draft: z.boolean().optional(), revision: integer, kindVersion: z.number().int().positive(), createdAt: z.string(), updatedAt: z.string(), contentRevision: integer, emptyUntilRevision: integer.nullable().optional(), summary: z.object({ width: integer, height: integer, layers: integer }) })

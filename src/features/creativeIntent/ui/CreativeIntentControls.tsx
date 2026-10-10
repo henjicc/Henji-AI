@@ -70,7 +70,7 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
       {props.candidates.map(c => <UiOptionButton key={c.id} variant="menu" active={props.selected === c.id} onClick={() => props.onPreview(c.id)}>{c.label} B</UiOptionButton>)}
       {motion && <UiButton size="sm" onClick={motion.onPlay}><Play size={14} />正常速预览</UiButton>}
     </UiGroup>}
-    {props.message && <UiError size="sm" title="请调整示范" message={props.message} />}
-    {busy ? <><UiLoading size="sm" message="正在整理动作…" /><UiButton onClick={props.onCancel}>取消整理</UiButton></> : <UiButton variant="primary" disabled={props.status === 'idle'} onClick={apply || props.needsSave ? props.onApply : props.onOptimize}>{props.needsSave ? '重试保存' : apply ? '应用' : '整理'}</UiButton>}
+    {props.message && <UiError size="sm" title={motion ? '请调整示范' : '请调整布局'} message={props.message} />}
+    {busy ? <><UiLoading size="sm" message={motion ? '正在整理动作…' : '正在整理布局…'} /><UiButton onClick={props.onCancel}>取消整理</UiButton></> : <UiButton variant="primary" disabled={props.status === 'idle'} onClick={apply || props.needsSave ? props.onApply : props.onOptimize}>{props.needsSave ? '重试保存' : apply ? '应用' : '整理'}</UiButton>}
   </div>
 }

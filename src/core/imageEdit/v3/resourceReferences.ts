@@ -1,5 +1,13 @@
+import { creativeIntentLiveResources, type CreativeIntents } from '../../creativeIntent/persistence';
+import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from './documentTypes';
+
 export const IMAGE_EDIT_RESOURCE_ID_PATTERN_V3 = /^sha256:[a-f0-9]{64}$/;
 
+/** Identify the authoritative document field, never a same-named arbitrary effect parameter. */
+export function isImageEditDocumentResourceContainerV3(value:unknown):boolean {
+  return Boolean(value&&typeof value==='object'&&'version'in value&&value.version===IMAGE_EDIT_DOCUMENT_VERSION_V3
+    &&'layers'in value&&Array.isArray(value.layers)&&'geometry'in value&&'color'in value);
+}
 
 /**
  * 枚举 JSON 权威状态里的内容寻址引用。效果参数也可能持有资源，所以不能只扫描
@@ -31,7 +39,12 @@ export function collectImageEditJsonResourceIdsV3(
       for (const child of entry) pending.push(child);
       continue;
     }
-    for (const child of Object.values(entry)) pending.push(child);
+    for (const [key, child] of Object.entries(entry)) {
+      // Draft digests describe input, not files. Only its authoritative resource directory is a live root.
+      if (key === 'creativeIntents' && isImageEditDocumentResourceContainerV3(entry) || key === 'intents' && 'type' in entry && entry.type === 'document.set-creative-intents') {
+        for (const resource of creativeIntentLiveResources([child as CreativeIntents | undefined])) add(resource.resourceId);
+      } else pending.push(child);
+    }
   }
   additionalResourceIds.forEach(add);
   return [...refs].sort();

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ImageEditorV3Props } from '@/features/imageEdit/v3/editor/types'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { createImageEditPathLayerV3 } from '@/core/imageEdit/v3/documentFactory'
+import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '@/core/imageEdit/v3/documentTypes'
 
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage, readHarnessImageEditDocument } from '@/tests/harnessNativeStorage'
 import { imageEditTestManagedSource, imageEditTestSnapshot } from '@/tests/imageEditV3SourceFixture'
@@ -39,7 +40,7 @@ describe('查看器 V3 快速标记宿主', () => {
     render(<ViewerMarkEditor imageUrl="C:/source.png" onClose={vi.fn()} onSave={save} onSessionChange={changed} />)
     await screen.findByTestId('v3-viewer-editor')
     expect(editorProps.profileId).toBe('quick')
-    expect(editorProps.document.version).toBe(10)
+    expect(editorProps.document.version).toBe(IMAGE_EDIT_DOCUMENT_VERSION_V3)
     const document = await editGeometryAndMark()
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(save).toHaveBeenCalledOnce())

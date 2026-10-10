@@ -189,6 +189,7 @@ export interface ImageEditDocumentSetColorCommandV3 extends ImageEditCommandBase
 }
 
 export type ImageEditLeafCommandV3 =
+  | ImageEditSetCreativeIntentsCommandV3
   | ImageEditDocumentSetColorCommandV3
   | ImageEditDocumentSetCanvasSizeCommandV3
   | ImageEditLayerReplaceCommandV3
@@ -207,6 +208,12 @@ export type ImageEditLeafCommandV3 =
   | ImageEditLayerSetMaskCommandV3
   | ImageEditRasterTileDeltaCommandV3
   | ImageEditMaskTileDeltaCommandV3;
+
+export interface ImageEditSetCreativeIntentsCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'document.set-creative-intents';
+  intents: import('../../creativeIntent/persistence').CreativeIntents | null;
+  resources: ImageEditCommandResourceDescriptorV3[];
+}
 
 /** Prepared operations publish one revision and one history entry; nested batches are not allowed. */
 export interface ImageEditAtomicCommandV3 extends ImageEditCommandBaseV3 {
@@ -252,6 +259,7 @@ export function collectImageEditCommandResourceReferencesV3(
   command: ImageEditCommandV3,
 ): ImageEditHistoryResourceReferenceV3[] {
   const resources: ImageEditHistoryResourceReferenceV3[] = [];
+  if (command.type === 'document.set-creative-intents') return command.resources;
   if (command.type === 'document.atomic') return mergeImageEditHistoryResourceReferencesV3(command.commands.flatMap(collectImageEditCommandResourceReferencesV3));
   if (command.type === 'document.set-color') {
     if (command.resources) resources.push(...command.resources);

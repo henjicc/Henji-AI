@@ -18,7 +18,7 @@ const logger = createMainLogger('main.image_editor_v3.history');
 export class ImageEditHistoryPageStoreV3 {
   constructor(private readonly resources: ContentAddressedResourceStore) {}
 
-  async prepare(snapshot: ImageEditCommandHistorySnapshotV3, signal?: AbortSignal): Promise<{
+  async prepare(snapshot: ImageEditCommandHistorySnapshotV3, signal?: AbortSignal, mapEntry?: (entry: ImageEditHistoryEntrySnapshotV3) => Promise<ImageEditHistoryEntrySnapshotV3>): Promise<{
     checkpoint: ImageEditHistoryCheckpointV3;
     resourceIds: ResourceId[];
     release: () => Promise<void>;
@@ -40,6 +40,11 @@ export class ImageEditHistoryPageStoreV3 {
       let previousRevision = -1;
       for await (const page of this.sourcePages(snapshot, signal)) {
         signal?.throwIfAborted();
+        if (mapEntry) {
+          const entries: ImageEditHistoryEntrySnapshotV3[] = [];
+          for (const entry of page.undo) entries.push(await mapEntry(entry));
+          page.undo = entries;
+        }
         for (const entry of page.undo) {
           if (ids.has(entry.forward.commandId) || entry.forward.expectedRevision <= previousRevision) throw new Error('历史命令 ID 重复或分页顺序无效');
           ids.add(entry.forward.commandId); previousRevision = entry.forward.expectedRevision;

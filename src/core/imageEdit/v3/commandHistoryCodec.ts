@@ -1,4 +1,5 @@
 import { parseImageEditDocumentV3 } from './documentCodec';
+import { creativeIntentsSchema } from '../../creativeIntent/persistence';
 import { normalizeImageEditLayerCommonPatchV3 } from './commandCommonPatch';
 import type { ImageEditLayerCommonPatchV3 } from './commandTypes';
 
@@ -230,6 +231,11 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史命令无效');
   const command = value;
   switch (command.type) {
+    case 'document.set-creative-intents':
+      validateBase(command, ['intents', 'resources']);
+      creativeIntentsSchema.nullable().parse(command.intents);
+      validateCommandResourceDescriptors(command.resources, '草稿资源元数据');
+      break;
     case 'document.set-color':
       validateBase(command, ['color', ...(command.resources === undefined ? [] : ['resources'])]);
       if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '颜色命令资源元数据');

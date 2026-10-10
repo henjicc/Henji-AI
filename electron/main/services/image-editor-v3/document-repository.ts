@@ -26,6 +26,7 @@ import {
 } from './history-persistence'
 import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
 import type { ImageEditHistoryCheckpointV3 } from '../../../../src/core/imageEdit/v3/historyPaging/checkpoint'
+import { rebindImageLayoutDocument } from './layout-rebind'
 
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
@@ -355,18 +356,20 @@ export class ImageEditDocumentRepository {
     if (!isRecord(source.document)) {
       throw new Error(`Invalid image edit document body for fork: ${source.documentId}`)
     }
-    return this.create({
+    const rebound = await this.rebind(source, targetDocumentId)
+    try { return await this.create({
       documentId: targetDocumentId,
       revision: source.revision,
-      document: { ...source.document, id: targetDocumentId },
-      history: source.history
-        ? { ...source.history, documentId: targetDocumentId }
-        : undefined,
-      historyCheckpoint: source.historyCheckpoint ? { ...source.historyCheckpoint, documentId: targetDocumentId } : undefined,
-      resourceRefs: source.resourceRefs,
+      document: rebound.envelope.document,
+      historyCheckpoint: rebound.envelope.historyCheckpoint,
+      resourceRefs: rebound.envelope.resourceRefs,
       previewRef: source.previewRef,
       now: request.now,
-    })
+    }) } finally { await rebound.release() }
+  }
+
+  async rebind(envelope: ImageEditDocumentEnvelope, documentId: string): ReturnType<typeof rebindImageLayoutDocument> {
+    return rebindImageLayoutDocument(envelope, validateDocumentId(documentId), this.resources)
   }
 
   /**

@@ -40,6 +40,7 @@ import { createImageEditLayerContentRegistryV3 } from './layerEntries/base';
 import { imageEditNamedRegionsSchemaV3 } from './namedRegions';
 import { assertImageEditSmartGraphV3, assertImageEditSmartInstancesConsistentV3 } from './smartContent/graph';
 import { imageEditSmartOriginSchemaV3 } from './smartContent/schema';
+import { creativeIntentsSchema } from '../../creativeIntent/persistence';
 
 export type ImageEditDocumentSourceFormatV3 = 'v3' | 'invalid' | 'unknown-version';
 
@@ -435,7 +436,10 @@ function parseDocument(value: Record<string, unknown>): ImageEditDocumentV3 | nu
   const geometry = parseGeometry(value.geometry);
   const color = parseColor(value.color);
   const namedRegions = imageEditNamedRegionsSchemaV3.safeParse(value.namedRegions);
-  if (!geometry || !color || !Array.isArray(value.layers) || !namedRegions.success) return null;
+  const creativeIntents = creativeIntentsSchema.optional().safeParse(value.creativeIntents);
+  if (!geometry || !color || !Array.isArray(value.layers) || !namedRegions.success || !creativeIntents.success) return null;
+  const ownerId = `v3:${encodeURIComponent(value.id)}`;
+  if (creativeIntents.data && [...creativeIntents.data.drafts, ...creativeIntents.data.sessions].some(d => d.ownerRef.kind !== 'image_edit.document' || d.ownerRef.id !== ownerId)) return null;
   const layers: ImageEditLayerV3[] = [];
   const ids = new Set<string>();
   const registerIds = (layer: ImageEditLayerV3): boolean => {
@@ -461,6 +465,7 @@ function parseDocument(value: Record<string, unknown>): ImageEditDocumentV3 | nu
     color,
     layers,
     namedRegions: namedRegions.data,
+    ...(creativeIntents.data ? { creativeIntents: creativeIntents.data } : {}),
   };
 }
 
