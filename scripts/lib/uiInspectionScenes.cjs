@@ -2,6 +2,7 @@
 const { createImageEditVectorTextScene } = require('./uiInspectionSceneImageEditVectorText.cjs')
 const { createImageEditPaintTargetsScene, createImageEditPaintParameterScene, createImageEditPaintCrossTilesScene } = require('./uiInspectionSceneImageEditPaintTargets.cjs')
 const { createImageEditRetouchScene } = require('./uiInspectionSceneImageEditRetouch.cjs')
+const { createImageEditAiWorkflowsScene } = require('./uiInspectionSceneImageEditAiWorkflows.cjs')
 const { createImageEditTransformScene } = require('./uiInspectionSceneImageEditTransform.cjs')
 const { createImageEditSelectionToolsScene } = require('./uiInspectionSceneImageEditSelectionTools.cjs')
 const { createImageEditToolLifecycleScene, createImageEditRegistrationFailureScene, createImageEditQuickMarkViewerScene } = require('./uiInspectionSceneImageEditToolLifecycle.cjs')
@@ -182,6 +183,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createImageEditPaintCrossTilesScene(context),
     createImageEditPaintParameterScene(context),
     createImageEditRetouchScene(context),
+    createImageEditAiWorkflowsScene(context),
     createImageEditFilterScopesScene(context),
     createImageEditSmartContentScene(context),
     createImageEditVectorTextScene(context),

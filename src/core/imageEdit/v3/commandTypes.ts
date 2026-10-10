@@ -40,6 +40,14 @@ export interface ImageEditDocumentUpdateOutputGeometryCommandV3 extends ImageEdi
   crop: ImageEditCropRectV3 | null;
 }
 
+/** 改画布边界，不重采样图层像素；宿主负责将需要移动的内容纳入同一原子命令。 */
+export interface ImageEditDocumentSetCanvasSizeCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'document.set-canvas-size';
+  width: number;
+  height: number;
+  rasterCanvases: Record<string, { width: number; height: number } | null>;
+}
+
 export type ImageEditLayerCommonPatchV3 = Partial<{
   name: string;
   visible: boolean;
@@ -175,6 +183,7 @@ export interface ImageEditMaskTileDeltaCommandV3 extends ImageEditCommandBaseV3 
 }
 
 export type ImageEditLeafCommandV3 =
+  | ImageEditDocumentSetCanvasSizeCommandV3
   | ImageEditLayerReplaceCommandV3
   | ImageEditNamedRegionsCommandV3
   | ImageEditLayersMoveCommandV3

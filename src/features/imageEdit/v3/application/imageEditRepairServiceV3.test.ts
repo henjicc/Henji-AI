@@ -65,6 +65,21 @@ function busFor(width = 1200, height = 128) {
   return bus
 }
 describe('区域修复同源事务', () => {
+  it('本地 AI 模型补丁也先预览，取消确认不提交，确认一次撤销', async () => {
+    const bus = busFor(64); let ready!: () => void, accept!: () => void;
+    const preview = new Promise<void>(resolve => { ready = resolve; });
+    const controller = new AbortController();
+    const pending = repairImageEditRegionV3(bus, 'raster', { action: 'remove', quality: 'fine', signal: controller.signal,
+      confirm: signal => new Promise<void>((resolve, reject) => { accept = resolve; signal.addEventListener('abort', () => reject(signal.reason), { once: true }); ready(); }) });
+    const cancelled = expect(pending).rejects.toThrow();
+    await preview; expect(bus.getSnapshot().document.revision).toBe(0); expect(Object.keys(bus.getSnapshot().previewOverrides)).toHaveLength(1);
+    controller.abort(); await cancelled; expect(bus.getPersistenceSnapshot().history.undo).toHaveLength(0);
+    const second = new Promise<void>(resolve => { ready = resolve; });
+    const retry = repairImageEditRegionV3(bus, 'raster', { action: 'remove', quality: 'fine', confirm: () => new Promise<void>(resolve => { accept = resolve; ready(); }) });
+    await second; accept(); await retry;
+    expect(state.calls).toHaveLength(2); expect(bus.getPersistenceSnapshot().history.undo).toHaveLength(1);
+    bus.undo(); expect(bus.getSnapshot().document.layers[0]).toMatchObject({ tiles: {} }); bus.dispose();
+  })
   it('8K 大区域超出工作缓冲预算后逐块读取原尺寸供体，不调用推理，一次提交与撤销', async () => {
     const bus = busFor(8192, 512), before = bus.getSnapshot().document.layers
     const result = await repairImageEditRegionV3(bus, 'raster', { action: 'remove', method: 'texture' })

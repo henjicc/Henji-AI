@@ -17,7 +17,7 @@ import type {
   ImageEditLayerCommonPatchV3,
 } from './commandTypes';
 import { normalizeImageEditLayerCommonPatchV3 } from './commandCommonPatch';
-import { applyImageEditOutputGeometryCommandV3 } from './commandDocumentReducer';
+import { applyImageEditCanvasSizeCommandV3, applyImageEditOutputGeometryCommandV3 } from './commandDocumentReducer';
 import {
   ImageEditCommandValidationErrorV3,
   ImageEditLayerLockedErrorV3,
@@ -568,6 +568,7 @@ export function applyImageEditCommandV3(
   }
   const documentResult = command.type === 'document.update-output-geometry'
     ? applyImageEditOutputGeometryCommandV3(document, command, nextRevision)
+    : command.type === 'document.set-canvas-size' ? applyImageEditCanvasSizeCommandV3(document, command, nextRevision)
     : null;
   const regionsResult = command.type === 'document.set-named-regions'
     ? imageEditNamedRegionsSchemaV3.parse(command.regions) : null;
@@ -599,7 +600,7 @@ export function applyImageEditCommandV3(
       ...document,
       revision: nextRevision,
       ...(regionsResult ? { namedRegions: regionsResult } : {}),
-      ...(documentResult ? { geometry: documentResult.geometry } : { layers: layerResult?.layers ?? document.layers }),
+      ...(documentResult ? { geometry: documentResult.geometry, layers: documentResult.layers } : { layers: layerResult?.layers ?? document.layers }),
     },
     inverse,
     historyMetadataBytes,

@@ -21,6 +21,7 @@ import { applyImageEditCommandV3 } from '@/core/imageEdit/v3/commandReducer';
 import { withImageEditCommandRevisionV3 } from '@/core/imageEdit/v3/commandTypes';
 import { projectImageEditHistoryCommandV3, type ImageEditHistoryRowV3, type ImageEditHistoryViewV3, type ImageEditHistoryJumpOptionsV3 } from '@/core/imageEdit/v3/historyPaging/projection';
 import { createLogger } from '@/core/logging';
+import { rebaseImageEditSelectionGridV3 } from '@/core/imageEdit/v3/selection/rebase';
 
 const historyLogger = createLogger('features.imageEdit.v3.history');
 
@@ -227,7 +228,9 @@ export class ImageEditCommandBusV3 {
           const commandEntry = this.history.getEntryAt(direction < 0 ? commandPosition - 1 : commandPosition);
           if (commandEntry?.forward.commandId !== entry.commandId) throw new Error('文档历史与会话时间线不一致');
           const command = direction < 0 ? commandEntry.inverse : commandEntry.forward;
+          const beforeGrid = document.geometry;
           document = applyImageEditCommandV3(document, withImageEditCommandRevisionV3(command, document.revision), { allowLegacyResourceMetadata: true }).document;
+          if (selection && (beforeGrid.width !== document.geometry.width || beforeGrid.height !== document.geometry.height)) { selection = rebaseImageEditSelectionGridV3(selection, beforeGrid, document.geometry); selectionSteps++; }
           commandPosition += direction;
         } else { selection = direction < 0 ? entry.before : entry.after; selectionSteps++; }
         options.onProgress?.(completed + 1, total);
@@ -260,6 +263,7 @@ export class ImageEditCommandBusV3 {
     }
     const nextDocument = this.history.execute(this.document, prepared);
     if (nextDocument === this.document) return this.document;
+    this.rebaseSelection(nextDocument);
     this.document = nextDocument;
     this.sessionUndo.push({ commandId: prepared.commandId, projection: projectImageEditHistoryCommandV3(prepared) });
     this.historyGeneration++;
@@ -320,6 +324,7 @@ export class ImageEditCommandBusV3 {
     const previousRevision = this.document.revision;
     const transition = this.history.undo(this.document);
     if (!transition.changed) return false;
+    this.rebaseSelection(transition.document);
     this.document = transition.document;
     this.sessionUndo.pop(); this.sessionRedo.push(entry);
     this.historyGeneration++;
@@ -336,6 +341,7 @@ export class ImageEditCommandBusV3 {
     const previousRevision = this.document.revision;
     const transition = this.history.undoCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
+    this.rebaseSelection(transition.document);
     this.document = transition.document;
     for (const entry of this.sessionUndo.splice(-commandIdsNewestFirst.length).reverse()) this.sessionRedo.push(entry);
     this.historyGeneration++;
@@ -352,6 +358,7 @@ export class ImageEditCommandBusV3 {
     const previousRevision = this.document.revision;
     const transition = this.history.rollbackCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
+    this.rebaseSelection(transition.document);
     this.document = transition.document;
     this.sessionUndo.splice(-commandIdsNewestFirst.length);
     this.historyGeneration++;
@@ -373,6 +380,7 @@ export class ImageEditCommandBusV3 {
     const previousRevision = this.document.revision;
     const transition = this.history.redo(this.document);
     if (!transition.changed) return false;
+    this.rebaseSelection(transition.document);
     this.document = transition.document;
     this.sessionRedo.pop(); this.sessionUndo.push(entry);
     this.historyGeneration++;
@@ -410,6 +418,12 @@ export class ImageEditCommandBusV3 {
   }
 
   /** 一次手势一个会话历史项；清理实例不落盘，也不污染作品历史。 */
+  private rebaseSelection(next: ImageEditDocumentV3): void {
+    if (!this.selection || this.document.geometry.width === next.geometry.width && this.document.geometry.height === next.geometry.height) return;
+    this.selection = rebaseImageEditSelectionGridV3(this.selection, this.document.geometry, next.geometry);
+    this.selectionRevision++;
+  }
+
   setSelection(selection: ImageEditSelectionSessionV3 | null): number | null {
     this.assertMutable();
     const after = selection === null ? null : imageEditSelectionSessionSchemaV3.parse(selection);

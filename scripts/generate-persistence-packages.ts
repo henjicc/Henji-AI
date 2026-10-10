@@ -25,8 +25,14 @@ export async function generateImageHistoryPersistenceFixtures(sourceFixture: str
   const source = JSON.parse(await fsp.readFile(sourceFixture, 'utf8')) as { document: Record<string, unknown>; createdAt: string }
   // 样本作者复用既有图层/参数，正式读入口仍拒绝旧开发版本。
   let document = parseImageEditDocumentV3({ ...source.document, namedRegions: source.document.namedRegions ?? [], version: createImageEditDocumentV3({ width: 1, height: 1 }).version })
+  document.namedRegions = document.namedRegions.filter(region => region.id !== 'golden-float32')
   document.namedRegions.push({ id: 'golden-float32', name: '软覆盖率', selection: appendImageEditSelectionV3(null, encodeImageEditSelectionMaskV3(Float32Array.of(.123456789, .50000006, 1, 0), 2, 2), 'replace') })
   const history = new ImageEditCommandHistoryV3()
+  const originalSize = { width: document.geometry.width, height: document.geometry.height }
+  document = history.execute(document, { type: 'document.set-canvas-size', commandId: 'golden-extend-canvas', expectedRevision: document.revision,
+    width: originalSize.width + 32, height: originalSize.height + 16, rasterCanvases: {} })
+  document = history.execute(document, { type: 'document.set-canvas-size', commandId: 'golden-restore-canvas', expectedRevision: document.revision,
+    ...originalSize, rasterCanvases: {} })
   document = history.execute(document, { type: 'document.atomic', commandId: 'golden-atomic', expectedRevision: document.revision, commands: [
     { type: 'layer.update-common', commandId: 'golden-atomic-a', expectedRevision: document.revision, layerId: 'golden-layer', patch: { opacity: .8 } },
     { type: 'layer.update-common', commandId: 'golden-atomic-b', expectedRevision: document.revision + 1, layerId: 'golden-layer', patch: { opacity: 1 } },

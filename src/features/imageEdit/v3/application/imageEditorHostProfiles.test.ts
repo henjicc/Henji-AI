@@ -31,7 +31,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'zoom',
       'crop',
       'select-rect', 'select-ellipse', 'select-lasso', 'select-polygon', 'select-brush', 'select-wand', 'select-color-range', 'select-focus', 'select-subject', 'select-subject-box',
-      'remove', 'repair',
+      'remove', 'repair', 'ai-outpaint',
       'raster-brush',
       'eraser',
       'mask-edit',

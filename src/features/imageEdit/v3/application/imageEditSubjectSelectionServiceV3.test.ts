@@ -11,7 +11,7 @@ import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersiste
 import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry'
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
-import { selectImageEditRegionV3 } from './imageEditSubjectSelectionServiceV3'
+import { discardImageEditSubjectCandidatesV3, selectImageEditRegionV3 } from './imageEditSubjectSelectionServiceV3'
 import { imageEditV3LayerRef, imageEditV3DocumentRef } from './imageEditDocumentRefs'
 
 const state = vi.hoisted(() => ({ multiple: false, afterInference: null as (() => void) | null, requests: [] as ImageEditorV3SubjectRequest[] }))
@@ -39,6 +39,13 @@ function busFor(): ImageEditCommandBusV3 {
   const doc = createImageEditDocumentV3({ width: 64, height: 32, documentId: crypto.randomUUID() }); doc.layers = [createImageEditRasterLayerV3('r', '原图')]; return new ImageEditCommandBusV3(doc)
 }
 describe('主体选择同源状态闭环', () => {
+  it('取消候选在服务层失效，不允许 UI 隐藏后仍选中旧候选', async () => {
+    const bus = busFor(); state.multiple = true;
+    await selectImageEditRegionV3(bus, 'r', { region: { kind: 'subject' } });
+    discardImageEditSubjectCandidatesV3(bus);
+    await expect(selectImageEditRegionV3(bus, 'r', { region: { kind: 'subject' }, candidateId: '1' })).rejects.toThrow();
+    expect(bus.getSnapshot().selection).toBeNull(); bus.dispose();
+  })
   it('多主体不改选区，明确选择后可读回并一步撤销；候选不可跨图层或修改后复用', async () => {
     const bus = busFor(); state.multiple = true
     const result = await selectImageEditRegionV3(bus, 'r')

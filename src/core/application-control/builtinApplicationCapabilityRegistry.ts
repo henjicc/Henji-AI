@@ -35,6 +35,7 @@ import {
 import { IMAGE_MARK_APPLICATION_CAPABILITIES } from './domains/imageMark/imageMarkApplicationCapabilities'
 import { applyImageEditSelectionCapability } from './domains/imageEdit/imageEditSelectionCapabilities'
 import { IMAGE_EDIT_REPAIR_CAPABILITIES } from './domains/imageEdit/imageEditRepairCapabilities'
+import { IMAGE_EDIT_OUTPAINT_CAPABILITIES } from './domains/imageEdit/imageEditOutpaintCapabilities'
 import { DOCUMENTS_APPLICATION_CAPABILITIES } from './domains/documents/documentsApplicationCapabilities'
 
 export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
@@ -61,6 +62,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   paintImageEditTargetCapability,
   convertImageEditFilterScopeCapability,
   ...IMAGE_EDIT_REPAIR_CAPABILITIES,
+  ...IMAGE_EDIT_OUTPAINT_CAPABILITIES,
   selectImageEditRegionCapability,
   // 通用反射能力：领域只要注册实体和属性，助手就能读改增删，不必再写专用能力
   ...APPLICATION_REFLECTION_APPLICATION_CAPABILITIES,

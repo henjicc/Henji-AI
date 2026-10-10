@@ -24,6 +24,7 @@ export interface ImageEditHistoryJumpOptionsV3 {
 }
 
 const labels: Record<ImageEditCommandV3['type'], string> = {
+  'document.set-canvas-size': '调整画布边界',
   'layer.replace': '更新图层内容',
   'document.atomic': '转换滤镜范围',
   'document.set-named-regions': '管理通道', 'layer.move-many': '移动图层',

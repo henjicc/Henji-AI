@@ -35,8 +35,10 @@ import { createImageDocumentFromSource } from '@/features/imageMark/standalone/i
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { releaseImageDocument } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import { requestImageDocumentInEditor } from '@/features/imageEdit/documents/imageDocumentWorkspace'
+import { registerImageEditOutpaintHandlers } from './registerImageEditOutpaintHandlers'
 
 export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  registerImageEditOutpaintHandlers(registrar)
   registrar.registerHandler(paintImageEditTargetCapability.id, async (input, context) => {
     const parsed = paintImageEditTargetCapability.inputSchema.parse(input)
     const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)

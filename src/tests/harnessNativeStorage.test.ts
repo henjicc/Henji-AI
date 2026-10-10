@@ -12,6 +12,13 @@ import {
   seedHarnessFonts,
 } from './harnessNativeStorage'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
+import type { GenerationHistoryInsertDto } from '@/platform/contracts/localRecords'
+
+function historyRecord(id: string, patch: Partial<GenerationHistoryInsertDto> = {}): GenerationHistoryInsertDto {
+  return { id, providerId: 'kie', modelId: 'image-model', type: 'image', prompt: '产品 Photo', params: { nested: { value: 1 } },
+    resultPaths: [], taskId: null, status: 'pending', errorMessage: null, cost: null, duration: null,
+    createdAt: '2026-10-01T00:00:00.000Z', ...patch }
+}
 
 /**
  * 替身自身的门禁。
@@ -70,6 +77,53 @@ describe('harness 内存 native 替身', () => {
 
     resetHarnessNativeStorage()
     expect(await assetLibrary.listLibraries()).toEqual([])
+  })
+
+  it('生成历史显式写回终态，输入与读回均克隆，更新保留创建时间且不推断业务结果', async () => {
+    const storage = getPlatform().generationHistory
+    const record = historyRecord('original')
+    await storage.insert(record)
+    record.params.nested = { value: 99 }; record.resultPaths.push('/changed.png')
+    const read = (await storage.get(record.id))!
+    expect(read).toMatchObject({ status: 'pending', params: { nested: { value: 1 } }, resultPaths: [], updatedAt: record.createdAt })
+    read.params.nested = {}; read.resultPaths.push('/read.png')
+    expect((await storage.get(record.id))?.resultPaths).toEqual([])
+    const update = { status: 'success' as const, resultPaths: ['/generated.png'], prompt: null, cost: 0 }
+    await storage.update(record.id, update); update.resultPaths.push('/mutated.png')
+    expect(await storage.get(record.id)).toMatchObject({ createdAt: record.createdAt, status: 'success', resultPaths: ['/generated.png'], prompt: null, cost: 0 })
+    const updatedAt = (await storage.get(record.id))!.updatedAt
+    await storage.update(record.id, { prompt: undefined })
+    expect((await storage.get(record.id))?.updatedAt).toBe(updatedAt)
+    await storage.update('missing', { status: 'success' }); expect(await storage.get('missing')).toBeNull()
+    resetHarnessNativeStorage(); expect(await storage.count()).toBe(0); expect(await storage.get(record.id)).toBeNull()
+  })
+
+  it('生成历史批量主键冲突整体回滚，按创建时间和插入顺序分页并按字段过滤', async () => {
+    const storage = getPlatform().generationHistory
+    await storage.insert(historyRecord('old', { createdAt: '2026-09-01T00:00:00.000Z' }))
+    await expect(storage.insertMany([historyRecord('partial'), historyRecord('old')])).rejects.toThrow('UNIQUE constraint failed: history.id')
+    await expect(storage.insertMany([historyRecord('same'), historyRecord('same')])).rejects.toThrow('UNIQUE constraint failed: history.id')
+    expect(await storage.count()).toBe(1)
+    await expect(storage.insert(historyRecord('old'))).rejects.toThrow('UNIQUE constraint failed: history.id')
+    await storage.insertMany([historyRecord('new-first'), historyRecord('new-last'), historyRecord('video', { type: 'video', providerId: 'fal', modelId: 'video-model', status: 'error', prompt: null })])
+    expect((await storage.list()).map(row => row.id)).toEqual(['video', 'new-last', 'new-first', 'old'])
+    const query = { providerId: 'kie', modelId: 'image-model', type: 'image' as const, status: 'pending' as const, search: 'PHOTO', idPrefix: 'new-', offset: 1, limit: 1 }
+    expect((await storage.list(query)).map(row => row.id)).toEqual(['new-first'])
+    const listed = await storage.list({ offset: 2 }); listed[0].prompt = 'changed'
+    expect((await storage.get('new-first'))?.prompt).toBe('产品 Photo')
+    expect(await storage.list({ search: 'missing' })).toEqual([])
+  })
+
+  it('生成历史删除返回实际条数，按时间清理保持边界记录，未实现方法仍拒绝', async () => {
+    const storage = getPlatform().generationHistory
+    await storage.insertMany([historyRecord('old', { createdAt: '2026-09-01T00:00:00.000Z' }), historyRecord('keep'), historyRecord('delete'), historyRecord('batch')])
+    await storage.delete('delete'); await storage.delete('missing')
+    expect(await storage.deleteMany(['batch', 'batch', 'missing'])).toBe(1)
+    expect(await storage.clear('2026-10-01T00:00:00.000Z')).toBe(1)
+    expect((await storage.list()).map(row => row.id)).toEqual(['keep'])
+    expect(await storage.clear()).toBe(1); expect(await storage.clear()).toBe(0)
+    const native = (window as unknown as { henjiNative: { generationHistory: Record<string, unknown> } }).henjiNative
+    expect(() => native.generationHistory.fakeSuccess).toThrow(/没有实现/)
   })
 
   it('镜头参考文档经真实电子适配器新建、保存并回读（3.2 起走通用文档）', async () => {

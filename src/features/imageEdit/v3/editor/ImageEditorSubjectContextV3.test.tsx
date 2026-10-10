@@ -10,7 +10,7 @@ import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorSubjectProviderV3, useImageEditorSubjectV3 } from './ImageEditorSubjectContextV3'
 import type { ImageEditorV3Controller } from './types'
 
-vi.mock('../application/imageEditSubjectSelectionServiceV3', () => ({ selectImageEditRegionV3: vi.fn() }))
+vi.mock('../application/imageEditSubjectSelectionServiceV3', () => ({ selectImageEditRegionV3: vi.fn(), discardImageEditSubjectCandidatesV3: vi.fn() }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 it('切换图片取消旧主体作业并清除忙碌，旧候选不能污染新图片或结束新作业', async () => {
   const make = () => { const doc = createImageEditDocumentV3({ width: 32, height: 32 }); doc.layers = [createImageEditRasterLayerV3('r', '原图')]; return new ImageEditCommandBusV3(doc) }

@@ -176,8 +176,11 @@ function collectFindings(options) {
         if (resolved && resolved !== importer) target.add(resolved)
       }
       // Vite import.meta.glob 自动发现的入口（如工具箱 toolboxTools/*/entry.ts）同样算被引用
-      for (const match of text.matchAll(/import\.meta\.glob(?:<[^>]*>)?\(\s*['"`]([^'"`]+)['"`]/g)) {
-        for (const file of globMatches(match[1], importer, known)) if (file !== importer) target.add(file)
+      for (const match of text.matchAll(/import\.meta\.glob(?:<[^>]*>)?\(\s*(?:\[([\s\S]*?)\]|['"`]([^'"`]+)['"`])/g)) {
+        const patterns = match[2] ? [match[2]] : [...match[1].matchAll(/['"`]([^'"`]+)['"`]/g)].map(entry => entry[1]);
+        for (const pattern of patterns.filter(value => !value.startsWith('!'))) {
+          for (const file of globMatches(pattern, importer, known)) if (file !== importer) target.add(file)
+        }
       }
     }
     for (const html of walk(ROOT, (name, full) => name.endsWith('.html') && !full.includes(`${path.sep}out${path.sep}`)

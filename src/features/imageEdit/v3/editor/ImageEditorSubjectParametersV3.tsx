@@ -15,7 +15,7 @@ export function ImageEditorSubjectParametersV3(): JSX.Element | null {
   return <>
     <UiButton size="sm" disabled={subject.busy} onClick={() => void subject.run({ kind: 'subject' })}>{t('imageEditor.v3.subject.auto')}</UiButton>
     <UiButton size="sm" disabled={subject.busy} onClick={() => void subject.run({ kind: 'portrait', quality: 'fine' })}>{t('imageEditor.v3.subject.portrait')}</UiButton>
-    {subject.candidates.length ? <PanelTrigger panelWidthLabels={[t('imageEditor.v3.subject.choose')]} closeOnPanelClick={false} renderPanel={() => <div className="flex flex-col gap-1 p-2">
+    {subject.candidates.length ? <PanelTrigger panelWidth="content" closeOnPanelClick={false} renderPanel={() => <div className="flex flex-col gap-1 whitespace-nowrap p-2">
       {subject.candidates.slice(page * 8, (page + 1) * 8).map((candidate, index) => <UiOptionButton key={candidate.id} variant="menu" onClick={() => void subject.run({ kind: 'subject' }, candidate.id)}>{t('imageEditor.v3.subject.candidate', { number: page * 8 + index + 1, area: Math.round(candidate.area * 100) })}</UiOptionButton>)}
       <div className="flex items-center justify-between gap-2"><UiButton size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>{t('imageEditor.v3.subject.previous')}</UiButton><UiButton size="sm" disabled={(page + 1) * 8 >= subject.candidates.length} onClick={() => setPage(page + 1)}>{t('imageEditor.v3.subject.next')}</UiButton></div>
     </div>}>

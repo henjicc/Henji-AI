@@ -67,7 +67,14 @@ async function cleanupIsolatedUserDataDir(userDataDir) {
   }
 }
 
-async function stopElectronChild(child) {
+async function stopElectronChild(child, nativePid = child.pid) {
+  // Windows 的 Playwright child 可能是启动包装进程；包装已退出不代表本次 Electron 已退出。
+  if (process.platform === 'win32' && Number.isSafeInteger(nativePid) && nativePid > 0 && nativePid !== child.pid) {
+    try { process.kill(nativePid, 0) } catch (error) { if (error.code === 'ESRCH') return; throw error }
+    const ownedTree = spawn('taskkill', ['/PID', String(nativePid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    await once(ownedTree, 'exit')
+    return
+  }
   if (child.exitCode !== null) return
   child.kill()
   await Promise.race([
@@ -273,6 +280,7 @@ async function launchElectronApp({
         cwd: target.cwd,
         env: createElectronEnv(launchEnv),
       })
+      const nativePid = await app.evaluate(() => process.pid)
       const page = await app.firstWindow({ timeout: 30000 })
       const restoreOnboarding = skipOnboarding
         ? await suppressOnboardingForAutomation(page)
@@ -294,7 +302,7 @@ async function launchElectronApp({
               app.close().catch(() => undefined),
               new Promise((resolve) => setTimeout(resolve, 5000)),
             ])
-            await stopElectronChild(child)
+            await stopElectronChild(child, nativePid)
           } finally {
             await cleanupIsolatedUserDataDir(ownedUserDataDir)
           }

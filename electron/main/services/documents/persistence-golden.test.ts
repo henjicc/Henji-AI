@@ -32,7 +32,7 @@ describe('正式读入口打开黄金归档与源码', () => {
         expect(imageWorkingCopySchema.safeParse(persisted).success).toBe(true)
         expect(imported.manifest.packageVersion).toBe(IMAGE_PACKAGE_VERSION)
         expect(imported.manifest.document.formatVersion).toBe(IMAGE_WORKING_VERSION)
-        expect(imported.manifest.document.historyCheckpoint).toMatchObject({ total: 4, position: 3 })
+        expect(imported.manifest.document.historyCheckpoint).toMatchObject({ total: 6, position: 5 })
         expect(imported.manifest.document.history?.redo).toHaveLength(1)
         const history = new ImageEditCommandHistoryV3()
         const document = imported.manifest.document.document as ImageEditDocumentV3
@@ -47,7 +47,8 @@ describe('正式读入口打开黄金归档与源码', () => {
         expect(document.namedRegions).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'golden-region', name: '主体', selection: expect.objectContaining({ feather: .02 }) })]))
         const floatShape = document.namedRegions.find(region => region.id === 'golden-float32')!.selection.operations[0].shape
         expect(floatShape).toMatchObject({ type: 'mask', runs: [[0, 1, Math.fround(.123456789)], [1, 1, Math.fround(.50000006)], [2, 1, 1]] })
-        expect(imported.manifest.document.history?.undo[0].forward.type).toBe('document.atomic')
+        expect(imported.manifest.document.history?.undo[0].forward.type).toBe('document.set-canvas-size')
+        expect(imported.manifest.document.history?.undo[2].forward.type).toBe('document.atomic')
         expect(layers[1]).toMatchObject({ type: 'adjustment', adjustmentId: 'color_grade' })
         expect(layers[2]).toMatchObject({ type: 'effect', effectId: 'gaussian_blur' })
         expect(layers[3]).toMatchObject({ type:'shape', content:{operands:[{operation:'replace'}]} })

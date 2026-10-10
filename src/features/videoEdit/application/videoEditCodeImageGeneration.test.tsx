@@ -24,7 +24,14 @@ import * as images from './videoEditCodeImageGeneration'
 
 interface Task { status: string; resultAvailable: boolean; progress: number; cancellable: boolean; errorMessage?: string }
 const state = vi.hoisted(() => ({ providers: ['kie'], tasks: new Map<string, Task>(), listeners: new Set<() => void>(), failTrial: false, submitGate: undefined as Promise<void> | undefined }))
-const submit = vi.hoisted(() => vi.fn(async (_input: unknown, id: string) => { await state.submitGate; state.tasks.set(id, { status: 'pending', resultAvailable: false, progress: 0, cancellable: true }); return { taskId: id } }))
+const submit = vi.hoisted(() => vi.fn(async (input: { modelId: string; prompt: string; options: Record<string, unknown> }, id: string) => {
+  await state.submitGate
+  state.tasks.set(id, { status: 'pending', resultAvailable: false, progress: 0, cancellable: true })
+  const { getPlatform } = await import('@/platform/runtime')
+  await getPlatform().generationHistory.insert({ id, providerId: 'kie', modelId: input.modelId, type: 'image', prompt: input.prompt,
+    params: input.options, resultPaths: [], taskId: id, status: 'pending', errorMessage: null, cost: null, duration: null })
+  return { taskId: id }
+}))
 const cancel = vi.hoisted(() => vi.fn(async (id: string) => { state.tasks.set(id, { status: 'cancelled', progress: 0, resultAvailable: false, cancellable: false }) }))
 vi.mock('@/features/generation/application/generationApplicationService', () => ({ generationApplicationService: {
   prepare: vi.fn(() => ({})), submit, getTask: (id: string) => { const task = state.tasks.get(id); if (!task) throw new Error('TASK_NOT_FOUND'); return task }, cancelTask: cancel,
@@ -57,7 +64,14 @@ const request = () => ({ target: target(), parameterKey: 'photo', prompt: '产�
 const assets = new Map<string, AssetRecord>()
 const files = new Map<string, string>()
 function notify(id: string, patch: Partial<Task>): void { Object.assign(state.tasks.get(id)!, patch); for (const listener of [...state.listeners]) listener() }
-async function complete(job: images.CodeImageGenerationJob): Promise<void> { notify(job.taskId, { status: 'success', resultAvailable: true }); await waitFor(() => expect(job.status, job.error).toBe('placed')) }
+async function succeed(job: images.CodeImageGenerationJob): Promise<void> {
+  await waitFor(async () => expect(await getPlatform().generationHistory.get(job.taskId)).not.toBeNull())
+  notify(job.taskId, { status: 'success', resultAvailable: true, progress: 100 })
+  // 替身供应商也要写正式历史回执，内存终态和持久存储各有自己的事实。
+  await getPlatform().generationHistory.update(job.taskId, { status: 'success', resultPaths: [`D:/generated/${job.taskId}.png`] })
+  notify(job.taskId, {})
+}
+async function complete(job: images.CodeImageGenerationJob): Promise<void> { await succeed(job); await waitFor(() => expect(job.status, job.error).toBe('placed')) }
 function View(): React.ReactElement {
   useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
   const editor = readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, owner.document.sequences[0].clips[0].id)
@@ -119,7 +133,7 @@ it('进度取消走正式任务；迟到成功不导入、不绑定', async () =
   await view.findByText('正在生成图片 37%')
   fireEvent.click(view.getByRole('button', { name: '取消生成' }))
   await waitFor(() => expect(cancel).toHaveBeenCalledWith(job.taskId, '已取消代码图片生成'))
-  notify(job.taskId, { status: 'success', resultAvailable: true }); await new Promise(resolve => setTimeout(resolve, 0))
+  await succeed(job); await new Promise(resolve => setTimeout(resolve, 0))
   expect(job.status).toBe('cancelled'); expect(bound()).toBeNull(); expect(owner.document.media).toEqual([])
 })
 it('浮层提交编辑后的提示词，关闭控件后后台仍完成；落库来源和绑定一步撤销', async () => {
@@ -135,6 +149,18 @@ it('浮层提交编辑后的提示词，关闭控件后后台仍完成；落库�
   expect(owner.document.media[0]).toMatchObject({ assetId: 'asset-0', codeImageGeneration: { prompt: job.request.prompt, modelId: 'kie-gpt-image-2', taskId: job.taskId, parameterKey: 'photo', outputIndex: 0 } })
   expect([...assets.values()][0].source).toBe('generated')
   undoVideoEdit(owner.document.id); expect(bound()).toBeNull(); expect(owner.document.media).toHaveLength(0); expect(assets.size).toBe(1)
+})
+it('内存成功但历史未落盘时不导入或绑定，持久回执后只落位一次', async () => {
+  const job = await images.startCodeImageGeneration(request())
+  await waitFor(async () => expect(await getPlatform().generationHistory.get(job.taskId)).not.toBeNull())
+  notify(job.taskId, { status: 'success', resultAvailable: true, progress: 100 })
+  await waitFor(() => expect(job.progress).toBe(100))
+  expect((await getPlatform().generationHistory.get(job.taskId))?.status).toBe('pending')
+  expect(job.status).toBe('generating'); expect(bound()).toBeNull(); expect(assets.size).toBe(0)
+  const history = owner.past.length
+  await complete(job)
+  expect(owner.past).toHaveLength(history + 1); expect(owner.document.media).toHaveLength(1)
+  expect(bound()).toEqual({ kind: 'image', mediaId: job.mediaId }); expect(submit).toHaveBeenCalledTimes(1)
 })
 it('连续生成保留候选，控件切换候选可以撤销，序列和参数归属隔离', async () => {
   const first = await images.startCodeImageGeneration(request()); await complete(first)
@@ -160,7 +186,7 @@ it('完成候选、绑定和生成来源随项目保存重开；来源属性可�
 })
 it('试渲染失败不留下半导入；应用完成图片重试不再次生成', async () => {
   const job = await images.startCodeImageGeneration(request()); const before = owner.document; const history = owner.past.length
-  state.failTrial = true; notify(job.taskId, { status: 'success', resultAvailable: true })
+  state.failTrial = true; await succeed(job)
   await waitFor(() => expect(job.status).toBe('failed'))
   expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history); expect(assets.size).toBe(1)
   state.failTrial = false; images.retryCodeImageGenerationBinding(job.id)
@@ -170,7 +196,7 @@ it('用户期间换图后拒绝覆盖；确认应用复用原完成结果', asyn
   const first = await images.startCodeImageGeneration(request()); await complete(first)
   const second = await images.startCodeImageGeneration(request())
   await bindVideoEditCodeImage(target(), 'photo', null)
-  notify(second.taskId, { status: 'success', resultAvailable: true })
+  await succeed(second)
   await waitFor(() => expect(second.status).toBe('failed')); expect(second.error).toContain('已选择其他图片'); expect(bound()).toBeNull()
   images.retryCodeImageGenerationBinding(second.id); await waitFor(() => expect(second.status).toBe('placed'))
   expect(submit).toHaveBeenCalledTimes(2)
@@ -178,7 +204,7 @@ it('用户期间换图后拒绝覆盖；确认应用复用原完成结果', asyn
 it('保存失败后的重试只保存原绑定；用户随后撤销不会被重新应用', async () => {
   const job = await images.startCodeImageGeneration(request())
   const write = vi.spyOn(owner.session, 'flush').mockRejectedValue(new Error('磁盘写入失败'))
-  notify(job.taskId, { status: 'success', resultAvailable: true }); await waitFor(() => expect(job.status).toBe('failed'))
+  await succeed(job); await waitFor(() => expect(job.status).toBe('failed'))
   expect(job.mediaId).toBeTruthy(); const history = owner.past.length
   undoVideoEdit(owner.document.id); write.mockRestore()
   images.retryCodeImageGenerationBinding(job.id); await waitFor(() => expect(job.status).toBe('placed'))
@@ -193,7 +219,7 @@ it('提交未返回时取消，任务返回后仍请求正式取消', async () =
 it('生成期间轨道锁定时不留下半导入或绑定', async () => {
   const job = await images.startCodeImageGeneration(request())
   editVideoProject(owner.document.id, document => { document.sequences[0].tracks.find(track => track.index === document.sequences[0].clips[0].track)!.locked = true; return document })
-  notify(job.taskId, { status: 'success', resultAvailable: true }); await waitFor(() => expect(job.status).toBe('failed'))
+  await succeed(job); await waitFor(() => expect(job.status).toBe('failed'))
   expect(bound()).toBeNull(); expect(owner.document.media).toHaveLength(0)
 })
 it('助手正式桥梁导入生成结果，读取item媒体引用再通用实体绑定并回读撤销', async () => {

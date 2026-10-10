@@ -30,6 +30,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { FakeDocumentCommands } from '@/features/documents/documentSessionTestKit'
 import type { FontCatalog } from '@/core/fonts/catalog'
 import type { SettingEntryDto, SettingValueType } from '@/core/localRecords/types'
+import type { GenerationHistoryPlatform } from '@/platform/contracts/localRecords'
+import type { GenerationHistoryRecordDto } from '@/core/localRecords/types'
 
 import type { AssetLibraryRecord, AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
@@ -42,6 +44,58 @@ const FIX_HINT = '替身只负责存储：要用到新方法，就在 src/tests/
 /** 进程边界的结构化克隆。直接交出内部引用会把"这跳其实穿了一次 IPC"这件事藏起来。 */
 function wire<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+/* ── 生成历史存储 ───────────────────────────────────────────────────────── */
+
+const generationHistory = new Map<string, GenerationHistoryRecordDto>()
+const historyTimestamp = (): string => new Date().toISOString().replace('T', ' ').slice(0, 19)
+
+/** 只模拟 history 表的行、排序和事务；不推断任务终态，不生成结果或加工媒体路径。 */
+const generationHistoryStorage: GenerationHistoryPlatform = {
+  async list(query = {}) {
+    const search = query.search?.trim().toLowerCase()
+    const rows = [...generationHistory.values()].reverse().filter(row =>
+      (!query.providerId || row.providerId === query.providerId)
+      && (!query.modelId || row.modelId === query.modelId)
+      && (!query.type || row.type === query.type)
+      && (!query.status || row.status === query.status)
+      && (!query.idPrefix || row.id.startsWith(query.idPrefix))
+      && (!search || row.prompt?.toLowerCase().includes(search)))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    const offset = query.offset ?? 0
+    return wire(rows.slice(offset, query.limit === undefined ? undefined : offset + query.limit))
+  },
+  async get(id) { return generationHistory.has(id) ? wire(generationHistory.get(id)!) : null },
+  async count() { return generationHistory.size },
+  async insert(record) { await generationHistoryStorage.insertMany([record]) },
+  async insertMany(records) {
+    const ids = new Set(generationHistory.keys())
+    // 先克隆并核对整批主键，任一冲突都不能留下部分写入。
+    const rows = records.map(record => {
+      if (ids.has(record.id)) throw new Error('UNIQUE constraint failed: history.id')
+      ids.add(record.id)
+      const createdAt = record.createdAt ?? historyTimestamp()
+      return wire({ ...record, createdAt, updatedAt: createdAt })
+    })
+    for (const row of rows) generationHistory.set(row.id, row)
+  },
+  async update(id, updates) {
+    const row = generationHistory.get(id)
+    const patch = wire(updates)
+    if (row && Object.keys(patch).length) generationHistory.set(id, { ...row, ...patch, updatedAt: historyTimestamp() })
+  },
+  async delete(id) { generationHistory.delete(id) },
+  async deleteMany(ids) {
+    return ids.reduce((count, id) => count + Number(generationHistory.delete(id)), 0)
+  },
+  async clear(olderThan) {
+    let count = 0
+    for (const [id, row] of generationHistory) {
+      if (!olderThan || row.createdAt < olderThan) { generationHistory.delete(id); count++ }
+    }
+    return count
+  },
 }
 
 /* ── 素材库存储 ─────────────────────────────────────────────────────────── */
@@ -176,6 +230,7 @@ const NAMESPACES: Record<string, object> = {
   },
   assetLibrary: assetLibraryStorage,
   audio: audioEditStorage,
+  generationHistory: generationHistoryStorage,
   documents: documentsStorage,
   imageEditorV3: {
     async listDocuments(request: Parameters<ImageEditorV3Platform['listDocuments']>[0]) {
@@ -270,6 +325,7 @@ export function resetHarnessNativeStorage(): void {
   settings.clear()
   imageDocuments.clear()
   libraries.clear()
+  generationHistory.clear()
   documentStore = new FakeDocumentCommands({ realKinds: true })
 }
 

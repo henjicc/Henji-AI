@@ -30,7 +30,7 @@ const generation = vi.hoisted(() => ({
 const observe = vi.hoisted(() => vi.fn(async (_projectId: string, target: { kind: 'source'; itemId: string; timeUs: number } | { kind: 'program'; sequenceId?: string; frame: number }) => ({ asset: { filePath: target.kind === 'source' ? `/frames/${target.itemId}-${target.timeUs}.png` : `/frames/program-${target.frame}.png` } })))
 const imports = vi.hoisted(() => vi.fn())
 const saves = vi.hoisted(() => vi.fn(async () => { if (state.saveError) throw new Error('保存失败') }))
-vi.mock('@/services/database', () => ({ databaseService: { getHistoryById: vi.fn(async () => state.history) } }))
+vi.mock('@/services/database', () => ({ databaseService: { getHistoryById: vi.fn(async () => state.history ?? (state.task.status === 'success' ? { status: 'success' } : null)) } }))
 
 vi.mock('@/core/ModelRegistry', () => ({ registry: { getModel: (id: string) => ({ meta: { id, type: id.startsWith('test-audio') ? 'audio' : 'video', provider: 'test' } }), getSchema: () => [], getDefaultValues: () => ({}) } }))
 vi.mock('@/core/inputs/inputLimits', () => ({ resolveInputLimits: () => ({ images: { min: 0, max: 2 }, videos: { min: 0, max: 0 }, audios: { min: 0, max: 0 } }) }))

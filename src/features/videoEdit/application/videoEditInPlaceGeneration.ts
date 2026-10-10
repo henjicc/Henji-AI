@@ -1,5 +1,6 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { createLogger } from '@/core/logging'
+import { completeInPlaceGeneration } from '@/core/services/inPlaceGeneration'
 import { registry } from '@/core/ModelRegistry'
 import type { ParamDef } from '@/core/types'
 import { transferModelParamOverrides } from '@/core/params/modelParamTransfer'
@@ -11,7 +12,7 @@ import { generationApplicationService } from '@/features/generation/application/
 import { databaseService } from '@/services/database'
 import { videoEditInPlaceRecordSchema } from '@/core/videoEdit/inPlacePersistence'
 import { VideoEditOperationFailure } from '@/core/videoEdit/operationFailure'
-import { subscribeVisibleGenerationTaskChanges } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
+import { waitForGenerationCompletion as waitVideoEditGenerationTask } from '@/features/generation'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { prepareVideoEditCreativeResult } from './videoEditCreativeSources'
@@ -286,49 +287,7 @@ export async function prepareVideoEditInPlace(request: VideoEditInPlaceRequest):
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }
 function aborted(signal: AbortSignal): boolean { return signal.aborted }
 
-/** 等生成任务到终态；进度由界面直接订阅生成进度。 */
-export async function waitVideoEditGenerationTask(taskId: string, signal: AbortSignal, recovering = false, onProgress?: (progress: number) => void): Promise<{ ok: true } | { ok: false; error: string }> {
-  return await new Promise((resolve, reject) => {
-    let checking = false
-    let checkAgain = false
-    let settled = false
-    const finish = (outcome: { ok: true } | { ok: false; error: string }): void => { if (settled) return; settled = true; cleanup(); resolve(outcome) }
-    const check = async (): Promise<void> => {
-      if (settled) return
-      if (checking) { checkAgain = true; return }
-      checking = true
-      try {
-        let task: ReturnType<typeof generationApplicationService.getTask> | undefined
-        try { task = generationApplicationService.getTask(taskId) } catch { task = undefined }
-        if (task) onProgress?.(task.progress ?? 0)
-        // 恢复优先读持久历史，防止生成页尚未刷新时用旧内存状态盖掉关闭期间的结果。
-        if (recovering || !task) {
-          const record = await databaseService.getHistoryById(taskId)
-          if (settled || signal.aborted) return
-          if (record && isGenerationTerminalStatus(record.status)) {
-            finish(normalizeGenerationTaskStatus(record.status) === 'success'
-              ? { ok: true } : { ok: false, error: record.errorMessage || '原生成任务未完成，可重试或换模型重新生成。' })
-            return
-          }
-          if (!task && !record) { finish({ ok: false, error: '找不到原生成任务，请从生成历史核对结果，或重试重新生成。' }); return }
-        }
-        if (task && isGenerationTerminalStatus(task.status)) {
-          const status = normalizeGenerationTaskStatus(task.status)
-          finish(status === 'success' && task.resultAvailable ? { ok: true } : { ok: false, error: task.errorMessage || (status === 'cancelled' ? '生成已取消。' : '生成没有完成。') })
-          return
-        }
-      } catch (error) { if (!settled) { settled = true; cleanup(); reject(error) } }
-      finally { checking = false; if (checkAgain) { checkAgain = false; void check() } }
-    }
-    const onAbort = (): void => { settled = true; cleanup(); reject(signal.reason ?? new DOMException('已取消。', 'AbortError')) }
-    const unsubscribe = subscribeVisibleGenerationTaskChanges(() => { void check() })
-    // 状态事件之外再兜底轮询（结果写回与事件可能错开）。
-    const timer = setInterval(() => { void check() }, 2000)
-    function cleanup(): void { unsubscribe(); clearInterval(timer); signal.removeEventListener('abort', onAbort) }
-    signal.addEventListener('abort', onAbort, { once: true })
-    if (signal.aborted) onAbort(); else void check()
-  })
-}
+export { waitForGenerationCompletion as waitVideoEditGenerationTask } from '@/features/generation'
 
 async function referenceFiles(job: VideoEditInPlaceJob, references: VideoEditInPlaceSelectedReference[], signal: AbortSignal): Promise<string[]> {
   const paths: string[] = []
@@ -354,25 +313,16 @@ async function land(job: VideoEditInPlaceJob, taskId: string, signal: AbortSigna
   })
   // 在等待保存前记住已发生的编辑：保存失败/取消竞态不能再次导入同一结果。
   update(job.id, { clipId: landed!.clipId })
-  await saveVideoEdit(job.projectId)
   return { clipId: landed!.clipId, ...(landed!.fallback ? { fallback: landed!.fallback } : {}) }
 }
 
 async function complete(job: VideoEditInPlaceJob, taskId: string, signal: AbortSignal, recovering = false): Promise<void> {
-  const current = jobs.get(job.id) ?? job
-  if (current.clipId) {
-    // 已编辑，只有保存未确认。先写完原修改，再移除续接记录。
-    await saveVideoEdit(job.projectId)
-    update(job.id, { status: 'placed', error: undefined })
-    await saveVideoEdit(job.projectId)
-    return
-  }
-  const outcome = await waitVideoEditGenerationTask(taskId, signal, recovering)
-  signal.throwIfAborted()
-  if (!outcome.ok) throw new Error(outcome.error)
-  update(job.id, { status: 'placing', error: undefined })
-  const landed = await land(job, taskId, signal)
-  update(job.id, { status: 'placed', clipId: landed.clipId, ...(landed.fallback ? { fallback: landed.fallback } : {}) })
+  const landed = await completeInPlaceGeneration({ signal,
+    readApplied: () => { const current = jobs.get(job.id) ?? job; return current.clipId ? { clipId: current.clipId, fallback: current.fallback } : undefined },
+    wait: () => waitVideoEditGenerationTask(taskId, signal, recovering),
+    place: async () => { update(job.id, { status: 'placing', error: undefined }); return land(job, taskId, signal) },
+    markApplied: result => update(job.id, result), save: () => saveVideoEdit(job.projectId) })
+  update(job.id, { status: 'placed', error: undefined, clipId: landed.clipId, ...(landed.fallback ? { fallback: landed.fallback } : {}) })
   await saveVideoEdit(job.projectId)
   prune()
 }

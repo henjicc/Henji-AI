@@ -225,6 +225,18 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史命令无效');
   const command = value;
   switch (command.type) {
+    case 'document.set-canvas-size':
+      validateBase(command, ['width', 'height', 'rasterCanvases']);
+      if (safeInteger(command.width, '画布宽度') <= 0 || safeInteger(command.height, '画布高度') <= 0) fail('画布尺寸必须为正数');
+      if (!command.rasterCanvases || typeof command.rasterCanvases !== 'object' || Array.isArray(command.rasterCanvases)) fail('像素网格无效');
+      for (const [id, size] of Object.entries(command.rasterCanvases)) {
+        if (!id.length) fail('像素网格引用无效');
+        if (size === null) continue;
+        if (!size || typeof size !== 'object' || Array.isArray(size)) fail('像素网格尺寸无效');
+        const record = size as Record<string, unknown>;
+        if (Object.keys(record).sort().join(',') !== 'height,width' || safeInteger(record.width, '像素网格宽度') <= 0 || safeInteger(record.height, '像素网格高度') <= 0) fail('像素网格尺寸无效');
+      }
+      break;
     case 'document.atomic':
       validateBase(command, ['commands']);
       if (!Array.isArray(command.commands) || command.commands.length === 0) fail('原子历史操作为空');

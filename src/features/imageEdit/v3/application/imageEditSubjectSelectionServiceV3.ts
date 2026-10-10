@@ -15,6 +15,8 @@ const logger = createLogger('features.image_edit_v3.subject')
 export interface ImageEditSubjectCandidateV3 { id: string; bounds: ImageEditorV3SubjectCandidate['bounds']; area: number; score: number }
 interface Pending { layerId: string; revision: number; selectionRevision: number; candidates: ImageEditorV3SubjectCandidate[] }
 const pending = new WeakMap<ImageEditCommandBusV3, Pending>(), active = new WeakSet<ImageEditCommandBusV3>()
+/** 候选只属于本次识别；取消或切换目标后不得通过旧候选继续提交。 */
+export function discardImageEditSubjectCandidatesV3(bus: ImageEditCommandBusV3): void { pending.delete(bus) }
 export interface ImageEditSubjectSelectionOptionsV3 {
   region?: ImageEditSubjectRegionV3
   candidateId?: string
@@ -61,6 +63,7 @@ export async function selectImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
   if (active.has(bus)) throw new Error('正在选择主体，请完成或取消当前任务')
   if (start.document.color.workingSpace !== 'srgb' || start.document.color.hdrMetadata || !['srgb', 'linear'].includes(start.document.color.transferFunction)) throw new Error('主体选择目前支持标准色域图片')
   pending.delete(bus); active.add(bus)
+  logger.info('主体选择开始', { event: 'image_edit.subject.start', context: { documentId: start.document.id, layerId, regionKind: region.kind } })
   const abort = new AbortController(), cancel = (): void => abort.abort()
   options.signal?.addEventListener('abort', cancel, { once: true })
   bus.getLifecycleSignal().addEventListener('abort', cancel, { once: true })

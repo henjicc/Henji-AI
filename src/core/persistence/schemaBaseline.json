@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 8,
-      "fingerprint": "3db5294b62f36390c396f74c9a7c1cf92b6f92541c8f355c0c0bfec28e9892dc",
-      "supportedFrom": 8
+      "version": 9,
+      "fingerprint": "e1d87c416ce062091021cf7696e3c117e1194444eef280e495583e67b784af44",
+      "supportedFrom": 9
     },
     "image-working-copy": {
-      "version": 10,
-      "fingerprint": "1781d68487bae400aab9f93a017886aa17b2d5c6ee6fa849d447b22b471016ab",
-      "supportedFrom": 10
+      "version": 11,
+      "fingerprint": "865d031879f266e2362f67249044c92a0d61216c1823c8685c9a26346da1fbd3",
+      "supportedFrom": 11
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 8,
-      "fingerprint": "429c33aceb80fad97a1733b7a09ec0aca10d6e9fcc2f29955dd5a7bf94d0bbed",
-      "supportedFrom": 8
+      "version": 9,
+      "fingerprint": "df88d10bb072db6bc8e6e6b2468341ca552e36ccfe18b7ae6a96327d00242afa",
+      "supportedFrom": 9
     },
     "keystore": {
       "version": 1,
@@ -944,6 +944,33 @@
         6,
         7
       ]
+    },
+    {
+      "at": "2026-10-10T08:00:33.121Z",
+      "format": "image-package",
+      "version": 9,
+      "reason": "画布图层包共用扩图工作副本与历史命令",
+      "previousFingerprint": "3db5294b62f36390c396f74c9a7c1cf92b6f92541c8f355c0c0bfec28e9892dc",
+      "fingerprint": "e1d87c416ce062091021cf7696e3c117e1194444eef280e495583e67b784af44",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T08:00:33.122Z",
+      "format": "image-working-copy",
+      "version": 11,
+      "reason": "画布图层包共用扩图工作副本与历史命令",
+      "previousFingerprint": "1781d68487bae400aab9f93a017886aa17b2d5c6ee6fa849d447b22b471016ab",
+      "fingerprint": "865d031879f266e2362f67249044c92a0d61216c1823c8685c9a26346da1fbd3",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T08:00:33.122Z",
+      "format": "canvas-layer-package",
+      "version": 9,
+      "reason": "画布图层包共用扩图工作副本与历史命令",
+      "previousFingerprint": "429c33aceb80fad97a1733b7a09ec0aca10d6e9fcc2f29955dd5a7bf94d0bbed",
+      "fingerprint": "df88d10bb072db6bc8e6e6b2468341ca552e36ccfe18b7ae6a96327d00242afa",
+      "waivedFixtureVersions": []
     }
   ]
 }

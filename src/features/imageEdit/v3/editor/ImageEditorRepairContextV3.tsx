@@ -38,13 +38,13 @@ export function ImageEditorRepairProviderV3({ bus, controller, children }: { bus
       const now = state.sessions[controller.sessionId]
       if (!now || now.activeTool !== startSession.activeTool || now.selectedLayerIds.join('/') !== startSession.selectedLayerIds.join('/')) task.abort()
     })
-    const confirm = options.method === 'texture' ? (signal: AbortSignal): Promise<void> => new Promise((resolve, reject) => {
+    const confirm = (signal: AbortSignal): Promise<void> => new Promise((resolve, reject) => {
       signal.throwIfAborted()
       const cancelWait = (): void => { confirmation.current = null; reject(new Error('填充预览已取消')) }
       signal.addEventListener('abort', cancelWait, { once: true })
       confirmation.current = () => { signal.removeEventListener('abort', cancelWait); confirmation.current = null; setPreviewReady(false); resolve() }
       setPreviewReady(true); setProgress(null)
-    }) : undefined
+    })
     try {
       await repairImageEditRegionV3(bus, layerIds[0], { ...options, confirm, quality, signal: task.signal, progress: value => { if (mounted.current && !task.signal.aborted) setProgress({ stage: value.stage, percent: Math.floor(value.done / Math.max(1, value.total) * 100) }) } })
     } catch (cause) { if (mounted.current && !task.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)) }

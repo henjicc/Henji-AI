@@ -7,7 +7,7 @@ import {tools as vectorTools} from '../toolEntries/vector'
 import { tools as legacyTools } from '../toolEntries/legacy'
 import { toolManifestRegistration } from './toolManifest'
 
-const entries = import.meta.glob<{ tools: readonly ToolDefinition[] }>(['../toolEntries/*.{ts,tsx}', '!../toolEntries/vector.tsx', '!../toolEntries/legacy.tsx', '!../toolEntries/paint.tsx', '!../toolEntries/transform.tsx'], { eager: true })
+const entries = import.meta.glob<{ tools: readonly ToolDefinition[] }>(['../toolEntries/*.ts', '../toolEntries/*.tsx', '!../toolEntries/vector.tsx', '!../toolEntries/legacy.tsx', '!../toolEntries/paint.tsx', '!../toolEntries/transform.tsx'], { eager: true })
 const logger = createLogger('imageEditor.tools')
 
 function collect(): { registry: ToolRegistry; failed: boolean } {
