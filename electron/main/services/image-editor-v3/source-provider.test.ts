@@ -59,6 +59,26 @@ describe('SharpSourceProvider', () => {
     expect(wider).toMatchObject({width:518,height:518,originX:509,originY:509})
     expect([...wider.pixels.subarray(0,4)]).toEqual([253,253,80,255])
   })
+  it('冷源纵向相邻瓦片共享条带，halo、条带边界与尾行像素保持精确', async () => {
+    const width = 1536, height = 1200, pixels = Buffer.alloc(width * height * 4)
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4
+      pixels[offset] = y % 256; pixels[offset + 1] = x % 256
+      pixels[offset + 2] = 80; pixels[offset + 3] = (x + y) % 256
+    }
+    const encoded = await sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer()
+    const resource = await store.putBuffer(encoded, { mediaType: 'image/png' })
+    const loader = vi.fn(loadSharp), provider = new SharpSourceProvider(store, { sharpLoader: loader, derivedCache: null })
+    await provider.readMetadata(resource.id); loader.mockClear()
+    const tiles = await Promise.all([0, 1, 2].map(tileY => provider.readTile({ resourceId: resource.id, mip: 0, tileX: 1, tileY, halo: 1 })))
+    expect(loader).toHaveBeenCalledTimes(2)
+    for (const tile of tiles) for (const row of [0, tile.height - 1]) {
+      const expected = pixels.subarray(((tile.originY + row) * width + tile.originX) * 4,
+        ((tile.originY + row) * width + tile.originX + tile.width) * 4)
+      expect(tile.pixels.subarray(row * tile.rowStride, (row + 1) * tile.rowStride)).toEqual(expected)
+    }
+    expect(tiles[2]).toMatchObject({ originY: 1023, height: 177 })
+  })
   it.each([
     {
       label: 'baseline JPEG',

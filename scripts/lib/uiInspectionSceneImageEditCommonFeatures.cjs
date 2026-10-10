@@ -43,7 +43,7 @@ function createImageEditCommonFeaturesScene(context, canvas = false) {
             if(records.some(record => record.target instanceof Element && record.target.closest('[data-vector-overlay] svg'))) schedule()
           })
           observer.observe(root, {subtree:true,attributes:true,childList:true,characterData:true})
-          const input = event => { if(event.target instanceof Element && event.target.closest('[data-vector-overlay] textarea')) schedule() }
+          const input = event => { if(event.target instanceof Element && event.target.closest('[data-vector-overlay] textarea, [data-vector-properties] textarea')) schedule() }
           root.addEventListener('input',input)
           return {stop:() => {observer.disconnect();tasks.disconnect();root.removeEventListener('input',input);for(const frame of frames.values()) cancelAnimationFrame(frame);return longTasks}}
         })
@@ -119,8 +119,42 @@ function createImageEditCommonFeaturesScene(context, canvas = false) {
         // 普通键盘连续输入、整段中文输入与正式图层提交分别报告。
         // 每个中文字符调用 Input.insertText 的诊断数据保留在记录中，不能当作键盘采样。
         await measure('text-input', () => text.pressSequentially('4K clipboard and mosaic', {delay:16}))
+        if (process.env.HENJI_IMAGE_INTERACTION_FOCUS === 'typing-zoom') {
+          // 截图另做一轮，避免 capturePage 耗时污染键盘延迟样本。
+          await text.fill('')
+          for (const [index, character] of [...'连续文字输入'].entries()) {
+            await text.pressSequentially(character)
+            await capture(`typing-frame-${index}`)
+          }
+        }
         await measure('text-composition', () => text.fill('4K 常用编辑：复制粘贴与马赛克'))
         await measure('text', () => text.press('Enter'))
+        if (process.env.HENJI_IMAGE_INTERACTION_FOCUS === 'typing-zoom') {
+          const layerText = host.getByRole('textbox', { name: '图层文字内容', exact: true })
+          await layerText.waitFor()
+          const original = await layerText.inputValue()
+          const revision = () => host.locator('[data-command-bar]').getAttribute('data-document-revision').then(Number)
+          const beforeTyping = await revision()
+          await layerText.focus(); await layerText.press('End')
+          await measure('layer-text-input', () => layerText.pressSequentially(' continued', { delay: 16 }))
+          assert.equal(await revision(), beforeTyping + 1, '停顿只提交一次文字内容修改')
+          await host.focus(); await context.settlePage(page, 100)
+          assert.equal(await revision(), beforeTyping + 1, '停顿提交之后失焦不得重复提交')
+          await press('Control+z'); await context.settlePage(page, 500)
+          assert.equal(await layerText.inputValue(), original, '一步撤销读回连续输入前的文字')
+          await capture('layer-text-undo')
+          if (process.env.HENJI_IMAGE_INTERACTION_ASSERT_BUDGET === '1') {
+            const typing = metrics.find(metric => metric.name === 'text-input')
+            const zoom = metrics.find(metric => metric.name === 'zoom-actual')
+            assert.equal(typing.overlaySamples, 23, '连续键盘输入必须保留全部 23 个 RAF 样本')
+            assert.ok(typing.overlayP95Ms <= 33, `连续文字 P95 超预算：${typing.overlayP95Ms}ms`)
+            const layerTyping = metrics.find(metric => metric.name === 'layer-text-input')
+            assert.ok(layerTyping.overlayP95Ms !== null && layerTyping.overlayP95Ms <= 33,
+              `文字属性连续输入 P95 超预算：${layerTyping.overlayP95Ms}ms`)
+            assert.ok(zoom.finalMs !== null && zoom.finalMs <= 300, `冷缩放终态超预算：${zoom.finalMs}ms`)
+          }
+          return
+        }
         await host.getByRole('button', { name:'文字与图形', exact:true }).click()
         await page.getByRole('menuitem', { name:'矩形', exact:true }).click()
         await measure('shape', async () => {

@@ -35,7 +35,7 @@ import {
 } from './source-orientation'
 import { ManagedSourcePyramid, type SourcePyramidTileLayout } from './source-pyramid'
 import { runSharpOperation } from './sharp-operation'
-import { SourceDecodeStripeCache } from './source-decode-stripes'
+import { MAX_SOURCE_DECODE_STRIPE_BYTES, SourceDecodeStripeCache } from './source-decode-stripes'
 import { createMainLogger } from '../logging'
 
 const logger = createMainLogger('main.image_editor_v3.source_provider')
@@ -304,21 +304,26 @@ export class SharpSourceProvider implements SourceProvider {
     const bitDepth = request.bitDepth ?? (metadata.colorSpace === 'display-p3' ? 32 : sourceStorageBitDepth(metadata))
 
     // mip0 的横向相邻块共享一次原生全宽条带解码，避免 PNG/JPEG 从文件头重复扫描。
-    // 只保留两个有界条带，不建立完整 RGBA 表面；HDR 与缩放继续走原区域契约。
+    // 在原内存预算内让两行瓦片共享扫描；宽图仍用单行，HDR 与缩放走原区域契约。
     if (mip === 0 && (bitDepth !== 32 || metadata.colorSpace === 'display-p3')
       && metadata.width > IMAGE_EDIT_TILE_SIZE && metadata.height > IMAGE_EDIT_TILE_SIZE) {
       const stripeStride = metadata.width * 4 * (bitDepth / 8)
+      const pairTop = Math.max(0, Math.floor(tileY / 2) * IMAGE_EDIT_TILE_SIZE * 2 - halo)
+      const pairBottom = Math.min(metadata.height, (Math.floor(tileY / 2) + 1) * IMAGE_EDIT_TILE_SIZE * 2 + halo)
+      const paired = stripeStride * (pairBottom - pairTop) <= MAX_SOURCE_DECODE_STRIPE_BYTES
+      const stripeTop = paired ? pairTop : originY
+      const stripeHeight = paired ? pairBottom - pairTop : outputHeight
       const stripe = await this.decodeStripes.read(
-        `${request.resourceId}:${originY}:${outputHeight}:${bitDepth}`,
-        stripeStride * outputHeight,
+        `${request.resourceId}:${stripeTop}:${stripeHeight}:${bitDepth}`,
+        stripeStride * stripeHeight,
         async (signal) => {
           const started = performance.now()
-          const context = { resourceId: request.resourceId, tileY, bitDepth, bytes: stripeStride * outputHeight }
+          const context = { resourceId: request.resourceId, tileY, bitDepth, bytes: stripeStride * stripeHeight }
           logger.debug('开始解码图片源条带', { event: 'image_editor_v3.source.stripe.start', context })
           try {
             const sharp = await this.sharpLoader()
-            const encoded = mapOrientedSourceRectToEncoded({ left: 0, top: originY,
-              width: metadata.width, height: outputHeight },
+            const encoded = mapOrientedSourceRectToEncoded({ left: 0, top: stripeTop,
+              width: metadata.width, height: stripeHeight },
             { width: metadata.encodedWidth, height: metadata.encodedHeight }, metadata.orientation)
             let pipeline = sharp(this.resources.getFilesystemPath(request.resourceId), {
               limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS, sequentialRead: false, failOn: 'warning',
@@ -346,7 +351,7 @@ export class SharpSourceProvider implements SourceProvider {
         const rowStride = outputWidth * 4 * (bitDepth / 8)
         const pixels = Buffer.allocUnsafe(rowStride * outputHeight)
         for (let row = 0; row < outputHeight; row += 1) {
-          const start = row * stripeStride + originX * 4 * (bitDepth / 8)
+          const start = (row + originY - stripeTop) * stripeStride + originX * 4 * (bitDepth / 8)
           stripe.copy(pixels, row * rowStride, start, start + rowStride)
         }
         return { resourceId: request.resourceId, mip, tileX, tileY, halo,

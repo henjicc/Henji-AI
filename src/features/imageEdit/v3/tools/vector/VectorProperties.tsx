@@ -1,6 +1,6 @@
-import { useEffect,useRef,useState } from 'react'
+import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { Dropdown, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiTextArea } from '@/components/ui'
+import { Dropdown, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { TypographyPanel } from '@/components/typography/TypographyPanel'
 import { defaultTextStyle, rectanglePath, type RichTextContent, type TextStyle, type VectorPathCommand, type VectorPathContent } from '@/core/imaging/vectorContent'
@@ -8,14 +8,7 @@ import type { ImageEditVectorLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorV3Controller } from '../../editor/types'
 import { collectImageEditV3LiveLayers } from '../../application/imageEditDocumentRefs'
 import { attachImageEditVectorMaskV3,setImageEditVectorContentV3 } from './service'
-
-/** Draft text preserves IME composition; persistence receives complete edits only. */
-function RunTextInput({value,onCommit}:{value:string;onCommit:(text:string)=>void}):JSX.Element {
-  const [draft,setDraft]=useState(value);const composing=useRef(false)
-  useEffect(()=>{if(!composing.current)setDraft(value)},[value])
-  const commit=(text:string)=>{if(!composing.current && text!==value)onCommit(text)}
-  return <UiTextArea aria-label="图层文字内容" rows={3} value={draft} onChange={event=>setDraft(event.currentTarget.value)} onCompositionStart={()=>{composing.current=true}} onCompositionEnd={event=>{composing.current=false;setDraft(event.currentTarget.value);commit(event.currentTarget.value)}} onBlur={()=>commit(draft)} onKeyDown={event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)&&!event.nativeEvent.isComposing){event.preventDefault();commit(draft)}}}/>
-}
+import { RunTextInputV3 } from './RunTextInputV3'
 
 export function VectorProperties({ controller, layer, locked, onContentChange, maskOnly = false }: { controller: ImageEditorV3Controller; layer: ImageEditVectorLayerV3; locked: boolean; onContentChange?: (content: RichTextContent | VectorPathContent) => void; maskOnly?: boolean }): JSX.Element {
   const [paragraphIndex, setParagraph] = useState(0)
@@ -25,8 +18,8 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
   const [maskTarget,setMaskTarget]=useState('')
   const [error, setError] = useState('')
   const fail = (cause: unknown): void => setError(cause instanceof Error ? cause.message : '无法更新内容，请重试。')
-  const write = (content: RichTextContent | VectorPathContent): void => {
-    try { if(onContentChange) onContentChange(content); else setImageEditVectorContentV3(controller.document.id, layer.id, content); setError('') } catch (cause) { fail(cause) }
+  const write = (content: RichTextContent | VectorPathContent): boolean => {
+    try { if(onContentChange) onContentChange(content); else setImageEditVectorContentV3(controller.document.id, layer.id, content); setError(''); return true } catch (cause) { fail(cause); return false }
   }
   const number = (label: string, value: number, update: (value: number) => void, min?: number): JSX.Element => <UiFormRow label={label} density="compact"><NumberInput ariaLabel={label} size="sm" value={value} min={min} onChange={update} /></UiFormRow>
   if (layer.type === 'text') {
@@ -35,13 +28,13 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
     const paragraph = content.paragraphs[p]
     const r = Math.min(runIndex, Math.max(0, (paragraph?.runs.length ?? 0) - 1))
     const run = paragraph?.runs[r]
-    const updateParagraph = (patch: Partial<NonNullable<typeof paragraph>>): void => write({ ...content, paragraphs: content.paragraphs.map((value, index) => index === p ? { ...value, ...patch } : value) })
-    const updateRun = (patch: Partial<NonNullable<typeof run>>): void => updateParagraph({ runs: paragraph.runs.map((value, index) => index === r ? { ...value, ...patch } : value) })
+    const updateParagraph = (patch: Partial<NonNullable<typeof paragraph>>): boolean => write({ ...content, paragraphs: content.paragraphs.map((value, index) => index === p ? { ...value, ...patch } : value) })
+    const updateRun = (patch: Partial<NonNullable<typeof run>>): boolean => updateParagraph({ runs: paragraph.runs.map((value, index) => index === r ? { ...value, ...patch } : value) })
     return <fieldset disabled={locked} className="min-w-0" data-vector-properties>
       <UiGroup title="段落与文字" titleTone="compact" actions={<UiIconButton size="sm" aria-label="添加段落" onClick={() => { write({ ...content, paragraphs: [...content.paragraphs, { runs: [{ text: '文字', style: run?.style ?? defaultTextStyle(controller.document.geometry.height) }], align: 'left', direction: 'auto', spaceBefore: 0, spaceAfter: 0 }] }); setParagraph(content.paragraphs.length); setRun(0) }}><Plus size={14} /></UiIconButton>}>
         {paragraph ? <Dropdown ariaLabel="编辑段落" size="sm" value={String(p)} options={content.paragraphs.map((value, index) => ({ value: String(index), label: `段落 ${index + 1} · ${value.runs.map(item => item.text).join('').slice(0, 20)}` }))} onSelect={value => { setParagraph(Number(value)); setRun(0) }} /> : <UiEmpty size="xs" title="还没有文字" description="添加段落后即可输入文字。" />}
         {paragraph && <><div className="flex items-center gap-2"><Dropdown ariaLabel="文字片段" size="sm" value={String(r)} options={paragraph.runs.map((value, index) => ({ value: String(index), label: `片段 ${index + 1} · ${value.text.slice(0, 20)}` }))} onSelect={value => setRun(Number(value))} /><UiIconButton size="sm" aria-label="添加文字片段" onClick={() => { updateParagraph({ runs: [...paragraph.runs, { text: '文字', style: run?.style ?? defaultTextStyle(controller.document.geometry.height) }] }); setRun(paragraph.runs.length) }}><Plus size={14} /></UiIconButton><UiIconButton size="sm" aria-label="删除文字片段" onClick={() => updateParagraph({ runs: paragraph.runs.filter((_, index) => index !== r) })}><Trash2 size={14} /></UiIconButton></div>
-          {run ? <RunTextInput value={run.text} onCommit={text=>updateRun({text})} /> : <UiEmpty size="xs" title="段落为空" description="添加文字片段后即可输入。" />}
+          {run ? <RunTextInputV3 key={`${controller.document.id}:${layer.id}:${p}:${r}`} documentId={controller.document.id} value={run.text} onCommit={text=>updateRun({text})} /> : <UiEmpty size="xs" title="段落为空" description="添加文字片段后即可输入。" />}
           <Dropdown ariaLabel="段落方向" size="sm" value={paragraph.direction} options={[{ value: 'auto', label: '自动方向' }, { value: 'ltr', label: '从左到右' }, { value: 'rtl', label: '从右到左' }]} onSelect={value => updateParagraph({ direction: value as typeof paragraph.direction })} />
           {number('段前间距', paragraph.spaceBefore, spaceBefore => updateParagraph({ spaceBefore }), 0)}
           {number('段后间距', paragraph.spaceAfter, spaceAfter => updateParagraph({ spaceAfter }), 0)}
@@ -59,7 +52,7 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
   const operand = content.operands[o]
   const c = Math.min(pointIndex, Math.max(0, (operand?.path.commands.length ?? 0) - 1))
   const command = operand?.path.commands[c]
-  const updateOperand = (patch: Partial<NonNullable<typeof operand>>): void => write({ ...content, operands: content.operands.map((value, index) => index === o ? { ...value, ...patch } : value) })
+  const updateOperand = (patch: Partial<NonNullable<typeof operand>>): void => { write({ ...content, operands: content.operands.map((value, index) => index === o ? { ...value, ...patch } : value) }) }
   const updateCommand = (command: VectorPathCommand): void => updateOperand({ path: { ...operand.path, commands: operand.path.commands.map((value, index) => index === c ? command : value) } })
   const style: TextStyle = { ...defaultTextStyle(controller.document.geometry.height), ...content.paint }
   return <fieldset disabled={locked} className="min-w-0" data-vector-properties>

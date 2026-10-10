@@ -2,7 +2,7 @@ import { AbortableSingleflight, throwIfImageSourceAborted } from './abortable-si
 
 /** 原生解码条带的内存预算，包括仍在执行的解码；拒绝缓存不等于拒绝源图。 */
 const STRIPE_CACHE_BYTES = 32 * 1024 * 1024
-const MAX_STRIPE_BYTES = STRIPE_CACHE_BYTES / 2
+export const MAX_SOURCE_DECODE_STRIPE_BYTES = STRIPE_CACHE_BYTES / 2
 
 export class SourceDecodeStripeCache {
   private readonly flights = new AbortableSingleflight<Buffer | null>()
@@ -17,7 +17,7 @@ export class SourceDecodeStripeCache {
     signal?: AbortSignal,
   ): Promise<Buffer | null> {
     throwIfImageSourceAborted(signal)
-    if (byteLength > MAX_STRIPE_BYTES) return null
+    if (byteLength > MAX_SOURCE_DECODE_STRIPE_BYTES) return null
     const cached = this.entries.get(key)
     if (cached) {
       this.entries.delete(key)

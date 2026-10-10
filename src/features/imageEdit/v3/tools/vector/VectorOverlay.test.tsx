@@ -43,3 +43,16 @@ it('取消、切换工具和编辑期间文档更新不提交草稿', () => {
   expect(screen.queryByRole('textbox',{name:'文字内容'})).toBeNull()
   expect(addImageEditVectorLayersV3).not.toHaveBeenCalled()
 })
+it('连续输入只更新本地草稿，IME 确认不写历史，正式确认只提交一次', () => {
+  const result = mount(), overlay = result.container.querySelector('[data-vector-overlay]')!
+  fireEvent.pointerDown(overlay, { button: 0, clientX: 100, clientY: 120 })
+  const input = screen.getByRole('textbox', { name: '文字内容' })
+  for (const value of ['连续', '连续文字', '连续文字输入']) fireEvent.change(input, { target: { value } })
+  fireEvent.compositionStart(input)
+  fireEvent.change(input, { target: { value: '连续文字输入确认' } })
+  fireEvent.compositionEnd(input)
+  expect(addImageEditVectorLayersV3).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '添加文字' }))
+  expect(addImageEditVectorLayersV3).toHaveBeenCalledTimes(1)
+  expect(screen.queryByRole('textbox', { name: '文字内容' })).toBeNull()
+})

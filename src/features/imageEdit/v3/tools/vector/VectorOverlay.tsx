@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { UiButton, UiError, UiPanel, UiTextArea } from '@/components/ui';
 import type { MarkItem } from '@/core/imageEdit/types';
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
@@ -8,6 +8,7 @@ import { useImageEditorSessionStoreV3 } from '../../store';
 import { mapAnnotationPointV3, invertAnnotationMatrixV3 } from '../../editor/annotationGeometryV3';
 import type { ToolOverlayContext } from '../../toolFramework/types';
 import { addImageEditVectorLayersV3 } from './service';
+import { currentImageEditorInteractionV3, traceImageEditorStageV3, type ImageEditorInteractionTraceV3 } from '../../execution/interactionTraceV3';
 
 export function VectorOverlay({ controller, geometry, bindKeyboard }: ToolOverlayContext): JSX.Element | null {
   const session = useImageEditorSessionStoreV3(state => state.sessions[controller.sessionId]);
@@ -18,6 +19,11 @@ export function VectorOverlay({ controller, geometry, bindKeyboard }: ToolOverla
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const composing = useRef(false);
+  const textTrace = useRef<ImageEditorInteractionTraceV3>();
+  useLayoutEffect(() => {
+    traceImageEditorStageV3(controller.document.id, textTrace.current, 'text-dom-ready');
+    textTrace.current = undefined;
+  }, [text, controller.document.id]);
   const tool = session?.activeTool ?? 'move';
   const clear = (): void => { gesture.current = null; setDraft(null); setText(''); setError(''); };
   useEffect(() => { clear(); }, [controller.document.id, controller.document.revision, tool]);
@@ -75,8 +81,13 @@ export function VectorOverlay({ controller, geometry, bindKeyboard }: ToolOverla
     {draft && draft.type !== 'text' ? <svg className="pointer-events-none h-full w-full" viewBox={`0 0 ${geometry.width} ${geometry.height}`} preserveAspectRatio="none"><g transform={`matrix(${geometry.sourceToOutput.join(' ')})`} fill="none" stroke={'stroke' in draft ? draft.stroke : color} strokeWidth={lineWidth}>
       {draft.type === 'rect' ? <rect x={draft.x} y={draft.y} width={draft.width} height={draft.height} /> : draft.type === 'ellipse' ? <ellipse cx={draft.x + draft.width / 2} cy={draft.y + draft.height / 2} rx={draft.width / 2} ry={draft.height / 2} /> : draft.type === 'arrow' || draft.type === 'pen' ? <polyline points={draft.points.join(' ')} /> : null}
     </g></svg> : null}
-    {draft?.type === 'text' ? <div className="absolute inset-0 flex items-center justify-center" onPointerDown={event => event.stopPropagation()}><UiPanel variant="glass" className="flex w-80 flex-col gap-3 p-4">
-      <UiTextArea aria-label="文字内容" autoFocus value={text} rows={3} onChange={event => setText(event.currentTarget.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
+    {/* 持续输入用实底表面，避免每次字形变化触发图像背景的毛玻璃合成。 */}
+    {draft?.type === 'text' ? <div className="absolute inset-0 flex items-center justify-center" onPointerDown={event => event.stopPropagation()}><UiPanel className="flex w-80 flex-col gap-3 p-4">
+      <UiTextArea aria-label="文字内容" autoFocus value={text} rows={3} onChange={event => {
+        textTrace.current = currentImageEditorInteractionV3(controller.document.id);
+        traceImageEditorStageV3(controller.document.id, textTrace.current, 'text-handler');
+        setText(event.currentTarget.value);
+      }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
         onKeyDown={event => { if (composing.current || event.nativeEvent.isComposing) return; if (event.key === 'Escape') { event.stopPropagation(); clear(); } if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); if (text) commit({ ...draft, text }); } }} />
       <div className="flex justify-end gap-2"><UiButton size="sm" onClick={clear}>取消</UiButton><UiButton size="sm" variant="primary" disabled={!text} onClick={() => { if (!composing.current) commit({ ...draft, text }); }}>添加文字</UiButton></div>
     </UiPanel></div> : null}
