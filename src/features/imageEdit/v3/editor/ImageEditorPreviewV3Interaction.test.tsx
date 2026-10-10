@@ -182,6 +182,29 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
+  it('大图适应窗口显示实际比例，Ctrl+1 到实际像素，Ctrl+0 同时恢复居中', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 1_000, bottom: 600,
+      width: 1_000, height: 600, toJSON: () => undefined,
+    })
+    const document = createImageEditDocumentV3({ width: 3_840, height: 2_160, documentId: 'viewport-presets', sourceResourceId: 'sha256:source' })
+    const changes = vi.fn()
+    const view = render(<ImageEditorV3 sourceImageUrl="preview.jpg" document={document} profileId="full" onDocumentChange={changes} />)
+    const root = view.container.querySelector<HTMLElement>('[data-image-editor-v3]')!
+    const surface = view.container.querySelector<HTMLElement>('[data-preview-surface]')!
+    const displayZoom = (): number => Number(surface.dataset.previewDisplayZoom)
+    await waitFor(() => expect(displayZoom()).toBeCloseTo(952 / 3840))
+    fireEvent.keyDown(root, { key: '1', code: 'Digit1', ctrlKey: true })
+    await waitFor(() => expect(displayZoom()).toBeCloseTo(1))
+    const sessionId = Object.keys(useImageEditorSessionStoreV3.getState().sessions)[0]
+    useImageEditorInteractionStoreV3.getState().setViewportPan(sessionId, { x: 80, y: -40 })
+    fireEvent.keyDown(root, { key: '0', code: 'Digit0', ctrlKey: true })
+    await waitFor(() => expect(displayZoom()).toBeCloseTo(952 / 3840))
+    expect(useImageEditorInteractionStoreV3.getState().viewportPanBySession[sessionId]).toEqual({ x: 0, y: 0 })
+    fireEvent.click(view.getByRole('button', { name: '实际大小' }))
+    await waitFor(() => expect(displayZoom()).toBeCloseTo(1))
+    expect(changes).not.toHaveBeenCalled()
+  })
   it('完整源图层始终位于文档裁切层内，越界部分只显示透明底', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 1_000, bottom: 600,

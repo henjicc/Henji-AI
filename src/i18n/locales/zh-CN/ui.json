@@ -702,6 +702,8 @@
       "previewRenderFailed": "预览暂时没能刷新，编辑内容不受影响。继续编辑或重新打开图片即可恢复。",
       "zoomIn": "放大",
       "zoomOut": "缩小",
+      "fitWindow": "适应窗口",
+      "actualSize": "实际大小",
       "panels": {
         "expand": "展开{{title}}",
         "collapse": "收起{{title}}",

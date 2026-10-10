@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { init, type Gpu } from 'vgpu/node'
+import sharp from 'sharp'
 
 import {
   IMAGE_EDIT_BLEND_MODES_V3,
@@ -7,6 +8,7 @@ import {
   convertFloat32TileColorDomainV3,
   createBuiltInImageEditRenderNodeRegistry,
   createFloat32MaskTile,
+  createFloat32PremultipliedRgbaTile,
   createImageEditAdjustmentLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
@@ -46,6 +48,17 @@ beforeAll(async () => { gpu = await init() })
 afterAll(() => gpu?.dispose())
 
 describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
+  it('照片上新建空图层及空图层编组保持透明，与 CPU 合成一致', async () => {
+    const document = baseDocument('empty-layer')
+    const empty = createImageEditRasterLayerV3('empty', '新图层')
+    document.layers = [raster(1, '照片'), empty]
+    assertBlendTolerance(await compareDocument(document, tiles([1])))
+    const group = createImageEditGroupLayerV3('empty-group', '空图层组')
+    group.children = [empty]
+    document.layers = [raster(1, '照片'), group]
+    assertBlendTolerance(await compareDocument(document, tiles([1])))
+  })
+
   it('已合成组的空间变换明确进入 CPU 后备，不静默返回未经变换的 GPU 图', () => {
     const document = baseDocument('transformed-group')
     const group = createImageEditGroupLayerV3('group', '变换组')
@@ -405,6 +418,18 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
       assertBlendTolerance(result)
   })
 
+  it('普通照片提亮和暖色调整后，中性HSL保持高光且不产生黑色噪点', async () => {
+    const { data, info } = await sharp('tests/fixtures/image-inpainting/face-scratch-source.png').ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    const document = baseDocument('neutral-hsl-highlights', info.width, info.height)
+    document.layers = [raster(5, '底图'), adjustment('bright', { stops: 1.28 }),
+      createImageEditAdjustmentLayerV3('warm', '暖色', 'temperature-tint', { temperature: .16, tint: 0 }),
+      createImageEditAdjustmentLayerV3('hsl-neutral', '中性HSL', 'hsl', {})]
+    const resources = tilesSized([5], info.width, info.height)
+    resources.get(ref(5))!.pixels = Uint8Array.from(data).buffer
+    const result = await compareDocument(document, resources)
+    expect(result.comparison.quantizedMaxLsbError, JSON.stringify(result.comparison)).toBeLessThanOrEqual(2)
+  })
+
   it('仅安全融合连续无蒙版normal曝光，并保持CPU真值', async () => {
     const document = baseDocument('fused-exposure')
     const first = adjustment('first', { stops: 0.2, offset: 0.01, gamma: 1.02 })
@@ -506,9 +531,15 @@ async function compareDocument(
   const rect = { x: 0, y: 0, width, height }
   const cpu = await executeImageEditCpuRenderPlanV3(plan, {
     loadColorLut: loadImageColorLutV3,
-    loadRaster: async (node) => decodeInterleavedRgbaSourceTileV3({
-      ...resources.get(resourceId(node))!, colorSpace: 'srgb',
-    }),
+    loadRaster: async (node) => {
+      const source = node.parameters.source
+      if (source && typeof source === 'object' && !Array.isArray(source) && 'kind' in source && source.kind === 'empty') {
+        return createFloat32PremultipliedRgbaTile(width, height, 'linear-light', new Float32Array(width * height * 4))
+      }
+      return decodeInterleavedRgbaSourceTileV3({
+        ...resources.get(resourceId(node))!, colorSpace: 'srgb',
+      })
+    },
     rasterizeVectorContent: async () => { throw new Error('3.1 golden不含标注') },
     loadMask: async (mask) => {
       const resource = resources.get(Object.values(mask.tiles)[0])!

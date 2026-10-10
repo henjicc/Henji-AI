@@ -98,23 +98,46 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     vectorRaster.mockReset()
   })
 
-  it('预览与最终质量的矢量身份不同，导出仍由同一内容核供瓦片，不读取伪造磁盘资源', async () => {
+  it.each([
+    { snapshotQuality: 'export', quality: 'stable' },
+    { snapshotQuality: 'draft', quality: 'export' },
+  ] as const)('$snapshotQuality 快照能供应 $quality 矢量瓦片，不读取伪造磁盘资源', async ({ snapshotQuality, quality }) => {
     const harness = clientHarness(), document = createImageEditDocumentV3({width:2,height:2})
     document.layers = [createImageEditPathLayerV3('path','可编辑形状')]
     const registry = createBuiltInImageEditRenderNodeRegistry()
-    const node = compileImageEditRenderPlanV3(document,registry,'export').nodes.find(node=>node.definitionId==='vector.content')!
-    const preview = compileImageEditRenderPlanV3(document,registry,'stable').nodes.find(node=>node.definitionId==='vector.content')!
+    const node = compileImageEditRenderPlanV3(document,registry,quality).nodes.find(node=>node.definitionId==='vector.content')!
+    const preview = compileImageEditRenderPlanV3(document,registry,'draft').nodes.find(node=>node.definitionId==='vector.content')!
     const resourceRef = createImageEditorGpuAnnotationResourceRefV3(node)
-    expect(resourceRef).not.toBe(createImageEditorGpuAnnotationResourceRefV3(preview))
+    if (quality === 'export') expect(resourceRef).not.toBe(createImageEditorGpuAnnotationResourceRefV3(preview))
     vectorRaster.mockReturnValue(createFloat32PremultipliedRgbaTile(2,2,'linear-light',new Float32Array(16)))
     const bridge = new ImageEditorRenderSessionGpuBridgeV3('vector-export',harness.client,vi.fn(),false)
     try {
-      bridge.syncSnapshot({document,renderGeneration:1,geometryHash:'geometry',quality:'stable',resourceDescriptors:[]})
+      bridge.syncSnapshot({document,renderGeneration:1,geometryHash:'geometry',quality:snapshotQuality,resourceDescriptors:[]})
       harness.listener({type:'tiles-needed',sceneGeneration:1,deviceGeneration:1,exportRequestId:'vector-output',keys:[{resourceRef,resourceKind:'generated-vector',format:'rgba16float',mip:0,tileX:0,tileY:0,contentVersion:'final'}]})
       await vi.waitFor(()=>expect(harness.client.uploadExportTiles).toHaveBeenCalledOnce())
       expect(vectorRaster).toHaveBeenCalledWith(node,document,{x:0,y:0,width:2,height:2},0,expect.any(AbortSignal))
       expect(readSourceTile).not.toHaveBeenCalled();expect(readSourceTiles).not.toHaveBeenCalled()
     } finally {bridge.dispose()}
+  })
+
+  it('显存回退后新文档发布不再向失效设备发帧，设备恢复事件才重新启用', () => {
+    const harness = clientHarness()
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3('budget-fallback', harness.client, vi.fn(), false)
+    const snapshot = { document: createImageEditDocumentV3({ width: 320, height: 240 }), renderGeneration: 1,
+      geometryHash: 'geometry', quality: 'stable' as const, resourceDescriptors: [] }
+    bridge.updateViewport(1, layout)
+    bridge.syncSnapshot(snapshot)
+    harness.listener({ type: 'ready', sceneGeneration: 1, deviceGeneration: 1, recovered: false })
+    expect(harness.client.requestFrame).toHaveBeenCalledOnce()
+    harness.listener({ type: 'failed', sceneGeneration: 1, deviceGeneration: 1, requestId: null,
+      code: 'resource-budget-exceeded', message: 'GPU Scene 当前视口与受保护资源超过会话显存预算', recoverable: true })
+    vi.mocked(harness.client.requestFrame).mockClear()
+    bridge.syncSnapshot({ ...snapshot, renderGeneration: 2 })
+    bridge.requestFrame('stable')
+    expect(harness.client.requestFrame).not.toHaveBeenCalled()
+    harness.listener({ type: 'ready', sceneGeneration: 2, deviceGeneration: 2, recovered: true })
+    expect(harness.client.requestFrame).toHaveBeenCalledOnce()
+    bridge.dispose()
   })
 
   it('拒绝把旧整图蒙版当作源图片读取', async () => {

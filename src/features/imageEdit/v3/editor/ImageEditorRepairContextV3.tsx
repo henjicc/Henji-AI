@@ -50,6 +50,6 @@ export function ImageEditorRepairProviderV3({ bus, controller, children }: { bus
     } catch (cause) { if (mounted.current && !task.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { unsubscribe(); confirmation.current = null; if (abort.current === task) { abort.current = null; if (mounted.current) { setBusy(false); setProgress(null); setPreviewReady(false) } } }
   }
-  function cancel(): void { abort.current?.abort(); setBusy(false); setProgress(null) }
+  function cancel(): void { abort.current?.abort(); confirmation.current = null; setPreviewReady(false); setProgress(null) }
   return <RepairContext.Provider value={{ busy, error, progress, quality, setQuality, previewReady, apply: () => confirmation.current?.(), run, cancel }}>{children}</RepairContext.Provider>
 }

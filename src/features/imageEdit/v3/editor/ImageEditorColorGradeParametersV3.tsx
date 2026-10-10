@@ -31,7 +31,7 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
   const [importing, setImporting] = useState(false)
   const [names, setNames] = useState<Record<string, string>>({})
   const controllerRef = useRef(controller); controllerRef.current = controller
-  const coalescer = useMemo(() => new LatestAdjustmentPreview<ImageEditJsonObjectV3>(requestAnimationFrame, cancelAnimationFrame, params => controllerRef.current.setParameterPreview(previewId, layer.id, observing.current ? { ...params, hsl_show_mask: true } : params)), [previewId, layer.id])
+  const coalescer = useMemo(() => new LatestAdjustmentPreview<ImageEditJsonObjectV3>(callback => window.requestAnimationFrame(callback), handle => window.cancelAnimationFrame(handle), params => controllerRef.current.setParameterPreview(previewId, layer.id, observing.current ? { ...params, hsl_show_mask: true } : params)), [previewId, layer.id])
   const cancel = useCallback((): void => { coalescer.cancel(); active.current = false; controllerRef.current.clearParameterPreview(previewId); observing.current = false; setShowMask(false); latest.current = parseImageColorGradeParams(paramsRef.current); setDraft(latest.current) }, [coalescer, previewId])
   useEffect(() => { if (!active.current) { latest.current = parseImageColorGradeParams(layer.params); setDraft(latest.current); if (observing.current) coalescer.update(latest.current) } }, [layer.params, controller, coalescer])
   useEffect(() => { live.current = true; setImporting(false); return () => { live.current = false; coalescer.cancel(); controllerRef.current.clearParameterPreview(previewId) } }, [coalescer, previewId])

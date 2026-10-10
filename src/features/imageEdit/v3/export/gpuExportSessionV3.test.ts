@@ -58,7 +58,7 @@ describe('ImageEditorGpuExportSessionV3', () => {
     expect(gpu.requestExport).not.toHaveBeenCalled()
     session.dispose()
   })
-  it('设备已失败时切换快照不会清除立即失败门禁', async () => {
+  it('设备已失败时切换快照仍直接选择 CPU，不创建注定失败的 GPU 导出', () => {
     const gpu = client()
     const session = new ImageEditorGpuExportSessionV3(gpu)
     const document = createImageEditDocumentV3({ width: 16, height: 16 })
@@ -67,12 +67,12 @@ describe('ImageEditorGpuExportSessionV3', () => {
     session.syncSnapshot(snapshot)
     session.notifyDeviceUnavailable(new Error('device lost'))
     session.syncSnapshot({ ...snapshot, renderGeneration: 2 })
-    await expect(session.render(request(document))![Symbol.asyncIterator]().next()).rejects.toThrow('device lost')
+    expect(session.render(request(document))).toBeNull()
     expect(gpu.requestExport).not.toHaveBeenCalled()
     session.dispose()
   })
 
-  it.each(['初始化失败', '设备丢失'])('%s之后的新导出立即拒绝等待，恢复ready后允许正常GPU导出', async (reason) => {
+  it.each(['初始化失败', '设备丢失', '显存预算不足'])('%s之后的新导出直接选择 CPU，恢复ready后允许正常GPU导出', async (reason) => {
     const gpu = client()
     const session = new ImageEditorGpuExportSessionV3(gpu)
     const document = createImageEditDocumentV3({ width: 16, height: 16 })
@@ -80,8 +80,7 @@ describe('ImageEditorGpuExportSessionV3', () => {
       resourceDescriptors: [] })
     if (reason === '设备丢失') session.notifyDeviceReady()
     session.notifyDeviceUnavailable(new Error(reason))
-    const failed = session.render(request(document))!
-    await expect(failed[Symbol.asyncIterator]().next()).rejects.toThrow(reason)
+    expect(session.render(request(document))).toBeNull()
     expect(gpu.requestExport).not.toHaveBeenCalled()
 
     session.notifyDeviceReady()
@@ -97,7 +96,7 @@ describe('ImageEditorGpuExportSessionV3', () => {
     session.dispose()
   })
 
-  it('初始化中的导出等待被失败唤醒，后续导出也立即失败而不是再等待', async () => {
+  it('初始化中的导出等待被失败唤醒，后续导出直接选择 CPU', async () => {
     const gpu = client()
     const session = new ImageEditorGpuExportSessionV3(gpu)
     const document = createImageEditDocumentV3({ width: 16, height: 16 })
@@ -107,7 +106,7 @@ describe('ImageEditorGpuExportSessionV3', () => {
     expect(gpu.requestExport).not.toHaveBeenCalled()
     session.notifyDeviceUnavailable(new Error('adapter unavailable'))
     await expect(next).rejects.toThrow('adapter unavailable')
-    await expect(session.render(request(document))![Symbol.asyncIterator]().next()).rejects.toThrow('adapter unavailable')
+    expect(session.render(request(document))).toBeNull()
     expect(gpu.requestExport).not.toHaveBeenCalled()
     session.dispose()
   })

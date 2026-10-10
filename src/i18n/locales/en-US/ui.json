@@ -702,6 +702,8 @@
       "previewRenderFailed": "The preview could not refresh. Your edits are safe; keep editing or reopen the image to recover.",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
+      "fitWindow": "Fit window",
+      "actualSize": "Actual size",
       "panels": {
         "expand": "Expand {{title}}",
         "collapse": "Collapse {{title}}",

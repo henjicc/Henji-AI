@@ -14,6 +14,7 @@ describe('GPU 导出故障注入诊断标记', () => {
     { diagnostic: true, beforeRender: true },
     { diagnostic: true, beforeRender: false },
     { diagnostic: false, beforeRender: true },
+    { diagnostic: false, beforeRender: false },
   ])('桥接保留结构化标记：%j', async ({ diagnostic, beforeRender }) => {
     let receive!: (event: ImageEditorGpuSceneWorkerEventV3) => void
     const client: ImageEditorGpuSceneClientV3Like = {
@@ -34,10 +35,17 @@ describe('GPU 导出故障注入诊断标记', () => {
       code: 'initialization-failed', message: 'Reality 注入 GPU 初始化失败', recoverable: true, diagnostic,
     })
     if (beforeRender) fail()
-    const stream = bridge.renderExport(request)!
+    const stream = bridge.renderExport(request)
     if (!beforeRender) fail()
     try {
-      await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow('Reality 注入 GPU 初始化失败')
+      if (beforeRender) {
+        expect(stream).toBeNull()
+        expect(client.requestExport).not.toHaveBeenCalled()
+        expect(log.error).not.toHaveBeenCalled()
+        return
+      }
+      expect(stream).not.toBeNull()
+      await expect(stream![Symbol.asyncIterator]().next()).rejects.toThrow('Reality 注入 GPU 初始化失败')
       const event = expect.objectContaining({ event: 'image_editor_v3.gpu_export.failed' })
       if (diagnostic) {
         expect(log.warn).toHaveBeenCalledWith(expect.any(String), event)

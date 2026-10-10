@@ -120,7 +120,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.resourceDescriptors = new Map(snapshot.resourceDescriptors.map((entry) => [entry.resourceRef, entry]))
     this.document = structuredClone(snapshot.document)
     this.annotationNodes = new Map(
-      [...new Set<ImageEditRenderQuality>([snapshot.quality, 'export'])].flatMap(quality =>
+      [...new Set<ImageEditRenderQuality>([snapshot.quality, 'stable', 'export'])].flatMap(quality =>
         compileImageEditRenderPlanV3(snapshot.document, renderNodeRegistry, quality).nodes
           .filter((node) => node.definitionId === 'vector.content')
           .map((node) => [createImageEditorGpuAnnotationResourceRefV3(node), node] as const)),
@@ -292,7 +292,8 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         this.fallback(event.message)
         return
       }
-      if (event.code === 'initialization-failed') {
+      // 显存回退会销毁 Worker 当前设备状态；后续文档发布不能把资源就绪当成设备恢复。
+      if (event.code === 'initialization-failed' || event.code === 'resource-budget-exceeded') {
         this.deviceReady = false
         this.clearTileRetry()
         this.tileLoadAbortController.abort()

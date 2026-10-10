@@ -182,6 +182,13 @@ export function ImageEditorPreviewV3({
     zoom,
     pan,
   )
+  const resetViewport = (preset: 'fit' | 'actual'): void => {
+    if (!viewportLayout) return
+    useImageEditorInteractionStoreV3.getState().setViewportTransform(controller.sessionId, {
+      zoom: preset === 'fit' ? 1 : zoom / viewportLayout.viewport.zoom,
+      pan: ZERO_VIEWPORT_PAN_V3,
+    })
+  }
   const liveBlurFeedback = useMemo(() => {
     if (Object.keys(snapshot.previewOverrides).length === 0) return null
     const nextRadius = resolveLiveBlurRadiusV3(projectedDocument)
@@ -384,6 +391,7 @@ export function ImageEditorPreviewV3({
   inputRouter.connect({
     navigation: { down: navigation.onPointerDown, move: navigation.onPointerMove, up: navigation.onPointerUp, cancel: navigation.onPointerCancel },
     move: { down: layerMoveHandlers.onPointerDownCapture, move: layerMoveHandlers.onPointerMoveCapture, up: layerMoveHandlers.onPointerUpCapture, cancel: layerMoveHandlers.onPointerCancelCapture },
+    viewport: resetViewport,
   })
   const navigationCursor = imageEditorToolRegistry.get(inputRouter.effectiveTool)?.cursor ?? ''
 
@@ -391,6 +399,7 @@ export function ImageEditorPreviewV3({
     <main
       ref={surfaceRef}
       data-preview-surface
+      data-preview-display-zoom={viewportLayout?.viewport.zoom}
       data-layer-picking-ready-count={alphaMaps.size}
       data-preview-display-source={previewRenderer ? 'custom' : displayPipeline.displaySource}
       data-preview-coverage={previewRenderer ? undefined : viewportComposite.coverage.toFixed(4)}
@@ -525,6 +534,8 @@ export function ImageEditorPreviewV3({
         horizontalSnapGuideRef={horizontalSnapGuideRef}
         verticalSnapGuideRef={verticalSnapGuideRef}
         zoom={zoom}
+        displayZoom={viewportLayout?.viewport.zoom ?? zoom}
+        onViewportPreset={resetViewport}
         onZoomChange={navigation.zoomFromCenter}
       />
     </main>

@@ -2,12 +2,14 @@ import { Minus, Plus } from 'lucide-react'
 import type { RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiIconButton } from '@/components/ui'
+import { UiButton, UiIconButton } from '@/components/ui'
 
 interface ImageEditorViewportChromeV3Props {
   horizontalSnapGuideRef: RefObject<HTMLDivElement>
   verticalSnapGuideRef: RefObject<HTMLDivElement>
   zoom: number
+  displayZoom: number
+  onViewportPreset(preset: 'fit' | 'actual'): void
   onZoomChange(zoom: number): void
 }
 
@@ -15,6 +17,8 @@ export function ImageEditorViewportChromeV3({
   horizontalSnapGuideRef,
   verticalSnapGuideRef,
   zoom,
+  displayZoom,
+  onViewportPreset,
   onZoomChange,
 }: ImageEditorViewportChromeV3Props): JSX.Element {
   const { t } = useTranslation('ui')
@@ -46,7 +50,7 @@ export function ImageEditorViewportChromeV3({
           <Minus className="h-4 w-4" />
         </UiIconButton>
         <span className="flex h-7 w-14 items-center justify-center rounded-md bg-media-control text-xs tabular-nums text-on-media">
-          {Math.round(zoom * 100)}%
+          {Math.round(displayZoom * 100)}%
         </span>
         <UiIconButton tone="media"
           aria-label={t('imageEditor.v3.zoomIn')}
@@ -56,6 +60,14 @@ export function ImageEditorViewportChromeV3({
         >
           <Plus className="h-4 w-4" />
         </UiIconButton>
+        <UiButton variant="media" size="sm" title={`${t('imageEditor.v3.fitWindow')} (Ctrl+0)`}
+          onClick={() => onViewportPreset('fit')}>
+          {t('imageEditor.v3.fitWindow')}
+        </UiButton>
+        <UiButton variant="media" size="sm" title={`${t('imageEditor.v3.actualSize')} (Ctrl+1)`}
+          onClick={() => onViewportPreset('actual')}>
+          {t('imageEditor.v3.actualSize')}
+        </UiButton>
       </div>
     </>
   )

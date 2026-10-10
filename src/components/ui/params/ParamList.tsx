@@ -53,6 +53,8 @@ function createFieldStore() {
 type FieldStore = ReturnType<typeof createFieldStore>
 const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpec; store: FieldStore }) {
   const snapshot = useSyncExternalStore(listener => store.subscribe(field.key, listener), () => store.snapshot(field.key))
+  // 新字段在本轮布局提交时发布；字段集合切换的首次渲染尚无快照。
+  if (!snapshot) return null
   const [value, , visible, , highlighted] = JSON.parse(snapshot) as [CodeParameterValue, unknown, boolean, string, boolean]
   if (!visible) return null
   const props = store.props

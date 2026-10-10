@@ -237,7 +237,7 @@ function compileNode(
       ? source.resourceId : null
     const sparse = compileSparseTiles(tiles, descriptors)
     if (typeof sparse === 'string') return sparse
-    if (!resourceId && Object.keys(sparse).length === 0) {
+    if (!resourceId && source.kind !== 'empty' && Object.keys(sparse).length === 0) {
       return `图层 ${node.layerId} 缺少可用栅格资源`
     }
     const key = resourceId
@@ -403,7 +403,8 @@ function collectRasterLayers(
       ? layer.source.resourceId : null
     if (resourceRef && !descriptors.has(resourceRef)) continue
     const sparseTiles = compileSparseTiles(layer.tiles, descriptors)
-    if (typeof sparseTiles === 'string' || (!resourceRef && Object.keys(sparseTiles).length === 0)) continue
+    if (typeof sparseTiles === 'string'
+      || (!resourceRef && layer.source.kind !== 'empty' && Object.keys(sparseTiles).length === 0)) continue
     output.push({
       layerId: layer.id,
       sourceKind: 'raster',

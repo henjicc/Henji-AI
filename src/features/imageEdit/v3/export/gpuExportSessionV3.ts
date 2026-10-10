@@ -44,7 +44,6 @@ export class ImageEditorGpuExportSessionV3 {
   private readonly diagnosticEventListener: EventListener | null
   private deviceReady = false
   private deviceFailure: Error | null = null
-  private deviceFailureDiagnostic = false
   private diagnosticFailureAfterTiles: number | null = null
 
   constructor(
@@ -86,14 +85,12 @@ export class ImageEditorGpuExportSessionV3 {
   notifyDeviceReady(): void {
     this.deviceReady = true
     this.deviceFailure = null
-    this.deviceFailureDiagnostic = false
     if (this.active) this.startActive(this.active)
   }
 
   notifyDeviceUnavailable(error: Error, diagnostic = false): void {
     this.deviceReady = false
     this.deviceFailure = error
-    this.deviceFailureDiagnostic = diagnostic
     this.failActive(error, diagnostic)
   }
 
@@ -127,6 +124,7 @@ export class ImageEditorGpuExportSessionV3 {
       || snapshot.document.id !== request.document.id
       || snapshot.document.revision !== request.document.revision
       || snapshot.renderGeneration < 1
+      || this.deviceFailure
       || this.active) return null
     const requestId = `gpu-export:${request.sessionId ?? crypto.randomUUID()}`
     const plan = compileImageEditRenderPlanV3(request.document, nodeRegistry, 'export')
@@ -144,10 +142,9 @@ export class ImageEditorGpuExportSessionV3 {
       requestId,
       events: [],
       wake: null,
-      // 初始化尚在进行时可等待 ready；已失败的设备必须立即拒绝流，
-      // 由既有导出事务从 tile 0 重试 CPU，不能永久等待不会再来的 ready。
-      error: request.signal?.aborted ? abortError(request.signal.reason) : this.deviceFailure,
-      errorDiagnostic: !request.signal?.aborted && this.deviceFailureDiagnostic,
+      // 初始化中的设备可等待 ready；已知不可用的设备在创建流前直接选择 CPU。
+      error: request.signal?.aborted ? abortError(request.signal.reason) : null,
+      errorDiagnostic: false,
       completed: false,
       cancelSent: false,
       diagnostics: undefined,

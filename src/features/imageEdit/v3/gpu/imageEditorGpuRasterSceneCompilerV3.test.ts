@@ -19,6 +19,16 @@ function descriptors(resourceRefs: Iterable<string>) {
 }
 
 describe('compileImageEditorGpuRasterSceneV3', () => {
+  it('新建的空栅格图层是透明内容，不作为缺失资源退回 CPU', () => {
+    const fixture = createImageEditorGpuBaselineFixturesV3()[0]
+    const document = structuredClone(fixture.document)
+    document.layers.push(createImageEditRasterLayerV3('empty', '新图层'))
+    const result = compileImageEditorGpuRasterSceneV3(document, descriptors(fixture.resourceSeeds.keys()))
+    expect(result.supported).toBe(true)
+    if (!result.supported) return
+    expect(result.scene.layers.find(layer => layer.layerId === 'empty')).toMatchObject({ resourceRef: null, sparseTiles: {} })
+    expect(result.scene.graph.find(node => node.kind === 'source' && node.layerId === 'empty')).toMatchObject({ resourceKey: null })
+  })
   it('保持根级普通栅格自下而上的顺序并去重资源键', () => {
     const fixture = createImageEditorGpuBaselineFixturesV3()[0]
     const result = compileImageEditorGpuRasterSceneV3(

@@ -14,6 +14,7 @@ async function openCanvasImageEditorV3Fixture({
   foreground = null,
   annotations = [],
   vectorLayers = [],
+  sourcePath = null,
   /*
    * 后台文档验收要的是"数据已经种好、编辑器从没挂载过"这个初始状态：置 false 时种完就返回，
    * 不打开工程也不双击节点。调用方拿到 projectId 与 documentRef 后自行 reload，让直写存储的
@@ -56,7 +57,7 @@ async function openCanvasImageEditorV3Fixture({
     )
     const managed = await window.henjiNative.imageEditorV3.ingestSource({
       requestId: `reality-canvas-gpu-ingest-${crypto.randomUUID()}`,
-      source: { kind: 'local-path', filePath: source },
+      source: { kind: 'local-path', filePath: payload.sourcePath ?? source },
     })
     let foregroundSource = null
     if (payload.foreground) {
@@ -150,7 +151,7 @@ async function openCanvasImageEditorV3Fixture({
       sourceResourceRef: managed.resource.resourceRef,
       foregroundResourceRef: foregroundSource?.resource.resourceRef ?? null,
       sourceGeometry: { width: managed.metadata.width, height: managed.metadata.height } }
-  }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground, vectorLayers: [...vectorLayers, ...annotations.flatMap(item => loadTypeScript('src/core/imageEdit/v3/layerEntries/vectorDraft.ts').imageEditLayersFromMarkDraftV3({ ...item, id: 'reality-annotation-layer' }))], model: imageEditInspectionModel() })
+  }, { projectId, width, height, label, sourcePath, sourceWidth, sourceHeight, transform, solidColor, foreground, vectorLayers: [...vectorLayers, ...annotations.flatMap(item => loadTypeScript('src/core/imageEdit/v3/layerEntries/vectorDraft.ts').imageEditLayersFromMarkDraftV3({ ...item, id: 'reality-annotation-layer' }))], model: imageEditInspectionModel() })
   if (!openEditor) return { dialog: null, editor: null, fixture, projectId }
   // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await context.reopenCanvasProjectFromStorage(page, projectId)

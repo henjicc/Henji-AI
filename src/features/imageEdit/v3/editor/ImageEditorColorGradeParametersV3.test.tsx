@@ -7,8 +7,8 @@ import { ImageEditorColorGradeParametersV3 } from './ImageEditorColorGradeParame
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 function setup() {
   const frames = new Map<number, () => void>(); let sequence = 0
-  vi.stubGlobal('requestAnimationFrame', (callback: () => void) => { frames.set(++sequence, callback); return sequence })
-  vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames.delete(id) })
+  vi.stubGlobal('requestAnimationFrame', function (this: unknown, callback: () => void) { expect(this).toBe(window); frames.set(++sequence, callback); return sequence })
+  vi.stubGlobal('cancelAnimationFrame', function (this: unknown, id: number) { expect(this).toBe(window); frames.delete(id) })
   const layer = createImageEditAdjustmentLayerV3('grade', '调整', 'color_grade', {})
   const controller = { sessionId: 'grade-test', setParameterPreview: vi.fn(), clearParameterPreview: vi.fn(), commitLayerParamsPreview: vi.fn() }
   const view = render(<ImageEditorColorGradeParametersV3 controller={controller} layer={layer} disabled={false} />)

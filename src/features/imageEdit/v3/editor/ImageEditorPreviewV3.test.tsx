@@ -399,7 +399,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     await waitFor(() => expect(
       Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
     ).toEqual([document.layers[0].id]))
-    const zoomIn = rendered.container.querySelector<HTMLButtonElement>('[data-viewport-control] button:last-of-type')
+    const zoomIn = rendered.getByRole('button', { name: '放大' })
     if (!zoomIn) throw new Error('移动反馈测试缺少放大按钮')
     fireEvent.click(zoomIn)
     fireEvent.click(zoomIn)

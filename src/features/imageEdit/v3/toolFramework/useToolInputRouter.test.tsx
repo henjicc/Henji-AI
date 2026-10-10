@@ -13,6 +13,7 @@ import { useToolInputRouter } from './useToolInputRouter'
 
 const cancelled = vi.fn(), committed = vi.fn(), begun = vi.fn()
 const keyboardCommand = vi.fn(() => true)
+const viewportCommand = vi.fn()
 const nav = { down: vi.fn(), move: vi.fn(), up: vi.fn(), cancel: vi.fn() }
 const documentValue = createImageEditDocumentV3({ width: 100, height: 100, documentId: 'tool-input-host' })
 const bus = new ImageEditCommandBusV3(documentValue)
@@ -22,7 +23,7 @@ function Harness(): JSX.Element {
   const surface = useRef<HTMLElement>(null)
   const active = useImageEditorSessionStoreV3(state => state.sessions.router.activeTool)
   const router = useToolInputRouter(surface, controller, active, bus)
-  router.connect({ navigation: nav, move: nav })
+  router.connect({ navigation: nav, move: nav, viewport: viewportCommand })
   const { bindKeyboard } = router
   useLayoutEffect(() => bindKeyboard('raster', keyboardCommand), [bindKeyboard])
   return <div data-image-editor-v3 tabIndex={0} data-testid="root">
@@ -42,6 +43,22 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('实际宿主输入桥', () => {
+  it('Ctrl/Meta+0/1 只在编辑器非输入态触发视口预设，并阻止外层缩放', () => {
+    const view = render(<Harness />), root = view.getByTestId('root')
+    for (const [key, modifier, preset] of [['0', 'ctrlKey', 'fit'], ['1', 'metaKey', 'actual']] as const) {
+      const event = new KeyboardEvent('keydown', { key, [modifier]: true, bubbles: true, cancelable: true })
+      fireEvent(root, event)
+      expect(event.defaultPrevented).toBe(true)
+      expect(viewportCommand).toHaveBeenLastCalledWith(preset)
+    }
+    viewportCommand.mockClear()
+    fireEvent.keyDown(view.getByRole('textbox'), { key: '0', ctrlKey: true })
+    fireEvent.keyDown(document.body, { key: '1', ctrlKey: true })
+    fireEvent.keyDown(root, { key: '1', ctrlKey: true, altKey: true })
+    root.setAttribute('inert', '')
+    fireEvent.keyDown(root, { key: '0', ctrlKey: true })
+    expect(viewportCommand).not.toHaveBeenCalled()
+  })
   it('未持有工具租约时不截断宿主拖动穿过预览，持有租约时仍拒绝第二指针', () => {
     const view = render(<Harness />), owned = view.getByTestId('owned'), other = view.getByTestId('other')
     const moved = vi.fn(), released = vi.fn(), pointerCancelled = vi.fn()

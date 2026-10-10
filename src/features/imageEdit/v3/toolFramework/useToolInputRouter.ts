@@ -20,6 +20,7 @@ interface PointerHandlers {
 interface RouterPorts {
   navigation: PointerHandlers
   move: PointerHandlers
+  viewport?: (preset: 'fit' | 'actual') => void
 }
 
 const logger = createLogger('imageEditor.tools')
@@ -120,6 +121,15 @@ export function useToolInputRouter(
       const modal = [...document.querySelectorAll('[role="dialog"],[role="menu"]')].some(element =>
         !element.contains(root()) && !element.closest('[inert],[aria-hidden="true"]')
         && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden')
+      if (!event.defaultPrevented && !editable && !modal && !root()?.closest('[inert]')
+        && !event.isComposing && !composing.current && event.keyCode !== 229
+        && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
+        && ['0', '1'].includes(event.key) && ports.current?.viewport) {
+        event.preventDefault(); event.stopImmediatePropagation()
+        cancelRef.current('temporary-tool')
+        ports.current.viewport(event.key === '0' ? 'fit' : 'actual')
+        return
+      }
       if (!editable && !modal && !event.isComposing && !composing.current && event.keyCode !== 229
         && !event.ctrlKey && !event.metaKey && !event.altKey && !event.repeat && !router.temporaryActive
         && (['Enter', 'Delete', 'Backspace'].includes(event.key) || event.key.startsWith('Arrow'))) {
