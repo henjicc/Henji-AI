@@ -52,6 +52,6 @@ describe('独立选区覆盖率和边缘', () => {
   });
   it('拒绝开放字段、无效坐标与无效羽化', () => {
     expect(() => imageEditSelectionSessionSchemaV3.parse({ operations: [], feather: Number.NaN, inverted: false })).toThrow();
-    expect(() => appendImageEditSelectionV3(null, { ...left, x: 2 }, 'replace')).toThrow();
+    expect(() => appendImageEditSelectionV3(null, { ...left, x: Infinity }, 'replace')).toThrow();
   });
 });

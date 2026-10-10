@@ -106,7 +106,7 @@ export function createImageEditorRasterBrushTileLoaderV3(
   const resolveStorageSize = async (signal: AbortSignal): Promise<ImageEditSize> => {
     signal.throwIfAborted()
     if (storageSize) return storageSize
-    if (options.layer.source.kind === 'empty') return options.document.geometry
+    if (options.layer.source.kind === 'empty') return options.layer.rasterCanvasSize ?? options.document.geometry
     const pyramid = await readImageEditorExportSourcePyramidV3(options.layer.source.resourceId, signal, {
       readSourcePyramid: options.readSourcePyramid,
     })
@@ -114,7 +114,7 @@ export function createImageEditorRasterBrushTileLoaderV3(
     const source = pyramid.levels.find((level) => level.mip === 0)
     if (!source) throw new Error('图片源金字塔缺少原始尺寸')
     sourcePyramid = pyramid
-    storageSize = resolveImageEditRasterStorageSizeV3(source, options.document.geometry)
+    storageSize = resolveImageEditRasterStorageSizeV3(source, options.layer.rasterCanvasSize ?? options.document.geometry)
     return storageSize
   }
   const load: ImageEditBrushTileLoaderV3 = async (coordinate, signal) => {
@@ -149,7 +149,7 @@ export function createImageEditorRasterBrushTileLoaderV3(
       }
     }
     const decoded = await loadImageEditorV3SourceRegion(
-      options.layer.source.resourceId, region.outputRect, options.document.geometry,
+      options.layer.source.resourceId, region.outputRect, await resolveStorageSize(signal),
       sourceBitDepth(options.document), target.workingSpace, target.transferFunction,
       target.referenceWhiteNits, signal, {
         readSourcePyramid: async () => {

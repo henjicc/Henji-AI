@@ -15,6 +15,15 @@ function sample() {
   return { document, layer };
 }
 describe('扩图：同一命令历史与共享区域内核', () => {
+  it('左上扩边移动原稿、命名区域和独立边缘蒙版，撤销全部恢复', () => {
+    const { document, layer } = sample(), plan = planImageEditOutpaintV3(document, { left: .5, top: .5, right: 0, bottom: 0 });
+    document.namedRegions = [{ id: 'subject', name: '主体', selection: appendImageEditSelectionV3(null, { type: 'rectangle', x: 0, y: 0, width: 1, height: 1 }, 'replace') }];
+    const history = new ImageEditCommandHistoryV3(), next = history.execute(document, createImageEditOutpaintCommandV3(document, plan, layer, {}, 'left-top'));
+    expect(next.layers[0].transform).toEqual([1, 0, 0, 1, 50, 40]);
+    expect(next.namedRegions[0].selection.operations[0].shape).toMatchObject({ x: 1 / 3, y: 1 / 3, width: 2 / 3, height: 2 / 3 });
+    expect([...rasterizeVectorCoverage(next.layers[1].mask!.vectorPaths!, { x: 49, y: 39, width: 2, height: 2 })]).toEqual([1, 1, 1, 0]);
+    expect(history.undo(next).document).toMatchObject({ geometry: document.geometry, layers: document.layers, namedRegions: document.namedRegions });
+  });
   it('锁定原图网格、蒙版只显示新增边缘，扩边与新层一次撤销并可序列化', () => {
     const { document, layer } = sample(), plan = planImageEditOutpaintV3(document, { right: .5, bottom: .5 });
     const history = new ImageEditCommandHistoryV3();

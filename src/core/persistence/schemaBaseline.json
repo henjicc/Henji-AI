@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 9,
-      "fingerprint": "e1d87c416ce062091021cf7696e3c117e1194444eef280e495583e67b784af44",
-      "supportedFrom": 9
+      "version": 10,
+      "fingerprint": "da28536f4cf24a7d8eb812c2153fd97393f47c1a9279dafb400e5f490cbfcf8e",
+      "supportedFrom": 10
     },
     "image-working-copy": {
-      "version": 11,
-      "fingerprint": "865d031879f266e2362f67249044c92a0d61216c1823c8685c9a26346da1fbd3",
-      "supportedFrom": 11
+      "version": 12,
+      "fingerprint": "08f4eec83d4a5f71f977ccea05c8e39abeabfba257c46cfb964f94cf49f9b11b",
+      "supportedFrom": 12
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 9,
-      "fingerprint": "df88d10bb072db6bc8e6e6b2468341ca552e36ccfe18b7ae6a96327d00242afa",
-      "supportedFrom": 9
+      "version": 10,
+      "fingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
+      "supportedFrom": 10
     },
     "keystore": {
       "version": 1,
@@ -970,6 +970,33 @@
       "reason": "画布图层包共用扩图工作副本与历史命令",
       "previousFingerprint": "429c33aceb80fad97a1733b7a09ec0aca10d6e9fcc2f29955dd5a7bf94d0bbed",
       "fingerprint": "df88d10bb072db6bc8e6e6b2468341ca552e36ccfe18b7ae6a96327d00242afa",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T10:07:15.432Z",
+      "format": "image-package",
+      "version": 10,
+      "reason": "t119-16：选区保留画布外有限坐标，尺寸锚点与缩放共用当前格式；开发期不兼容旧数据",
+      "previousFingerprint": "e1d87c416ce062091021cf7696e3c117e1194444eef280e495583e67b784af44",
+      "fingerprint": "da28536f4cf24a7d8eb812c2153fd97393f47c1a9279dafb400e5f490cbfcf8e",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T10:07:15.433Z",
+      "format": "image-working-copy",
+      "version": 12,
+      "reason": "t119-16：选区保留画布外有限坐标，尺寸锚点与缩放共用当前格式；开发期不兼容旧数据",
+      "previousFingerprint": "865d031879f266e2362f67249044c92a0d61216c1823c8685c9a26346da1fbd3",
+      "fingerprint": "08f4eec83d4a5f71f977ccea05c8e39abeabfba257c46cfb964f94cf49f9b11b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T10:07:15.433Z",
+      "format": "canvas-layer-package",
+      "version": 10,
+      "reason": "t119-16：选区保留画布外有限坐标，尺寸锚点与缩放共用当前格式；开发期不兼容旧数据",
+      "previousFingerprint": "df88d10bb072db6bc8e6e6b2468341ca552e36ccfe18b7ae6a96327d00242afa",
+      "fingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
       "waivedFixtureVersions": []
     }
   ]

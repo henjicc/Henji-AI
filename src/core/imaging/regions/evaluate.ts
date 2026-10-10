@@ -58,8 +58,9 @@ export function evaluateRegionProgram(selection: RegionProgram, size: RegionGrid
   assertRegionRect(region);
   throwIfRegionAborted(signal);
   if (![size.width, size.height].every(value => Number.isFinite(value) && value > 0)
-    || !Number.isFinite(selection.feather) || selection.feather < 0 || selection.feather > 1) throw new Error('区域参考尺寸或羽化无效');
+    || !Number.isFinite(selection.feather) || selection.feather < 0) throw new Error('区域参考尺寸或羽化无效');
   const radius = selection.feather * Math.min(size.width, size.height);
+  if (!Number.isFinite(radius)) throw new Error('区域羽化超过浮点坐标精度');
   // 大羽化沿共享 fast-blur 的低频策略：全局对齐的 mip，halo 不随大图线性膨胀。
   if (radius > 16) {
     const scale = 2 ** Math.ceil(Math.log2(radius / 16));

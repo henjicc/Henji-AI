@@ -36,6 +36,7 @@ export function OutpaintStatusV3({ bus }: ToolOptionsProps): JSX.Element | null 
 export function OutpaintOptionsV3({ bus }: ToolOptionsProps): JSX.Element {
   const { t, i18n } = useTranslation('ui'), text = (key: string) => t(`imageEditor.v3.outpaint.${key}`);
   const [open, setOpen] = useState(false), [picking, setPicking] = useState(false);
+  const [left, setLeft] = useState(0), [top, setTop] = useState(0);
   const [right, setRight] = useState(25), [bottom, setBottom] = useState(0);
   const [prompt, setPrompt] = useState(() => parseLegacyPromptString(''));
   const [modelId, setModelId] = useState(''), [providerId, setProviderId] = useState('');
@@ -54,7 +55,7 @@ export function OutpaintOptionsV3({ bus }: ToolOptionsProps): JSX.Element {
     setBusy(true); setError(null);
     try {
       const { prepareImageEditOutpaintV3, startImageEditOutpaintV3 } = await loadOutpaint();
-      const request = { documentId, margins: { right: right / 100, bottom: bottom / 100 }, prompt: toPromptPlainText(prompt) || text('defaultPrompt'), ...(modelId ? { modelId } : {}) };
+      const request = { documentId, margins: { left: left / 100, top: top / 100, right: right / 100, bottom: bottom / 100 }, prompt: toPromptPlainText(prompt) || text('defaultPrompt'), ...(modelId ? { modelId } : {}) };
       const prepared = await prepareImageEditOutpaintV3(request);
       const price = prepared.preparation.priceEstimate as { amount?: number; currency?: string } | null;
       const settings = readPriceEstimateDisplaySettings();
@@ -75,9 +76,11 @@ export function OutpaintOptionsV3({ bus }: ToolOptionsProps): JSX.Element {
     <UiButton size="sm" disabled={active} onClick={() => setOpen(true)}>{text('configure')}</UiButton>
     <span className="text-xs text-text3">{text('costShort')}</span>
     <UiModal isOpen={open} title={text('title')} onClose={() => { if (!busy) setOpen(false); }} size="compact"
-      footer={<><UiButton disabled={busy} onClick={() => setOpen(false)}>{text('close')}</UiButton><UiButton variant="primary" disabled={busy || active || right + bottom <= 0} onClick={() => void begin()}>{text('generate')}</UiButton></>}>
+      footer={<><UiButton disabled={busy} onClick={() => setOpen(false)}>{text('close')}</UiButton><UiButton variant="primary" disabled={busy || active || left + top + right + bottom <= 0} onClick={() => void begin()}>{text('generate')}</UiButton></>}>
       <div className="flex flex-col gap-4" data-outpaint-configuration>
         <p className="text-sm text-text2">{text('description')}</p>
+        <UiFormRow label={text('left')}><NumberInput ariaLabel={text('left')} value={left} min={0} onChange={setLeft} disabled={busy} /></UiFormRow>
+        <UiFormRow label={text('top')}><NumberInput ariaLabel={text('top')} value={top} min={0} onChange={setTop} disabled={busy} /></UiFormRow>
         <UiFormRow label={text('right')}><NumberInput ariaLabel={text('right')} value={right} min={0} onChange={setRight} disabled={busy} /></UiFormRow>
         <UiFormRow label={text('bottom')}><NumberInput ariaLabel={text('bottom')} value={bottom} min={0} onChange={setBottom} disabled={busy} /></UiFormRow>
         <UiButton disabled={busy} title={text('changeModel')} onClick={() => setPicking(true)}>{modelId ? getI18nText(registry.getModel(modelId)?.meta.name ?? modelId, i18n.language) : text('defaultModel')}</UiButton>

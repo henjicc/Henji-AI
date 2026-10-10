@@ -11,17 +11,20 @@ import { ImageEditorSelectionOverlayV3 } from './ImageEditorSelectionOverlayV3'
 import type { ImageEditorV3Controller } from './types'
 import type { ToolKeyboardBinding, ToolKeyboardHandler } from '../toolFramework/types'
 import { appendImageEditSelectionV3 } from '@/core/imageEdit/v3/selection/session'
+import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3'
+import type { SelectionRasterRequestV3 } from '../execution/selectionRaster.worker'
 
 const subjectView = vi.hoisted(() => ({ busy: false, candidates: [], run: vi.fn(async () => undefined) }))
 vi.mock('./ImageEditorSubjectContextV3', () => ({ useImageEditorSubjectV3: () => subjectView }))
 const repairView = vi.hoisted(() => ({ busy: false, run: vi.fn(async () => undefined) }))
 vi.mock('./ImageEditorRepairContextV3', () => ({ useImageEditorRepairV3: () => repairView }))
 
+const rasterize = vi.hoisted(() => vi.fn(async (request: SelectionRasterRequestV3) => new Float32Array(request.region.width * request.region.height)))
 vi.mock('../execution/selectionRasterClientV3', () => ({ ImageEditSelectionRasterClientV3: class {
-  async rasterize() { return new Float32Array(32 * 16) }
+  rasterize = rasterize
   dispose() {}
 } }))
-beforeEach(() => { repairView.busy = false; repairView.run.mockClear(); subjectView.busy = false; subjectView.run.mockClear(); useImageEditorSessionStoreV3.setState({ sessions: {} }); vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null) })
+beforeEach(() => { rasterize.mockClear(); repairView.busy = false; repairView.run.mockClear(); subjectView.busy = false; subjectView.run.mockClear(); useImageEditorSessionStoreV3.setState({ sessions: {} }); vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null) })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 function setup(tool: 'select-rect' | 'select-polygon' | 'select-brush' | 'remove' | 'repair' | 'select-subject' | 'select-subject-box') {
   const document = createImageEditDocumentV3({ width: 32, height: 16, documentId: 'selection-gesture' })
@@ -34,12 +37,32 @@ function setup(tool: 'select-rect' | 'select-polygon' | 'select-brush' | 'remove
     const [snapshot, setSnapshot] = useState(bus.getSnapshot())
     useEffect(() => bus.subscribe(() => setSnapshot(bus.getSnapshot())), [])
     const controller = { sessionId: 'test-selection', document: snapshot.document, profile: getImageEditorHostProfileV3('full') } as ImageEditorV3Controller
-    return <div data-image-editor-v3 onKeyDown={event => keyboard.current?.(event.nativeEvent)}><ImageEditorSelectionOverlayV3 controller={controller} bus={bus} bindKeyboard={bindKeyboard} /></div>
+    return <div data-image-editor-v3 onKeyDown={event => keyboard.current?.(event.nativeEvent)}><ImageEditorSelectionOverlayV3 controller={controller} bus={bus} bindKeyboard={bindKeyboard} projectedDocument={projectImageEditorPreviewDocumentV3(snapshot)} /></div>
   }
   const result = render(<Editor />), overlay = result.container.querySelector('svg')!
   vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 160, width: 320, height: 160, toJSON: () => ({}) })
   return { bus, overlay, root: result.container.firstElementChild! }
 }
+it('尺寸预览按新网格显示映射选区，取消恢复原稿与临时选区且不写历史', async () => {
+  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({
+    createImageData: (width: number, height: number) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+    putImageData: vi.fn(), fillRect: vi.fn(), drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D)
+  const { bus, overlay } = setup('select-rect')
+  const original = appendImageEditSelectionV3(null, { type: 'rectangle', x: .25, y: 0, width: .5, height: 1 }, 'replace')
+  await act(async () => { bus.setSelection(original) })
+  const document = bus.getSnapshot().document, history = bus.getSnapshot().history.undoCount
+  const mapped = appendImageEditSelectionV3(null, { type: 'rectangle', x: .625, y: 0, width: .25, height: 1 }, 'replace')
+  await act(async () => { bus.setPreview({ id: 'document-geometry', kind: 'document-geometry', targetId: document.id,
+    baseRevision: document.revision, value: { ...document, geometry: { ...document.geometry, width: 64 } }, selectionPreview: mapped }) })
+  expect(overlay.getAttribute('viewBox')).toBe('0 0 64 16')
+  expect(rasterize).toHaveBeenLastCalledWith(expect.objectContaining({ selection: mapped, size: { width: 64, height: 16 } }), expect.any(AbortSignal))
+  expect(bus.getSnapshot().document).toBe(document); expect(bus.getSnapshot().selection).toEqual(original)
+  await act(async () => { bus.clearPreview('document-geometry') })
+  expect(overlay.getAttribute('viewBox')).toBe('0 0 32 16')
+  expect(rasterize).toHaveBeenLastCalledWith(expect.objectContaining({ selection: original, size: { width: 32, height: 16 } }), expect.any(AbortSignal))
+  expect(bus.getSnapshot().history.undoCount).toBe(history); bus.dispose()
+})
 it('框选只在抬手提交比例坐标，作品和原蒙版不变；一个手势一次撤销', () => {
   const { bus, overlay } = setup('select-rect')
   fireEvent.pointerDown(overlay, { button: 0, pointerId: 1, clientX: 80, clientY: 40 })

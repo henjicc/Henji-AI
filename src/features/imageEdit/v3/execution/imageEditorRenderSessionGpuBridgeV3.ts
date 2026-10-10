@@ -57,6 +57,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   private frameInFlight = false
   private deviceReady = false
   private sceneResourcesReady = false
+  private syncingSnapshot = false
   private tileRetryUsed = false
   private tileResourcesFailed = false
   private tileRetryTimer: ReturnType<typeof setTimeout> | null = null
@@ -125,9 +126,16 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
           .map((node) => [createImageEditorGpuAnnotationResourceRefV3(node), node] as const)),
     )
     this.exportSession.syncSnapshot(snapshot)
-    this.client?.syncScene(snapshot)
+    // A tile-only scene can report resources-ready synchronously. Its sequence
+    // gate resets the camera to zero, so synchronize the camera before rendering.
+    this.syncingSnapshot = true
+    try {
+      this.client?.syncScene(snapshot)
+      if (this.layout) this.client?.updateViewport(this.sceneGeneration, this.cameraSequence, this.layout)
+    } finally {
+      this.syncingSnapshot = false
+    }
     if (this.layout) {
-      this.client?.updateViewport(this.sceneGeneration, this.cameraSequence, this.layout)
       this.requestFrame(snapshot.quality)
     }
   }
@@ -307,7 +315,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
 
   private dispatchFrame(): void {
     if (!this.client || !this.deviceReady || !this.sceneResourcesReady || !this.layout
-      || this.frameInFlight || !this.pendingFrame) return
+      || this.syncingSnapshot || this.frameInFlight || !this.pendingFrame) return
     const pending = this.pendingTransform
     this.pendingTransform = null
     if (pending) this.interactionSequence = pending.interactionSequence

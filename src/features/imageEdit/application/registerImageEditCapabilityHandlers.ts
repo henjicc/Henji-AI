@@ -1,3 +1,4 @@
+import { registerImageEditGeometryHandlers } from './registerImageEditGeometryHandlers'
 import { paintImageEditTargetCapability } from '@/core/application-control/domains/imageEdit/imageEditPaintCapabilities'
 import { paintImageEditTargetV3 } from '../v3/tools/paint/service'
 import { convertImageEditFilterScopeCapability } from '@/core/application-control/domains/imageEdit/imageEditFilterCapabilities'
@@ -39,6 +40,7 @@ import { registerImageEditOutpaintHandlers } from './registerImageEditOutpaintHa
 
 export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
   registerImageEditOutpaintHandlers(registrar)
+  registerImageEditGeometryHandlers(registrar)
   registrar.registerHandler(paintImageEditTargetCapability.id, async (input, context) => {
     const parsed = paintImageEditTargetCapability.inputSchema.parse(input)
     const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)

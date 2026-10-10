@@ -353,6 +353,28 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     expect(client.dispose).toHaveBeenCalledOnce()
   })
 
+  it('无源图片的瓦片场景同步就绪时，先恢复相机序列再请求新帧', () => {
+    const harness = clientHarness()
+    const present = vi.fn(() => true)
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3('size-tile-scene', harness.client, vi.fn(), false, present, vi.fn())
+    const snapshot = { document: createImageEditDocumentV3({ width: 320, height: 240 }), renderGeneration: 1,
+      geometryHash: 'geometry', quality: 'stable' as const, resourceDescriptors: [] }
+    bridge.updateViewport(1, layout)
+    bridge.syncSnapshot(snapshot)
+    harness.listener({ type: 'ready', sceneGeneration: 1, deviceGeneration: 1, recovered: false })
+    harness.listener(frame(0))
+    vi.mocked(harness.client.requestFrame).mockClear()
+    vi.mocked(harness.client.updateViewport).mockClear()
+    bridge.syncSnapshot({ ...snapshot, renderGeneration: 2 })
+    expect(harness.client.requestFrame).toHaveBeenCalledOnce()
+    expect(harness.client.updateViewport).toHaveBeenCalledWith(2, 1, layout)
+    expect(vi.mocked(harness.client.updateViewport).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(harness.client.requestFrame).mock.invocationCallOrder[0])
+    harness.listener({ ...frame(0), sceneGeneration: 2 })
+    expect(present).toHaveBeenCalledTimes(2)
+    bridge.dispose()
+  })
+
   it('将高频瞬态矩阵串行合并到实际呈现帧，不重复发送 uniform', () => {
     const harness = clientHarness()
     const present = vi.fn(() => true)

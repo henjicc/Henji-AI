@@ -36,6 +36,7 @@ describe('正式读入口打开黄金归档与源码', () => {
         expect(imported.manifest.document.history?.redo).toHaveLength(1)
         const history = new ImageEditCommandHistoryV3()
         const document = imported.manifest.document.document as ImageEditDocumentV3
+        expect(document.namedRegions.find(region => region.id === 'golden-outside')?.selection.operations[0].shape).toMatchObject({ type: 'rectangle', x: -.4, y: 1.1, width: 1.5 });
         history.restore(document, imported.manifest.document.history)
         const redone = history.redo(document).document
         expect(redone.layers[0].opacity).toBe(.5)

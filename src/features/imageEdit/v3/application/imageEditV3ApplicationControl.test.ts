@@ -39,6 +39,28 @@ const executionContext: ApplicationExecutionContext = {
 const disposers: Array<() => void> = []
 
 beforeEach(installHarnessNativeStorage)
+it('画布锚点走通用文档属性、当前选区同一次撤销，节点持久化入口不分叉', async () => {
+  const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'size-reflection' });
+  document.layers = [createImageEditRasterLayerV3('content', '内容')];
+  const bus = new ImageEditCommandBusV3(document);
+  disposers.push(registerPersistedImageEditTestSession('size-reflection-session', bus));
+  const reflection = getApplicationReflectionRegistry(), target = imageEditV3DocumentRef(document.id), id = 'image_edit.document.canvas_size';
+  const descriptor = reflection.describe({ entityTypes: ['image_edit.document'] }, accessContext).properties.find(value => value.id === id)!;
+  if (descriptor.value.kind !== 'json') throw new Error('画布尺寸需公开结构化 schema');
+  expect(reflection.resolveSchema(descriptor.value.schemaRef, accessContext)).toMatchObject({ properties: { anchor: { enum: ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'] } } });
+  const before = await reflection.readEntity(target, [id], accessContext);
+  expect(before.properties[id]).toEqual({ width: 32, height: 24, anchor: 'center' });
+  const result = await commitStep('左上补边', before.revisions, { kind: 'mutation', target, entityType: 'image_edit.document', expectedRevisions: before.revisions,
+    mutations: [{ propertyId: id, operation: 'set', value: { width: 48, height: 40, anchor: 'bottom-right' } }] }, 'size');
+  expect(result.status, JSON.stringify(result)).toBe('completed');
+  expect(bus.getSnapshot().document.layers[0].transform).toEqual([1, 0, 0, 1, 16, 16]);
+  expect((await reflection.readEntity(target, [id], accessContext)).properties[id]).toEqual({ width: 48, height: 40, anchor: 'center' });
+  if (result.status !== 'completed' || !result.undoRef) throw new Error('缺少尺寸撤销引用');
+  const undone = await getApplicationControlExecutionEngine().undo({ undoRef: result.undoRef, expectedRevisions: result.resultingRevisions, idempotencyKey: 'size-transaction-undo' }, executionContext);
+  expect(undone.status, JSON.stringify(undone)).toBe('completed');
+  expect(bus.getSnapshot().document.geometry).toEqual(document.geometry);
+  expect(bus.getSnapshot().document.layers).toEqual(document.layers);
+});
 afterEach(() => {
   while (disposers.length > 0) disposers.pop()?.()
   uninstallHarnessNativeStorage()

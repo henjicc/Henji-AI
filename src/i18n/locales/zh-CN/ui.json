@@ -884,7 +884,9 @@
         "placing": "正在把扩图放入当前图片",
         "failed": "扩图未完成",
         "recover": "恢复原任务",
-        "cancel": "取消扩图"
+        "cancel": "取消扩图",
+        "left": "左侧增加（%）",
+        "top": "上方增加（%）"
       },
       "tools": {
         "paint-gradient": "渐变",
@@ -932,7 +934,8 @@
         "vector-arrow": "箭头",
         "vector-callout": "说明框",
         "vector-number": "序号",
-        "vector-path": "路径"
+        "vector-path": "路径",
+        "document-size": "画布与图像尺寸"
       },
       "layerControls": {
         "rotate": "旋转图层",
@@ -1267,6 +1270,39 @@
         "sampleFirst": "请先 Alt 点击干净来源，或点取样后在画面中选择来源",
         "previewFill": "预览填充",
         "apply": "应用"
+      },
+      "documentGeometry": {
+        "configure": "调整尺寸",
+        "title": "画布与图像尺寸",
+        "mode": "调整方式",
+        "canvas": "画布尺寸",
+        "resample": "图像尺寸",
+        "content-aware": "内容识别缩放",
+        "canvasHint": "改变画布边界，按锚点放置原稿。画布外内容仍保留；带滤镜的原稿作为可编辑内容保留。",
+        "resampleHint": "缩放整幅图像及选区，保留原稿图层、路径、蒙版和滤镜。双击结果图层可编辑原稿。",
+        "content-awareHint": "优先移除或补入低细节区域，保护选区中的主体。先检查预览；建筑和重复纹理可能变形，可取消或改用图像尺寸。",
+        "width": "宽度（像素）",
+        "height": "高度（像素）",
+        "anchor": "原稿锚点",
+        "anchors": {
+          "top-left": "左上",
+          "top": "上方",
+          "top-right": "右上",
+          "left": "左侧",
+          "center": "居中",
+          "right": "右侧",
+          "bottom-left": "左下",
+          "bottom": "下方",
+          "bottom-right": "右下"
+        },
+        "proportional": "保持宽高比",
+        "protect": "保护当前选区",
+        "preparing": "正在准备尺寸预览",
+        "preview": "预览",
+        "apply": "应用",
+        "cancel": "取消",
+        "previewHint": "正在预览，应用后可一步撤销",
+        "cropHint": "尺寸以原稿画布为准，画面方向保持不变。应用时取消当前裁剪，原稿与裁剪可一步撤销。"
       }
     }
   },

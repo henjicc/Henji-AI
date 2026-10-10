@@ -1,3 +1,4 @@
+import { prepareImageEditCommandV3 } from '@/core/imageEdit/v3/commandPreparation';
 import {
   ImageEditCommandHistoryV3,
   type ImageEditCommandHistoryOptionsV3,
@@ -5,7 +6,6 @@ import {
 import type { ImageEditCommandV3 } from '@/core/imageEdit/v3/commandTypes';
 import {
   collectPositiveImageEditCommandResourceBytesV3,
-  prepareImageEditCommandResourceMetadataV3,
 } from '@/core/imageEdit/v3/commandLayerResourceMetadata';
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes';
 import type {
@@ -25,13 +25,14 @@ import { rebaseImageEditSelectionGridV3 } from '@/core/imageEdit/v3/selection/re
 
 const historyLogger = createLogger('features.imageEdit.v3.history');
 
-type SessionHistoryEntry = { commandId: string; projection: ReturnType<typeof projectImageEditHistoryCommandV3> } | { selectionCommandId: number; before: ImageEditSelectionSessionV3 | null; after: ImageEditSelectionSessionV3 | null };
+type SessionHistoryEntry = { commandId: string; selectionBefore?: ImageEditSelectionSessionV3 | null; selectionAfter?: ImageEditSelectionSessionV3 | null; projection: ReturnType<typeof projectImageEditHistoryCommandV3> } | { selectionCommandId: number; before: ImageEditSelectionSessionV3 | null; after: ImageEditSelectionSessionV3 | null };
 
 export type ImageEditPreviewOverrideKindV3 =
   | 'parameter'
   | 'crop'
   | 'transform'
-  | 'brush';
+  | 'brush'
+  | 'document-geometry';
 
 export interface ImageEditPreviewOverrideV3 {
   id: string;
@@ -41,6 +42,8 @@ export interface ImageEditPreviewOverrideV3 {
   value: unknown;
   /** Transient persisted tiles remain protected by the preparing operation's resource lease. */
   resourceByteSizes?: Readonly<Record<string, number>>;
+  /** Geometry previews display the mapped coverage without changing the live selection/history. */
+  selectionPreview?: ImageEditSelectionSessionV3 | null;
 }
 
 export interface ImageEditCommandBusSnapshotV3 {
@@ -230,7 +233,9 @@ export class ImageEditCommandBusV3 {
           const command = direction < 0 ? commandEntry.inverse : commandEntry.forward;
           const beforeGrid = document.geometry;
           document = applyImageEditCommandV3(document, withImageEditCommandRevisionV3(command, document.revision), { allowLegacyResourceMetadata: true }).document;
-          if (selection && (beforeGrid.width !== document.geometry.width || beforeGrid.height !== document.geometry.height)) { selection = rebaseImageEditSelectionGridV3(selection, beforeGrid, document.geometry); selectionSteps++; }
+          if (direction < 0 && entry.selectionBefore !== undefined) { selection = entry.selectionBefore; selectionSteps++; }
+          else if (direction > 0 && entry.selectionAfter !== undefined) { selection = entry.selectionAfter; selectionSteps++; }
+          else if (selection && (beforeGrid.width !== document.geometry.width || beforeGrid.height !== document.geometry.height)) { selection = rebaseImageEditSelectionGridV3(selection, beforeGrid, document.geometry); selectionSteps++; }
           commandPosition += direction;
         } else { selection = direction < 0 ? entry.before : entry.after; selectionSteps++; }
         options.onProgress?.(completed + 1, total);
@@ -245,11 +250,12 @@ export class ImageEditCommandBusV3 {
     return () => this.persistenceListeners.delete(listener);
   }
 
-  dispatch(command: ImageEditCommandV3): ImageEditDocumentV3 {
+  dispatch(command: ImageEditCommandV3, selectionAfter?: ImageEditSelectionSessionV3 | null): ImageEditDocumentV3 {
     this.assertMutable();
+    const validatedSelection = selectionAfter == null ? selectionAfter : imageEditSelectionSessionSchemaV3.parse(selectionAfter);
     const previousRevision = this.document.revision;
     const nextByteSizes = new Map(this.resourceByteSizes);
-    const prepared = prepareImageEditCommandResourceMetadataV3(
+    const prepared = prepareImageEditCommandV3(
       this.document,
       command,
       nextByteSizes,
@@ -261,11 +267,13 @@ export class ImageEditCommandBusV3 {
       }
       nextByteSizes.set(resource.resourceId, resource.byteSize);
     }
+    const selectionBefore = this.selection;
     const nextDocument = this.history.execute(this.document, prepared);
     if (nextDocument === this.document) return this.document;
-    this.rebaseSelection(nextDocument);
+    if (selectionAfter !== undefined) { this.selection = validatedSelection ?? null; this.selectionRevision++; }
+    else this.rebaseSelection(nextDocument);
     this.document = nextDocument;
-    this.sessionUndo.push({ commandId: prepared.commandId, projection: projectImageEditHistoryCommandV3(prepared) });
+    this.sessionUndo.push({ commandId: prepared.commandId, selectionBefore, selectionAfter: this.selection, projection: projectImageEditHistoryCommandV3(prepared) });
     this.historyGeneration++;
     this.sessionRedo = [];
     this.resourceByteSizes.clear();
@@ -324,7 +332,8 @@ export class ImageEditCommandBusV3 {
     const previousRevision = this.document.revision;
     const transition = this.history.undo(this.document);
     if (!transition.changed) return false;
-    this.rebaseSelection(transition.document);
+    if (entry.selectionBefore !== undefined) { this.selection = entry.selectionBefore; this.selectionRevision++; }
+    else this.rebaseSelection(transition.document);
     this.document = transition.document;
     this.sessionUndo.pop(); this.sessionRedo.push(entry);
     this.historyGeneration++;
@@ -341,7 +350,9 @@ export class ImageEditCommandBusV3 {
     const previousRevision = this.document.revision;
     const transition = this.history.undoCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
-    this.rebaseSelection(transition.document);
+    const oldest = this.sessionUndo.at(-commandIdsNewestFirst.length);
+    if (oldest && 'commandId' in oldest && oldest.selectionBefore !== undefined) { this.selection = oldest.selectionBefore; this.selectionRevision++; }
+    else this.rebaseSelection(transition.document);
     this.document = transition.document;
     for (const entry of this.sessionUndo.splice(-commandIdsNewestFirst.length).reverse()) this.sessionRedo.push(entry);
     this.historyGeneration++;
@@ -358,7 +369,9 @@ export class ImageEditCommandBusV3 {
     const previousRevision = this.document.revision;
     const transition = this.history.rollbackCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
-    this.rebaseSelection(transition.document);
+    const oldest = this.sessionUndo.at(-commandIdsNewestFirst.length);
+    if (oldest && 'commandId' in oldest && oldest.selectionBefore !== undefined) { this.selection = oldest.selectionBefore; this.selectionRevision++; }
+    else this.rebaseSelection(transition.document);
     this.document = transition.document;
     this.sessionUndo.splice(-commandIdsNewestFirst.length);
     this.historyGeneration++;
@@ -380,7 +393,8 @@ export class ImageEditCommandBusV3 {
     const previousRevision = this.document.revision;
     const transition = this.history.redo(this.document);
     if (!transition.changed) return false;
-    this.rebaseSelection(transition.document);
+    if (entry.selectionAfter !== undefined) { this.selection = entry.selectionAfter; this.selectionRevision++; }
+    else this.rebaseSelection(transition.document);
     this.document = transition.document;
     this.sessionRedo.pop(); this.sessionUndo.push(entry);
     this.historyGeneration++;

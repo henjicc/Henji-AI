@@ -1,3 +1,5 @@
+import { resampleAffinePixels } from '../../../imaging/transforms/resample'
+import type { Affine } from '../../../imaging/transforms'
 import { inverseAffine, mapAffine, composeAffine } from '../../../imaging/transforms';
 import {
   createFloat32MaskTile,
@@ -148,66 +150,6 @@ export function resolveImageEditInverseSourceRectV3(
   }, sourceSize)
 }
 
-function resampleAffine(
-  source: Float32Array,
-  sourceWidth: number,
-  sourceHeight: number,
-  sourceRect: ImageEditRect,
-  outputRect: ImageEditRect,
-  transform: readonly number[],
-  channels: 1 | 4,
-): Float32Array {
-  const inverse = invertImageEditTransformV3(transform)
-  const [inverseA, inverseB, inverseC, inverseD, inverseE, inverseF] = inverse
-  const output = new Float32Array(outputRect.width * outputRect.height * channels)
-  const firstGlobalX = outputRect.x + 0.5
-  for (let y = 0; y < outputRect.height; y += 1) {
-    const globalY = outputRect.y + y + 0.5
-    let localX = inverseA * firstGlobalX + inverseC * globalY + inverseE
-      - sourceRect.x - 0.5
-    let localY = inverseB * firstGlobalX + inverseD * globalY + inverseF
-      - sourceRect.y - 0.5
-    for (let x = 0; x < outputRect.width; x += 1) {
-      const x0 = Math.floor(localX)
-      const y0 = Math.floor(localY)
-      const x1 = x0 + 1
-      const y1 = y0 + 1
-      const tx = localX - x0
-      const ty = localY - y0
-      const leftWeight = 1 - tx
-      const topWeight = 1 - ty
-      const weight00 = leftWeight * topWeight
-      const weight10 = tx * topWeight
-      const weight01 = leftWeight * ty
-      const weight11 = tx * ty
-      const offset00 = x0 >= 0 && y0 >= 0 && x0 < sourceWidth && y0 < sourceHeight
-        ? (y0 * sourceWidth + x0) * channels
-        : -1
-      const offset10 = x1 >= 0 && y0 >= 0 && x1 < sourceWidth && y0 < sourceHeight
-        ? (y0 * sourceWidth + x1) * channels
-        : -1
-      const offset01 = x0 >= 0 && y1 >= 0 && x0 < sourceWidth && y1 < sourceHeight
-        ? (y1 * sourceWidth + x0) * channels
-        : -1
-      const offset11 = x1 >= 0 && y1 >= 0 && x1 < sourceWidth && y1 < sourceHeight
-        ? (y1 * sourceWidth + x1) * channels
-        : -1
-      const outputOffset = (y * outputRect.width + x) * channels
-      for (let channel = 0; channel < channels; channel += 1) {
-        output[outputOffset + channel] = (
-          (offset00 < 0 ? 0 : source[offset00 + channel]) * weight00
-          + (offset10 < 0 ? 0 : source[offset10 + channel]) * weight10
-          + (offset01 < 0 ? 0 : source[offset01 + channel]) * weight01
-          + (offset11 < 0 ? 0 : source[offset11 + channel]) * weight11
-        )
-      }
-      localX += inverseA
-      localY += inverseB
-    }
-  }
-  return output
-}
-
 export function resampleImageEditRgbaAffineV3(
   tile: Float32PremultipliedRgbaTile,
   sourceRect: ImageEditRect,
@@ -217,17 +159,16 @@ export function resampleImageEditRgbaAffineV3(
   if (tile.width !== sourceRect.width || tile.height !== sourceRect.height) {
     throw new Error('仿射采样的 RGBA 瓦片与源区域尺寸不一致')
   }
+  assertImageEditTransformInvertibleV3(transform)
   return createFloat32PremultipliedRgbaTile(
     outputRect.width,
     outputRect.height,
     tile.colorDomain,
-    resampleAffine(
-      tile.data,
-      tile.width,
-      tile.height,
+    resampleAffinePixels(
+      tile,
       sourceRect,
       outputRect,
-      transform,
+      transform as Affine,
       4,
     ),
     tile.workingSpace,
@@ -245,16 +186,15 @@ export function resampleImageEditMaskAffineV3(
   if (tile.width !== sourceRect.width || tile.height !== sourceRect.height) {
     throw new Error('仿射采样的蒙版瓦片与源区域尺寸不一致')
   }
+  assertImageEditTransformInvertibleV3(transform)
   return createFloat32MaskTile(
     outputRect.width,
     outputRect.height,
-    resampleAffine(
-      tile.data,
-      tile.width,
-      tile.height,
+    resampleAffinePixels(
+      tile,
       sourceRect,
       outputRect,
-      transform,
+      transform as Affine,
       1,
     ),
   )

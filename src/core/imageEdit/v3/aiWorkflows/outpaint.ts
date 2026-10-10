@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createDocumentGeometryCommandV3 } from '../documentGeometry';
 import type { ImageEditDocumentV3 } from '../documentTypes';
 import type { ImageEditCommandV3, ImageEditLeafCommandV3 } from '../commandTypes';
 import type { ImageEditSmartLayerV3 } from '../smartContent/types';
@@ -8,21 +9,13 @@ import { rectanglePath } from '../../../imaging/vectorContent';
 import type { ImageEditLayerV3 } from '../layerTypes';
 import { rebaseImageEditSelectionGridV3 } from '../selection/rebase';
 
-export function imageEditOutpaintRasterCanvasesV3(document: ImageEditDocumentV3) {
-  const canvases: Record<string, { width: number; height: number } | null> = {};
-  const visit = (layers: readonly ImageEditLayerV3[]): void => { for (const layer of layers) {
-    if (layer.type === 'group') visit(layer.children);
-    else if (layer.type === 'raster' && !layer.rasterCanvasSize) canvases[layer.id] = { width: document.geometry.width, height: document.geometry.height };
-  } };
-  visit(document.layers); return canvases;
-}
-
 /** 比例相对于原画幅；允许任意有限扩展，实际模型/编码器约束由执行端检查。 */
-export const imageEditOutpaintMarginsSchemaV3 = z.object({ right: z.number().finite().nonnegative(), bottom: z.number().finite().nonnegative() }).strict()
-  .refine(value => value.right > 0 || value.bottom > 0, '至少扩展一条边');
+export const imageEditOutpaintMarginsSchemaV3 = z.object({ left: z.number().finite().nonnegative().optional(), top: z.number().finite().nonnegative().optional(), right: z.number().finite().nonnegative(), bottom: z.number().finite().nonnegative() }).strict()
+  .refine(value => (value.left ?? 0) > 0 || (value.top ?? 0) > 0 || value.right > 0 || value.bottom > 0, '至少扩展一条边');
 export type ImageEditOutpaintMarginsV3 = z.infer<typeof imageEditOutpaintMarginsSchemaV3>;
 export interface ImageEditOutpaintPlanV3 {
   documentId: string; sourceVersion: number; time: RegionSampleTime;
+  offset: { x: number; y: number };
   original: { width: number; height: number }; output: { width: number; height: number };
 }
 function assertImageEditOutpaintDocumentV3(document: ImageEditDocumentV3): void {
@@ -38,12 +31,13 @@ export function planImageEditOutpaintV3(document: ImageEditDocumentV3, margins: 
   const parsed = imageEditOutpaintMarginsSchemaV3.parse(margins);
   assertImageEditOutpaintDocumentV3(document);
   const original = { width: document.geometry.width, height: document.geometry.height };
-  const output = { width: original.width + Math.max(0, Math.round(original.width * parsed.right)), height: original.height + Math.max(0, Math.round(original.height * parsed.bottom)) };
+  const offset = { x: Math.round(original.width * (parsed.left ?? 0)), y: Math.round(original.height * (parsed.top ?? 0)) };
+  const output = { width: original.width + offset.x + Math.max(0, Math.round(original.width * parsed.right)), height: original.height + offset.y + Math.max(0, Math.round(original.height * parsed.bottom)) };
   if (![output.width, output.height].every(value => Number.isSafeInteger(value) && value > 0) || output.width === original.width && output.height === original.height) throw new Error('扩展尺寸必须增加至少一个像素，且不能超过整数坐标精度');
-  return { documentId: document.id, sourceVersion: document.revision, time, original, output };
+  return { documentId: document.id, sourceVersion: document.revision, time, original, output, offset };
 }
 export function rebaseImageEditSelectionForOutpaintV3(selection: ImageEditSelectionSessionV3, plan: ImageEditOutpaintPlanV3): ImageEditSelectionSessionV3 {
-  return rebaseImageEditSelectionGridV3(selection, plan.original, plan.output);
+  return rebaseImageEditSelectionGridV3(selection, plan.original, plan.output, [1, 0, 0, 1, plan.offset.x, plan.offset.y]);
 }
 export function createImageEditOutpaintCommandV3(document: ImageEditDocumentV3, plan: ImageEditOutpaintPlanV3,
   layer: ImageEditSmartLayerV3, bytes: Readonly<Record<string, number>>, commandId: string): ImageEditCommandV3 {
@@ -52,13 +46,14 @@ export function createImageEditOutpaintCommandV3(document: ImageEditDocumentV3, 
   const commands: ImageEditLeafCommandV3[] = [];
   type Draft<T> = T extends ImageEditLeafCommandV3 ? Omit<T, 'expectedRevision'> : never;
   const add = (command: Draft<ImageEditLeafCommandV3>): void => { commands.push({ ...command, expectedRevision: document.revision + commands.length } as ImageEditLeafCommandV3); };
-  add({ type: 'document.set-canvas-size', commandId: `${commandId}:size`, ...plan.output, rasterCanvases: imageEditOutpaintRasterCanvasesV3(document) });
-  if (document.namedRegions.length) add({ type: 'document.set-named-regions', commandId: `${commandId}:regions`, regions: document.namedRegions.map(region => ({ ...region, selection: rebaseImageEditSelectionForOutpaintV3(region.selection, plan) })) });
+  const geometry = createDocumentGeometryCommandV3(document, plan.output, [1, 0, 0, 1, plan.offset.x, plan.offset.y], `${commandId}:geometry`);
+  if (geometry.type !== 'document.atomic') throw new Error('扩图几何事务无效');
+  commands.push(...geometry.commands);
   const result = structuredClone(layer);
   // 新层只显示新增边缘；原画面像素、alpha 和所有编辑都从下方原图保持。
   result.mask = { kind: 'sparse-mask', storage: 'mask-float32', maskId: `${layer.id}:margin-mask`, tileSize: 512, defaultValue: 0, tiles: {}, inverted: false,
     vectorPaths: [{ operation: 'replace', path: rectanglePath(0, 0, plan.output.width, plan.output.height) },
-      { operation: 'subtract', path: rectanglePath(0, 0, plan.original.width, plan.original.height) }] };
+      { operation: 'subtract', path: rectanglePath(plan.offset.x, plan.offset.y, plan.original.width, plan.original.height) }] };
   result.maskAttachment = { ...result.maskAttachment, linked: false };
   const resources = Object.entries(bytes).sort(([a], [b]) => a.localeCompare(b)).map(([resourceId, byteSize]) => ({ resourceId, byteSize }));
   add({ type: 'layer.add', commandId: `${commandId}:layer`, parentId: null, index: document.layers.length, layer: result, resources });

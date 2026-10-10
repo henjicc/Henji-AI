@@ -18,6 +18,14 @@ import {
 } from './rasterBrushTilesV3'
 
 describe('图片编辑 V3 栅格画笔瓦片读取', () => {
+  it('画布边界改变后，空来源的稀疏像素仍用图层原始网格读取', async () => {
+    const document = createImageEditDocumentV3({ width: 1024, height: 1024 });
+    const layer = { ...createImageEditRasterLayerV3('original', '原稿'), rasterCanvasSize: { width: 513, height: 1 }, tiles: { '0/1/0': `sha256:${'c'.repeat(64)}` } };
+    const readBrushTile = vi.fn(async () => createFloat32PremultipliedRgbaTile(1, 1, 'linear-light', Float32Array.of(.1, .2, .3, .5)));
+    const loader = createImageEditorRasterBrushTileLoaderV3({ document, layer, resourceByteSizes: new Map([[layer.tiles['0/1/0'], 96]]), readBrushTile });
+    expect(await loader.resolveStorageSize(new AbortController().signal)).toEqual({ width: 513, height: 1 });
+    expect((await loader({ mip: 0, x: 1, y: 0 }, new AbortController().signal)).tile).toMatchObject({ width: 1, height: 1 });
+  });
   it('没有稀疏覆盖时读取源图边缘瓦片并转为文档工作空间的 Float32 预乘像素', async () => {
     const sourceId = `sha256:${'c'.repeat(64)}`
     const document = createImageEditDocumentV3({ width: 513, height: 1, sourceResourceId: sourceId })

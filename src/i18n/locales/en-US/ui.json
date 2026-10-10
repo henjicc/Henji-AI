@@ -884,7 +884,9 @@
         "placing": "Placing outpaint in this image",
         "failed": "Outpaint did not complete",
         "recover": "Recover original task",
-        "cancel": "Cancel outpaint"
+        "cancel": "Cancel outpaint",
+        "left": "Add left (%)",
+        "top": "Add top (%)"
       },
       "tools": {
         "paint-gradient": "Gradient",
@@ -932,7 +934,8 @@
         "vector-arrow": "Arrow",
         "vector-callout": "Callout",
         "vector-number": "Number",
-        "vector-path": "Path"
+        "vector-path": "Path",
+        "document-size": "Canvas and image size"
       },
       "layerControls": {
         "rotate": "Rotate layer",
@@ -1267,6 +1270,39 @@
         "sampleFirst": "Alt-click a clean source, or choose Sample and click the image",
         "previewFill": "Preview fill",
         "apply": "Apply"
+      },
+      "documentGeometry": {
+        "configure": "Resize",
+        "title": "Canvas and image size",
+        "mode": "Resize method",
+        "canvas": "Canvas size",
+        "resample": "Image size",
+        "content-aware": "Content-aware scaling",
+        "canvasHint": "Change the canvas boundary and anchor the original. Off-canvas content remains in the editable original.",
+        "resampleHint": "Resample the image and selections while retaining editable layers, paths, masks and filters. Open the result layer to edit the original.",
+        "content-awareHint": "Remove or insert low-detail seams while protecting the selection. Inspect the preview; buildings and repeating textures may distort. Cancel or use image size if needed.",
+        "width": "Width (pixels)",
+        "height": "Height (pixels)",
+        "anchor": "Original anchor",
+        "anchors": {
+          "top-left": "Top left",
+          "top": "Top",
+          "top-right": "Top right",
+          "left": "Left",
+          "center": "Center",
+          "right": "Right",
+          "bottom-left": "Bottom left",
+          "bottom": "Bottom",
+          "bottom-right": "Bottom right"
+        },
+        "proportional": "Keep aspect ratio",
+        "protect": "Protect current selection",
+        "preparing": "Preparing resize preview",
+        "preview": "Preview",
+        "apply": "Apply",
+        "cancel": "Cancel",
+        "previewHint": "Previewing; applying creates one undo step",
+        "cropHint": "Dimensions refer to the original canvas. Orientation is preserved. Applying removes the current crop; undo restores it together with the original."
       }
     }
   },

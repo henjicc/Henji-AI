@@ -14,8 +14,9 @@ import type { ImageEditorV3Controller } from './types'
 import { useImageEditorRepairV3 } from './ImageEditorRepairContextV3'
 
 import type { ToolKeyboardBinding } from '../toolFramework/types'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 
-export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; bindKeyboard?: ToolKeyboardBinding }): JSX.Element {
+export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard, projectedDocument }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; bindKeyboard?: ToolKeyboardBinding; projectedDocument?: ImageEditDocumentV3 }): JSX.Element {
   const { t } = useTranslation('ui')
   const repair = useImageEditorRepairV3()
   const subject = useImageEditorSubjectV3()
@@ -26,13 +27,15 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
   const svg = useRef<SVGSVGElement>(null)
   const session = useImageEditorSessionStoreV3(s => s.sessions[controller.sessionId])
   const tool = session?.activeTool ?? 'move'
-  const geometry = useMemo(() => resolveAnnotationOutputGeometryV3(controller.document), [controller.document])
+  const displayDocument = projectedDocument ?? controller.document
+  const geometry = useMemo(() => resolveAnnotationOutputGeometryV3(displayDocument), [displayDocument])
   const [draft, setDraft] = useState<readonly (readonly [number, number])[]>([])
   const [error, setError] = useState<string | null>(null)
   const gesture = useRef<{ tool: string; points: (readonly [number, number])[]; pointer?: CapturedEditorPointerV3; revision: number; selectionRevision: number } | null>(null)
   const draftFrame = useRef<number | null>(null)
   const snapshot = bus.getSnapshot()
-  const displayedSelection = advanced?.preview ?? snapshot.selection
+  const geometryPreview = Object.values(snapshot.previewOverrides).find(value => value.kind === 'document-geometry' && value.baseRevision === snapshot.document.revision)
+  const displayedSelection = advanced?.preview ?? (geometryPreview ? geometryPreview.selectionPreview ?? null : snapshot.selection)
   const active = (tool.startsWith('select-') && !subject?.busy) || ((tool === 'remove' || tool === 'repair') && !repair?.busy)
   const cancel = () => { const current = gesture.current; gesture.current = null; if (current?.pointer) releaseEditorPointerV3(current.pointer); if (draftFrame.current !== null) cancelAnimationFrame(draftFrame.current); draftFrame.current = null; setDraft([]) }
   useEffect(() => {
@@ -56,8 +59,8 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
     const scale = Math.min(1, 512 / Math.max(geometry.width, geometry.height))
     const width = Math.max(1, Math.ceil(geometry.width * scale)), height = Math.max(1, Math.ceil(geometry.height * scale))
     canvas.current.width = width; canvas.current.height = height
-    const previewSize = { width: Math.max(1, Math.round(controller.document.geometry.width * scale)), height: Math.max(1, Math.round(controller.document.geometry.height * scale)) }
-    const matrix = multiplyAnnotationMatricesV3([previewSize.width / controller.document.geometry.width, 0, 0, previewSize.height / controller.document.geometry.height, 0, 0], multiplyAnnotationMatricesV3(invertAnnotationMatrixV3(geometry.sourceToOutput), [geometry.width / width, 0, 0, geometry.height / height, 0, 0]))
+    const previewSize = { width: Math.max(1, Math.round(displayDocument.geometry.width * scale)), height: Math.max(1, Math.round(displayDocument.geometry.height * scale)) }
+    const matrix = multiplyAnnotationMatricesV3([previewSize.width / displayDocument.geometry.width, 0, 0, previewSize.height / displayDocument.geometry.height, 0, 0], multiplyAnnotationMatricesV3(invertAnnotationMatrixV3(geometry.sourceToOutput), [geometry.width / width, 0, 0, geometry.height / height, 0, 0]))
     void client.rasterize({ selection: displayedSelection, size: previewSize, region: { x: 0, y: 0, width, height }, matrix }, abort.signal).then(data => {
       if (abort.signal.aborted) return
       const pixels = ctx.createImageData(width, height)
@@ -66,7 +69,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
       if (sourceCanvas.current && canvas.current) { sourceCanvas.current.width = width; sourceCanvas.current.height = height; sourceCanvas.current.getContext('2d')?.drawImage(canvas.current, 0, 0) }
     }).catch((cause: unknown) => { if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)) }).finally(() => client.dispose())
     return () => { abort.abort(); client.dispose() }
-  }, [displayedSelection, geometry, controller.document, theme])
+  }, [displayedSelection, geometry, displayDocument, theme])
   function point(event: PointerEvent<SVGSVGElement>): readonly [number, number] {
     const rect = event.currentTarget.getBoundingClientRect()
     return [(event.clientX - rect.left) / rect.width * geometry.width, (event.clientY - rect.top) / rect.height * geometry.height]
@@ -148,7 +151,7 @@ export function ImageEditorSelectionOverlayV3({ bus, controller, bindKeyboard }:
       className={`absolute inset-0 h-full w-full touch-none ${active ? 'pointer-events-auto' : 'pointer-events-none'}`}
       onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (tool !== 'select-polygon' && gesture.current?.pointer?.pointerId === e.pointerId) { move(e); finish() } }}
       onDoubleClick={() => { if (tool === 'select-polygon') finish() }} onPointerCancel={cancel} onLostPointerCapture={cancel}>
-      {subject?.candidates.map((candidate, index) => {
+      {(geometryPreview ? [] : subject?.candidates ?? []).map((candidate, index) => {
         const b = candidate.bounds
         const points = [[b.x, b.y], [b.x + b.width, b.y], [b.x + b.width, b.y + b.height], [b.x, b.y + b.height]].map(([x, y]) => mapAnnotationPointV3(geometry.sourceToOutput, [x * controller.document.geometry.width, y * controller.document.geometry.height]))
         return <g key={candidate.id} className="pointer-events-none"><polygon points={points.map(p => p.join(',')).join(' ')} className="fill-none stroke-accent-text" /><text x={points[0][0]} y={points[0][1]} className="fill-accent-text text-xs">{index + 1}</text></g>

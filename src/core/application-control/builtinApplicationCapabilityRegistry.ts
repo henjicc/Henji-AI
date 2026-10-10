@@ -1,3 +1,4 @@
+import { resampleImageEditCapability } from './domains/imageEdit/imageEditGeometryCapabilities'
 import { paintImageEditTargetCapability } from './domains/imageEdit/imageEditPaintCapabilities'
 import { convertImageEditFilterScopeCapability } from './domains/imageEdit/imageEditFilterCapabilities'
 import { computeImageEditSelectionCapability } from './domains/imageEdit/imageEditAdvancedSelectionCapabilities'
@@ -63,6 +64,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   convertImageEditFilterScopeCapability,
   ...IMAGE_EDIT_REPAIR_CAPABILITIES,
   ...IMAGE_EDIT_OUTPAINT_CAPABILITIES,
+  resampleImageEditCapability,
   selectImageEditRegionCapability,
   // 通用反射能力：领域只要注册实体和属性，助手就能读改增删，不必再写专用能力
   ...APPLICATION_REFLECTION_APPLICATION_CAPABILITIES,

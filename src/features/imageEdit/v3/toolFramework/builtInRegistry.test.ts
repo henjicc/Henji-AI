@@ -7,6 +7,7 @@ vi.mock('../toolEntries/vector',()=>({tools:[]}))
 vi.mock('../toolEntries/transform', () => ({ tools: [] }))
 vi.mock('../toolEntries/paint', () => ({ tools: [] }))
 vi.mock('../toolEntries/retouch', () => ({ tools: [] }))
+vi.mock('../toolEntries/documentGeometry', () => ({ tools: [] }))
 vi.mock('../toolEntries/aiWorkflows', () => ({ tools: [] }))
 vi.mock('../toolEntries/legacy', () => ({ get tools() { return state.tools } }))
 vi.mock('./toolManifest', async () => {

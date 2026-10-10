@@ -1,3 +1,6 @@
+import { prepareDocumentGeometryV3 } from '../tools/documentGeometry/service'
+import { retainSmartContentResourcesV3 } from '../smartContent/resourceLeases'
+import type { ImageEditSelectionSessionV3 } from '@/core/imageEdit/v3/selection/session'
 import { richTextContentSchema, vectorPathContentSchema } from '@/core/imaging/vectorContent'
 import {
   applyWriterTable,
@@ -173,7 +176,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
   abstract readonly propertyOperations: ApplicationMutationExecutor['propertyOperations']
   readonly effectContract = { direct: [], cascades: [] }
 
-  abstract createCommands(step: MutationStep, context?: ApplicationExecutionContext): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number; release?: () => Promise<void> }>
+  abstract createCommands(step: MutationStep, context?: ApplicationExecutionContext): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number; selectionAfter?: ImageEditSelectionSessionV3 | null; release?: () => Promise<void> }>
 
   async apply(step: MutationStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const { documentId } = mutationDocumentIdentity(step.target, this.entityType)
@@ -188,7 +191,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
       entityType: step.entityType,
       targetId: step.target.id,
     })
-    const { documentId, commands, historyPosition, release } = await this.createCommands(step, context)
+    const { documentId, commands, historyPosition, selectionAfter, release } = await this.createCommands(step, context)
     const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const applied: string[] = []
     const historyBefore = bus.getHistoryView().position
@@ -199,7 +202,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
       for (const command of commands) {
         if (context.signal?.aborted) throw new Error('CANCELLED')
         const previous = bus.getSnapshot().document
-        const next = bus.dispatch({ ...command, expectedRevision: previous.revision })
+        const next = bus.dispatch({ ...command, expectedRevision: previous.revision }, selectionAfter)
         if (next !== previous) applied.push(command.commandId)
       }
       const result = completed(step, documentId, applied, historyChanged ? { before: historyBefore, after: bus.getHistoryView().position, keys: historyKeys(documentId) } : undefined)
@@ -425,7 +428,7 @@ export class ImageEditV3DocumentMutationExecutor extends ImageEditV3MutationExec
   readonly writableProperties = new Set([...writableProperties(this.writers), ...writableProperties(this.historyWriters), ...writableProperties(this.workflowWriters)])
   readonly propertyOperations = new Map([...propertyOperations(this.writers), ...propertyOperations(this.historyWriters), ...propertyOperations(this.workflowWriters)])
 
-  async createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number }> {
+  async createCommands(step: MutationStep, context?: ApplicationExecutionContext): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number; selectionAfter?: ImageEditSelectionSessionV3 | null; release?: () => Promise<void> }> {
     const { documentId } = splitImageEditV3DocumentRef(step.target)
     const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const document = bus.getSnapshot().document
@@ -440,6 +443,15 @@ export class ImageEditV3DocumentMutationExecutor extends ImageEditV3MutationExec
     const workflow: ImageEditWorkflowDraftV3 = {}
     const workflowMutations = step.mutations.filter(mutation => this.workflowWriters[mutation.propertyId])
     await applyWriterTable(this.workflowWriters, workflow, workflowMutations)
+    if (workflow.canvasSize) {
+      if (step.mutations.length !== 1) throw new Error('画布尺寸调整请作为独立 change，随后再调整其他属性')
+      if (workflow.canvasSize.width === document.geometry.width && workflow.canvasSize.height === document.geometry.height) return { documentId, commands: [] }
+      const draft = await prepareDocumentGeometryV3(bus, { ...workflow.canvasSize, mode: 'canvas' }, { signal: context?.signal })
+      return { documentId, commands: [draft.command], selectionAfter: draft.selection, release: async () => {
+        if (bus.getSnapshot().document !== document) retainSmartContentResourcesV3(bus, draft.release)
+        else await draft.release()
+      } }
+    }
     const geometryMutations = step.mutations.filter(mutation => !this.workflowWriters[mutation.propertyId])
     await applyWriterTable(this.writers, geometry, geometryMutations)
     const orientationChanged = geometry.orientation.rotate !== document.geometry.orientation.rotate

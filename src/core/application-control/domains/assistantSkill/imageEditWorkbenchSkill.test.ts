@@ -74,7 +74,7 @@ describe('图片编辑工作台技能的渐进披露与真实契约', () => {
     const parameterNames = [...all.matchAll(/params\.([a-z_]+)/g)].map(match => match[1])
     expect(parameterNames.filter(name => name !== 'hsl_show_mask' && !(name in imageColorGradeParamsSchema.shape))).toEqual([])
     expect(imageColorGradeParamsSchema.safeParse({ hsl_show_mask: true }).success).toBe(false)
-    expect(imageEditSelectionSessionSchemaV3.safeParse({ operations: [], feather: 2, inverted: false }).success).toBe(false)
+    expect(imageEditSelectionSessionSchemaV3.safeParse({ operations: [], feather: -1, inverted: false }).success).toBe(false)
   })
 
   it('入口与四篇链接有界、首轮不带参数细节并明确技能分工', () => {

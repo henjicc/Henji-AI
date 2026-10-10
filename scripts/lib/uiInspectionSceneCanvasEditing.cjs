@@ -374,6 +374,17 @@ function attachUiInspectionCanvasEditing(context) {
       }
     }, { targetProjectId: projectId, model: imageEditInspectionModel() })
 
+    // 尺寸等独立场景只需要同一正式多图层夹具，不串行夹带拖动/导出验收。
+    if (inspection?.fixtureOnly) {
+      await reopenCanvasProjectFromStorage(page, projectId)
+      const result = page.locator(`[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`)
+      await result.waitFor({ state: 'visible', timeout: 12000 })
+      await result.dblclick()
+      await page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i })
+        .locator('[data-image-editor-v3]').waitFor({ state: 'visible', timeout: 15000 })
+      return
+    }
+
     const verifiedDrag = await verifyMultiLayerDragPerformance({
       page,
       projectId,

@@ -1,3 +1,4 @@
+import { parseImageEditDocumentV3 } from '@/core/imageEdit/v3/documentCodec';
 import { normalizeImageEditLayerCommonPatchV3 } from '@/core/imageEdit/v3/commandCommonPatch';
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { imageEditLayerFiltersSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
@@ -133,6 +134,11 @@ function applyOverride(
   override: ImageEditPreviewOverrideV3,
 ): ImageEditDocumentV3 {
   if (override.baseRevision !== document.revision) return document
+  if (override.kind === 'document-geometry') {
+    const value = parseImageEditDocumentV3(override.value);
+    if (value.id !== document.id || value.revision !== document.revision) throw new Error('尺寸预览目标已变化');
+    return value;
+  }
   if (override.kind === 'crop' && isRecord(override.value)) {
     const cropValue = 'crop' in override.value ? override.value.crop : override.value
     const orientationValue = override.value.orientation

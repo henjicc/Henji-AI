@@ -4,7 +4,7 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
 
 const documentRef = z.object({ kind: z.literal('image_edit.document'), id: z.string().startsWith('v3:') }).strict();
 const taskRef = z.object({ kind: z.literal('generation.task'), id: z.string().min(1) }).strict();
-export const imageEditOutpaintInputSchema = z.object({ documentRef, margins: imageEditOutpaintMarginsSchemaV3.describe('相对于原画幅的扩展比例：right=0.25 表示右侧增加原宽度的 25%，bottom=0.5 表示下方增加原高度的 50%。至少一边大于零。'),
+export const imageEditOutpaintInputSchema = z.object({ documentRef, margins: imageEditOutpaintMarginsSchemaV3.describe('相对于原画幅的扩展比例：right=0.25 表示右侧增加原宽度的 25%，bottom=0.5 表示下方增加原高度的 50%。left/top 为左/上扩展比例，可省略表示不扩展；至少一边大于零。'),
   prompt: z.string().trim().min(1).describe('新增画面的内容描述；模型自动收到当前合成图与新增边缘，不必手动上传。'),
   modelId: z.string().min(1).optional(), params: z.record(z.string(), z.unknown()).optional() }).strict();
 const common = { version: 1, domain: 'image_edit' as const, side: 'frontend' as const, dataClasses: ['C1' as const], idempotent: true, destructive: false, supportsPreview: false,
@@ -20,7 +20,7 @@ export const prepareImageEditOutpaintCapability = defineApplicationCapability({ 
 });
 export const generateImageEditOutpaintCapability = defineApplicationCapability({ ...common,
   id: 'generate_image_edit_outpaint', title: '在当前图片扩图', aliases: ['AI 扩图', '自然补边', 'outpaint'],
-  description: '按原画幅比例向右或下方扩展当前图片。先取当前合成画面与透明新增边缘作为参考，复用正式图片生成队列；按所选模型计费。提交立即返回 taskRef，当前图片显示进度占位，用户可继续编辑。完成后扩边和带蒙版的智能对象新层作为一步可撤销编辑进入原文档，原图像素不改。先 prepare_image_edit_outpaint 确认参数和费用，再提交；用 get_image_edit_outpaint 读回落位，不把生成完成当成文档已保存。取消走 cancel_generation_task；生成成功但落位或保存失败用 recover_image_edit_outpaint 恢复原结果，禁止重复付费。',
+  description: '按原画幅比例向任意方向扩展当前图片。先取当前合成画面与透明新增边缘作为参考，复用正式图片生成队列；按所选模型计费。提交立即返回 taskRef，当前图片显示进度占位，用户可继续编辑。完成后扩边和带蒙版的智能对象新层作为一步可撤销编辑进入原文档，原图像素不改。先 prepare_image_edit_outpaint 确认参数和费用，再提交；用 get_image_edit_outpaint 读回落位，不把生成完成当成文档已保存。取消走 cancel_generation_task；生成成功但落位或保存失败用 recover_image_edit_outpaint 恢复原结果，禁止重复付费。',
   readOnly: false, risk: 'R2', permission: 'generation:create', timeoutMs: 180000, supportsUndo: true, completionKind: 'submitted', requiredScopes: ['image_edit', 'generation'],
   executionPrerequisites: ['prepare_image_edit_outpaint'], paidGenerationPreparation: 'prepare_image_edit_outpaint',
   inputSchema: imageEditOutpaintInputSchema, outputSchema: z.object({ documentRef, taskRef, status: z.literal('submitted'), message: z.string() }).strict(),
