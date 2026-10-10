@@ -56,6 +56,8 @@ import {
 } from '../services/image-editor-v3/resource-media-url'
 import { ImageDocumentService, ImageDocumentWorkingCopyLinks } from '../services/image-editor-v3/image-document'
 import { CanvasLayerPackageService } from '../services/image-editor-v3/canvas-layers/canvas-layer-packages'
+import { decodeImageEditHistoryCheckpointV3 } from '../../../src/core/imageEdit/v3/historyPaging/checkpoint'
+import { collectImageEditResourceRolesV3 } from '../../../src/core/imageEdit/v3/resourceRoles'
 
 export {
   parseImageEditorV3FastProxyPayload,
@@ -236,10 +238,20 @@ function toReference(envelope: ImageEditDocumentEnvelope): Record<string, unknow
   if (normalized.documentId !== envelope.documentId || normalized.revision !== envelope.revision) {
     throw new Error('Image editor V3 document body and envelope revisions differ')
   }
+  const checkpoint = envelope.historyCheckpoint
+  const source = envelope.history
+  const roles = source && collectImageEditResourceRolesV3({ layers: [] }, source)
+  const refs = new Set(checkpoint?.resources.map(resource => resource.resourceId))
   return {
     documentRef: toDocumentRef(envelope.documentId),
     revision: envelope.revision,
     previewRef: envelope.previewRef ?? null,
+    ...(checkpoint && source && roles ? { history: {
+      version: checkpoint.snapshotVersion, documentId: checkpoint.documentId, headRevision: checkpoint.headRevision,
+      undo: [], redo: [], cold: { checkpoint, prefixLength: checkpoint.total, position: checkpoint.position,
+        commandIds: [...(source.cold?.commandIds.slice(0, source.cold.prefixLength) ?? []), ...source.undo.map(entry => entry.forward.commandId), ...[...source.redo].reverse().map(entry => entry.forward.commandId)],
+        resourceRoles: { images: [...roles.images].filter(id => refs.has(id)), sparse: [...roles.sparse].filter(([id]) => refs.has(id)) } },
+    } } : {}),
   }
 }
 
@@ -355,6 +367,13 @@ async function saveDocument(payload: SaveDocumentPayload, signal: AbortSignal): 
 
 export function registerImageEditorV3Ipc(): void {
   const guard = assertTrustedMainRenderer
+  registerIpcHandler('imageEditorV3:history:page', input => {
+    const base = parseImageEditorV3BasePayload(input)
+    if (!input || typeof input !== 'object' || !('checkpoint' in input) || !('pageIndex' in input)
+      || typeof input.pageIndex !== 'number' || !Number.isSafeInteger(input.pageIndex) || input.pageIndex < 0) throw new Error('历史分页读取范围无效')
+    return { ...base, checkpoint: decodeImageEditHistoryCheckpointV3(input.checkpoint), pageIndex: input.pageIndex }
+  }, (payload, event) => runRequest('history.page', payload.requestId, event.sender.id,
+    signal => getRuntime().documents.readHistoryPage(payload.checkpoint, payload.pageIndex, signal)), guard)
   registerImageEditorV3RasterExportIpc({
     manager: getRuntime().rasterExports,
     materializer: getRuntime().managedRaster,
@@ -382,7 +401,7 @@ export function registerImageEditorV3Ipc(): void {
     runRequest('document.load', payload.requestId, event.sender.id, async (signal) => {
       throwIfAborted(signal)
       try {
-        const document = await getRuntime().documents.load(payload.documentRef)
+        const document = await getRuntime().documents.loadPaged(payload.documentRef, signal)
         await assertHistoryResourceSizes(document.history)
         return await toSnapshot(document, signal)
       }

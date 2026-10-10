@@ -106,7 +106,8 @@ function createImageEditHistoryScene(context) {
           const loaded = await window.henjiNative.imageEditorV3.loadDocument({ requestId: `history-check-${crypto.randomUUID()}`, documentRef })
           return loaded.history
         }, documentRef)
-        assert.equal(persistedHistory.undo.length + persistedHistory.redo.length, 270, '磁盘历史不包含瞬态选区')
+        assert.equal(persistedHistory.cold.prefixLength, 270, '磁盘历史不包含瞬态选区')
+        assert.equal(persistedHistory.undo.length + persistedHistory.redo.length, 0, '重开只返回冷页索引，不全量恢复命令')
         await page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i }).getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
         await page.reload({ waitUntil: 'domcontentloaded' })
         await context.reopenCanvasProjectFromStorage(page, projectId)
@@ -119,6 +120,8 @@ function createImageEditHistoryScene(context) {
         await host().locator('[data-image-history-panel]').getByRole('button', { name: '重做', exact: true }).click()
         await host().locator('[data-image-history-row="270"] [aria-current="step"]').waitFor()
         const start = async () => {
+          // Virtuoso 在行测量变化后重试定位，内部清理窗口为 1200ms；结束后再模拟用户滚动。
+          await context.settlePage(page, 1500)
           await host().locator('[data-testid="virtuoso-scroller"]').evaluate(element => { element.scrollTop = 0 })
           await host().locator('[data-image-history-row="0"]').waitFor()
           await host().locator('[data-image-history-row="0"] button').click()
@@ -126,7 +129,12 @@ function createImageEditHistoryScene(context) {
         // 调度故障夹具只延长让出线程的等待，正式求值与取消路径保持原实现。
         await page.evaluate(() => {
           window.__historyOriginalTimeout = window.setTimeout
-          window.setTimeout = function (callback, delay, ...args) { return window.__historyOriginalTimeout(callback, delay === 0 ? 100 : delay, ...args) }
+          window.setTimeout = function (callback, delay, ...args) {
+            // Promise resolver 是原生函数；不要同时拖慢 Virtuoso 的行测量/滚动回调。
+            const yielding = delay === 0 && typeof callback === 'function'
+              && Function.prototype.toString.call(callback).includes('[native code]')
+            return window.__historyOriginalTimeout(callback, yielding ? 100 : delay, ...args)
+          }
         })
         await start()
         await host().getByRole('button', { name: '取消恢复', exact: true }).waitFor()

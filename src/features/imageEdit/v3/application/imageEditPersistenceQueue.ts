@@ -130,7 +130,7 @@ export class ImageEditPersistenceV3Queue {
           previewRef: null,
           history,
         })
-        this.persistedHistory = historyJson
+        this.persistedHistory = JSON.stringify(this.reference.history ?? history)
         this.publish({ kind: 'idle', reference: this.reference })
       } catch (error) {
         const queuedAfterFailure = this.pending as ImageEditPersistenceSnapshotV3 | null

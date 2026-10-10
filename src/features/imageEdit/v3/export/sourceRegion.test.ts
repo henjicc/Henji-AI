@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorV3ExportSourceTileRequest } from './contracts'
-import { loadImageEditorV3SourceRegion } from './sourceRegion'
+import { ImageEditorDecodedSourceTilesV3, loadImageEditorV3SourceRegion } from './sourceRegion'
+import { ImageEditResourceBudget } from '@/core/imageEdit/v3/resourceBudget'
 import { fakeSourcePyramidReader } from './renderExportTestFixtures'
 
 const RESOURCE = `sha256:${'7'.repeat(64)}` as const
@@ -57,6 +58,22 @@ function load(
 }
 
 describe('图片编辑 V3 导出源瓦片边界', () => {
+  it('四个并行区域共用一次源块解码，保持逐像素相同并释放预算', async () => {
+    const budget = new ImageEditResourceBudget(), cache = new ImageEditorDecodedSourceTilesV3(budget)
+    const tile = { ...sourceTile(8), width: 4, height: 4, rowStride: 16, pixels: new ArrayBuffer(64) }
+    new Uint8Array(tile.pixels).set(Array.from({ length: 64 }, (_, index) => index * 3))
+    const read = vi.fn(async () => tile)
+    const dependencies = { readSourceTile: read, readSourcePyramid: fakeSourcePyramidReader(new Map([[RESOURCE, { width: 4, height: 4 }]])) }
+    const regions = [{ x: 0, y: 0, width: 2, height: 2 }, { x: 2, y: 0, width: 2, height: 2 }, { x: 0, y: 2, width: 2, height: 2 }, { x: 2, y: 2, width: 2, height: 2 }]
+    const load = (region: typeof regions[number], shared = false) => loadImageEditorV3SourceRegion(RESOURCE, region, { width: 4, height: 4 }, 8, 'srgb', 'srgb', 203, new AbortController().signal, dependencies, 0, shared ? cache : undefined)
+    try {
+      const results = await Promise.all(regions.map(region => load(region, true)))
+      expect(read).toHaveBeenCalledTimes(1)
+      for (let index = 0; index < regions.length; index++) expect(results[index].data).toEqual((await load(regions[index])).data)
+      expect(budget.snapshot().totalBytes).toBe(4 * 4 * 16)
+    } finally { cache.release() }
+    expect(budget.snapshot().leaseCount).toBe(0)
+  })
   it.each([8, 16, 32] as const)('只接受与 %s-bit 请求完整匹配的紧密像素契约', async (bitDepth) => {
     await expect(load(bitDepth, sourceTile(bitDepth))).resolves.toMatchObject({
       width: 1,

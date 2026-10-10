@@ -19,6 +19,11 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     releaseRepairResources: request => getNativeImageEditorV3().releaseRepairResources?.(request) ?? Promise.resolve(),
     listDocuments: (request) => getNativeImageEditorV3().listDocuments(request),
     loadDocument: (request) => getNativeImageEditorV3().loadDocument(request),
+    readHistoryPage: (request) => {
+      const method = getNativeImageEditorV3().readHistoryPage
+      if (!method) throw new Error('图片历史分页读取不可用')
+      return method(request)
+    },
     saveDocument: (request) => getNativeImageEditorV3().saveDocument(request),
     forkDocument: (request) => getNativeImageEditorV3().forkDocument(request),
     deleteDocumentIfRevision: (request) => (

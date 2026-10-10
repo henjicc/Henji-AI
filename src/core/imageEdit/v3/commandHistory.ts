@@ -20,6 +20,8 @@ import {
 } from './commandHistoryCodec';
 import type { ImageEditDocumentV3 } from './documentTypes';
 import { serializeImageEditRenderValue, type ImageEditHashValue } from './renderHash';
+import { decodeImageEditRuntimeHistoryV3 } from './historyPaging/runtimeSnapshot';
+import type { ImageEditHistoryCheckpointV3 } from './historyPaging/schema';
 
 export type ImageEditHistoryResourceReleaseReasonV3 =
   | 'redo-cleared'
@@ -33,6 +35,7 @@ export interface ImageEditHistoryResourcesReleasedEventV3 {
 }
 
 export interface ImageEditCommandHistoryOptionsV3 {
+  readPage?: (checkpoint: ImageEditHistoryCheckpointV3, pageIndex: number, signal?: AbortSignal) => Promise<ImageEditHistoryEntrySnapshotV3[]>;
   maxSnapshotJsonBytes?: number;
   onResourcesReleased?: (event: ImageEditHistoryResourcesReleasedEventV3) => void;
 }
@@ -116,26 +119,33 @@ export class ImageEditCommandHistoryV3 {
   private readonly releaseEvents: ImageEditHistoryResourcesReleasedEventV3[] = [];
   private documentId: string | null = null;
   private headRevision: number | null = null;
+  private cold: ImageEditCommandHistorySnapshotV3['cold'];
+  private readonly pages = new Map<number, ImageEditHistoryEntrySnapshotV3[]>();
+  private readonly readPage: ImageEditCommandHistoryOptionsV3['readPage'];
+  private pageRead: Promise<unknown> = Promise.resolve();
 
   constructor(options: ImageEditCommandHistoryOptionsV3 = {}) {
     this.maxSnapshotJsonBytes = options.maxSnapshotJsonBytes === undefined
       ? undefined
       : validateLimit(options.maxSnapshotJsonBytes, '历史快照 JSON 上限');
     this.onResourcesReleased = options.onResourcesReleased;
+    this.readPage = options.readPage;
   }
 
   execute(document: ImageEditDocumentV3, command: ImageEditCommandV3): ImageEditDocumentV3 {
     this.assertHead(document);
-    if (this.allEntries().some((entry) => entry.forward.commandId === command.commandId)) {
+    if (this.allEntries().some((entry) => entry.forward.commandId === command.commandId)
+      || this.cold?.commandIds.slice(0, this.cold.prefixLength).includes(command.commandId)) {
       throw new ImageEditCommandValidationErrorV3(`历史命令 ID 重复：${command.commandId}`);
     }
     const retainedBefore = this.resourceMap();
-    const hadRedo = this.redoEntries.length > 0;
+    const hadRedo = this.getState().redoCount > 0;
     const result = applyImageEditCommandV3(document, command);
     // 无变化的手势／参数提交不推进 revision、不分叉 redo，也不留下空历史。
     if (!commandChangesState(command, result.inverse)) return document;
     const releaseCandidates = this.mergeResourceMap(retainedBefore, result.historyResources);
     this.redoEntries.length = 0;
+    if (this.cold) this.cold = { ...this.cold, prefixLength: Math.min(this.cold.position, this.cold.prefixLength), position: this.cold.position + 1 };
     this.undoEntries.push(cloneEntry({
       forward: command,
       inverse: result.inverse,
@@ -149,12 +159,17 @@ export class ImageEditCommandHistoryV3 {
 
   undo(document: ImageEditDocumentV3): ImageEditHistoryTransitionV3 {
     this.assertHead(document);
-    const entry = this.undoEntries.at(-1);
+    const position = this.getState().undoCount;
+    const entry = this.getEntryAt(position - 1);
+    if (!entry && position > 0) throw new Error('历史冷页尚未加载，请使用异步历史导航');
     if (!entry) return { document, changed: false };
     const command = withImageEditCommandRevisionV3(entry.inverse, document.revision);
     const result = applyImageEditCommandV3(document, command, { allowLegacyResourceMetadata: true });
-    this.undoEntries.pop();
-    this.redoEntries.push(entry);
+    if (this.cold && position <= this.cold.prefixLength) this.cold = { ...this.cold, position: position - 1 };
+    else {
+      this.undoEntries.pop(); this.redoEntries.push(entry);
+      if (this.cold) this.cold = { ...this.cold, position: position - 1 };
+    }
     this.track(result.document);
     return { document: result.document, changed: true };
   }
@@ -169,10 +184,8 @@ export class ImageEditCommandHistoryV3 {
   ): ImageEditHistoryTransitionV3 {
     this.assertHead(document);
     if (commandIdsNewestFirst.length === 0) return { document, changed: false };
-    const actual = this.undoEntries
-      .slice(-commandIdsNewestFirst.length)
-      .reverse()
-      .map((entry) => entry.forward.commandId);
+    const position = this.getState().undoCount;
+    const actual = commandIdsNewestFirst.map((_, index) => this.getEntryAt(position - 1 - index)?.forward.commandId);
     if (
       actual.length !== commandIdsNewestFirst.length
       || actual.some((commandId, index) => commandId !== commandIdsNewestFirst[index])
@@ -199,6 +212,16 @@ export class ImageEditCommandHistoryV3 {
     commandIdsNewestFirst: readonly string[]
   ): ImageEditHistoryTransitionV3 {
     const retainedBefore = this.resourceMap();
+    if (this.cold && commandIdsNewestFirst.length > this.undoEntries.length) {
+      // 事务命令可已确认入冷页；先验证整组，再截去回滚尾部。
+      if (this.getState().redoCount > 0) throw new ImageEditRevisionConflictErrorV3('事务回滚期间存在较新的重做分支');
+      const transition = this.undoCommands(document, commandIdsNewestFirst);
+      if (!transition.changed) return transition;
+      this.redoEntries.length = 0;
+      this.cold = { ...this.cold, prefixLength: Math.min(this.cold.position, this.cold.prefixLength) };
+      this.notifyReleased(retainedBefore, 'rollback');
+      return transition;
+    }
     const transition = this.undoCommands(document, commandIdsNewestFirst);
     if (!transition.changed) return transition;
     const rolledBack = this.redoEntries.splice(-commandIdsNewestFirst.length);
@@ -215,12 +238,17 @@ export class ImageEditCommandHistoryV3 {
 
   redo(document: ImageEditDocumentV3): ImageEditHistoryTransitionV3 {
     this.assertHead(document);
-    const entry = this.redoEntries.at(-1);
+    const position = this.getState().undoCount;
+    const entry = this.getEntryAt(position);
+    if (!entry && this.getState().redoCount > 0) throw new Error('历史冷页尚未加载，请使用异步历史导航');
     if (!entry) return { document, changed: false };
     const command = withImageEditCommandRevisionV3(entry.forward, document.revision);
     const result = applyImageEditCommandV3(document, command, { allowLegacyResourceMetadata: true });
-    this.redoEntries.pop();
-    this.undoEntries.push(entry);
+    if (this.cold && position < this.cold.prefixLength) this.cold = { ...this.cold, position: position + 1 };
+    else {
+      this.redoEntries.pop(); this.undoEntries.push(entry);
+      if (this.cold) this.cold = { ...this.cold, position: position + 1 };
+    }
     this.track(result.document);
     return { document: result.document, changed: true };
   }
@@ -228,22 +256,66 @@ export class ImageEditCommandHistoryV3 {
   /** 有界投影／跳转读取，不为面板克隆整份持久快照。 */
   getEntryAt(position: number): ImageEditHistoryEntrySnapshotV3 | undefined {
     if (!Number.isSafeInteger(position) || position < 0) return undefined;
+    if (this.cold) {
+      if (position < this.cold.prefixLength) {
+        const index = this.cold.checkpoint.pages.findIndex(page => position >= page.start && position < page.start + page.count);
+        return this.pages.get(index)?.[position - this.cold.checkpoint.pages[index].start];
+      }
+      position -= this.cold.prefixLength;
+    }
     return position < this.undoEntries.length ? this.undoEntries[position]
       : this.redoEntries[this.redoEntries.length - 1 - (position - this.undoEntries.length)];
   }
 
+  async readEntryAt(position: number, signal?: AbortSignal): Promise<ImageEditHistoryEntrySnapshotV3 | undefined> {
+    signal?.throwIfAborted();
+    const cached = this.getEntryAt(position);
+    if (cached || !this.cold || position < 0 || position >= this.cold.prefixLength) return cached;
+    const cold = this.cold;
+    const pageIndex = cold.checkpoint.pages.findIndex(page => position >= page.start && position < page.start + page.count);
+    const run = async (): Promise<ImageEditHistoryEntrySnapshotV3 | undefined> => {
+      signal?.throwIfAborted();
+      const cached = this.getEntryAt(position);
+      if (cached) return cached;
+      if (!this.readPage) throw new Error('图片历史分页读取端口不可用');
+      const entries = await this.readPage(cold.checkpoint, pageIndex, signal);
+      signal?.throwIfAborted();
+      const descriptor = cold.checkpoint.pages[pageIndex];
+      if (entries.length !== descriptor.count || entries.some((entry, index) => entry.forward.commandId !== cold.commandIds[descriptor.start + index])) throw new Error('历史页与命令索引不一致');
+      if (this.cold?.checkpoint !== cold.checkpoint) {
+        // 保存确认只改变存储身份时，读到的同一命令仍可借阅；不能把旧页放入新窗口。
+        const offset = position - descriptor.start;
+        if (this.cold?.commandIds[position] === entries[offset]?.forward.commandId) return entries[offset];
+        throw new Error('历史检查点已变化，请重试读取');
+      }
+      this.pages.delete(pageIndex); this.pages.set(pageIndex, entries);
+      // 四页/16MiB 热窗口；超大合法单页独占窗口，串行读取限制在途峰值。
+      while (this.pages.size > 1 && (this.pages.size > 4 || [...this.pages.keys()].reduce((sum, key) => sum + cold.checkpoint.pages[key].byteSize, 0) > 16 * 1024 * 1024)) this.pages.delete(this.pages.keys().next().value!);
+      return entries[position - descriptor.start];
+    };
+    const operation = this.pageRead.then(run, run);
+    this.pageRead = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
+  getColdCommandIds(): readonly string[] { return this.cold?.commandIds.slice(0, this.cold.prefixLength) ?? []; }
+  getHotPageCount(): number { return this.pages.size; }
+
   /** 总线已逐命令验证临时结果后，一次发布历史游标；不创建另一撤销栈。 */
   publishPosition(document: ImageEditDocumentV3, position: number, expectedHead: ImageEditDocumentV3): void {
     this.assertHead(expectedHead);
-    const total = this.undoEntries.length + this.redoEntries.length;
+    const state = this.getState();
+    const total = state.undoCount + state.redoCount;
     if (!Number.isSafeInteger(position) || position < 0 || position > total || document.id !== expectedHead.id) {
       throw new ImageEditCommandValidationErrorV3('历史位置无效');
     }
-    if (position < this.undoEntries.length) {
-      while (this.undoEntries.length > position) this.redoEntries.push(this.undoEntries.pop()!);
-    } else if (position > this.undoEntries.length) {
-      while (this.undoEntries.length < position) this.undoEntries.push(this.redoEntries.pop()!);
+    const tailPosition = Math.max(0, position - (this.cold?.prefixLength ?? 0));
+    if (tailPosition < this.undoEntries.length) {
+      while (this.undoEntries.length > tailPosition) this.redoEntries.push(this.undoEntries.pop()!);
+    } else if (tailPosition > this.undoEntries.length) {
+      while (this.undoEntries.length < tailPosition) this.undoEntries.push(this.redoEntries.pop()!);
     }
+    if (this.cold) this.cold = { ...this.cold, position };
     this.track(document);
   }
 
@@ -251,6 +323,7 @@ export class ImageEditCommandHistoryV3 {
     const retainedBefore = this.resourceMap();
     this.undoEntries.length = 0;
     this.redoEntries.length = 0;
+    this.cold = undefined; this.pages.clear();
     this.documentId = document?.id ?? null;
     this.headRevision = document?.revision ?? null;
     this.notifyReleased(retainedBefore, 'clear');
@@ -259,6 +332,7 @@ export class ImageEditCommandHistoryV3 {
   discardRedo(): void {
     const retainedBefore = this.resourceMap();
     this.redoEntries.length = 0;
+    if (this.cold) this.cold = { ...this.cold, prefixLength: Math.min(this.cold.position, this.cold.prefixLength) };
     this.notifyReleased(retainedBefore, 'redo-cleared');
   }
 
@@ -273,13 +347,14 @@ export class ImageEditCommandHistoryV3 {
       && hasStrictResourceMetadata(entry.inverse)
     ));
     return {
-      version: strict
+      version: this.cold?.checkpoint.snapshotVersion ?? (strict
         ? IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3
-        : IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3,
+        : IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3),
       documentId: this.documentId,
       headRevision: this.headRevision,
       undo: this.undoEntries.map(cloneEntry),
       redo: this.redoEntries.map(cloneEntry),
+      ...(this.cold ? { cold: this.cold } : {}),
     };
   }
 
@@ -288,16 +363,18 @@ export class ImageEditCommandHistoryV3 {
   }
 
   restore(document: ImageEditDocumentV3, value: unknown): void {
-    const decoded = decodeImageEditCommandHistorySnapshotV3(value, this.decodeOptions());
+    const decoded = { snapshot: value && typeof value === 'object' && 'cold' in value
+      ? decodeImageEditRuntimeHistoryV3(value) : decodeImageEditCommandHistorySnapshotV3(value, this.decodeOptions()).snapshot };
     if (decoded.snapshot.documentId !== document.id || decoded.snapshot.headRevision !== document.revision) {
       throw new ImageEditRevisionConflictErrorV3(
         `历史快照头不匹配：快照 ${decoded.snapshot.documentId}@${decoded.snapshot.headRevision}，文档 ${document.id}@${document.revision}`
       );
     }
-    this.assertSnapshotApplies(document, decoded.snapshot);
+    if (!decoded.snapshot.cold) this.assertSnapshotApplies(document, decoded.snapshot);
     const retainedBefore = this.resourceMap();
     this.undoEntries.length = 0;
     this.redoEntries.length = 0;
+    this.cold = decoded.snapshot.cold; this.pages.clear();
     for (const entry of decoded.snapshot.undo) this.undoEntries.push(cloneEntry(entry));
     for (const entry of decoded.snapshot.redo) this.redoEntries.push(cloneEntry(entry));
     this.track(document);
@@ -324,8 +401,8 @@ export class ImageEditCommandHistoryV3 {
       ? null
       : retainedMetadataBytes + resourceTotals.bytes;
     return {
-      undoCount: this.undoEntries.length,
-      redoCount: this.redoEntries.length,
+      undoCount: this.cold?.position ?? this.undoEntries.length,
+      redoCount: this.cold ? this.cold.prefixLength + this.undoEntries.length + this.redoEntries.length - this.cold.position : this.redoEntries.length,
       retainedBytes,
       retainedResourceCount: resources.length,
       retainedResourceBytes: resourceTotals.unknownResourceCount > 0
@@ -341,7 +418,7 @@ export class ImageEditCommandHistoryV3 {
 
   private resourceMap(): Map<string, ImageEditHistoryResourceReferenceV3> {
     const merged = mergeImageEditHistoryResourceReferencesV3(
-      this.allEntries().flatMap((entry) => entry.resources)
+      [...(this.cold?.checkpoint.resources ?? []), ...(this.cold?.checkpoint.pages.map(page => ({ resourceId: page.resourceId, byteSize: page.byteSize })) ?? []), ...this.allEntries().flatMap((entry) => entry.resources)]
     );
     return new Map(merged.map((resource) => [resource.resourceId, resource]));
   }

@@ -14,7 +14,7 @@ vi.mock('@/features/generation', () => ({ generationApplicationService: {
   prepare: vi.fn((request: { modelId: string; options: Record<string, unknown> }) => ({ prepared: true, modelId: request.modelId, providerId: 'fixture', mediaType: 'image', options: request.options, priceEstimate: { display: '测试估价' } })),
   submit: fake.submit, getTask: () => ({ cancellable: true }), cancelTask: fake.cancel,
 }, waitForGenerationCompletion: (id: string, signal: AbortSignal, _recovering: boolean, progress: (value: number) => void) => new Promise((resolve, reject) => {
-  fake.waits.set(id, { resolve, progress }); signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  fake.waits.set(id, { resolve: value => { fake.waits.delete(id); resolve(value); }, progress }); signal.addEventListener('abort', () => reject(signal.reason), { once: true });
 }) }));
 vi.mock('@/services/database', () => ({ databaseService: {
   getHistoryById: async (id: string) => fake.history.get(id),
@@ -44,6 +44,7 @@ beforeEach(() => {
 });
 afterEach(() => fake.bus.dispose());
 const request = () => ({ documentId: fake.bus.getSnapshot().document.id, margins: { right: .5, bottom: .5 }, prompt: '自然延续砖墙' });
+async function completionReady(taskId: string) { await vi.waitFor(() => expect(fake.waits.has(taskId)).toBe(true)); return fake.waits.get(taskId)!; }
 async function settle(taskId: string, status: string) { await vi.waitFor(() => expect(readImageEditOutpaintJobV3(taskId)?.status).toBe(status)); }
 describe('图片扩图正式队列编排（无网络模拟供应商）', () => {
   it('prepare 不导出或提交；参考画布补边，请求带媒体，进度后新智能层原子落位并保存', async () => {
@@ -53,8 +54,8 @@ describe('图片扩图正式队列编排（无网络模拟供应商）', () => {
     expect(fake.referenceSave.mock.calls[0][0].document.geometry).toMatchObject({ width: 150, height: 120 });
     expect(fake.submit.mock.calls[0][0]).toMatchObject({ mediaType: 'image', options: { uploadedFilePaths: ['media://fixture/padded.png'], images: ['media://fixture/padded.png'] } });
     expect(fake.bus.getSnapshot().document.revision).toBe(0);
-    fake.waits.get(job.taskId)!.progress(45); expect(readImageEditOutpaintJobV3(job.taskId)?.progress).toBe(45);
-    fake.waits.get(job.taskId)!.resolve({ ok: true }); await settle(job.taskId, 'placed');
+    (await completionReady(job.taskId)).progress(45); expect(readImageEditOutpaintJobV3(job.taskId)?.progress).toBe(45);
+    (await completionReady(job.taskId)).resolve({ ok: true }); await settle(job.taskId, 'placed');
     expect(fake.bus.getSnapshot().document.layers).toHaveLength(2); expect(fake.bus.getPersistenceSnapshot().history.undo).toHaveLength(1);
     const selected = fake.bus.getSnapshot().selection!.operations[0].shape;
     expect(selected.type).toBe('rectangle'); if (selected.type === 'rectangle') { expect(selected.x).toBeCloseTo(.2); expect(selected.y).toBeCloseTo(.2); }
@@ -65,7 +66,7 @@ describe('图片扩图正式队列编排（无网络模拟供应商）', () => {
   });
   it('保存失败保留已落位内容，恢复只续保存，无重复付费或加层', async () => {
     fake.save.mockRejectedValueOnce(new Error('disk full'));
-    const job = await startImageEditOutpaintV3(request()); fake.waits.get(job.taskId)!.resolve({ ok: true }); await settle(job.taskId, 'failed');
+    const job = await startImageEditOutpaintV3(request()); (await completionReady(job.taskId)).resolve({ ok: true }); await settle(job.taskId, 'failed');
     expect(fake.bus.getSnapshot().document.layers).toHaveLength(2);
     await recoverImageEditOutpaintV3(job.documentId, job.taskId); await settle(job.taskId, 'placed');
     expect(fake.submit).toHaveBeenCalledTimes(1); expect(fake.appearance).toHaveBeenCalledTimes(1); expect(fake.bus.getSnapshot().document.layers).toHaveLength(2);
@@ -73,8 +74,8 @@ describe('图片扩图正式队列编排（无网络模拟供应商）', () => {
   it('取消与供应商失败不改图片；失败恢复等待原任务，不提交新任务', async () => {
     const job = await startImageEditOutpaintV3(request()); await cancelImageEditOutpaintV3(job.taskId); await settle(job.taskId, 'cancelled');
     expect(fake.cancel).toHaveBeenCalledTimes(1); expect(fake.bus.getSnapshot().document.revision).toBe(0);
-    const next = await startImageEditOutpaintV3(request()); fake.waits.get(next.taskId)!.resolve({ ok: false, error: 'fixture provider failed' }); await settle(next.taskId, 'failed');
-    await recoverImageEditOutpaintV3(next.documentId, next.taskId); fake.waits.get(next.taskId)!.resolve({ ok: true }); await settle(next.taskId, 'placed');
+    const next = await startImageEditOutpaintV3(request()); (await completionReady(next.taskId)).resolve({ ok: false, error: 'fixture provider failed' }); await settle(next.taskId, 'failed');
+    await recoverImageEditOutpaintV3(next.documentId, next.taskId); (await completionReady(next.taskId)).resolve({ ok: true }); await settle(next.taskId, 'placed');
     expect(fake.submit).toHaveBeenCalledTimes(2);
   });
   it('HDR 拒绝在提交前；准备失败清理参考，尺寸改变拒绝迟到落位', async () => {
@@ -84,7 +85,7 @@ describe('图片扩图正式队列编排（无网络模拟供应商）', () => {
     fake.bus.dispose(); fake.bus = new ImageEditCommandBusV3(doc);
     const job = await startImageEditOutpaintV3(request());
     fake.bus.dispatch({ type: 'document.set-canvas-size', commandId: 'manual-size', expectedRevision: 0, width: 200, height: 80, rasterCanvases: {} });
-    fake.waits.get(job.taskId)!.resolve({ ok: true }); await settle(job.taskId, 'failed');
+    (await completionReady(job.taskId)).resolve({ ok: true }); await settle(job.taskId, 'failed');
     expect(readImageEditOutpaintJobV3(job.taskId)?.error).toContain('原画幅已变化'); expect(fake.bus.getSnapshot().document.layers).toHaveLength(1);
   });
   it('供应商取消失败保留可见错误，不把计费取消报告为成功', async () => {
@@ -103,7 +104,7 @@ describe('图片扩图正式队列编排（无网络模拟供应商）', () => {
     expect(readImageEditOutpaintJobV3(taskId)?.status).toBe('failed');
     expect(fake.submit).not.toHaveBeenCalled(); expect(fake.bus.getSnapshot().document.revision).toBe(0);
     await recoverImageEditOutpaintV3(input.documentId, taskId);
-    fake.waits.get(taskId)!.resolve({ ok: true }); await settle(taskId, 'placed');
+    (await completionReady(taskId)).resolve({ ok: true }); await settle(taskId, 'placed');
     expect(fake.submit).not.toHaveBeenCalled(); expect(fake.bus.getSnapshot().document.layers).toHaveLength(2);
   });
   it('提交回执等待期间取消，不再回填；收到正式回执后取消原任务并清理参考', async () => {

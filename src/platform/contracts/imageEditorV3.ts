@@ -1,5 +1,7 @@
 import type { ImageEditDocumentV3 } from '../../core/imageEdit/v3/documentTypes'
 import type { ImageEditCommandHistorySnapshotV3 } from '../../core/imageEdit/v3/commandHistoryCodec'
+import type { ImageEditHistoryCheckpointV3 } from '../../core/imageEdit/v3/historyPaging/schema'
+import type { ImageEditHistoryEntrySnapshotV3 } from '../../core/imageEdit/v3/commandHistoryCodec'
 import type { DocumentContainerRef, DocumentMeta, DocumentReadResult } from '../../core/documents/types'
 
 export type ImageEditorV3DocumentRef = `image-edit-v3:${string}`
@@ -17,6 +19,7 @@ export interface ImageEditorV3DocumentReference {
   documentRef: ImageEditorV3DocumentRef
   revision: number
   previewRef: ImageEditorV3ResourceRef | null
+  history?: ImageEditCommandHistorySnapshotV3 | null
 }
 
 export interface ImageEditorV3DocumentSnapshot extends ImageEditorV3DocumentReference {
@@ -338,6 +341,7 @@ export interface ImageEditorV3Platform {
     requestId: string
     documentRef: ImageEditorV3DocumentRef
   }): Promise<ImageEditorV3DocumentSnapshot | null>
+  readHistoryPage?(request: { requestId: string; checkpoint: ImageEditHistoryCheckpointV3; pageIndex: number }): Promise<ImageEditHistoryEntrySnapshotV3[]>
   saveDocument(request: {
     requestId: string
     document: ImageEditDocumentV3

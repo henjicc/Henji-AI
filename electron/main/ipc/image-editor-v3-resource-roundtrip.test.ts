@@ -88,8 +88,13 @@ it('正式 IPC 装配共享资源库：历史独占瓦片与分页在 GC、运�
   expect(reopened.resourceRefs).toContain(resource.resourceRef)
   expect(reopened.resources.find(item => item.resourceRef === resource.resourceRef)?.mediaType)
     .toBe('application/x-henji-brush-tile-v3')
-  const restored = new ImageEditCommandHistoryV3()
+  const restored = new ImageEditCommandHistoryV3({ readPage: (checkpoint, pageIndex) => invoke('history:page', {
+    requestId: `history-page-${pageIndex}`, checkpoint, pageIndex,
+  }) })
   restored.restore(reopened.document, reopened.history)
+  expect(reopened.history?.undo).toHaveLength(0)
+  expect(reopened.history?.cold?.checkpoint.total).toBe(1)
+  await restored.readEntryAt(0)
   expect(restored.redo(reopened.document).document.layers[0]).toMatchObject({ tiles: { '0/0/0': resource.resourceRef } })
   const read = await invoke<{ tiles: Array<{ tile: { data: ArrayBuffer } }> }>('brushTiles:read', {
     requestId: 'read', tiles: [{ tileKey: '0/0/0', resource }],

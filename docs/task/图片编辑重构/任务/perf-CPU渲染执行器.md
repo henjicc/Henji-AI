@@ -1,6 +1,6 @@
 # t123-cpu 图片编辑 CPU 渲染执行器与冷源解码性能
 
-状态：**实现与定向验证完成，等待总管理者审查；性能目标未达成，不能关闭任务。** 最终 4K 渲染/写瓦片 4.88 秒、8K 18.67 秒，仍超过 3/10 秒；完整保存 5.18/19.21 秒。测量进程事件循环最大延迟 25.14/19.72ms，真实 Electron 主进程与界面未测。
+状态（t138）：共享源块解码与 Worker 阶段计时已接入，稀疏蒙版行复制进一步提速；最终 4K/8K 渲染 3.42/12.38 秒，完整保存 3.70/12.89 秒。**仍未达到 ≤3/≤10 秒，不能关闭性能目标。** 像素与重开 SHA-256 未变；真实 Electron 保存手感未测。
 
 ## 范围、计划与设计自查
 
@@ -114,3 +114,58 @@ Remove-Item Env:HENJI_IMAGE_SAVE_BENCH_LABEL
 | 本记录 | 选型、设计自查、改前/改后、失败与未达目标交接。 |
 
 两个 `src/features/.../export` 文件是 CPU 执行宿主必须的窄接线；未修改保存、打包、历史分页文件。对同源问题的实际排查范围是 CPU 整幅/区域执行、默认导出、源读取/代理/金字塔、EXIF/halo/mip、稀疏栅格与蒙版、原 GPU 色彩消费方。非恒等几何、HDR 值和 GPU 既有容差在精确测试中未发现同源回归；所有效果的真实窗口性能没有验证。
+
+
+## t138 共享解码与蒙版行读取（2026-10-10）
+
+- 四个并行子区域在同一调度瓦片内共享一次 512 源块读取/验证/Float32 解码，缓存键绑定资源、mip、坐标、位深、工作空间及参考白。最多 32MiB，计入全局 `in-flight` 预算；预算不足回到原暂存路径，任务 finally 释放，不跨任务常驻、不 detach 借出缓冲。
+- Worker 内部补回调等待、实际节点内核、opacity/composite/effect-mix、投影和编码计时，汇总进入原结构化渲染日志，不新增日志文件或界面调试状态。累加包含四 Worker 的重叠时间，不能把它当串行墙钟相加。
+- 阶段证据表明 `wait.mask` 累加约 27.55 秒。mip0 蒙版原来逐像素构造瓦片键、查 Map，空白区域也逐像素执行；改为默认/矢量基底填充后只按行复制相交稀疏块。整数采样位置、浮点值、边缘和更高 mip 的原路径不变，没有降低分辨率或放宽像素容差。
+- 保留成熟 Sharp/libvips 解码与原生 Workers。官方操作文档 `https://sharp.pixelplumbing.com/api-operation/` 说明了原生逐像素操作，但整条渲染链仍要求精确 Float32 中间舍入、预乘 Alpha、局部蒙版及 HDR 契约；未经金样证明不能直接把它换成近似原生管线。`https://nodejs.org/api/worker_threads.html` 是线程适配的一手资料。本轮未引入新依赖或自研 SIMD/解码器。
+
+### 同一夹具测量
+
+4096²/8192²、两层共享源、非空稀疏蒙版、曝光调整与局部曝光滤镜；真实文件保存与重开全像素 SHA-256 保持一致。性能进程无 Electron 窗口；没有清空系统文件缓存。三轮皆用原唯一保存夹具，不复制另一条保存实现。
+
+| 阶段 | 改前 t123 4K / 8K | 仅共享解码 4K / 8K | 共享解码 + 蒙版行复制 4K / 8K |
+|---|---:|---:|---:|
+| 渲染（含写输出块） | 4,877.34 / 18,671.67 ms | 4,882.37 / 17,826.55 ms | 3,417.35 / 12,380.64 ms |
+| 完整保存 | 5,177.98 / 19,213.24 ms | 5,175.22 / 18,367.83 ms | 3,701.01 / 12,888.20 ms |
+| 原源读取累加 | 旧记录见上 | 969.83 / 3,854.23 ms | 947.62 / 3,765.85 ms |
+| 输出块写入 | 旧记录见上 | 旧报告 | 303.70 / 1,058.25 ms |
+| 编码与同步 | 旧记录见上 | 旧报告 | 150.78 / 310.00 ms |
+| 输出哈希 | 旧记录见上 | 旧报告 | 26.41 / 45.73 ms |
+| 打包发布 | 旧记录见上 | 旧报告 | 106.46 / 151.84 ms |
+| 事件循环最大延迟 | 25.14 / 19.72 ms | 诊断报告 | 14.23 / 19.08 ms |
+
+两尺寸合计解码调用从 1,280 降到 320 次；共享解码累加 535.94ms。Worker 最终累加：wait.raster 31,328.29ms、wait.mask 4,184.25ms、曝光 4,147.36ms、opacity 1,401.03ms、composite 1,686.29ms、effect-mix 1,847.44ms、encode 2,941.13ms；等待包含消息调度和宿主资源返回，不是纯 Sharp CPU 时间。仅共享解码的收益有限，蒙版行复制才产生本轮主要收益；不能把全部改善归因于解码。
+
+结果：完整保存比原轮降低约 28.5% / 32.9%，目标依然欠账。下一步应首先拆分宿主读取/structured clone/Worker 排队的 wait.raster 窄阶段，比较一次顺序 libvips 解码流式供给与当前原生条带；内核剩余曝光/混合/编码再与成熟 SIMD/WASM 方案比较，必须沿原 Float32 舍入和 SHA-256，不可调整容差。不能凭当前两个尺度宣称所有 HDR、全局效果或所有硬件达标。
+
+复现仍用上面的显式基准命令，标签分别为 `t138-shared-decode` 与 `t138-mask-rows`。最终 CPU 代码之后未再修改；新增共享源与跨稀疏块默认值精确测试，真实线程原测试与像素金样沿完整目录回归。
+
+### 设计自查与验收边界
+
+1. 助手只凭名称和说明能否用对？能沿既有生成/编辑/保存/导出操作，无新公开参数或工具；阶段信息只进原日志。
+2. 能否 AI 先做、人只确认？解码共享、蒙版区域读取与内存退让自动完成，人只校正图像；耗时未达目标，不能承诺已完成即时保存。
+3. 产物能否直接流进其他工作区？同尺寸、同像素、同文档和资源，沿原流转；本轮没有重跑跨工作区窗口。
+
+最终回归：用户指定九目录范围（官方九个原生文件单独跑），684 文件、3,977 用例通过，0 失败/跳过；原生 `npm run test:assistant-persistence` 9 文件 83 用例通过。两侧 tsc、本任务文件 ESLint、dependency-graph/dead-code/main-imports/persistence-compat/ui-residue/surface/colors/icons/ipc-contract 门禁通过；应用控制不变量限并发重跑 31 文件 206 用例通过。高并发 OOM、首次原生超时及首次目录回归发现的测试接线问题，过程和最终证据见 05 记录；性能目标未达成保留为明确风险。未执行 Git 写操作、SDK 改动、付费调用、Reality 或开发实例；运行时代码后续交付需要最新主进程产物。
+
+
+### t138 实际文件清单
+
+| 文件 | 本轮改动 |
+|---|---|
+| `src/core/imageEdit/v3/execution/cpuRegionWorkerClient.ts` | Worker 阶段接收。 |
+| `src/core/imageEdit/v3/execution/cpuRegionWorkerProtocol.ts` | 内部计时协议。 |
+| `src/core/imageEdit/v3/execution/cpuRegionWorkerRuntime.ts` | Worker 阶段测量。 |
+| `src/core/imageEdit/v3/execution/cpuRenderPerformance.benchmark.test.ts` | 基准阶段汇总。 |
+| `src/core/imageEdit/v3/execution/cpuRenderRegionExecutor.ts` | 节点内核计时。 |
+| `src/features/imageEdit/v3/export/maskRegion.ts` | 蒙版行读取。 |
+| `src/features/imageEdit/v3/export/renderExportTilesV3.ts` | 共享解码与计时接线。 |
+| `src/features/imageEdit/v3/export/sourceRegion.test.ts` | 共享解码像素及预算测试。 |
+| `src/features/imageEdit/v3/export/sourceRegion.ts` | 任务内解码缓存。 |
+| `src/features/imageEdit/v3/export/maskRegion.test.ts` | 蒙版边界精确测试。 |
+
+同时更新两份指定任务记录与 `docs/rules/assistant-status.md` 的历史通路条目。

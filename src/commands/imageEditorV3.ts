@@ -9,7 +9,8 @@ import {
   createFloat32MaskTile,
   createFloat32PremultipliedRgbaTile,
 } from '@/core/imageEdit/v3/effects/contracts'
-import { decodeImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
+import { decodeImageEditRuntimeHistoryV3, runtimeHistoryResourcesV3 } from '@/core/imageEdit/v3/historyPaging/runtimeSnapshot'
+import type { ImageEditCommandHistoryOptionsV3 } from '@/core/imageEdit/v3/commandHistory'
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
 import type {
   ImageEditDocumentReferenceV3,
@@ -68,11 +69,7 @@ function collectHistoryResourceIds(
   value: ImageEditSaveDocumentOptionsV3['history'],
 ): string[] {
   if (!value) return []
-  const history = decodeImageEditCommandHistorySnapshotV3(value).snapshot
-  return [...new Set(
-    [...history.undo, ...history.redo]
-      .flatMap((entry) => entry.resources.map((resource) => resource.resourceId)),
-  )].sort()
+  return runtimeHistoryResourcesV3(decodeImageEditRuntimeHistoryV3(value)).map(resource => resource.resourceId)
 }
 
 async function runCancellable<T>(
@@ -180,6 +177,14 @@ export async function readImageEditorV3SourceTile(
   const release = await acquireImageTileRead(getPlatform().imageEditorV3, 'source', signal)
   try { return await runCancellable(request.requestId, signal, (platform) => platform.readSourceTile(request)) }
   finally { release() }
+}
+
+export const readImageEditorV3HistoryPage: NonNullable<ImageEditCommandHistoryOptionsV3['readPage']> = (checkpoint, pageIndex, signal) => {
+  const requestId = createImageEditorV3RequestId('history-page')
+  return runCancellable(requestId, signal, platform => {
+    if (!platform.readHistoryPage) throw new Error('图片历史分页读取不可用')
+    return platform.readHistoryPage({ requestId, checkpoint, pageIndex })
+  })
 }
 
 function brushTileDataBuffer(tile: ImageEditBrushTileV3): ArrayBuffer {
@@ -403,6 +408,7 @@ export class ImageEditorV3CommandRepository implements ImageEditDocumentReposito
       documentId: document.id,
       revision: saved.revision,
       previewRef: saved.previewRef,
+      ...(saved.history ? { history: saved.history } : {}),
     }
   }
 

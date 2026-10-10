@@ -14,9 +14,9 @@ import {
 } from '../../../src/core/imageEdit/v3/effects/contracts'
 import type { ImageEditBrushTileV3 } from '../../../src/core/imageEdit/v3/brush/contracts'
 import {
-  decodeImageEditCommandHistorySnapshotV3,
   type ImageEditCommandHistorySnapshotV3,
 } from '../../../src/core/imageEdit/v3/commandHistoryCodec'
+import { decodeImageEditRuntimeHistoryV3, runtimeHistoryResourcesV3 } from '../../../src/core/imageEdit/v3/historyPaging/runtimeSnapshot'
 import { collectImageEditJsonResourceIdsV3 } from '../../../src/core/imageEdit/v3/resourceReferences'
 import { decodeImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentCodec'
 import { parseRecord } from './registry'
@@ -295,14 +295,13 @@ export function parseImageEditorV3SavePayload(input: unknown): SaveDocumentPaylo
   }
   const history = record.history === undefined || record.history === null
     ? undefined
-    : decodeImageEditCommandHistorySnapshotV3(record.history).snapshot
+    : decodeImageEditRuntimeHistoryV3(record.history)
   if (history && (history.documentId !== normalized.documentId
     || history.headRevision !== normalized.revision)) {
     throw new Error('History snapshot head does not match document')
   }
   const historyRefs = history
-    ? [...history.undo, ...history.redo]
-      .flatMap((entry) => entry.resources.map((resource) => resource.resourceId))
+    ? runtimeHistoryResourcesV3(history).map(resource => resource.resourceId)
     : []
   const resourceRefs = readResourceRefs(record.resourceRefs, 'resourceRefs')
   const requiredRefs = collectImageEditJsonResourceIdsV3(normalized.document, [

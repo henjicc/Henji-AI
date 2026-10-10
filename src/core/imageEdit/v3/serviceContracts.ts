@@ -7,6 +7,8 @@ export interface ImageEditDocumentReferenceV3 {
   documentId: string;
   revision: number;
   previewRef: string | null;
+  /** 保存确认后的分页历史源，供实例释放已保存的命令尾部。 */
+  history?: ImageEditCommandHistorySnapshotV3 | null;
 }
 
 export interface ImageEditDocumentSnapshotV3 extends ImageEditDocumentReferenceV3 {

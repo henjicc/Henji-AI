@@ -146,7 +146,7 @@ function decodeUndo(token: string): UndoPayload {
 
 async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
   const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
-  if (!bus.undoCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_COLLECTION_UNDO_EMPTY')
+  if (!(await bus.undoCommands(payload.commandIdsNewestFirst))) throw new Error('IMAGE_EDIT_V3_COLLECTION_UNDO_EMPTY')
   const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
@@ -162,7 +162,7 @@ async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedSt
 
 async function rollbackPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
   const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
-  if (!bus.rollbackCommands(payload.commandIdsNewestFirst)) {
+  if (!(await bus.rollbackCommands(payload.commandIdsNewestFirst))) {
     throw new Error('IMAGE_EDIT_V3_COLLECTION_ROLLBACK_EMPTY')
   }
   const revision = getImageEditDocumentCatalogRevisionV3()
@@ -277,7 +277,7 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
         }),
       }
     } catch (error) {
-      if (commandIds.length > 0) bus.rollbackCommands([...commandIds].reverse())
+      if (commandIds.length > 0) await bus.rollbackCommands([...commandIds].reverse())
       logger.error('图片编辑 V3 图层集合写入失败', {
         event: 'image_edit.v3.application_collection.apply.failed',
         requestId: context.requestId,

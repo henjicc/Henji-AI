@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { createImageEditGroupLayerV3, createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import {
@@ -84,6 +84,15 @@ export function useImageEditorControllerV3(
     historySnapshot: props.historySnapshot, resourceByteSizes: initialResourceByteSizes,
   }, props.persistenceHost)
   const [snapshot, setSnapshot] = useState(binding.bus.getSnapshot())
+  const [historyFailed, setHistoryFailed] = useState(false)
+  const historyViewActive = useRef(true)
+  useEffect(() => { historyViewActive.current = true; return () => { historyViewActive.current = false } }, [binding.bus])
+  const navigateHistory = useCallback((redo: boolean): void => {
+    setHistoryFailed(false)
+    void (async () => { if (redo) await binding.bus.redo(); else await binding.bus.undo() })().catch(() => {
+      if (historyViewActive.current) setHistoryFailed(true)
+    })
+  }, [binding.bus])
   const document = snapshot.document.id === binding.documentId ? snapshot.document : binding.bus.getSnapshot().document
   const historyState = snapshot.document.id === binding.documentId ? snapshot.history : binding.bus.getSnapshot().history
   const onDocumentChangeRef = useRef(props.onDocumentChange)
@@ -265,14 +274,16 @@ export function useImageEditorControllerV3(
           params,
         })
       },
-      undo: () => { binding.bus.undo() },
+      undo: () => navigateHistory(false),
+      historyFailed,
+      dismissHistoryFailure: () => setHistoryFailed(false),
       historyPort: binding.bus,
       historyResourceDescriptors: props.resourceDescriptors,
-      redo: () => { binding.bus.redo() },
+      redo: () => navigateHistory(true),
       canUndo: historyState.undoCount > 0,
       canRedo: historyState.redoCount > 0,
     }
-  }, [binding.bus, document, historyState.redoCount, historyState.undoCount, profile, props.resourceDescriptors, sessionId])
+  }, [binding.bus, document, historyState.redoCount, historyState.undoCount, historyFailed, navigateHistory, profile, props.resourceDescriptors, sessionId])
 
   return { controller, bus: binding.bus }
 }

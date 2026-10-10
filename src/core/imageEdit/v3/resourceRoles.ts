@@ -12,6 +12,8 @@ export function collectImageEditResourceRolesV3(
 ): { images: ReadonlySet<string>; sparse: ReadonlyMap<string, ImageEditSparseResourceStorageV3> } {
   const images = new Set<string>()
   const sparse = new Map<string, ImageEditSparseResourceStorageV3>()
+  history?.cold?.resourceRoles.images.forEach(id => images.add(id))
+  history?.cold?.resourceRoles.sparse.forEach(([id, storage]) => sparse.set(id, storage))
   const add = (id: string | null, storage: ImageEditSparseResourceStorageV3): void => {
     if (!id) return
     if (sparse.has(id) && sparse.get(id) !== storage) throw new Error('图片编辑同一资源的稀疏存储类型冲突')

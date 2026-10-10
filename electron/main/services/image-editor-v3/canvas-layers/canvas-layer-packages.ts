@@ -412,7 +412,7 @@ export class CanvasLayerPackageService {
 
   private async loadWorking(documentId: string): Promise<ImageEditDocumentEnvelope | null> {
     try {
-      const envelope = await this.options.documents.load(documentId)
+      const envelope = await this.options.documents.loadCheckpoint(documentId)
       this.options.validateDocument(envelope)
       return envelope
     } catch (error) {

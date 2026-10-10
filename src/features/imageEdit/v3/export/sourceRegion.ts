@@ -18,6 +18,35 @@ import type {
   ImageEditorV3ExportSourceTileRequest,
 } from './contracts'
 import { readImageEditorExportSourcePyramidV3 } from './sourceGeometry'
+import type { ImageEditResourceBudget, ImageEditMemoryLease } from '@/core/imageEdit/v3'
+
+/** 一次调度瓦片内共享解码；不跨任务保留，不 detach 借出的源数据。 */
+export class ImageEditorDecodedSourceTilesV3 {
+  private readonly tiles = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
+  private readonly leases: ImageEditMemoryLease[] = []
+  private bytes = 0
+  constructor(private readonly budget: ImageEditResourceBudget) {}
+
+  read(key: string, bytes: number, load: () => Promise<Float32PremultipliedRgbaTile>): Promise<Float32PremultipliedRgbaTile> {
+    const cached = this.tiles.get(key)
+    if (cached) return cached
+    // 32MiB 是解码缓存预算；超出时沿已计入工作集的单块暂存路径，不拒绝图层或素材。
+    const lease = this.bytes + bytes <= 32 * 1024 * 1024 ? this.budget.acquire('in-flight', bytes) : null
+    if (!lease) return load()
+    this.bytes += bytes
+    this.leases.push(lease)
+    const pending = load()
+    this.tiles.set(key, pending)
+    return pending
+  }
+
+  release(): void {
+    this.tiles.clear()
+    this.leases.forEach(lease => lease.release())
+    this.leases.length = 0
+    this.bytes = 0
+  }
+}
 
 function throwIfAborted(signal: AbortSignal): void {
   if (!signal.aborted) return
@@ -150,6 +179,7 @@ export async function loadImageEditorV3SourceRegion(
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
   mip = 0,
+  decodedTiles?: ImageEditorDecodedSourceTilesV3,
 ): Promise<Float32PremultipliedRgbaTile> {
   throwIfAborted(signal)
   if (!/^sha256:[a-f0-9]{64}$/.test(resourceRef)) {
@@ -172,18 +202,24 @@ export async function loadImageEditorV3SourceRegion(
       halo: 0,
       bitDepth,
     }
-    const tile = await readTile(request, signal)
-    throwIfAborted(signal)
-    validateReturnedTile(request, tile)
     const expected = createTileRegion(sourceSize, coordinate, 0).sourceRect
-    if (tile.width !== expected.width || tile.height !== expected.height
-      || tile.originX !== expected.x || tile.originY !== expected.y) {
-      throw new Error('图片源瓦片与真实源几何不匹配')
+    const load = async (): Promise<Float32PremultipliedRgbaTile> => {
+      const tile = await readTile(request, signal)
+      throwIfAborted(signal)
+      validateReturnedTile(request, tile)
+      if (tile.width !== expected.width || tile.height !== expected.height
+        || tile.originX !== expected.x || tile.originY !== expected.y) {
+        throw new Error('图片源瓦片与真实源几何不匹配')
+      }
+      return decodeSourceTile(tile, targetWorkingSpace, referenceWhiteNits)
     }
+    const key = `${resourceRef}:${mip}:${coordinate.x}:${coordinate.y}:${bitDepth}:${targetWorkingSpace}:${referenceWhiteNits}`
+    const decoded = await (decodedTiles?.read(key, expected.width * expected.height * 16, load) ?? load())
+    throwIfAborted(signal)
     copyIntersection(
-      decodeSourceTile(tile, targetWorkingSpace, referenceWhiteNits),
-      tile.originX,
-      tile.originY,
+      decoded,
+      expected.x,
+      expected.y,
       output,
       region,
     )

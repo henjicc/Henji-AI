@@ -26,6 +26,7 @@ import {
 } from './layerTypes';
 import { calculateImageEditHistorySnapshotResourceTotalsV3 } from './commandHistoryResources';
 import { imageEditNamedRegionsSchemaV3 } from './namedRegions';
+import type { ImageEditHistoryCheckpointV3 } from './historyPaging/schema';
 
 export const IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3 = 1 as const;
 export const IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3 = 2 as const;
@@ -46,6 +47,9 @@ export interface ImageEditCommandHistorySnapshotV3 {
   headRevision: number;
   undo: ImageEditHistoryEntrySnapshotV3[];
   redo: ImageEditHistoryEntrySnapshotV3[];
+  /** 仅运行时/IPC 的分页保存源；磁盘仍只写既有检查点格式。数组只包含新增尾部。 */
+  cold?: { checkpoint: ImageEditHistoryCheckpointV3; prefixLength: number; position: number; commandIds: readonly string[];
+    resourceRoles: { images: string[]; sparse: Array<[string, 'rgba-float32' | 'mask-float32']> } };
 }
 
 export interface DecodeImageEditHistorySnapshotOptionsV3 {

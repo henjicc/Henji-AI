@@ -1,5 +1,5 @@
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
-import { IMAGE_EDIT_HISTORY_FIELDS_V3 } from './imageEditHistoryFields'
+import { IMAGE_EDIT_HISTORY_FIELDS_V3, readImageEditHistoryRowsV3 } from './imageEditHistoryFields'
 import { IMAGE_EDIT_WORKFLOW_FIELDS_V3 } from './imageEditWorkflowFields'
 import { listImageEditDocumentEntitiesV3 } from './imageEditDocumentCatalog'
 import {
@@ -262,7 +262,9 @@ export class ImageEditV3ReflectionProvider {
       values = {
         ...fieldReadValues(IMAGE_EDIT_V3_DOCUMENT_FIELDS, document.geometry),
         ...fieldReadValues(IMAGE_EDIT_WORKFLOW_FIELDS_V3.filter(field => !request.propertyIds || request.propertyIds.includes(field.propertyId)), document),
-        ...fieldReadValues(IMAGE_EDIT_HISTORY_FIELDS_V3.filter(field => !request.propertyIds || request.propertyIds.includes(field.propertyId)), bus),
+        ...fieldReadValues(IMAGE_EDIT_HISTORY_FIELDS_V3.filter(field => !request.propertyIds || request.propertyIds.includes(field.propertyId)), {
+          bus, rows: !request.propertyIds || request.propertyIds.includes('image_edit.document.history_entries') ? await readImageEditHistoryRowsV3(bus) : [],
+        }),
         'image_edit.document.revision': document.revision,
         'image_edit.document.width': document.geometry.width,
         'image_edit.document.height': document.geometry.height,

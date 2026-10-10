@@ -40,6 +40,8 @@ import {
 } from './cpuRenderPlanExecutor'
 
 export interface ImageEditCpuRegionRenderContextV3 extends ImageEditCpuSamplingContextV3 {
+  /** 内部诊断，耗时进入日志；不改变求值与像素契约。 */
+  onStage?: (stage: string, milliseconds: number) => void
   /** 文档坐标到当前求值坐标的比例；mip 0 为 1。 */
   loadColorLut?: (ref: string) => Promise<CubeLut>
   scaleX?: number
@@ -325,22 +327,29 @@ export async function executeImageEditCpuRenderRegionPlanV3(
         if (backdrop) {
           content = convertFloat32TileColorContractV3(content, backdrop)
         }
+        const mask = await sampleMask(node, region)
+        const maskStart = performance.now()
         const masked = applyContentMaskAndOpacityV3(
           content,
           numberParameter(node, 'opacity', 1),
-          await sampleMask(node, region),
+          mask,
         )
-        return compositePremultipliedTilesV3(
+        context.onStage?.('opacity', performance.now() - maskStart)
+        const compositeStart = performance.now()
+        const composited = compositePremultipliedTilesV3(
           backdrop,
           masked,
           imageEditCpuRenderNodeBlendModeV3(node),
           node.parameters.clipping === true,
         )
+        context.onStage?.('composite', performance.now() - compositeStart)
+        return composited
       }
       const expanded = effectInputRegion(node, region, context)
       const source = await render(inputNode(nodes, node, 0), expanded)
       const regional = !!context.registry.get(node.definitionId)?.inputRegion
       const mask = await sampleMask(node, regional ? region : expanded)
+      const effectStart = performance.now()
       const processed = node.definitionId.startsWith('adjustment.')
         ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask, context.loadColorLut, { origin: [expanded.x, expanded.y], size: [context.size.width, context.size.height] })
         : await executeImageEditCpuEffectNodeV3(node, source, mask, {
@@ -354,6 +363,8 @@ export async function executeImageEditCpuRenderRegionPlanV3(
                 )
               : undefined,
           })
+      context.onStage?.(node.definitionId, performance.now() - effectStart)
+      const mixStart = performance.now()
       const original = convertFloat32TileColorDomainV3(regional ? cropImageEditRgbaRegionV3(source, expanded, region) : source, processed.colorDomain)
       const mixed = mixEffectLayerV3(
         original,
@@ -361,6 +372,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
         imageEditCpuRenderNodeBlendModeV3(node),
         numberParameter(node, 'opacity', 1),
       )
+      context.onStage?.('effect-mix', performance.now() - mixStart)
       return regional || regionKey(expanded) === regionKey(region)
         ? mixed
         : cropImageEditRgbaRegionV3(mixed, expanded, region)

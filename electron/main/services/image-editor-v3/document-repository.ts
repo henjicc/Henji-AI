@@ -264,6 +264,16 @@ export class ImageEditDocumentRepository {
     return envelope
   }
 
+  async loadPaged(documentIdOrRef: string, signal?: AbortSignal): Promise<ImageEditDocumentEnvelope> {
+    const envelope = await this.loadCheckpoint(documentIdOrRef);
+    if (envelope.historyCheckpoint) envelope.history = await this.historyPages.open(envelope.historyCheckpoint, signal);
+    return envelope;
+  }
+
+  async readHistoryPage(checkpoint: ImageEditHistoryCheckpointV3, pageIndex: number, signal?: AbortSignal): Promise<import('../../../../src/core/imageEdit/v3/commandHistoryCodec').ImageEditHistoryEntrySnapshotV3[]> {
+    return this.historyPages.readPage(checkpoint, pageIndex, signal);
+  }
+
   /** 保存、目录扫描与 GC 只读检查点，不把历史命令全部载入。 */
   async loadCheckpoint(documentIdOrRef: string): Promise<ImageEditDocumentEnvelope> {
     const documentId = documentIdOrRef.startsWith(IMAGE_EDIT_DOCUMENT_REF_PREFIX)
@@ -317,7 +327,7 @@ export class ImageEditDocumentRepository {
         historyCheckpoint: undefined,
         resourceRefs: mergePersistedImageEditResourceRefsV3(
           document,
-          normalizeResourceRefs(request.resourceRefs).filter(ref => !current.historyCheckpoint?.pages.some(page => page.resourceId === ref)),
+          normalizeResourceRefs(request.resourceRefs),
           request.previewRef,
           history,
         ),
@@ -448,9 +458,10 @@ export class ImageEditDocumentRepository {
       if (envelope.history) {
         const prepared = await this.historyPages.prepare(envelope.history, signal)
         release = prepared.release
-        const previousPages = new Set(envelope.historyCheckpoint?.pages.map(page => page.resourceId))
+        // 保存回执到达前，渲染层可能继续编辑并仍使用原检查点。
+        // 当前请求引用的源页保留到下一次采用新检查点的保存，不能提前被 GC 删除。
         envelope.historyCheckpoint = prepared.checkpoint
-        envelope.resourceRefs = normalizeResourceRefs([...envelope.resourceRefs.filter(ref => !previousPages.has(ref)), ...prepared.resourceIds])
+        envelope.resourceRefs = mergePersistedImageEditResourceRefsV3(envelope.document, envelope.resourceRefs, envelope.previewRef, prepared.checkpoint)
       } else if (envelope.historyCheckpoint) {
         const lease = await this.resources.acquireLease(envelope.resourceRefs)
         release = () => lease.release()

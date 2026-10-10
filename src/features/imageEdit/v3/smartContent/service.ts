@@ -61,9 +61,10 @@ export async function prepareSmartContentMutationV3(bus: ImageEditCommandBusV3, 
     const abandon = retainSmartContentResourcesV3(bus, appearance.release);
     const ids = new Set([update.commandId, ...(update.type === 'document.atomic' ? update.commands.map(child => child.commandId) : [])]);
     return { commands, release: async () => {
-      const history = bus.getPersistenceSnapshot().history;
-      const published = [...history.undo, ...history.redo].some(entry => ids.has(entry.forward.commandId)
-        || (entry.forward.type === 'document.atomic' && entry.forward.commands.some(child => ids.has(child.commandId))));
+      let published = false;
+      for await (const entry of bus.readHistoryEntries()) {
+        if (ids.has(entry.forward.commandId) || (entry.forward.type === 'document.atomic' && entry.forward.commands.some(child => ids.has(child.commandId)))) { published = true; break; }
+      }
       if (!published) await abandon();
     } };
   } catch (error) { await appearance.release(); throw error; }

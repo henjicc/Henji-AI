@@ -9,6 +9,8 @@ import { mergeImageEditHistoryResourceReferencesV3 } from '../../../../../src/co
 import type { ContentAddressedResourceStore } from '../resource-store';
 import type { ResourceId, ResourceLease } from '../contracts';
 import { createMainLogger } from '../../logging';
+import { decodeImageEditRuntimeHistoryV3 } from '../../../../../src/core/imageEdit/v3/historyPaging/runtimeSnapshot';
+import { collectImageEditResourceRolesV3, type ImageEditSparseResourceStorageV3 } from '../../../../../src/core/imageEdit/v3/resourceRoles';
 
 const logger = createMainLogger('main.image_editor_v3.history');
 
@@ -21,11 +23,12 @@ export class ImageEditHistoryPageStoreV3 {
     resourceIds: ResourceId[];
     release: () => Promise<void>;
   }> {
+    snapshot = decodeImageEditRuntimeHistoryV3(snapshot);
     const leases: ResourceLease[] = [];
     const checkpoint: ImageEditHistoryCheckpointV3 = {
       format: 'henji-image-history', version: IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3,
       documentId: snapshot.documentId, headRevision: snapshot.headRevision, snapshotVersion: snapshot.version,
-      position: snapshot.undo.length, total: snapshot.undo.length + snapshot.redo.length,
+      position: snapshot.cold?.position ?? snapshot.undo.length, total: (snapshot.cold?.prefixLength ?? 0) + snapshot.undo.length + snapshot.redo.length,
       pages: [], resources: [],
     };
     logger.info('开始保存图片历史页', { event: 'image_edit.history.pages.prepare.start', context: { documentId: snapshot.documentId } });
@@ -33,8 +36,14 @@ export class ImageEditHistoryPageStoreV3 {
     try {
       const retained = new Map<string, number | null>();
       let start = 0;
-      for (const page of splitImageEditHistoryPagesV3(snapshot)) {
+      const ids = new Set<string>();
+      let previousRevision = -1;
+      for await (const page of this.sourcePages(snapshot, signal)) {
         signal?.throwIfAborted();
+        for (const entry of page.undo) {
+          if (ids.has(entry.forward.commandId) || entry.forward.expectedRevision <= previousRevision) throw new Error('历史命令 ID 重复或分页顺序无效');
+          ids.add(entry.forward.commandId); previousRevision = entry.forward.expectedRevision;
+        }
         const pageResources = mergeImageEditHistoryResourceReferencesV3(page.undo.flatMap(entry => entry.resources));
         const newRefs = pageResources.filter(ref => !retained.has(ref.resourceId));
         if (newRefs.length) leases.push(await this.resources.acquireLease(newRefs.map(ref => ref.resourceId as ResourceId)));
@@ -66,6 +75,50 @@ export class ImageEditHistoryPageStoreV3 {
       logger.error('图片历史页保存失败', { event: 'image_edit.history.pages.prepare.failed', error });
       throw error;
     }
+  }
+
+  private async *sourcePages(snapshot: ImageEditCommandHistorySnapshotV3, signal?: AbortSignal): AsyncGenerator<ImageEditCommandHistorySnapshotV3> {
+    const { cold, ...tail } = snapshot;
+    if (cold) {
+      for (let index = 0; index < cold.checkpoint.pages.length; index++) {
+        const descriptor = cold.checkpoint.pages[index];
+        if (descriptor.start >= cold.prefixLength) break;
+        const entries = (await this.readValidatedPage(cold.checkpoint, index, signal)).slice(0, cold.prefixLength - descriptor.start);
+        if (entries.some((entry, offset) => entry.forward.commandId !== cold.commandIds[descriptor.start + offset])) throw new Error('历史命令索引不匹配');
+        yield { version: cold.checkpoint.snapshotVersion, documentId: 'image-history-page', headRevision: entries.at(-1)!.forward.expectedRevision + 1, undo: entries, redo: [] };
+      }
+    }
+    yield* splitImageEditHistoryPagesV3(tail);
+  }
+
+  /** 按页校验并建立紧凑 ID 索引；绝不全量克隆命令。 */
+  async open(checkpointValue: unknown, signal?: AbortSignal): Promise<ImageEditCommandHistorySnapshotV3> {
+    const checkpoint = decodeImageEditHistoryCheckpointV3(checkpointValue);
+    const commandIds: string[] = [];
+    const ids = new Set<string>();
+    const references = new Map<string, number | null>();
+    const images = new Set<string>();
+    const sparse = new Map<string, ImageEditSparseResourceStorageV3>();
+    let previousRevision = -1;
+    for (let index = 0; index < checkpoint.pages.length; index++) {
+      const entries = await this.readValidatedPage(checkpoint, index, signal);
+      const roles = collectImageEditResourceRolesV3({ layers: [] }, { version: checkpoint.snapshotVersion, documentId: 'image-history-page', headRevision: checkpoint.headRevision, undo: entries, redo: [] });
+      roles.images.forEach(id => images.add(id));
+      roles.sparse.forEach((storage, id) => {
+        if (sparse.has(id) && sparse.get(id) !== storage) throw new Error('历史资源用途冲突');
+        sparse.set(id, storage);
+      });
+      for (const entry of entries) {
+        if (ids.has(entry.forward.commandId) || entry.forward.expectedRevision <= previousRevision) throw new Error('历史命令 ID 重复或分页顺序无效');
+        ids.add(entry.forward.commandId); commandIds.push(entry.forward.commandId); previousRevision = entry.forward.expectedRevision;
+        for (const ref of entry.resources) references.set(ref.resourceId, ref.byteSize);
+      }
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    if (JSON.stringify(mergeImageEditHistoryResourceReferencesV3([...references].map(([resourceId, byteSize]) => ({ resourceId, byteSize })))) !== JSON.stringify(checkpoint.resources)) throw new Error('历史页资源与检查点不一致');
+    signal?.throwIfAborted();
+    return { version: checkpoint.snapshotVersion, documentId: checkpoint.documentId, headRevision: checkpoint.headRevision,
+      undo: [], redo: [], cold: { checkpoint, prefixLength: checkpoint.total, position: checkpoint.position, commandIds, resourceRoles: { images: [...images], sparse: [...sparse] } } };
   }
 
   async readPage(checkpointValue: unknown, pageIndex: number, signal?: AbortSignal): Promise<ImageEditHistoryEntrySnapshotV3[]> {

@@ -9,10 +9,13 @@ import type { CpuRegionWorkerRequestV3, CpuRegionWorkerEventV3, CpuRegionWorkerV
 export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEventV3, transfer?: ArrayBuffer[]) => void) {
   let activeJob: number | null = null
   let sequence = 0
+  let stages: Record<string, number> = {}
+  const record = (stage: string, ms: number): void => { stages[stage] = (stages[stage] ?? 0) + ms }
   const pending = new Map<number, { resolve(value: CpuRegionWorkerValueV3): void; reject(error: Error): void }>()
   const callback = (request: CpuRegionWorkerCallbackV3): Promise<CpuRegionWorkerValueV3> => new Promise((resolve, reject) => {
     const callbackId = ++sequence
-    pending.set(callbackId, { resolve, reject })
+    const start = performance.now()
+    pending.set(callbackId, { resolve: value => { record(`wait.${request.kind}`, performance.now() - start); resolve(value) }, reject })
     send({ type: 'callback', jobId: activeJob!, callbackId, request })
   })
   return async (message: CpuRegionWorkerRequestV3): Promise<void> => {
@@ -30,15 +33,18 @@ export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEven
       return
     }
     activeJob = message.jobId
+    stages = {}
     const grids = new Map(message.grids)
     const transparent = (region: { width: number; height: number }) => createFloat32PremultipliedRgbaTile(
       region.width, region.height, 'linear-light', new Float32Array(region.width * region.height * 4),
       message.color.workingSpace, message.color.transferFunction, message.color.referenceWhiteNits,
     )
     try {
+      const renderStart = performance.now()
       const rendered = await executeImageEditCpuRenderRegionPlanV3(message.plan, message.region, {
         size: message.size, scaleX: message.scaleX, scaleY: message.scaleY,
         registry: createBuiltInImageEditRenderNodeRegistry(),
+        onStage: record,
         resolveSamplingGrid: (target) => grids.get(`${target.kind}:${target.kind === 'content' ? target.node.id : target.ownerNode.id}`),
         createTransparent: transparent,
         loadRaster: async (node, region) => await callback({ kind: 'raster', nodeId: node.id, region }) as Float32PremultipliedRgbaTile,
@@ -48,10 +54,15 @@ export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEven
         executeCustomEffect: message.customEffects ? async (node, source, mask, region) =>
           await callback({ kind: 'effect', nodeId: node.id, source, mask, region }) as Float32PremultipliedRgbaTile : undefined,
       })
+      record('render', performance.now() - renderStart)
+      const projectStart = performance.now()
       const projected = projectImageEditorV3RenderedRegionToOutput(rendered ?? transparent(message.region),
         message.region, message.output.rect, message.output.geometry)
+      record('project', performance.now() - projectStart)
+      const encodeStart = performance.now()
       const tile = encodeImageEditorV3RenderedOutputTile(projected, message.output.rect, message.output.description)
-      send({ type: 'completed', jobId: message.jobId, tile }, [tile.pixels.buffer as ArrayBuffer])
+      record('encode', performance.now() - encodeStart)
+      send({ type: 'completed', jobId: message.jobId, tile, stages }, [tile.pixels.buffer as ArrayBuffer])
     } catch (error) {
       send({ type: 'failed', jobId: message.jobId, message: error instanceof Error ? error.message : String(error) })
     } finally {

@@ -1,5 +1,4 @@
 import {
-  decodeImageEditCommandHistorySnapshotV3,
   type ImageEditCommandHistorySnapshotV3,
 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
 import { decodeImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentCodec'
@@ -9,6 +8,7 @@ import type { ImageEditHistoryResourceReferenceV3 } from '../../../../src/core/i
 import type { ResourceId } from './contracts'
 import { parseResourceId } from './resource-store'
 import { decodeImageEditHistoryCheckpointV3, type ImageEditHistoryCheckpointV3 } from '../../../../src/core/imageEdit/v3/historyPaging/checkpoint'
+import { decodeImageEditRuntimeHistoryV3, runtimeHistoryResourcesV3 } from '../../../../src/core/imageEdit/v3/historyPaging/runtimeSnapshot'
 export { ImageEditHistoryPageStoreV3 } from './history-pages/store'
 
 export function normalizePersistedImageEditDocumentV3(
@@ -57,7 +57,7 @@ export function normalizePersistedImageEditHistoryV3(
   if (typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Persisted image edit history must be a structured snapshot')
   }
-  const decoded = decodeImageEditCommandHistorySnapshotV3(value)
+  const decoded = { snapshot: decodeImageEditRuntimeHistoryV3(value) }
   if (decoded.snapshot.documentId !== documentId || decoded.snapshot.headRevision !== revision) {
     throw new Error('Image edit history head does not match its document envelope')
   }
@@ -70,7 +70,7 @@ export function collectPersistedImageEditHistoryResourcesV3(
   history: ImageEditCommandHistorySnapshotV3 | ImageEditHistoryCheckpointV3 | undefined,
 ): ImageEditHistoryResourceReferenceV3[] {
   if (history && 'format' in history) return [...history.resources, ...history.pages.map(page => ({ resourceId: page.resourceId, byteSize: page.byteSize }))]
-  return history ? retainedResources(history) : []
+  return history ? runtimeHistoryResourcesV3(history) : []
 }
 
 export function normalizePersistedImageEditCheckpointV3(value: unknown, documentId: string, revision: number): ImageEditHistoryCheckpointV3 | undefined {

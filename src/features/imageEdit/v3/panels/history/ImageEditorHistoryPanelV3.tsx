@@ -39,7 +39,7 @@ const HistoryList = memo(function HistoryList({ port, thumbnails, disabled, onJu
   const { t } = useTranslation('ui')
   const [view, setView] = useState(() => port.getHistoryView())
   const list = useRef<VirtuosoHandle>(null)
-  const pages = useRef(new Map<number, ImageEditHistoryRowV3[]>())
+  const pages = useRef(new Map<string, Promise<ImageEditHistoryRowV3[]>>())
   useEffect(() => {
     const read = (): void => {
       const next = port.getHistoryView()
@@ -53,23 +53,51 @@ const HistoryList = memo(function HistoryList({ port, thumbnails, disabled, onJu
     return port.subscribe(read)
   }, [port])
   useEffect(() => { list.current?.scrollIntoView({ index: view.position, align: 'center', behavior: 'auto' }) }, [view.position])
-  if (view.total === 0) return <UiEmpty size="sm" icon={<History className="h-5 w-5" />} title={t('imageEditor.v3.history.empty', { defaultValue: '还没有编辑记录' })} />
-  const rowAt = (index: number): ImageEditHistoryRowV3 => {
+  const pageAt = useCallback((index: number): Promise<ImageEditHistoryRowV3[]> => {
     const pageIndex = Math.floor(index / 64)
-    let page = pages.current.get(pageIndex)
+    const key = `${view.generation}:${pageIndex}`
+    let page = pages.current.get(key)
     if (!page) {
-      page = port.readHistoryPage(pageIndex * 64, 64)
+      page = port.readHistoryPageAsync ? port.readHistoryPageAsync(pageIndex * 64, 64) : Promise.resolve(port.readHistoryPage(pageIndex * 64, 64))
       // 有界视图缓存；淘汰的页可随滚动重新读取，历史条目不被裁剪。
-      if (pages.current.size >= 8) pages.current.delete(pages.current.keys().next().value as number)
-      pages.current.set(pageIndex, page)
+      if (pages.current.size >= 8) pages.current.delete(pages.current.keys().next().value as string)
+      pages.current.set(key, page)
+      void page.catch(() => { if (pages.current.get(key) === page) pages.current.delete(key) })
     }
-    return page[index % 64]
-  }
+    return page
+  }, [port, view.generation])
+  if (view.total === 0) return <UiEmpty size="sm" icon={<History className="h-5 w-5" />} title={t('imageEditor.v3.history.empty', { defaultValue: '还没有编辑记录' })} />
   return <Virtuoso ref={list} className="min-h-0 flex-1" totalCount={view.total + 1} initialTopMostItemIndex={view.position}
-    computeItemKey={index => rowAt(index).key}
-    itemContent={index => {
-      const row = rowAt(index)
-      return <div className="px-2 py-0.5" data-image-history-row={index}>
+    computeItemKey={index => `${view.generation}:${index}`}
+    itemContent={index => <HistoryRow index={index} pageAt={pageAt} thumbnails={thumbnails} view={view} disabled={disabled} onJump={onJump} />} />
+})
+
+const HistoryRow = memo(function HistoryRow({ index, pageAt, thumbnails, view, disabled, onJump }: {
+  index: number; pageAt: (index: number) => Promise<ImageEditHistoryRowV3[]>; thumbnails: ImageEditThumbnailsV3;
+  view: ReturnType<HistoryPort['getHistoryView']>; disabled: boolean; onJump: (position: number) => void
+}): JSX.Element {
+  const { t } = useTranslation('ui')
+  const [row, setRow] = useState<ImageEditHistoryRowV3 | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    let active = true
+    setRow(null); setFailed(false)
+    void pageAt(index).then(page => { if (active) setRow(page[index % 64]) }).catch(error => {
+      if (!active) return
+      setFailed(true)
+      logger.warn('历史页读取失败', { event: 'image_edit.history.page.failed', error })
+    })
+    return () => { active = false }
+  }, [index, pageAt, retry])
+  if (failed) return <UiError size="sm" title={t('imageEditor.v3.history.pageFailed', { defaultValue: '未能读取历史记录' })}
+    message={t('imageEditor.v3.history.pageFailedMessage', { defaultValue: '编辑内容已保留，请重试读取。' })}
+    actions={<UiButton size="sm" onClick={() => setRetry(value => value + 1)}>{t('common.retry', { defaultValue: '重试' })}</UiButton>} />
+  // 占位与含缩略图的正常行等高，冷页到达不改变 Virtuoso 的滚动锚点。
+  if (!row) return <div className="h-11 px-2 py-0.5"><UiLoading size="xs"
+    className="h-full !flex-row gap-2 !py-0 [&>p]:!mt-0"
+    message={t('imageEditor.v3.history.loading', { defaultValue: '正在读取历史…' })} /></div>
+  return <div className="px-2 py-0.5" data-image-history-row={index}>
         <UiOptionButton variant="menu" size="sm" className="w-full" active={index === view.position}
           aria-current={index === view.position ? 'step' : undefined} disabled={disabled}
           onClick={() => onJump(index)}>
@@ -78,7 +106,6 @@ const HistoryList = memo(function HistoryList({ port, thumbnails, disabled, onJu
           {index === view.position && <span className="shrink-0">{t('imageEditor.v3.history.current', { defaultValue: '当前位置' })}</span>}
         </UiOptionButton>
       </div>
-    }} />
 })
 
 export function ImageEditorHistoryPanelV3({ controller }: ImageEditorPanelContextV3): JSX.Element {

@@ -103,7 +103,11 @@ function installOwner(instance: OwnedInstance, host?: ImageEditPersistenceHostV3
   instance.persistenceOwner = new ImageEditPersistenceOwnerV3(
     instance.documentId, queue, () => instance.bus.getPersistenceSnapshot(), host?.confirmProjection, host?.projection,
     () => !instance.closing,
-    () => releaseSmartContentResourcesV3(instance.bus),
+    async () => {
+      const history = queue.getReference().history
+      if (history) instance.bus.confirmPersistedHistory(history)
+      await releaseSmartContentResourcesV3(instance.bus)
+    },
   )
 }
 

@@ -59,7 +59,10 @@ export class ImageEditCpuRegionWorkerClientV3 {
       this.job = null
       job.unsubscribe()
       if (event.type === 'failed') job.reject(new Error(event.message))
-      else job.resolve(event.tile)
+      else {
+        for (const [stage, ms] of Object.entries(event.stages)) job.context.onStage?.(stage, ms)
+        job.resolve(event.tile)
+      }
       return
     }
     try {

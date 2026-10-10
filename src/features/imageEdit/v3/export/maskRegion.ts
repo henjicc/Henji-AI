@@ -117,6 +117,22 @@ export async function loadImageEditorV3SparseMaskRegion(
     const tiles = await loadMaskTiles(references, signal, dependencies)
     const output = reference.vectorPaths ? rasterizeVectorCoverage(reference.vectorPaths,region,2**(-mip),2**(-mip),signal) : new Float32Array(region.width * region.height)
     if (!reference.vectorPaths && reference.defaultValue === 1) output.fill(1)
+    if (mip === 0) {
+      // 精确整数采样：只覆盖相交的稀疏块，空白画布无需逐像素构造字符串/查 Map。
+      for (const reference of references) {
+        throwIfAborted(signal)
+        const tile = tiles.get(reference.tileKey)!
+        const tileX = reference.tileX * 512, tileY = reference.tileY * 512
+        const left = Math.max(region.x, tileX), top = Math.max(region.y, tileY)
+        const right = Math.min(region.x + region.width, tileX + tile.width)
+        const bottom = Math.min(region.y + region.height, tileY + tile.height)
+        for (let y = top; y < bottom; y++) {
+          const start = (y - tileY) * tile.width + left - tileX
+          output.set(tile.data.subarray(start, start + right - left), (y - region.y) * region.width + left - region.x)
+        }
+      }
+      return createFloat32MaskTile(region.width, region.height, output)
+    }
     const scale = 2 ** mip
     for (let y = 0; y < region.height; y += 1) {
       throwIfAborted(signal)

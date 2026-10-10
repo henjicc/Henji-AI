@@ -56,6 +56,7 @@ import {
 } from './brushRegion'
 import {
   loadImageEditorV3SourceRegion,
+  ImageEditorDecodedSourceTilesV3,
 } from './sourceRegion'
 import { createImageEditorSparseMaskPlanV3 } from '../execution/sparseMaskResourcesV3'
 import {
@@ -167,6 +168,7 @@ async function* renderTiles(
     return client
   }
   let completed = 0
+  const cpuStages: Record<string, number> = {}
   let diffusionAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3DiffusionAnalyses>> | null = null
   let glowAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3VgpuGlowAnalyses>> | null = null
   let fastBlurAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3FastBlurAnalyses>> | null = null
@@ -281,6 +283,7 @@ async function* renderTiles(
               parts = splitImageEditCpuOutputV3(workerOutput, 1)
             }
             const workingLease = acquireOrThrow(budget, 'in-flight', workingBytes())
+            const decodedTiles = new ImageEditorDecodedSourceTilesV3(budget)
             try {
               const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
               const loadSource = (
@@ -300,11 +303,14 @@ async function* renderTiles(
                   referenceWhiteNits,
                   taskContext.signal,
                   dependencies,
+                  0,
+                  decodedTiles,
                 )
                 sourceCache.set(key, loaded)
                 return loaded
               }
               const renderContext: ImageEditCpuRegionRenderContextV3 = {
+                onStage: (stage, ms) => { cpuStages[stage] = (cpuStages[stage] ?? 0) + ms },
                 size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
                 registry,
                 signal: taskContext.signal,
@@ -434,6 +440,7 @@ async function* renderTiles(
                 throw error
               }
             } finally {
+              decodedTiles.release()
               workingLease.release()
             }
           },
@@ -450,7 +457,7 @@ async function* renderTiles(
     logger.info('完成图片编辑 V3 分块导出渲染', {
       event: 'image_editor_v3.export.render.completed',
       requestId: currentSessionId,
-      context: { documentId: document.id, revision: document.revision, tileCount: completed },
+      context: { documentId: document.id, revision: document.revision, tileCount: completed, cpuStages },
     })
   } catch (error) {
     if (controller.signal.aborted) {

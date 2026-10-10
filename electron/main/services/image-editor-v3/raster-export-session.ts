@@ -185,7 +185,7 @@ export class RasterExportSessionManager {
     this.startingByOwner.set(request.ownerId, startingForOwner + 1)
     this.startingTargets.add(resolvedTarget)
     try {
-      const snapshot = await this.documents.load(request.documentRef)
+      const snapshot = await this.documents.loadCheckpoint(request.documentRef)
       const sourceFingerprint = createImageEditSourceFingerprint(snapshot)
       if (snapshot.revision !== request.revision || sourceFingerprint !== request.sourceFingerprint) {
         throw new Error('Raster export snapshot does not match the persisted document')
@@ -445,7 +445,7 @@ export class RasterExportSessionManager {
     sourceFingerprint: string,
   ): Promise<boolean> {
     try {
-      const current = await this.documents.load(documentId)
+      const current = await this.documents.loadCheckpoint(documentId)
       return current.revision === revision
         && createImageEditSourceFingerprint(current) === sourceFingerprint
     } catch {

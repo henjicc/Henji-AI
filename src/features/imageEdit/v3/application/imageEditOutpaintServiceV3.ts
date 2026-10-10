@@ -46,7 +46,7 @@ export async function restoreImageEditOutpaintJobsV3(documentId: string, signal:
     signal.throwIfAborted();
     for (const record of records) {
       const metadata = storedOutpaintSchema.safeParse(record.params.imageEditOutpaint);
-      if (!metadata.success || metadata.data.documentId !== documentId || jobs.has(record.id) || record.status === 'cancelled' || findApplied(bus, record.id)) continue;
+      if (!metadata.success || metadata.data.documentId !== documentId || jobs.has(record.id) || record.status === 'cancelled' || await findApplied(bus, record.id, signal)) continue;
       jobs.set(record.id, { taskId: record.id, documentId, plan: restorePlan(metadata.data), status: 'failed', progress: 0,
         error: record.errorMessage ?? '发现尚未回填的扩图，请恢复原任务；不会重新生成或重复计费' });
       update(record.id, {});
@@ -81,23 +81,23 @@ function findPlaced(layers: readonly ImageEditLayerV3[], taskId: string): string
     if (layer.type === 'group') { const id = findPlaced(layer.children, taskId); if (id) return id; }
   }
 }
-function findApplied(bus: ImageEditCommandBusV3, taskId: string): string | undefined {
+async function findApplied(bus: ImageEditCommandBusV3, taskId: string, signal?: AbortSignal): Promise<string | undefined> {
   const placed = findPlaced(bus.getSnapshot().document.layers, taskId);
   if (placed) return placed;
   const visit = (command: ImageEditCommandV3): string | undefined => {
     if (command.type === 'document.atomic') { for (const child of command.commands) { const id = visit(child); if (id) return id; } }
     if (command.type === 'layer.add' || command.type === 'layer.replace') return findPlaced([command.layer], taskId);
   };
-  const history = bus.getPersistenceSnapshot().history;
-  for (const entry of [...history.undo, ...history.redo]) { const id = visit(entry.forward); if (id) return id; }
+  for await (const entry of bus.readHistoryEntries(signal)) { const id = visit(entry.forward); if (id) return id; }
 }
 async function complete(job: ImageEditOutpaintJobV3, controller: AbortController, recovering: boolean): Promise<void> {
   const { bus } = requireImageEditDocumentInstanceV3(job.documentId);
   const release = leaseImageEditDocumentInstanceV3(job.documentId);
   const signal = AbortSignal.any([controller.signal, bus.getLifecycleSignal()]);
   try {
+    const appliedLayerId = jobs.get(job.taskId)?.layerId ?? await findApplied(bus, job.taskId, signal);
     const layerId = await completeInPlaceGeneration({ signal,
-      readApplied: () => jobs.get(job.taskId)?.layerId ?? findApplied(bus, job.taskId),
+      readApplied: () => jobs.get(job.taskId)?.layerId ?? appliedLayerId,
       wait: () => waitForGenerationCompletion(job.taskId, signal, recovering, progress => update(job.taskId, { progress })),
       place: async () => {
         update(job.taskId, { status: 'placing' });
@@ -202,7 +202,7 @@ export async function recoverImageEditOutpaintV3(documentId: string, taskId: str
     const metadata = storedOutpaintSchema.parse(record?.params.imageEditOutpaint);
     if (metadata.documentId !== documentId) throw new Error('扩图任务与图片文档不一致');
     const plan = restorePlan(metadata);
-    job = { taskId, documentId, plan, status: 'placing', progress: 0, layerId: findApplied(bus, taskId) };
+    job = { taskId, documentId, plan, status: 'placing', progress: 0, layerId: await findApplied(bus, taskId) };
     jobs.set(taskId, job);
   }
   if (job.documentId !== documentId) throw new Error('扩图任务与图片文档不一致');

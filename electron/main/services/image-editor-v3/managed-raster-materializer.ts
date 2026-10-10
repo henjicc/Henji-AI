@@ -130,7 +130,7 @@ export class ManagedRasterMaterializer {
       })
       const lease = await this.resources.acquireLease([stored.id])
       try {
-        const current = await this.documents.load(completed.documentId)
+        const current = await this.documents.loadPaged(completed.documentId)
         if (
           current.revision !== completed.revision
           || createImageEditSourceFingerprint(current) !== completed.sourceFingerprint

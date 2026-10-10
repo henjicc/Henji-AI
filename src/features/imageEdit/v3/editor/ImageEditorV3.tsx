@@ -49,6 +49,9 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
       data-host-profile={controller.profile.id}
       className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-gap text-text1 ${props.className ?? ''}`}
     >
+      {controller.historyFailed && <UiError size="sm" title={t('imageEditor.v3.history.failed', { defaultValue: '未能恢复所选历史' })}
+        message={t('imageEditor.v3.history.failedMessage', { defaultValue: '当前编辑内容已保留。请重新选择历史记录后重试。' })}
+        actions={<UiButton size="sm" onClick={controller.dismissHistoryFailure}>{t('imageEditor.v3.history.continue', { defaultValue: '继续编辑' })}</UiButton>} />}
       {builtInToolRegistration.failed ? <>
         <UiToolbar variant="command" trailing={props.toolbarActions}>{props.toolbarLeading}</UiToolbar>
         <UiError className="flex-1" message={t('imageEditor.v3.tools.loadFailed')} />

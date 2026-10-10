@@ -27,7 +27,7 @@ export type CpuRegionWorkerRequestV3 =
   | { type: 'reply'; jobId: number; callbackId: number; value?: CpuRegionWorkerValueV3; error?: string }
 export type CpuRegionWorkerEventV3 =
   | { type: 'callback'; jobId: number; callbackId: number; request: CpuRegionWorkerCallbackV3 }
-  | { type: 'completed'; jobId: number; tile: ImageEditCpuOutputTileV3 }
+  | { type: 'completed'; jobId: number; tile: ImageEditCpuOutputTileV3; stages: Readonly<Record<string, number>> }
   | { type: 'failed'; jobId: number; message: string }
 
 export interface CpuRegionWorkerPortV3 {

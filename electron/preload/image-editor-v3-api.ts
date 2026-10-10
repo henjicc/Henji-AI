@@ -100,6 +100,7 @@ export function createImageEditorV3Api(
     releaseRepairResources: request => nativeInvoke('imageEditorV3:repair:release', request),
     listDocuments: (request) => nativeInvoke('imageEditorV3:document:list', request),
     loadDocument: (request) => nativeInvoke('imageEditorV3:document:load', request),
+    readHistoryPage: (request) => nativeInvoke('imageEditorV3:history:page', request),
     saveDocument: (request) => nativeInvoke('imageEditorV3:document:save', request),
     deleteDocumentIfRevision: (request) => nativeInvoke(
       'imageEditorV3:document:deleteIfRevision',

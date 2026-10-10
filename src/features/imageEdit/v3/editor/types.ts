@@ -91,7 +91,7 @@ export interface ImageEditorV3Props {
 
 export interface ImageEditorV3Controller {
   /** 缩减展示宿主可不附着历史；正式编辑器由同一实例总线提供。 */
-  historyPort?: Pick<import('../application/imageEditCommandBus').ImageEditCommandBusV3, 'getHistoryView' | 'readHistoryPage' | 'readHistoryDocument' | 'jumpToHistory' | 'subscribe'>
+  historyPort?: Pick<import('../application/imageEditCommandBus').ImageEditCommandBusV3, 'getHistoryView' | 'readHistoryPage' | 'readHistoryDocument' | 'jumpToHistory' | 'subscribe'> & Partial<Pick<import('../application/imageEditCommandBus').ImageEditCommandBusV3, 'readHistoryPageAsync'>>
   historyResourceDescriptors?: readonly ImageEditorV3ResourceDescriptor[]
   regionPort?: Pick<import('../application/imageEditCommandBus').ImageEditCommandBusV3, 'getSnapshot' | 'setSelection' | 'subscribe'>
   setNamedRegions?: (regions: ImageEditNamedRegionV3[]) => void
@@ -148,6 +148,8 @@ export interface ImageEditorV3Controller {
   ) => void
   undo: () => void
   redo: () => void
+  historyFailed?: boolean
+  dismissHistoryFailure?: () => void
   canUndo: boolean
   canRedo: boolean
 }

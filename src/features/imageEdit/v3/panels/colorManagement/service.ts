@@ -86,9 +86,10 @@ export async function prepareColorSettingsV3(bus: ImageEditCommandBusV3, value: 
     const ids = new Set([command.commandId, ...command.commands.map(child => child.commandId)]);
     logger.info('颜色调整已准备', { event: 'image_edit.color.prepare.completed', context: { documentId: original.id, mode: settings.mode } });
     return { commands: [command], release: async () => {
-      const history = bus.getPersistenceSnapshot().history;
-      const published = [...history.undo, ...history.redo].some(entry => ids.has(entry.forward.commandId)
-        || (entry.forward.type === 'document.atomic' && entry.forward.commands.some(child => ids.has(child.commandId))));
+      let published = false;
+      for await (const entry of bus.readHistoryEntries()) {
+        if (ids.has(entry.forward.commandId) || (entry.forward.type === 'document.atomic' && entry.forward.commands.some(child => ids.has(child.commandId)))) { published = true; break; }
+      }
       if (!published) await abandon();
     } };
   } catch (error) {

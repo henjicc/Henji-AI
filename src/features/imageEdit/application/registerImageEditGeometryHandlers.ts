@@ -18,7 +18,7 @@ export function registerImageEditGeometryHandlers(registrar: ApplicationCapabili
       try { commandId = commitDocumentGeometryV3(bus, draft); } catch (error) { await draft.release(); throw error; }
       const current = bus.getSnapshot().document;
       return { ref: parsed.documentRef, commandId, removedLayers, createdLayers: current.layers.map(layer => imageEditV3LayerRef(documentId, layer.id)), width: current.geometry.width, height: current.geometry.height,
-        verification: { verified: current.geometry.width === parsed.width && current.geometry.height === parsed.height && bus.getPersistenceSnapshot().history.undo.at(-1)?.forward.commandId === commandId } };
+        verification: { verified: current.geometry.width === parsed.width && current.geometry.height === parsed.height && (await bus.readHistoryHead())?.commandId === commandId } };
     });
   });
 }

@@ -50,7 +50,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
       if (access && persistenceOwner?.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
       const commandId = await paintImageEditTargetV3(bus, layerId, parsed.destination, parsed.operation, context.signal)
       const current = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
-      const head = bus.getPersistenceSnapshot().history.undo.at(-1)?.forward
+      const head = (await bus.readHistoryHead())
       const tiles = parsed.destination === 'mask' ? current?.layer.mask?.tiles : current?.layer.type === 'raster' ? current.layer.tiles : undefined
       return { ref: parsed.destination === 'mask' ? imageEditV3MaskRef(documentId, layerId) : imageEditV3LayerRef(documentId, layerId), changed: commandId !== null, commandId,
         verification: { verified: commandId === null || (head?.commandId === commandId && (head.type === 'raster.apply-tile-delta' || head.type === 'mask.apply-tile-delta') && head.changes.every(change => tiles?.[change.tileKey] === change.resourceId)) } }
@@ -119,7 +119,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
         ...(parsed.region.kind === 'rectangle' ? { rectangle: { x: parsed.region.x, y: parsed.region.y, width: parsed.region.width, height: parsed.region.height } } : {}),
         ...(capability.id === repairImageEditRegionCapability.id ? { sourceRegion: imageEditRepairInputSchema.parse(input).sourceRegion } : {}), signal: context.signal })
       const current = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
-      const head = bus.getPersistenceSnapshot().history.undo.at(-1)?.forward
+      const head = (await bus.readHistoryHead())
       return { ref: imageEditV3LayerRef(documentId, layerId), documentRef: imageEditV3DocumentRef(documentId), commandId: result.commandId,
         verification: { verified: current?.layer.type === 'raster' && head?.commandId === result.commandId && head.type === 'raster.apply-tile-delta' && head.layerId === layerId && head.changes.every(change => current.layer.type === 'raster' && current.layer.tiles[change.tileKey] === change.resourceId) } }
     })

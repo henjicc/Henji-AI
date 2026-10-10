@@ -131,7 +131,7 @@ function completed(
 async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
   const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
   assertHistoryJumpCurrent(payload)
-  if (payload.commandIdsNewestFirst.length && !bus.undoCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_UNDO_EMPTY')
+  if (payload.commandIdsNewestFirst.length && !(await bus.undoCommands(payload.commandIdsNewestFirst))) throw new Error('IMAGE_EDIT_V3_UNDO_EMPTY')
   if (payload.historyJump) await bus.jumpToHistory(payload.historyJump.before)
   const revision = getImageEditDocumentCatalogRevisionV3()
   return {
@@ -150,7 +150,7 @@ async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedSt
 async function rollbackPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
   const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
   assertHistoryJumpCurrent(payload)
-  if (payload.commandIdsNewestFirst.length && !bus.rollbackCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_ROLLBACK_EMPTY')
+  if (payload.commandIdsNewestFirst.length && !(await bus.rollbackCommands(payload.commandIdsNewestFirst))) throw new Error('IMAGE_EDIT_V3_ROLLBACK_EMPTY')
   if (payload.historyJump) await bus.jumpToHistory(payload.historyJump.before)
   const revision = getImageEditDocumentCatalogRevisionV3()
   return {
@@ -216,7 +216,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
       })
       return result
     } catch (error) {
-      if (applied.length > 0) bus.rollbackCommands([...applied].reverse())
+      if (applied.length > 0) await bus.rollbackCommands([...applied].reverse())
       if (historyChanged) await bus.jumpToHistory(historyBefore)
       logger.error('图片编辑 V3 属性写入失败', {
         event: 'image_edit.v3.application_mutation.apply.failed',

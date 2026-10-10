@@ -45,7 +45,7 @@ export async function paintImageEditTargetV3(bus: ImageEditCommandBusV3, layerId
       const result = await stroke.finish();
       signal?.throwIfAborted(); bus.getLifecycleSignal().throwIfAborted();
       if (bus.getSnapshot().selectionRevision !== start.selectionRevision) throw new Error('选区已变化，请重新绘画');
-      return result ? bus.getPersistenceSnapshot().history.undo.at(-1)?.forward.commandId ?? null : null;
+      return result ? (await bus.readHistoryHead())?.commandId ?? null : null;
     } finally { unsubscribe(); cancel(); signal?.removeEventListener('abort', cancel); bus.getLifecycleSignal().removeEventListener('abort', cancel); }
   }
   let fill: PaintFill;
