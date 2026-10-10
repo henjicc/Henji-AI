@@ -5,6 +5,8 @@ import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistenc
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
 import { styleKitSchema } from '../../videoEdit/styleKit'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
+import { creativeIntentsSchema } from '../../creativeIntent/persistence'
+import { VIDEO_EDIT_CONTENT_VERSION } from '../../persistence/schemaVersions'
 
 /*
  * 剪辑（`.henji-video`，3.1 剪辑接入）：项目的主文档，始终放在项目里（可以在项目之间移动）。
@@ -37,6 +39,7 @@ const sequenceSchema = z.looseObject({
 })
 
 export const videoEditContentSchema = z.object({
+  creativeIntents: creativeIntentsSchema.optional(),
   styleKits: z.array(styleKitSchema).optional(),
   colorLuts: z.array(colorLutAssetSchema).optional(),
   media: z.array(z.looseObject({ id: z.string().min(1), path: z.string().min(1) })),
@@ -74,6 +77,8 @@ function sequenceHasContent(sequence: VideoEditDocumentContent['sequences'][numb
  */
 function isEmptyVideoEditContent(content: VideoEditDocumentContent): boolean {
   return content.media.length === 0
+    && (content.creativeIntents?.drafts.length ?? 0) === 0
+    && (content.creativeIntents?.sessions.length ?? 0) === 0
     && (content.colorLuts?.length ?? 0) === 0
     && content.items.length === 0
     && content.bins.length === 0
@@ -107,7 +112,7 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   untitledNames: { zh: '未命名剪辑', en: 'Untitled Edit' },
   storage: 'json',
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
-  version: 1,
+  version: VIDEO_EDIT_CONTENT_VERSION,
   contentSchema: videoEditContentSchema,
   migrations: {},
   createEmptyContent: createEmptyVideoEditContent,
