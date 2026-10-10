@@ -3,7 +3,7 @@
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import type { ImageEditorManagedPreviewResultV3 } from './imageEditorPreviewClientV3'
 import type { ManagedImageEditorPreviewStateV3 } from './useManagedImageEditorPreviewV3'
@@ -11,6 +11,7 @@ import type { ImageEditorViewportCompositeStateV3 } from './useImageEditorViewpo
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 
 const mocked = vi.hoisted(() => ({
+  descriptors: vi.fn(),
   managed: {
     result: null,
     resultDocumentId: null,
@@ -35,7 +36,7 @@ vi.mock('./useManagedImageEditorPreviewV3', () => ({
 }))
 
 vi.mock('./useImageEditorViewportCompositeV3', () => ({
-  useImageEditorViewportCompositeV3: () => mocked.viewport,
+  useImageEditorViewportCompositeV3: (...args: unknown[]) => { mocked.descriptors(args[3]); return mocked.viewport },
 }))
 
 import { useImageEditorDisplayPipelineV3 } from './useImageEditorDisplayPipelineV3'
@@ -103,6 +104,15 @@ function snapshot(
 }
 
 describe('useImageEditorDisplayPipelineV3', () => {
+  it('暂存补丁从权威预览元数据进入同一 GPU 资源描述，取消立即移除而不污染作品', () => {
+    const resourceId = `sha256:${'f'.repeat(64)}`, bytes = 256, first = snapshot(0, {})
+    first.document.layers = [createImageEditRasterLayerV3('layer', '像素')]
+    let current = { ...first, previewOverrides: { fill: { id: 'fill', kind: 'brush' as const, targetId: 'layer', baseRevision: 0, value: { tiles: { '0/0/0': resourceId } }, resourceByteSizes: { [resourceId]: bytes } } } } as ImageEditCommandBusSnapshotV3
+    const rendered = renderHook(() => useImageEditorDisplayPipelineV3('session', current, true, [], layout))
+    expect(mocked.descriptors).toHaveBeenLastCalledWith([{ resourceRef: resourceId, byteLength: bytes, mediaType: 'application/x-henji-brush-tile-v3' }])
+    expect(first.document.layers[0]).toMatchObject({ tiles: {} }); expect(first.document.revision).toBe(0)
+    current = first; rendered.rerender(); expect(mocked.descriptors).toHaveBeenLastCalledWith([])
+  })
   beforeEach(() => {
     mocked.managed.result = null
     mocked.managed.resultDocumentId = null

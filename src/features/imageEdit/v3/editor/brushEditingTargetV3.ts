@@ -18,7 +18,7 @@ import {
   createImageEditorRasterBrushTileLoaderV3,
 } from './rasterBrushTilesV3'
 
-export type ImageEditorBrushToolIdV3 = 'raster-brush' | 'eraser' | 'mask-edit'
+export type ImageEditorBrushToolIdV3 = 'raster-brush' | 'eraser' | 'mask-edit' | 'clone-stamp' | 'healing-brush'
 
 export interface ImageEditorBrushEditingTargetV3 {
   layerId: string
@@ -47,6 +47,7 @@ export function resolveImageEditorBrushEditingTargetV3(input: {
   maskValue?: number
   resourceByteSizes: ReadonlyMap<string, number>
 }): ImageEditorBrushEditingTargetResolutionV3 {
+  if ((input.activeTool === 'clone-stamp' || input.activeTool === 'healing-brush') && input.editTarget === 'mask') return { ready: false, reason: 'retouchPixelsOnly' }
   if (input.activeTool === 'mask-edit' || input.editTarget === 'mask') {
     const resolved = resolveImageEditorMaskBrushLayerV3(input.document, input.selectedLayerIds)
     if (!resolved.ready) return resolved

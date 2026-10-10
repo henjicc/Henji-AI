@@ -45,6 +45,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'mask-edit',
       'paint-gradient',
       'paint-fill',
+      'clone-stamp', 'healing-brush', 'content-aware-fill',
       'free-transform', 'perspective-transform', 'mesh-transform',
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))

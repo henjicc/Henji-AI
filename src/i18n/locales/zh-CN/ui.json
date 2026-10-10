@@ -896,7 +896,10 @@
         "select-focus": "焦点区域",
         "free-transform": "自由变换",
         "perspective-transform": "透视",
-        "mesh-transform": "网格变形"
+        "mesh-transform": "网格变形",
+        "clone-stamp": "仿制图章",
+        "healing-brush": "修复画笔",
+        "content-aware-fill": "内容识别填充"
       },
       "layerControls": {
         "rotate": "旋转图层",
@@ -957,7 +960,8 @@
         "hidden": "所选栅格图层或其所在组已隐藏，暂时不能绘制。",
         "singular": "所选栅格图层的变换不可逆，暂时不能绘制。",
         "failed": "栅格笔画未写入：{{reason}}",
-        "deformed": "请先恢复原像素再绘画；独立蒙版不受影响。"
+        "deformed": "请先恢复原像素再绘画；独立蒙版不受影响。",
+        "retouchPixelsOnly": "图章与修复画笔需要像素目标，请切回像素"
       },
       "repair": {
         "auto": "自动",
@@ -1212,6 +1216,20 @@
         "invalid": "无法应用此变换",
         "recover": "控制点不能重合或折叠。调整控制点，或取消以恢复。",
         "restore": "恢复原像素"
+      },
+      "retouch": {
+        "group": "修饰",
+        "size": "大小",
+        "opacity": "整笔透明度",
+        "flow": "流量",
+        "hardness": "硬度",
+        "aligned": "对齐供体",
+        "showSource": "显示来源",
+        "sample": "取样",
+        "resample": "重新取样",
+        "sampleFirst": "请先 Alt 点击干净来源，或点取样后在画面中选择来源",
+        "previewFill": "预览填充",
+        "apply": "应用"
       }
     }
   },

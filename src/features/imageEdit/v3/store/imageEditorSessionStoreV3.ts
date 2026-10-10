@@ -22,6 +22,11 @@ export interface ImageEditorToolSettingsV3 {
   paintMaskValue: number
   paintMaskEnd: number
   paintGradientKind: 'linear' | 'radial'
+  retouchSource: { documentId: string; layerId: string; x: number; y: number } | null
+  retouchOffset: { x: number; y: number } | null
+  retouchAligned: boolean
+  retouchShowSource: boolean
+  retouchPicking: boolean
   maskMode: 'paint' | 'erase'
   selectionCombineMode: ImageEditSelectionCombineModeV3
   annotationLineWidthPercent: number
@@ -86,6 +91,11 @@ const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
   paintMaskValue: 1,
   paintMaskEnd: 0,
   paintGradientKind: 'linear',
+  retouchSource: null,
+  retouchOffset: null,
+  retouchAligned: true,
+  retouchShowSource: true,
+  retouchPicking: false,
   maskMode: 'paint',
   selectionCombineMode: 'replace',
   annotationLineWidthPercent: DEFAULT_LINE_WIDTH_PERCENT,

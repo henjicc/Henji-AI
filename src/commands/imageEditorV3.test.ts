@@ -101,6 +101,26 @@ afterEach(() => {
 })
 
 describe('图片编辑 V3 commands 契约', () => {
+  it('绘画/GPU/供体共享两个原生读取槽，排队取消不调用原生，完成后继续读取', async () => {
+    const platform = createPlatform(), finish: (() => void)[] = []; let active = 0, peak = 0
+    vi.mocked(platform.readBrushTiles).mockImplementation(async () => {
+      active++; peak = Math.max(peak, active)
+      await new Promise<void>(resolve => finish.push(resolve)); active--
+      return { tiles: [] }
+    })
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const abort = new AbortController()
+    const tasks = [readImageEditorV3BrushTiles({ requestId: 'one', tiles: [] }), readImageEditorV3BrushTiles({ requestId: 'two', tiles: [] })]
+    const cancelled = readImageEditorV3BrushTiles({ requestId: 'cancelled', tiles: [] }, abort.signal)
+    const rejected = expect(cancelled).rejects.toThrow('取消')
+    const last = readImageEditorV3BrushTiles({ requestId: 'four', tiles: [] })
+    await vi.waitFor(() => expect(platform.readBrushTiles).toHaveBeenCalledTimes(2))
+    abort.abort(); await rejected
+    finish.shift()!(); await vi.waitFor(() => expect(platform.readBrushTiles).toHaveBeenCalledTimes(3))
+    while (finish.length) finish.shift()!()
+    await Promise.all([...tasks, last]); expect(peak).toBe(2)
+    expect(vi.mocked(platform.readBrushTiles).mock.calls.map(([request]) => request.requestId)).toEqual(['one', 'two', 'four'])
+  })
   it('条件删除通过 PAL 发送可取消的精确 revision 请求', async () => {
     const platform = createPlatform()
     mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })

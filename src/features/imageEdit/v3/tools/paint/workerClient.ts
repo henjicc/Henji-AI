@@ -1,5 +1,6 @@
 import type { PaintBrush, PaintDab, PaintFill, PaintSurface, PaintTarget } from '@/core/imaging/paint';
 import type { PaintWorkerRequest, PaintWorkerResponse } from './paint.worker';
+import type { RetouchSource } from '@/core/imaging/retouch';
 
 /** A gesture/task owns one lazy Worker. Requests are bounded to one sparse tile. */
 export class PaintWorkerClient {
@@ -13,6 +14,10 @@ export class PaintWorkerClient {
 
   fill(surface: PaintSurface, fill: PaintFill, opacity: number, mask: boolean, signal: AbortSignal): Promise<boolean> {
     return this.run(surface, { kind: 'fill', surface, fill, opacity, mask }, signal);
+  }
+
+  retouch(surface: PaintSurface, dabs: readonly PaintDab[], brush: PaintBrush, source: RetouchSource, signal: AbortSignal): Promise<boolean> {
+    return this.run(surface, { kind: 'retouch', surface, dabs, brush, source }, signal);
   }
 
   private async run(surface: PaintSurface, request: PaintWorkerRequest, signal: AbortSignal): Promise<boolean> {

@@ -1,13 +1,16 @@
 import { rasterizePaintDabs, rasterizePaintFill, type PaintBrush, type PaintDab, type PaintFill, type PaintSurface, type PaintTarget } from '@/core/imaging/paint';
+import { rasterizeRetouchDabs, type RetouchSource } from '@/core/imaging/retouch';
 
 export type PaintWorkerRequest = { surface: PaintSurface } & (
   { kind: 'dabs'; dabs: readonly PaintDab[]; brush: PaintBrush; target: PaintTarget; tool: 'brush' | 'eraser' }
-  | { kind: 'fill'; fill: PaintFill; opacity: number; mask: boolean });
+  | { kind: 'fill'; fill: PaintFill; opacity: number; mask: boolean }
+  | { kind: 'retouch'; dabs: readonly PaintDab[]; brush: PaintBrush; source: RetouchSource });
 export type PaintWorkerResponse = { changed: boolean; output: Float32Array; coverage: Float32Array } | { error: string };
 
 export function executePaintWorkerRequest(request: PaintWorkerRequest): PaintWorkerResponse {
   const surface = { ...request.surface, output: new Float32Array(request.surface.output) };
-  const changed = request.kind === 'fill' ? rasterizePaintFill(surface, request.fill, request.opacity, request.mask)
+  const changed = request.kind === 'retouch' ? rasterizeRetouchDabs(surface, request.dabs, request.brush, request.source)
+    : request.kind === 'fill' ? rasterizePaintFill(surface, request.fill, request.opacity, request.mask)
     : rasterizePaintDabs(surface, request.dabs, request.brush, request.target, request.tool);
   return { changed, output: surface.output, coverage: surface.coverage };
 }

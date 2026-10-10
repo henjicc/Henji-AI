@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import '@/tests/imageEditDocumentFixture'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -40,9 +40,12 @@ vi.mock('@/commands/imageEditorV3', async (importOriginal) => {
 })
 
 vi.mock('../tools/paint/workerClient', async () => {
-  const { rasterizePaintDabs } = await import('@/core/imaging/paint');
+  const { rasterizePaintDabs, rasterizePaintFill } = await import('@/core/imaging/paint');
+  const { rasterizeRetouchDabs } = await import('@/core/imaging/retouch');
   return { PaintWorkerClient: class {
     rasterize = async (...args: Parameters<typeof rasterizePaintDabs>) => rasterizePaintDabs(...args);
+    fill = async (...args: Parameters<typeof rasterizePaintFill>) => rasterizePaintFill(...args);
+    retouch = async (...args: Parameters<typeof rasterizeRetouchDabs>) => rasterizeRetouchDabs(...args);
     dispose(): void {}
   } };
 });
@@ -121,6 +124,38 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
     cleanup()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('图章 UI Alt 取样不提交，对齐跨笔保留偏移，不对齐每笔回到供体，取消释放手势', async () => {
+    const rendered = render(<ControlledRasterEditor profileId="full" onDocumentChange={() => undefined} onPersistenceChange={() => undefined} />)
+    await screen.findByRole('button', { name: '修饰' })
+    const sessionId = Object.keys(useImageEditorSessionStoreV3.getState().sessions)[0]
+    act(() => useImageEditorSessionStoreV3.getState().setActiveTool(sessionId, 'clone-stamp'))
+    const overlay = rendered.container.querySelector('[data-raster-brush-overlay]') as SVGSVGElement
+    vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 320, 320))
+    const capture = installPointerCapture(overlay)
+    const session = () => Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
+    fireEvent.pointerDown(overlay, { button: 0, clientX: 80, clientY: 80, pointerId: 1 })
+    expect(screen.getByText('请先 Alt 点击干净来源，或点取样后在画面中选择来源')).toBeTruthy()
+    fireEvent.pointerUp(overlay, { clientX: 80, clientY: 80, pointerId: 1 })
+    const sampleEvent = new MouseEvent('pointerdown', { bubbles: true, button: 0, altKey: true, clientX: 80, clientY: 80 })
+    Object.defineProperties(sampleEvent, { pointerId: { value: 2 }, pointerType: { value: 'mouse' } })
+    fireEvent(overlay, sampleEvent)
+    fireEvent.pointerUp(overlay, { clientX: 80, clientY: 80, pointerId: 2 })
+    expect(session().toolSettings.retouchSource).toMatchObject({ documentId: 'brush-ui', layerId: 'raster', x: 16, y: 16 })
+    expect(capture.setPointerCapture).not.toHaveBeenCalled(); expect(bridge.persistBrushTiles).not.toHaveBeenCalled()
+    const stroke = async (x: number, id: number, expected: number) => {
+      fireEvent.pointerDown(overlay, { button: 0, clientX: x, clientY: 80, pointerId: id })
+      expect(session().toolSettings.retouchOffset?.x).toBe(expected)
+      fireEvent.pointerUp(overlay, { clientX: x, clientY: 80, pointerId: id })
+      await waitFor(() => expect(capture.releasePointerCapture).toHaveBeenCalledWith(id))
+    }
+    await stroke(240, 3, -32); await stroke(160, 4, -32)
+    fireEvent.click(screen.getByRole('switch', { name: '对齐供体' }))
+    await stroke(160, 5, -16); await stroke(200, 6, -24)
+    fireEvent.pointerDown(overlay, { button: 0, clientX: 160, clientY: 80, pointerId: 7 })
+    fireEvent.pointerCancel(overlay, { pointerId: 7 }); expect(capture.releasePointerCapture).toHaveBeenCalledWith(7)
+    expect(bridge.persistBrushTiles).not.toHaveBeenCalled()
   })
 
   it.each(['mask', 'full', 'canvas-edit'] as const)('%s pointer 手势先显示 dirty tile，抬笔后只持久化一次且撤销重做恢复引用', async (profileId) => {

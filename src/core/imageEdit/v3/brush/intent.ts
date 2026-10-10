@@ -5,6 +5,10 @@ const point = z.object({ x: z.number().finite(), y: z.number().finite(), pressur
   tiltX: z.number().min(-90).max(90).default(0), tiltY: z.number().min(-90).max(90).default(0) }).strict();
 const color = z.string().regex(/^#[a-f\d]{6}$/i);
 export const imageEditPaintIntentSchemaV3 = z.discriminatedUnion('kind', [
+  z.object({ kind: z.enum(['clone', 'heal']), points: z.array(point).min(1), source: point,
+    sizeRatio: z.number().finite().positive(), hardness: fraction.default(.8), opacity: fraction.default(1), flow: fraction.default(1),
+    spacing: z.number().finite().positive().default(.15), seed: z.number().int().default(1),
+  }).strict(),
   z.object({ kind: z.literal('stroke'), tool: z.enum(['brush', 'eraser']).default('brush'), points: z.array(point).min(1),
     sizeRatio: z.number().finite().positive(), hardness: fraction.default(.8), opacity: fraction.default(1), flow: fraction.default(1),
     spacing: z.number().finite().positive().default(.15), smoothing: fraction.default(0),

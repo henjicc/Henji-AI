@@ -110,7 +110,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     return runImageEditPersistedOperationV3(documentId, access, async () => {
       const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
       if (access && persistenceOwner?.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
-      const result = await repairImageEditRegionV3(bus, layerId, { action: capability.id === 'remove_image_edit_region' ? 'remove' : 'repair', quality: parsed.quality,
+      const result = await repairImageEditRegionV3(bus, layerId, { action: capability.id === 'remove_image_edit_region' ? 'remove' : 'repair', quality: parsed.quality, method: 'method' in parsed && (parsed.method === 'texture' || parsed.method === 'auto') ? parsed.method : undefined,
         ...(parsed.region.kind === 'subject' || parsed.region.kind === 'portrait' ? { semanticRegion: parsed.region.kind, candidateId: parsed.region.candidateId } : {}),
         ...(parsed.region.kind === 'rectangle' ? { rectangle: { x: parsed.region.x, y: parsed.region.y, width: parsed.region.width, height: parsed.region.height } } : {}),
         ...(capability.id === repairImageEditRegionCapability.id ? { sourceRegion: imageEditRepairInputSchema.parse(input).sourceRegion } : {}), signal: context.signal })

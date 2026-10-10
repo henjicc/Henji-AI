@@ -38,6 +38,8 @@ export interface ImageEditPreviewOverrideV3 {
   targetId: string;
   baseRevision: number;
   value: unknown;
+  /** Transient persisted tiles remain protected by the preparing operation's resource lease. */
+  resourceByteSizes?: Readonly<Record<string, number>>;
 }
 
 export interface ImageEditCommandBusSnapshotV3 {
@@ -130,7 +132,7 @@ export class ImageEditCommandBusV3 {
   }
 
   getResourceByteSizes(): Readonly<Record<string, number>> {
-    return Object.fromEntries(this.resourceByteSizes);
+    return { ...Object.fromEntries(this.resourceByteSizes), ...Object.assign({}, ...[...this.previewOverrides.values()].map(preview => preview.resourceByteSizes ?? {})) };
   }
 
   getHistoryView(): ImageEditHistoryViewV3 {

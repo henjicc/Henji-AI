@@ -7,10 +7,13 @@ import { fillImageEditTargetV3 } from './fillService';
 import { createPaintSelectionClip } from './selectionClip';
 import { PaintWorkerClient } from './workerClient';
 import { paintColorInDocument } from './color';
+import { RetouchStrokeCompute } from '../retouch/source';
 
 /** Algorithm adapter, also available to non-visual callers; no UI focus or preset dependency. */
 export async function paintImageEditTargetV3(bus: ImageEditCommandBusV3, layerId: string, destination: 'pixels' | 'mask', operation: ImageEditPaintIntentV3, signal?: AbortSignal): Promise<string | null> {
   signal?.throwIfAborted();
+  const retouching = operation.kind === 'clone' || operation.kind === 'heal';
+  if (retouching && destination !== 'pixels') throw new Error('仿制图章与修复画笔的 destination 必须是 pixels');
   const start = bus.getSnapshot(), resourceByteSizes = new Map(Object.entries(bus.getResourceByteSizes()));
   const resolved = resolveImageEditorBrushEditingTargetV3({ document: start.document, selectedLayerIds: [layerId], activeTool: destination === 'mask' ? 'mask-edit' : 'raster-brush',
     maskMode: operation.kind === 'stroke' && operation.tool === 'eraser' ? 'erase' : 'paint', color: 'color' in operation ? operation.color : undefined,
@@ -19,11 +22,14 @@ export async function paintImageEditTargetV3(bus: ImageEditCommandBusV3, layerId
   const target = resolved.target, size = target.resolveStorageSize ?? (async () => start.document.geometry);
   const grid = await size(signal ?? new AbortController().signal); signal?.throwIfAborted();
   if (bus.getSnapshot().document.revision !== start.document.revision || bus.getSnapshot().selectionRevision !== start.selectionRevision) throw new Error('绘画目标已变化，请重新读取');
-  if (operation.kind === 'stroke') {
-    if (destination === 'pixels' && operation.tool === 'brush' && !operation.color) throw new Error('像素画笔需要 color');
-    const worker = new PaintWorkerClient(), clip = createPaintSelectionClip(start.document, start.selection, target.matrix, size);
-    const stroke = new ImageEditorRasterBrushStrokeV3({ bus, document: start.document, layerId, destination: target.destination, tool: operation.tool,
-      shape: { size: operation.sizeRatio * Math.min(grid.width, grid.height), hardness: operation.hardness, opacity: operation.opacity, flow: operation.flow, spacing: operation.spacing, smoothing: operation.smoothing, pressureSize: operation.pressureSize, pressureFlow: operation.pressureFlow, pressureCurve: operation.pressureCurve, tip: operation.tip, angle: operation.angle, tilt: operation.tilt, texture: operation.texture, scatter: operation.scatter, seed: operation.seed }, target: target.target, loadTile: target.loadTile,
+  if ('points' in operation) {
+    if (operation.kind === 'stroke' && destination === 'pixels' && operation.tool === 'brush' && !operation.color) throw new Error('像素画笔需要 color');
+    const clip = createPaintSelectionClip(start.document, start.selection, target.matrix, size);
+    const worker = operation.kind === 'stroke' ? new PaintWorkerClient() : new RetouchStrokeCompute(target.loadTile, size, operation.kind,
+      { x: (operation.source.x - operation.points[0].x) * grid.width, y: (operation.source.y - operation.points[0].y) * grid.height }, clip.read);
+    const dynamics = operation.kind === 'stroke' ? { smoothing: operation.smoothing, pressureSize: operation.pressureSize, pressureFlow: operation.pressureFlow, pressureCurve: operation.pressureCurve, tip: operation.tip, angle: operation.angle, tilt: operation.tilt, texture: operation.texture, scatter: operation.scatter } : {};
+    const stroke = new ImageEditorRasterBrushStrokeV3({ bus, document: start.document, layerId, destination: target.destination, tool: operation.kind === 'stroke' ? operation.tool : 'brush',
+      shape: { size: operation.sizeRatio * Math.min(grid.width, grid.height), hardness: operation.hardness, opacity: operation.opacity, flow: operation.flow, spacing: operation.spacing, seed: operation.seed, ...dynamics }, target: target.target, loadTile: target.loadTile,
       resolveStorageSize: size, resourceByteSizes, onPreviewTiles: () => {}, rasterize: worker.rasterize, loadCoverage: clip.read });
     const cancel = (): void => { stroke.cancel(); worker.dispose(); clip.dispose(); };
     const unsubscribe = bus.subscribe(() => { if (bus.getSnapshot().selectionRevision !== start.selectionRevision) cancel(); });

@@ -9,7 +9,7 @@ const marking: readonly ImageEditorHostProfileIdV3[] = [...editing, 'quick']
 const navigation = { id: 'navigation', order: 0 }
 const cropping = { id: 'crop', order: 1 }
 const selection = { id: 'selection', order: 2, collapsed: true, labelKey: 'imageEditor.v3.selection.overlay', expandedProfiles: ['mask'] as const }
-const repair = { id: 'repair', order: 3 }
+const repair = { id: 'repair', order: 3, collapsed: true, labelKey: 'imageEditor.v3.retouch.group' }
 const annotation = { id: 'annotation', order: 4, collapsed: true, labelKey: 'imageEditor.v3.tools.annotation', triggerId: 'annotation' }
 
 const specs = {

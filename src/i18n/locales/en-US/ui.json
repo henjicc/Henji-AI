@@ -896,7 +896,10 @@
         "select-focus": "Focus area",
         "free-transform": "Free transform",
         "perspective-transform": "Perspective",
-        "mesh-transform": "Mesh warp"
+        "mesh-transform": "Mesh warp",
+        "clone-stamp": "Clone stamp",
+        "healing-brush": "Healing brush",
+        "content-aware-fill": "Content-aware fill"
       },
       "layerControls": {
         "rotate": "Rotate layer",
@@ -957,7 +960,8 @@
         "hidden": "The selected raster layer or its group is hidden.",
         "singular": "The selected raster layer has a non-invertible transform.",
         "failed": "The raster stroke was not saved: {{reason}}",
-        "deformed": "Restore source pixels before painting; independent masks remain editable."
+        "deformed": "Restore source pixels before painting; independent masks remain editable.",
+        "retouchPixelsOnly": "Clone and healing brushes need a pixel target"
       },
       "repair": {
         "auto": "Auto",
@@ -1212,6 +1216,20 @@
         "invalid": "Cannot apply this transform",
         "recover": "Control points cannot overlap or fold. Adjust them or cancel to restore.",
         "restore": "Restore source pixels"
+      },
+      "retouch": {
+        "group": "Retouch",
+        "size": "Size",
+        "opacity": "Stroke opacity",
+        "flow": "Flow",
+        "hardness": "Hardness",
+        "aligned": "Aligned source",
+        "showSource": "Show source",
+        "sample": "Sample",
+        "resample": "Resample",
+        "sampleFirst": "Alt-click a clean source, or choose Sample and click the image",
+        "previewFill": "Preview fill",
+        "apply": "Apply"
       }
     }
   },

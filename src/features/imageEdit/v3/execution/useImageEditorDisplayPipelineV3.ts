@@ -1,4 +1,7 @@
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
+import { useMemo } from 'react'
+import { reconcileImageEditorV3ResourceDescriptors } from '../application/imageEditorResourceDescriptorsV3'
+import { projectImageEditorPreviewDocumentV3 } from './previewDocumentV3'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import { useImageEditorViewportCompositeV3 } from './useImageEditorViewportCompositeV3'
 import { useManagedImageEditorPreviewV3 } from './useManagedImageEditorPreviewV3'
@@ -25,18 +28,22 @@ export function useImageEditorDisplayPipelineV3(
   layout: ImageEditorDisplayViewportLayoutV3 | null,
 ) {
   const hasPreviewOverrides = Object.keys(snapshot.previewOverrides).length > 0
+  const displayDescriptors = useMemo(() => {
+    const temporary = Object.values(snapshot.previewOverrides).flatMap(preview => Object.entries(preview.resourceByteSizes ?? {}).map(([resourceId, byteSize]) => ({ resourceId, byteSize })))
+    return temporary.length ? reconcileImageEditorV3ResourceDescriptors(projectImageEditorPreviewDocumentV3(snapshot), resourceDescriptors, temporary) : resourceDescriptors
+  }, [snapshot, resourceDescriptors])
   const viewportComposite = useImageEditorViewportCompositeV3(
     sessionId,
     snapshot,
     enabled,
-    resourceDescriptors,
+    displayDescriptors,
     layout,
   )
   const managedPreview = useManagedImageEditorPreviewV3(
     sessionId,
     snapshot,
     false,
-    resourceDescriptors,
+    displayDescriptors,
   )
   const exactViewportResult = viewportComposite.result
     && layout

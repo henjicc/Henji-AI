@@ -236,7 +236,24 @@ export function persistImageEditorV3BrushTiles(
   })
 }
 
-export function readImageEditorV3BrushTiles(
+// Shared by paint, donor hover, GPU upload, masks and export. Match the main process's
+// two-read memory budget, applying cancellable backpressure instead of rejecting normal gestures.
+const brushReadQueues = new WeakMap<ImageEditorV3Platform, { active: number; waiting: (() => void)[] }>()
+async function acquireBrushRead(platform: ImageEditorV3Platform, signal?: AbortSignal): Promise<() => void> {
+  if (signal?.aborted) throw abortError()
+  let queue = brushReadQueues.get(platform)
+  if (!queue) { queue = { active: 0, waiting: [] }; brushReadQueues.set(platform, queue) }
+  const state = queue
+  await new Promise<void>((resolve, reject) => {
+    const start = (): void => { signal?.removeEventListener('abort', cancel); state.active++; resolve() }
+    const cancel = (): void => { const index = state.waiting.indexOf(start); if (index >= 0) state.waiting.splice(index, 1); reject(abortError()) }
+    if (state.active < 2) start()
+    else { state.waiting.push(start); signal?.addEventListener('abort', cancel, { once: true }) }
+  })
+  return () => { state.active--; state.waiting.shift()?.() }
+}
+
+export async function readImageEditorV3BrushTiles(
   request: {
     requestId: string
     tiles: ReadonlyArray<{
@@ -246,7 +263,8 @@ export function readImageEditorV3BrushTiles(
   },
   signal?: AbortSignal,
 ): Promise<{ tiles: Array<{ tileKey: string; tile: ImageEditBrushTileV3 }> }> {
-  return runCancellable(request.requestId, signal, async (platform) => {
+  const release = await acquireBrushRead(getPlatform().imageEditorV3, signal)
+  try { return await runCancellable(request.requestId, signal, async (platform) => {
     const result = await platform.readBrushTiles({
       requestId: request.requestId,
       tiles: request.tiles.map((item) => ({
@@ -263,7 +281,7 @@ export function readImageEditorV3BrushTiles(
         tile: deserializeBrushTile(item.tile),
       })),
     }
-  })
+  }) } finally { release() }
 }
 
 /** 图片文档（.henjiimg，3.5）：打开 / 重新定位 / 新建草稿 / 写回。 */

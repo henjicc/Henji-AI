@@ -16,12 +16,16 @@ import { loadImageEditorV3SourceRegion } from '../export/sourceRegion'
 import { exportCurrentImageEditSelectionV3 } from './imageEditSelectionExportV3'
 import { findImageEditV3LiveLayer } from './imageEditDocumentRefs'
 import type { ImageEditCommandBusV3 } from './imageEditCommandBus'
+import { readRetouchRegion } from '../tools/retouch/source'
 
 const logger = createLogger('features.image_edit_v3.repair')
 const active = new WeakSet<ImageEditCommandBusV3>()
 export interface ImageEditRepairOptionsV3 {
   action: 'remove' | 'repair'
   quality?: 'auto' | 'fast' | 'fine'
+  method?: 'auto' | 'texture'
+  /** Visual host waits here; non-visual callers commit through the same transaction immediately. */
+  confirm?: (signal: AbortSignal) => Promise<void>
   semanticRegion?: 'subject' | 'portrait'
   candidateId?: string
   /** 未裁剪画面比例矩形；省略时使用当前选区，不修改会话选区。 */
@@ -61,7 +65,7 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
     if (now.document.revision !== document.revision || now.selectionRevision !== start.selectionRevision) throw new Error('图片或选区已变化，请重新修复')
   }
   const monitor = bus.subscribe(() => { if (bus.getSnapshot().document.revision !== document.revision || bus.getSnapshot().selectionRevision !== start.selectionRevision) abort.abort() })
-  const leaseId = createImageEditorV3RequestId('repair-lease'), begun = performance.now()
+  const leaseId = createImageEditorV3RequestId('repair-lease'), previewId = createImageEditIdV3('repair-preview'), begun = performance.now()
   const maskClient = new ImageEditSelectionRasterClientV3(), pixels = new ImageEditRepairPixelsClientV3()
   const sizes = new Map(Object.entries(bus.getResourceByteSizes()))
   const loader = createImageEditorRasterBrushTileLoaderV3({ document, layer, resourceByteSizes: sizes })
@@ -115,6 +119,9 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
       return bitmap
     }
     let guide: { tile: Float32PremultipliedRgbaTile; x: number; y: number; scale: number } | undefined
+    let textureGuide = false
+    let streamedOffsets: readonly { x: number; y: number }[] | undefined
+    let periodicBackground = false
     if (options.action === 'remove') {
       // 模型的固定工作分辨率不是图片尺寸上限。整块选区共享上下文，避免大物体内部瓦片没有已知像素。
       const bounds = imageEditRepairContextV3(roi, size)
@@ -126,14 +133,41 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
       if ((options.quality ?? 'auto') === 'auto' && quality !== 'blemish') {
         const analysis = await pixels.run({ type: 'structure', bitmap }, signal)
         if (!analysis.structure) throw new Error('背景纹理分析结果缺失')
+        periodicBackground = analysis.structure.periodic
         quality = routeImageEditRepairQualityV3('auto', roi, selectedPixels / (size.width * size.height), analysis.structure)
         logger.info('修复质量已选择', { event: 'image_edit.repair.quality_route', context: { quality, area: selectedPixels / (size.width * size.height), ...analysis.structure } })
       }
+      // Original-resolution texture within a working memory budget; large regions are streamed below.
+      // Texture requests never download models. Auto only accepts a strong ring fit, otherwise existing inference remains authoritative.
+      if (options.method === 'texture' || ((options.quality ?? 'auto') === 'auto' && periodicBackground)) {
+        try {
+        const textureScale = bounds.width * bounds.height * 16 <= 32 * 1024 * 1024 ? 1 : scale
+        const textureRect = { x: bounds.x, y: bounds.y, width: Math.ceil(bounds.width / textureScale), height: Math.ceil(bounds.height / textureScale) }
+        const textureMatrix = multiplyAnnotationMatricesV3(matrix, [textureScale, 0, 0, textureScale, bounds.x, bounds.y])
+        const textureCoverage = await maskClient.rasterize({ selection, size: document.geometry, region: { x: 0, y: 0, width: textureRect.width, height: textureRect.height }, matrix: textureMatrix }, signal)
+        const original = textureScale === 1 ? await readRetouchRegion(loader, size, textureRect, signal) : undefined
+        // Model proxies are explicitly SDR. Original-resolution texture keeps floating pixels intact.
+        const proxyData = original?.data ?? Float32Array.from(bitmap.rgba, (value, i) => i % 4 === 3 ? value / 255 : ((value / 255 <= .04045 ? value / 255 / 12.92 : ((value / 255 + .055) / 1.055) ** 2.4) * bitmap.rgba[Math.floor(i / 4) * 4 + 3] / 255))
+        const result = await pixels.run({ type: 'texture', input: { pixels: { width: textureRect.width, height: textureRect.height, originX: textureRect.x, originY: textureRect.y, data: proxyData }, coverage: textureCoverage, seed: 1 } }, signal)
+        if (!result.texture) throw new Error('纹理填充结果缺失')
+        if (options.method === 'texture' || result.texture.ringError < .004) {
+          if (textureScale === 1) guide = { tile: createFloat32PremultipliedRgbaTile(textureRect.width, textureRect.height, 'linear-light', result.texture.data, document.color.workingSpace, document.color.transferFunction, 203), x: bounds.x, y: bounds.y, scale: 1 }
+          else streamedOffsets = result.texture.offsets.map(value => ({ x: Math.round(value.x * textureScale), y: Math.round(value.y * textureScale) }))
+          textureGuide = true
+        }
+        } catch (error) {
+          fresh()
+          if (options.method === 'texture') throw error
+          logger.info('纹理供体不可用，转入本地修补', { event: 'image_edit.repair.texture_fallback', error, context: { documentId: document.id, layerId } })
+        }
+      }
+      if (!guide && !streamedOffsets) {
       const result = await repairImageEditorV3Raster({ requestId: createImageEditorV3RequestId('repair'), leaseId, width: proxy.width, height: proxy.height,
         rgba: bitmap.rgba.buffer as ArrayBuffer, mask: bitmap.mask.buffer as ArrayBuffer, quality }, signal,
         value => options.progress?.({ stage: value.stage === 'downloading' ? 'downloading' : 'processing', done: value.done, total: value.total }))
       const tile = await loadImageEditorV3SourceRegion(result.patch.resourceRef, { x: 0, y: 0, width: proxy.width, height: proxy.height }, proxy, 8, 'srgb', document.color.transferFunction, 203, signal, {})
       guide = { tile, x: bounds.x, y: bounds.y, scale }
+      }
     }
     for (let y = topTile; y < bottomTile; y++) for (let x = leftTile; x < rightTile; x++) {
       fresh()
@@ -147,17 +181,38 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
       options.progress?.({ stage: 'preparing', done, total })
       const coverage = await maskClient.rasterize({ selection, size: document.geometry, region, matrix }, signal)
       if (!coverage.some(value => value > 0)) { done++; continue }
+      const original = await loader({ mip: 0, x, y }, signal)
+      if (original.tile.storage !== 'rgba-float32') throw new Error('像素图层格式不匹配')
+      let textureData: Float32Array | undefined
+      if (streamedOffsets) {
+        const target = { width: core.width, height: core.height, originX: core.x, originY: core.y, data: original.tile.data }
+        let output: Float32Array = new Float32Array(target.data), resolved: Uint8Array = new Uint8Array(core.width * core.height), remaining = 1
+        for (const displacement of streamedOffsets) {
+          fresh()
+          const donorRect = { ...core, x: core.x + displacement.x, y: core.y + displacement.y }
+          const donor = await readRetouchRegion(loader, size, donorRect, signal)
+          const donorCoverage = await maskClient.rasterize({ selection, size: document.geometry, region: donorRect, matrix }, signal)
+          const filled = await pixels.run({ type: 'texture-donor', target, coverage, donor, donorCoverage, output, resolved }, signal)
+          if (!filled.data || !filled.resolved || filled.remaining === undefined) throw new Error('纹理供体结果缺失')
+          output = filled.data; resolved = filled.resolved; remaining = filled.remaining
+          if (!remaining) break
+        }
+        if (remaining) throw new Error('部分选区找不到干净纹理，请缩小选区或改用移除工具')
+        textureData = output
+      }
+      if (textureData) {
+        // Streamed original-resolution donors preserve detail; the proxy is used only to find displacements.
+        guide = undefined
+      }
       const bitmap = await sample(region, coverage)
       const sampled = options.action === 'repair' ? await sample({ ...region, x: region.x + offset.x, y: region.y + offset.y }) : undefined
       fresh()
-      const result = guide ? undefined : await repairImageEditorV3Raster({ requestId: createImageEditorV3RequestId('repair'), leaseId, width: region.width, height: region.height,
+      const result = guide || textureData ? undefined : await repairImageEditorV3Raster({ requestId: createImageEditorV3RequestId('repair'), leaseId, width: region.width, height: region.height,
         rgba: new Uint8Array(bitmap.rgba).buffer, mask: new Uint8Array(bitmap.mask).buffer, ...(sampled ? { sample: new Uint8Array(sampled.rgba).buffer } : {}), quality }, signal,
         value => options.progress?.({ stage: value.stage === 'downloading' ? 'downloading' : 'processing', done: done + value.done / Math.max(1, value.total), total }))
       fresh()
-      const patch = guide?.tile ?? await loadImageEditorV3SourceRegion(result!.patch.resourceRef, { x: 0, y: 0, width: region.width, height: region.height }, region, 8, 'srgb', document.color.transferFunction, 203, signal, {})
-      const original = await loader({ mip: 0, x, y }, signal)
-      if (original.tile.storage !== 'rgba-float32') throw new Error('像素图层格式不匹配')
-      const merged = await pixels.run({ type: 'merge', tile: original.tile, origin: { x: core.x, y: core.y }, patch, bitmap, ...(guide ? { guide: { x: guide.x, y: guide.y, scale: guide.scale } } : {}) }, signal)
+      const patch = textureData ? original.tile : guide?.tile ?? await loadImageEditorV3SourceRegion(result!.patch.resourceRef, { x: 0, y: 0, width: region.width, height: region.height }, region, 8, 'srgb', document.color.transferFunction, 203, signal, {})
+      const merged = textureData ? { data: textureData } : await pixels.run({ type: 'merge', tile: original.tile, origin: { x: core.x, y: core.y }, patch, bitmap, ...(guide ? { guide: { x: guide.x, y: guide.y, scale: guide.scale } } : {}) }, signal)
       if (!merged.data) throw new Error('修复像素结果缺失')
       const tile: Float32PremultipliedRgbaTile = { ...original.tile, data: merged.data }
       const tileKey = `0/${x}/${y}`
@@ -172,17 +227,25 @@ export async function repairImageEditRegionV3(bus: ImageEditCommandBusV3, layerI
     fresh()
     if (!changes.length) throw new Error('修复结果没有改变图片，可以换一个来源或质量档重试')
     const commandId = createImageEditIdV3(options.action === 'remove' ? 'remove-region' : 'repair-region')
+    if (options.confirm) {
+      bus.setPreview({ id: previewId, kind: 'brush', targetId: layerId, baseRevision: document.revision,
+        value: { tiles: Object.fromEntries(changes.map(change => [change.tileKey, change.resourceId])) },
+        resourceByteSizes: Object.fromEntries(changes.map(change => [change.resourceId, change.byteSize])) })
+      await options.confirm(signal); fresh()
+    }
     options.progress?.({ stage: 'committing', done: total, total })
     monitor() // 原子提交本身不能被本次过期监视当作外部修改。
+    bus.clearPreview(previewId)
     bus.dispatch({ type: 'raster.apply-tile-delta', commandId, expectedRevision: document.revision, layerId, changes })
     committed = true
     const durationMs = performance.now() - begun
-    logger.info('区域修复完成', { event: 'image_edit.repair.completed', context: { documentId: document.id, layerId, durationMs, patchCount: changes.length } })
+    logger.info('区域修复完成', { event: 'image_edit.repair.completed', context: { documentId: document.id, layerId, durationMs, patchCount: changes.length, textureGuide } })
     return { layerId, commandId, durationMs, patchCount: changes.length }
   } catch (error) {
     logger.warn('区域修复未提交', { event: 'image_edit.repair.failed', error, context: { documentId: document.id, cancelled: signal.aborted } })
     throw error
   } finally {
+    bus.clearPreview(previewId)
     monitor(); options.signal?.removeEventListener('abort', cancel)
     bus.getLifecycleSignal().removeEventListener('abort', cancel); maskClient.dispose(); pixels.dispose(); active.delete(bus)
     try { await releaseImageEditorV3RepairResources(leaseId) } catch (error) { logger.warn('修复资源租约释放失败', { event: 'image_edit.repair.cleanup.failed', error }) }

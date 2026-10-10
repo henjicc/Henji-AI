@@ -13,11 +13,15 @@ export function ImageEditorRepairParametersV3({ bus, controller }: { bus: ImageE
   const session = useImageEditorSessionStoreV3(s => s.sessions[controller.sessionId])
   if (!view || !session) return null
   const removing = session.activeTool === 'remove'
+  const texture = session.activeTool === 'content-aware-fill'
   const repairModels = models.models.filter(value => ['image_inpainting_lama', 'image_inpainting_migan'].includes(value.id))
   const model = view.quality === 'auto' ? repairModels.find(value => value.status === 'downloading') ?? repairModels.find(value => !!value.lastFailure && value.lastFailure !== 'cancelled') : repairModels.find(value => value.id === (view.quality === 'fine' ? 'image_inpainting_lama' : 'image_inpainting_migan'))
   const percent = model?.progress ? Math.floor(model.progress.receivedBytes / Math.max(1, model.progress.totalBytes) * 100) : 0
   return <div className="flex min-w-max shrink-0 items-center gap-3 whitespace-nowrap" data-repair-parameters>
-    {removing ? <>
+    {texture ? <>
+      <UiButton size="sm" disabled={!bus.getSnapshot().selection || view.busy} onClick={() => void view.run({ action: 'remove', method: 'texture' })}>{t('imageEditor.v3.retouch.previewFill')}</UiButton>
+      {view.previewReady && <UiButton size="sm" variant="primary" onClick={view.apply}>{t('imageEditor.v3.retouch.apply')}</UiButton>}
+    </> : removing ? <>
       <label className="flex items-center gap-2 text-xs text-text2">{t('imageEditor.v3.toolSettings.size')}
         <UiRangeInput aria-label={t('imageEditor.v3.toolSettings.size')} min={1} max={Math.min(controller.document.geometry.width, controller.document.geometry.height)} step={1} value={session.toolSettings.brushSize}
           disabled={view.busy} onChange={event => useImageEditorSessionStoreV3.getState().setToolSetting(controller.sessionId, 'brushSize', Number(event.currentTarget.value))} />
@@ -33,7 +37,7 @@ export function ImageEditorRepairParametersV3({ bus, controller }: { bus: ImageE
       {models.loadFailed ? <UiError size="xs" message={modelText('sections.localModels.loadFailed')} onRetry={models.reload} /> : null}
       {model?.lastFailure && model.lastFailure !== 'cancelled' && model.status !== 'downloading' ? <UiError size="xs" message={modelText(`sections.localModels.failure.${model.lastFailure}`)} /> : null}
     </> : <span className="text-xs text-text2">{t('imageEditor.v3.repair.drag-source')}</span>}
-    {view.busy && view.progress ? <><span role="status" className="text-xs text-text2">{t(`imageEditor.v3.repair.${view.progress.stage}`, { percent: view.progress.percent })}</span><UiButton size="sm" onClick={view.cancel}>{t('imageEditor.v3.selection.cancel-task')}</UiButton></> : null}
+    {view.busy ? <>{view.progress && <span role="status" className="text-xs text-text2">{t(`imageEditor.v3.repair.${view.progress.stage}`, { percent: view.progress.percent })}</span>}<UiButton size="sm" onClick={view.cancel}>{t('imageEditor.v3.selection.cancel-task')}</UiButton></> : null}
     {view.error ? <UiError size="xs" message={view.error} /> : null}
   </div>
 }

@@ -1,4 +1,5 @@
 import { encodeImageEditSelectionMaskV3 } from '@/core/imageEdit/v3/subjectSelection'
+import { applyRetouchTextureDonor, completeRetouchTexture } from '@/core/imaging/retouch'
 import { analyzeImageEditRepairStructureV3 } from '@/core/imageEdit/v3/repairQuality'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,7 +18,7 @@ import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersiste
 import { imageEditV3LayerRef, imageEditV3DocumentRef } from './imageEditDocumentRefs'
 import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry'
 
-const state = vi.hoisted(() => ({ calls: [] as { width: number; sample: boolean; quality: string }[], afterWrite: null as (() => void) | null, fail: false, serial: 0 }))
+const state = vi.hoisted(() => ({ calls: [] as { width: number; sample: boolean; quality: string }[], afterWrite: null as (() => void) | null, fail: false, serial: 0, donorCalls: 0 }))
 const selectSubject = vi.hoisted(() => vi.fn())
 vi.mock('./imageEditSubjectSelectionServiceV3', () => ({ selectImageEditRegionV3: selectSubject }))
 vi.mock('@/commands/imageEditorV3', async original => ({ ...await original<typeof import('@/commands/imageEditorV3')>(),
@@ -44,6 +45,8 @@ vi.mock('../execution/selectionRasterClientV3', () => ({ ImageEditSelectionRaste
 vi.mock('../execution/repairPixelsClientV3', () => ({ ImageEditRepairPixelsClientV3: class {
   async run(input: RepairPixelsRequestV3, signal: AbortSignal) {
     signal.throwIfAborted()
+    if (input.type === 'texture') return { texture: completeRetouchTexture(input.input) }
+    if (input.type === 'texture-donor') { state.donorCalls++; return { remaining: applyRetouchTextureDonor(input.target, input.coverage, input.donor, input.donorCoverage, input.output, input.resolved), data: input.output, resolved: input.resolved } }
     if (input.type === 'structure') return { structure: analyzeImageEditRepairStructureV3(input.bitmap) }
     if (input.type === 'merge') return { data: mergeImageEditRepairPatchV3(input.tile, input.origin, input.patch, input.bitmap, input.guide) }
     if (input.type === 'mask') input.bitmap.mask = Uint8Array.from(input.coverage, v => Math.round(v * 255))
@@ -52,16 +55,41 @@ vi.mock('../execution/repairPixelsClientV3', () => ({ ImageEditRepairPixelsClien
   }
   dispose() {}
 } }))
-beforeEach(() => { installHarnessNativeStorage(); state.calls = []; state.fail = false; state.serial = 0; state.afterWrite = null; selectSubject.mockReset(); selectSubject.mockResolvedValue({ status: 'selected', candidates: [], selection: appendImageEditSelectionV3(null, encodeImageEditSelectionMaskV3(Uint8Array.of(0, 255, 0, 255), 2, 2), 'replace'), durationMs: 1 }) })
+beforeEach(() => { installHarnessNativeStorage(); state.calls = []; state.fail = false; state.serial = 0; state.donorCalls = 0; state.afterWrite = null; selectSubject.mockReset(); selectSubject.mockResolvedValue({ status: 'selected', candidates: [], selection: appendImageEditSelectionV3(null, encodeImageEditSelectionMaskV3(Uint8Array.of(0, 255, 0, 255), 2, 2), 'replace'), durationMs: 1 }) })
 afterEach(uninstallHarnessNativeStorage)
-function busFor(width = 1200) {
-  const doc = createImageEditDocumentV3({ width, height: 128, documentId: crypto.randomUUID() })
+function busFor(width = 1200, height = 128) {
+  const doc = createImageEditDocumentV3({ width, height, documentId: crypto.randomUUID() })
   doc.layers = [createImageEditRasterLayerV3('raster', '原图')]
   const bus = new ImageEditCommandBusV3(doc)
   bus.setSelection(appendImageEditSelectionV3(null, { type: 'rectangle', x: 0.1, y: 0.2, width: 0.8, height: 0.5 }, 'replace'))
   return bus
 }
 describe('区域修复同源事务', () => {
+  it('8K 大区域超出工作缓冲预算后逐块读取原尺寸供体，不调用推理，一次提交与撤销', async () => {
+    const bus = busFor(8192, 512), before = bus.getSnapshot().document.layers
+    const result = await repairImageEditRegionV3(bus, 'raster', { action: 'remove', method: 'texture' })
+    expect(state.donorCalls).toBeGreaterThan(0); expect(state.calls).toHaveLength(0)
+    expect(result.patchCount).toBe(14); expect(bus.getPersistenceSnapshot().history.undo).toHaveLength(1)
+    bus.undo(); expect(bus.getSnapshot().document.layers).toEqual(before); bus.dispose()
+  }, 30000)
+  it('内容识别预览不改作品，确认单次提交，选区改变能中止等待并释放预览', async () => {
+    const bus = busFor(64), before = bus.getSnapshot(); let accept!: () => void
+    let ready!: () => void; const prepared = new Promise<void>(resolve => { ready = resolve })
+    const task = repairImageEditRegionV3(bus, 'raster', { action: 'remove', method: 'texture', confirm: () => new Promise<void>(resolve => { accept = resolve; ready() }) })
+    await prepared
+    expect(bus.getSnapshot().document.revision).toBe(0); expect(Object.keys(bus.getSnapshot().previewOverrides)).toHaveLength(1)
+    expect(state.calls).toHaveLength(0); expect(Object.keys(bus.getResourceByteSizes())).not.toHaveLength(0)
+    accept(); await task
+    expect(Object.keys(bus.getSnapshot().previewOverrides)).toHaveLength(0); expect(bus.getPersistenceSnapshot().history.undo).toHaveLength(1)
+    bus.undo(); expect(bus.getSnapshot().document.layers).toEqual(before.document.layers)
+    let previewReady!: () => void; const pending = new Promise<void>(resolve => { previewReady = resolve })
+    const stale = repairImageEditRegionV3(bus, 'raster', { action: 'remove', method: 'texture', confirm: signal => new Promise<void>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new Error('selection changed')), { once: true }); previewReady()
+    }) })
+    const rejected = expect(stale).rejects.toThrow('selection changed')
+    await pending; bus.setSelection(null); await rejected
+    expect(Object.keys(bus.getSnapshot().previewOverrides)).toHaveLength(0); expect(bus.getPersistenceSnapshot().history.undo).toHaveLength(0); bus.dispose()
+  })
   it('跨三个瓦片的大选区只推理一次、保留独立选区、一步撤销与重做', async () => {
     const bus = busFor(), before = bus.getSnapshot()
     const result = await repairImageEditRegionV3(bus, 'raster', { action: 'remove' })

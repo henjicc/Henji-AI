@@ -2,6 +2,8 @@ import { UiError, UiPanel } from '@/components/ui'
 import { PaintWorkerClient } from '../tools/paint/workerClient'
 import { createPaintSelectionClip } from '../tools/paint/selectionClip'
 import { imageEditPaintBrushV3 } from '../tools/paint/settings'
+import { RetouchStrokeCompute } from '../tools/retouch/source'
+import { RetouchSourcePreview } from '../tools/retouch/RetouchSourcePreview'
 import type { ImageEditBrushPointV3, ImageEditBrushTileChangeV3 } from '@/core/imageEdit/v3/brush/contracts'
 import { linearPreviewTileToImageDataV3 } from '@/features/imageEdit/v3/execution/previewPixelsV3'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -108,6 +110,7 @@ export function ImageEditorRasterBrushOverlayV3({
   const committedTilesRef = useRef(new RasterBrushCommittedOverlayCacheV3())
   const [overlay, setOverlay] = useState<RasterBrushOverlayStateV3 | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  const [hoverPoint, setHoverPoint] = useState<readonly [number, number] | null>(null)
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool ?? 'move',
   )
@@ -122,10 +125,19 @@ export function ImageEditorRasterBrushOverlayV3({
     () => resolveAnnotationOutputGeometryV3(controller.document),
     [controller.document],
   )
-  const brushTool = activeTool === 'raster-brush'
+  const retouchTool = activeTool === 'clone-stamp' || activeTool === 'healing-brush'
+  const brushTool = retouchTool || activeTool === 'raster-brush'
     || activeTool === 'eraser'
     || activeTool === 'mask-edit'
   const selectedLayerIdsKey = selectedLayerIds.join('\u0000') + editTarget + (settings?.maskMode ?? '')
+  const donorTarget = useMemo(() => retouchTool ? resolveImageEditorBrushEditingTargetV3({ document: controller.document, selectedLayerIds, activeTool,
+    maskMode: 'paint', editTarget, resourceByteSizes: resourceSizesRef.current }) : null, [retouchTool, controller.document, selectedLayerIds, activeTool, editTarget])
+  const donorSize = useCallback(async () => controller.document.geometry, [controller.document.geometry])
+  const donorFailure = useCallback((error: unknown) => setFailure(t('imageEditor.v3.rasterBrush.failed', { reason: errorMessage(error) })), [t])
+  const sourcePoint = settings?.retouchSource && settings.retouchSource.documentId === controller.document.id && selectedLayerIds.includes(settings.retouchSource.layerId)
+    ? hoverPoint && settings.retouchOffset && (settings.retouchAligned || gestureRef.current)
+      ? [hoverPoint[0] + settings.retouchOffset.x, hoverPoint[1] + settings.retouchOffset.y] as const
+      : [settings.retouchSource.x, settings.retouchSource.y] as const : null
 
   useEffect(() => {
     for (const [resourceId, byteSize] of Object.entries(resourceByteSizes ?? {})) {
@@ -269,6 +281,11 @@ export function ImageEditorRasterBrushOverlayV3({
 
   const moveGesture = (event: ReactPointerEvent<SVGSVGElement>): void => {
     const current = gestureRef.current
+    if (retouchTool) {
+      const resolved = resolveImageEditorBrushEditingTargetV3({ document: bus.getSnapshot().document, selectedLayerIds, activeTool,
+        maskMode: 'paint', editTarget, resourceByteSizes: resourceSizesRef.current })
+      if (resolved.ready) setHoverPoint(clientToLayer(resolved.target.inverseMatrix, event.clientX, event.clientY))
+    }
     if (
       !current
       || current.phase !== 'drawing'
@@ -302,7 +319,7 @@ export function ImageEditorRasterBrushOverlayV3({
         }
       } finally {
         current.queue.stop()
-            current.disposeCompute()
+        current.disposeCompute()
         if (gestureRef.current === current) {
           gestureRef.current = null
           releaseEditorPointerV3(current.pointer)
@@ -346,6 +363,18 @@ export function ImageEditorRasterBrushOverlayV3({
     }
     const target = resolved.target
     const { matrix, inverseMatrix } = target
+    const first = clientToLayer(inverseMatrix, event.clientX, event.clientY)
+    const store = useImageEditorSessionStoreV3.getState()
+    if (retouchTool && (event.altKey || settings?.retouchPicking)) {
+      store.setToolSetting(controller.sessionId, 'retouchSource', { documentId: document.id, layerId: target.layerId, x: first[0], y: first[1] })
+      store.setToolSetting(controller.sessionId, 'retouchOffset', null)
+      store.setToolSetting(controller.sessionId, 'retouchPicking', false)
+      setFailure(null); event.preventDefault(); return
+    }
+    const source = settings?.retouchSource
+    if (retouchTool && (!source || source.documentId !== document.id || source.layerId !== target.layerId)) {
+      setFailure(t('imageEditor.v3.retouch.sampleFirst')); return
+    }
     setFailure(null)
     const existingTiles = committedTilesRef.current.tilesForLayer({
       documentId: document.id,
@@ -354,8 +383,10 @@ export function ImageEditorRasterBrushOverlayV3({
     })
     setOverlay({ matrix, tiles: existingTiles })
     const tool = activeTool as ImageEditorBrushToolIdV3
-    const compute = new PaintWorkerClient()
+    const offset = settings?.retouchAligned && settings.retouchOffset ? settings.retouchOffset : source ? { x: source.x - first[0], y: source.y - first[1] } : { x: 0, y: 0 }
+    if (retouchTool) store.setToolSetting(controller.sessionId, 'retouchOffset', offset)
     const clip = createPaintSelectionClip(document, bus.getSnapshot().selection, matrix, target.resolveStorageSize ?? (async () => document.geometry))
+    const compute = retouchTool ? new RetouchStrokeCompute(target.loadTile, target.resolveStorageSize ?? (async () => document.geometry), activeTool === 'clone-stamp' ? 'clone' : 'heal', offset, clip.read) : new PaintWorkerClient()
     const stroke = new ImageEditorRasterBrushStrokeV3({
       bus,
       document,
@@ -441,6 +472,18 @@ export function ImageEditorRasterBrushOverlayV3({
               ))}
             </g>
           ) : null}
+          {retouchTool && settings?.retouchShowSource && sourcePoint && donorTarget?.ready ? <>
+            {hoverPoint && !gestureRef.current && !settings.retouchPicking ? <RetouchSourcePreview load={donorTarget.target.loadTile}
+              size={donorTarget.target.resolveStorageSize ?? donorSize} source={sourcePoint} destination={hoverPoint} diameter={settings.brushSize}
+              matrix={donorTarget.target.matrix} document={controller.document} onError={donorFailure} /> : null}
+            {(() => {
+              const mapped = mapAnnotationPointV3(donorTarget.target.matrix, sourcePoint), radius = geometry.width / 80
+              return <g pointerEvents="none" className="fill-none stroke-accent-text" data-retouch-source-marker>
+                <circle cx={mapped[0]} cy={mapped[1]} r={radius} strokeWidth={geometry.width / 500} />
+                <path d={`M ${mapped[0] - radius * 1.5} ${mapped[1]} H ${mapped[0] + radius * 1.5} M ${mapped[0]} ${mapped[1] - radius * 1.5} V ${mapped[1] + radius * 1.5}`} strokeWidth={geometry.width / 500} />
+              </g>
+            })()}
+          </> : null}
         </svg>
       ) : null}
       {failure ? <UiPanel className="absolute left-1/2 top-3 max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 px-4"><UiError size="sm" message={failure} /></UiPanel> : null}
