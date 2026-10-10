@@ -179,7 +179,7 @@ describe('图片编辑预览能力契约', () => {
 
   it('标注契约与正式编辑器字段、范围和联动保持一致', () => {
     const rect = markItemVariant(canonicalPreview?.aiInputSchema, 'rect')
-    expect(property(rect, 'lineWidth').minimum).toBe(1)
+    expect(property(rect, 'lineWidth').exclusiveMinimum).toBe(0)
     expect(property(rect, 'labelFontSize').minimum).toBe(8)
     expect(property(rect, 'stroke').pattern).toBe('^#[0-9a-fA-F]{6}$')
     expect(property(rect, 'labelBackgroundColor').pattern).toBe('^#[0-9a-fA-F]{6}$')
@@ -192,10 +192,10 @@ describe('图片编辑预览能力契约', () => {
     expect(property(text, 'backgroundColor').pattern).toBe('^#[0-9a-fA-F]{6}$')
 
     const pen = markItemVariant(canonicalPreview?.aiInputSchema, 'pen')
-    expect(property(pen, 'points').maxItems).toBe(4_096)
+    // 产品不限制笔迹点数，规模靠栅格化与分块处理
+    expect(property(pen, 'points').maxItems).toBeUndefined()
 
-    const mosaic = markItemVariant(canonicalPreview?.aiInputSchema, 'mosaic')
-    expect(property(mosaic, 'strengthPercent')).toMatchObject({ minimum: 0.5, maximum: 8 })
+    // 马赛克不再是标注项，改由共享滤镜（像素化）提供；下方 invalidItems 断言 mosaic 标注被拒绝
 
     expect(canonicalPreview?.inputSchema.safeParse({
       sourceRef: { kind: 'asset', id: 'asset-1' },
@@ -226,7 +226,7 @@ describe('图片编辑预览能力契约', () => {
     }).success).toBe(true)
 
     const invalidItems = [
-      { type: 'rect', x: 1, y: 2, width: 3, height: 4, stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 0.5 },
+      { type: 'rect', x: 1, y: 2, width: 3, height: 4, stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 0 },
       { type: 'text', x: 1, y: 2, text: '太小', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 9 },
       { type: 'mosaic', x: 1, y: 2, width: 3, height: 4, strengthPercent: 9 },
       { type: 'rect', x: 1, y: 2, width: 3, height: 4, stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 1, label: '偏移', labelDx: 2 },
