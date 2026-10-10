@@ -1,3 +1,4 @@
+import { decodeTransferFunctionV3 } from '@/core/imaging/colorManagement';
 import { describe, expect, it, vi } from 'vitest'
 import {
   ImageEditResourceBudget,
@@ -242,3 +243,17 @@ describe('图片编辑 V3 稀疏栅格分块导出', () => {
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
   })
 })
+
+
+it('智能内容的 P3 浮点输出保留原传递合同，已缓存瓦片可再次物化且不丢超白/负值', async () => {
+  const document = createImageEditDocumentV3({ width: 1, height: 1, documentId: 'p3-smart-materialize',
+    color: { workingSpace: 'display-p3', bitDepth: 'float32', transferFunction: 'srgb', hdrMetadata: null, iccProfileResourceId: null } });
+  const layer = createImageEditRasterLayerV3('p3-appearance', '缓存外观'); layer.tiles['0/0/0'] = BRUSH_A; document.layers = [layer];
+  const tile = createFloat32PremultipliedRgbaTile(1, 1, 'linear-light', Float32Array.from([.6, -.05, .1, .5]), 'display-p3', 'srgb', 203);
+  const output = await firstTilePixels(renderImageEditorV3ExportTiles({ document, resourceDescriptors: [descriptor(BRUSH_A)],
+    description: { ...description(1, 1), bitDepth: 32, sampleFormat: 'float', colorSpace: 'display-p3' } },
+    { readBrushTiles: async () => ({ tiles: [{ tileKey: '0/0/0', tile }] }) }));
+  const view = new DataView(output.buffer, output.byteOffset, output.byteLength);
+  for (const [channel, value] of [1.2, -.1, .2].entries()) expect(decodeTransferFunctionV3(view.getFloat32(channel * 4, true), 'srgb')).toBeCloseTo(value, 6);
+  expect(view.getFloat32(12, true)).toBeCloseTo(.5, 6);
+});

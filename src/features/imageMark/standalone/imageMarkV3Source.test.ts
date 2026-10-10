@@ -64,7 +64,7 @@ describe('imageMarkV3Source', () => {
     )
   })
 
-  it('候选版把支持的 8-bit SDR 来源统一为 sRGB 文档，不开放 ICC 模式', () => {
+  it('P3 输入以 Float32 线性 sRGB 工作，保留超白和负通道而不误附原 ICC', () => {
     const icc = `sha256:${'b'.repeat(64)}` as const
     expect(createImageMarkV3ColorMode(metadata({
       colorSpace: 'display-p3',
@@ -72,30 +72,18 @@ describe('imageMarkV3Source', () => {
       iccProfileResourceRef: icc,
     }))).toEqual({
       workingSpace: 'srgb',
-      bitDepth: 8,
-      transferFunction: 'srgb',
+      bitDepth: 'float32',
+      transferFunction: 'linear',
       hdrMetadata: null,
       iccProfileResourceId: null,
     })
   })
 
-  it('拒绝把 16 位、HDR 和非首发格式静默降成 8 位', () => {
-    expect(() => createImageMarkV3ColorMode(metadata({
-      bitsPerSample: 16,
-      depth: 'ushort',
-    }))).toThrow('仅支持 8-bit SDR')
-    expect(() => createImageMarkV3ColorMode(metadata({
-      format: 'avif',
-      bitsPerSample: 10,
-      cicp: {
-        colorPrimaries: 9,
-        transferCharacteristics: 16,
-        matrixCoefficients: 9,
-        fullRange: true,
-      },
-      hdr: true,
-    }))).toThrow('仅支持 JPEG、PNG 和 WebP')
-    expect(() => createImageMarkV3ColorMode(metadata({ hdr: true })))
-      .toThrow('仅支持 8-bit SDR')
+  it('保留 16 位与浮点精度，拒绝未验证的 HDR 解码', () => {
+    expect(createImageMarkV3ColorMode(metadata({ bitsPerSample: 16, depth: 'ushort' }))).toMatchObject({ bitDepth: 16, transferFunction: 'srgb' })
+    expect(createImageMarkV3ColorMode(metadata({ bitsPerSample: 32, depth: 'float' }))).toMatchObject({ bitDepth: 'float32', transferFunction: 'linear' })
+    expect(() => createImageMarkV3ColorMode(metadata({ format: 'avif', bitsPerSample: 10, cicp: { colorPrimaries: 9, transferCharacteristics: 16, matrixCoefficients: 9, fullRange: true }, hdr: true }))).toThrow('颜色保真验证')
+    expect(() => createImageMarkV3ColorMode(metadata({ hdr: true }))).toThrow('颜色保真验证')
+    expect(() => createImageMarkV3ColorMode(metadata({ pages: 2 }))).toThrow('多页图片')
   })
 })

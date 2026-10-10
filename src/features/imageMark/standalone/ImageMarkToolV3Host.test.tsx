@@ -266,7 +266,7 @@ describe('ImageMarkToolV3Host', () => {
     expect(mocks.save).not.toHaveBeenCalled()
   })
 
-  it('命令带有保存与另存为；导出只列发布格式；来源菜单不再有打开可编辑文件', async () => {
+  it('命令带有保存与另存为；导出列出文档支持的专业格式；来源菜单不再有打开可编辑文件', async () => {
     const onSave = vi.fn(async () => undefined)
     const onSaveAs = vi.fn(async () => undefined)
     const rendered = renderHost({ onSave, onSaveAs })
@@ -281,8 +281,8 @@ describe('ImageMarkToolV3Host', () => {
     expect(screen.queryByRole('button', { name: '打开可编辑文件' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '选择栅格导出格式' }))
-    expect(document.querySelectorAll('[data-export-format]')).toHaveLength(3)
-    expect(document.querySelector('[data-export-format="tiff8"]')).toBeNull()
+    expect(document.querySelectorAll('[data-export-format]')).toHaveLength(5)
+    expect(document.querySelector('[data-export-format="tiff8"]')).not.toBeNull()
   })
 
   it('接到文档会话：会话保存时把待保存修改落进工作副本，卸载时解除', async () => {

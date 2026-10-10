@@ -1,3 +1,4 @@
+import { encodeTransferFunctionV3 } from '@/core/imaging/colorManagement';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory';
 import { embedImageEditRasterV3 } from '@/core/imageEdit/v3/smartContent/commands';
@@ -23,7 +24,7 @@ function fixture() {
 beforeEach(() => {
   vi.clearAllMocks(); mocks.pin.mockResolvedValue(undefined); mocks.release.mockResolvedValue(undefined);
   mocks.persist.mockResolvedValue({ tiles: [{ tileKey: '0/0/0', resourceId: cacheId, byteSize: 64 }] });
-  mocks.render.mockImplementation(async function* () { yield { x: 0, y: 0, width: 1, height: 1, rowStride: 16, pixels: Float32Array.from([.4, .2, .1, .5]).buffer }; });
+  mocks.render.mockImplementation(async function* (request) { yield { x: 0, y: 0, width: 1, height: 1, rowStride: 16, pixels: Float32Array.from([.4, .2, .1].map(value => encodeTransferFunctionV3(value, request.description.transferFunction)).concat(.5)).buffer }; });
 });
 describe('智能内容物化和正式实例安全', () => {
   it('通用写入准备后未发布立即释放；发布后由保存确认持有缓存', async () => {
@@ -52,6 +53,8 @@ describe('智能内容物化和正式实例安全', () => {
     const icc = structuredClone(layer.content.document); icc.color.iccProfileResourceId = sourceId;
     const profileAppearance = await prepareSmartContentAppearanceV3(icc, document, { [sourceId]: 100 }); await profileAppearance.release();
     expect(mocks.render.mock.calls[1][0].document.color.iccProfileResourceId).toBe(sourceId);
+    expect(mocks.render.mock.calls[1][0].document.color.transferFunction).toBe(icc.color.transferFunction);
+    expect(mocks.render.mock.calls[1][0].description.transferFunction).toBe(icc.color.transferFunction);
     expect(mocks.render.mock.calls[1][0].description.iccProfileResourceRef).toBe(sourceId);
     bus.dispose();
   });
@@ -67,7 +70,7 @@ describe('智能内容物化和正式实例安全', () => {
     const { document, layer } = fixture();
     const appearance = await prepareSmartContentAppearanceV3(layer.content.document, document, { [sourceId]: 100 });
     expect(mocks.render.mock.calls[0][0].description.bitDepth).toBe(32);
-    expect(mocks.persist.mock.calls[0][0].tiles[0].tile.data).toEqual(Float32Array.from([.2, .1, .05, .5]));
+    for (const [index, value] of [.2, .1, .05, .5].entries()) expect(mocks.persist.mock.calls[0][0].tiles[0].tile.data[index]).toBeCloseTo(value, 6);
     expect(appearance.bytes[cacheId]).toBe(64); await appearance.release();
     const cancelled = new AbortController(); cancelled.abort();
     await expect(prepareSmartContentAppearanceV3(layer.content.document, document, {}, cancelled.signal)).rejects.toThrow();

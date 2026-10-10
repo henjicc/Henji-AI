@@ -90,7 +90,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     layerKinds: ['raster', 'smart', 'text', 'shape', 'path', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: listCreatableImageEditOperationIdsV3('adjustment'),
-    panels: ['layers', 'properties', 'history', 'channels', 'adjustments'],
+    panels: ['layers', 'properties', 'history', 'channels', 'adjustments', 'color'],
     layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document', 'export-raster'],
     hdrReadiness: {
@@ -120,7 +120,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     layerKinds: ['raster', 'smart', 'text', 'shape', 'path', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: listCreatableImageEditOperationIdsV3('adjustment'),
-    panels: ['layers', 'properties', 'history', 'channels', 'adjustments'],
+    panels: ['layers', 'properties', 'history', 'channels', 'adjustments', 'color'],
     layerControls: ['blend-mode', 'mask'],
     saveActions: ['save-document'],
     hdrReadiness: {

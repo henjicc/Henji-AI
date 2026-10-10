@@ -1,3 +1,4 @@
+import { parseImageEditDocumentV3 } from './documentCodec';
 import { normalizeImageEditLayerCommonPatchV3 } from './commandCommonPatch';
 import type { ImageEditLayerCommonPatchV3 } from './commandTypes';
 
@@ -225,6 +226,13 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史命令无效');
   const command = value;
   switch (command.type) {
+    case 'document.set-color':
+      validateBase(command, ['color', ...(command.resources === undefined ? [] : ['resources'])]);
+      if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '颜色命令资源元数据');
+      if (!isRecord(command.color)) fail('历史颜色契约无效');
+      // 文档 codec 同时校验传递函数、HDR 和资源引用，不另写字段表。
+      parseImageEditDocumentV3({ ...createImageEditDocumentV3({ width: 1, height: 1 }), color: command.color });
+      break;
     case 'document.set-canvas-size':
       validateBase(command, ['width', 'height', 'rasterCanvases']);
       if (safeInteger(command.width, '画布宽度') <= 0 || safeInteger(command.height, '画布高度') <= 0) fail('画布尺寸必须为正数');

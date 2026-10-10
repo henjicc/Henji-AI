@@ -227,7 +227,9 @@ export class ImageEditorGpuExportSessionV3 {
         event: 'image_editor_v3.gpu_export.failed', requestId: active.requestId,
         context: { completedTiles: completed },
       }
-      if (active.errorDiagnostic) {
+      if (request.signal?.aborted) {
+        logger.info('图片编辑 GPU 分块导出已取消', { ...logDetails, event: 'image_editor_v3.gpu_export.cancelled' });
+      } else if (active.errorDiagnostic) {
         logger.warn('图片编辑 GPU 分块导出已执行 Reality 故障注入', logDetails)
       } else {
         logger.error('图片编辑 GPU 分块导出失败', failure, logDetails)

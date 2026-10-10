@@ -1,3 +1,4 @@
+import { prepareColorSettingsV3 } from '../panels/colorManagement/service';
 import { prepareDocumentGeometryV3 } from '../tools/documentGeometry/service'
 import { retainSmartContentResourcesV3 } from '../smartContent/resourceLeases'
 import type { ImageEditSelectionSessionV3 } from '@/core/imageEdit/v3/selection/session'
@@ -443,6 +444,10 @@ export class ImageEditV3DocumentMutationExecutor extends ImageEditV3MutationExec
     const workflow: ImageEditWorkflowDraftV3 = {}
     const workflowMutations = step.mutations.filter(mutation => this.workflowWriters[mutation.propertyId])
     await applyWriterTable(this.workflowWriters, workflow, workflowMutations)
+    if (workflow.colorSettings) {
+      if (step.mutations.length !== 1) throw new Error('颜色调整请作为独立 change，随后再修改其他属性');
+      return { documentId, ...await prepareColorSettingsV3(bus, workflow.colorSettings, { signal: context?.signal }) };
+    }
     if (workflow.canvasSize) {
       if (step.mutations.length !== 1) throw new Error('画布尺寸调整请作为独立 change，随后再调整其他属性')
       if (workflow.canvasSize.width === document.geometry.width && workflow.canvasSize.height === document.geometry.height) return { documentId, commands: [] }

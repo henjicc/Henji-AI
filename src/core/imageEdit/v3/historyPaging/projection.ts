@@ -24,6 +24,7 @@ export interface ImageEditHistoryJumpOptionsV3 {
 }
 
 const labels: Record<ImageEditCommandV3['type'], string> = {
+  'document.set-color': '调整颜色与位深',
   'document.set-canvas-size': '调整画布边界',
   'layer.replace': '更新图层内容',
   'document.atomic': '转换滤镜范围',
@@ -37,6 +38,7 @@ const labels: Record<ImageEditCommandV3['type'], string> = {
 };
 
 export function projectImageEditHistoryCommandV3(command: ImageEditCommandV3): Pick<ImageEditHistoryRowV3, 'labelKey' | 'label' | 'targetName'> {
+  if (command.type === 'document.atomic' && command.commands.some(value => value.type === 'document.set-color')) return { labelKey: 'imageEditor.v3.history.commands.document.set-color', label: labels['document.set-color'], targetName: null };
   const targetName = command.type === 'layer.add' ? command.layer.name
     : command.type === 'layer.group' ? command.group.name
     : command.type === 'layer.update-common' ? command.patch.name ?? null : null;

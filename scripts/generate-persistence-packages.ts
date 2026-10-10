@@ -35,6 +35,8 @@ export async function generateImageHistoryPersistenceFixtures(sourceFixture: str
     ...originalSize, rasterCanvases: {} })
   document = history.execute(document, { type: 'document.atomic', commandId: 'golden-atomic', expectedRevision: document.revision, commands: [
     { type: 'layer.update-common', commandId: 'golden-atomic-a', expectedRevision: document.revision, layerId: 'golden-layer', patch: { opacity: .8 } },
+    { type: 'document.set-color', commandId: 'golden-color-p3', expectedRevision: document.revision, color: { ...document.color, workingSpace: 'display-p3', bitDepth: 16 } },
+    { type: 'document.set-color', commandId: 'golden-color-restore', expectedRevision: document.revision, color: structuredClone(document.color) },
     { type: 'layer.update-common', commandId: 'golden-atomic-b', expectedRevision: document.revision + 1, layerId: 'golden-layer', patch: { opacity: 1 } },
   ] })
   for (const opacity of [.9, 1, .5]) document = history.execute(document, {

@@ -4,6 +4,14 @@ import { createImageEditDocumentV3, createImageEditPathLayerV3, createImageEditS
 import { rectanglePath } from '@/core/imaging/vectorContent'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 import type { ImageEditorGpuSceneExportRequestV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
+const log = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn() }));
+vi.mock('@/core/logging', async () => {
+  const actual = await vi.importActual<typeof import('@/core/logging')>('@/core/logging');
+  return { ...actual, createLogger: (domain: string) => {
+    const logger = actual.createLogger(domain);
+    return domain === 'features.image_edit.v3.gpu_export' ? { ...logger, ...log } : logger;
+  } };
+});
 import { ImageEditorGpuExportSessionV3 } from './gpuExportSessionV3'
 
 function client(): ImageEditorGpuSceneClientV3Like & {
@@ -175,7 +183,8 @@ describe('ImageEditorGpuExportSessionV3', () => {
     session.dispose()
   })
 
-  it('AbortSignal会拒绝等待中的导出并取消worker job', async () => {
+  it('AbortSignal会拒绝等待中的导出并取消worker job，只记取消而不误报失败', async () => {
+    log.info.mockClear(); log.error.mockClear();
     const gpu = client()
     const session = new ImageEditorGpuExportSessionV3(gpu)
     const document = createImageEditDocumentV3({ width: 16, height: 16 })
@@ -188,6 +197,8 @@ describe('ImageEditorGpuExportSessionV3', () => {
     const next = stream[Symbol.asyncIterator]().next()
     controller.abort(new Error('user cancelled'))
     await expect(next).rejects.toThrow('user cancelled')
+    expect(log.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'image_editor_v3.gpu_export.cancelled' }));
+    expect(log.error).not.toHaveBeenCalled();
     expect(gpu.cancelExport).toHaveBeenCalledWith(exportRequest.requestId)
     session.dispose()
   })

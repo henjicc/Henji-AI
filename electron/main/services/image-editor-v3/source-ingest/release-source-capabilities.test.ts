@@ -27,17 +27,17 @@ function metadata(patch: Partial<SourceImageMetadata> = {}): SourceImageMetadata
   }
 }
 
-describe('图片编辑 V3 候选版源格式门禁', () => {
-  it.each(['jpeg', 'png', 'webp'])('接受静态 8-bit SDR %s', (format) => {
-    expect(() => assertImageEditorV3ReleaseSource(metadata({ format }))).not.toThrow()
+describe('图片编辑 V3 实际解码源格式门禁', () => {
+  it.each(['jpeg', 'png', 'webp', 'tiff', 'avif', 'heif'])('接受静态 SDR %s 并保留 16 位', (format) => {
+    expect(() => assertImageEditorV3ReleaseSource(metadata({ format, bitsPerSample: 16, depth: 'ushort' }))).not.toThrow()
   })
 
   it.each([
-    [{ format: 'avif' }, 'format'],
-    [{ bitsPerSample: 16, depth: 'ushort' }, 'precision'],
+    [{ format: 'unknown' }, 'format'],
+    [{ cicp: { colorPrimaries: 9, transferCharacteristics: 1, matrixCoefficients: 9, fullRange: false } }, 'format'],
     [{ hdr: true }, 'hdr'],
     [{ pages: 2 }, 'animated'],
-  ] as const)('拒绝候选版范围外来源 %#', (patch, reason) => {
+  ] as const)('拒绝未经验证的颜色或多页来源 %#', (patch, reason) => {
     expect(() => assertImageEditorV3ReleaseSource(metadata(patch))).toThrow(
       expect.objectContaining({ name: ImageEditorV3UnsupportedSourceError.name, reason }),
     )

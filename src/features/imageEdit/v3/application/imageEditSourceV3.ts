@@ -26,15 +26,14 @@ export function resolveImageMarkV3SourceLocator(sourceImageUrl: string): ImageEd
 export function createImageMarkV3ColorMode(
   metadata: ImageEditorV3SourceMetadata,
 ): ImageEditColorModeV3 {
-  const format = metadata.format?.toLowerCase()
-  if (!format || !['jpeg', 'png', 'webp'].includes(format)) {
-    throw new Error(`当前新版编辑器仅支持 JPEG、PNG 和 WebP：${format ?? '未知格式'}`)
-  }
-  if (metadata.hdr || metadata.bitsPerSample > 8 || metadata.depth === 'float') {
-    throw new Error('当前新版编辑器仅支持 8-bit SDR 图片')
-  }
-  // 候选版统一在导入边界转换到 sRGB；ICC/P3/HDR 文档模式留待后续版本重新开放。
-  return createDefaultImageEditColorModeV3()
+  if (!metadata.format) throw new Error('无法识别图片编码');
+  if (metadata.pages && metadata.pages > 1) throw new Error('请先选取多页图片中的一页');
+  if (metadata.hdr) throw new Error('HDR 源图片解码尚未通过颜色保真验证；可继续编辑工作文档中的 HDR 浮点内容');
+  // Source provider performs ICC decoding to canonical sRGB/scRGB. An input ICC must
+  // never be reattached to these converted pixels as if it were their working profile.
+  const floatingWorkingPixels = metadata.colorSpace === 'display-p3' || metadata.depth === 'float' || metadata.bitsPerSample > 16;
+  return { ...createDefaultImageEditColorModeV3(), bitDepth: floatingWorkingPixels ? 'float32' : metadata.bitsPerSample > 8 ? 16 : 8,
+    transferFunction: floatingWorkingPixels ? 'linear' : 'srgb' };
 }
 
 /** 不透明媒体能力先经唯一持久化边界转成可读路径；原始路径、HTTP 和 Data URL 直接受管导入。 */

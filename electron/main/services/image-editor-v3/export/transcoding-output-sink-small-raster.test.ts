@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { loadSharp } from '../../image/sharp-loader'
 import type { TileOutputDescription } from '../contracts'
+import { standardRgbProfile } from './standard-profiles'
 import { TranscodingTileOutputSink } from './transcoding-output-sink'
 import { removeTemporaryDirectory } from '../../../../../src/tests/removeTemporaryDirectory'
 
@@ -91,3 +92,20 @@ describe('TranscodingTileOutputSink 小尺寸文档', () => {
     expect(decoded).toEqual(Buffer.from(pixels))
   })
 })
+
+
+it('Display-P3 16 位 PNG 带标准 ICC，编码不误标 sRGB，透明度保持', async () => {
+  const sharp = await loadSharp();
+  const description: TileOutputDescription = { ...baseDescription, bitDepth: 16, colorSpace: 'display-p3' };
+  const pixels = new Uint8Array(8), samples = new DataView(pixels.buffer);
+  for (const [index, value] of [40000, 12000, 3000, 32768].entries()) samples.setUint16(index * 2, value, true);
+  const target = path.join(rootDir, 'p3-16.png');
+  const sink = new TranscodingTileOutputSink(target, { format: 'png16', inputByteOrder: 'little-endian' });
+  await sink.begin(description); await sink.writeTile({ x: 0, y: 0, width: 1, height: 1, rowStride: 8, pixels }); await sink.complete();
+  const metadata = await sharp(target).metadata();
+  expect(metadata.icc?.toString('ascii', 16, 20)).toBe('RGB ');
+  expect(metadata.bitsPerSample).toBe(16);
+  expect(metadata.icc).toEqual(await standardRgbProfile('display-p3'));
+  const read = await sharp(target).keepIccProfile().toColourspace('rgb16').raw({ depth: 'ushort' }).toBuffer();
+  for (let index = 0; index < 4; index++) expect(read.readUInt16LE(index * 2)).toBeCloseTo(samples.getUint16(index * 2, true), -1);
+});

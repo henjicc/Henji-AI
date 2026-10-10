@@ -1,3 +1,4 @@
+import { parseImageEditDocumentV3 } from './documentCodec';
 import { parseImageEditSharedEffectParametersV3 } from './operationCatalog';
 import { parseImageColorGradeParams } from '../../imaging/adjustments/schema';
 import {
@@ -566,19 +567,21 @@ export function applyImageEditCommandV3(
     return { document: { ...candidate, revision: nextRevision }, inverse, historyMetadataBytes,
       historyResources: history.resources, historyBytes: historyMetadataBytes + history.bytes };
   }
+  if (command.type === 'document.set-color') assertImageEditStructuralCommandResourcesV3(document, command);
+  const color = command.type === 'document.set-color' ? parseImageEditDocumentV3({ ...document, color: command.color }).color : null;
   const documentResult = command.type === 'document.update-output-geometry'
     ? applyImageEditOutputGeometryCommandV3(document, command, nextRevision)
     : command.type === 'document.set-canvas-size' ? applyImageEditCanvasSizeCommandV3(document, command, nextRevision)
     : null;
   const regionsResult = command.type === 'document.set-named-regions'
     ? imageEditNamedRegionsSchemaV3.parse(command.regions) : null;
-  const layerResult = documentResult || regionsResult ? null : applyLayerCommand(
+  const layerResult = documentResult || regionsResult || color ? null : applyLayerCommand(
     document,
     command,
     nextRevision,
     options.allowLegacyResourceMetadata === true,
   );
-  const inverse = regionsResult ? { ...inverseBase(command, nextRevision), type: 'document.set-named-regions' as const,
+  const inverse = color ? { ...inverseBase(command, nextRevision), type: 'document.set-color' as const, color: structuredClone(document.color), ...(command.type === 'document.set-color' && command.resources ? { resources: structuredClone(command.resources) } : {}) } : regionsResult ? { ...inverseBase(command, nextRevision), type: 'document.set-named-regions' as const,
     regions: structuredClone(document.namedRegions) } : documentResult?.inverse ?? layerResult?.inverse;
   try {
     assertImageEditLayerSemanticsV3(layerResult?.layers ?? document.layers);
@@ -599,6 +602,7 @@ export function applyImageEditCommandV3(
     document: {
       ...document,
       revision: nextRevision,
+      ...(color ? { color } : {}),
       ...(regionsResult ? { namedRegions: regionsResult } : {}),
       ...(documentResult ? { geometry: documentResult.geometry, layers: documentResult.layers } : { layers: layerResult?.layers ?? document.layers }),
     },

@@ -77,6 +77,11 @@ export function assertImageEditStructuralCommandResourcesV3(
   command: ImageEditCommandV3,
   allowLegacyMissing = false,
 ): void {
+  if (command.type === 'document.set-color') {
+    const ids = sortedUnique([document.color.iccProfileResourceId, command.color.iccProfileResourceId].filter((value): value is string => value !== null));
+    if (ids.length || command.resources) assertDescriptors(command.resources, ids, '颜色命令资源元数据');
+    return;
+  }
   if (command.type === 'layer.update-common' && command.patch.filters) {
     const ids = filterResourceIds(document, command);
     if (ids.length || command.resources) assertDescriptors(command.resources, ids, '滤镜命令资源元数据');
@@ -112,6 +117,10 @@ export function prepareImageEditCommandResourceMetadataV3(
   command: ImageEditCommandV3,
   byteSizes: ReadonlyMap<string, number>,
 ): ImageEditCommandV3 {
+  if (command.type === 'document.set-color') {
+    const ids = sortedUnique([document.color.iccProfileResourceId, command.color.iccProfileResourceId].filter((value): value is string => value !== null));
+    return { ...command, resources: command.resources ? assertDescriptors(command.resources, ids, '颜色命令资源元数据') : descriptorsFromIds(ids, byteSizes, '颜色命令') };
+  }
   if (command.type === 'layer.update-common' && command.patch.filters) {
     const ids = filterResourceIds(document, command);
     return { ...command, resources: command.resources

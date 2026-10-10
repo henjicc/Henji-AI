@@ -28,7 +28,7 @@ const MAX_SOURCE_URL_CHARACTERS = 8_192
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308])
 const IMAGE_MEDIA_TYPE_PATTERN = /^image\/[a-z0-9][a-z0-9.+-]{0,63}$/
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
-const RELEASE_IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const RELEASE_IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/tiff', 'image/avif', 'image/heif', 'image/heic'])
 
 export const IMAGE_EDITOR_V3_SOURCE_INGEST_LIMITS: ImageEditorV3SourceIngestLimits = {
   localMaxBytes: 8 * 1024 * 1024 * 1024,
@@ -172,6 +172,11 @@ function mediaTypeFromPathname(pathname: string): string | undefined {
     case '.jpg':
     case '.jpeg': return 'image/jpeg'
     case '.webp': return 'image/webp'
+    case '.tif':
+    case '.tiff': return 'image/tiff'
+    case '.avif': return 'image/avif'
+    case '.heic': return 'image/heic'
+    case '.heif': return 'image/heif'
     default: return undefined
   }
 }
@@ -183,7 +188,7 @@ function normalizeImageMediaType(raw: string | null, fallback?: string): string 
     throw new Error(`Remote source is not a supported raster image: ${normalized}`)
   }
   if (!RELEASE_IMAGE_MEDIA_TYPES.has(normalized)) {
-    throw new Error(`当前新版编辑器仅支持 JPEG、PNG 和 WebP：${normalized}`)
+    throw new Error(`当前解码器不支持此图片类型：${normalized}`)
   }
   return normalized
 }

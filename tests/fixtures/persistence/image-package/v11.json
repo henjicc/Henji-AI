@@ -1,0 +1,676 @@
+{
+  "packageFormat": "henjiimg",
+  "packageVersion": 11,
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "document": {
+    "format": "henji-image-edit",
+    "formatVersion": 13,
+    "documentId": "golden-image",
+    "revision": 19,
+    "createdAt": "2026-10-09T00:00:00.000Z",
+    "updatedAt": "2026-10-09T00:00:00.000Z",
+    "document": {
+      "version": 10,
+      "id": "golden-image",
+      "revision": 19,
+      "geometry": {
+        "width": 64,
+        "height": 48,
+        "orientation": {
+          "rotate": 90,
+          "mirrored": true
+        },
+        "crop": {
+          "x": 1,
+          "y": 2,
+          "width": 32,
+          "height": 40
+        }
+      },
+      "color": {
+        "workingSpace": "srgb",
+        "bitDepth": 8,
+        "transferFunction": "srgb",
+        "hdrMetadata": null,
+        "iccProfileResourceId": null
+      },
+      "layers": [
+        {
+          "id": "golden-layer",
+          "name": "空白图层",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "fillOpacity": 0.7,
+          "clipping": false,
+          "deformation": {
+            "kind": "perspective",
+            "points": [
+              [
+                0.1,
+                0
+              ],
+              [
+                0.9,
+                0
+              ],
+              [
+                1,
+                1
+              ],
+              [
+                0,
+                1
+              ]
+            ]
+          },
+          "maskAttachment": {
+            "enabled": true,
+            "linked": false,
+            "density": 0.6,
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          "filters": [
+            {
+              "id": "golden-local-grade",
+              "operationType": "adjustment",
+              "effectId": "exposure",
+              "params": {
+                "stops": 0.4
+              },
+              "enabled": true,
+              "opacity": 0.8,
+              "blendMode": "normal",
+              "mask": null
+            }
+          ],
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "smart",
+          "source": {
+            "kind": "empty"
+          },
+          "tiles": {},
+          "content": {
+            "id": "content-0741c12f-cb74-4ea7-94f5-b6c895f20e72",
+            "origin": null,
+            "document": {
+              "version": 10,
+              "id": "document-0d283894-68d6-4e35-a075-69b795c1a958",
+              "revision": 0,
+              "geometry": {
+                "width": 64,
+                "height": 48,
+                "orientation": {
+                  "rotate": 0,
+                  "mirrored": false
+                },
+                "crop": null
+              },
+              "color": {
+                "workingSpace": "srgb",
+                "bitDepth": 8,
+                "transferFunction": "srgb",
+                "hdrMetadata": null,
+                "iccProfileResourceId": null
+              },
+              "layers": [
+                {
+                  "id": "layer-706e4b1a-4730-4e79-a448-acadd0807292",
+                  "name": "空白图层",
+                  "visible": true,
+                  "locked": false,
+                  "opacity": 1,
+                  "fillOpacity": 1,
+                  "clipping": false,
+                  "maskAttachment": {
+                    "enabled": true,
+                    "linked": true,
+                    "density": 1,
+                    "transform": [
+                      1,
+                      0,
+                      0,
+                      1,
+                      0,
+                      0
+                    ]
+                  },
+                  "filters": [],
+                  "blendMode": "normal",
+                  "transform": [
+                    1,
+                    0,
+                    0,
+                    1,
+                    0,
+                    0
+                  ],
+                  "mask": null,
+                  "type": "raster",
+                  "source": {
+                    "kind": "empty"
+                  },
+                  "tiles": {}
+                }
+              ],
+              "namedRegions": []
+            },
+            "width": 64,
+            "height": 48
+          }
+        },
+        {
+          "id": "golden-shared-grade",
+          "name": "共享调整",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "fillOpacity": 1,
+          "clipping": false,
+          "maskAttachment": {
+            "enabled": true,
+            "linked": true,
+            "density": 1,
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          "filters": [],
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "adjustment",
+          "adjustmentId": "color_grade",
+          "params": {
+            "temperature": 0,
+            "tint": 0,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "saturation": 0,
+            "vibrance": 0,
+            "faded_film": 0,
+            "sharpen": 0,
+            "creative_shadow_hue": 0,
+            "creative_shadow_strength": 0,
+            "creative_highlight_hue": 0,
+            "creative_highlight_strength": 0,
+            "curve_master_points": [],
+            "curve_red_points": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 50,
+                "y": 60
+              },
+              {
+                "x": 100,
+                "y": 100
+              }
+            ],
+            "curve_green_points": [],
+            "curve_blue_points": [],
+            "curve_hue_sat_points": [],
+            "curve_hue_hue_points": [],
+            "curve_hue_luma_points": [],
+            "curve_luma_sat_points": [],
+            "curve_sat_sat_points": [],
+            "input_lut": "",
+            "input_lut_strength": 100,
+            "look_lut": "",
+            "look_lut_strength": 100,
+            "shadow_hue": 230,
+            "shadow_strength": 12,
+            "shadow_luminance": 0,
+            "midtone_hue": 0,
+            "midtone_strength": 0,
+            "midtone_luminance": 0,
+            "highlight_hue": 0,
+            "highlight_strength": 0,
+            "highlight_luminance": 0,
+            "hsl_hue_start": 0,
+            "hsl_hue_end": 360,
+            "hsl_hue_feather": 0,
+            "hsl_saturation_start": 0,
+            "hsl_saturation_end": 100,
+            "hsl_saturation_feather": 0,
+            "hsl_luminance_start": 0,
+            "hsl_luminance_end": 100,
+            "hsl_luminance_feather": 0,
+            "hsl_invert": false,
+            "hsl_denoise": 0,
+            "hsl_blur": 0,
+            "hsl_temperature": 0,
+            "hsl_tint": 0,
+            "hsl_contrast": 0,
+            "hsl_sharpen": 0,
+            "hsl_saturation": -15,
+            "hsl_grade_hue": 0,
+            "hsl_grade_strength": 0,
+            "hsl_grade_luminance": 0,
+            "vignette_amount": 0,
+            "vignette_midpoint": 50,
+            "vignette_roundness": 0,
+            "vignette_feather": 50
+          },
+          "renderable": true
+        },
+        {
+          "id": "golden-shared-gaussian",
+          "name": "高斯模糊",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "fillOpacity": 1,
+          "clipping": false,
+          "maskAttachment": {
+            "enabled": true,
+            "linked": true,
+            "density": 1,
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          "filters": [],
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "effect",
+          "effectId": "gaussian_blur",
+          "params": {
+            "sigma_fraction_height": 0.009,
+            "axis": "horizontal",
+            "edge_mode": "transparent"
+          },
+          "renderable": true
+        },
+        {
+          "id": "golden-quick-marks",
+          "name": "快速标记",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "fillOpacity": 1,
+          "clipping": false,
+          "maskAttachment": {
+            "enabled": true,
+            "linked": true,
+            "density": 1,
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          "filters": [],
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "mask": null,
+          "type": "shape",
+          "content": {
+            "operands": [
+              {
+                "path": {
+                  "commands": [
+                    {
+                      "kind": "move",
+                      "x": 0,
+                      "y": 0
+                    },
+                    {
+                      "kind": "line",
+                      "x": 160,
+                      "y": 0
+                    },
+                    {
+                      "kind": "line",
+                      "x": 160,
+                      "y": 100
+                    },
+                    {
+                      "kind": "line",
+                      "x": 0,
+                      "y": 100
+                    },
+                    {
+                      "kind": "close"
+                    }
+                  ],
+                  "fillRule": "nonzero"
+                },
+                "operation": "replace"
+              }
+            ],
+            "paint": {
+              "fill": {
+                "enabled": true,
+                "color": "#ffffff"
+              },
+              "strokes": [
+                {
+                  "enabled": true,
+                  "color": "#000000",
+                  "width": 2,
+                  "position": "center"
+                }
+              ],
+              "shadows": []
+            }
+          }
+        },
+        {
+          "id": "golden-smart-instance",
+          "name": "空白图层",
+          "visible": true,
+          "locked": false,
+          "opacity": 1,
+          "fillOpacity": 0.7,
+          "clipping": false,
+          "deformation": {
+            "kind": "perspective",
+            "points": [
+              [
+                0.1,
+                0
+              ],
+              [
+                0.9,
+                0
+              ],
+              [
+                1,
+                1
+              ],
+              [
+                0,
+                1
+              ]
+            ]
+          },
+          "maskAttachment": {
+            "enabled": true,
+            "linked": false,
+            "density": 0.6,
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          "filters": [
+            {
+              "id": "golden-local-grade",
+              "operationType": "adjustment",
+              "effectId": "exposure",
+              "params": {
+                "stops": 0.4
+              },
+              "enabled": true,
+              "opacity": 0.8,
+              "blendMode": "normal",
+              "mask": null
+            }
+          ],
+          "blendMode": "normal",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            4,
+            2
+          ],
+          "mask": null,
+          "type": "smart",
+          "source": {
+            "kind": "empty"
+          },
+          "tiles": {},
+          "content": {
+            "id": "content-0741c12f-cb74-4ea7-94f5-b6c895f20e72",
+            "origin": null,
+            "document": {
+              "version": 10,
+              "id": "document-0d283894-68d6-4e35-a075-69b795c1a958",
+              "revision": 0,
+              "geometry": {
+                "width": 64,
+                "height": 48,
+                "orientation": {
+                  "rotate": 0,
+                  "mirrored": false
+                },
+                "crop": null
+              },
+              "color": {
+                "workingSpace": "srgb",
+                "bitDepth": 8,
+                "transferFunction": "srgb",
+                "hdrMetadata": null,
+                "iccProfileResourceId": null
+              },
+              "layers": [
+                {
+                  "id": "layer-706e4b1a-4730-4e79-a448-acadd0807292",
+                  "name": "空白图层",
+                  "visible": true,
+                  "locked": false,
+                  "opacity": 1,
+                  "fillOpacity": 1,
+                  "clipping": false,
+                  "maskAttachment": {
+                    "enabled": true,
+                    "linked": true,
+                    "density": 1,
+                    "transform": [
+                      1,
+                      0,
+                      0,
+                      1,
+                      0,
+                      0
+                    ]
+                  },
+                  "filters": [],
+                  "blendMode": "normal",
+                  "transform": [
+                    1,
+                    0,
+                    0,
+                    1,
+                    0,
+                    0
+                  ],
+                  "mask": null,
+                  "type": "raster",
+                  "source": {
+                    "kind": "empty"
+                  },
+                  "tiles": {}
+                }
+              ],
+              "namedRegions": []
+            },
+            "width": 64,
+            "height": 48
+          }
+        }
+      ],
+      "namedRegions": [
+        {
+          "id": "golden-region",
+          "name": "主体",
+          "selection": {
+            "operations": [
+              {
+                "shape": {
+                  "type": "ellipse",
+                  "x": 0.2,
+                  "y": 0.1,
+                  "width": 0.5,
+                  "height": 0.7
+                },
+                "combine": "replace",
+                "invertBefore": false
+              }
+            ],
+            "feather": 0.02,
+            "inverted": false
+          }
+        },
+        {
+          "id": "golden-outside",
+          "name": "画布外保留",
+          "selection": {
+            "operations": [
+              {
+                "shape": {
+                  "type": "rectangle",
+                  "x": -0.4,
+                  "y": 1.1,
+                  "width": 1.5,
+                  "height": 0.5
+                },
+                "combine": "replace",
+                "invertBefore": false
+              }
+            ],
+            "feather": 0.02,
+            "inverted": false
+          }
+        },
+        {
+          "id": "golden-float32",
+          "name": "软覆盖率",
+          "selection": {
+            "operations": [
+              {
+                "shape": {
+                  "type": "mask",
+                  "width": 2,
+                  "height": 2,
+                  "runs": [
+                    [
+                      0,
+                      1,
+                      0.12345679104328156
+                    ],
+                    [
+                      1,
+                      1,
+                      0.5000000596046448
+                    ],
+                    [
+                      2,
+                      1,
+                      1
+                    ]
+                  ],
+                  "matrix": [
+                    1,
+                    0,
+                    0,
+                    1,
+                    0,
+                    0
+                  ]
+                },
+                "combine": "replace",
+                "invertBefore": false
+              }
+            ],
+            "feather": 0,
+            "inverted": false
+          }
+        }
+      ]
+    },
+    "historyCheckpoint": {
+      "format": "henji-image-history",
+      "version": 2,
+      "documentId": "golden-image",
+      "headRevision": 19,
+      "snapshotVersion": 2,
+      "position": 5,
+      "total": 6,
+      "pages": [
+        {
+          "resourceId": "sha256:20a54be3bef7c8a0711e1df2b255f4aa29b9742ac7e69c344095e8ca79ad72e0",
+          "byteSize": 3379,
+          "start": 0,
+          "count": 6
+        }
+      ],
+      "resources": []
+    },
+    "resourceRefs": [
+      "sha256:20a54be3bef7c8a0711e1df2b255f4aa29b9742ac7e69c344095e8ca79ad72e0"
+    ]
+  },
+  "resources": [
+    {
+      "resourceId": "sha256:20a54be3bef7c8a0711e1df2b255f4aa29b9742ac7e69c344095e8ca79ad72e0",
+      "sha256": "20a54be3bef7c8a0711e1df2b255f4aa29b9742ac7e69c344095e8ca79ad72e0",
+      "byteLength": 3379,
+      "path": "resources/20a54be3bef7c8a0711e1df2b255f4aa29b9742ac7e69c344095e8ca79ad72e0"
+    }
+  ]
+}

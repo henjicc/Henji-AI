@@ -1700,7 +1700,7 @@ function createToolboxScenes(context) {
         }).click().then(() => page.locator('[data-export-format]').evaluateAll(
           (items) => items.map((item) => item.getAttribute('data-export-format')),
         ))
-        if (formats.join(',') !== 'png8,jpeg,webp') {
+        if (formats.join(',') !== 'png8,jpeg,webp,tiff8,bigtiff') {
           throw new Error(`发布候选导出格式不正确：${formats.join(',')}`)
         }
         await page.keyboard.press('Escape')

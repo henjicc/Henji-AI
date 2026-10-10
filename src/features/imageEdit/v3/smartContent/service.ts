@@ -106,7 +106,8 @@ export async function resolveSmartContentSourceV3(origin: ImageEditSmartOriginV3
 /** 沿唯一导出求值器逐块物化，浮点线性缓存不会把原始可编辑文档替换成 PNG。 */
 export async function prepareSmartContentAppearanceV3(contentDocument: ImageEditDocumentV3,
   parent: ImageEditDocumentV3, bytes: Readonly<Record<string, number>>, signal?: AbortSignal,
-  onProgress?: (completed: number, total: number) => void) {
+  onProgress?: (completed: number, total: number) => void,
+  transformPixels?: (tile: import('@/core/imageEdit/v3/effects/contracts').Float32PremultipliedRgbaTile) => import('@/core/imageEdit/v3/effects/contracts').Float32PremultipliedRgbaTile) {
   signal?.throwIfAborted();
   const decoded = decodeImageEditDocumentV3(contentDocument);
   if (!decoded.document) throw new Error('智能内容无效或包含循环引用');
@@ -115,7 +116,8 @@ export async function prepareSmartContentAppearanceV3(contentDocument: ImageEdit
     source: { kind: 'empty' }, tiles: {}, content: { id: 'candidate', origin: null, document, width: 1, height: 1 } }] });
   const hdr = document.color.hdrMetadata !== null || document.color.transferFunction === 'pq' || document.color.transferFunction === 'hlg';
   // HDR 沿正式 scene-linear Float32 导出；保留原传递函数/参考白，不能用清空元数据伪装 SDR。
-  const renderDocument = hdr ? document : { ...document, color: { ...document.color, bitDepth: 'float32' as const, transferFunction: 'linear' as const } };
+  const renderDocument = hdr ? document : { ...document, color: { ...document.color, bitDepth: 'float32' as const } };
+  const outputTransfer = hdr ? 'linear' as const : document.color.transferFunction;
   const geometry = resolveImageEditorV3ExportGeometry(document);
   const requestId = createImageEditIdV3('smart-content');
   const resultBytes = { ...bytes };
@@ -124,7 +126,7 @@ export async function prepareSmartContentAppearanceV3(contentDocument: ImageEdit
   try {
     for await (const output of renderImageEditorV3ExportTiles({ document: renderDocument, resourceDescriptors: smartContentDescriptorsV3(document, bytes),
       description: { width: geometry.outputWidth, height: geometry.outputHeight, bitDepth: 32, sampleFormat: 'float', colorSpace: document.color.workingSpace,
-        transferFunction: 'linear', alphaMode: 'straight',
+        transferFunction: outputTransfer, alphaMode: 'straight',
         ...(document.color.iccProfileResourceId ? { iccProfileResourceRef: document.color.iccProfileResourceId as ImageEditorV3ResourceDescriptor['resourceRef'] } : {}) }, tileSize: 512, signal, onTileRendered: onProgress })) {
       signal?.throwIfAborted();
       const buffer = output.pixels instanceof Uint8Array ? output.pixels : new Uint8Array(output.pixels);
@@ -136,8 +138,12 @@ export async function prepareSmartContentAppearanceV3(contentDocument: ImageEdit
         for (let channel = 0; channel < 3; channel++) data[index + channel] = view.getFloat32(offset + channel * 4, true) * alpha;
         data[index + 3] = alpha;
       }
-      const tile = convertFloat32TileColorContractV3(createFloat32PremultipliedRgbaTile(output.width, output.height, 'linear-light', data,
-        document.color.workingSpace, 'linear', document.color.hdrMetadata?.referenceWhiteNits ?? 203), {
+      // SDR renders Float32 in its original transfer contract so cached brush/smart tiles
+      // are never relabelled. Decode that output through the shared kernel before assignment.
+      const encodedTile = createFloat32PremultipliedRgbaTile(output.width, output.height, outputTransfer === 'linear' ? 'linear-light' : 'perceptual-working', data,
+        document.color.workingSpace, outputTransfer, document.color.hdrMetadata?.referenceWhiteNits ?? 203);
+      const sourceTile = convertFloat32TileColorContractV3(encodedTile, { ...encodedTile, colorDomain: 'linear-light' });
+      const tile = transformPixels ? transformPixels(sourceTile) : convertFloat32TileColorContractV3(sourceTile, {
         colorDomain: 'linear-light', workingSpace: parent.color.workingSpace, transferFunction: parent.color.transferFunction,
         referenceWhiteNits: parent.color.hdrMetadata?.referenceWhiteNits ?? 203 });
       const tileKey = `0/${output.x / 512}/${output.y / 512}`;

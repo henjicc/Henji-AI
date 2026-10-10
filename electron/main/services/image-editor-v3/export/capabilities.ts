@@ -1,3 +1,4 @@
+import { standardRgbProfile } from './standard-profiles';
 import type {
   ResourceId,
   TileOutputDescription,
@@ -353,6 +354,9 @@ export async function prepareExportMetadata(
   rejectUnsupportedCicp(description, options.format)
   validateTransferFunction(description, options.format)
 
+  if (description.colorSpace === 'display-p3' && description.transferFunction === 'srgb' && !description.iccProfileResourceId) {
+    return { iccProfile: validateIccBytes(await standardRgbProfile('display-p3'), options.format) };
+  }
   if (description.colorSpace !== 'srgb' && !description.iccProfileResourceId) {
     throw capabilityError(
       'ICC_PROFILE_REQUIRED',

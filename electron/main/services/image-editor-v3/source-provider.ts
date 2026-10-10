@@ -2,6 +2,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { assertImageEditorV3SourceColor } from './source-ingest/release-source-capabilities'
+import { decodeTransferFunctionV3, encodeTransferFunctionV3, linearWorkingSpaceMatrixV3 } from '../../../../src/core/imaging/colorManagement/rgb'
+import { standardRgbProfile } from './export/standard-profiles'
 import { loadSharp } from '../image/sharp-loader'
 import { AbortableSingleflight, throwIfImageSourceAborted } from './abortable-singleflight'
 import {
@@ -61,6 +64,33 @@ function normalizeRawLittleEndian(data: Buffer, bitDepth: 8 | 16 | 32): Buffer {
   return bitDepth === 16 ? data.swap16() : data.swap32()
 }
 
+/** 标准 P3 沿已验证的共享 D65 数学转到 scRGB；保留超白、负值与 Alpha。 */
+function decodeStandardRgb(bytes: Buffer, space: 'srgb' | 'display-p3', bitDepth: 8 | 16 | 32 = 32): Buffer {
+  const raw = normalizeRawLittleEndian(bytes, 16), matrix = linearWorkingSpaceMatrixV3(space, 'srgb');
+  const bytesPerSample = bitDepth / 8;
+  const output = Buffer.allocUnsafe(raw.length / 2 * bytesPerSample);
+  const write = (value: number, index: number) => {
+    if (bitDepth === 32) output.writeFloatLE(value, index * bytesPerSample);
+    else {
+      const maximum = bitDepth === 8 ? 255 : 65535;
+      const integer = Math.round(Math.min(1, Math.max(0, value)) * maximum);
+      if (bitDepth === 8) output.writeUInt8(integer, index);
+      else output.writeUInt16LE(integer, index * 2);
+    }
+  };
+  for (let offset = 0; offset < raw.length; offset += 8) {
+    const r = decodeTransferFunctionV3(raw.readUInt16LE(offset) / 65535, 'srgb');
+    const g = decodeTransferFunctionV3(raw.readUInt16LE(offset + 2) / 65535, 'srgb');
+    const b = decodeTransferFunctionV3(raw.readUInt16LE(offset + 4) / 65535, 'srgb');
+    for (let channel = 0; channel < 3; channel++) {
+      const linear = matrix[channel * 3] * r + matrix[channel * 3 + 1] * g + matrix[channel * 3 + 2] * b;
+      write(bitDepth === 32 ? linear : encodeTransferFunctionV3(linear, 'srgb'), offset / 2 + channel);
+    }
+    write(raw.readUInt16LE(offset + 6) / 65535, offset / 2 + 3);
+  }
+  return output;
+}
+
 function describeMetadataPyramid(metadata: SourceImageMetadata): SourcePyramidDescriptor {
   const levels: SourcePyramidDescriptor['levels'] = []
   for (let mip = 0; mip <= MAX_MIP_LEVEL; mip += 1) {
@@ -100,7 +130,7 @@ function standardTileLayout(
     height: Math.min(IMAGE_EDIT_TILE_SIZE, levelHeight - originY),
     originX,
     originY,
-    bitDepth: request.bitDepth ?? (metadata.hdr ? 32 : sourceStorageBitDepth(metadata)),
+    bitDepth: request.bitDepth ?? (metadata.colorSpace === 'display-p3' ? 32 : sourceStorageBitDepth(metadata)),
   }
 }
 
@@ -112,6 +142,7 @@ export class SharpSourceProvider implements SourceProvider {
   private readonly metadataCache = new Map<ResourceId, SourceImageMetadata>()
   private readonly metadataFlights = new AbortableSingleflight<SourceImageMetadata>()
   private readonly proxyFlights = new AbortableSingleflight<FastSourceProxy>()
+  private standardSrgbProfileResourceId: ResourceId | null = null;
   private readonly metadataCacheLimit: number
   private readonly sharpLoader: typeof loadSharp
   private readonly derivedCache: DerivedDiskCache | null
@@ -151,9 +182,10 @@ export class SharpSourceProvider implements SourceProvider {
     if (!pyramid) throw new Error('Source pyramid cache is disabled')
     return this.withResourceLease(request.resourceId, request.signal, async () => {
       const metadata = await this.readMetadataWithinLease(request.resourceId, request.signal)
+      assertImageEditorV3SourceColor(metadata)
       return pyramid.prewarm({
         ...request,
-        bitDepth: request.bitDepth ?? (metadata.hdr ? 32 : sourceStorageBitDepth(metadata)),
+        bitDepth: request.bitDepth ?? (metadata.colorSpace === 'display-p3' ? 32 : sourceStorageBitDepth(metadata)),
       }, describeMetadataPyramid(metadata))
     })
   }
@@ -168,9 +200,7 @@ export class SharpSourceProvider implements SourceProvider {
     }
     return this.withResourceLease(resourceId, signal, async () => {
       const metadata = await this.readMetadataWithinLease(resourceId, signal)
-      if (metadata.hdr) {
-        throw new Error('HDR source requires the Float32 tile preview path; SDR proxy conversion is disabled')
-      }
+      assertImageEditorV3SourceColor(metadata)
       return this.proxyFlights.run(
         `${resourceId}:${maxDimension}`,
         (sharedSignal) => this.readFastProxyWithinLease(resourceId, maxDimension, sharedSignal),
@@ -184,10 +214,12 @@ export class SharpSourceProvider implements SourceProvider {
     maxDimension: number,
     signal: AbortSignal,
   ): Promise<FastSourceProxy> {
+    const metadata = await this.readMetadataWithinLease(resourceId, signal);
+    assertImageEditorV3SourceColor(metadata);
     return readFastSourceProxy({
       resourceId,
       sourcePath: this.resources.getFilesystemPath(resourceId),
-      metadata: await this.readMetadataWithinLease(resourceId, signal),
+      metadata,
       maxDimension,
       maximumInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
       sharpLoader: this.sharpLoader,
@@ -199,6 +231,8 @@ export class SharpSourceProvider implements SourceProvider {
 
   async readTile(request: SourceTileRequest): Promise<SourceTile> {
     return this.withResourceLease(request.resourceId, request.signal, async () => {
+      const sourceMetadata = await this.readMetadataWithinLease(request.resourceId, request.signal);
+      assertImageEditorV3SourceColor(sourceMetadata);
       if ((request.halo ?? 0) === 0 && this.pyramid) {
         const metadata = await this.readMetadataWithinLease(request.resourceId, request.signal)
         return this.pyramid.readTile(request, standardTileLayout(request, metadata))
@@ -238,6 +272,7 @@ export class SharpSourceProvider implements SourceProvider {
     throwIfImageSourceAborted(request.signal)
 
     const metadata = await this.readMetadataWithinLease(request.resourceId, request.signal)
+    assertImageEditorV3SourceColor(metadata)
     const scale = 2 ** mip
     const levelWidth = Math.max(1, Math.ceil(metadata.width / scale))
     const levelHeight = Math.max(1, Math.ceil(metadata.height / scale))
@@ -266,14 +301,11 @@ export class SharpSourceProvider implements SourceProvider {
       width: metadata.encodedWidth,
       height: metadata.encodedHeight,
     }, metadata.orientation)
-    const bitDepth = request.bitDepth ?? (metadata.hdr ? 32 : sourceStorageBitDepth(metadata))
-    if (metadata.hdr && bitDepth !== 32) {
-      throw new Error('HDR source tiles require Float32 scRGB decoding; encoded integer fallback is disabled')
-    }
+    const bitDepth = request.bitDepth ?? (metadata.colorSpace === 'display-p3' ? 32 : sourceStorageBitDepth(metadata))
 
     // mip0 的横向相邻块共享一次原生全宽条带解码，避免 PNG/JPEG 从文件头重复扫描。
     // 只保留两个有界条带，不建立完整 RGBA 表面；HDR 与缩放继续走原区域契约。
-    if (mip === 0 && halo === 0 && bitDepth !== 32
+    if (mip === 0 && halo === 0 && (bitDepth !== 32 || metadata.colorSpace === 'display-p3')
       && metadata.width > IMAGE_EDIT_TILE_SIZE && metadata.height > IMAGE_EDIT_TILE_SIZE) {
       const stripeStride = metadata.width * 4 * (bitDepth / 8)
       const stripe = await this.decodeStripes.read(
@@ -288,11 +320,16 @@ export class SharpSourceProvider implements SourceProvider {
             const encoded = mapOrientedSourceRectToEncoded({ left: 0, top: originY,
               width: metadata.width, height: outputHeight },
             { width: metadata.encodedWidth, height: metadata.encodedHeight }, metadata.orientation)
-            const pipeline = sharp(this.resources.getFilesystemPath(request.resourceId), {
+            let pipeline = sharp(this.resources.getFilesystemPath(request.resourceId), {
               limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS, sequentialRead: false, failOn: 'warning',
             }).extract(encoded).autoOrient().toColourspace(bitDepth === 16 ? 'rgb16' : 'srgb')
               .ensureAlpha().raw({ depth: bitDepth === 16 ? 'ushort' : 'uchar' })
-            const pixels = normalizeRawLittleEndian(await runSharpOperation(pipeline, signal, () => pipeline.toBuffer()), bitDepth)
+            const standardP3 = metadata.colorSpace === 'display-p3';
+            const standardSrgb = metadata.iccProfileResourceId === this.standardSrgbProfileResourceId;
+            if (standardP3 || standardSrgb) pipeline = pipeline.keepIccProfile().toColourspace(standardP3 || bitDepth !== 8 ? 'rgb16' : 'srgb').raw({ depth: standardP3 || bitDepth !== 8 ? 'ushort' : 'uchar' });
+            else if (metadata.hasIccProfile) pipeline = pipeline.withIccProfile('srgb', { attach: false });
+            const decoded = await runSharpOperation(pipeline, signal, () => pipeline.toBuffer());
+            const pixels = standardP3 ? decodeStandardRgb(decoded, 'display-p3', bitDepth) : normalizeRawLittleEndian(decoded, bitDepth);
             logger.debug('完成解码图片源条带', { event: 'image_editor_v3.source.stripe.completed',
               context: { ...context, elapsedMs: performance.now() - started } })
             return pixels
@@ -314,8 +351,8 @@ export class SharpSourceProvider implements SourceProvider {
         }
         return { resourceId: request.resourceId, mip, tileX, tileY, halo,
           width: outputWidth, height: outputHeight, channels: 4, bitDepth,
-          sampleFormat: 'uint', numericRange: bitDepth === 16 ? 'unorm16' : 'unorm8',
-          byteOrder: 'little-endian', rowStride, colorSpace: 'srgb', transferFunction: 'srgb',
+          sampleFormat: bitDepth === 32 ? 'float' : 'uint', numericRange: bitDepth === 32 ? 'scene-linear' : bitDepth === 16 ? 'unorm16' : 'unorm8',
+          byteOrder: 'little-endian', rowStride, colorSpace: bitDepth === 32 ? 'scrgb' : 'srgb', transferFunction: bitDepth === 32 ? 'linear' : 'srgb',
           alphaMode: 'straight', orientationApplied: true, originX, originY, pixels }
       }
     }
@@ -334,10 +371,15 @@ export class SharpSourceProvider implements SourceProvider {
     if (sourceRight - sourceLeft !== outputWidth || sourceBottom - sourceTop !== outputHeight) {
       pipeline = pipeline.resize(outputWidth, outputHeight, { fit: 'fill', kernel: 'lanczos3' })
     }
-    if (bitDepth === 16) pipeline = pipeline.toColourspace('rgb16')
+    const standardP3 = metadata.colorSpace === 'display-p3';
+    const standardSrgb = metadata.iccProfileResourceId === this.standardSrgbProfileResourceId;
+    const integerIccFloat = !standardP3 && metadata.hasIccProfile && bitDepth === 32;
+    if (standardP3 || standardSrgb) pipeline = pipeline.keepIccProfile().toColourspace(standardP3 || bitDepth !== 8 ? 'rgb16' : 'srgb');
+    else if (bitDepth === 16 || integerIccFloat) pipeline = pipeline.toColourspace('rgb16')
     else if (bitDepth === 32) pipeline = pipeline.toColourspace('scrgb')
     else pipeline = pipeline.toColourspace('srgb')
-    const rawDepth = bitDepth === 8 ? 'uchar' : bitDepth === 16 ? 'ushort' : 'float'
+    if (!standardP3 && !standardSrgb && metadata.hasIccProfile) pipeline = pipeline.withIccProfile('srgb', { attach: false });
+    const rawDepth = standardP3 || integerIccFloat ? 'ushort' : bitDepth === 8 ? 'uchar' : bitDepth === 16 ? 'ushort' : 'float'
     pipeline = pipeline.ensureAlpha().raw({ depth: rawDepth })
     const { data, info } = await runSharpOperation(
       pipeline,
@@ -365,7 +407,7 @@ export class SharpSourceProvider implements SourceProvider {
       orientationApplied: true,
       originX,
       originY,
-      pixels: normalizeRawLittleEndian(data, bitDepth),
+      pixels: standardP3 || integerIccFloat ? decodeStandardRgb(data, standardP3 ? 'display-p3' : 'srgb', bitDepth) : normalizeRawLittleEndian(data, bitDepth),
     }
   }
 
@@ -434,6 +476,7 @@ export class SharpSourceProvider implements SourceProvider {
         signal,
       })
       : null
+    if (iccProfile && metadata.icc?.equals(await standardRgbProfile('srgb'))) this.standardSrgbProfileResourceId = iccProfile.id;
     return {
       resourceId,
       width: orientedDimensions.width,
@@ -444,7 +487,7 @@ export class SharpSourceProvider implements SourceProvider {
       channels: metadata.channels,
       depth: metadata.depth,
       bitsPerSample,
-      colorSpace: metadata.space,
+      colorSpace: metadata.icc?.equals(await standardRgbProfile('display-p3')) ? 'display-p3' : metadata.space,
       orientation,
       orientationApplied: true,
       density: metadata.density,

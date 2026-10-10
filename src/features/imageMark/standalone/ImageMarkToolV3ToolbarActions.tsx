@@ -14,12 +14,6 @@ import type {
   ImageMarkToolV3HostProps,
 } from './useImageMarkToolV3Host'
 
-const RELEASE_EXPORT_FORMATS = new Set<ImageEditorV3RasterExportFormat>([
-  'png8',
-  'jpeg',
-  'webp',
-])
-
 interface ImageMarkToolV3ToolbarActionsProps extends Pick<
   ImageMarkToolV3HostProps,
   'onOpenFile' | 'onPasteFromClipboard' | 'onCreateBlank' | 'onSave' | 'onSaveAs' | 'videoEditReturn'
@@ -150,7 +144,6 @@ export function ImageMarkToolV3ToolbarActions({
                 className="flex flex-col gap-0.5"
               >
                 {host.rasterExportOptions
-                  .filter(({ format }) => RELEASE_EXPORT_FORMATS.has(format))
                   .map(({ format, readiness }) => {
                   const disabled = readiness.state !== 'ready'
                   const reason = disabled

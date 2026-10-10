@@ -1,3 +1,4 @@
+import { colorSettingsSchema, type ColorSettings } from '@/core/imaging/colorManagement';
 import { canvasSizeSchemaV3 } from '@/core/imageEdit/v3/documentGeometry'
 import { z } from 'zod'
 import type { ApplicationFieldDefinition, ApplicationPropertyDescriptor, JsonValue } from '@/core/application-control'
@@ -8,15 +9,18 @@ import { collectImageEditV3LiveLayers } from './imageEditDocumentRefs'
 import { imageEditV3SchemaRef } from './imageEditV3Fields'
 
 export const imageEditLayerMovesSchemaV3 = z.array(z.object({ layerId: z.string().min(1), parentId: z.string().min(1).nullable(), index: z.number().int().nonnegative() }).strict()).min(1)
-export interface ImageEditWorkflowDraftV3 { regions?: ImageEditNamedRegionV3[]; moves?: ImageEditLayersMoveCommandV3['moves']; canvasSize?: z.infer<typeof canvasSizeSchemaV3> }
+export interface ImageEditWorkflowDraftV3 { colorSettings?: ColorSettings; regions?: ImageEditNamedRegionV3[]; moves?: ImageEditLayersMoveCommandV3['moves']; canvasSize?: z.infer<typeof canvasSizeSchemaV3> }
 function descriptor(suffix: string, title: string, description: string): ApplicationPropertyDescriptor {
   const id = `image_edit.document.${suffix}`
   return { id, entityType: 'image_edit.document', version: 1, title, description, value: { kind: 'json', schemaRef: imageEditV3SchemaRef('property', `${id}.value`) },
-    ...(suffix === 'layer_order' || suffix === 'canvas_size' ? { verificationStrategy: 'execution' as const } : {}),
+    ...(suffix === 'layer_order' || suffix === 'canvas_size' || suffix === 'color_settings' ? { verificationStrategy: 'execution' as const } : {}),
     nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['image_edit:read'], write: ['image_edit:write'] },
     revisionScopes: ['image_edit'], schemaRef: imageEditV3SchemaRef('property', id) }
 }
 export const IMAGE_EDIT_WORKFLOW_FIELDS_V3: ApplicationFieldDefinition<ImageEditDocumentV3, ImageEditWorkflowDraftV3>[] = [
+  { propertyId: 'image_edit.document.color_settings', descriptor: descriptor('color_settings', '颜色配置与位深', '读取 workingSpace、bitDepth、transferFunction。mode=convert 保持颜色外观转换到 sRGB/Display-P3/Rec.2020；mode=assign 保留编码 RGB 数值并重新指定配置，会改变外观。HDR 只接受 Rec.2020 与至少 16 位；HDR 转编码 SDR 需要显式色调映射，当前拒绝该转换，可保留 HDR 或使用线性浮点交付。原稿、滤镜、文字、蒙版保存在可编辑智能内容内，整体一步撤销；CMYK、Lab、自定义 ICC 与软打样尚未开放。'),
+    read: document => ({ mode: 'convert', workingSpace: document.color.workingSpace, bitDepth: document.color.bitDepth, transferFunction: document.color.transferFunction }),
+    writer: { write(draft, mutation) { draft.colorSettings = colorSettingsSchema.parse(mutation.value) } }, storeActions: [] },
   { propertyId: 'image_edit.document.canvas_size', descriptor: descriptor('canvas_size', '画布尺寸与锚点', '读回原始画布的 width/height，anchor 默认 center。写入正整数宽高与 top-left/top/top-right/left/center/right/bottom-left/bottom/bottom-right 锚点；锚点只决定这次边界移动，不是图像重采样。保持原稿像素、路径、蒙版与滤镜，裁掉的画布外内容仍在原稿中。尺寸不变时不创建历史。'),
     read: document => ({ width: document.geometry.width, height: document.geometry.height, anchor: 'center' }),
     writer: { write(draft, mutation) { draft.canvasSize = canvasSizeSchemaV3.parse(mutation.value) } }, storeActions: [] },

@@ -182,7 +182,14 @@ export interface ImageEditMaskTileDeltaCommandV3 extends ImageEditCommandBaseV3 
   changes: ImageEditRasterTileChangeV3[];
 }
 
+export interface ImageEditDocumentSetColorCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'document.set-color';
+  resources?: ImageEditCommandResourceDescriptorV3[];
+  color: import('./colorTypes').ImageEditColorModeV3;
+}
+
 export type ImageEditLeafCommandV3 =
+  | ImageEditDocumentSetColorCommandV3
   | ImageEditDocumentSetCanvasSizeCommandV3
   | ImageEditLayerReplaceCommandV3
   | ImageEditNamedRegionsCommandV3
@@ -246,6 +253,10 @@ export function collectImageEditCommandResourceReferencesV3(
 ): ImageEditHistoryResourceReferenceV3[] {
   const resources: ImageEditHistoryResourceReferenceV3[] = [];
   if (command.type === 'document.atomic') return mergeImageEditHistoryResourceReferencesV3(command.commands.flatMap(collectImageEditCommandResourceReferencesV3));
+  if (command.type === 'document.set-color') {
+    if (command.resources) resources.push(...command.resources);
+    else if (command.color.iccProfileResourceId) resources.push({ resourceId: command.color.iccProfileResourceId, byteSize: null });
+  }
   if (command.type === 'layer.update-common' && command.patch.filters) {
     if (command.resources) resources.push(...command.resources);
     else for (const filter of command.patch.filters) resources.push(...collectImageEditJsonResourceIdsV3(filter)

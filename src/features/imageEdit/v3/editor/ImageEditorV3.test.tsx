@@ -556,11 +556,12 @@ describe('ImageEditorV3 professional shell', () => {
     expect(preview?.className).not.toContain('rounded')
     expect(preview?.className).not.toContain('shadow')
     expect(rendered.container.querySelector('[data-editor-panel-dock="right"]')).toBeTruthy()
-    expect(dockedPanels).toHaveLength(5)
+    expect(dockedPanels).toHaveLength(6)
     // 历史与属性同组成标签，DOM 中标签页顺序随 Dockview 激活顺序变化，只校验集合
     expect([...dockedPanels].map((panel) => panel.getAttribute('data-editor-panel-id')).sort()).toEqual([
       'adjustments',
       'channels',
+      'color',
       'history',
       'layers',
       'properties',
@@ -621,7 +622,7 @@ describe('ImageEditorV3 professional shell', () => {
     await screen.findByRole('button', { name: '关闭图层面板' })
     expect(screen.queryByRole('button', { name: '关闭历史面板' })).toBeNull()
     expect(screen.queryByRole('button', { name: '关闭通道面板' })).toBeNull()
-    for (const title of ['图层', '属性', '历史', '通道', '调整与滤镜']) {
+    for (const title of ['图层', '属性', '历史', '通道', '调整与滤镜', '颜色']) {
       fireEvent.click(screen.getByRole('button', { name: '面板' }))
       fireEvent.click(await screen.findByRole('menuitem', { name: `关闭${title}面板` }))
       await waitFor(() => expect(screen.queryByRole('menu', { name: '面板' })).toBeNull())
@@ -632,7 +633,7 @@ describe('ImageEditorV3 professional shell', () => {
     await screen.findByRole('button', { name: '关闭图层面板' })
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
-    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(5))
+    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(6))
     expect(rendered.container.querySelector('[data-preview-surface]')).toBe(preview)
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
     expect(screen.getByRole('button', { name: '撤销' }).hasAttribute('disabled')).toBe(true)

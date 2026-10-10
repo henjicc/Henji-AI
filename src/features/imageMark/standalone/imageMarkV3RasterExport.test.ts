@@ -383,9 +383,6 @@ describe('工具箱 V3 栅格分块导出', () => {
       missingIcc.document,
       'wide.tiff',
       'bigtiff',
-    )).toMatchObject({
-      state: 'disabled',
-      reasonKey: 'imageEditor.v3.readiness.reasons.exportInvalidIcc',
-    })
+    )).toMatchObject({ state: 'ready' })
   })
 })

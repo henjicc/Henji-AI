@@ -66,7 +66,7 @@ describe('ImageEditorV3SourceIngestor', () => {
       .resolves.toBe('local-image')
   })
 
-  it('元数据确认后拒绝非首发格式、16 位和 HDR，不静默降精度', async () => {
+  it('元数据确认后保留 SDR 高精度与 AVIF，拒绝未验证 HDR', async () => {
     const filePath = path.join(rootDir, 'source.avif')
     await fsp.writeFile(filePath, Buffer.from('unsupported-image'))
     const ingestor = new ImageEditorV3SourceIngestor(resources, sourceProvider())
@@ -75,20 +75,20 @@ describe('ImageEditorV3SourceIngestor', () => {
       format: 'avif',
     }))
     await expect(ingestor.ingest({ kind: 'local-path', filePath }))
-      .rejects.toThrow('仅支持 JPEG、PNG 和 WebP')
+      .resolves.toMatchObject({ metadata: { format: 'avif' } })
 
     readMetadata.mockImplementationOnce(async (resourceId) => metadata(resourceId, {
       depth: 'ushort',
       bitsPerSample: 16,
     }))
     await expect(ingestor.ingest({ kind: 'local-path', filePath }))
-      .rejects.toThrow('暂不支持 16 位或浮点图片')
+      .resolves.toMatchObject({ metadata: { bitsPerSample: 16 } })
 
     readMetadata.mockImplementationOnce(async (resourceId) => metadata(resourceId, {
       hdr: true,
     }))
     await expect(ingestor.ingest({ kind: 'local-path', filePath }))
-      .rejects.toThrow('暂不支持 HDR 图片')
+      .rejects.toThrow('颜色保真验证')
   })
 
   it('HTTP(S) 手动校验每次重定向并把响应 body 增量写入资源库', async () => {

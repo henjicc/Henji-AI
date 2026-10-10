@@ -14,7 +14,7 @@ import {
   type DerivedDiskCache,
 } from './derived-disk-cache'
 
-const SOURCE_PYRAMID_CACHE_VERSION = 3
+const SOURCE_PYRAMID_CACHE_VERSION = 4
 const DEFAULT_PREWARM_TILE_BUDGET = 4_096
 const MAX_PREWARM_TILE_BUDGET = 100_000
 const logger = createMainLogger('main.image_editor_v3.source_pyramid')

@@ -26,6 +26,9 @@ export function assertImageEditHistoryInversePairV3(
   if (inverse.commandId !== `${forward.commandId}:inverse`
     || inverse.expectedRevision !== forward.expectedRevision + 1) fail('历史逆向补丁基线无效');
   switch (forward.type) {
+    case 'document.set-color':
+      if (inverse.type !== forward.type) fail('颜色调整逆向补丁无效');
+      assertStructuralResourcesMatch(forward, inverse); break;
     case 'document.set-canvas-size':
       if (inverse.type !== forward.type) fail('画布尺寸逆向补丁无效'); break;
     case 'layer.replace':

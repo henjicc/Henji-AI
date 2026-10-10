@@ -14,7 +14,7 @@ import { ImageEditorPanelMenuV3 } from './ImageEditorDockChromeV3'
 import { ImageEditorShellContextV3 } from './ImageEditorShellContextV3'
 
 // 每个面板任务只需新增自己的登记条目；不再改中央 union/switch/内容分派。
-const entries = import.meta.glob<readonly ImageEditorPanelDefinitionV3[]>(['../panelEntries/*.{ts,tsx}', '!../panelEntries/shell.tsx', '!../panelEntries/history.tsx', '!../panelEntries/channels.tsx', '!../panelEntries/adjustments.tsx'], { eager: true, import: 'default' })
+const entries = import.meta.glob<readonly ImageEditorPanelDefinitionV3[]>(['../panelEntries/*.ts', '../panelEntries/*.tsx', '!../panelEntries/shell.tsx', '!../panelEntries/history.tsx', '!../panelEntries/channels.tsx', '!../panelEntries/adjustments.tsx'], { eager: true, import: 'default' })
 const defaultRegistry = new ImageEditorPanelRegistryV3([...shellPanels, ...historyPanels, ...channelPanels, ...adjustmentPanels, ...Object.values(entries).flat()])
 
 export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, registry = defaultRegistry, layoutStore, onDockApiChange }: {

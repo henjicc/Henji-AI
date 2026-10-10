@@ -1303,6 +1303,30 @@
         "cancel": "Cancel",
         "previewHint": "Previewing; applying creates one undo step",
         "cropHint": "Dimensions refer to the original canvas. Orientation is preserved. Applying removes the current crop; undo restores it together with the original."
+      },
+      "colorManagement": {
+        "title": "Color",
+        "document": "Current document",
+        "configuration": "Color and output precision",
+        "mode": "Operation",
+        "convert": "Convert profile",
+        "assign": "Assign profile",
+        "profile": "Working gamut",
+        "depth": "Bit depth",
+        "transfer": "Transfer function",
+        "apply": "Apply color settings",
+        "cancel": "Cancel",
+        "preparing": "Preparing color…",
+        "convertHint": "Preserve appearance and keep editable original layers. Bit depth controls final encoding precision; increasing it cannot recover missing detail.",
+        "assignHint": "Keep encoded RGB values and reinterpret with the new profile. Appearance changes. Keep the original and undo in one step.",
+        "proof": "Display and proofing",
+        "proofBoundary": "Preview converts to sRGB; HDR uses an SDR display mapping. Print soft proofing, CMYK, Lab and custom ICC are unavailable. Screenshots do not prove monitor calibration.",
+        "depths": {
+          "8": "8 bit",
+          "16": "16 bit",
+          "float16": "Half float",
+          "float32": "32 bit float"
+        }
       }
     }
   },

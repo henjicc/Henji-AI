@@ -1303,6 +1303,30 @@
         "cancel": "取消",
         "previewHint": "正在预览，应用后可一步撤销",
         "cropHint": "尺寸以原稿画布为准，画面方向保持不变。应用时取消当前裁剪，原稿与裁剪可一步撤销。"
+      },
+      "colorManagement": {
+        "title": "颜色",
+        "document": "当前文档",
+        "configuration": "颜色与输出精度",
+        "mode": "处理方式",
+        "convert": "转换配置",
+        "assign": "指定配置",
+        "profile": "工作色域",
+        "depth": "位深",
+        "transfer": "传递函数",
+        "apply": "应用颜色配置",
+        "cancel": "取消",
+        "preparing": "正在准备颜色…",
+        "convertHint": "保留颜色外观，原始图层保存在可编辑原稿内。位深决定最终编码精度，提升位深不会补回缺失细节。",
+        "assignHint": "保留编码 RGB 数值，按新配置重新解释；画面颜色会改变。原稿保留，可一步撤销。",
+        "proof": "显示与软打样",
+        "proofBoundary": "当前预览转换到 sRGB；HDR 使用 SDR 映射。尚未开放打印软打样、CMYK、Lab 和自定义 ICC。截图不能证明显示器校色。",
+        "depths": {
+          "8": "8 位",
+          "16": "16 位",
+          "float16": "半浮点",
+          "float32": "32 位浮点"
+        }
       }
     }
   },

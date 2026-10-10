@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 10,
-      "fingerprint": "da28536f4cf24a7d8eb812c2153fd97393f47c1a9279dafb400e5f490cbfcf8e",
-      "supportedFrom": 10
+      "version": 11,
+      "fingerprint": "c504b6aec73e949eaa1ea515cfc90ce3d2d6df6a6964adc431a62c0104156c8a",
+      "supportedFrom": 11
     },
     "image-working-copy": {
-      "version": 12,
-      "fingerprint": "08f4eec83d4a5f71f977ccea05c8e39abeabfba257c46cfb964f94cf49f9b11b",
-      "supportedFrom": 12
+      "version": 13,
+      "fingerprint": "fe3aef47f834dbdedbf1553259a9bc02bf789da0bf4fd2bf2b846b64df381ae4",
+      "supportedFrom": 13
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 10,
-      "fingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
-      "supportedFrom": 10
+      "version": 11,
+      "fingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
+      "supportedFrom": 11
     },
     "keystore": {
       "version": 1,
@@ -997,6 +997,33 @@
       "reason": "t119-16：选区保留画布外有限坐标，尺寸锚点与缩放共用当前格式；开发期不兼容旧数据",
       "previousFingerprint": "df88d10bb072db6bc8e6e6b2468341ca552e36ccfe18b7ae6a96327d00242afa",
       "fingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T12:01:50.945Z",
+      "format": "image-package",
+      "version": 11,
+      "reason": "t119-17 新增可撤销颜色契约命令；指定和转换 profile 的原稿及历史按新开发格式保存，不兼容旧工作副本",
+      "previousFingerprint": "da28536f4cf24a7d8eb812c2153fd97393f47c1a9279dafb400e5f490cbfcf8e",
+      "fingerprint": "c504b6aec73e949eaa1ea515cfc90ce3d2d6df6a6964adc431a62c0104156c8a",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T12:01:50.946Z",
+      "format": "image-working-copy",
+      "version": 13,
+      "reason": "t119-17 新增可撤销颜色契约命令；指定和转换 profile 的原稿及历史按新开发格式保存，不兼容旧工作副本",
+      "previousFingerprint": "08f4eec83d4a5f71f977ccea05c8e39abeabfba257c46cfb964f94cf49f9b11b",
+      "fingerprint": "fe3aef47f834dbdedbf1553259a9bc02bf789da0bf4fd2bf2b846b64df381ae4",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T12:01:50.946Z",
+      "format": "canvas-layer-package",
+      "version": 11,
+      "reason": "t119-17 新增可撤销颜色契约命令；指定和转换 profile 的原稿及历史按新开发格式保存，不兼容旧工作副本",
+      "previousFingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
+      "fingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
       "waivedFixtureVersions": []
     }
   ]

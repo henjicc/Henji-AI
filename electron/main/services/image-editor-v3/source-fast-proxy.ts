@@ -14,7 +14,7 @@ import type { ManagedSourcePyramid } from './source-pyramid'
 import { runSharpOperation } from './sharp-operation'
 
 const logger = createMainLogger('main.image_editor_v3.source_proxy')
-const SOURCE_PROXY_CACHE_VERSION = 3
+const SOURCE_PROXY_CACHE_VERSION = 4
 const MAX_FAST_PROXY_BASE_LEVEL_BYTES = 48 * 1024 * 1024
 
 interface FastProxyPyramidSeedPlan {
@@ -47,7 +47,7 @@ function planFastProxyPyramidSeed(
   metadata: SourceImageMetadata,
   maxDimension: number,
 ): FastProxyPyramidSeedPlan | null {
-  if (metadata.hdr || sourceStorageBitDepth(metadata) !== 8) return null
+  if (metadata.hdr || metadata.hasIccProfile || sourceStorageBitDepth(metadata) !== 8) return null
   const ratio = Math.max(metadata.width / maxDimension, metadata.height / maxDimension)
   const baseMip = Math.max(0, Math.floor(Math.log2(Math.max(1, ratio))))
   if (baseMip === 0) return null
@@ -130,7 +130,7 @@ async function decodeRawBaseLevelFromSource(
   sharp: Awaited<ReturnType<typeof loadSharp>>,
   level: SourcePyramidLevel,
 ): Promise<Buffer> {
-  const pipeline = sharp(options.sourcePath, {
+  let pipeline = sharp(options.sourcePath, {
     limitInputPixels: options.maximumInputPixels,
     sequentialRead: true,
     failOn: 'warning',
@@ -141,6 +141,7 @@ async function decodeRawBaseLevelFromSource(
     kernel: 'lanczos3',
     fastShrinkOnLoad: true,
   }).toColourspace('srgb').ensureAlpha().raw({ depth: 'uchar' })
+  if (options.metadata.hasIccProfile) pipeline = pipeline.withIccProfile('srgb', { attach: false })
   const { data, info } = await runSharpOperation(
     pipeline,
     options.signal,
@@ -226,7 +227,7 @@ async function encodeProxyFromSource(
   options: ReadFastSourceProxyOptions,
   sharp: Awaited<ReturnType<typeof loadSharp>>,
 ) {
-  const pipeline = sharp(options.sourcePath, {
+  let pipeline = sharp(options.sourcePath, {
     limitInputPixels: options.maximumInputPixels,
     sequentialRead: true,
     failOn: 'warning',
@@ -237,6 +238,7 @@ async function encodeProxyFromSource(
     withoutEnlargement: true,
     fastShrinkOnLoad: true,
   }).toColourspace('srgb').webp({ quality: 82, effort: 2 })
+  if (options.metadata.hasIccProfile) pipeline = pipeline.withIccProfile('srgb', { attach: false })
   return runSharpOperation(pipeline, options.signal, () => pipeline.toBuffer({ resolveWithObject: true }))
 }
 

@@ -1,10 +1,11 @@
 /** 图片编辑 V3 的显式颜色管理契约。 */
 
-export type ImageEditWorkingSpaceV3 = 'srgb' | 'display-p3' | 'rec2020';
+import type { RgbWorkingSpace, RgbTransferFunction } from '../../imaging/colorManagement';
+export type ImageEditWorkingSpaceV3 = RgbWorkingSpace;
 
 export type ImageEditBitDepthV3 = 8 | 16 | 'float16' | 'float32';
 
-export type ImageEditTransferFunctionV3 = 'srgb' | 'linear' | 'pq' | 'hlg';
+export type ImageEditTransferFunctionV3 = RgbTransferFunction;
 
 export interface ImageEditCicpMetadataV3 {
   colorPrimaries: number;

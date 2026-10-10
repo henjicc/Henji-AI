@@ -200,7 +200,7 @@ function defaultPngFormat(document: ImageEditDocumentV3): ImageEditorV3RasterExp
       ? 'avif10'
       : 'bigtiff'
   }
-  return document.color.bitDepth === 16 ? 'png16' : 'png8'
+  return document.color.bitDepth === 'float16' || document.color.bitDepth === 'float32' || document.color.transferFunction !== 'srgb' ? 'bigtiff' : document.color.bitDepth === 16 ? 'png16' : 'png8'
 }
 
 export function createImageMarkV3RasterExportSpec(
@@ -237,7 +237,7 @@ export function createImageMarkV3RasterExportSpec(
   const iccProfileResourceRef = hdrMetadata
     ? null
     : optionalResourceRef(document.color.iccProfileResourceId)
-  if (!hdrMetadata && document.color.workingSpace !== 'srgb' && !iccProfileResourceRef) {
+  if (!hdrMetadata && document.color.workingSpace !== 'srgb' && !(document.color.workingSpace === 'display-p3' && document.color.transferFunction === 'srgb') && !iccProfileResourceRef) {
     throw new ImageMarkV3RasterExportContractError(
       'imageEditor.v3.readiness.reasons.exportInvalidIcc',
     )
