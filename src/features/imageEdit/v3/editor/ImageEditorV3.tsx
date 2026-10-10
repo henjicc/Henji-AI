@@ -15,6 +15,7 @@ import type { ImageEditorV3Props } from './types'
 import { useImageEditorControllerV3 } from './useImageEditorControllerV3'
 import { createImageEditorDiagnosticSummaryV3 } from './imageEditorDiagnosticSummaryV3'
 import { ImageEditorRepairProviderV3 } from './ImageEditorRepairContextV3'
+import { SmartContentProviderV3 } from '../smartContent/SmartContentContext'
 
 function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const { controller, bus } = useImageEditorControllerV3(props)
@@ -31,6 +32,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   }, [controller.document, controller.sessionId, onEditorContextChange])
 
   return (
+    <SmartContentProviderV3 bus={bus} profileId={props.profileId} sourceImageUrl={props.sourceImageUrl} renderEditor={child => <ImageEditorV3 {...child} />}>
     <ImageEditorSubjectProviderV3 bus={bus} controller={controller}>
     <SelectionAdvancedProviderV3 bus={bus} controller={controller}>
     <ImageEditorRepairProviderV3 bus={bus} controller={controller}>
@@ -80,6 +82,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
     </ImageEditorRepairProviderV3>
     </SelectionAdvancedProviderV3>
     </ImageEditorSubjectProviderV3>
+    </SmartContentProviderV3>
   )
 }
 

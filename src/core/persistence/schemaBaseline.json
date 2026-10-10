@@ -57,14 +57,14 @@
       "supportedFrom": 1
     },
     "image-package": {
-      "version": 6,
-      "fingerprint": "fd0c153b617255668cc5e10b988208fbd5d0b1cb511f8f53fd1e39869ca2b168",
-      "supportedFrom": 6
+      "version": 7,
+      "fingerprint": "8a086adf32b6176a068ff66c7403c1495ae3b850313c6a49b0897de8af876ed0",
+      "supportedFrom": 7
     },
     "image-working-copy": {
-      "version": 8,
-      "fingerprint": "cd946612a4108f69343edb5f63e38ec54948405e2f7a87f94759631b9777491b",
-      "supportedFrom": 8
+      "version": 9,
+      "fingerprint": "c135bb85272a4c3a6715780dec78c400c150c0d5023029589b40395db7f6a411",
+      "supportedFrom": 9
     },
     "settings": {
       "version": 13,
@@ -132,9 +132,9 @@
       "supportedFrom": 1
     },
     "canvas-layer-package": {
-      "version": 6,
-      "fingerprint": "577471eb47527ea2c72d1258173b0d0a253ef32dd198a6a45d01e6fd8e249af6",
-      "supportedFrom": 6
+      "version": 7,
+      "fingerprint": "d0cd170e9f45638bfe45884578d852031c5c5f26d3c28b6e8667fe24112ac9e8",
+      "supportedFrom": 7
     },
     "keystore": {
       "version": 1,
@@ -810,6 +810,33 @@
       "reason": "新增非破坏透视与网格变形，开发期统一新格式",
       "previousFingerprint": "4c8e704ca8325baa78f56bd791c61e36bb55f946fa452f3d439811e7aeaa4f1b",
       "fingerprint": "577471eb47527ea2c72d1258173b0d0a253ef32dd198a6a45d01e6fd8e249af6",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T03:49:53.724Z",
+      "format": "image-package",
+      "version": 7,
+      "reason": "t119-13：智能对象保留可编辑内容、来源与原生缓存网格，统一新格式并拒绝旧工作副本和包",
+      "previousFingerprint": "fd0c153b617255668cc5e10b988208fbd5d0b1cb511f8f53fd1e39869ca2b168",
+      "fingerprint": "8a086adf32b6176a068ff66c7403c1495ae3b850313c6a49b0897de8af876ed0",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T03:49:53.726Z",
+      "format": "image-working-copy",
+      "version": 9,
+      "reason": "t119-13：智能对象保留可编辑内容、来源与原生缓存网格，统一新格式并拒绝旧工作副本和包",
+      "previousFingerprint": "cd946612a4108f69343edb5f63e38ec54948405e2f7a87f94759631b9777491b",
+      "fingerprint": "c135bb85272a4c3a6715780dec78c400c150c0d5023029589b40395db7f6a411",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-10T03:49:53.726Z",
+      "format": "canvas-layer-package",
+      "version": 7,
+      "reason": "t119-13：智能对象保留可编辑内容、来源与原生缓存网格，统一新格式并拒绝旧工作副本和包",
+      "previousFingerprint": "577471eb47527ea2c72d1258173b0d0a253ef32dd198a6a45d01e6fd8e249af6",
+      "fingerprint": "d0cd170e9f45638bfe45884578d852031c5c5f26d3c28b6e8667fe24112ac9e8",
       "waivedFixtureVersions": []
     }
   ]

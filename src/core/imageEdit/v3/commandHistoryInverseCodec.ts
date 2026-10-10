@@ -26,6 +26,11 @@ export function assertImageEditHistoryInversePairV3(
   if (inverse.commandId !== `${forward.commandId}:inverse`
     || inverse.expectedRevision !== forward.expectedRevision + 1) fail('历史逆向补丁基线无效');
   switch (forward.type) {
+    case 'layer.replace':
+      if (inverse.type !== 'layer.replace' || inverse.layerId !== forward.layerId
+        || inverse.layer.id !== forward.layer.id
+        || JSON.stringify(inverse.resources) !== JSON.stringify(forward.resources)) fail('内容替换逆向补丁无效');
+      break;
     case 'document.atomic':
       if (inverse.type !== 'document.atomic' || inverse.commands.length !== forward.commands.length) fail('原子历史逆向补丁无效');
       forward.commands.forEach((child, index) => assertImageEditHistoryInversePairV3(child, inverse.commands[inverse.commands.length - 1 - index]));

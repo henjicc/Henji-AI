@@ -148,6 +148,14 @@ describe('图片编辑 V3 调度器', () => {
     await expect(active).rejects.toBeInstanceOf(ImageEditTaskCancelledError);
   });
 
+  it('并行导出失败终止关联任务时保留原始错误', async () => {
+    const scheduler = new ImageEditRenderScheduler();
+    const error = new Error('内容资源无法读取');
+    const active = scheduler.schedule({ id: 'failed', sessionId: 'content', revision: 1, kind: 'export', lane: 'cpu', priority: 200,
+      run: async () => { scheduler.cancelSession('content', error); throw error; } });
+    await expect(active).rejects.toBe(error);
+  });
+
   it('同 revision 的新预览也取代旧 PreviewOverride，旧帧不会成功返回', async () => {
     const scheduler = new ImageEditRenderScheduler();
     const gate = deferred<void>();

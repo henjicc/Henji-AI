@@ -10,7 +10,7 @@ import { collectImageEditMaskResourceIdsV3 } from './layerTypes'
 import { collectImageEditJsonResourceIdsV3 } from './resourceReferences'
 
 type StructuralCommandV3 = Extract<ImageEditCommandV3, {
-  type: 'layer.add' | 'layer.delete' | 'layer.duplicate' | 'layer.group' | 'layer.ungroup'
+  type: 'layer.add' | 'layer.replace' | 'layer.delete' | 'layer.duplicate' | 'layer.group' | 'layer.ungroup'
 }>
 
 function sortedUnique(values: readonly string[]): string[] {
@@ -23,6 +23,12 @@ function structuralResourceIds(
 ): string[] {
   if (command.type === 'layer.add') {
     return collectImageEditLayerResourceIdsForCommandV3(command.layer)
+  }
+  if (command.type === 'layer.replace') {
+    const previous = findImageEditCommandLayerLocationV3(document.layers, command.layerId)
+    if (!previous) throw new ImageEditCommandValidationErrorV3('待替换图层不存在')
+    return sortedUnique([...collectImageEditLayerResourceIdsForCommandV3(previous.layer),
+      ...collectImageEditLayerResourceIdsForCommandV3(command.layer)])
   }
   if (command.type === 'layer.delete' || command.type === 'layer.duplicate') {
     const location = findImageEditCommandLayerLocationV3(document.layers, command.layerId)
@@ -77,6 +83,7 @@ export function assertImageEditStructuralCommandResourcesV3(
     return;
   }
   if (command.type !== 'layer.add'
+    && command.type !== 'layer.replace'
     && command.type !== 'layer.delete'
     && command.type !== 'layer.duplicate'
     && command.type !== 'layer.group'
@@ -112,6 +119,7 @@ export function prepareImageEditCommandResourceMetadataV3(
       : descriptorsFromIds(ids, byteSizes, '滤镜命令') };
   }
   if (command.type === 'layer.add'
+    || command.type === 'layer.replace'
     || command.type === 'layer.delete'
     || command.type === 'layer.duplicate'
     || command.type === 'layer.group'
@@ -149,7 +157,9 @@ export function collectPositiveImageEditCommandResourceBytesV3(
   command: ImageEditCommandV3,
 ): ImageEditCommandResourceDescriptorV3[] {
   const candidates: ImageEditCommandResourceDescriptorV3[] = []
-  if (command.type === 'raster.apply-tile-delta' || command.type === 'mask.apply-tile-delta') {
+  if (command.type === 'document.atomic') {
+    for (const child of command.commands) candidates.push(...collectPositiveImageEditCommandResourceBytesV3(child))
+  } else if (command.type === 'raster.apply-tile-delta' || command.type === 'mask.apply-tile-delta') {
     for (const change of command.changes) {
       if (change.previousResourceId) candidates.push({ resourceId: change.previousResourceId, byteSize: change.previousByteSize })
       if (change.resourceId) candidates.push({ resourceId: change.resourceId, byteSize: change.byteSize })

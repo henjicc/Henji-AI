@@ -29,6 +29,7 @@ import { resolveImageEditorReadinessReasonV3 } from './readinessPresentationV3'
 import type { ImageEditorV3Controller } from './types'
 import { ImageEditorLayerScalarsV3 } from '../panels/properties/ImageEditorLayerScalarsV3'
 import { selectImageEditTargetV3 } from '../panels/layers/editTarget'
+import { SmartContentPropertiesV3 } from '../smartContent/SmartContentProperties'
 
 interface ImageEditorPropertiesPanelV3Props {
   controller: ImageEditorV3Controller
@@ -234,13 +235,15 @@ export function ImageEditorPropertiesPanelV3({
       </UiGroup>
       ) : (
       <>
-        {editTarget !== 'mask' && (selected.type === 'raster' || selected.type === 'annotation' || selected.type === 'group') ? (
+        {editTarget !== 'mask' && (selected.type === 'raster' || selected.type === 'smart' || selected.type === 'annotation' || selected.type === 'group') ? (
           <ImageEditorLayerTransformPropertiesV3
             controller={controller}
             layer={selected}
             disabled={!isImageEditLayerTransformableV3(selectedLocation ?? null)}
           />
         ) : null}
+
+        {editTarget !== 'mask' && controller.profile.layerKinds.includes('smart') ? <SmartContentPropertiesV3 layer={selected} disabled={contentLocked} /> : null}
 
         {editTarget !== 'mask' && (selected.type === 'effect' || selected.type === 'adjustment') ? (
           <div>

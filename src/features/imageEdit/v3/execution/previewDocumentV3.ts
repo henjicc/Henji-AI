@@ -311,14 +311,14 @@ function collectLayerResources(
       }
     }
   }
-  if (layer.type === 'raster') {
+  if (layer.type === 'raster' || layer.type === 'smart') {
     if (layer.source.kind === 'resource' && RESOURCE_REF_PATTERN.test(layer.source.resourceId)) {
       addProxyRequest(layer.source.resourceId, maxDimension, descriptors, proxies)
     }
     for (const [tileKey, resourceId] of Object.entries(layer.tiles)) {
       const sourceSize = layer.source.kind === 'resource' ? resourceSizes.get(layer.source.resourceId) : undefined
       addBrushRequest(document, layer.id, tileKey, resourceId, descriptors, brushes, 'rgba-float32',
-        resolveImageEditRasterStorageSizeV3(sourceSize ?? null, document.geometry))
+        resolveImageEditRasterStorageSizeV3(sourceSize ?? null, layer.type === 'smart' ? layer.content : layer.rasterCanvasSize ?? document.geometry))
     }
   } else if (layer.type === 'group') {
     for (const child of layer.children) {

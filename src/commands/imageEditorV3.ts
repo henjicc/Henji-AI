@@ -173,11 +173,13 @@ export function readImageEditorV3FastProxy(
   return runCancellable(request.requestId, signal, (platform) => platform.readFastProxy(request))
 }
 
-export function readImageEditorV3SourceTile(
+export async function readImageEditorV3SourceTile(
   request: Parameters<ImageEditorV3Platform['readSourceTile']>[0],
   signal?: AbortSignal,
 ): ReturnType<ImageEditorV3Platform['readSourceTile']> {
-  return runCancellable(request.requestId, signal, (platform) => platform.readSourceTile(request))
+  const release = await acquireImageTileRead(getPlatform().imageEditorV3, 'source', signal)
+  try { return await runCancellable(request.requestId, signal, (platform) => platform.readSourceTile(request)) }
+  finally { release() }
 }
 
 function brushTileDataBuffer(tile: ImageEditBrushTileV3): ArrayBuffer {
@@ -238,11 +240,14 @@ export function persistImageEditorV3BrushTiles(
 
 // Shared by paint, donor hover, GPU upload, masks and export. Match the main process's
 // two-read memory budget, applying cancellable backpressure instead of rejecting normal gestures.
-const brushReadQueues = new WeakMap<ImageEditorV3Platform, { active: number; waiting: (() => void)[] }>()
-async function acquireBrushRead(platform: ImageEditorV3Platform, signal?: AbortSignal): Promise<() => void> {
+type TileReadOperation = 'brush' | 'source'
+const imageTileReadQueues = new WeakMap<ImageEditorV3Platform, Map<TileReadOperation, { active: number; waiting: (() => void)[] }>>()
+async function acquireImageTileRead(platform: ImageEditorV3Platform, operation: TileReadOperation, signal?: AbortSignal): Promise<() => void> {
   if (signal?.aborted) throw abortError()
-  let queue = brushReadQueues.get(platform)
-  if (!queue) { queue = { active: 0, waiting: [] }; brushReadQueues.set(platform, queue) }
+  let queues = imageTileReadQueues.get(platform)
+  if (!queues) { queues = new Map(); imageTileReadQueues.set(platform, queues) }
+  let queue = queues.get(operation)
+  if (!queue) { queue = { active: 0, waiting: [] }; queues.set(operation, queue) }
   const state = queue
   await new Promise<void>((resolve, reject) => {
     const start = (): void => { signal?.removeEventListener('abort', cancel); state.active++; resolve() }
@@ -263,7 +268,7 @@ export async function readImageEditorV3BrushTiles(
   },
   signal?: AbortSignal,
 ): Promise<{ tiles: Array<{ tileKey: string; tile: ImageEditBrushTileV3 }> }> {
-  const release = await acquireBrushRead(getPlatform().imageEditorV3, signal)
+  const release = await acquireImageTileRead(getPlatform().imageEditorV3, 'brush', signal)
   try { return await runCancellable(request.requestId, signal, async (platform) => {
     const result = await platform.readBrushTiles({
       requestId: request.requestId,

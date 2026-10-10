@@ -403,7 +403,7 @@ async function* renderTiles(
               )).catch(error => {
                 // 一个区域失败立即终止其余线程与读取，不能提前归还仍在使用的像素预算。
                 cpuWorkers.forEach(worker => worker.dispose())
-                scheduler.cancelSession(currentSessionId)
+                scheduler.cancelSession(currentSessionId, error)
                 throw error
               }), outputRect, request.description.bitDepth / 8 * 4) : null
               const renderedRegion = workerTile ? null : await executeImageEditCpuRenderRegionPlanV3(plan, sourceRegion, renderContext)

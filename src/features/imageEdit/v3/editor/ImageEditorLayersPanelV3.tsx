@@ -205,7 +205,7 @@ export function ImageEditorLayersPanelV3({
 
   const addChoice = (choice: ImageEditLayerCreationChoiceV3): void => {
     if (creationAbort.current) return
-    const layer = createImageEditLayerFromChoiceV3(choice, controller.document.color.workingSpace)
+    const layer = createImageEditLayerFromChoiceV3(choice, controller.document.color.workingSpace, controller.document)
     setCreationError(null)
     const task = new AbortController(); creationAbort.current = task; setCreating(true); setCreationProgress(0)
     void Promise.resolve().then(() => controller.addLayer(layer, null, resolveCreationIndex(controller.document.layers, choice), task.signal, (done, total) => setCreationProgress(Math.floor(done / total * 100)))).then(() => {

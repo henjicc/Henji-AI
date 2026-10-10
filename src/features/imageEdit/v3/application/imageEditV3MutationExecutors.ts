@@ -37,6 +37,7 @@ import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 }
 import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
 import { IMAGE_EDIT_HISTORY_FIELDS_V3, type ImageEditHistoryMutationDraftV3 } from './imageEditHistoryFields'
 import { IMAGE_EDIT_WORKFLOW_FIELDS_V3, imageEditLayerMovesSchemaV3, type ImageEditWorkflowDraftV3 } from './imageEditWorkflowFields'
+import { prepareSmartContentMutationV3 } from '../smartContent/service'
 
 interface UndoPayload {
   entityType: 'image_edit.document' | 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask' | 'image_edit.layer_filter'
@@ -171,7 +172,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
   abstract readonly propertyOperations: ApplicationMutationExecutor['propertyOperations']
   readonly effectContract = { direct: [], cascades: [] }
 
-  abstract createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number }>
+  abstract createCommands(step: MutationStep, context?: ApplicationExecutionContext): Promise<{ documentId: string; commands: ImageEditCommandV3[]; historyPosition?: number; release?: () => Promise<void> }>
 
   async apply(step: MutationStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const { documentId } = mutationDocumentIdentity(step.target, this.entityType)
@@ -186,7 +187,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
       entityType: step.entityType,
       targetId: step.target.id,
     })
-    const { documentId, commands, historyPosition } = await this.createCommands(step)
+    const { documentId, commands, historyPosition, release } = await this.createCommands(step, context)
     const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const applied: string[] = []
     const historyBefore = bus.getHistoryView().position
@@ -220,7 +221,7 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
         error: error instanceof Error ? error.message : String(error),
       })
       throw error
-    }
+    } finally { await release?.() }
   }
 
   async applyAtomic(
@@ -319,7 +320,8 @@ function layerCommands(
   step: MutationStep,
   entityType: 'image_edit.layer' | 'image_edit.group',
   fields: typeof IMAGE_EDIT_V3_LAYER_FIELDS | typeof IMAGE_EDIT_V3_GROUP_FIELDS,
-): Promise<{ documentId: string; commands: ImageEditCommandV3[] }> {
+  context?: ApplicationExecutionContext,
+): Promise<{ documentId: string; commands: ImageEditCommandV3[]; release?: () => Promise<void> }> {
   const { documentId, layerId } = splitImageEditV3LayerRef(step.target, entityType)
   const { bus } = requireImageEditDocumentInstanceV3(documentId)
   const location = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
@@ -328,8 +330,10 @@ function layerCommands(
   if (entityType === 'image_edit.group' && location.layer.type !== 'group') throw new Error('NOT_FOUND')
   const draft: ImageEditV3LayerMutationDraft = { commonPatch: {} }
   const writers = fieldWriterTable(fields)
-  return applyWriterTable(writers, draft, step.mutations).then(() => {
-    const commands: ImageEditCommandV3[] = []
+  return applyWriterTable(writers, draft, step.mutations).then(async () => {
+    const prepared = await prepareSmartContentMutationV3(bus, layerId, draft,
+      context?.signal ? AbortSignal.any([context.signal, bus.getLifecycleSignal()]) : bus.getLifecycleSignal())
+    const commands: ImageEditCommandV3[] = [...prepared.commands]
     const base = (): { commandId: string; expectedRevision: number } => ({
       commandId: createImageEditIdV3('assistant-command'),
       expectedRevision: bus.getSnapshot().document.revision,
@@ -351,7 +355,7 @@ function layerCommands(
     const move = resolveMoveTarget(documentId, layerId, draft)
     if (move) commands.push({ ...base(), type: 'layer.move', layerId, ...move })
     if (commands.length === 0) throw new Error('NO_STATE_CHANGE')
-    return { documentId, commands }
+    return { documentId, commands, release: prepared.release }
   })
 }
 
@@ -360,8 +364,8 @@ export class ImageEditV3LayerMutationExecutor extends ImageEditV3MutationExecuto
   readonly writableProperties = writableProperties(LAYER_WRITERS)
   readonly propertyOperations = propertyOperations(LAYER_WRITERS)
 
-  createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[] }> {
-    return layerCommands(step, this.entityType, IMAGE_EDIT_V3_LAYER_FIELDS)
+  createCommands(step: MutationStep, context?: ApplicationExecutionContext): Promise<{ documentId: string; commands: ImageEditCommandV3[]; release?: () => Promise<void> }> {
+    return layerCommands(step, this.entityType, IMAGE_EDIT_V3_LAYER_FIELDS, context)
   }
 }
 

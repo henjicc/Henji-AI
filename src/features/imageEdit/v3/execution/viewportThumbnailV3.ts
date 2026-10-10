@@ -15,7 +15,7 @@ export async function renderImageEditorThumbnailV3(
   sessionId = document.id,
 ): Promise<ImageEditorV3PackageThumbnailSnapshot> {
   const hasSource = (layers: readonly ImageEditLayerV3[]): boolean => layers.some((layer) =>
-    layer.type === 'group' ? hasSource(layer.children) : layer.type === 'raster' && layer.source.kind === 'resource')
+    layer.type === 'group' ? hasSource(layer.children) : (layer.type === 'raster' || layer.type === 'smart') && layer.source.kind === 'resource')
   if (hasSource(document.layers)) return renderImageEditorViewportThumbnailV3(client, document, resourceDescriptors, signal, sessionId)
   // 无图片资源时不存在独立源几何；保留原空画笔/纯标注能力。两路只分流一次，永不互相 fallback。
   signal.throwIfAborted()

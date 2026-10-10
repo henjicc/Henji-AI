@@ -23,7 +23,7 @@ import {
   type ImageEditorV3ExportRenderDependencies,
   type ImageEditorV3ExportRenderRegion,
 } from './contracts'
-import { resolveImageEditRasterStorageSizeV3, resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
+import { resolveImageEditRasterCanvasV3, resolveImageEditRasterStorageSizeV3, resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import { createImageEditRasterReplacementV3, addImageEditRasterReplacementV3,
   missingImageEditRasterBaseSamplesV3, finishImageEditRasterReplacementV3 } from '@/core/imageEdit/v3/execution/rasterTileReplacement'
 
@@ -172,8 +172,9 @@ export function createImageEditorV3SparseRasterPlan(
     const source = isRecord(node.parameters.source) ? node.parameters.source : null
     const sourceSize = source?.kind === 'resource' && typeof source.resourceId === 'string'
       ? resourceSizes.get(source.resourceId) : undefined
-    const storageSize = resolveImageEditRasterStorageSizeV3(sourceSize ?? null, canvasSize)
-    extentByNodeId.set(node.id, resolveImageEditRasterSourceExtentV3(sourceSize ?? null, canvasSize, Object.keys(node.parameters.tiles)))
+    const nativeCanvas = resolveImageEditRasterCanvasV3(node.parameters, canvasSize)
+    const storageSize = resolveImageEditRasterStorageSizeV3(sourceSize ?? null, nativeCanvas)
+    extentByNodeId.set(node.id, resolveImageEditRasterSourceExtentV3(sourceSize ?? null, nativeCanvas, Object.keys(node.parameters.tiles)))
     for (const [key, resourceId] of Object.entries(node.parameters.tiles)) {
       const reference = parseSparseReference(node, key, resourceId, descriptors)
       const region = createTileRegion(storageSize, { mip: 0, x: reference.tileX, y: reference.tileY }, 0, BRUSH_TILE_SIZE)

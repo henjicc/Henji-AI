@@ -1050,6 +1050,7 @@
         "hasMask": "已有蒙版"
       },
       "layerType": {
+        "smart": "智能对象",
         "raster": "栅格图层",
         "annotation": "标注图层",
         "effect": "效果图层",

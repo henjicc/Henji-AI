@@ -21,7 +21,7 @@ interface ResolvedImageSource {
   document?: ImageEditDocumentV3
 }
 
-async function resolveImageSource(ref: ApplicationRef): Promise<ResolvedImageSource> {
+export async function resolveImageSource(ref: ApplicationRef): Promise<ResolvedImageSource> {
   if (ref.kind === 'generation.result') {
     const record = await databaseService.getHistoryById(ref.id)
     if (

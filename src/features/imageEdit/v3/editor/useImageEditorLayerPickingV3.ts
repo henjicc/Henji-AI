@@ -22,7 +22,7 @@ export function useImageEditorLayerPickingV3(document: ImageEditDocumentV3,
   }
   const visit = (layers: readonly ImageEditLayerV3[]): void => {
     for (const layer of layers) {
-      if (layer.type === 'raster') {
+      if (layer.type === 'raster' || layer.type === 'smart') {
         if (layer.source.kind === 'resource') add(layer.source.resourceId, false)
         Object.values(layer.tiles).forEach((id) => add(id, true))
       }

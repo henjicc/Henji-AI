@@ -16,7 +16,7 @@ import {
 } from '@/core/imageEdit/v3'
 import { convertPreviewWorkingSpaceToSrgbDisplayV3 } from './previewColorV3'
 import { scaleImageEditorPreviewEffectsV3 } from './previewEffectScalingV3'
-import { resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
+import { resolveImageEditRasterCanvasV3, resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import { ImageEditorPreviewCustomEffectsV3 } from './previewCustomEffectsV3'
 import { ImageEditorViewportGlobalAnalysisCacheV3 } from './viewportGlobalAnalysisV3'
 import type { ImageEditorViewportCompositeRenderRequestV3 } from './viewportCompositeProtocolV3'
@@ -233,7 +233,7 @@ export async function renderImageEditorViewportCompositeV3(
             return tile.data[((y % 512) * tile.width + x % 512) * 4 + channel]
           },
           resolveImageEditRasterSourceExtentV3(resourceId ? resourceSizes.get(resourceId) ?? null : null,
-            request.document.geometry, Object.keys(node.parameters.tiles as Record<string, unknown>)),
+            resolveImageEditRasterCanvasV3(node.parameters, request.document.geometry), Object.keys(node.parameters.tiles as Record<string, unknown>)),
         )
       },
       rasterizeAnnotations: async (node, region) => rasterizeAnnotations(

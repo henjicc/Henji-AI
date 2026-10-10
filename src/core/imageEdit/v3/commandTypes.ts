@@ -70,6 +70,14 @@ export interface ImageEditLayerDeleteCommandV3 extends ImageEditCommandBaseV3 {
   resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
+/** Replace content without deleting a clipping base or changing its stable instance identity. */
+export interface ImageEditLayerReplaceCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'layer.replace';
+  layerId: string;
+  layer: ImageEditLayerV3;
+  resources?: ImageEditCommandResourceDescriptorV3[];
+}
+
 export interface ImageEditLayerMoveCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.move';
   layerId: string;
@@ -188,6 +196,7 @@ export interface ImageEditMaskTileDeltaCommandV3 extends ImageEditCommandBaseV3 
 }
 
 export type ImageEditLeafCommandV3 =
+  | ImageEditLayerReplaceCommandV3
   | ImageEditNamedRegionsCommandV3
   | ImageEditLayersMoveCommandV3
   | ImageEditDocumentUpdateOutputGeometryCommandV3
@@ -268,13 +277,14 @@ export function collectImageEditCommandResourceReferencesV3(
     }
   } else if (
     command.type === 'layer.add'
+    || command.type === 'layer.replace'
     || command.type === 'layer.delete'
     || command.type === 'layer.duplicate'
     || command.type === 'layer.group'
     || command.type === 'layer.ungroup'
   ) {
     if (command.resources) resources.push(...command.resources);
-    else if (command.type === 'layer.add') collectLegacyLayerResources(command.layer, resources);
+    else if (command.type === 'layer.add' || command.type === 'layer.replace') collectLegacyLayerResources(command.layer, resources);
     else if (command.type === 'layer.group') collectLegacyLayerResources(command.group, resources);
   } else if (command.type === 'layer.set-mask' && command.mask) {
     if (command.maskResources) resources.push(...command.maskResources);

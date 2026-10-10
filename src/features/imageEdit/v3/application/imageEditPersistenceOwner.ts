@@ -53,6 +53,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
     private confirmProjection?: ImageEditPersistenceHostV3['confirmProjection'],
     public projection?: ImageEditPersistenceHostV3['projection'],
     private readonly canStart: () => boolean = () => true,
+    private readonly onConfirmed?: () => Promise<void>,
   ) {
     if (queue.getReference().documentId !== documentId) throw new Error('图片编辑保存宿主与文档不匹配')
     this.key = `image-edit-document:${documentId}`
@@ -156,6 +157,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
           event: 'image_edit.v3.persistence.confirm.completed',
           context: { documentId: this.documentId, revision: reference.revision },
         })
+        await this.onConfirmed?.()
         return this.queue.getReference()
       }
     } catch (cause) {

@@ -93,7 +93,7 @@ export function ImageEditorPreviewV3({
   const alphaMaps = useImageEditorLayerPickingV3(controller.document, resourceDescriptors ?? [])
   const layerBounds = (layerId: string) => {
     const location = findImageEditLayerLocationV3(controller.document.layers, layerId)
-    if (!location || location.layer.type !== 'raster') return null
+    if (!location || (location.layer.type !== 'raster' && location.layer.type !== 'smart')) return null
     return imageEditorLayerContentBoundsV3(location.layer, alphaMaps)
       ?? { x: 0, y: 0, width: controller.document.geometry.width, height: controller.document.geometry.height }
   }

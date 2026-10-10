@@ -40,7 +40,7 @@ export function resolveImageEditorDefaultLayerIdV3(
   return candidates.find(({ layer, interactive }) => (
     interactive && layer.type === 'raster' && layer.source.kind === 'resource'
   ))?.layer.id
-    ?? candidates.find(({ layer, interactive }) => interactive && layer.type === 'raster')?.layer.id
+    ?? candidates.find(({ layer, interactive }) => interactive && (layer.type === 'raster' || layer.type === 'smart'))?.layer.id
     ?? candidates.find(({ layer, interactive }) => (
       interactive && (layer.type === 'annotation' || layer.type === 'group')
     ))?.layer.id

@@ -28,6 +28,7 @@ import {
   prewarmImageEditorV3SourcePyramid,
   readImageEditorV3BrushTiles,
   readImageEditorV3FastProxy,
+  readImageEditorV3SourceTile,
 } from './imageEditorV3'
 
 const SOURCE_REF = `sha256:${'a'.repeat(64)}` as const
@@ -101,6 +102,35 @@ afterEach(() => {
 })
 
 describe('图片编辑 V3 commands 契约', () => {
+  it('并行 CPU/预览源读取共用两个槽位，排队取消和失败不阻塞后续任务', async () => {
+    const platform = createPlatform(), finish: (() => void)[] = []; let active = 0, peak = 0
+    const tile: Awaited<ReturnType<ImageEditorV3Platform['readSourceTile']>> = {
+      resourceRef: SOURCE_REF, mip: 0, tileX: 0, tileY: 0, halo: 0, width: 1, height: 1, channels: 4,
+      bitDepth: 8, sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian', rowStride: 4,
+      colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight', orientationApplied: true,
+      originX: 0, originY: 0, pixels: new Uint8Array([255, 0, 0, 255]).buffer,
+    }
+    vi.mocked(platform.readSourceTile).mockImplementation(async request => {
+      active++; peak = Math.max(peak, active)
+      await new Promise<void>(resolve => finish.push(resolve)); active--
+      if (request.requestId === 'one') throw new Error('源读取失败')
+      return tile
+    })
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const read = (requestId: string, signal?: AbortSignal) => readImageEditorV3SourceTile({ requestId, resourceRef: SOURCE_REF, mip: 0, tileX: 0, tileY: 0 }, signal)
+    const first = read('one'), failed = expect(first).rejects.toThrow('源读取失败'), second = read('two')
+    const abort = new AbortController(), cancelled = expect(read('cancelled', abort.signal)).rejects.toThrow('取消')
+    const last = read('four')
+    await vi.waitFor(() => expect(platform.readSourceTile).toHaveBeenCalledTimes(2))
+    abort.abort(); await cancelled
+    finish.shift()!(); await failed
+    await vi.waitFor(() => expect(platform.readSourceTile).toHaveBeenCalledTimes(3))
+    while (finish.length) finish.shift()!()
+    await expect(second).resolves.toEqual(tile); await expect(last).resolves.toEqual(tile)
+    expect(peak).toBe(2); expect(platform.cancelRequest).not.toHaveBeenCalled()
+    expect(vi.mocked(platform.readSourceTile).mock.calls.map(([request]) => request.requestId)).toEqual(['one', 'two', 'four'])
+  })
+
   it('绘画/GPU/供体共享两个原生读取槽，排队取消不调用原生，完成后继续读取', async () => {
     const platform = createPlatform(), finish: (() => void)[] = []; let active = 0, peak = 0
     vi.mocked(platform.readBrushTiles).mockImplementation(async () => {

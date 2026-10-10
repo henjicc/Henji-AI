@@ -5,6 +5,7 @@ import {
   Eye,
   EyeOff,
   Image,
+  FileImage,
   Layers3,
   Lock,
   SlidersHorizontal,
@@ -50,6 +51,7 @@ interface ImageEditorLayerRowV3Props {
 }
 
 const TYPE_ICON = {
+  smart: FileImage,
   raster: Image,
   annotation: SquarePen,
   effect: Sparkles,

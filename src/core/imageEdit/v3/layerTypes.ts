@@ -1,5 +1,7 @@
 import type { Deformation } from '../../imaging/transforms';
 import type { MarkItem } from '../types';
+import type { ImageEditSmartLayerV3 } from './smartContent/types';
+export type { ImageEditSmartLayerV3, ImageEditSmartContentV3, ImageEditSmartOriginV3 } from './smartContent/types';
 
 export type ImageEditBlendModeV3 =
   | 'normal'
@@ -82,6 +84,8 @@ export type ImageEditRasterSourceV3 =
 
 export interface ImageEditRasterLayerV3 extends ImageEditLayerCommonV3 {
   type: 'raster';
+  /** 栅格化智能内容的原生网格；省略时使用所属文档画布。 */
+  rasterCanvasSize?: { width: number; height: number };
   source: ImageEditRasterSourceV3;
   /** `mip/x/y` → 内容寻址瓦片资源 ID；空记录表示没有稀疏覆盖。 */
   tiles: Record<string, string>;
@@ -116,6 +120,7 @@ export interface ImageEditGroupLayerV3 extends ImageEditLayerCommonV3 {
 
 export type ImageEditLayerV3 =
   | ImageEditRasterLayerV3
+  | ImageEditSmartLayerV3
   | ImageEditAnnotationLayerV3
   | ImageEditEffectLayerV3
   | ImageEditAdjustmentLayerV3

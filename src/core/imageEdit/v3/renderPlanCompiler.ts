@@ -139,13 +139,14 @@ function compositeContent(
 
 function compileContentLayer(
   state: CompileState,
-  layer: Extract<ImageEditLayerV3, { type: 'raster' | 'annotation' }>,
+  layer: Extract<ImageEditLayerV3, { type: 'raster' | 'smart' | 'annotation' }>,
   path: readonly string[],
   belowNodeId: string | null,
 ): string {
-  const definitionId = layer.type === 'raster' ? 'source.raster' : 'vector.annotation';
-  const contentParameters: Record<string, unknown> = layer.type === 'raster'
-    ? { source: layer.source, tiles: layer.tiles, colorMode: state.color }
+  const definitionId = layer.type !== 'annotation' ? 'source.raster' : 'vector.annotation';
+  const contentParameters: Record<string, unknown> = layer.type !== 'annotation'
+    ? { source: layer.source, tiles: layer.tiles, colorMode: state.color,
+      ...(layer.type === 'smart' ? { rasterCanvasSize: { width: layer.content.width, height: layer.content.height } } : layer.rasterCanvasSize ? { rasterCanvasSize: layer.rasterCanvasSize } : {}) }
     : { annotations: layer.annotations, colorMode: state.color };
   const contentNodeId = appendNode(state, layer, path, definitionId, [], contentParameters, null);
   if (!contentNodeId) return belowNodeId ?? '';
@@ -272,7 +273,7 @@ function compileLayers(
 }
 
 function compileSingleLayer(state: CompileState, layer: ImageEditLayerV3, path: readonly string[], below: string | null): string | null {
-  if (layer.type === 'raster' || layer.type === 'annotation') return compileContentLayer(state, layer, path, below) || below;
+  if (layer.type === 'raster' || layer.type === 'smart' || layer.type === 'annotation') return compileContentLayer(state, layer, path, below) || below;
   if (layer.type === 'effect' || layer.type === 'adjustment') return compileEffectLayer(state, layer, path, below);
   return compileGroup(state, layer, path, below);
 }

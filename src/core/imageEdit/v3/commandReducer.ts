@@ -39,6 +39,8 @@ import {
 import { assertImageEditStructuralCommandResourcesV3 } from './commandLayerResourceMetadata';
 import { assertImageEditLayerSemanticsV3 } from './layerModel/semantics';
 import { imageEditNamedRegionsSchemaV3 } from './namedRegions';
+import { assertImageEditSmartGraphV3, assertImageEditSmartInstancesConsistentV3 } from './smartContent/graph';
+import { createImageEditLayerContentRegistryV3 } from './layerEntries/base';
 
 export {
   ImageEditCommandValidationErrorV3,
@@ -130,7 +132,11 @@ function cloneLayer(layer: ImageEditLayerV3, idMap?: Readonly<Record<string, str
     mask: layer.mask ? cloneImageEditMaskReferenceV3(layer.mask) : null,
   };
   if (layer.type === 'raster') {
-    return { ...common, type: 'raster', source: { ...layer.source }, tiles: { ...layer.tiles } };
+    return { ...common, type: 'raster', source: { ...layer.source }, tiles: { ...layer.tiles },
+      ...(layer.rasterCanvasSize ? { rasterCanvasSize: { ...layer.rasterCanvasSize } } : {}) };
+  }
+  if (layer.type === 'smart') {
+    return { ...common, type: 'smart', source: { ...layer.source }, tiles: { ...layer.tiles }, content: structuredClone(layer.content) };
   }
   if (layer.type === 'annotation') {
     return { ...common, type: 'annotation', annotations: jsonClone(layer.annotations) };
@@ -412,6 +418,14 @@ function applyLayerContentCommand(
       ...(command.resources ? { resources: command.resources.map(resource => ({ ...resource })) } : {}) } };
   }
   assertLayerEditable(location);
+  if (command.type === 'layer.replace') {
+    if (command.layer.id !== layerId) throw new ImageEditCommandValidationErrorV3('替换内容不能改变实例标识');
+    assertImageEditSmartGraphV3(command.layer);
+    const layer = createImageEditLayerContentRegistryV3().parse(command.layer.type, command.layer);
+    return { layers: replaceLayer(document.layers, location, cloneLayer(layer)), inverse: {
+      ...base, type: 'layer.replace', layerId, layer: cloneLayer(location.layer), resources: command.resources,
+    } };
+  }
   if (command.type === 'layer.update-params') {
     if (location.layer.type !== 'effect' && location.layer.type !== 'adjustment') {
       throw new ImageEditCommandValidationErrorV3('目标不是效果或调整图层');
@@ -548,7 +562,7 @@ function applyLayerContentCommand(
 export function applyImageEditCommandV3(
   document: ImageEditDocumentV3,
   command: ImageEditCommandV3,
-  options: { allowLegacyResourceMetadata?: boolean } = {},
+  options: { allowLegacyResourceMetadata?: boolean; deferSmartConsistency?: boolean } = {},
 ): ImageEditCommandApplyResultV3 {
   if (!command.commandId || command.commandId.length > 256) {
     throw new ImageEditCommandValidationErrorV3('图片编辑命令 ID 无效');
@@ -568,14 +582,17 @@ export function applyImageEditCommandV3(
     let candidate = document;
     const inverses: import('./commandTypes').ImageEditLeafCommandV3[] = [];
     for (const child of command.commands) {
-      const result = applyImageEditCommandV3(candidate, { ...child, expectedRevision: candidate.revision }, options);
+      const result = applyImageEditCommandV3(candidate, { ...child, expectedRevision: candidate.revision }, { ...options, deferSmartConsistency: true });
       candidate = result.document;
       if (result.inverse.type === 'document.atomic') throw new ImageEditCommandValidationErrorV3('不支持嵌套原子操作');
-      inverses.unshift(result.inverse);
+      // 原子内的临时 revision 只用于执行；持久历史与原始子命令基线对应。
+      inverses.unshift({ ...result.inverse, expectedRevision: child.expectedRevision + 1 });
     }
     const inverse: ImageEditCommandV3 = { ...inverseBase(command, nextRevision), type: 'document.atomic', commands: inverses };
     const history = calculateImageEditCommandHistoryResourcesV3(command, inverse);
     const historyMetadataBytes = new TextEncoder().encode(JSON.stringify([command, inverse])).byteLength;
+    assertImageEditSmartGraphV3(candidate);
+    assertImageEditSmartInstancesConsistentV3(candidate);
     return { document: { ...candidate, revision: nextRevision }, inverse, historyMetadataBytes,
       historyResources: history.resources, historyBytes: historyMetadataBytes + history.bytes };
   }
@@ -594,6 +611,9 @@ export function applyImageEditCommandV3(
     regions: structuredClone(document.namedRegions) } : documentResult?.inverse ?? layerResult?.inverse;
   try {
     assertImageEditLayerSemanticsV3(layerResult?.layers ?? document.layers);
+    const candidate = { ...document, layers: layerResult?.layers ?? document.layers };
+    assertImageEditSmartGraphV3(candidate);
+    if (!options.deferSmartConsistency) assertImageEditSmartInstancesConsistentV3(candidate);
   } catch (error) {
     throw new ImageEditCommandValidationErrorV3(error instanceof Error ? error.message : '图层语义无效');
   }

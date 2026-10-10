@@ -5,6 +5,8 @@ import { deformationSchema } from '../imaging/transforms';
 import { z } from 'zod'
 import { imageEditHistoryCheckpointSchemaV3 } from '../imageEdit/v3/historyPaging/schema'
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '../imageEdit/v3/documentTypes'
+import type { ImageEditDocumentV3 } from '../imageEdit/v3/documentTypes'
+import { imageEditSmartContentSchemaV3 } from '../imageEdit/v3/smartContent/schema'
 import { imageEditNamedRegionsSchemaV3 } from '../imageEdit/v3/namedRegions'
 import { IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION } from './schemaVersions'
 
@@ -16,7 +18,8 @@ const chromaticity = z.object({ x: z.number(), y: z.number() })
 const hdrMetadata = z.object({ standard: z.enum(['pq', 'hlg']), referenceWhiteNits: z.number(), cicp: z.object({ colorPrimaries: z.number(), transferCharacteristics: z.number(), matrixCoefficients: z.number(), fullRange: z.boolean() }), contentLight: z.object({ maxContentLightLevelNits: z.number(), maxFrameAverageLightLevelNits: z.number() }).optional(), masteringDisplay: z.object({ red: chromaticity, green: chromaticity, blue: chromaticity, whitePoint: chromaticity, maxLuminanceNits: z.number(), minLuminanceNits: z.number() }).optional() })
 const common = { deformation: deformationSchema.nullable().optional(), id: identifier, name: z.string(), visible: z.boolean(), locked: z.boolean(), opacity: z.number().min(0).max(1), fillOpacity: z.number().min(0).max(1), clipping: z.boolean(), maskAttachment: imageEditMaskAttachmentSchemaV3, filters: imageEditLayerFiltersSchemaV3, blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay', 'soft-light']), transform: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]), mask: imageEditSparseMaskSchemaV3.nullable() }
 export const imageLayerSchema: z.ZodType = z.lazy(() => z.discriminatedUnion('type', [
-  z.object({ ...common, type: z.literal('raster'), source: z.union([z.object({ kind: z.literal('empty') }), z.object({ kind: z.literal('resource'), resourceId: identifier })]), tiles: z.record(z.string(), identifier) }),
+  z.object({ ...common, type: z.literal('raster'), rasterCanvasSize: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).optional(), source: z.union([z.object({ kind: z.literal('empty') }), z.object({ kind: z.literal('resource'), resourceId: identifier })]), tiles: z.record(z.string(), identifier) }),
+  z.object({ ...common, type: z.literal('smart'), source: z.union([z.object({ kind: z.literal('empty') }), z.object({ kind: z.literal('resource'), resourceId: identifier })]), tiles: z.record(z.string(), identifier), content: z.lazy(() => imageEditSmartContentSchemaV3(imageContentSchema as z.ZodType<ImageEditDocumentV3>)) }).strict(),
   z.object({ ...common, type: z.literal('annotation'), annotations: z.array(jsonObject) }),
   z.object({ ...common, type: z.literal('effect'), effectId: identifier,
     params: z.union([jsonObject, ...listImagingEffects().filter(effect => effect.hosts.includes('image')).map(effect => effect.parameterSchema)]),

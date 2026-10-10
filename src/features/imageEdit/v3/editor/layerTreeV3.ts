@@ -13,6 +13,8 @@ import type {
   ImageEditLayerV3,
 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorLayerKindV3 } from '../application/imageEditorHostProfiles'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import { createEmptyImageEditSmartLayerV3 } from '@/core/imageEdit/v3/smartContent/commands'
 
 export interface ImageEditLayerLocationV3 {
   layer: ImageEditLayerV3
@@ -191,8 +193,13 @@ export function createImageEditDuplicateIdMapV3(layer: ImageEditLayerV3): Record
 export function createImageEditLayerFromChoiceV3(
   choice: ImageEditLayerCreationChoiceV3,
   workingSpace: ImageEditWorkingSpaceV3,
+  document?: ImageEditDocumentV3,
 ): ImageEditLayerV3 {
   const id = createImageEditIdV3('layer')
+  if (choice.kind === 'smart') {
+    if (!document) throw new Error('智能对象需要当前图片文档');
+    return createEmptyImageEditSmartLayerV3(document, id, choice.name);
+  }
   if (choice.kind === 'raster') return createImageEditRasterLayerV3(id, choice.name)
   if (choice.kind === 'annotation') return createImageEditAnnotationLayerV3(id, choice.name)
   if (choice.kind === 'group') return createImageEditGroupLayerV3(id, choice.name)

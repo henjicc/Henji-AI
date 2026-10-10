@@ -113,11 +113,11 @@ export class ImageEditRenderScheduler {
     });
   }
 
-  cancelSession(sessionId: string): void {
+  cancelSession(sessionId: string, reason?: unknown): void {
     for (const [key, pendingPreview] of this.pendingPreviews) {
       if (pendingPreview.task.sessionId !== sessionId) continue;
       this.pendingPreviews.delete(key);
-      const error = new ImageEditTaskCancelledError(pendingPreview.task.id);
+      const error = reason ?? new ImageEditTaskCancelledError(pendingPreview.task.id);
       pendingPreview.controller.abort(error);
       this.taskIds.delete(pendingPreview.task.id);
       pendingPreview.reject(error);
@@ -126,14 +126,14 @@ export class ImageEditRenderScheduler {
       const pending = this.pendingTasks[index];
       if (pending.task.sessionId !== sessionId) continue;
       this.pendingTasks.splice(index, 1);
-      const error = new ImageEditTaskCancelledError(pending.task.id);
+      const error = reason ?? new ImageEditTaskCancelledError(pending.task.id);
       pending.controller.abort(error);
       this.taskIds.delete(pending.task.id);
       pending.reject(error);
     }
     for (const active of this.activeTasks.values()) {
       if (active.task.sessionId === sessionId) {
-        active.controller.abort(new ImageEditTaskCancelledError(active.task.id));
+        active.controller.abort(reason ?? new ImageEditTaskCancelledError(active.task.id));
       }
     }
   }

@@ -20,7 +20,7 @@ export function ImageEditorLayerControlsV3({ presentation, document, layerId, bo
   const { t } = useTranslation('ui')
   const rootRef = useRef<HTMLDivElement>(null)
   const location = layerId ? findImageEditLayerLocationV3(document.layers, layerId) : null
-  const visible = isImageEditLayerTransformableV3(location) && location.layer.type === 'raster' && bounds !== null
+  const visible = isImageEditLayerTransformableV3(location) && (location.layer.type === 'raster' || location.layer.type === 'smart') && bounds !== null
   useLayoutEffect(() => {
     presentation.sync(rootRef.current, visible && location && bounds ? {
       documentId: document.id, revision: document.revision, layerId: location.layer.id,

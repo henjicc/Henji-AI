@@ -24,12 +24,15 @@ export function collectImageEditResourceRolesV3(
   const layer = (value: ImageEditLayerV3): void => {
     mask(value.mask)
     value.filters.forEach(filter => mask(filter.mask))
-    if (value.type === 'raster') {
+    if (value.type === 'raster' || value.type === 'smart') {
       if (value.source.kind === 'resource') images.add(value.source.resourceId)
       Object.values(value.tiles).forEach((id) => add(id, 'rgba-float32'))
+      if (value.type === 'smart') value.content.document.layers.forEach(layer)
     } else if (value.type === 'group') value.children.forEach(layer)
   }
   const command = (value: ImageEditCommandV3): void => {
+    if (value.type === 'document.atomic') { value.commands.forEach(command); return }
+    if (value.type === 'layer.replace') { layer(value.layer); return }
     if (value.type === 'layer.add') layer(value.layer)
     else if (value.type === 'layer.group') layer(value.group)
     else if (value.type === 'layer.set-mask') mask(value.mask)

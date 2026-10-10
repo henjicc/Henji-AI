@@ -1,6 +1,6 @@
 import { createImageEditorV3RequestId } from '@/commands/imageEditorV3'
 import { mipSize, type ImageEditCpuSamplingContextV3, type ImageEditRenderPlan, type ImageEditSize } from '@/core/imageEdit/v3'
-import { resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
+import { resolveImageEditRasterCanvasV3, resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import type { ImageEditorV3PyramidDescriptor } from '@/platform/contracts/imageEditorV3'
 import { readSharedImageEditorSourcePyramidV3 } from '../execution/imageEditorSourcePyramidsV3'
 import type { ImageEditorV3ExportRenderDependencies } from './contracts'
@@ -63,7 +63,7 @@ export async function prepareImageEditorExportSourceGeometryV3(
       const resourceId = isRecord(source) && source.kind === 'resource' && typeof source.resourceId === 'string'
         ? source.resourceId : null
       size = resolveImageEditRasterSourceExtentV3(resourceId ? sizes.get(resourceId) ?? null : null,
-        canvasSize, isRecord(target.node.parameters.tiles) ? Object.keys(target.node.parameters.tiles) : [])
+        resolveImageEditRasterCanvasV3(target.node.parameters, canvasSize), isRecord(target.node.parameters.tiles) ? Object.keys(target.node.parameters.tiles) : [])
     }
     // 现有导出/效果分析载入器直接返回请求的求值 mip，不做第二次网格缩放。
     return { size: mipSize(size, mip), toEvaluation: [1, 0, 0, 1, 0, 0] }

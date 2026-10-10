@@ -79,7 +79,7 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
   expand(document.layers)
   for (const location of flattenImageEditLayerTreeV3(document.layers, groups)) {
     const { layer, ancestors } = location
-    if (layer.type !== 'raster' || [layer, ...ancestors].some((entry) => !entry.visible || entry.locked || entry.opacity === 0 || entry.fillOpacity === 0)) continue
+    if ((layer.type !== 'raster' && layer.type !== 'smart') || [layer, ...ancestors].some((entry) => !entry.visible || entry.locked || entry.opacity === 0 || entry.fillOpacity === 0)) continue
     const raw = mapImageEditTransformPointV3(invertImageEditTransformV3(layerToOutputV3(document, location)), ...point)
     const normalized=inverseDeform(prepareDeformation(layer.deformation),[raw[0]/document.geometry.width,raw[1]/document.geometry.height]);if(!normalized)continue;
     const [x,y]=[normalized[0]*document.geometry.width,normalized[1]*document.geometry.height]
@@ -107,7 +107,7 @@ export function pickImageEditorLayerV3(document: ImageEditDocumentV3, point: rea
 }
 
 export function imageEditorLayerContentBoundsV3(layer: ImageEditLayerV3, maps: LayerAlphaMapsV3): LayerContentBoundsV3 | null {
-  if (layer.type !== 'raster') return null
+  if (layer.type !== 'raster' && layer.type !== 'smart') return null
   const bounds: LayerContentBoundsV3[] = []
   const source = layer.source.kind === 'resource' ? maps.get(layer.source.resourceId)?.bounds : null
   if (source) bounds.push(source)

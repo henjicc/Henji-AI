@@ -3,7 +3,7 @@ import type { ImageEditLayerV3 } from './layerTypes';
 import type { ImageEditNamedRegionV3 } from './namedRegions';
 
 /** 文档内容与工作副本外壳独立版本化；历史页改动不改变图层/几何内容。 */
-export const IMAGE_EDIT_DOCUMENT_VERSION_V3 = 7;
+export const IMAGE_EDIT_DOCUMENT_VERSION_V3 = 8;
 
 export type ImageEditRotationV3 = 0 | 90 | 180 | 270;
 

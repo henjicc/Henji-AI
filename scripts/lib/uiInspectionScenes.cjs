@@ -9,6 +9,7 @@ const { createImageEditLayerPanelsScene } = require('./uiInspectionSceneImageEdi
 const { createImageEditHistoryScene } = require('./uiInspectionSceneImageEditHistory.cjs')
 const { createImageEditRegionHostsScene } = require('./uiInspectionSceneImageEditRegionHosts.cjs')
 const { createImageEditFilterScopesScene, createImageEditFilterFailureScene } = require('./uiInspectionSceneImageEditFilterScopes.cjs')
+const { createImageEditSmartContentScene } = require('./uiInspectionSceneImageEditSmartContent.cjs')
 const { diffBuffers } = require('./canvasVisualDiff.cjs')
 const { createVideoEditProbeScene } = require('./uiInspectionSceneVideoEditProbe.cjs')
 const { createVideoEditScrubScene } = require('./uiInspectionSceneVideoEditScrub.cjs')
@@ -181,6 +182,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createImageEditPaintParameterScene(context),
     createImageEditRetouchScene(context),
     createImageEditFilterScopesScene(context),
+    createImageEditSmartContentScene(context),
     createImageEditFilterFailureScene(context),
     ...createCameraStagePlaybackScenes(context),
     ...createGpuRasterScenes(context),

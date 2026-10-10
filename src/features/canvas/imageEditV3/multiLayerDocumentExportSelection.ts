@@ -53,6 +53,7 @@ export function resolveMultiLayerDocumentExportSelection(input: {
   if (layer.type === 'adjustment') {
     return { ready: false, reason: '调整层依赖其他图层，暂不支持单独导出' }
   }
+  if (layer.type === 'smart') return { ready: true, targetRef: { ...imageEditV3LayerRef(input.document.id, layer.id), kind: 'image_edit.layer' }, label: layer.name }
   const annotation = input.annotationSelection
   if (!annotation || annotation.layerId !== layer.id) {
     return { ready: false, reason: '请在标注图层中选择一个具体元素' }

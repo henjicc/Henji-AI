@@ -1,5 +1,15 @@
 import { createTileRegion, type ImageEditRect, type ImageEditSize } from '../tileGeometry'
 
+/** A smart appearance retains its own tile edge geometry, independently of the host canvas. */
+export function resolveImageEditRasterCanvasV3(parameters: Readonly<Record<string, unknown>>, fallback: ImageEditSize): ImageEditSize {
+  const size = parameters.rasterCanvasSize;
+  if (!size || typeof size !== 'object') return fallback;
+  const value = size as Record<string, unknown>;
+  if (!Number.isSafeInteger(value.width) || Number(value.width) <= 0
+    || !Number.isSafeInteger(value.height) || Number(value.height) <= 0) throw new Error('智能对象呈现尺寸无效');
+  return { width: Number(value.width), height: Number(value.height) };
+}
+
 export function resolveImageEditRasterStorageSizeV3(source: ImageEditSize | null, canvas: ImageEditSize): ImageEditSize {
   return { width: Math.max(source?.width ?? 0, canvas.width), height: Math.max(source?.height ?? 0, canvas.height) }
 }

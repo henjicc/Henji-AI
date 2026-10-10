@@ -129,7 +129,8 @@ function collectResources(document: ImageEditDocumentV3): ResourceUsage[] {
         add(resourceId, 'mask', layer.id)
       }
     }
-    if (layer.type !== 'raster') continue
+    if (layer.type !== 'raster' && layer.type !== 'smart') continue
+    if (layer.type === 'smart') for (const resourceId of collectImageEditJsonResourceIdsV3(layer.content.document)) add(resourceId, 'smart-content', layer.id)
     if (layer.source.kind === 'resource') add(layer.source.resourceId, 'raster-source', layer.id)
     for (const resourceId of Object.values(layer.tiles)) add(resourceId, 'raster-tile', layer.id)
   }
@@ -189,10 +190,10 @@ function layerAvailability(
       writable = false
       reasons.push('图层已锁定；请先把 locked 设为 false。')
     }
-    if (writable && propertyId.endsWith('.transform') && !['raster','annotation','group'].includes(source.location.layer.type)) {
+    if (writable && propertyId.endsWith('.transform') && !['raster','smart','annotation','group'].includes(source.location.layer.type)) {
       writable=false;reasons.push('仅像素、标注或图层组支持空间变换。');
     }
-    if (writable && propertyId === 'image_edit.layer.deformation' && source.location.layer.type !== 'raster') {
+    if (writable && propertyId === 'image_edit.layer.deformation' && !['raster','smart'].includes(source.location.layer.type)) {
       writable = false; reasons.push('透视与网格变形需要像素图层；请先选择像素图层。');
     }
     if (writable && propertyId === 'image_edit.layer.params') {
@@ -201,6 +202,12 @@ function layerAvailability(
         writable = false
         reasons.push('只有可渲染的效果或调整图层能修改 params。')
       }
+    }
+    if (writable && propertyId === 'image_edit.layer.type' && !['raster', 'smart'].includes(source.location.layer.type)) {
+      writable = false; reasons.push('此图层类型不能转为智能对象。');
+    }
+    if (writable && propertyId.startsWith('image_edit.layer.smart_') && source.location.layer.type !== 'smart') {
+      writable = false; reasons.push('请先把像素图层转为智能对象。');
     }
     if (writable && entityType === 'image_edit.mask' && layerLocked) {
       writable = false

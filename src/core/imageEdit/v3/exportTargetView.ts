@@ -69,7 +69,7 @@ function annotationDisplayName(layer: ImageEditAnnotationLayerV3, item: MarkItem
 
 function hasRenderableContent(layer: ImageEditLayerV3): boolean {
   if (!layer.visible) return false
-  if (layer.type === 'raster') {
+  if (layer.type === 'raster' || layer.type === 'smart') {
     return layer.source.kind === 'resource' || Object.keys(layer.tiles).length > 0
   }
   if (layer.type === 'annotation') return layer.annotations.length > 0

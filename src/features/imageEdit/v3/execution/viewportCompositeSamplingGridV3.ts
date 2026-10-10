@@ -7,7 +7,7 @@ import {
   type ImageEditRenderPlanNode,
   type ImageEditSize,
 } from '@/core/imageEdit/v3'
-import { resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
+import { resolveImageEditRasterCanvasV3, resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 
 function record(value: unknown): Readonly<Record<string, unknown>> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -71,7 +71,7 @@ export function createImageEditorViewportSamplingGridResolverV3(
         : []
       const extent = resolveImageEditRasterSourceExtentV3(
         sourceSize ?? null,
-        documentSize,
+        resolveImageEditRasterCanvasV3(node.parameters, documentSize),
         sparseKeys,
       )
       return samplingGrid(extent, actualMip ?? outputMip, outputMip)

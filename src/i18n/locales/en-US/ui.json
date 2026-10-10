@@ -1050,6 +1050,7 @@
         "hasMask": "Has mask"
       },
       "layerType": {
+        "smart": "Smart object",
         "raster": "Raster layer",
         "annotation": "Annotation layer",
         "effect": "Effect layer",

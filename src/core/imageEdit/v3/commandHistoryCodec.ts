@@ -116,35 +116,36 @@ function parseSafeJson(value: unknown, maxBytes: number): unknown {
   } catch {
     fail('历史快照 JSON 无效');
   }
-  const visit = (entry: unknown, depth: number): void => {
-    if (depth > 80) fail('历史快照结构超限');
+  const pending: unknown[] = [parsed];
+  while (pending.length) {
+    const entry = pending.pop();
     if (typeof entry === 'string' && entry.length > 1_000_000) fail('历史快照字符串超限');
     if (Array.isArray(entry)) {
-      entry.forEach((child) => visit(child, depth + 1));
+      for (const child of entry) pending.push(child);
     } else if (isRecord(entry)) {
       for (const [key, child] of Object.entries(entry)) {
         if (FORBIDDEN_KEYS.has(key)) fail('历史快照包含危险字段');
-        visit(child, depth + 1);
+        pending.push(child);
       }
     }
-  };
-  visit(parsed, 0);
+  }
   return parsed;
 }
 
 function validateLayerKeys(value: unknown): void {
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史图层无效');
-  const specific = value.type === 'raster' ? ['type', 'source', 'tiles']
+  const specific = value.type === 'smart' ? ['type', 'source', 'tiles', 'content']
+    : value.type === 'raster' ? ['type', 'source', 'tiles']
     : value.type === 'annotation' ? ['type', 'annotations']
       : value.type === 'effect' ? ['type', 'effectId', 'params', 'renderable']
         : value.type === 'adjustment' ? ['type', 'adjustmentId', 'params', 'renderable']
           : value.type === 'group' ? ['type', 'children', 'isolated']
             : fail('历史图层类型未知');
-  exactKeysWithOptional(value, [...COMMON_LAYER_KEYS, ...specific], ['deformation'], '历史图层');
+  exactKeysWithOptional(value, [...COMMON_LAYER_KEYS, ...specific], value.type === 'raster' ? ['deformation', 'rasterCanvasSize'] : ['deformation'], '历史图层');
   if (value.mask !== null) {
     validateMask(value.mask, '历史图层蒙版');
   }
-  if (value.type === 'raster') {
+  if (value.type === 'raster' || value.type === 'smart') {
     if (!isRecord(value.source)) fail('历史栅格来源无效');
     exactKeys(value.source, value.source.kind === 'empty' ? ['kind'] : ['kind', 'resourceId'], '历史栅格来源');
     if (!isRecord(value.tiles)) fail('历史栅格瓦片无效');
@@ -306,6 +307,14 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
       validateBase(command, ['groupId', ...(command.resources === undefined ? [] : ['resources'])]); nonEmptyString(command.groupId, '图层组 ID');
       if (strictResources && command.resources === undefined) fail('图层解组命令缺少资源元数据');
       if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层命令资源元数据'); break;
+    case 'layer.replace': {
+      validateBase(command, ['layerId', 'layer', ...(command.resources === undefined ? [] : ['resources'])]);
+      nonEmptyString(command.layerId, '图层 ID'); validateLayer(command.layer);
+      if (!isRecord(command.layer) || command.layer.id !== command.layerId) fail('内容替换实例标识不一致');
+      if (strictResources && command.resources === undefined) fail('替换内容命令缺少资源元数据');
+      if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '内容替换资源元数据');
+      break;
+    }
     case 'layer.update-common': {
       validateBase(command, ['layerId', 'patch', ...(command.resources === undefined ? [] : ['resources'])]);
       if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层公共属性资源元数据'); nonEmptyString(command.layerId, '图层 ID');

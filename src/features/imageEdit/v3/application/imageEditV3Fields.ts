@@ -2,6 +2,10 @@ import { deformationSchema } from '@/core/imaging/transforms';
 import { imageEditTransformSchemaV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3, imageEditSparseMaskSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics'
 import { z } from 'zod'
 import type { ImageEditCanvasGeometryV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditSmartOriginV3 } from '@/core/imageEdit/v3/smartContent/types'
+import { imageEditSmartOriginSchemaV3 } from '@/core/imageEdit/v3/smartContent/schema'
+import { decodeImageEditDocumentV3 } from '@/core/imageEdit/v3/documentCodec'
 import type {
   ApplicationFieldDefinition,
   ApplicationPropertyDescriptor,
@@ -30,6 +34,9 @@ export interface ImageEditV3LayerFieldSource {
 }
 
 export interface ImageEditV3LayerMutationDraft {
+  contentType?: 'raster' | 'smart'
+  smartDocument?: ImageEditDocumentV3
+  smartOrigin?: ImageEditSmartOriginV3 | null
   commonPatch: ImageEditLayerCommonPatchV3
   params?: Record<string, JsonValue>
   isolated?: boolean
@@ -94,7 +101,7 @@ function property(
 const READ_ONLY_IDENTITY = '由当前打开的 V3 图片文档和图层树维护。'
 const BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'soft-light']
   .map((value) => ({ value, label: value }))
-const LAYER_TYPES = ['raster', 'annotation', 'effect', 'adjustment']
+const LAYER_TYPES = ['raster', 'smart', 'annotation', 'effect', 'adjustment']
   .map((value) => ({ value, label: value }))
 const PARAMS_SCHEMA_REF = imageEditV3SchemaRef('property', 'image_edit.layer.params.value')
 
@@ -311,11 +318,29 @@ export const IMAGE_EDIT_V3_LAYER_FIELDS: ApplicationFieldDefinition<
   { propertyId: 'image_edit.layer.deformation', descriptor: property('image_edit.layer', 'deformation', '非破坏透视或网格；控制点为对象空间比例，四角顺时针或网格逐行。清空恢复原像素。', { kind: 'json', schemaRef: imageEditV3SchemaRef('property', 'image_edit.layer.deformation.value') }, { nullable: true }), read: source => source.location.layer.deformation as JsonValue ?? null, writer: { write(draft, mutation) { draft.commonPatch.deformation = deformationSchema.nullable().parse(mutation.value); } }, storeActions: [] },
   {
     propertyId: 'image_edit.layer.type',
-    descriptor: property('image_edit.layer', 'type', '类型', { kind: 'enum', values: LAYER_TYPES }, {
-      readOnlyReason: '图层类型创建后固定；改类型请删除并新建图层。',
-    }),
+    descriptor: property('image_edit.layer', 'type', '图层类型；像素与智能对象可无损转换，其他类型只读', { kind: 'enum', values: LAYER_TYPES }),
     read: (source) => layerType(source.location.layer),
+    writer: { write(draft, mutation) {
+      if (mutation.value !== 'raster' && mutation.value !== 'smart') throw new Error('只能在像素图层和智能对象之间转换');
+      draft.contentType = mutation.value;
+    } },
     storeActions: [],
+  },
+  {
+    propertyId: 'image_edit.layer.smart_content',
+    descriptor: property('image_edit.layer', 'smart_content', '可编辑的智能内容文档；保留文档标识，写入会物化并同步同源实例，外部变换蒙版滤镜保持不变', { kind: 'json', schemaRef: imageEditV3SchemaRef('property', 'image_edit.layer.smart_content.value') }, { nullable: true }),
+    read: source => source.location.layer.type === 'smart' ? source.location.layer.content.document as unknown as JsonValue : null,
+    writer: { write(draft, mutation) {
+      const decoded = decodeImageEditDocumentV3(mutation.value);
+      if (!decoded.document) throw new Error('智能内容无效或存在循环引用');
+      draft.smartDocument = decoded.document;
+    } }, storeActions: [],
+  },
+  {
+    propertyId: 'image_edit.layer.smart_source',
+    descriptor: property('image_edit.layer', 'smart_source', '智能内容的受管理来源；设置文档、画布节点或生成结果引用会刷新全部同源实例，设为空转为嵌入内容', { kind: 'ref', refKinds: ['image_edit.document', 'canvas.node', 'generation.result', 'asset'] }, { nullable: true }),
+    read: source => source.location.layer.type === 'smart' ? source.location.layer.content.origin as unknown as JsonValue : null,
+    writer: { write(draft, mutation) { draft.smartOrigin = imageEditSmartOriginSchemaV3.nullable().parse(mutation.value); } }, storeActions: [],
   },
   {
     propertyId: 'image_edit.layer.definition_id',

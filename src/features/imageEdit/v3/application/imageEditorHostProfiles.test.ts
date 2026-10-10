@@ -9,7 +9,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
   it('完整宿主开放共享调整和图层组，保留原保存与导出权限', () => {
     const profile = getImageEditorHostProfileV3('full')
     expect(profile).toMatchObject({
-      layerKinds: ['raster', 'effect', 'adjustment', 'group'],
+      layerKinds: ['raster', 'smart', 'effect', 'adjustment', 'group'],
       adjustments: ['color_grade', 'exposure', 'curves', 'temperature-tint', 'hsl'],
       panels: ['layers', 'properties', 'history', 'channels', 'adjustments'],
       layerControls: ['blend-mode', 'mask'],

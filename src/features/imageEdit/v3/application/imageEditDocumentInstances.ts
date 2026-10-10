@@ -8,6 +8,7 @@ import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/image
 import { collectImageEditResourceRolesV3 } from '@/core/imageEdit/v3/resourceRoles'
 import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from './imageEditorResourceDescriptorsV3'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
+import { releaseSmartContentResourcesV3 } from '../smartContent/resourceLeases'
 
 const logger = createLogger('features.imageEdit.v3.document_instances')
 
@@ -102,6 +103,7 @@ function installOwner(instance: OwnedInstance, host?: ImageEditPersistenceHostV3
   instance.persistenceOwner = new ImageEditPersistenceOwnerV3(
     instance.documentId, queue, () => instance.bus.getPersistenceSnapshot(), host?.confirmProjection, host?.projection,
     () => !instance.closing,
+    () => releaseSmartContentResourcesV3(instance.bus),
   )
 }
 

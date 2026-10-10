@@ -90,12 +90,13 @@ export function planImageEditorGpuRasterTilesV3(
     Math.hypot(layer.transform[2], layer.transform[3]),
   )
   const sourceZoom = layer.deformation ? Math.max(1, viewport.zoom * layerScale) : Math.max(Number.EPSILON, viewport.zoom * layerScale)
-  const pyramid = layer.sourcePyramid ?? createImageEditorGpuPyramidDescriptorV3(scene.width, scene.height)
+  const nativeCanvas = layer.rasterCanvasSize ?? scene
+  const pyramid = layer.sourcePyramid ?? createImageEditorGpuPyramidDescriptorV3(nativeCanvas.width, nativeCanvas.height)
   const sourceSize = pyramid.levels.find((level) => level.mip === 0)!
   const hasSparseOverrides = Object.keys(layer.sparseTiles).length > 0
   // 稀疏画笔覆盖属于图层的文档坐标空间，允许画到原始小图片边界之外。
   const sparseExtent = resolveImageEditRasterSourceExtentV3(
-    layer.resourceRef ? sourceSize : null, scene, Object.keys(layer.sparseTiles),
+    layer.resourceRef ? sourceSize : null, nativeCanvas, Object.keys(layer.sparseTiles),
   )
   const planningPyramid = hasSparseOverrides
     ? createImageEditorGpuPyramidDescriptorV3(sparseExtent.width, sparseExtent.height) : pyramid
@@ -142,7 +143,7 @@ export function planImageEditorGpuRasterTilesV3(
   const tiles = coordinates.flatMap((tile) => {
     const override = plannedMip === 0 ? layer.sparseTiles[`0/${tile.tileX}/${tile.tileY}`] : undefined
     const overrideRect = override ? imageEditRasterOverrideRectV3(
-      resolveImageEditRasterStorageSizeV3(layer.resourceRef ? sourceSize : null, scene), `0/${tile.tileX}/${tile.tileY}`,
+      resolveImageEditRasterStorageSizeV3(layer.resourceRef ? sourceSize : null, nativeCanvas), `0/${tile.tileX}/${tile.tileY}`,
     ) : null
     const mipDimensions = (override ? planningPyramid : pyramid).levels.find((level) => level.mip === plannedMip)
     // 非覆盖区只请求真实源覆盖的瓦片；源范围之外是透明，不是一个可解码瓦片。

@@ -41,6 +41,7 @@ export function resolveImageEditLayerMoveUnavailableReasonV3(
   if (!location) return 'select-one'
   if (
     location.layer.type !== 'raster'
+    && location.layer.type !== 'smart'
     && location.layer.type !== 'annotation'
     && location.layer.type !== 'group'
   ) return 'unsupported'
@@ -122,13 +123,14 @@ export function resolveImageEditRasterLayerOutputBoundsV3(
   location: Pick<ImageEditLayerLocationV3, 'layer' | 'ancestors'>,
   layerTransform: ImageEditTransformV3 = location.layer.transform,
 ): ImageEditorSnapBoundsV3 | null {
-  if (location.layer.type !== 'raster') return null
+  if (location.layer.type !== 'raster' && location.layer.type !== 'smart') return null
   const matrix = resolveAnnotationLayerToOutputMatrixV3(document, [
     layerTransform,
     ...location.ancestors.slice().reverse().map((ancestor) => ancestor.transform),
   ])
   const points=location.layer.deformation?.points??identityDeformation('perspective').points;
-  const corners=points.map(point=>mapAnnotationPointV3(matrix,[point[0]*document.geometry.width,point[1]*document.geometry.height]));
+  const size = location.layer.deformation ? document.geometry : location.layer.type === 'smart' ? location.layer.content : location.layer.rasterCanvasSize ?? document.geometry;
+  const corners=points.map(point=>mapAnnotationPointV3(matrix,[point[0]*size.width,point[1]*size.height]));
   const xs = corners.map(([x]) => x)
   const ys = corners.map(([, y]) => y)
   return {

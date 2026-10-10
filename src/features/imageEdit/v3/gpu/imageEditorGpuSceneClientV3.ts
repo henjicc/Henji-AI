@@ -486,7 +486,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
 function rasterSourceRefs(layers: ImageEditDocumentV3['layers']): ImageEditorV3ResourceRef[] {
   return [...new Set(layers.flatMap((layer): ImageEditorV3ResourceRef[] => {
     if (layer.type === 'group') return rasterSourceRefs(layer.children)
-    return layer.type === 'raster' && layer.source.kind === 'resource'
+    return (layer.type === 'raster' || layer.type === 'smart') && layer.source.kind === 'resource'
       ? [layer.source.resourceId as ImageEditorV3ResourceRef] : []
   }))]
 }

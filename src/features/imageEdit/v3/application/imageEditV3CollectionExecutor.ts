@@ -24,6 +24,8 @@ import { getImageEditDocumentCatalogRevisionV3, requireImageEditDocumentInstance
 import { findImageEditV3LiveLayer, imageEditV3GroupRef, imageEditV3LayerRef, splitImageEditV3DocumentRef, splitImageEditV3LayerRef } from './imageEditDocumentRefs'
 
 import { runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
+import { createEmptyImageEditSmartLayerV3 } from '@/core/imageEdit/v3/smartContent/commands'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 type CollectionEntityType = 'image_edit.layer' | 'image_edit.group'
@@ -56,13 +58,17 @@ function requiredParams(value: JsonValue | undefined): ImageEditJsonObjectV3 {
   return structuredClone(value) as ImageEditJsonObjectV3
 }
 
-function createLayer(properties: Record<string, JsonValue>): ImageEditLayerV3 {
+function createLayer(properties: Record<string, JsonValue>, document: ImageEditDocumentV3): ImageEditLayerV3 {
   const entityType = 'image_edit.layer'
   const name = requiredString(fullProperty(properties, entityType, 'name'), 'name')
   const type = requiredString(fullProperty(properties, entityType, 'type'), 'type')
   const definitionId = fullProperty(properties, entityType, 'definition_id')
   const params = fullProperty(properties, entityType, 'params')
   const id = createImageEditIdV3('layer')
+  if (type === 'smart') {
+    if (definitionId !== null || params !== null) throw new Error('智能对象的 definition_id 与 params 必须为空');
+    return createEmptyImageEditSmartLayerV3(document, id, name);
+  }
   if (type === 'raster') {
     if (definitionId !== null || params !== null) throw new Error('INVALID_INPUT：栅格图层的 definition_id 与 params 必须为 null。')
     return createImageEditRasterLayerV3(id, name)
@@ -201,7 +207,7 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
           if (context.signal?.aborted) throw new Error('CANCELLED')
           const layer = this.entityType === 'image_edit.group'
             ? createGroup(item.properties)
-            : createLayer(item.properties)
+            : createLayer(item.properties, bus.getSnapshot().document)
           const command: ImageEditCommandV3 = {
             commandId: createImageEditIdV3('assistant-command'),
             expectedRevision: bus.getSnapshot().document.revision,

@@ -17,6 +17,7 @@ import type { ImageEditorV3PyramidDescriptor, ImageEditorV3ResourceDescriptor } 
 import type { ImageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocolV3'
 
 export interface ImageEditorGpuRasterLayerV3 {
+  rasterCanvasSize?: { width: number; height: number }
   layerId: string
   sourceKind: 'raster' | 'annotation'
   resourceRef: `sha256:${string}` | null
@@ -392,7 +393,7 @@ function collectRasterLayers(
       })
       continue
     }
-    if (layer.type !== 'raster') continue
+    if (layer.type !== 'raster' && layer.type !== 'smart') continue
     const resourceRef = layer.source.kind === 'resource' && isResourceRef(layer.source.resourceId)
       ? layer.source.resourceId : null
     if (resourceRef && !descriptors.has(resourceRef)) continue
@@ -401,6 +402,7 @@ function collectRasterLayers(
     output.push({
       layerId: layer.id,
       sourceKind: 'raster',
+      ...(layer.type === 'smart' ? { rasterCanvasSize: { width: layer.content.width, height: layer.content.height } } : layer.rasterCanvasSize ? { rasterCanvasSize: layer.rasterCanvasSize } : {}),
       deformation: layer.deformation ?? null,
       resourceRef,
       contentVersion: resourceRef ? `${resourceRef}:${descriptors.get(resourceRef)!.byteLength}` : 'empty',

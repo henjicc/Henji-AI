@@ -1,11 +1,9 @@
 export const IMAGE_EDIT_RESOURCE_ID_PATTERN_V3 = /^sha256:[a-f0-9]{64}$/;
 
-const MAX_RESOURCE_SCAN_DEPTH_V3 = 80;
-const MAX_RESOURCE_SCAN_VALUES_V3 = 1_000_000;
 
 /**
  * 枚举 JSON 权威状态里的内容寻址引用。效果参数也可能持有资源，所以不能只扫描
- * 当前已知图层字段；同时用深度和节点数上限约束来自 IPC/包文件的恶意输入。
+ * 当前已知图层字段；迭代遍历避免把文档层级和素材数量当成产品上限。
  */
 export function collectImageEditJsonResourceIdsV3(
   value: unknown,
@@ -13,7 +11,6 @@ export function collectImageEditJsonResourceIdsV3(
 ): string[] {
   const refs = new Set<string>();
   const visited = new WeakSet<object>();
-  let visitedValues = 0;
 
   const add = (resourceId: string): void => {
     if (!IMAGE_EDIT_RESOURCE_ID_PATTERN_V3.test(resourceId)) {
@@ -21,25 +18,21 @@ export function collectImageEditJsonResourceIdsV3(
     }
     refs.add(resourceId);
   };
-  const visit = (entry: unknown, depth: number): void => {
-    visitedValues += 1;
-    if (visitedValues > MAX_RESOURCE_SCAN_VALUES_V3 || depth > MAX_RESOURCE_SCAN_DEPTH_V3) {
-      throw new Error('图片编辑资源引用扫描超限');
-    }
+  const pending: unknown[] = [value];
+  while (pending.length) {
+    const entry = pending.pop();
     if (typeof entry === 'string') {
       if (IMAGE_EDIT_RESOURCE_ID_PATTERN_V3.test(entry)) refs.add(entry);
-      return;
+      continue;
     }
-    if (!entry || typeof entry !== 'object' || visited.has(entry)) return;
+    if (!entry || typeof entry !== 'object' || visited.has(entry)) continue;
     visited.add(entry);
     if (Array.isArray(entry)) {
-      for (const child of entry) visit(child, depth + 1);
-      return;
+      for (const child of entry) pending.push(child);
+      continue;
     }
-    for (const child of Object.values(entry)) visit(child, depth + 1);
-  };
-
-  visit(value, 0);
+    for (const child of Object.values(entry)) pending.push(child);
+  }
   additionalResourceIds.forEach(add);
   return [...refs].sort();
 }

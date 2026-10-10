@@ -62,6 +62,26 @@ async function commitStep(
 }
 
 describe('图片编辑 V3 实时 Application Control', () => {
+  it('智能对象沿通用图层属性转换、读回与撤销，智能内容 schema 可发现', async () => {
+    const document = createImageEditDocumentV3({ width: 16, height: 16, documentId: 'smart-reflection' })
+    document.layers = [createImageEditRasterLayerV3('content', '内容')]
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerPersistedImageEditTestSession('smart-reflection-session', bus))
+    const reflection = getApplicationReflectionRegistry(), target = imageEditV3LayerRef(document.id, 'content')
+    const propertyIds = ['image_edit.layer.type', 'image_edit.layer.smart_content', 'image_edit.layer.smart_source']
+    const before = await reflection.readEntity(target, propertyIds, accessContext)
+    const converted = await commitStep('转换为智能对象', before.revisions, { kind: 'mutation', target, entityType: 'image_edit.layer', expectedRevisions: before.revisions,
+      mutations: [{ propertyId: propertyIds[0], operation: 'set', value: 'smart' }] }, 'smart-convert')
+    expect(converted.status, JSON.stringify(converted)).toBe('completed')
+    const current = await reflection.readEntity(target, propertyIds, accessContext)
+    expect(current.properties[propertyIds[0]]).toBe('smart')
+    expect(current.properties[propertyIds[1]]).toMatchObject({ version: document.version, layers: [{ type: 'raster' }] })
+    const field = reflection.describe({ entityTypes: ['image_edit.layer'] }, accessContext).properties.find(property => property.id === propertyIds[1])!
+    if (field.value.kind === 'json') expect(reflection.resolveSchema(field.value.schemaRef, accessContext)).toBeTruthy()
+    if (converted.status !== 'completed' || !converted.undoRef) throw new Error('缺少智能对象事务撤销引用')
+    expect((await getApplicationControlExecutionEngine().undo({ undoRef: converted.undoRef, expectedRevisions: current.revisions, idempotencyKey: 'smart-convert-undo' }, executionContext)).status).toBe('completed')
+    expect(bus.getSnapshot().document.layers).toEqual(document.layers)
+  })
   it('命名区域和批量树位置经正式描述、通用写入和读回，支持事务撤销', async () => {
     const document = createImageEditDocumentV3({ width: 32, height: 24, documentId: 'workflow-reflection' })
     document.layers = [createImageEditRasterLayerV3('content', '内容'), createImageEditGroupLayerV3('group', '组')]

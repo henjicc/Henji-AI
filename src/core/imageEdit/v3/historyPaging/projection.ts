@@ -24,6 +24,7 @@ export interface ImageEditHistoryJumpOptionsV3 {
 }
 
 const labels: Record<ImageEditCommandV3['type'], string> = {
+  'layer.replace': '更新图层内容',
   'document.atomic': '转换滤镜范围',
   'document.set-named-regions': '管理通道', 'layer.move-many': '移动图层',
   'document.update-output-geometry': '调整画面',

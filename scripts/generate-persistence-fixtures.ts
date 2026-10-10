@@ -14,6 +14,7 @@ import { VIDEO_EDIT_EXPORT_PRESETS } from '../src/core/videoEdit/exportPresets'
 import { videoEditTextStyleSchema } from '../src/core/videoEdit/text'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3, createImageEditAdjustmentLayerV3, createImageEditAnnotationLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
 import { createDefaultImageEditColorModeV3 } from '../src/core/imageEdit/v3/colorTypes'
+import { embedImageEditRasterV3 } from '../src/core/imageEdit/v3/smartContent/commands'
 import { IMAGE_WORKING_VERSION, IMAGE_PACKAGE_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
 import { createThemePayloadV2 } from '../src/core/theme/themeMigration'
 import { DEFAULT_THEME_SEED } from '../src/core/theme/themeEngine'
@@ -45,6 +46,7 @@ const image = createImageEditDocumentV3({ width: 64, height: 48, documentId: 'go
 image.namedRegions = [{ id: 'golden-region', name: '主体', selection: { operations: [{ combine: 'replace', invertBefore: false, shape: { type: 'ellipse', x: .2, y: .1, width: .5, height: .7 } }], feather: .02, inverted: false } }]
 image.layers.push(createImageEditRasterLayerV3('golden-layer', '空白图层'))
 image.layers[0].fillOpacity = .7
+image.layers[0].deformation = { kind: 'perspective', points: [[.1, 0], [.9, 0], [1, 1], [0, 1]] }
 image.layers[0].maskAttachment.linked = false
 image.layers[0].maskAttachment.density = .6
 image.layers[0].filters = [{ id: 'golden-local-grade', operationType: 'adjustment', effectId: 'exposure',
@@ -56,6 +58,8 @@ image.layers.push(createImageEditEffectLayerV3('golden-shared-gaussian', '高斯
 const annotation = createImageEditAnnotationLayerV3('golden-quick-marks', '快速标记')
 annotation.annotations.push({ id: 'golden-mark', type: 'rect', x: 10, y: 20, width: 12, height: 14, stroke: BLACK_HEX, lineWidth: 2 })
 image.layers.push(annotation)
+image.layers[0] = embedImageEditRasterV3(image, 'golden-layer')
+image.layers.push({ ...structuredClone(image.layers[0]), id: 'golden-smart-instance', transform: [1, 0, 0, 1, 4, 2] })
 image.geometry.orientation = { rotate: 90, mirrored: true }
 image.geometry.crop = { x: 1, y: 2, width: 32, height: 40 }
 const working = { format: 'henji-image-edit', formatVersion: IMAGE_WORKING_VERSION, documentId: image.id, revision: 0, createdAt: timestamp, updatedAt: timestamp, document: image, resourceRefs: [] }

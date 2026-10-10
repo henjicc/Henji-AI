@@ -16,7 +16,7 @@ import {
   type ImageEditSize,
 } from '@/core/imageEdit/v3'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
-import { resolveImageEditRasterStorageSizeV3, imageEditRasterOverrideRectV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
+import { resolveImageEditRasterCanvasV3, resolveImageEditRasterStorageSizeV3, imageEditRasterOverrideRectV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import { imageEditRasterBoundaryBasePointsV3 } from '@/core/imageEdit/v3/execution/rasterTileReplacement'
 import type {
   ImageEditorV3ResourceDescriptor,
@@ -286,7 +286,7 @@ export function createImageEditorViewportSourceTileRequestsV3(
       if (resourceRef && rasterMip >= 10 && isRecord(node.parameters.tiles)) {
         const size = resourceSizes.get(resourceRef)
         if (!size) throw new Error('画笔边界采样缺少真实源几何')
-        const storage = resolveImageEditRasterStorageSizeV3(size, prepared.document.geometry)
+        const storage = resolveImageEditRasterStorageSizeV3(size, resolveImageEditRasterCanvasV3(node.parameters, prepared.document.geometry))
         const rectangles = Object.keys(node.parameters.tiles).map((key) => imageEditRasterOverrideRectV3(storage, key))
         const sampleRegions = wholeSource ? [{ x: 0, y: 0, ...mipSize(size, rasterMip) }] : regions ?? []
         for (const region of sampleRegions) for (const point of imageEditRasterBoundaryBasePointsV3(region, rasterMip, size, rectangles)) {

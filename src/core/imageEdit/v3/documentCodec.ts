@@ -40,6 +40,8 @@ import { isImageEditTransformInvertibleV3 } from './execution/affineTransform';
 import { assertImageEditLayerSemanticsV3, imageEditMaskAttachmentSchemaV3, imageEditLayerFiltersSchemaV3 } from './layerModel/semantics';
 import { createImageEditLayerContentRegistryV3 } from './layerEntries/base';
 import { imageEditNamedRegionsSchemaV3 } from './namedRegions';
+import { assertImageEditSmartGraphV3, assertImageEditSmartInstancesConsistentV3 } from './smartContent/graph';
+import { imageEditSmartOriginSchemaV3 } from './smartContent/schema';
 
 export type ImageEditDocumentSourceFormatV3 = 'v3' | 'invalid' | 'unknown-version';
 
@@ -347,22 +349,39 @@ function parseTiles(value: unknown): Record<string, string> | null {
 }
 
 function parseLayer(value: unknown, depth: number): ImageEditLayerV3 | null {
-  if (!isRecord(value) || depth > 64) return null;
+  if (!isRecord(value)) return null;
   const common = parseCommon(value);
   if (!common) return null;
-  if (value.type === 'raster') {
+  if (value.type === 'raster' || value.type === 'smart') {
+    if (value.rasterCanvasSize !== undefined && (!isRecord(value.rasterCanvasSize)
+      || !isSafeInteger(value.rasterCanvasSize.width) || value.rasterCanvasSize.width <= 0
+      || !isSafeInteger(value.rasterCanvasSize.height) || value.rasterCanvasSize.height <= 0)) return null;
     if (!isRecord(value.source) || (value.source.kind !== 'empty' && value.source.kind !== 'resource')) return null;
     if (value.source.kind === 'resource' && !isNonEmptyString(value.source.resourceId)) return null;
     const tiles = parseTiles(value.tiles);
     if (!tiles) return null;
-    return {
+    const raster = {
       ...common,
       type: 'raster',
+      ...(value.rasterCanvasSize && isRecord(value.rasterCanvasSize)
+        && isSafeInteger(value.rasterCanvasSize.width) && value.rasterCanvasSize.width > 0
+        && isSafeInteger(value.rasterCanvasSize.height) && value.rasterCanvasSize.height > 0
+        ? { rasterCanvasSize: { width: value.rasterCanvasSize.width, height: value.rasterCanvasSize.height } } : {}),
       source: value.source.kind === 'empty'
         ? { kind: 'empty' }
         : { kind: 'resource', resourceId: value.source.resourceId as string },
       tiles,
     } satisfies ImageEditRasterLayerV3;
+    if (value.type === 'raster') return raster;
+    if (!isRecord(value.content) || !isNonEmptyString(value.content.id)
+      || !isRecord(value.content.document) || value.content.document.version !== IMAGE_EDIT_DOCUMENT_VERSION_V3
+      || !isSafeInteger(value.content.width) || value.content.width <= 0
+      || !isSafeInteger(value.content.height) || value.content.height <= 0) return null;
+    const origin = imageEditSmartOriginSchemaV3.nullable().safeParse(value.content.origin);
+    const contentDocument = parseDocument(value.content.document);
+    if (!origin.success || !contentDocument) return null;
+    return { ...raster, type: 'smart', content: { id: value.content.id, origin: origin.data,
+      document: contentDocument, width: value.content.width, height: value.content.height } };
   }
   if (value.type === 'annotation') {
     if (!Array.isArray(value.annotations)) return null;
@@ -458,7 +477,12 @@ export function decodeImageEditDocumentV3(value: unknown): ImageEditDocumentDeco
       issues: [typeof input.value.version === 'number' ? 'unknown-version' : 'missing-version'],
     };
   }
-  const document = parseDocument(input.value);
+  let document: ImageEditDocumentV3 | null;
+  try {
+    assertImageEditSmartGraphV3(input.value);
+    document = parseDocument(input.value);
+    if (document) assertImageEditSmartInstancesConsistentV3(document);
+  } catch { document = null; }
   return document
     ? { document, sourceFormat: 'v3', issues: [] }
     : { document: null, sourceFormat: 'invalid', issues: ['invalid-v3-document'] };

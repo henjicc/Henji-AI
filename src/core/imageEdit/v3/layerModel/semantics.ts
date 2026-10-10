@@ -60,12 +60,12 @@ export function assertImageEditLayerSemanticsV3(layers: readonly ImageEditLayerV
       if (!Number.isFinite(layer.fillOpacity) || layer.fillOpacity < 0 || layer.fillOpacity > 1
         || typeof layer.clipping !== 'boolean') throw new Error('填充或剪贴属性无效');
       if (layer.deformation) {
-        if (layer.type !== 'raster') throw new Error('透视与网格变形需要像素图层');
+        if (layer.type !== 'raster' && layer.type !== 'smart') throw new Error('透视与网格变形需要像素图层或智能对象');
         deformationSchema.parse(layer.deformation);
       }
       imageEditMaskAttachmentSchemaV3.parse(layer.maskAttachment);
       imageEditLayerFiltersSchemaV3.parse(layer.filters);
-      const content = layer.type === 'raster' || layer.type === 'annotation' || layer.type === 'group';
+      const content = layer.type === 'raster' || layer.type === 'smart' || layer.type === 'annotation' || layer.type === 'group';
       if (!content && layer.filters.length) throw new Error('作用域滤镜层不能再挂内容滤镜；请添加独立滤镜层');
       if (layer.clipping && (!hasBase || !content)) throw new Error('剪贴层需要同组下方的内容基底');
       if (!layer.clipping) hasBase = content;
