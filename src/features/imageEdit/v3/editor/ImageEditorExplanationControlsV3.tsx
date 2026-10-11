@@ -36,7 +36,7 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
   useEffect(() => { if (stage === 'recording') setOpen(false) }, [stage])
   useEffect(() => () => adapter.cancelPick(), [adapter])
   const generate = async (paragraphs: TranscriptEntry[]): Promise<void> => {
-    await adapter.finishReview(); await adapter.generate(paragraphs); setOpen(false); onGenerated?.()
+    await adapter.generate(paragraphs); setOpen(false); onGenerated?.()
   }
   const canGenerate = (reviews: ExplanationReviewResult[]): boolean => {
     const protectedRefs = new Set(reviews.flatMap(review => review.plan.protectedRefs.map(ref => ref.id)))
@@ -52,7 +52,7 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
         renderPanel={() => <div data-image-explanation-controls><ExplanationPanel entries={entries} stage={stage} elapsedUs={state.elapsedUs} busy={state.busy} loading={loading} hasRecorded={hasRecorded}
           failed={failed || !!state.message?.includes('未保存')} failureTitle={failed ? failureTitle : undefined} onRetry={() => run(retryWork.current ?? (failed ? async () => {} : () => adapter.save()), failureTitle)}
           onStart={() => run(() => adapter.snapshot().session?.state === 'paused' ? adapter.resume() : adapter.start(crypto.randomUUID()), '录制失败')} onTranscribe={() => setUpload(true)} onCancel={() => run(() => adapter.cancelTranscription())} onDelete={state.session ? () => setDeleting(true) : undefined}
-          onRead={onRead} onBind={onBind} onPick={onPick} onError={onError} contextKey={`${state.session?.id}:${controller.document.revision}`} onGenerate={generate} canGenerate={canGenerate} />
+          onRead={onRead} onBind={onBind} onPick={onPick} onError={onError} contextKey={`${state.session?.id}:${controller.document.revision}`} generationKey={state.session?.id} prepareGeneration={() => adapter.prepareGeneration()} onGenerate={generate} canGenerate={canGenerate} />
         </div>}>
         {controls => <UiButton size="sm" aria-label="录制讲解" onClick={controls.togglePanel} aria-expanded={controls.open}>{active ? <><span aria-hidden className="h-2 w-2 rounded-full bg-danger-solid" />{explanationDuration(state.elapsedUs)}</> : <><Mic size={14} />讲解</>}</UiButton>}
       </PanelTrigger>

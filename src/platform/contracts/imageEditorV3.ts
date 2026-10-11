@@ -527,6 +527,7 @@ export interface ImageEditorV3Platform {
   collectGarbage(request: {
     requestId: string
     retainedResourceRefs: ImageEditorV3ResourceRef[]
+    eraseResourceRefs?: ImageEditorV3ResourceRef[]
   }): Promise<{ deletedResourceRefs: ImageEditorV3ResourceRef[]; reclaimedBytes: number }>
   cancelRequest(requestId: string): Promise<{ cancelled: boolean }>
 }

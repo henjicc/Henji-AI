@@ -14,9 +14,33 @@ import { motionDigest, motionSamplePage, motionPageRef, readMotionPages, readMot
 import { optimizeVideoEditMotionOffThread } from './videoEditMotionWorkerClient'
 import { captureVideoMotionReference, readVideoIntentAnnotation, sampleVideoMotionReference, videoMotionConstraintOptionsSchema, type VideoMotionConstraintOptions } from './videoEditIntentAnnotationAdapter'
 import { reviewedMovementChanges, type IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
+import { staggerMotion, hasStaggerMotion } from '@/core/creativeIntent/stagger'
 
 const logger = createLogger('features.videoEdit.motionDraft')
 const PAGE_SAMPLE_BUDGET = 256
+export function videoStaggerSource(owner: VideoEditInstance): VideoEditClip | undefined {
+  const selected = getActiveVideoEditSequence(owner).clips.filter(clip => owner.selectedClipIds.includes(clip.id) && clip.kind !== 'audio' && clip.kind !== 'adjustment')
+  if (selected.length < 2) return undefined
+  return selected.find(clip => clip.id === owner.selection && hasStaggerMotion(clip)) ?? selected.find(hasStaggerMotion)
+}
+
+export function staggerVideoMotion(id: string, sequenceId: string, sourceId: string, targetIds: readonly string[], range: readonly [number, number], stepFrames = 4): string[] {
+  logger.info('错峰复制开始', { event: 'video_edit.motion.stagger.start', context: { documentId: id, sourceId, targetCount: targetIds.length } })
+  try {
+    const owner = requireVideoEditInstance(id)
+    const busy = videoEditBusyReason(id); if (busy) throw new Error(busy)
+    const sequence = videoEditComposition(owner.document, sequenceId)
+    const source = sequence.clips.find(clip => clip.id === sourceId)
+    const targets = targetIds.map(targetId => { const target = sequence.clips.find(clip => clip.id === targetId); if (!target) throw new Error('目标片段已不存在。'); return target })
+    if (!source || !targets.length) throw new Error('请选择源片段及要应用的片段。')
+    assertVideoEditClipsEditable(sequence, [sourceId, ...targetIds])
+    if ([source, ...targets].some(clip => clip.kind === 'audio' || clip.kind === 'adjustment' || clip.follow || clip.disabledIntrinsicSections?.includes('motion'))) throw new Error('请使用已启用运动且没有跟随的画面片段。')
+    const changed = new Map(staggerMotion(source, targets, range, stepFrames).map(clip => [clip.id, clip]))
+    editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(clip => changed.get(clip.id) ?? clip) } : value) }))
+    logger.info('错峰复制完成', { event: 'video_edit.motion.stagger.completed', context: { documentId: id, targetCount: changed.size } })
+    return [...changed.keys()]
+  } catch (error) { logger.error('错峰复制失败', error, { event: 'video_edit.motion.stagger.failed', context: { documentId: id } }); throw error }
+}
 const OVERLAY_SAMPLE_BUDGET = 96
 export type MotionCaptureMode = 'navigate' | 'demonstrate'
 export type MotionCaptureProperty = Exclude<MotionProperty, 'pivot'>
@@ -338,7 +362,7 @@ export async function reopenVideoMotion(id: string, draftId: string): Promise<vo
   try {
     const input = await inputFor(state)
     for (const candidate of state.candidates) assertCandidateCurrent(candidate, motionCandidateIdentity(state.draft, input))
-    if (state.original) assertCandidateCurrent(state.original, motionCandidateIdentity({ ...state.draft, fidelity: 1 }, { ...input, intent: undefined }))
+    if (state.original) assertCandidateCurrent(state.original, motionCandidateIdentity({ ...state.draft, fidelity: 1 }, { ...input, intent: undefined, beatFrames: undefined }))
   } catch (error) { state.candidates = []; state.original = undefined; state.preview = 'base'; state.message = error instanceof Error ? error.message : '原稿已保留，请重新示范。' }
   const previous = runtimes.get(owner); previous?.controller?.abort(); previous?.release(); previous?.unsubscribe()
   states.set(owner, state); runtimes.set(owner, { startedAt: performance.now(), seq: 0, visit: 0, lastDirection: 0, pointerActive: false, preferredCandidateId: state.preview, release: () => {}, unsubscribe: () => {}, previewRevision: 0, inputRevision: 0 })
@@ -369,7 +393,7 @@ async function inputFor(state: VideoMotionState): Promise<OptimizeMotionInput> {
     }
   }
   const takeIds = [...draft.takes.map(t => t.id), ...draft.targets.map(t => `annotation:${t.ref.id}`)]
-  return { draft, samples, selectedTakeIds: state.selectedTakeIds, intent: state.intent, annotations, relative, mappings: Object.fromEntries(takeIds.map(takeId => [takeId, { positionToNative: [1, 0, 0, 1, -.5, -.5], pivotToNative: [1, 0, 0, 1, 0, 0], clipStart: clip.start, scaleFactor: 1, rotationOffsetDegrees: 0 }])) }
+  return { draft, samples, selectedTakeIds: state.selectedTakeIds, intent: state.intent, annotations, relative, beatFrames: clip.snapToBeat ? (sequence.markers ?? []).filter(mark => mark.type === 'beat').map(mark => mark.frame).sort((a, b) => a - b) : undefined, mappings: Object.fromEntries(takeIds.map(takeId => [takeId, { positionToNative: [1, 0, 0, 1, -.5, -.5], pivotToNative: [1, 0, 0, 1, 0, 0], clipStart: clip.start, scaleFactor: 1, rotationOffsetDegrees: 0 }])) }
 }
 
 /** Same domain entry for UI and the shared entity-property adapter; selecting never edits artwork. */
@@ -449,7 +473,7 @@ export async function previewVideoMotion(id: string, candidateId: string): Promi
   const input = await inputFor(state)
   const candidate = candidateId === 'original' ? state.original : state.candidates.find(c => c.id === candidateId)
   if (!candidate) throw new Error('请先整理，再对照原稿与候选。')
-  assertCandidateCurrent(candidate, motionCandidateIdentity(candidateId === 'original' ? { ...state.draft, fidelity: 1 } : state.draft, candidateId === 'original' ? { ...input, intent: undefined } : input))
+  assertCandidateCurrent(candidate, motionCandidateIdentity(candidateId === 'original' ? { ...state.draft, fidelity: 1 } : state.draft, candidateId === 'original' ? { ...input, intent: undefined, beatFrames: undefined } : input))
   state.preview = candidateId; runtimes.get(state.owner)!.preferredCandidateId = candidateId; setVideoEditPlaybackRate(id, 1); state.draft.selectedCandidateRef = state.draft.candidateRefs[state.candidates.findIndex(c => c.id === candidateId)]?.resourceId; publish(state); await persistHead(state)
 }
 export async function configureVideoMotion(id: string, values: { fidelity?: number; intent?: MotionIntent; selectedTakeIds?: string[]; pinSampleId?: string; unpinId?: string }): Promise<void> {

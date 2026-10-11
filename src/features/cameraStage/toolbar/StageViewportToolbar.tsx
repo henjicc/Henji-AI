@@ -3,6 +3,7 @@ import { Move3D, PenTool, Rotate3D, Scaling } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import type { StageGizmoMode } from '../domain/sceneTypes'
+import { CameraMotionControls } from './CameraMotionControls'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import {
   resolvePathStateKeyframeId,
@@ -73,6 +74,7 @@ const StageViewportToolbar: React.FC = () => {
             </UiIconButton>
         )
       })}
+      <CameraMotionControls />
     </div>
   )
 }

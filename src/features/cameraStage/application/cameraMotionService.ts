@@ -7,6 +7,7 @@ import { captureCameraStageUndo } from './cameraStageUndo'
 import { cameraMotionIdentity, cameraMotionSourceKey, compileCameraMotionCandidates, assertCameraCandidateCurrent, type CameraMotionCandidateRequest } from './cameraMotionCandidates'
 import { checkCancelled, CreativeIntentError, type ComputationControl } from '@/core/creativeIntent/sampling'
 import { applyAnimationAtTime } from '../store/playbackSampling'
+import type { CameraMotionNativeCandidate } from './cameraMotionCandidates'
 
 const logger = createLogger('features.cameraStage.camera_motion')
 
@@ -175,10 +176,10 @@ async function applyCameraStageMotionInternal(input: CameraStageMotionInput): Pr
 
 export const applyCameraStageMotion = bindCameraStageProjectOperation(applyCameraStageMotionInternal, (input) => input.projectId)
 
-type CameraMotionReview = Awaited<ReturnType<typeof prepareCameraStageMotionInternal>>
-const reviews = new WeakMap<CameraMotionReview, { projectId: string; request: CameraMotionCandidateRequest; result: ReturnType<typeof compileCameraMotionCandidates>; applied?: { candidateId: string; undoToken: string; sourceKey: string } }>()
+export type CameraMotionReview = Awaited<ReturnType<typeof prepareCameraStageMotionInternal>>
+const reviews = new WeakMap<CameraMotionReview, { projectId: string; sourceKey: string; request: CameraMotionCandidateRequest; result: ReturnType<typeof compileCameraMotionCandidates>; applied?: { candidateId: string; undoToken: string; sourceKey: string } }>()
 
-async function prepareCameraStageMotionInternal(projectId: string, request: CameraMotionCandidateRequest, control: ComputationControl = {}) {
+async function prepareCameraStageMotionInternal(projectId: string, request: CameraMotionCandidateRequest, control: ComputationControl = {}, demonstration?: CameraMotionNativeCandidate) {
   logger.info('三维机位候选整理开始', { event: 'camera_stage.motion.prepare.start', projectId, cameraId: request.cameraId })
   try {
     checkCancelled(control)
@@ -188,9 +189,9 @@ async function prepareCameraStageMotionInternal(projectId: string, request: Came
     const identity = await cameraMotionIdentity(state, frozenRequest)
     checkCancelled(control)
     if (sourceKey !== cameraMotionSourceKey(cameraStageProjectStore(projectId).getState())) throw new CreativeIntentError('stale-candidate', [], '场景已变化，请重新整理')
-    const result = compileCameraMotionCandidates(state, frozenRequest, identity, control)
+    const result = compileCameraMotionCandidates(demonstration ? { ...state, ...structuredClone(demonstration) } : state, frozenRequest, identity, control)
     const review = { candidates: result.candidates.map(({ id, label }) => ({ id, label })), unavailable: structuredClone(result.unavailable) }
-    reviews.set(review, { projectId, request: frozenRequest, result })
+    reviews.set(review, { projectId, sourceKey, request: frozenRequest, result })
     logger.info('三维机位候选整理完成', { event: 'camera_stage.motion.prepare.completed', projectId, candidateCount: result.candidates.length })
     return review
   } catch (error) {
@@ -200,6 +201,15 @@ async function prepareCameraStageMotionInternal(projectId: string, request: Came
 }
 
 export const prepareCameraStageMotion = bindCameraStageProjectOperation(prepareCameraStageMotionInternal, projectId => projectId)
+
+/** Read-only native preview: never installs candidate objects, animation or history into the document store. */
+export function readCameraStageMotionPreview(projectId: string, review: CameraMotionReview, candidateId: string): CameraMotionNativeCandidate {
+  const record = reviews.get(review)
+  const candidate = record?.result.candidates.find(value => value.id === candidateId)
+  if (!record || record.projectId !== projectId || !candidate || record.applied || record.sourceKey !== cameraMotionSourceKey(cameraStageProjectStore(projectId).getState())) throw new CreativeIntentError('stale-candidate', [], '候选已失效，请重新整理')
+  return structuredClone(candidate.native)
+}
+
 
 /** Commit one native state-keyframe change; a failed save retains the change and retries only the original save. */
 export const applyCameraStageMotionCandidate = bindCameraStageProjectOperation(async (projectId: string, review: CameraMotionReview, candidateId: string): Promise<{ undoToken: string; saved: boolean }> => {

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { applyAnimationToPlaybackAppliers } from '../store/playbackAppliers'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { cameraMotionPreview } from '../application/cameraMotionDraft'
 import {
   advanceCameraStagePlaybackRuntime,
   claimCameraStagePlaybackDriver,
@@ -61,12 +62,13 @@ const StagePlaybackDriver: React.FC = () => {
       seekCameraStagePlaybackRuntime(currentTime, true)
     }
 
-    const { tracks, duration } = state.animation
+    const preview = cameraMotionPreview(state)
+    const { tracks, duration } = preview?.animation ?? state.animation
     const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
     const advanced = advanceCameraStagePlaybackRuntime({ driver, delta, duration, loop })
     if (!advanced.accepted) return
 
-    applyAnimationToPlaybackAppliers(state.objects, tracks, advanced.time)
+    applyAnimationToPlaybackAppliers(preview?.objects ?? state.objects, tracks, advanced.time)
 
     // 以累计帧间隔节流，循环回绕不会再因时间差为负而停止更新 UI。
     pushElapsedRef.current += delta

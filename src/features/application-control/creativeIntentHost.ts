@@ -20,6 +20,7 @@ export function splitIntentRef(ref: ApplicationRef) {
 export interface CreativeIntentHost {
   documentRef: ApplicationRef; owner: object; assertCurrent(): void
   size(): [number, number]; selected(draft: MotionDraft): string | undefined
+  explanationEditor?(sessionId: string): import('@/core/creativeIntent/semanticIntentEdits').ExplanationBodyEditor
   checkpoint(): () => () => Promise<void>
   read(): CreativeIntents; commit(head: CreativeIntents): void; save(context?: ApplicationExecutionContext): Promise<void>; applicationSaved?(operationId: string): boolean
   prepare(draft: MotionDraft): Promise<void>

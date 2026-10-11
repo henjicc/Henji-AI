@@ -11,7 +11,7 @@ import type { VideoEditGraphic } from './graphics'
 
 const id = z.string().min(1).max(100)
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
-export const videoEditMarkerSchema = z.object({ id, clipId: id.optional(), frame, name: z.string().trim().min(1).max(200) }).strict()
+export const videoEditMarkerSchema = z.object({ id, clipId: id.optional(), frame, name: z.string().trim().min(1).max(200), type: z.enum(['marker', 'beat']).optional().describe('beat 为节拍，marker 或省略表示普通标记。'), strength: z.number().finite().min(0).max(1).optional().describe('节拍的相对重音强度，0–1。') }).strict()
 export const videoEditCaptionSchema = z.object({ id, clipId: id.optional(), start: frame, duration: frame.min(1), text: z.string().trim().min(1).max(2000),
   translation: z.string().trim().max(2000).optional().describe('第二语言字幕，显示在原文下方；空字符串清除翻译。'),
   // Reflection's shared unset-value convention is the empty string; make it a valid schema value.

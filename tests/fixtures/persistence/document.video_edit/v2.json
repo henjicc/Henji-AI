@@ -111,6 +111,7 @@
             "opacity": 1,
             "volume": 1,
             "text": "",
+            "snapToBeat": true,
             "curves": {
               "opacity": [
                 {
@@ -316,6 +317,13 @@
             "id": "golden-marker",
             "frame": 20,
             "name": "审查点"
+          },
+          {
+            "id": "golden-beat",
+            "frame": 30,
+            "name": "重音",
+            "type": "beat",
+            "strength": 0.9
           }
         ]
       }

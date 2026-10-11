@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { renderHook, render, fireEvent } from '@testing-library/react'
+import { createElement } from 'react'
+import { VideoEditMotionControls } from '../panels/VideoEditMotionControls'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { optimizeMotionDraft } from '@/core/creativeIntent/candidates'
@@ -15,9 +17,10 @@ import { createVideoEditAnnotation, updateVideoEditAnnotation } from './videoEdi
 import { motionClipPose } from '@/core/videoEdit/motionDraft'
 import { proposeVideoExplanationMotion } from './videoEditMotionDraft'
 import { motionDigest } from './videoEditMotionResources'
+import { updateVideoEditClipProperties } from './videoEditClipProperties'
 import type { IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
 
-vi.mock('./videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => { const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted(); input = { ...input, samples }; return { result: optimizeMotionDraft(input), original: optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined }).candidates[0] } } }))
+vi.mock('./videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => { const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted(); input = { ...input, samples }; return { result: optimizeMotionDraft(input), original: optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined, beatFrames: undefined }).candidates[0] } } }))
 const files = new Map<string, Uint8Array>()
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear(); vi.stubGlobal('crypto', webcrypto)
@@ -31,6 +34,38 @@ beforeEach(() => {
 afterEach(async () => { for (const owner of listVideoEditInstances()) { if (videoMotionState(owner)?.status === 'paused') await stopVideoMotion(owner.document.id); await closeVideoEditProject(owner.document.id) } vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 const setup = async () => { const owner = await createVideoEditTestProject(); appendVideoEditClip(owner.document.id); const clip = getActiveVideoEditSequence(owner).clips[0]; setVideoEditView(owner.document.id, { selection: clip.id, frame: 0 }); return owner }
 const present = (owner: Awaited<ReturnType<typeof setup>>, frame: number) => { setVideoEditView(owner.document.id, { frame }); recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame, revision: videoMotionComposition(owner)!.revision, at: performance.now() }) }
+it('超级关键帧现有分组的 UiSwitch 可一步修改当前片段吸附开关', async () => {
+  const owner = await setup(), id = owner.document.id, onError = vi.fn(), history = owner.past.length
+  const view = render(createElement(VideoEditMotionControls, { owner, onError }))
+  fireEvent.click(view.getByRole('button', { name: '超级关键帧' }))
+  fireEvent.click(view.getByRole('switch', { name: '吸附到节拍' }))
+  expect(getActiveVideoEditSequence(owner).clips[0].snapToBeat).toBe(true); expect(owner.past).toHaveLength(history + 1)
+  expect(onError).not.toHaveBeenCalled(); view.unmount()
+  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].snapToBeat).toBeUndefined()
+})
+it('节拍吸附从片段通用开关进入正式整理；原稿不吸附、钉点优先、标记变化拒绝旧候选', async () => {
+  const owner = await setup(), id = owner.document.id, clip = getActiveVideoEditSequence(owner).clips[0]
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, markers: [15, 30, 45].map(frame => ({ id: `beat-${frame}`, frame, name: '节拍', type: 'beat' as const })) })) }))
+  updateVideoEditClipProperties(id, owner.activeSequenceId, clip.id, { snapToBeat: true })
+  await startVideoMotion(id, 'place'); const state = videoMotionState(owner)!
+  for (const [frame, x] of [[0, .2], [17, .8], [33, .3], [60, .7]]) {
+    present(owner, frame); demonstrateVideoMotion(id, { ...state.pose, position: [x, .5] }, 'down'); present(owner, frame)
+    demonstrateVideoMotion(id, { ...state.pose, position: [x, .5] }, 'up'); present(owner, frame)
+  }
+  await stopVideoMotion(id); await configureVideoMotion(id, { fidelity: 1 }); await pinVideoMotionFrame(id, 33); await optimizeVideoMotion(id)
+  const candidate = state.candidates[0]
+  expect(candidate.motions[0].curves.x!.map(point => point.time)).toContain(15)
+  expect(candidate.motions[0].curves.x!.map(point => point.time)).toContain(33)
+  expect(state.original!.motions[0].curves.x!.map(point => point.time)).toContain(17)
+  await previewVideoMotion(id, 'original')
+  await previewVideoMotion(id, candidate.id)
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, markers: sequence.markers?.map(mark => mark.frame === 15 ? { ...mark, frame: 16 } : mark) })) }))
+  await expect(applyVideoMotion(id)).rejects.toThrow('变化')
+  await optimizeVideoMotion(id); const before = structuredClone(getActiveVideoEditSequence(owner).clips[0].curves)
+  const history = owner.past.length; await applyVideoMotion(id); expect(owner.past).toHaveLength(history + 1)
+  expect(getActiveVideoEditSequence(owner).clips[0].curves?.x?.map(point => point.time)).toContain(16)
+  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].curves).toEqual(before)
+})
 it('讲解移动转成正式动作候选，单帧不猜时长，应用后一步撤销且旧基线拒绝',async()=>{
   const owner=await setup(),id=owner.document.id,sequence=getActiveVideoEditSequence(owner),clip=sequence.clips[0],before=structuredClone(clip)
   const plan:IntentDifferencePlan={changes:[{targetRef:{kind:'video_edit.clip',id:`${id}:${clip.id}`},property:'position',before:motionClipPose(clip,0).position,after:[.8,.5],expectedDigest:await motionDigest([sequence,owner.frame])}],protectedRefs:[],issues:[],status:'review',recordedOperationRefs:[{kind:'command',id:'must-not-replay'}]}

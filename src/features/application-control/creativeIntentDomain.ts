@@ -13,6 +13,7 @@ import { createLogger } from '@/core/logging'
 import { semanticVisualBatches, type SemanticIntentImage } from '@/core/creativeIntent/semanticIntentInput'
 import { prepareSemanticImage } from './creativeIntentImages'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { creativeExplanationRegistration, CreativeExplanationMutationExecutor } from './creativeIntentExplanation'
 const logger = createLogger('features.applicationControl.creativeIntent')
 type InputProgress = { baseline: string; offset: number; imageOffset: number; receipt?: string }
 const inputReads = new WeakMap<object, Map<string, InputProgress>>()
@@ -45,9 +46,10 @@ function recordingSource(documentRef: ApplicationRef, sessionId: string, context
 
 export const creativeIntentApplicationDomain: ApplicationDomainModule = {
   id: 'creativeIntent',
-  entities: () => (['video_edit', 'image_edit'] as const).flatMap(domain => INTENT_ENTITIES.map(type => creativeIntentRegistration(domain, type))),
+  entities: () => (['video_edit', 'image_edit'] as const).flatMap(domain => [...INTENT_ENTITIES.map(type => creativeIntentRegistration(domain, type)), creativeExplanationRegistration(domain)]),
   registerExecutors(engine) {
     for (const domain of ['video_edit', 'image_edit'] as const) {
+      engine.registerMutationExecutor(new CreativeExplanationMutationExecutor(domain))
       for (const type of INTENT_ENTITIES) if (type !== 'intent_pin' && !(domain === 'image_edit' && type === 'intent_take')) engine.registerMutationExecutor(new CreativeIntentMutationExecutor(domain, type))
       engine.registerCollectionExecutor(new CreativeIntentPinCollectionExecutor(domain))
       engine.registerCollectionExecutor(new CreativeIntentEvidenceCollectionExecutor(domain, 'intent_draft'))

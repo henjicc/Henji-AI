@@ -1,16 +1,26 @@
 import { applyWriterTable, fieldWriterTable, propertyOperations, writableProperties, type ApplicationMutationExecutor, type ApplicationCompletedStepResult, type ApplicationPlannedStep, type ApplicationExecutionContext, type ApplicationEffectContract } from '@/core/application-control'
 import { creativeIntentFields, type IntentWrite } from './creativeIntentFields'
-import { intentRecord, intentRevisions, type IntentDomain, type IntentEntity } from './creativeIntentHost'
+import { intentRecord, intentHost, splitIntentRef, intentRevisions, type IntentDomain, type IntentEntity } from './creativeIntentHost'
+import { onExplanationBodyErased, explanationBodyRef } from '@/core/creativeIntent/semanticIntentEdits'
 import { createLogger } from '@/core/logging'
 import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
 const logger = createLogger('features.applicationControl.creativeIntent')
 type Step = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
-const undos = new Map<string, () => Promise<ApplicationCompletedStepResult>>()
+const undos = new Map<string, (context?: ApplicationExecutionContext) => Promise<ApplicationCompletedStepResult>>()
+const undoPrivateHeads = new Map<string, string[]>()
+onExplanationBodyErased(ref => {
+  for (const [token, refs] of undoPrivateHeads) if (refs.includes(`${ref.kind}:${ref.id}`)) { undos.delete(token); undoPrivateHeads.delete(token) }
+})
 export function intentResult(refs: ApplicationCompletedStepResult['directRefs'], domain: IntentDomain): ApplicationCompletedStepResult { return { status: 'completed', directRefs: refs, resultingRevisions: intentRevisions(domain), evidence: [{ kind: 'entity_state', fact: '原稿与候选已从正式文档读回；作品只在确认应用时改变。', capturedAt: new Date().toISOString() }] } }
-export function retainIntentUndo(restore: () => Promise<void>, refs: ApplicationCompletedStepResult['directRefs'], domain: IntentDomain): string {
-  const token = crypto.randomUUID(); undos.set(token, async () => { await restore(); undos.delete(token); return intentResult(refs, domain) }); return token
+export function retainIntentUndo(restore: (context?: ApplicationExecutionContext) => Promise<void>, refs: ApplicationCompletedStepResult['directRefs'], domain: IntentDomain): string {
+  const privateRefs = refs.flatMap(ref => {
+    const documentRef = ref.kind.endsWith('.explanation_body') ? { kind: `${domain}.document`, id: ref.id.slice(0, ref.id.lastIndexOf(':')) } : splitIntentRef(ref).documentRef
+    return intentHost(documentRef).read().sessions.map(session => { const body = explanationBodyRef(documentRef, session.id); return `${body.kind}:${body.id}` })
+  })
+  const token = crypto.randomUUID(); undoPrivateHeads.set(token, privateRefs)
+  undos.set(token, async context => { await restore(context); undos.delete(token); undoPrivateHeads.delete(token); return intentResult(refs, domain) }); return token
 }
-export async function undoIntent(token: string) { const restore = undos.get(token); if (!restore) throw new Error('原撤销记录已失效，请读取文档历史。'); return restore() }
+export async function undoIntent(token: string, context?: ApplicationExecutionContext) { const restore = undos.get(token); if (!restore) throw new Error('原撤销记录已失效，请读取文档历史。'); return restore(context) }
 export class CreativeIntentMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType: string
   readonly table

@@ -3,7 +3,7 @@
   "formats": {
     "document.video_edit": {
       "version": 2,
-      "fingerprint": "50ae23c66ccf409cfc4811dd6676b0a6ce4cf71fbfad1279cd11c52e44efae65",
+      "fingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
       "supportedFrom": 2
     },
     "document.canvas": {
@@ -173,7 +173,7 @@
     },
     "subtitle-manifest": {
       "version": 1,
-      "fingerprint": "de2e33717d95785ac025ea50ce654e98678e3d3da8dc5921c54178ed7aae52ee",
+      "fingerprint": "9ad2c8922d20b178dcb14f4ec7485631ad108d32507d20f0312805120b75febf",
       "supportedFrom": 1
     },
     "storyboard-metadata": {
@@ -1172,6 +1172,33 @@
       "reason": "t161：手绘蒙版新增源时间路径动画与显式点对应，开发期按新契约读取，不兼容旧格式。",
       "previousFingerprint": "87e316a9e804baa7d525567cfa78022f51a31d6ed58a0130d3d1de438da69249",
       "fingerprint": "de2e33717d95785ac025ea50ce654e98678e3d3da8dc5921c54178ed7aae52ee",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T09:50:13.658Z",
+      "format": "document.video_edit",
+      "version": 2,
+      "reason": "t164 最小节拍标记类型与重音强度、片段节拍吸附开关；开发阶段直接采用新字段，当前黄金样本已由正式构造器更新。",
+      "previousFingerprint": "50ae23c66ccf409cfc4811dd6676b0a6ce4cf71fbfad1279cd11c52e44efae65",
+      "fingerprint": "01d4d62289e24849e04171e730fc2a54cd01233777e3b47727d51092a3d74cbe",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T09:50:13.661Z",
+      "format": "subtitle-manifest",
+      "version": 1,
+      "reason": "t164 最小节拍标记类型与重音强度、片段节拍吸附开关；开发阶段直接采用新字段，当前黄金样本已由正式构造器更新。",
+      "previousFingerprint": "de2e33717d95785ac025ea50ce654e98678e3d3da8dc5921c54178ed7aae52ee",
+      "fingerprint": "9ad2c8922d20b178dcb14f4ec7485631ad108d32507d20f0312805120b75febf",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T09:55:54.891Z",
+      "format": "document.video_edit",
+      "version": 2,
+      "reason": "t164 标记类型区分普通 marker 与节拍 beat；补齐通用实体未设置时的合法默认读值。",
+      "previousFingerprint": "01d4d62289e24849e04171e730fc2a54cd01233777e3b47727d51092a3d74cbe",
+      "fingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
       "waivedFixtureVersions": []
     }
   ]

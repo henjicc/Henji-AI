@@ -26,6 +26,7 @@ export interface PutResourceResult extends ResourceDescriptor {
 
 export interface ResourceGarbageCollectionOptions {
   minimumAgeMs?: number
+  onlyResourceIds?: ReadonlySet<ResourceId>
   dryRun?: boolean
   /** 根扫描与作品发布共用租约屏障，避免扫描后才发布的新根被回收。 */
   resolveReferences?: () => Promise<ReadonlySet<ResourceId>>
@@ -451,6 +452,7 @@ export class ContentAddressedResourceStore {
         for (const entry of entries) {
           if (!entry.isFile() || !SHA256_PATTERN.test(entry.name)) continue
           const resourceId = `sha256:${entry.name}` as ResourceId
+          if (options.onlyResourceIds && !options.onlyResourceIds.has(resourceId)) continue
           if (live.has(resourceId)) continue
           if ((this.leaseCounts.get(resourceId) ?? 0) > 0) {
             retainedByLease.push(resourceId)

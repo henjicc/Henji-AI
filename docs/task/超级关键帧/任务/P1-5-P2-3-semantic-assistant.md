@@ -172,3 +172,67 @@
 ### t158 交接结论
 
 35 个文件留在工作区，交总管理者审查及 Git 提交。代码与单测阶段已结束，以上明确欠账仍在；不得把“七目录零失败”写成整单完成。主进程 toolResult 已改变，后续实际验收须由总管理者构建新产物；本轮按要求不 bundle、不跑 Reality、不启停开发实例。共享引擎新增分支的排查覆盖完整执行后保存失败、部分失败报告、公共回执归属、图片恢复及原回执撤销；未扩展为全项目审计。
+
+## t166 部分接线，待协调
+
+2026-10-11。本轮仅在 `D:/VibeCode/henji-wt-batch` 的 `codex/minimal-batch` 工作区修改指定文件；没有 Git 写操作、SDK 修改、依赖安装、付费调用、Reality、构建或开发实例启停。**t166 未完成，不能按本节测试通过判断已经满足实际使用的隐私闭环。**
+
+### 已实现
+
+- ExplanationPanel 增加最小 UiModal：指定标题、发送文字/画面数量/模型/费用一行、一次会话复选框，以及取消/发送两个按钮。预检不返回外发请求时直接沿原本地生成；取消不生成，发送防重复，宿主切换使旧预检失效。`prepareGeneration` 是待生产宿主提供的入口，当前没有真实调用方，组件不自行伪造模型、费用或会话同意。
+- 双端注册 C2 `explanation_body`，校正词稿和完整绑定走既有通用属性与事务执行器，不新增专用助手工具。读取/写入仍要求连接权限和当前会话 textUpload 同意，不把正文降为 C1；UI 修改使用同一个事务引擎。词稿追加不可变校正事件，保留原文、时钟和指向，读回投影为最新校正。
+- 活跃图片宿主支持事务内确认和正文恢复，并同步普通撤销后的 collector，防止下一次保存覆盖已撤销的正文。剪辑修改透传通用事务上下文，不额外重复保存。通用事务执行器的单步撤销有精确证据。
+- 删除事件失效所有会捕获该会话正文的通用意图撤销令牌；剪辑仍沿既有全历史与文件擦除。图片只删除当前头和失效通用令牌，尚未擦除命令历史中的正文/画面。
+
+### 文件所有权之外的阻塞
+
+已通过会话问题请求协调，未得到扩大文件所有权的答复，因此以下文件没有修改：
+
+1. `src/features/creativeIntent/ui/CreativeIntentControls.tsx` 属于 t165；需实际消费 `prepareGeneration`，从真实生产模型请求生成预检，并将用户同意写入 t158 会话 consent。两个现有“生成候选”应用函数均为本地整理，当前不会外发，也没有模型路径可由弹窗确认。
+2. `src/features/application-control/capabilities/applicationReflectionAdapter.ts` 需用真实公共 undoRef 和原目标调用 `rememberExplanationUndoAccess`。当前只有通用引擎内部撤销已验证，公共助手撤销的 C2 grant 尚未生产接通；不能把单测中手动注册映射当成正式接线。
+3. `src/features/imageEdit/v3/application/imageEditCommandBus.ts` 与其历史领域需提供针对会话的彻底擦除，覆盖冷历史、撤销/重做、页资源和历史画面；当前普通图片历史仍可能恢复已删除会话，**不能宣称删除后不可找回**。
+4. 两端 `*CreativeIntentReflection.ts` 需给冷宿主提供正式正文编辑端口；当前未打开原讲解的宿主明确只读。共享外部实体目录的 C2 属性过滤也需要总管理者核对，未以降低等级绕开。
+5. `electron/main/services/embedded-agent/piEngine.ts` 等正式模型调度需要失败后调用已有本地整理回退；本轮没有生产接线，仅确认原 core fallback 精确测试通过，**模型失败自动降级仍未完成**。
+
+### 选型与设计自查
+
+复用现有 UiModal/UiCheckbox、Zod、Application Control 通用属性/事务与两端 collector；不需要新增 npm 依赖，也不创建第二套模型调用、授权或保存框架。本文说明选型依据，不另建文档。
+
+1. 助手只凭名称和说明能否用对？正文属性使用“校正词稿”和“确认讲解指向”，明确读回 eventId 和完整绑定；已接通的活跃宿主事务可用，公共 C2 撤销与冷宿主仍需接线，不能称全套可用。
+2. 能否 AI 先做、人只确认？沿原生成候选和指向校正；外发弹窗只留一个主操作，外发同意必须由人完成。生产模型预检和同意保存尚未接通。
+3. 产物能否直接流进其他工作区？校正仍写原私密会话，候选仍是既有 MotionDraft/图片布局；不增加中间作品格式，本轮没有跨工作区或真实视觉验收。
+
+### 检查结果
+
+按 testing.md L2 的权限/共享事务及用户指定五目录执行；Vitest 使用 `--silent --pool forks --minWorkers 1 --maxWorkers 1` 分目录，复用本轮有效证据，不跑全量或 Reality。
+
+- `src/core/creativeIntent`：18 文件、149 项通过。
+- `src/features/creativeIntent`：7 文件、29 项通过。
+- `src/features/application-control`：普通 Node 下 19 文件、108 项通过；原生 `mcpWriteIntegration` 不能在普通 Node 收集，随后由正式原生运行器补验通过。最后正文与外部目录精确复验：2 文件、10 项通过。
+- `src/features/videoEdit/application`：80 文件通过、1 个既有性能基准文件跳过；650 项通过、1 项跳过。
+- `src/features/imageEdit/v3/application`：26 文件、145 项通过、1 项既有性能基准跳过。图片测试只 mock 通用 writer 接线边界；真实 adapter 校正/读回/collector 恢复有证据，通用引擎事务由独立正文测试覆盖。
+- `npm run test:assistant-persistence`：9 文件、83 项通过、0 跳过；无窗口原生 SQLite runner，未启停用户开发实例。五个指定目录没有未解决失败，默认跳过的性能基准不计为已验证。
+- 两条 `npx tsc -p tsconfig.json --noEmit` / `npx tsc -p tsconfig.electron.json --noEmit` 均通过。渲染层首轮曾被并行 t164 测试 hook 返回值阻断，对方修复后复验通过。
+- 11 个本轮源代码/测试文件 `npx eslint <files> --max-warnings 0` 通过，0 警告。
+- `check:surface`、`check:ui-residue` 通过；`check:assistant-capabilities` 按 structure/coverage/invariants 去重覆盖：structure 通过，复用应用控制及图片目录相交项，剩余 coverage/invariants 26 文件、170 项通过。
+- `check:persistence-compat` 最终通过：41 种格式。首轮被并行任务 video_edit/subtitle 指纹变化阻断；对方更新基线后复验通过。本轮未改持久 schema，没有自己的 dev-break/黄金样本变更。
+- 首轮 Vitest 仅传 maxWorkers 与默认 minWorkers 冲突、一个断言使用当前 Vitest 不支持的方法，均已修正并补验；正文候选绑定的对象键序比较问题改为 schema 规范化比较并复验。未将失败记录隐藏为成功。
+
+### t166 文件清单与交接
+
+- `src/core/creativeIntent/semanticIntentEdits.ts`：正文修改 schema、活跃宿主编辑桥与删除失效通知。
+- `src/features/application-control/creativeIntentExplanation.ts`：双端 C2 正文实体/属性、通用事务执行器和 UI writer 接线。
+- `src/features/application-control/creativeIntentExplanation.test.ts`：真实引擎的双端授权、读写、撤销、擦除失效与伪造引用检查。
+- `src/features/application-control/creativeIntentDomain.ts`：注册双端正文实体及执行器。
+- `src/features/application-control/creativeIntentAuthorization.ts`：基于会话同意的正文授权、纯目录发现及待消费的撤销映射。
+- `src/features/application-control/creativeIntentMutationExecutors.ts`：正文删除后失效捕获该私密会话的原通用撤销令牌。
+- `src/features/creativeIntent/ui/ExplanationPanel.tsx`：最小外发确认组件与宿主过期保护。
+- `src/features/creativeIntent/ui/ExplanationPanel.test.tsx`：本地/确认/取消/复选框/重复发送及切换宿主测试。
+- `src/features/imageEdit/v3/application/imageEditExplanation.ts`：正文校正、事务内保存和 collector 撤销同步；删除通知。
+- `src/features/imageEdit/v3/application/imageEditExplanation.test.ts`：校正、重开、审阅读回、普通撤销和删除后 editor 失效测试。
+- `src/features/videoEdit/application/videoEditExplanation.ts`：词稿/绑定改走正文事务，校正恢复与原隐私擦除通知。
+- `docs/rules/assistant-status.md`：登记正文事务的部分进展与尚未接通的路线。
+- `docs/task/超级关键帧/02-实施拆分.md`：只更新第七节本任务“讲解外发确认、私密正文写入与撤销”行。
+- `docs/task/超级关键帧/任务/P1-5-P2-3-semantic-assistant.md`：末尾追加本节。
+
+以上 14 文件交总管理者审查，未暂存/提交/推送。同源排查覆盖两端词稿/绑定、校正后读回、collector 与历史切换、通用正文事务及捕获私密会话的元数据撤销；没有扩大为全项目审计。生产外发/公共 C2 撤销/图片私密历史擦除/生产模型降级未完成，需先协调上述文件再交用户实际使用。Electron 截图与最终运行产物由总管理者统一处理。

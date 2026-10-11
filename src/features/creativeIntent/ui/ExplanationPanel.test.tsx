@@ -9,6 +9,37 @@ import { useExplanationHasRecorded, useExplanationTranscript } from './explanati
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: TranscriptEntry[]; itemContent: (index: number, value: TranscriptEntry) => React.ReactNode }) => <div data-testid="virtual-paragraphs">{data.map((entry, index) => <div key={entry.eventId}>{itemContent(index, entry)}</div>)}</div> }))
 afterEach(cleanup)
 afterEach(() => localStorage.clear())
+it('模型外发先确认；取消不生成，发送沿用复选选择且只执行一次', async () => {
+  const onGenerate = vi.fn(async () => {}), confirm = vi.fn(async () => {})
+  const prepareGeneration = vi.fn(async () => ({ modelName: '测试模型', imageCount: 3, confirm }))
+  render(<ExplanationPanel {...props({ onGenerate, prepareGeneration })} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
+  await screen.findByRole('dialog', { name: '发送讲解给 AI？' })
+  expect(screen.getByText('将发送讲解文字和 3 张画面给 测试模型，费用以供应商为准。')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '取消' }))
+  expect(confirm).not.toHaveBeenCalled(); expect(onGenerate).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
+  await screen.findByRole('dialog', { name: '发送讲解给 AI？' })
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: '发送' })); fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce())
+  expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith(true)
+})
+it('本地整理和已同意的生成无需外发确认；异步预检切换讲解后不发送', async () => {
+  let finish!: (value: undefined) => void
+  const onGenerate = vi.fn(async () => {}), prepareGeneration = vi.fn(() => new Promise<undefined>(resolve => { finish = resolve }))
+  const view = render(<ExplanationPanel {...props({ onGenerate, prepareGeneration, contextKey: 'first' })} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
+  view.rerender(<ExplanationPanel {...props({ onGenerate, contextKey: 'second' })} />)
+  await act(async () => { finish(undefined) })
+  expect(onGenerate).not.toHaveBeenCalled(); expect(screen.queryByRole('dialog')).toBeNull()
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
+  await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce())
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
 const entry: TranscriptEntry = { kind: 'transcript', eventId: 'entry', seq: 1, monoUs: 100000, timeline: null, unavailableReason: 'static', clockSegmentRef: 'static', utteranceId: 'sentence', wordId: 'word', text: '把这个放到那边', audioSegmentRef: 'audio', startSample: 1, endSample: 48000, monoSpanUs: [100000, 200000], timelineSpans: [], granularity: 'word', alignmentQuality: 'precise', source: 'asr' }
 const result: ExplanationReviewResult = { resolution: { text: entry.text, mentions: [], issues: [], negated: false }, plan: { status: 'review', issues: [], protectedRefs: [], recordedOperationRefs: [], changes: Array.from({ length: 7 }, (_, index) => ({ targetRef: { kind: 'image_edit.layer', id: String(index), label: `图片${index}` }, property: 'position', before: [.1, .5], after: [.8, .5], expectedDigest: 'baseline' })) } }
 function props(extra: Partial<ExplanationPanelProps> = {}): ExplanationPanelProps {
@@ -92,4 +123,17 @@ it('手动点选期间收起证据后，读回新绑定而不是段落预读缓�
   await screen.findByLabelText('保护')
   expect(screen.queryByText('还有 1 处需要确认')).toBeNull()
   expect(onRead).toHaveBeenCalledTimes(3)
+})
+
+
+it('保存会话同意使审阅版本变化后仍执行生成，切换会话才作废', async () => {
+  const onGenerate = vi.fn(async () => {}), onRead = async () => result
+  const prepareGeneration = vi.fn(async () => ({ modelName: '模型', imageCount: 1, confirm: async () => {
+    view.rerender(<ExplanationPanel {...props({ onRead, onGenerate, prepareGeneration, contextKey: 'session:2', generationKey: 'session' })} />)
+  } }))
+  const view = render(<ExplanationPanel {...props({ onRead, onGenerate, prepareGeneration, contextKey: 'session:1', generationKey: 'session' })} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
+  fireEvent.click(await screen.findByRole('button', { name: '发送' }))
+  await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce())
 })

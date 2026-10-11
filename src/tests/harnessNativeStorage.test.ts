@@ -47,6 +47,18 @@ describe('harness 内存 native 替身', () => {
     resetHarnessNativeStorage(); expect((await getPlatform().fonts.list()).faces).toEqual([]); expect(await getPlatform().settings.get('fonts.preferences')).toBeNull()
   })
 
+  it('图片正文资源在 native 存储边界克隆，释放租约不伪造删除，reset 清空', async () => {
+    const storage = getPlatform().imageEditorV3, value = { text: '私密词稿' }
+    const saved = await storage.writeLayoutResource!({ requestId: 'write', leaseId: 'session', value })
+    value.text = '调用端修改'
+    const read = await storage.readLayoutResource!({ requestId: 'read', resourceRef: saved.resourceRef }) as { text: string }
+    expect(read.text).toBe('私密词稿'); read.text = '读回端修改'
+    await storage.releaseLayoutResources!({ requestId: 'release', leaseId: 'session' })
+    expect(await storage.readLayoutResource!({ requestId: 'again', resourceRef: saved.resourceRef })).toEqual({ text: '私密词稿' })
+    resetHarnessNativeStorage()
+    await expect(storage.readLayoutResource!({ requestId: 'missing', resourceRef: saved.resourceRef })).rejects.toThrow('不存在')
+  })
+
   it('没实现的命名空间抛错，不返回空值', () => {
     const native = (window as unknown as { henjiNative: Record<string, unknown> }).henjiNative
     expect(() => native.notInstalled).toThrowError(/henjiNative\.notInstalled 没有实现/)

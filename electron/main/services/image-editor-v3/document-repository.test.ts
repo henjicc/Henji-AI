@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { recordingFixtureSession } from '../../../../src/core/creativeIntent/fixtures/recordingFixtures'
 import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
 import {
   createImageEditDocumentV3,
@@ -371,4 +372,43 @@ describe('ImageEditDocumentRepository', () => {
     expect(collected.deleted).toContain(tile.id)
     expect(await resources.has(tile.id)).toBe(false)
   })
+})
+
+
+it('私密讲解从真实冷历史擦除后，旧历史页和正文画面物理删除，重开撤销不能恢复', async () => {
+  const resources = new ContentAddressedResourceStore(path.join(rootDir, 'resources'))
+  const repository = new ImageEditDocumentRepository(path.join(rootDir, 'documents'), { resources })
+  const body = await resources.putBuffer(Buffer.from('private transcript'))
+  const visual = await resources.putBuffer(Buffer.from('private visual'))
+  const session = recordingFixtureSession('static')
+  session.state = 'reviewing'; session.ownerRef = { kind: 'image_edit.document', id: 'v3:privacy' }
+  const refs = [body, visual].map(resource => ({ resourceId: resource.id, digest: resource.id, path: `resources/${resource.sha256}`, bytes: resource.byteLength, kind: 'page' as const }))
+  session.pages = [{ resourceId: body.id, digest: body.id, bytes: body.byteLength, kind: 'transcript', count: 1, monoSpanUs: [0, 1], seqSpan: [0, 0] }]
+  session.clockSegments = [{ id: 'static', mode: 'hold', monoSpanUs: [0, 1], start: null, end: null, anchors: [] }]
+  session.visualEvidenceRefs = [{ id: 'visual', kind: 'frame', resourceRef: { resourceId: visual.id, digest: visual.id, bytes: visual.byteLength }, size: [1, 1], pixelBudget: 1,
+    frames: [{ eventId: 'frame', seq: 0, monoUs: 0, timeline: null, unavailableReason: 'static', clockSegmentRef: 'static', stateDigest: session.sourceDigest, geometrySnapshotRef: 'geometry', sourceRefs: [], pointer: null, reason: 'reference', attachmentRect: [0, 0, 1, 1] }] }]
+  const initial = documentAt('privacy', 0, 'keep')
+  const history = new ImageEditCommandHistoryV3(); history.clear(initial)
+  const document = history.execute(initial, { type: 'document.set-creative-intents', commandId: 'private-head', expectedRevision: 0,
+    intents: { drafts: [], sessions: [session], resources: refs }, resources: refs.map(ref => ({ resourceId: ref.resourceId, byteSize: ref.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId)) })
+  const saved = await repository.create({ documentId: document.id, revision: document.revision, document, history: history.createSnapshot() })
+  const reopened = await repository.loadPaged(document.id)
+  expect(reopened.history).toHaveProperty('cold')
+  const cold = new ImageEditCommandHistoryV3({ readPage: (checkpoint, index) => repository.readHistoryPage(checkpoint, index) })
+  cold.restore(reopened.document as ImageEditDocumentV3, reopened.history)
+  const obsolete = new Set(reopened.resourceRefs)
+  const clean = await cold.eraseExplanationSession(reopened.document as ImageEditDocumentV3, session.id)
+  await repository.save({ documentId: clean.id, expectedRevision: saved.revision, nextRevision: clean.revision, document: clean, history: cold.createSnapshot(), resourceRefs: [] })
+  const live = new Set((await repository.list()).flatMap(value => value.resourceRefs))
+  const erased = await resources.garbageCollect(live, { minimumAgeMs: 0, onlyResourceIds: obsolete })
+  expect(erased.deleted).toContain(body.id); expect(erased.deleted).toContain(visual.id)
+  for (const ref of obsolete) if (!live.has(ref)) expect(await resources.has(ref)).toBe(false)
+  const persisted = await repository.loadPaged(clean.id)
+  const final = new ImageEditCommandHistoryV3({ readPage: (checkpoint, index) => repository.readHistoryPage(checkpoint, index) })
+  final.restore(persisted.document as ImageEditDocumentV3, persisted.history)
+  let current = persisted.document as ImageEditDocumentV3
+  while (final.getState().undoCount) { await final.readEntryAt(final.getState().undoCount - 1); current = final.undo(current).document }
+  while (final.getState().redoCount) { await final.readEntryAt(final.getState().undoCount); current = final.redo(current).document }
+  expect(JSON.stringify(current)).not.toContain(session.id)
+  expect(current.layers).toEqual(initial.layers)
 })

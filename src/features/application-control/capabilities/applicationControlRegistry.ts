@@ -1,3 +1,4 @@
+import { bindExplanationBodyWriter } from '../creativeIntentExplanation'
 import { ApplicationControlExecutionEngine, ApplicationReflectionRegistry } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { BUILTIN_APPLICATION_CAPABILITIES } from '@/core/application-control/builtinApplicationCapabilityRegistry'
@@ -49,3 +50,5 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   executionEngine = next
   return next
 }
+
+bindExplanationBodyWriter(getApplicationControlExecutionEngine)

@@ -144,7 +144,7 @@ export const UI_DIVIDER_CLASS = 'border-t border-line/60';
 /**
  * 分区堆叠间距：去掉分区卡片后，靠这个间距 + 组标签建立层级。
  * 比原先卡片时代的 space-y-5 更宽松，用留白换回呼吸感。
- * 若将来需要更强切分，只改这一处（加 `divide-y divide-border-dark/60 [&>*+*]:pt-8`）。
+ * 若将来需要更强切分，只改这一处（加 `divide-y divide-line/60 [&>*+*]:pt-8`）。
  */
 export const UI_SECTION_STACK_CLASS = 'space-y-8';
 

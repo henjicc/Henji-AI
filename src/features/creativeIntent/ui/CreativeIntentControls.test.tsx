@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { CreativeIntentControls, type CreativeIntentControlsProps } from './CreativeIntentControls'
 
@@ -43,4 +43,30 @@ it('图片侧静态配置直接共用候选和钉点，无需伪造录制回调�
   expect(screen.queryByRole('button', { name: '正常速预览' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '钉住所选图层' })); expect(p.onPin).toHaveBeenCalledOnce()
   fireEvent.click(screen.getByRole('button', { name: '保留节奏 B' })); expect(p.onPreview).toHaveBeenCalledWith('candidate')
+})
+
+it('机位配置隐藏二维选项，候选预览与钉住走同源回调', () => {
+  const source = props()
+  const p: CreativeIntentControlsProps = { profile: 'camera', property: 'position', status: 'reviewing', candidates: [{ id: 'smooth', label: '平滑推拉' }, { id: 'orbit', label: '环绕' }, { id: 'dolly-hold', label: '推近停顿' }], selected: 'smooth', fidelity: .5, pins: [], canPin: true, onStart: vi.fn(), onStop: vi.fn(), onPause: vi.fn(), onResume: vi.fn(), onPlay: vi.fn(), onProperty: vi.fn(), onCancel: source.onCancel, onOptimize: source.onOptimize, onApply: source.onApply, onPreview: source.onPreview, onFidelity: source.onFidelity, onPin: source.onPin, onUnpin: source.onUnpin }
+  render(<CreativeIntentControls {...p} />)
+  expect(screen.queryByRole('slider')).toBeNull()
+  expect(screen.queryByRole('button', { name: '分时摆放' })).toBeNull()
+  expect(screen.queryByRole('button', { name: '示范运动' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '原稿' })); fireEvent.click(screen.getByRole('button', { name: '环绕' }))
+  expect(p.onPreview).toHaveBeenNthCalledWith(1, 'original'); expect(p.onPreview).toHaveBeenNthCalledWith(2, 'orbit')
+  fireEvent.click(screen.getByRole('button', { name: '钉住当前机位' })); expect(p.onPin).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByRole('button', { name: '应用' })); expect(p.onApply).toHaveBeenCalledOnce()
+})
+
+it('整理通过共享外发确认预检，取消不生成，发送后只生成一次', async () => {
+  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ modelName: '实际模型', imageCount: 2, confirm }))
+  render(<CreativeIntentControls {...p} contextKey="session" prepareGeneration={prepareGeneration} />)
+  fireEvent.click(screen.getByRole('button', { name: '重新整理' }))
+  await screen.findByRole('dialog'); expect(p.onOptimize).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '取消' })); expect(confirm).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '重新整理' })); await screen.findByRole('dialog')
+  fireEvent.click(screen.getByRole('checkbox', { name: '本次讲解不再询问' }))
+  fireEvent.click(screen.getByRole('button', { name: '发送' })); fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(p.onOptimize).toHaveBeenCalledOnce())
+  expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith(true)
 })

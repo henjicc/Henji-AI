@@ -11,7 +11,7 @@ scope.onmessage = (event: MessageEvent<MotionWorkerRequest>): void => {
     if (!input) throw new Error('原稿尚未就绪。')
     if (event.data.kind === 'page') { samples.push(...event.data.entries); scope.postMessage({ kind: 'received' }); return }
     const result = optimizeMotionDraft(input)
-    const original = optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined }).candidates[0]
+    const original = optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined, beatFrames: undefined }).candidates[0]
     scope.postMessage({ result, original }); input = undefined; samples = []
   }
   catch (error) { scope.postMessage({ error: error instanceof Error ? error.message : '整理失败，请重试。', code: error instanceof CreativeIntentError ? error.code : undefined, refs: error instanceof CreativeIntentError ? error.refs : [] }) }
