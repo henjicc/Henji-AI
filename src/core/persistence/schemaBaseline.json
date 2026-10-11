@@ -3,7 +3,7 @@
   "formats": {
     "document.video_edit": {
       "version": 2,
-      "fingerprint": "fa15389dd5ecaecd141ec3d75cb0898024e16082588085bfe58d0e157de74349",
+      "fingerprint": "c55ceea7fa1c3ac86c20c429671c56716773fbda2ea3fa3ccbd8e36444f4993b",
       "supportedFrom": 2
     },
     "document.canvas": {
@@ -58,12 +58,12 @@
     },
     "image-package": {
       "version": 12,
-      "fingerprint": "d24265348b8ddb698917da8773afa0814a46e2de0ce468bac138ad15036347bf",
+      "fingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
       "supportedFrom": 12
     },
     "image-working-copy": {
       "version": 14,
-      "fingerprint": "edccddcd3e5923baaff55ec1f673bad096525be666f7d6900380d2a1cfb28301",
+      "fingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
       "supportedFrom": 14
     },
     "settings": {
@@ -133,7 +133,7 @@
     },
     "canvas-layer-package": {
       "version": 12,
-      "fingerprint": "cc0b5d94094b475c989d8c74348b37b06cae0c7765eb93b3cec06f272dc600d8",
+      "fingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
       "supportedFrom": 12
     },
     "keystore": {
@@ -1118,6 +1118,42 @@
       "reason": "t149 将默认转写模型归入权威设置格式，开发期升版并停止读取无转写字段的旧格式",
       "previousFingerprint": "d3201320105f4ef9d3e376238c9accf8847d4a660ae51d003acaf8ed961acd32",
       "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T04:38:14.951Z",
+      "format": "image-package",
+      "version": 12,
+      "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
+      "previousFingerprint": "d24265348b8ddb698917da8773afa0814a46e2de0ce468bac138ad15036347bf",
+      "fingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T04:38:14.953Z",
+      "format": "image-working-copy",
+      "version": 14,
+      "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
+      "previousFingerprint": "edccddcd3e5923baaff55ec1f673bad096525be666f7d6900380d2a1cfb28301",
+      "fingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T04:38:14.953Z",
+      "format": "canvas-layer-package",
+      "version": 12,
+      "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
+      "previousFingerprint": "cc0b5d94094b475c989d8c74348b37b06cae0c7765eb93b3cec06f272dc600d8",
+      "fingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T04:38:14.953Z",
+      "format": "document.video_edit",
+      "version": 2,
+      "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
+      "previousFingerprint": "fa15389dd5ecaecd141ec3d75cb0898024e16082588085bfe58d0e157de74349",
+      "fingerprint": "c55ceea7fa1c3ac86c20c429671c56716773fbda2ea3fa3ccbd8e36444f4993b",
       "waivedFixtureVersions": []
     }
   ]

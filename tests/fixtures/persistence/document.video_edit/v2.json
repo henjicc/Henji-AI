@@ -366,8 +366,8 @@
           "candidateRefs": [
             {
               "resourceId": "golden-motion-candidate",
-              "digest": "sha256:c6b9acf7641a94de3857060ecfa693bd3c20da56832c8637477fe6cc3ade2a71",
-              "bytes": 5972
+              "digest": "sha256:bbd983c8a1d615808c0ce3016dc2072e70774a3cd0f3eb3b2ab407a15dc382d4",
+              "bytes": 5973
             }
           ],
           "applications": [],
@@ -386,8 +386,8 @@
         },
         {
           "resourceId": "golden-motion-candidate",
-          "digest": "sha256:c6b9acf7641a94de3857060ecfa693bd3c20da56832c8637477fe6cc3ade2a71",
-          "bytes": 5972,
+          "digest": "sha256:bbd983c8a1d615808c0ce3016dc2072e70774a3cd0f3eb3b2ab407a15dc382d4",
+          "bytes": 5973,
           "path": "henji:/素材/golden-motion-candidate.json",
           "kind": "candidate"
         }

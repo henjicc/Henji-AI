@@ -8,7 +8,7 @@
       "id": "golden-video_edit"
     },
     "sourceDraftDigest": "sha256:7fb5a293f0712dd71768b57e0c153b210077dfc45a72ed5fb03c4b6a83594149",
-    "algorithmVersion": "p1-schneider-native/2",
+    "algorithmVersion": "p2-primitives-native/1",
     "requestKey": "{\"fidelity\":0,\"takes\":null,\"intent\":null,\"mappings\":[[\"take0\",{\"positionToNative\":[1,0,0,1,-0.5,-0.5],\"pivotToNative\":[1,0,0,1,0,0],\"clipStart\":0,\"scaleFactor\":1,\"rotationOffsetDegrees\":0}]]}",
     "targetBases": [
       {
