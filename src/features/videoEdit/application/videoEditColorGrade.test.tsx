@@ -11,6 +11,7 @@ import { analyzeVideoEditColorGrade, editVideoEditColorGrade } from './videoEdit
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { makeVideoEditBuiltinEffect } from './videoEditCompositing'
 import { evaluateVideoEditBuiltinParameters } from '@/core/videoEdit/keyframes'
+import { videoEditObservationVersion } from './videoEditObservationVersion'
 
 vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditCodeTrial')>(), trialVideoEditCodeFrames: vi.fn(), trialVideoEditCodeDocument: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('./videoEditColorLutClient', async () => {
@@ -64,6 +65,7 @@ it('分析隔离目标与 ColorGrade 前的效果，不改播放头/文档；建
   const { owner, target } = await setup(); editVideoEditColorGrade(target, { params: { exposure: 2, faded_film: 30 } })
   const snapshot = owner.document; const history = owner.past.length; const frame = owner.frame
   const result = await analyzeVideoEditColorGrade(target)
+  expect(result.documentVersion).toBe(videoEditObservationVersion(owner, snapshot.revision))
   expect(owner.document).toBe(snapshot); expect(owner.frame).toBe(frame); expect(owner.past).toHaveLength(history); expect(closeBitmap).toHaveBeenCalledTimes(5); expect(result.frames).toHaveLength(5)
   const rendered = vi.mocked(trialVideoEditCodeFrames).mock.calls[0][0][0]
   expect(rendered.document.clips).toHaveLength(1); expect(rendered.document.clips[0].effects).toEqual([]); expect(rendered.document.annotations).toEqual([]); expect(rendered.document.captions).toEqual([])

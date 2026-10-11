@@ -16,6 +16,16 @@ const receipt = { ok: true, resultingRevision: 9, resultingScopeRevisions: scope
     resultingRevisions: revisions, resultRefs: [ref], effects: [{ entityType: ref.kind, refs: [ref], evidence }], evidence } }
 
 describe('Pi 与 MCP 的公共响应裁剪', () => {
+  it('画布、图片与剪辑读取的宿主代次经过精简投影仍保留，旧回执不会被改写', () => {
+    for (const kind of ['canvas.node', 'image_edit.document', 'video_edit.document']) {
+      const before = { ok: true, revisionEpoch: 'before-restart', data: { revision: 0, scopeRevisions: { [kind.split('.')[0]]: 0 }, ref: { kind, id: 'document' } } }
+      const after = { ...before, revisionEpoch: 'after-restart' }
+      const projected = projectApplicationToolResult('read_application_entity', { ref: { kind, id: 'document' } }, before)
+      expect(projected).toMatchObject({ revision: 0, revisionEpoch: 'before-restart' })
+      expect(projectApplicationToolResult('read_application_entity', {}, after).revisionEpoch).not.toBe(projected.revisionEpoch)
+      expect(before.data).toHaveProperty('revision', 0)
+    }
+  })
   it('只交付一份相关修订和验证结论，内部回执与恢复证据不变', () => {
     const original = structuredClone(receipt)
     const raw = { ok: true, operationId: 'id', executionState: 'completed' as const, result: receipt, recoveryResult: null }

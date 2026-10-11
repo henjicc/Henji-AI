@@ -115,5 +115,8 @@ export function projectToolOutputSchema(schema: Record<string, unknown>, name: s
           .filter(([field]) => !dataEnvelope || !['revision', 'scopeRevisions', 'resultingRevision', 'resultingScopeRevisions'].includes(field))
           .map(([field, description]) => [field, visit(description, field === 'data')])) : visit(item)]))
   }
-  return visit(schema) as Record<string, unknown>
+  const projected = visit(schema) as Record<string, unknown>
+  return { ...projected, properties: { ...object(projected.properties), revisionEpoch: {
+    type: 'string', description: '读取结果所属宿主代次；revision、scopeRevisions、实体 revisions 仅在此代次相同时可比较大小。代次变化后重新读取。截帧的新旧判断使用 documentVersion。',
+  } } }
 }

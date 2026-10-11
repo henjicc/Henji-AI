@@ -10,6 +10,7 @@ import { addMediaReferenceToLibrary } from '@/features/assets/services/assetColl
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { requireVideoEditInstance } from './videoEditService'
+import { videoEditObservationVersion } from './videoEditObservationVersion'
 import { resolveVideoEditElementAnnotation, videoEditCodeElementFrames, videoEditCodeElementRegion } from './videoEditCodeElements'
 import { codeElementLabel } from '@/core/videoEdit/codeElementSelection'
 
@@ -25,6 +26,7 @@ export interface VideoEditFrameObservation {
   sourceWidth: number
   sourceHeight: number
   documentRevision: number
+  documentVersion: string
   sequenceId?: string
   frame?: number
   timeUs?: number
@@ -56,6 +58,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   // null 仅供工作区流转保存完整画幅；助手观察仍由公开 schema 限制尺寸预算。
   if (maxWidth !== null && (!Number.isSafeInteger(maxWidth) || maxWidth < 256 || maxWidth > 3840)) throw new Error('观察宽度须为256到3840之间的整数像素。')
   const owner = requireVideoEditInstance(projectId); const document = owner.document
+  const documentVersion = videoEditObservationVersion(owner, document.revision)
   const started = performance.now()
   let composition: VideoEditComposition; let frame = 0
   if (target.kind === 'program') {
@@ -108,5 +111,5 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const asset = await assetApplicationService.inspect(created.id)
   if (asset.inspectionStatus !== 'ready' || asset.width !== width || asset.height !== height) throw new Error('观察图片没有通过资产检查，请重试。')
   logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width, height, durationMs: Math.round(performance.now() - started) } })
-  return { asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
+  return { asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
 }

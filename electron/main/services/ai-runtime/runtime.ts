@@ -1,4 +1,4 @@
-import { networkRequestContext } from './network-transport'
+import { networkRequestContext, type NetworkRequestScope } from './network-transport'
 import { claimGenerationSubmission, completeGenerationSubmission, readGenerationSubmission, readGenerationSubmissionStage } from './generation-submissions'
 import {
   AiRuntimeError,
@@ -205,6 +205,7 @@ export async function continuePolling(
 ): Promise<HostGenerateResponse> {
   const requestId = request.requestId?.trim() || `continue-${request.modelId}-${Date.now()}`
   const taskId = request.taskId.trim()
+  const pollScope: NetworkRequestScope = { requestId, modelId: request.modelId, taskId, phase: 'poll' }
   let ownedMediaPaths: string[] = []
   activePolls += 1
   logger.info('后端开始轮询', {
@@ -216,21 +217,11 @@ export async function continuePolling(
 
   try {
     let requestInfo: AIClientGenerationRequestInfo | undefined
-    const sdkResult = await networkRequestContext.run({ requestId, modelId: request.modelId }, () => sdkAIClient.continuePolling({ ...request, requestId }, {
+    const sdkResult = await networkRequestContext.run(pollScope, () => sdkAIClient.continuePolling({ ...request, requestId }, {
       onRequestBuilt: (info) => {
         requestInfo = info
-        logger.info('后端发起轮询请求', {
-          event: 'generation.runtime.request_json',
-          requestId,
-          taskId,
-          modelId: request.modelId,
-          providerId: info.providerId,
-          context: {
-            method: info.method,
-            route: info.route,
-            requestBody: sanitizeJsonValue(info.requestBody),
-          },
-        })
+        // 此回调携带模型创建端点；真实轮询请求日志由宿主 transport 记录。
+        pollScope.providerId = info.providerId
       },
     }))
     const providerResult = toHostGenerateResponse(sdkResult)
@@ -239,9 +230,9 @@ export async function continuePolling(
       request.modelId,
       info.providerId,
       requestId,
-      info.route,
+      pollScope.lastRequest?.route ?? info.route,
       taskId,
-      sdkResult.metadata
+      pollScope.lastResponse ?? sdkResult.metadata
     )
     logger.info('后端轮询响应', {
       event: 'generation.runtime.response_json',
@@ -293,6 +284,8 @@ export async function continuePolling(
       taskId,
       modelId: request.modelId,
       error: toLogError(error),
+      providerId: pollScope.providerId,
+      context: { phase: 'poll', ...pollScope.lastRequest, responseBody: pollScope.lastResponse },
     })
     throw error
   } finally {

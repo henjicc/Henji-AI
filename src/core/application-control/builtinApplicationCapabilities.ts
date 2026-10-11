@@ -88,6 +88,7 @@ export const getCurrentApplicationContextCapability = defineCapability({
     }),
     videoEdit: hostContextSnapshotSchema.shape.videoEdit,
     catalogRevision: z.number().int().nonnegative(),
+    externalContractVersion: z.string().optional().describe('公共工具契约版本；与客户端缓存不符时重新 tools/list 或重连。'),
     ready: z.boolean(),
     revision: z.number().int().nonnegative(),
   }).passthrough(),
