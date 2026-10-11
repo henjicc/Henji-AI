@@ -11,6 +11,8 @@ import {
 import type { CapabilityExecutionContext } from './handlerTypes'
 import { applicationCallerAccess } from '@/core/application-control/callerContext'
 
+const publicUndos = new Map<string, { callerId: string; revisions: Record<string, number> }>()
+
 /**
  * 反射层通用能力的执行适配器。
  *
@@ -476,15 +478,31 @@ export const applicationReflectionHandlers = {
       if (!refreshed) throw new Error('CONFLICT:目标属性已在刷新期间变化，请重新读取并规划。')
       rawResult = await execute(refreshed, 1)
     }
+    if ((rawResult.status === 'completed' || rawResult.status === 'failed') && rawResult.undoRef) {
+      publicUndos.set(rawResult.undoRef, { callerId: context.callerGrant?.callerId ?? 'renderer',
+        revisions: rawResult.status === 'completed' ? rawResult.resultingRevisions : rawResult.currentRevisions ?? {} })
+    }
     const result = completedTransaction(rawResult)
     return {
       status: 'completed' as const,
       transactionRef: result.transactionRef,
+      undoRef: result.undoRef,
       verification: result.verification,
       resultingRevisions: result.resultingRevisions,
       resultRefs: result.resultRefs as unknown as Array<Record<string, unknown>>,
       effects: result.effects as unknown as Array<Record<string, unknown>>,
       evidence: result.evidence as unknown as Array<Record<string, unknown>>,
     }
+  },
+  async undoEntities(input: { undoRef: string }, context: CapabilityExecutionContext) {
+    const record = publicUndos.get(input.undoRef)
+    if (!record || record.callerId !== (context.callerGrant?.callerId ?? 'renderer')) throw new Error('PERMISSION_DENIED:撤销回执不属于本连接或已使用。')
+    const raw = await getApplicationControlExecutionEngine().undo({ undoRef: input.undoRef,
+      expectedRevisions: record.revisions, idempotencyKey: `undo:${context.requestId ?? crypto.randomUUID()}` }, executionContext(context))
+    if (raw.status === 'completed' || raw.status === 'failed' && raw.persistence) publicUndos.delete(input.undoRef)
+    const result = completedTransaction(raw)
+    return { status: 'completed' as const, transactionRef: result.transactionRef, verification: result.verification,
+      resultingRevisions: result.resultingRevisions, resultRefs: result.resultRefs as unknown as Array<Record<string, unknown>>,
+      effects: result.effects as unknown as Array<Record<string, unknown>>, evidence: result.evidence as unknown as Array<Record<string, unknown>> }
   },
 }

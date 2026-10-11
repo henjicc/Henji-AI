@@ -19,6 +19,25 @@ function setup(save?: ImageEditDocumentRepositoryV3['save']) {
 }
 
 describe('图片编辑唯一保存宿主', () => {
+  it('事务内步骤延迟到整批确认，保存失败保留修改；恢复不重放且不增加历史', async () => {
+    const { owner, add, write, bus } = setup()
+    const batch = owner.begin(), settled = vi.fn(async () => undefined)
+    add('layout'); owner.acceptCurrent()
+    const context = { requestId: 'transaction', exposure: 'local_adapter' as const, permissions: new Set<string>(), acceptedDataClasses: new Set(['C1'] as const), persistenceScopes: new Set([owner.key]) }
+    await owner.confirmStep(context, settled)
+    expect(write).not.toHaveBeenCalled(); expect(settled).not.toHaveBeenCalled()
+    write.mockRejectedValueOnce(new Error('disk unavailable'))
+    await expect(batch.confirm()).rejects.toThrow('保存未确认'); batch.release()
+    expect(owner.isCurrentConfirmed()).toBe(false)
+    const history = bus.getHistoryView().position
+    await owner.confirmStep(undefined, settled)
+    expect(settled).toHaveBeenCalledTimes(1)
+    expect(owner.isCurrentConfirmed()).toBe(true)
+    expect(bus.getHistoryView().position).toBe(history)
+    expect(bus.getSnapshot().document.layers).toHaveLength(1)
+    expect(() => owner.confirmStep(context, settled)).toThrow('事务已失效')
+    owner.dispose(); bus.dispose()
+  })
   it('确认保存时身份检查不反复复制完整历史，投影仍核对同一当前文档', async () => {
     const { bus, queue, add } = setup()
     add('layout')

@@ -278,6 +278,13 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       if (error instanceof ApplicationPersistenceBoundaryFailure
         || (error instanceof ApplicationExecutionProgressFailure && error.completed.length > 0)) this.store.markCommitted(stored.plan.planRef)
       const failureResult = await this.handleExecutionFailure(error, stored.plan, transactionRef, context, persistenceReceipts)
+      // All business steps completed; a failed save must retain the same undo path.
+      // Partial or compensated mutations never receive a whole-transaction receipt.
+      if (failureResult.status === 'failed' && error instanceof ApplicationPersistenceBoundaryFailure
+        && !error.executionFailure && error.completedStepIndexes.every((index, offset) => index === offset)) {
+        const undoRef = this.createUndoRef(stored.plan.steps, error.completed)
+        if (undoRef) failureResult.undoRef = undoRef
+      }
       const result = failureResult.status === 'failed' && error instanceof ApplicationPersistenceBoundaryFailure
         ? { ...failureResult, recoveryVerification: { conditions: stored.plan.verificationConditions, evidence: error.completed.flatMap((item) => item.evidence) } }
         : failureResult

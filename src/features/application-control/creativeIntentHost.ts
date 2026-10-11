@@ -1,4 +1,4 @@
-import type { ApplicationRef } from '@/core/application-control'
+import type { ApplicationRef, ApplicationExecutionContext } from '@/core/application-control'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
 import type { MotionIntent } from '@/core/creativeIntent/recipe'
 import type { CreativeIntents, StoredCreativeIntentResource } from '@/core/creativeIntent/persistence'
@@ -21,15 +21,16 @@ export interface CreativeIntentHost {
   documentRef: ApplicationRef; owner: object; assertCurrent(): void
   size(): [number, number]; selected(draft: MotionDraft): string | undefined
   checkpoint(): () => () => Promise<void>
-  read(): CreativeIntents; commit(head: CreativeIntents): void; save(): Promise<void>
+  read(): CreativeIntents; commit(head: CreativeIntents): void; save(context?: ApplicationExecutionContext): Promise<void>; applicationSaved?(operationId: string): boolean
   prepare(draft: MotionDraft): Promise<void>
-  configure(values: { fidelity?: number; pinSampleId?: string; unpinId?: string; selectedTakeIds?: string[] }): Promise<void>
-  optimize(signal?: AbortSignal): Promise<void>; select(resourceId: string): Promise<void>; apply(): Promise<void>
+  configure(values: { fidelity?: number; pinSampleId?: string; unpinId?: string; selectedTakeIds?: string[] }, context?: ApplicationExecutionContext): Promise<void>
+  optimize(signal?: AbortSignal): Promise<void>; select(resourceId: string): Promise<void>; apply(context?: ApplicationExecutionContext): Promise<void>; recoverApplication(context?: ApplicationExecutionContext): Promise<void>
 }
 export interface CreativeIntentHostProvider {
   domain: IntentDomain; documents(): ApplicationRef[]; revisions(): Record<string, number>
   open(ref: ApplicationRef): CreativeIntentHost
   readResource(resource: StoredCreativeIntentResource): Promise<unknown>
+  readVisual?(resource: StoredCreativeIntentResource): Promise<Uint8Array>
   digest(value: unknown): Promise<string>
   configureMotion?(id: string, values: { intent: MotionIntent; selectedTakeIds: string[] }): Promise<void>
 }
@@ -41,9 +42,13 @@ export function intentDocuments(domain: IntentDomain): ApplicationRef[] { return
 export function intentHost(ref: ApplicationRef): CreativeIntentHost { return intentProvider(ref.kind.split('.')[0] as IntentDomain).open(ref) }
 export function intentRecord(ref: ApplicationRef) {
   const identity = splitIntentRef(ref), host = intentHost(identity.documentRef), head = host.read()
-  const draft = head.drafts.find(d => d.id === identity.draftId)
-  if (!draft) throw new Error('原稿已不存在，请重新读取超级关键帧目录。')
+  const storedDraft = head.drafts.find(d => d.id === identity.draftId)
+  if (!storedDraft) throw new Error('NOT_FOUND:原稿已不存在，请重新读取超级关键帧目录。')
+  // Saving a receipt must not append an artwork command. The image persistence owner
+  // is authoritative for the current saved snapshot, including a cold reopen.
+  const draft = host.applicationSaved ? { ...storedDraft, applications: storedDraft.applications.map(application => ({ ...application,
+    saved: application.saved || host.applicationSaved!(application.operationRef.id) })) } : storedDraft
   const item = ref.kind.endsWith('intent_take') ? draft.takes.find(t => t.id === identity.childId) : ref.kind.endsWith('intent_pin') ? draft.pins.find(p => p.id === identity.childId) : ref.kind.endsWith('intent_candidate') ? draft.candidateRefs.find(c => c.resourceId === identity.childId) : draft
-  if (!item) throw new Error('原稿子项已变化，请重新读取候选、示范或钉住点。')
+  if (!item) throw new Error('NOT_FOUND:原稿子项已变化，请重新读取候选、示范或钉住点。')
   return { ...identity, host, head, draft, item, ref }
 }

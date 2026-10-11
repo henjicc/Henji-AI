@@ -7,6 +7,8 @@ export interface ApplicationCallerGrant {
   readonly permissions: readonly string[]
   readonly allowWrites: boolean
   readonly allowDestructive: boolean
+  /** Trusted host policy only; never sourced from a tool argument. */
+  readonly privateAccess?: { readonly assertCurrent: () => void }
 }
 
 const grants = new WeakSet<ApplicationCallerGrant>()
@@ -17,6 +19,7 @@ export function createApplicationCallerGrant(input: ApplicationCallerGrant): App
     ...input,
     capabilityIds: Object.freeze([...input.capabilityIds]),
     permissions: Object.freeze([...input.permissions]),
+    privateAccess: input.privateAccess && Object.freeze({ ...input.privateAccess }),
   })
   grants.add(grant)
   return grant
@@ -30,6 +33,7 @@ export function assertApplicationCallerGrant(grant: ApplicationCallerGrant): voi
   if (!grants.has(grant) || revoked.has(grant)) {
     throw new Error('PERMISSION_DENIED:连接尚未授权或已撤销，请在应用中重新授权连接。')
   }
+  grant.privateAccess?.assertCurrent()
 }
 
 export function applicationCallerAccess(
@@ -39,7 +43,7 @@ export function applicationCallerAccess(
   return {
     exposure: 'local_adapter',
     permissions: new Set(grant.permissions),
-    acceptedDataClasses: new Set(['C0', 'C1']),
+    acceptedDataClasses: new Set(grant.privateAccess ? ['C0', 'C1', 'C2'] : ['C0', 'C1']),
     requestId,
     signal,
   }
@@ -54,7 +58,7 @@ export function assertApplicationCapabilityAllowed(
     || !grant.permissions.includes(definition.permission)
     || (!definition.readOnly && !grant.allowWrites)
     || (definition.destructive && !grant.allowDestructive)
-    || definition.dataClasses.some((value) => value !== 'C0' && value !== 'C1')) {
+    || definition.dataClasses.some((value) => value !== 'C0' && value !== 'C1' && !(value === 'C2' && grant.privateAccess))) {
     throw new Error(`PERMISSION_DENIED:未授权能力 ${definition.id}，需要 ${definition.permission}；请在应用中调整连接授权。`)
   }
 }

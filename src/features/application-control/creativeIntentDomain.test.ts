@@ -6,20 +6,28 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditTestProject, closeAllVideoEdits, failVideoEditSaves } from '@/features/videoEdit/application/videoEditDocumentTestKit'
-import { appendVideoEditClip, getActiveVideoEditSequence, setVideoEditView, closeVideoEditProject, editVideoProject } from '@/features/videoEdit/application/videoEditService'
+import { appendVideoEditClip, getActiveVideoEditSequence, setVideoEditView, closeVideoEditProject, editVideoProject, updateVideoEditCreativeIntents } from '@/features/videoEdit/application/videoEditService'
 import { startVideoMotion, stopVideoMotion, demonstrateVideoMotion, recordVideoMotionPresentation, videoMotionComposition, videoMotionState } from '@/features/videoEdit/application/videoEditMotionDraft'
 import { getPlatform } from '@/platform/runtime'
 import { optimizeMotionDraft } from '@/core/creativeIntent/candidates'
 import { optimizeVideoEditMotionOffThread } from '@/features/videoEdit/application/videoEditMotionWorkerClient'
-import { intentRef } from './creativeIntentHost'
+import { intentRef, registerCreativeIntentHost } from './creativeIntentHost'
 import type { ApplicationRef } from '@/core/application-control'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from './applicationCapabilityService'
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { motionDraftSchema } from '@/core/creativeIntent/contracts'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
+import * as layoutService from '@/features/imageEdit/v3/application/imageEditLayoutDraft'
+import { imageLayoutDigest } from '@/features/imageEdit/v3/application/imageEditLayoutResources'
+import { imageCreativeIntentProvider } from '@/features/imageEdit/v3/application/imageEditCreativeIntentReflection'
+import { requireImageEditPersistenceOwnerV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
+import { createImageLayoutCandidates } from '@/core/imageEdit/v3/layoutCandidates'
+import { explanationSessionSchema } from '@/core/creativeIntent/schema'
+import { creativeIntentPrivateAccess } from './creativeIntentAuthorization'
+import { applicationTransactionFailureFactsSchema } from '@/core/application-control/applicationTransactionFailureFacts'
 
 vi.mock('@/features/videoEdit/application/videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: vi.fn(async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => {
   const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted()
@@ -78,6 +86,43 @@ it('正式 describe → change/invoke → read：钉点保持、候选应用与�
     expect(getActiveVideoEditSequence(owner).clips[0].curves).toEqual(before)
   } finally { app.dispose() }
 })
+it('原稿元数据经公共事务回执一次撤销，跨连接不可借用回执', async () => {
+  const { owner, draftRef } = await setup(), app = createApplicationHarness(), other = createApplicationHarness()
+  try {
+    const label = owner.document.creativeIntents!.drafts[0].label
+    const result = await app.change(draftRef, { 'video_edit.intent_draft.label': '可撤销名称' })
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    if (!result.ok) throw new Error('change failed')
+    expect(result.data.undoRef).toBeTypeOf('string')
+    const denied = await other.call('undo_application_changes', { undoRef: result.data.undoRef })
+    expect(denied.ok).toBe(false)
+    await app.requireResult('undo_application_changes', { undoRef: result.data.undoRef })
+    expect(owner.document.creativeIntents!.drafts[0].label).toBe(label)
+    expect((await app.call('undo_application_changes', { undoRef: result.data.undoRef })).ok).toBe(false)
+  } finally { app.dispose(); other.dispose() }
+})
+it('原稿集合复用真实证据、删除和公共撤销，不复活旧宿主缓存', async () => {
+  const { owner, draftRef } = await setup(), app = createApplicationHarness(), documentRef = { kind: 'video_edit.document', id: owner.document.id }
+  try {
+    const created = await app.requireResult('change_application_entities', { summary: '复用原稿', changes: [{ kind: 'create_items', entityType: draftRef.kind, parent: documentRef,
+      items: [{ properties: { 'video_edit.intent_draft.source_ref': draftRef, 'video_edit.intent_draft.label': '副本' } }] }] })
+    const copy = (created.resultRefs as ApplicationRef[])[0]
+    expect(owner.document.creativeIntents!.drafts).toHaveLength(2)
+    expect(owner.document.creativeIntents!.drafts[1].takes).toEqual(owner.document.creativeIntents!.drafts[0].takes)
+    const baseline = await app.read(copy)
+    const removed = await app.requireResult('change_application_entities', { summary: '删除副本', changes: [{ kind: 'remove_items', entityType: draftRef.kind, parent: documentRef, targets: [copy] }] }, baseline.revisions as Record<string, number>)
+    expect(owner.document.creativeIntents!.drafts).toHaveLength(1)
+    await app.requireResult('undo_application_changes', { undoRef: removed.undoRef })
+    expect(owner.document.creativeIntents!.drafts).toHaveLength(2)
+    const take = owner.document.creativeIntents!.drafts[1].takes[0]
+    const takeRef = { kind: 'video_edit.intent_take', id: `${copy.id}:${encodeURIComponent(take.id)}` }
+    const takeBaseline = await app.read(takeRef)
+    const deleted = await app.requireResult('change_application_entities', { summary: '移除示范', changes: [{ kind: 'remove_items', entityType: takeRef.kind, parent: copy, targets: [takeRef] }] }, takeBaseline.revisions as Record<string, number>)
+    expect(owner.document.creativeIntents!.drafts[1].takes.some(t => t.id === take.id)).toBe(false)
+    await app.requireResult('undo_application_changes', { undoRef: deleted.undoRef })
+    expect(owner.document.creativeIntents!.drafts[1].takes.some(t => t.id === take.id)).toBe(true)
+  } finally { app.dispose() }
+})
 it('权限拒绝先于 provider；已关闭实例不写入；保存失败只恢复保存', async () => {
   const { owner, draftRef } = await setup(), app = createApplicationHarness()
   try {
@@ -128,7 +173,7 @@ it('作品后续手调后，正式候选应用拒绝过期结果并保留新状�
     expect(owner.document.creativeIntents!.drafts[0].applications).toHaveLength(0)
   } finally { app.dispose() }
 })
-it('图片正式原稿名称可读写保存；未接通的批量保存动作在 describe 阶段明确拒绝', async () => {
+it('图片正式原稿名称可读写保存；损坏原稿拒绝整理并保持作品', async () => {
   const document = createImageEditDocumentV3({ documentId: 'intent-image-public', width: 8, height: 8 })
   const draft = motionDraftSchema.parse({ id: 'draft', version: 1, ownerRef: { kind: 'image_edit.document', id: `v3:${document.id}` }, mode: 'static', label: '随手摆', fidelity: .5, sourceDigest: `sha256:${'a'.repeat(64)}`, targets: [], takes: [], pins: [], clockSegments: [], constraints: [], recipeRefs: [], candidateRefs: [], applications: [] })
   document.creativeIntents = { drafts: [draft], sessions: [], resources: [] }
@@ -139,8 +184,82 @@ it('图片正式原稿名称可读写保存；未接通的批量保存动作在 
     expect(result.ok, JSON.stringify(result)).toBe(true)
     expect((await app.read(ref, ['image_edit.intent_draft.label'])).properties).toMatchObject({ 'image_edit.intent_draft.label': '图片原稿' })
     const blocked = await app.change(ref, { 'image_edit.intent_draft.fidelity': .7 })
-    expect(blocked.ok).toBe(false); expect(JSON.stringify(blocked)).toContain('保存')
+    expect(blocked.ok).toBe(false); expect(JSON.stringify(blocked)).toContain('原稿')
     expect(bus.getSnapshot().document.creativeIntents!.drafts[0].fidelity).toBe(.5)
     expect(bus.undo()).toBe(true); expect(bus.getSnapshot().document.creativeIntents!.drafts[0].label).toBe('随手摆')
   } finally { app.dispose(); dispose() }
+})
+it('正式 C2 讲解读取与封闭计划：未授权拒绝、连续输入回执、错误计划回退和撤权', async () => {
+  const { owner, draftRef } = await setup(), documentRef = { kind: 'video_edit.document', id: owner.document.id }
+  const session = explanationSessionSchema.parse({ id: 'private-recording', version: 1, ownerRef: { kind: 'document.video_edit', id: owner.document.id }, createdAt: new Date().toISOString(), state: 'reviewing', mode: 'animated',
+    sourceDigest: `sha256:${'a'.repeat(64)}`, retentionStatus: 'absent', clockSegments: [], pages: [], visualEvidenceRefs: [], bindings: [], segmentExclusions: [], corrections: [], annotationRefs: [], appliedReceiptRefs: [], finalPoseRefs: [],
+    consent: { noticeDigest: `sha256:${'b'.repeat(64)}`, userReceiptRef: 'user-consent', capture: true, keepAudio: false, audioUpload: false, textUpload: false, imageUpload: false } })
+  updateVideoEditCreativeIntents(owner.document.id, { ...owner.document.creativeIntents!, sessions: [session] })
+  const raw = { documentRef, sessionId: session.id, offset: 0, imageOffset: 0 }
+  expect(() => creativeIntentPrivateAccess('read_video_edit_intent_recording', raw)).toThrow('PERMISSION_DENIED')
+  session.consent!.textUpload = true
+  updateVideoEditCreativeIntents(owner.document.id, { ...owner.document.creativeIntents!, sessions: [session] })
+  const createSession = (capabilityId: string, input: unknown) => createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'private-caller', capabilityIds: [capabilityId],
+    permissions: ['video_edit:read', 'video_edit:write'], allowWrites: true, allowDestructive: false, privateAccess: creativeIntentPrivateAccess(capabilityId, input) }))
+  const read = createSession('read_video_edit_intent_recording', raw)
+  const result = await read.execute({ id: 'read_video_edit_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  expect(result.ok, JSON.stringify(result)).toBe(true)
+  if (!result.ok) throw new Error('private read failed')
+  expect(result.data.inputReceipt).toBeTypeOf('string')
+  expect(result.data.semanticImages).toEqual([])
+  expect(JSON.stringify(result.data)).not.toContain('input_audio')
+  const proposed = { draftRef, sessionId: session.id, inputReceipt: result.data.inputReceipt, semanticPlan: { draftDigest: `sha256:${'f'.repeat(64)}`, actions: [], protectedRefs: [], questions: [] } }
+  const interpreted = await createSession('interpret_video_edit_intent', proposed).execute({ id: 'interpret_video_edit_intent', version: 1, input: proposed }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  expect(interpreted.ok, JSON.stringify(interpreted)).toBe(true)
+  if (interpreted.ok) expect(interpreted.data.status).toBe('local_fallback')
+  const replay = await createSession('interpret_video_edit_intent', proposed).execute({ id: 'interpret_video_edit_intent', version: 1, input: proposed }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  expect(replay.ok).toBe(false)
+  session.consent!.textUpload = false
+  updateVideoEditCreativeIntents(owner.document.id, { ...owner.document.creativeIntents!, sessions: [session] })
+  await expect(read.execute({ id: 'read_video_edit_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
+})
+it('图片正式保真度、钉点、应用保存失败恢复和公共撤销共用原布局服务，无事务互等', async () => {
+  const document = createImageEditDocumentV3({ documentId: 'image-intent-transaction', width: 1000, height: 600 })
+  document.layers = ['a', 'b', 'c'].map((id, i) => ({ ...createImageEditRasterLayerV3(id, id), transform: [1, 0, 0, 1, i * 150, i * 13] }))
+  const bus = new ImageEditCommandBusV3(document), values = new Map<string, unknown>()
+  let fail = false
+  const save = vi.fn(async (value: typeof document) => { if (fail) throw new Error('disk unavailable'); return { documentId: value.id, revision: value.revision, previewRef: null } })
+  const dispose = registerPersistedImageEditTestSession('image-intent-transaction', bus, { save })
+  const owner = requireImageEditPersistenceOwnerV3(document.id)
+  const adapter = new layoutService.ImageEditLayoutDraft(bus, { measure: async () => [[0, 0], [50, 0], [50, 30], [0, 30]],
+    compute: async input => createImageLayoutCandidates(input.items, input.constraints, input.identity, input.fidelity),
+    confirm: () => owner.confirm(), confirmStep: async (context, settled) => { owner.acceptCurrent(); await owner.confirmStep(context, settled) }, release: async () => undefined,
+    store: async (value, kind) => { const digest = await imageLayoutDigest(value); values.set(digest, value); return { resourceId: digest, digest, kind, path: `resources/${digest.slice(7)}`, bytes: new TextEncoder().encode(JSON.stringify(value)).length,
+      ...(value && typeof value === 'object' && 'sourceDigest' in value ? { sourceDigest: String(value.sourceDigest) } : {}) } }, read: async resource => values.get(resource.resourceId) })
+  vi.spyOn(layoutService, 'imageEditLayoutDraft').mockReturnValue(adapter)
+  const app = createApplicationHarness()
+  registerCreativeIntentHost({ ...imageCreativeIntentProvider, readResource: async resource => values.get(resource.resourceId) })
+  try {
+    await adapter.organize(['a', 'b', 'c'])
+    const draft = adapter.snapshot().draft!, draftRef = intentRef(draft.ownerRef, 'intent_draft', draft.id)
+    expect((await app.change(draftRef, { 'image_edit.intent_draft.fidelity': .2 })).ok).toBe(true)
+    const pinned = await app.requireResult('change_application_entities', { summary: '钉住图片位置', changes: [{ kind: 'create_items', entityType: 'image_edit.intent_pin', parent: draftRef,
+      items: [{ properties: { 'image_edit.intent_pin.sample_id': adapter.snapshot().entries[0].sample.sampleId } }] }] })
+    expect(bus.getSnapshot().document.creativeIntents!.drafts[0].pins).toHaveLength(1)
+    await app.requireResult('undo_application_changes', { undoRef: pinned.undoRef })
+    const current = bus.getSnapshot().document.creativeIntents!.drafts[0], candidateRef = intentRef(draft.ownerRef, 'intent_candidate', draft.id, current.candidateRefs[0].resourceId)
+    const before = structuredClone(bus.getSnapshot().document.layers), history = bus.getHistoryView().position
+    fail = true
+    const failed = await app.change(candidateRef, { 'image_edit.intent_candidate.applied': true })
+    expect(failed.ok).toBe(false)
+    if (failed.ok) throw new Error('Expected controlled save failure')
+    const failedReceipt = applicationTransactionFailureFactsSchema.parse(failed.error.details?.transaction)
+    expect(failedReceipt.undoRef).toBeTypeOf('string')
+    expect(bus.getSnapshot().document.creativeIntents!.drafts[0].applications).toHaveLength(1)
+    expect(bus.getHistoryView().position).toBe(history + 1)
+    const after = structuredClone(bus.getSnapshot().document.layers)
+    fail = false
+    const recovered = await app.change(candidateRef, { 'image_edit.intent_candidate.saved': true })
+    expect(recovered.ok, JSON.stringify(recovered)).toBe(true)
+    expect(bus.getSnapshot().document.layers).toEqual(after)
+    expect(bus.getHistoryView().position).toBe(history + 1)
+    expect((await app.read(candidateRef, ['image_edit.intent_candidate.saved'])).properties).toMatchObject({ 'image_edit.intent_candidate.saved': true })
+    await app.requireResult('undo_application_changes', { undoRef: failedReceipt.undoRef })
+    expect(bus.getSnapshot().document.layers).toEqual(before)
+  } finally { fail = false; registerCreativeIntentHost(imageCreativeIntentProvider); app.dispose(); dispose() }
 })

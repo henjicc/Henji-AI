@@ -91,6 +91,24 @@ function applicationCatalog(allowWrites = true) {
 }
 
 describe('Pi official SDK engine', () => {
+  it('授权讲解 JSONL 与历史附图经正式 Pi 消息进入受控模型 transport，用量复用原循环', async () => {
+    const f = await fixture({ image: true })
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('read_image_edit_intent_recording')!
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: [{ name: definition.id, description: definition.description,
+      inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }] } })
+    const digest = `sha256:${'a'.repeat(64)}`
+    f.tool.mockResolvedValue({ ok: true, data: { lines: ['{"kind":"event","type":"speech","text":"调整构图"}'], nextOffset: null, nextImageOffset: null, inputReceipt: 'complete-input',
+      semanticImages: [{ mimeType: 'image/jpeg', data: 'aGlzdG9yaWNhbC1pbWFnZQ==', manifest: { id: 'history', kind: 'frame', resourceRef: { resourceId: 'history', digest, bytes: 16 }, size: [640, 360], pixelBudget: 2500000,
+        frames: [{ seq: 1, monoUs: 1, timeline: null, unavailableReason: 'static', clockSegmentRef: 'static', eventId: 'pointer', stateDigest: digest, geometrySnapshotRef: 'geometry', sourceRefs: [], pointer: [.2, .3], reason: 'appearance', attachmentRect: [0, 0, 640, 360] }] } }] } })
+    f.setToolPlan([{ name: 'load_application_tools', arguments: { names: [definition.id] } }, { name: definition.id, arguments: { documentRef: { kind: 'image_edit.document', id: 'v3:test' }, sessionId: 'session', offset: 0, imageOffset: 0 } }])
+    await f.engine.command({ action: 'prompt', input: { text: '根据已授权讲解整理', context: '' } })
+    expect(f.requests).toHaveLength(3)
+    const payload = JSON.stringify(f.requests[2])
+    expect(payload).toContain('调整构图'); expect(payload).toContain('image_url')
+    expect(payload).toContain('data:image/jpeg;base64,aGlzdG9yaWNhbC1pbWFnZQ==')
+    expect(payload).not.toContain('input_audio')
+    expect(f.events.filter(event => event.type === 'log').every(event => !JSON.stringify(event).includes('调整构图'))).toBe(true)
+  })
   it('DeepSeek 用量按输入 token 加权汇总，失败仍输出汇总', async () => {
     const f = await fixture()
     f.setUsage({ prompt_tokens: 1000, completion_tokens: 20, total_tokens: 1020, prompt_cache_hit_tokens: 900, prompt_cache_miss_tokens: 100 })

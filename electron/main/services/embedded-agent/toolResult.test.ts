@@ -36,4 +36,21 @@ describe('Pi media result boundary', () => {
     await expect(executePiTool({ ...input, signal: controller.signal }, call)).rejects.toThrow()
     expect(call).not.toHaveBeenCalled()
   })
+  it('讲解附图只进原生图像块；无视觉或无效附件不泄漏字节与完成回执', async () => {
+    const digest = `sha256:${'a'.repeat(64)}`
+    const manifest = { id: 'frame', kind: 'frame', resourceRef: { resourceId: 'image', digest, bytes: 3 }, size: [640, 360], pixelBudget: 2500000,
+      frames: [{ eventId: 'point', seq: 1, monoUs: 1, timeline: null, unavailableReason: 'static', clockSegmentRef: 'clock', stateDigest: digest,
+        geometrySnapshotRef: 'geometry', sourceRefs: [], pointer: null, reason: 'pointing', attachmentRect: [0, 0, 640, 360] }] }
+    const semanticImage = { mimeType: 'image/jpeg', data: 'cHJpdmF0ZS1waXhlbHM=', manifest }
+    const response = { ok: true, data: { lines: ['private transcript'], semanticImages: [semanticImage], inputReceipt: 'complete-input' } }
+    const call = vi.fn().mockResolvedValue(response), recording = { ...input, name: 'read_image_edit_intent_recording' }
+    const result = await executePiTool(recording, call)
+    expect(result.content[1]).toEqual({ type: 'image', mimeType: semanticImage.mimeType, data: semanticImage.data })
+    expect(JSON.stringify(result.content[0])).not.toContain(semanticImage.data)
+    const blind = await executePiTool({ ...recording, vision: false }, call)
+    expect(JSON.stringify(blind)).not.toContain(semanticImage.data)
+    expect(JSON.stringify(blind)).not.toContain('complete-input')
+    call.mockResolvedValue({ ok: true, data: { ...response.data, semanticImages: [{ ...semanticImage, manifest: {} }] } })
+    await expect(executePiTool(recording, call)).rejects.toThrow()
+  })
 })

@@ -4,7 +4,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCap
 /** 由能力原声明生成可调用集合；没有第二份 MCP 业务名单。未接好执行器由覆盖门禁报错。 */
 export function isExternalApplicationTool(definition: ApplicationCapabilityDefinition): boolean {
   return definition.side === 'frontend' && !definition.external
-    && definition.dataClasses.every(value => value === 'C0' || value === 'C1')
+    && definition.dataClasses.every(value => value === 'C0' || value === 'C1' || value === 'C2')
 }
 
 export function projectExternalCapabilities(definitions: readonly ApplicationCapabilityDefinition[]) {

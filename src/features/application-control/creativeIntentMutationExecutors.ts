@@ -24,7 +24,7 @@ export class CreativeIntentMutationExecutor implements ApplicationMutationExecut
   async apply(step: Step, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     context.signal?.throwIfAborted()
     const record = intentRecord(step.target), finish = record.host.checkpoint()
-    const state: IntentWrite = { record, writes: [] }
+    const state: IntentWrite = { record, writes: [], context }
     await applyWriterTable(this.table, state, step.mutations)
     logger.info('原稿修改开始', { event: 'creative_intent.change.start', requestId: context.requestId, entityType: this.entityType })
     try {

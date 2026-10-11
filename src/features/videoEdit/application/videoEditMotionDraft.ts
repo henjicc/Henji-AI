@@ -37,6 +37,24 @@ const listeners = new Set<() => void>(); let revision = 0
 export function subscribeVideoMotion(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function videoMotionRevision(): number { return revision }
 export function videoMotionState(owner: VideoEditInstance): VideoMotionState | undefined { return states.get(owner) }
+/** Public metadata CRUD must invalidate the same document-owned preview/capture cache. */
+export function syncVideoMotionMetadata(owner: VideoEditInstance): void {
+  const state = states.get(owner), runtime = runtimes.get(owner)
+  if (!state || !runtime) return
+  if (state.status !== 'reviewing') throw new Error('请先结束当前示范或整理，再修改原稿集合。')
+  const draft = head(owner).drafts.find(value => value.id === state.draft.id)
+  if (!draft) {
+    runtime.controller?.abort(); runtime.release(); runtime.unsubscribe()
+    if (runtime.flushTimer) clearTimeout(runtime.flushTimer)
+    states.delete(owner); runtimes.delete(owner); owner.motionRecording = false
+    revision++; listeners.forEach(listener => listener()); return
+  }
+  const candidatesChanged = JSON.stringify(state.draft.candidateRefs) !== JSON.stringify(draft.candidateRefs)
+  state.draft = structuredClone(draft)
+  state.selectedTakeIds = head(owner).motionOptions?.find(options => options.draftId === draft.id)?.selectedTakeIds
+  if (candidatesChanged) { runtime.controller?.abort(); runtime.inputRevision++; state.candidates = []; state.original = undefined; state.preview = 'original' }
+  publish(state)
+}
 function publish(state: VideoMotionState, preview = true): void {
   if (preview) runtimes.get(state.owner)!.previewRevision++
   revision++; for (const listener of listeners) listener()

@@ -15,6 +15,7 @@ import { imageLayoutDigest, storeImageLayoutResource, readImageLayoutResource, r
 import { findImageEditDocumentInstanceV3, leaseImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
 import { findImageEditLayerLocationV3 } from '../editor/layerTreeV3'
 import type { Affine } from '@/core/imaging/transforms'
+import type { ApplicationExecutionContext } from '@/core/application-control'
 
 const logger = createLogger('features.imageEdit.v3.layout')
 const PAGE_ENTRIES = 64 // Per-page I/O/scheduling budget; the whole selection is processed.
@@ -27,6 +28,7 @@ interface LayoutPorts {
   compute?:(input:ImageLayoutComputeInput,signal:AbortSignal)=>Promise<LayoutCandidate[]>
   store:typeof storeImageLayoutResource; read:typeof readImageLayoutResource
   confirm:()=>Promise<unknown>; release:(id:string)=>Promise<void>
+  confirmStep?:(context:ApplicationExecutionContext|undefined,settled:()=>Promise<void>)=>Promise<void>
 }
 function baseOf(document:ImageEditDocumentV3): unknown { return { geometry:document.geometry,color:document.color,layers:document.layers } }
 /** Document-owned adapter. UI and the future P1-5 executor consume this same entry, never a second layout implementation. */
@@ -79,8 +81,11 @@ export class ImageEditLayoutDraft {
     try { const document=this.bus.dispatch(this.command(this.head(draft),createImageEditIdV3('layout-draft'))); this.update({draft,revision:document.revision,needsSave:true}) }
     finally {this.ownWrite=false}
   }
-  private async confirm():Promise<void> {
-    await this.ports.confirm(); this.update({needsSave:false}); await this.releasePending()
+  private async confirm(context?:ApplicationExecutionContext):Promise<void> {
+    const document=this.bus.getSnapshot().document
+    const settled=async()=>{if(this.bus.getSnapshot().document===document)this.update({needsSave:false});await this.releasePending()}
+    if(this.ports.confirmStep) await this.ports.confirmStep(context,settled)
+    else {await this.ports.confirm();await settled()}
   }
   private async releasePending():Promise<void> { for (const lease of this.pendingLeases) { await this.ports.release(lease); this.pendingLeases.delete(lease) } }
   private async store(value:unknown,kind:StoredCreativeIntentResource['kind'],lease:string):Promise<StoredCreativeIntentResource> {
@@ -89,7 +94,7 @@ export class ImageEditLayoutDraft {
   async organize(ids:readonly string[],preferred=this.state.selected):Promise<void> {
     await this.organizeDraft(ids,preferred)
   }
-  private async organizeDraft(ids:readonly string[],preferred:string,configured?:MotionDraft):Promise<void> {
+  private async organizeDraft(ids:readonly string[],preferred:string,configured?:MotionDraft,context?:ApplicationExecutionContext):Promise<void> {
     if(this.state.needsSave)throw new Error('请先重试保存，再继续整理')
     const previous=this.state,baseDocument=this.bus.getSnapshot().document
     this.cancel(); const abort=new AbortController(); this.abort=abort; const generation=++this.generation
@@ -151,7 +156,7 @@ export class ImageEditLayoutDraft {
       this.preview(this.state.selected)
       performance.measure('image-layout-candidate-generation', { start: started, end: performance.now() })
       performance.clearMeasures('image-layout-candidate-generation')
-      await this.confirm()
+      await this.confirm(context)
       logger.info('图片布局候选已完成',{event:'image_edit.layout.optimize.completed',context:{layers:items.length,candidateMs:performance.now()-started,candidates:candidates.length}})
     } catch(error) {
       if(generation===this.generation) this.update({...(!persisted?{...previous,candidates:[],selected:'original',baseDigest:this.bus.getSnapshot().document===baseDocument?previous.baseDigest:''}:{}),status:(persisted?this.state.draft:previous.draft)?'reviewing':'idle',message:abort.signal.aborted?'已取消整理，原稿保留':error instanceof Error?error.message:String(error),messageTone:abort.signal.aborted?'status':'error'})
@@ -193,7 +198,7 @@ export class ImageEditLayoutDraft {
       return live.layer.transform.some((v,i)=>v!==transform[i])?[{layerId:entry.layerId,transform}]:[]
     })
   }
-  async configure(options:{fidelity?:number;pinIds?:readonly string[];unpin?:string}):Promise<void> {
+  async configure(options:{fidelity?:number;pinIds?:readonly string[];unpin?:string},context?:ApplicationExecutionContext):Promise<void> {
     if(this.state.needsSave)throw new Error('请先重试保存，再调整布局')
     const draft=this.state.draft
     if(!draft) throw new Error('请先整理随手摆原稿')
@@ -207,10 +212,10 @@ export class ImageEditLayoutDraft {
     const updated=motionDraftSchema.parse({...draft,pins,fidelity:options.fidelity??draft.fidelity,candidateRefs:[],selectedCandidateRef:undefined})
     updated.sourceDigest=await imageLayoutDigest({pages:updated.takes.flatMap(t=>t.samplePages),recipes:updated.recipeRefs,pins,fidelity:updated.fidelity})
     // 一次停手只保存完整的新候选，避免先落盘空候选，再为同一设置保存第二遍。
-    await this.organizeDraft([],preferred,updated)
+    await this.organizeDraft([],preferred,updated,context)
   }
-  async apply():Promise<void> {
-    if(this.state.needsSave) {await this.confirm();this.update({message:'布局已保存',messageTone:'status'}); return}
+  async apply(context?:ApplicationExecutionContext):Promise<void> {
+    if(this.state.needsSave) {await this.confirm(context);if(!this.state.needsSave)this.update({message:'布局已保存',messageTone:'status'});return}
     const draft=this.state.draft,candidate=this.state.candidates.find(c=>c.id===this.state.selected)
     if(!draft||!candidate) throw new Error('请先选择整理候选')
     const document=this.bus.getSnapshot().document
@@ -226,7 +231,7 @@ export class ImageEditLayoutDraft {
     this.clearPreviews(); this.ownWrite=true
     try {const next=this.bus.dispatch({type:'document.atomic',commandId,expectedRevision:document.revision,commands}); this.update({draft:applied,revision:next.revision,candidates:[],selected:'original',needsSave:true})}
     finally {this.ownWrite=false}
-    await this.confirm()
+    await this.confirm(context)
     this.update({message:'已应用，可撤销',messageTone:'status'})
     logger.info('图片布局已应用',{event:'image_edit.layout.apply.completed',context:{commandId,layers:changes.length}})
   }
@@ -291,6 +296,7 @@ export function imageEditLayoutDraft(bus:ImageEditCommandBusV3):ImageEditLayoutD
     measure:(document,layer,signal,matrix)=>measureImageLayoutLayer(document,layer,signal,matrix,bus.getResourceByteSizes()),
     compute:(input,signal)=>computer.compute(input,signal),
     confirm:async()=>{const owner=findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner;if(!owner) throw new Error('图片暂时无法保存，请重试保存');return owner.confirm(true)},
+    confirmStep:async(context,settled)=>{const owner=findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner;if(!owner)throw new Error('图片暂时无法保存，请重试保存');owner.acceptCurrent();await owner.confirmStep(context,settled)},
     release:releaseImageLayoutResources});adapters.set(bus,adapter)}
   return adapter
 }

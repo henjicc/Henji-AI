@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
+import { semanticIntentImageSchema } from '../../../../src/core/creativeIntent/semanticIntentInput'
 
 const chunkSchema = z.object({ mimeType: z.string(), base64: z.string(), offset: z.number().int().nonnegative(),
   byteLength: z.number().int().positive(), totalBytes: z.number().int().positive(), eof: z.boolean() })
@@ -18,7 +19,22 @@ function applicationResultText(result: unknown): string {
 
 /** 仅消费受控媒体工具返回的字节，不解析路径或下载任意 URL。 */
 export async function executePiTool(input: { id: string; name: string; args: Record<string, unknown>; signal?: AbortSignal; vision: boolean }, call: CallTool): Promise<ToolResult> {
-  if (input.name !== 'read_application_media') return textResult(applicationResultText(await call(input.id, input.name, input.args, input.signal)))
+  if (input.name !== 'read_application_media') {
+    const result = await call(input.id, input.name, input.args, input.signal)
+    const text = applicationResultText(result)
+    input.signal?.throwIfAborted()
+    const envelope = z.object({ data: z.object({}).passthrough() }).passthrough().safeParse(result)
+    if (!envelope.success || !('semanticImages' in envelope.data.data)) return textResult(text)
+    const { semanticImages: rawImages, ...data } = envelope.data.data
+    const semanticImages = z.array(semanticIntentImageSchema).parse(rawImages)
+    if (!semanticImages.length) return textResult(text)
+    if (!input.vision) {
+      const { inputReceipt: _receipt, ...remaining } = data
+      return textResult(JSON.stringify({ ...envelope.data, data: remaining, message: '本段讲解需要历史画面。请切换支持图片的模型或手动绑定对象；尚未读取图像，不得提交语义计划。' }))
+    }
+    return { content: [{ type: 'text', text: JSON.stringify({ ...envelope.data, data: { ...data, semanticImages: semanticImages.map(image => image.manifest) } }) },
+      ...semanticImages.map(image => ({ type: 'image' as const, mimeType: image.mimeType, data: image.data }))], details: undefined }
+  }
   if (!input.vision) return textResult('当前模型不支持图片理解。请让用户切换支持图片的模型；可以继续读取媒体记录的文字属性，不要声称已看到图片。')
   const chunks: Buffer[] = []
   let offset = 0

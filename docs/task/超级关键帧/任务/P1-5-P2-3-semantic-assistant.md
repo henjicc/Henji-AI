@@ -79,3 +79,96 @@
 - `docs/rules/assistant-status.md`：如实登记新增通路与未接通边界。
 - `docs/task/超级关键帧/02-实施拆分.md`：仅追加 t156 状态行。
 - 本文件：任务设计、证据与交接边界。
+
+
+## t158 接通
+
+2026-10-11，状态：部分接通，待总管理者审查；不能登记整单完成。未执行 Git 写操作、未修改 SDK、未跑 Reality/assistant:cli、未启动或重启开发环境、无真实付费调用。
+
+### 本轮实现与覆盖分级
+
+- C2 原等级保留；统一 caller grant 增加可信宿主 policy，连接权限和会话 textUpload consent 共同成立才放行，每次使用及读取资源后复核，撤权同时取消在途请求。C2 能力进入正式目录；工具参数不能创建授权。普通原稿属性和增删为通用实体覆盖，语义整理仍是既有算法能力。
+- JSONL 与必要受管图像经同一公共工具返回，再转换为 Pi 原生 image 内容块；沿正式 Pi 模型、费用/额度及工具授权通路，不新增供应商 client，不读取原音。连续文字及图片分页完成后才发 inputReceipt；过期/遗漏输入不能提交封闭计划。长句分片而不截断；模型不支持视觉时不交付图像完成回执。
+- 附图按未解决指代与外观请求挑选，区分不同时间/visit/状态，按最多 3 帧常规批次传输；既有多帧拼图先按每帧矩形裁取原像素，逐帧缩放至长边不超过 640px 并继续分批，不因六帧预算截掉未解决指代，单附件校验 2.5MP 像素预算。manifest 保留时间、指向与缩放后的矩形；尚未完成图内图注/指针叠层及复杂指代前后帧最优挑选，不能把此项称为 §6.1 全部完成。
+- 图片 configure/apply 复用 ImageEditLayoutDraft；事务内步骤登记保存后回调并立即返回，整批统一确认，消除原保存互等。失败保持应用事实，恢复只确认当前快照，不重放图层修改、不增加作品历史；公共 saved 由持久化 owner 的真实确认状态投影。
+- 共享事务引擎在所有业务步骤完成而保存失败时也保留 undoRef；change_application_entities 返回 undoRef，新增领域无关的 undo_application_changes，核对连接归属、原事务权限和版本。原稿名称、钉点与原稿增删通过公共入口撤销；剪辑原稿可从同文档真实示范复制创建/删除，示范可复用同目标/同采集时钟证据、删除并清理关联钉点。删除同步原宿主缓存，避免复活被删原稿。图片静态 take 仍只读，不能声称完整双端 CRUD 已完成。
+- 封闭计划错误摘要和不能编译的组合回退本地整理；真实 Pi SDK 通过本机受控 HTTP/SSE transport 验证讲解和 JPEG 字节确实进入模型请求。没有外部模型请求，真实理解质量未验证。Pi 上游网络/模型失败后的自动本地降级尚未在生产调度层接通，不能仅凭 core propose 替身称其完成。
+
+### 需要协调的阻塞
+
+1. 私密正文写入与公共撤销尚未接通。图片 ImageEditExplanation 当前校正会等待原 confirm，且内存 collector 会覆盖直接修改的文档头；需要 t157 提供事务内校正及恢复会话接口。已在会话中请求总管理者协调，未越权修改 imageEditExplanation*.ts/editor/recording。
+2. textUpload/imageUpload 的本机可信确认入口仍缺失，现有新建会话默认 false；本轮只消费授权事实，未将其改成默认授权，也未开放让助手自行写 true 的旁路。因此普通新录制会话会被正确拒绝，不能宣称用户语义闭环已可用。
+3. 公共 undoRef 当前为当前宿主进程内回执，重启后应沿正式历史恢复；共享引擎已补“业务全部完成、仅保存失败”的公共撤销回执，图片已验证失败→恢复保存→原公共回执撤销；部分执行或补偿后的事务不会冒充全事务可撤销。
+4. 两端后台整理仍要求原宿主有效；剪辑要求目标片段已选中，不隐式切换编辑目标。未覆盖真实 Electron、真实图像编码像素效果、真实模型/ASR 效果和完整跨工作区视觉验收。
+
+### 选型与设计自查
+
+沿用现有 Zod 封闭 schema、官方 Pi SDK、原通用事务引擎、图片持久化 owner 和布局服务；图片转码复用 Chromium 原生 createImageBitmap/OffscreenCanvas，不新增依赖/模型执行器。与引入第二套审批、LLM client、图片保存器相比，此选择保留原权限、费用与恢复责任；本轮没有新的算法库选型。
+
+1. 助手只凭名称和说明能否用对？已接通入口说明了读取分页、图像授权、完整输入回执、候选确认与保存恢复；正文写入尚未注册，不能声称全套可用。
+2. 能否 AI 先做、人只确认？本地整理和封闭计划先出候选，歧义/否定保护先确认，应用仍沿原工具；本机外发同意必须由用户完成，当前 UI 入口待协调。
+3. 产物能否直接流进其他工作区？应用产物仍是原图片文档/普通剪辑曲线，沿已有资源与作品链路流转；本轮无新中间作品格式，跨工作区真实验收未运行。
+
+### t158 检查结果
+
+按 testing.md L2（统一授权、公共契约与持久化屏障）及本次用户指定目录执行；分目录、单 fork、--silent，不运行全量/Reality。最终以下记录去重复用本轮已通过且未失效的精确证据，历史 t156 证据不替代本轮。
+
+- core/creativeIntent：首轮 13 文件 122 项中 1 项同步授权时机失败，恢复同步前置检查后精确重跑通过；本轮新增的拼图分批测试也通过。
+- core/application-control：28 文件 146 项 + callerContext 1 项通过；共享引擎补保存失败 undoRef 后，engine/failureReporting 17 项再通过。
+- features/application-control：16 文件 96 项 + creativeIntentDomain 9 项 + creativeIntentImages 1 项通过；公共失败回执修复后 domain 9 项与 adapter 16 项已精确复验。
+- src/tests：20 文件 82 项通过，1 文件/1 项既有性能基准按默认配置跳过，0 失败。
+- videoEdit/application：77 文件 629 项通过，1 文件/1 项既有性能基准按默认配置跳过，0 失败。
+- 两套 tsc 在最后共享引擎改动后均通过；本轮曾修复新测试 afterEach 返回 VitestUtils 的类型错误。
+- 图片输入/Pi 新测试 32 项首轮 31 通过、1 项测试夹具缺 pointer 失败，补显式 pointer:null 后对应 5 项通过；Pi SDK transport 的 25 项通过，无外部付费请求。
+- check:assistant-capabilities:structure、check:main-imports（629 文件）、check:ipc-contract（352 请求/2 端口/25 订阅）、check:persistence-compat（41 格式）、check:ui-residue 通过。
+- check:dead-code 退出 0：1 个存量未使用文件、0 个存量未使用依赖、2113 导出/类型仅报告；另有既有 unlisted/unresolved 诊断，未改基线。
+- check:dependency-graph 首轮失败于并行 t157 的三条讲解面板跨 feature 导入；对方随后改为公共 index 入口，本轮复验退出 0（363 条跨 feature 非 index 导入，0 条冻结跨层边）。未修改对方文件或扩大基线。
+- imageEdit/v3/application：剩余 24 文件 120 项通过、1 项既有分页性能基准跳过；复用本轮 owner 10 项和 layout 8 项，目录共 26 文件、138 项通过、1 项跳过，0 失败。
+- embedded-agent：剩余 6 文件 29 项，加 Pi 25 项及 toolResult 5 项，8 文件 59 项全部通过。
+- 七目录按去重证据合计 193 文件、1283 项通过、3 项既有性能基准跳过，0 个未解决失败；不将跳过的性能基准称为已验证。
+- npm run test:assistant-persistence：9 文件、83 项通过、0 跳过。只使用无窗口原生 SQLite 运行器，没有启动开发实例。
+- check:assistant-capabilities 按 structure / coverage / invariants 去重完成：structure 通过；coverage 13 项复用本轮 core 目录；invariants 复用已通过目录项，剩余 22 文件加共享引擎受影响的 2 个公共失败测试，共 24 文件 134 项通过。没有以命令尚未运行或历史结果冒充门禁通过。
+- 本轮文件 ESLint 已通过，最后修改文件也分别补验。图片目录命令首轮重复传 --exclude 被当前 Vitest CLI 拒绝，没有执行测试；改用单个 brace glob 后继续。
+
+### t158 文件清单
+
+- `electron/main/services/embedded-agent/piEngine.test.ts`：正式 Pi SDK 配受控本机 HTTP/SSE transport，验证正文和图片进入真实消息。
+- `electron/main/services/embedded-agent/toolResult.ts`：将公共语义附件转换为 Pi 原生图片，拒绝无效附件及无视觉完成回执。
+- `electron/main/services/embedded-agent/toolResult.test.ts`：补充图像字节隔离、非视觉模型与无效附件边界。
+- `src/core/application-control/callerContext.ts`：统一可信 C2 policy、实时撤权与不可变 grant。
+- `src/core/application-control/callerContext.test.ts`：验证 C2 默认拒绝、可信放行、伪造/撤权/写权限拒绝。
+- `src/core/application-control/domains/creativeIntent/creativeIntentCapabilities.ts`：正式发现、图文批次与封闭计划输入回执契约。
+- `src/core/application-control/domains/shared/applicationReflectionApplicationCapabilities.ts`：公开通用 change 的 undoRef 与通用撤销能力。
+- `src/core/application-control/externalCapabilityPolicy.ts`：允许 C2 元数据发现，执行仍受统一 grant 约束。
+- `src/core/creativeIntent/semanticIntentRecording.ts`：长 JSONL 记录分片，保留同步授权前置检查。
+- `src/core/creativeIntent/semanticIntentInput.ts`：必要视觉选帧、拆分既有拼图与像素预算。
+- `src/core/creativeIntent/semanticIntentInput.test.ts`：验证跨批不丢帧、不同时间不误去重、矩形缩放及大拼图分批。
+- `src/features/application-control/applicationCapabilityService.ts`：正式能力发现不再一刀切隐藏 C2。
+- `src/features/application-control/capabilities/applicationReflectionAdapter.ts`：同连接事务撤销回执与版本核验。
+- `src/features/application-control/capabilities/registry.ts`：通用撤销处理器注册。
+- `src/features/application-control/creativeIntentAuthorization.ts`：从正式会话同意与当前宿主构建可信授权检查。
+- `src/features/application-control/creativeIntentCollectionExecutor.ts`：原稿/剪辑示范增删与公共撤销，读取冲突不回滚外部编辑。
+- `src/features/application-control/creativeIntentDomain.test.ts`：公共 C2/原稿 CRUD/元数据撤销/双端保存恢复结果回归。
+- `src/features/application-control/creativeIntentDomain.ts`：连续图文读取回执、授权复核、必要附图和集合执行器接线。
+- `src/features/application-control/creativeIntentFields.ts`：配置/应用透传事务上下文，增加复用源引用属性。
+- `src/features/application-control/creativeIntentHost.ts`：宿主保存/恢复/视觉资源端口及保存回执投影。
+- `src/features/application-control/creativeIntentImages.ts`：原生图像编解码、按帧裁切和 manifest 坐标转换。
+- `src/features/application-control/creativeIntentImages.test.ts`：裁切/缩放、原稿不变与编码失败释放测试。
+- `src/features/application-control/creativeIntentMutationExecutors.ts`：向原业务 writer 传递统一执行上下文。
+- `src/features/application-control/creativeIntentReflection.ts`：移除已修图片事务阻断，注册原稿与示范集合写入。
+- `src/features/application-control/localApplicationHost.ts`：在可信唯一宿主入口创建私密授权，撤权取消在途任务。
+- `src/features/imageEdit/v3/application/imageEditCreativeIntentReflection.ts`：图片原布局服务事务接线、保存恢复与受管附图读取。
+- `src/features/imageEdit/v3/application/imageEditLayoutDraft.ts`：原布局配置/应用支持事务内延迟确认。
+- `src/features/imageEdit/v3/application/imageEditPersistenceOwner.test.ts`：批次无互等、失败恢复与无效事务范围回归。
+- `src/features/imageEdit/v3/application/imageEditPersistenceOwner.ts`：统一保存屏障后回调与真实保存状态。
+- `src/features/videoEdit/application/videoEditCreativeIntentReflection.ts`：元数据提交同步宿主、原应用恢复及视觉资源读取。
+- `src/features/videoEdit/application/videoEditMotionDraft.ts`：必要范围扩展：删除或改变示范后同步原宿主缓存，防止复活已删数据。
+- `docs/rules/assistant-status.md`：登记已接通部分并保留正文授权写入等欠账。
+- `docs/task/超级关键帧/02-实施拆分.md`：仅更新 P1-5 的 t156/t158 状态行。
+- `docs/task/超级关键帧/任务/P1-5-P2-3-semantic-assistant.md`：在末尾追加本节及验证/风险/设计自查。
+
+- `src/core/application-control/execution/engine.ts`：必要共享范围扩展，保存屏障失败后保留完整业务事务的撤销回执，不给部分/已补偿执行伪造整组撤销。
+
+### t158 交接结论
+
+35 个文件留在工作区，交总管理者审查及 Git 提交。代码与单测阶段已结束，以上明确欠账仍在；不得把“七目录零失败”写成整单完成。主进程 toolResult 已改变，后续实际验收须由总管理者构建新产物；本轮按要求不 bundle、不跑 Reality、不启停开发实例。共享引擎新增分支的排查覆盖完整执行后保存失败、部分失败报告、公共回执归属、图片恢复及原回执撤销；未扩展为全项目审计。

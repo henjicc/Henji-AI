@@ -195,6 +195,7 @@ const changeEntities = defineApplicationCapability({
   outputSchema: capabilityOutputSchema({
     status: z.literal('completed'),
     transactionRef: z.string(),
+    undoRef: z.string().optional(),
     verification: applicationVerificationResultSchema.optional(),
     resultingRevisions: z.record(z.string(), z.number().int().nonnegative()),
     resultRefs: z.array(z.record(z.string(), z.unknown())),
@@ -285,6 +286,19 @@ const changeEntities = defineApplicationCapability({
   }),
 })
 
+const undoEntities = defineApplicationCapability({
+  id: 'undo_application_changes', version: 1, title: '撤销一组应用修改', domain: 'application',
+  description: '使用 change_application_entities 返回的 undoRef 撤销整组修改，包括原稿元数据。只接受本连接的未使用回执；仍检查原权限、当前版本并确认保存。保存未确认时只恢复保存，不重复撤销。',
+  aliases: ['撤销原稿修改', '撤销事务'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'application:write',
+  idempotent: false, destructive: false, timeoutMs: 30_000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: [], acceptsRefs: ['application.transaction'], producesRefs: [],
+  inputSchema: z.object({ undoRef: z.string().min(1) }).strict(), outputSchema: changeEntities.outputSchema,
+  resolveOperationTargets: input => [{ kind: 'application.transaction', id: input.undoRef }],
+  resolveOperationWriteTargets: input => [{ kind: 'application.transaction', id: input.undoRef }],
+  control: changeEntities.control, resolveObservedEffects: (_input, output) => changeEntities.resolveObservedEffects!({ summary: '撤销', changes: [] }, output),
+  summarize: () => '已撤销原事务并确认保存。',
+})
+
 export const APPLICATION_REFLECTION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  describeEntities, listEntities, readEntity, changeEntities,
+  describeEntities, listEntities, readEntity, changeEntities, undoEntities,
 ]

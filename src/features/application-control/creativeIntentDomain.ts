@@ -3,14 +3,25 @@ import { reviewSemanticIntent } from '@/core/creativeIntent/semanticIntent'
 import { semanticRecordingInput, semanticRecordingResolutions } from '@/core/creativeIntent/semanticIntentRecording'
 import { creativeIntentRegistration } from './creativeIntentReflection'
 import { CreativeIntentMutationExecutor } from './creativeIntentMutationExecutors'
-import { CreativeIntentPinCollectionExecutor } from './creativeIntentCollectionExecutor'
+import { CreativeIntentPinCollectionExecutor, CreativeIntentEvidenceCollectionExecutor } from './creativeIntentCollectionExecutor'
 import { INTENT_ENTITIES, intentRecord, intentHost, intentRef, intentRevisions, intentProvider, type IntentDomain } from './creativeIntentHost'
 import type { ApplicationDomainModule } from './domainModule'
 import type { ApplicationRef } from '@/core/application-control'
 import type { CapabilityExecutionContext } from './capabilities/handlerTypes'
 import type { ExplanationSession } from '@/core/creativeIntent/schema'
 import { createLogger } from '@/core/logging'
+import { semanticVisualBatches, type SemanticIntentImage } from '@/core/creativeIntent/semanticIntentInput'
+import { prepareSemanticImage } from './creativeIntentImages'
+import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
 const logger = createLogger('features.applicationControl.creativeIntent')
+type InputProgress = { baseline: string; offset: number; imageOffset: number; receipt?: string }
+const inputReads = new WeakMap<object, Map<string, InputProgress>>()
+function recordingReads(owner: object) {
+  let reads = inputReads.get(owner)
+  if (!reads) { reads = new Map(); inputReads.set(owner, reads) }
+  return reads
+}
+const recordingKey = (documentRef: ApplicationRef, sessionId: string, context: CapabilityExecutionContext) => JSON.stringify([context.callerGrant?.callerId ?? 'renderer', documentRef, sessionId])
 
 function recordingSource(documentRef: ApplicationRef, sessionId: string, context: CapabilityExecutionContext) {
   const host = intentHost(documentRef), session = host.read().sessions.find(s => s.id === sessionId)
@@ -18,6 +29,7 @@ function recordingSource(documentRef: ApplicationRef, sessionId: string, context
   if (!session.consent?.textUpload) throw new Error('PERMISSION_DENIED:请先在录制宿主确认讲解文字外发。')
   const baseline = JSON.stringify(session)
   const assertCurrent = () => {
+    if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
     context.signal.throwIfAborted(); host.assertCurrent()
     if (JSON.stringify(host.read().sessions.find(s => s.id === sessionId)) !== baseline) throw new Error('讲解已删除或校正，请重新读取；不会发送旧记录。')
   }
@@ -38,6 +50,8 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
     for (const domain of ['video_edit', 'image_edit'] as const) {
       for (const type of INTENT_ENTITIES) if (type !== 'intent_pin' && !(domain === 'image_edit' && type === 'intent_take')) engine.registerMutationExecutor(new CreativeIntentMutationExecutor(domain, type))
       engine.registerCollectionExecutor(new CreativeIntentPinCollectionExecutor(domain))
+      engine.registerCollectionExecutor(new CreativeIntentEvidenceCollectionExecutor(domain, 'intent_draft'))
+      if (domain === 'video_edit') engine.registerCollectionExecutor(new CreativeIntentEvidenceCollectionExecutor(domain, 'intent_take'))
     }
   },
   registerCapabilities(registrar) {
@@ -48,17 +62,43 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
       try {
         if ('documentRef' in input) {
           const source = recordingSource(input.documentRef, input.sessionId, context)
-          const lines: string[] = []; let offset = 0; let nextOffset: number | null = null
+          const reads = recordingReads(source.host.owner)
+          const key = recordingKey(input.documentRef, input.sessionId, context), baseline = JSON.stringify(source.session)
+          if (input.offset === 0 && input.imageOffset === 0) reads.set(key, { baseline, offset: 0, imageOffset: 0 })
+          const progress = reads.get(key)
+          if (!progress || progress.baseline !== baseline || progress.offset !== input.offset || progress.imageOffset !== input.imageOffset) throw new Error('讲解批次不连续或已变化，请从 offset=0 重新读取。')
+          const lines: string[] = []; let offset = 0; let nextOffset: number | null = null; let textSize = 0
           // 128 lines is an output batch budget, never a recording or product count limit.
           for await (const line of semanticRecordingInput(source.session, source.read, source.host.size())) {
             source.assertCurrent()
             if (offset++ < input.offset) continue
-            if (lines.length === 128) { nextOffset = offset - 1; break }
-            lines.push(line)
+            if (lines.length === 128 || lines.length && textSize + line.length > 24_000) { nextOffset = offset - 1; break }
+            lines.push(line); textSize += line.length
+          }
+          const semanticImages: SemanticIntentImage[] = []
+          let nextImageOffset: number | null = input.imageOffset
+          if (nextOffset === null) {
+            const resolutions = await semanticRecordingResolutions(source.session, source.read)
+            const batches = semanticVisualBatches(source.session, resolutions)
+            const batch = batches[input.imageOffset]
+            if (batch) {
+              if (!source.session.consent?.imageUpload) throw new Error('PERMISSION_DENIED:本段讲解需要历史画面，请先确认图片外发或手动绑定对象。')
+              const provider = intentProvider(domain)
+              if (!provider.readVisual) throw new Error('历史画面不可用，请手动确认指代。')
+              for (const visual of batch) {
+                source.assertCurrent()
+                const resource = source.host.read().resources.find(r => r.kind === 'visual' && r.resourceId === visual.resourceRef.resourceId && r.digest === visual.resourceRef.digest && r.bytes === visual.resourceRef.bytes)
+                if (!resource) throw new Error('历史画面缺失，请手动确认；不会使用当前画面替代。')
+                semanticImages.push(await prepareSemanticImage(await provider.readVisual(resource), visual))
+              }
+            }
+            nextImageOffset = input.imageOffset + 1 < batches.length ? input.imageOffset + 1 : null
           }
           source.assertCurrent()
+          progress.offset = nextOffset ?? input.offset; progress.imageOffset = nextImageOffset ?? input.imageOffset
+          if (nextOffset === null && nextImageOffset === null) progress.receipt = crypto.randomUUID()
           logger.info('讲解文字批次已读取', { event: 'creative_intent.process.completed', requestId: context.requestId })
-          return { resultRef: input.documentRef, lines, nextOffset, revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) }
+          return { resultRef: input.documentRef, lines, nextOffset, nextImageOffset, semanticImages, inputReceipt: progress.receipt, revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) }
         }
         const record = intentRecord(input.draftRef)
         let status: 'candidate' | 'confirmation_required' | 'local_fallback' = 'candidate'; let questions: string[] = []
@@ -67,7 +107,11 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
         if ('semanticPlan' in input) {
           if (!('sessionId' in input) || typeof input.sessionId !== 'string' || !input.sessionId) throw new Error('语义计划需要已授权的原讲解 sessionId；不能伪造绑定或否定保护。')
           const source = recordingSource(record.documentRef, input.sessionId, context)
+          const reads = recordingReads(source.host.owner)
+          const progress = reads.get(recordingKey(record.documentRef, input.sessionId, context))
+          if (!progress?.receipt || progress.receipt !== ('inputReceipt' in input ? input.inputReceipt : undefined) || progress.baseline !== JSON.stringify(source.session)) throw new Error('请完整读取当前讲解与必要附图，再提交意图；不能省略未处理指代。')
           const resolutions = await semanticRecordingResolutions(source.session, source.read); source.assertCurrent()
+          reads.delete(recordingKey(record.documentRef, input.sessionId, context))
           review = reviewSemanticIntent(input.semanticPlan, record.draft, resolutions)
           status = review.status; questions = review.questions
           if (review.protectedRefs.length) { status = 'confirmation_required'; questions.push('请先核对并钉住否定保护的对象，再重新整理；不会修改受保护对象。') }
@@ -96,7 +140,9 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
           status = 'local_fallback'; questions.push('语义候选无法编译，已恢复原稿并使用本地整理。')
           await record.host.optimize(context.signal)
         }
-        context.signal.throwIfAborted(); record.host.assertCurrent(); await record.host.save()
+        context.signal.throwIfAborted(); record.host.assertCurrent()
+        if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
+        await record.host.save()
         logger.info('意图候选处理完成', { event: 'creative_intent.process.completed', requestId: context.requestId, context: { status } })
         return finish()
       } catch (error) { logger.warn('意图处理未完成', { event: 'creative_intent.process.failed', requestId: context.requestId, error }); throw error }

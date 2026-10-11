@@ -8,6 +8,7 @@ import { createApplicationCapabilitySession, listApplicationCapabilities } from 
 import { buildExternalCapabilityInventory, externalReflectionPermissions } from './externalCapabilityInventory'
 import { rendererEpoch } from './rendererIdentity'
 import { APPLICATION_DOMAINS } from './applicationDomains'
+import { creativeIntentPrivateAccess } from './creativeIntentAuthorization'
 
 const logger = createLogger('features.application_control.host')
 // 与宿主附件生命周期分开；发送回执失败或同一渲染器重新连接后，核对仍读原执行事实。
@@ -42,7 +43,8 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
       try {
         if (definitions.find(item => item.id === capabilityId)?.paidGenerationPreparation && !allowPaid) throw new Error('此连接没有付费生成授权。')
         if (!ready) throw new Error('应用尚未就绪，请稍后重试。')
-        const grant = createApplicationCallerGrant({ callerId, capabilityIds: allowWrites ? [...APPLICATION_CAPABILITY_IDS] : [...APPLICATION_READ_CAPABILITY_IDS], permissions: [...APPLICATION_READ_PERMISSIONS, ...permissions.read, ...(allowWrites ? [...APPLICATION_WRITE_PERMISSIONS, ...permissions.write] : [])], allowWrites, allowDestructive })
+        const grant = createApplicationCallerGrant({ callerId, capabilityIds: allowWrites ? [...APPLICATION_CAPABILITY_IDS] : [...APPLICATION_READ_CAPABILITY_IDS], permissions: [...APPLICATION_READ_PERMISSIONS, ...permissions.read, ...(allowWrites ? [...APPLICATION_WRITE_PERMISSIONS, ...permissions.write] : [])], allowWrites, allowDestructive,
+          privateAccess: creativeIntentPrivateAccess(capabilityId, input) })
         grants.set(requestId, grant)
         const definition = definitions.find((item) => item.id === capabilityId)
         if (!definition) throw new Error('此读取工具不可用，请重新连接。')
@@ -92,7 +94,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
     void execute().catch((error) => logger.error('发送操作结果失败', error, { event: `mcp.${action}.reply.failed` })).finally(() => { active.delete(requestId); grants.delete(requestId) })
   })
   const unsubscribeCancel = platform.onCancel((id) => active.get(id)?.abort())
-  const unsubscribeRevoke = platform.onRevoke((id) => { for (const [key, grant] of grants) if (grant.callerId === id) { revokeApplicationCallerGrant(grant); grants.delete(key) } })
+  const unsubscribeRevoke = platform.onRevoke((id) => { for (const [key, grant] of grants) if (grant.callerId === id) { revokeApplicationCallerGrant(grant); active.get(key)?.abort(); grants.delete(key) } })
   void platform.registerHost({ rendererEpoch, attachmentSequence, ready, tools, domains }).catch((error) => logger.error('连接应用宿主失败', error, { event: 'mcp.host.register.failed' }))
   return () => {
     disposed = true

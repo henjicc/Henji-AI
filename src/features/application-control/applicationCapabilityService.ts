@@ -21,7 +21,7 @@ export function listApplicationCapabilities(): ApplicationCapabilityDefinition[]
   return BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().filter((definition) => (
     (isExternalApplicationTool(definition) || definition.external?.kind === 'recovery')
     && registered.has(definition.id)
-    && definition.dataClasses.every((value) => value === 'C0' || value === 'C1')
+    && definition.dataClasses.every((value) => value === 'C0' || value === 'C1' || value === 'C2')
   ))
 }
 

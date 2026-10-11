@@ -1,6 +1,7 @@
 import type { ImageEditDocumentReferenceV3, ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ApplicationPersistenceBatch, ApplicationPersistenceParticipant, ApplicationPersistenceReceipt } from '@/core/application-control/execution/persistence'
 import type { ApplicationCascadeEffectDeclaration } from '@/core/application-control/execution/types'
+import type { ApplicationExecutionContext } from '@/core/application-control/execution/types'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { createLogger } from '@/core/logging'
 
@@ -45,6 +46,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
   private projectedDocument: ImageEditPersistenceSnapshotV3['document'] | null = null
   private projectedHistory: string | null = null
   private receipt: ApplicationPersistenceReceipt | undefined
+  private confirmedDocument: ImageEditPersistenceSnapshotV3['document'] | null = null
 
   constructor(
     readonly documentId: string,
@@ -69,6 +71,27 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
   getConfirmationReceipt(): ApplicationPersistenceReceipt | undefined { return this.receipt }
   ownsQueue(queue: ImageEditPersistenceQueuePortV3): boolean { return this.queue === queue }
   getReference(): ImageEditDocumentReferenceV3 { return this.queue.getReference() }
+
+  isCurrentConfirmed(): boolean {
+    return !this.projectionNeeded && (this.confirmedDocument === this.currentDocument()
+      || !this.confirmProjection && this.queue.getReference().revision === this.currentDocument().revision)
+  }
+
+  /** Only the transaction's own step may defer waiting for its final save barrier. */
+  confirmStep(context: ApplicationExecutionContext | undefined, settled: () => Promise<void>): Promise<void> {
+    this.assertCurrent()
+    if (context?.persistenceScopes?.has(this.key)) {
+      if (!this.batchConfirmation) throw new Error('图片保存事务已失效，请重新执行。')
+      const confirmation = this.batchConfirmation.promise
+      void confirmation.then(() => settled().catch(error => {
+        logger.error('图片保存后的资源清理未完成', error, {
+          event: 'image_edit.v3.persistence.settle.failed', context: { documentId: this.documentId },
+        })
+      }), () => { /* The transaction reports save failure; keep the pending application for retry. */ })
+      return Promise.resolve()
+    }
+    return this.confirm(true).then(settled)
+  }
 
   attachProjection(host: ImageEditPersistenceHostV3): void {
     if (this.confirmProjection || !host.confirmProjection) return
@@ -162,6 +185,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
           context: { documentId: this.documentId, revision: reference.revision },
         })
         await this.onConfirmed?.()
+        this.confirmedDocument = snapshot.document
         return this.queue.getReference()
       }
     } catch (cause) {

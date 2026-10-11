@@ -133,6 +133,7 @@ function registerBuiltins(): void {
       if (capability.id === 'describe_application_entities') return await applicationReflectionHandlers.describeEntities(parsed, context)
       if (capability.id === 'list_application_entities') return await applicationReflectionHandlers.listEntities(parsed, context)
       if (capability.id === 'read_application_entity') return await applicationReflectionHandlers.readEntity(parsed, context)
+      if (capability.id === 'undo_application_changes') return await applicationReflectionHandlers.undoEntities(parsed, context)
       return await applicationReflectionHandlers.changeEntities(parsed, context)
     })
   }

@@ -2,8 +2,8 @@ import type { ApplicationRef } from '@/core/application-control'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
 import type { CreativeIntents } from '@/core/creativeIntent/persistence'
 import { listVideoEditInstances, requireVideoEditInstance, updateVideoEditCreativeIntents, videoEditDomainRevision, saveVideoEdit, restoreVideoEditSnapshot, getActiveVideoEditSequence } from './videoEditService'
-import { reopenVideoMotion, videoMotionState, configureVideoMotion, optimizeVideoMotion, cancelVideoMotionOptimization, previewVideoMotion, applyVideoMotion } from './videoEditMotionDraft'
-import { readMotionResource, motionDigest } from './videoEditMotionResources'
+import { reopenVideoMotion, videoMotionState, configureVideoMotion, optimizeVideoMotion, cancelVideoMotionOptimization, previewVideoMotion, applyVideoMotion, syncVideoMotionMetadata } from './videoEditMotionDraft'
+import { readMotionResource, readMotionResourceBytes, motionDigest } from './videoEditMotionResources'
 const empty = (): CreativeIntents => ({ drafts: [], sessions: [], resources: [] })
 function open(documentRef: ApplicationRef) {
     const id = documentRef.id; const owner = requireVideoEditInstance(id)
@@ -28,7 +28,7 @@ function open(documentRef: ApplicationRef) {
         }
       },
       read: () => { assertCurrent(); return owner.document.creativeIntents ?? empty() },
-      commit: (head: CreativeIntents) => { assertCurrent(); updateVideoEditCreativeIntents(id, head) },
+      commit: (head: CreativeIntents) => { assertCurrent(); const state = videoMotionState(owner); if (state && state.status !== 'reviewing') throw new Error('请先结束当前示范或整理。'); updateVideoEditCreativeIntents(id, head); syncVideoMotionMetadata(owner) },
       save: async () => { assertCurrent(); await saveVideoEdit(id); assertCurrent() },
       async prepare(draft: MotionDraft) {
         assertCurrent()
@@ -48,6 +48,7 @@ function open(documentRef: ApplicationRef) {
       },
       async select(resourceId: string) { const state = videoMotionState(owner)!; const index = state.draft.candidateRefs.findIndex(r => r.resourceId === resourceId); const candidate = state.candidates[index]; if (!candidate) throw new Error('候选已过期，请重新整理。'); await previewVideoMotion(id, candidate.id) },
       apply: () => applyVideoMotion(id),
+      recoverApplication: () => applyVideoMotion(id),
     }
 }
 export const videoCreativeIntentProvider = {
@@ -55,6 +56,7 @@ export const videoCreativeIntentProvider = {
   documents: () => listVideoEditInstances().map(v => ({ kind: 'video_edit.document', id: v.document.id })),
   revisions: () => ({ video_edit: videoEditDomainRevision() }),
   readResource: readMotionResource,
+  readVisual: readMotionResourceBytes,
   digest: motionDigest,
   configureMotion: configureVideoMotion,
   open,

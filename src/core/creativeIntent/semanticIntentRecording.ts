@@ -43,7 +43,15 @@ export async function* semanticRecordingEvents(session: ExplanationSession, read
 }
 export function semanticRecordingInput(session: ExplanationSession, read: ReadPage, size: [number, number]) {
   if (!session.consent?.textUpload) throw new Error('PERMISSION_DENIED:请先在录制宿主确认讲解文字外发范围。')
-  return serializeRecordingInput(session, semanticRecordingEvents(session, read), { size, includeImages: false })
+  return (async function* () {
+  let record = 0
+  for await (const line of serializeRecordingInput(session, semanticRecordingEvents(session, read), { size, includeImages: false })) {
+    // A single very long utterance is split, never truncated or rejected as a product limit.
+    if (line.length <= 8000) yield line
+    else for (let offset = 0; offset < line.length; offset += 8000) yield JSON.stringify({ kind: 'text-fragment', record, offset, total: line.length, text: line.slice(offset, offset + 8000) })
+    record++
+  }
+  })()
 }
 export async function semanticRecordingResolutions(session: ExplanationSession, read: ReadPage): Promise<DeixisResolution[]> {
   const resolutions: DeixisResolution[] = []

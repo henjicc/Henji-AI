@@ -1,4 +1,5 @@
-import type { ApplicationRef } from '@/core/application-control'
+import { getPlatform } from '@/platform/runtime'
+import type { ApplicationRef, ApplicationExecutionContext } from '@/core/application-control'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
 import { creativeIntentLiveResources, type CreativeIntents } from '@/core/creativeIntent/persistence'
 import { listImageEditDocumentInstancesV3, requireImageEditDocumentInstanceV3, getImageEditDocumentCatalogRevisionV3 } from './imageEditDocumentInstances'
@@ -28,14 +29,14 @@ function open(documentRef: ApplicationRef) {
         resources: creativeIntentLiveResources([document.creativeIntents, head]).map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })) })
       requireImageEditPersistenceOwnerV3(id).acceptCurrent()
     },
-    save: async () => { assertCurrent(); await requireImageEditPersistenceOwnerV3(id).confirm(true); assertCurrent() },
+    save: async (context?: ApplicationExecutionContext) => { assertCurrent(); await requireImageEditPersistenceOwnerV3(id).confirmStep(context, async () => { assertCurrent() }) },
+    applicationSaved: (operationId: string) => Boolean(bus.getSnapshot().document.creativeIntents?.drafts.some(d => d.applications.some(a => a.operationRef.id === operationId))) && requireImageEditPersistenceOwnerV3(id).isCurrentConfirmed(),
     async prepare(draft: MotionDraft) { assertCurrent(); if (adapter.snapshot().status === 'optimizing') throw new Error('请等待当前整理结束。'); await adapter.reopen(draft.id); assertCurrent() },
-    async configure(values: { fidelity?: number; pinSampleId?: string; unpinId?: string; selectedTakeIds?: string[] }) {
-      if (requireImageEditPersistenceOwnerV3(id).isBusy()) throw new Error('图片原稿参数尚未接入批量保存事务，请在随手摆面板调整。')
+    async configure(values: { fidelity?: number; pinSampleId?: string; unpinId?: string; selectedTakeIds?: string[] }, context?: ApplicationExecutionContext) {
       if (values.selectedTakeIds) throw new Error('图片原稿使用全部静态图层，不支持排除采样段。')
       const entry = values.pinSampleId ? adapter.snapshot().entries.find(e => e.sample.sampleId === values.pinSampleId) : undefined
       if (values.pinSampleId && !entry) throw new Error('原稿中没有这个钉住姿态。')
-      await adapter.configure({ fidelity: values.fidelity, unpin: values.unpinId, pinIds: entry ? [entry.layerId] : undefined })
+      await adapter.configure({ fidelity: values.fidelity, unpin: values.unpinId, pinIds: entry ? [entry.layerId] : undefined }, context)
     },
     async optimize(signal?: AbortSignal) {
       signal?.throwIfAborted(); assertCurrent()
@@ -45,7 +46,8 @@ function open(documentRef: ApplicationRef) {
       finally { signal?.removeEventListener('abort', cancel) }
     },
     async select(resourceId: string) { const state = adapter.snapshot(); const index = state.draft?.candidateRefs.findIndex(r => r.resourceId === resourceId) ?? -1; const candidate = state.candidates[index]; if (!candidate) throw new Error('候选已过期，请重新整理。'); adapter.preview(candidate.id) },
-    apply: () => { if (requireImageEditPersistenceOwnerV3(id).isBusy()) throw new Error('图片候选应用尚未接入批量保存事务，请在随手摆面板确认应用。'); return adapter.apply() },
+    apply: (context?: ApplicationExecutionContext) => adapter.apply(context),
+    recoverApplication: async (context?: ApplicationExecutionContext) => { assertCurrent(); await requireImageEditPersistenceOwnerV3(id).confirmStep(context, async () => { assertCurrent() }) },
   }
 }
 export const imageCreativeIntentProvider = {
@@ -53,6 +55,10 @@ export const imageCreativeIntentProvider = {
   documents: () => listImageEditDocumentInstancesV3().map(v => imageEditV3DocumentRef(v.documentId)),
   revisions: () => ({ image_edit: getImageEditDocumentCatalogRevisionV3() }),
   readResource: readImageLayoutResource,
+  readVisual: async (resource: import('@/core/creativeIntent/persistence').StoredCreativeIntentResource) => {
+    const proxy = await getPlatform().imageEditorV3.readFastProxy({ requestId: crypto.randomUUID(), resourceRef: resource.resourceId as `sha256:${string}`, maxDimension: 640 })
+    return new Uint8Array(proxy.bytes)
+  },
   digest: imageLayoutDigest,
   open,
 }

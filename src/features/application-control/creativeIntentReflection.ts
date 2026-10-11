@@ -14,7 +14,7 @@ export function creativeIntentRegistration(domain: IntentDomain, type: IntentEnt
   return {
     entity: { id: entityType, domain, version: 1, title: titles[type], description: '读取原稿、示范、钉点与候选。整理仅生成候选；用户确认后写候选 applied=true，整组结果可撤销。', refKind: entityType,
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [type === 'intent_draft' ? `${domain}.document` : `${domain}.intent_draft`], revisionScopes: [domain], queryCapabilityIds: ['read_application_entity'], schemaRef: creativeIntentSchemaRef('entity', entityType),
-      ...(type === 'intent_pin' ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.sample_id`], maxItemsPerChange: 256 } } : {}),
+      ...(['intent_draft', 'intent_pin', ...(domain === 'video_edit' ? ['intent_take'] : [])].includes(type) ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.${type === 'intent_pin' ? 'sample_id' : 'source_ref'}`], maxItemsPerChange: 256 } } : {}),
       ...(type === 'intent_take' && domain === 'image_edit' ? { writeExclusion: { reason: '图片示范段记录不可变采样证据；静态布局使用所有目标，通过原稿保真度和钉住姿态校正。' } } : {}),
     },
     properties: fieldDescriptors(fields),
@@ -43,10 +43,9 @@ export function creativeIntentRegistration(domain: IntentDomain, type: IntentEnt
       async getPropertyAvailability(ref, ids) {
         intentRecord(ref)
         return ids.map(propertyId => { const field = fields.find(f => f.propertyId === propertyId); if (!field) throw new Error(`未知属性 ${propertyId}；可用：${fields.map(f => f.propertyId).join('、')}`)
-          const blocked = domain === 'image_edit' && ['image_edit.intent_draft.fidelity', 'image_edit.intent_candidate.applied', 'image_edit.intent_candidate.saved'].includes(propertyId)
-          return { propertyId, readable: true, writable: Boolean(field.writer) && !blocked, reasons: blocked ? ['图片随手摆的保存确认尚未接入通用事务，请从原随手摆面板调整或确认应用。'] : field.writer ? [] : [field.descriptor.readOnlyReason!], requiredPermissions: [`${domain}:${field.writer ? 'write' : 'read'}`], revisions: intentRevisions(domain) } })
+          return { propertyId, readable: true, writable: Boolean(field.writer), reasons: field.writer ? [] : [field.descriptor.readOnlyReason!], requiredPermissions: [`${domain}:${field.writer ? 'write' : 'read'}`], revisions: intentRevisions(domain) } })
       },
-      async getCollectionAvailability(parent) { const result = unrestrictedCollectionAvailability(entityType, parent, intentRevisions(domain), [`${domain}:write`]); if (domain === 'image_edit' && type === 'intent_pin') for (const operation of [result.create, result.remove]) { operation.available = false; operation.reasons = ['图片钉点保存尚未接入通用事务，请在原随手摆面板钉住姿态。'] } return result },
+      async getCollectionAvailability(parent) { return unrestrictedCollectionAvailability(entityType, parent, intentRevisions(domain), [`${domain}:write`]) },
     },
   }
 }
