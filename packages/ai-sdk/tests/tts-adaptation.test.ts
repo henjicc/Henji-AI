@@ -1,3 +1,6 @@
+import { z } from 'zod'
+import turboContract from './fixtures/tts/kie-turbo-input.json'
+import { shouldRetry } from '../src/runtime/retry'
 import { describe, expect, it, vi } from 'vitest'
 import fixture from './fixtures/tts/speech-protocols.json'
 import { catalogIndex } from '../src/catalog'
@@ -73,9 +76,11 @@ describe('TTS model catalog', () => {
     })
     expect(catalogIndex.get('fal-minimax-speech-2.8')?.pricing.calculator?.({ prompt: '你好', falMinimaxSpeechSpec: 'turbo' })).toBeCloseTo(0.00012)
     expect(catalogIndex.get('bailian-cosyvoice-v3.5')?.pricing.calculator?.({ prompt: '你好', bailianCosyVoiceSpec: 'plus' })).toBeCloseTo(0.0003)
-    for (const id of ['bailian-qwen-audio-3.1-tts-flash', 'kie-gemini-3.1-flash-tts']) {
+    for (const id of ['bailian-qwen-audio-3.1-tts-flash']) {
       expect(catalogIndex.get(id)?.pricing.calculator?.({ prompt: '你好' }), id).toBeNaN()
     }
+    expect(catalogIndex.get('kie-gemini-3.1-flash-tts')?.pricing).toMatchObject({ billingMode: 'estimated' })
+    expect(catalogIndex.get('kie-gemini-3.1-flash-tts')?.pricing.calculator?.({ prompt: '你好' })).toBeCloseTo(0.2351104)
     for (const id of ['volcengine-seed-tts-2.0', 'volcengine-seed-icl-2.0']) {
       expect(catalogIndex.get(id)?.pricing.calculator?.({ prompt: '你好' }), id).toBeCloseTo(0.0006)
     }
@@ -83,6 +88,26 @@ describe('TTS model catalog', () => {
 })
 
 describe('TTS media provider protocols', () => {
+  it('KIE Turbo 默认中文请求符合当前官方输入契约，语言可省略，音色必须是 ID', () => {
+    const request = build('kie-eleven-turbo-2.5-tts') as { input: Record<string, unknown> }
+    const schema = z.fromJSONSchema(turboContract.inputSchema)
+    expect(schema.safeParse(request.input).success).toBe(true)
+    expect(request.input).not.toHaveProperty('language_code')
+    expect(schema.safeParse({ ...request.input, voice: 'Rachel' }).success).toBe(false)
+    expect(schema.safeParse({ ...request.input, voice: 'Brian' }).success).toBe(false)
+    expect(schema.safeParse({ ...request.input, speed: 1.3 }).success).toBe(false)
+  })
+
+  it.each([200, 400, 403])('百炼产品未开通（HTTP %s）归一化且禁止重试，保留原码', async (status) => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 'InvalidParameter', message: 'The product is not activated. Please activate the product first.' }), { status }))
+    const input = execution(build('bailian-minimax-speech-2.8'), '/api/v1/services/aigc/multimodal-generation/generation', fetch)
+    const error = await bailian.execute(input).catch((value: unknown) => value)
+    expect(error).toMatchObject({ code: 'provider_product_not_activated', message: expect.stringContaining('百炼账号未开通该模型'), details: { providerCode: 'InvalidParameter', retryable: false, status } })
+    expect(shouldRetry(error)).toBe(false)
+    expect(shouldRetry(error, 'poll-query')).toBe(false)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('百炼 MiniMax 的最终 Hex 音频变为可落盘的 data URI，错误状态被拒绝', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(fixture.bailianMinimax)))
     const input = execution(build('bailian-minimax-speech-2.8'), '/api/v1/services/aigc/multimodal-generation/generation', fetch)

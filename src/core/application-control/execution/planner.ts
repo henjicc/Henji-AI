@@ -195,6 +195,13 @@ export class ApplicationPlanBuilder {
          */
         let revisions: Record<string, number>
         if (descriptor?.collectionWrite) {
+          if (step.operation.kind === 'create') {
+            for (const item of step.operation.items) {
+              for (const [propertyId, value] of Object.entries(item.properties)) {
+                this.dependencies.registry.validatePropertyValueShape(step.entityType, propertyId, value, context)
+              }
+            }
+          }
           const availability = await this.dependencies.registry.getCollectionAvailability(
             step.parent, step.entityType, context,
           )

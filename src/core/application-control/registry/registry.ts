@@ -1,3 +1,4 @@
+import { validateJsonValueShape } from './jsonValueShape'
 import {
   applicationSchemaRefSchema,
   jsonValueSchema,
@@ -213,7 +214,18 @@ export class ApplicationReflectionRegistry {
     const property = this.requireProperty(entityType, propertyId)
     if (!this.canWriteProperty(property, context)) throw new Error(`PERMISSION_DENIED:${propertyId}`)
     if (property.readOnlyReason) throw new Error(`PROPERTY_READ_ONLY:${propertyId}`)
-    return normalizeApplicationPropertyValue(property, value)
+    return this.validatePropertyValueShape(entityType, propertyId, value, context)
+  }
+
+  /** 创建成员也需要值校验，但创建必填字段可以在创建后只读。 */
+  validatePropertyValueShape(entityType: string, propertyId: string, value: JsonValue, context: ApplicationControlAccessContext): JsonValue {
+    const property = this.requireProperty(entityType, propertyId)
+    if (!this.canReadProperty(property, context)) throw new Error(`PERMISSION_DENIED:${propertyId}`)
+    const normalized = normalizeApplicationPropertyValue(property, value)
+    if (property.value.kind === 'json' && !(value === null && property.nullable)) {
+      validateJsonValueShape(property.id, this.resolveSchema(property.value.schemaRef, context), normalized)
+    }
+    return normalized
   }
 
   /**

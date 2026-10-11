@@ -11,12 +11,13 @@ export function normalizeEndpoint(base: string, route: string): string {
   return `${base}/${route}`
 }
 
-export async function readJsonResponse(response: Response, provider: string): Promise<JsonValue> {
+export async function readJsonResponse(response: Response, provider: string, inspect?: (payload: JsonValue) => void): Promise<JsonValue> {
   const payload = await response.json().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     throw new AiRuntimeError('invalid_json', message)
   }) as JsonValue
 
+  inspect?.(payload)
   if (!response.ok) {
     throw new AiRuntimeError('provider_http_error', `${provider} HTTP ${response.status}: ${JSON.stringify(payload)}`)
   }

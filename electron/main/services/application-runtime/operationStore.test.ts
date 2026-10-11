@@ -33,6 +33,17 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it('明确未执行后同一 operationId 与参数可重新准备，unknown 仍禁止重放', () => {
+    const f = fixture(); const raw = input(f.baseline)
+    const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
+    f.store.save({ ...first, state: 'not_executed', result: { ok: false, error: { details: { execution: { notExecuted: true } } } } })
+    const retry = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
+    expect(retry.state).toBe('prepared')
+    expect(retry.result).toBeUndefined()
+    f.store.save({ ...retry, state: 'unknown' })
+    expect(f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access).state).toBe('unknown')
+  })
+
   it('完整补偿的失败即使携带执行过的effects也确定收敛；保存不确定仍保留屏障', () => {
     const f = fixture()
     for (const persistence of [false, true]) {

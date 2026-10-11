@@ -119,7 +119,7 @@ describe('应用反射通用能力适配器', () => {
     })
 
     const result = await applicationReflectionHandlers.describeEntities(
-      { domains: [], entityTypes: ['sample.item'] },
+      { domains: [], entityTypes: ['sample.item'], detail: 'full' },
       context,
     )
     const serialized = JSON.stringify(result)
@@ -158,7 +158,7 @@ describe('应用反射通用能力适配器', () => {
     mocks.getAcceptedPropertyOperations.mockReturnValueOnce(['append', 'remove', 'set'])
 
     const result = await applicationReflectionHandlers.describeEntities(
-      { domains: ['assets'], entityTypes: ['asset'] }, context,
+      { domains: ['assets'], entityTypes: ['asset'], detail: 'full' }, context,
     )
 
     expect(result.properties[0]).toMatchObject({

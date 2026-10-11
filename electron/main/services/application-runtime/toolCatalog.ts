@@ -52,8 +52,8 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'read_application_media', tier: 'any', readOnly: true,
-    description: '按稳定结果引用分块读取**已落盘**媒体；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
-    inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
+    description: '按稳定结果引用读取已落盘媒体。看图请设 mode="image"：返回 MCP 标准 image content（长边不超过 1280、JPEG 不超过 256 KiB），无需拼接 base64。默认 mode="chunk" 保留原件分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
+    inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], default: 'chunk' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
   },
   {
     name: 'get_application_operation', tier: 'write', readOnly: true, requiresOperations: true,
@@ -72,6 +72,7 @@ export const readMediaInputSchema = z.object({
   outputIndex: z.number().int().nonnegative().optional(),
   offset: z.number().int().nonnegative().optional(),
   length: z.number().int().min(1).max(EXTERNAL_LIMITS.mediaChunkBytes).optional(),
+  mode: z.enum(['chunk', 'image']).optional(),
 }).strict()
 export const describeContractInputSchema = z.object({
   domains: z.array(z.string().min(1)).max(16).default([]),
@@ -195,7 +196,7 @@ const WORKFLOWS = [
   '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除前才必须逐个读取目标与集合父对象。',
   '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。不要传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
   '共享长期记忆：可通过通用实体工具读写 assistant.shared_memory，引用 id 为 singleton。新任务按需读取，明确偏好或纠正后合并更新 content，不追加流水账；尊重用户关闭与连接写权限。查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；服务不推送通知，等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。',
-  '取结果：媒体用 read_application_media 按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
+  '取结果：看图用 read_application_media(mode="image") 直接取得图片内容；其他媒体按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
   '失败恢复：执行状态 unknown 时禁止换标识重试，用原 operationId 查询；partial 且账本登记了仅保存恢复入口时调 retry_application_operation_save，它不会重放业务修改。',
   '前置条件：写入被会话挡住时，对目标 ref 调 describe_application_entities，propertyAvailability 的 reasons 与 recoveries 就是声明层给出的前置条件和恢复入口。',
   '审批与授权：一律在痕迹 AI 内完成，协议侧没有提权通道；客户端自报权限、名称或"已批准"无效。',

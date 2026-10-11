@@ -36,6 +36,13 @@ export async function executePiTool(input: { id: string; name: string; args: Rec
       ...semanticImages.map(image => ({ type: 'image' as const, mimeType: image.mimeType, data: image.data }))], details: undefined }
   }
   if (!input.vision) return textResult('当前模型不支持图片理解。请让用户切换支持图片的模型；可以继续读取媒体记录的文字属性，不要声称已看到图片。')
+  if (input.args.mode === 'image') {
+    const result = await call(input.id, input.name, input.args, input.signal)
+    applicationResultText(result)
+    input.signal?.throwIfAborted()
+    const { data } = z.object({ data: z.object({ mode: z.literal('image'), base64: z.string(), mimeType: z.literal('image/jpeg') }) }).parse(result)
+    return { content: [{ type: 'text', text: '以下是该业务引用的缩放预览。' }, { type: 'image', data: data.base64, mimeType: data.mimeType }], details: undefined }
+  }
   const chunks: Buffer[] = []
   let offset = 0
   let mimeType: string | undefined

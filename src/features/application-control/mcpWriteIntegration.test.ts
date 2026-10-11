@@ -71,6 +71,59 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       expect((await client.callTool({ name: 'create_document', arguments: create })).structuredContent).toEqual(created.structuredContent)
       expect(useProjectStore.getState().currentProjectId).toBe(currentProjectId)
       expect(operations.store.get(createId, identity.id)?.state).toBe('completed')
+
+      // t168 外部客户端契约：仅替换像素/媒体仓库边界，MCP、反射、Session 与账本均真实。
+      const video = await import('@/features/videoEdit/application/videoEditService')
+      const observation = await import('@/features/videoEdit/application/videoEditFrameObservation')
+      const mediaResources = await import('../../../electron/main/services/application-runtime/mediaResources')
+      const { getPlatform } = await import('@/platform/runtime')
+      const createdVideo = await client.callTool({ name: 'create_document', arguments: { operationId: randomUUID(), kind: 'video_edit', name: 'MCP 未打开剪辑' } })
+      expect(createdVideo.isError, JSON.stringify(createdVideo)).toBe(false)
+      const documentRef = (createdVideo.structuredContent as { result: { data: { resultRef: { id: string } } } }).result.data.resultRef
+      const owner = await video.openVideoEditDocument(documentRef, { focus: false })
+      const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.activeSequenceId}` }
+      const asset = { id: 'mcp-observed-frame', filePath: 'D:/private/frame.png', displayUrl: '', mediaType: 'image' as const, displayName: '观察画面', source: 'video-edit' as const, mimeType: 'image/png', sizeBytes: 4, width: 320, height: 180, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready' as const, inspectionError: null, fileModifiedAt: 1, contentIdentity: 'd'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }
+      const observe = vi.spyOn(observation, 'observeVideoEditFrame').mockResolvedValue({ asset, width: 320, height: 180, sourceWidth: 320, sourceHeight: 180, documentRevision: 0 })
+      const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset)
+      const jpeg = await (await import('sharp')).default({ create: { width: 32, height: 18, channels: 3, background: { r: 0, g: 0, b: 0 } } }).jpeg().toBuffer()
+      const media = vi.spyOn(mediaResources, 'readApplicationMediaResource').mockResolvedValue({ mode: 'image', mimeType: 'image/jpeg', base64: jpeg.toString('base64'), width: 32, height: 18, offset: 0, byteLength: jpeg.length, totalBytes: jpeg.length, eof: true })
+      try {
+        const frame = await client.callTool({ name: 'observe_video_edit_frame', arguments: { documentRef: { kind: 'video_edit.document', id: owner.document.id }, target: { kind: 'program', frame: 0 } } })
+        expect(frame.isError, JSON.stringify(frame)).toBe(false)
+        expect(JSON.stringify(frame)).toContain(asset.id)
+        const image = await client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: asset.id }, mode: 'image' } })
+        expect(image.isError, JSON.stringify(image)).toBe(false)
+        expect(image.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'image', mimeType: 'image/jpeg', data: jpeg.toString('base64') })]))
+        expect(JSON.stringify(image.structuredContent)).not.toContain(jpeg.toString('base64'))
+        expect(JSON.stringify(image)).not.toContain(asset.filePath)
+        expect(media).toHaveBeenCalledWith(expect.objectContaining({ mode: 'image' }), false)
+        const compact = await client.callTool({ name: 'describe_application_entities', arguments: { domains: ['video_edit'] } })
+        expect(compact.isError, JSON.stringify(compact)).toBe(false)
+        const catalog = (compact.structuredContent as { data: { properties: Array<Record<string, unknown>>; nextCursor: string | null } }).data
+        expect(catalog.properties.length).toBeLessThanOrEqual(40)
+        expect(catalog.nextCursor).toBeTruthy()
+        expect(JSON.stringify(compact).length).toBeLessThan(25000)
+        expect(catalog.properties[0]).toHaveProperty('valueShape')
+        expect(catalog.properties[0]).not.toHaveProperty('value')
+        const shape = await client.callTool({ name: 'describe_application_entities', arguments: { entityType: 'video_edit.sequence', propertyIds: ['video_edit.sequence.frame_rate'], detail: 'full' } })
+        expect(JSON.stringify(shape)).toContain('numerator')
+        expect(JSON.stringify(shape)).toContain('denominator')
+        const read = await client.callTool({ name: 'read_application_entity', arguments: { ref: sequenceRef, propertyIds: ['video_edit.sequence.frame_rate'] } })
+        expect(read.isError, JSON.stringify(read)).toBe(false)
+        await video.closeVideoEditProject(owner.document.id)
+        const wrong = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': 60 } }] } })
+        expect(wrong.structuredContent, JSON.stringify(wrong)).toMatchObject({ executionState: 'not_executed' })
+        expect(JSON.stringify(wrong)).toContain('video_edit.sequence.frame_rate')
+        expect(JSON.stringify(wrong)).toContain('numerator')
+        expect(JSON.stringify(wrong)).toContain('denominator')
+        const fresh = await client.callTool({ name: 'read_application_entity', arguments: { ref: sequenceRef, propertyIds: ['video_edit.sequence.frame_rate'] } })
+        expect(fresh.isError, JSON.stringify(fresh)).toBe(false)
+        await video.closeVideoEditProject(owner.document.id)
+        const changed = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': { numerator: 60, denominator: 1 } } }] } })
+        expect(changed.structuredContent, JSON.stringify(changed)).toMatchObject({ executionState: 'completed' })
+        expect((await video.openVideoEditDocument(documentRef, { focus: false })).document.sequences[0].frameRate).toEqual({ numerator: 60, denominator: 1 })
+      } finally { observe.mockRestore(); inspect.mockRestore(); media.mockRestore(); await video.closeVideoEditProject(owner.document.id) }
+
     } finally { uninstallHarnessNativeStorage() }
     const ref = { kind: 'settings.registry', id: 'singleton' }
     const read = await client.callTool({ name: 'read_application_entity', arguments: { ref, propertyIds: ['interface.theme_contrast'] } })

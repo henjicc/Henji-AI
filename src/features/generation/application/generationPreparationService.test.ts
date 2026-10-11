@@ -71,6 +71,12 @@ describe('generationPreparation', () => {
     vi.unstubAllGlobals()
   })
 
+  it('估价标记由模型契约传递至助手，不冒充精确动态计费', () => {
+    registry.clear()
+    registry.register({ ...testModel, pricing: { currency: '$', calculator: () => 0.2351104, billingMode: 'estimated', description: '上限估价' } })
+    expect(getGenerationModelSchema(testModel.meta.id).priceEstimate).toMatchObject({ amount: 0.2351104, billingMode: 'estimated', basis: expect.stringContaining('上限估价') })
+  })
+
   it('按配置搜索并裁剪单模型 schema', () => {
     const models = searchGenerationModels({
       mediaType: 'image', providerId: 'test-provider', tags: ['text-to-image'],

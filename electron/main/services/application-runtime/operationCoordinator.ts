@@ -87,7 +87,7 @@ export class ApplicationOperationCoordinator {
     const prior = this.store.get(operationId, callerId)
     if (prior) {
       if (prior.inputDigest !== digest) throw new Error('OPERATION_INPUT_CONFLICT:同一操作标识不能修改参数或基线。')
-      if (prior.state !== 'prepared') return prior
+      if (prior.state !== 'prepared' && prior.state !== 'not_executed') return prior
     }
     if (!access.allowWrites) throw new Error('PERMISSION_DENIED:请在应用内授权修改。')
     const refs: Array<{ kind: string; id: string }> = []

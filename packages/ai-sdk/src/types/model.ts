@@ -412,6 +412,8 @@ export type RuntimePricingMediaContextRequirement =
 
 export interface RuntimePricingConfig {
   currency: Currency
+  /** 估计值不代表实际账单；宿主应同时展示 description 中的依据。 */
+  billingMode?: 'estimated'
   fixed?: number
   calculator?: (params: JsonObject) => number
   /** 数值是当前参数总价，还是单个计费单位的参考价；缺省保持既有总价语义。 */
