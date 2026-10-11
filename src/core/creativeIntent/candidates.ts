@@ -5,14 +5,16 @@ import { detectMotionCycle, recognizeMotionPrimitives } from './recognition'
 import { checkCancelled, CreativeIntentError, prepareMotionTakes, type ComputationControl } from './sampling'
 import { evaluateVideoEditKeyframes } from '../videoEdit/keyframes'
 import { inverseAffine, mapAffine } from '../imaging/transforms'
+import { annotationPoseEvaluator, type IntentAnnotation } from './annotationConstraints'
+import { interpolateMotionPose, relativeMotionEvaluator, type RelativeMotionInput } from './referenceTransforms'
 
-export const MOTION_ALGORITHM_VERSION = 'p2-primitives-native/1'
+export const MOTION_ALGORITHM_VERSION = 'p2-annotation-relative/1'
 export interface MotionCandidate { id: string; label: string; identity: CandidateIdentity; motions: CompiledMotion[] }
 export interface MotionCandidateResult { candidates: MotionCandidate[]; unavailable: { family: string; code: string; refs: readonly string[]; message: string }[] }
-export interface OptimizeMotionInput { draft: MotionDraft; samples: readonly MotionSample[]; mappings: Record<string, MotionCompileContext>; selectedTakeIds?: readonly string[]; intent?: MotionIntent }
+export interface OptimizeMotionInput { draft: MotionDraft; samples: readonly MotionSample[]; mappings: Record<string, MotionCompileContext>; selectedTakeIds?: readonly string[]; intent?: MotionIntent; annotations?: readonly IntentAnnotation[]; relative?: RelativeMotionInput }
 
-export function motionCandidateIdentity(draft: MotionDraft, request?: Pick<OptimizeMotionInput, 'mappings' | 'intent' | 'selectedTakeIds'>): CandidateIdentity {
-  const requestKey = JSON.stringify({ fidelity: draft.fidelity, takes: request?.selectedTakeIds ? [...request.selectedTakeIds].sort() : null, intent: request?.intent ?? null, mappings: request?.mappings ? Object.entries(request.mappings).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0) : null })
+export function motionCandidateIdentity(draft: MotionDraft, request?: Pick<OptimizeMotionInput, 'mappings' | 'intent' | 'selectedTakeIds' | 'annotations' | 'relative'>): CandidateIdentity {
+  const requestKey = JSON.stringify({ fidelity: draft.fidelity, takes: request?.selectedTakeIds ? [...request.selectedTakeIds].sort() : null, intent: request?.intent ?? null, annotations: request?.annotations ?? [], relative: request?.relative ? { target: request.relative.targetRef, mode: request.relative.mode, ref: request.relative.current.ref, recorded: request.relative.recorded.identity, current: request.relative.current.identity } : null, mappings: request?.mappings ? Object.entries(request.mappings).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0) : null })
   return { ownerRef: draft.ownerRef, sourceDraftDigest: draft.sourceDigest, algorithmVersion: MOTION_ALGORITHM_VERSION, requestKey, targetBases: draft.targets.map(t => ({ targetRef: t.ref, baseDigest: t.baseDigest, geometryDigest: t.geometryDigest })) }
 }
 export function assertCandidateCurrent(candidate: MotionCandidate, current: CandidateIdentity): void {
@@ -43,8 +45,16 @@ export function optimizeMotionDraft(input: OptimizeMotionInput, control: Computa
   if (draft.constraints.length) throw new CreativeIntentError('unsupported-constraint', draft.constraints.map(c => c.id), '动画不能套用静态布局约束')
   const intent = input.intent && motionIntentSchema.parse(input.intent)
   const takes = prepareMotionTakes(draft, input.samples, input.selectedTakeIds, control)
+  // Authored annotations can propose motion without fabricating recorded samples or clocks.
+  if (!takes.length) for (const target of draft.targets) {
+    const marks = input.annotations?.filter(a => a.geometry.kind !== 'text' && a.span && a.targetRefs.some(r => r.kind === target.ref.kind && r.id === target.ref.id)) ?? []
+    if (!marks.length) continue
+    const start = Math.min(...marks.map(a => a.span![0])); const end = Math.max(...marks.map(a => a.span![1]))
+    takes.push({ takeId: `annotation:${target.ref.id}`, target, points: [...new Set([start, end])].map(frame => ({ frame, pose: target.basePose, sampleIds: [], hard: true })), pins: [] })
+  }
   if (!takes.length) return { candidates: [], unavailable: [{ family: 'draft', code: 'no-demonstration', refs: [], message: '只有找位置或缺示范，请先摆姿态' }] }
   const families: { id: string; label: string; cleanup: boolean; intent?: MotionIntent }[] = [{ id: 'faithful', label: '保留原姿态与节奏', cleanup: false }, { id: 'clean', label: '保留停顿和转向，整理抖动', cleanup: !intent || intent.kind === 'follow_path' && !intent.preserveJitter }]
+  if (input.annotations?.some(a => a.geometry.kind !== 'text') || input.relative) families.splice(1, 0, { id: 'constrained', label: input.relative ? '跟随参照（当前区间）' : '按标注运动', cleanup: false })
   if (intent && intent.kind !== 'follow_path') families.push({ id: 'intent', label: intent.kind === 'cycle' ? intent.mode === 'loop' ? '闭合循环' : '平缓往返' : MOTION_PRIMITIVE_LABELS[intent.kind], cleanup: false, intent })
   if (!intent && takes.length === 1) {
     const recognized = recognizeMotionPrimitives(takes[0], 'rules', control)
@@ -62,10 +72,21 @@ export function optimizeMotionDraft(input: OptimizeMotionInput, control: Computa
     try {
       const motions = takes.map(t => {
         const mapping = input.mappings[t.takeId]; if (!mapping) throw new CreativeIntentError('host-mapping', [t.takeId], '缺宿主坐标转换')
+        if (family.id === 'constrained') {
+          if (input.relative && input.annotations?.some(a => a.geometry.kind !== 'text')) throw new CreativeIntentError('constraint-space', [t.takeId], '请先分别确认画面标注运动与相对参照运动')
+          const annotate = annotationPoseEvaluator(t, input.annotations ?? [])
+          const relative = input.relative ? relativeMotionEvaluator(t, input.relative) : undefined
+          const hardFrames = input.annotations?.flatMap(a => a.span ?? []) ?? []
+          const anchors = [...t.points]
+          if (annotate) for (const frame of hardFrames) if (!anchors.some(p => p.frame === frame)) anchors.push({ frame, pose: interpolateMotionPose(t.points, frame), hard: true, sampleIds: [] })
+          const constrained = anchors.sort((a, b) => a.frame - b.frame).map(p => ({ ...p, pose: annotate ? annotate(p.frame, p.pose) : p.pose }))
+          const evaluatePose = relative ?? ((frame: number) => { const pose = interpolateMotionPose(constrained, frame); return annotate ? annotate(frame, pose) : pose })
+          return compileMotionTake(t, mapping, { fidelity: draft.fidelity, evaluatePose, hardFrames }, control)
+        }
         return compileMotionTake(t, mapping, { fidelity: draft.fidelity, cleanup: family.cleanup, intent: family.intent }, control)
       })
       const candidate = { id: family.id, label: family.label, identity: motionCandidateIdentity(draft, input), motions }
-      if (!candidates.some(c => !visiblyDifferent(c, candidate, input, control))) candidates.push(candidate)
+      if (family.id === 'constrained' || !candidates.some(c => !visiblyDifferent(c, candidate, input, control))) candidates.push(candidate)
       else unavailable.push({ family: family.id, code: 'no-distinct-result', refs: takes.map(t => t.takeId), message: '当前保真值和约束下与已有候选相同，保留原稿对照' })
       if (candidates.length === 3) break
     } catch (e) {

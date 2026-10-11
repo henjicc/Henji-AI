@@ -7,10 +7,12 @@ import { type MotionIntent } from '@/core/creativeIntent/recipe'
 import { type CreativeIntents, type StoredCreativeIntentResource, creativeIntentLiveResources } from '@/core/creativeIntent/persistence'
 import { mergeMotionClipCurves, motionClipBase, motionClipGeometry, motionClipPose } from '@/core/videoEdit/motionDraft'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
+import { assertVideoEditAnnotationTransition } from '@/core/videoEdit/annotations'
 import { videoEditComposition, type VideoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import { requireVideoEditInstance, getActiveVideoEditSequence, editVideoProject, updateVideoEditCreativeIntents, holdVideoEditActivity, saveVideoEdit, subscribeVideoEditView, setVideoEditPlaybackRate, registerVideoEditClosePreparation, videoEditBusyReason, switchVideoEditSequence, setVideoEditView, type VideoEditInstance } from './videoEditService'
-import { motionDigest, motionSamplePage, motionPageRef, readMotionPages, readMotionCandidate, storeMotionResource } from './videoEditMotionResources'
+import { motionDigest, motionSamplePage, motionPageRef, readMotionPages, readMotionCandidate, readMotionResource, storeMotionResource } from './videoEditMotionResources'
 import { optimizeVideoEditMotionOffThread } from './videoEditMotionWorkerClient'
+import { captureVideoMotionReference, readVideoIntentAnnotation, sampleVideoMotionReference, videoMotionConstraintOptionsSchema, type VideoMotionConstraintOptions } from './videoEditIntentAnnotationAdapter'
 
 const logger = createLogger('features.videoEdit.motionDraft')
 const PAGE_SAMPLE_BUDGET = 256
@@ -26,6 +28,7 @@ export interface VideoMotionState {
   recent: MotionSample[]; pending: MotionSample[]; pinnedSamples?: MotionSample[]; selectedTakeIds?: string[]; intent?: MotionIntent;
   message?: string; generationMs?: number; inputLatencies: number[];
   original?: MotionCandidate; originalRef?: StoredCreativeIntentResource; endpoints?: [MotionSample, MotionSample]; appliedBaseDigest?: string
+  constraints?: VideoMotionConstraintOptions
 }
 interface CaptureRuntime { startedAt: number; seq: number; visit: number; gestureStarted?: boolean; gestureOrigin?: PresentedPose; lastFrame?: number; lastDirection: number; takeId?: string; pointerActive: boolean; inputAt?: number; pendingEvent?: MotionSample['event']; pendingPresentation?: Promise<void>; presented?: () => void; pausedAt?: number; clockId?: string; flushTimer?: ReturnType<typeof setTimeout>; write?: Promise<void>; persist?: Promise<void>; controller?: AbortController; preferredCandidateId?: string; release: () => void; unsubscribe: () => void; previewRevision: number; inputRevision: number; cached?: { base: VideoEditComposition; revision: number; composition: VideoEditComposition } }
 const states = new WeakMap<VideoEditInstance, VideoMotionState>()
@@ -274,6 +277,11 @@ export async function reopenVideoMotion(id: string, draftId: string): Promise<vo
   const options = head(owner).motionOptions?.find(o => o.draftId === draftId)
   const state: VideoMotionState = { owner, draft: structuredClone(draft), status: 'reviewing', mode: 'navigate', property: 'position', speed: 1, capture: 'place', pose: draft.targets[0].basePose, preview: 'original', candidates: [], recent: [], pending: [], inputLatencies: [], intent: options?.intent, selectedTakeIds: options?.selectedTakeIds, appliedBaseDigest: options?.appliedBaseDigest }
   state.pinnedSamples = []
+  for (const ref of draft.recipeRefs) {
+    const resource = head(owner).resources.find(r => r.resourceId === ref.resourceId)
+    if (!resource || resource.kind !== 'recipe') throw new Error('动作约束资源缺失，请恢复原稿')
+    state.constraints = videoMotionConstraintOptionsSchema.parse(await readMotionResource(resource))
+  }
   const pins = new Set(draft.pins.map(pin => pin.sampleId))
   for await (const page of readMotionPages(id, draft)) if (page.kind === 'samples') {
     state.recent = [...state.recent, ...page.entries].slice(-OVERLAY_SAMPLE_BUDGET); state.endpoints = [state.endpoints?.[0] ?? page.entries[0], page.entries.at(-1)!]
@@ -300,7 +308,58 @@ async function inputFor(state: VideoMotionState): Promise<OptimizeMotionInput> {
   if (baseDigest !== state.draft.targets[0].baseDigest && baseDigest !== state.appliedBaseDigest || await motionDigest(motionClipGeometry(sequence, clip)) !== state.draft.targets[0].geometryDigest) throw new Error('片段或画幅已修改，请保留原稿并重新示范。')
   const samples: MotionSample[] = []
   if (targetClip(state) !== clip) throw new Error('片段已有后续修改，请重新预览。')
-  return { draft, samples, selectedTakeIds: state.selectedTakeIds, intent: state.intent, mappings: Object.fromEntries(draft.takes.map(t => [t.id, { positionToNative: [1, 0, 0, 1, -.5, -.5], pivotToNative: [1, 0, 0, 1, 0, 0], clipStart: clip.start, scaleFactor: 1, rotationOffsetDegrees: 0 }])) }
+  const annotations = state.constraints?.annotations.map(choice => {
+    const mark = sequence.annotations.find(a => a.id === choice.id)
+    if (!mark) throw new Error('标注已删除，请重新选择标注并整理')
+    return readVideoIntentAnnotation(state.owner.document.id, sequence, mark, clip.id, choice.role, choice.span)
+  })
+  let relative: OptimizeMotionInput['relative']
+  const reference = state.constraints?.reference
+  if (reference) {
+    const current = sequence.clips.find(c => c.id === reference.clip.id)
+    if (!current || current.id === clip.id) throw new Error('参照已删除或指向自身，请重新选择')
+    const ranges = draft.takes.filter(t => !state.selectedTakeIds || state.selectedTakeIds.includes(t.id)).flatMap(t => t.timelineRange ? [[Math.min(...t.timelineRange), Math.max(...t.timelineRange)] as [number, number]] : [])
+    if (ranges.length) {
+      relative = { targetRef: draft.targets[0].ref, mode: reference.mode, recorded: sampleVideoMotionReference(state.owner.document.id, reference, ranges), current: sampleVideoMotionReference(state.owner.document.id, captureVideoMotionReference(sequence, current, reference.mode), ranges) }
+      relative.recorded.identity = await motionDigest(reference)
+      relative.current.identity = await motionDigest(captureVideoMotionReference(sequence, current, reference.mode))
+    }
+  }
+  const takeIds = [...draft.takes.map(t => t.id), ...draft.targets.map(t => `annotation:${t.ref.id}`)]
+  return { draft, samples, selectedTakeIds: state.selectedTakeIds, intent: state.intent, annotations, relative, mappings: Object.fromEntries(takeIds.map(takeId => [takeId, { positionToNative: [1, 0, 0, 1, -.5, -.5], pivotToNative: [1, 0, 0, 1, 0, 0], clipStart: clip.start, scaleFactor: 1, rotationOffsetDegrees: 0 }])) }
+}
+
+/** Same domain entry for UI and the shared entity-property adapter; selecting never edits artwork. */
+export async function configureVideoMotionConstraints(id: string, choice: { annotation?: { id: string; role: 'path' | 'target' | 'dwell' | 'text'; span?: [number, number] }; referenceId?: string; referenceMode?: 'local' | 'composition'; clear?: boolean }): Promise<void> {
+  assertApplicationWritesAllowed()
+  const state = states.get(requireVideoEditInstance(id)); if (!state) throw new Error('请先开始示范，再选择标注或参照')
+  if (state.status === 'optimizing') throw new Error('请先取消整理再调整约束')
+  const sequence = owningSequence(state); const clip = targetClip(state)
+  const constraints: VideoMotionConstraintOptions = choice.clear ? { kind: 'video-motion-constraints', version: 1, annotations: [] } : structuredClone(state.constraints ?? { kind: 'video-motion-constraints', version: 1, annotations: [] })
+  if (choice.annotation) {
+    const mark = sequence.annotations.find(a => a.id === choice.annotation!.id)
+    if (!mark) throw new Error('标注已删除，请重新选择')
+    const annotation = readVideoIntentAnnotation(id, sequence, mark, clip.id, choice.annotation.role, choice.annotation.span)
+    constraints.annotations = [...constraints.annotations.filter(a => a.id !== mark.id), { id: mark.id, role: choice.annotation.role, span: annotation.span! }]
+  }
+  if (choice.referenceId !== undefined) {
+    const reference = sequence.clips.find(c => c.id === choice.referenceId)
+    if (!reference || reference.id === clip.id) throw new Error('请选择另一个画面片段作为参照')
+    constraints.reference = constraints.reference?.clip.id === reference.id ? { ...constraints.reference, mode: choice.referenceMode ?? constraints.reference.mode } : captureVideoMotionReference(sequence, reference, choice.referenceMode ?? 'local')
+  }
+  const parsed = videoMotionConstraintOptionsSchema.parse(constraints)
+  const resource = await storeMotionResource(id, parsed, 'recipe')
+  if (states.get(state.owner) !== state || getActiveVideoEditSequence(state.owner).revision !== sequence.revision) { await discardUnpublishedResources(state, [resource]); throw new Error('画面已改变，请重新选择约束') }
+  invalidate(state); state.constraints = parsed
+  if (parsed.annotations.some(a => a.role !== 'text') && !state.draft.targets[0].editable.includes('position')) state.draft.targets[0].editable.push('position')
+  state.draft.recipeRefs = [{ resourceId: resource.resourceId, bytes: resource.bytes, digest: resource.digest }]
+  await persistHead(state, [resource]); publish(state)
+}
+
+export async function organizeVideoMotionAnnotation(id: string, annotationId: string, role: 'path' | 'target' | 'dwell' | 'text', span: [number, number]): Promise<void> {
+  if (!states.get(requireVideoEditInstance(id))) { await startVideoMotion(id, 'place'); await stopVideoMotion(id) }
+  await configureVideoMotionConstraints(id, { annotation: { id: annotationId, role, span } })
+  await optimizeVideoMotion(id)
 }
 export async function optimizeVideoMotion(id: string): Promise<void> {
   const state = states.get(requireVideoEditInstance(id)); if (!state) throw new Error('请先示范动作。')
@@ -314,6 +373,10 @@ export async function optimizeVideoMotion(id: string): Promise<void> {
     await flushVideoMotion(state); const input = await inputFor(state)
     const pages = async function* (): AsyncGenerator<MotionSample[]> { for await (const page of readMotionPages(id, input.draft, controller.signal)) if (page.kind === 'samples') yield page.entries }
     const { result, original } = await optimizeVideoEditMotionOffThread(input, controller.signal, pages()); controller.signal.throwIfAborted()
+    if (input.relative || input.annotations?.some(a => a.geometry.kind !== 'text')) {
+      result.candidates = result.candidates.filter(candidate => candidate.id === 'constrained')
+      result.unavailable = result.unavailable.filter(item => item.family === 'constrained')
+    }
     const current = await inputFor(state)
     for (const candidate of result.candidates) assertCandidateCurrent(candidate, motionCandidateIdentity(state.draft, current))
     for (const candidate of result.candidates) { controller.signal.throwIfAborted(); resources.push(await storeMotionResource(id, { version: 1, ...candidate }, 'candidate')) }
@@ -414,14 +477,23 @@ export async function applyVideoMotion(id: string): Promise<void> {
   const input = await inputFor(state); assertCandidateCurrent(candidate, motionCandidateIdentity(state.draft, input))
   if (states.get(state.owner) !== state || runtime.inputRevision !== inputRevision) throw new Error('原稿已有后续修改，请重新预览。')
   const expected = state.owner.document; const clip = targetClip(state); const seq = owningSequence(state)
+  const transactionId = crypto.randomUUID()
   editVideoProject(id, document => {
     if (state.owner.document !== expected) throw new Error('片段已有后续修改，请重新预览。')
     const sequence = document.sequences.find(s => s.id === seq.id)!
     sequence.clips = sequence.clips.map(c => c.id === clip.id ? mergeMotionClipCurves(c, candidate.motions) : c)
+    const ids = new Set(state.constraints?.annotations.filter(a => a.role !== 'text').map(a => a.id))
+    sequence.annotations = sequence.annotations.map(mark => {
+      if (!ids.has(mark.id)) return mark
+      const open = mark.status === 'draft' ? { ...mark, status: 'open' as const } : mark
+      const next = { ...open, status: 'addressed' as const, addressedBy: { transactionId, revision: document.revision + 1 }, thread: [...mark.thread, { id: crypto.randomUUID(), author: { kind: 'assistant' as const, name: '动作整理' }, createdAt: new Date().toISOString(), text: '已按已确认的标注角色整理当前动作区间，请预览审查；可用剪辑撤销恢复。' }] }
+      assertVideoEditAnnotationTransition(mark, open, 'agent'); assertVideoEditAnnotationTransition(open, next, 'agent')
+      return next
+    })
     return document
   })
   const applied = targetClip(state); state.appliedBaseDigest = await motionDigest(motionClipBase(applied))
-  const application = { candidateRef: state.draft.selectedCandidateRef!, operationRef: { kind: 'creative_intent.application', id: crypto.randomUUID() }, receiptRef: { kind: 'video_edit.document', id }, saved: false }
+  const application = { candidateRef: state.draft.selectedCandidateRef!, operationRef: { kind: 'creative_intent.application', id: transactionId }, receiptRef: { kind: 'video_edit.document', id }, saved: false }
   state.draft.applications.push(application)
   state.preview = 'base'; publish(state)
   await saveMotionApplication(state, application)

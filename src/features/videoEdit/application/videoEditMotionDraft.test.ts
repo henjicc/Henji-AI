@@ -10,6 +10,9 @@ import { appendVideoEditClip, closeVideoEditProject, editVideoProject, getActive
 import { startVideoMotion, demonstrateVideoMotion, recordVideoMotionPresentation, videoMotionState, videoMotionComposition, setVideoMotionOptions, setVideoMotionPointer, stopVideoMotion, optimizeVideoMotion, applyVideoMotion, configureVideoMotion, reopenVideoMotion, videoMotionLiveResources, setVideoMotionIntent, previewVideoMotion, pinVideoMotionFrame } from './videoEditMotionDraft'
 import { readMotionPages } from './videoEditMotionResources'
 import { useVideoEditMotionGesture } from '../panels/useVideoEditMotionGesture'
+import { configureVideoMotionConstraints, organizeVideoMotionAnnotation } from './videoEditMotionDraft'
+import { createVideoEditAnnotation, updateVideoEditAnnotation } from './videoEditAnnotations'
+import { motionClipPose } from '@/core/videoEdit/motionDraft'
 
 vi.mock('./videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => { const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted(); input = { ...input, samples }; return { result: optimizeMotionDraft(input), original: optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined }).candidates[0] } } }))
 const files = new Map<string, Uint8Array>()
@@ -25,6 +28,43 @@ beforeEach(() => {
 afterEach(async () => { for (const owner of listVideoEditInstances()) { if (videoMotionState(owner)?.status === 'paused') await stopVideoMotion(owner.document.id); await closeVideoEditProject(owner.document.id) } vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 const setup = async () => { const owner = await createVideoEditTestProject(); appendVideoEditClip(owner.document.id); const clip = getActiveVideoEditSequence(owner).clips[0]; setVideoEditView(owner.document.id, { selection: clip.id, frame: 0 }); return owner }
 const present = (owner: Awaited<ReturnType<typeof setup>>, frame: number) => { setVideoEditView(owner.document.id, { frame }); recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame, revision: videoMotionComposition(owner)!.revision, at: performance.now() }) }
+it('箭头无需伪造录制即可整理，标注变化拒绝旧候选，应用追加处理回复且一次撤销', async () => {
+  const owner = await setup(); const id = owner.document.id; const clip = getActiveVideoEditSequence(owner).clips[0]
+  const annotation = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, endFrame: 60, clipId: clip.id, target: { kind: 'stroke', strokes: [[{ x: .2, y: .3 }, { x: .8, y: .6 }]] }, text: '沿箭头走' })
+  await organizeVideoMotionAnnotation(id, annotation, 'path', [0, 60])
+  const state = videoMotionState(owner)!; expect(state.draft.takes).toHaveLength(0); expect(state.candidates).toHaveLength(1)
+  expect(motionClipPose(videoMotionComposition(owner)!.clips[0], 60).position[0]).toBeCloseTo(.8)
+  updateVideoEditAnnotation(id, annotation, mark => ({ ...mark, text: '沿这个箭头走' }))
+  await expect(applyVideoMotion(id)).rejects.toThrow('已变化')
+  await optimizeVideoMotion(id)
+  const before = structuredClone(getActiveVideoEditSequence(owner).annotations[0]); const history = owner.past.length
+  await applyVideoMotion(id)
+  const after = getActiveVideoEditSequence(owner).annotations[0]
+  expect(after.status).toBe('addressed'); expect(after.author).toEqual(before.author); expect(after.createdAt).toBe(before.createdAt)
+  expect(after.thread).toHaveLength(before.thread.length + 1); expect(owner.past).toHaveLength(history + 1)
+  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).annotations[0]).toEqual(before)
+  expect(getActiveVideoEditSequence(owner).clips[0].curves?.x).toBeUndefined()
+})
+it('参照改变拒绝旧候选，重新整理仍保留录制时的局部偏移且保存重开', async () => {
+  const owner = await setup(); const id = owner.document.id; const target = getActiveVideoEditSequence(owner).clips[0]
+  appendVideoEditClip(id); const reference = getActiveVideoEditSequence(owner).clips[1]
+  editVideoProject(id, document => { const c = document.sequences[0].clips[1]; c.start = 0; c.duration = target.duration; c.x = .1; return document })
+  setVideoEditView(id, { selection: target.id, frame: 0 }); await startVideoMotion(id, 'place')
+  await configureVideoMotionConstraints(id, { referenceId: reference.id })
+  const state = videoMotionState(owner)!; present(owner, 0)
+  demonstrateVideoMotion(id, { ...state.pose, position: [.7, .5] }, 'down'); present(owner, 0)
+  demonstrateVideoMotion(id, { ...state.pose, position: [.8, .5] }, 'up'); present(owner, 60)
+  await stopVideoMotion(id); await optimizeVideoMotion(id)
+  editVideoProject(id, document => { document.sequences[0].clips[1].x = .2; return document })
+  await expect(applyVideoMotion(id)).rejects.toThrow('已变化')
+  await optimizeVideoMotion(id); expect(state.candidates).toHaveLength(1)
+  expect(motionClipPose(videoMotionComposition(owner)!.clips[0], 60).position[0]).toBeCloseTo(.9)
+  await applyVideoMotion(id)
+  expect(getActiveVideoEditSequence(owner).clips[0].groupId).toBe(target.groupId)
+  const reopened = await reopenVideoEdit(id); await reopenVideoMotion(id, state.draft.id)
+  expect(videoMotionState(reopened)!.constraints?.reference?.clip.x).toBe(.1)
+  expect(motionClipPose(getActiveVideoEditSequence(reopened).clips[0], 60).position[0]).toBeCloseTo(.9)
+})
 it('录制不自动播放；找位置没有示范；仅真实呈现姿态进入原稿；一步应用撤销重做且重开保留钉点和原稿', async () => {
   const owner = await setup(); const id = owner.document.id; const history = owner.past.length
   await startVideoMotion(id, 'place'); expect(owner.playing).toBe(false)

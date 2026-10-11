@@ -49,7 +49,7 @@ export function poseToNative(pose: Pose, context: MotionCompileContext): Record<
   return { x: p[0], y: p[1], scale: pose.scaleXY[0] * context.scaleFactor, rotation: pose.rotationTurns * 360 + context.rotationOffsetDegrees, anchorX: pivot[0], anchorY: pivot[1] }
 }
 
-export function compileMotionTake(take: PreparedTake, context: MotionCompileContext, options: { fidelity: number; intent?: MotionIntent; cleanup?: boolean }, control: ComputationControl = {}): CompiledMotion {
+export function compileMotionTake(take: PreparedTake, context: MotionCompileContext, options: { fidelity: number; intent?: MotionIntent; cleanup?: boolean; evaluatePose?: (frame: number) => Pose; hardFrames?: readonly number[] }, control: ComputationControl = {}): CompiledMotion {
   checkCancelled(control)
   if (options.intent) options = { ...options, intent: motionIntentSchema.parse(options.intent) }
   if (!Number.isSafeInteger(context.clipStart) || context.clipStart < 0 || !(context.scaleFactor > 0) || !Number.isFinite(context.rotationOffsetDegrees)) throw new CreativeIntentError('host-mapping', [take.takeId], '宿主转换无效')
@@ -95,9 +95,11 @@ export function compileMotionTake(take: PreparedTake, context: MotionCompileCont
   tolerance.x = .00025 / Math.hypot(inv[0] * w / short, inv[1] * h / short)
   tolerance.y = .00025 / Math.hypot(inv[2] * w / short, inv[3] * h / short)
   for (const key of keys) tolerance[key] *= 1 - .9 * options.fidelity
-  const useIntent = options.intent && options.intent.kind !== 'follow_path'
+  const useIntent = Boolean(options.evaluatePose || options.intent && options.intent.kind !== 'follow_path')
+  const evaluatedPose = (frame: number): Pose => options.evaluatePose ? options.evaluatePose(frame) : intentPose(options.intent!, first.pose, (frame - first.frame) / duration, duration)
   const points: FramePose[] = useIntent ? [] : source
   const hardFrames = new Set(source.filter(p => p.hard).map(p => p.frame))
+  for (const frame of options.hardFrames ?? []) hardFrames.add(frame)
   if (primitive && primitive.kind !== 'follow_path') {
     const repeat = options.intent?.kind === 'cycle' ? options.intent : undefined
     const period = repeat?.periodFrames ?? duration
@@ -114,7 +116,7 @@ export function compileMotionTake(take: PreparedTake, context: MotionCompileCont
   }
   if (useIntent) for (let frame = first.frame; frame <= last.frame; frame++) {
     if (frame % 256 === 0) checkCancelled(control)
-    const pose = intentPose(options.intent!, first.pose, (frame - first.frame) / duration, duration)
+    const pose = evaluatedPose(frame)
     points.push({ frame, pose, sampleIds: [], hard: frame === first.frame || frame === last.frame || hardFrames.has(frame) })
   }
   const values = points.map(p => ({ p, native: poseToNative(p.pose, context) }))
@@ -124,7 +126,7 @@ export function compileMotionTake(take: PreparedTake, context: MotionCompileCont
     let samples: ScalarSample[] = values.map(({ p, native }) => ({ time: p.frame - context.clipStart, value: native[key], hard: p.hard }))
     if (options.cleanup) samples = cleanScalarSamples(samples, options.fidelity)
     for (const s of samples) if (!videoEditClipAnimatedValueSchemas[key].safeParse(s.value).success) throw new CreativeIntentError('native-range', [take.takeId, key], `属性 ${key} 超出正式宿主范围，请调整动作`) 
-    const intentValue = useIntent ? (time: number): number => poseToNative(intentPose(options.intent!, first.pose, (time + context.clipStart - first.frame) / duration, duration), context)[key] : undefined
+    const intentValue = useIntent ? (time: number): number => poseToNative(evaluatedPose(time + context.clipStart), context)[key] : undefined
     const fitted: FittedScalar = options.fidelity === 1 && !useIntent ? { points: samples.map(s => ({ time: s.time, value: s.value, interpolation: 'linear' as const })), maxError: 0 } : fitScalarCurve(samples, tolerance[key], control, intentValue)
     if (options.intent?.kind === 'cycle') {
       const cycle = options.intent; const times = new Set<number>([first.frame - context.clipStart, last.frame - context.clipStart])
@@ -170,7 +172,7 @@ export function compileMotionTake(take: PreparedTake, context: MotionCompileCont
   // Analytic intent checked at 4 subdivisions/frame, independently of fit-curve's tolerance.
   if (useIntent) for (let frame = first.frame; frame <= last.frame; frame += .25) {
     if (Number.isInteger(frame) && frame % 256 === 0) checkCancelled(control)
-    const native = poseToNative(intentPose(options.intent!, first.pose, (frame - first.frame) / duration, duration), context)
+    const native = poseToNative(evaluatedPose(frame), context)
     for (const key of keys) {
       if (!videoEditClipAnimatedValueSchemas[key].safeParse(native[key]).success) throw new CreativeIntentError('native-range', [take.takeId, key], '动作极值超出宿主范围')
       const error = Math.abs(evaluateVideoEditKeyframes(curves[key], frame - context.clipStart, native[key]) - native[key])
