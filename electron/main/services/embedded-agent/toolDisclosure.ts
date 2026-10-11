@@ -17,7 +17,7 @@ export class PiToolDisclosure {
 
   constructor(tools: ToolDefinition[], private readonly manager: SessionManager, private readonly session: () => AgentSession) {
     this.deferred = tools.filter(tool => !basicTools.has(tool.name) && (domainOf(tool.name)
-      || ['describe_application_contract', 'read_application_media', 'get_application_operation', 'retry_application_operation_save'].includes(tool.name))).map(tool => tool.name)
+      || ['describe_application_contract', 'read_application_media', 'get_application_operation', 'retry_application_operation_save', 'review_application_operation'].includes(tool.name))).map(tool => tool.name)
     for (const entry of manager.getBranch()) {
       if (entry.type !== 'custom') continue
       if (entry.customType === 'henji-loaded-image-edit-tools') this.remember('tool.image_edit', this.deferred.filter(name => domainOf(name) === 'image_edit'))
