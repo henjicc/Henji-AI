@@ -39,13 +39,12 @@ export function ExplanationReview({ entry, onRead, onBind, onError, initiallyOpe
     {open && <>
       {!result ? <UiEmpty title="正在读取录制证据" /> : <>
         {url ? <div className="relative"><img src={url} className="block h-auto w-full" alt="指向时保存的作品画面" />{result.imagePoint && <MapPin aria-label="录制时的指向位置" size={18} className="absolute text-accent-text" style={{ left: `${result.imagePoint[0] * 100}%`, top: `${result.imagePoint[1] * 100}%`, transform: 'translate(-50%, -100%)' }} />}</div> : <UiEmpty title="这处没有保存历史画面" description="保留位置证据，不用当前画面代替。" />}
-        <p className={UI_TEXT_META_CLASS}>位置为录制时的作品坐标。重叠对象和粗时间需要逐项确认。</p>
         {result.resolution.negated && <p role="status" className={UI_TEXT_BODY_CLASS}>这句表示不要修改对象，候选只用于确认保护范围。</p>}
         {result.resolution.mentions.map(mention => <p key={mention.id} className={UI_TEXT_META_CLASS}>{slotNames[mention.slot]}「{mention.text}」：{mention.selected ? `${mention.selected.targetRefs.map(ref => ref.label ?? '已确认对象').join('、') || '已确认位置'} · ${(mention.selected.point[0] * 100).toFixed(1)}%, ${(mention.selected.point[1] * 100).toFixed(1)}%` : mention.issues.join('；') || '请确认'}</p>)}
-        {!!options.length && <div className="h-40"><Virtuoso data={options} itemContent={(_index, option) => <UiButton size="sm" disabled={busy} onClick={() => {
+        {!!options.length && <div className="h-40 min-w-0"><Virtuoso data={options} itemContent={(_index, option) => <UiButton className="max-w-full" size="sm" disabled={busy} title={`确认${option.label}`} onClick={() => {
           const token = epoch.value; setBusy(true); const binding = confirmedExplanationBinding(option.mention, option.candidate, option.target)
           void onBind(entry, binding).then(() => onRead(entry)).then(value => { if (token === epoch.value) setResult(value) }).catch(error => { if (token === epoch.value) onError(error) }).finally(() => { if (token === epoch.value) setBusy(false) })
-        }}>确认{option.label}</UiButton>} /></div>}
+        }}><span className="min-w-0 truncate">确认{option.label}</span></UiButton>} /></div>}
         {!!result.plan.issues.length && <UiError title="还不能生成修改计划" message={result.plan.issues.join('；')} />}
         {result.plan.status === 'satisfied' && <p className={UI_TEXT_BODY_CLASS}>当前状态已满足确认目标，无需重复执行。</p>}
         {result.plan.status === 'review' && <p className={UI_TEXT_BODY_CLASS}>候选更新：{result.plan.changes.length} 处位置差异待审阅。当前仅供审阅，还未修改作品。录制中的移动、撤销和重做不会重放。</p>}

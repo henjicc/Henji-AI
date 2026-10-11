@@ -13,14 +13,14 @@ interface SharedCreativeIntentControlsProps {
 }
 interface MotionCreativeIntentControlsProps {
   profile?: 'motion'
-  intent: 'path' | 'overshoot' | 'spring'
+  intent: 'path' | 'overshoot' | 'spring' | 'bounce' | 'orbit' | 'pingpong'
   mode: 'navigate' | 'demonstrate'; speed: 1 | 0.5 | 0.25; property: 'position' | 'rotationTurns' | 'scaleXY'; capture: 'place' | 'record'
   takes: { id: string; label: string; selected: boolean }[]
   onStart: () => void; onStop: () => void; onPause: () => void; onResume: () => void
   onPinEnd?: () => void; onTake: (id: string) => void
   onMode: (value: 'navigate' | 'demonstrate') => void; onSpeed: (value: 1 | 0.5 | 0.25) => void
   onProperty: (value: 'position' | 'rotationTurns' | 'scaleXY') => void; onCapture: (value: 'place' | 'record') => void
-  onIntent: (value: 'path' | 'overshoot' | 'spring') => void; onPlay: () => void
+  onIntent: (value: 'path' | 'overshoot' | 'spring' | 'bounce' | 'orbit' | 'pingpong') => void; onPlay: () => void
 }
 /** Static hosts consume the same candidate/pin controls without inventing recording state or callbacks. */
 export type CreativeIntentControlsProps = SharedCreativeIntentControlsProps & (MotionCreativeIntentControlsProps | { profile: 'layout' })
@@ -57,7 +57,7 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
         onPointerUp={() => finishFidelity(true)} onPointerCancel={() => finishFidelity(false)} onBlur={() => finishFidelity(true)}
         onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); finishFidelity(false) } }}
         onKeyUp={event => { if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') finishFidelity(true) }} />
-      {motion && <Dropdown ariaLabel="整理动作" value={motion.intent} options={[{ value: 'path', label: '沿示范路径' }, { value: 'overshoot', label: '轻回弹' }, { value: 'spring', label: '弹性回落' }]} onSelect={motion.onIntent} />}
+      {motion && <Dropdown ariaLabel="整理动作" value={motion.intent} options={[{ value: 'path', label: '沿示范路径' }, { value: 'overshoot', label: '轻回弹' }, { value: 'spring', label: '弹性回落' }, { value: 'bounce', label: '弹跳' }, { value: 'orbit', label: '环绕' }, { value: 'pingpong', label: '平缓往返' }]} onSelect={motion.onIntent} />}
     </UiGroup>
     {motion && motion.takes.length > 1 && <UiGroup title="采用示范" titleTone="compact"><div className="h-24"><Virtuoso data={motion.takes} itemContent={(_, t) => <UiOptionButton variant="menu" active={t.selected} onClick={() => motion.onTake(t.id)}>{t.label}</UiOptionButton>} /></div></UiGroup>}
     <UiGroup title="钉住姿态" titleTone="compact">

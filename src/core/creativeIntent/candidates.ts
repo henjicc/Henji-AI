@@ -1,11 +1,12 @@
 import { motionDraftSchema, sameCandidateInput, type CandidateIdentity, type MotionDraft, type MotionSample } from './contracts'
 import { compileMotionTake, type CompiledMotion, type MotionCompileContext } from './motionCompiler'
-import { motionIntentSchema, type MotionIntent } from './recipe'
+import { MOTION_PRIMITIVE_LABELS, motionIntentSchema, type MotionIntent } from './recipe'
+import { detectMotionCycle, recognizeMotionPrimitives } from './recognition'
 import { checkCancelled, CreativeIntentError, prepareMotionTakes, type ComputationControl } from './sampling'
 import { evaluateVideoEditKeyframes } from '../videoEdit/keyframes'
 import { inverseAffine, mapAffine } from '../imaging/transforms'
 
-export const MOTION_ALGORITHM_VERSION = 'p1-schneider-native/2'
+export const MOTION_ALGORITHM_VERSION = 'p2-primitives-native/1'
 export interface MotionCandidate { id: string; label: string; identity: CandidateIdentity; motions: CompiledMotion[] }
 export interface MotionCandidateResult { candidates: MotionCandidate[]; unavailable: { family: string; code: string; refs: readonly string[]; message: string }[] }
 export interface OptimizeMotionInput { draft: MotionDraft; samples: readonly MotionSample[]; mappings: Record<string, MotionCompileContext>; selectedTakeIds?: readonly string[]; intent?: MotionIntent }
@@ -44,7 +45,15 @@ export function optimizeMotionDraft(input: OptimizeMotionInput, control: Computa
   const takes = prepareMotionTakes(draft, input.samples, input.selectedTakeIds, control)
   if (!takes.length) return { candidates: [], unavailable: [{ family: 'draft', code: 'no-demonstration', refs: [], message: '只有找位置或缺示范，请先摆姿态' }] }
   const families: { id: string; label: string; cleanup: boolean; intent?: MotionIntent }[] = [{ id: 'faithful', label: '保留原姿态与节奏', cleanup: false }, { id: 'clean', label: '保留停顿和转向，整理抖动', cleanup: !intent || intent.kind === 'follow_path' && !intent.preserveJitter }]
-  if (intent && intent.kind !== 'follow_path') families.push({ id: 'intent', label: intent.kind === 'scale_focus' ? '保持焦点推近' : intent.kind === 'overshoot' ? '轻微过冲回落' : intent.kind === 'spring_settle' ? '有弹性地回落' : intent.kind === 'dwell' ? '保持指定停顿' : '沿指定直线移动', cleanup: false, intent })
+  if (intent && intent.kind !== 'follow_path') families.push({ id: 'intent', label: intent.kind === 'cycle' ? intent.mode === 'loop' ? '闭合循环' : '平缓往返' : MOTION_PRIMITIVE_LABELS[intent.kind], cleanup: false, intent })
+  if (!intent && takes.length === 1) {
+    const recognized = recognizeMotionPrimitives(takes[0], 'rules', control)
+    if (!recognized.rejected && recognized.candidates[0]?.kind !== 'follow_path') {
+      families.push({ id: 'recognized', label: MOTION_PRIMITIVE_LABELS[recognized.candidates[0].kind], cleanup: false, intent: recognized.candidates[0].intent })
+    }
+    const cycle = detectMotionCycle(takes[0])
+    if (cycle) families.push({ id: 'cycle', label: cycle.mode === 'loop' ? '闭合循环' : '平缓往返', cleanup: false, intent: cycle })
+  }
   if (intent?.kind === 'overshoot' && draft.fidelity < 1) families.push({ id: 'expressive', label: '加强过冲后回落', cleanup: false, intent: { ...intent, amountRatio: intent.amountRatio * (1 + .5 * (1 - draft.fidelity)) } })
   if (intent?.kind === 'scale_focus' && draft.fidelity < 1) families.push({ id: 'steady-focus', label: '保持焦点，平稳推近', cleanup: false, intent: { ...intent, timingBlend: 1 - draft.fidelity } })
   const candidates: MotionCandidate[] = []; const unavailable: MotionCandidateResult['unavailable'] = []

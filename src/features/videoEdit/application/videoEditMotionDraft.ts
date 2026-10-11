@@ -371,7 +371,7 @@ export async function configureVideoMotion(id: string, values: { fidelity?: numb
   await flushVideoMotion(state); publish(state)
 }
 /** Intent endpoints come from sealed samples of the selected take, never from the bounded overlay cache. */
-export async function setVideoMotionIntent(id: string, value: 'path' | 'overshoot' | 'spring'): Promise<void> {
+export async function setVideoMotionIntent(id: string, value: 'path' | 'overshoot' | 'spring' | 'bounce' | 'orbit' | 'pingpong'): Promise<void> {
   const state = states.get(requireVideoEditInstance(id)); if (!state) return
   await flushVideoMotion(state); await inputFor(state)
   let first: MotionSample | undefined; let last: MotionSample | undefined
@@ -382,6 +382,14 @@ export async function setVideoMotionIntent(id: string, value: 'path' | 'overshoo
   }
   if (!first || !last) throw new Error('请先示范动作。')
   const from = first.pose.position; const to = last.pose.position
+  if (value === 'bounce' || value === 'orbit' || value === 'pingpong') {
+    const duration = last.timeline!.frame - first.timeline!.frame
+    if (duration < 2) throw new Error('请延长示范，留出动作的转向时间。')
+    const intent: MotionIntent = value === 'bounce' ? { kind: 'bounce', from, to, heightRatio: .12, count: 2, decay: .75 }
+      : value === 'orbit' ? { kind: 'orbit', center: [from[0] - .12, from[1]], radiusXY: [.12, .12], startTurns: 0, sweepTurns: 2 }
+      : { kind: 'cycle', mode: 'pingpong', periodFrames: duration, template: { kind: 'move_line', from, to } }
+    await configureVideoMotion(id, { intent }); return
+  }
   await configureVideoMotion(id, { intent: value === 'path' ? { kind: 'follow_path', preserveJitter: false } : value === 'overshoot' ? { kind: 'overshoot', from, to, amountRatio: .08, settleFraction: .625 } : { kind: 'spring_settle', from, to, damping: 6, cycles: 2 } })
 }
 export async function pinVideoMotionFrame(id: string, frame: number | 'end'): Promise<void> {

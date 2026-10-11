@@ -32,8 +32,8 @@ const VIEWS: Record<VideoEditClipPropertyKey, PropertyView> = {
 }
 
 function PropertyRow({ label, tooltip, children, resetLabel, resetDisabled, onReset, animation }: { label: string; tooltip: string; children: ReactNode; resetLabel: string; resetDisabled: boolean; onReset: () => void; animation?: ReactNode }): React.ReactElement {
-  return <div className="flex min-h-8 flex-wrap items-center gap-1.5 pl-5">
-    {animation}<span className="min-w-20 flex-1 text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
+  return <div className="flex min-h-8 min-w-0 items-center gap-0.5" data-video-edit-property-row={label}>
+    {animation}<span className="min-w-0 flex-1 truncate text-xs text-text2" title={label}><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
     {children}
     <UiIconButton size="xs" aria-label={resetLabel} title={resetLabel} disabled={resetDisabled} onClick={onReset}><RotateCcw size={12} /></UiIconButton>
   </div>
@@ -45,7 +45,7 @@ function PropertyNumber({ view, clip, frame, gesture }: { view: PropertyView; cl
   const bounds = videoEditClipPropertyBounds(view.key)
   const factor = 10 ** view.precision
   return <span className="flex shrink-0 items-center gap-1">
-    <NumberInput ariaLabel={view.label} increaseLabel={`增加${view.label}`} decreaseLabel={`减少${view.label}`} size="sm" value={value} min={view.toDisplay(bounds.min, frame)} max={view.toDisplay(bounds.max, frame)} step={view.step} precision={view.precision} widthClassName="w-20" align="right"
+    <NumberInput ariaLabel={view.label} increaseLabel={`增加${view.label}`} decreaseLabel={`减少${view.label}`} size="sm" value={value} min={view.toDisplay(bounds.min, frame)} max={view.toDisplay(bounds.max, frame)} step={view.step} precision={view.precision} widthClassName="w-16" align="right"
       onScrubStart={gesture.begin} onScrubEnd={cancelled => { if (cancelled) gesture.cancel(); else gesture.finish() }}
       onChange={next => { if (gesture.active() || Math.round(next * factor) !== Math.round(value * factor)) gesture.commit({ [view.key]: view.fromDisplay(next, frame) }) }} />
     {view.unit ? <span className="w-3 text-2xs text-text3">{view.unit}</span> : <span className="w-3" aria-hidden="true" />}

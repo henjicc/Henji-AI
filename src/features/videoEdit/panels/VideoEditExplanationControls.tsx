@@ -30,7 +30,7 @@ export function VideoEditExplanationControls({ owner, onError }: { owner: VideoE
         {recording && <UiButton disabled={state?.busy} onClick={() => run(() => pauseVideoExplanation(id))}><Pause size={14} />暂停录制</UiButton>}
         {session && ['recording', 'paused', 'recoverable'].includes(session.state) && <UiButton disabled={state?.busy} onClick={() => run(() => stopVideoExplanation(id))}><Square size={14} />结束录制</UiButton>}
         {session?.state === 'transcribing' && <UiButton onClick={() => run(() => cancelVideoExplanationTranscription(id))}>取消转写</UiButton>}
-        {!!owner.document.creativeIntents?.sessions.length && <Virtuoso className="h-40 w-56" data={owner.document.creativeIntents.sessions} itemContent={(i, saved) => <UiButton disabled={recording || state?.busy} onClick={() => run(() => reopenVideoExplanation(id, saved.id))}>查看第 {i + 1} 次讲解</UiButton>} />}
+        {!!owner.document.creativeIntents?.sessions.length && <div className="h-40 w-56 max-w-full"><Virtuoso data={owner.document.creativeIntents.sessions} itemContent={(i, saved) => <UiButton disabled={recording || state?.busy} onClick={() => run(() => reopenVideoExplanation(id, saved.id))}>查看第 {i + 1} 次讲解</UiButton>} /></div>}
         {session && <UiButton variant="danger" onClick={() => setDeleting(true)}><Trash2 size={14} />彻底删除本次讲解</UiButton>}
       </UiGroup>} />
       {recording && <><span role="status" className={UI_TEXT_META_CLASS}><Mic size={14} className="inline" />{Math.floor((state?.elapsedUs ?? 0) / 1_000_000)} 秒</span><UiIconButton aria-label="暂停录制讲解" disabled={state?.busy} onClick={() => run(() => pauseVideoExplanation(id))}><Pause size={14} /></UiIconButton><UiIconButton aria-label="结束录制讲解" disabled={state?.busy} onClick={() => run(() => stopVideoExplanation(id))}><Square size={14} /></UiIconButton></>}
@@ -97,10 +97,10 @@ export function VideoEditExplanationReview({ owner, onError }: { owner: VideoEdi
   const count = session.pages.filter(p => p.kind === 'transcript').length
   let model = '默认转写模型未配置'
   try { const modelId = session.asr?.moduleId ?? modelDefaultsManager.resolveTranscriptionModelId(); const entry = modelDefaultsManager.listTranscriptionModels().find(m => m.descriptor.id === modelId); model = entry ? `${getProviderDisplayName(entry.descriptor.providerIds?.[0] ?? '')} · ${entry.descriptor.modelId}` : '已选择的转写模型' } catch { /* Invalid selection is rejected before upload. */ }
-  return <aside className="flex w-80 min-h-0 shrink-0 flex-col border-l border-line px-3 py-2" aria-label="讲解词稿审阅" data-observation-sensitive>
+  return <aside className="flex w-80 max-w-full min-h-0 min-w-0 shrink flex-col border-l border-line px-3 py-2" aria-label="讲解词稿审阅" data-observation-sensitive>
     <div className="flex items-center justify-between"><span className={UI_TEXT_BODY_CLASS}>讲解词稿</span><UiIconButton aria-label="关闭讲解审阅并删除临时原音" disabled={state?.busy} onClick={() => { void clearTemporaryVideoExplanationAudio(owner.document.id).then(() => setHidden(true)).catch(onError) }}><X size={14} /></UiIconButton></div>
     {state?.message && <UiError title="请检查讲解" message={state.message} />}
-    <p className={UI_TEXT_META_CLASS}>{session.retentionStatus === 'deleted' ? '原音已删除，无法回听。' : session.retentionStatus === 'retained' ? '你已选择随项目保留原音。' : '原音为临时录音，关闭审阅后删除。'}</p>
+    <p className={UI_TEXT_META_CLASS}>{session.retentionStatus === 'deleted' ? '原音已删除，无法回听。' : session.retentionStatus === 'retained' ? '原音随项目保留。' : '关闭审阅后删除临时原音。'}</p>
     {inspected ? <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="flex items-center justify-between"><span className={UI_TEXT_BODY_CLASS}>「{inspected.text}」的指向</span><UiIconButton aria-label="返回讲解词稿" onClick={() => setInspected(undefined)}><X size={14} /></UiIconButton></div>
       <ExplanationReview key={inspected.eventId} entry={inspected} contextKey={contextKey} onRead={read} onBind={bind} onError={onError} initiallyOpen showTrigger={false} />
