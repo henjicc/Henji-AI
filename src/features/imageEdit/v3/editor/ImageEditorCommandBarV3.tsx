@@ -41,6 +41,7 @@ export function ImageEditorCommandBarV3({
   // 参数在命令带中间放不下时移到从属带；neededWidth 记下放不下那一刻参数的完整宽度，
   // 中间槽位宽度够了再移回，避免来回跳动。
   const [stacked, setStacked] = useState(false)
+  const [layoutOpenRequest, setLayoutOpenRequest] = useState(0)
   const neededWidthRef = useRef(0)
 
   useEffect(() => {
@@ -96,8 +97,8 @@ export function ImageEditorCommandBarV3({
           className="flex min-w-0 shrink-0 items-center gap-1.5"
         >
           {toolbarActions}
-          {(controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorExplanationControlsV3 bus={bus} controller={controller} />}
-          {(controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorLayoutControlsV3 bus={bus} controller={controller} />}
+          {(controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorExplanationControlsV3 bus={bus} controller={controller} onGenerated={() => setLayoutOpenRequest(value => value + 1)} />}
+          {(controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorLayoutControlsV3 bus={bus} controller={controller} openRequest={layoutOpenRequest} />}
           {panelActions}
         </div>
       )}

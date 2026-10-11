@@ -10,14 +10,15 @@ import { imageEditV3LayerRef } from './imageEditDocumentRefs'
 import { explanationSessionSchema } from '@/core/creativeIntent/schema'
 import { confirmedExplanationBinding } from '@/core/creativeIntent/deixis'
 
-vi.mock('./imageEditLayoutDraft', () => ({ imageEditLayoutDraft: () => ({ organize: organize }) }))
+vi.mock('./imageEditLayoutDraft', () => ({ imageEditLayoutDraft: () => ({ organize, move }) }))
 const organize = vi.hoisted(() => vi.fn(async () => {}))
+const move = vi.hoisted(() => vi.fn(async () => {}))
 let wall = 0
 beforeEach(() => { vi.stubGlobal('crypto', webcrypto); wall = 0; vi.spyOn(performance, 'now').mockImplementation(() => wall); organize.mockClear() })
 afterEach(() => { vi.restoreAllMocks() })
-function setup() {
+function setup(names: readonly string[] = ['a', 'b', 'c']) {
   const doc = createImageEditDocumentV3({ documentId: 'record-image', width: 600, height: 400 })
-  doc.layers = ['a', 'b', 'c'].map(id => createImageEditRasterLayerV3(id, id))
+  doc.layers = ['a', 'b', 'c'].map((id, index) => createImageEditRasterLayerV3(id, names[index]))
   const bus = new ImageEditCommandBusV3(doc), values = new Map<string, unknown>()
   let feed: (block: CapturedAudioBlock) => void = () => {}
   const stop = vi.fn(async () => {})
@@ -34,6 +35,26 @@ function setup() {
   return { adapter, audio, bus, block, point, stop, confirm, values }
 }
 describe('图片静态讲解宿主', () => {
+  it('删除包含多页资源的讲解后可重新录制，目录顺序不影响命令资源契约', async () => {
+    const f=setup();await f.adapter.start('consent');f.block();f.point();wall=1200
+    await f.adapter.stop();await f.adapter.transcribe('upload')
+    const document=f.bus.getSnapshot().document,head=structuredClone(document.creativeIntents!)
+    head.resources.sort((a,b)=>b.resourceId.localeCompare(a.resourceId))
+    f.bus.dispatch({type:'document.set-creative-intents',commandId:'reverse-directory',expectedRevision:document.revision,intents:head,resources:head.resources.map(resource=>({resourceId:resource.resourceId,byteSize:resource.bytes})).sort((a,b)=>a.resourceId.localeCompare(b.resourceId))})
+    const layers=structuredClone(document.layers)
+    await f.adapter.remove();expect(f.adapter.snapshot().session).toBeUndefined()
+    expect(f.bus.getSnapshot().document.layers).toEqual(layers)
+    expect(f.bus.getSnapshot().document.creativeIntents!.sessions).toHaveLength(0)
+    await f.adapter.start('second-consent');expect(f.adapter.snapshot().session!.state).toBe('recording');await f.adapter.close()
+  })
+  it('同名图片自动用图层位置区分，不改变稳定引用', async () => {
+    const f = setup(['主图', '主图', 'c']); await f.adapter.start('consent'); f.block(); f.point(); wall = 1200
+    await f.adapter.stop(); await f.adapter.transcribe('upload')
+    const review = await f.adapter.readReview((await f.adapter.transcript())[0])
+    expect(review.objects?.map(object => object.label)).toEqual(['主图 · 上层', '主图 · 下层', 'c'])
+    expect(review.objects?.map(object => object.ref.id)).toEqual(['a', 'b', 'c'].map(id => imageEditV3LayerRef('record-image', id).id))
+    await f.adapter.close()
+  })
   it('墙钟采集、分页持久化、本地转写、选中目标进入唯一随手摆服务', async () => {
     const f = setup(); await f.adapter.start('user-consent'); f.block(); f.point(); wall = 1200
     await f.adapter.stop(); await f.adapter.transcribe('upload-consent')
@@ -80,6 +101,8 @@ describe('图片静态讲解宿主', () => {
     expect(review.plan.changes[0]).toMatchObject({ targetRef: { label: 'a' }, property: 'position', after: [.8, .5] })
     expect(review.resolution.mentions.every(m => m.selected?.timeline === null)).toBe(true)
     expect(review.image).toBeUndefined(); expect(f.bus.getSnapshot().document.layers).toEqual(before)
+    await f.adapter.generate([entry]);expect(move).toHaveBeenCalledWith([expect.objectContaining({status:'review',changes:expect.any(Array)})])
+    expect(f.bus.getSnapshot().document.layers).toEqual(before)
     await f.adapter.close()
   })
   it('没有历史指向时人工点选可以确认对象，校正没有历史画面；取消与关闭释放点选等待', async () => {

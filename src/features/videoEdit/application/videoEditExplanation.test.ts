@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { normalizeTimestampedTranscript } from '@/core/audioEdit/timestampedTranscript'
 import { videoEditComposition } from '@/core/videoEdit/document'
-import { pickedExplanationBinding } from '@/core/creativeIntent/deixis'
+import { confirmedExplanationBinding, pickedExplanationBinding } from '@/core/creativeIntent/deixis'
 import type { CapturedAudioBlock } from '@/features/creativeIntent/recording/microphone'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
@@ -15,6 +15,7 @@ import { storeMotionResource, storeMotionResourceBytes, readMotionResource, read
 import { startVideoExplanation, pauseVideoExplanation, resumeVideoExplanation, stopVideoExplanation, videoExplanationState, recordVideoExplanationPresentation, recordVideoExplanationPointer, transcribeVideoExplanation, readVideoExplanationPage, correctVideoExplanationText, videoExplanationJsonl, eraseVideoExplanation, reopenVideoExplanation, retryVideoExplanationSave, retainVideoExplanationAudio, readVideoExplanationReview, correctVideoExplanationBinding, pickVideoExplanationBinding } from './videoEditExplanation'
 
 const capture = vi.hoisted(()=>({block:undefined as ((block:CapturedAudioBlock)=>void)|undefined,interrupt:undefined as ((message:string)=>void)|undefined,stop:vi.fn(async()=>{}),deny:false}))
+vi.mock('./videoEditExplanationVisual',()=>({captureExplanationPixels:vi.fn(async()=>({bytes:new Uint8Array([137,80,78,71,13,10,26,10]),size:[200,100]}))}))
 vi.mock('@/features/creativeIntent/recording/microphone',()=>({captureMicrophone:vi.fn(async(_origin:number,onBlock:(block:CapturedAudioBlock)=>void,onInterrupt:(message:string)=>void)=>{if(capture.deny)throw new Error('PermissionDenied');capture.block=onBlock;capture.interrupt=onInterrupt;return{stop:capture.stop}})}))
 const files=new Map<string,Uint8Array>(); const chunks=new Map<string,Float32Array>(); let clock=100
 beforeEach(()=>{
@@ -46,6 +47,32 @@ it('共用 visual 资源保存入口保留结构化 JSON 与二进制 PNG 的编
 })
 function present(owner:Awaited<ReturnType<typeof setup>>,frame:number){setVideoEditView(owner.document.id,{frame});recordVideoExplanationPresentation(owner,{frame,sequenceId:owner.activeSequenceId,revision:owner.document.revision,at:clock})}
 function audio(){capture.block!({firstFrame:4800,samples:new Float32Array(4800).fill(.2),sampleRate:48000,monoStartUs:100_000,uncertaintyUs:10_000})}
+it('起点重叠不阻止终点独立确认，轮廓还原指向时的位置而非后来移动的位置', async()=>{
+  const owner=await setup(),id=owner.document.id
+  editVideoProject(id,doc=>{doc.sequences[0].clips.push({...doc.sequences[0].clips[0],id:'overlap',scale:.3});return doc})
+  await startVideoExplanation(id,crypto.randomUUID());clock=200;present(owner,0);audio()
+  const monitor=document.createElement('div');document.body.append(monitor)
+  vi.spyOn(monitor,'getBoundingClientRect').mockReturnValue(new DOMRect(0,0,200,100))
+  const point=(x:number)=>{const event=new MouseEvent('pointerdown',{clientX:x,clientY:50,bubbles:true});Object.defineProperty(event,'timeStamp',{value:clock});monitor.dispatchEvent(event);recordVideoExplanationPointer(owner,event as unknown as PointerEvent,monitor)}
+  clock=230;point(100);clock=250;editVideoProject(id,doc=>{doc.sequences[0].clips[0].x=.2;return doc});clock=260;present(owner,0);clock=290;point(180)
+  videoExplanationState(owner)!.picture=undefined // Resume invalidates presentation until the next acknowledged draw.
+  clock=400;await stopVideoExplanation(id)
+  vi.mocked(getPlatform().audioEdit.recording.transcribe).mockImplementationOnce(async input=>({modelId:input.modelId,providerId:'groq',requestId:input.requestId,transcript:{unit:'ms',text:'从这里到那边',granularity:'word',words:[],segments:[{text:'从这里到那边',startMs:30,endMs:100,granularity:'segment',timing:'coarse',words:[{text:'从这里',startMs:30,endMs:40,granularity:'word',timing:'precise'},{text:'到那边',startMs:90,endMs:100,granularity:'word',timing:'precise'}]}]}}))
+  await transcribeVideoExplanation(id,crypto.randomUUID())
+  const entry=(await readVideoExplanationPage(id,0))[0];if(entry.kind!=='transcript')throw new Error('missing')
+  const review=await readVideoExplanationReview(id,entry),source=review.resolution.mentions.find(m=>m.slot==='source')!,destination=review.resolution.mentions.find(m=>m.slot==='destination')!
+  expect(source.selected).toBeUndefined();expect(destination.candidates.length).toBeGreaterThan(0);expect(review.plan.issues).toContain('差异目标尚未确认')
+  await correctVideoExplanationBinding(id,entry,pickedExplanationBinding(destination,[],[.9,.5]))
+  const independentlyConfirmed=await readVideoExplanationReview(id,entry)
+  expect(independentlyConfirmed.resolution.mentions.find(m=>m.slot==='destination')!.confirmedByUser).toBe(true)
+  expect(independentlyConfirmed.resolution.mentions.find(m=>m.slot==='source')!.selected).toBeUndefined()
+  const candidate=source.candidates.find(candidate=>candidate.point[0]===.5)!
+  await correctVideoExplanationBinding(id,entry,confirmedExplanationBinding(source,candidate,candidate.targetRefs.find(ref=>!ref.id.endsWith(':overlap'))))
+  const evidence=await readVideoExplanationReview(id,entry,source.id)
+  const corners=evidence.objects!.find(object=>object.ref.id.endsWith(`:${getActiveVideoEditSequence(owner).clips[0].id}`))!.corners!
+  expect(corners.reduce((sum,point)=>sum+point[0],0)/4).toBeCloseTo(.5)
+  monitor.remove()
+})
 it('真实词级结果后出现句级块不会降级已有词时刻，每条仍保留自身粒度', async () => {
   const owner=await setup(); const id=owner.document.id
   await startVideoExplanation(id,crypto.randomUUID());clock=200;present(owner,0);audio()

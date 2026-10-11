@@ -13,6 +13,9 @@ import { useVideoEditMotionGesture } from '../panels/useVideoEditMotionGesture'
 import { configureVideoMotionConstraints, organizeVideoMotionAnnotation } from './videoEditMotionDraft'
 import { createVideoEditAnnotation, updateVideoEditAnnotation } from './videoEditAnnotations'
 import { motionClipPose } from '@/core/videoEdit/motionDraft'
+import { proposeVideoExplanationMotion } from './videoEditMotionDraft'
+import { motionDigest } from './videoEditMotionResources'
+import type { IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
 
 vi.mock('./videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => { const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted(); input = { ...input, samples }; return { result: optimizeMotionDraft(input), original: optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined }).candidates[0] } } }))
 const files = new Map<string, Uint8Array>()
@@ -28,6 +31,28 @@ beforeEach(() => {
 afterEach(async () => { for (const owner of listVideoEditInstances()) { if (videoMotionState(owner)?.status === 'paused') await stopVideoMotion(owner.document.id); await closeVideoEditProject(owner.document.id) } vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 const setup = async () => { const owner = await createVideoEditTestProject(); appendVideoEditClip(owner.document.id); const clip = getActiveVideoEditSequence(owner).clips[0]; setVideoEditView(owner.document.id, { selection: clip.id, frame: 0 }); return owner }
 const present = (owner: Awaited<ReturnType<typeof setup>>, frame: number) => { setVideoEditView(owner.document.id, { frame }); recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame, revision: videoMotionComposition(owner)!.revision, at: performance.now() }) }
+it('讲解移动转成正式动作候选，单帧不猜时长，应用后一步撤销且旧基线拒绝',async()=>{
+  const owner=await setup(),id=owner.document.id,sequence=getActiveVideoEditSequence(owner),clip=sequence.clips[0],before=structuredClone(clip)
+  const plan:IntentDifferencePlan={changes:[{targetRef:{kind:'video_edit.clip',id:`${id}:${clip.id}`},property:'position',before:motionClipPose(clip,0).position,after:[.8,.5],expectedDigest:await motionDigest([sequence,owner.frame])}],protectedRefs:[],issues:[],status:'review',recordedOperationRefs:[{kind:'command',id:'must-not-replay'}]}
+  await proposeVideoExplanationMotion(id,[plan],[0,0]);const state=videoMotionState(owner)!
+  expect(state.candidates.length).toBeGreaterThan(0);expect(state.reviewRequest).toBe(1);expect(getActiveVideoEditSequence(owner).clips[0]).toEqual(before)
+  expect(motionClipPose(videoMotionComposition(owner)!.clips[0],0).position[0]).toBeCloseTo(.8)
+  const history=owner.past.length;await applyVideoMotion(id);expect(owner.past).toHaveLength(history+1)
+  expect(motionClipPose(getActiveVideoEditSequence(owner).clips[0],0).position[0]).toBeCloseTo(.8)
+  undoVideoEdit(id);expect(getActiveVideoEditSequence(owner).clips[0]).toEqual(before)
+  await expect(proposeVideoExplanationMotion(id,[plan],[0,0])).rejects.toThrow('已变化')
+})
+it.each<[number, number]>([[0, 30], [30, 0]])('讲解移动保留实际起终帧顺序（%s → %s）', async (from, to) => {
+  const owner = await setup(), id = owner.document.id, sequence = getActiveVideoEditSequence(owner), clip = sequence.clips[0]
+  const before = motionClipPose(clip, from).position
+  const plan: IntentDifferencePlan = { changes: [{ targetRef: { kind: 'video_edit.clip', id: `${id}:${clip.id}` }, property: 'position', before, after: [.8, .5], expectedDigest: await motionDigest([sequence, owner.frame]) }], protectedRefs: [], issues: [], status: 'review', recordedOperationRefs: [] }
+  await proposeVideoExplanationMotion(id, [plan], [from, to])
+  expect(videoMotionState(owner)!.draft.takes[0]).toMatchObject({ timelineRange: [from, to], direction: Math.sign(to - from) })
+  await applyVideoMotion(id)
+  const applied = getActiveVideoEditSequence(owner).clips[0]
+  expect(motionClipPose(applied, from).position).toEqual(before)
+  expect(motionClipPose(applied, to).position[0]).toBeCloseTo(.8)
+})
 it('箭头无需伪造录制即可整理，标注变化拒绝旧候选，应用追加处理回复且一次撤销', async () => {
   const owner = await setup(); const id = owner.document.id; const clip = getActiveVideoEditSequence(owner).clips[0]
   const annotation = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, endFrame: 60, clipId: clip.id, target: { kind: 'stroke', strokes: [[{ x: .2, y: .3 }, { x: .8, y: .6 }]] }, text: '沿箭头走' })

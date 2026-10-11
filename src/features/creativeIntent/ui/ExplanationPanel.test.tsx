@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { TranscriptEntry } from '@/core/creativeIntent/schema'
 import type { ExplanationReviewResult } from './ExplanationReview'
@@ -75,4 +75,21 @@ it('首次开始录制的提示跨宿主重开仍只显示一次，不保存私�
   first.rerender(<Host recorded />); first.unmount()
   render(<Host recorded={false} />)
   expect(screen.getByText('已录制')).toBeTruthy(); expect(localStorage.getItem('henji-explanation-recorded')).toBe('true')
+})
+it('手动点选期间收起证据后，读回新绑定而不是段落预读缓存', async () => {
+  const ref = { kind: 'image_edit.layer', id: 'safe', label: '主图' }
+  const mention = { id: 'mention', text: '这个', slot: 'target' as const, entry, entries: [entry], negated: true, candidates: [], issues: [], confirmedByUser: false }
+  let current: ExplanationReviewResult = { ...result, resolution: { ...result.resolution, negated: true, mentions: [mention] }, plan: { ...result.plan, changes: [], status: 'blocked' } }
+  let finish!: () => void
+  const onRead = vi.fn(async () => current)
+  const onPick = vi.fn(async () => { await new Promise<void>(resolve => { finish = resolve }); current = { ...current, resolution: { ...current.resolution, mentions: [{ ...mention, confirmedByUser: true, selected: { targetRefs: [ref], point: [.5, .5], timeline: null, pointer: null, evidenceSeqs: [] } }] }, plan: { ...current.plan, status: 'satisfied', protectedRefs: [ref] } } })
+  render(<ExplanationPanel {...props({ onRead, onPick })} />)
+  await screen.findByText('还有 1 处需要确认')
+  fireEvent.click(screen.getByRole('button', { name: '查看「这个」的指向' }))
+  fireEvent.click(await screen.findByRole('radio', { name: '其他…' }))
+  fireEvent.click(screen.getByRole('button', { name: '查看「这个」的指向' }))
+  await act(async () => finish())
+  await screen.findByLabelText('保护')
+  expect(screen.queryByText('还有 1 处需要确认')).toBeNull()
+  expect(onRead).toHaveBeenCalledTimes(3)
 })

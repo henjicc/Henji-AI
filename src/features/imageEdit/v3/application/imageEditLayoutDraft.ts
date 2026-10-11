@@ -16,6 +16,10 @@ import { findImageEditDocumentInstanceV3, leaseImageEditDocumentInstanceV3 } fro
 import { findImageEditLayerLocationV3 } from '../editor/layerTreeV3'
 import type { Affine } from '@/core/imaging/transforms'
 import type { ApplicationExecutionContext } from '@/core/application-control'
+import { reviewedMovementChanges, type IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
+import { splitImageEditV3LayerRef } from './imageEditDocumentRefs'
+import { translateAffine } from '@/core/imaging/transforms'
+import { resolveAnnotationOutputGeometryV3 } from '../editor/annotationGeometryV3'
 
 const logger = createLogger('features.imageEdit.v3.layout')
 const PAGE_ENTRIES = 64 // Per-page I/O/scheduling budget; the whole selection is processed.
@@ -94,7 +98,14 @@ export class ImageEditLayoutDraft {
   async organize(ids:readonly string[],preferred=this.state.selected):Promise<void> {
     await this.organizeDraft(ids,preferred)
   }
-  private async organizeDraft(ids:readonly string[],preferred:string,configured?:MotionDraft,context?:ApplicationExecutionContext):Promise<void> {
+  async move(plans:readonly IntentDifferencePlan[]):Promise<void> {
+    const changes=reviewedMovementChanges(plans),document=this.bus.getSnapshot().document
+    const expectedDigest=await imageLayoutDigest([document.geometry,document.layers])
+    const ids=changes.map(change=>{const target=splitImageEditV3LayerRef(change.targetRef);if(target.documentId!==document.id||change.expectedDigest!==expectedDigest)throw new Error('图片已变化，请重新审阅讲解');return target.layerId})
+    if(document!==this.bus.getSnapshot().document)throw new Error('图片已变化，请重新审阅讲解')
+    await this.organizeDraft(ids,'move',undefined,undefined,changes)
+  }
+  private async organizeDraft(ids:readonly string[],preferred:string,configured?:MotionDraft,context?:ApplicationExecutionContext,movements?:IntentDifferencePlan['changes']):Promise<void> {
     if(this.state.needsSave)throw new Error('请先重试保存，再继续整理')
     const previous=this.state,baseDocument=this.bus.getSnapshot().document
     this.cancel(); const abort=new AbortController(); this.abort=abort; const generation=++this.generation
@@ -108,8 +119,8 @@ export class ImageEditLayoutDraft {
       let draft=configured??this.state.draft
       const document=baseDocument
       const digest=await imageLayoutDigest(baseOf(document))
-      if (!draft || this.state.baseDigest!==digest || ids.length && ids.map(id=>id).sort().join('\0')!==this.state.entries.map(e=>e.layerId).sort().join('\0')) {
-        const captured=await captureImageLayoutEntries(document,ids.length ? ids : this.state.entries.map(e=>e.layerId),abort.signal,this.ports.measure)
+      if (movements || !draft || this.state.baseDigest!==digest || ids.length && ids.map(id=>id).sort().join('\0')!==this.state.entries.map(e=>e.layerId).sort().join('\0')) {
+        const captured=await captureImageLayoutEntries(document,ids.length ? ids : this.state.entries.map(e=>e.layerId),abort.signal,this.ports.measure,movements ? 1 : 3)
         const sourceDigest=await imageLayoutDigest(captured), take=createImageEditIdV3('layout-take')
         const ownerRef=imageEditV3DocumentRef(document.id)
         const entries:ImageLayoutEntry[]=captured.map((e,i)=>({...e,sample:{seq:i,monoUs:i,timeline:null,unavailableReason:'static',clockSegmentRef:'static',sampleId:`${take}:${i}`,takeRef:take,targetRef:e.item.targetRef,
@@ -143,8 +154,19 @@ export class ImageEditLayoutDraft {
       const constraints:LayoutConstraint[]=[...draft.constraints,{kind:'align',id:'edge',strength:'soft',sourceRefs:[],axis:horizontal?'y':'x',edge:'start',targets,reference},
         {kind:'distribute',id:'spacing',strength:'soft',sourceRefs:[],axis:horizontal?'x':'y',targets}]
       const identity=imageLayoutIdentity(draft.sourceDigest,draft.ownerRef,draft.targets.map(t=>({targetRef:t.ref,baseDigest:t.baseDigest,geometryDigest:t.geometryDigest})),draft.fidelity)
-      if(!this.ports.compute) throw new Error('暂时无法整理布局，请重新打开图片后重试')
-      const candidates=await this.ports.compute({items,constraints,identity,fidelity:draft.fidelity},abort.signal)
+      const output=resolveAnnotationOutputGeometryV3(document)
+      let candidates:LayoutCandidate[]
+      if(movements) {
+        candidates=[{id:'move',label:'按讲解移动',identity,maxConstraintError:0,changes:items.map(item=>{
+          const change=movements.find(change=>refKey(change.targetRef)===refKey(item.targetRef))!
+          const after=change.after as [number,number]
+          const delta:[number,number]=[after[0]*output.width-item.affine[4],after[1]*output.height-item.affine[5]]
+          return {targetRef:item.targetRef,delta,affine:translateAffine(item.affine,delta)}
+        })}]
+      } else {
+        if(!this.ports.compute) throw new Error('暂时无法整理布局，请重新打开图片后重试')
+        candidates=await this.ports.compute({items,constraints,identity,fidelity:draft.fidelity},abort.signal)
+      }
       for(const candidate of candidates) {imageLayoutCandidateSchema.parse({...candidate,version:1});imageLayoutLocalChanges(this.lockedEntries(),candidate)}
       abort.signal.throwIfAborted()
       const refs:MotionDraft['candidateRefs']=[]
@@ -200,6 +222,7 @@ export class ImageEditLayoutDraft {
   }
   async configure(options:{fidelity?:number;pinIds?:readonly string[];unpin?:string},context?:ApplicationExecutionContext):Promise<void> {
     if(this.state.needsSave)throw new Error('请先重试保存，再调整布局')
+    if(this.state.candidates.some(candidate=>candidate.id==='move'))throw new Error('请在讲解中重新确认目标位置，再生成移动候选')
     const draft=this.state.draft
     if(!draft) throw new Error('请先整理随手摆原稿')
     const preferred=this.state.selected

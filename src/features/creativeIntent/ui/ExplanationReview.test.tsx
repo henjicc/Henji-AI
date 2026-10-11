@@ -10,6 +10,7 @@ import type { ClockSegment, Timeline } from '@/core/creativeIntent/contracts'
 import type { TranscriptEntry } from '@/core/creativeIntent/schema'
 import { ExplanationReview, type ExplanationReviewResult } from './ExplanationReview'
 import { explanationChanges } from './explanationPresentation'
+import { fireEvent } from '@testing-library/react'
 
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, value: unknown) => ReactNode }) => <div>{data.map((value, index) => <div key={index}>{itemContent(index, value)}</div>)}</div> }))
 let root: Root | undefined; let element: HTMLElement | undefined
@@ -53,6 +54,20 @@ it('关闭或卸载后迟到的私密结果不恢复旧稿，也不报读取错�
   await act(async () => finish(result))
   expect(element!.textContent).toBe('')
 })
+it('另一处指代在首处提交期间仍能独立确认，同名对象用宿主提供的位置区分', async () => {
+  const sentence = { ...entry, text: '从这里到那边' }, resolution = resolveDeixis([sentence], [pointer], clocks)
+  const result: ExplanationReviewResult = { resolution, plan: buildIntentDifferencePlan([resolution], [], [], []), objects: [{ref:a,label:'同名 · V1'},{ref:b,label:'同名 · V2'}] }
+  let finish!: () => void
+  const bind = vi.fn().mockImplementationOnce(() => new Promise<void>(resolve => { finish=resolve })).mockResolvedValue(undefined)
+  element = document.createElement('div'); document.body.append(element); root = createRoot(element)
+  await act(async () => root!.render(<ExplanationReview entry={sentence} onRead={async()=>result} onBind={bind} onError={vi.fn()} initiallyOpen />))
+  const named = (text:string):HTMLButtonElement => Array.from(element!.querySelectorAll('button')).find(button=>button.textContent===text)!
+  await act(async()=>named('这里').click());expect(named('同名 · V1')).toBeTruthy();expect(named('同名 · V2')).toBeTruthy()
+  await act(async()=>named('同名 · V1').click());expect(named('同名 · V1').disabled).toBe(true)
+  await act(async()=>named('那边').click());expect(named('中央').disabled).toBe(false)
+  await act(async()=>fireEvent.click(named('中央')));expect(bind).toHaveBeenCalledTimes(2)
+  await act(async()=>finish());expect(named('中央').disabled).toBe(false)
+})
 it('当前作品状态变化重读差异，旧基线的迟到结果不能覆盖新计划', async () => {
   let finish!: (value: ExplanationReviewResult) => void
   const resolution = resolveDeixis([entry], [pointer], clocks)
@@ -64,4 +79,8 @@ it('当前作品状态变化重读差异，旧基线的迟到结果不能覆盖�
   await act(async () => root!.render(<ExplanationReview entry={entry} onRead={read} onBind={bind} onError={error} onResult={reported} initiallyOpen contextKey="after" />))
   await act(async () => finish({ resolution, plan: { ...current.plan, issues: ['过期基线'] } }))
   expect(read).toHaveBeenCalledTimes(2); expect(reported).toHaveBeenCalledOnce(); expect(reported).toHaveBeenCalledWith(entry, current); expect(element!.textContent).not.toContain('过期基线')
+})
+it('修改和保护摘要也复用同名对象的宿主区分名', () => {
+  const resolution = resolveDeixis([entry], [], clocks)
+  expect(explanationChanges({ resolution, plan: { changes: [{ targetRef: a, property: 'position', before: [.1, .5], after: [.8, .5], expectedDigest: 'digest' }], protectedRefs: [b], issues: [], status: 'review', recordedOperationRefs: [] }, objects: [{ ref: a, label: '同名 · V1' }, { ref: b, label: '同名 · V2' }] })).toEqual(['不改动：同名 · V2', '同名 · V1 移到右侧'])
 })

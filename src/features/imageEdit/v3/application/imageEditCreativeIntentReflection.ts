@@ -26,7 +26,7 @@ function open(documentRef: ApplicationRef) {
       assertCurrent(); requireImageEditPersistenceOwnerV3(id).assertCurrent()
       const document = bus.getSnapshot().document
       bus.dispatch({ type: 'document.set-creative-intents', commandId: crypto.randomUUID(), expectedRevision: document.revision, intents: head,
-        resources: creativeIntentLiveResources([document.creativeIntents, head]).map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })) })
+        resources: creativeIntentLiveResources([document.creativeIntents, head]).map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId)) })
       requireImageEditPersistenceOwnerV3(id).acceptCurrent()
     },
     save: async (context?: ApplicationExecutionContext) => { assertCurrent(); await requireImageEditPersistenceOwnerV3(id).confirmStep(context, async () => { assertCurrent() }) },

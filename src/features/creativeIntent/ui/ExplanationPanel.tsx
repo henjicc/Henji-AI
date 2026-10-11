@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { UiButton, UiError, UiIconButton, UiTextToken } from '@/components/ui'
@@ -21,6 +21,24 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
   const [focusRequest, setFocusRequest] = useState(0)
   const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null)
   const virtual = useRef<VirtuosoHandle>(null)
+  const section = useRef<HTMLElement>(null)
+  const [availableHeight, setAvailableHeight] = useState<number>()
+  const [generating, setGenerating] = useState(false)
+  const generatingRef = useRef(false)
+  useLayoutEffect(() => {
+    // PanelTrigger also constrains height near viewport edges. Respect its actual budget,
+    // so only our middle region scrolls and neither fixed row escapes the outer scroller.
+    const panel = section.current?.closest('[data-panel-scroll-region]')?.parentElement
+    if (!panel) return
+    const update = (): void => {
+      const view = panel.ownerDocument.defaultView; if (!view) return
+      const style = view.getComputedStyle(panel), limit = parseFloat(style.maxHeight)
+      const inset = [style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth].reduce((sum, value) => sum + (parseFloat(value) || 0), 0)
+      setAvailableHeight(Math.max(0, Math.min(view.innerHeight * .8, Number.isFinite(limit) ? limit - inset : view.innerHeight * .8)))
+    }
+    update(); const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(update); observer?.observe(panel)
+    return () => observer?.disconnect()
+  }, [])
   const paragraphs = useMemo(() => [...new Map(entries.map(entry => [entry.utteranceId, entry])).values()], [entries])
   const scope = useMemo(() => ({ contextKey, onRead, pending: new Map<string, Promise<ExplanationReviewResult>>(), queue: Promise.resolve() }), [contextKey, onRead])
   const cache = scope.pending
@@ -35,6 +53,10 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
     return pending
   }, [cache, onRead, scope])
   const bind = useCallback(async (entry: TranscriptEntry, binding: Parameters<ExplanationReviewProps['onBind']>[1]): Promise<void> => { await onBind(entry, binding); cache.delete(entry.eventId) }, [cache, onBind])
+  const pick = useCallback(async (entry: TranscriptEntry, mention: Parameters<NonNullable<ExplanationReviewProps['onPick']>>[1]): Promise<void> => {
+    cache.delete(entry.eventId)
+    try { await review.onPick?.(entry, mention) } finally { cache.delete(entry.eventId) }
+  }, [cache, review.onPick])
   useEffect(() => { setResults(new Map()); setFocused(undefined); setExpanded(false) }, [contextKey])
   useEffect(() => { setResults(previous => new Map([...previous].filter(([id]) => paragraphs.some(entry => entry.utteranceId === id)))) }, [paragraphs])
   const report = useCallback((entry: TranscriptEntry, result: ExplanationReviewResult) => setResults(previous => new Map(previous).set(entry.utteranceId, { ...result, image: undefined })), [])
@@ -58,9 +80,9 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
     if (virtualized) virtual.current?.scrollToIndex({ index, align: 'start' })
     else scrollParent?.querySelectorAll('[data-explanation-paragraph]')[index]?.scrollIntoView?.({ block: 'nearest' })
   }
-  const paragraph = (entry: TranscriptEntry): JSX.Element => <ExplanationReview {...review} onRead={read} onBind={bind} entry={entry} initiallyOpen showTrigger={false} onResult={report} focusedMentionId={focused} focusedMentionRequest={focusRequest} />
+  const paragraph = (entry: TranscriptEntry): JSX.Element => <ExplanationReview {...review} onRead={read} onBind={bind} onPick={review.onPick ? pick : undefined} entry={entry} initiallyOpen showTrigger={false} onResult={report} focusedMentionId={focused} focusedMentionRequest={focusRequest} />
   const transcribing = stage === 'transcribing', recording = stage === 'recording' || stage === 'paused'
-  return <section className="flex max-h-[80vh] min-h-0 min-w-0 flex-col gap-4" aria-label="讲解词稿审阅" data-observation-sensitive>
+  return <section ref={section} style={{ maxHeight: availableHeight }} className="flex max-h-[80vh] min-h-0 min-w-0 flex-col gap-4 overflow-hidden" aria-label="讲解词稿审阅" data-observation-sensitive>
     <div className="flex shrink-0 items-center justify-between gap-2">
       <span className={UI_TEXT_BODY_CLASS}>讲解 · {explanationDuration(elapsedUs)}</span>
       {onDelete && <UiIconButton size="sm" tone="danger" aria-label="删除讲解" disabled={busy} onClick={onDelete}><Trash2 size={14} /></UiIconButton>}
@@ -79,7 +101,11 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
       </>}
     </div>
     {!failed && !transcribing && !recording && !!stage && <div className="flex shrink-0 justify-end">
-      {entries.length ? <span title={reason}><UiButton variant="primary" disabled={busy || !!reason || !onGenerate} onClick={() => { if (onGenerate) void onGenerate(paragraphs).catch(review.onError) }}>生成候选</UiButton></span> : <UiButton variant="primary" disabled={busy || loading} onClick={onTranscribe}>转写并审阅</UiButton>}
+      {entries.length ? <span title={reason}><UiButton variant="primary" disabled={busy || generating || !!reason || !onGenerate} onClick={() => {
+        if (!onGenerate || generatingRef.current) return
+        generatingRef.current = true; setGenerating(true)
+        void onGenerate(paragraphs).catch(review.onError).finally(() => { generatingRef.current = false; setGenerating(false) })
+      }}>生成候选</UiButton></span> : <UiButton variant="primary" disabled={busy || loading} onClick={onTranscribe}>转写并审阅</UiButton>}
     </div>}
   </section>
 }

@@ -11,6 +11,22 @@ export interface IntentDifferencePlan {
   /** Provenance only. These operations MUST NOT be sent to an executor. */
   recordedOperationRefs: ApplicationRef[]
 }
+
+/** Candidate bridges accept reviewed differences only; recorded commands remain provenance. */
+export function reviewedMovementChanges(plans: readonly IntentDifferencePlan[]): IntentDifferencePlan['changes'] {
+  if (plans.some(plan => plan.status === 'blocked' || plan.issues.length)) throw new Error('请先确认讲解中的对象和目标位置')
+  const protectedKeys = new Set(plans.flatMap(plan => plan.protectedRefs.map(refKey)))
+  const changes = plans.flatMap(plan => plan.changes), seen = new Set<string>()
+  if (!changes.length) throw new Error('当前没有需要移动的对象')
+  for (const change of changes) {
+    const key = refKey(change.targetRef)
+    if (protectedKeys.has(key)) throw new Error('移动包含保护对象，请重新确认')
+    if (seen.has(key)) throw new Error('同一对象有多个移动目标，请分别生成候选')
+    seen.add(key)
+    if (change.property !== 'position' || !Array.isArray(change.after) || change.after.length !== 2 || !change.after.every(Number.isFinite)) throw new Error('请确认要移动到的位置')
+  }
+  return changes
+}
 export function buildIntentDifferencePlan(resolutions: readonly DeixisResolution[], goals: readonly ReviewedIntentGoal[], current: readonly IntentCurrentState[], events: readonly ExplanationEvent[]): IntentDifferencePlan {
   const issues = resolutions.flatMap(resolution => [...resolution.issues, ...resolution.mentions.flatMap(mention => mention.selected ? [] : mention.issues.length ? mention.issues : ['指代尚未确认'])])
   if (resolutions.some(resolution => !resolution.negated && (resolution.dwellSeconds !== undefined || resolution.exitDirection || resolution.mentions.some(mention => mention.slot === 'dwell' || mention.slot === 'exit')))) issues.push('包含停留或离开要求，需要确认完整时间变化后再生成计划')

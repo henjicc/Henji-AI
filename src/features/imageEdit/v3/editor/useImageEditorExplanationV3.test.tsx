@@ -60,3 +60,13 @@ it('浮层遮住作品时不采集带界面的缩略图', async () => {
   expect(await input.capture()).toBeNull(); expect(capture).not.toHaveBeenCalled()
   panel.remove()
 })
+
+it('图片编辑器作为画布对话框宿主时，宿主自身不遮挡其作品', async () => {
+  const view = render(<div role="dialog"><Host /></div>), preview = view.getByTestId('preview')
+  vi.spyOn(preview, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 80, 600, 400))
+  const dialog = view.getByRole('dialog')
+  vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 900, 720))
+  down(preview)
+  const input = adapter.recordPointer.mock.calls[0][0] as { capture: () => Promise<unknown> }
+  expect(await input.capture()).not.toBeNull(); expect(capture).toHaveBeenCalledOnce()
+})

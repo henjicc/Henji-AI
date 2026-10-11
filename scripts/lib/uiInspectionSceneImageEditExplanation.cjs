@@ -43,11 +43,10 @@ async function runImageExplanationScene({ page, app, host, read, select, shot, e
   const controls = () => page.locator('[data-image-explanation-controls]')
   const button = name => page.getByRole('button', { name, exact: true })
   const open = async () => { if (!await controls().isVisible()) await trigger().click() }
-  const close = async () => { if (await controls().isVisible()) { await trigger().click(); await controls().waitFor({ state: 'hidden' }) } }
   await select(['hero', 'mirror', 'rotate'])
   await open(); await shot('首次录制提示')
   await button('开始录制').click()
-  await host().getByRole('button', { name: '暂停图片讲解', exact: true }).waitFor(); await close(); await shot('开始录制')
+  await host().getByRole('button', { name: '暂停图片讲解', exact: true }).waitFor(); await controls().waitFor({ state: 'hidden' }); await shot('开始录制')
   // A harmless hover followed by a down/up on the already-selected subject. The move tool stays untouched.
   const preview = host().locator('[data-preview-surface]')
   const bounds = await preview.boundingBox(); assert.ok(bounds)
@@ -92,7 +91,6 @@ async function runImageExplanationScene({ page, app, host, read, select, shot, e
   assert.equal(await controls().locator('[data-explanation-evidence]').count(), 1)
   const before = (await read()).document.layers
   await button('生成候选').click(); await controls().waitFor({ state: 'hidden', timeout: 60000 })
-  await host().getByRole('button', { name: '随手摆', exact: true }).click()
   const layout = page.locator('[data-image-layout-controls]')
   await layout.getByRole('radio', { name: '等距排列', exact: true }).waitFor(); await shot('布局候选')
   await layout.getByRole('button', { name: '应用', exact: true }).click(); await layout.getByText('已应用，可撤销', { exact: true }).waitFor(); await shot('一步应用')
@@ -101,6 +99,46 @@ async function runImageExplanationScene({ page, app, host, read, select, shot, e
   await host().getByRole('button', { name: /^(撤销|Undo)$/ }).click(); await shot('一步撤销')
   // Wait for the normal autosave to report the undone pose.
   await page.waitForTimeout(1200); assert.deepEqual((await read()).document.layers, before)
+  // A second local recording exercises object + destination through the same layout UI.
+  await open(); await button('删除讲解').click(); await button('删除').click()
+  await button('开始录制').waitFor(); await button('开始录制').click()
+  await host().getByRole('button', { name: '暂停图片讲解', exact: true }).waitFor(); await controls().waitFor({ state: 'hidden' })
+  await page.mouse.move(point.x, point.y); await page.keyboard.down('Control'); await page.mouse.down(); await page.waitForTimeout(160); await page.mouse.up(); await page.keyboard.up('Control')
+  await page.waitForTimeout(1300)
+  const destinationPoint = { x: bounds.x + bounds.width / 2 + (800 - geometry.width / 2) * geometry.zoom, y: bounds.y + bounds.height / 2 + (125 - geometry.height / 2) * geometry.zoom }
+  await page.mouse.move(destinationPoint.x, destinationPoint.y); await page.keyboard.down('Control'); await page.mouse.down(); await page.waitForTimeout(160); await page.mouse.up(); await page.keyboard.up('Control')
+  await page.waitForTimeout(700); await host().getByRole('button', { name: '结束图片讲解', exact: true }).click(); await button('转写并审阅').waitFor()
+  const movementSession = (await read()).document.creativeIntents.sessions.at(-1)
+  const movementEvents = await page.evaluate(async session => {
+    const events = []
+    for (const ref of session.pages) { const page = await window.henjiNative.imageEditorV3.readLayoutResource({ requestId: crypto.randomUUID(), resourceRef: ref.resourceId }); events.push(...page.entries) }
+    return events
+  }, movementSession)
+  const movementPointers = movementEvents.filter(event => event.kind === 'pointer' && event.phase === 'down' && event.compositionPoint)
+  const sourcePointer = movementPointers.find(event => event.pointedRefs.some(ref => ref.label === '主图')), destinationPointer = movementPointers.find(event => event.compositionPoint[0] > .7)
+  assert.ok(sourcePointer && destinationPointer)
+  const movementTranscripts = {}
+  let alignedMovement = false
+  for (const audio of movementEvents.filter(event => event.kind === 'audio')) {
+    const start = (sourcePointer.monoUs - audio.monoSpanUs[0]) / 1000, end = (destinationPointer.monoUs - audio.monoSpanUs[0]) / 1000
+    if (start < 0 || end + 100 >= (audio.endSample - audio.startSample) * 1000 / audio.sampleRate) {
+      movementTranscripts[audio.audioSegmentRef] = { unit: 'ms', text: '', granularity: 'segment', words: [], segments: [] }
+      continue
+    }
+    alignedMovement = true
+    const words = [{ text: '把这个', startMs: start, endMs: start + 100, granularity: 'word', timing: 'precise', confidence: .99 }, { text: '放到那边', startMs: end, endMs: end + 100, granularity: 'word', timing: 'precise', confidence: .99 }]
+    movementTranscripts[audio.audioSegmentRef] = { unit: 'ms', text: '把这个放到那边', granularity: 'word', words, segments: [{ text: '把这个放到那边', startMs: start, endMs: end + 100, granularity: 'segment', timing: 'coarse', words }] }
+  }
+  assert.ok(alignedMovement, '移动词时必须完整落在真实音频样本内，不能猜测或截断时间戳')
+  await app.evaluate((_electron, transcripts) => { globalThis.__t157Transcripts = transcripts }, movementTranscripts)
+  await button('转写并审阅').click(); await button('确认上传音频并转写').click()
+  await button('查看「这个」的指向').waitFor({ timeout: 60000 }); await button('查看「这个」的指向').click(); await shot('移动对象与目标位置审阅')
+  const movementBefore = structuredClone((await read()).document.layers)
+  await button('生成候选').click(); await layout.getByRole('radio', { name: '按讲解移动', exact: true }).waitFor(); await shot('正式移动候选自动打开')
+  await layout.getByRole('button', { name: '应用', exact: true }).click(); await layout.getByText('已应用，可撤销', { exact: true }).waitFor(); await shot('移动候选一步应用')
+  assert.notDeepEqual((await read()).document.layers, movementBefore)
+  await host().getByRole('button', { name: '随手摆', exact: true }).click(); await host().getByRole('button', { name: /^(撤销|Undo)$/ }).click(); await page.waitForTimeout(1200); await shot('移动候选一步撤销')
+  assert.deepEqual((await read()).document.layers, movementBefore)
   assert.ok(await page.evaluate(() => window.__t157Streams.every(stream => stream.getTracks().every(track => track.readyState === 'ended'))))
   evidence.recording = { mode: session.mode, pointers: pointers.length, historicalFrames: session.visualEvidenceRefs.length, asrFixtureCalls: await app.evaluate(() => globalThis.__t157Calls), paidCalls: 0 }
   store()

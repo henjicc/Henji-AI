@@ -54,6 +54,8 @@ export function useImageEditorExplanationV3(input: {
       const bottom = Math.min(rect.bottom, rect.top + (size[1] - viewport.documentY) * viewport.zoom, window.innerHeight)
       const captureRect = { x: Math.ceil(left), y: Math.ceil(top), width: Math.floor(right - Math.ceil(left)), height: Math.floor(bottom - Math.ceil(top)) }
       const unobscured = (): boolean => ![...surface.ownerDocument.querySelectorAll<HTMLElement>('[data-panel-placement], [role="dialog"]')].some(overlay => {
+        // The image editor itself can be a dialog host; only other overlays obscure it.
+        if (overlay.contains(surface)) return false
         const box = overlay.getBoundingClientRect()
         return box.width > 0 && box.height > 0 && box.left < right && box.right > left && box.top < bottom && box.bottom > top
       })

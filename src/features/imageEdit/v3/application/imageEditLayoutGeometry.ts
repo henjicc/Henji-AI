@@ -83,7 +83,7 @@ export function resolveImageLayoutParentAffine(document:ImageEditDocumentV3,ance
   return parent
 }
 export async function captureImageLayoutEntries(document: ImageEditDocumentV3, ids: readonly string[], signal: AbortSignal,
-  measure: LayoutMeasure = measureImageLayoutLayer): Promise<Omit<ImageLayoutEntry, 'sample'>[]> {
+  measure: LayoutMeasure = measureImageLayoutLayer, minimum = 3): Promise<Omit<ImageLayoutEntry, 'sample'>[]> {
   const unique = new Set(ids)
   if (unique.size !== ids.length) throw new Error('随手摆目标重复')
   const entries: Omit<ImageLayoutEntry, 'sample'>[] = []
@@ -114,6 +114,6 @@ export async function captureImageLayoutEntries(document: ImageEditDocumentV3, i
     entries.push({ layerId:id, localAffine:[...location.layer.transform], parentAffine:[...parent], item:{ targetRef:imageEditV3LayerRef(document.id,id), affine:[...affine],
       worldCorners:points.map(p => [p[0],p[1]]), translationLocked:hasLockedChild(location.layer)||location.ancestors.some(a=>a.locked) } })
   }
-  if (entries.length < 3) throw new Error('请至少选择三个独立图层；组与其子图层算同一个目标')
+  if (entries.length < minimum) throw new Error(minimum === 3 ? '请至少选择三个独立图层；组与其子图层算同一个目标' : '请选择至少一个有内容的图层')
   return entries
 }

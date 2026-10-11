@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { PanelTrigger, UiButton, UiGroup, Dropdown } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { CreativeIntentControls, CreativeIntentOverlay } from '@/features/creativeIntent'
@@ -11,6 +11,8 @@ export function VideoEditMotionControls({ owner, onError }: { owner: VideoEditIn
   useSyncExternalStore(subscribeVideoMotion, videoMotionRevision)
   const state = videoMotionState(owner); const id = owner.document.id
   const [capture, setCapture] = useState<'place' | 'record'>('place')
+  const [open, setOpen] = useState(false)
+  useEffect(() => { if (state?.reviewRequest) setOpen(true) }, [state?.reviewRequest, state?.draft.id])
   const sequence = getActiveVideoEditSequence(owner)
   const clip = sequence.clips.find(c => c.id === owner.selection)
   const [annotationId, setAnnotationId] = useState('')
@@ -20,7 +22,7 @@ export function VideoEditMotionControls({ owner, onError }: { owner: VideoEditIn
   const interval: [number, number] = span ?? [chosenMark?.frame ?? clip?.start ?? 0, chosenMark?.endFrame ?? (clip ? clip.start + clip.duration - 1 : 0)]
   const run = (operation: () => void | Promise<void>): void => { try { void Promise.resolve(operation()).catch(onError) } catch (error) { onError(error) } }
   const lastDraft = owner.document.creativeIntents?.drafts.at(-1)
-  return <PanelTrigger display={state?.status === 'recording' ? '正在示范' : '超级关键帧'} appearance="quiet" size="sm" buttonClassName="w-auto" alignment="aboveCenter" gap={8} surface="glass" panelPadding="content" panelWidth="content" renderPanel={() => <>
+  return <PanelTrigger open={open} onOpenChange={setOpen} display={state?.status === 'recording' ? '正在示范' : '超级关键帧'} appearance="quiet" size="sm" buttonClassName="w-auto" alignment="aboveCenter" gap={8} surface="glass" panelPadding="content" panelWidth="content" renderPanel={() => <>
     {!state && lastDraft && <UiButton onClick={() => run(() => reopenVideoMotion(id, lastDraft.id))}>继续上次原稿</UiButton>}
     <UiGroup title="标注与参照" titleTone="compact">
       <Dropdown label="使用标注" value={annotationId} options={sequence.annotations.filter(a => a.status !== 'resolved' && (!a.clipId || a.clipId === clip?.id)).map(a => ({ value: a.id, label: a.text }))} onSelect={value => { setAnnotationId(value); setSpan(undefined) }} />

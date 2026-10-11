@@ -33,10 +33,11 @@ export function explanationPosition(point: readonly number[]): string {
 }
 
 export function explanationChanges(result: ExplanationReviewResult): string[] {
+  const label = (ref: ExplanationReviewResult['plan']['protectedRefs'][number]): string => result.objects?.find(object => object.ref.kind === ref.kind && object.ref.id === ref.id)?.label ?? ref.label ?? '已确认对象'
   return [
-    ...result.plan.protectedRefs.map(ref => `不改动：${ref.label ?? '已确认对象'}`),
+    ...result.plan.protectedRefs.map(ref => `不改动：${label(ref)}`),
     ...(result.layout ? [`${result.layout.targetRefs.length} 张图片 ${result.layout.action === 'distribute' ? '等距排列' : '对齐'}`] : []),
-    ...result.plan.changes.map(change => `${change.targetRef.label ?? '已确认对象'} ${change.property === 'position' && Array.isArray(change.after) ? `移到${explanationPosition(change.after)}` : change.property === 'rotationTurns' ? '调整角度' : change.property === 'scaleXY' ? '调整大小' : '调整中心'}`),
+    ...result.plan.changes.map(change => `${label(change.targetRef)} ${change.property === 'position' && Array.isArray(change.after) ? `移到${explanationPosition(change.after)}` : change.property === 'rotationTurns' ? '调整角度' : change.property === 'scaleXY' ? '调整大小' : '调整中心'}`),
   ]
 }
 

@@ -18,6 +18,8 @@ import { findImageEditLayerLocationV3 } from '../editor/layerTreeV3'
 import { resolveAnnotationOutputGeometryV3 } from '../editor/annotationGeometryV3'
 import type { ExplanationReviewProps } from '@/features/creativeIntent'
 import type { ApplicationRef } from '@/core/application-control/identifiers'
+import { captureImageLayoutEntries } from './imageEditLayoutGeometry'
+import { reviewedMovementChanges } from '@/core/creativeIntent/intentPlan'
 
 const logger = createLogger('features.imageEdit.explanation')
 type ExplanationReviewResult = Awaited<ReturnType<ExplanationReviewProps['onRead']>>
@@ -278,7 +280,26 @@ export class ImageEditExplanation {
     const refs = resolution.mentions.filter(m => /[这那]几个/.test(m.text)).flatMap(m => m.selected?.targetRefs ?? [])
     const layout = !resolution.negated && !resolution.issues.length && resolution.mentions.every(m => m.selected) && /等距|对齐/.test(resolution.text) && refs.length >= (/等距/.test(resolution.text) ? 3 : 2)
       ? { targetRefs: refs, action: /等距/.test(resolution.text) ? 'distribute' as const : 'align' as const } : undefined
-    return { resolution, plan, image, imagePoint: evidence?.frames.find(frame => chosen?.evidenceSeqs.includes(frame.seq))?.pointer ?? undefined, layout }
+    const refsForOptions = [...new Map(resolution.mentions.flatMap(m => [...(m.selected?.targetRefs ?? []), ...m.candidates.flatMap(c => c.targetRefs)]).map(ref => [ref.id, ref])).values()]
+    const locations = collectImageEditV3LiveLayers(document)
+    const objects = refsForOptions.map(ref => {
+      const location = locations.find(l => imageEditV3LayerRef(document.id, l.layer.id).id === ref.id), name = location?.layer.name ?? ref.label ?? '图层'
+      const duplicates = locations.filter(l => l.layer.name === name)
+      const position = location ? duplicates.findIndex(l => l.layer.id === location.layer.id) : -1
+      const suffix = location?.ancestors.at(-1)?.name
+      const label = duplicates.length > 1 ? `${name} · ${suffix && duplicates.filter(l => l.ancestors.at(-1)?.name === suffix).length === 1 ? suffix : position === 0 ? '上层' : position === duplicates.length - 1 ? '下层' : `第 ${position + 1} 层`}` : name
+      return { ref, label, corners: undefined as [number, number][] | undefined }
+    })
+    // Never project changed artwork over an old screenshot.
+    const historical = evidence?.frames.find(frame => chosen?.evidenceSeqs.includes(frame.seq))
+    if (image && historical?.stateDigest === stateDigest) {
+      const ids = objects.map(object => splitImageEditV3LayerRef(object.ref).layerId)
+      const measured = await captureImageLayoutEntries(document, ids, this.controller.signal, undefined, 1)
+      for (const object of objects) object.corners = measured.find(e => e.item.targetRef.id === object.ref.id)?.item.worldCorners.map(([x, y]) => [x / output.width, y / output.height])
+    }
+    this.assert(collector)
+    if (this.bus.getSnapshot().document !== document) throw new Error('画面已改变，请重新选择这处指代')
+    return { resolution, plan, image, imagePoint: historical?.pointer ?? undefined, layout, objects }
   }
   private historicalEvidence(entry: TranscriptEntry): ExplanationSession['visualEvidenceRefs'][number] | undefined {
     const middle = (entry.monoSpanUs[0] + entry.monoSpanUs[1]) / 2
@@ -313,6 +334,19 @@ export class ImageEditExplanation {
     const ids = review.layout.targetRefs.map(ref => { const target = splitImageEditV3LayerRef(ref); if (target.documentId !== documentId) throw new Error('图层不属于当前图片。'); return target.layerId })
     await imageEditLayoutDraft(this.bus).organize(ids, review.layout.action)
   }
+  async generate(entries: readonly TranscriptEntry[]): Promise<void> {
+    const reviews: ExplanationReviewResult[] = []
+    for (const entry of entries) reviews.push(await this.readReview(entry, undefined, false))
+    const plans = reviews.filter(review => !review.layout).map(review => review.plan)
+    const protectedIds = new Set(reviews.flatMap(review => review.plan.protectedRefs.map(ref => ref.id)))
+    if (reviews.some(review => review.layout?.targetRefs.some(ref => protectedIds.has(ref.id)))) throw new Error('排列包含保护对象，请重新确认。')
+    if (plans.some(plan => plan.changes.length)) {
+      reviewedMovementChanges(plans)
+      await imageEditLayoutDraft(this.bus).move(plans)
+    }
+    if (!plans.some(plan => plan.changes.length) && !reviews.some(review => review.layout)) throw new Error('请先确认对象和动作。')
+    for (const [index, review] of reviews.entries()) if (review.layout) await this.organize(entries[index])
+  }
   pick(entry: TranscriptEntry, mention: DeicticMention): Promise<void> {
     this.cancelPick()
     return new Promise((resolve, reject) => { this.picking = { entry, mention, resolve, reject } })
@@ -342,13 +376,15 @@ export class ImageEditExplanation {
   async remove(): Promise<void> {
     const collector = this.require()
     if (this.state.busy || ['recording', 'paused', 'transcribing'].includes(collector.session.state)) throw new Error('请先结束录制。')
+    try {
     await this.finishReview(); await this.ports.audio.erase(collector.session.id)
     const document = this.bus.getSnapshot().document, current = document.creativeIntents!
     const next = { ...current, sessions: current.sessions.filter(session => session.id !== collector.session.id) }
     next.resources = creativeIntentLiveResources([next])
-    this.bus.dispatch({ type: 'document.set-creative-intents', commandId: crypto.randomUUID(), expectedRevision: document.revision, intents: next, resources: creativeIntentLiveResources([current, next]).map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })) })
+    this.bus.dispatch({ type: 'document.set-creative-intents', commandId: crypto.randomUUID(), expectedRevision: document.revision, intents: next, resources: creativeIntentLiveResources([current, next]).map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId)) })
     await this.ports.confirm(); this.collector = undefined; this.publish({ message: undefined })
     logger.info('图片讲解已删除', { event: 'image_edit.explanation.remove.completed' })
+    } catch (error) { logger.warn('图片讲解删除未完成', { event: 'image_edit.explanation.remove.failed', error }); throw error }
   }
   async close(): Promise<void> {
     if (this.disposed) return

@@ -12,12 +12,13 @@ const EMPTY: string[] = []
 const CANDIDATE_LABELS: Readonly<Record<string, string>> = { align: '边缘对齐', distribute: '等距排列', hero: '保留主图' }
 
 /** Both writable hosts compose the same primitives over the document-owned layout adapter. */
-export function ImageEditorLayoutControlsV3({ bus, controller }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller }): JSX.Element | null {
+export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; openRequest?: number }): JSX.Element | null {
   const adapter = useMemo(() => imageEditLayoutDraft(bus), [bus])
   const state = useSyncExternalStore(adapter.subscribe, adapter.snapshot)
   const selected = useImageEditorSessionStoreV3(s => s.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY)
   const [error, setError] = useState<string>()
   const [open, setOpen] = useState(false)
+  useEffect(() => { if (openRequest) setOpen(true) }, [openRequest])
   const [running, setRunning] = useState(false)
   const inFlight = useRef(false)
   const [fidelity, setFidelity] = useState<number | null>(null)
@@ -47,6 +48,7 @@ export function ImageEditorLayoutControlsV3({ bus, controller }: { bus: ImageEdi
   }
   const busy = running || state.status === 'optimizing'
   const canOrganize = selected.length >= 3 || Boolean(state.draft && state.entries.length >= 3)
+  const movement = state.candidates.some(candidate => candidate.id === 'move')
   const canApply = state.candidates.some(candidate => candidate.id === state.selected)
   const options = [{ id: 'original', label: '原稿' }, ...state.candidates.map(candidate => ({ id: candidate.id, label: CANDIDATE_LABELS[candidate.id] ?? candidate.label }))]
   const pins = state.draft?.pins.map(pin => {
@@ -80,7 +82,7 @@ export function ImageEditorLayoutControlsV3({ bus, controller }: { bus: ImageEdi
             }}>{option.label}</UiOptionButton>)}
         </div>
       </UiGroup>}
-      {state.draft && <>
+      {state.draft && !movement && <>
         <UiGroup title="保留原稿位置" titleTone="compact">
           <div className="flex items-center justify-between text-xs text-text2"><span>完全整理</span><span className="tabular-nums">{retained}%</span><span>保持原位</span></div>
           <UiRangeInput aria-label="保留原稿位置" aria-valuetext={retained === 0 ? '完全整理' : retained === 100 ? '保持原位' : `保留原稿位置 ${retained}%`}
@@ -101,7 +103,7 @@ export function ImageEditorLayoutControlsV3({ bus, controller }: { bus: ImageEdi
             </UiButton>} /></div>}
         </UiGroup>
       </>}
-      {!canOrganize && !failure && <UiEmpty size="xs" title="至少选择三个独立图层" />}
+      {!canOrganize && !state.draft && !failure && <UiEmpty size="xs" title="至少选择三个独立图层" />}
       {failure ? <UiError title={state.needsSave ? '布局尚未保存' : '布局未完成'} message={failure} size="xs" align="start" />
         : state.message && <div role="status" className="text-xs text-text2">{state.message}</div>}
       {state.status === 'optimizing' && <UiLoading size="xs" message="正在整理布局…" />}

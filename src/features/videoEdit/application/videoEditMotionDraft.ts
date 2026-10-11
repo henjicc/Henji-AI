@@ -13,6 +13,7 @@ import { requireVideoEditInstance, getActiveVideoEditSequence, editVideoProject,
 import { motionDigest, motionSamplePage, motionPageRef, readMotionPages, readMotionCandidate, readMotionResource, storeMotionResource } from './videoEditMotionResources'
 import { optimizeVideoEditMotionOffThread } from './videoEditMotionWorkerClient'
 import { captureVideoMotionReference, readVideoIntentAnnotation, sampleVideoMotionReference, videoMotionConstraintOptionsSchema, type VideoMotionConstraintOptions } from './videoEditIntentAnnotationAdapter'
+import { reviewedMovementChanges, type IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
 
 const logger = createLogger('features.videoEdit.motionDraft')
 const PAGE_SAMPLE_BUDGET = 256
@@ -29,6 +30,7 @@ export interface VideoMotionState {
   message?: string; generationMs?: number; inputLatencies: number[];
   original?: MotionCandidate; originalRef?: StoredCreativeIntentResource; endpoints?: [MotionSample, MotionSample]; appliedBaseDigest?: string
   constraints?: VideoMotionConstraintOptions
+  reviewRequest?: number
 }
 interface CaptureRuntime { startedAt: number; seq: number; visit: number; gestureStarted?: boolean; gestureOrigin?: PresentedPose; lastFrame?: number; lastDirection: number; takeId?: string; pointerActive: boolean; inputAt?: number; pendingEvent?: MotionSample['event']; pendingPresentation?: Promise<void>; presented?: () => void; pausedAt?: number; clockId?: string; flushTimer?: ReturnType<typeof setTimeout>; write?: Promise<void>; persist?: Promise<void>; controller?: AbortController; preferredCandidateId?: string; release: () => void; unsubscribe: () => void; previewRevision: number; inputRevision: number; cached?: { base: VideoEditComposition; revision: number; composition: VideoEditComposition } }
 const states = new WeakMap<VideoEditInstance, VideoMotionState>()
@@ -133,6 +135,29 @@ export async function startVideoMotion(id: string, capture: 'place' | 'record' =
   })
   await persistHead(state); publish(state)
   logger.info('动作示范开始', { event: 'video_edit.motion.start', context: { documentId: id, capture } })
+}
+/** Reviewed positions are authored poses, not a replay of recorded editing commands. */
+export async function proposeVideoExplanationMotion(id: string, plans: readonly IntentDifferencePlan[], frames: [number, number]): Promise<void> {
+  const changes = reviewedMovementChanges(plans), owner = requireVideoEditInstance(id), sequence = getActiveVideoEditSequence(owner)
+  // The existing motion editor reviews one selected element at a time.
+  if (changes.length !== 1) throw new Error('请分别审阅每个对象的移动候选')
+  const change = changes[0], clip = sequence.clips.find(c => change.targetRef.kind === 'video_edit.clip' && change.targetRef.id === `${id}:${c.id}`)
+  if (!clip || owner.playing || change.expectedDigest !== await motionDigest([sequence, owner.frame]) || getActiveVideoEditSequence(owner) !== sequence) throw new Error('当前画面已变化，请重新审阅讲解')
+  if (!frames.every(frame => Number.isSafeInteger(frame) && frame >= clip.start && frame < clip.start + clip.duration)) throw new Error('移动位置不在该片段的时间范围内')
+  setVideoEditView(id, { selection: clip.id, playing: false })
+  await startVideoMotion(id, 'place')
+  const state = states.get(owner)!, runtime = runtimes.get(owner)!, take = crypto.randomUUID(), clock = crypto.randomUUID(), visit = `review:${take}`
+  const range: [number, number] = [...frames]
+  const timelineAt = (frame: number): Timeline => ({ sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }, frame, fps: sequence.frameRate, visitRef: visit })
+  const poses: MotionSample[] = [...new Set(range)].map((frame, index) => ({ seq: index, monoUs: index, timeline: timelineAt(frame), clockSegmentRef: clock, sampleId: `${take}:${index}`, takeRef: take, targetRef: change.targetRef,
+    pose: { ...motionClipPose(clip, frame), position: frame === range[1] ? change.after as [number, number] : change.before as [number, number] }, gestureKind: 'place', quality: 'presented', confirmed: true, event: 'up' }))
+  state.draft.label = '讲解移动'; state.draft.targets[0].editable = ['position']; state.draft.fidelity = 1
+  state.draft.clockSegments = [{ id: clock, monoSpanUs: [0, Math.max(1, poses.length - 1)], mode: range[0] === range[1] ? 'hold' : 'scrub', start: timelineAt(range[0]), end: timelineAt(range[1]), anchors: [] }]
+  state.draft.takes = [{ id: take, intent: 'demonstrate', pathDemonstration: false, placement: true, monoSpanUs: [0, Math.max(1, poses.length - 1)], direction: Math.sign(range[1] - range[0]) as -1 | 0 | 1, visitRef: visit, timelineRange: range, samplePages: [], geometryDigest: state.draft.targets[0].geometryDigest }]
+  state.pending = poses; state.recent = poses; state.endpoints = [poses[0], poses.at(-1)!]; state.status = 'reviewing'
+  owner.motionRecording = false; runtime.release(); runtime.unsubscribe()
+  await flushVideoMotion(state); await optimizeVideoMotion(id)
+  state.reviewRequest = (state.reviewRequest ?? 0) + 1; publish(state)
 }
 export function recordVideoMotionPresentation(owner: VideoEditInstance, evidence: MotionPresentation): void {
   const state = states.get(owner); const runtime = runtimes.get(owner)

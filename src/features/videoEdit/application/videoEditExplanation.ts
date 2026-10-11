@@ -7,22 +7,22 @@ import { type CreativeIntents, type StoredCreativeIntentResource } from '@/core/
 import { alignRecordingTranscript } from '@/core/creativeIntent/recordingAlignment'
 import { recordingCommandEvent } from '@/core/creativeIntent/recordingEvents'
 import { resolveDeixis, confirmedExplanationBinding, pickedExplanationBinding, type DeicticMention, type DeixisResolution, type ExplanationBinding } from '@/core/creativeIntent/deixis'
-import { buildIntentDifferencePlan, type IntentDifferencePlan, type ReviewedIntentGoal } from '@/core/creativeIntent/intentPlan'
+import { buildIntentDifferencePlan, reviewedMovementChanges, type IntentDifferencePlan, type ReviewedIntentGoal } from '@/core/creativeIntent/intentPlan'
 import { captureExplanationPixels } from './videoEditExplanationVisual'
 import { serializeRecordingInput } from '@/core/creativeIntent/recordingSerializer'
 import { RecordingCollector, captureMicrophone, type CapturedAudioBlock, type MicrophoneCapture } from '@/features/creativeIntent'
 import { modelDefaultsManager } from '@/features/settings'
 import { motionClipPose } from '@/core/videoEdit/motionDraft'
-import { videoEditClipPictureSize, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
+import { videoEditClipPictureSize, videoEditClipToFrame, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
 import { videoEditComposition, activeVideoEditClips, type VideoEditComposition } from '@/core/videoEdit/document'
 import type { ApplicationRef } from '@/core/application-control/identifiers'
 import type { ApplicationSurfaceId } from '@/core/application-control/applicationSurfaces'
 import { motionDigest, storeMotionResource, storeMotionResourceBytes, motionPageRef, readMotionResource, readMotionResourceBytes } from './videoEditMotionResources'
-import { subscribeVideoMotion, videoMotionState } from './videoEditMotionDraft'
+import { subscribeVideoMotion, videoMotionState, proposeVideoExplanationMotion } from './videoEditMotionDraft'
 import { getActiveVideoEditSequence, requireVideoEditInstance, updateVideoEditCreativeIntents, purgeVideoEditExplanationSession, subscribeVideoEditCommandFacts, subscribeVideoEditView, registerVideoEditClosePreparation, saveVideoEdit, type VideoEditInstance, type VideoEditCommandFact } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.explanation')
-export interface VideoExplanationState { collector: RecordingCollector; originMs: number; elapsedUs: number; message?: string; busy: boolean; erased: boolean; microphone?: MicrophoneCapture; controller: AbortController; picture?: { frame: number; sequenceId: string; revision: number; composition: VideoEditComposition }; uncertaintyUs: number[] }
+export interface VideoExplanationState { collector: RecordingCollector; originMs: number; elapsedUs: number; message?: string; busy: boolean; erased: boolean; microphone?: MicrophoneCapture; controller: AbortController; picture?: { frame: number; sequenceId: string; revision: number; composition: VideoEditComposition }; reviewComposition?: VideoEditComposition; uncertaintyUs: number[] }
 interface Runtime { state: VideoExplanationState; write: Promise<void>; partial: CapturedAudioBlock[]; samples: number; pendingAudio: Map<string, () => Promise<void>>; queued?: number; erasePaths?: Set<string>; lastBlock?: CapturedAudioBlock; pausing?: Promise<void>; installed?: boolean; viewKey?: string; geometry?: { key: string; id: string }; release: () => void; timer?: ReturnType<typeof setInterval> }
 const states = new WeakMap<VideoEditInstance, Runtime>()
 const listeners = new Set<() => void>(); let revision = 0
@@ -183,6 +183,7 @@ export async function stopVideoExplanation(id: string): Promise<void> {
 }
 async function freezeFinalRecordingPoses(owner: VideoEditInstance, state: VideoExplanationState): Promise<void> {
   const sequence = getActiveVideoEditSequence(owner); const frame = owner.frame
+  state.reviewComposition = sequence
   const clips = new Map(sequence.clips.map(clip => [`${owner.document.id}:${clip.id}`, clip])); const targets = new Map<string, ApplicationRef>()
   for await (const page of pages(owner, state.collector.session)) if (page.kind !== 'clock' && page.kind !== 'samples') for (const event of page.entries) {
     const refs = event.kind === 'command' ? event.targets : event.kind === 'delta' ? event.changes.map(c => c.targetRef) : event.kind === 'pointer' ? [...event.pointedRefs, ...event.selectedRefs] : []
@@ -281,7 +282,7 @@ export async function correctVideoExplanationText(id: string, entry: TranscriptE
     await runtime.state.collector.flush(); installHead(owner, runtime.state); await saveVideoEdit(id); publish()
   })
 }
-export interface VideoExplanationReviewData { resolution: DeixisResolution; plan: IntentDifferencePlan; image?: Uint8Array; imagePoint?: [number, number] }
+export interface VideoExplanationReviewData { resolution: DeixisResolution; plan: IntentDifferencePlan; image?: Uint8Array; imagePoint?: [number, number]; objects?: { ref: ApplicationRef; label: string; corners?: [number, number][] }[] }
 /** Verify and read only the indexed sentence/evidence pages; no session-wide materialization. */
 async function explanationSentence(owner: VideoEditInstance, state: VideoExplanationState, entry: TranscriptEntry): Promise<{ entries: TranscriptEntry[]; events: ExplanationEvent[] }> {
   const session = state.collector.session; const entries: TranscriptEntry[] = []; const events: ExplanationEvent[] = []
@@ -310,6 +311,11 @@ export async function readVideoExplanationReview(id: string, entry: TranscriptEn
   const sequence = getActiveVideoEditSequence(owner); const frame = owner.frame; const digest = await motionDigest([sequence, frame])
   const current = sequence.clips.map(clip => ({ targetRef: { kind: 'video_edit.clip', id: `${id}:${clip.id}`, label: clip.name }, pose: motionClipPose(clip, frame), stateDigest: digest }))
   const plan = buildIntentDifferencePlan([resolution], goals, current, events)
+  // Confirmation is a property of each reference, even while another reference is ambiguous.
+  if (!resolution.negated && /移|放|从.*到/.test(resolution.text) && resolution.mentions.some(mention => ['target', 'source', 'destination'].includes(mention.slot) && !mention.confirmedByUser)) {
+    plan.changes = []; plan.status = 'blocked'
+    if (!plan.issues.includes('差异目标尚未确认')) plan.issues.push('差异目标尚未确认')
+  }
   if (!resolution.negated && !goals.length && plan.status !== 'blocked') { plan.status = 'blocked'; plan.issues.push('这句尚未形成完整的差异目标，请补充并确认') }
   const inspected = resolution.mentions.find(mention => mention.id === mentionId) ?? resolution.mentions.find(mention => mention.entries.some(value => value.eventId === entry.eventId)) ?? resolution.mentions[0]
   const chosen = inspected?.selected ?? inspected?.candidates[0]
@@ -317,8 +323,57 @@ export async function readVideoExplanationReview(id: string, entry: TranscriptEn
   const resource = visual && head(owner).resources.find(value => value.resourceId === visual.resourceRef.resourceId)
   const image = includeImage && resource ? await readMotionResourceBytes(resource) : undefined
   assertCurrent(owner, state)
+  const tracks = sequence.tracks.filter(track => track.kind === 'video').sort((a, b) => a.index - b.index)
+  const refs = [...new Map(resolution.mentions.flatMap(mention => [...(mention.selected?.targetRefs ?? []), ...mention.candidates.flatMap(candidate => candidate.targetRefs)]).map(ref => [ref.id, ref])).values()]
+  const historicalFrame = chosen?.timeline?.frame ?? frame
+  const historical = visual?.frames.find(value => chosen?.evidenceSeqs.includes(value.seq))
+  const frozen = state.reviewComposition?.id === sequence.id ? state.reviewComposition : state.picture?.sequenceId === sequence.id ? state.picture.composition : sequence
+  const historicalPoses = new Map(refs.flatMap(ref => {
+    const clip = frozen.clips.find(c => ref.id === `${id}:${c.id}`)
+    return clip ? [[ref.id, motionClipPose(clip, historicalFrame)] as const] : []
+  }))
+  const restored = new Set<string>(), unavailable = new Set<string>()
+  if (includeImage && historical) {
+    const after = { ...state.collector.session, pages: state.collector.session.pages.filter(page => page.kind === 'delta' && page.monoSpanUs[1] > historical.monoUs) }
+    // Read sealed deltas page by page; reconstruct geometry, never replay an operation.
+    for await (const page of pages(owner, after, 'delta')) if (page.kind === 'delta') for (const event of page.entries) if (event.monoUs > historical.monoUs) for (const change of event.changes) {
+      const pose = historicalPoses.get(change.targetRef.id), key = `${change.targetRef.id}:${change.property}`
+      if (!pose || restored.has(key)) continue
+      if (event.timeline?.frame !== historicalFrame) { unavailable.add(change.targetRef.id); continue }
+      Object.assign(pose, { [change.property]: change.before }); restored.add(key)
+    }
+  }
+  const verified = includeImage && (!!state.reviewComposition || !!state.picture || !!historical && historical.stateDigest === await motionDigest([sequence, historicalFrame]))
+  const objects = refs.flatMap(ref => {
+    const clip = sequence.clips.find(c => ref.id === `${id}:${c.id}`); if (!clip) return []
+    const duplicates = sequence.clips.filter(c => c.name === clip.name)
+    const track = `V${tracks.findIndex(t => t.index === clip.track) + 1}`
+    const sameTrack = duplicates.filter(c => c.track === clip.track).sort((a, b) => a.start - b.start)
+    const label = duplicates.length > 1 ? `${clip.name} · ${track}${sameTrack.length > 1 ? ` · 第 ${sameTrack.findIndex(c => c.id === clip.id) + 1} 段` : ''}` : clip.name
+    const capturedClip = frozen.clips.find(c => c.id === clip.id) ?? clip
+    const pose = historicalPoses.get(ref.id) ?? motionClipPose(capturedClip, historicalFrame), placed = { ...capturedClip, x: pose.position[0] - .5, y: pose.position[1] - .5, scale: pose.scaleXY[0], rotation: pose.rotationTurns * 360, anchorX: pose.pivot[0], anchorY: pose.pivot[1] }
+    const corners = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]): [number, number] => { const point = videoEditClipToFrame(placed, videoEditClipPictureSize(frozen, capturedClip), frozen, u, v); return [point.x, point.y] })
+    return [{ ref, label, corners: verified && !unavailable.has(ref.id) ? corners : undefined }]
+  })
+  assertCurrent(owner, state)
   if (owner.playing || owner.frame !== frame || getActiveVideoEditSequence(owner) !== sequence) { plan.changes = []; plan.status = 'blocked'; plan.issues.push('当前画面状态已改变，请暂停播放后重新确认差异') }
-  return { resolution, plan, image, imagePoint: visual?.frames.find(frame => chosen?.evidenceSeqs.includes(frame.seq))?.pointer ?? undefined }
+  return { resolution, plan, image, imagePoint: visual?.frames.find(frame => chosen?.evidenceSeqs.includes(frame.seq))?.pointer ?? undefined, objects }
+}
+export async function generateVideoExplanationCandidates(id: string, entries: readonly TranscriptEntry[]): Promise<void> {
+  await clearTemporaryVideoExplanationAudio(id)
+  const reviews: VideoExplanationReviewData[] = []
+  for (const entry of entries) reviews.push(await readVideoExplanationReview(id, entry, undefined, false))
+  reviewedMovementChanges(reviews.map(review => review.plan))
+  const protectedRefs = reviews.flatMap(review => review.plan.protectedRefs)
+  // The existing editor focuses one draft. Preserve all generated drafts and open the last,
+  // rather than imposing a limit on the number of instructions in the transcript.
+  for (const [index, review] of reviews.entries()) if (review.plan.changes.length) {
+    const movement = await readVideoExplanationReview(id, entries[index], undefined, false)
+    const source = movement.resolution.mentions.find(mention => mention.slot === 'source' || mention.slot === 'target')?.selected
+    const destination = movement.resolution.mentions.find(mention => mention.slot === 'destination')?.selected
+    const frame = requireVideoEditInstance(id).frame
+    await proposeVideoExplanationMotion(id, [{ ...movement.plan, protectedRefs }], [source?.timeline?.frame ?? frame, destination?.timeline?.frame ?? frame])
+  }
 }
 export async function correctVideoExplanationBinding(id: string, entry: TranscriptEntry, binding: ExplanationBinding): Promise<void> {
   const owner = requireVideoEditInstance(id); const runtime = states.get(owner)
@@ -375,6 +430,7 @@ export async function reopenVideoExplanation(id: string, sessionId: string): Pro
   existing?.release()
   const elapsedUs = Math.max(session.clockSegments.at(-1)?.monoSpanUs[1] ?? 0, existing?.state.collector.session.id === sessionId ? now(existing.state) : 0)
   const state: VideoExplanationState = { collector: undefined as unknown as RecordingCollector, originMs: performance.now() - elapsedUs / 1000, elapsedUs, busy: false, erased: false, controller: new AbortController(), uncertaintyUs: [] }
+  if (existing?.state.collector.session.id === sessionId) state.reviewComposition = existing.state.reviewComposition
   state.collector = new RecordingCollector(session, async page => { const resource = await storeMotionResource(id, page, 'page'); if (state.erased) { await getPlatform().system.fs.remove(resource.path); return } state.collector.session.pages.push(motionPageRef(resource, page)); installHead(owner, state, resource) }, message => { state.message = message; publish() })
   if (['recording', 'paused', 'transcribing'].includes(state.collector.session.state)) state.collector.session.state = 'recoverable'
   const runtime: Runtime = { state, write: Promise.resolve(), partial: [], samples: 0, pendingAudio: new Map(), installed: true, release: () => {} }; states.set(owner, runtime)

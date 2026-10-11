@@ -9,7 +9,7 @@ import { imageEditExplanation } from '../application/imageEditExplanation'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import type { ImageEditorV3Controller } from './types'
 
-export function ImageEditorExplanationControlsV3({ bus, controller }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller }): JSX.Element {
+export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; onGenerated?: () => void }): JSX.Element {
   const adapter = useMemo(() => imageEditExplanation(bus), [bus])
   const state = useSyncExternalStore(adapter.subscribe, adapter.snapshot)
   const [open, setOpen] = useState(false), [upload, setUpload] = useState(false), [deleting, setDeleting] = useState(false)
@@ -36,17 +36,15 @@ export function ImageEditorExplanationControlsV3({ bus, controller }: { bus: Ima
   useEffect(() => { if (stage === 'recording') setOpen(false) }, [stage])
   useEffect(() => () => adapter.cancelPick(), [adapter])
   const generate = async (paragraphs: TranscriptEntry[]): Promise<void> => {
-    const reviews: ExplanationReviewResult[] = []
-    for (const entry of paragraphs) reviews.push(await adapter.readReview(entry, undefined, false))
-    if (reviews.some(review => !review.resolution.negated && !review.layout)) throw new Error('请先确认需要排列的图片。')
-    const protectedRefs = new Set(reviews.flatMap(review => review.plan.protectedRefs.map(ref => ref.id)))
-    if (reviews.some(review => review.layout?.targetRefs.some(ref => protectedRefs.has(ref.id)))) throw new Error('排列包含保护对象，请重新确认。')
-    for (const [index, review] of reviews.entries()) if (review.layout) await adapter.organize(paragraphs[index])
-    await adapter.finishReview(); setOpen(false)
+    await adapter.finishReview(); await adapter.generate(paragraphs); setOpen(false); onGenerated?.()
   }
   const canGenerate = (reviews: ExplanationReviewResult[]): boolean => {
     const protectedRefs = new Set(reviews.flatMap(review => review.plan.protectedRefs.map(ref => ref.id)))
-    return reviews.some(review => !!review.layout) && reviews.every(review => review.resolution.negated || !!review.layout && review.layout.targetRefs.every(ref => !protectedRefs.has(ref.id)))
+    return reviews.some(review => !!review.layout || review.plan.changes.length > 0) && reviews.every(review => {
+      if (review.resolution.negated) return true
+      if (review.layout) return review.layout.targetRefs.every(ref => !protectedRefs.has(ref.id))
+      return review.plan.status === 'review' && review.plan.changes.every(change => change.property === 'position' && !protectedRefs.has(change.targetRef.id))
+    })
   }
   return <>
     <div className="flex shrink-0 items-center gap-1" role="group" aria-label="录制讲解控制">

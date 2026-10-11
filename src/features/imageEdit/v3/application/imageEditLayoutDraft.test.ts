@@ -10,6 +10,8 @@ import { ImageEditCommandBusV3 } from './imageEditCommandBus'
 import { ImageEditLayoutDraft } from './imageEditLayoutDraft'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { captureImageLayoutEntries, type LayoutMeasure } from './imageEditLayoutGeometry'
+import { imageEditV3LayerRef } from './imageEditDocumentRefs'
+import type { IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
 
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto)})
 const measure:LayoutMeasure=async(_document,layer)=>{const w=layer.id==='a'?120:layer.id==='b'?70:35;return [[0,0],[w,0],[w,40],[0,40]]}
@@ -27,6 +29,22 @@ function setup(doc=document()) {
   return {bus,adapter,values,confirmed,released}
 }
 describe('随手摆正式文档适配',()=>{
+  it('单个移动计划保留镜像及祖先变换，正式候选预览、保存重开、应用和一步撤销',async()=>{
+    const doc=document(),group=createImageEditGroupLayerV3('g','组')
+    group.transform=[2,.2,.5,.7,31,29];group.children=[doc.layers[0]];doc.layers=[group,...doc.layers.slice(1)]
+    const {bus,adapter}=setup(doc),before=structuredClone(doc.layers)
+    const plan:IntentDifferencePlan={changes:[{targetRef:imageEditV3LayerRef(doc.id,'a'),property:'position',before:[0,0],after:[.8,.5],expectedDigest:await imageLayoutDigest([doc.geometry,doc.layers])}],protectedRefs:[],issues:[],status:'review',recordedOperationRefs:[{kind:'command',id:'must-not-replay'}]}
+    await adapter.move([plan]);expect(adapter.snapshot().candidates[0].id).toBe('move');expect(bus.getSnapshot().document.layers).toEqual(before)
+    const candidate=adapter.snapshot().candidates[0],changed=candidate.changes[0]
+    expect(changed.affine[4]).toBeCloseTo(800);expect(changed.affine[5]).toBeCloseTo(300)
+    await adapter.reopen(adapter.snapshot().draft!.id);expect(adapter.snapshot().candidates[0]).toMatchObject({id:'move'})
+    await expect(adapter.configure({fidelity:.5})).rejects.toThrow('目标位置')
+    expect(adapter.snapshot().candidates[0]).toMatchObject({id:'move'})
+    const history=bus.getSnapshot().history.undoCount;await adapter.apply();expect(bus.getSnapshot().history.undoCount).toBe(history+1)
+    const location=bus.getSnapshot().document.layers[0];expect(location.type==='group'&&location.children[0].transform.slice(0,4)).toEqual([1,0,0,1])
+    expect(bus.undo()).toBe(true);expect(bus.getSnapshot().document.layers).toEqual(before)
+    await expect(adapter.move([{...plan,protectedRefs:[plan.changes[0].targetRef]}])).rejects.toThrow('保护')
+  })
   it('S13 合成先验：边缘等距、完整预览隔离、原子应用一次撤销、原稿与资源存活',async()=>{
     const ordinary=`sha256:${'f'.repeat(64)}`
     expect(collectImageEditJsonResourceIdsV3({params:{intents:[ordinary]}})).toEqual([ordinary])
