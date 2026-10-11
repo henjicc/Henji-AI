@@ -96,6 +96,10 @@ describe('TTS media provider protocols', () => {
     expect(schema.safeParse({ ...request.input, voice: 'Rachel' }).success).toBe(false)
     expect(schema.safeParse({ ...request.input, voice: 'Brian' }).success).toBe(false)
     expect(schema.safeParse({ ...request.input, speed: 1.3 }).success).toBe(false)
+    expect(() => build('kie-eleven-turbo-2.5-tts', { kieElevenTurboVoice: 'Brian' })).toThrow('音色 ID')
+    expect(() => build('kie-eleven-turbo-2.5-tts', { kieElevenTurboVoice: 'Rachel' })).toThrow('音色 ID')
+    expect(build('kie-eleven-turbo-2.5-tts', { prompt: '测试一下。', kieElevenTurboSpeed: 1.05, kieElevenTurboStability: .5 }))
+      .toMatchObject({ model: 'elevenlabs/text-to-speech-turbo-2-5', input: { text: '测试一下。', voice: 'EkK5I93UQWFDigLMpZcX', speed: 1.05, stability: .5 } })
   })
 
   it.each([200, 400, 403])('百炼产品未开通（HTTP %s）归一化且禁止重试，保留原码', async (status) => {

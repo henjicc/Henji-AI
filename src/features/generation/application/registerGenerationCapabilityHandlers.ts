@@ -169,9 +169,11 @@ export function registerGenerationCapabilityHandlers(
     const resolved = await prepareInput(parsed)
     const preparation = generationApplicationService.prepare(resolved)
     const providerConfigured = (await generationService.getConfiguredProviders()).includes(String(preparation.providerId))
+    const unavailable = getProviderAvailabilityFailure(String(preparation.providerId), resolved.modelId)
     return {
-      preparation: { ...preparation, providerConfigured, canSubmit: providerConfigured,
-        message: providerConfigured ? '参数已通过校验，供应商已配置；提交仍需费用与权限确认。' : '参数已通过校验，但供应商未配置，不能提交。请先配置该供应商凭据，或选择已配置供应商的模型。' },
+      preparation: { ...preparation, providerConfigured, canSubmit: providerConfigured && !unavailable,
+        ...(unavailable ? { errorCode: unavailable.code, retryAfterMs: Math.max(0, unavailable.expiresAt - Date.now()) } : {}),
+        message: unavailable?.message ?? (providerConfigured ? '参数已通过校验，供应商已配置；提交仍需费用与权限确认。' : '参数已通过校验，但供应商未配置，不能提交。请先配置该供应商凭据，或选择已配置供应商的模型。') },
     }
   })
 
@@ -180,6 +182,9 @@ export function registerGenerationCapabilityHandlers(
     const parsed = parseCapabilityInput<GenerationInput>('create_visible_generation_task', input)
     const destination = generationDestination(parsed)
     const resolved = await prepareInput(parsed, destination)
+    const providerId = registry.getModel(resolved.modelId)?.meta.provider
+    const unavailable = providerId && getProviderAvailabilityFailure(providerId, resolved.modelId)
+    if (unavailable) throw new ApplicationPreflightFailure(new Error(`${unavailable.code}:${unavailable.message}`))
     throwIfCapabilityAborted(context.signal)
     if (destination.mode === 'canvas') {
       const { submitCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
@@ -233,3 +238,5 @@ async function readGenerationTask(taskId: string): Promise<Record<string, unknow
   const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
   return await getCanvasGenerationTask(taskId) ?? { ...generationApplicationService.getTask(taskId) }
 }
+import { getProviderAvailabilityFailure } from '@/core/services/providerAvailability'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'

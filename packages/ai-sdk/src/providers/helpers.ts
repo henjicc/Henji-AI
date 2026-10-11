@@ -1,5 +1,6 @@
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import type { JsonObject, JsonValue } from '../types/runtime'
+import { assertProviderAccess } from './providerAccessErrors'
 
 export function normalizeEndpoint(base: string, route: string): string {
   if (route.startsWith('http://') || route.startsWith('https://')) {
@@ -18,6 +19,7 @@ export async function readJsonResponse(response: Response, provider: string, ins
   }) as JsonValue
 
   inspect?.(payload)
+  assertProviderAccess(provider, payload, response.status)
   if (!response.ok) {
     throw new AiRuntimeError('provider_http_error', `${provider} HTTP ${response.status}: ${JSON.stringify(payload)}`)
   }

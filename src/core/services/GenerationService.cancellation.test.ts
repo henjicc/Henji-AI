@@ -7,6 +7,7 @@ import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService
 import { useAlertDialogStore, showAlertDialog, requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { configureGenerationSubmissionConfirmation } from './generationSubmissionConfirmation'
 import { ttsPresentation } from '@/models/presentation/tts'
+import { clearProviderAvailability, getProviderAvailabilityFailure } from './providerAvailability'
 
 vi.mock('@/commands/aiRuntime', () => ({
   aiCancelTask: vi.fn(async () => undefined), aiGenerate: vi.fn(), aiContinuePolling: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('@/commands/aiRuntime', () => ({
 }))
 const service = GenerationService.getInstance()
 beforeEach(() => {
+  clearProviderAvailability('fixture')
   configureGenerationSubmissionConfirmation(requestAlertConfirmation)
   vi.clearAllMocks()
   useAlertDialogStore.setState({ queue: [] })
@@ -26,6 +28,21 @@ afterEach(() => { registry.unregister('cancel-fixture'); vi.restoreAllMocks(); u
 function enableConfirmation(): void {
   registry.getModel('cancel-fixture')!.submissionConfirmation = ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation
 }
+
+it.each(['generate', 'poll'] as const)('%s 失败记住模型准入，手动重试仍派发且成功清除，界面文案不含内部码', async phase => {
+  const dispatch = phase === 'generate' ? aiGenerate : aiContinuePolling
+  vi.mocked(dispatch).mockRejectedValueOnce(new Error('[provider_product_not_activated] 测试供应商账号未开通该模型，请到控制台开通。'))
+    .mockResolvedValueOnce({ status: 'completed', urls: ['C:/result.png'], filePaths: [], metadata: {} })
+  const invoke = () => phase === 'generate' ? service.generate('cancel-fixture', { prompt: 'fixture' }) : service.continuePolling('cancel-fixture', 'fixture-task')
+  const error = await invoke().catch((error: unknown) => error)
+  expect(error).toMatchObject({ code: 'PROVIDER_PRODUCT_NOT_ACTIVATED', message: expect.stringContaining('测试供应商') })
+  expect((error as Error).message).not.toContain('PROVIDER_')
+  expect(getProviderAvailabilityFailure('fixture', 'cancel-fixture')).toMatchObject({ code: 'PROVIDER_PRODUCT_NOT_ACTIVATED' })
+  expect(getProviderAvailabilityFailure('fixture', 'other-model')).toBeUndefined()
+  await invoke()
+  expect(dispatch).toHaveBeenCalledTimes(2)
+  expect(getProviderAvailabilityFailure('fixture', 'cancel-fixture')).toBeUndefined()
+})
 
 it.each(['dialog', 'signal', 'task'] as const)('克隆等待 %s 取消时不上传或提交供应商请求，也不取消其他弹窗', async mode => {
   enableConfirmation()

@@ -13,6 +13,15 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 describe('KIE provider', () => {
+  it.each([
+    ['500', 'Internal Error, Please try again later.', 'provider_internal_error', true],
+    ['422', 'Invalid parameter: voice', 'provider_invalid_request', false],
+  ])('任务失败 %s 区分供应商内部错误与参数拒绝', async (failCode, failMsg, code, retryable) => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ code: 200, data: { state: 'fail', failCode, failMsg } }))
+    await expect(continuePolling({ apiKey: 'fixture', taskId: 'fixture', requestId: 'fixture', polling: { interval: 0, maxAttempts: 1 }, runtime: fakeRuntimeContext(fetch) }))
+      .rejects.toMatchObject({ code, details: { retryable } })
+    expect(fetch).toHaveBeenCalledOnce()
+  })
   afterEach(() => vi.useRealTimers())
   it('提交后查询连接中断只续查原任务，不重新 POST', async () => {
     vi.useFakeTimers()

@@ -4,7 +4,7 @@ import type { CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { codeComponentNameSchema, componentSourceMetadata } from '@/core/videoEdit/codeMaterial/components'
 import { codeSourceTextSchema, componentFileReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditSchemaRef } from './videoEditFields'
-import { listVideoEditInstances, requireVideoEditInstance, videoEditDomainRevision } from './videoEditService'
+import { listVideoEditInstances, openVideoEditDocument, videoEditDomainRevision } from './videoEditService'
 import { projectCodeComponents, publishProjectCodeComponent, refuseCodeComponentRemoval, withdrawProjectCodeComponents, codeComponentReferences, type CodeComponentReference } from './videoEditCodeStorage'
 import type { CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 
@@ -33,7 +33,9 @@ function split(ref: ApplicationRef): { projectId: string; name: string } {
   return { projectId: ref.id.slice(0, index), name: ref.id.slice(index + 1) }
 }
 async function requireComponent(ref: ApplicationRef, includeReferences = false): Promise<ComponentReadData> {
-  const { projectId, name } = split(ref); const component = (await projectCodeComponents(projectId)).find(component => component.name === name)
+  const { projectId, name } = split(ref)
+  await openVideoEditDocument({ id: projectId }, { focus: false })
+  const component = (await projectCodeComponents(projectId)).find(component => component.name === name)
   if (!component) throw new Error(`项目组件 ${name} 不存在，请重新列出组件。`)
   return { ...component, references: includeReferences ? await codeComponentReferences(projectId, name) : [] }
 }
@@ -55,11 +57,11 @@ export function createCodeComponentRegistration(): ApplicationEntityRegistration
       async readEntity(ref, request) { const selected = request.propertyIds?.length ? fields.filter(field => request.propertyIds!.includes(field.propertyId)) : fields; const values = fieldReadValues(selected, await requireComponent(ref, !request.propertyIds?.length || request.propertyIds.includes(`${type}.references`))); return { ref, entityType: type, properties: values, revisions: revisions(), capturedAt: new Date().toISOString() } },
       async getPropertyAvailability(ref, propertyIds) { await requireComponent(ref); return propertyIds.map(propertyId => { if (!fields.some(field => field.propertyId === propertyId)) throw new Error(`组件属性 ${propertyId} 不存在。`); return { propertyId, readable: true, writable: false, reasons: [reason], requiredPermissions: ['video_edit:read'], revisions: revisions() } }) },
       async getCollectionAvailability(parent) {
+        if (parent.kind === 'video_edit.document') await openVideoEditDocument({ id: parent.id }, { focus: false })
         const result = unrestrictedCollectionAvailability(type, parent, revisions(), ['video_edit:write'])
         result.remove = { ...result.remove, available: false, reasons: [reason] }
         if (parent.kind !== 'video_edit.document') result.create = { ...result.create, available: false, reasons: ['请使用剪辑文档引用作为组件库上下文。'] }
         else {
-          requireVideoEditInstance(parent.id)
           const references = await codeComponentReferences(parent.id)
           if (references.length) result.remove.reasons.push(`已被素材引用：${[...new Set(references.map(reference => `${reference.documentName} / ${reference.materialRef.label}`))].join('、')}。可读取组件的 references 属性获得完整素材引用。`)
         }

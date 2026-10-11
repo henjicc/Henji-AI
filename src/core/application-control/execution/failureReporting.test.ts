@@ -133,6 +133,18 @@ async function commitFailingPlan(fail: () => never) {
 }
 
 describe('事务失败报告', () => {
+  it('事务派发前的普通异常附零执行事实，事务步骤异常保留 partial', async () => {
+    const engine = createEngine(() => { throw new Error('步骤异常') }, {
+      resolvePersistenceParticipants: () => { throw new Error('保存宿主尚未打开') },
+    })
+    const plan = await engine.plan({ summary: '前置拒绝', transactionMode: 'atomic', steps: [{
+      kind: 'operation', capabilityId: 'sample_operation', capabilityVersion: 1, input: {}, expectedRevisions: { [SCOPE]: 0 },
+    }] }, context())
+    const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: { [SCOPE]: 0 }, idempotencyKey: 'preflight-error-facts-001' }, context())
+    expect(result).toMatchObject({ status: 'failed', partial: { completedStepIndexes: [], uncompensatedStepIndexes: [] } })
+    expect(await commitFailingPlan(() => { throw new Error('步骤异常') }))
+      .toMatchObject({ status: 'failed', transactionRef: expect.any(String), partial: { completedStepIndexes: [] } })
+  })
   it('零步提交时如实说明应用未改变，且允许重试', async () => {
     const result = await commitFailingPlan(() => {
       throw new Error('TARGET_OBJECT_NOT_FOUND：targetObjectId «立方体» 不是本场景中的对象 id')

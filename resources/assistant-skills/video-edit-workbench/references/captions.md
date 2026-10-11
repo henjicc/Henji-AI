@@ -40,4 +40,4 @@ maxCharacters 是每行字数，maxLines 是每条行数；pauseSeconds 可试0.
 
 ## 核对
 
-读回文字与范围；用 `observe_video_edit_frame` 选长句、亮背景、译文与人脸拥挤处，`read_application_media` 真读。按需检查入出帧和相邻接缝。SRT/VTT 与烧录见 deliver：结构回读不代替最终成片字幕检查。
+读回文字与范围；用 `observe_video_edit_frame` 选长句、亮背景、译文与人脸拥挤处，`read_application_media(mode="image")` 真读。按需检查入出帧和相邻接缝。SRT/VTT 与烧录见 deliver：结构回读不代替最终成片字幕检查。

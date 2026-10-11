@@ -104,7 +104,7 @@ const observeTarget = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('program'), sequenceRef: ref('video_edit.sequence').optional(), frame: z.number().int().nonnegative() }).strict(),
   z.object({ kind: z.literal('source'), itemRef: ref('video_edit.item'), timeUs: z.number().int().nonnegative() }).strict(),
 ])
-const observeOutput = z.object({ resultRef: assetRef, documentRef, target: observeTarget, width: z.number().int().positive(), height: z.number().int().positive(), sourceWidth: z.number().int().positive(), sourceHeight: z.number().int().positive(), documentRevision: z.number().int().nonnegative(), message: z.string(),
+const observeOutput = z.object({ byteLength: z.number().int().nonnegative(), resultRef: assetRef, documentRef, target: observeTarget, width: z.number().int().positive(), height: z.number().int().positive(), sourceWidth: z.number().int().positive(), sourceHeight: z.number().int().positive(), documentRevision: z.number().int().nonnegative(), message: z.string(),
   verification: z.object({ verified: z.boolean(), condition: z.string(), target: assetRef }) }).strict()
 export const observeVideoEditFrameCapability = defineApplicationCapability({
   id: 'observe_video_edit_frame', title: '观察剪辑指定画面', description: '按当前剪辑版本离屏渲染序列指定整数帧的最终合成画面（含代码素材、滤镜、转场与字幕），或素材项源素材指定微秒时间的原始画面，保存为资产库图片并返回assetRef；用 read_application_media({ref:assetRef,mode:"image"}) 直接查看图片。不改变用户的播放头、选区和节目画面。默认宽度1920，可设256到3840。overlayAnnotations=true叠加当前帧未关闭的标注及列表编号；annotationIds指定标注（包括已通过）；cropAnnotationId按点/矩形/笔画/元素region裁切放大。时间段没有画面区域，不能裁切。highlightElement={clipRef,elementId}可高亮指定当前帧代码元素；标注与元素选项只支持program帧。',

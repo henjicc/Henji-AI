@@ -10,6 +10,7 @@ import {
 } from '../transactions'
 import type { ApplicationReflectionRegistry } from '../registry'
 import { ApplicationExecutionPlanStore } from './planStore'
+import { ApplicationPreflightFailure } from './transactionFailure'
 import { ApplicationPlanBuilder } from './planner'
 import { ApplicationTransactionVerifier } from './verifier'
 import { ApplicationExecutionFailureSupport } from './failureSupport'
@@ -49,7 +50,8 @@ function failure(
   recoverable: boolean,
   extra: Partial<Omit<Extract<ApplicationTransactionResult, { status: 'failed' }>, 'status' | 'code' | 'message' | 'recoverable'>> = {}
 ): ApplicationTransactionResult {
-  return applicationTransactionResultSchema.parse({ status: 'failed', code, message, recoverable, ...extra })
+  return applicationTransactionResultSchema.parse({ status: 'failed', code, message, recoverable,
+    partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] }, ...extra })
 }
 
 function mergeRevisions(target: Record<string, number>, source: Record<string, number>): void {
@@ -153,7 +155,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     request: ApplicationPlanRequest,
     context: ApplicationExecutionContext
   ): Promise<ApplicationChangePlan> {
-    const plan = await this.planner.build(request, context)
+    const plan = await this.planner.build(request, context).catch(error => { throw new ApplicationPreflightFailure(error) })
     this.store.savePlan(plan)
     return plan
   }
@@ -187,6 +189,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     const transactionRef = this.createOpaqueRef('transaction')
     const expected = planRevisions(stored.plan)
     const persistenceReceipts: ApplicationPersistenceReceipt[] = []
+    let executionStarted = false
     try {
       assertExpectedRevisions(expected, request.expectedRevisions)
       const current = await this.readCurrentRevisions(stored.plan.steps, context)
@@ -200,7 +203,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       const execution = await withApplicationPersistenceBoundary({
         participants: this.resolvePersistenceParticipants?.(stored.plan.steps, context) ?? [],
         context,
-        execute: (batchContext) => this.executePlan(stored.plan, batchContext),
+        execute: (batchContext) => { executionStarted = true; return this.executePlan(stored.plan, batchContext) },
         completed: (result) => result.completed,
         onReceipt: (receipt) => persistenceReceipts.push(receipt),
       })
@@ -278,6 +281,9 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       if (error instanceof ApplicationPersistenceBoundaryFailure
         || (error instanceof ApplicationExecutionProgressFailure && error.completed.length > 0)) this.store.markCommitted(stored.plan.planRef)
       const failureResult = await this.handleExecutionFailure(error, stored.plan, transactionRef, context, persistenceReceipts)
+      if (!executionStarted && failureResult.status === 'failed' && !failureResult.persistence) {
+        failureResult.partial = { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] }
+      }
       // All business steps completed; a failed save must retain the same undo path.
       // Partial or compensated mutations never receive a whole-transaction receipt.
       if (failureResult.status === 'failed' && error instanceof ApplicationPersistenceBoundaryFailure
@@ -316,6 +322,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     const record = this.undoRecords.get(request.undoRef)
     if (!record) return failure('NOT_FOUND', '撤销引用不存在或已使用。', false)
     const persistenceReceipts: ApplicationPersistenceReceipt[] = []
+    let executionStarted = false
     try {
       await this.assertUndoPermissions(record.steps, context)
       const current = await this.readUndoCurrentRevisions(record.steps, record.results, context)
@@ -333,6 +340,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         participants: this.resolvePersistenceParticipants?.(record.steps, context) ?? [],
         context,
         execute: async (batchContext) => {
+          executionStarted = true
           const applied: ApplicationCompletedStepResult[] = []
           try {
             for (let index = record.steps.length - 1; index >= 0; index -= 1) {
@@ -374,6 +382,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         ? await this.describePersistenceFailure(error, record.steps, context, undefined, 'undo')
         : error instanceof ApplicationExecutionProgressFailure
           ? await this.describeProgressFailure(error, record.steps, context, undefined, persistenceReceipts, 'undo') : this.toFailure(error)
+      if (!executionStarted && result.status === 'failed' && !result.persistence) result.partial = { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] }
       this.store.saveIdempotent(request.idempotencyKey, request.undoRef, result)
       return result
     }
@@ -384,6 +393,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     context: ApplicationExecutionContext, execute: (assertOwnership: (scopes?: string[]) => void) => Promise<ApplicationTransactionResult>,
     readRevisions: ((steps: ApplicationPlannedStep[]) => Promise<Record<string, number>>)
       = (currentSteps) => this.readCurrentRevisions(currentSteps, context)) {
+    let entered = false
     try {
       const participants = this.resolvePersistenceParticipants?.(steps, context) ?? []
       const scopes = () => [...this.affectedScopes(steps), ...participants.flatMap((owner) =>
@@ -401,8 +411,12 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       }
       return await this.scopeGuard.run([
         ...[...heldScopes].map((scope) => `scope:${scope}`), `operation:${operationRef}`, `idempotency:${idempotencyKey}`,
-      ], context.signal, () => execute(assertOwnership))
-    } catch (error) { return this.toFailure(error) }
+      ], context.signal, () => { entered = true; return execute(assertOwnership) })
+    } catch (error) {
+      const result = this.toFailure(error)
+      if (!entered && result.status === 'failed') result.partial = { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] }
+      return result
+    }
   }
 
   private checkApproval(

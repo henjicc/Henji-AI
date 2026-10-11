@@ -11,6 +11,12 @@ import type { OperationRecord } from './operationStore'
 export interface LocalHostTransport { send(channel: string, payload: unknown): void }
 type Pending = { callerId: string; rendererEpoch: string; committed: boolean; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
 
+export class ApplicationHostNotReadyError extends Error {
+  readonly retryAfterMs = 1000
+  readonly notExecuted = true
+  constructor() { super('APPLICATION_NOT_READY:应用正在重新连接，请稍后重试。') }
+}
+
 export class ApplicationHostBridge {
   private host: { registration: LocalHostRegistration; transport: LocalHostTransport } | undefined
   private pending = new Map<string, Pending>()
@@ -21,6 +27,21 @@ export class ApplicationHostBridge {
   publishContext(context: HostContextSnapshot): void { this.context = context; this.changed() }
   onChange(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private changed(): void { for (const listener of this.listeners) listener() }
+  private waitUntilReady(callerId: string, signal: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const cleanup = () => { clearTimeout(timer); unsubscribe(); signal.removeEventListener('abort', aborted) }
+      const aborted = () => { cleanup(); reject(new Error('请求已取消。')) }
+      const check = () => {
+        try { this.assertAuthorized(callerId) } catch (error) { cleanup(); reject(error); return }
+        if (this.ready) { cleanup(); resolve() }
+      }
+      const unsubscribe = this.onChange(check)
+      const timer = setTimeout(() => { cleanup(); reject(new ApplicationHostNotReadyError()) }, 10_000)
+      signal.addEventListener('abort', aborted, { once: true })
+      if (signal.aborted) aborted()
+      else check()
+    })
+  }
   constructor(private readonly assertAuthorized: (callerId: string) => void, private readonly operations?: ApplicationOperationCoordinator) {}
   get rendererEpoch(): string { return this.host?.registration.rendererEpoch ?? '' }
   get ready(): boolean { return this.host?.registration.ready === true }
@@ -90,10 +111,16 @@ export class ApplicationHostBridge {
     pending.cleanup()
     this.pending.delete(reply.requestId)
   }
-  execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
+  async execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
     options: { operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): Promise<Record<string, unknown>> {
     this.assertAuthorized(callerId)
-    if (!this.ready || !this.host) return Promise.reject(new Error('应用尚未就绪，请稍后重试。'))
+    if (!this.ready || !this.host) {
+      const readOnly = BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.readOnly === true
+      if (options.operation || !readOnly) throw new ApplicationHostNotReadyError()
+      await this.waitUntilReady(callerId, signal)
+      this.assertAuthorized(callerId)
+      if (!this.ready || !this.host) throw new ApplicationHostNotReadyError()
+    }
     if (signal.aborted) return Promise.reject(new Error('请求已取消。'))
     if (this.pending.size >= 8) return Promise.reject(new Error('应用正忙，请稍后重试。'))
     const host = this.host

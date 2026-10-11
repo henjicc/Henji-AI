@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { getProviderAvailabilityFailure, subscribeProviderAvailability } from '@/core/services/providerAvailability'
 import { useTranslation } from 'react-i18next'
 import { getAvailableProviders, getModelInfo } from '@/utils/modelHelpers'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -22,7 +23,7 @@ import InputArea from './components/InputArea'
 import { GeneratorConfigurationBar } from './components/GeneratorConfigurationBar'
 import type { ParameterPanelController } from './components/ParameterPanel'
 import { PromptOptimizeButton } from './components/PromptOptimizeButton'
-import { UiFieldLayoutContext, type PromptEditorHandle } from '@/components/ui'
+import { UiError, UiFieldLayoutContext, type PromptEditorHandle } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 import { parseLegacyPromptString } from '@/core/inputs/promptDocument'
@@ -58,6 +59,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 }) => {
   // 1. UI 状态管理
   const uiState = useUIState()
+  const unavailable = useSyncExternalStore(subscribeProviderAvailability, () => getProviderAvailabilityFailure(uiState.selectedProvider, uiState.selectedModel))
   const { t } = useTranslation(['models', 'ui'])
   const [isSubmittingGenerate, setIsSubmittingGenerate] = useState(false)
   const [promptOptimizationPreview, setPromptOptimizationPreview] = useState({
@@ -324,6 +326,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
   return (
     <div className="relative w-full">
+      {unavailable && <UiError size="xs" align="start" title="暂时无法生成" message={`${unavailable.message} 处理后可点击生成手动重试。`} />}
       {/* 输入区域：参考素材 · 提示词 · 底栏（模型与参数 ｜ 费用、预设、优化、生成） */}
       <InputArea
         compact={compact}

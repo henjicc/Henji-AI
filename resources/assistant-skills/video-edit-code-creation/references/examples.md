@@ -414,4 +414,4 @@ export default {
 }
 ```
 
-检查每例进场、停留、退出及片段接缝；极光另外看两处时间的流动，数字卡确认终值与用户原数据一致。用 observe_video_edit_frame 的 program 目标，再 read_application_media 读取像素。样例自动测试编译及多个时间点求值，不替代真实画面审查。
+检查每例进场、停留、退出及片段接缝；极光另外看两处时间的流动，数字卡确认终值与用户原数据一致。用 observe_video_edit_frame 的 program 目标，再 read_application_media(mode="image") 读取像素。样例自动测试编译及多个时间点求值，不替代真实画面审查。

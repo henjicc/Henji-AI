@@ -391,6 +391,7 @@ export const applicationReflectionHandlers = {
       if (input.detail === 'full') return { ...full, ...(schema ? { valueSchema: schema } : {}) }
       return { id: property.id, entityType: property.entityType, title: property.title, writable: full.writable,
         valueShape: schema ? describeJsonValueShape(schema) : property.value.kind,
+        ...((input.entityType || input.entityTypes.length || input.propertyIds?.length) && property.description ? { description: property.description } : {}),
         ...(property.nullable ? { nullable: true } : {}) }
     })
     return {

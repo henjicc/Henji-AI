@@ -30,7 +30,7 @@ export async function execute(input: ProviderExecutionInput): Promise<ProviderEx
       .map((pointer) => stringAt(body, pointer))
       .find((value) => value && /product is not activated|model.*(?:not activated|not authorized)|产品未开通|模型未开通/i.test(value))
     if (message) {
-      throw new AiRuntimeError('provider_product_not_activated', '百炼账号未开通该模型，请到百炼控制台开通后重试；开通前不要重复提交。', {
+      throw new AiRuntimeError('provider_product_not_activated', `百炼账号未开通该模型（${stringAt(input.body, '/model') ?? '当前模型'}），请到百炼控制台 https://bailian.console.aliyun.com/ 开通后重试；开通前不要重复提交。`, {
         retryable: false, category: 'authentication', status: response.status,
         providerCode: stringAt(body, '/code') ?? stringAt(body, '/error/code') ?? getPointer(body, '/output/base_resp/status_code'),
         providerMessage: message,

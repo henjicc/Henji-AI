@@ -1,7 +1,7 @@
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import type { ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types/runtime'
 import { audioBytesToDataUri } from './audio-data'
-import { normalizeEndpoint } from './helpers'
+import { normalizeEndpoint, readJsonResponse } from './helpers'
 import { isJsonObject } from './helpers'
 import { fetchProvider } from './provider-fetch'
 
@@ -21,8 +21,7 @@ export async function execute(input: ProviderExecutionInput): Promise<ProviderEx
     retryPreconnectOnce: true,
   })
   if (!response.ok) {
-    await response.body?.cancel().catch(() => undefined)
-    throw new AiRuntimeError('provider_task_failed', `SiliconFlow speech request failed (HTTP ${response.status})`)
+    await readJsonResponse(response, 'SiliconFlow')
   }
   const bytes = new Uint8Array(await response.arrayBuffer())
   const requestedFormat = isJsonObject(input.body) && typeof input.body.response_format === 'string' ? input.body.response_format : 'mp3'

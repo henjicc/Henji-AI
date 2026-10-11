@@ -79,4 +79,4 @@ export default {
 
 rgba(r,g,b,a) 构造四通道；luma(color) 为 Rec.709 亮度；contrast(color,amount) 以 0.5 为中心调 RGB；saturate(color,amount) 按亮度调饱和度，后二者夹到 0–1。hsv(h,s,v,a?)/hsl(h,s,l,a?)：h 为周数，s/v/l 在 0–1，alpha 默认 1；toHsv/toHsl 返回 [h,s,v或l,a]，转换结果不能直接当 RGB 绘制。
 
-主色、描边、辉光分别负责可读、分离、质感，不能靠全部提亮解决层级。完成后 observe_video_edit_frame + read_application_media 看真实像素；编译/求值测试证明契约，不能证明字体形状、辉光观感或运动品味。
+主色、描边、辉光分别负责可读、分离、质感，不能靠全部提亮解决层级。完成后 observe_video_edit_frame + read_application_media(mode="image") 看真实像素；编译/求值测试证明契约，不能证明字体形状、辉光观感或运动品味。

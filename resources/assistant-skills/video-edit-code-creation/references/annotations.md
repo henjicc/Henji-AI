@@ -18,7 +18,7 @@ observe_video_edit_frame：documentRef 为实际剪辑引用；target.kind:"prog
 - range 无画面区域，观察起止、中间与相邻接缝，不裁切。
 - 可用 highlightElement:{clipRef,elementId} 核对当前帧元素。
 
-返回 resultRef 交 read_application_media 读到 eof，真正读图后判断。标注不在此序列/帧或元素不可见时会拒绝，重新定位，不猜区域。可先看全帧关系再放大细节；只看裁切图可能误判对齐和主次。
+返回 resultRef 交 read_application_media(mode="image") 直接读图，真正读图后判断。标注不在此序列/帧或元素不可见时会拒绝，重新定位，不猜区域。可先看全帧关系再放大细节；只看裁切图可能误判对齐和主次。
 
 ## 定位代码元素
 

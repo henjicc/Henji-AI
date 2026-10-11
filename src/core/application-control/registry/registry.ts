@@ -127,6 +127,7 @@ export class ApplicationReflectionRegistry {
       this.schemaDocuments.set(schemaKey(document.ref), {
         ref: applicationSchemaRefSchema.parse(document.ref),
         value: jsonValueSchema.parse(document.value),
+        validator: document.validator,
       })
     }
   }
@@ -223,7 +224,8 @@ export class ApplicationReflectionRegistry {
     if (!this.canReadProperty(property, context)) throw new Error(`PERMISSION_DENIED:${propertyId}`)
     const normalized = normalizeApplicationPropertyValue(property, value)
     if (property.value.kind === 'json' && !(value === null && property.nullable)) {
-      validateJsonValueShape(property.id, this.resolveSchema(property.value.schemaRef, context), normalized)
+      validateJsonValueShape(property.id, this.resolveSchema(property.value.schemaRef, context), normalized,
+        this.schemaDocuments.get(schemaKey(property.value.schemaRef))?.validator)
     }
     return normalized
   }

@@ -115,12 +115,14 @@ describe('对外工具目录的投影与授权过滤', () => {
   it('目录按授权档过滤，被挡住的工具指名道姓说明缺哪一档', () => {
     expect(names(READ_ONLY).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
     expect(names(READ_ONLY)).not.toContain('get_application_operation')
+    expect(names(READ_ONLY)).not.toContain('review_application_operation')
+    expect(names(WRITE)).toContain('review_application_operation')
     expect(catalog(READ_ONLY).hidden.map((item) => item.name).sort())
-      .toEqual([...APPLICATION_WRITE_CAPABILITY_IDS, 'get_application_operation', 'retry_application_operation_save'].sort())
+      .toEqual([...APPLICATION_WRITE_CAPABILITY_IDS, 'get_application_operation', 'review_application_operation', 'retry_application_operation_save'].sort())
     expect(catalog(READ_ONLY).hidden.find((item) => item.name === 'create_visible_generation_task')?.tier).toBe('paid')
 
     // 改权限：写工具出现，付费工具仍然缺席，并且缺席原因写明缺付费档而不是缺修改档。
-    expect(names(WRITE)).toEqual(expect.arrayContaining(['change_application_entities', 'get_application_operation', 'retry_application_operation_save']))
+    expect(names(WRITE)).toEqual(expect.arrayContaining(['change_application_entities', 'get_application_operation', 'review_application_operation', 'retry_application_operation_save']))
     expect(names(WRITE)).not.toContain('create_visible_generation_task')
     expect(catalog(WRITE).hidden).toEqual(['create_visible_generation_task', 'submit_canvas_node_generation', 'generate_image_edit_outpaint', 'generate_video_edit_in_place']
       .map(name => ({ name, tier: 'paid', requires: '本连接未获「允许付费生成」授权' })))
@@ -138,6 +140,7 @@ describe('对外工具目录的投影与授权过滤', () => {
   it('没有操作账本时写入与账本工具整体缺席，只读工具不受影响', () => {
     expect(names(PAID, false).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
     expect(names(PAID, false)).not.toContain('get_application_operation')
+    expect(names(PAID, false)).not.toContain('review_application_operation')
     expect(names(PAID, false)).toEqual(expect.arrayContaining([...APPLICATION_READ_CAPABILITY_IDS, 'read_application_media', 'describe_application_contract']))
   })
 

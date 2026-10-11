@@ -1,4 +1,5 @@
 import { ApplicationHostBridge } from './applicationHostBridge'
+import { dialog } from 'electron'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
 import { ApplicationOperationStore } from './operationStore'
@@ -20,7 +21,12 @@ export function initializeApplicationRuntime() {
     record => recoverPersistedGenerationOperation(id => getGenerationHistoryStore().getStatus(id), record, () => {
       const context = host.getContext()
       return context ? { revision: context.revision, scopeRevisions: context.scopeRevisions } : undefined
-    }), () => host.writableEntityTypes())
+    }), () => host.writableEntityTypes(), async summary => {
+      const result = await dialog.showMessageBox({ type: 'question', title: '核对之前的修改',
+        message: '请查看原文档，确认这次修改是否已经完成', detail: `${summary}\n重启前的修改结果尚未确认。仅在确认目标内容后选择；本次核对不会重新执行修改。`,
+        buttons: ['暂不处理', '确认已完成', '确认未执行'], defaultId: 0, cancelId: 0, noLink: true })
+      return result.response === 1 ? 'completed' : result.response === 2 ? 'not_executed' : undefined
+    })
   const host: ApplicationHostBridge = new ApplicationHostBridge(id => {
     if (embeddedCallers.has(id)) return
     if (!externalAuthority) throw new Error('调用者未获授权。')

@@ -33,6 +33,50 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it('旧关闭剪辑前置拒绝自动核对，存在事务事实的同文案仍保留保护', () => {
+    const f = fixture()
+    const error = { code: 'CAPABILITY_REJECTED', message: '请先打开目标剪辑：在剪辑页打开所在项目，或用 open_document 打开这份剪辑（文档 ID 取自 list_documents）。' }
+    const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    f.store.save({ ...original, state: 'unknown', result: { ok: false, error: { ...error, details: { transaction: { partial: { completedStepIndexes: [0] } } } } } })
+    expect(f.coordinator.result(f.store.get(original.operationId, f.callerId)!).executionState).toBe('unknown')
+    f.store.save({ ...original, state: 'unknown', result: { ok: false, error } })
+    expect(f.coordinator.result(f.store.get(original.operationId, f.callerId)!)).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
+    expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).not.toThrow()
+  })
+  it('重启后缺失回执可由应用核对恢复；原宿主、撤销授权及取消确认不能放行', async () => {
+    const f = fixture(); const raw = input(f.baseline)
+    const original = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
+    f.coordinator.dispatched(original, randomUUID(), f.rendererEpoch)
+    const review = vi.fn<[], Promise<'not_executed' | undefined>>().mockResolvedValue(undefined)
+    const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), review)
+    const record = f.store.get(original.operationId, f.callerId)!
+    const read = vi.fn().mockResolvedValue(true)
+    await expect(coordinator.review(record, f.rendererEpoch, read, () => undefined)).rejects.toThrow('RECOVERY_SESSION_ACTIVE')
+    expect(review).not.toHaveBeenCalled()
+    const nextEpoch = randomUUID()
+    await coordinator.review(record, nextEpoch, read, () => undefined)
+    expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown')
+    review.mockResolvedValue('not_executed')
+    await expect(coordinator.review(record, nextEpoch, read, () => { throw new Error('权限已撤销') })).rejects.toThrow('权限已撤销')
+    expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown')
+    await coordinator.review(record, nextEpoch, read, () => undefined)
+    expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' })
+    expect(read).toHaveBeenCalledWith({ kind: 'settings.registry', id: 'singleton' })
+  })
+  it('宿主重连时公开写入立即登记未执行和重试时间，不依赖尚未注册的领域', async () => {
+    const f = fixture(); const host = new ApplicationHostBridge(() => undefined)
+    const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => host.writableEntityTypes())
+    const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: false }) }, host, coordinator)
+    const raw = input(f.baseline)
+    expect(await dispatcher.call(f.callerId, 'change_application_entities', raw, new AbortController().signal)).toMatchObject({ executionState: 'not_executed', result: { error: { details: { execution: { notExecuted: true }, retryAfterMs: 1000 } } } })
+    expect(f.store.get(String(raw.operationId), f.callerId)?.state).toBe('not_executed')
+  })
+  it('预检已知未开通拒绝预算预留，不提交任务', () => {
+    const f = fixture()
+    const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: 'fixture', mediaType: 'audio' }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
+    expect(() => reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { canSubmit: false, errorCode: 'PROVIDER_PRODUCT_NOT_ACTIVATED', message: '请开通', priceEstimate: { comparableCnyAmount: 0.1 } } } })).toThrow('PROVIDER_PRODUCT_NOT_ACTIVATED')
+    expect(f.store.get(record.operationId, f.callerId)?.generationEstimate).toBeUndefined()
+  })
   it('明确未执行后同一 operationId 与参数可重新准备，unknown 仍禁止重放', () => {
     const f = fixture(); const raw = input(f.baseline)
     const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
@@ -81,6 +125,7 @@ describe('应用原生操作记录与恢复', () => {
     const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
     f.store.save({ ...original, state: 'partial', result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } } })
     const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+    vi.spyOn(host, 'ready', 'get').mockReturnValue(true)
     const execute = vi.spyOn(host, 'execute').mockImplementation(async (_caller, capability, _input, _signal, options) => {
       if (capability === 'get_current_application_context') return { ok: true, data: { verification: { verified } } }
       if (!options?.operation || options.operation.operationId === original.operationId) throw new Error('不得重放原写入')
@@ -117,6 +162,7 @@ describe('应用原生操作记录与恢复', () => {
     const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
     f.store.save({ ...original, state: 'partial', result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } } })
     const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+    vi.spyOn(host, 'ready', 'get').mockReturnValue(true)
     const execute = vi.spyOn(host, 'execute').mockResolvedValue({ ok: true, data: { verification: { verified: true } } })
     const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined, access: () => ({ ...access, allowPaid: false }) }, host, f.coordinator)
     expect(await dispatcher.call('another', 'get_application_operation', { operationId: original.operationId }, new AbortController().signal)).toMatchObject({ executionState: 'not_found' })
