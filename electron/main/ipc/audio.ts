@@ -1,4 +1,5 @@
 import { registerAudioSampleHandlers } from './audio-samples'
+import { registerExplanationAudioHandlers } from './explanation-audio'
 import { registerAudioLoudnessHandlers } from './audio-loudness'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 import { probeAudioEditImport, relinkAudioEditSource, verifyAudioEditSource } from '../services/audio-edit/media'
@@ -22,6 +23,7 @@ import type {
  */
 export function registerAudioIpc(): void {
   registerAudioSampleHandlers()
+  registerExplanationAudioHandlers()
   registerAudioLoudnessHandlers()
 
   registerIpcHandler('audioEdit:source:probe', (input) => parseStringField(input, 'sourcePath'), probeAudioEditImport)

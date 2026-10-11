@@ -89,7 +89,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
         logger.info('带时间转写完成', { event: 'audio_edit.timestamped_asr.completed', requestId: context.requestId, modelId: plan.modelId, context: { granularity: result.granularity } })
         return result
       } catch (error) {
-        logger.error('带时间转写失败', { event: 'audio_edit.timestamped_asr.failed', requestId: context.requestId, modelId: plan.modelId, context: { cancelled: context.signal.aborted }, error })
+        logger.error('带时间转写失败', { event: 'audio_edit.timestamped_asr.failed', requestId: context.requestId, modelId: plan.modelId, context: { cancelled: context.signal.aborted } })
         throw error
       }
     },

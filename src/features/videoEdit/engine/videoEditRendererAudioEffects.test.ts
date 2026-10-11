@@ -93,8 +93,9 @@ it('音频效果在混音里生效：片段音量在效果之前、淡化在效�
   expect(left[RATE / 4]).toBe(0)
   // 限幅器在片段音量之后：音量推到 200% 峰值仍不超过最大电平；之后的淡出只会更轻。
   const limited = await mix(sound({ volume: 2, fadeOutFrames: 30, effects: [builtin('limiter', { ceiling: -6 })] }), [1, 1, 1, 1, .5])
-  expect(Math.max(...limited[0].map(Math.abs))).toBeLessThanOrEqual(10 ** (-6 / 20) + 1e-6)
-  expect(Math.max(...limited[0].subarray(Math.round(4.4 * RATE), Math.round(4.5 * RATE)).map(Math.abs))).toBeLessThan(.2)
+  const peak = (samples: Float32Array): number => samples.reduce((maximum, sample) => Math.max(maximum, Math.abs(sample)), 0)
+  expect(peak(limited[0])).toBeLessThanOrEqual(10 ** (-6 / 20) + 1e-6)
+  expect(peak(limited[0].subarray(Math.round(4.4 * RATE), Math.round(4.5 * RATE)))).toBeLessThan(.2)
 })
 
 it('连续播放时与分块方式无关：0.5 秒块（预览）与按帧长的块（导出）逐样本一致，效果链延迟已对齐', async () => {

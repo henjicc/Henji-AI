@@ -86,6 +86,15 @@ export function holdVideoEditActivity(id: string, label: string): () => void {
 }
 const listeners = new Set<() => void>()
 const domainListeners = new Set<() => void>()
+export interface VideoEditCommandFact { operationId: string; relatedOperationId?: string; phase: 'committed' | 'cancelled' | 'failed' | 'undo' | 'redo'; before: VideoEditDocument; after: VideoEditDocument }
+const commandListeners = new Set<(owner: VideoEditInstance, fact: VideoEditCommandFact) => void>()
+const historyOperations = new WeakMap<VideoEditDocument, string>()
+export function subscribeVideoEditCommandFacts(listener: (owner: VideoEditInstance, fact: VideoEditCommandFact) => void): () => void { commandListeners.add(listener); return () => { commandListeners.delete(listener) } }
+function publishCommandFact(owner: VideoEditInstance, fact: VideoEditCommandFact): void {
+  for (const listener of commandListeners) {
+    try { listener(owner, fact) } catch { logger.warn('讲解操作观察未完成', { event: 'video_edit.command.observation_failed' }) }
+  }
+}
 const viewListeners = new Set<() => void>()
 let viewRevision = 0
 let revision = 0
@@ -119,13 +128,14 @@ interface GestureState {
 }
 const gestures = new WeakMap<VideoEditInstance, GestureState>()
 const closing = new WeakMap<VideoEditInstance, Promise<void>>()
-const closePreparations = new WeakMap<VideoEditInstance, () => Promise<void>>()
+const closePreparations = new WeakMap<VideoEditInstance, Set<() => Promise<void>>>()
 const preparingClose = new WeakMap<VideoEditInstance, Promise<void>>()
 
 /** 领域活动在文档保存屏障前封存自己的待写数据；失败时保留会话供重试。 */
 export function registerVideoEditClosePreparation(instance: VideoEditInstance, prepare: () => Promise<void>): () => void {
-  closePreparations.set(instance, prepare)
-  return () => { if (closePreparations.get(instance) === prepare) closePreparations.delete(instance) }
+  const preparations = closePreparations.get(instance) ?? new Set<() => Promise<void>>()
+  preparations.add(prepare); closePreparations.set(instance, preparations)
+  return () => { preparations.delete(prepare) }
 }
 const programCommands = new WeakMap<VideoEditInstance, object>()
 export function videoEditProgramCommandIdentity(id: string): object {
@@ -152,7 +162,7 @@ export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   gestures.set(owner, { handle, before: owner.document, finished, release, maskChanges: new Map() })
   return handle
 }
-function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0, inPlaceGenerations: undefined }) === JSON.stringify({ ...right, revision: 0, inPlaceGenerations: undefined }) }
+function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0, inPlaceGenerations: undefined, creativeIntents: undefined }) === JSON.stringify({ ...right, revision: 0, inPlaceGenerations: undefined, creativeIntents: undefined }) }
 function withInPlaceMetadata(document: VideoEditDocument, current: VideoEditDocument): VideoEditDocument {
   const next = { ...document }
   if (current.creativeIntents) next.creativeIntents = current.creativeIntents
@@ -165,11 +175,21 @@ function withInPlaceMetadata(document: VideoEditDocument, current: VideoEditDocu
 export function updateVideoEditCreativeIntents(id: string, head: CreativeIntents): void {
   assertApplicationWritesAllowed()
   const owner = requireVideoEditInstance(id); assertVideoEditWritable(owner)
-  if (gestures.has(owner)) throw new Error('请先完成当前参数调整。')
   const creativeIntents = creativeIntentsSchema.parse(head)
   if ([...creativeIntents.drafts, ...creativeIntents.sessions].some(draft => draft.ownerRef.kind !== 'document.video_edit' || draft.ownerRef.id !== id)) throw new Error('原稿归属与当前剪辑不符，请恢复原文件。')
   owner.document = { ...owner.document, creativeIntents }; owner.version++
-  notifyVideoEditContent(owner); publishVideoEdit()
+  notifyVideoEditContent(owner); publishVideoEdit(true)
+}
+/** Irreversible privacy erasure traverses current, both history directions, and an in-flight gesture. */
+export function purgeVideoEditExplanationSession(id: string, sessionId: string): import('@/core/creativeIntent/persistence').StoredCreativeIntentResource[] {
+  const owner = requireVideoEditInstance(id); const gesture = gestures.get(owner)
+  const documents = [owner.document, ...owner.past, ...owner.future, ...(gesture ? [gesture.before] : [])]
+  const ids = new Set(documents.flatMap(document => document.creativeIntents?.sessions.filter(s => s.id === sessionId).flatMap(s => [...s.pages, ...s.visualEvidenceRefs.map(v => v.resourceRef), ...(s.audio ? [s.audio] : []), ...(s.submittedPlanRef ? [s.submittedPlanRef] : [])]).map(r => r.resourceId) ?? []))
+  const resources = new Map(documents.flatMap(document => document.creativeIntents?.resources.filter(r => ids.has(r.resourceId)).map(r => [r.resourceId, r] as const) ?? []))
+  const scrub = (document: VideoEditDocument): VideoEditDocument => document.creativeIntents ? { ...document, creativeIntents: { ...document.creativeIntents, sessions: document.creativeIntents.sessions.filter(s => s.id !== sessionId), resources: document.creativeIntents.resources.filter(r => !ids.has(r.resourceId)) } } : document
+  owner.past = owner.past.map(scrub); owner.future = owner.future.map(scrub); if (gesture) gesture.before = scrub(gesture.before)
+  updateVideoEditCreativeIntents(id, scrub(owner.document).creativeIntents ?? { drafts: [], sessions: [], resources: [] })
+  return [...resources.values()]
 }
 /** 任务元数据沿用会话保存屏障，不增加撤销步、不清空重做，也不推进剪辑内容版本。 */
 export function updateVideoEditInPlaceMetadata(id: string, records: readonly VideoEditInPlaceRecord[]): void {
@@ -278,6 +298,7 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
   const maskOnly = Boolean(state.maskChanges) && owner.document === (state.maskDocument ?? state.before)
   const committed = commit && (maskOnly ? [...state.maskChanges!.values()].some(change => change.changed) : !sameDocumentContent(owner.document, state.before))
   if (committed) {
+    historyOperations.set(state.before, state.handle.token)
     owner.past = [...owner.past.slice(-49), state.before]; owner.future = []
   } else if (owner.document !== state.before && (!commit || !maskOnly)) {
     // 手势期间确有预览写入才恢复起点；什么都没写的取消不产生新版本（否则画面版本领先于已保存版本却无内容可存）。
@@ -286,6 +307,7 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
     rescaleSequenceViews(owner, before); reconcileSequenceView(owner)
   }
   state.release(); publishVideoEdit(true)
+  if (committed || !commit) publishCommandFact(owner, { operationId: state.handle.token, phase: committed ? 'committed' : 'cancelled', before: state.before, after: committed ? owner.document : state.before })
   if (committed) notifyVideoEditContent(owner)
 }
 function cancelVideoEditGesture(owner: VideoEditInstance): void { const state = gestures.get(owner); if (state) finishVideoEditGesture(state.handle, false) }
@@ -390,7 +412,9 @@ export function editVideoProject(id: string, update: (document: VideoEditDocumen
   const instance = requireVideoEditInstance(id)
   assertVideoEditWritable(instance)
   if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
-  return applyVideoEditDocument(instance, update, true, false, preserveProgramAnchors)
+  const before = instance.document
+  try { return applyVideoEditDocument(instance, update, true, false, preserveProgramAnchors) }
+  catch (error) { publishCommandFact(instance, { operationId: crypto.randomUUID(), phase: 'failed', before, after: before }); throw error }
 }
 /** Streaming imports keep one undo boundary per request. Later edits keep their own boundaries.
  * Each deterministic additive import update is also applied to snapshots AFTER that boundary,
@@ -502,12 +526,15 @@ function applyVideoEditDocument(instance: VideoEditInstance, update: (document: 
   return publishVideoEditDocument(instance, next, recordHistory)
 }
 function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean, spatialOnly = false): VideoEditDocument {
+  const operationId = recordHistory ? crypto.randomUUID() : undefined
+  if (operationId) historyOperations.set(instance.document, operationId)
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
   instance.document = { ...next, id: before.id, name: before.name, revision: instance.document.revision + 1 }
   if (!spatialOnly) { rescaleSequenceViews(instance, before); reconcileSequenceView(instance) }
   instance.version++
+  if (operationId) publishCommandFact(instance, { operationId, phase: 'committed', before, after: instance.document })
   // 受限手势草稿只刷新实时画面及叠层；结束/取消由 finishVideoEditGesture 统一刷新完整界面。
   // 否则每个指针事件都会重绘时间线、项目列表和所有 Dock 面板。
   if (spatialOnly) publishVideoEditDomain()
@@ -524,11 +551,14 @@ export function undoVideoEdit(id: string, redo = false): void {
   if (!target) return
   if (redo) instance.past.push(instance.document); else instance.future.unshift(instance.document)
   const before = instance.document
+  const relatedOperationId = historyOperations.get(target) ?? historyOperations.get(before) ?? crypto.randomUUID()
+  historyOperations.set(target, relatedOperationId); historyOperations.set(before, relatedOperationId)
   instance.document = withInPlaceMetadata({ ...target, name: before.name, revision: instance.document.revision + 1 }, before); instance.version++
   rescaleSequenceViews(instance, before)
   reconcileSequenceView(instance)
   publishVideoEdit(true)
   notifyVideoEditContent(instance)
+  publishCommandFact(instance, { operationId: crypto.randomUUID(), relatedOperationId, phase: redo ? 'redo' : 'undo', before, after: instance.document })
 }
 type VideoEditProgramControl = Partial<Pick<VideoEditInstance, 'frame' | 'playing' | 'playbackDirection'>>
 export function validateVideoEditProgramControl(id: string, values: VideoEditProgramControl): void {
@@ -874,6 +904,7 @@ export async function leaveVideoEditProject(id: string): Promise<DocumentLeaveOu
   if (previous) return await previous
   if (instance.busy || activities.get(instance)?.size) throw new Error(videoEditBusyReason(id) ?? '请等待处理完成。')
   const operation = (async (): Promise<DocumentLeaveOutcome> => {
+    for (const prepare of [...(closePreparations.get(instance) ?? [])]) await prepare()
     cancelVideoEditGesture(instance); instance.playing = false; publishVideoEdit()
     const registry = documentRegistry()
     const container = instance.session.documentMeta.container
@@ -919,8 +950,8 @@ export function closeVideoEditProject(id: string): Promise<void> {
   const preparation = preparingClose.get(instance)
   if (preparation) return preparation
   const prepare = closePreparations.get(instance)
-  if (prepare) {
-    const operation = Promise.resolve().then(prepare).then(() => {
+  if (prepare?.size) {
+    const operation = Promise.resolve().then(async () => { for (const preparation of [...prepare]) await preparation() }).then(() => {
       preparingClose.delete(instance)
       return closeVideoEditProject(id)
     }).finally(() => { preparingClose.delete(instance) })
@@ -1009,5 +1040,5 @@ export function appendVideoEditClip(id: string, mediaId?: string, placement?: { 
 }
 // 剪辑内容由文档会话登记表在退出屏障里写完；这里只拦住进行中的导出并收起参数调整与播放
 registerApplicationCloseGuard(async () => {
-  for (const instance of instances.values()) { if (instance.busy || activities.get(instance)?.size) throw new Error(videoEditBusyReason(instance.document.id) ?? '请等待处理完成。'); cancelVideoEditGesture(instance); instance.playing = false }
+  for (const instance of instances.values()) { if (instance.busy || activities.get(instance)?.size) throw new Error(videoEditBusyReason(instance.document.id) ?? '请等待处理完成。'); for (const prepare of [...(closePreparations.get(instance) ?? [])]) await prepare(); cancelVideoEditGesture(instance); instance.playing = false }
 })

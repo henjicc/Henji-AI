@@ -1,4 +1,5 @@
 import { createCodeComponentRegistration } from './videoEditCodeComponentReflection'
+import { createVideoEditExplanationRegistration } from './videoEditExplanationReflection'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { createVideoEditTextPresetRegistration } from './videoEditTextPresetReflection'
 import { videoEditImportTask } from './videoEditImportTask'
@@ -195,5 +196,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createCodeComponentRegistration(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createTitleTemplateRegistration(), createFontRegistration(), createStyleKitRegistration(STYLE_KIT_ENTITY), createStyleKitRegistration(STYLE_PRESET_ENTITY)]
+  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createTitleTemplateRegistration(), createFontRegistration(), createStyleKitRegistration(STYLE_KIT_ENTITY), createStyleKitRegistration(STYLE_PRESET_ENTITY)]
 }
