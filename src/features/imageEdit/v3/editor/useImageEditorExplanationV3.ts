@@ -25,7 +25,8 @@ export function useImageEditorExplanationV3(input: {
     let lastMove = 0
     const pointer = (event: PointerEvent): void => {
       if (!(event.target instanceof Node) || !surface.contains(event.target)) return
-      if (adapter.snapshot().session?.state !== 'recording') return
+      const correcting = adapter.hasPendingPick()
+      if (adapter.snapshot().session?.state !== 'recording' && !correcting) return
       const value = latest.current, layout = value.layout
       if (!layout || !value.ready || Object.keys(value.bus.getSnapshot().previewOverrides).length) return
       if (event.target instanceof Element && event.target.closest('button,input,textarea,select,[contenteditable],[data-observation-sensitive]')) return
@@ -40,23 +41,35 @@ export function useImageEditorExplanationV3(input: {
       const sourcePoint = mapAffine(inverseAffine(output.sourceToOutput), point)
       const picked = inside ? pickImageEditorLayerV3(document, point, value.maps) : null
       const refs = picked ? [{ ...imageEditV3LayerRef(document.id, picked), label: findImageEditLayerLocationV3(document.layers, picked)?.layer.name }] : []
+      if (correcting) {
+        if (event.type === 'pointerdown' && inside) {
+          event.preventDefault(); event.stopPropagation()
+          adapter.acceptPick([point[0] / size[0], point[1] / size[1]], refs, value.selected.map(id => ({ ...imageEditV3LayerRef(document.id, id), label: findImageEditLayerLocationV3(document.layers, id)?.layer.name })))
+        }
+        return
+      }
       const left = Math.max(rect.left, rect.left - viewport.documentX * viewport.zoom, 0)
       const top = Math.max(rect.top, rect.top - viewport.documentY * viewport.zoom, 0)
       const right = Math.min(rect.right, rect.left + (size[0] - viewport.documentX) * viewport.zoom, window.innerWidth)
       const bottom = Math.min(rect.bottom, rect.top + (size[1] - viewport.documentY) * viewport.zoom, window.innerHeight)
       const captureRect = { x: Math.ceil(left), y: Math.ceil(top), width: Math.floor(right - Math.ceil(left)), height: Math.floor(bottom - Math.ceil(top)) }
+      const unobscured = (): boolean => ![...surface.ownerDocument.querySelectorAll<HTMLElement>('[data-panel-placement], [role="dialog"]')].some(overlay => {
+        const box = overlay.getBoundingClientRect()
+        return box.width > 0 && box.height > 0 && box.left < right && box.right > left && box.top < bottom && box.bottom > top
+      })
       const capture = inside && captureRect.width > 0 && captureRect.height > 0 && captureRect.width <= 4096 && captureRect.height <= 4096 ? async () => {
         // capturePage takes window DIP, while DOM rectangles include the application's
         // zoom. Use the actual content size; devicePixelRatio also includes monitor DPI.
         const viewSize = { width: window.innerWidth, height: window.innerHeight }
         const content = await getPlatform().window.getContentSize()
+        if (!unobscured()) return null
         const sx = content.width / viewSize.width, sy = content.height / viewSize.height
         const x = Math.ceil(captureRect.x * sx), y = Math.ceil(captureRect.y * sy)
         const nativeRect = { x, y, width: Math.floor((captureRect.x + captureRect.width) * sx) - x, height: Math.floor((captureRect.y + captureRect.height) * sy) - y }
         if (window.innerWidth !== viewSize.width || window.innerHeight !== viewSize.height) return null
         const source = await getPlatform().media.captureApplicationSurface({ schemaVersion: SURFACE_OBSERVATION_SCHEMA_VERSION, target: value.controller.profile.id === 'canvas-edit' ? 'workspace.canvas' : 'tool.image_edit', rect: nativeRect, masks: [], maskPolicyId: 'surface.mask_declared_fields' })
         // A command, navigation, or preview overlay during capture invalidates association.
-        if (window.innerWidth !== viewSize.width || window.innerHeight !== viewSize.height || latest.current.controller.document !== document || latest.current.layout?.viewportKey !== layout.viewportKey || Object.keys(value.bus.getSnapshot().previewOverrides).length || !surface.isConnected) return null
+        if (!unobscured() || window.innerWidth !== viewSize.width || window.innerHeight !== viewSize.height || latest.current.controller.document !== document || latest.current.layout?.viewportKey !== layout.viewportKey || Object.keys(value.bus.getSnapshot().previewOverrides).length || !surface.isConnected) return null
         const image = await getPlatform().imageEditorV3.ingestSource({ requestId: crypto.randomUUID(), source: { kind: 'data-url', dataUrl: source.dataUrl } })
         return { resource: { resourceId: image.resource.resourceRef, digest: image.resource.resourceRef, bytes: image.resource.byteLength, path: `resources/${image.resource.resourceRef.slice(7)}`, kind: 'visual' as const }, size: [source.width, source.height] as [number, number], point: [(event.clientX * sx - x) / nativeRect.width, (event.clientY * sy - y) / nativeRect.height] as [number, number] }
       } : undefined

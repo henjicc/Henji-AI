@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { alignExplanationEntry, nearestPointBaseline, type PointerEvidence } from './alignment'
-import { confirmedExplanationBinding, resolveDeixis } from './deixis'
+import { confirmedExplanationBinding, pickedExplanationBinding, resolveDeixis } from './deixis'
 import { buildIntentDifferencePlan } from './intentPlan'
 import type { ClockSegment, Pose, Timeline } from './contracts'
 import type { ExplanationEvent, TranscriptEntry } from './schema'
@@ -110,4 +110,49 @@ it('move/undo/redo只保留来源，当前已经满足零差异，删除和过�
   expect(difference.changes).toEqual([{ targetRef: a, property: 'position', before: [.5, .5], after: [.8, .5], expectedDigest: digest }])
   expect(buildIntentDifferencePlan([resolution], [goal], [], events).status).toBe('blocked')
   expect(buildIntentDifferencePlan([resolution], [goal], [{ targetRef: a, pose, stateDigest: 'stale' }], events).status).toBe('blocked')
+})
+
+const staticClocks: ClockSegment[] = [{ id: 'static-clock', monoSpanUs: [0, 10_000_000], mode: 'hold', start: null, end: null, anchors: [] }]
+const imageA = { kind: 'image_edit.layer', id: 'image:a', label: '主图' }
+function staticSpeech(text: string, span: [number, number] = [1_000_000, 1_200_000], extra: Partial<TranscriptEntry> = {}): TranscriptEntry {
+  return speech(text, { timeline: null, unavailableReason: 'static', clockSegmentRef: 'static-clock', monoSpanUs: span, timelineSpans: [{ monoSpanUs: span, clockSegmentRef: 'static-clock', start: null, end: null, quality: 'unavailable', evidenceSeqs: [] }], ...extra })
+}
+function staticPointer(extra: Partial<PointerEvidence> = {}): PointerEvidence {
+  return pointer({ timeline: null, unavailableReason: 'static', clockSegmentRef: 'static-clock', hoverRefs: [imageA], pointedRefs: [imageA], selectedRefs: [imageA], ...extra })
+}
+it('静态墙钟对齐对象和目标位置，不伪造剪辑时间线', () => {
+  const entries = [staticSpeech('把这个'), staticSpeech('放到那边', [3_100_000, 3_300_000], { eventId: 'second', wordId: 'second' })]
+  const events = [staticPointer(), staticPointer({ seq: 2, monoUs: 3_000_000, compositionPoint: [.8, .5], hoverRefs: [], pointedRefs: [] })]
+  const result = resolveDeixis(entries, events, staticClocks)
+  expect(result.issues).toEqual([])
+  expect(result.mentions.map(m => [m.slot, m.selected?.point])).toEqual([['target', [.5, .5]], ['destination', [.8, .5]]])
+  expect(result.mentions.every(m => m.selected?.timeline === null)).toBe(true)
+  const binding = confirmedExplanationBinding(result.mentions[0], result.mentions[0].candidates[0], imageA)
+  expect(binding.timelineSpans[0]).toMatchObject({ start: null, end: null, quality: 'coarse' })
+  expect(resolveDeixis(entries, events, staticClocks, [binding]).mentions[0].confirmedByUser).toBe(true)
+  const plan = buildIntentDifferencePlan([result], [{ targetRef: imageA, property: 'position', value: [.8, .5], confirmed: true }], [{ targetRef: imageA, pose, stateDigest: digest }], [])
+  expect(plan.status).toBe('review'); expect(plan.changes[0].after).toEqual([.8, .5])
+})
+it('静态这几个使用当时选中集合；重叠命中仍需确认，不能借菜单或缺口补指向', () => {
+  const targets = [imageA, { ...imageA, id: 'image:b' }, { ...imageA, id: 'image:c' }]
+  const entry = staticSpeech('这几个等距'), event = staticPointer({ selectedRefs: targets })
+  const parsed = resolveDeixis([entry], [event], staticClocks)
+  expect(parsed.mentions).toHaveLength(1); expect(parsed.mentions[0].text).toBe('这几个'); expect(parsed.mentions[0].selected?.targetRefs).toEqual(targets)
+  const binding = confirmedExplanationBinding(parsed.mentions[0], parsed.mentions[0].candidates[0])
+  expect(resolveDeixis([entry], [event], staticClocks, [binding]).mentions[0].selected?.targetRefs).toEqual(targets)
+  expect(resolveDeixis([staticSpeech('这个')], [staticPointer({ hoverRefs: targets })], staticClocks).mentions[0].selected).toBeUndefined()
+  expect(alignExplanationEntry(entry, [staticPointer({ compositionPoint: null })], staticClocks).pointers).toEqual([])
+  expect(resolveDeixis([entry], [event, staticPointer({ seq: 2, monoUs: 1_100_000, compositionPoint: null })], staticClocks).mentions[0].selected?.targetRefs).toEqual(targets)
+  expect(alignExplanationEntry(entry, [staticPointer({ unavailableReason: 'missing-presentation' })], staticClocks).pointers).toEqual([])
+  expect(alignExplanationEntry(entry, [event], [{ ...staticClocks[0], mode: 'gap' }]).pointers).toEqual([])
+})
+it('人工画面点选是显式校正，不制造历史指针；词稿变化后校正失效', () => {
+  const entry = staticSpeech('这个', undefined, { granularity: 'segment', wordId: undefined, alignmentQuality: 'coarse' })
+  const mention = resolveDeixis([entry], [], staticClocks).mentions[0]
+  const binding = pickedExplanationBinding(mention, [imageA], [.6, .4])
+  const confirmed = resolveDeixis([entry], [], staticClocks, [binding]).mentions[0]
+  expect(confirmed.confirmedByUser).toBe(true); expect(confirmed.selected).toMatchObject({ evidenceSeqs: [], pointer: null, targetRefs: [imageA] })
+  expect(() => pickedExplanationBinding(mention, [], [.6, .4])).toThrow('对象')
+  expect(() => pickedExplanationBinding(mention, [imageA], [2, .4])).toThrow('画面')
+  expect(resolveDeixis([{ ...entry, utteranceId: 'new' }], [], staticClocks, [binding]).mentions[0].selected).toBeUndefined()
 })

@@ -7,12 +7,12 @@ import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import type { ImageEditorV3Controller } from './types'
 import { useImageEditorExplanationV3 } from './useImageEditorExplanationV3'
 
-const adapter = vi.hoisted(() => ({ snapshot: () => ({ session: { state: 'recording' } }), recordPointer: vi.fn(), pause: vi.fn(async () => {}), detach: vi.fn(async () => {}) }))
+const adapter = vi.hoisted(() => ({ snapshot: () => ({ session: { state: 'recording' } }), hasPendingPick: vi.fn(() => false), acceptPick: vi.fn(), recordPointer: vi.fn(), pause: vi.fn(async () => {}), detach: vi.fn(async () => {}) }))
 const capture = vi.hoisted(() => vi.fn(async () => ({ dataUrl: 'data:image/png;base64,AA==', width: 540, height: 360 })))
 vi.mock('../application/imageEditExplanation', () => ({ imageEditExplanation: () => adapter }))
 vi.mock('./layerPickingV3', () => ({ pickImageEditorLayerV3: () => 'subject' }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ window: { getContentSize: async () => ({ width: 900, height: 720 }) }, media: { captureApplicationSurface: capture }, imageEditorV3: { ingestSource: async () => ({ resource: { resourceRef: 'sha256:fixture', byteLength: 1 } }) } }) }))
-beforeEach(() => { vi.clearAllMocks() })
+beforeEach(() => { vi.clearAllMocks(); adapter.hasPendingPick.mockReturnValue(false) })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 const image = createImageEditDocumentV3({ documentId: 'capture-test', width: 600, height: 400 })
 const bus = { getSnapshot: () => ({ previewOverrides: {} }) } as unknown as ImageEditCommandBusV3
@@ -41,4 +41,22 @@ it('90% 界面缩放下把作品 CSS 裁切转为窗口 DIP，不带入旁边面
   const result = await input.capture()
   expect(capture).toHaveBeenCalledWith(expect.objectContaining({ rect: { x: 90, y: 72, width: 540, height: 360 } }))
   expect(result.point).toEqual([20 / 600, 0])
+})
+
+it('画面点选仅校正指代，不录制指针也不把点击传给编辑工具', () => {
+  adapter.hasPendingPick.mockReturnValue(true)
+  const view = render(<Host />); down(view.getByTestId('preview'))
+  expect(adapter.acceptPick).toHaveBeenCalledWith([.2, .2], expect.arrayContaining([expect.objectContaining({ label: undefined })]), expect.any(Array))
+  expect(adapter.recordPointer).not.toHaveBeenCalled()
+})
+
+it('浮层遮住作品时不采集带界面的缩略图', async () => {
+  const view = render(<Host />), preview = view.getByTestId('preview')
+  vi.spyOn(preview, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 400))
+  const panel = document.createElement('div'); panel.dataset.panelPlacement = 'below'; document.body.append(panel)
+  vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue(new DOMRect(400, 0, 300, 200))
+  down(preview)
+  const input = adapter.recordPointer.mock.calls[0][0] as { capture: () => Promise<unknown> }
+  expect(await input.capture()).toBeNull(); expect(capture).not.toHaveBeenCalled()
+  panel.remove()
 })

@@ -6,7 +6,7 @@ import { clockEventIssue, type ClockSegment } from '@/core/creativeIntent/contra
 import { type CreativeIntents, type StoredCreativeIntentResource } from '@/core/creativeIntent/persistence'
 import { alignRecordingTranscript } from '@/core/creativeIntent/recordingAlignment'
 import { recordingCommandEvent } from '@/core/creativeIntent/recordingEvents'
-import { resolveDeixis, confirmedExplanationBinding, type DeixisResolution, type ExplanationBinding } from '@/core/creativeIntent/deixis'
+import { resolveDeixis, confirmedExplanationBinding, pickedExplanationBinding, type DeicticMention, type DeixisResolution, type ExplanationBinding } from '@/core/creativeIntent/deixis'
 import { buildIntentDifferencePlan, type IntentDifferencePlan, type ReviewedIntentGoal } from '@/core/creativeIntent/intentPlan'
 import { captureExplanationPixels } from './videoEditExplanationVisual'
 import { serializeRecordingInput } from '@/core/creativeIntent/recordingSerializer'
@@ -299,7 +299,7 @@ async function explanationSentence(owner: VideoEditInstance, state: VideoExplana
   assertCurrent(owner, state)
   return { entries: latest, events }
 }
-export async function readVideoExplanationReview(id: string, entry: TranscriptEntry): Promise<VideoExplanationReviewData> {
+export async function readVideoExplanationReview(id: string, entry: TranscriptEntry, mentionId?: string, includeImage = true): Promise<VideoExplanationReviewData> {
   const owner = requireVideoEditInstance(id); const state = videoExplanationState(owner); if (!state) throw new Error('请先打开讲解')
   const { entries, events } = await explanationSentence(owner, state, entry)
   const resolution = resolveDeixis(entries, events, state.collector.session.clockSegments, state.collector.session.bindings)
@@ -308,25 +308,27 @@ export async function readVideoExplanationReview(id: string, entry: TranscriptEn
   const destination = resolution.mentions.find(mention => mention.slot === 'destination')
   if (!resolution.negated && /移|放|从.*到/.test(resolution.text) && target?.selected?.targetRefs.length === 1 && destination?.selected) goals.push({ targetRef: target.selected.targetRefs[0], property: 'position', value: destination.selected.point, confirmed: target.confirmedByUser && destination.confirmedByUser })
   const sequence = getActiveVideoEditSequence(owner); const frame = owner.frame; const digest = await motionDigest([sequence, frame])
-  const current = sequence.clips.map(clip => ({ targetRef: { kind: 'video_edit.clip', id: `${id}:${clip.id}` }, pose: motionClipPose(clip, frame), stateDigest: digest }))
+  const current = sequence.clips.map(clip => ({ targetRef: { kind: 'video_edit.clip', id: `${id}:${clip.id}`, label: clip.name }, pose: motionClipPose(clip, frame), stateDigest: digest }))
   const plan = buildIntentDifferencePlan([resolution], goals, current, events)
   if (!resolution.negated && !goals.length && plan.status !== 'blocked') { plan.status = 'blocked'; plan.issues.push('这句尚未形成完整的差异目标，请补充并确认') }
-  const chosen = resolution.mentions.find(mention => mention.entries.some(value => value.eventId === entry.eventId))?.selected ?? resolution.mentions.find(mention => mention.entries.some(value => value.eventId === entry.eventId))?.candidates[0]
+  const inspected = resolution.mentions.find(mention => mention.id === mentionId) ?? resolution.mentions.find(mention => mention.entries.some(value => value.eventId === entry.eventId)) ?? resolution.mentions[0]
+  const chosen = inspected?.selected ?? inspected?.candidates[0]
   const visual = state.collector.session.visualEvidenceRefs.find(value => value.frames.some(frame => chosen?.evidenceSeqs.includes(frame.seq)))
   const resource = visual && head(owner).resources.find(value => value.resourceId === visual.resourceRef.resourceId)
-  const image = resource ? await readMotionResourceBytes(resource) : undefined
+  const image = includeImage && resource ? await readMotionResourceBytes(resource) : undefined
   assertCurrent(owner, state)
   if (owner.playing || owner.frame !== frame || getActiveVideoEditSequence(owner) !== sequence) { plan.changes = []; plan.status = 'blocked'; plan.issues.push('当前画面状态已改变，请暂停播放后重新确认差异') }
-  return { resolution, plan, image, imagePoint: chosen?.point }
+  return { resolution, plan, image, imagePoint: visual?.frames.find(frame => chosen?.evidenceSeqs.includes(frame.seq))?.pointer ?? undefined }
 }
 export async function correctVideoExplanationBinding(id: string, entry: TranscriptEntry, binding: ExplanationBinding): Promise<void> {
   const owner = requireVideoEditInstance(id); const runtime = states.get(owner)
   if (!runtime || runtime.state.busy || !['reviewing', 'recoverable'].includes(runtime.state.collector.session.state)) throw new Error('请等待录制或转写结束')
   await enqueue(runtime, async () => {
     const review = await readVideoExplanationReview(id, entry); const mention = review.resolution.mentions.find(value => value.id === binding.id)
-    const candidate = mention?.candidates.find(value => binding.evidenceSeqs.every(seq => value.evidenceSeqs.includes(seq)) && binding.point?.every((point, index) => point === value.point[index]))
-    if (!mention || !candidate) throw new Error('原指向已改变，请重新选择')
-    const validated = confirmedExplanationBinding(mention, candidate, binding.targetRefs[0])
+    const candidate = binding.evidenceSeqs.length ? mention?.candidates.find(value => binding.evidenceSeqs.every(seq => value.evidenceSeqs.includes(seq)) && binding.point?.every((point, index) => point === value.point[index])) : undefined
+    if (!mention || !candidate && (binding.evidenceSeqs.length || !binding.point)) throw new Error('原指向已改变，请重新选择')
+    for (const ref of binding.targetRefs) if (ref.kind !== 'video_edit.clip' || !getActiveVideoEditSequence(owner).clips.some(clip => ref.id === `${id}:${clip.id}`)) throw new Error('所选对象已不存在。')
+    const validated = candidate ? confirmedExplanationBinding(mention, candidate, binding.targetRefs[0]) : pickedExplanationBinding(mention, binding.targetRefs, binding.point!)
     if (JSON.stringify(validated) !== JSON.stringify(binding)) throw new Error('绑定必须来自完整历史候选')
     assertCurrent(owner, runtime.state)
     const session = runtime.state.collector.session
@@ -455,6 +457,44 @@ function recordCommand(owner: VideoEditInstance, fact: VideoEditCommandFact): vo
     for (const { mark, base } of marks) { if (!base) continue; const annotationRef = { kind: 'video_edit.annotation', id: `${owner.document.id}:${mark.id}` }; if (!state.collector.session.annotationRefs.some(r => r.id === annotationRef.id)) state.collector.session.annotationRefs.push(annotationRef); state.collector.append({ ...base, kind: 'annotation', annotationRef, snapshotDigest: await motionDigest(mark), role: 'note', timelineSpans: [] }) }
   }).catch(() => { state.message = '操作记录尚未保存，请结束后重试保存。'; publish() })
 }
+function explanationPointRefs(owner: VideoEditInstance, sequence: VideoEditComposition, frame: number, point: [number, number]): ApplicationRef[] {
+  const refs: ApplicationRef[] = []
+  for (const clip of [...activeVideoEditClips(sequence, frame)].reverse()) {
+    if (clip.kind === 'audio' || clip.kind === 'adjustment') continue
+    const pose = motionClipPose(clip, frame)
+    const source = videoEditFrameToClip({ ...clip, x: pose.position[0] - .5, y: pose.position[1] - .5, anchorX: pose.pivot[0], anchorY: pose.pivot[1], scale: pose.scaleXY[0], rotation: pose.rotationTurns * 360 }, videoEditClipPictureSize(sequence, clip), sequence, point[0], point[1])
+    if (source.u >= 0 && source.u <= 1 && source.v >= 0 && source.v <= 1) refs.push({ kind: 'video_edit.clip', id: `${owner.document.id}:${clip.id}`, ...(clip.name ? { label: clip.name.slice(0, 200) } : {}) })
+  }
+  return refs
+}
+
+/** User correction observes one canvas click; it does not replay recorded actions or seek. */
+export function pickVideoExplanationBinding(owner: VideoEditInstance, entry: TranscriptEntry, mention: DeicticMention, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const root = document
+    const cleanup = (): void => { root.removeEventListener('pointerdown', point, true); signal.removeEventListener('abort', cancel) }
+    const cancel = (): void => { cleanup(); resolve() }
+    const point = (event: PointerEvent): void => {
+      const target = event.target
+      if (!(target instanceof Element) || target.closest('[data-observation-sensitive],button,input,textarea,select')) return
+      const monitor = target.closest<HTMLElement>('[data-video-edit-program-display]')
+      if (!monitor) return
+      if (owner.playing) { cleanup(); reject(new Error('请暂停播放后点选。')); return }
+      const presented = monitor.querySelector<HTMLCanvasElement>('canvas[aria-label="剪辑画面"]')
+      if (!presented || presented.dataset.presentedFrame !== String(owner.frame)) { cleanup(); reject(new Error('画面正在更新，请稍候再点选。')); return }
+      const rect = monitor.getBoundingClientRect()
+      const position: [number, number] = [(event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height]
+      if (!position.every(value => Number.isFinite(value) && value >= 0 && value <= 1)) return
+      event.preventDefault(); event.stopPropagation(); cleanup()
+      const object = mention.slot === 'target' || mention.slot === 'source'
+      const refs = object ? explanationPointRefs(owner, getActiveVideoEditSequence(owner), owner.frame, position).slice(0, 1) : []
+      try { void correctVideoExplanationBinding(owner.document.id, entry, pickedExplanationBinding(mention, refs, position)).then(resolve, reject) } catch (error) { reject(error) }
+    }
+    if (signal.aborted) { resolve(); return }
+    root.addEventListener('pointerdown', point, true); signal.addEventListener('abort', cancel, { once: true })
+  })
+}
+
 export function recordVideoExplanationPointer(owner: VideoEditInstance, event: PointerEvent, monitor: HTMLElement): void {
   const state = videoExplanationState(owner); if (!state || state.busy || state.collector.session.state !== 'recording') return
   const target = event.target as Element | null
@@ -462,14 +502,8 @@ export function recordVideoExplanationPointer(owner: VideoEditInstance, event: P
   const rect = monitor.getBoundingClientRect(); if (!rect.width || !rect.height) return
   const point: [number, number] = [(event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height]
   const inside = point.every(v => v >= 0 && v <= 1) && (monitor.parentElement ?? monitor).contains(target)
-  const hoverRefs: ApplicationRef[] = []
   const picture = state.picture; const sequence = picture?.composition
-  if (inside && picture && sequence) {
-    const composition = sequence
-    for (const clip of [...activeVideoEditClips(composition, picture.frame)].reverse()) { if (clip.kind === 'audio' || clip.kind === 'adjustment') continue
-      const pose = motionClipPose(clip, picture.frame); const source = videoEditFrameToClip({ ...clip, x: pose.position[0] - .5, y: pose.position[1] - .5, anchorX: pose.pivot[0], anchorY: pose.pivot[1], scale: pose.scaleXY[0], rotation: pose.rotationTurns * 360 }, videoEditClipPictureSize(composition, clip), sequence, point[0], point[1])
-      if (source.u >= 0 && source.u <= 1 && source.v >= 0 && source.v <= 1) hoverRefs.push({ kind: 'video_edit.clip', id: `${owner.document.id}:${clip.id}`, ...(clip.name ? { label: clip.name.slice(0, 200) } : {}) }) }
-  }
+  const hoverRefs = inside && picture && sequence ? explanationPointRefs(owner, sequence, picture.frame, point) : []
   const runtime = states.get(owner)!
   const pointerWindow = monitor.ownerDocument.defaultView
   const eventAt = (pointerWindow?.performance.timeOrigin ?? performance.timeOrigin) + event.timeStamp - performance.timeOrigin

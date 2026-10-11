@@ -60,9 +60,10 @@ function createVideoEditExplanationScene() {
           return output.stream
         }
       })
-      const trigger = () => page.getByRole('button', { name: /^(录制讲解|正在录制|录制已暂停)$/ })
-      const panel = async () => { if (!await button(page, '开始录制讲解').isVisible() && !await button(page, '继续录制').isVisible() && !await button(page, '结束录制').isVisible()) await trigger().click() }
-      const close = async () => { if (await button(page, '开始录制讲解').isVisible() || await button(page, '继续录制').isVisible() || await button(page, '结束录制').isVisible()) { await trigger().click(); await page.waitForTimeout(180) } }
+      const trigger = () => page.getByRole('button', { name: '录制讲解', exact: true })
+      const review = () => page.getByLabel('讲解词稿审阅', { exact: true })
+      const panel = async () => { if (!await review().isVisible()) await trigger().click() }
+      const close = async () => { if (await review().isVisible()) { await trigger().click(); await page.waitForTimeout(180) } }
       const shot = async name => {
         const suffix = `step-${String(evidence.frames.length + 1).padStart(3, '0')}`
         // Wait for the compositor after the renderer receipt / popover animation.
@@ -108,8 +109,8 @@ function createVideoEditExplanationScene() {
           if (!playing) await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), frame)
         }
         await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: { kind: 'video_edit.clip', id: seeded.documentId + ':motion-clip' } }))
-        await panel(); await button(page, '开始录制讲解').click(); await button(page, '同意并开始录制').waitFor(); await page.waitForTimeout(180); await shot('01-知情提示')
-        await button(page, '同意并开始录制').click(); await page.getByLabel('暂停录制讲解', { exact: true }).waitFor(); await close(); await shot('02-开始不播放')
+        await panel(); await button(page, '开始录制').waitFor(); await page.waitForTimeout(180); await shot('01-知情提示')
+        await button(page, '开始录制').click(); await page.getByLabel('暂停录制讲解', { exact: true }).waitFor(); await close(); await shot('02-开始不播放')
         const view = await callTool(client, 'read_application_entity', { ref, propertyIds: ['video_edit.document.timeline_view'] })
         const ruler = await page.getByRole('slider', { name: '剪辑时间定位', exact: true }).boundingBox(); assert(ruler)
         await page.mouse.move(ruler.x + 20 * 60 * view.data.properties['video_edit.document.timeline_view'].zoom / 30 + .1, ruler.y + 12)
@@ -128,8 +129,8 @@ function createVideoEditExplanationScene() {
         await playback(40, true); await page.waitForTimeout(250); await shot('07-继续播放'); await playback(70)
         // Device loss is injected as the MediaStream track ended event, handled by the production capture service.
         await page.evaluate(() => window.__t150Streams.at(-1).getAudioTracks()[0].dispatchEvent(new Event('ended')))
-        await trigger().filter({ hasText: '录制已暂停' }).waitFor(); await panel(); await shot('08-麦克风断开')
-        await button(page, '继续录制').click(); await page.getByLabel('暂停录制讲解', { exact: true }).waitFor(); await close(); await shot('09-恢复麦克风')
+        await button(page, '继续录制讲解').waitFor(); await panel(); await shot('08-麦克风断开')
+        await button(page, '继续录制讲解').click(); await page.getByLabel('暂停录制讲解', { exact: true }).waitFor(); await close(); await shot('09-恢复麦克风')
         await page.waitForTimeout(1700); await page.getByLabel('结束录制讲解', { exact: true }).click()
         await page.getByLabel('讲解词稿审阅', { exact: true }).waitFor(); await shot('10-结束')
         const sessionDoc = await saved(doc => doc.creativeIntents?.sessions[0]?.state === 'reviewing')
@@ -144,31 +145,29 @@ function createVideoEditExplanationScene() {
         const fixtureTranscript = { text: '从这里到那边。别动它。', unit: 'ms', granularity: 'mixed', words, segments: [{ text: '从这里到那边', startMs: words[0].startMs, endMs: endMs + 100, granularity: 'segment', timing: 'coarse', words }, { text: '别动它', startMs: Math.min(endMs + 120, (audio.monoSpanUs[1] - audio.monoSpanUs[0]) / 1000 - 110), endMs: Math.min(endMs + 220, (audio.monoSpanUs[1] - audio.monoSpanUs[0]) / 1000 - 10), granularity: 'segment', timing: 'coarse', confidence: .99 }] }
         await app.evaluate((_electron, { chunk, transcript }) => { globalThis.__t150TranscriptByChunk = { [chunk]: transcript } }, { chunk: audio.audioSegmentRef, transcript: fixtureTranscript })
         await button(page, '转写并审阅').click(); await button(page, '同意上传并转写').click()
-        await page.getByLabel('校正讲解文字', { exact: true }).first().waitFor(); await shot('11-真实词句粒度审阅')
+        await button(page, '查看「这里」的指向').first().waitFor(); await shot('11-转写自然段落审阅')
         await saved(doc => doc.creativeIntents?.sessions[0]?.pages.some(p => p.kind === 'transcript'))
-        await page.getByRole('button', { name: '查看词「这里」的录制证据', exact: true }).first().click()
-        await page.getByText('指向重叠对象，需确认其中一个', { exact: false }).first().waitFor(); await page.getByAltText('指向时保存的作品画面').first().waitFor(); await shot('11a-点词历史画面与重叠确认')
-        await page.getByRole('button', { name: /^确认起点「这里」/ }).first().click(); await page.getByRole('button', { name: /^确认终点「那边」/ }).first().click()
-        const proposal = page.getByText('候选更新：1 处位置差异待审阅。', { exact: false }).first()
+        await button(page, '查看「这里」的指向').first().click()
+        await page.getByText('这里有几个对象重叠，请选一个', { exact: true }).first().waitFor(); await page.getByAltText('指向时保存的作品画面').first().waitFor(); await shot('11a-点词历史画面与重叠确认')
+        await review().getByRole('radio').first().click(); await button(page, '查看「那边」的指向').first().click(); await review().getByRole('radio').first().click()
+        await button(page, '查看「它」的指向').first().click()
+        const coarse = page.getByText('这句时间不够精确，请点选对象', { exact: true }).first()
+        await coarse.waitFor(); await coarse.scrollIntoViewIfNeeded(); await shot('11d-粗时间就地确认')
+        await review().getByRole('radio', { name: '其他…', exact: true }).click()
+        await page.mouse.click(box.x + box.width * .5, box.y + box.height * .5)
+        await review().waitFor(); await page.getByLabel('保护', { exact: true }).first().waitFor()
+        const proposal = page.getByText(/移到右侧/).first()
         await proposal.waitFor(); await proposal.scrollIntoViewIfNeeded(); await shot('11b-绑定后当前差异候选')
         const beforeBinding = readVideoEditFile(seeded.file).creativeIntents.sessions[0].bindings
-        await page.getByRole('button', { name: /^确认起点「这里」/ }).nth(1).click(); await page.waitForTimeout(200)
+        await button(page, '查看「这里」的指向').first().click(); await button(page, '重新点选').first().click()
+        await page.mouse.click(box.x + box.width * .2, box.y + box.height * .5); await page.waitForTimeout(200)
         await saved(doc => JSON.stringify(doc.creativeIntents.sessions[0].bindings) !== JSON.stringify(beforeBinding)); await proposal.scrollIntoViewIfNeeded(); await shot('11c-改绑定更新候选')
         evidence.bindingsBefore = beforeBinding; evidence.bindingsAfter = readVideoEditFile(seeded.file).creativeIntents.sessions[0].bindings
-        await button(page, '返回讲解词稿').click()
-        const coarse = page.getByText(/句级时间，请确认对应画面/).first()
-        const pageCount = readVideoEditFile(seeded.file).creativeIntents.sessions[0].pages.filter(ref => ref.kind === 'transcript').length
-        for (let index = 0; index < pageCount; index++) {
-          await page.getByLabel('校正讲解文字', { exact: true }).first().waitFor(); await page.waitForTimeout(200)
-          await page.locator('[aria-label="讲解词稿审阅"] [data-virtuoso-scroller]').evaluate(element => { element.scrollTop = element.scrollHeight }); await page.waitForTimeout(200)
-          if (await coarse.isVisible()) break
-          const next = button(page, '下一页词稿'); if (!await next.isEnabled()) break; await next.click()
-        }
-        await coarse.waitFor(); await coarse.scrollIntoViewIfNeeded(); await shot('11d-句级粗时间明确呈现')
+        assert.doesNotMatch(await review().innerText(), /\d+(?:\.\d+)?%|位置 \d|对象 \d|候选更新|上一页|下一页|不会重放/)
         evidence.session = readVideoEditFile(seeded.file).creativeIntents.sessions[0]
         evidence.asrFixtureCalls = await app.evaluate(() => globalThis.__t150AsrCalls)
-        await panel(); await button(page, '彻底删除本次讲解').click(); await shot('12-删除确认')
-        await button(page, '彻底删除').click(); await saved(doc => doc.creativeIntents?.sessions.length === 0); await close(); await shot('13-删除完成')
+        await panel(); await button(page, '删除讲解').click(); await shot('12-删除确认')
+        await button(page, '删除').click(); await saved(doc => doc.creativeIntents?.sessions.length === 0); await close(); await shot('13-删除完成')
         assert.equal(await page.evaluate(() => window.__t150Streams.every(s => s.getTracks().every(t => t.readyState === 'ended'))), true)
       } catch (error) { evidence.failure = error.message; if (seeded) { evidence.session = readVideoEditFile(seeded.file).creativeIntents?.sessions[0]; evidence.documentFile = seeded.file } await panel().catch(() => {}); evidence.failurePanel = await page.getByRole('alert').allTextContents().catch(() => []); await capture('failure').catch(() => {}); throw error }
       finally {

@@ -61,3 +61,15 @@ describe('E03/E06 分块ASR对齐及 JSONL', () => {
     expect(selectRecordingFrames(events,{atUs:0,need:'appearance',stateDigest:()=> 'state'})).toEqual([])
   })
 })
+
+it('静态 ASR 保留真实词级墙钟精度，粗句和录音缺口不会变精确', () => {
+  const clock = { id: 'static', monoSpanUs: [0, 2_000_000] as [number, number], mode: 'hold' as const, start: null, end: null, anchors: [] }
+  const audio: AudioClockSegment = { kind: 'audio', eventId: 'audio', seq: 0, monoUs: 0, timeline: null, unavailableReason: 'static', clockSegmentRef: 'static', audioSegmentRef: 'audio', startSample: 0, endSample: 96000, monoSpanUs: [0, 2_000_000], sampleRate: 48000, channels: 1, uncertaintyUs: 1000 }
+  const dto = normalizeTimestampedTranscript({ text: '这个', segments: [{ text: '这个', startMs: 100, endMs: 400, words: [{ text: '这个', startMs: 100, endMs: 400 }] }] }, 2000, 'word')
+  const precise = alignRecordingTranscript(dto, audio, [clock], 1, s => s).entries[0]
+  expect(precise.alignmentQuality).toBe('precise'); expect(precise.timeline).toBeNull(); expect(precise.unavailableReason).toBe('static')
+  expect(precise.monoSpanUs).toEqual([100000, 400000])
+  const coarse = normalizeTimestampedTranscript({ text: '这个', segments: [{ text: '这个', startMs: 100, endMs: 400 }] }, 2000, 'word')
+  expect(alignRecordingTranscript(coarse, audio, [clock], 1, s => s).entries[0].alignmentQuality).toBe('coarse')
+  expect(alignRecordingTranscript(dto, audio, [{ ...clock, mode: 'gap' }], 1, s => s).entries[0].alignmentQuality).toBe('coarse')
+})

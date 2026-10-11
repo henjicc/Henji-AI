@@ -44,7 +44,7 @@ export function alignRecordingTranscript(transcript: TimestampedTranscript, audi
     const word = part.granularity !== 'segment'
     entries.push({ kind: 'transcript', eventId: id(`event-${index}`), seq: firstSeq + index++, monoUs: monoSpanUs[0], timeline: first.start, clockSegmentRef: first.clockSegmentRef,
       ...(!first.start ? { unavailableReason: audio.unavailableReason === 'static' ? 'static' as const : 'missing-presentation' as const } : {}), utteranceId, ...(word ? { wordId: id(`word-${index}`) } : {}), text: part.text, audioSegmentRef: audio.audioSegmentRef,
-      startSample, endSample, monoSpanUs, timelineSpans, granularity: part.granularity, alignmentQuality: word && part.timing === 'precise' && audio.uncertaintyUs <= 50_000 && timelineSpans.every(s => s.quality === 'presented') ? 'precise' : 'coarse',
+      startSample, endSample, monoSpanUs, timelineSpans, granularity: part.granularity, alignmentQuality: word && part.timing === 'precise' && audio.uncertaintyUs <= 50_000 && timelineSpans.every(s => s.quality === 'presented' || audio.unavailableReason === 'static' && clocks.some(c => c.id === s.clockSegmentRef && c.mode === 'hold' && !c.start && !c.end)) ? 'precise' : 'coarse',
       ...(part.confidence === undefined ? {} : { confidence: part.confidence }), source: 'asr' })
   }
   transcript.segments.forEach((segment, i) => {

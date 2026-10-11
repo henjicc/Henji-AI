@@ -4,7 +4,7 @@ import { creativeIntentPageSchema } from '@/core/creativeIntent/pages'
 import { creativeIntentsSchema, creativeIntentLiveResources, type StoredCreativeIntentResource } from '@/core/creativeIntent/persistence'
 import { clockEventIssue } from '@/core/creativeIntent/contracts'
 import { alignRecordingTranscript } from '@/core/creativeIntent/recordingAlignment'
-import { resolveDeixis, confirmedExplanationBinding, type ExplanationBinding } from '@/core/creativeIntent/deixis'
+import { resolveDeixis, confirmedExplanationBinding, pickedExplanationBinding, type DeicticMention, type ExplanationBinding } from '@/core/creativeIntent/deixis'
 import { buildIntentDifferencePlan, type ReviewedIntentGoal } from '@/core/creativeIntent/intentPlan'
 import { RecordingCollector, captureMicrophone, type CapturedAudioBlock, type MicrophoneCapture } from '@/features/creativeIntent'
 import { getPlatform } from '@/platform/runtime'
@@ -59,6 +59,7 @@ export class ImageEditExplanation {
   private saving = Promise.resolve()
   private detaching?: Promise<void>
   private queued = 0
+  private picking?: { entry: TranscriptEntry; mention: DeicticMention; resolve: () => void; reject: (error: unknown) => void }
   constructor(private readonly bus: ImageEditCommandBusV3, private readonly ports: ExplanationPorts) {
     bus.getLifecycleSignal().addEventListener('abort', () => { void this.close().catch(error => logger.warn('图片讲解关闭未完成', { event: 'image_edit.explanation.close.failed', error })) }, { once: true })
   }
@@ -252,7 +253,7 @@ export class ImageEditExplanation {
     } catch (error) { session.state = 'recoverable'; this.publish({ message: '转写未完成，原稿已保留。' }); logger.warn('图片讲解转写未完成', { event: 'image_edit.explanation.transcribe.failed' }); throw error }
     finally { this.publish({ busy: false }) }
   }
-  async readReview(entry: TranscriptEntry): Promise<ExplanationReviewResult> {
+  async readReview(entry: TranscriptEntry, mentionId?: string, includeImage = true): Promise<ExplanationReviewResult> {
     const collector = this.require(), events: ExplanationEvent[] = [], entries: TranscriptEntry[] = []
     for await (const event of this.events('transcript')) if (event.kind === 'transcript' && event.utteranceId === entry.utteranceId) entries.push(event)
     if (!entries.some(e => e.eventId === entry.eventId)) throw new Error('词稿已变化，请重新打开。')
@@ -263,16 +264,21 @@ export class ImageEditExplanation {
     const document = this.bus.getSnapshot().document, stateDigest = await imageLayoutDigest([document.geometry, document.layers]), output = resolveAnnotationOutputGeometryV3(document)
     const current = collectImageEditV3LiveLayers(document).filter(l => l.layer.type !== 'group').map(location => {
       const matrix = layerToOutputV3(document, findImageEditLayerLocationV3(document.layers, location.layer.id)!)
-      return { targetRef: imageEditV3LayerRef(document.id, location.layer.id), stateDigest, pose: { position: [matrix[4] / output.width, matrix[5] / output.height] as [number, number], rotationTurns: Math.atan2(matrix[1], matrix[0]) / (2 * Math.PI), scaleXY: [Math.hypot(matrix[0], matrix[1]), Math.hypot(matrix[2], matrix[3])] as [number, number], pivot: [.5, .5] as [number, number] } }
+      return { targetRef: { ...imageEditV3LayerRef(document.id, location.layer.id), label: location.layer.name }, stateDigest, pose: { position: [matrix[4] / output.width, matrix[5] / output.height] as [number, number], rotationTurns: Math.atan2(matrix[1], matrix[0]) / (2 * Math.PI), scaleXY: [Math.hypot(matrix[0], matrix[1]), Math.hypot(matrix[2], matrix[3])] as [number, number], pivot: [.5, .5] as [number, number] } }
     })
     const destination = resolution.mentions.find(m => m.slot === 'destination')?.selected
     const goals: ReviewedIntentGoal[] = destination ? resolution.mentions.filter(m => m.slot === 'target' || m.slot === 'source').flatMap(m => m.selected?.targetRefs.map(targetRef => ({ targetRef, property: 'position' as const, value: destination.point, confirmed: true })) ?? []) : []
     const plan = buildIntentDifferencePlan([resolution], goals, current, events)
-    const evidence = this.historicalEvidence(entry)
-    const image = evidence ? await this.ports.readVisual(evidence.resourceRef.resourceId) : undefined
+    const mention = resolution.mentions.find(m => m.id === mentionId) ?? resolution.mentions.find(m => m.entries.some(e => e.eventId === entry.eventId)) ?? resolution.mentions[0]
+    const chosen = mention?.selected ?? mention?.candidates[0]
+    const evidence = collector.session.visualEvidenceRefs.find(visual => visual.frames.some(frame => chosen?.evidenceSeqs.includes(frame.seq)))
+    const image = includeImage && evidence ? await this.ports.readVisual(evidence.resourceRef.resourceId) : undefined
     this.assert(collector)
     if (document !== this.bus.getSnapshot().document) throw new Error('图片已变化，请重新审阅。')
-    return { resolution, plan, image, imagePoint: evidence?.frames[0]?.pointer ?? undefined }
+    const refs = resolution.mentions.filter(m => /[这那]几个/.test(m.text)).flatMap(m => m.selected?.targetRefs ?? [])
+    const layout = !resolution.negated && !resolution.issues.length && resolution.mentions.every(m => m.selected) && /等距|对齐/.test(resolution.text) && refs.length >= (/等距/.test(resolution.text) ? 3 : 2)
+      ? { targetRefs: refs, action: /等距/.test(resolution.text) ? 'distribute' as const : 'align' as const } : undefined
+    return { resolution, plan, image, imagePoint: evidence?.frames.find(frame => chosen?.evidenceSeqs.includes(frame.seq))?.pointer ?? undefined, layout }
   }
   private historicalEvidence(entry: TranscriptEntry): ExplanationSession['visualEvidenceRefs'][number] | undefined {
     const middle = (entry.monoSpanUs[0] + entry.monoSpanUs[1]) / 2
@@ -282,26 +288,71 @@ export class ImageEditExplanation {
   historicalRefs(entry: TranscriptEntry): ApplicationRef[] { return this.historicalEvidence(entry)?.frames[0]?.sourceRefs ?? [] }
   async bind(entry: TranscriptEntry, binding: ExplanationBinding): Promise<void> {
     const review = await this.readReview(entry), mention = review.resolution.mentions.find(m => m.id === binding.id)
+    if (mention && !binding.evidenceSeqs.length && binding.point) {
+      const document = this.bus.getSnapshot().document
+      for (const ref of binding.targetRefs) { const target = splitImageEditV3LayerRef(ref); if (target.documentId !== document.id || !findImageEditLayerLocationV3(document.layers, target.layerId)) throw new Error('所选对象已不存在。') }
+      const corrected = pickedExplanationBinding(mention, binding.targetRefs, binding.point)
+      if (JSON.stringify(corrected) !== JSON.stringify(binding)) throw new Error('点选校正必须来自当前讲解。')
+      this.require().session.bindings = [...this.require().session.bindings.filter(b => b.id !== corrected.id), corrected]
+      await this.save(); this.publish(); return
+    }
     const candidate = mention?.candidates.find(c => binding.evidenceSeqs.every(seq => c.evidenceSeqs.includes(seq)) && binding.point?.every((v, i) => c.point[i] === v))
     if (!mention || !candidate) throw new Error('指向证据已变化，请重新确认。')
-    const target = binding.targetRefs[0]
+    const target = /[这那]几个/.test(mention.text) ? undefined : binding.targetRefs[0]
     if (target && !candidate.targetRefs.some(r => r.kind === target.kind && r.id === target.id)) throw new Error('对象不属于当时指向。')
     const confirmed = confirmedExplanationBinding(mention, candidate, target)
+    if (JSON.stringify(confirmed) !== JSON.stringify(binding)) throw new Error('指代校正必须来自完整候选。')
     const collector = this.require(); collector.session.bindings = [...collector.session.bindings.filter(b => b.id !== confirmed.id), confirmed]
     await this.save(); this.publish()
+    logger.info('图片讲解指向已确认', { event: 'image_edit.explanation.binding.completed' })
   }
   async organize(entry: TranscriptEntry): Promise<void> {
     const review = await this.readReview(entry)
-    if (review.resolution.negated || !/等距|对齐/.test(review.resolution.text)) throw new Error('请先审阅明确的等距或对齐讲解。')
-    const refs = new Map<string, ApplicationRef>()
-    for await (const event of this.events('pointer')) if (event.kind === 'pointer' && event.monoUs >= entry.monoSpanUs[0] - 500000 && event.monoUs <= entry.monoSpanUs[1] + 500000) for (const ref of event.selectedRefs) refs.set(ref.id, ref)
+    if (!review.layout) throw new Error('请先确认需要等距或对齐的图层。')
     const documentId = this.bus.getSnapshot().document.id
-    const ids = [...refs.values()].map(ref => { const target = splitImageEditV3LayerRef(ref); if (target.documentId !== documentId) throw new Error('图层不属于当前图片。'); return target.layerId })
-    if (ids.length < 3) throw new Error('请在讲解时选中至少三个需要等距排列的图层。')
-    await imageEditLayoutDraft(this.bus).organize(ids, /等距/.test(review.resolution.text) ? 'distribute' : 'align')
+    const ids = review.layout.targetRefs.map(ref => { const target = splitImageEditV3LayerRef(ref); if (target.documentId !== documentId) throw new Error('图层不属于当前图片。'); return target.layerId })
+    await imageEditLayoutDraft(this.bus).organize(ids, review.layout.action)
+  }
+  pick(entry: TranscriptEntry, mention: DeicticMention): Promise<void> {
+    this.cancelPick()
+    return new Promise((resolve, reject) => { this.picking = { entry, mention, resolve, reject } })
+  }
+  hasPendingPick(): boolean { return !!this.picking }
+  cancelPick(): void { const pending = this.picking; this.picking = undefined; pending?.resolve() }
+  acceptPick(point: [number, number], refs: ApplicationRef[], selectedRefs: ApplicationRef[]): void {
+    const pending = this.picking; if (!pending) return
+    const object = pending.mention.slot === 'target' || pending.mention.slot === 'source'
+    const targets = object ? /[这那]几个/.test(pending.mention.text) ? selectedRefs : refs : []
+    this.picking = undefined
+    try { void this.bind(pending.entry, pickedExplanationBinding(pending.mention, targets, point)).then(pending.resolve, pending.reject) } catch (error) { pending.reject(error) }
+  }
+  async cancelTranscription(): Promise<void> {
+    const collector = this.require(); collector.session.state = 'recoverable'
+    await this.ports.audio.cancel(collector.session.id); this.publish()
+    logger.info('图片讲解转写已取消', { event: 'image_edit.explanation.transcribe.cancelled' })
+  }
+  async finishReview(): Promise<void> {
+    this.cancelPick()
+    const collector = this.collector; if (!collector || !['reviewing', 'recoverable'].includes(collector.session.state)) return
+    await this.ports.audio.release(collector.session.id)
+    collector.session.retentionStatus = 'deleted'; delete collector.session.audio
+    await this.save(); this.publish()
+    logger.info('图片讲解原音已释放', { event: 'image_edit.explanation.audio.released' })
+  }
+  async remove(): Promise<void> {
+    const collector = this.require()
+    if (this.state.busy || ['recording', 'paused', 'transcribing'].includes(collector.session.state)) throw new Error('请先结束录制。')
+    await this.finishReview(); await this.ports.audio.erase(collector.session.id)
+    const document = this.bus.getSnapshot().document, current = document.creativeIntents!
+    const next = { ...current, sessions: current.sessions.filter(session => session.id !== collector.session.id) }
+    next.resources = creativeIntentLiveResources([next])
+    this.bus.dispatch({ type: 'document.set-creative-intents', commandId: crypto.randomUUID(), expectedRevision: document.revision, intents: next, resources: creativeIntentLiveResources([current, next]).map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })) })
+    await this.ports.confirm(); this.collector = undefined; this.publish({ message: undefined })
+    logger.info('图片讲解已删除', { event: 'image_edit.explanation.remove.completed' })
   }
   async close(): Promise<void> {
     if (this.disposed) return
+    this.cancelPick()
     this.controller.abort(); clearInterval(this.timer)
     await this.microphone?.stop(); this.microphone = undefined
     const collector = this.collector

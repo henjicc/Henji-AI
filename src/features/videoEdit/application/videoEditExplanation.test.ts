@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { normalizeTimestampedTranscript } from '@/core/audioEdit/timestampedTranscript'
 import { videoEditComposition } from '@/core/videoEdit/document'
+import { pickedExplanationBinding } from '@/core/creativeIntent/deixis'
 import type { CapturedAudioBlock } from '@/features/creativeIntent/recording/microphone'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
@@ -11,7 +12,7 @@ import { createVideoEditTestProject, failVideoEditSaves, savedVideoEdit } from '
 import { appendVideoEditClip, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, editVideoProject, setVideoEditView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture } from './videoEditService'
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { storeMotionResource, storeMotionResourceBytes, readMotionResource, readMotionResourceBytes } from './videoEditMotionResources'
-import { startVideoExplanation, pauseVideoExplanation, resumeVideoExplanation, stopVideoExplanation, videoExplanationState, recordVideoExplanationPresentation, recordVideoExplanationPointer, transcribeVideoExplanation, readVideoExplanationPage, correctVideoExplanationText, videoExplanationJsonl, eraseVideoExplanation, reopenVideoExplanation, retryVideoExplanationSave, retainVideoExplanationAudio } from './videoEditExplanation'
+import { startVideoExplanation, pauseVideoExplanation, resumeVideoExplanation, stopVideoExplanation, videoExplanationState, recordVideoExplanationPresentation, recordVideoExplanationPointer, transcribeVideoExplanation, readVideoExplanationPage, correctVideoExplanationText, videoExplanationJsonl, eraseVideoExplanation, reopenVideoExplanation, retryVideoExplanationSave, retainVideoExplanationAudio, readVideoExplanationReview, correctVideoExplanationBinding, pickVideoExplanationBinding } from './videoEditExplanation'
 
 const capture = vi.hoisted(()=>({block:undefined as ((block:CapturedAudioBlock)=>void)|undefined,interrupt:undefined as ((message:string)=>void)|undefined,stop:vi.fn(async()=>{}),deny:false}))
 vi.mock('@/features/creativeIntent/recording/microphone',()=>({captureMicrophone:vi.fn(async(_origin:number,onBlock:(block:CapturedAudioBlock)=>void,onInterrupt:(message:string)=>void)=>{if(capture.deny)throw new Error('PermissionDenied');capture.block=onBlock;capture.interrupt=onInterrupt;return{stop:capture.stop}})}))
@@ -155,4 +156,22 @@ it('开始下一次和切换已封讲解先清临时原音，保留旧词稿并�
   await reopenVideoExplanation(id,first);expect(chunks.size).toBe(0);expect(owner.document.creativeIntents!.sessions.find(s=>s.id===second)?.retentionStatus).toBe('deleted')
   expect(await readVideoExplanationPage(id,0)).toMatchObject([{text:'向左移动'}])
   videoExplanationState(owner)!.collector.session.state='recoverable';await startVideoExplanation(id,crypto.randomUUID());expect(videoExplanationState(owner)!.collector.session.id).not.toBe(first)
+})
+it('粗时间人工校正不伪造历史画面，当前节目点选要求实际呈现帧并可取消', async () => {
+  const owner = await setup(), id = owner.document.id
+  await startVideoExplanation(id, crypto.randomUUID()); clock = 200; present(owner, 0); audio(); clock = 300; await stopVideoExplanation(id)
+  vi.mocked(getPlatform().audioEdit.recording.transcribe).mockImplementationOnce(async input => ({ modelId: input.modelId, providerId: 'groq', requestId: input.requestId, transcript: normalizeTimestampedTranscript({ text: '这个', segments: [{ text: '这个', startMs: 0, endMs: 100 }] }, 100, 'word') }))
+  await transcribeVideoExplanation(id, crypto.randomUUID())
+  const entry = (await readVideoExplanationPage(id, 0))[0]; if (entry.kind !== 'transcript') throw new Error('missing')
+  const mention = (await readVideoExplanationReview(id, entry)).resolution.mentions[0]
+  const target = { kind: 'video_edit.clip', id: `${id}:${getActiveVideoEditSequence(owner).clips[0].id}`, label: '主图' }
+  await correctVideoExplanationBinding(id, entry, pickedExplanationBinding(mention, [target], [.5, .5]))
+  const corrected = await readVideoExplanationReview(id, entry)
+  expect(corrected.resolution.mentions[0].confirmedByUser).toBe(true); expect(corrected.image).toBeUndefined()
+  const monitor = document.createElement('div'); monitor.dataset.videoEditProgramDisplay = ''; document.body.append(monitor)
+  const controller = new AbortController(), waiting = pickVideoExplanationBinding(owner, entry, mention, controller.signal)
+  const refused = expect(waiting).rejects.toThrow('画面正在更新')
+  monitor.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 10, clientY: 10 })); await refused
+  const cancel = new AbortController(), cancelled = pickVideoExplanationBinding(owner, entry, mention, cancel.signal)
+  cancel.abort(); await cancelled; monitor.remove()
 })

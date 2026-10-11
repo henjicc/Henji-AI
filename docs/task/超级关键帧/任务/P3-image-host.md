@@ -82,3 +82,78 @@ r5 两录制宿主各 5 步和失败帧也已逐张目视（12 张）：同意�
 - 当前持久化在暂停、结束与转写页完成时确认；录制中的定期会话 head 持久化、进程崩溃恢复、编辑 command/undo/delta 全事实记录没有在本单闭环。元数据走原文档命令，仍会进入历史；最终布局应用必须单步撤销实测。
 - 临时音频关闭图片后释放，词稿/指向仍保存；删除讲解、删除全部证据与隐私清理的公共操作需由 t156 核对正式注册链，本单不声明已验收。
 - 未修改 core、main、videoEdit 或 shared recording 采集层，故无新增主进程代码或剪辑行为分支。未手改 SDK、未执行 Git 写操作、未启停 electron:dev；正式 bundle 的自动生成产物由总管理者核对归属。
+
+### t159 审阅面板重做
+
+2026-10-11。代码按总管理者给定设计稿实现，由总管理者审查与 Git 提交。本任务没有执行 Git 写操作，没有修改 packages/ai-sdk、t158 所有权文件，没有启动或重启 electron:dev，没有真实付费调用。
+
+**实现及覆盖分级**
+
+- 图片 full/canvas-edit 与剪辑共用 360px 浮层，标题/内容/操作三段、最大 80vh、内部滚动。录制自动收起，命令带显示危险色圆点、计时及暂停/继续/结束图标；空闲只显示开始录制和首次隐私元信息，首次开始事实仅以本机布尔呈现偏好保存，未保存私密内容。
+- 按自然段排版词稿，指代词 2px 下划线/3px 偏移，已确认强调色，待确认琥珀色和小圆点；点词展开一处历史图、MapPin 与对象名。原因只在该词证据中映射一句，不显示内部编号、坐标、原因列表或分页。没有历史画面时显示对象名与缺图一句；异步换词立即隐藏旧图，迟到结果不覆盖新证据。
+- 单选最多两个候选加“其他…”，其他与重新点选进入真实作品画面，消费 pointerdown，不执行编辑或寻找不存在的历史帧。否定绑定显示保护锁与“不改动”摘要；还有 N 处待确认可跳词，已确认摘要最多五行并展开余项。超过 2000 词用既有 react-virtuoso 按段虚拟化，存储页只是分批载入，不设产品数量上限。
+- 转写仅显示进度/取消，失败复用 UiError 一句标题与重试，重试执行原失败动作；音频上传仍需原外发同意。本机原音关闭已转写审阅后释放；删除复用各宿主领域入口。
+- 静态 timeline=null 不再被剪辑呈现要求过滤：词级精度仍来自 ASR DTO、实际墙钟和音频不确定度，跨 gap 与粗时间需确认；“把这个放到那边”生成对象/目标位置差异计划，“这几个等距”按当时选中集合进入唯一布局服务，粗时间需确认完整集合。菜单/时间线不作为显示候选；剪辑原有歧义保护保留。
+- 图片截图延续 t157 的 CSS→窗口 DIP 换算，新增浮层/弹窗遮挡拒绝与捕获后复核；剪辑沿已有已呈现作品像素入口，只选该词对应的指针帧。
+- UI 骨架/首次提示属于呈现层；绑定、点选、取消与删除复用原领域服务，属原能力入口改造，没有另写 MCP 工具。公共 C2 注册/权限与通用撤销由 t158/总管理者审查，本任务不把内部 UI 校正当作公共能力已验收。
+
+**选型与设计自查**
+
+- 复用 UiTextToken、UiOptionButton、UiError、PanelTrigger 和已安装的 react-virtuoso；比较后不沿用逐词 chip/分页，不自写虚拟列表或另一套布局求解器。图片整理复用 ImageEditLayoutDraft，手动校正复用现有图层/片段命中几何，没有新增依赖。
+- 助手只凭名称和说明能否用对？对象引用和目标位置沿原私密讲解及实体语义，内部审阅已经有确定结果；公共 C2 正文写入、移动候选桥接尚未完整，不能宣称助手端闭环。
+- 能否 AI 先做、人只确认？确定的词级静态指向先解析，重叠/粗时间/缺指向才就地确认；已确认集合交原算法整理，否定对象保持保护。真实模型质量、ASR 质量没有付费验收。
+- 产物能否直接流进其他工作区？布局沿原图片文档与撤销/导出链，可作为既有其他宿主素材；讲解音频与私密证据不自动外发。移动差异计划尚未接入正式候选，不能将摘要当实际产物。
+
+**本任务实际文件范围（必要扩展已说明）**
+
+- src/core/creativeIntent/alignment.ts：静态墙钟候选、菜单忽略及缺口保护。
+- src/core/creativeIntent/deixis.ts：静态/集合指代和显式点选校正。
+- src/core/creativeIntent/deixis.test.ts：静态移动、集合、人工校正回归。
+- src/core/creativeIntent/recordingAlignment.ts：合法静态词时间精度，保持 null 时间线。
+- src/core/creativeIntent/recording.test.ts：静态 ASR 与 gap 精度回归。
+- src/features/creativeIntent/index.ts：共享面板/呈现 helper 的正式公开导出。
+- src/features/creativeIntent/ui/ExplanationReview.tsx：自然词稿与单处就地证据。
+- src/features/creativeIntent/ui/ExplanationReview.test.tsx：绑定、缺图与过期结果回归。
+- src/features/creativeIntent/ui/ExplanationPanel.tsx（新增）：双宿主共用三段骨架及状态。
+- src/features/creativeIntent/ui/ExplanationPanel.test.tsx（新增）：摘要折叠、确认跳词、虚拟化、首用提示、分批竞态。
+- src/features/creativeIntent/ui/explanationPresentation.ts（新增）：用户文案映射、分批词稿与首次呈现偏好。
+- src/features/videoEdit/panels/VideoEditExplanationControls.tsx：命令带录制与共享浮层接线。
+- src/features/videoEdit/panels/VideoEditExplanationControls.test.tsx：清私密旧稿、计时与失败重试。
+- src/features/videoEdit/VideoEditPreview.tsx：移除旧审阅侧栏占位，保留节目区域。
+- src/features/videoEdit/application/videoEditExplanation.ts（必要扩展）：精确词证据、画面点选与绑定校验。
+- src/features/videoEdit/application/videoEditExplanation.test.ts（必要扩展）：粗时间校正、呈现拒绝与取消回归。
+- src/features/imageEdit/v3/editor/ImageEditorExplanationControlsV3.tsx：共享面板与静态布局接线。
+- src/features/imageEdit/v3/editor/useImageEditorExplanationV3.ts：点选路由与截图遮挡拒绝。
+- src/features/imageEdit/v3/editor/useImageEditorExplanationV3.test.tsx：DIP、遮挡和点选路由回归。
+- src/features/imageEdit/v3/application/imageEditExplanation.ts（必要扩展）：静态计划读回、绑定/集合校验与录音释放。
+- src/features/imageEdit/v3/application/imageEditExplanation.test.ts（必要扩展）：移动计划、粗集合和手动确认回归。
+- scripts/lib/uiInspectionSceneImageEditExplanation.cjs：新面板真实宿主脚本及纯作品图断言。
+- scripts/lib/uiInspectionSceneVideoEditExplanation.cjs：新词证据/粗时间/保护/无内部文案场景。
+- 本文件、02-实施拆分.md 本单状态行、docs/rules/assistant-status.md 本单索引。
+
+**检查与证据**
+
+验证为 testing.md L2（共享 core、两直接宿主、异步读写/取消）。按用户指定目录分批单 worker 静音回归，耗时流程后台运行；没有全仓测试或完整构建。
+
+- core/creativeIntent：13 文件、126 项通过，node_modules/.cache/t159-core-final.log。
+- features/creativeIntent：7 文件、22 项通过，t159-creative-final.log；失败态后最新面板/词稿 10 项复验通过，t159-retry-final.log（该轮整轮有下述测试标签失败，不能把整轮记为通过）。
+- imageEdit/v3/editor：39 文件、166 项通过，t159-image-editor-tests.log；此后 controls 仅补失败标题/重试接线，ESLint 通过；真实双宿主仍待截图。
+- imageEditExplanation.test.ts：7 项通过，t159-image-application-final.log。
+- videoEdit unit：首次 177 文件，173 通过、两文件失败、两个基准文件跳过；失败来自运行中公开导出变化。两失败文件和讲解服务稳定源码复验 3 文件、47 项通过，t159-video-final.log。随后重试接线新增测试，预览 32 项/共享审阅 10 项通过，controls 一项因 UiError 默认英文重试标签失败；显式按设计稿设中文“重试”后 controls 4 项通过，t159-retry-control-fixed.log。不隐瞒首轮与中间轮失败。
+- videoEdit GPU：11 文件、57 项通过、4 项既有基准/不支持分支跳过，0 失败，t159-video-gpu.log；跳过项不作为已验收。
+- 两套 tsc 在 t159-tsc-renderer-delivery.log / t159-tsc-electron-delivery.log 均退出 0。重试接线后 renderer 曾退出 2，t159-tsc-renderer-final-review.log：并行 codeParamAdapter.test.ts 缺 description/number.unit 及 vector.unit=normalized 类型不符，videoEditCodeParameters.test.ts 的效果参数、执行器参数/结果类型不符，均非本单文件；未越权修改。随后并行修复已落入工作区，最终完整 renderer 检查 t159-tsc-renderer-handoff.log 退出 0，本单文件未见类型错误。
+- 全部本单 TS/TSX/CJS ESLint 通过，t159-eslint-delivery.log；重试接线四文件 t159-retry-eslint.log 通过，最终标签 t159-label-eslint.log 通过。
+- check:surface / colors / icons / ui-residue / dependency-graph 均通过，t159-check-<名称>-delivery.log。dependency-graph 初轮跨 feature 私有导入失败，已改正式 index 导出后复验通过。
+- check:assistant-capabilities 通过，t159-check-assistant-capabilities-delivery.log（结构检查、覆盖13项、通用不变量31文件206项）；本单未动正式能力声明。
+- 正式场景工具 45 项通过，t159-scenes-tests.log。git diff --check 只读核对本单文件，无空白错误；未执行任何 Git 写动作。
+- Reality 只尝试一轮：node_modules/.cache/t159-reality.log，退出1，产物13:24:35、最新源码13:52:25，被新鲜度门禁拒绝。没有绕过门禁、没有重新构建或重试；node_modules/.cache/ui-inspection.lock 已在 finally 释放。**截图待总管理者补拍**，不能将旧两张基线或 jsdom 当本次视觉验收。
+
+**需要总管理者注意的未闭环边界**
+
+- 静态对象/位置差异计划已产生，但 imageEditLayoutDraft 只提供整理/钉点/应用，没有消费任意位置差异的候选接口，且为 t158 所有。本单保留移动摘要与禁用“生成候选”的一句 tooltip，未直接改图层冒充候选。剪辑也缺正式移动计划转候选的 UI 桥接，主按钮保持禁用；图片等距/对齐有现成路径。请先补正式桥接再宣称设计稿的全部可执行状态完成。
+- 图片删除沿 document.set-creative-intents，当前作品会移除讲解并释放原音，但已有文档撤销历史仍可能保留词稿/历史图引用；不能宣称与剪辑 purge 一样彻底不可恢复。需要在原历史服务补单会话隐私擦除，而非清空全部作品历史。
+- 新图裁切/亮图标记、360px/80vh 实际呈现与长词稿性能尚无本轮正式截图/规模测量。对照旧截图已目视确认其问题，未声称新界面视觉验收完成。采集同源排查覆盖图片工具箱/画布共用 hook 和剪辑已呈现像素路径；surfaceObservation/canvasProjectCover 的其他 native CSS 坐标风险沿 t157 记录，未越权扩修。
+- 目录回归是其运行时源码的证据；随后并行新增 cameraAdapter/codeParamAdapter/maskPathAdapter/propertyAdapter 及代码参数测试不属于本单，不能外推为那些新增文件已验证。总管理者需串行集成审查新增适配器与移动候选桥接；上述类型阻塞在最终 renderer 检查已消失。
+- 未改 main/preload，不需因本单重启主进程；遵守授权，没有启动/重启开发实例。没有公共工具新增、SDK 改动、真实 ASR 或意图模型调用。
+
+**t159 交回前最后定向复验（14:35）**：关闭某待确认词证据后，再点击唯一待确认摘要仍能重新展开，面板/词稿 2 文件10项通过，t159-focus-final.log；对应 ESLint t159-focus-eslint.log 退出0。剪辑失败重试按当前 recoverable 状态恢复 ASR 请求，controls 最新5项通过，t159-asr-retry-final.log；对应 ESLint t159-asr-retry-eslint.log 退出0。最后 renderer tsc（含最终 focus/重试源码）t159-tsc-renderer-handoff.log 退出0；Electron tsc 的有效通过证据仍为 t159-tsc-electron-delivery.log，此后未修改 core/main。最终截图锁不存在；未重新尝试 Reality。

@@ -34,7 +34,7 @@ import { VideoEditTextOverlay } from './panels/VideoEditTextOverlay'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
 import { useVideoEditMotionGesture } from './panels/useVideoEditMotionGesture'
 import { VideoEditMotionControls, VideoEditMotionOverlay } from './panels/VideoEditMotionControls'
-import { VideoEditExplanationControls, VideoEditExplanationReview } from './panels/VideoEditExplanationControls'
+import { VideoEditExplanationControls } from './panels/VideoEditExplanationControls'
 import { recordVideoExplanationPresentation, recordVideoExplanationPointer, pauseVideoExplanation, videoExplanationState } from './application/videoEditExplanation'
 import { videoMotionComposition, videoMotionState, recordVideoMotionPresentation, setVideoMotionOptions, subscribeVideoMotion, pauseVideoMotion } from './application/videoEditMotionDraft'
 import { VideoEditInOutDuration, VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
@@ -641,7 +641,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         })}
       </div>}
     </div>
-    <VideoEditExplanationReview owner={instance} onError={onError} />
     </div>
     {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线工具栏有同一读数），
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}

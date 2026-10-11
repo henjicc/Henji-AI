@@ -45,9 +45,9 @@ async function runImageExplanationScene({ page, app, host, read, select, shot, e
   const open = async () => { if (!await controls().isVisible()) await trigger().click() }
   const close = async () => { if (await controls().isVisible()) { await trigger().click(); await controls().waitFor({ state: 'hidden' }) } }
   await select(['hero', 'mirror', 'rotate'])
-  await open(); await button('开始录制讲解').click(); await shot('录制范围确认')
-  await button('同意并开始录制').click()
-  await host().getByRole('status').filter({ hasText: /录制 \d+ 秒/ }).waitFor(); await close(); await shot('开始录制')
+  await open(); await shot('首次录制提示')
+  await button('开始录制').click()
+  await host().getByRole('button', { name: '暂停图片讲解', exact: true }).waitFor(); await close(); await shot('开始录制')
   // A harmless hover followed by a down/up on the already-selected subject. The move tool stays untouched.
   const preview = host().locator('[data-preview-surface]')
   const bounds = await preview.boundingBox(); assert.ok(bounds)
@@ -85,11 +85,13 @@ async function runImageExplanationScene({ page, app, host, read, select, shot, e
   }
   await app.evaluate((_electron, transcripts) => { globalThis.__t157Transcripts = transcripts }, transcripts)
   await button('转写并审阅').click(); await button('确认上传音频并转写').click()
-  await button('查看词稿「这几个等距」').first().waitFor({ timeout: 60000 }); await shot('转写审阅')
-  await button('查看词稿「这几个等距」').first().click()
+  await button('查看「这几个」的指向').first().waitFor({ timeout: 60000 }); await shot('转写审阅')
+  await button('查看「这几个」的指向').first().click()
   await page.getByAltText('指向时保存的作品画面').waitFor({ timeout: 60000 }); await shot('点词回看历史画面和图层')
+  assert.doesNotMatch(await controls().innerText(), /\d+(?:\.\d+)?%|位置 \d|对象 \d|还不能生成修改计划|上一页|下一页|候选更新|不会重放/)
+  assert.equal(await controls().locator('[data-explanation-evidence]').count(), 1)
   const before = (await read()).document.layers
-  await button('生成布局候选').click(); await controls().waitFor({ state: 'hidden', timeout: 60000 })
+  await button('生成候选').click(); await controls().waitFor({ state: 'hidden', timeout: 60000 })
   await host().getByRole('button', { name: '随手摆', exact: true }).click()
   const layout = page.locator('[data-image-layout-controls]')
   await layout.getByRole('radio', { name: '等距排列', exact: true }).waitFor(); await shot('布局候选')

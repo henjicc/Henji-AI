@@ -4,7 +4,7 @@ import { alignExplanationEntry, type PointerEvidence } from './alignment'
 import type { ExplanationEvent, ExplanationSession, TranscriptEntry } from './schema'
 
 export type IntentSlot = 'target' | 'source' | 'destination' | 'dwell' | 'exit'
-export interface DeicticCandidate { evidenceSeqs: number[]; targetRefs: ApplicationRef[]; point: [number, number]; timeline: Timeline; pointer: PointerEvidence }
+export interface DeicticCandidate { evidenceSeqs: number[]; targetRefs: ApplicationRef[]; point: [number, number]; timeline: Timeline | null; pointer: PointerEvidence | null }
 export interface DeicticMention {
   id: string; text: string; slot: IntentSlot; entry: TranscriptEntry; entries: TranscriptEntry[]; negated: boolean
   candidates: DeicticCandidate[]; selected?: DeicticCandidate; issues: string[]; confirmedByUser: boolean
@@ -12,14 +12,14 @@ export interface DeicticMention {
 export interface DeixisResolution { text: string; mentions: DeicticMention[]; issues: string[]; negated: boolean; dwellSeconds?: number; exitDirection?: 'left' | 'right' | 'up' | 'down' }
 export type ExplanationBinding = ExplanationSession['bindings'][number]
 
-function candidates(pointers: readonly PointerEvidence[]): DeicticCandidate[] {
+function candidates(pointers: readonly PointerEvidence[], group = false): DeicticCandidate[] {
   const down = pointers.filter(pointer => pointer.phase === 'down')
   const usable = down.length ? down : pointers
   const result = new Map<string, DeicticCandidate>()
   for (const pointer of usable) {
-    if (!pointer.compositionPoint || !pointer.timeline) continue
+    if (!pointer.compositionPoint || !pointer.timeline && pointer.unavailableReason !== 'static') continue
     // Retain EVERY overlapping hit. Selection and display names cannot disambiguate a historical hit.
-    const refs = [...new Map([...pointer.hoverRefs, ...pointer.pointedRefs].map(ref => [refKey(ref), ref])).values()]
+    const refs = [...new Map((group && pointer.unavailableReason === 'static' ? pointer.selectedRefs : [...pointer.hoverRefs, ...pointer.pointedRefs]).map(ref => [refKey(ref), ref])).values()]
     const key = JSON.stringify([pointer.timeline, pointer.compositionPoint, refs.map(refKey).sort()])
     const existing = result.get(key)
     if (existing) existing.evidenceSeqs.push(pointer.seq)
@@ -39,35 +39,40 @@ export function resolveDeixis(entries: readonly TranscriptEntry[], events: reado
   const mentions: DeicticMention[] = []
   let offset = 0
   const ranges = ordered.map(entry => { const start = offset; offset += entry.text.length; return { entry, start, end: offset } })
-  for (const match of text.matchAll(/刚才那个|这里|这儿|那边|那里|这个|那个|这|那|它/g)) {
+  for (const match of text.matchAll(/刚才那个|这几个|那几个|这里|这儿|那边|那里|这个|那个|这|那|它/g)) {
     const at = match.index!; const range = ranges.find(item => at >= item.start && at < item.end)!
     const prefix = text.slice(Math.max(0, at - 8), at)
     const slot: IntentSlot = /(?:从|由)$/.test(prefix) ? 'source' : /(?:退出到|离开到|移出到)$/.test(prefix) ? 'exit' : /(?:到|至|移向|放在)$/.test(prefix) ? 'destination' : /(?:离开|退出)$/.test(prefix) ? 'exit' : /(?:停在|留在)$/.test(prefix) ? 'dwell' : 'target'
     const phraseEntries = ranges.filter(item => item.start < at + match[0].length && item.end > at).map(item => item.entry)
     const aligned = alignExplanationEntry({ ...range.entry, monoSpanUs: [phraseEntries[0].monoSpanUs[0], phraseEntries[phraseEntries.length - 1].monoSpanUs[1]], timelineSpans: phraseEntries.flatMap(entry => entry.timelineSpans) }, events, clocks)
     for (const entry of phraseEntries) for (const issue of alignExplanationEntry(entry, events, clocks).issues) if (!aligned.issues.includes(issue)) aligned.issues.push(issue)
-    const options = candidates(aligned.pointers)
+    const group = /[这那]几个/.test(match[0]) && range.entry.unavailableReason === 'static'
+    const options = candidates(aligned.pointers, group)
     const mentionIssues = [...aligned.issues]
     if (phraseEntries.some(entry => entry.granularity === 'segment' || entry.alignmentQuality !== 'precise')) mentionIssues.push('只有句级或粗时间，需确认指向')
     if (match[0] === '刚才那个') mentionIssues.push('“刚才”需要明确选择历史指向')
     if (options.length > 1) mentionIssues.push('有多个位置或访问，需选择对应证据')
-    if (options.some(option => option.targetRefs.length > 1)) mentionIssues.push('指向重叠对象，需确认其中一个')
+    if (!group && options.some(option => option.targetRefs.length > 1)) mentionIssues.push('指向重叠对象，需确认其中一个')
     if ((slot === 'target' || slot === 'source') && !options.some(option => option.targetRefs.length)) mentionIssues.push('没有可确认的历史对象')
     const id = `${range.entry.utteranceId}:${slot}:${at}`
     const binding = bindings.find(value => value.id === id)
     let selected = options.length === 1 && !mentionIssues.length ? options[0] : undefined
     let confirmedByUser = false
     if (binding?.correctedByUser && binding.confidence === 'confirmed' && phraseEntries.every(entry => binding.utteranceIds.includes(entry.utteranceId) && (!entry.wordId || binding.wordIds.includes(entry.wordId))) && (phraseEntries.some(entry => entry.wordId) || binding.wordIds.length === 0)) {
-      const candidate = options.find(option => binding.evidenceSeqs.length > 0 && binding.evidenceSeqs.every(seq => option.evidenceSeqs.includes(seq)) && binding.point?.every((value, index) => value === option.point[index]) && binding.targetRefs.every(ref => option.targetRefs.some(target => refKey(target) === refKey(ref))) && binding.timelineSpans.some(span => span.start?.visitRef === option.timeline.visitRef && span.start.sequenceRef.id === option.timeline.sequenceRef.id))
-      if (candidate && binding.targetRefs.length <= 1 && (!(slot === 'target' || slot === 'source') || binding.targetRefs.length === 1) && !issues.length && !aligned.issues.some(issue => issue.includes('置信度') || issue.includes('缺口'))) {
+      const candidate = options.find(option => binding.evidenceSeqs.length > 0 && binding.evidenceSeqs.every(seq => option.evidenceSeqs.includes(seq)) && binding.point?.every((value, index) => value === option.point[index]) && binding.targetRefs.every(ref => option.targetRefs.some(target => refKey(target) === refKey(ref))) && binding.timelineSpans.some(span => option.timeline ? span.start?.visitRef === option.timeline.visitRef && span.start.sequenceRef.id === option.timeline.sequenceRef.id : !span.start && !span.end && span.clockSegmentRef === option.pointer?.clockSegmentRef && span.evidenceSeqs.some(seq => option.evidenceSeqs.includes(seq))))
+      if (candidate && (group || binding.targetRefs.length <= 1) && (!(slot === 'target' || slot === 'source') || (group ? binding.targetRefs.length > 0 : binding.targetRefs.length === 1)) && !issues.length && !aligned.issues.some(issue => issue.includes('置信度') || issue.includes('缺口'))) {
         selected = { ...candidate, targetRefs: binding.targetRefs }; confirmedByUser = true; mentionIssues.length = 0
+      } else if (!binding.evidenceSeqs.length && binding.point && binding.point.every(Number.isFinite) && binding.timelineSpans.length && binding.timelineSpans.every(span => phraseEntries.some(entry => entry.clockSegmentRef === span.clockSegmentRef)) && (group || binding.targetRefs.length <= 1) && (!(slot === 'target' || slot === 'source') || binding.targetRefs.length > 0)) {
+        // Explicit correction is user evidence, never a fabricated historical pointer/frame.
+        selected = { evidenceSeqs: [], targetRefs: binding.targetRefs, point: binding.point, timeline: range.entry.timeline, pointer: null }
+        confirmedByUser = true; mentionIssues.length = 0
       } else mentionIssues.push('原绑定不再匹配历史证据，请重新确认')
     }
     mentions.push({ id, text: match[0], slot, entry: range.entry, entries: phraseEntries, negated, candidates: options, selected, issues: mentionIssues, confirmedByUser })
   }
   // One click cannot silently stand for both ends of a movement. An intentional zero-distance
   // instruction is still possible, but requires explicit confirmation of both roles.
-  for (const source of mentions.filter(mention => mention.slot === 'source')) for (const destination of mentions.filter(mention => mention.slot === 'destination' || mention.slot === 'exit')) {
+  for (const source of mentions.filter(mention => mention.slot === 'source' || mention.slot === 'target' && mention.entry.unavailableReason === 'static')) for (const destination of mentions.filter(mention => mention.slot === 'destination' || mention.slot === 'exit')) {
     if (source.selected && destination.selected && source.selected.evidenceSeqs.some(seq => destination.selected!.evidenceSeqs.includes(seq)) && !(source.confirmedByUser && destination.confirmedByUser)) {
       for (const mention of [source, destination]) if (!mention.confirmedByUser) { mention.selected = undefined; mention.issues.push('起点和终点共享同一指向，需分别确认') }
     }
@@ -88,6 +93,15 @@ export function resolveDeixis(entries: readonly TranscriptEntry[], events: reado
 
 export function confirmedExplanationBinding(mention: DeicticMention, candidate: DeicticCandidate, target?: ApplicationRef): ExplanationBinding {
   if (!mention.candidates.includes(candidate) || target && !candidate.targetRefs.some(ref => refKey(ref) === refKey(target))) throw new Error('只能选择这次讲解的历史候选')
-  if ((mention.slot === 'target' || mention.slot === 'source') && !target) throw new Error('请确认对应对象')
-  return { id: mention.id, utteranceIds: [...new Set(mention.entries.map(entry => entry.utteranceId))], wordIds: mention.entries.flatMap(entry => entry.wordId ? [entry.wordId] : []), targetRefs: target ? [candidate.targetRefs.find(ref => refKey(ref) === refKey(target))!] : [], point: candidate.point, evidenceSeqs: candidate.evidenceSeqs, timelineSpans: [{ monoSpanUs: [candidate.pointer.monoUs, candidate.pointer.monoUs], clockSegmentRef: candidate.pointer.clockSegmentRef, start: candidate.timeline, end: candidate.timeline, quality: 'presented', evidenceSeqs: candidate.evidenceSeqs }], confidence: 'confirmed', correctedByUser: true }
+  if (!candidate.pointer) throw new Error('请使用画面点选校正指代')
+  const group = /[这那]几个/.test(mention.text) && candidate.pointer.unavailableReason === 'static'
+  if ((mention.slot === 'target' || mention.slot === 'source') && !target && !(group && candidate.targetRefs.length)) throw new Error('请确认对应对象')
+  return { id: mention.id, utteranceIds: [...new Set(mention.entries.map(entry => entry.utteranceId))], wordIds: mention.entries.flatMap(entry => entry.wordId ? [entry.wordId] : []), targetRefs: target ? [candidate.targetRefs.find(ref => refKey(ref) === refKey(target))!] : group ? candidate.targetRefs : [], point: candidate.point, evidenceSeqs: candidate.evidenceSeqs, timelineSpans: [{ monoSpanUs: [candidate.pointer.monoUs, candidate.pointer.monoUs], clockSegmentRef: candidate.pointer.clockSegmentRef, start: candidate.timeline, end: candidate.timeline, quality: candidate.timeline ? 'presented' : 'coarse', evidenceSeqs: candidate.evidenceSeqs }], confidence: 'confirmed', correctedByUser: true }
+}
+
+export function pickedExplanationBinding(mention: DeicticMention, targetRefs: ApplicationRef[], point: [number, number]): ExplanationBinding {
+  if (!point.every(Number.isFinite) || point.some(value => value < 0 || value > 1)) throw new Error('请在作品画面内点选')
+  const group = /[这那]几个/.test(mention.text) && mention.entry.unavailableReason === 'static'
+  if ((mention.slot === 'target' || mention.slot === 'source') && (!targetRefs.length || !group && targetRefs.length !== 1)) throw new Error('请选择对应对象')
+  return { id: mention.id, utteranceIds: [...new Set(mention.entries.map(entry => entry.utteranceId))], wordIds: mention.entries.flatMap(entry => entry.wordId ? [entry.wordId] : []), targetRefs, point, evidenceSeqs: [], timelineSpans: mention.entries.flatMap(entry => entry.timelineSpans), confidence: 'confirmed', correctedByUser: true }
 }

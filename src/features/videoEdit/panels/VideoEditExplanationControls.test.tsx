@@ -8,41 +8,74 @@ import { recordingFixtureSession } from '@/core/creativeIntent/fixtures/recordin
 import { transcriptEventSchema } from '@/core/creativeIntent/schema'
 import type { VideoEditInstance } from '../application/videoEditService'
 import type { VideoExplanationState } from '../application/videoEditExplanation'
-import { VideoEditExplanationControls, VideoEditExplanationReview } from './VideoEditExplanationControls'
+import { VideoEditExplanationControls } from './VideoEditExplanationControls'
 
-const control=vi.hoisted(()=>({state:undefined as VideoExplanationState|undefined,version:0,listeners:new Set<()=>void>(),read:vi.fn(),stream:vi.fn()}))
-vi.mock('../application/videoEditExplanation',()=>({videoExplanationState:()=>control.state,videoExplanationRevision:()=>control.version,subscribeVideoExplanation:(listener:()=>void)=>{control.listeners.add(listener);return()=>control.listeners.delete(listener)},readVideoExplanationPage:control.read,videoExplanationJsonl:control.stream,readVideoExplanationReview:vi.fn(),correctVideoExplanationBinding:vi.fn(),startVideoExplanation:vi.fn(),stopVideoExplanation:vi.fn(),pauseVideoExplanation:vi.fn(),resumeVideoExplanation:vi.fn(),transcribeVideoExplanation:vi.fn(),eraseVideoExplanation:vi.fn(),reopenVideoExplanation:vi.fn(),cancelVideoExplanationTranscription:vi.fn(),correctVideoExplanationText:vi.fn(),clearTemporaryVideoExplanationAudio:vi.fn(),retainVideoExplanationAudio:vi.fn(),readVideoExplanationAudio:vi.fn(),retryVideoExplanationSave:vi.fn()}))
-vi.mock('@/features/settings',()=>({modelDefaultsManager:{resolveTranscriptionModelId:()=>{throw new Error('not configured')},listTranscriptionModels:()=>[]}}))
-vi.mock('react-virtuoso',()=>({Virtuoso:({data,itemContent}:{data:unknown[];itemContent:(index:number,value:unknown)=>ReactNode})=><div>{data.map((value,index)=><div key={index}>{itemContent(index,value)}</div>)}</div>}))
-let root:Root|undefined;let element:HTMLElement|undefined
-afterEach(async()=>{await act(async()=>root?.unmount());element?.remove();root=undefined;control.state=undefined;control.listeners.clear();vi.clearAllMocks()})
-function state(id:string):VideoExplanationState{
-  const collector=new RecordingCollector({...recordingFixtureSession(),id,state:'reviewing'},async()=>{},()=>{})
-  return{collector,originMs:0,elapsedUs:1000,busy:false,erased:false,controller:new AbortController(),uncertaintyUs:[]}
+const control = vi.hoisted(() => ({ state: undefined as VideoExplanationState | undefined, version: 0, listeners: new Set<() => void>(), read: vi.fn(), review: vi.fn(), start: vi.fn(), transcribe: vi.fn() }))
+vi.mock('../application/videoEditExplanation', () => ({ videoExplanationState: () => control.state, videoExplanationRevision: () => control.version, subscribeVideoExplanation: (listener: () => void) => { control.listeners.add(listener); return () => control.listeners.delete(listener) }, readVideoExplanationPage: control.read, readVideoExplanationReview: control.review, correctVideoExplanationBinding: vi.fn(), pickVideoExplanationBinding: vi.fn(), startVideoExplanation: control.start, stopVideoExplanation: vi.fn(), pauseVideoExplanation: vi.fn(), resumeVideoExplanation: vi.fn(), transcribeVideoExplanation: control.transcribe, eraseVideoExplanation: vi.fn(), cancelVideoExplanationTranscription: vi.fn(), clearTemporaryVideoExplanationAudio: vi.fn(async () => {}), retryVideoExplanationSave: vi.fn() }))
+vi.mock('../application/videoEditService', () => ({ subscribeVideoEditDomain: () => () => {}, subscribeVideoEditView: () => () => {}, videoEditDomainRevision: () => 0, videoEditViewRevision: () => 0 }))
+vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, value: unknown) => ReactNode }) => <div>{data.map((value, index) => <div key={index}>{itemContent(index, value)}</div>)}</div> }))
+let root: Root | undefined, element: HTMLElement | undefined
+const owner = { document: { id: 'fixture-document', revision: 1 } } as unknown as VideoEditInstance
+const onError = vi.fn()
+afterEach(async () => { await act(async () => root?.unmount()); element?.remove(); root = undefined; control.state = undefined; control.listeners.clear(); vi.clearAllMocks() })
+function state(id: string): VideoExplanationState {
+  const collector = new RecordingCollector({ ...recordingFixtureSession(), id, state: 'reviewing' }, async () => {}, () => {})
+  collector.session.pages = [{ resourceId: 'page', digest: `sha256:${'1'.repeat(64)}`, bytes: 1, count: 1, kind: 'transcript', monoSpanUs: [0, 1000], seqSpan: [0, 1] }]
+  return { collector, originMs: 0, elapsedUs: 42000000, busy: false, erased: false, controller: new AbortController(), uncertaintyUs: [] }
 }
-it('E09 删除/换会话清除词稿缓存，迟到JSONL批次不能在新讲解中复活',async()=>{
-  const owner={document:{id:'fixture-document'}} as unknown as VideoEditInstance;const onError=vi.fn()
-  const entry=transcriptEventSchema.parse({kind:'transcript',eventId:'event',seq:1,monoUs:0,timeline:null,unavailableReason:'missing-presentation',clockSegmentRef:'clock',utteranceId:'utterance',text:'PRIVATE transcript old',audioSegmentRef:'audio',startSample:0,endSample:48,monoSpanUs:[0,1000],timelineSpans:[],granularity:'segment',alignmentQuality:'unavailable',source:'asr'})
-  control.state=state('old-session');control.read.mockResolvedValue([entry]);control.version=0
-  let resolve!:(value:IteratorResult<string>)=>void;control.stream.mockReturnValue({next:()=>new Promise<IteratorResult<string>>(done=>{resolve=done})})
-  element=document.createElement('div');document.body.append(element);root=createRoot(element)
-  await act(async()=>root!.render(<VideoEditExplanationReview owner={owner} onError={onError}/>))
-  expect(element.querySelector('textarea')?.value).toBe('PRIVATE transcript old')
-  await act(async()=>{Array.from(element!.querySelectorAll('button')).find(button=>button.textContent==='预览结构化输入')!.click()})
-  await act(async()=>{control.state=undefined;control.version++;control.listeners.forEach(listener=>listener())})
-  expect(element.textContent).toBe('')
-  control.read.mockResolvedValue([])
-  await act(async()=>{control.state=state('new-session');control.version++;control.listeners.forEach(listener=>listener())})
-  await act(async()=>{resolve({done:false,value:'PRIVATE JSONL old'});await Promise.resolve()})
-  expect(element.querySelector('textarea')).toBeNull();expect(element.textContent).not.toContain('PRIVATE');expect(onError).not.toHaveBeenCalled()
+const button = (text: string): HTMLButtonElement => Array.from(document.querySelectorAll('button')).find(button => button.textContent === text || button.getAttribute('aria-label') === text)!
+async function mount(): Promise<void> {
+  element = document.createElement('div'); document.body.append(element); root = createRoot(element)
+  await act(async () => root!.render(<VideoEditExplanationControls owner={owner} onError={onError} />))
+  await act(async () => button('录制讲解').click())
+}
+it('删除或换会话后清空私密词稿；旧异步批次不能复活', async () => {
+  const entry = transcriptEventSchema.parse({ kind: 'transcript', eventId: 'event', seq: 1, monoUs: 0, timeline: null, unavailableReason: 'missing-presentation', clockSegmentRef: 'clock', utteranceId: 'utterance', text: 'PRIVATE transcript old', audioSegmentRef: 'audio', startSample: 0, endSample: 48, monoSpanUs: [0, 1000], timelineSpans: [], granularity: 'segment', alignmentQuality: 'unavailable', source: 'asr' })
+  control.state = state('old-session'); control.read.mockResolvedValue([entry]); control.version = 0
+  control.review.mockImplementation(async value => ({ resolution: { text: value.text, mentions: [], issues: [], negated: false }, plan: { changes: [], protectedRefs: [], issues: [], status: 'blocked', recordedOperationRefs: [] } }))
+  await mount(); expect(document.body.textContent).toContain('PRIVATE transcript old')
+  let finish!: (value: unknown[]) => void
+  control.read.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+  await act(async () => { control.state = state('pending-session'); control.version++; control.listeners.forEach(listener => listener()) })
+  await act(async () => { control.state = state('new-session'); control.read.mockResolvedValue([]); control.version++; control.listeners.forEach(listener => listener()) })
+  await act(async () => finish([entry]))
+  expect(document.body.textContent).not.toContain('PRIVATE'); expect(onError).not.toHaveBeenCalled()
+  expect(document.querySelector('textarea')).toBeNull(); expect(document.body.textContent).not.toMatch(/上一页|下一页|位置 1|对象 1/)
 })
-it('原音失效的可恢复会话可以开始新讲解，不提供无效继续入口',async()=>{
-  const owner={document:{id:'fixture-document'}} as unknown as VideoEditInstance
-  control.state=state('expired-session');control.state.collector.session.state='recoverable';control.state.collector.session.retentionStatus='deleted';control.version=0
-  element=document.createElement('div');document.body.append(element);root=createRoot(element)
-  await act(async()=>root!.render(<VideoEditExplanationControls owner={owner} onError={vi.fn()}/>))
-  await act(async()=>element!.querySelector('button')!.click())
-  const buttons=Array.from(document.querySelectorAll('button'))
-  expect(buttons.find(button=>button.textContent==='开始录制讲解')?.disabled).toBe(false)
-  expect(buttons.some(button=>button.textContent==='继续录制')).toBe(false)
+it('原音失效且无词稿时提供开始录制，初次提示不重复出现', async () => {
+  control.state = state('expired'); control.state.collector.session.state = 'recoverable'; control.state.collector.session.retentionStatus = 'deleted'; control.state.collector.session.pages = []
+  control.read.mockResolvedValue([])
+  control.start.mockResolvedValue(undefined)
+  await mount()
+  expect(button('开始录制').disabled).toBe(false)
+  await act(async () => button('开始录制').click())
+  expect(control.start).toHaveBeenCalledOnce(); expect(document.body.textContent).not.toContain('继续录制')
+})
+it('录制计时位于命令带，暂停与结束保持图标按钮，面板自动收起', async () => {
+  control.state = state('recording'); control.state.collector.session.state = 'recording'; control.state.collector.session.pages = []
+  element = document.createElement('div'); document.body.append(element); root = createRoot(element)
+  await act(async () => root!.render(<VideoEditExplanationControls owner={owner} onError={onError} />))
+  expect(button('录制讲解').textContent).toBe('0:42')
+  expect(button('暂停录制讲解')).toBeTruthy(); expect(button('结束录制讲解')).toBeTruthy()
+  expect(document.querySelector('[aria-label="讲解词稿审阅"]')).toBeNull()
+})
+it('失败只给一句标题，重试执行刚才失败的操作', async () => {
+  control.start.mockRejectedValueOnce(new Error('internal microphone cause')).mockResolvedValue(undefined)
+  await mount()
+  await act(async () => button('开始录制').click())
+  expect(document.body.textContent).toContain('录制失败'); expect(document.body.textContent).not.toContain('internal microphone cause')
+  await act(async () => button('重试').click())
+  expect(control.start).toHaveBeenCalledTimes(2)
+})
+
+it('转写重试读取当前恢复状态，不按首次闭包重复新建转写请求', async () => {
+  control.state = state('retry-asr'); control.read.mockResolvedValue([])
+  control.transcribe.mockImplementationOnce(async () => { control.state!.collector.session.state = 'recoverable'; throw new Error('provider interrupted') }).mockResolvedValue(undefined)
+  await mount()
+  await act(async () => button('转写并审阅').click())
+  await act(async () => button('同意上传并转写').click())
+  expect(document.body.textContent).toContain('转写失败')
+  await act(async () => button('重试').click())
+  expect(control.transcribe).toHaveBeenCalledTimes(2)
+  expect(control.transcribe.mock.calls[0][2]).toBe(false); expect(control.transcribe.mock.calls[1][2]).toBe(true)
 })

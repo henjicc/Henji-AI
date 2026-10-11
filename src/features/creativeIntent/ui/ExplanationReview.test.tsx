@@ -9,6 +9,7 @@ import type { PointerEvidence } from '@/core/creativeIntent/alignment'
 import type { ClockSegment, Timeline } from '@/core/creativeIntent/contracts'
 import type { TranscriptEntry } from '@/core/creativeIntent/schema'
 import { ExplanationReview, type ExplanationReviewResult } from './ExplanationReview'
+import { explanationChanges } from './explanationPresentation'
 
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, value: unknown) => ReactNode }) => <div>{data.map((value, index) => <div key={index}>{itemContent(index, value)}</div>)}</div> }))
 let root: Root | undefined; let element: HTMLElement | undefined
@@ -33,33 +34,34 @@ it('点击真实词显示历史缺图与重叠确认，改绑定使当前差异�
   })
   const bind = vi.fn(async (_entry: TranscriptEntry, binding: ExplanationBinding) => { bindings = [binding] })
   await mount(read, bind)
-  expect(element!.textContent).toContain('指向重叠对象'); expect(element!.textContent).toContain('这处没有保存历史画面')
-  const buttons = Array.from(element!.querySelectorAll('button')).filter(button => button.textContent?.startsWith('确认对象'))
+  await act(async () => element!.querySelector('button')!.click())
+  expect(element!.textContent).toContain('这里有几个对象重叠，请选一个'); expect(element!.textContent).toContain('这处没有保存当时的画面')
+  const buttons = Array.from(element!.querySelectorAll('[role="radio"]')).filter(button => button.textContent === '同名') as HTMLButtonElement[]
   expect(buttons).toHaveLength(2)
   await act(async () => buttons[1].click())
-  expect(bind.mock.calls[0][1].targetRefs).toEqual([b]); expect(element!.textContent).toContain('候选更新：1')
-  expect(element!.textContent).toContain('从 50.0%, 50.0% 到 80.0%, 50.0%')
-  await act(async () => Array.from(element!.querySelectorAll('button')).filter(button => button.textContent?.startsWith('确认对象'))[0].click())
-  expect(element!.textContent).toContain('从 40.0%, 50.0% 到 80.0%, 50.0%')
+  expect(bind.mock.calls[0][1].targetRefs).toEqual([b])
+  expect(explanationChanges(await read())).toEqual(['同名 移到右侧'])
+  expect(element!.textContent).not.toMatch(/位置 1|对象 1|%|候选更新|还不能生成|不会重放/)
+  expect(element!.querySelectorAll('[role="radio"]')).toHaveLength(0)
 })
 it('关闭或卸载后迟到的私密结果不恢复旧稿，也不报读取错误', async () => {
   let finish!: (value: ExplanationReviewResult) => void
   const resolution = resolveDeixis([entry], [pointer], clocks)
   const result = { resolution, plan: buildIntentDifferencePlan([resolution], [], [], []) }
   await mount(() => new Promise(resolve => { finish = resolve }))
-  await act(async () => element!.querySelector('button')!.click())
+  await act(async () => { root!.unmount(); root = undefined })
   await act(async () => finish(result))
-  expect(element!.textContent).toBe('这个')
+  expect(element!.textContent).toBe('')
 })
 it('当前作品状态变化重读差异，旧基线的迟到结果不能覆盖新计划', async () => {
   let finish!: (value: ExplanationReviewResult) => void
   const resolution = resolveDeixis([entry], [pointer], clocks)
   const current = { resolution, plan: { changes: [], protectedRefs: [], issues: ['新状态需要确认'], status: 'blocked' as const, recordedOperationRefs: [] } }
   const read = vi.fn().mockImplementationOnce(() => new Promise<ExplanationReviewResult>(resolve => { finish = resolve })).mockResolvedValue(current)
-  const bind = vi.fn(); const error = vi.fn()
+  const bind = vi.fn(); const error = vi.fn(); const reported = vi.fn()
   element = document.createElement('div'); document.body.append(element); root = createRoot(element)
-  await act(async () => root!.render(<ExplanationReview entry={entry} onRead={read} onBind={bind} onError={error} initiallyOpen contextKey="before" />))
-  await act(async () => root!.render(<ExplanationReview entry={entry} onRead={read} onBind={bind} onError={error} initiallyOpen contextKey="after" />))
+  await act(async () => root!.render(<ExplanationReview entry={entry} onRead={read} onBind={bind} onError={error} onResult={reported} initiallyOpen contextKey="before" />))
+  await act(async () => root!.render(<ExplanationReview entry={entry} onRead={read} onBind={bind} onError={error} onResult={reported} initiallyOpen contextKey="after" />))
   await act(async () => finish({ resolution, plan: { ...current.plan, issues: ['过期基线'] } }))
-  expect(read).toHaveBeenCalledTimes(2); expect(element!.textContent).toContain('新状态需要确认'); expect(element!.textContent).not.toContain('过期基线')
+  expect(read).toHaveBeenCalledTimes(2); expect(reported).toHaveBeenCalledOnce(); expect(reported).toHaveBeenCalledWith(entry, current); expect(element!.textContent).not.toContain('过期基线')
 })
