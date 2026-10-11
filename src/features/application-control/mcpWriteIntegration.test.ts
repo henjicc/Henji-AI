@@ -71,6 +71,90 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       expect((await client.callTool({ name: 'create_document', arguments: create })).structuredContent).toEqual(created.structuredContent)
       expect(useProjectStore.getState().currentProjectId).toBe(currentProjectId)
       expect(operations.store.get(createId, identity.id)?.state).toBe('completed')
+
+      // t168 外部客户端契约：仅替换像素/媒体仓库边界，MCP、反射、Session 与账本均真实。
+      const video = await import('@/features/videoEdit/application/videoEditService')
+      const observation = await import('@/features/videoEdit/application/videoEditFrameObservation')
+      const mediaResources = await import('../../../electron/main/services/application-runtime/mediaResources')
+      const { getPlatform } = await import('@/platform/runtime')
+      const createdVideo = await client.callTool({ name: 'create_document', arguments: { operationId: randomUUID(), kind: 'video_edit', name: 'MCP 未打开剪辑' } })
+      expect(createdVideo.isError, JSON.stringify(createdVideo)).toBe(false)
+      const documentRef = (createdVideo.structuredContent as { result: { data: { resultRef: { id: string } } } }).result.data.resultRef
+      const createSequence = { operationId: randomUUID(), summary: '后台创建主序列', changes: [{ kind: 'create_items', entityType: 'video_edit.sequence',
+        parent: { kind: 'video_edit.document', id: documentRef.id }, items: [{ properties: {
+          'video_edit.sequence.name': '主序列', 'video_edit.sequence.frame_rate': { numerator: 30, denominator: 1 },
+        } }] }] }
+      // 只在文档 I/O 边界模拟一次未打开文档的读取失败，业务执行尚未开始。
+      const unavailable = vi.spyOn(harnessDocumentStore(), 'readDocument').mockRejectedValueOnce(new Error('目标剪辑暂不可读取'))
+      try {
+        const rejected = await client.callTool({ name: 'change_application_entities', arguments: createSequence })
+        expect(JSON.stringify(rejected)).toContain('目标剪辑暂不可读取')
+        expect(rejected.structuredContent, JSON.stringify(rejected)).toMatchObject({ executionState: 'not_executed' })
+        const fact = await client.callTool({ name: 'get_application_operation', arguments: { operationId: createSequence.operationId } })
+        expect(fact.structuredContent).toMatchObject({ executionState: 'not_executed' })
+      } finally { unavailable.mockRestore() }
+      const createdSequence = await client.callTool({ name: 'change_application_entities', arguments: createSequence })
+      expect(createdSequence.structuredContent, JSON.stringify(createdSequence)).toMatchObject({ executionState: 'completed' })
+      // t169：完整证据/修订选项仅改变交付，不进入幂等摘要，也不重放已创建序列。
+      const detailedSequence = await client.callTool({ name: 'change_application_entities', arguments: { ...createSequence, includeEvidence: true, includeRevisions: true } })
+      const compactReceipt = createdSequence.structuredContent as { revision: number; scopeRevisions: Record<string, number>; result: { data: Record<string, unknown> } }
+      const detailedReceipt = detailedSequence.structuredContent as typeof compactReceipt
+      expect(detailedSequence.isError, JSON.stringify(detailedSequence)).toBe(false)
+      expect(compactReceipt.scopeRevisions).toEqual({ video_edit: detailedReceipt.scopeRevisions.video_edit })
+      expect(compactReceipt.revision).toBe(detailedReceipt.revision)
+      expect(compactReceipt.result.data).not.toHaveProperty('evidence')
+      expect(detailedReceipt.result.data).toHaveProperty('evidence')
+      expect(detailedReceipt.scopeRevisions).toHaveProperty('canvas')
+      expect(operations.store.get(createSequence.operationId, identity.id)?.input).not.toHaveProperty('includeRevisions')
+      const owner = await video.openVideoEditDocument(documentRef, { focus: false })
+      expect(owner.document.sequences).toHaveLength(1)
+      const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.document.sequences[0].id}` }
+      expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
+      expect(video.activeVideoEditInstance()).toBeUndefined()
+      const asset = { id: 'mcp-observed-frame', filePath: path.join(os.tmpdir(), 'private', 'frame.png'), displayUrl: '', mediaType: 'image' as const, displayName: '观察画面', source: 'video-edit' as const, mimeType: 'image/png', sizeBytes: 4, width: 320, height: 180, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready' as const, inspectionError: null, fileModifiedAt: 1, contentIdentity: 'd'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }
+      const observe = vi.spyOn(observation, 'observeVideoEditFrame').mockResolvedValue({ asset, width: 320, height: 180, sourceWidth: 320, sourceHeight: 180, documentRevision: 0 })
+      const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset)
+      const jpeg = await (await import('sharp')).default({ create: { width: 32, height: 18, channels: 3, background: { r: 0, g: 0, b: 0 } } }).jpeg().toBuffer()
+      const media = vi.spyOn(mediaResources, 'readApplicationMediaResource').mockResolvedValue({ mode: 'image', mimeType: 'image/jpeg', base64: jpeg.toString('base64'), width: 32, height: 18, offset: 0, byteLength: jpeg.length, totalBytes: jpeg.length, eof: true })
+      try {
+        const frame = await client.callTool({ name: 'observe_video_edit_frame', arguments: { documentRef: { kind: 'video_edit.document', id: owner.document.id }, target: { kind: 'program', frame: 0 } } })
+        expect(frame.isError, JSON.stringify(frame)).toBe(false)
+        expect(JSON.stringify(frame)).toContain(asset.id)
+        const image = await client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: asset.id }, mode: 'image' } })
+        expect(image.isError, JSON.stringify(image)).toBe(false)
+        expect(image.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'image', mimeType: 'image/jpeg', data: jpeg.toString('base64') })]))
+        expect(JSON.stringify(image.structuredContent)).not.toContain(jpeg.toString('base64'))
+        expect(JSON.stringify(image)).not.toContain(asset.filePath)
+        expect(media).toHaveBeenCalledWith(expect.objectContaining({ mode: 'image' }), false)
+        const compact = await client.callTool({ name: 'describe_application_entities', arguments: { domains: ['video_edit'] } })
+        expect(compact.isError, JSON.stringify(compact)).toBe(false)
+        const catalog = (compact.structuredContent as { data: { properties: Array<Record<string, unknown>>; nextCursor: string | null } }).data
+        expect(catalog.properties.length).toBeLessThanOrEqual(40)
+        expect(catalog.nextCursor).toBeTruthy()
+        expect(JSON.stringify(compact).length).toBeLessThan(25000)
+        expect(catalog.properties[0]).toHaveProperty('valueShape')
+        expect(catalog.properties[0]).not.toHaveProperty('value')
+        const shape = await client.callTool({ name: 'describe_application_entities', arguments: { entityType: 'video_edit.sequence', propertyIds: ['video_edit.sequence.frame_rate'], detail: 'full' } })
+        expect(JSON.stringify(shape)).toContain('numerator')
+        expect(JSON.stringify(shape)).toContain('denominator')
+        const read = await client.callTool({ name: 'read_application_entity', arguments: { ref: sequenceRef, propertyIds: ['video_edit.sequence.frame_rate'] } })
+        expect(read.isError, JSON.stringify(read)).toBe(false)
+        const baseline = read.structuredContent as { baselineId: string; data: { revisions: Record<string, number> } }
+        expect(operations.store.readBaseline(baseline.baselineId, identity.id)).toMatchObject({ refs: [sequenceRef], revisions: baseline.data.revisions })
+        await video.closeVideoEditProject(owner.document.id)
+        const wrong = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), summary: '修改帧率', changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': 60 } }] } })
+        expect(wrong.structuredContent, JSON.stringify(wrong)).toMatchObject({ executionState: 'not_executed' })
+        expect(JSON.stringify(wrong)).toContain('video_edit.sequence.frame_rate')
+        expect(JSON.stringify(wrong)).toContain('numerator')
+        expect(JSON.stringify(wrong)).toContain('denominator')
+        const fresh = await client.callTool({ name: 'read_application_entity', arguments: { ref: sequenceRef, propertyIds: ['video_edit.sequence.frame_rate'] } })
+        expect(fresh.isError, JSON.stringify(fresh)).toBe(false)
+        await video.closeVideoEditProject(owner.document.id)
+        const changed = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), summary: '修改帧率', changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': { numerator: 60, denominator: 1 } } }] } })
+        expect(changed.structuredContent, JSON.stringify(changed)).toMatchObject({ executionState: 'completed' })
+        expect((await video.openVideoEditDocument(documentRef, { focus: false })).document.sequences[0].frameRate).toEqual({ numerator: 60, denominator: 1 })
+      } finally { observe.mockRestore(); inspect.mockRestore(); media.mockRestore(); await video.closeVideoEditProject(owner.document.id) }
+
     } finally { uninstallHarnessNativeStorage() }
     const ref = { kind: 'settings.registry', id: 'singleton' }
     const read = await client.callTool({ name: 'read_application_entity', arguments: { ref, propertyIds: ['interface.theme_contrast'] } })

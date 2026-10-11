@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   describe: vi.fn(),
+  resolveSchema: vi.fn(),
   listDeclaredPropertyPermissions: vi.fn(() => ['assets:read', 'assets:write', 'storyboard:read']),
   listProperties: vi.fn((entityType: string) => (
     entityType === 'sample.item'
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./applicationControlRegistry', () => ({
   getApplicationReflectionRegistry: () => ({
     describe: mocks.describe,
+    resolveSchema: mocks.resolveSchema,
     listDeclaredPropertyPermissions: mocks.listDeclaredPropertyPermissions,
     listProperties: mocks.listProperties,
     getPropertyAvailability: mocks.getPropertyAvailability,
@@ -90,6 +92,25 @@ describe('应用反射通用能力适配器', () => {
     ]))
   })
 
+  it('紧凑目录按属性分页，精确查询返回完整 JSON 值 schema', async () => {
+    const valueSchema = { type: 'object', properties: { numerator: { type: 'integer' }, denominator: { type: 'integer' } }, required: ['numerator', 'denominator'] }
+    const properties = ['rate', 'name'].map((name) => ({ id: `sample.item.${name}`, entityType: 'sample.item', title: name,
+      value: { kind: 'json', schemaRef: { id: name } }, requiredPermissions: { read: [], write: ['assets:write'] } }))
+    mocks.describe.mockReturnValue({ entities: [{ id: 'sample.item', title: '样例', collectionWrite: { creatable: true, removable: true, requiredPropertyIds: ['sample.item.name'] } }], properties })
+    mocks.resolveSchema.mockReturnValue(valueSchema)
+    const first = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], limit: 1 }, context)
+    expect(first.nextCursor).toBe('1')
+    expect(first.properties).toEqual([{ id: 'sample.item.rate', entityType: 'sample.item', title: 'rate', writable: true, valueShape: '{numerator: integer, denominator: integer}' }])
+    expect(first.entities[0].collectionWrite).toEqual({ creatable: true, removable: true })
+    const last = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], limit: 1, cursor: first.nextCursor! }, context)
+    expect(last.nextCursor).toBeNull()
+    expect(last.properties[0]).toMatchObject({ id: 'sample.item.name' })
+    mocks.describe.mockReturnValueOnce({ entities: [], properties: properties.slice(0, 1) })
+    const full = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], entityType: 'sample.item', propertyIds: ['sample.item.rate'], detail: 'full' }, context)
+    expect(full.properties[0]).toMatchObject({ valueSchema })
+    expect(mocks.describe).toHaveBeenLastCalledWith({ entityTypes: ['sample.item'], propertyIds: ['sample.item.rate'] }, expect.anything())
+  })
+
   /*
    * 回归：结构描述把大量对模型无意义的字段一起发过去。
    *
@@ -119,7 +140,7 @@ describe('应用反射通用能力适配器', () => {
     })
 
     const result = await applicationReflectionHandlers.describeEntities(
-      { domains: [], entityTypes: ['sample.item'] },
+      { domains: [], entityTypes: ['sample.item'], detail: 'full' },
       context,
     )
     const serialized = JSON.stringify(result)
@@ -158,7 +179,7 @@ describe('应用反射通用能力适配器', () => {
     mocks.getAcceptedPropertyOperations.mockReturnValueOnce(['append', 'remove', 'set'])
 
     const result = await applicationReflectionHandlers.describeEntities(
-      { domains: ['assets'], entityTypes: ['asset'] }, context,
+      { domains: ['assets'], entityTypes: ['asset'], detail: 'full' }, context,
     )
 
     expect(result.properties[0]).toMatchObject({

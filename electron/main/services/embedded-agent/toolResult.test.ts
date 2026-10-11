@@ -18,6 +18,18 @@ describe('Pi media result boundary', () => {
     expect(result.content[1]).toEqual({ type: 'image', data: Buffer.from('abcdef').toString('base64'), mimeType: 'image/png' })
     expect(call.mock.calls[1][2]).toMatchObject({ ref: input.args.ref, offset: 3 })
   })
+  it('图片预览只调用一次并投影原生图片，非视觉模型不能读取', async () => {
+    const preview = { ...input, args: { ...input.args, mode: 'image' } }
+    const data = { mode: 'image', mimeType: 'image/jpeg', base64: 'aW1hZ2U=', width: 640, height: 360, byteLength: 5 }
+    const call = vi.fn().mockResolvedValue({ ok: true, data })
+    const result = await executePiTool(preview, call)
+    expect(result.content[1]).toEqual({ type: 'image', data: data.base64, mimeType: data.mimeType })
+    expect(JSON.stringify(result.content[0])).not.toContain(data.base64)
+    expect(call).toHaveBeenCalledTimes(1)
+    call.mockClear()
+    expect(JSON.stringify(await executePiTool({ ...preview, vision: false }, call))).toContain('切换')
+    expect(call).not.toHaveBeenCalled()
+  })
   it('不支持视觉、视频和超大图片均给出可行动的说明，不把字节当文字', async () => {
     const call = vi.fn()
     expect(JSON.stringify(await executePiTool({ ...input, vision: false }, call))).toContain('切换')

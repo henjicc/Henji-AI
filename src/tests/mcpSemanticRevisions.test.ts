@@ -16,6 +16,8 @@ import { useProjectStore } from '@/stores/projectStore'
 import { loadRealModelsIntoRegistry } from './loadRealModels'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { addCanvasNode } from '@/features/canvas/application/canvasApplicationService'
+import { createApplicationHarness } from './applicationHarness'
+import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 
 const task: GenerationTaskStatusSnapshot = { taskId: 'mcp-revision-task', status: 'generating', progress: 10,
   modelId: 'fixture', mediaType: 'image', resultAvailable: false, errorCode: null, errorMessage: null }
@@ -44,6 +46,36 @@ async function baseline(session: ReturnType<typeof client>) {
 }
 const invocation = (expectedRevisions: unknown) => ({ id: 'cancel_generation_task', version: 1,
   expectedRevisions, input: { taskId: task.taskId, reason: '验收取消' } })
+
+it('紧凑目录可翻页遍历所有已授权领域，JSON 属性都有可读的值 schema', async () => {
+  const harness = createApplicationHarness()
+  try {
+    const reflection = getApplicationReflectionRegistry()
+    const access = { exposure: 'local_adapter' as const, permissions: new Set(reflection.listDeclaredPropertyPermissions()), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+    const unresolved: string[] = []
+    for (const property of reflection.describe({}, access).properties) {
+      if (property.value.kind !== 'json') continue
+      try { reflection.resolveSchema(property.value.schemaRef, access) }
+      catch { unresolved.push(property.id) }
+    }
+    expect(unresolved).toEqual([])
+    const seen = new Set<string>()
+    let cursor: string | undefined
+    do {
+      const result = await harness.call('describe_application_entities', { detail: 'full', limit: 40, ...(cursor ? { cursor } : {}) })
+      expect(result.ok, JSON.stringify(result)).toBe(true)
+      if (!result.ok) throw new Error('目录遍历失败')
+      for (const property of result.data.properties as Array<{ id: string; value: { kind: string }; valueSchema?: unknown }>) {
+        expect(seen.has(property.id), property.id).toBe(false)
+        seen.add(property.id)
+        if (property.value.kind === 'json') expect(property.valueSchema, property.id).toBeDefined()
+      }
+      cursor = result.data.nextCursor as string | undefined
+    } while (cursor)
+    expect(seen.has('video_edit.sequence.frame_rate')).toBe(true)
+    expect(seen.has('canvas.node.storyboard_frames')).toBe(true)
+  } finally { harness.dispose() }
+})
 
 it('没有项目时可创建并验证持久化，再打开同一画布项目', async () => {
   const previousCanvas = useCanvasStore.getState()

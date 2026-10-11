@@ -1,3 +1,4 @@
+import sharp from 'sharp'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -30,6 +31,19 @@ afterAll(async () => { await fs.rm(directory, { recursive: true, force: true }) 
 beforeEach(() => { state.rows.clear(); state.results.clear(); state.project = null })
 
 describe('稳定业务引用的媒体读取', () => {
+  it('图片模式输出有界 JPEG，保留原件分块且无本地路径', async () => {
+    const filename = path.join(state.root, 'preview.png')
+    await sharp({ create: { width: 3000, height: 1600, channels: 3, background: { r: 40, g: 69, b: 105 } } }).png().toFile(filename)
+    state.rows.set('asset:preview', { file_path: filename })
+    const image = await readApplicationMediaResource({ ref: { kind: 'asset', id: 'preview' }, mode: 'image' })
+    expect(image).toMatchObject({ mode: 'image', mimeType: 'image/jpeg', width: 1280, eof: true })
+    expect(image.byteLength).toBeLessThanOrEqual(256 * 1024)
+    expect((await sharp(Buffer.from(image.base64, 'base64')).metadata()).width).toBe(1280)
+    expect(JSON.stringify(image)).not.toContain(filename)
+    expect(await readApplicationMediaResource({ ref: { kind: 'asset', id: 'preview' } })).toMatchObject({ mimeType: 'image/png' })
+    await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'preview' }, mode: 'image', offset: 1 })).rejects.toThrow()
+  })
+
   it('媒体元信息读取只检查文件，不读取二进制内容', async () => {
     const filename = path.join(state.root, 'metadata.png')
     await fs.writeFile(filename, 'metadata')

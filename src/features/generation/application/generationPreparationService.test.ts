@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { catalog } from '@henjicc/ai-sdk'
 import { volcengineSeedIcl20Model } from '../../../../packages/ai-sdk/src/catalog/volcengine-speech/seed-icl-2.0.model'
+import { kieGemini31FlashTtsModel } from '../../../../packages/ai-sdk/src/catalog/kie/gemini-3.1-flash-tts.model'
 
 import {
   applicationSchemaRefSchema,
@@ -69,6 +70,12 @@ describe('generationPreparation', () => {
   afterEach(() => {
     registry.clear()
     vi.unstubAllGlobals()
+  })
+
+  it('估价标记由模型契约传递至助手，不冒充精确动态计费', () => {
+    registry.clear()
+    registry.register(composeModelDefinition(kieGemini31FlashTtsModel, modelPresentations[kieGemini31FlashTtsModel.meta.id]))
+    expect(getGenerationModelSchema(kieGemini31FlashTtsModel.meta.id).priceEstimate).toMatchObject({ amount: 0.2351104, billingMode: 'estimated', basis: expect.stringContaining('上限估价') })
   })
 
   it('按配置搜索并裁剪单模型 schema', () => {

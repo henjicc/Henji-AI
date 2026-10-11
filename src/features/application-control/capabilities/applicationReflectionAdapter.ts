@@ -1,4 +1,5 @@
 import { rememberExplanationUndoAccess } from '../creativeIntentAuthorization'
+import { describeJsonValueShape } from '@/core/application-control/registry/jsonValueShape'
 import type {
   ApplicationPlannedStep,
   ApplicationTransactionResult,
@@ -337,20 +338,21 @@ function describedProperty(property: Record<string, unknown>, context?: Capabili
 
 export const applicationReflectionHandlers = {
   async describeEntities(
-    input: { domains: string[]; entityTypes: string[]; refs?: Array<{ kind: string; id: string; label?: string }> },
+    input: { domains: string[]; entityTypes: string[]; entityType?: string; propertyIds?: string[]; detail?: 'compact' | 'full'; cursor?: string; limit?: number; refs?: Array<{ kind: string; id: string; label?: string }> },
     context: CapabilityExecutionContext,
   ) {
     const registry = getApplicationReflectionRegistry()
     const accessContext = executionContext(context)
     const description = registry.describe({
       ...(input.domains.length > 0 ? { domains: input.domains } : {}),
-      ...(input.entityTypes.length > 0 ? { entityTypes: input.entityTypes } : {}),
+      ...(input.entityType ? { entityTypes: [input.entityType] } : input.entityTypes.length > 0 ? { entityTypes: input.entityTypes } : {}),
+      ...(input.propertyIds?.length ? { propertyIds: input.propertyIds } : {}),
     }, accessContext)
     const entities = description.entities as unknown as Array<Record<string, unknown>>
     const refs = input.refs ?? []
     if (context.callerGrant) refs.forEach(assertCompleteRef)
     const propertyAvailability = await Promise.all(refs.map(async (ref) => {
-      const propertyIds = registry.listProperties(ref.kind).map((property) => property.id)
+      const propertyIds = registry.listProperties(ref.kind).filter(property => !input.propertyIds?.length || input.propertyIds.includes(property.id)).map((property) => property.id)
       const availability = await registry.getPropertyAvailability(ref, propertyIds, accessContext)
       return {
         ref,
@@ -380,9 +382,26 @@ export const applicationReflectionHandlers = {
           remove: operation(availability.remove),
         }
       })))).flat()
+    const offset = Number(input.cursor ?? 0)
+    if (!Number.isSafeInteger(offset)) throw new Error('INVALID_INPUT:cursor 必须是有效分页位置。')
+    const limit = input.limit ?? 40
+    const properties = description.properties.slice(offset, offset + limit).map(property => {
+      const full = describedProperty(property as unknown as Record<string, unknown>, context)
+      const schema = property.value.kind === 'json' ? registry.resolveSchema(property.value.schemaRef, accessContext) : undefined
+      if (input.detail === 'full') return { ...full, ...(schema ? { valueSchema: schema } : {}) }
+      return { id: property.id, entityType: property.entityType, title: property.title, writable: full.writable,
+        valueShape: schema ? describeJsonValueShape(schema) : property.value.kind,
+        ...(property.nullable ? { nullable: true } : {}) }
+    })
     return {
-      entities: entities.map(describedEntity),
-      properties: (description.properties as unknown as Array<Record<string, unknown>>).map((property) => describedProperty(property, context)),
+      entities: entities.map(entity => {
+        if (input.detail === 'full') return describedEntity(entity)
+        const collection = entity.collectionWrite as { creatable: boolean; removable: boolean } | undefined
+        return { id: entity.id, title: entity.title,
+          ...(collection ? { collectionWrite: { creatable: collection.creatable, removable: collection.removable } } : {}) }
+      }),
+      properties,
+      nextCursor: offset + limit < description.properties.length ? String(offset + limit) : null,
       propertyAvailability,
       collectionAvailability,
     }
@@ -433,18 +452,23 @@ export const applicationReflectionHandlers = {
     const appContext = executionContext(context)
     let expected = context.expectedRevisions ?? {}
     const sessionKey = context.requestId ?? 'renderer'
-    const changes = context.callerGrant ? input.changes : input.changes.map((change) => normalizeChangeRefs(sessionKey, change))
-    changes.forEach((change) => {
-      if (change.kind === 'set_properties' || change.kind === 'mutate_properties') assertCompleteRef(change.target)
-      else {
-        assertCompleteRef(change.parent)
-        if (change.kind === 'remove_items') change.targets.forEach(assertCompleteRef)
-      }
-    })
+    const changes = (() => {
+      try {
+        const changes = context.callerGrant ? input.changes : input.changes.map((change) => normalizeChangeRefs(sessionKey, change))
+        changes.forEach((change) => {
+          if (change.kind === 'set_properties' || change.kind === 'mutate_properties') assertCompleteRef(change.target)
+          else {
+            assertCompleteRef(change.parent)
+            if (change.kind === 'remove_items') change.targets.forEach(assertCompleteRef)
+          }
+        })
+        return changes
+      } catch (error) { throw new ApplicationPreflightFailure(error) }
+    })()
     const baselines = await captureMutationBaselines(changes, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
     if (context.callerGrant && context.expectedRevisions === undefined) {
       if (changes.some((change) => change.kind === 'remove_items')) throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:删除前请读取目标并提供 baselineIds。'))
-      const current = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
+      const current = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext).catch(error => { throw new ApplicationPreflightFailure(error) })
       if (!current) throw new ApplicationPreflightFailure(new Error('CONFLICT:目标正在变化，请稍后重试。'))
       expected = current
     }

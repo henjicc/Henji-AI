@@ -28,7 +28,7 @@ const refSchema = z.object({
 
 const describeEntities = defineApplicationCapability({
   id: 'describe_application_entities', version: 1, title: '查看可读写的应用结构',
-  description: '列出应用里有哪些实体类型和属性、各自能否修改、取值范围，以及哪些集合可以新增或删除成员。想改某个东西但没有专用能力时先用它。',
+  description: '默认返回紧凑实体/属性目录与值形状，按 domains 或 entityType/entityTypes 过滤，用 cursor 翻页。写入前用 propertyIds 精确选择属性并设 detail="full" 读取完整值 schema、范围和说明；refs 可查询实例当前可写性。',
   domain: 'application',
   aliases: ['有哪些属性', '能改什么', '可写属性', '实体结构', '关键帧属性', 'describe entities', 'schema'],
   readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'application:read',
@@ -37,6 +37,11 @@ const describeEntities = defineApplicationCapability({
   inputSchema: z.object({
     domains: z.array(z.string().min(1)).max(16).default([]),
     entityTypes: z.array(z.string().min(1)).max(32).default([]),
+    entityType: z.string().min(1).optional(),
+    propertyIds: z.array(z.string().min(1)).max(64).default([]),
+    detail: z.enum(['compact', 'full']).default('compact'),
+    cursor: z.string().regex(/^\d+$/).optional(),
+    limit: z.number().int().min(1).max(100).default(40),
     refs: z.array(refSchema).max(16).default([]),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -44,6 +49,7 @@ const describeEntities = defineApplicationCapability({
     properties: z.array(z.record(z.string(), z.unknown())),
     propertyAvailability: z.array(z.record(z.string(), z.unknown())).default([]),
     collectionAvailability: z.array(z.record(z.string(), z.unknown())).default([]),
+    nextCursor: z.string().nullable(),
   }),
   resolveConcurrencyKey: () => 'application:describe',
   resolveTargetIds: () => ({}),

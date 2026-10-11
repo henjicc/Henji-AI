@@ -808,7 +808,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   instances.set(session.id, instance)
   // 去掉了项目内素材的素材库关联：写回剪辑文件
   if (detached) session.markChanged()
-  if (focus || !activeId) activeId = session.id
+  if (focus) activeId = session.id
   publishVideoEdit(true)
   logger.info('剪辑已打开', { event: 'video_edit.document.open.completed', context: { docId: session.id, missing: session.getState().missingPaths.length } })
   // 打开即恢复（含后台打开），无需挂载时间线；只续查原任务，不重新生成。
@@ -830,6 +830,7 @@ async function openSessionInstance(open: () => Promise<DocumentSession>, focus: 
 }
 
 /** 打开一份剪辑文档（按 ID，可带位置）；已打开时切到它。 */
+const openingInstances = new Map<string, Promise<VideoEditInstance>>()
 export async function openVideoEditDocument(target: DocumentTarget, options: { focus?: boolean } = {}): Promise<VideoEditInstance> {
   assertApplicationWritesAllowed()
   const focus = options.focus ?? true
@@ -837,7 +838,15 @@ export async function openVideoEditDocument(target: DocumentTarget, options: { f
   if (existing && !existing.session.isEnded) { if (focus) focusVideoEdit(target.id); return existing }
   if (leaving.has(target.id)) throw new Error('这份剪辑正在关闭，请稍后再打开。')
   try {
-    return await openSessionInstance(() => documentRegistry().open(target), focus)
+    let pending = openingInstances.get(target.id)
+    if (!pending) {
+      pending = openSessionInstance(() => documentRegistry().open(target), false)
+      openingInstances.set(target.id, pending)
+      void pending.finally(() => { if (openingInstances.get(target.id) === pending) openingInstances.delete(target.id) }).catch(() => {})
+    }
+    const instance = await pending
+    if (focus) focusVideoEdit(target.id)
+    return instance
   } catch (error) {
     if (isDocumentServiceError(error, 'DocumentNotFoundError')) throw new Error('找不到这份剪辑文件，它可能已被移动或删除。')
     throw error

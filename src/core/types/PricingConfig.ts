@@ -52,6 +52,8 @@ export function isNonMonetaryCurrency(currency?: string): boolean {
  * ```
  */
 export interface PricingConfig {
+  /** SDK 声明的保守估价，随模型说明呈现，不能当作实际账单。 */
+  billingMode?: 'estimated'
   /**
    * 货币符号
    *

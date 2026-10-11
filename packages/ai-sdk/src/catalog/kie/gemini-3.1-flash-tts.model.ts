@@ -34,8 +34,10 @@ export const kieGemini31FlashTtsModel = defineModel({
     },
   },
   pricing: {
-    currency: '$', calculator: () => Number.NaN,
-    description: '输入 $0.7/百万 Token、音频输出 $14/百万 Token；输出 Token 无法在提交前准确估算',
+    currency: '$', billingMode: 'estimated',
+    // 按 Google 同名模型的完整输入/输出 token 窗口预留，避免把语速猜测当硬上限。
+    calculator: () => (8192 * 0.7 + 16384 * 14) / 1_000_000,
+    description: '上限估价 $0.2351：按输入8192、输出16384 Token预留；KIE费率$0.7/$14每百万Token。依据Google同名模型窗口，实际以KIE账单为准。',
   },
 })
 

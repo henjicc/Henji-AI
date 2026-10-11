@@ -462,6 +462,7 @@ export const IMAGE_EDIT_V3_MASK_FIELDS: ApplicationFieldDefinition<
 export const IMAGE_EDIT_V3_PARAMS_SCHEMA_REF = PARAMS_SCHEMA_REF
 
 /** 文档输出几何与界面裁剪使用同一 V3 命令校验。 */
+export const imageEditCropRectInputSchemaV3 = z.object({ x: z.number().int().nonnegative(), y: z.number().int().nonnegative(), width: z.number().int().positive(), height: z.number().int().positive() }).strict().nullable()
 export const IMAGE_EDIT_V3_DOCUMENT_FIELDS: ApplicationFieldDefinition<ImageEditCanvasGeometryV3, ImageEditCanvasGeometryV3>[] = [
   { propertyId: 'image_edit.document.orientation_rotate', descriptor: property('image_edit.document', 'orientation_rotate', '旋转角度', { kind: 'enum', values: ['0', '90', '180', '270'].map(value => ({ value, label: value })) }),
     read: geometry => String(geometry.orientation.rotate), writer: { write(geometry, mutation) {
@@ -474,7 +475,7 @@ export const IMAGE_EDIT_V3_DOCUMENT_FIELDS: ApplicationFieldDefinition<ImageEdit
     } }, storeActions: [] },
   { propertyId: 'image_edit.document.crop_rect', descriptor: property('image_edit.document', 'crop_rect', '裁剪区域', { kind: 'json', schemaRef: imageEditV3SchemaRef('property', 'image_edit.document.crop_rect.value') }, { nullable: true }),
     read: geometry => geometry.crop as unknown as JsonValue, writer: { write(geometry, mutation) {
-      geometry.crop = z.object({ x: z.number().int().nonnegative(), y: z.number().int().nonnegative(), width: z.number().int().positive(), height: z.number().int().positive() }).strict().nullable().parse(mutation.value)
+      geometry.crop = imageEditCropRectInputSchemaV3.parse(mutation.value)
     } }, storeActions: [] },
 ]
 

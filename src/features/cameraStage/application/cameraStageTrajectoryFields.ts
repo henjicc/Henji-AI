@@ -91,9 +91,14 @@ const KNOTS_VALUE: ApplicationPropertyValue = {
   },
 }
 
+const knotsInputSchema = z.array(knotInputSchema).max(64)
+export const TRAJECTORY_SCHEMA_DOCUMENTS = [
+  { ref: KNOTS_VALUE.schemaRef, value: z.toJSONSchema(knotsInputSchema, { io: 'input' }) as JsonValue },
+]
+
 const knotsCodec: ValueCodec<StageSpatialPathKnot[]> = {
   value: KNOTS_VALUE,
-  parse: (raw) => z.array(knotInputSchema).max(64).parse(raw).map((knot) => ({
+  parse: (raw) => knotsInputSchema.parse(raw).map((knot) => ({
     id: knot.id ?? uuidv4(),
     position: knot.position,
     inTangent: knot.inTangent,

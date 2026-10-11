@@ -334,6 +334,9 @@ function validatePricing(model: ModelRuntimeDefinition, fail: ValidationFailure)
   }
 
   const hasFixed = typeof pricing.fixed === 'number'
+  if (pricing.billingMode !== undefined && pricing.billingMode !== 'estimated') {
+    fail('Model pricing.billingMode must be estimated')
+  }
   const hasCalculator = typeof pricing.calculator === 'function'
 
   if (!hasFixed && !hasCalculator) {

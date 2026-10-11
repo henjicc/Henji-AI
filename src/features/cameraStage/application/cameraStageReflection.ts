@@ -27,7 +27,7 @@ import {
 } from './cameraStageObjectFields'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
 import { PLAYBACK_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
-import { TRAJECTORY_FIELDS } from './cameraStageTrajectoryFields'
+import { TRAJECTORY_FIELDS, TRAJECTORY_SCHEMA_DOCUMENTS } from './cameraStageTrajectoryFields'
 import { calculateStageObjectBounds } from './sceneAnalysis'
 
 const DOMAIN = 'camera_stage'
@@ -438,6 +438,7 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
       },
       properties: propertiesByEntity[entityType],
       provider: new CameraStageReflectionProvider(entityType, readRevision),
+      schemaDocuments: entityType === ENTITY_TYPES.trajectory ? TRAJECTORY_SCHEMA_DOCUMENTS : [],
     }
   })
 }

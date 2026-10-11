@@ -169,7 +169,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         const observed = await observeVideoEditFrame(id, input.target.kind === 'program' ? { kind: 'program', frame: input.target.frame, ...(input.target.sequenceRef ? { sequenceId: child(input.target.sequenceRef) } : {}) } : { kind: 'source', itemId: child(input.target.itemRef), timeUs: input.target.timeUs }, input.maxWidth, context.signal, undefined, { overlayAnnotations: input.overlayAnnotations, annotationIds: input.annotationIds, cropAnnotationId: input.cropAnnotationId, ...(input.highlightElement ? { highlightElement: { clipId: child(input.highlightElement.clipRef), elementId: input.highlightElement.elementId } } : {}) })
         const resultRef = { kind: 'asset' as const, id: observed.asset.id }
         return { resultRef, documentRef: input.documentRef, target: input.target, width: observed.width, height: observed.height, sourceWidth: observed.sourceWidth, sourceHeight: observed.sourceHeight, documentRevision: observed.documentRevision,
-          message: `已按剪辑版本 ${observed.documentRevision} 渲染${input.target.kind === 'program' ? `序列帧 ${input.target.frame}` : '源素材画面'}（${observed.width}×${observed.height}），用 read_application_media 读取该资产查看画面。`,
+          message: `已按剪辑版本 ${observed.documentRevision} 渲染${input.target.kind === 'program' ? `序列帧 ${input.target.frame}` : '源素材画面'}（${observed.width}×${observed.height}），用 read_application_media 并设置 mode="image" 直接查看该资产画面。`,
           verification: { verified: true, target: resultRef, condition: '已用正式渲染器生成固定版本画面，并通过资产检查核对尺寸。' } }
       }
       if (definition.id === trimVideoEditClipCapability.id) return await trimVideoEditClip(trimVideoEditClipCapability.inputSchema.parse(raw))

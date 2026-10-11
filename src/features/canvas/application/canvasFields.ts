@@ -118,6 +118,7 @@ const storyboardFramePatchSchema = z.object({
 }).strict()
 
 const assetGroupMemberOrderSchema = z.array(z.string().min(1)).max(200)
+const storyboardFramePatchesSchema = z.array(storyboardFramePatchSchema).min(1).max(200)
 
 function generationJsonValue(suffix: string): Extract<ApplicationPropertyValue, { kind: 'json' }> {
   const id = `${NODE_ENTITY_TYPE}.${suffix}.value`
@@ -130,12 +131,14 @@ function generationJsonValue(suffix: string): Extract<ApplicationPropertyValue, 
 const GENERATION_CONFIG_VALUE = generationJsonValue('generation_config')
 const GENERATION_SCHEMA_VALUE = generationJsonValue('generation_schema')
 export const CANVAS_NODE_SCHEMA_DOCUMENTS = [
+  { ref: STORYBOARD_FRAMES_VALUE.schemaRef, value: z.toJSONSchema(storyboardFramePatchesSchema) as JsonValue },
+  { ref: ASSET_GROUP_MEMBER_ORDER_VALUE.schemaRef, value: z.toJSONSchema(assetGroupMemberOrderSchema) as JsonValue },
   { ref: GENERATION_CONFIG_VALUE.schemaRef, value: z.toJSONSchema(canvasNodeGenerationConfigSchema) as JsonValue },
   { ref: GENERATION_SCHEMA_VALUE.schemaRef, value: z.toJSONSchema(z.record(z.string(), z.unknown()).nullable()) as JsonValue },
 ]
 
 function parseStoryboardFramePatches(raw: JsonValue | undefined): CanvasStoryboardFramePatch[] {
-  return z.array(storyboardFramePatchSchema).min(1).max(200).parse(raw)
+  return storyboardFramePatchesSchema.parse(raw)
 }
 
 /** 写入目标是节点补丁本身——两条属性合成一个 patch 再整体提交，逐条提交会产生两次历史记录。 */

@@ -13,7 +13,7 @@ import { videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditTranscriptWords, resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEditTransitionClipIds, VIDEO_EDIT_TRANSITION_PRESETS, VIDEO_EDIT_TRANSITION_REF_PREFIX } from '@/core/videoEdit/transitions'
-import { listVideoEditInstances, requireVideoEditInstance, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
 import { VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY, VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditDataKey, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
 import { readVideoEditSource } from './videoEditSource'
 import { getVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
@@ -108,6 +108,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
     return { refs: all.slice(offset, offset + request.limit), nextCursor: offset + request.limit < all.length ? String(offset + request.limit) : null, revisions: { video_edit: videoEditRevision() } }
   }
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
+    if (!listVideoEditInstances().some(owner => owner.document.id === splitVideoEditRef(ref).projectId)) await openVideoEditDocument({ id: splitVideoEditRef(ref).projectId }, { focus: false })
     if (this.entityType === 'video_edit.media' && (!request.propertyIds?.length || request.propertyIds.includes('video_edit.media.proxy_state'))) { const target = splitVideoEditRef(ref); await ensureVideoEditProxyState(target.projectId, target.childId) }
     const needsMetadata = ['video_edit.code_material', 'video_edit.code_version'].includes(this.entityType)
     if (needsMetadata) {
@@ -120,6 +121,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
     return { ref, entityType: this.entityType, revisions: { video_edit: videoEditRevision() }, properties: request.propertyIds?.length ? Object.fromEntries(Object.entries(data).filter(([key]) => request.propertyIds!.includes(key))) : data, capturedAt: new Date().toISOString() }
   }
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
+    if (!listVideoEditInstances().some(owner => owner.document.id === splitVideoEditRef(ref).projectId)) await openVideoEditDocument({ id: splitVideoEditRef(ref).projectId }, { focus: false })
     const data = readVideoEditData(ref)
     return propertyIds.map(propertyId => {
       const field = VIDEO_EDIT_FIELDS[this.entityType].find(item => item.propertyId === propertyId)
@@ -144,6 +146,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
     })
   }
   async getCollectionAvailability(parent: ApplicationRef) {
+    if (!listVideoEditInstances().some(owner => owner.document.id === splitVideoEditRef(parent).projectId)) await openVideoEditDocument({ id: splitVideoEditRef(parent).projectId }, { focus: false })
     readVideoEditData(parent)
     const availability = unrestrictedCollectionAvailability(this.entityType, parent, { video_edit: videoEditRevision() }, ['video_edit:write'])
     if (!VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType)) return availability

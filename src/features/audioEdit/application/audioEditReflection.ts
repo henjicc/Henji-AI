@@ -11,7 +11,7 @@ import { audioEditSuggestionState } from '@/core/audioEdit/edits'
 import { getPlatform } from '@/platform/runtime'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 
-import { AUDIO_EDIT_ENTITY_TYPES, AUDIO_EDIT_FIELDS, audioEditSchemaRef as schemaRef, type AudioEditEntityType as EntityType } from './audioEditFields'
+import { AUDIO_EDIT_ENTITY_TYPES, AUDIO_EDIT_FIELDS, audioEditSchemaDocuments, audioEditSchemaRef as schemaRef, type AudioEditEntityType as EntityType } from './audioEditFields'
 import { fieldDescriptors, fieldReadValues } from '@/core/application-control'
 import { loadAudioEditProject, getAudioEditProjectInstance, getAudioEditRevision } from './audioEditProjectInstances'
 export { AUDIO_EDIT_ENTITY_TYPES } from './audioEditFields'
@@ -117,6 +117,7 @@ export function createAudioEditReflectionRegistrations(): ApplicationEntityRegis
       ...(entityType === AUDIO_EDIT_ENTITY_TYPES.render ? { writeExclusion: { reason: '成片映射由口播剪辑时间线根据词块保留状态实时计算。' } } : {}),
     },
     properties: propertiesByEntity[entityType],
+    schemaDocuments: audioEditSchemaDocuments(entityType),
     provider: new AudioEditReflectionProvider(entityType),
   }))
 }

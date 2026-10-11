@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import sharp from 'sharp'
 import path from 'node:path'
 import { z } from 'zod'
 import { inferMimeFromPath, isPathWithinAllowedMediaRoots } from '../../protocol'
@@ -23,6 +24,7 @@ const inputSchema = z.object({
   outputIndex: z.number().int().min(0).max(10_000).default(0),
   offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
   length: z.number().int().min(1).max(256 * 1024).default(256 * 1024),
+  mode: z.enum(['chunk', 'image']).default('chunk'),
 }).strict()
 
 async function sources(ref: z.infer<typeof inputSchema>['ref']): Promise<string[]> {
@@ -57,8 +59,8 @@ async function sources(ref: z.infer<typeof inputSchema>['ref']): Promise<string[
 
 /** 只读取稳定业务引用已保存的本地媒体；连接授权由 MCP 服务在调用前核对。 */
 export async function readApplicationMediaResource(input: {
-  ref: { kind: string; id: string }; outputIndex?: number; offset?: number; length?: number
-}, metadataOnly = false): Promise<{ mimeType: string; base64: string; offset: number; byteLength: number; totalBytes: number; eof: boolean }> {
+  ref: { kind: string; id: string }; outputIndex?: number; offset?: number; length?: number; mode?: 'chunk' | 'image'
+}, metadataOnly = false): Promise<{ mimeType: string; base64: string; offset: number; byteLength: number; totalBytes: number; eof: boolean; mode?: 'image'; width?: number; height?: number }> {
   const parsed = inputSchema.parse(input)
   logger.debug('开始读取关联媒体', { event: 'mcp.media.read.start', context: { kind: parsed.ref.kind } })
   try {
@@ -78,6 +80,21 @@ export async function readApplicationMediaResource(input: {
       if (!stat.isFile()) failure('UNSUPPORTED_MEDIA_TYPE', '媒体不是普通文件。')
       if (parsed.offset > stat.size) failure('MEDIA_RANGE_OUT_OF_BOUNDS', '读取位置超出媒体末尾。')
       if (metadataOnly) return { mimeType, base64: '', offset: 0, byteLength: 0, totalBytes: stat.size, eof: stat.size === 0 }
+      if (parsed.mode === 'image') {
+        if (!mimeType.startsWith('image/')) failure('UNSUPPORTED_MEDIA_TYPE', '图片模式只支持图片；视频请先取帧，其他媒体使用 chunk 模式。')
+        if (parsed.offset !== 0) failure('INVALID_INPUT', '图片模式不接受分块偏移。')
+        // Sharp/libvips 在线程池缩放编码；限制传输尺寸而非用户原件，保留分块读取原件。
+        let edge = 1280
+        while (edge >= 160) {
+          const { data, info } = await sharp(real, { animated: false }).rotate().resize({ width: edge, height: edge, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 75 }).toBuffer({ resolveWithObject: true })
+          if (data.length <= 256 * 1024) {
+            logger.debug('关联图片预览读取完成', { event: 'mcp.media.read.completed', context: { kind: parsed.ref.kind, byteLength: data.length } })
+            return { mode: 'image', mimeType: 'image/jpeg', base64: data.toString('base64'), offset: 0, byteLength: data.length, totalBytes: stat.size, eof: true, width: info.width, height: info.height }
+          }
+          edge = Math.floor(edge / 2)
+        }
+        failure('MEDIA_PREVIEW_TOO_LARGE', '图片预览无法压缩到传输预算，请改用分块读取。')
+      }
       const buffer = Buffer.alloc(Math.min(parsed.length, stat.size - parsed.offset))
       const { bytesRead } = await file.read(buffer, 0, buffer.length, parsed.offset)
       logger.debug('关联媒体读取完成', { event: 'mcp.media.read.completed', context: { kind: parsed.ref.kind, byteLength: bytesRead } })

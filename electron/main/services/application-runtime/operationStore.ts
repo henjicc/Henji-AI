@@ -79,7 +79,8 @@ export class ApplicationOperationStore {
       const existing = this.get(record.operationId, record.callerId)
       if (existing) {
         if (existing.inputDigest !== record.inputDigest) throw new Error('OPERATION_INPUT_CONFLICT:操作标识已绑定其他参数，请为新的业务请求使用新标识。')
-        return existing
+        // 只有明确零执行可以用同一身份重新准备；未知/部分/回滚结果不自动重放。
+        if (existing.state !== 'not_executed') return existing
       }
       this.save(record)
       return record
