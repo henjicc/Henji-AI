@@ -108,6 +108,16 @@ describe('TTS media provider protocols', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    { message: '', error: { code: 'invalid_parameter_error', message: 'The product is not activated' } },
+    { message: '', output: { base_resp: { status_code: 1004, status_msg: 'The product is not activated' } } },
+  ])('嵌套错误不被空的顶层 message 遮蔽', async (payload) => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 400 }))
+    const error = await bailian.execute(execution(build('bailian-minimax-speech-2.8'), '/api/v1/services/aigc/multimodal-generation/generation', fetch)).catch((value: unknown) => value)
+    expect(error).toMatchObject({ code: 'provider_product_not_activated', details: { retryable: false, providerMessage: 'The product is not activated' } })
+    expect(shouldRetry(error)).toBe(false)
+  })
+
   it('百炼 MiniMax 的最终 Hex 音频变为可落盘的 data URI，错误状态被拒绝', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(fixture.bailianMinimax)))
     const input = execution(build('bailian-minimax-speech-2.8'), '/api/v1/services/aigc/multimodal-generation/generation', fetch)

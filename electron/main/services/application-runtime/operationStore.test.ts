@@ -535,6 +535,16 @@ describe('应用原生操作记录与恢复', () => {
     const failure = { ok: false, error: { details: { transaction: { effects: [{ target: project }], persistence: { recovery: { capabilityId: 'retry_canvas_document_save', target: project, replayMutation: false } }, recoveryVerification: { conditions: [{ kind: 'property_equals', target: project, propertyId: 'canvas.document.name', expected: 'after' }], evidence } } } } }
     f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: failure })
     expect(() => f.coordinator.prepareSaveRecovery(f.callerId, { operationId: randomUUID(), originalOperationId: record.operationId }, randomUUID(), access)).toThrow('SESSION_LOST')
+    const retryInput = { operationId: randomUUID(), originalOperationId: record.operationId }
+    const rejectedRecovery = f.coordinator.prepareSaveRecovery(f.callerId, retryInput, f.rendererEpoch, access)
+    const rejectedRequest = randomUUID()
+    f.coordinator.dispatched(rejectedRecovery, rejectedRequest, f.rendererEpoch)
+    f.coordinator.complete({ requestId: rejectedRequest, rendererEpoch: f.rendererEpoch,
+      result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: '保存前置条件未满足', details: { execution: { notExecuted: true } } } } })
+    expect(f.store.get(rejectedRecovery.operationId, f.callerId)?.state).toBe('not_executed')
+    const retryRecovery = f.coordinator.prepareSaveRecovery(f.callerId, retryInput, f.rendererEpoch, access)
+    expect(retryRecovery).toMatchObject({ state: 'prepared', recoveryOf: record.operationId })
+    expect(retryRecovery.result).toBeUndefined()
     for (const verified of [false, true]) {
       const recovery = f.coordinator.prepareSaveRecovery(f.callerId, { operationId: randomUUID(), originalOperationId: record.operationId }, f.rendererEpoch, access)
       expect(recovery.input).toEqual({ documentRef: project })

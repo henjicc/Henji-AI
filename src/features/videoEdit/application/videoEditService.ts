@@ -808,7 +808,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   instances.set(session.id, instance)
   // 去掉了项目内素材的素材库关联：写回剪辑文件
   if (detached) session.markChanged()
-  if (focus || !activeId) activeId = session.id
+  if (focus) activeId = session.id
   publishVideoEdit(true)
   logger.info('剪辑已打开', { event: 'video_edit.document.open.completed', context: { docId: session.id, missing: session.getState().missingPaths.length } })
   // 打开即恢复（含后台打开），无需挂载时间线；只续查原任务，不重新生成。

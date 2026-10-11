@@ -394,7 +394,12 @@ export const applicationReflectionHandlers = {
         ...(property.nullable ? { nullable: true } : {}) }
     })
     return {
-      entities: entities.map(entity => input.detail === 'full' ? describedEntity(entity) : { id: entity.id, title: entity.title, ...(entity.collectionWrite ? { collectionWrite: entity.collectionWrite } : {}) }),
+      entities: entities.map(entity => {
+        if (input.detail === 'full') return describedEntity(entity)
+        const collection = entity.collectionWrite as { creatable: boolean; removable: boolean } | undefined
+        return { id: entity.id, title: entity.title,
+          ...(collection ? { collectionWrite: { creatable: collection.creatable, removable: collection.removable } } : {}) }
+      }),
       properties,
       nextCursor: offset + limit < description.properties.length ? String(offset + limit) : null,
       propertyAvailability,

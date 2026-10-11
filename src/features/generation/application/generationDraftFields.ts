@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import {
   type ApplicationFieldDefinition,
   type ApplicationPropertyDescriptor,
@@ -40,6 +41,12 @@ function digest(seed: string): string {
 function schemaRef(id: string) {
   return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind: 'property' as const, id, version: 1, digest: digest(`property:${id}`) }
 }
+
+const uploadedMediaSchema = z.array(z.string())
+export const GENERATION_DRAFT_SCHEMA_DOCUMENTS = ['uploaded_images', 'uploaded_videos', 'uploaded_audios'].map(suffix => ({
+  ref: schemaRef(`${GENERATION_DRAFT_ENTITY_TYPE}.${suffix}.value`),
+  value: z.toJSONSchema(uploadedMediaSchema, { io: 'input' }) as JsonValue,
+}))
 
 function draftDescriptor(
   suffix: string,
@@ -142,10 +149,7 @@ export const GENERATION_DRAFT_FIELDS: ApplicationFieldDefinition<GenerationDraft
     read: (draft) => draft.uploadedPromptImages.map((image) => image.url) as JsonValue,
     writer: {
       write(patch, mutation) {
-        if (!Array.isArray(mutation.value) || mutation.value.some((item) => typeof item !== 'string')) {
-          throw new Error('INVALID_INPUT')
-        }
-        const urls = mutation.value as string[]
+        const urls = uploadedMediaSchema.parse(mutation.value)
         const currentImages = currentDraftValue(patch, 'uploadedPromptImages')
         patch.uploadedPromptImages = reconcileMediaGeneratorPromptImages(currentImages, urls)
         patch.uploadedFilePaths = urls
@@ -159,10 +163,7 @@ export const GENERATION_DRAFT_FIELDS: ApplicationFieldDefinition<GenerationDraft
     read: (draft) => [...draft.uploadedVideos] as JsonValue,
     writer: {
       write(patch, mutation) {
-        if (!Array.isArray(mutation.value) || mutation.value.some((item) => typeof item !== 'string')) {
-          throw new Error('INVALID_INPUT')
-        }
-        const urls = mutation.value as string[]
+        const urls = uploadedMediaSchema.parse(mutation.value)
         patch.uploadedVideos = urls
         patch.uploadedVideoFilePaths = urls
       },
@@ -175,10 +176,7 @@ export const GENERATION_DRAFT_FIELDS: ApplicationFieldDefinition<GenerationDraft
     read: (draft) => [...draft.uploadedAudios] as JsonValue,
     writer: {
       write(patch, mutation) {
-        if (!Array.isArray(mutation.value) || mutation.value.some((item) => typeof item !== 'string')) {
-          throw new Error('INVALID_INPUT')
-        }
-        const urls = mutation.value as string[]
+        const urls = uploadedMediaSchema.parse(mutation.value)
         patch.uploadedAudios = urls
         patch.uploadedAudioFilePaths = urls
       },

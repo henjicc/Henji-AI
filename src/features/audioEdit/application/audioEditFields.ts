@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { type ApplicationFieldDefinition, type ApplicationPropertyDescriptor, type JsonValue, fieldWriterTable } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { AudioEditProjectDocument, AudioEditProcessorDescriptor } from '@/core/audioEdit/types'
@@ -80,4 +81,25 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
   ],
 }
 export function audioEditWriterTable(entityType: AudioEditEntityType) { return fieldWriterTable(AUDIO_EDIT_FIELDS[entityType]) }
+
+const audioEditValueSchemas: Record<string, z.ZodType> = {
+  'audio_edit.batch_settings': audioEditSettingsSchema,
+  'audio_edit.cuts': audioEditCutsSchema,
+  'audio_edit.view_settings': audioEditViewSettingsSchema,
+  'audio_edit.frame_rate': audioEditFrameRateSchema,
+  'audio_edit.recipe': audioEditProcessorChainSchema,
+  // 只读描述来自宿主处理器目录，形状与 AudioEditProcessorDescriptor 一致。
+  'audio_edit.processors': z.array(z.object({
+    id: z.string(), name: z.string(), vendor: z.string(), version: z.string(), available: z.boolean(),
+    semanticRole: z.enum(['mouth_declick', 'voice_denoise', 'breath_control']).optional(),
+    latencyFrames: z.number().optional(), reason: z.string().optional(),
+    parameters: z.array(z.object({ id: z.number(), name: z.string(), normalizedValue: z.number(), displayValue: z.string() })).optional(),
+  })),
+}
+export function audioEditSchemaDocuments(entityType: AudioEditEntityType) {
+  return AUDIO_EDIT_FIELDS[entityType].flatMap(({ descriptor }) => descriptor.value.kind === 'json' ? [{
+    ref: descriptor.value.schemaRef,
+    value: z.toJSONSchema(audioEditValueSchemas[descriptor.value.schemaRef.id], { io: 'input' }) as JsonValue,
+  }] : [])
+}
 

@@ -26,6 +26,8 @@
 
 2026-09-27 补充官方音色目录及账号查询接口：Qwen Audio 3.1、Seed-TTS 2.0 使用核对后的预置清单；百炼 MiniMax / Qwen / CosyVoice 与硅基流动 CosyVoice2 支持按账号查询可用音色。接口字段、适用模型和不可查询渠道的边界见上方契约。
 
+2026-10-12 外部 MCP 实测复核：KIE Turbo 音色 ID、百炼未开通错误与 TTS 估价依据及待确认边界见 [TTS 契约的 t168 复核](TTS-多供应商-2026-09.md#2026-10-12-外部-mcp-实测复核t168)。
+
 ## 2026-09-24 已适配更新
 
 - [HappyHorse 1.1 · KIE](HappyHorse-1.1/HappyHorse-1.1_KIE.md)：文生、图生与多图参考。

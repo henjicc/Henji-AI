@@ -80,9 +80,27 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       const createdVideo = await client.callTool({ name: 'create_document', arguments: { operationId: randomUUID(), kind: 'video_edit', name: 'MCP 未打开剪辑' } })
       expect(createdVideo.isError, JSON.stringify(createdVideo)).toBe(false)
       const documentRef = (createdVideo.structuredContent as { result: { data: { resultRef: { id: string } } } }).result.data.resultRef
+      const createSequence = { operationId: randomUUID(), summary: '后台创建主序列', changes: [{ kind: 'create_items', entityType: 'video_edit.sequence',
+        parent: { kind: 'video_edit.document', id: documentRef.id }, items: [{ properties: {
+          'video_edit.sequence.name': '主序列', 'video_edit.sequence.frame_rate': { numerator: 30, denominator: 1 },
+        } }] }] }
+      // 只在文档 I/O 边界模拟一次未打开文档的读取失败，业务执行尚未开始。
+      const unavailable = vi.spyOn(harnessDocumentStore(), 'readDocument').mockRejectedValueOnce(new Error('目标剪辑暂不可读取'))
+      try {
+        const rejected = await client.callTool({ name: 'change_application_entities', arguments: createSequence })
+        expect(JSON.stringify(rejected)).toContain('目标剪辑暂不可读取')
+        expect(rejected.structuredContent, JSON.stringify(rejected)).toMatchObject({ executionState: 'not_executed' })
+        const fact = await client.callTool({ name: 'get_application_operation', arguments: { operationId: createSequence.operationId } })
+        expect(fact.structuredContent).toMatchObject({ executionState: 'not_executed' })
+      } finally { unavailable.mockRestore() }
+      const createdSequence = await client.callTool({ name: 'change_application_entities', arguments: createSequence })
+      expect(createdSequence.structuredContent, JSON.stringify(createdSequence)).toMatchObject({ executionState: 'completed' })
       const owner = await video.openVideoEditDocument(documentRef, { focus: false })
-      const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.activeSequenceId}` }
-      const asset = { id: 'mcp-observed-frame', filePath: 'D:/private/frame.png', displayUrl: '', mediaType: 'image' as const, displayName: '观察画面', source: 'video-edit' as const, mimeType: 'image/png', sizeBytes: 4, width: 320, height: 180, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready' as const, inspectionError: null, fileModifiedAt: 1, contentIdentity: 'd'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }
+      expect(owner.document.sequences).toHaveLength(1)
+      const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.document.sequences[0].id}` }
+      expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
+      expect(video.activeVideoEditInstance()).toBeUndefined()
+      const asset = { id: 'mcp-observed-frame', filePath: path.join(os.tmpdir(), 'private', 'frame.png'), displayUrl: '', mediaType: 'image' as const, displayName: '观察画面', source: 'video-edit' as const, mimeType: 'image/png', sizeBytes: 4, width: 320, height: 180, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready' as const, inspectionError: null, fileModifiedAt: 1, contentIdentity: 'd'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }
       const observe = vi.spyOn(observation, 'observeVideoEditFrame').mockResolvedValue({ asset, width: 320, height: 180, sourceWidth: 320, sourceHeight: 180, documentRevision: 0 })
       const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset)
       const jpeg = await (await import('sharp')).default({ create: { width: 32, height: 18, channels: 3, background: { r: 0, g: 0, b: 0 } } }).jpeg().toBuffer()
@@ -111,7 +129,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
         const read = await client.callTool({ name: 'read_application_entity', arguments: { ref: sequenceRef, propertyIds: ['video_edit.sequence.frame_rate'] } })
         expect(read.isError, JSON.stringify(read)).toBe(false)
         await video.closeVideoEditProject(owner.document.id)
-        const wrong = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': 60 } }] } })
+        const wrong = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), summary: '修改帧率', changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': 60 } }] } })
         expect(wrong.structuredContent, JSON.stringify(wrong)).toMatchObject({ executionState: 'not_executed' })
         expect(JSON.stringify(wrong)).toContain('video_edit.sequence.frame_rate')
         expect(JSON.stringify(wrong)).toContain('numerator')
@@ -119,7 +137,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
         const fresh = await client.callTool({ name: 'read_application_entity', arguments: { ref: sequenceRef, propertyIds: ['video_edit.sequence.frame_rate'] } })
         expect(fresh.isError, JSON.stringify(fresh)).toBe(false)
         await video.closeVideoEditProject(owner.document.id)
-        const changed = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': { numerator: 60, denominator: 1 } } }] } })
+        const changed = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), summary: '修改帧率', changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': { numerator: 60, denominator: 1 } } }] } })
         expect(changed.structuredContent, JSON.stringify(changed)).toMatchObject({ executionState: 'completed' })
         expect((await video.openVideoEditDocument(documentRef, { focus: false })).document.sequences[0].frameRate).toEqual({ numerator: 60, denominator: 1 })
       } finally { observe.mockRestore(); inspect.mockRestore(); media.mockRestore(); await video.closeVideoEditProject(owner.document.id) }

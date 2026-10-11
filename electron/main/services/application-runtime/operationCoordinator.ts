@@ -198,7 +198,7 @@ export class ApplicationOperationCoordinator {
     if (!access.allowWrites) throw new Error('PERMISSION_DENIED:请在应用内授权修改。')
     const existing = this.store.get(operationId, callerId)
     if (existing && existing.inputDigest !== operationDigest(raw)) throw new Error('OPERATION_INPUT_CONFLICT:恢复操作已绑定其他输入。')
-    if (existing && existing.state !== 'prepared') return existing
+    if (existing && existing.state !== 'prepared' && existing.state !== 'not_executed') return existing
     const original = this.store.get(originalOperationId, callerId)
     if (!original || original.state !== 'partial') throw new Error('RECOVERY_UNAVAILABLE:原操作没有已确认的保存失败，未知修改不能重放。')
     if (original.rendererEpoch !== rendererEpoch) throw new Error('RECOVERY_SESSION_LOST:原编辑会话已关闭，未保存的内存不能伪造恢复；请在应用中核对原文档。')

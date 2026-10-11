@@ -15,7 +15,7 @@ import { databaseService, type HistoryRecord } from '@/services/database'
 import { readStoredResultUrls } from '../domain/storedResultUrls'
 
 import { useGenerationDraftStore } from '../store/generationDraftStore'
-import { GENERATION_DRAFT_FIELDS } from './generationDraftFields'
+import { GENERATION_DRAFT_FIELDS, GENERATION_DRAFT_SCHEMA_DOCUMENTS } from './generationDraftFields'
 import { GENERATION_MODEL_FIELDS, getGenerationModelsRevision, type GenerationModelFieldSource } from './generationModelFields'
 import {
   getGenerationModelSchema,
@@ -451,6 +451,7 @@ export function createGenerationDraftReflectionRegistration(): ApplicationEntity
       schemaRef: schemaRef('entity', GENERATION_DRAFT_ENTITY_TYPE),
     },
     properties: fieldDescriptors(GENERATION_DRAFT_FIELDS),
+    schemaDocuments: GENERATION_DRAFT_SCHEMA_DOCUMENTS,
     provider: new GenerationDraftReflectionProvider(),
   }
 }

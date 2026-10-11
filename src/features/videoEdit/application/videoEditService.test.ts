@@ -19,6 +19,22 @@ import { freezeApplicationWrites } from '@/core/applicationLifecycle/application
 import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition, subscribeVideoEditDomain } from './videoEditService'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { openVideoEditDocument, activeVideoEditInstance, closeVideoEditProject } from './videoEditService'
+
+it('并发后台打开复用唯一实例，前台打开仍聚焦；失败后可重试', async () => {
+  const original = await createLegacyTrackVideoEditProject()
+  const target = { id: original.document.id }
+  await closeVideoEditProject(target.id)
+  const read = vi.spyOn(harnessDocumentStore(), 'readDocument')
+  read.mockRejectedValueOnce(new Error('读取暂不可用'))
+  await expect(openVideoEditDocument(target, { focus: false })).rejects.toThrow('读取暂不可用')
+  const [a, b] = await Promise.all([openVideoEditDocument(target, { focus: false }), openVideoEditDocument(target, { focus: false })])
+  expect(a).toBe(b)
+  expect(activeVideoEditInstance()).toBeUndefined()
+  expect(await openVideoEditDocument(target)).toBe(a)
+  expect(activeVideoEditInstance()).toBe(a)
+  expect(read).toHaveBeenCalledTimes(2)
+})
 
 it('原生图形和调整范围独立持久，复制序列重映射转场，错误草稿不改变历史', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequenceId = owner.activeSequenceId
