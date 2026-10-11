@@ -208,7 +208,7 @@ describe('本地 MCP 协议与边界', () => {
     const readOnlyTools = (await a.client.listTools()).tools
     expect(readOnlyTools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['read_application_entity', 'read_application_media', 'describe_application_contract']))
     expect(readOnlyTools.filter((tool) => tool.annotations?.readOnlyHint !== true)).toEqual([])
-    expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: {}, capturedAt: new Date(0).toISOString(), revision: 0, scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 } } })
+    expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, revision: 0, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, capturedAt: new Date(0).toISOString() } })
     expect((await a.client.callTool({ name: 'change_application_entities', arguments: {} })).isError).toBe(true)
     expect(f.calls).toHaveLength(1)
     await a.client.close()
@@ -288,7 +288,7 @@ describe('本地 MCP 协议与边界', () => {
       { id: 'change_application_entities', version: 2, title: '修改', description: '修改实体', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     ] }, { send: () => {} })
     const a = await f.connect()
-    const result = await a.client.callTool({ name: 'describe_application_contract', arguments: {} })
+    const result = await a.client.callTool({ name: 'describe_application_contract', arguments: { detail: 'full' } })
     expect(result.isError, JSON.stringify(result)).toBe(false)
     const data = (result.structuredContent as { data: Record<string, unknown> }).data
     expect((data.contract as { externalContractVersion: string }).externalContractVersion).toBe(EXTERNAL_CONTRACT_VERSION)

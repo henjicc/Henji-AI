@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { buildApplicationContract, buildApplicationToolCatalog, EXCLUDED_TOOLS, PROTOCOL_TOOL_SPECS, toolTier } from './toolCatalog'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
+import { RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
 import {
   EXTERNAL_CONTRACT_VERSION, APPLICATION_CAPABILITY_IDS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS,
   type LocalDomainSurface, type LocalTool,
@@ -83,7 +84,7 @@ describe('对外工具目录的投影与授权过滤', () => {
       const projected = listed.get(tool.id)
       expect(projected, tool.id).toBeDefined()
       if (APPLICATION_READ_CAPABILITY_IDS.some((id) => id === tool.id)) {
-        expect(projected!.inputSchema, tool.id).toEqual({ ...tool.inputSchema, type: 'object' })
+        expect(projected!.inputSchema, tool.id).toEqual({ ...tool.inputSchema, properties: { ...tool.inputSchema.properties as object, ...resultDetailFields(tool.id) }, type: 'object' })
         continue
       }
       const properties = projected!.inputSchema.properties as Record<string, unknown>
@@ -91,6 +92,7 @@ describe('对外工具目录的投影与授权过滤', () => {
       const withoutEnvelope = { ...properties }
       delete withoutEnvelope.operationId
       delete withoutEnvelope.baselineIds
+      for (const key of Object.keys(RESULT_DETAIL_FIELDS)) delete withoutEnvelope[key]
       const declaredWithoutCompat = { ...declared }
       delete declaredWithoutCompat.expectedRevisions
       expect(withoutEnvelope, tool.id).toEqual(declaredWithoutCompat)
@@ -158,12 +160,13 @@ describe('契约发现的投影', () => {
 
     const expanded = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 43821, requestedDomains: ['storyboard'] })
     const storyboard = (expanded.domains as Array<Record<string, unknown>>).find((domain) => domain.id === 'storyboard')!
+    expect(expanded.access).toHaveProperty('alternativeRoutes')
     expect((storyboard.entities as Array<{ readOnlyReason?: string }>)[0].readOnlyReason).toContain('只读摘要投影')
     expect((expanded.domains as Array<Record<string, unknown>>).find((domain) => domain.id === 'settings')).not.toHaveProperty('entities')
   })
 
   it('契约固定版本矩阵，并把"清单里没有"与"调用被拒"讲清楚', () => {
-    const contract = buildApplicationContract({ domains, access: WRITE, catalog: catalog(WRITE), port: 43821, requestedDomains: [] })
+    const contract = buildApplicationContract({ domains, access: WRITE, catalog: catalog(WRITE), port: 43821, requestedDomains: [], detail: 'full' })
     expect(contract.contract).toMatchObject({
       externalContractVersion: EXTERNAL_CONTRACT_VERSION,
       applicationCapabilityCatalog: 'application-capabilities/v2',
@@ -192,7 +195,7 @@ describe('契约发现的投影', () => {
     expect(Buffer.byteLength(JSON.stringify(contract))).toBeLessThan(64 * 1024)
   })
   it('内置助手契约指向对话权限，不让用户创建 MCP 连接；全权限可发现付费生成', () => {
-    const contract = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 0, requestedDomains: [], callerKind: 'embedded' })
+    const contract = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 0, requestedDomains: [], callerKind: 'embedded', detail: 'full' })
     expect(contract.contract).toMatchObject({ transport: { kind: 'embedded', requiresExternalConnection: false } })
     expect(contract.access).toMatchObject({ paid: true, destructive: true, note: expect.stringContaining('助手操作权限') })
     expect(contract.tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'create_visible_generation_task' })]))

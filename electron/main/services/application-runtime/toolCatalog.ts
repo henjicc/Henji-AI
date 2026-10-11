@@ -10,6 +10,7 @@ import { APPLICATION_READABLE_MEDIA_KINDS } from '../../../../src/core/applicati
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { GENERATION_BUDGET } from './generationBudget'
 import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
+import { projectToolOutputSchema, RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
 
 /**
  * 对外目录的唯一投影处。
@@ -47,8 +48,8 @@ export interface ProtocolToolSpec {
 export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'describe_application_contract', tier: 'any', readOnly: true,
-    description: '发现入口：返回对外契约版本、支持的协议与传输限制、本连接的授权档位、被授权档位挡住的工具，以及按域划分的可读写范围。domains 留空只返回域级摘要；给定域名才展开该域的实体清单，避免一次注入全部属性。',
-    inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' } }, additionalProperties: false },
+    description: '发现协议、授权、限制、业务域与可用技能。domains 点名才展开实体；detail="full" 查询工具授权清单、排除理由与弃用策略。',
+    inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' } }, additionalProperties: false },
   },
   {
     name: 'read_application_media', tier: 'any', readOnly: true,
@@ -58,12 +59,12 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'get_application_operation', tier: 'write', readOnly: true, requiresOperations: true,
     description: '读取本连接操作的持久事实；未知状态不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。',
-    inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false },
+    inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, ...RESULT_DETAIL_FIELDS }, required: ['operationId'], additionalProperties: false },
   },
   {
     name: 'retry_application_operation_save', tier: 'write', readOnly: false, requiresOperations: true,
     description: '按原操作记录仅重试保存并核对原条件；不会重放业务修改，必须保留原编辑会话。',
-    inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, originalOperationId: { type: 'string', format: 'uuid' } }, required: ['operationId', 'originalOperationId'], additionalProperties: false },
+    inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, originalOperationId: { type: 'string', format: 'uuid' }, ...RESULT_DETAIL_FIELDS }, required: ['operationId', 'originalOperationId'], additionalProperties: false },
   },
 ]
 
@@ -76,6 +77,7 @@ export const readMediaInputSchema = z.object({
 }).strict()
 export const describeContractInputSchema = z.object({
   domains: z.array(z.string().min(1)).max(16).default([]),
+  detail: z.enum(['compact', 'full']).default('compact'),
 }).strict()
 
 /**
@@ -128,12 +130,12 @@ function capabilityTool(tool: LocalTool): Tool {
     if (tool.id === 'create_visible_generation_task') schema.required = [...new Set([...schema.required as string[], 'modelId', 'prompt', 'mediaType'])]
   }
   return {
-    name: tool.id, title: tool.title, description: tool.description,
-    inputSchema: { ...schema, type: 'object' },
-    ...(definition ? { outputSchema: z.toJSONSchema(write
+    name: tool.id, title: tool.title, description: tool.description + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
+    inputSchema: { ...schema, properties: { ...schema.properties as Record<string, unknown>, ...resultDetailFields(tool.id) }, type: 'object' },
+    ...(definition ? { outputSchema: projectToolOutputSchema(z.toJSONSchema(write
       ? z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough() }).passthrough()
       : z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough(),
-    { io: 'output' }) as Tool['inputSchema'] } : {}),
+    { io: 'output' }), tool.id) as Tool['inputSchema'] } : {}),
     annotations: { readOnlyHint: !write, destructiveHint: tool.id === 'change_application_entities' || Boolean(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)?.destructive), openWorldHint: false },
   }
 }
@@ -210,11 +212,12 @@ export function buildApplicationContract(input: {
   catalog: ApplicationToolCatalog
   port: number
   requestedDomains: readonly string[]
+  detail?: 'compact' | 'full'
   /** 外部连接可读的技能索引（只含名称与适用条件）；内置 Pi 走 skills_index 层，不在契约里重复。 */
   skills?: ReadonlyArray<{ name: string; description: string }>
 }): Record<string, unknown> {
   const requested = new Set(input.requestedDomains)
-  return {
+  const full = {
     contract: {
       externalContractVersion: EXTERNAL_CONTRACT_VERSION,
       applicationCapabilityCatalog: APPLICATION_CAPABILITY_CATALOG_VERSION,
@@ -253,5 +256,23 @@ export function buildApplicationContract(input: {
       index: input.skills.map(skill => ({ name: skill.name, description: skill.description })),
     } } : {}),
     workflows: input.skills?.length ? [...WORKFLOWS, '技能：部分专业流程有操作说明，见 skills；任务匹配时用 load_assistant_skill 按需读取，不预读全部。'] : WORKFLOWS,
+  }
+  if (input.detail === 'full') return full
+  const { deprecationPolicy: _deprecationPolicy, ...contract } = full.contract
+  return {
+    contract,
+    access: { read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
+      ...(input.requestedDomains.length ? { alternativeRoutes: full.access.alternativeRoutes } : {}),
+      note: input.callerKind === 'embedded' ? '授权来自对话框的「助手操作权限」，不需要 MCP 连接。仅执行用户请求范围内的操作。'
+        : '授权仅在痕迹 AI 内调整。工具缺席表示缺授权档；PERMISSION_DENIED 表示本次目标不允许。' },
+    domains: full.domains,
+    ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
+    workflows: [
+      '发现：按域 describe_application_entities；list_application_entities 分页/where 定位；read_application_entity 读属性与 baselineId。完整授权工具清单、排除理由和弃用策略：describe_application_contract(detail="full")；可用工具：tools/list。',
+      '写入：客户端生成 UUID operationId。同一 ID 重传返回原事实；普通修改/新增省略 baselineIds，删除必须读取目标及集合父对象后提供。不要传 expectedRevisions。默认修订仅相关域；includeRevisions=true 获取全表，includeEvidence=true 获取验证明细。',
+      '恢复：unknown 用原 operationId 查 get_application_operation，禁止换 ID 重放；partial 按登记的恢复入口仅重试保存。前置拒绝用 describe_application_entities(refs) 查可用条件。',
+      '结果：生成用 wait_generation_task 等终态；看图用 read_application_media(mode="image")，其他媒体分块读到 eof。无需通知扩展。技能按 skills 的适用条件用 load_assistant_skill 按需读取主文件和单份参考。',
+      `费用：提交前自动估价，所有 Agent 最近 ${GENERATION_BUDGET.windowMs / 60_000} 分钟共享 ¥${GENERATION_BUDGET.cny} 自动生成额度。超额或无法估价时停止，不换 ID 连续尝试。`,
+    ],
   }
 }

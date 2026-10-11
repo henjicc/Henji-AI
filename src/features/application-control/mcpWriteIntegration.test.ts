@@ -95,6 +95,17 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       } finally { unavailable.mockRestore() }
       const createdSequence = await client.callTool({ name: 'change_application_entities', arguments: createSequence })
       expect(createdSequence.structuredContent, JSON.stringify(createdSequence)).toMatchObject({ executionState: 'completed' })
+      // t169：完整证据/修订选项仅改变交付，不进入幂等摘要，也不重放已创建序列。
+      const detailedSequence = await client.callTool({ name: 'change_application_entities', arguments: { ...createSequence, includeEvidence: true, includeRevisions: true } })
+      const compactReceipt = createdSequence.structuredContent as { revision: number; scopeRevisions: Record<string, number>; result: { data: Record<string, unknown> } }
+      const detailedReceipt = detailedSequence.structuredContent as typeof compactReceipt
+      expect(detailedSequence.isError, JSON.stringify(detailedSequence)).toBe(false)
+      expect(compactReceipt.scopeRevisions).toEqual({ video_edit: detailedReceipt.scopeRevisions.video_edit })
+      expect(compactReceipt.revision).toBe(detailedReceipt.revision)
+      expect(compactReceipt.result.data).not.toHaveProperty('evidence')
+      expect(detailedReceipt.result.data).toHaveProperty('evidence')
+      expect(detailedReceipt.scopeRevisions).toHaveProperty('canvas')
+      expect(operations.store.get(createSequence.operationId, identity.id)?.input).not.toHaveProperty('includeRevisions')
       const owner = await video.openVideoEditDocument(documentRef, { focus: false })
       expect(owner.document.sequences).toHaveLength(1)
       const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.document.sequences[0].id}` }
@@ -128,6 +139,8 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
         expect(JSON.stringify(shape)).toContain('denominator')
         const read = await client.callTool({ name: 'read_application_entity', arguments: { ref: sequenceRef, propertyIds: ['video_edit.sequence.frame_rate'] } })
         expect(read.isError, JSON.stringify(read)).toBe(false)
+        const baseline = read.structuredContent as { baselineId: string; data: { revisions: Record<string, number> } }
+        expect(operations.store.readBaseline(baseline.baselineId, identity.id)).toMatchObject({ refs: [sequenceRef], revisions: baseline.data.revisions })
         await video.closeVideoEditProject(owner.document.id)
         const wrong = await client.callTool({ name: 'change_application_entities', arguments: { operationId: randomUUID(), summary: '修改帧率', changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.frame_rate': 60 } }] } })
         expect(wrong.structuredContent, JSON.stringify(wrong)).toMatchObject({ executionState: 'not_executed' })

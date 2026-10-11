@@ -10,6 +10,7 @@ import { createMainLogger } from '../logging'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { isAssistantSkillError } from '../../../../src/core/assistant/skills'
 import { agentSkillIndex, loadAgentSkill } from '../assistant/skills/agentSkills'
+import { projectApplicationToolResult, type ResultDetailOptions } from './resultProjection'
 const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
 const logger = createMainLogger('main.application_runtime')
 
@@ -41,13 +42,27 @@ export class ApplicationToolDispatcher {
     }
   }
   async call(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
+    this.connections.assertActive(callerId)
+    const input = { ...args }
+    const options: ResultDetailOptions = {}
+    for (const key of ['includeRevisions', 'includeEvidence', 'includeDetails'] as const) {
+      if (!(key in input)) continue
+      const parsed = z.boolean().safeParse(input[key])
+      if (!parsed.success) return applicationFailure(`INVALID_INPUT:${key} 必须是布尔值。`)
+      options[key] = parsed.data
+      delete input[key]
+    }
+    const raw = await this.callRaw(callerId, name, input, signal)
+    return projectApplicationToolResult(name, input, raw, options)
+  }
+  private async callRaw(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
       this.connections.assertActive(callerId)
       if (name === 'describe_application_contract') {
         try {
-          const { domains } = describeContractInputSchema.parse(args ?? {})
+          const { domains, detail } = describeContractInputSchema.parse(args ?? {})
           const skills = this.callerKind === 'external' ? await agentSkillIndex() : undefined
           this.connections.assertActive(callerId)
-          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills })
+          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills, detail })
           const result = { ok: true, data }
           return result
         } catch (error) {
