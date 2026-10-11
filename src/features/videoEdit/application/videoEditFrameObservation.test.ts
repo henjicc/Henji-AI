@@ -54,6 +54,7 @@ it('公共观察按固定剪辑版本取指定合成帧与源时间画面，不�
     const program = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'program', frame: 42 }, maxWidth: 960 })
     expect(render.calls[0]).toMatchObject({ frame: 42, document: { id: owner.activeSequenceId, revision: owner.document.revision } })
     expect(program).toMatchObject({ width: 960, height: 540, sourceWidth: 1920, sourceHeight: 1080, documentRevision: owner.document.revision, resultRef: { kind: 'asset', id: 'asset-1' } })
+    expect(program.byteLength).toBe(4)
     expect(owner.frame).toBe(3)
     const source = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, timeUs: 2_500_000 } })
     expect(render.calls[1]).toMatchObject({ frame: 0, document: { width: 3840, height: 2160, fps: 60, clips: [{ sourceInUs: 2_500_000, start: 0, duration: 1 }] } })

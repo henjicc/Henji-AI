@@ -53,8 +53,8 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'read_application_media', tier: 'any', readOnly: true,
-    description: '按稳定结果引用读取已落盘媒体。看图请设 mode="image"：返回 MCP 标准 image content（长边不超过 1280、JPEG 不超过 256 KiB），无需拼接 base64。默认 mode="chunk" 保留原件分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
-    inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], default: 'chunk' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
+    description: '按稳定结果引用读取已落盘媒体。图片默认返回 image（MCP 标准图片，无需拼接 base64），默认长边 1280、JPEG 至多 100 KiB；maxEdge/maxBytes 可缩小查看预算。mode="chunk" 用于读取原件字节；音视频默认分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
+    inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], description: '图片默认 image 直接查看；chunk 读取原件字节，音视频默认 chunk。' }, maxEdge: { type: 'integer', minimum: 1, maximum: 3840, default: 1280, description: '图片预览的长边像素上限。' }, maxBytes: { type: 'integer', minimum: 1024, maximum: 262144, default: 102400, description: 'JPEG 字节上限，自动降低质量或尺寸；不改原件。' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
   },
   {
     name: 'get_application_operation', tier: 'write', readOnly: true, requiresOperations: true,
@@ -66,6 +66,11 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
     description: '按原操作记录仅重试保存并核对原条件；不会重放业务修改，必须保留原编辑会话。',
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, originalOperationId: { type: 'string', format: 'uuid' }, ...RESULT_DETAIL_FIELDS }, required: ['operationId', 'originalOperationId'], additionalProperties: false },
   },
+  {
+    name: 'review_application_operation', tier: 'write', readOnly: false, requiresOperations: true,
+    description: '原宿主结束且执行回执遗失时，由应用读取原目标并弹窗请用户核对是否已执行。只修正本连接原操作账本，不重放修改；不能由智能体代替用户确认。',
+    inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false },
+  },
 ]
 
 export const readMediaInputSchema = z.object({
@@ -74,6 +79,8 @@ export const readMediaInputSchema = z.object({
   offset: z.number().int().nonnegative().optional(),
   length: z.number().int().min(1).max(EXTERNAL_LIMITS.mediaChunkBytes).optional(),
   mode: z.enum(['chunk', 'image']).optional(),
+  maxEdge: z.number().int().min(1).max(3840).optional(),
+  maxBytes: z.number().int().min(1024).max(EXTERNAL_LIMITS.mediaChunkBytes).optional(),
 }).strict()
 export const describeContractInputSchema = z.object({
   domains: z.array(z.string().min(1)).max(16).default([]),

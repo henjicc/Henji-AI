@@ -60,12 +60,63 @@ export class ApplicationOperationCoordinator {
    * 一个实体都不放行，"忘了派生"只会变成拒绝，不会变成放行。
    */
   constructor(readonly store: ApplicationOperationStore, private readonly recoverPersisted?: (record: OperationRecord) => OperationRecord | undefined,
-    private readonly writableEntityTypes: () => ReadonlySet<string> = () => new Set()) {
+    private readonly writableEntityTypes: () => ReadonlySet<string> = () => new Set(),
+    private readonly requestReview?: (summary: string) => Promise<'completed' | 'not_executed' | undefined>) {
     store.recoverInterrupted()
     for (const record of store.unresolved()) {
       const recovered = recoverPersisted?.(record)
       if (recovered) store.save(recovered)
     }
+  }
+  /** 只识别旧通用事务入口的已知前置拒绝，不以缺少回执或目标当前值相等推断。 */
+  private recoverPreflight(record: OperationRecord): OperationRecord {
+    const error = object(record.result?.error)
+    const details = object(error.details)
+    const legacyClosedDocument = record.capabilityId === 'change_application_entities'
+      && error.code === 'CAPABILITY_REJECTED'
+      && error.message === '请先打开目标剪辑：在剪辑页打开所在项目，或用 open_document 打开这份剪辑（文档 ID 取自 list_documents）。'
+    // 旧引擎步骤内异常会包装为“操作未完整完成”并附 partial；此原文只可能在步骤外逃逸。
+    if (record.state === 'unknown' && record.result?.ok === false
+      && !details.transaction && !details.persistence && !details.effects && !details.partial
+      && !record.result.effects && !record.result.data && !record.recoveryResult && !record.recoveryVerification
+      && (object(details.execution).notExecuted === true || legacyClosedDocument)) {
+      const recovered: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified',
+        result: { ...record.result, error: { ...error, recoverable: true, details: { ...details, execution: { notExecuted: true } } } } }
+      this.store.save(recovered)
+      return recovered
+    }
+    return record
+  }
+  async review(record: OperationRecord, rendererEpoch: string, readTarget: (ref: { kind: string; id: string }) => Promise<boolean>, assertAuthorized: () => void): Promise<void> {
+    if (record.state !== 'unknown') return
+    if (!rendererEpoch || rendererEpoch === record.rendererEpoch) throw new Error('RECOVERY_SESSION_ACTIVE:原执行宿主尚未结束，请先查询回执；应用重新加载后可核对。')
+    if (!this.requestReview) throw new Error('RECOVERY_REVIEW_UNAVAILABLE:当前宿主不能发起人工核对，请在痕迹AI桌面应用中重试。')
+    const targets = record.targetRefs?.length ? record.targetRefs : resultRefs(record.input)
+    for (const ref of targets) if (!await readTarget(ref)) throw new Error('RECOVERY_TARGET_UNAVAILABLE:原目标尚不能读取，请在应用中定位原文档后再核对。')
+    const decision = await this.requestReview(typeof record.input.summary === 'string' ? record.input.summary : '先前的应用修改')
+    assertAuthorized()
+    if (!decision) return
+    const current = this.store.get(record.operationId, record.callerId)
+    if (!current || current.state !== 'unknown' || current.requestId !== record.requestId) return
+    this.store.save({ ...current, state: decision, verificationState: 'verified',
+      recoveryResult: { ok: true, verification: { verified: true, source: 'application_user_review', decision } } })
+  }
+  /** 宿主未注册时只登记入口零执行事实；不读取领域白名单，也绝不覆盖既有执行账。 */
+  rejectBeforeDispatch(callerId: string, raw: Record<string, unknown>, capabilityId: OperationRecord['capabilityId'], retryAfterMs: number): OperationRecord {
+    const { operationId, baselineIds } = envelopeSchema.parse(raw)
+    const input = { ...raw }; delete input.operationId; delete input.baselineIds
+    const digest = operationDigest(capabilityId === 'change_application_entities' ? { input, baselineIds } : { input, baselineIds, capabilityId })
+    const prior = this.store.get(operationId, callerId)
+    if (prior) {
+      if (prior.inputDigest !== digest) throw new Error('OPERATION_INPUT_CONFLICT:同一操作标识不能修改参数或基线。')
+      return this.recoverPreflight(prior)
+    }
+    const record = this.store.prepare({ operationId, callerId, inputDigest: digest, input, capabilityId, state: 'prepared' })
+    const rejected: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified', result: { ok: false,
+      error: { code: 'APPLICATION_NOT_READY', message: '应用正在重新连接，请稍后重试。', recoverable: true,
+        details: { execution: { notExecuted: true }, retryAfterMs } } } }
+    this.store.save(rejected)
+    return rejected
   }
   rememberRead(callerId: string, result: Record<string, unknown>, rendererEpoch: string): Record<string, unknown> {
     if (result.ok !== true) return result
@@ -84,7 +135,8 @@ export class ApplicationOperationCoordinator {
     const digest = operationDigest(capabilityId === 'change_application_entities' ? { input, baselineIds } : { input, baselineIds, capabilityId })
     if (!access.allowWrites) throw new Error('PERMISSION_DENIED:请在应用内授权修改。')
     if (Array.isArray(input.changes) && input.changes.some((change) => object(change).kind === 'remove_items') && !access.allowDestructive) throw new Error('PERMISSION_DENIED:此连接没有删除授权。')
-    const prior = this.store.get(operationId, callerId)
+    const storedPrior = this.store.get(operationId, callerId)
+    const prior = storedPrior && this.recoverPreflight(storedPrior)
     if (prior) {
       if (prior.inputDigest !== digest) throw new Error('OPERATION_INPUT_CONFLICT:同一操作标识不能修改参数或基线。')
       if (prior.state !== 'prepared' && prior.state !== 'not_executed') return prior
@@ -119,7 +171,9 @@ export class ApplicationOperationCoordinator {
     if (destructive && !baselineIds.length) throw new Error(`BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${JSON.stringify(refs)}，再提交返回的 baselineIds。`)
     const baselines = baselineIds.map((id) => this.store.readBaseline(id, callerId))
     const currentAccess = operationAccess({ operationId, callerId, capabilityId, input, targetRefs: writeRefs ?? refs })
-    for (const unresolved of this.store.unresolved()) {
+    for (const saved of this.store.unresolved()) {
+      const unresolved = this.recoverPreflight(saved)
+      if (unresolved.state === 'not_executed') continue
       const previousAccess = operationAccess(unresolved)
       const sameUnknownRequest = unresolved.callerId === callerId && unresolved.state === 'unknown' && unresolved.capabilityId === capabilityId
         && operationDigest(unresolved.input) === operationDigest(input)
@@ -222,10 +276,11 @@ export class ApplicationOperationCoordinator {
       expectedRevisions: {}, state: 'prepared', recoveryOf: originalOperationId, capabilityId: recovery.capabilityId as OperationRecord['capabilityId'], recoveryVerification: verification })
   }
   result(record: OperationRecord): Record<string, unknown> {
+    record = this.recoverPreflight(record)
     const recovered = this.recoverPersisted?.(record)
     if (recovered) { this.store.save(recovered); record = recovered }
     return { ok: record.state === 'completed' && record.verificationState === 'verified', operationId: record.operationId, executionState: record.state,
       verificationState: record.verificationState ?? 'unresolved', result: record.result ?? null, recoveryResult: record.recoveryResult ?? null,
-      recovery: record.state === 'unknown' ? '执行结果尚待核对；禁止重复原修改。等待原回执，或在应用内核对原目标。' : undefined }
+      recovery: record.state === 'unknown' ? '执行结果尚待核对；禁止重复原修改。先用 get_application_operation 等待原回执；原宿主已结束时调用 review_application_operation，由应用读取目标并请用户核对是否执行，再解除保护。' : undefined }
   }
 }

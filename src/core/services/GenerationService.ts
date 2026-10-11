@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import type { DocumentContainerRef } from '@/core/documents/types'
 import { emitApplicationEvent } from '@/core/events/applicationEvents'
+import { clearProviderAvailability, rememberProviderFailure } from './providerAvailability'
 
 const logger = createLogger('core.services.GenerationService')
 /**
@@ -13,7 +14,7 @@ import { registry } from '@/core/ModelRegistry'
 import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecutionModels'
 import { createProgressTracker, resolveProgressSpec } from '@/core/progress/progressTracker'
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
-import type { ProviderId } from '@/core/types'
+import { getI18nText, type ProviderId } from '@/core/types'
 import { stripDerivedMediaState } from '@/core/params/derivedMediaState'
 import { captureClonedVoice } from '@/services/voiceLibrary/captureClonedVoice'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
@@ -76,10 +77,12 @@ interface PendingProgressSampleContext {
  */
 export class GenerationFailedError extends Error {
   readonly modelId: string
+  readonly code?: string
   constructor(modelId: string, reason: string) {
-    super(reason)
+    super(reason.replace(/\[provider_[a-z_]+\]\s*/gi, ''))
     this.name = 'GenerationFailedError'
     this.modelId = modelId
+    this.code = /\[(provider_[a-z_]+)\]/i.exec(reason)?.[1].toUpperCase()
   }
 }
 
@@ -250,6 +253,7 @@ export class GenerationService {
       })
       progressTracker?.complete()
 
+      clearProviderAvailability(model.meta.provider, modelId)
       emitApplicationEvent('generation-completed', {
         modelId,
         providerId: model.meta.provider,
@@ -266,12 +270,15 @@ export class GenerationService {
         trace: response.trace,
       }
     } catch (error) {
-      const message = getErrorMessage(error)
+      let message = getErrorMessage(error)
       if (options.signal?.aborted || error instanceof GenerationSubmissionCancelledError) {
         logger.info('[GenerationService] 本地生成已停止', { event: 'generation.generate.cancelled', requestId, modelId })
         progressTracker?.stop()
         throw error
       }
+      const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId)
+      const unavailable = model && rememberProviderFailure(model.meta.provider, modelId, getI18nText(model.meta.name, 'zh'), message)
+      if (unavailable) message = `[${unavailable.code}] ${unavailable.message}`
       logger.error('[GenerationService] 生成异常', error, {
         event: 'generation.generate.failed',
         requestId,
@@ -399,6 +406,7 @@ export class GenerationService {
       })
       progressTracker?.complete()
 
+      if (model) clearProviderAvailability(model.meta.provider, modelId)
       emitApplicationEvent('generation-completed', {
         modelId,
         providerId: model?.meta.provider,
@@ -415,12 +423,15 @@ export class GenerationService {
         trace: response.trace,
       }
     } catch (error) {
-      const message = getErrorMessage(error)
+      let message = getErrorMessage(error)
       if (options.signal?.aborted) {
         logger.info('[GenerationService] 本地续查已停止', { event: 'generation.continue_polling.cancelled', requestId, taskId, modelId })
         progressTracker?.stop()
         throw error
       }
+      const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId)
+      const unavailable = model && rememberProviderFailure(model.meta.provider, modelId, getI18nText(model.meta.name, 'zh'), message)
+      if (unavailable) message = `[${unavailable.code}] ${unavailable.message}`
       if (/\[(voice_training_failed|voice_not_found)\]/.test(message)) {
         try { await voiceLibraryService.markTaskFailed(taskId) }
         catch (storageError) { logger.warn('保存音色失败状态失败', storageError, { event: 'generation.voice_status.save_failed', taskId, modelId }) }
@@ -435,7 +446,7 @@ export class GenerationService {
         },
       })
       progressTracker?.fail(message)
-      throw new Error(`Continue polling failed for ${modelId}: ${message}`)
+      throw new GenerationFailedError(modelId, message)
     }
   }
 
@@ -443,16 +454,19 @@ export class GenerationService {
     const trimmed = apiKey.trim()
     if (!trimmed) {
       await aiRemoveProviderApiKey(provider)
+      clearProviderAvailability(provider)
       this.keyStatusCache.set(provider, false)
       return
     }
 
     await aiSetProviderApiKey(provider, trimmed)
+    clearProviderAvailability(provider)
     this.keyStatusCache.set(provider, true)
   }
 
   async removeApiKey(provider: string): Promise<void> {
     await aiRemoveProviderApiKey(provider)
+    clearProviderAvailability(provider)
     this.keyStatusCache.set(provider, false)
   }
 

@@ -31,6 +31,20 @@ afterAll(async () => { await fs.rm(directory, { recursive: true, force: true }) 
 beforeEach(() => { state.rows.clear(); state.results.clear(); state.project = null })
 
 describe('稳定业务引用的媒体读取', () => {
+  it('图片默认直接查看，1280×720 帧遵守默认与显式传输预算', async () => {
+    const filename = path.join(state.root, 'frame.png')
+    const pixels = Buffer.alloc(1280 * 720 * 3)
+    for (let i = 0; i < pixels.length; i++) pixels[i] = (i * 17 + Math.floor(i / 103)) % 128
+    await sharp(pixels, { raw: { width: 1280, height: 720, channels: 3 } }).png().toFile(filename)
+    state.rows.set('asset:frame', { file_path: filename })
+    const input = { ref: { kind: 'asset', id: 'frame' }, maxEdge: 640, maxBytes: 24 * 1024 }
+    const image = await readApplicationMediaResource({ ref: input.ref })
+    expect(image.mode).toBe('image')
+    expect(image.byteLength).toBeLessThanOrEqual(100 * 1024)
+    const smaller = await readApplicationMediaResource(input)
+    expect(smaller.width).toBeLessThanOrEqual(640)
+    expect(smaller.byteLength).toBeLessThanOrEqual(24 * 1024)
+  })
   it('图片模式输出有界 JPEG，保留原件分块且无本地路径', async () => {
     const filename = path.join(state.root, 'preview.png')
     await sharp({ create: { width: 3000, height: 1600, channels: 3, background: { r: 40, g: 69, b: 105 } } }).png().toFile(filename)
@@ -40,7 +54,7 @@ describe('稳定业务引用的媒体读取', () => {
     expect(image.byteLength).toBeLessThanOrEqual(256 * 1024)
     expect((await sharp(Buffer.from(image.base64, 'base64')).metadata()).width).toBe(1280)
     expect(JSON.stringify(image)).not.toContain(filename)
-    expect(await readApplicationMediaResource({ ref: { kind: 'asset', id: 'preview' } })).toMatchObject({ mimeType: 'image/png' })
+    expect(await readApplicationMediaResource({ ref: { kind: 'asset', id: 'preview' }, mode: 'chunk' })).toMatchObject({ mimeType: 'image/png' })
     await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'preview' }, mode: 'image', offset: 1 })).rejects.toThrow()
   })
 
@@ -80,7 +94,7 @@ describe('稳定业务引用的媒体读取', () => {
     const filename = path.join(state.root, 'task.png'); await fs.writeFile(filename, 'task')
     for (const id of ['current-task', 'old-history']) {
       state.results.set(id, [filename])
-      expect(await readApplicationMediaResource({ ref: { kind: 'generation.result', id } })).toMatchObject({ base64: 'dGFzaw==' })
+      expect(await readApplicationMediaResource({ ref: { kind: 'generation.result', id }, mode: 'chunk' })).toMatchObject({ base64: 'dGFzaw==' })
     }
     await expect(readApplicationMediaResource({ ref: { kind: 'generation.result', id: 'unsaved-task' } })).rejects.toMatchObject({ code: 'MEDIA_NOT_PERSISTED' })
     await expect(readApplicationMediaResource({ ref: { kind: 'generation.result', id: 'current-task' }, offset: 8 })).rejects.toMatchObject({ code: 'MEDIA_RANGE_OUT_OF_BOUNDS' })
@@ -89,7 +103,7 @@ describe('稳定业务引用的媒体读取', () => {
     const a = path.join(state.root, 'a.png'); const b = path.join(state.root, 'b.png')
     await fs.writeFile(a, 'a'); await fs.writeFile(b, 'b')
     state.project = { nodes: [{ id: 'node', type: 'image', position: { x: 0, y: 0 }, data: { imageUrl: a, previewImageUrl: a, mediaInputs: { image: [b] } } }], edges: [] }
-    expect(await readApplicationMediaResource({ ref: { kind: 'canvas.node', id: 'project:node' }, outputIndex: 1 })).toMatchObject({ base64: 'Yg==' })
+    expect(await readApplicationMediaResource({ ref: { kind: 'canvas.node', id: 'project:node' }, mode: 'chunk', outputIndex: 1 })).toMatchObject({ base64: 'Yg==' })
   })
   it.each([{ outputIndex: -1 }, { outputIndex: 0.5 }, { offset: -1 }, { offset: 1.5 }, { offset: Infinity }, { length: 0 }, { length: 262145 }, { length: 1.5 }])('拒绝非法范围 %j', async (range) => {
     await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'x' }, ...range })).rejects.toThrow()

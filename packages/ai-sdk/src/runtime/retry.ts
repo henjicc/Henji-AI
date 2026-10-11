@@ -56,6 +56,8 @@ export function shouldRetry(error: unknown, mode: RetryMode = 'request'): boolea
       || errorChain(error).some(record => providerCode(record)?.toUpperCase() === 'ECONNRESET'
         && record.message === 'Client network socket disconnected before secure TLS connection was established')
   }
+  // 任务已经终止；retryable 表示用户可重新提交，不允许自动续查或重放计费请求。
+  if (errorChain(error).some(record => record.details && typeof record.details === 'object' && (record.details as ErrorRecord).terminal === true)) return false
   const structuredRetryable = readStructuredRetryable(error)
   if (structuredRetryable !== undefined) return structuredRetryable
   if (error instanceof AiRuntimeError) {

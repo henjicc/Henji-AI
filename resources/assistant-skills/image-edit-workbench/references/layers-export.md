@@ -27,7 +27,7 @@
 ## 结果图读取与图片导出
 
 1. 先读写入/保存回执、参数与蒙版状态。内置 Pi 可用 `observe_application_surface` 查看当前应用并实际读取图像；这是当前窗口证据，不代表已检查原尺寸导出。外部 MCP 不开放该内部截图工具。
-2. 画布来源中受支持的栅格层/组，用 `export_image_edit_target_to_canvas` 给原 canvasRef、sourceNodeRef、targetRef，生成普通 PNG 节点并连接来源；随后 `read_application_media` 用返回 nodeRef 分块到 eof，再让支持图像的模型查看。调整/效果层不能单独导出；浮点/HDR文档也不支持这个算法，不能借它假装全能图片导出。
+2. 画布来源中受支持的栅格层/组，用 `export_image_edit_target_to_canvas` 给原 canvasRef、sourceNodeRef、targetRef，生成普通 PNG 节点并连接来源；随后 `read_application_media(mode="image")` 用返回 nodeRef 直接查看图像。调整/效果层不能单独导出；浮点/HDR文档也不支持这个算法，不能借它假装全能图片导出。
 3. 要下载画布节点图片用 `download_canvas_media`，documentId/nodeIds 必须来自原画布发现结果，destination 只用已配置 quick/preset。核对 savedNodeIds/failedNodeIds；分批大小按本工具schema，不给整个作品节点数量设配额。读取整图时确认节点关联媒体的outputIndex，不把输入原图误当编辑结果。
 4. 独立图片编辑器已有扁平图片导出界面；当前公开工具目录未提供可指定该工作文档的通用扁平导出能力。不要发明工具或把 `commit_image_edit` 当V3工作文档导出：它只收创建预览返回的previewRef。需要这个界面导出而当前调用面无法执行时如实说明具体缺口。
 5. 交付可编辑文档用 `export_document_package` 的 documentId（目录返回值），结果是 .henjipack 而不是PNG。它连同引用素材/内嵌图层打包，核对 missingFiles。图片格式/透明度/尺寸/色彩空间由实际导出入口约束，不能承诺未发现的格式选项。

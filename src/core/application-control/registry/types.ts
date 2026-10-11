@@ -71,6 +71,8 @@ export interface ApplicationEntityProvider {
 export interface ApplicationSchemaDocument {
   ref: ApplicationSchemaRef
   value: JsonValue
+  /** 运行期保留领域校验及中文提示；不参与传输或持久化。 */
+  validator?: import('zod').z.ZodType
 }
 
 export interface ApplicationEntityRegistration {

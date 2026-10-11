@@ -54,6 +54,7 @@ async function sendCreateTask(input: ProviderExecutionInput, endpoint: string): 
   const code = getPointer(payload, '/code')
   const success = getPointer(payload, '/success')
   if ((typeof code === 'number' && code !== 200) || success === false) {
+    assertKieTaskFailure(code, stringAt(payload, '/msg') ?? '')
     throw new AiRuntimeError('provider_task_failed', stringAt(payload, '/msg') ?? 'KIE create task failed')
   }
   return payload
@@ -79,11 +80,21 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
     const state = (stringAt(payload, '/data/state') ?? '').trim().toLowerCase()
     if (state === 'success') return payload
     if (state === 'fail') {
+      assertKieTaskFailure(getPointer(payload, '/data/failCode'), stringAt(payload, '/data/failMsg') ?? '')
       throw new AiRuntimeError('provider_task_failed', stringAt(payload, '/data/failMsg') ?? 'KIE task failed')
     }
     if (['waiting', 'queuing', 'generating'].includes(state)) return undefined
     return POLL_QUERY_FAILED
   })
+}
+
+function assertKieTaskFailure(code: JsonValue | undefined, message: string): void {
+  if (/^Internal Error(?:,|\.|$)/i.test(message.trim())) {
+    throw new AiRuntimeError('provider_internal_error', 'KIE 服务内部错误，可稍后手动重试。', { retryable: true, terminal: true, providerCode: code, providerMessage: message })
+  }
+  if (String(code) === '422') {
+    throw new AiRuntimeError('provider_invalid_request', `KIE 拒绝了请求参数，请修改后重试：${message}`, { retryable: false, providerCode: code, providerMessage: message })
+  }
 }
 
 function extractTaskId(payload: JsonValue): string | undefined {

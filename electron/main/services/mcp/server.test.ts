@@ -243,13 +243,15 @@ describe('本地 MCP 协议与边界', () => {
     f.advance()
     expect((await fetch(f.url(), { headers: { Authorization: `Bearer ${tokenB}` } })).status).toBe(401)
   })
-  it('未就绪仍可发现目录，执行返回就绪失败', async () => {
+  it('未就绪仍可发现目录，只读等待超时返回就绪失败和重试时间', async () => {
     const f = await fixture({ ready: false })
     const { client } = await f.connect()
     expect((await client.listTools()).tools.length).toBeGreaterThan(0)
-    expect((await client.callTool({ name: 'read_application_entity', arguments: {} })).isError).toBe(true)
+    const result = await client.callTool({ name: 'read_application_entity', arguments: {} })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result)).toContain('retryAfterMs')
     expect(f.calls).toHaveLength(0)
-  })
+  }, 15_000)
   it('页面重载终止读取，迟到回执不能泄漏结果', async () => {
     const f = await fixture({ pending: true })
     const a = await f.connect()

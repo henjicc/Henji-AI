@@ -51,6 +51,8 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     invocationInput: unknown,
     context: CapabilityExecutionContext
   ): Promise<Record<string, unknown>> {
+    let handlerStarted = false
+    try {
     const invocation = applicationCapabilityInvocationSchema.parse(invocationInput)
     const definition = this.definitions.get(invocation.id)
     const handler = this.handlers.get(invocation.id)
@@ -106,6 +108,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
         throw new Error('REVISION_ENVELOPE_MISMATCH')
       }
     }
+    handlerStarted = true
     const result = await handler(input, {
       ...context,
       getExecutionEngine: getApplicationControlExecutionEngine,
@@ -120,6 +123,10 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     const enrichedOutput = definition.outputSchema.safeParse(enriched)
     const output = (enrichedOutput.success ? enrichedOutput.data : definition.outputSchema.parse(result)) as Record<string, unknown>
     return capabilityVerificationEnvelope(definition, input, output)
+    } catch (error) {
+      if (!handlerStarted) throw new ApplicationPreflightFailure(error)
+      throw error
+    }
   }
 }
 
@@ -185,14 +192,18 @@ function toFailure(error: unknown): ApplicationCapabilityFailure {
   }
   if (error instanceof ApplicationPreflightFailure) {
     const conflict = /^(?:CONFLICT|REVISION_CONFLICT|PLAN_REVISION_CONFLICT)(?::|$)/.test(error.message)
-    return { ok: false, error: { code: conflict ? 'CONFLICT' : 'INVALID_INPUT',
+    const providerCode = (['PROVIDER_PRODUCT_NOT_ACTIVATED', 'PROVIDER_MODEL_ACCESS_DENIED', 'PROVIDER_INSUFFICIENT_BALANCE'] as const)
+      .find(code => error.message.startsWith(`${code}:`))
+    return { ok: false, error: { code: providerCode ?? (conflict ? 'CONFLICT' : 'INVALID_INPUT'),
       message: conflict ? `目标状态已变化，请重新读取原目标取得版本后再试。${error.message}` : error.message,
       recoverable: true, details: { execution: { notExecuted: true } } } }
   }
   if (error instanceof ApplicationTransactionFailure) {
     const transaction = transactionFailureFacts(error.result)
     return { ok: false, error: { code: error.result.code === 'CONFLICT' ? 'CONFLICT' : 'CAPABILITY_REJECTED', message: error.message,
-      recoverable: error.result.recoverable, ...(transaction ? { details: { transaction } } : {}) } }
+      recoverable: error.result.recoverable, ...(transaction ? { details: { transaction,
+        ...(error.result.partial?.completedStepIndexes.length === 0 && !error.result.persistence && !error.result.effects?.length ? { execution: { notExecuted: true } } : {}),
+      } } : {}) } }
   }
   if (error instanceof ApplicationPersistenceFailure) {
     return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message,

@@ -59,9 +59,9 @@ it.each([
   { kind: 'canvas.node', id: 'media-project:media-node' },
 ])('物理SQLite重新打开后，$kind 正式解析返回真实媒体分块', async (ref) => {
   expect(isPathWithinAllowedMediaRoots(file)).toBe(true)
-  const result = await readApplicationMediaResource({ ref, offset: 4, length: 5 })
+  const result = await readApplicationMediaResource({ ref, mode: 'chunk', offset: 4, length: 5 })
   expect(result).toEqual({ mimeType: 'image/png', base64: bytes.subarray(4, 9).toString('base64'), offset: 4, byteLength: 5, totalBytes: bytes.length, eof: false })
-  expect(await readApplicationMediaResource({ ref, offset: bytes.length })).toMatchObject({ base64: '', byteLength: 0, eof: true })
+  expect(await readApplicationMediaResource({ ref, mode: 'chunk', offset: bytes.length })).toMatchObject({ base64: '', byteLength: 0, eof: true })
 })
 
 it('正式记录未保存和真实媒体根外路径拒绝；读取不自行扩大授权', async () => {
@@ -92,7 +92,7 @@ it('真实SDK客户端读取媒体，缺少凭据和撤销连接后均不能读�
     const url = new URL(`http://127.0.0.1:${server.listeningPort}/mcp`)
     expect((await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status).toBe(401)
     await client.connect(new StreamableHTTPClientTransport(url, { requestInit: { headers: { Authorization: `Bearer ${connections.token(connection.id)}` } } }))
-    const result = await client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'asset-result' }, length: 5 } })
+    const result = await client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'asset-result' }, mode: 'chunk', length: 5 } })
     expect(result.isError).not.toBe(true)
     expect(result.structuredContent).toMatchObject({ ok: true, data: { mimeType: 'image/png', byteLength: 5, totalBytes: bytes.length, base64: bytes.subarray(0, 5).toString('base64') } })
     connections.revoke(connection.id)

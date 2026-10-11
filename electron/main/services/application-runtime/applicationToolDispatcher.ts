@@ -4,6 +4,7 @@ import { EXTERNAL_LIMITS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAP
 import { buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, readMediaInputSchema, type ApplicationAccess } from './toolCatalog'
 import { readApplicationMediaResource, ApplicationMediaResourceError } from './mediaResources'
 import type { ApplicationHostBridge } from './applicationHostBridge'
+import { ApplicationHostNotReadyError } from './applicationHostBridge'
 import type { ApplicationOperationCoordinator } from './operationCoordinator'
 import { reserveGenerationBudget } from './generationBudget'
 import { createMainLogger } from '../logging'
@@ -83,12 +84,23 @@ export class ApplicationToolDispatcher {
         this.connections.assertActive(callerId)
         return result
       }
-      if (name === 'get_application_operation' && this.operations) {
+      if ((name === 'get_application_operation' || name === 'review_application_operation') && this.operations) {
         const parsed = z.object({ operationId: z.string().uuid() }).strict().safeParse(args)
         if (!parsed.success) return applicationFailure(invalidInputMessage(parsed.error)!)
         const operation = this.operations.store.get(parsed.data.operationId, callerId)
         if (operation) {
           try { await this.reconcileVerification(callerId, operation, signal) } catch { /* 核实不可用时保留原事实与屏障。 */ }
+          if (name === 'review_application_operation') {
+            if (!this.connections.access(callerId).allowWrites) return applicationFailure('PERMISSION_DENIED:此连接没有修改授权。')
+            try {
+              await this.operations.review(this.operations.store.get(operation.operationId, callerId)!, this.host.rendererEpoch, async ref => {
+                const result = await this.host.execute(callerId, 'read_application_entity', { ref }, signal, this.connections.access(callerId))
+                this.connections.assertActive(callerId)
+                signal.throwIfAborted()
+                return result.ok === true || (result.error as { code?: string } | undefined)?.code === 'NOT_FOUND'
+              }, () => { this.connections.assertActive(callerId); signal.throwIfAborted(); if (!this.connections.access(callerId).allowWrites) throw new Error('PERMISSION_DENIED:修改授权已撤销。') })
+            } catch (error) { return applicationFailure(error instanceof Error ? error.message : '操作核对未完成。') }
+          }
         }
         const result = operation ? this.operations.result(this.operations.store.get(operation.operationId, callerId)!) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }
         return { ...result, ok: result.ok === true }
@@ -96,6 +108,11 @@ export class ApplicationToolDispatcher {
       if ([...APPLICATION_WRITE_CAPABILITY_IDS, 'retry_application_operation_save'].some((id) => id === name) && this.operations) {
         try {
           const access = this.connections.access(callerId)
+          const writeId = APPLICATION_WRITE_CAPABILITY_IDS.find(id => id === name)
+          if (!this.host.ready && access.allowWrites && writeId) {
+            const result = this.operations.result(this.operations.rejectBeforeDispatch(callerId, args ?? {}, writeId, 1000))
+            return { ...result, ok: result.ok === true }
+          }
           if (name === 'change_application_entities' && access.allowWrites && Array.isArray(args?.changes)) {
             const targets = args.changes.map(change => change && typeof change === 'object' ? (change as { target?: unknown }).target : undefined)
             for (const unresolved of this.operations.store.unresolved()) {
@@ -125,8 +142,9 @@ export class ApplicationToolDispatcher {
                 logger.info('生成参数与费用检查通过', { event: 'application.generation_preflight.completed', requestId: operation.operationId, context: { estimatedCny: this.operations.store.get(operation.operationId, callerId)?.generationEstimate?.cny } })
               } catch (error) {
                 const message = error instanceof Error ? error.message : '生成准备失败。'
+                const code = /^(PROVIDER_(?:PRODUCT_NOT_ACTIVATED|MODEL_ACCESS_DENIED|INSUFFICIENT_BALANCE)):/.exec(message)?.[1] ?? 'GENERATION_PREFLIGHT_REJECTED'
                 logger.warn('生成提交前检查未通过', { event: 'application.generation_preflight.failed', requestId: operation.operationId, error })
-                if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') this.operations.store.save({ ...this.operations.store.get(operation.operationId, callerId)!, state: 'not_executed', result: { ok: false, error: { code: 'GENERATION_PREFLIGHT_REJECTED', message, details: { execution: { notExecuted: true } } } } })
+                if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') this.operations.store.save({ ...this.operations.store.get(operation.operationId, callerId)!, state: 'not_executed', verificationState: 'verified', result: { ok: false, error: { code, message, details: { execution: { notExecuted: true } } } } })
               }
             }
             if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') {
@@ -134,7 +152,7 @@ export class ApplicationToolDispatcher {
                 const current = this.operations.store.get(operation.operationId, callerId)!
                 // 尚未派发的宿主拒绝是明确零执行；已派发后的等待失败保留执行事实。
                 if (current.state === 'preparing') this.operations.store.save({ ...current, state: 'not_executed', result: {
-                  ok: false, error: { code: 'DISPATCH_REJECTED', message: error instanceof Error ? error.message : '应用尚未就绪。', details: { execution: { notExecuted: true } } },
+                  ok: false, error: { code: 'DISPATCH_REJECTED', message: error instanceof Error ? error.message : '应用尚未就绪。', recoverable: true, details: { execution: { notExecuted: true }, ...(error instanceof ApplicationHostNotReadyError ? { retryAfterMs: error.retryAfterMs } : {}) } },
                 } })
               }
             }
@@ -147,14 +165,16 @@ export class ApplicationToolDispatcher {
       const id = APPLICATION_READ_CAPABILITY_IDS.find((value) => value === name)
       if (!id) return applicationFailure('此连接只允许读取。请用 tools/list 查看可用工具。')
       try {
-        const rendererEpoch = this.host.rendererEpoch
         const raw = await this.host.execute(callerId, id, args ?? {}, signal, this.connections.access(callerId))
-        const result = this.operations ? this.operations.rememberRead(callerId, raw, rendererEpoch) : raw
+        const result = this.operations ? this.operations.rememberRead(callerId, raw, this.host.rendererEpoch) : raw
         this.connections.assertActive(callerId)
         const text = JSON.stringify(result)
         if (Buffer.byteLength(text) > MAX_RESULT) throw new Error('读取结果过大，请缩小字段或分页读取。')
         return { ...result, ok: result.ok === true }
-      } catch (error) { return applicationFailure(error instanceof Error ? error.message : '应用读取失败，请稍后重试。') }
+      } catch (error) {
+        if (error instanceof ApplicationHostNotReadyError) return { ok: false, error: { code: 'APPLICATION_NOT_READY', message: error.message, recoverable: true, details: { retryAfterMs: error.retryAfterMs, execution: { notExecuted: true } } } }
+        return applicationFailure(error instanceof Error ? error.message : '应用读取失败，请稍后重试。')
+      }
   }
   private async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {
     await this.operations?.reconcileReceipt(record, async original => {

@@ -1,7 +1,7 @@
 import { ApplicationOperationNotExecutedFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
-import { requireVideoEditInstance } from './videoEditService'
+import { openVideoEditDocument, requireVideoEditInstance } from './videoEditService'
 
 // 仅这些操作的业务产物是同一不可变文档的原子提交；分析缓存不构成剪辑写入。
 // 付费生成、文件导入、代理、导出、跨工作区写入不能依赖此守卫判断执行事实。
@@ -16,11 +16,12 @@ const ATOMIC_DOCUMENT_ALGORITHMS = new Set([
 ])
 
 export function guardVideoEditDocumentAlgorithm(id: string, handler: CapabilityHandler): CapabilityHandler {
-  if (!ATOMIC_DOCUMENT_ALGORITHMS.has(id)) return handler
   return async (raw, context) => {
-    const input = raw as { documentRef: { kind: 'video_edit.document'; id: string } }
+    const input = raw as { documentRef?: { kind: string; id: string } }
+    if (input.documentRef?.kind !== 'video_edit.document') return handler(raw, context)
     let owner
-    try { owner = requireVideoEditInstance(input.documentRef.id) } catch (error) { throw new ApplicationPreflightFailure(error) }
+    try { owner = await openVideoEditDocument({ id: input.documentRef.id }, { focus: false }) } catch (error) { throw new ApplicationPreflightFailure(error) }
+    if (!ATOMIC_DOCUMENT_ALGORITHMS.has(id)) return handler(raw, context)
     const baseline = owner.document
     try { return await handler(raw, context) } catch (error) {
       if (error instanceof ApplicationPersistenceFailure) throw error

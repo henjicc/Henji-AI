@@ -37,7 +37,7 @@ placement.mode=library 只进素材面板；replace 给 clipRef；insert/overwri
 - `send_video_edit_to_canvas` 给 documentRef、sequenceRef、canvasRef，selection.kind=frame + frame，或 kind=clip + clipRef；placement 取画布正式schema。帧是最终合成，片段带当前裁切、速度、效果与链接声音，结果进目标画布撤销栈，不付费且不切页。源／目标变化后拒绝，准备完成文件可能保留，恢复前先读两端状态。
 - `edit_video_edit_program_frame` 只给 documentRef，从当前序列播放头取合成并打开图片编辑器。先用 `video_edit.document.program_playback` 定位并暂停目标帧；该入口有真实导航，仅用户要求编辑画面时用。
 - 进入图片编辑后从实际宿主／文档目录取得图片文档引用，经其通用实体编辑并保存；保留返回的原剪辑 documentRef、sequenceRef、frameEditSessionRef、returnPlacement。回填 `place_video_edit_creative_result` 用保存图片的 documents.document 来源，并原样带 frameEditSessionRef 与 returnPlacement（作为 placement）；时长恰为1帧，不能用普通图片默认时长。不要把返回的剪辑 documentRef 冒充图片文档。
-- 只是看画面用 `observe_video_edit_frame`，取 program 目标 sequenceRef/frame 或 source 目标itemRef/timeUs，随后 `read_application_media`；无需打开图片编辑。收录选帧用 `collect_video_edit_output` 的 kind=frame，依赖当前节目已暂停和定位。
+- 只是看画面用 `observe_video_edit_frame`，取 program 目标 sequenceRef/frame 或 source 目标itemRef/timeUs，随后 `read_application_media(mode="image")`；无需打开图片编辑。收录选帧用 `collect_video_edit_output` 的 kind=frame，依赖当前节目已暂停和定位。
 
 ## 原地生成：计划、审批、等待、落位
 

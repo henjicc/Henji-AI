@@ -21,6 +21,7 @@ export interface VideoEditFrameObservation {
   asset: AssetRecord
   width: number
   height: number
+  byteLength: number
   sourceWidth: number
   sourceHeight: number
   documentRevision: number
@@ -107,5 +108,5 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const asset = await assetApplicationService.inspect(created.id)
   if (asset.inspectionStatus !== 'ready' || asset.width !== width || asset.height !== height) throw new Error('观察图片没有通过资产检查，请重试。')
   logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width, height, durationMs: Math.round(performance.now() - started) } })
-  return { asset, width, height, sourceWidth, sourceHeight, documentRevision: document.revision, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
+  return { asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
 }

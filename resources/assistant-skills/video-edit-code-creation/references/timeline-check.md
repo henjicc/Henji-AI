@@ -30,7 +30,7 @@
 - `cropAnnotationId:"原始标注id"` 按 point/region/stroke/element.region 裁切放大。range 无画面区域不能裁切；目标须属于此序列且覆盖此帧，元素不可定位时先核对源码版本。
 - `highlightElement:{clipRef,elementId}` 高亮当前帧可见代码元素。以上标注/高亮选项只支持 program，不用于 source。
 
-它按当前剪辑版本离屏渲染，不改用户的播放头、选区和画面。返回的 `resultRef` 交给 `read_application_media` 读到 eof，读到像素后再评价。动画至少看开始、关键帧附近和结束三处；只看一帧不能证明动画正确。
+它按当前剪辑版本离屏渲染，不改用户的播放头、选区和画面。返回的 `resultRef` 交给 `read_application_media(mode="image")` 查看图像，读到像素后再评价。动画至少看开始、关键帧附近和结束三处；只看一帧不能证明动画正确。
 
 处理批注读 annotations；修改源码使用 languageVersion:3 并新增固定版本，参数仍属于片段实例。不要用旧元素位置/旧版本帧评价新作品，也不要把编译成功当作像素验收。
 

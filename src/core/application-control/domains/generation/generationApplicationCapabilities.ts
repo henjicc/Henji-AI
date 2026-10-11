@@ -196,6 +196,8 @@ const prepareGenerationTask = defineApplicationCapability({
       prepared: z.literal(true),
       providerConfigured: z.boolean(),
       canSubmit: z.boolean(),
+      errorCode: z.enum(['PROVIDER_PRODUCT_NOT_ACTIVATED', 'PROVIDER_MODEL_ACCESS_DENIED', 'PROVIDER_INSUFFICIENT_BALANCE']).optional(),
+      retryAfterMs: z.number().nonnegative().optional(),
       message: z.string().min(1),
       modelId: z.string().min(1),
       providerId: z.string().min(1),

@@ -23,16 +23,22 @@ export function describeJsonValueShape(schema: unknown, depth = 0): string {
 const validators = new WeakMap<object, z.ZodType>()
 
 /** 使用现有 Zod 的 JSON Schema 实现，领域自定义 refine 仍由正式执行器复核。 */
-export function validateJsonValueShape(propertyId: string, schema: JsonValue, value: JsonValue): void {
+export function validateJsonValueShape(propertyId: string, schema: JsonValue, value: JsonValue, domainValidator?: z.ZodType): void {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return
-  let validator = validators.get(schema)
+  let validator = domainValidator ?? validators.get(schema)
   if (!validator) {
     validator = z.fromJSONSchema(schema)
     validators.set(schema, validator)
   }
   const result = validator.safeParse(value)
   if (!result.success) {
-    const issues = result.error.issues.slice(0, 3).map(issue => `${issue.path.join('.') || '值'}: ${issue.message}`).join('；')
+    // 联合分支本身只说 Invalid input；展开叶子才能保留 shapes[0].points 等修正依据。
+    const leaves = (issues: readonly z.core.$ZodIssue[]): z.core.$ZodIssue[] => issues.flatMap(issue =>
+      issue.code === 'invalid_union' ? issue.errors.flatMap(leaves) : [issue])
+    const issues = leaves(result.error.issues).map(issue => {
+      const path = issue.path.map((part, index) => typeof part === 'number' ? `[${part}]` : `${index ? '.' : ''}${String(part)}`).join('')
+      return `${path || '值'}: ${issue.message}`
+    }).join('；')
     throw new Error(`INVALID_PROPERTY_VALUE:${propertyId} 需要 ${describeJsonValueShape(schema)}；${issues}。用 describe_application_entities 的 propertyIds 读取完整 schema。`)
   }
 }

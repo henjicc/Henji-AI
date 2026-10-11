@@ -75,6 +75,25 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 } }))
 const source = `export default {apiVersion:1,name:"原创移动圆",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:4,seed:7,parameters:{amount:{type:"number",title:"透明度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){return [ellipse({x:100+ctx.time*20,y:100,width:500,height:500,fill:[0,1,1,ctx.params.amount]})];}}`
 const files = new Map<string, string>()
+it('关闭的剪辑可后台创建代码素材和组件，读取组件不抢占活动剪辑', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  const app = createApplicationHarness()
+  try {
+    await closeVideoEditProject(id)
+    for (const [entityType, properties] of [
+      ['video_edit.code_component', { 'video_edit.code_component.name': '共享圆', 'video_edit.code_component.source': 'export const radius = 100;' }],
+      ['video_edit.code_material', { 'video_edit.code_material.source': source }],
+    ] as const) {
+      const result = await app.call('change_application_entities', { summary: '后台创建', changes: [{ kind: 'create_items', entityType, parent: { kind: 'video_edit.document', id }, items: [{ properties }] }] })
+      expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
+      expect(projectService.activeVideoEditInstance()).toBeUndefined()
+      await closeVideoEditProject(id)
+    }
+    expect(await app.read({ kind: 'video_edit.code_component', id: `${id}:共享圆` }, ['video_edit.code_component.source']))
+      .toMatchObject({ properties: { 'video_edit.code_component.source': 'export const radius = 100;' } })
+    expect(projectService.activeVideoEditInstance()).toBeUndefined()
+  } finally { app.dispose() }
+})
 const filterSource = 'export default {apiVersion:1,name:"原创滤镜",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
 const codeAssetFixture = (codeSource = source): CodeAsset => ({ format: 'henji-code-asset', version: 1, name: '可编辑资产', ...testCodeAssetSource(codeSource, codeSource.includes('type:"image"') ? 2 : 1), parameters: { amount: .7 }, curves: { amount: [{ id: 'asset-key', sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 }, value: .9, interpolation: 'ease' }] }, images: [] })
 const importPublication = (asset = codeAssetFixture()) => ({ asset, media: [], mediaIds: new Map<string, string>(), origin: { assetId: 'fixed-asset', contentIdentity: 'a'.repeat(64) }, beforePublish: async () => undefined })

@@ -33,6 +33,7 @@ import { createEmptyGenerationDraft } from '@/features/generation/domain/generat
 
 import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
 import { registerGenerationCapabilityHandlers } from '@/features/generation/application/registerGenerationCapabilityHandlers'
+import { clearProviderAvailability, rememberProviderFailure, PROVIDER_AVAILABILITY_TTL } from '@/core/services/providerAvailability'
 
 const context = { signal: new AbortController().signal }
 
@@ -68,6 +69,7 @@ function registeredHandlers(): Map<string, CapabilityHandler> {
  */
 describe('generation capability handlers（5.4：放宽提交）', () => {
   beforeEach(() => {
+    clearProviderAvailability(testModel.meta.provider)
     vi.clearAllMocks()
     mocks.configured.mockResolvedValue([testModel.meta.provider])
     registry.clear()
@@ -79,8 +81,25 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     registry.clear()
+  })
+
+  it('记住未开通后预检拒绝，模型成功或三十分钟后恢复，余额不足跨模型生效', async () => {
+    vi.useFakeTimers()
+    const handlers = registeredHandlers(); const prepare = handlers.get('prepare_generation_task')!
+    const input = { modelId: testModel.meta.id, mediaType: 'image', prompt: 'fixture' }
+    rememberProviderFailure(testModel.meta.provider, testModel.meta.id, '测试模型', '[provider_product_not_activated] 请到供应商控制台开通。')
+    expect(await prepare(input, context)).toMatchObject({ preparation: { canSubmit: false, errorCode: 'PROVIDER_PRODUCT_NOT_ACTIVATED' } })
+    await expect(handlers.get('create_visible_generation_task')!(input, context)).rejects.toThrow('开通')
+    expect(mocks.submit).not.toHaveBeenCalled()
+    clearProviderAvailability(testModel.meta.provider, testModel.meta.id)
+    expect(await prepare(input, context)).toMatchObject({ preparation: { canSubmit: true } })
+    rememberProviderFailure(testModel.meta.provider, 'another-model', '另一个模型', '[provider_insufficient_balance] 供应商账户余额不足，请充值。')
+    expect(await prepare(input, context)).toMatchObject({ preparation: { canSubmit: false, errorCode: 'PROVIDER_INSUFFICIENT_BALANCE' } })
+    await vi.advanceTimersByTimeAsync(PROVIDER_AVAILABILITY_TTL)
+    expect(await prepare(input, context)).toMatchObject({ preparation: { canSubmit: true } })
   })
 
   it('t95：未配置供应商只完成参数准备，明确不能提交；已配置仍须独立提交授权', async () => {

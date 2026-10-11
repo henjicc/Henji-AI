@@ -6,8 +6,9 @@ export const GENERATION_BUDGET = { cny: 50, windowMs: 10 * 60_000 } as const
 export function reserveGenerationBudget(store: ApplicationOperationStore, record: OperationRecord, preparation: unknown, now = Date.now()): void {
   const current = store.get(record.operationId, record.callerId)
   if (!current || !['prepared', 'preparing'].includes(current.state)) return
-  const result = preparation as { ok?: boolean; data?: { preparation?: { priceEstimate?: { comparableCnyAmount?: unknown } } }; error?: { message?: string } }
+  const result = preparation as { ok?: boolean; data?: { preparation?: { canSubmit?: boolean; message?: string; errorCode?: string; priceEstimate?: { comparableCnyAmount?: unknown } } }; error?: { message?: string } }
   if (result?.ok !== true) throw new Error(result?.error?.message ?? '生成参数校验未通过，请修正后再提交。')
+  if (result.data?.preparation?.canSubmit === false) throw new Error(`${result.data.preparation.errorCode ?? 'GENERATION_PREFLIGHT_REJECTED'}:${result.data.preparation.message ?? '当前不能提交生成。'}`)
   const amount = result.data?.preparation?.priceEstimate?.comparableCnyAmount
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) throw new Error('费用暂不可估算，请先在生成页面核对价格后手动提交；不要盲目重试。')
   const since = now - GENERATION_BUDGET.windowMs
