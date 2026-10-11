@@ -1,0 +1,72 @@
+{
+  "source": {
+    "classification": "synthetic-negative",
+    "note": "独立负例：成功终态无媒体输出；不是官方成功响应。",
+    "matrixRows": [
+      "空成功终态",
+      "提交缺标识",
+      "任务标识类型错误"
+    ]
+  },
+  "cases": {
+    "apimart": {
+      "empty": {
+        "code": 200,
+        "data": {
+          "id": "fixture-task",
+          "status": "completed",
+          "result": {
+            "images": []
+          }
+        }
+      },
+      "missingId": {},
+      "invalidId": {
+        "code": 200,
+        "data": [
+          {
+            "task_id": 42
+          }
+        ]
+      }
+    },
+    "kie": {
+      "empty": {
+        "code": 200,
+        "data": {
+          "taskId": "fixture-task",
+          "state": "success",
+          "resultJson": "{\"resultUrls\":[]}"
+        }
+      },
+      "missingId": {},
+      "invalidId": {
+        "code": 200,
+        "data": {
+          "taskId": 42
+        }
+      }
+    },
+    "fal": {
+      "empty": {
+        "images": [],
+        "description": "fixture"
+      },
+      "missingId": {},
+      "invalidId": {
+        "request_id": 42
+      }
+    },
+    "grsai": {
+      "empty": {
+        "id": "fixture-task",
+        "status": "succeeded",
+        "results": []
+      },
+      "missingId": {},
+      "invalidId": {
+        "id": 42
+      }
+    }
+  }
+}

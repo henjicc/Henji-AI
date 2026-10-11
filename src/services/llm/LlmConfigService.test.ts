@@ -125,12 +125,12 @@ describe('normalizeLlmConfig', () => {
     const deepSeekModels = config.models.filter(model => model.providerId === 'deepseek' || model.modelId.includes('deepseek-v4'))
     expect(deepSeekModels.map(model => [model.providerId, model.modelId])).toEqual([
       ['ppio', 'deepseek/deepseek-v4-pro'],
-      ['ppio', 'deepseek/deepseek-v4-flash'],
+      ['ppio', 'deepseek/deepseek-v4.1-flash'],
       ['deepseek', 'deepseek-flash'],
     ])
     expect(deepSeekModels.every(model => (
       model.capabilities.contextWindow === DEEPSEEK_V4_CONTEXT_WINDOW
-      && model.capabilities.maxOutputTokens === DEEPSEEK_V4_MAX_OUTPUT_TOKENS
+      && model.capabilities.maxOutputTokens === (model.modelId === 'deepseek/deepseek-v4.1-flash' ? null : DEEPSEEK_V4_MAX_OUTPUT_TOKENS)
     ))).toBe(true)
   })
 

@@ -90,6 +90,9 @@ export interface PricingConfig {
   /** estimateMode=unit 时展示的单位，例如 MP。 */
   estimateUnit?: string
 
+  /** 保守预算上限的展示语义，不保证供应商实际账单上限。 */
+  estimateKind?: 'upper-bound'
+
   /** 由宿主统一解析并注入 calculator 的媒体元数据需求。 */
   mediaContext?: RuntimePricingMediaContextRequirement[]
 

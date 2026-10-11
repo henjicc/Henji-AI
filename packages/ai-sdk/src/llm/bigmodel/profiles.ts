@@ -61,12 +61,6 @@ export const BIGMODEL_GLM_5_3_FLASH_PRICING: Readonly<Record<'cn' | 'global', Bi
     inputPerMillionTokens: 0.8,
     outputPerMillionTokens: 2.8,
     cacheReadPerMillionTokens: 0.23,
-    promotion: {
-      inputPerMillionTokens: 0.4,
-      outputPerMillionTokens: 1.4,
-      cacheReadPerMillionTokens: 0.115,
-      observedAt: '2026-08-28',
-    },
   },
   global: {
     currency: 'USD',

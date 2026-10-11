@@ -1,0 +1,43 @@
+{
+  "source": {
+    "url": "https://qmy27nhsd9.apifox.cn/452392911e0",
+    "collectedAt": "2026-10-12",
+    "classification": "official-literal",
+    "requiresLogin": false,
+    "note": "接口字面例仍是nano-banana-2；2.1 model由官方2026-10-07公告明确替换，仅契约复用，不冒充2.1生成日志2026-10-12补采折叠的异步200与400字面响应；仅ID稳定化，400响应HTTP状态保留为测试场景。",
+    "matrixRows": [
+      "请求构建",
+      "succeeded",
+      "提交响应/running",
+      "HTTP400/failed"
+    ]
+  },
+  "examples": [
+    {
+      "model": "nano-banana-2",
+      "prompt": "生成一张边牧与古牧正在抖音直播间直播带货截图",
+      "images": [],
+      "aspectRatio": "1:1",
+      "imageSize": "1K",
+      "replyType": "json"
+    },
+    {
+      "id": "fixture-task",
+      "status": "succeeded",
+      "results": [
+        {
+          "url": "https://example.invalid/fixture.png"
+        }
+      ]
+    },
+    {
+      "id": "fixture-task",
+      "status": "running"
+    },
+    {
+      "id": "fixture-task",
+      "status": "failed",
+      "error": "generate failed"
+    }
+  ]
+}

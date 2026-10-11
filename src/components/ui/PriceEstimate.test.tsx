@@ -105,6 +105,14 @@ describe('PriceEstimate', () => {
     expect(rendered.getByText('$0.03/MP')).toBeTruthy()
   })
 
+  it.each(['panel', 'badge'] as const)('%s按配置明确显示估算上限与账单假设提示', variant => {
+    const model: ModelDefinition = { ...unitPriceModel, meta: { ...unitPriceModel.meta, id: 'upper-price-test' },
+      pricing: { currency: '¥', calculator: () => 0.12, estimateKind: 'upper-bound' } }
+    registry.register(model)
+    const rendered = render(<PriceEstimate providerId="bailian" modelId={model.meta.id} params={{}} variant={variant} />)
+    expect(rendered.getByText(/^priceEstimate.upperBound /).title).toContain('priceEstimate.upperBoundHint')
+  })
+
   it('相同参数的多请求按次数估算总价，改变视图数量后更新', () => {
     const model: ModelDefinition = { ...unitPriceModel, meta: { ...unitPriceModel.meta, id: 'batch-price-test' },
       pricing: { currency: '$', calculator: () => 0.035 } }

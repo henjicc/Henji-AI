@@ -25,7 +25,7 @@ export function createSiliconflowChatRequest(request: SiliconflowChatRequest): L
     adapter: 'openai',
     baseUrl: request.baseUrl?.trim() || SILICONFLOW_BASE_URL,
     capabilities: request.capabilities ?? (known ? {
-      ...createLlmCapabilitiesForModel(modelId),
+      ...createLlmCapabilitiesForModel(modelId, 'siliconflow'),
       ...SILICONFLOW_PROVIDER_PRESET.modelCapabilities?.[modelId],
     } : undefined),
     reasoning: request.reasoning ?? (known ? { ...SILICONFLOW_PROVIDER_PRESET.reasoning } : undefined),

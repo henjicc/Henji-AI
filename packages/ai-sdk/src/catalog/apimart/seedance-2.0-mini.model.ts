@@ -97,13 +97,13 @@ export const apimartSeedance20MiniModel = defineModel({
         calculator: (params) => {
             const duration = Math.min(15, Math.max(4, Math.round(Number(params.apimartSeedance20MiniDuration || 5))));
             const rate = params.apimartSeedance20MiniResolution === '480p'
-                ? { noVideo: 0.01056, withVideo: 0.0064 }
-                : { noVideo: 0.02288, withVideo: 0.01384 };
+                ? { noVideo: 0.01815, withVideo: 0.01105 }
+                : { noVideo: 0.03903, withVideo: 0.02376 };
             const hasVideo = params.apimartSeedance20MiniMode === 'reference-to-video' && countUploadedVideos(params) > 0;
             const inputDuration = hasVideo ? resolveUploadedVideoDurationSeconds(params) : 0;
             return (duration + (hasVideo ? inputDuration : 0)) * (hasVideo ? rate.withVideo : rate.noVideo);
         },
-        description: '无/有视频输入每秒：480p $0.01056/$0.0064，720p $0.02288/$0.01384；有视频时按输入与输出总时长计费'
+        description: '无/有视频输入每秒：480p $0.01815/$0.01105，720p $0.03903/$0.02376；有视频时按输入与输出总时长计费'
     }
 });
 export default apimartSeedance20MiniModel;

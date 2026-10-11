@@ -8,8 +8,6 @@ describe('GPT Image 2.5 宿主参数联动', () => {
   it.each([
     ['kie-gpt-image-2.5', 'gpt25Resolution', { gpt25Resolution: '4K', gpt25AspectRatio: '27:16' }, 'gpt25AspectRatio', '27:16'],
     ['apimart-gpt-image-2.5', 'gpt25Channel', { gpt25Channel: 'ext', gpt25AspectRatio: '3:1' }, 'gpt25AspectRatio', '3:1'],
-    ['grsai-gpt-image-2.5', 'gpt25Variant', { gpt25Variant: 'flare', gpt25Quality: 'max' }, 'gpt25Quality', 'max'],
-    ['grsai-gpt-image-2.5', 'gpt25Resolution', { gpt25Variant: 'sunburst', gpt25Resolution: '2K', gpt25AspectRatio: '1:3' }, 'gpt25AspectRatio', '1:3'],
   ] as const)('%s 切换后清理不支持的选择', async (id, trigger, changed, target, invalid) => {
     const runtime = catalog.find(m => m.meta.id === id)!
     const model = composeModelDefinition(runtime, gptImage25Presentation[id])

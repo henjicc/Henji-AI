@@ -107,11 +107,11 @@ describe('catalog consumer contract', () => {
         fields: ['default', 'id', 'order', 'required', 'type', 'valueType', 'visible'],
       },
       dropdown: {
-        count: 336,
+        count: 330,
         fields: ['apiField', 'default', 'id', 'options', 'order', 'required', 'transferKey', 'type', 'valueType', 'visible'],
       },
       'file-upload': {
-        count: 2,
+        count: 3,
         fields: ['accept', 'default', 'id', 'maxCount', 'maxSize', 'order', 'required', 'type', 'valueType', 'visible'],
       },
       'image-upload': {
@@ -119,16 +119,16 @@ describe('catalog consumer contract', () => {
         fields: ['accept', 'default', 'format', 'id', 'maxCount', 'maxSize', 'order', 'type', 'valueType', 'visible'],
       },
       number: {
-        count: 96,
-        fields: ['apiField', 'default', 'id', 'max', 'min', 'order', 'step', 'transferKey', 'type', 'valueType', 'visible'],
+        count: 97,
+        fields: ['default', 'id', 'max', 'min', 'order', 'step', 'transferKey', 'type', 'valueType', 'visible'],
       },
       switch: {
-        count: 96,
-        fields: ['apiField', 'default', 'id', 'order', 'transferKey', 'type', 'valueType', 'visible'],
+        count: 89,
+        fields: ['default', 'id', 'order', 'transferKey', 'type', 'valueType', 'visible'],
       },
       text: {
         // 5.8（P-17）：删掉用户拿不到的“延续任务 ID”
-        count: 14,
+        count: 15,
         fields: ['default', 'id', 'maxLength', 'order', 'required', 'type', 'visible'],
       },
       textarea: {
@@ -142,9 +142,9 @@ describe('catalog consumer contract', () => {
   it('client.catalog 的 6 个公开查询函数直接消费真实 124 catalog', () => {
     const client = createAIClient({ runtime })
     try {
-      expect(client.catalog.listByType('image')).toHaveLength(60)
-      expect(client.catalog.listByType('video')).toHaveLength(50)
-      expect(client.catalog.listByProvider('fal')).toHaveLength(41)
+      expect(client.catalog.listByType('image')).toHaveLength(64)
+      expect(client.catalog.listByType('video')).toHaveLength(46)
+      expect(client.catalog.listByProvider('fal')).toHaveLength(42)
       expect(client.catalog.listByProvider('volcengine')).toHaveLength(3)
       expect(client.catalog.listByTag('voice-cloning').map((model) => model.meta.id))
         .toEqual(['ppio-minimax-speech'])
@@ -167,14 +167,14 @@ describe('catalog consumer contract', () => {
     }
   })
 
-  it('编译并执行真实 catalog 的全部 188 条显隐/inputLimits/requirement 条件', () => {
+  it('编译并执行真实 catalog 的全部 175 条显隐/inputLimits/requirement 条件', () => {
     const conditions = collectCatalogConditions()
     const stringConditions = conditions.filter((item) => typeof item.condition === 'string')
     const functionConditions = conditions.filter((item) => typeof item.condition === 'function')
 
-    expect(conditions).toHaveLength(188)
-    expect(stringConditions).toHaveLength(126)
-    expect(functionConditions).toHaveLength(62)
+    expect(conditions).toHaveLength(175)
+    expect(stringConditions).toHaveLength(115)
+    expect(functionConditions).toHaveLength(60)
 
     for (const { modelId, condition } of conditions) {
       if (typeof condition === 'string') expect(() => compileRuntimeCondition(condition)).not.toThrow()
@@ -243,9 +243,9 @@ describe('catalog consumer contract', () => {
       expect(alternate.controls.map((control) => control.id)).toContain('apimartGeminiOmniFlashExtDuration')
       expect(alternate.controls.map((control) => control.id)).not.toContain('apimartGeminiOmniFlashOfficialDuration')
 
-      const rangeAndRules = renderMinimalModelForm(client, 'ppio-wan-2.7')
+      const rangeAndRules = renderMinimalModelForm(client, 'fal-ai-minimax-h3', { falMiniMaxH3Mode: 'reference-to-video' })
       expect(rangeAndRules.controls).toEqual(expect.arrayContaining([
-        expect.objectContaining({ id: 'ppioWan27Duration', kind: 'number' }),
+        expect.objectContaining({ id: 'falMiniMaxH3Duration', kind: 'number' }),
         expect.objectContaining({ id: 'uploadedFilePaths', kind: 'upload', mediaKind: 'image' }),
         expect.objectContaining({ id: 'uploadedVideoFilePaths', kind: 'upload', mediaKind: 'video' }),
         expect.objectContaining({ id: 'uploadedAudioFilePaths', kind: 'upload', mediaKind: 'audio' }),

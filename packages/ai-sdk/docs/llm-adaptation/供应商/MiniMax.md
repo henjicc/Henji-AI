@@ -75,10 +75,10 @@ for block in message.content:
 
 ## 原始链接索引（均无需登录）
 
-- [模型概览](https://platform.minimaxi.com/docs/guides/models-intro)
-- [模型调用（URL 配置、双协议示例）](https://platform.minimaxi.com/docs/guides/text-generation)
-- [通过 SDK 接入（Anthropic SDK 快速开始）](https://platform.minimaxi.com/docs/guides/quickstart-sdk)
-- [服务端工具（Server Tools / web_search）](https://platform.minimaxi.com/docs/guides/server-tools)
-- [工具使用 & 交错思维链](https://platform.minimaxi.com/docs/guides/text-m3-function-call)
-- [按量计费](https://platform.minimaxi.com/docs/guides/pricing-paygo)
-- [MiniMax 文档全量索引](https://platform.minimaxi.com/docs/llms.txt)
+- [模型概览](https://platform.minimax.cn/docs/guides/models-intro)
+- [模型调用（URL 配置、双协议示例）](https://platform.minimax.cn/docs/guides/text-generation)
+- [通过 SDK 接入（Anthropic SDK 快速开始）](https://platform.minimax.cn/docs/guides/quickstart-sdk)
+- [服务端工具（Server Tools / web_search）](https://platform.minimax.cn/docs/guides/server-tools)
+- [工具使用 & 交错思维链](https://platform.minimax.cn/docs/guides/text-m3-function-call)
+- [按量计费](https://platform.minimax.cn/docs/guides/pricing-paygo)
+- [MiniMax 文档全量索引](https://platform.minimax.cn/docs/llms.txt)

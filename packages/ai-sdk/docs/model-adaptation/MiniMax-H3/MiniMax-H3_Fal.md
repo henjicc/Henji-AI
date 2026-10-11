@@ -106,3 +106,7 @@
 | 参考生视频 schema + 价格 | https://fal.ai/models/minimax/h3/reference-to-video/llms.txt | 否 |
 | 队列协议 | https://fal.ai/docs/documentation/model-apis/inference/queue | 否 |
 | API Key 创建 | https://fal.ai/dashboard/keys | **是** |
+
+## 2026-10-12 提示词扩写
+
+三个端点均使用 `prompt_expansion_mode=disabled/fast/balanced/quality`；关闭映射 disabled，开启映射选中档位，不再发送 enable_prompt_expansion。target_audio_url 本批未接入。来源：[文生](https://fal.ai/models/minimax/h3/text-to-video/llms.txt)、[图生](https://fal.ai/models/minimax/h3/image-to-video/llms.txt)、[参考](https://fal.ai/models/minimax/h3/reference-to-video/llms.txt)（公开无需登录）。

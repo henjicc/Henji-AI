@@ -211,3 +211,7 @@ Coding Plan 3 倍额度扣减是订阅用量规则，不是 token 单价。SDK/�
 [模型页](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash.md) 现明确 Flash / FlashX 支持 JSON 结构化输出，thinking.type 只能 enabled。SDK 开放 JSON 与思考并用，未扩大到 JSON Schema；工具流仍沿标准 SSE。FlashX 仅加入大陆端点，不推断 Global 支持。上下文 1M、最大输出 128K，多模态与 Flash 相同。
 
 [官方价格](https://docs.bigmodel.cn/cn/guide/start/pricing.md)：FlashX 输入 ¥2、输出 ¥7、缓存命中 ¥0.57 / 百万 tokens；缓存写入限时免费，不登记为永久零价。公开无需登录，未执行付费调用。旧文中的“结构化输出未核验”由本节取代。
+
+## 2026-10-12 CN 优惠清理
+
+中国区仅保留基础输入/输出/缓存 CNY 0.8/2.8/0.23 每百万 tokens；删除无有效期证据的 2026-08-28 CN 半价 promotion。Global 历史活动仍有明确结束日期，保持原记录。来源：[官方价格](https://docs.bigmodel.cn/cn/guide/start/pricing.md)（公开无需登录）。

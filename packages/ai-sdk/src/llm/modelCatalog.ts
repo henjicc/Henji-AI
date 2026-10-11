@@ -1,4 +1,4 @@
-import { LLM_MODEL_CATALOG_ENTRIES } from './modelCatalogEntries'
+import { DEEPSEEK_OFFICIAL_FLASH_ALIASES, LLM_MODEL_CATALOG_ENTRIES } from './modelCatalogEntries'
 import type { LlmApiProtocol } from './providerProtocol'
 import type { LlmCapabilities } from './types'
 
@@ -51,7 +51,7 @@ export function modelSupportsLlmApiProtocol(
  *
  * 同一个模型经不同渠道进来写法不同：聚合网关带厂商前缀（`deepseek/deepseek-v4-flash`、
  * `xiaomimimo/mimo-v2.5-pro`），官方渠道带快照日期后缀（`doubao-seed-2-1-pro-260628`），
- * 部分网关还带 `:free` 之类的档位标记。这些都指向同一份能力。
+ * 部分网关还带 `:free` 之类的档位标记。规范化只收敛名称，原厂重定向等渠道差异仍按供应商查表。
  */
 export function normalizeCatalogModelId(modelId: string): string {
   const trimmed = modelId.trim().toLowerCase()
@@ -70,8 +70,14 @@ const CATALOG_BY_KEY: ReadonlyMap<string, LlmModelCatalogEntry> = new Map(
   ])
 )
 
-export function findLlmModelCatalogEntry(modelId: string): LlmModelCatalogEntry | null {
+export function findLlmModelCatalogEntry(modelId: string, providerId?: string): LlmModelCatalogEntry | null {
   const key = normalizeCatalogModelId(modelId)
+  const provider = providerId?.trim().toLowerCase()
+  // 无前缀的旧名默认指原厂；显式供应商优先，聚合前缀不能继承原厂重定向。
+  if (provider === 'deepseek' || (!provider && !modelId.includes('/'))) {
+    const official = DEEPSEEK_OFFICIAL_FLASH_ALIASES.find(entry => entry.id === key)
+    if (official) return official
+  }
   return key ? CATALOG_BY_KEY.get(key) ?? null : null
 }
 

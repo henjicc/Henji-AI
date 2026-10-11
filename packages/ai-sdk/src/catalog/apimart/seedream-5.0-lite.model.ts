@@ -71,9 +71,9 @@ export const apimartSeedream50LiteModel = defineModel({
         calculator: (params) => {
             const images = countUploadedImages(params);
             const requested = Math.min(15, Math.max(1, Math.round(Number(params.apimartSeedream50LiteCount || 1))));
-            return Math.max(1, Math.min(requested, 15 - Math.min(14, images))) * 0.02275;
+            return Math.max(1, Math.min(requested, 15 - Math.min(14, images))) * 0.028;
         },
-        description: '$0.02275/张；参考图数量与生成数量之和不超过 15'
+        description: '$0.028/张；参考图数量与生成数量之和不超过 15'
     }
 });
 export default apimartSeedream50LiteModel;

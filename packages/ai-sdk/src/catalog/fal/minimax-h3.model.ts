@@ -111,8 +111,7 @@ export const falMiniMaxH3Model = defineModel({
                 prompt: typeof params.prompt === 'string' ? params.prompt.trim().slice(0, 7000) : '',
                 duration: Math.min(15, Math.max(5, Math.round(Number(params.falMiniMaxH3Duration || 5)))),
                 resolution,
-                enable_prompt_expansion: params.falMiniMaxH3PromptExpansion !== false,
-                prompt_expansion_mode: ['fast', 'quality'].includes(String(params.falMiniMaxH3PromptExpansionMode))
+                prompt_expansion_mode: params.falMiniMaxH3PromptExpansion === false ? 'disabled' : ['fast', 'quality'].includes(String(params.falMiniMaxH3PromptExpansionMode))
                     ? String(params.falMiniMaxH3PromptExpansionMode)
                     : 'balanced',
                 enable_safety_checker: true

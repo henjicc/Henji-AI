@@ -1,5 +1,61 @@
 [
   {
+    "id": "MusePublic/14_ckpt_SD_XL",
+    "canonicalModelId": "sdxl-14-checkpoint",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeGuidance",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
+    "id": "MusePublic/majicMIX_realistic",
+    "canonicalModelId": "majicmix-realistic",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeGuidance",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
+    "id": "Qwen/Qwen-Image",
+    "canonicalModelId": "qwen-image",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeGuidance",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
+    "id": "Qwen/Qwen-Image-Edit-2509",
+    "canonicalModelId": "qwen-image-edit-2509",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "modelscopeSteps"
+    ]
+  },
+  {
+    "id": "Tongyi-MAI/Z-Image-Turbo",
+    "canonicalModelId": "z-image-turbo",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
     "id": "apimart-gemini-omni-flash",
     "canonicalModelId": "gemini-omni-video",
     "aliases": [
@@ -180,6 +236,17 @@
     "params": [
       "apimartNanoBanana2LiteAspectRatio",
       "apimartNanoBanana2LiteCount"
+    ]
+  },
+  {
+    "id": "apimart-nano-banana-2.1",
+    "canonicalModelId": "nano-banana-2.1",
+    "aliases": [],
+    "params": [
+      "apimartNanoBanana21Channel",
+      "apimartNanoBanana21AspectRatio",
+      "apimartNanoBanana21Resolution",
+      "apimartNanoBanana21NumImages"
     ]
   },
   {
@@ -583,6 +650,22 @@
     ]
   },
   {
+    "id": "fal-ai-nano-banana-2.1",
+    "canonicalModelId": "nano-banana-2.1",
+    "aliases": [],
+    "params": [
+      "falNanoBanana21AspectRatio",
+      "falNanoBanana21Resolution",
+      "falNanoBanana21NumImages",
+      "falNanoBanana21WebSearch",
+      "falNanoBanana21Thinking",
+      "falNanoBanana21Pdf",
+      "falNanoBanana21SystemPrompt",
+      "falNanoBanana21OutputFormat",
+      "falNanoBanana21LimitGenerations"
+    ]
+  },
+  {
     "id": "fal-ai-nano-banana-pro",
     "canonicalModelId": "nano-banana-pro",
     "aliases": [
@@ -801,6 +884,15 @@
     ]
   },
   {
+    "id": "grsai-nano-banana-2.1",
+    "canonicalModelId": "nano-banana-2.1",
+    "aliases": [],
+    "params": [
+      "grsaiNanoBanana21AspectRatio",
+      "grsaiNanoBanana21Resolution"
+    ]
+  },
+  {
     "id": "grsai-nano-banana-pro",
     "canonicalModelId": "nano-banana-pro",
     "aliases": [
@@ -972,6 +1064,16 @@
     ],
     "params": [
       "kieNanoBanana2LiteAspectRatio"
+    ]
+  },
+  {
+    "id": "kie-nano-banana-2.1",
+    "canonicalModelId": "nano-banana-2.1",
+    "aliases": [],
+    "params": [
+      "kieNanoBanana21AspectRatio",
+      "kieNanoBanana21Resolution",
+      "kieNanoBanana21OutputFormat"
     ]
   },
   {
@@ -1152,30 +1254,6 @@
     ]
   },
   {
-    "id": "MusePublic/14_ckpt_SD_XL",
-    "canonicalModelId": "sdxl-14-checkpoint",
-    "aliases": [],
-    "params": [
-      "modelscopeImageSize",
-      "resolutionBaseSize",
-      "modelscopeSteps",
-      "modelscopeGuidance",
-      "modelscopeNegativePrompt"
-    ]
-  },
-  {
-    "id": "MusePublic/majicMIX_realistic",
-    "canonicalModelId": "majicmix-realistic",
-    "aliases": [],
-    "params": [
-      "modelscopeImageSize",
-      "resolutionBaseSize",
-      "modelscopeSteps",
-      "modelscopeGuidance",
-      "modelscopeNegativePrompt"
-    ]
-  },
-  {
     "id": "ppio-kling-3.0",
     "canonicalModelId": "kling-video-3.0",
     "aliases": [],
@@ -1191,17 +1269,6 @@
     ]
   },
   {
-    "id": "ppio-minimax-hailuo-2.3",
-    "canonicalModelId": "hailuo-2.3",
-    "aliases": [],
-    "params": [
-      "ppioHailuo23VideoDuration",
-      "ppioHailuo23VideoResolution",
-      "ppioHailuo23FastMode",
-      "ppioHailuo23PromptExtend"
-    ]
-  },
-  {
     "id": "ppio-minimax-speech",
     "canonicalModelId": "minimax-speech-2.8",
     "aliases": [],
@@ -1212,80 +1279,6 @@
       "minimaxLanguageBoost",
       "minimaxAdvancedSettings",
       "minimaxVoiceClonePanel"
-    ]
-  },
-  {
-    "id": "ppio-wan-2.5-preview",
-    "canonicalModelId": "wan-2.5-preview",
-    "aliases": [],
-    "params": [
-      "ppioWan25VideoDuration",
-      "ppioWan25Size",
-      "ppioWan25Resolution",
-      "ppioWan25PromptExtend",
-      "ppioWan25Audio"
-    ]
-  },
-  {
-    "id": "ppio-wan-2.6",
-    "canonicalModelId": "wan-2.6",
-    "aliases": [],
-    "params": [
-      "ppioWan26Mode",
-      "ppioWan26AspectRatio",
-      "ppioWan26Quality",
-      "ppioWan26VideoDuration",
-      "ppioWan26ShotType",
-      "ppioWan26Audio",
-      "ppioWan26PromptExtend"
-    ]
-  },
-  {
-    "id": "ppio-wan-2.7",
-    "canonicalModelId": "wan-2.7",
-    "aliases": [],
-    "params": [
-      "ppioWan27Mode",
-      "ppioWan27AspectRatio",
-      "ppioWan27EditRatio",
-      "ppioWan27Resolution",
-      "ppioWan27Duration",
-      "ppioWan27ShotType",
-      "ppioWan27Audio",
-      "ppioWan27AudioSetting",
-      "ppioWan27PromptExtend"
-    ]
-  },
-  {
-    "id": "Qwen/Qwen-Image",
-    "canonicalModelId": "qwen-image",
-    "aliases": [],
-    "params": [
-      "modelscopeImageSize",
-      "resolutionBaseSize",
-      "modelscopeSteps",
-      "modelscopeGuidance",
-      "modelscopeNegativePrompt"
-    ]
-  },
-  {
-    "id": "Qwen/Qwen-Image-Edit-2509",
-    "canonicalModelId": "qwen-image-edit-2509",
-    "aliases": [],
-    "params": [
-      "modelscopeImageSize",
-      "modelscopeSteps"
-    ]
-  },
-  {
-    "id": "Tongyi-MAI/Z-Image-Turbo",
-    "canonicalModelId": "z-image-turbo",
-    "aliases": [],
-    "params": [
-      "modelscopeImageSize",
-      "resolutionBaseSize",
-      "modelscopeSteps",
-      "modelscopeNegativePrompt"
     ]
   },
   {

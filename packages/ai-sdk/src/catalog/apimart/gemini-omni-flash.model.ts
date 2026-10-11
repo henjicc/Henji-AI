@@ -1,7 +1,8 @@
 /** APIMart Gemini Omni Flash 官方与 Ext 渠道统一模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
-import type { JsonValue, JsonObject } from '../../types/runtime'
+import { countUploadedVideos, resolveUploadedImageSources, resolveUploadedVideoSources } from '../shared/mediaPresence'
+import type { JsonObject } from '../../types/runtime'
 
 export const apimartGeminiOmniFlashModel = defineModel({
   meta: {
@@ -35,10 +36,13 @@ export const apimartGeminiOmniFlashModel = defineModel({
     polling: { interval: 5000, maxAttempts: 180, expectedAttempts: 60 }
   },
   inputLimits: {
-    images: { max: 4 }, videos: { max: 1 },
+    images: { max: 16 }, videos: { max: 1 },
     rules: [{
       when: 'apimartGeminiOmniFlashChannel === "ext"',
       images: { max: 3 }
+    }, {
+      when: 'apimartGeminiOmniFlashChannel === "ext" && apimartGeminiOmniFlashGenerationType === "frame"',
+      images: { max: 1 }
     }]
   },
   requirements: [{
@@ -65,6 +69,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
       id: 'apimartGeminiOmniFlashResolution', type: 'dropdown', order: 3,
       default: '720p',
       options: [
+        { value: '360p' },
         { value: '720p' },
         { value: '1080p' },
         { value: '4k' }
@@ -96,13 +101,9 @@ export const apimartGeminiOmniFlashModel = defineModel({
   endpoints: '/v1/videos/generations',
   request: {
     builder: (params) => {
-      const clean = (value: JsonValue): string[] => Array.isArray(value)
-        ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        : []
-      const uploadedImages = clean(params.uploadedFilePaths)
-      const images = uploadedImages.length > 0 ? uploadedImages : clean(params.images)
-      const uploadedVideos = clean(params.uploadedVideoFilePaths)
-      const videos = uploadedVideos.length > 0 ? uploadedVideos : clean(params.videos)
+      const images = resolveUploadedImageSources(params)
+      const videos = resolveUploadedVideoSources(params)
+      if (videos.length > 1) throw new Error('Gemini Omni Flash 只支持一段参考视频')
       const prompt = typeof params.prompt === 'string' ? params.prompt.trim() : ''
       const aspectRatio = params.apimartGeminiOmniFlashAspectRatio === '9:16' ? '9:16' : '16:9'
       const channel = params.apimartGeminiOmniFlashChannel === 'ext' ? 'ext' : 'official'
@@ -116,7 +117,8 @@ export const apimartGeminiOmniFlashModel = defineModel({
         if (generationType === 'frame' && images.length > 1) {
           throw new Error('Gemini Omni Flash 普通渠道的首帧模式只能传入 1 张图片')
         }
-        const resolution = params.apimartGeminiOmniFlashResolution === '1080p'
+        const resolution = params.apimartGeminiOmniFlashResolution === '360p'
+          || params.apimartGeminiOmniFlashResolution === '1080p'
           || params.apimartGeminiOmniFlashResolution === '4k'
           ? params.apimartGeminiOmniFlashResolution
           : '720p'
@@ -124,7 +126,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
           ? Number(params.apimartGeminiOmniFlashExtDuration)
           : 6
         const body: JsonObject = {
-          model: 'Omni-Flash-Ext', prompt, resolution, aspect_ratio: aspectRatio, nsfw_check: false
+          model: 'gemini-omni-1.1-flash-ext', prompt, resolution, aspect_ratio: aspectRatio, nsfw_check: false
         }
         if (videos.length === 0) body.duration = duration
         if (images.length > 0) {
@@ -138,6 +140,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
       if (!prompt && images.length + videos.length === 0) {
         throw new Error('Gemini Omni Flash 官方渠道至少需要提示词或一份参考素材')
       }
+      if (images.length > 16) throw new Error('Gemini Omni Flash 官方渠道最多支持 16 张参考图')
       const body: JsonObject = {
         model: 'gemini-omni-flash-preview',
         prompt,
@@ -145,7 +148,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
         aspect_ratio: aspectRatio,
         resolution: '720p'
       }
-      if (images.length > 0) body.image_urls = images.slice(0, 4)
+      if (images.length > 0) body.image_urls = images
       if (videos.length > 0) body.video_urls = videos.slice(0, 1)
       return body
     }
@@ -156,16 +159,16 @@ export const apimartGeminiOmniFlashModel = defineModel({
       if (params.apimartGeminiOmniFlashChannel !== 'ext') {
         return Math.min(10, Math.max(3, Math.round(Number(params.apimartGeminiOmniFlashOfficialDuration || 5)))) * 0.088
       }
-      const resolution = params.apimartGeminiOmniFlashResolution === '4k' ? '4k' : 'standard'
-      const hasVideo = (Array.isArray(params.uploadedVideoFilePaths) && params.uploadedVideoFilePaths.length > 0)
-        || (Array.isArray(params.videos) && params.videos.length > 0)
-      if (hasVideo) return resolution === '4k' ? 0.24 : 0.08
+      const resolution = params.apimartGeminiOmniFlashResolution === '4k' ? '4k'
+        : params.apimartGeminiOmniFlashResolution === '360p' ? '360p' : 'standard'
+      if (countUploadedVideos(params) > 0) return resolution === '4k' ? 0.24 : resolution === '360p' ? 0.04 : 0.08
       const duration = ['4', '6', '8', '10'].includes(String(params.apimartGeminiOmniFlashExtDuration))
         ? String(params.apimartGeminiOmniFlashExtDuration)
         : '6'
       const standard: Record<string, number> = { '4': 0.25, '6': 0.3, '8': 0.35, '10': 0.4 }
       const high4k: Record<string, number> = { '4': 0.75, '6': 0.8, '8': 0.85, '10': 0.9 }
-      return (resolution === '4k' ? high4k : standard)[duration]
+      const low360: Record<string, number> = { '4': 0.15, '6': 0.175, '8': 0.2, '10': 0.225 }
+      return (resolution === '4k' ? high4k : resolution === '360p' ? low360 : standard)[duration]
     },
     description: '官方渠道 720p $0.088/秒；普通渠道按分辨率、时长或参考视频档位计费'
   }

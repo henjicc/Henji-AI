@@ -31,7 +31,6 @@ import {
   isLikelyVideoSource,
   isMinimaxVoiceCloneMode,
   normalizeNonEmptyString,
-  summarizeMediaSources,
   toVideoDisplayUrl,
 } from './generationTaskUtils'
 
@@ -356,16 +355,6 @@ export async function createVisibleGenerationTask(
   const taskAudioPaths = isStringArray(options.uploadedAudioFilePaths) ? options.uploadedAudioFilePaths : undefined
   const videoUrls = taskVideoPaths?.length ? taskVideoPaths.map(toVideoDisplayUrl) : (isStringArray(options.videos) ? options.videos : undefined)
 
-  if (model === 'ppio-wan-2.5-preview') {
-    logger.info('Wan 2.5 Preview 请求媒体输入', {
-      event: 'visible_generation.media_input.debug',
-      modelId: model,
-      images: summarizeMediaSources(options.images),
-      uploadedFilePaths: summarizeMediaSources(options.uploadedFilePaths),
-      videos: summarizeMediaSources(options.videos),
-      uploadedVideoFilePaths: summarizeMediaSources(options.uploadedVideoFilePaths),
-    })
-  }
 
   const taskId = input.operationId ?? createTaskId()
   const imageEditStates = (isStringArray(options.images) ? options.images : []).reduce<Record<string, ImageEditSessionData>>((acc, url, index) => {

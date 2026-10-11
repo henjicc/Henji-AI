@@ -34,7 +34,9 @@
   "upload": "Upload",
   "retry": "Fetch Result Again",
   "priceEstimate": {
-    "label": "Estimate"
+    "label": "Estimate",
+    "upperBound": "Estimated ceiling",
+    "upperBoundHint": "Based on conservative assumptions; actual charges follow the provider's bill."
   },
   "actions": {
     "clearHistory": "Clear History",

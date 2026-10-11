@@ -281,7 +281,7 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
       uploadedVideoFilePaths: ['video.mp4'],
       kieSeedance25Duration: 10,
       kieSeedance25Resolution: '1080p'
-    })).toBeCloseTo(3.425)
+    })).toBeCloseTo(4.75)
   })
 
   it('Seedance 2.0 默认 16:9 并可返回尾帧', () => {
@@ -321,6 +321,6 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
       __firstVideoDurationSeconds: 6,
       kieSeedance25Duration: 10,
       kieSeedance25Resolution: '1080p'
-    })).toBeCloseTo(5.48)
+    })).toBeCloseTo(7.6)
   })
 })

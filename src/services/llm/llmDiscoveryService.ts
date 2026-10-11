@@ -38,7 +38,7 @@ export function createModelFromInput(
   capabilities?: Partial<LlmCapabilities>
 ): LlmModelConfig {
   const trimmedModelId = modelId.trim()
-  const entry = findLlmModelCatalogEntry(trimmedModelId)
+  const entry = findLlmModelCatalogEntry(trimmedModelId, provider.adapter === 'deepseek' ? 'deepseek' : provider.providerId)
   return {
     providerId: provider.providerId,
     modelId: trimmedModelId,
@@ -47,7 +47,7 @@ export function createModelFromInput(
     baseUrl: provider.baseUrl,
     // 命中内置目录时直接按官方文档标好输入模态、工具调用、上下文等能力，用户不用自己勾。
     capabilities: {
-      ...mergeCapabilities(createLlmCapabilitiesForModel(trimmedModelId), capabilities),
+      ...mergeCapabilities(createLlmCapabilitiesForModel(trimmedModelId, provider.adapter === 'deepseek' ? 'deepseek' : provider.providerId), capabilities),
       text: true,
     },
     catalogId: entry?.id,

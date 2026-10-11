@@ -10,29 +10,9 @@
         }
       }
     },
-    "ppio-minimax-hailuo-2.3": {
-      "meta": {
-        "name": "Minimax Hailuo 2.3"
-      }
-    },
     "ppio-minimax-speech": {
       "meta": {
         "name": "Minimax Speech 2.8"
-      }
-    },
-    "ppio-wan-2.5-preview": {
-      "meta": {
-        "name": "Wan 2.5 Preview"
-      }
-    },
-    "ppio-wan-2.6": {
-      "meta": {
-        "name": "Wan 2.6"
-      }
-    },
-    "ppio-wan-2.7": {
-      "meta": {
-        "name": "Wan 2.7"
       }
     }
   }

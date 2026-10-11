@@ -328,11 +328,11 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 图片模型', () => {
     expect(request).toMatchObject({ n: 3, resolution: '4K', sequential_image_generation: 'auto' })
     expect(apimartSeedream50LiteModel.pricing.calculator?.({
       uploadedFilePaths: Array.from({ length: 12 }, () => 'x.png'), apimartSeedream50LiteCount: 10
-    })).toBeCloseTo(3 * 0.02275)
+    })).toBeCloseTo(3 * 0.028)
     expect(apimartSeedream50LiteModel.pricing.calculator?.({
       uploadedFilePaths: [], images: [], uploadedImages: Array.from({ length: 14 }, () => 'x.png'),
       apimartSeedream50LiteCount: 10
-    })).toBeCloseTo(0.02275)
+    })).toBeCloseTo(0.028)
   })
 
   it('Nano Banana 2 主模型支持 0.5K 与搜索联动，Lite 使用独立固定 1K 契约', () => {

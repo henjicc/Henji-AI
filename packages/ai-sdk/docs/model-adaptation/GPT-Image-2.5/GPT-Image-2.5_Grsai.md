@@ -1,5 +1,7 @@
 # GPT Image 2.5 · Grsai
 
+当前状态（2026-10-12）：Flare/Sunburst 自2026-10-05起维护，运行目录仅保留标准渠道；下文两个变体的参数与价格是历史采集记录，恢复并复核官方契约后再加回。
+
 | 项目 | 内容 |
 |---|---|
 | 最后更新 | 2026-09-10 |
@@ -51,3 +53,7 @@ Flare/Sunburst像素最大边3840、16倍数、长宽比≤3、面积655360–82
 - [轮询与错误响应](https://qmy27nhsd9.apifox.cn/452409577e0.md)
 - [实时模型积分及充值档位](https://grsai.ai/zh/dashboard/models)
 - [9月9日上新与9月10日降价公告](https://grsai.ai/zh/dashboard/announcements)
+
+## 2026-10-12 渠道状态
+
+2026-10-05 起 Flare / Sunburst 维护，当前从可选渠道移除；恢复后重新加回。标准渠道可用、仍为 600 积分，基础充值档 ¥0.06。来源：[公告](https://grsai.ai/dashboard/announcements)、[当前模型状态](https://grsai.ai/dashboard/models)（本次公开可读，无需登录）。旧变体规格仅作为恢复时的历史资料，不能视为现行可调用契约。

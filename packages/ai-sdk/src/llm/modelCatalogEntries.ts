@@ -14,6 +14,22 @@ import type { LlmModelCatalogEntry } from './modelCatalog'
  * 否则用户会得到"勾了但发过去没反应"的静默失效。
  */
 export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
+  {
+    id: 'deepseek-v4.1-flash',
+    displayName: 'DeepSeek V4.1 Flash（派欧云）',
+    vendor: 'DeepSeek',
+    input: { image: true, video: false, audio: false },
+    toolCall: true,
+    parallelTools: false,
+    structuredOutputMode: 'json',
+    reasoning: false,
+    sampling: true,
+    contextWindow: 1_048_576,
+    maxOutputTokens: 393_216,
+    apiProtocols: ['openai-compatible'],
+    note: 'PPIO 控制台官方元数据（2026-10-12 登录核实）确认图片输入、函数工具与 tool_choice、JSON 模式，上下文 1,048,576、最大输出 393,216；输入/输出/缓存读 CNY 2/8/0.04 每百万 tokens。思考开关的网关字段未公开，暂不发送思考参数；Responses 契约未采集。',
+    docs: 'docs/model-adaptation/供应商/派欧云.md',
+  },
   // 硅基流动模型页与 Chat VLM 契约；未确认的视频字段和输出上限不猜测。
   ...[
     { id: 'kimi-k2.7-code', displayName: 'Kimi K2.7 Code', vendor: 'Moonshot' },
@@ -109,7 +125,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     contextWindow: 1_000_000,
     maxOutputTokens: 384_000,
     apiProtocols: ['openai-responses', 'openai-compatible'],
-    note: '图片输入只在 Responses API 下可用；SDK 会在直连 DeepSeek 时自动选择 Responses。',
+    note: '旧视觉实验模型；网关是否重定向未证实，原厂别名由供应商范围覆盖。',
     docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
   },
 
@@ -337,3 +353,13 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     docs: 'docs/llm-adaptation/供应商/MiniMax.md',
   },
 ]
+
+/** 原厂旧名已转到新 Flash；网关同名仍保留上方的独立旧契约。 */
+export const DEEPSEEK_OFFICIAL_FLASH_ALIASES: readonly LlmModelCatalogEntry[] = [
+  'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp',
+].map(id => ({
+  ...LLM_MODEL_CATALOG_ENTRIES.find(entry => entry.id === 'deepseek-flash')!,
+  id,
+  displayName: 'DeepSeek V4.1 Flash（原厂旧别名）',
+  note: '原厂旧实体已下线，旧名称重定向到 deepseek-flash；支持图片及 Chat / Responses API。网关同名条目不使用此覆盖。',
+}))

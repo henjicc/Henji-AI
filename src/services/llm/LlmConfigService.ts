@@ -211,7 +211,7 @@ function normalizeProvider(provider: LlmProviderConfig): LlmProviderConfig {
  */
 function applyModelCatalogOnce(model: LlmModelConfig): LlmModelConfig {
   if (model.catalogId) return model
-  const entry = findLlmModelCatalogEntry(model.modelId)
+  const entry = findLlmModelCatalogEntry(model.modelId, model.adapter === 'deepseek' ? 'deepseek' : model.providerId)
   if (!entry) return model
   return {
     ...model,

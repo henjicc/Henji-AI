@@ -67,14 +67,17 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
         && model.pricing.estimateUnit
         ? `${priceDisplay}/${model.pricing.estimateUnit}`
         : priceDisplay
+    const isUpperBound = model.pricing.estimateKind === 'upper-bound'
+    const label = t(isUpperBound ? 'priceEstimate.upperBound' : 'priceEstimate.label')
+    const title = `${label}: ${priceDisplayWithUnit}${isUpperBound ? ` — ${t('priceEstimate.upperBoundHint')}` : ''}`
 
     if (variant === 'badge') {
         return (
             <span
                 className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-line/60 bg-gap/65 px-1.5 py-1 text-2xs leading-none text-text2"
-                title={`${t('priceEstimate.label')}: ${priceDisplayWithUnit}`}
+                title={title}
             >
-                {priceDisplayWithUnit}
+                {isUpperBound ? `${label} ${priceDisplayWithUnit}` : priceDisplayWithUnit}
             </span>
         )
     }
@@ -83,9 +86,9 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
     return (
         <span
             className="whitespace-nowrap px-1.5 text-xs tabular-nums text-text3"
-            title={`${t('priceEstimate.label')}: ${priceDisplayWithUnit}`}
+            title={title}
         >
-            {t('priceEstimate.label')} {priceDisplayWithUnit}
+            {label} {priceDisplayWithUnit}
         </span>
     )
 }

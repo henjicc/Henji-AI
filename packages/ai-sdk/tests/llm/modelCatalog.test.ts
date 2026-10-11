@@ -35,10 +35,13 @@ describe('normalizeCatalogModelId', () => {
 })
 
 describe('findLlmModelCatalogEntry', () => {
-  it('同一个模型不管从哪个渠道进来都查到同一条', () => {
+  it('原厂旧别名与网关同名模型按供应商隔离', () => {
     const direct = findLlmModelCatalogEntry('deepseek-v4-flash')
     expect(direct?.id).toBe('deepseek-v4-flash')
-    expect(findLlmModelCatalogEntry('deepseek/deepseek-v4-flash')).toBe(direct)
+    expect(direct?.input.image).toBe(true)
+    expect(findLlmModelCatalogEntry('deepseek/deepseek-v4-flash')?.input.image).toBe(false)
+    expect(findLlmModelCatalogEntry('deepseek-v4-flash', 'siliconflow')?.input.image).toBe(false)
+    expect(findLlmModelCatalogEntry('deepseek-v4-flash', 'deepseek')?.input.image).toBe(true)
   })
 
   it('支持别名（同能力的价格变体）', () => {
@@ -82,7 +85,7 @@ describe('applyLlmModelCatalogEntry', () => {
     // DeepSeek 的视觉模型只在 Responses API 上收图；该协议接通后可以如实开放图片输入。
     const entry = findLlmModelCatalogEntry('deepseek-v4-flash-vision-exp')!
     expect(entry.input.image).toBe(true)
-    expect(entry.apiProtocols?.[0]).toBe('openai-responses')
+    expect(entry.apiProtocols).toContain('openai-responses')
     expect(entry.note).toContain('Responses API')
     // GLM-5.3 官方明确只支持文本模态
     expect(findLlmModelCatalogEntry('glm-5.3')!.input).toEqual({ image: false, video: false, audio: false })

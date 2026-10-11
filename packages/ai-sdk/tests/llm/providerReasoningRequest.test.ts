@@ -10,10 +10,22 @@ function apply(
   reasoning: { enabled: boolean; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' },
   adapter?: string,
 ): Record<string, unknown> {
-  return applyProviderReasoningRequestBody(providerId, adapter, { model: 'm' }, reasoning)
+  return applyProviderReasoningRequestBody(providerId, adapter, { model: providerId === 'kimi' ? 'kimi-k3' : 'm' }, reasoning)
 }
 
 describe('applyProviderReasoningRequestBody', () => {
+  it('Kimi按模型区分字段并删除残留的错误字段，保留输出预算', () => {
+    for (const enabled of [true, false]) {
+      const body = { max_tokens: 4096, reasoning_effort: 'max', thinking: { type: 'disabled' } }
+      const config = { enabled, effort: 'max' as const }
+      expect(applyProviderReasoningRequestBody('kimi', undefined, { ...body, model: 'kimi-k2.6' }, config))
+        .toEqual({ model: 'kimi-k2.6', max_tokens: 4096, thinking: { type: enabled ? 'enabled' : 'disabled' } })
+      expect(applyProviderReasoningRequestBody('kimi', undefined, { ...body, model: 'kimi-k2.7-code' }, config))
+        .toEqual({ model: 'kimi-k2.7-code', max_tokens: 4096, thinking: { type: 'enabled', keep: 'all' } })
+      expect(applyProviderReasoningRequestBody('kimi', undefined, { ...body, model: 'kimi-k3' }, config))
+        .toEqual({ model: 'kimi-k3', max_tokens: 4096, reasoning_effort: enabled ? 'max' : 'low' })
+    }
+  })
   it('DeepSeek 同时发 thinking 与 reasoning_effort，且只用官方示例里的两档', () => {
     expect(apply('deepseek', { enabled: true, effort: 'low' })).toMatchObject({
       thinking: { type: 'enabled' },

@@ -144,6 +144,7 @@
       "meta": {
         "name": "HappyHorse 1.1"
       }
-    }
+    },
+    "kie-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "Generate and edit images up to 4K"}}
   }
 }

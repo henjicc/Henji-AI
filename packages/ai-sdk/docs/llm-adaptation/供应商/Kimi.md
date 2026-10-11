@@ -74,3 +74,7 @@ K3 是付费解锁模型：**充值后才能调用**，新用户认证赠送的 
 - [联网搜索定价](https://platform.kimi.com/docs/pricing/tools)
 - [使用思考模式](https://platform.kimi.com/docs/guide/use-thinking-models)
 - [Kimi 文档全量索引](https://platform.kimi.com/docs/llms.txt)
+
+## 2026-10-12 思考请求分支
+
+K3 用 reasoning_effort=low/high/max（不能关闭，关闭映射 low）；K2.6 用 thinking.type=enabled/disabled；K2.7 Code 固定 thinking.type=enabled、thinking.keep=all，不发送 K3 reasoning_effort。未知模型不猜 K3 私有参数。maxOutputTokens 保持原值。来源：[Chat API](https://platform.kimi.com/docs/api/chat)（公开无需登录）。

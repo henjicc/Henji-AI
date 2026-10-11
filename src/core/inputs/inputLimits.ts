@@ -24,7 +24,8 @@ const normalizeLimit = (limit: InputCountLimit | undefined, fallbackMax: number)
   if (limit.exact !== undefined) return { min: limit.exact, max: limit.exact }
   return {
     min: limit.min ?? 0,
-    max: limit.max ?? fallbackMax
+    // 已声明输入类型但未给 max 表示供应商未声明数量上限，与 SDK 消费契约一致。
+    max: limit.max ?? Number.POSITIVE_INFINITY
   }
 }
 

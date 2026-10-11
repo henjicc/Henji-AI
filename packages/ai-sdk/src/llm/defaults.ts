@@ -15,7 +15,7 @@ export const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
 export const DEFAULT_DEEPSEEK_MODEL_ID = 'deepseek-flash'
 export const DEFAULT_PPIO_PROVIDER_ID = 'ppio'
 export const DEFAULT_PPIO_BASE_URL = 'https://api.ppio.com/openai'
-export const DEFAULT_PPIO_MODEL_ID = 'deepseek/deepseek-v4-flash'
+export const DEFAULT_PPIO_MODEL_ID = 'deepseek/deepseek-v4.1-flash'
 export const DEFAULT_LLM_REASONING_EFFORT: LlmReasoningEffort = 'high'
 export const DEEPSEEK_V4_CONTEXT_WINDOW = 1_000_000
 export const DEEPSEEK_V4_MAX_OUTPUT_TOKENS = 384_000
@@ -45,8 +45,8 @@ export const DEFAULT_LLM_CAPABILITIES: LlmCapabilities = {
  * 添加模型的两个入口（手动添加、获取模型列表）和内置模型清单都走这里，保证"同一个模型 ID
  * 无论从哪个入口进来，标出来的能力一致"。
  */
-export function createLlmCapabilitiesForModel(modelId: string): LlmCapabilities {
-  const entry = findLlmModelCatalogEntry(modelId)
+export function createLlmCapabilitiesForModel(modelId: string, providerId?: string): LlmCapabilities {
+  const entry = findLlmModelCatalogEntry(modelId, providerId)
   return entry
     ? applyLlmModelCatalogEntry(DEFAULT_LLM_CAPABILITIES, entry)
     : { ...DEFAULT_LLM_CAPABILITIES }

@@ -6,7 +6,6 @@ import { falGptImage25Model as fal } from '../../src/catalog/fal/gpt-image-2.5.m
 import { grsaiGptImage25Model as grsai } from '../../src/catalog/grsai/gpt-image-2.5.model'
 import { kieGptImage25Model as kie } from '../../src/catalog/kie/gpt-image-2.5.model'
 import { GPT25_OUTPUT_REFERENCE } from '../../src/catalog/shared/gptImage25Pricing'
-import { GRSAI_GPT25_SIZES } from '../../src/catalog/grsai/gptImage25Sizes'
 import type { JsonObject, JsonValue } from '../../src/types/runtime'
 import type { ModelRuntimeDefinition } from '../../src/types/model'
 
@@ -65,14 +64,15 @@ describe('GPT Image 2.5 official request contracts', () => {
     expect((await build(kie, { __firstImageRatio: 27 / 16 })).input).toMatchObject({ aspect_ratio: '1:1' })
   })
 
-  it('applies Grsai version-specific pixels, quality and background', async () => {
+  it('keeps Grsai standard and rejects channels under maintenance', async () => {
     expect(await build(grsai, { gpt25Variant: 'standard', gpt25Resolution: '4K', gpt25Quality: 'max', gpt25Transparent: true })).toEqual({ model: 'gpt-image-2.5', prompt: 'A product photo', aspectRatio: '1:1' })
-    expect(await build(grsai, { gpt25Variant: 'sunburst', gpt25Resolution: '4K', gpt25Quality: 'max', gpt25Transparent: true, gpt25AspectRatio: '3:2' })).toMatchObject({ model: 'gpt-image-2.5-sunburst', aspectRatio: '3504x2336', quality: 'max', background: 'transparent' })
+    await expect(build(grsai, { gpt25Variant: 'sunburst' })).rejects.toThrow()
+    await expect(build(grsai, { gpt25Variant: 'flare' })).rejects.toThrow()
     expect(await build(grsai)).toEqual({ model: 'gpt-image-2.5', prompt: 'A product photo', aspectRatio: '1:1' })
   })
 
   it('keeps all explicit pixel sizes within the official constraints', () => {
-    const sizes = [...Object.values(GPT25_OUTPUT_REFERENCE).map(s => [s.width, s.height]), ...Object.values(GRSAI_GPT25_SIZES).flatMap(row => Object.values(row).map(s => s!.split('x').map(Number)))]
+    const sizes = Object.values(GPT25_OUTPUT_REFERENCE).map(s => [s.width, s.height])
     for (const [width, height] of sizes) {
       expect(width % 16).toBe(0); expect(height % 16).toBe(0)
       expect(Math.max(width, height)).toBeLessThanOrEqual(3840)
@@ -88,19 +88,22 @@ describe('GPT Image 2.5 official request contracts', () => {
     expect(apimart.pricing!.calculator!({ gpt25Channel: 'official', gpt25Quality: 'high' })).toBeCloseTo(1756 * 24 / 1e6)
     expect(fal.pricing!.calculator!({ gpt25Quality: 'max', gpt25Resolution: '2K', gpt25Count: 2 })).toBeCloseTo(14272 * 30 / 1e6 * 2)
     expect(grsai.pricing!.calculator!({})).toBe(0.06)
-    expect(grsai.pricing!.calculator!({ gpt25Variant: 'sunburst' })).toBe(0.24)
   })
 
   it.each(models)('$meta.id rejects invalid input instead of silently truncating it', async model => {
     await expect(build(model, { prompt: '' })).rejects.toThrow()
-    await expect(build(model, { images: Array(17).fill('https://example.invalid/ref.png') })).rejects.toThrow()
+    if (model === grsai) {
+      expect(await build(model, { images: Array(25).fill('https://example.invalid/ref.png') })).toHaveProperty('images', Array(25).fill('https://example.invalid/ref.png'))
+    } else {
+      await expect(build(model, { images: Array(17).fill('https://example.invalid/ref.png') })).rejects.toThrow()
+    }
     expect(await build(model)).not.toHaveProperty('output_format')
   })
 
   it('synthetic-negative: rejects unsupported combinations and empty masks', async () => {
     const cases: Array<[ModelRuntimeDefinition, JsonObject]> = [
       [kie, { prompt: 'x'.repeat(20001) }], [kie, { gpt25Resolution: '2K', gpt25AspectRatio: '9:8' }],
-      [grsai, { gpt25Variant: 'flare', gpt25Quality: 'max' }], [grsai, { gpt25Resolution: '2K', gpt25AspectRatio: '3:1' }],
+      [grsai, { gpt25Variant: 'flare', gpt25Quality: 'max' }], [grsai, { gpt25AspectRatio: '3:1' }],
       [fal, { gpt25Count: 11 }], [apimart, { gpt25Count: 5 }], [fal, { gpt25Count: '2' }],
       [fal, { gpt25Mask: ['mask'] }], [fal, { images: ['ref'], gpt25Mask: [''] }],
     ]

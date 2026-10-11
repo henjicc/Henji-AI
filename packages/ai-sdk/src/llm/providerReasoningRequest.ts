@@ -60,9 +60,15 @@ const PROVIDER_REASONING_BODY: Readonly<Record<string, ReasoningBodyBuilder>> = 
 
   // Kimi K3：始终思考、官方没有关闭开关，只有 low / high / max 三档。
   // 用户选「关闭」时退到最低档，而不是假装关掉——这一点在供应商预设的说明里也写了。
-  kimi: reasoning => ({
-    reasoning_effort: reasoning.enabled ? pickEffort(reasoning.effort, ['low', 'high', 'max']) : 'low',
-  }),
+  kimi: (reasoning, body) => {
+    const model = typeof body.model === 'string' ? body.model.toLowerCase() : ''
+    if (model === 'kimi-k3') {
+      return { reasoning_effort: reasoning.enabled ? pickEffort(reasoning.effort, ['low', 'high', 'max']) : 'low' }
+    }
+    if (model === 'kimi-k2.6') return { thinking: { type: reasoning.enabled ? 'enabled' : 'disabled' } }
+    if (model === 'kimi-k2.7-code') return { thinking: { type: 'enabled', keep: 'all' } }
+    return {}
+  },
 
   // 智谱 GLM：GLM-5.3 传 thinking.type='disabled' 会直接请求失败（官方迁移说明写明），
   // 而 GLM-5V-Turbo 不传即为关闭。所以关闭时整段不发，让两个模型各自走默认，
@@ -152,7 +158,7 @@ export function applyProviderReasoningRequestBody(
       ? { ...clean, reasoning: { effort: reasoning.enabled ? 'high' : 'none' } }
       : { ...clean, ...build(reasoning, clean) }
   }
-  if (key === 'siliconflow') {
+  if (key === 'siliconflow' || key === 'kimi') {
     const { thinking: _thinking, reasoning_effort: _effort, ...clean } = body
     return { ...clean, ...build(reasoning, clean) }
   }

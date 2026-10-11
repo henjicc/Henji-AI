@@ -16,8 +16,6 @@ import {
  * grep 每个 *.model.ts 里 linkages 数组的 trigger 条目数）选出前列，覆盖三种不同的
  * 联动效果组合：
  * - kie-seedance-v1：2 条，全是 autoSwitch（版本/上传图片数量都会把快速模式收回）
- * - ppio-minimax-hailuo-2.3：hide + filterOptions + autoSwitch（10 秒档不支持 1080P，
- *   filterOptions 收窄选项，autoSwitch 把已选的 1080P 收回 768P）
  * - ppio-kling-3.0：filterOptions + autoSwitch（动作控制模式不支持 4K，选项被收窄，
  *   已选的 4K 自动切回 1080P）
  *
@@ -77,36 +75,6 @@ describe('generationParams：联动纯函数（对照真实模型 schema）', ()
     })
   })
 
-  describe('ppio-minimax-hailuo-2.3（hide + filterOptions + autoSwitch，时长 × 分辨率）', () => {
-    const modelId = 'ppio-minimax-hailuo-2.3'
-
-    it('10 秒档不提供 1080P 选项', () => {
-      const model = registry.getModel(modelId)
-      const schema = registry.getSchema(modelId)
-      if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
-
-      const params = { ...extractDefaults(schema), ppioHailuo23VideoDuration: 10 }
-      const options = resolveGenerationParamOptions(schema, params, model.linkages)
-      const values = options.ppioHailuo23VideoResolution?.map((option) => option.value)
-      expect(values).not.toContain('1080P')
-    })
-
-    it('已选 1080P 时把时长切到 10 秒，分辨率自动收回 768P', () => {
-      const model = registry.getModel(modelId)
-      const schema = registry.getSchema(modelId)
-      if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
-
-      const base = {
-        ...extractDefaults(schema),
-        ppioHailuo23VideoResolution: '1080P',
-        ppioHailuo23VideoDuration: 10,
-      }
-
-      const reconciled = reconcileGenerationParams(schema, base, model.linkages, ['ppioHailuo23VideoDuration'])
-      expect(reconciled.ppioHailuo23VideoResolution).toBe('768P')
-    })
-  })
-
   describe('ppio-kling-3.0（filterOptions + autoSwitch，动作控制模式收窄分辨率）', () => {
     const modelId = 'ppio-kling-3.0'
 
@@ -138,18 +106,18 @@ describe('generationParams：联动纯函数（对照真实模型 schema）', ()
   })
 
   it('reconcileGenerationParams 省略 changedKeys 时对全部已有 key 各跑一遍，效果等价于精确指定', () => {
-    const modelId = 'ppio-minimax-hailuo-2.3'
+    const modelId = 'ppio-kling-3.0'
     const model = registry.getModel(modelId)
     const schema = registry.getSchema(modelId)
     if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
 
     const base = {
       ...extractDefaults(schema),
-      ppioHailuo23VideoResolution: '1080P',
-      ppioHailuo23VideoDuration: 10,
+      ppioKling30Resolution: '4K',
+      ppioKling30Mode: 'motion-control',
     }
 
-    const precise = reconcileGenerationParams(schema, base, model.linkages, ['ppioHailuo23VideoDuration'])
+    const precise = reconcileGenerationParams(schema, base, model.linkages, ['ppioKling30Mode'])
     const omitted = reconcileGenerationParams(schema, base, model.linkages)
     expect(omitted).toEqual(precise)
   })

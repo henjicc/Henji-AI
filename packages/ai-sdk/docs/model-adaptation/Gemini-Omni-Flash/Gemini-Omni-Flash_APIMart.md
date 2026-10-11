@@ -123,3 +123,7 @@ Google 官方 Gemini Omni Flash 全能多模态视频生成模型。支持文生
 | 获取任务状态 | https://docs.apimart.ai/cn/api-reference/tasks/status | 否 |
 | 定价中心（视频标签页搜 GEMINI-OMNI-FLASH-PREVIEW / OMNI-FLASH-EXT） | https://apimart.ai/zh/pricing | 否 |
 | API Key 管理 | https://apimart.ai/keys | **是** |
+
+## 2026-10-12 Ext 与 preview 分支复核
+
+Ext 的 API model 固定为 `gemini-omni-1.1-flash-ext`，360p/720p/1080p/4k，360p 的 4/6/8/10 秒为 USD 0.15/0.175/0.20/0.225；输入参考视频 360p USD 0.04。Ext 图片仍只支持 0/1/3 张，frame 只能 1 张；视频最多 1 个，传视频不能同时传 duration。Preview 独立契约最多 16 张参考图，不能共享 Ext 的 3 张上限。Ext 页标题与错误表遗漏 360p，但字段正文明确列举且价格页有收费，以字段正文及现价为准。来源：[Ext](https://docs.apimart.ai/cn/api-reference/videos/omni-flash-ext/generation.md)、[preview](https://docs.apimart.ai/cn/api-reference/videos/gemini-omni-flash-preview/generation.md)、[价格](https://apimart.ai/zh/pricing)（公开无需登录）。

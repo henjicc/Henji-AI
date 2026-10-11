@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import type { JsonObject } from '../../src/types/runtime'
 import { kling30Model } from '../../src/catalog/ppio/kling-3.0.model'
 import { minimaxSpeechModel } from '../../src/catalog/ppio/minimax-speech.model'
-import { wan27Model } from '../../src/catalog/ppio/wan-2.7.model'
 
 /** 直接执行 SDK catalog 中的真实 selector / builder，覆盖主进程实际消费路径。 */
 async function select(params: JsonObject): Promise<string> {
@@ -90,28 +89,7 @@ describe('派欧云按真实输入时长计价', () => {
     expect(price).toBeCloseTo(6)
   })
 
-  it('Wan 2.7 视频编辑 duration=0 时按输入视频真实时长计价', () => {
-    const price = wan27Model.pricing.calculator?.({
-      ppioWan27Mode: 'video-edit',
-      ppioWan27Resolution: '1080P',
-      ppioWan27Duration: 0,
-      uploadedVideoFilePaths: ['source.mp4'],
-      __videoDurationSeconds: [7.4],
-    })
-    expect(price).toBeCloseTo(7.4)
-  })
 
-  it('Wan 2.7 在逐段时长不完整时回退宿主提供的总时长', () => {
-    const price = wan27Model.pricing.calculator?.({
-      ppioWan27Mode: 'video-edit',
-      ppioWan27Resolution: '720P',
-      ppioWan27Duration: 0,
-      uploadedVideoFilePaths: ['source.mp4'],
-      __videoDurationSeconds: [],
-      __totalVideoDurationSeconds: 6.25,
-    })
-    expect(price).toBeCloseTo(3.75)
-  })
 })
 
 describe('MiniMax Speech 单次请求向上取整到分', () => {

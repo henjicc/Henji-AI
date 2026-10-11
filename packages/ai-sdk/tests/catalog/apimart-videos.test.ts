@@ -106,10 +106,10 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 视频模型', () => {
     expect(apimartGeminiOmniFlashModel.params.map((param) => param.id)).not.toContain('apimartGeminiOmniFlashExtendTaskId')
   })
 
-  it('Gemini Omni Flash 官方渠道最多支持 4 图', () => {
-    // 官方模型页原文："最多 4 张参考图"（apimart.ai/zh/model/gemini-omni-flash-preview）
+  it('Gemini Omni Flash 官方渠道最多支持 16 图', () => {
+    // 官方请求契约："最多 16 张参考图"（apimart.ai/zh/model/gemini-omni-flash-preview）
     const images = Array.from({ length: 16 }, (_, index) => `${index}.png`)
-    expect(apimartGeminiOmniFlashModel.request?.builder?.({ prompt: 'group', images })).toMatchObject({ image_urls: images.slice(0, 4) })
+    expect(apimartGeminiOmniFlashModel.request?.builder?.({ prompt: 'group', images })).toMatchObject({ image_urls: images })
   })
 
   it('Gemini Omni Flash 在统一模型中切换普通渠道的离散时长、图片约束和价格', async () => {
@@ -129,7 +129,7 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 视频模型', () => {
       apimartGeminiOmniFlashResolution: '4k',
       apimartGeminiOmniFlashExtDuration: '10'
     })).toMatchObject({
-      model: 'Omni-Flash-Ext',
+      model: 'gemini-omni-1.1-flash-ext',
       generation_type: 'reference',
       image_urls: ['a.png', 'b.png', 'c.png'],
       video_urls: ['motion.mp4'],
@@ -154,7 +154,7 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 视频模型', () => {
       images: ['frame.png'],
     })).resolves.toMatchObject({
       body: {
-        model: 'Omni-Flash-Ext', generation_type: 'frame', aspect_ratio: '9:16',
+        model: 'gemini-omni-1.1-flash-ext', generation_type: 'frame', aspect_ratio: '9:16',
         resolution: '4k', duration: 10, image_urls: ['frame.png'],
       },
     })
@@ -330,7 +330,7 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 视频模型', () => {
     [apimartMiniMaxH3Model, 'apimartMiniMaxH3Mode', 'apimartMiniMaxH3Duration', 'apimartMiniMaxH3Resolution', '2K', 0.09144],
     [apimartSeedance20Model, 'apimartSeedance20Mode', 'apimartSeedance20Duration', 'apimartSeedance20Resolution', '720p', 0.08584],
     [apimartSeedance20FastModel, 'apimartSeedance20FastMode', 'apimartSeedance20FastDuration', 'apimartSeedance20FastResolution', '720p', 0.05128],
-    [apimartSeedance20MiniModel, 'apimartSeedance20MiniMode', 'apimartSeedance20MiniDuration', 'apimartSeedance20MiniResolution', '720p', 0.01384],
+    [apimartSeedance20MiniModel, 'apimartSeedance20MiniMode', 'apimartSeedance20MiniDuration', 'apimartSeedance20MiniResolution', '720p', 0.02376],
     [apimartSeedance25Model, 'apimartSeedance25Mode', 'apimartSeedance25Duration', 'apimartSeedance25Resolution', '1080p', 0.22992],
   ] as const)('$meta.id 按所有参考视频真实总时长计价并让空数组回退到 uploadedVideos', (
     model, modeParam, durationParam, resolutionParam, resolution, rate

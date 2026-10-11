@@ -63,18 +63,8 @@ const fal = presentation('fal-ai-gpt-image-2.5', ['gpt25Variant', 'gpt25AspectRa
 // 复用已登记的遮罩创作契约，让生成面板与画布共同使用同一个编辑器。
 fal.params.gpt25Mask = falPresentation['fal-ai-gpt-image-2'].params.falGptImage2MaskUrl
 
-const grsai = presentation('grsai-gpt-image-2.5', ['gpt25Variant', 'gpt25AspectRatio', 'gpt25Resolution', 'gpt25Quality'])
-grsai.params.gpt25Transparent = { name: { zh: '透明背景', en: 'Transparent background' } }
-grsai.linkages = [
-  {
-    trigger: 'gpt25Variant', effect: 'filterOptions', target: 'gpt25Quality',
-    filter: (variant, options) => options.filter(o => variant === 'sunburst' || !['xhigh', 'max'].includes(String(o.value))),
-  },
-  {
-    trigger: ['gpt25Variant', 'gpt25Resolution'], effect: 'filterOptions', target: 'gpt25AspectRatio',
-    filter: (_value, options, params) => options.filter(o => (params.gpt25Variant !== 'standard' && params.gpt25Resolution !== '2K') || !['1:3', '3:1'].includes(String(o.value))),
-  },
-]
+const grsai = presentation('grsai-gpt-image-2.5', ['gpt25Variant', 'gpt25AspectRatio'])
+grsai.params.gpt25Variant = { ...common.gpt25Variant, tooltip: undefined }
 
 export const gptImage25Presentation: Record<string, ModelPresentation> = {
   'kie-gpt-image-2.5': kie, 'apimart-gpt-image-2.5': apimart,

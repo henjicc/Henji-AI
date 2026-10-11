@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "checkedAt": "2026-09-23T18:27:40.414Z",
+  "checkedAt": "2026-10-11T16:18:50.429Z",
   "sources": [
     {
       "id": "apimart-pricing",
@@ -23,12 +23,12 @@
       "id": "bailian-asr",
       "facets": {
         "models": {
-          "count": 57,
-          "hash": "2fc56f7d51dad98333e0d868d1961e064093838dcf4b4d67e54be1484754cd7f"
+          "count": 34,
+          "hash": "c4f3bdb2944048e25c85e0bde3ab2e90739d841a4a9533c5fbac8b290dd07445"
         },
         "api": {
-          "count": 9,
-          "hash": "161ba09aa0a39f1db936202e0ccb80c5ed8cd4e03634c26a06d7afc0a5765c56"
+          "count": 8,
+          "hash": "d0adc96446cdb636e08b44011240191d1652e8229839b70fcfcc89eb10e44296"
         },
         "pricing": {
           "count": 4,
@@ -57,8 +57,8 @@
       "id": "bigmodel-index",
       "facets": {
         "models": {
-          "count": 23,
-          "hash": "9e3d0687bdfb9fe28083349e68adbfee5f8417eb5df67d48bd12cf891f87bfba"
+          "count": 22,
+          "hash": "f6b9abd2f45692a30e6c84caf54864b07bed598be821d1a96b0605f84653f570"
         },
         "deprecation": {
           "count": 0,
@@ -78,16 +78,16 @@
       "id": "deepseek-pricing",
       "facets": {
         "models": {
-          "count": 9,
-          "hash": "a60d2376fdfa594e45468141e7b44c2493cf1e0983b1c1b4c78642c7b94a3ab9"
+          "count": 8,
+          "hash": "c19d1eb3952b7d0452c14537e9e0a3d0f54fd796da7cb23768596456dd09d154"
         },
         "api": {
-          "count": 23,
-          "hash": "460284d19768946b3f768ddebb93c10d636e95ef27a68c75a52bae387c0e6181"
+          "count": 10,
+          "hash": "7599d5093cbd69e30778fa33cedec7d15496d06d03700c4f0a421dbb3836fb8c"
         },
         "pricing": {
-          "count": 2,
-          "hash": "d512823432c194ca7c79ecf2157f4c0f0fabff61cb2d24927bfc86f04234c06a"
+          "count": 7,
+          "hash": "2aff1287f31b2e55d535742bd56de2c30baffef7c06611e124112654d63c9c36"
         }
       }
     },
@@ -103,12 +103,12 @@
           "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         },
         "api": {
-          "count": 13,
-          "hash": "4dd5dbee180cce66d8866fbfc02fbf85fc836ba3f04e8fc658e0a5e50b6cd7e4"
+          "count": 17,
+          "hash": "96c2c874f73752e5d69e2a722b9b9a51f5fbc3ae885dfd1a0cb23a2ebf6191fb"
         },
         "pricing": {
-          "count": 6,
-          "hash": "1abaae7ef8d6f416ea5cf97254b81950b23f26e4b974f079bb3556ba5f464755"
+          "count": 9,
+          "hash": "78d2e742183aac82f7a8c1ec154c05dea92e964edfda0faa55bd5ac490c5a7c0"
         }
       }
     },
@@ -133,20 +133,20 @@
       "id": "grsai-announcements",
       "facets": {
         "models": {
-          "count": 34,
-          "hash": "c0269b330791bd560305ac7f0279771588eccc3a7b34181d4e964099d1b160ff"
+          "count": 35,
+          "hash": "21d9baf687181297e51e67f5dfd80b34f9cfe917764c7c9c23dfa42bc97d7325"
         },
         "maintenance": {
-          "count": 16,
-          "hash": "f7c6ab30bc5a878967c78858135c9fd09c4f9f3e2cdb064e922c0022063801c9"
+          "count": 18,
+          "hash": "c7bedefbcc27f7394901b524d476ee0ed8b157a947ab9c0a8df1d0823d8b649a"
         },
         "deprecation": {
           "count": 6,
           "hash": "7c603af9978b32984d9a0a3d28ea10eb1ffd2fce06fecf28a8004b0ab9c10e7e"
         },
         "api": {
-          "count": 28,
-          "hash": "f38d4d92e5c69e42af40eff092aa03f3e474fd5f33c8fe06d0316b4fa251e629"
+          "count": 29,
+          "hash": "0d8b04f1531a9af26f8f5adc5981c19b5439d5860eacb46c551bb976cda2821b"
         },
         "pricing": {
           "count": 26,
@@ -158,16 +158,16 @@
       "id": "kie-index",
       "facets": {
         "models": {
-          "count": 274,
-          "hash": "25be62047ccd040b638cf59cce9af928b391c9bea636925cd5d397f34712e9c0"
+          "count": 303,
+          "hash": "86cff6269c4b518b6999e3e0f86e4d97a92fac896004878c55f97388ec85c3a0"
         },
         "deprecation": {
           "count": 1,
           "hash": "9225c4b240b997c2e1d350e879cc26fbd3091814d5bb9a4550297de4d30f3a3a"
         },
         "api": {
-          "count": 152,
-          "hash": "6d24c1e35d4ac2e3a891e0ae46c4e0db3dfa18abc41be42e96497f740ab9a63f"
+          "count": 144,
+          "hash": "d7a055eccdbc80e2040a59fa04591fe4bb74b3a07df9f25a9982f619741e8d5f"
         },
         "pricing": {
           "count": 0,
@@ -179,8 +179,8 @@
       "id": "kimi-index",
       "facets": {
         "models": {
-          "count": 31,
-          "hash": "8e3c0d4b2ca7a384535876db52a32d00503e15d1fc6324fc6bcd2e42954382a8"
+          "count": 30,
+          "hash": "70eeb32b2212a60b3cd8bc65c53f2cc4eda41ac2e212ed53edc16cfe8baf30be"
         },
         "deprecation": {
           "count": 3,
@@ -188,11 +188,11 @@
         },
         "api": {
           "count": 153,
-          "hash": "d19c64690133076b5115865a6009169dc7cb7bd17792cf933760daa8aa693688"
+          "hash": "054be571a8a26424136eb689e7a59f63a73f02a40275d28ab37ba5c0e0ea43fc"
         },
         "pricing": {
           "count": 11,
-          "hash": "554f82aed89573e5d9518c3946322b4bc0f10fafa95d701714d45634dc2bee2c"
+          "hash": "1b74badc9cca66c699739d134e0164cb38427f30c53aa8738fb7295d31c723a7"
         }
       }
     },
@@ -222,19 +222,19 @@
       "facets": {
         "models": {
           "count": 56,
-          "hash": "4bb09dadb45083efcb6059d09992664f991db14eeee2a7782769c01211eee193"
+          "hash": "404994d7f456e7341aa07e557f790fa9f8866ac941ad8e9ed125adda2cd7a28d"
         },
         "deprecation": {
           "count": 0,
           "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         },
         "api": {
-          "count": 98,
-          "hash": "c570c6fcca317d29bd98369ea31723d48105a44d288f0e7ce0af2efca3b89c64"
+          "count": 99,
+          "hash": "8877239a30765ef3c8ff49a98441cf652641bf196c1768cdc14b1d28dfcb91fd"
         },
         "pricing": {
           "count": 8,
-          "hash": "6cd809b3c25249fe0b8af83e837ef2e0c4c555d2984405c7042adc59302025fa"
+          "hash": "cce570cb83ec2aed751259d30d76aaeb53117df9fb3c397164df4c0e9c7a647a"
         }
       }
     },
@@ -285,7 +285,7 @@
       "facets": {
         "models": {
           "count": 95,
-          "hash": "df4ff85339655afe1177f977165c48f832563bac11931b2d1eded901ddc253fb"
+          "hash": "da707b9923524c4e82663d4c8b38aba246cbc4f41dfc17889d5888d8f496be6a"
         },
         "deprecation": {
           "count": 0,
@@ -297,7 +297,7 @@
         },
         "pricing": {
           "count": 14,
-          "hash": "14dbfe427e5dca3c5b678a7fc6ded3de0c45279999e535bc522e228d71d43c2c"
+          "hash": "da7fd50ab26d0537528d5de239b670e52e277e89115fbb5090cd7bf751f96fbd"
         }
       }
     },
@@ -309,12 +309,12 @@
           "hash": "d6b0897a2df8a03094bc37eeb316fc55e94828b754fc6231ad1eaa36ab6b9bdc"
         },
         "deprecation": {
-          "count": 0,
-          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          "count": 22,
+          "hash": "72e58d9e9c5bfed9d82d76f586ee9bfcd0c048b467742994853cbc5dd6631b08"
         },
         "api": {
           "count": 62,
-          "hash": "9f1f21beadad61ce07508e5c283e078b021842ab34d157f742df60da62e2f978"
+          "hash": "e729d8aa5bcc97015f3c73d18cdbeb780880c33f80f0060a4e79433a027e1eba"
         },
         "pricing": {
           "count": 2,
@@ -419,6 +419,195 @@
       "category": "pricing_change",
       "disposition": "actioned",
       "summary": "2026-09-24 复核：独立 V4-Pro-0813 重新列于价格页，补充闲时/高峰价格并撤销旧文档的 Pro 必转发 Flash 说法；现有独立 Pro 无视觉目录正确。"
+    },
+    {
+      "provider": "ppio",
+      "category": "deprecation",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A01/A02：默认改V4.1 Flash并保守登记网关能力；四个已停服视频系列从SDK与宿主删除。"
+    },
+    {
+      "provider": "grsai",
+      "category": "availability_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A03：GPT Image2.5 Flare/Sunburst维护中，移除可选变体，保留标准。"
+    },
+    {
+      "provider": "apimart",
+      "category": "pricing_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A04：Seedance2 Mini四档与Seedream5 Lite价格修正。"
+    },
+    {
+      "provider": "kie",
+      "category": "pricing_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A05：Seedance2.5 1080p及H3 768P/2K/参考图价格修正，共享输入视频时长计价。"
+    },
+    {
+      "provider": "apimart",
+      "category": "api_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A06：Omni Ext新model/360p与preview16图、Ext自身限制按渠道分开。"
+    },
+    {
+      "provider": "fal",
+      "category": "api_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A07：H3三路由统一prompt_expansion_mode，关闭disabled；target_audio_url留后续。"
+    },
+    {
+      "provider": "minimax",
+      "category": "metadata_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A10：官网/Key链接改platform.minimax.cn，默认API地址不变。"
+    },
+    {
+      "provider": "deepseek",
+      "category": "api_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A11：原厂旧Flash别名匹配新Flash，原厂预设去旧名，网关隔离。"
+    },
+    {
+      "provider": "bigmodel",
+      "category": "pricing_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A12：去除无有效期证据的中国区Flash promotion。"
+    },
+    {
+      "provider": "kimi",
+      "category": "api_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "A13：K3 reasoning_effort、K2.6 thinking.type、K2.7 Code固定思考；输出预算不变。"
+    },
+    {
+      "provider": "bailian",
+      "category": "pricing_change",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "t168遗留：Qwen Audio3.1 TTS按公开价格和明确工程假设作全文慢速估算上限，不再返回NaN。"
+    },
+    {
+      "provider": "apimart",
+      "category": "new_model",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "B01：Nano Banana2.1官方/Ext，分别声明1–4/1输出和Token/单张费用。"
+    },
+    {
+      "provider": "kie",
+      "category": "new_model",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "B02：Nano Banana2.1 10图/20000字符和1K/2K/4K价格。"
+    },
+    {
+      "provider": "fal",
+      "category": "new_model",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "B03：Nano Banana2.1生成/编辑、视频/PDF与Token计费。"
+    },
+    {
+      "provider": "grsai",
+      "category": "new_model",
+      "disposition": "actioned",
+      "reviewedAt": "2026-10-12",
+      "summary": "B04：Nano Banana2.1统一接口，1200积分各分辨率同价。"
+    },
+    {
+      "provider": "apimart",
+      "category": "source_quality",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "D02：apimart-pricing可读模型facet为空，不接受新hash，保留原基线；SPA不足不能当作下线。"
+    },
+    {
+      "provider": "ppio",
+      "category": "source_quality",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "D02：ppio-models接口范围缩水，只含少量音频记录，不接受新hash，保留原基线，完整目录待补证。"
+    },
+    {
+      "provider": "fal",
+      "category": "api_change",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "A08、B05–B07/B09/B11：Seedance2.5扩展参数、H3 Max、Ideogram V4、Music3、Wan3.0 Prime、LTX2.5本批不做。D03 Seedance2.5价格冲突仍待官方澄清。"
+    },
+    {
+      "provider": "volcengine",
+      "category": "api_change",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "A09/B16：Seedream5 Lite快照与Seed2.1 Pro/Lite快照能力本批不做。"
+    },
+    {
+      "provider": "kie",
+      "category": "new_model",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "B08/B12/B19：Wan3.0、Seedream5 Flash、Seedance2.5草稿完成本批不做；B20索引候选仍pending。"
+    },
+    {
+      "provider": "grsai",
+      "category": "new_model",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "B18：MiniMax H3及新LLM本批不做。"
+    },
+    {
+      "provider": "bailian",
+      "category": "new_model",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "D06：ASR限制/旧快照本批不做，来源结构变化不作为能力新增或停服证据。"
+    },
+    {
+      "provider": "siliconflow",
+      "category": "new_model",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "B17、D05：GLM5.3 Flash/Qwen3 ASR与TeleSpeech可用性本批不做。"
+    },
+    {
+      "provider": "ppio",
+      "category": "pricing_change",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "D04：Speech2.8 HD最新账号价格本批不改，等待登录证据。"
+    },
+    {
+      "provider": "minimax",
+      "category": "new_model",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "B14/B21：asr-1.0与M3.1套餐入口本批不做，音乐访问限制及旧API可用性不猜。"
+    },
+    {
+      "provider": "apimart",
+      "category": "new_model",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "B10/B12/B13/B20：Omni1.1官方、Seedream5 Flash、PixVerse V6及其他索引候选本批不做。"
+    },
+    {
+      "provider": "kimi",
+      "category": "new_model",
+      "disposition": "pending",
+      "reviewedAt": "2026-10-12",
+      "summary": "B15：K2.7 Code/Highspeed原厂预设与能力扩充本批不做；A13仅修正已知模型思考字段，不视作新预设接入。"
     }
   ]
 }

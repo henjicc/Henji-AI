@@ -21,6 +21,7 @@
     "apimart-z-image-turbo": { "meta": { "name": "Z-Image Turbo" } },
     "apimart-gpt-image-2.5": {
       "meta": { "name": "GPT Image 2.5" }
-    }
+    },
+    "apimart-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "生成和编辑最高 4K 的图像"}}
   }
 }

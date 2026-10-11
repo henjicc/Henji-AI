@@ -1,0 +1,38 @@
+{
+  "source": {
+    "url": "https://fal.ai/models/google/nano-banana-2.1/llms.txt",
+    "collectedAt": "2026-10-12",
+    "classification": "official-literal",
+    "requiresLogin": false,
+    "replacements": "媒体URL改为example.invalid；队列ID改为fixture-task；未补字段",
+    "matrixRows": [
+      "请求字段/枚举/限制",
+      "提交响应或成功结果"
+    ]
+  },
+  "examples": [
+    {
+      "prompt": "An action shot of a black lab swimming in an inground suburban swimming pool. The camera is placed meticulously on the water line, dividing the image in half, revealing both the dogs head above water holding a tennis ball in it's mouth, and it's paws paddling underwater."
+    },
+    {
+      "prompt": "An action shot of a black lab swimming in an inground suburban swimming pool. The camera is placed meticulously on the water line, dividing the image in half, revealing both the dogs head above water holding a tennis ball in it's mouth, and it's paws paddling underwater.",
+      "num_images": 1,
+      "aspect_ratio": "auto",
+      "output_format": "png",
+      "safety_tolerance": "4",
+      "resolution": "1K",
+      "limit_generations": true,
+      "thinking_level": "medium"
+    },
+    {
+      "images": [
+        {
+          "content_type": "image/png",
+          "file_name": "nano-banana-2-t2i-output.png",
+          "url": "https://example.invalid/fixture.png"
+        }
+      ],
+      "description": ""
+    }
+  ]
+}

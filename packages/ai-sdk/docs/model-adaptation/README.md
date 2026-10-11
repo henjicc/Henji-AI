@@ -149,12 +149,9 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 
 | 模型 | 模态 | 供应商 | 文档 |
 |---|---|---|---|
-| MiniMax Hailuo 2.3 | 视频 | 派欧云 / KIE / Fal | [派欧云](Hailuo-2.3/Hailuo-2.3_派欧云.md) / [KIE](Hailuo-2.3/Hailuo-2.3_KIE.md) / [Fal](Hailuo-2.3/Hailuo-2.3_Fal.md) |
+| MiniMax Hailuo 2.3 | 视频 | KIE / Fal | [KIE](Hailuo-2.3/Hailuo-2.3_KIE.md) / [Fal](Hailuo-2.3/Hailuo-2.3_Fal.md) |
 | MiniMax Hailuo 02 | 视频 | KIE / Fal | [KIE](Hailuo-02/Hailuo-02_KIE.md) / [Fal](Hailuo-02/Hailuo-02_Fal.md) |
 | Grok Imagine | 图片 | KIE | [KIE](Grok-Imagine/Grok-Imagine_KIE.md) |
-| Wan 2.5 Preview | 视频 | 派欧云 | [Wan-2.5-Preview_派欧云.md](Wan-2.5-Preview/Wan-2.5-Preview_派欧云.md) |
-| Wan 2.6 | 视频 | 派欧云 | [Wan-2.6_派欧云.md](Wan-2.6/Wan-2.6_派欧云.md) |
-| Wan 2.7 | 视频 | 派欧云 | [Wan-2.7_派欧云.md](Wan-2.7/Wan-2.7_派欧云.md) |
 | MiniMax Speech | 音频 | 派欧云 | [MiniMax-Speech_派欧云.md](MiniMax-Speech/MiniMax-Speech_派欧云.md) |
 | Topaz 图片放大 | 图片 | Fal | [Topaz-图片放大_Fal.md](Topaz-图片放大/Topaz-图片放大_Fal.md) |
 | Topaz 透明图放大 | 图片 | Fal | [Topaz-透明图放大_Fal.md](Topaz-透明图放大/Topaz-透明图放大_Fal.md) |
@@ -336,3 +333,7 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 - **新增模型**：在本文件的清单表里加一行 → 建同名文件夹 → 为每个支持它的供应商写一份 `<模型名>_<供应商名>.md`
 - **更新已有模型**：直接改对应的供应商文件，并更新该文件头部的「最后更新」以及本文件的「最后更新」
 - **信息来源要求**：每条参数 / 价格都要能追溯到文件末尾「原始链接索引」中的某个链接；需要登录才能看到的页面必须标注
+
+## 2026-10-12 Nano Banana 2.1
+
+[APIMart](Nano-Banana-2.1/Nano-Banana-2.1_APIMart.md) · [KIE](Nano-Banana-2.1/Nano-Banana-2.1_KIE.md) · [Fal](Nano-Banana-2.1/Nano-Banana-2.1_Fal.md) · [Grsai](Nano-Banana-2.1/Nano-Banana-2.1_Grsai.md)

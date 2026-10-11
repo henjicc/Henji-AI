@@ -1,0 +1,64 @@
+{
+  "source": {
+    "url": "https://docs.apimart.ai/cn/api-reference/images/gemini-nano-banana-2.1/generation.md",
+    "collectedAt": "2026-10-12",
+    "classification": "official-literal",
+    "requiresLogin": false,
+    "replacements": "媒体URL改为example.invalid；队列ID改为fixture-task；未补字段",
+    "matrixRows": [
+      "请求字段/枚举/限制",
+      "提交响应或成功结果"
+    ]
+  },
+  "examples": [
+    {
+      "code": 200,
+      "data": [
+        {
+          "status": "submitted",
+          "task_id": "task_01K..."
+        }
+      ]
+    },
+    {
+      "model": "gemini-nano-banana-2.1-ext",
+      "prompt": "给画面里的猫戴上一顶红色毛线帽，其余保持不变",
+      "image_urls": [
+        "https://example.invalid/fixture.png"
+      ],
+      "resolution": "1K"
+    },
+    {
+      "model": "gemini-nano-banana-2.1",
+      "prompt": "赛博朋克风格的城市夜景，霓虹灯，雨后街道",
+      "size": "16:9",
+      "resolution": "2K",
+      "n": 4
+    },
+    {
+      "code": 200,
+      "data": {
+        "id": "task_01K...",
+        "status": "completed",
+        "progress": 100,
+        "result": {
+          "images": [
+            {
+              "url": [
+                "https://example.invalid/fixture.png"
+              ],
+              "expires_at": 1791417625
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gemini-nano-banana-2.1",
+      "prompt": "一只橘猫坐在木桌上，旁边一杯咖啡，清晨柔光，写实摄影",
+      "size": "16:9",
+      "resolution": "2K",
+      "n": 1
+    }
+  ]
+}

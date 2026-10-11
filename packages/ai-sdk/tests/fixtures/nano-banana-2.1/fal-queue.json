@@ -1,0 +1,88 @@
+{
+  "source": {
+    "url": "https://fal.ai/docs/documentation/model-apis/inference/queue",
+    "collectedAt": "2026-10-12",
+    "classification": "official-literal",
+    "requiresLogin": false,
+    "replacements": "媒体URL改为example.invalid；队列ID改为fixture-task；未补字段",
+    "matrixRows": [
+      "提交响应",
+      "IN_QUEUE",
+      "IN_PROGRESS",
+      "COMPLETED"
+    ]
+  },
+  "examples": [
+    {
+      "request_id": "764cabcf-b745-4b3e-ae38-1200304cf45b",
+      "response_url": "https://queue.fal.run/fal-ai/flux/schnell/requests/764cabcf.../response",
+      "status_url": "https://queue.fal.run/fal-ai/flux/schnell/requests/764cabcf.../status",
+      "cancel_url": "https://queue.fal.run/fal-ai/flux/schnell/requests/764cabcf.../cancel",
+      "queue_position": 0
+    },
+    {
+      "status": "IN_QUEUE",
+      "request_id": "764cabcf-...",
+      "queue_position": 2,
+      "response_url": "https://queue.fal.run/.../response"
+    },
+    {
+      "status": "IN_PROGRESS",
+      "request_id": "764cabcf-...",
+      "response_url": "https://queue.fal.run/.../response",
+      "logs": [
+        {
+          "message": "Loading model weights...",
+          "timestamp": "2026-02-17T10:30:01.123Z"
+        },
+        {
+          "message": "Generating image...",
+          "timestamp": "2026-02-17T10:30:02.456Z"
+        }
+      ]
+    },
+    {
+      "status": "COMPLETED",
+      "request_id": "764cabcf-...",
+      "response_url": "https://queue.fal.run/.../response",
+      "logs": [
+        {
+          "message": "Done.",
+          "timestamp": "2026-02-17T10:30:05.789Z"
+        }
+      ],
+      "metrics": {
+        "inference_time": 3.42
+      }
+    },
+    {
+      "images": [
+        {
+          "url": "https://example.invalid/fixture.png",
+          "width": 1024,
+          "height": 1024,
+          "content_type": "image/png"
+        }
+      ],
+      "prompt": "a sunset over mountains",
+      "seed": 42,
+      "has_nsfw_concepts": [
+        false
+      ]
+    },
+    {
+      "request_id": "abc123",
+      "gateway_request_id": "abc123",
+      "status": "OK",
+      "payload": {
+        "images": [
+          {
+            "url": "https://example.invalid/fixture.png",
+            "width": 1024,
+            "height": 1024
+          }
+        ]
+      }
+    }
+  ]
+}

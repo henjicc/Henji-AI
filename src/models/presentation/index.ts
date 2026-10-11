@@ -9,10 +9,12 @@ import { modelscopePresentation } from './modelscope'
 import { ppioPresentation } from './ppio'
 import { volcenginePresentation } from './volcengine'
 import { gptImage25Presentation } from './gpt-image-2.5'
+import { nanoBanana21Presentation } from './nano-banana-2.1'
 import { ttsPresentation } from './tts'
 
 export const modelPresentations: Readonly<Record<string, ModelPresentation>> = {
   ...gptImage25Presentation,
+  ...nanoBanana21Presentation,
   ...apimartPresentation,
   ...bailianPresentation,
   ...falPresentation,

@@ -102,3 +102,7 @@
 - [Function Calling](https://api-docs.deepseek.com/guides/tool_calls)
 - [Vision（视觉输入限制）](https://api-docs.deepseek.com/guides/vision)
 - [API sitemap](https://api-docs.deepseek.com/sitemap.xml)（用于核对页面是否存在，避免中文 `/zh-cn/` 前缀 404 后静默 fallback 到错误页面）
+
+## 2026-10-12 原厂旧 Flash 别名
+
+原厂 deepseek-v4-flash / deepseek-v4-flash-vision-exp 实体下线，调用旧名重定向到 deepseek-flash（V4.1 Flash）；两别名均支持图片及 Chat/Responses，仅原厂匹配覆盖。旧 ID 移出原厂推荐；硅基流动等网关旧名继续按其独立目录，不继承新视觉能力。来源：[原厂模型价格表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)（公开无需登录）。

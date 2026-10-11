@@ -418,6 +418,8 @@ export interface RuntimePricingConfig {
   estimateMode?: 'total' | 'unit'
   /** `estimateMode: 'unit'` 时用于展示的计费单位，例如 `MP`。 */
   estimateUnit?: string
+  /** 保守预算上限的展示语义；仍是估算，不能承诺供应商实际账单上限。 */
+  estimateKind?: 'upper-bound'
   /**
    * calculator 需要宿主从媒体文件补齐的指标。SDK 只声明契约，不读取文件；
    * Web/Electron 等宿主可用各自的媒体探针统一解析并注入。

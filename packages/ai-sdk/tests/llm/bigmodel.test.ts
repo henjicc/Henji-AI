@@ -79,7 +79,7 @@ describe('BigModel endpoint profiles', () => {
     expect(cnModels).toEqual(['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash', 'glm-5.3-flashx'])
     expect(globalModels).toEqual(['glm-5.3-flash'])
     expect(BIGMODEL_GLM_5_3_FLASH_PRICING.cn.currency).toBe('CNY')
-    expect(BIGMODEL_GLM_5_3_FLASH_PRICING.cn.promotion?.endsAt).toBeUndefined()
+    expect(BIGMODEL_GLM_5_3_FLASH_PRICING.cn.promotion).toBeUndefined()
     expect(BIGMODEL_GLM_5_3_FLASH_PRICING.global).toMatchObject({ currency: 'USD' })
     expect(BIGMODEL_GLM_5_3_FLASH_PRICING.global.promotion?.endsAt).toBe('2026-09-09T16:00:00.000Z')
   })

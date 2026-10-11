@@ -54,7 +54,7 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
    */
   const updateModelId = (modelId: string): void => {
     if (!model) return
-    const entry = findLlmModelCatalogEntry(modelId)
+    const entry = findLlmModelCatalogEntry(modelId, model.adapter === 'deepseek' ? 'deepseek' : model.providerId)
     if (!entry || entry.id === model.catalogId) {
       onChange({ ...model, modelId })
       return
@@ -68,7 +68,7 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
     })
   }
 
-  const catalogEntry = model ? findLlmModelCatalogEntry(model.modelId) : null
+  const catalogEntry = model ? findLlmModelCatalogEntry(model.modelId, model.adapter === 'deepseek' ? 'deepseek' : model.providerId) : null
   const structuredOutputMode = model?.capabilities.structuredOutputMode ?? 'none'
 
   return (

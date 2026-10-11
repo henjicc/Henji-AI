@@ -1,6 +1,7 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
-import { countUploadedImages, countUploadedVideos, hasUploadedImage } from './mediaSources';
+import { countUploadedImages, hasUploadedImage } from './mediaSources';
+import { resolveUploadedVideoDurationSeconds } from '../shared/mediaPresence';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieMiniMaxH3Model = defineModel({
     meta: {
@@ -140,15 +141,12 @@ export const kieMiniMaxH3Model = defineModel({
         currency: '$',
         calculator: (params) => {
             const duration = Math.min(15, Math.max(4, Number(params.kieMiniMaxH3Duration || 6)));
-            const rate = params.kieMiniMaxH3Resolution === '2K' ? 0.13 : 0.08;
-            const firstVideoDuration = typeof params.__firstVideoDurationSeconds === 'number'
-                ? Math.max(0, params.__firstVideoDurationSeconds)
-                : 0;
-            const billedSeconds = duration + firstVideoDuration * countUploadedVideos(params);
+            const rate = params.kieMiniMaxH3Resolution === '2K' ? 0.065 : 0.04;
+            const billedSeconds = duration + resolveUploadedVideoDurationSeconds(params);
             const extraImages = Math.max(0, countUploadedImages(params) - 5);
-            return billedSeconds * rate + extraImages * 0.04;
+            return billedSeconds * rate + extraImages * 0.02;
         },
-        description: '768P $0.08/秒，2K $0.13/秒；输入视频时长同价计费，前 5 张参考图免费，之后 $0.04/张'
+        description: '768P $0.04/秒，2K $0.065/秒；输入视频时长同价计费，前 5 张参考图免费，之后 $0.02/张'
     }
 });
 export default kieMiniMaxH3Model;

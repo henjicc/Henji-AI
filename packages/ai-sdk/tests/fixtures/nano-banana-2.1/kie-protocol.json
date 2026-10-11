@@ -1,0 +1,63 @@
+{
+  "route": "/api/v1/jobs/createTask",
+  "submit": {
+    "code": 200,
+    "msg": "success",
+    "data": {
+      "taskId": "fixture-task"
+    }
+  },
+  "waiting": [
+    {
+      "code": 200,
+      "data": {
+        "taskId": "fixture-task",
+        "state": "waiting"
+      }
+    },
+    {
+      "code": 200,
+      "data": {
+        "taskId": "fixture-task",
+        "state": "queuing"
+      }
+    },
+    {
+      "code": 200,
+      "data": {
+        "taskId": "fixture-task",
+        "state": "generating"
+      }
+    }
+  ],
+  "final": {
+    "code": 200,
+    "data": {
+      "taskId": "fixture-task",
+      "state": "success",
+      "resultJson": "{\"resultUrls\": [\"https://example.invalid/a.png\", \"https://example.invalid/b.png\"]}"
+    }
+  },
+  "failed": {
+    "code": 200,
+    "data": {
+      "taskId": "fixture-task",
+      "state": "fail",
+      "failMsg": "fixture failure"
+    }
+  },
+  "source": {
+    "url": "https://docs.kie.ai/market/google/nanobanana-2-1.md",
+    "collectedAt": "2026-10-12",
+    "classification": "official-field-constructed",
+    "requiresLogin": false,
+    "note": "依据官方状态与字段表构造的多结果链；不是实际生成记录。空成功终态负例另存negative.json。",
+    "matrixRows": [
+      "提交响应",
+      "重复待处理状态",
+      "有效成功终态",
+      "供应商失败",
+      "取消"
+    ]
+  }
+}

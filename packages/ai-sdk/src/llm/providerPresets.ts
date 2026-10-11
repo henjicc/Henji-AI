@@ -66,7 +66,7 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoningConfigurable: false,
     modelIds: [
       'deepseek/deepseek-v4-pro',
-      'deepseek/deepseek-v4-flash',
+      'deepseek/deepseek-v4.1-flash',
       'moonshotai/kimi-k2.6',
       'xiaomimimo/mimo-v2.5-pro',
     ],
@@ -84,7 +84,7 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['deepseek-flash'],
-    responsesModelIds: ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'],
+    responsesModelIds: ['deepseek-flash', 'deepseek-v4-pro'],
     websiteUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).websiteUrl,
     apiKeyUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
@@ -195,10 +195,10 @@ export function resolvePresetModelApiProtocol(
   if (preset.providerId === 'bigmodel' && (endpointProfile ?? 'cn') !== 'cn') {
     return 'openai-compatible'
   }
-  const modelEntry = findLlmModelCatalogEntry(modelId)
+  const modelEntry = findLlmModelCatalogEntry(modelId, preset.providerId)
   const normalizedModelId = modelEntry?.id ?? modelId.trim().toLowerCase()
   const supportsResponses = preset.responsesModelIds?.some(candidate => (
-    (findLlmModelCatalogEntry(candidate)?.id ?? candidate.trim().toLowerCase()) === normalizedModelId
+    (findLlmModelCatalogEntry(candidate, preset.providerId)?.id ?? candidate.trim().toLowerCase()) === normalizedModelId
   )) === true
   return supportsResponses && modelEntry && modelSupportsLlmApiProtocol(modelEntry, 'openai-responses')
     ? 'openai-responses'
@@ -251,7 +251,7 @@ export function createModelsFromPreset(
     throw new Error(`[llm_endpoint_profile_unknown] bigmodel endpoint profile "${provider.endpointProfile}" is unavailable`)
   }
   return modelIds.map((modelId) => {
-    const entry = findLlmModelCatalogEntry(modelId)
+    const entry = findLlmModelCatalogEntry(modelId, preset.providerId)
     return {
       providerId: provider.providerId,
       providerFamilyId: provider.providerFamilyId,
@@ -262,7 +262,7 @@ export function createModelsFromPreset(
       adapter: provider.adapter,
       apiProtocol: resolvePresetModelApiProtocol(preset, modelId, provider.endpointProfile),
       baseUrl: provider.baseUrl,
-      capabilities: { ...createLlmCapabilitiesForModel(modelId), ...preset.modelCapabilities?.[modelId] },
+      capabilities: { ...createLlmCapabilitiesForModel(modelId, preset.providerId), ...preset.modelCapabilities?.[modelId] },
       catalogId: entry?.id,
       enabled: true,
     }

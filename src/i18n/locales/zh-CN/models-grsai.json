@@ -6,6 +6,7 @@
     "grsai-nano-banana-pro": { "meta": { "name": "Nano Banana Pro" } },
     "grsai-gpt-image-2.5": {
       "meta": { "name": "GPT Image 2.5" }
-    }
+    },
+    "grsai-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "生成和编辑最高 4K 的图像"}}
   }
 }

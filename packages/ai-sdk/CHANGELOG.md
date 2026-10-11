@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0 - 未发布
+
+- 新增 Nano Banana 2.1：APIMart 官方/Ext、KIE、Fal 生成/编辑和 Grsai；分渠道数量限制、Token/单张计费与上传参数。
+- 移除 PPIO 已停服的 Wan 2.5 Preview、Wan 2.6、Hailuo 2.3、Wan 2.7；Grsai GPT Image 2.5 暂停 Flare/Sunburst 变体。开发期不迁移旧配置。
+- PPIO 默认助手改为 V4.1 Flash；DeepSeek 原厂旧别名按新 Flash 能力匹配，网关保留独立契约；Kimi 思考字段按模型区分。
+- 更新 APIMart/KIE 指定价格、Omni Ext ID/360p/参考图限制与 Fal H3 扩写字段；清理无有效期证据的智谱中国区优惠，MiniMax 元信息改为官方新域名。
+- Qwen Audio 3.1 TTS 提供注明工程假设的估算上限；无真实付费验证，不承诺绝对账单上限。
+
 ## 0.9.0 - 2026-10-06
 
 - 生成结果新增 `urls: string[]`：按输出顺序列出全部结果地址，多结果模型不再需要拆分 `url` 中的 `|||` 拼接串。`url` 保留为兼容字段，内容不变。

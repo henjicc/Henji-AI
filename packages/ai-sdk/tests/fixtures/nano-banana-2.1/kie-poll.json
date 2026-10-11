@@ -1,0 +1,462 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/common/get-task-detail.md",
+    "collectedAt": "2026-10-12",
+    "classification": "official-literal",
+    "requiresLogin": false,
+    "replacements": "媒体URL改为example.invalid；队列ID改为fixture-task；未补字段",
+    "matrixRows": [
+      "waiting",
+      "queuing",
+      "generating",
+      "success",
+      "fail"
+    ]
+  },
+  "examples": [],
+  "officialOpenApiYaml": "openapi: 3.0.1\ninfo:\n  title: ''\n  description: ''\n  version: 1.0.0\npaths:\n  /api/v1/jobs/recordInfo:\n    get:\n      summary: Get Task Details\n      deprecated: false\n      description: >\n        Query the status and results of any task created in the Market models.\n        This is a unified query interface that works with all models under the\n        Market category.\n\n        ### Supported Models\n\n        Works for every task created via POST /api/v1/jobs/createTask. Chat\n        models are synchronous and have no task to query.\n\n        ### Task States\n\n        - **waiting**: Task is queued and waiting to be processed\n\n        - **queuing**: Task is in the processing queue\n\n        - **generating**: Task is currently being processed\n\n        - **success**: Task completed successfully\n\n        - **fail**: Task failed\n\n        ### Best Practices\n\n        - **Use callbacks for production**: Include `callBackUrl` when creating\n        tasks to avoid polling\n\n        - **Implement exponential backoff**: Start with 2-3 second intervals,\n        increase gradually\n\n        - **Long-running tasks**: Some video tasks take longer than 10 minutes.\n        Keep polling until state is success or fail.\n\n        - **Download results**: Generated files are kept for 14 days.\n\n        ### Errors\n\n        Errors are returned with HTTP 200; check `code`. Common values: `401`\n        invalid or missing API key; `422` taskId is missing, or the task does\n        not exist or does not belong to your account.\n      operationId: get-task-details\n      tags:\n        - docs/en/Market\n      parameters:\n        - name: taskId\n          in: query\n          description: The unique task identifier returned when you created the task.\n          required: true\n          schema:\n            type: string\n            examples:\n              - task_12345678\n      responses:\n        '200':\n          description: Request successful\n          content:\n            application/json:\n              schema:\n                allOf:\n                  - &ref_0\n                    $ref: '#/components/schemas/response%20not%20with%20recordId'\n                  - properties:\n                      data:\n                        description: The task data object containing all task information\n                        properties:\n                          taskId:\n                            description: The unique identifier for this task\n                            examples:\n                              - task_12345678\n                            type: string\n                          model:\n                            description: >-\n                              The model used for this task (e.g.,\n                              grok-imagine/text-to-image, seedream-4.0,\n                              kling-1.0)\n                            examples:\n                              - bytedance/seedance-2-5\n                              - gpt-image-2-text-to-image\n                            type: string\n                          state:\n                            description: >-\n                              Current state of the task. Check state to\n                              determine the outcome.\n                            enum:\n                              - waiting\n                              - queuing\n                              - generating\n                              - success\n                              - fail\n                            examples:\n                              - success\n                            type: string\n                          param:\n                            description: >-\n                              JSON string containing the original request\n                              parameters used to create the task. Its `input` is\n                              itself a JSON string — parse it twice.\n                            examples:\n                              - >-\n                                {\"model\":\"grok-imagine/text-to-image\",\"callBackUrl\":\"https://your-domain.com/api/callback\",\"input\":\"{\\\"prompt\\\":\\\"Cinematic\n                                portrait...\\\",\\\"aspect_ratio\\\":\\\"3:2\\\"}\"}\n                            type: string\n                          resultJson:\n                            description: >-\n                              Result JSON string. Present when state is success;\n                              on failure it may be null or an empty string.\n\n                              The structure is as follows:\n\n                              - For images/media/videos: {resultUrls: []}\n\n                              - If return_last_frame is enabled on Seedance 2.x\n                              models: {resultUrls: [], lastFrameUrl: []}\n\n                              - For text output: {resultObject: {}}\n\n                              For OmniHuman series models:\n\n                              - OmniHuman 1.5 Subject Detection (subject\n                              detection model): response structure is\n                              {resultObject: {mask_urls: [\"url1\", \"url2\",\n                              ...]}}, returning a list of mask image URLs\n                              corresponding to the detected subjects. The URLs\n                              returned by this model are valid for 1 hour.\n\n                              - OmniHuman 1.5 Human Identification (human\n                              identification model): response structure is\n                              {resultObject: {subject_status: 1}}, where\n                              `subject_status` means 0 = no subject detected, 1\n                              = subject detected, indicating whether a human\n                              subject is detected in the image.\n                            examples:\n                              - >-\n                                {\"resultUrls\":[\"https://example.com/generated-content.jpg\"]}\n                              - '{\"resultObject\":{\"subject_status\":1}}'\n                              - >-\n                                {\"resultObject\":{\"mask_urls\":[\"https://example.com/mask_1\",\n                                \"https://example.com/mask_2\"]}}\n                            type: string\n                          response:\n                            type: object\n                            description: >-\n                              Parsed form of resultJson. Present only when state\n                              is success.\n                            x-apidog-orders: []\n                            properties: {}\n                            x-apidog-ignore-properties: []\n                          failCode:\n                            description: >-\n                              Failure code (numeric string, e.g. \"500\"). Present\n                              when state is fail; on success it may be null or\n                              an empty string.\n                            examples:\n                              - ''\n                            type: string\n                          failMsg:\n                            description: >-\n                              Failure reason. Present when state is fail; on\n                              success it may be null or an empty string.\n                            examples:\n                              - ''\n                            type: string\n                          costTime:\n                            description: >-\n                              Processing time in seconds. Present for both\n                              successful and failed tasks.\n                            examples:\n                              - 15\n                            format: int64\n                            type: integer\n                          completeTime:\n                            description: >-\n                              Completion timestamp (Unix timestamp in\n                              milliseconds)\n                            examples:\n                              - 1698765432000\n                            format: int64\n                            type: integer\n                          createTime:\n                            description: >-\n                              Creation timestamp (Unix timestamp in\n                              milliseconds)\n                            examples:\n                              - 1698765400000\n                            format: int64\n                            type: integer\n                          creditsConsumed:\n                            description: >-\n                              Credit consumption details for this task,\n                              indicating the actual number of credits deducted\n                              during task execution.\n                            type: number\n                        type: object\n                        x-apidog-orders:\n                          - taskId\n                          - model\n                          - state\n                          - param\n                          - resultJson\n                          - response\n                          - failCode\n                          - failMsg\n                          - costTime\n                          - completeTime\n                          - createTime\n                          - creditsConsumed\n                        x-apidog-ignore-properties: []\n                    type: object\n                    x-apidog-orders:\n                      - data\n                    x-apidog-ignore-properties: []\n              example:\n                code: 200\n                msg: success\n                data:\n                  taskId: task_12345678\n                  model: grok-imagine/text-to-image\n                  state: success\n                  param: >-\n                    {\"model\":\"grok-imagine/text-to-image\",\"callBackUrl\":\"https://your-domain.com/api/callback\",\"input\":\"{\\\"prompt\\\":\\\"Cinematic\n                    portrait...\\\",\\\"aspect_ratio\\\":\\\"3:2\\\"}\"}\n                  resultJson: '{\"resultUrls\":[\"https://example.com/generated-content.jpg\"]}'\n                  failCode: ''\n                  failMsg: ''\n                  costTime: 15\n                  completeTime: 1698765432000\n                  createTime: 1698765400000\n                  updateTime: 1698765432000\n                  progress: 45\n                  creditsConsumed: 50\n          headers: {}\n          x-apidog-name: ''\n        '401':\n          description: Unauthorized - Invalid or missing API key\n          content:\n            application/json:\n              schema: *ref_0\n              example:\n                code: 401\n                msg: Unauthorized\n          headers: {}\n          x-apidog-name: ''\n        '422':\n          description: Validation error.\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  code:\n                    type: integer\n                  msg:\n                    type: string\n                  data:\n                    type: 'null'\n                required:\n                  - code\n                  - msg\n                  - data\n                x-apidog-orders:\n                  - code\n                  - msg\n                  - data\n                x-apidog-ignore-properties: []\n              example:\n                code: 422\n                msg: recordInfo is null\n                data: null\n          headers: {}\n          x-apidog-name: ''\n        '429':\n          description: Rate Limited - Too many requests\n          content:\n            application/json:\n              schema: *ref_0\n              example:\n                code: 429\n                msg: Rate limit exceeded\n          headers: {}\n          x-apidog-name: ''\n        '500':\n          description: Server error.\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  code:\n                    type: integer\n                    description: >-\n                      Response status code\n\n                      - **200**: Success - Request has been processed\n                      successfully\n\n                      - **401**: Unauthorized - Authentication credentials are\n                      missing or invalid\n\n                      - **402**: Insufficient Credits - Account does not have\n                      enough credits to perform the operation\n\n                      - **404**: Not Found - The requested resource or endpoint\n                      does not exist\n\n                      - **408**: Timeout - No result has been returned for over\n                      10 minutes.\n\n                      - **422**: Validation Error - The request parameters\n                      failed validation checks\n\n                      - **429**: Rate Limited - Request limit has been exceeded\n                      for this resource\n\n                      - **455**: Service Unavailable - System is currently\n                      undergoing maintenance\n\n                      - **500**: Server Error - An unexpected error occurred\n                      while processing the request\n\n                      - **501**: Generation Failed - Content generation task\n                      failed\n\n                      - **505**: Feature Disabled - The requested feature is\n                      currently disabled\n                  msg:\n                    type: string\n                    description: Response message, error description when failed\n                  data:\n                    type: object\n                    properties: {}\n                    x-apidog-orders: []\n                    x-apidog-ignore-properties: []\n                x-apidog-orders:\n                  - code\n                  - msg\n                  - data\n                required:\n                  - code\n                  - msg\n                  - data\n                x-apidog-ignore-properties: []\n              example:\n                code: 500\n                msg: >-\n                  Server Error - An unexpected error occurred while processing\n                  the request\n                data: null\n          headers: {}\n          x-apidog-name: Error\n      security:\n        - BearerAuth: []\n          x-apidog:\n            schemeGroups:\n              - id: kn8M4YUlc5i0A0179ezwx\n                schemeIds:\n                  - BearerAuth\n            required: true\n            use:\n              id: kn8M4YUlc5i0A0179ezwx\n            scopes:\n              kn8M4YUlc5i0A0179ezwx:\n                BearerAuth: []\n      x-apidog-folder: docs/en/Market\n      x-apidog-status: released\n      x-run-in-apidog: https://app.apidog.com/web/project/1184766/apis/api-28506351-run\ncomponents:\n  schemas:\n    response not with recordId:\n      type: object\n      required:\n        - data\n      properties:\n        code:\n          type: integer\n          description: >-\n            Status code of the request. The HTTP status is 200 even when the\n            request fails, so always check this field: 200 means success; any\n            other value means the request failed and msg describes the reason.\n            Common values: 401 invalid or missing API key; 402 insufficient\n            credits; 429 rate limit exceeded; 422 or 500 the request could not\n            be processed (read msg and check your parameters before retrying).\n          enum:\n            - 200\n            - 401\n            - 402\n            - 404\n            - 422\n            - 429\n            - 433\n            - 455\n            - 500\n            - 501\n            - 505\n        msg:\n          type: string\n          description: Response message, error description upon failure\n          examples:\n            - success\n        data:\n          type: object\n          required:\n            - taskId\n          properties:\n            taskId:\n              type: string\n              description: >-\n                The task ID can be used with the \"Get Task Details\" endpoint to\n                query the task status.\n              examples:\n                - dc1928bfcbc77cb6c85f3359a9c718b3\n          x-apidog-orders:\n            - taskId\n          x-apidog-ignore-properties: []\n      x-apidog-orders:\n        - code\n        - msg\n        - data\n      x-apidog-ignore-properties: []\n      x-apidog-folder: ''\n  securitySchemes:\n    BearerAuth:\n      type: bearer\n      scheme: bearer\n      bearerFormat: API Key\n      description: >-\n        All API requests require a Bearer Token. Add the header `Authorization:\n        Bearer YOUR_API_KEY` to authenticate requests.\n    BearerAuth1:\n      type: bearer\n      scheme: bearer\n      bearerFormat: API Key\n      description: >-\n        所有 API 请求都需要 Bearer Token。请在请求头中添加 `Authorization: Bearer YOUR_API_KEY`\n        进行身份验证。\nservers:\n  - url: https://api.kie.ai\n    description: 正式环境\nsecurity:\n  - BearerAuth: []\n    x-apidog:\n      schemeGroups:\n        - id: kn8M4YUlc5i0A0179ezwx\n          schemeIds:\n            - BearerAuth\n      required: true\n      use:\n        id: kn8M4YUlc5i0A0179ezwx\n      scopes:\n        kn8M4YUlc5i0A0179ezwx:\n          BearerAuth: []\n",
+  "officialOpenApi": {
+    "openapi": "3.0.1",
+    "info": {
+      "title": "",
+      "description": "",
+      "version": "1.0.0"
+    },
+    "paths": {
+      "/api/v1/jobs/recordInfo": {
+        "get": {
+          "summary": "Get Task Details",
+          "deprecated": false,
+          "description": "Query the status and results of any task created in the Market models. This is a unified query interface that works with all models under the Market category.\n### Supported Models\nWorks for every task created via POST /api/v1/jobs/createTask. Chat models are synchronous and have no task to query.\n### Task States\n- **waiting**: Task is queued and waiting to be processed\n- **queuing**: Task is in the processing queue\n- **generating**: Task is currently being processed\n- **success**: Task completed successfully\n- **fail**: Task failed\n### Best Practices\n- **Use callbacks for production**: Include `callBackUrl` when creating tasks to avoid polling\n- **Implement exponential backoff**: Start with 2-3 second intervals, increase gradually\n- **Long-running tasks**: Some video tasks take longer than 10 minutes. Keep polling until state is success or fail.\n- **Download results**: Generated files are kept for 14 days.\n### Errors\nErrors are returned with HTTP 200; check `code`. Common values: `401` invalid or missing API key; `422` taskId is missing, or the task does not exist or does not belong to your account.\n",
+          "operationId": "get-task-details",
+          "tags": [
+            "docs/en/Market"
+          ],
+          "parameters": [
+            {
+              "name": "taskId",
+              "in": "query",
+              "description": "The unique task identifier returned when you created the task.",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "examples": [
+                  "task_12345678"
+                ]
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Request successful",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/response%20not%20with%20recordId"
+                      },
+                      {
+                        "properties": {
+                          "data": {
+                            "description": "The task data object containing all task information",
+                            "properties": {
+                              "taskId": {
+                                "description": "The unique identifier for this task",
+                                "examples": [
+                                  "task_12345678"
+                                ],
+                                "type": "string"
+                              },
+                              "model": {
+                                "description": "The model used for this task (e.g., grok-imagine/text-to-image, seedream-4.0, kling-1.0)",
+                                "examples": [
+                                  "bytedance/seedance-2-5",
+                                  "gpt-image-2-text-to-image"
+                                ],
+                                "type": "string"
+                              },
+                              "state": {
+                                "description": "Current state of the task. Check state to determine the outcome.",
+                                "enum": [
+                                  "waiting",
+                                  "queuing",
+                                  "generating",
+                                  "success",
+                                  "fail"
+                                ],
+                                "examples": [
+                                  "success"
+                                ],
+                                "type": "string"
+                              },
+                              "param": {
+                                "description": "JSON string containing the original request parameters used to create the task. Its `input` is itself a JSON string — parse it twice.",
+                                "examples": [
+                                  "{\"model\":\"grok-imagine/text-to-image\",\"callBackUrl\":\"https://your-domain.com/api/callback\",\"input\":\"{\\\"prompt\\\":\\\"Cinematic portrait...\\\",\\\"aspect_ratio\\\":\\\"3:2\\\"}\"}"
+                                ],
+                                "type": "string"
+                              },
+                              "resultJson": {
+                                "description": "Result JSON string. Present when state is success; on failure it may be null or an empty string.\nThe structure is as follows:\n- For images/media/videos: {resultUrls: []}\n- If return_last_frame is enabled on Seedance 2.x models: {resultUrls: [], lastFrameUrl: []}\n- For text output: {resultObject: {}}\nFor OmniHuman series models:\n- OmniHuman 1.5 Subject Detection (subject detection model): response structure is {resultObject: {mask_urls: [\"url1\", \"url2\", ...]}}, returning a list of mask image URLs corresponding to the detected subjects. The URLs returned by this model are valid for 1 hour.\n- OmniHuman 1.5 Human Identification (human identification model): response structure is {resultObject: {subject_status: 1}}, where `subject_status` means 0 = no subject detected, 1 = subject detected, indicating whether a human subject is detected in the image.",
+                                "examples": [
+                                  "{\"resultUrls\":[\"https://example.com/generated-content.jpg\"]}",
+                                  "{\"resultObject\":{\"subject_status\":1}}",
+                                  "{\"resultObject\":{\"mask_urls\":[\"https://example.com/mask_1\", \"https://example.com/mask_2\"]}}"
+                                ],
+                                "type": "string"
+                              },
+                              "response": {
+                                "type": "object",
+                                "description": "Parsed form of resultJson. Present only when state is success.",
+                                "x-apidog-orders": [],
+                                "properties": {},
+                                "x-apidog-ignore-properties": []
+                              },
+                              "failCode": {
+                                "description": "Failure code (numeric string, e.g. \"500\"). Present when state is fail; on success it may be null or an empty string.",
+                                "examples": [
+                                  ""
+                                ],
+                                "type": "string"
+                              },
+                              "failMsg": {
+                                "description": "Failure reason. Present when state is fail; on success it may be null or an empty string.",
+                                "examples": [
+                                  ""
+                                ],
+                                "type": "string"
+                              },
+                              "costTime": {
+                                "description": "Processing time in seconds. Present for both successful and failed tasks.",
+                                "examples": [
+                                  15
+                                ],
+                                "format": "int64",
+                                "type": "integer"
+                              },
+                              "completeTime": {
+                                "description": "Completion timestamp (Unix timestamp in milliseconds)",
+                                "examples": [
+                                  1698765432000
+                                ],
+                                "format": "int64",
+                                "type": "integer"
+                              },
+                              "createTime": {
+                                "description": "Creation timestamp (Unix timestamp in milliseconds)",
+                                "examples": [
+                                  1698765400000
+                                ],
+                                "format": "int64",
+                                "type": "integer"
+                              },
+                              "creditsConsumed": {
+                                "description": "Credit consumption details for this task, indicating the actual number of credits deducted during task execution.",
+                                "type": "number"
+                              }
+                            },
+                            "type": "object",
+                            "x-apidog-orders": [
+                              "taskId",
+                              "model",
+                              "state",
+                              "param",
+                              "resultJson",
+                              "response",
+                              "failCode",
+                              "failMsg",
+                              "costTime",
+                              "completeTime",
+                              "createTime",
+                              "creditsConsumed"
+                            ],
+                            "x-apidog-ignore-properties": []
+                          }
+                        },
+                        "type": "object",
+                        "x-apidog-orders": [
+                          "data"
+                        ],
+                        "x-apidog-ignore-properties": []
+                      }
+                    ]
+                  },
+                  "example": {
+                    "code": 200,
+                    "msg": "success",
+                    "data": {
+                      "taskId": "task_12345678",
+                      "model": "grok-imagine/text-to-image",
+                      "state": "success",
+                      "param": "{\"model\":\"grok-imagine/text-to-image\",\"callBackUrl\":\"https://your-domain.com/api/callback\",\"input\":\"{\\\"prompt\\\":\\\"Cinematic portrait...\\\",\\\"aspect_ratio\\\":\\\"3:2\\\"}\"}",
+                      "resultJson": "{\"resultUrls\":[\"https://example.com/generated-content.jpg\"]}",
+                      "failCode": "",
+                      "failMsg": "",
+                      "costTime": 15,
+                      "completeTime": 1698765432000,
+                      "createTime": 1698765400000,
+                      "updateTime": 1698765432000,
+                      "progress": 45,
+                      "creditsConsumed": 50
+                    }
+                  }
+                }
+              },
+              "headers": {},
+              "x-apidog-name": ""
+            },
+            "401": {
+              "description": "Unauthorized - Invalid or missing API key",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/response%20not%20with%20recordId"
+                  },
+                  "example": {
+                    "code": 401,
+                    "msg": "Unauthorized"
+                  }
+                }
+              },
+              "headers": {},
+              "x-apidog-name": ""
+            },
+            "422": {
+              "description": "Validation error.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "integer"
+                      },
+                      "msg": {
+                        "type": "string"
+                      },
+                      "data": {
+                        "type": "null"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "msg",
+                      "data"
+                    ],
+                    "x-apidog-orders": [
+                      "code",
+                      "msg",
+                      "data"
+                    ],
+                    "x-apidog-ignore-properties": []
+                  },
+                  "example": {
+                    "code": 422,
+                    "msg": "recordInfo is null",
+                    "data": null
+                  }
+                }
+              },
+              "headers": {},
+              "x-apidog-name": ""
+            },
+            "429": {
+              "description": "Rate Limited - Too many requests",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/response%20not%20with%20recordId"
+                  },
+                  "example": {
+                    "code": 429,
+                    "msg": "Rate limit exceeded"
+                  }
+                }
+              },
+              "headers": {},
+              "x-apidog-name": ""
+            },
+            "500": {
+              "description": "Server error.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "integer",
+                        "description": "Response status code\n- **200**: Success - Request has been processed successfully\n- **401**: Unauthorized - Authentication credentials are missing or invalid\n- **402**: Insufficient Credits - Account does not have enough credits to perform the operation\n- **404**: Not Found - The requested resource or endpoint does not exist\n- **408**: Timeout - No result has been returned for over 10 minutes.\n- **422**: Validation Error - The request parameters failed validation checks\n- **429**: Rate Limited - Request limit has been exceeded for this resource\n- **455**: Service Unavailable - System is currently undergoing maintenance\n- **500**: Server Error - An unexpected error occurred while processing the request\n- **501**: Generation Failed - Content generation task failed\n- **505**: Feature Disabled - The requested feature is currently disabled"
+                      },
+                      "msg": {
+                        "type": "string",
+                        "description": "Response message, error description when failed"
+                      },
+                      "data": {
+                        "type": "object",
+                        "properties": {},
+                        "x-apidog-orders": [],
+                        "x-apidog-ignore-properties": []
+                      }
+                    },
+                    "x-apidog-orders": [
+                      "code",
+                      "msg",
+                      "data"
+                    ],
+                    "required": [
+                      "code",
+                      "msg",
+                      "data"
+                    ],
+                    "x-apidog-ignore-properties": []
+                  },
+                  "example": {
+                    "code": 500,
+                    "msg": "Server Error - An unexpected error occurred while processing the request",
+                    "data": null
+                  }
+                }
+              },
+              "headers": {},
+              "x-apidog-name": "Error"
+            }
+          },
+          "security": [
+            {
+              "BearerAuth": [],
+              "x-apidog": {
+                "schemeGroups": [
+                  {
+                    "id": "kn8M4YUlc5i0A0179ezwx",
+                    "schemeIds": [
+                      "BearerAuth"
+                    ]
+                  }
+                ],
+                "required": true,
+                "use": {
+                  "id": "kn8M4YUlc5i0A0179ezwx"
+                },
+                "scopes": {
+                  "kn8M4YUlc5i0A0179ezwx": {
+                    "BearerAuth": []
+                  }
+                }
+              }
+            }
+          ],
+          "x-apidog-folder": "docs/en/Market",
+          "x-apidog-status": "released",
+          "x-run-in-apidog": "https://app.apidog.com/web/project/1184766/apis/api-28506351-run"
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "response not with recordId": {
+          "type": "object",
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "code": {
+              "type": "integer",
+              "description": "Status code of the request. The HTTP status is 200 even when the request fails, so always check this field: 200 means success; any other value means the request failed and msg describes the reason. Common values: 401 invalid or missing API key; 402 insufficient credits; 429 rate limit exceeded; 422 or 500 the request could not be processed (read msg and check your parameters before retrying).",
+              "enum": [
+                200,
+                401,
+                402,
+                404,
+                422,
+                429,
+                433,
+                455,
+                500,
+                501,
+                505
+              ]
+            },
+            "msg": {
+              "type": "string",
+              "description": "Response message, error description upon failure",
+              "examples": [
+                "success"
+              ]
+            },
+            "data": {
+              "type": "object",
+              "required": [
+                "taskId"
+              ],
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "description": "The task ID can be used with the \"Get Task Details\" endpoint to query the task status.",
+                  "examples": [
+                    "dc1928bfcbc77cb6c85f3359a9c718b3"
+                  ]
+                }
+              },
+              "x-apidog-orders": [
+                "taskId"
+              ],
+              "x-apidog-ignore-properties": []
+            }
+          },
+          "x-apidog-orders": [
+            "code",
+            "msg",
+            "data"
+          ],
+          "x-apidog-ignore-properties": [],
+          "x-apidog-folder": ""
+        }
+      },
+      "securitySchemes": {
+        "BearerAuth": {
+          "type": "bearer",
+          "scheme": "bearer",
+          "bearerFormat": "API Key",
+          "description": "All API requests require a Bearer Token. Add the header `Authorization: Bearer YOUR_API_KEY` to authenticate requests."
+        },
+        "BearerAuth1": {
+          "type": "bearer",
+          "scheme": "bearer",
+          "bearerFormat": "API Key",
+          "description": "所有 API 请求都需要 Bearer Token。请在请求头中添加 `Authorization: Bearer YOUR_API_KEY` 进行身份验证。"
+        }
+      }
+    },
+    "servers": [
+      {
+        "url": "https://api.kie.ai",
+        "description": "正式环境"
+      }
+    ],
+    "security": [
+      {
+        "BearerAuth": [],
+        "x-apidog": {
+          "schemeGroups": [
+            {
+              "id": "kn8M4YUlc5i0A0179ezwx",
+              "schemeIds": [
+                "BearerAuth"
+              ]
+            }
+          ],
+          "required": true,
+          "use": {
+            "id": "kn8M4YUlc5i0A0179ezwx"
+          },
+          "scopes": {
+            "kn8M4YUlc5i0A0179ezwx": {
+              "BearerAuth": []
+            }
+          }
+        }
+      }
+    ]
+  }
+}

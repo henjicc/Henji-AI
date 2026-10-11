@@ -254,8 +254,8 @@ function createBuiltInLlmModel(
     adapter,
     apiProtocol,
     baseUrl,
-    capabilities: createLlmCapabilitiesForModel(modelId),
-    catalogId: findLlmModelCatalogEntry(modelId)?.id,
+    capabilities: createLlmCapabilitiesForModel(modelId, providerId),
+    catalogId: findLlmModelCatalogEntry(modelId, providerId)?.id,
     enabled: true,
   }
 }
@@ -276,7 +276,7 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
   )
   return [
     ppio('deepseek/deepseek-v4-pro', 'DeepSeek V4 Pro'),
-    ppio(DEFAULT_PPIO_MODEL_ID, 'DeepSeek V4 Flash'),
+    ppio(DEFAULT_PPIO_MODEL_ID, 'DeepSeek V4.1 Flash'),
     ppio('xiaomimimo/mimo-v2.5-pro', 'MiMo-V2.5-Pro'),
     ppio('moonshotai/kimi-k2.6', 'Kimi K2.6'),
     deepseek(DEFAULT_DEEPSEEK_MODEL_ID, 'DeepSeek V4.1 Flash'),

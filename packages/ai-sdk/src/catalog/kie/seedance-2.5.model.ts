@@ -1,6 +1,7 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
 import { hasUploadedVideo } from './mediaSources';
+import { resolveUploadedVideoDurationSeconds } from '../shared/mediaPresence';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieSeedance25Model = defineModel({
     meta: {
@@ -173,19 +174,13 @@ export const kieSeedance25Model = defineModel({
             }> = {
                 '480p': { noVideo: 0.14, withVideo: 0.085 },
                 '720p': { noVideo: 0.315, withVideo: 0.19 },
-                '1080p': { noVideo: 0.57, withVideo: 0.3425 }
+                '1080p': { noVideo: 0.79, withVideo: 0.475 }
             };
             const rate = perSecond[resolution] ?? perSecond['720p'];
-            const videoCount = Array.isArray(params.uploadedVideoFilePaths)
-                ? params.uploadedVideoFilePaths.length
-                : (Array.isArray(params.videos) ? params.videos.length : 0);
-            const firstVideoDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
-                ? params.__firstVideoDurationSeconds
-                : 0;
-            const billedSeconds = duration + (hasVideoInput ? firstVideoDuration * videoCount : 0);
+            const billedSeconds = duration + (hasVideoInput ? resolveUploadedVideoDurationSeconds(params) : 0);
             return billedSeconds * (hasVideoInput ? rate.withVideo : rate.noVideo);
         },
-        description: '无/有视频输入每秒：480p $0.14/$0.085，720p $0.315/$0.19，1080p $0.57/$0.3425；有视频时按输入与输出总时长计费，自动时长按 30 秒预估'
+        description: '无/有视频输入每秒：480p $0.14/$0.085，720p $0.315/$0.19，1080p $0.79/$0.475；有视频时按输入与输出总时长计费，自动时长按 30 秒预估'
     }
 });
 export default kieSeedance25Model;

@@ -43,6 +43,7 @@ export const apimartPresentationPart1: Record<string, ModelPresentation> = {
         name: sharedFieldText('resolution'),
         optionLabels: Object.fromEntries((
           [
+        { value: '360p', label: '360p' },
         { value: '720p', label: '720p' },
         { value: '1080p', label: '1080p' },
         { value: '4k', label: '4K' }

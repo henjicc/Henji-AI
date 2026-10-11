@@ -12,6 +12,7 @@ import type { I18nText } from '../types/I18nText'
  * 3. 若这里没有对应 key，先新增空描述，再由维护者补充文案。
  */
 export const GENERATION_MODEL_DESCRIPTIONS = {
+  'nano-banana-2.1': { zh: '面向图像生成与参考图编辑的新版本，侧重视觉质量、文字呈现、提示词遵循和主体一致性。', en: 'An updated image generation and editing model focused on visual quality, text rendering, prompt adherence and subject consistency.' },
   'seedream-5.0-flash': { zh: '', en: '' },
   'happyhorse-1.1': { zh: '', en: '' },
   // 图片模型
@@ -79,8 +80,6 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'vidu-q2': { zh: '在 Q1 基础上增强动态效果、画面细节和生成时长，支持文生、图生、参考生、首尾帧及视频延长，适合复杂运动和多主体内容。', en: '' },
   'vidu-q3': { zh: '新一代音视频一体化版本，支持智能分镜、同步对白与音效、最长 16 秒和更强多机位一致性，部分细分版本面向剧情及广告生产。', en: '' },
   'wan-2.5-preview': { zh: '万相首个原生音画同步版本，可同时生成对白、环境音效和背景音乐，支持 1080p、24fps 及最长 10 秒，奠定 Wan 音视频一体化能力。', en: '' },
-  'wan-2.6': { zh: '在 2.5 上提升画质、音效、指令遵循和主体一致性，扩展至最长 15 秒，并新增参考角色、多镜头分镜及多人互动，定位更偏专业叙事。', en: '' },
-  'wan-2.7': { zh: '当前综合创作版本，支持文本、图像、音频和视频输入，以及首尾帧、视频续写、多镜头、同步配音和指令式编辑，控制维度明显扩展。', en: '' },
 
   // 音频模型
   'minimax-speech-2.8': { zh: 'MiniMax 新一代多语言语音合成模型，重点提升情绪控制、呼吸和笑声等语气标签及 10 秒高相似度音色克隆；HD 侧重拟真表现，Turbo 侧重速度和自然流畅度。', en: '' },

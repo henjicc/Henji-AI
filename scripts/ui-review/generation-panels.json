@@ -45,13 +45,6 @@
       "pre": "[data-review-none]"
     },
     {
-      "id": "wan25-aspect",
-      "modelId": "ppio-wan-2.5-preview",
-      "providerId": "ppio",
-      "trig": "[data-overflow-item=\"special:aspect-resolution\"] [data-panel-trigger-button]",
-      "pre": "[data-review-none]"
-    },
-    {
       "id": "seedream-lite-aspect",
       "modelId": "fal-ai-seedream-5.0-lite",
       "providerId": "fal",

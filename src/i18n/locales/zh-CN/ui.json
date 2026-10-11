@@ -34,7 +34,9 @@
   "upload": "上传",
   "retry": "继续获取结果",
   "priceEstimate": {
-    "label": "预估"
+    "label": "预估",
+    "upperBound": "估算上限",
+    "upperBoundHint": "按保守假设估算，实际费用以供应商账单为准。"
   },
   "actions": {
     "clearHistory": "清除历史",

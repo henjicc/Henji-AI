@@ -100,8 +100,8 @@ export const PROVIDER_METADATA: readonly ProviderMetadata[] = [
   {
     providerId: 'minimax',
     displayName: 'MiniMax',
-    websiteUrl: 'https://platform.minimaxi.com/',
-    apiKeyUrl: 'https://platform.minimaxi.com/console/access?tab=api-keys',
+    websiteUrl: 'https://platform.minimax.cn/',
+    apiKeyUrl: 'https://platform.minimax.cn/console/access?tab=api-keys',
     websiteUrlKind: 'official',
     docs: 'docs/llm-adaptation/供应商/MiniMax.md',
   },

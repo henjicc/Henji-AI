@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-30 |
+| 最后更新 | 2026-10-12 |
 | 模态 | 视频 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | `seedance-2.0-mini` |
@@ -60,10 +60,10 @@
 
 | 规格 | 我们的价格 |
 |---|---|
-| 480P | 0.1056 Credits/秒 ≈ **$0.01056/秒** |
-| 480P-input | 0.064 Credits/秒 ≈ **$0.0064/秒** |
-| 720P | 0.2288 Credits/秒 ≈ **$0.02288/秒** |
-| 720P-input | 0.1384 Credits/秒 ≈ **$0.01384/秒** |
+| 480P | 0.1056 Credits/秒 ≈ **$0.01815/秒** |
+| 480P-input | 0.064 Credits/秒 ≈ **$0.01105/秒** |
+| 720P | 0.2288 Credits/秒 ≈ **$0.03903/秒** |
+| 720P-input | 0.1384 Credits/秒 ≈ **$0.02376/秒** |
 
 `-input` 档位对应「有参考视频输入」的计费方式（单价更低，但按输入 + 输出总时长计费）。
 
@@ -87,3 +87,7 @@
 | 获取任务状态 | https://docs.apimart.ai/cn/api-reference/tasks/status | 否 |
 | 定价中心（视频标签页） | https://apimart.ai/zh/pricing | 否 |
 | API Key 管理 | https://apimart.ai/keys | **是** |
+
+## 2026-10-12 价格复核
+
+本次按 t170 已确认表更新 calculator 与基础报价；输入视频计费公式不变。官方来源：[https://apimart.ai/zh/pricing](https://apimart.ai/zh/pricing)（公开无需登录），不使用会员专属折扣或第三方对比列。
