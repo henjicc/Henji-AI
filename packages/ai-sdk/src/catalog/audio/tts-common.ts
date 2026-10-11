@@ -1,9 +1,13 @@
 import type { JsonObject, JsonValue } from '../../types/runtime'
 
-export function speechText(params: JsonObject): string {
+/** maxChars 是供应商单次请求的文本上限，按 Unicode 字符计；超过时在发请求前拒绝。 */
+export function speechText(params: JsonObject, maxChars?: number): string {
   const value = typeof params.text === 'string' ? params.text : params.prompt
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error('语音合成需要非空文本')
+  }
+  if (maxChars !== undefined && [...value].length > maxChars) {
+    throw new Error(`语音合成单次最多 ${maxChars} 字，请分段生成`)
   }
   return value
 }

@@ -98,6 +98,8 @@ describe('TTS media provider protocols', () => {
     expect(schema.safeParse({ ...request.input, speed: 1.3 }).success).toBe(false)
     expect(() => build('kie-eleven-turbo-2.5-tts', { kieElevenTurboVoice: 'Brian' })).toThrow('音色 ID')
     expect(() => build('kie-eleven-turbo-2.5-tts', { kieElevenTurboVoice: 'Rachel' })).toThrow('音色 ID')
+    expect(build('kie-eleven-turbo-2.5-tts', { prompt: '字'.repeat(5000) })).toBeTruthy()
+    expect(() => build('kie-eleven-turbo-2.5-tts', { prompt: '字'.repeat(5001) })).toThrow('最多 5000 字')
     expect(build('kie-eleven-turbo-2.5-tts', { prompt: '测试一下。', kieElevenTurboSpeed: 1.05, kieElevenTurboStability: .5 }))
       .toMatchObject({ model: 'elevenlabs/text-to-speech-turbo-2-5', input: { text: '测试一下。', voice: 'EkK5I93UQWFDigLMpZcX', speed: 1.05, stability: .5 } })
   })

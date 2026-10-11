@@ -95,7 +95,8 @@ export const kieElevenTurbo25TtsModel = defineModel({
     builder: (params): JsonObject => ({
       model: 'elevenlabs/text-to-speech-turbo-2-5',
       input: {
-        text: speechText(params),
+        // KIE 官方字段表：text 最多 5000 字符
+        text: speechText(params, 5000),
         voice: turboVoice(params.kieElevenTurboVoice),
         stability: speechNumber(params.kieElevenTurboStability) ?? 0.5,
         speed: speechNumber(params.kieElevenTurboSpeed) ?? 1,
