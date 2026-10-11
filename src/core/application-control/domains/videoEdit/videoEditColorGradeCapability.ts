@@ -12,7 +12,7 @@ export const analyzeVideoEditColorGradeCapability = defineApplicationCapability(
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.clip'], producesRefs: ['video_edit.clip'],
   successEvidence: ['返回指定片段采样帧及校色/参考匹配建议；视觉效果需写入后观察。'], failureRecovery: ['片段修改后重新分析；纯色或过暗画面选择其他参考或手动校色。'],
   inputSchema: z.object({ documentRef: ref('video_edit.document'), sequenceRef: ref('video_edit.sequence'), clipRef: ref('video_edit.clip'), frame: z.number().int().nonnegative().optional(), sampleCount: z.number().int().min(1).max(9).optional(), referenceClipRef: ref('video_edit.clip').optional(), matchMethod: z.enum(['moments', 'histogram']).optional() }).strict(),
-  outputSchema: z.object({ resultRef: ref('video_edit.clip'), parameters: suggestedParameters, frame: z.number().int().nonnegative(), frames: z.array(z.number().int().nonnegative()).min(1).max(9), documentRevision: z.number().int().nonnegative(), message: z.string() }).strict(),
+  outputSchema: z.object({ resultRef: ref('video_edit.clip'), parameters: suggestedParameters, frame: z.number().int().nonnegative(), frames: z.array(z.number().int().nonnegative()).min(1).max(9), documentRevision: z.number().int().nonnegative(), documentVersion: z.string().min(1).describe('实际采样文档版本，与截帧 documentVersion 使用同一标识；宿主重启或文档重开后不同，不可按字符串排序。'), message: z.string() }).strict(),
   concurrencyKey: 'video_edit_color_grade', resolveConcurrencyKey: input => `video_edit_color_grade:${input.documentRef.id}`,
   resolveOperationTargets: input => [input.documentRef], resolveOperationWriteTargets: () => [],
   control: capabilityControl('observe', ['video_edit.clip'], { cancelable: true, revisionScopes: ['video_edit'] }), summarize: result => result.message,

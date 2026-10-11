@@ -11,6 +11,8 @@ import type { OperationRecord } from './operationStore'
 export interface LocalHostTransport { send(channel: string, payload: unknown): void }
 type Pending = { callerId: string; rendererEpoch: string; committed: boolean; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
 
+class ApplicationHostDisconnectedError extends Error {}
+
 export class ApplicationHostNotReadyError extends Error {
   readonly retryAfterMs = 1000
   readonly notExecuted = true
@@ -27,7 +29,7 @@ export class ApplicationHostBridge {
   publishContext(context: HostContextSnapshot): void { this.context = context; this.changed() }
   onChange(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private changed(): void { for (const listener of this.listeners) listener() }
-  private waitUntilReady(callerId: string, signal: AbortSignal): Promise<void> {
+  private waitUntilReady(callerId: string, signal: AbortSignal, deadline: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const cleanup = () => { clearTimeout(timer); unsubscribe(); signal.removeEventListener('abort', aborted) }
       const aborted = () => { cleanup(); reject(new Error('请求已取消。')) }
@@ -36,7 +38,7 @@ export class ApplicationHostBridge {
         if (this.ready) { cleanup(); resolve() }
       }
       const unsubscribe = this.onChange(check)
-      const timer = setTimeout(() => { cleanup(); reject(new ApplicationHostNotReadyError()) }, 10_000)
+      const timer = setTimeout(() => { cleanup(); reject(new ApplicationHostNotReadyError()) }, Math.max(0, deadline - Date.now()))
       signal.addEventListener('abort', aborted, { once: true })
       if (signal.aborted) aborted()
       else check()
@@ -75,7 +77,7 @@ export class ApplicationHostBridge {
       if (callerIds && !callerIds.has(pending.callerId)) continue
       this.operations?.interrupted(id, pending.rendererEpoch)
       this.host?.transport.send('application:host:cancel', id)
-      pending.reject(new Error('应用页面正在重新连接，请稍后重试。'))
+      pending.reject(new ApplicationHostDisconnectedError('应用页面正在重新连接，请稍后重试。'))
       pending.cleanup()
       this.pending.delete(id)
     }
@@ -106,18 +108,38 @@ export class ApplicationHostBridge {
     this.operations?.complete(reply)
     const pending = this.pending.get(reply.requestId)
     if (!pending || pending.rendererEpoch !== reply.rendererEpoch || this.host?.registration.rendererEpoch !== reply.rendererEpoch) return
-    try { this.assertAuthorized(pending.callerId); pending.resolve(reply.result) }
+    try {
+      this.assertAuthorized(pending.callerId)
+      // 只在交付读取副本时补代次，原操作回执及持久账本保持原样。
+      pending.resolve(pending.committed ? reply.result : { ...reply.result, revisionEpoch: reply.rendererEpoch })
+    }
     catch (error) { pending.reject(error instanceof Error ? error : new Error('连接不可用。')) }
     pending.cleanup()
     this.pending.delete(reply.requestId)
   }
   async execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
     options: { operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): Promise<Record<string, unknown>> {
+    const readOnly = !options.operation && BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.readOnly === true
+    // 只读才可重新派发；写操作的未知执行事实仍交给原账本恢复。
+    let reconnectDeadline: number | undefined
+    for (;;) {
+      if (!this.ready && readOnly) reconnectDeadline ??= Date.now() + 10_000
+      try { return await this.dispatch(callerId, capabilityId, input, signal, options, reconnectDeadline) }
+      catch (error) {
+        if (!(error instanceof ApplicationHostDisconnectedError) || !readOnly) throw error
+        reconnectDeadline ??= Date.now() + 10_000
+        if (Date.now() >= reconnectDeadline) throw new ApplicationHostNotReadyError()
+        await this.waitUntilReady(callerId, signal, reconnectDeadline)
+      }
+    }
+  }
+  private async dispatch(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
+    options: { operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }, reconnectDeadline?: number): Promise<Record<string, unknown>> {
     this.assertAuthorized(callerId)
     if (!this.ready || !this.host) {
       const readOnly = BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.readOnly === true
       if (options.operation || !readOnly) throw new ApplicationHostNotReadyError()
-      await this.waitUntilReady(callerId, signal)
+      await this.waitUntilReady(callerId, signal, reconnectDeadline ?? Date.now() + 10_000)
       this.assertAuthorized(callerId)
       if (!this.ready || !this.host) throw new ApplicationHostNotReadyError()
     }

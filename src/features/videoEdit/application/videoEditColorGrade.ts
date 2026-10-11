@@ -5,13 +5,14 @@ import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, type VideoEditGesture } from './videoEditService'
 import { makeVideoEditBuiltinEffect, updateVideoEditBuiltinEffect, type VideoEditBuiltinEffectChanges, type VideoEditCompositeTarget } from './videoEditCompositing'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
+import { videoEditObservationVersion } from './videoEditObservationVersion'
 
 import { colorGradeSampleFrames } from '@/core/videoEdit/colorGradeMatch'
 import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import { analyzeVideoEditColorGradeOffThread } from './videoEditColorLutClient'
 
 export interface ColorGradeAnalysisOptions { sampleCount?: number; referenceClipId?: string; matchMethod?: 'moments' | 'histogram' }
-export interface ColorGradeAnalysisResult { parameters: VideoEditBuiltinParams; frame: number; frames: number[]; documentRevision: number }
+export interface ColorGradeAnalysisResult { parameters: VideoEditBuiltinParams; frame: number; frames: number[]; documentRevision: number; documentVersion: string }
 
 const logger = createLogger('features.videoEdit.color_grade')
 function analysisClip(clip: VideoEditClip): VideoEditClip {
@@ -40,6 +41,7 @@ export function editVideoEditColorGrade(target: VideoEditCompositeTarget, change
  * No asset/file writes, no changes to transport. Suggestions are absolute basic-correction values. */
 export async function analyzeVideoEditColorGrade(target: VideoEditCompositeTarget, frame?: number, signal = new AbortController().signal, effectId?: string, options: ColorGradeAnalysisOptions = {}): Promise<ColorGradeAnalysisResult> {
   const started = performance.now(); const owner = requireVideoEditInstance(target.projectId); const snapshot = owner.document
+  const documentVersion = videoEditObservationVersion(owner, snapshot.revision)
   const sequence = snapshot.sequences.find(value => value.id === target.sequenceId); const clip = sequence?.clips.find(value => value.id === target.clipId)
   if (!sequence || !clip || clip.kind === 'audio' || clip.kind === 'adjustment') throw new Error('请选择带画面的片段，调整图层和声音片段不能自动校色。')
   const at = frame ?? (owner.frame >= clip.start && owner.frame < clip.start + clip.duration ? owner.frame : clip.start + Math.floor(clip.duration / 2))
@@ -82,7 +84,7 @@ export async function analyzeVideoEditColorGrade(target: VideoEditCompositeTarge
     signal.throwIfAborted()
     if (requireVideoEditInstance(target.projectId).document !== snapshot) throw new Error('片段已发生修改，请重新自动校色。')
     logger.info('自动校色分析完成', { event: 'video_edit.color_grade.analyze.completed', context: { projectId: target.projectId, clipId: clip.id, frame: at, durationMs: Math.round(performance.now() - started) } })
-    return { parameters, frame: at, frames, documentRevision: snapshot.revision }
+    return { parameters, frame: at, frames, documentRevision: snapshot.revision, documentVersion }
   } catch (error) {
     logger.warn('自动校色分析失败', { event: 'video_edit.color_grade.analyze.failed', error, context: { projectId: target.projectId, clipId: clip.id } })
     throw error

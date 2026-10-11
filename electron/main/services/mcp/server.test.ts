@@ -54,10 +54,56 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
     return { client, transport }
   }
   return { server, connections, first, second, host, calls, cancellations, url, connect,
+    reconnect: () => host.register({ ...registration, rendererEpoch: randomUUID(), attachmentSequence: 2, ready: true }, transportHost),
     change: () => host.register(registration, transportHost), advance: () => { now += 31 * 86400_000 } }
 }
 
 describe('本地 MCP 协议与边界', () => {
+  it('真实 tools/list 保留媒体 mode，上下文与精简契约均披露当前版本', async () => {
+    const f = await fixture({ result: { ok: true, data: { surface: { id: 'workspace.videoEdit', kind: 'workspace', focusedRef: null, selectedRefs: [] }, catalogRevision: 1, ready: true, revision: 0 } } })
+    const { client } = await f.connect()
+    const tool = (await client.listTools()).tools.find(item => item.name === 'read_application_media')!
+    expect(tool.inputSchema.properties?.mode).toMatchObject({ enum: ['chunk', 'image'], description: expect.stringContaining('图片默认 image') })
+    expect(tool.inputSchema.additionalProperties).toBe(false)
+    const context = await client.callTool({ name: 'get_current_application_context', arguments: {} })
+    expect(context.structuredContent).toMatchObject({ data: { externalContractVersion: '2.1.0' } })
+    const contract = await client.callTool({ name: 'describe_application_contract', arguments: {} })
+    expect(contract.structuredContent).toMatchObject({ data: { contract: { externalContractVersion: '2.1.0', transport: { listChangedNotifications: true } } } })
+  })
+  it('同一现代订阅真实收到工具变更通知，撤销后关闭且不能继续发现', async () => {
+    const f = await fixture()
+    const { client } = await f.connect()
+    const notifications = vi.fn()
+    client.setNotificationHandler('notifications/tools/list_changed', notifications)
+    const subscription = await client.listen({ toolsListChanged: true })
+    f.reconnect()
+    await vi.waitFor(() => expect(notifications).toHaveBeenCalled())
+    expect((await client.listTools()).tools.some(tool => tool.name === 'read_application_media')).toBe(true)
+    f.connections.revoke(f.first.id)
+    await f.server.revoke(f.first.id)
+    expect(await subscription.closed).toBe('remote')
+    await expect(client.listTools()).rejects.toThrow()
+  })
+  it('重载期间在途截帧与新发上下文读取都等待新渲染器后成功', async () => {
+    const options = { pending: true, result: { ok: true, data: { source: 'new-renderer' } } }
+    const f = await fixture(options)
+    const { client } = await f.connect()
+    const frame = client.callTool({ name: 'observe_video_edit_frame', arguments: { documentRef: { kind: 'video_edit.document', id: 'document' }, target: { kind: 'program', frame: 0 } } })
+    await vi.waitFor(() => expect(f.calls).toHaveLength(1))
+    const original = f.calls[0]
+    f.host.disconnect()
+    const context = client.callTool({ name: 'get_current_application_context', arguments: {} })
+    f.host.complete({ ...original, result: { ok: true, data: { source: 'stale-renderer' } } })
+    options.pending = false
+    f.reconnect()
+    for (const result of await Promise.all([frame, context])) {
+      expect(result.isError).not.toBe(true)
+      expect(JSON.stringify(result)).toContain('new-renderer')
+      expect(JSON.stringify(result)).not.toContain('stale-renderer')
+    }
+    expect(f.calls).toHaveLength(3)
+    expect(f.calls[1].rendererEpoch).not.toBe(original.rendererEpoch)
+  })
   it('资源目录从正式实体分页派生，私有零缓存且拒绝无效游标', async () => {
     const f = await fixture({ reply: request => {
       expect(request.capabilityId).toBe('list_application_entities')
@@ -208,7 +254,7 @@ describe('本地 MCP 协议与边界', () => {
     const readOnlyTools = (await a.client.listTools()).tools
     expect(readOnlyTools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['read_application_entity', 'read_application_media', 'describe_application_contract']))
     expect(readOnlyTools.filter((tool) => tool.annotations?.readOnlyHint !== true)).toEqual([])
-    expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, revision: 0, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, capturedAt: new Date(0).toISOString() } })
+    expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, revision: 0, revisionEpoch: f.host.rendererEpoch, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, capturedAt: new Date(0).toISOString() } })
     expect((await a.client.callTool({ name: 'change_application_entities', arguments: {} })).isError).toBe(true)
     expect(f.calls).toHaveLength(1)
     await a.client.close()
@@ -252,7 +298,7 @@ describe('本地 MCP 协议与边界', () => {
     expect(JSON.stringify(result)).toContain('retryAfterMs')
     expect(f.calls).toHaveLength(0)
   }, 15_000)
-  it('页面重载终止读取，迟到回执不能泄漏结果', async () => {
+  it('页面重载后等待新宿主；超时可恢复，迟到回执不能泄漏结果', async () => {
     const f = await fixture({ pending: true })
     const a = await f.connect()
     const reading = a.client.callTool({ name: 'read_application_entity', arguments: {} })
@@ -262,8 +308,9 @@ describe('本地 MCP 协议与边界', () => {
     f.host.complete({ ...original, result: { ok: true, data: { private: 'late' } } })
     const result = await reading
     expect(result.isError).toBe(true)
+    expect(JSON.stringify(result)).toContain('retryAfterMs')
     expect(JSON.stringify(result)).not.toContain('late')
-  })
+  }, 15_000)
   it('在途撤销后迟到回执不能返回业务内容', async () => {
     const f = await fixture({ pending: true })
     const a = await f.connect()

@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   logger: {
     info: vi.fn(),
+    debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   },
@@ -74,6 +75,7 @@ vi.mock('./trace', () => ({
 }))
 
 import { continuePolling, generate } from './runtime'
+import { createDiagnosticTransport } from './network-transport'
 
 const request = {
   modelId: 'fal-ai-z-image-turbo',
@@ -138,6 +140,18 @@ function mockCompletedGenerateResult(): void {
 }
 
 describe('ai-runtime continuePolling 日志闭环', () => {
+  it('KIE 接受创建后失败，日志记录实际 recordInfo 和原始关键字段，不再把创建 route 标为轮询', async () => {
+    const payload = { code: 200, data: { state: 'fail', failCode: '500', failMsg: 'Internal Error, Please try again later.', param: '{}', costTime: 4, createTime: 1, completeTime: 5 } }
+    mocks.continuePolling.mockImplementationOnce(async (_request: unknown, options: { onRequestBuilt: (info: { providerId: string; route: string; method: string; requestBody: object }) => void }) => {
+      options.onRequestBuilt({ providerId: 'kie', route: '/api/v1/jobs/createTask', method: 'GET', requestBody: {} })
+      const transport = createDiagnosticTransport(vi.fn().mockResolvedValue(Response.json(payload)), vi.fn())
+      await transport.fetch('https://api.kie.ai/api/v1/jobs/recordInfo?taskId=task-1')
+      throw new AiRuntimeError('provider_internal_error', 'KIE 服务内部错误，可稍后手动重试。')
+    })
+    await expect(continuePolling({ ...request, modelId: 'kie-eleven-turbo-2.5-tts' })).rejects.toThrow('KIE 服务内部错误')
+    expect(mocks.logger.error).toHaveBeenCalledWith('后端轮询失败', expect.objectContaining({ requestId: request.requestId, taskId: 'task-1', providerId: 'kie', context: { phase: 'poll', route: 'https://api.kie.ai/api/v1/jobs/recordInfo', method: 'GET', responseBody: { ...payload, data: { ...payload.data, param: {} } } } }))
+    expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain('/api/v1/jobs/createTask')
+  })
   it.each(['generate', 'continuePolling'] as const)('%s 保留供应商端点诊断并关联原请求', async phase => {
     const details = { submissionState: 'not_sent', attempts: [{ host: 'api.apib.ai', code: 'ECONNRESET', stage: 'before_send', durationMs: 10 }] }
     const failure = new AiRuntimeError('provider_network_error', '连接失败', details)

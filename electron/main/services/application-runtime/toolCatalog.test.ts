@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { createHash } from 'node:crypto'
 import { buildApplicationContract, buildApplicationToolCatalog, EXCLUDED_TOOLS, PROTOCOL_TOOL_SPECS, toolTier } from './toolCatalog'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
@@ -34,6 +35,23 @@ const domains: LocalDomainSurface[] = [
 ]
 
 describe('对外工具目录的投影与授权过滤', () => {
+  it('公开 tools/list 的规范化指纹与契约版本绑定，变更须显式升级版本', () => {
+    const normalize = (value: unknown): unknown => Array.isArray(value) ? value.map(normalize)
+      : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b, 'en')).map(([key, item]) => [key, normalize(item)])) : value
+    const tools = buildApplicationToolCatalog({ tools: hostTools, access: PAID, operationsEnabled: true, includeSkillTool: true }).tools
+    const fingerprint = createHash('sha256').update(JSON.stringify(normalize(tools))).digest('hex')
+    // 仅维护当前契约；升级时记录新版本的审查指纹，不更新旧版本的指纹。
+    const fingerprints: Record<string, string> = { '2.1.0': 'dcbc7a6ddfbe47bf0e54984fb5ab05677316242e60969af80c5d6947e74df3eb' }
+    expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
+  })
+  it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
+    for (const access of [READ_ONLY, WRITE, PAID]) {
+      const tool = catalog(access).tools.find(item => item.name === 'read_application_media')!
+      expect((tool.inputSchema.properties as Record<string, unknown>).mode).toEqual({ type: 'string', enum: ['chunk', 'image'], description: expect.stringContaining('图片默认 image') })
+      expect(tool.inputSchema.additionalProperties).toBe(false)
+      expect(tool.description).toContain('图片默认返回 image')
+    }
+  })
   it('新增付费入口只需领域声明，目录自动要求付费授权', () => {
     const original = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get.bind(BUILTIN_APPLICATION_CAPABILITY_REGISTRY)
     const spy = vi.spyOn(BUILTIN_APPLICATION_CAPABILITY_REGISTRY, 'get').mockImplementation(id => {

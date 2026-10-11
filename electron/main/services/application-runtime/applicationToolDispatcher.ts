@@ -1,6 +1,6 @@
 import { applicationFailure, type ApplicationResult } from '../../../../src/core/application-control/invocation'
 import { z } from 'zod'
-import { EXTERNAL_LIMITS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
+import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_LIMITS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
 import { buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, readMediaInputSchema, type ApplicationAccess } from './toolCatalog'
 import { readApplicationMediaResource, ApplicationMediaResourceError } from './mediaResources'
 import type { ApplicationHostBridge } from './applicationHostBridge'
@@ -53,7 +53,10 @@ export class ApplicationToolDispatcher {
       options[key] = parsed.data
       delete input[key]
     }
-    const raw = await this.callRaw(callerId, name, input, signal)
+    let raw = await this.callRaw(callerId, name, input, signal)
+    if (name === 'get_current_application_context' && raw.ok && raw.data) {
+      raw = { ...raw, data: { ...raw.data, externalContractVersion: EXTERNAL_CONTRACT_VERSION } }
+    }
     return projectApplicationToolResult(name, input, raw, options)
   }
   private async callRaw(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
@@ -166,7 +169,7 @@ export class ApplicationToolDispatcher {
       if (!id) return applicationFailure('此连接只允许读取。请用 tools/list 查看可用工具。')
       try {
         const raw = await this.host.execute(callerId, id, args ?? {}, signal, this.connections.access(callerId))
-        const result = this.operations ? this.operations.rememberRead(callerId, raw, this.host.rendererEpoch) : raw
+        const result = this.operations ? this.operations.rememberRead(callerId, raw, typeof raw.revisionEpoch === 'string' ? raw.revisionEpoch : this.host.rendererEpoch) : raw
         this.connections.assertActive(callerId)
         const text = JSON.stringify(result)
         if (Buffer.byteLength(text) > MAX_RESULT) throw new Error('读取结果过大，请缩小字段或分页读取。')

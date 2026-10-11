@@ -19,6 +19,8 @@ import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './vide
 // The production renderer is the replaced pixel boundary; composition building, scaling,
 // library collection and the public capability are real.
 const render = vi.hoisted(() => ({ calls: [] as Array<{ document: VideoEditComposition; frame: number }> }))
+const hostIdentity = vi.hoisted(() => ({ epoch: 'renderer-before-restart' }))
+vi.mock('@/core/application-control/runtimeIdentity', () => ({ get rendererEpoch() { return hostIdentity.epoch } }))
 vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), trialVideoEditCodeFrames: vi.fn(async (frames: Array<{ document: VideoEditComposition; frame: number }>) => {
   render.calls.push(...frames); const last = frames.at(-1)!
   return { width: last.document.width, height: last.document.height, close: vi.fn() }
@@ -43,6 +45,27 @@ beforeEach(() => {
   vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => structuredClone(assets.get(id)!))
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); useAssistantUiStore.getState().setPendingGoal(null); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+
+it('重启后同一修订号的截帧具有不同 documentVersion；同一快照稳定，编辑后变化', async () => {
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  const app = createApplicationHarness()
+  const input = { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'program', frame: 0 } }
+  try {
+    hostIdentity.epoch = 'renderer-before-restart'
+    const first = await app.requireResult('observe_video_edit_frame', input)
+    const same = await app.requireResult('observe_video_edit_frame', input)
+    expect(first.documentVersion).toBe(same.documentVersion)
+    // 模拟应用重新启动时宿主 epoch 更换而内容修订号相同；不改变落盘格式。
+    hostIdentity.epoch = 'renderer-after-restart'
+    const reopened = await app.requireResult('observe_video_edit_frame', input)
+    expect(reopened.documentRevision).toBe(first.documentRevision)
+    expect(reopened.documentVersion).not.toBe(first.documentVersion)
+    editVideoProject(id, document => ({ ...document, name: '修改后的剪辑' }))
+    const edited = await app.requireResult('observe_video_edit_frame', input)
+    expect(edited.documentVersion).not.toBe(reopened.documentVersion)
+    expect(edited.documentRevision).toBeGreaterThan(reopened.documentRevision as number)
+  } finally { hostIdentity.epoch = 'renderer-before-restart'; app.dispose() }
+})
 
 it('公共观察按固定剪辑版本取指定合成帧与源时间画面，不改播放头，结果为可读资产', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
