@@ -5,6 +5,7 @@ import { Constraint, Expression, Operator, Solver, Strength, Variable } from '@l
 import { affineSchema, candidateIdentitySchema, layoutConstraintSchema, pointSchema, refKey, type LayoutConstraint, type CandidateIdentity } from './contracts'
 import { checkCancelled, CreativeIntentError, type ComputationControl } from './sampling'
 import { eliminateLayoutEqualities } from './layoutElimination'
+import { layoutRowConstraints } from './layoutRows'
 
 export const layoutItemSchema = z.object({ targetRef: applicationRefSchema, affine: affineSchema, worldCorners: z.array(pointSchema).min(3), translationLocked: z.boolean(), groupRef: applicationRefSchema.optional() }).strict()
 export type LayoutItem = z.infer<typeof layoutItemSchema>
@@ -113,10 +114,17 @@ export function solveStaticLayout(itemsInput: readonly LayoutItem[], constraints
 }
 
 /** Hard constraints apply to every family. Soft equal spacing distinguishes a second suggestion. */
+export function solveAdaptiveLayout(items: readonly LayoutItem[], constraints: readonly LayoutConstraint[], identity: CandidateIdentity, control: ComputationControl = {}): LayoutCandidate {
+  const rows = layoutRowConstraints(items, constraints, control)
+  const result = solveStaticLayout(rows?.items ?? items, rows?.constraints ?? constraints, identity, control)
+  return { ...result, changes: result.changes.slice(0, items.length) }
+}
+
 export function createLayoutCandidates(items: readonly LayoutItem[], constraints: readonly LayoutConstraint[], identity: CandidateIdentity, control: ComputationControl = {}): LayoutCandidate[] {
   const first = solveStaticLayout(items, constraints.filter(c => c.strength === 'hard' || c.kind === 'align'), identity, control)
   first.id = 'align'; first.label = '对齐边缘，贴近摆放'
-  const second = solveStaticLayout(items, constraints, identity, control); second.id = 'distribute'; second.label = '对齐并按边缘等距'
+  const automatic = constraints.every(c => c.strength === 'soft')
+  const second = automatic ? solveAdaptiveLayout(items, constraints, identity, control) : solveStaticLayout(items, constraints, identity, control); second.id = 'distribute'; second.label = '对齐并按边缘等距'
   const signature = (v: LayoutCandidate): string => JSON.stringify(v.changes.map(c => c.affine.map(n => Math.round(n * 1e10) / 1e10)))
   return signature(first) === signature(second) ? [first] : [first, second]
 }

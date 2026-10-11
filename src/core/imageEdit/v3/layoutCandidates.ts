@@ -1,4 +1,4 @@
-import { createLayoutCandidates, solveStaticLayout, type LayoutItem, type LayoutCandidate } from '../../creativeIntent/layout'
+import { createLayoutCandidates, solveAdaptiveLayout, solveStaticLayout, type LayoutItem, type LayoutCandidate } from '../../creativeIntent/layout'
 import { refKey, type CandidateIdentity, type LayoutConstraint } from '../../creativeIntent/contracts'
 import { CreativeIntentError, type ComputationControl } from '../../creativeIntent/sampling'
 import { translateAffine } from '../../imaging/transforms'
@@ -10,7 +10,8 @@ export function createImageLayoutCandidates(items:readonly LayoutItem[],constrai
     const area=(item:LayoutItem):number=>(Math.max(...item.worldCorners.map(p=>p[0]))-Math.min(...item.worldCorners.map(p=>p[0])))*(Math.max(...item.worldCorners.map(p=>p[1]))-Math.min(...item.worldCorners.map(p=>p[1])))
     const main=items.reduce((a,b)=>area(a)>area(b)?a:b)
     try {
-      const candidate=solveStaticLayout(items.map(i=>({...i,translationLocked:refKey(i.targetRef)===refKey(main.targetRef)})),constraints,identity,control)
+      const solve=constraints.every(c=>c.strength==='soft')?solveAdaptiveLayout:solveStaticLayout
+      const candidate=solve(items.map(i=>({...i,translationLocked:refKey(i.targetRef)===refKey(main.targetRef)})),constraints,identity,control)
       candidate.id='hero';candidate.label='保留主图，整理周围';candidates.push(candidate)
     } catch(error) {if(!(error instanceof CreativeIntentError)||error.code!=='layout-conflict')throw error}
   }

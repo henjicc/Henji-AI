@@ -111,8 +111,37 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
           const first = host().locator('[data-layer-select]').first(); await first.click(); await first.press('End')
           await page.waitForTimeout(200)
           await host().locator('[data-layer-select]:focus').click({ modifiers: ['Shift'] })
-          await panel(); await button('整理').click(); await waitApply(); await shot('100层候选')
+          await shot('100层粗摆')
+          await panel(); await button('整理').click(); await waitApply()
+          await choice('等距排列').click(); await shot('100层等距候选')
           assert.equal((await read()).document.creativeIntents.drafts.at(-1).targets.length, 100, '必须真实选中100层，不能以单层冒充基准')
+          evidence.spacing = await page.evaluate(async documentRef => {
+            const api = window.henjiNative.imageEditorV3
+            const loaded = await api.loadDocument({ requestId: crypto.randomUUID(), documentRef })
+            const draft = loaded.document.creativeIntents.drafts.at(-1)
+            const pages = await Promise.all(draft.recipeRefs.map(ref => api.readLayoutResource({ requestId: crypto.randomUUID(), resourceRef: ref.resourceId })))
+            const entries = pages.flatMap(page => page.entries)
+            const candidates = await Promise.all(draft.candidateRefs.map(ref => api.readLayoutResource({ requestId: crypto.randomUUID(), resourceRef: ref.resourceId })))
+            const candidate = candidates.find(c => c.id === 'distribute')
+            return entries.map(entry => {
+              const change = candidate.changes.find(c => c.targetRef.id === entry.item.targetRef.id)
+              const corners = entry.item.worldCorners.map(([x, y]) => [x + change.delta[0], y + change.delta[1]])
+              return { id: entry.layerId, left: Math.min(...corners.map(p => p[0])), right: Math.max(...corners.map(p => p[0])), top: Math.min(...corners.map(p => p[1])), bottom: Math.max(...corners.map(p => p[1])) }
+            })
+          }, documentRef)
+          const rows = new Map()
+          for (const box of evidence.spacing) { const key = Math.round(box.top * 1e6); const row = rows.get(key) ?? []; row.push(box); rows.set(key, row) }
+          assert.equal(rows.size, 10, '等距必须保持原十行，不能挤成一行')
+          let bottom = -Infinity
+          for (const row of [...rows.values()].sort((a, b) => a[0].top - b[0].top)) {
+            row.sort((a, b) => a.left - b.left)
+            assert.equal(row.length, 10, '每个原有行的十对象都须保留')
+            assert.ok(row[0].top >= bottom - 1e-6, '行与行不能重叠')
+            const gaps = row.slice(1).map((box, i) => box.left - row[i].right)
+            gaps.forEach(gap => { assert.ok(gap > 0, '真实边缘必须留出间距'); assert.ok(Math.abs(gap - gaps[0]) < 1e-6, '每行真实边缘间距相等') })
+            bottom = Math.max(...row.map(box => box.bottom))
+          }
+          store()
         } else {
         if (panelReview) {
           await select(['hero']); await panel(); await controls().getByText('至少选择三个独立图层', { exact: true }).waitFor(); await shot('不足三层状态')
@@ -196,7 +225,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
             const controls = document.querySelector('[data-image-layout-controls]')
             const ready = [...controls.querySelectorAll('button')].find(b => b.textContent === '应用' || b.textContent === '整理')
             const completed = compute ? window.__layoutComputes[computes]?.end : input
-            return input !== undefined && completed !== undefined && ready && !controls.textContent.includes('正在整理布局') && window.__layoutFrames.some(f => f.at >= completed && f.generation !== generation)
+            return input !== undefined && completed !== undefined && ready && !ready.disabled && !controls.textContent.includes('正在整理布局') && window.__layoutFrames.some(f => f.at >= completed && f.generation !== generation)
           }, baseline, { timeout: 60000 })
           return page.evaluate(({ count, generation, compute, computes }) => { const input = window.__layoutInputs[count]; const completed = compute ? window.__layoutComputes[computes].end : input; return window.__layoutFrames.find(f => f.at >= completed && f.generation !== generation).presentedAt - input }, baseline)
         }
@@ -215,6 +244,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
         for (let i = 0; i < 30; i++) { evidence.candidateMs.push(await organize()); store() }
         evidence.metrics = Object.fromEntries(['candidateMs', 'abMs', 'fidelityMs'].map(k => [k, { p95: quantile(evidence[k], .95), p99: quantile(evidence[k], .99), worst: Math.max(...evidence[k]) }]))
         store()
+        if (benchmark) { await choice('等距排列').click(); assert.equal(await page.getByRole('slider', { name: '保留原稿位置', exact: true }).inputValue(), '0'); await shot('100层最终等距') }
         }
         // 同一真实宿主主动启用蒙版后拒绝，不用旧草稿跳过重新采样。
         if (!benchmark) {

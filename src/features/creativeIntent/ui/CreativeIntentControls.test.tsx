@@ -27,6 +27,13 @@ it('原稿与候选切换只发送选择意图，钉住按钮保持键盘焦点�
 it('应用保存失败只提供重试保存，不再整理或增加编辑事务', () => {
   const p = props(); render(<CreativeIntentControls {...p} selected="base" needsSave />)
   fireEvent.click(screen.getByRole('button', { name: '重试保存' })); expect(p.onApply).toHaveBeenCalledOnce(); expect(p.onOptimize).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: '重新整理' })).toBeNull()
+})
+it('选中候选后仍能重新整理，无需先预览已经过期的原稿', () => {
+  const p = props(); render(<CreativeIntentControls {...p} />)
+  fireEvent.click(screen.getByRole('button', { name: '重新整理' }))
+  expect(p.onOptimize).toHaveBeenCalledOnce(); expect(p.onPreview).not.toHaveBeenCalled(); expect(p.onApply).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: '应用' })).toBeDefined()
 })
 it('图片侧静态配置直接共用候选和钉点，无需伪造录制回调或播放能力', () => {
   const source = props()

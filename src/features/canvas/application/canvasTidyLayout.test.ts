@@ -58,6 +58,13 @@ describe('canvas static layout adapter', () => {
       const result = solveCanvasTidy(nodes, nodes.map(n => n.id), null, mode, identity)
       expect(result.unavailable).toBeUndefined(); expect(result.placements).toHaveLength(nodes.length)
       expect(new Set(result.placements.map(p => p.nodeId)).size).toBe(nodes.length)
+      if (mode === 'distribute') {
+        expect(new Set(result.placements.map(p => p.position.y)).size).toBe(12)
+        for (let row = 0; row < 12; row++) {
+          const gaps = Array.from({ length: 19 }, (_, col) => { const i = row * 20 + col; return result.placements[i + 1].position.x - result.placements[i].position.x - nodes[i].width! })
+          gaps.forEach(gap => { expect(gap).toBeGreaterThan(0); expect(gap).toBeCloseTo(gaps[0], 8) })
+        }
+      }
     }
     expect(solveCanvasTidy(nodes.slice(0, 2), ['0', '1'], '1', 'distribute', identity).unavailable).toBeUndefined()
   })

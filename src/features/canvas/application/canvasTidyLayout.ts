@@ -1,4 +1,4 @@
-import { solveStaticLayout, type LayoutItem } from '@/core/creativeIntent/layout'
+import { solveAdaptiveLayout, solveStaticLayout, type LayoutItem } from '@/core/creativeIntent/layout'
 import type { CandidateIdentity, LayoutConstraint } from '@/core/creativeIntent/contracts'
 import type { CanvasNode } from '../domain/canvasNodes'
 
@@ -114,7 +114,7 @@ export function solveCanvasTidy(nodes: readonly CanvasNode[], ids: readonly stri
           }
         }
       }
-      const result = solveStaticLayout(solveItems, constraints, identity)
+      const result = mode === 'distribute' ? solveAdaptiveLayout(solveItems, constraints, identity) : solveStaticLayout(solveItems, constraints, identity)
       const parent = parentId ? byId.get(parentId) : undefined
       if (parentId && !parent) throw new Error('找不到节点的容器，请重新打开画布')
       const container = parent ? canvasTidySize(parent) : undefined

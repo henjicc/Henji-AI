@@ -7,7 +7,7 @@ import { createImageLayoutCandidates } from '@/core/imageEdit/v3/layoutCandidate
 import type { StoredCreativeIntentResource } from '@/core/creativeIntent/persistence'
 import { imageLayoutDigest } from './imageEditLayoutResources'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
-import { ImageEditLayoutDraft } from './imageEditLayoutDraft'
+import { ImageEditLayoutDraft, presentImageLayoutCandidate } from './imageEditLayoutDraft'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { captureImageLayoutEntries, type LayoutMeasure } from './imageEditLayoutGeometry'
 import { imageEditV3LayerRef } from './imageEditDocumentRefs'
@@ -20,15 +20,42 @@ function document():ImageEditDocumentV3 {
   doc.layers=['a','b','c'].map((id,i)=>({...createImageEditRasterLayerV3(id,id),transform:[1,0,0,1,[15,240,480][i],[60,83,47][i]]}))
   return doc
 }
-function setup(doc=document()) {
+function setup(doc=document(),present?:(signal:AbortSignal)=>Promise<void>) {
   const values=new Map<string,unknown>(),confirmed=vi.fn(async()=>undefined),released=vi.fn(async()=>undefined)
   const bus=new ImageEditCommandBusV3(doc)
-  const adapter=new ImageEditLayoutDraft(bus,{measure,compute:async input=>createImageLayoutCandidates(input.items,input.constraints,input.identity,input.fidelity),confirm:confirmed,release:released,
+  const adapter=new ImageEditLayoutDraft(bus,{measure,present,compute:async input=>createImageLayoutCandidates(input.items,input.constraints,input.identity,input.fidelity),confirm:confirmed,release:released,
     store:async(value,kind)=>{const id=await imageLayoutDigest(value);values.set(id,structuredClone(value));return {resourceId:id,digest:id,path:`resources/${id.slice(7)}`,bytes:new TextEncoder().encode(JSON.stringify(value)).byteLength,kind,...(value&&typeof value==='object'&&'sourceDigest'in value?{sourceDigest:String(value.sourceDigest)}:{})}},
     read:async(resource:StoredCreativeIntentResource)=>{if(!values.has(resource.resourceId))throw new Error('missing');return values.get(resource.resourceId)}})
   return {bus,adapter,values,confirmed,released}
 }
 describe('随手摆正式文档适配',()=>{
+  it('先展示完整候选，绘制等待期间仍未保存且禁入新的整理',async()=>{
+    let release!:()=>void
+    const presented=new Promise<void>(resolve=>{release=resolve})
+    const present=vi.fn(()=>presented),{adapter,confirmed,bus}=setup(document(),present)
+    const organizing=adapter.organize(['a','b','c'])
+    await vi.waitFor(()=>expect(present).toHaveBeenCalledOnce())
+    expect(adapter.snapshot()).toMatchObject({status:'reviewing',needsSave:true})
+    expect(Object.keys(bus.getSnapshot().previewOverrides).length).toBeGreaterThan(0)
+    expect(confirmed).not.toHaveBeenCalled()
+    await expect(adapter.organize(['a','b','c'])).rejects.toThrow('重试保存')
+    release();await organizing;expect(confirmed).toHaveBeenCalledOnce()
+    expect(adapter.snapshot().needsSave).toBe(false)
+  })
+  it('候选绘制机会结束后才继续保存准备，关闭实例取消待绘制帧',async()=>{
+    const frames=new Map<number,FrameRequestCallback>();let id=0
+    vi.stubGlobal('requestAnimationFrame',(callback:FrameRequestCallback)=>{frames.set(++id,callback);return id})
+    const cancelled=vi.fn((frame:number)=>{frames.delete(frame)})
+    vi.stubGlobal('cancelAnimationFrame',cancelled)
+    const abort=new AbortController(),finished=vi.fn()
+    const presentation=presentImageLayoutCandidate(abort.signal).then(finished)
+    frames.get(1)!(0);expect(finished).not.toHaveBeenCalled()
+    frames.get(2)!(16);await presentation;expect(finished).toHaveBeenCalledOnce()
+    const closed=new AbortController(),pending=presentImageLayoutCandidate(closed.signal)
+    closed.abort(new Error('实例已关闭'))
+    await expect(pending).rejects.toThrow('实例已关闭');expect(cancelled).toHaveBeenCalledWith(3)
+    vi.unstubAllGlobals();vi.stubGlobal('crypto',webcrypto)
+  })
   it('单个移动计划保留镜像及祖先变换，正式候选预览、保存重开、应用和一步撤销',async()=>{
     const doc=document(),group=createImageEditGroupLayerV3('g','组')
     group.transform=[2,.2,.5,.7,31,29];group.children=[doc.layers[0]];doc.layers=[group,...doc.layers.slice(1)]

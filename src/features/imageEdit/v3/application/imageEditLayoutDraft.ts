@@ -30,6 +30,7 @@ export interface ImageLayoutState {
 interface LayoutPorts {
   measure?:LayoutMeasure
   compute?:(input:ImageLayoutComputeInput,signal:AbortSignal)=>Promise<LayoutCandidate[]>
+  present?:(signal:AbortSignal)=>Promise<void>
   store:typeof storeImageLayoutResource; read:typeof readImageLayoutResource
   confirm:()=>Promise<unknown>; release:(id:string)=>Promise<void>
   confirmStep?:(context:ApplicationExecutionContext|undefined,settled:()=>Promise<void>)=>Promise<void>
@@ -178,6 +179,11 @@ export class ImageEditLayoutDraft {
       this.preview(this.state.selected)
       performance.measure('image-layout-candidate-generation', { start: started, end: performance.now() })
       performance.clearMeasures('image-layout-candidate-generation')
+      // Allow the published candidate to paint before synchronous history/save preparation.
+      // Saving remains a barrier; yielding must not keep a closed document instance alive.
+      await this.ports.present?.(AbortSignal.any([abort.signal,this.bus.getLifecycleSignal()]))
+      abort.signal.throwIfAborted()
+      this.bus.getLifecycleSignal().throwIfAborted()
       await this.confirm(context)
       logger.info('图片布局候选已完成',{event:'image_edit.layout.optimize.completed',context:{layers:items.length,candidateMs:performance.now()-started,candidates:candidates.length}})
     } catch(error) {
@@ -312,12 +318,22 @@ export class ImageEditLayoutDraft {
   }
 }
 const adapters=new WeakMap<ImageEditCommandBusV3,ImageEditLayoutDraft>()
+export function presentImageLayoutCandidate(signal:AbortSignal):Promise<void> {
+  signal.throwIfAborted()
+  return new Promise((resolve,reject)=>{
+    let frame=0
+    const cancel=()=>{cancelAnimationFrame(frame);reject(signal.reason)}
+    signal.addEventListener('abort',cancel,{once:true})
+    frame=requestAnimationFrame(()=>{frame=requestAnimationFrame(()=>{signal.removeEventListener('abort',cancel);resolve()})})
+  })
+}
 export function imageEditLayoutDraft(bus:ImageEditCommandBusV3):ImageEditLayoutDraft {
   let adapter=adapters.get(bus)
   if(!adapter) {const computer=new ImageLayoutComputer();bus.getLifecycleSignal().addEventListener('abort',()=>computer.dispose(),{once:true})
     adapter=new ImageEditLayoutDraft(bus,{store:storeImageLayoutResource,read:readImageLayoutResource,
     measure:(document,layer,signal,matrix)=>measureImageLayoutLayer(document,layer,signal,matrix,bus.getResourceByteSizes()),
     compute:(input,signal)=>computer.compute(input,signal),
+    present:presentImageLayoutCandidate,
     confirm:async()=>{const owner=findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner;if(!owner) throw new Error('图片暂时无法保存，请重试保存');return owner.confirm(true)},
     confirmStep:async(context,settled)=>{const owner=findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner;if(!owner)throw new Error('图片暂时无法保存，请重试保存');owner.acceptCurrent();await owner.confirmStep(context,settled)},
     release:releaseImageLayoutResources});adapters.set(bus,adapter)}

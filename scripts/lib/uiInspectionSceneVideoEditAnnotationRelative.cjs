@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const sharp = require('sharp')
+const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
 const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
@@ -31,7 +32,9 @@ function createVideoEditAnnotationRelativeScene() {
         await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="white"/><circle cx="640" cy="360" r="230" fill="black"/></svg>')).png().toFile(source)
         const project = fixture(source); project.id = 'reality-t155'; const seq = project.sequences[0]
         seq.clips[0].name = '运动目标'; seq.clips[0].scale = .15
-        seq.clips.push({ ...structuredClone(seq.clips[0]), id: 'reference-clip', name: '参照元素', x: -.15, y: .1, scale: .1, track: 0 })
+        seq.tracks.push({ ...structuredClone(seq.tracks.find(t => t.kind === 'video')), id: 'reference-track', name: '视频 2', index: 2 })
+        seq.clips.push({ ...structuredClone(seq.clips[0]), id: 'reference-clip', name: '参照元素', x: -.15, y: .1, scale: .1, track: 2 })
+        loadTypeScript('src/core/videoEdit/document.ts').videoEditDocumentSchema.parse(project)
         await button(page, '剪辑').first().click(); seeded = await seedVideoEditProject(page, project)
         await page.evaluate(async ({ source, projectId, id }) => {
           const api = window.henjiNative.documents; const resource = await api.importFile({ sourcePath: source, container: { kind: 'project', projectId }, folder: 'materials' })
@@ -85,7 +88,7 @@ function createVideoEditAnnotationRelativeScene() {
         await button(page, '应用').click(); await saved(doc => doc.sequences[0].annotations[1].status === 'addressed')
         for (const frame of [0, 12, 24]) { await playback(frame); await shot('停留帧' + frame) }
         await button(page, '撤销').click(); await saved(doc => !doc.sequences[0].clips[0].curves?.x)
-        await playback(0); await panel(); await button(page, '开始示范').click()
+        await playback(0); await panel(); await button(page, '清除标注与参照约束').click(); await button(page, '开始示范').click()
         await page.getByLabel('相对参照', { exact: true }).click(); await page.getByRole('option', { name: '参照元素', exact: true }).click(); await close()
         const drag = async dx => {
           const rect = await page.locator('[data-video-edit-program-display]').boundingBox(); assert(rect)
@@ -97,17 +100,24 @@ function createVideoEditAnnotationRelativeScene() {
         const baseline = await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.timeline_view'] })
         const view = baseline.data.properties['video_edit.document.timeline_view']; const ruler = await page.getByRole('slider', { name: '剪辑时间定位', exact: true }).boundingBox()
         await page.mouse.click(ruler.x + 24 * 60 * view.zoom / 30 + .1, ruler.y + 12); await presented(24); await drag(.04)
-        await panel(); await button(page, '结束示范').click(); await button(page, '开始示范').waitFor({ state: 'visible' }); await button(page, '整理').click(); await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 }); await shot('相对参照候选')
+        await panel(); await button(page, '结束示范').click(); await button(page, '开始示范').waitFor({ state: 'visible' })
+        await controls.getByRole('button', { name: '整理', exact: true }).click(); await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 }); await shot('相对参照候选')
         await close()
         const referenceRef = { kind: 'video_edit.clip', id: seeded.documentId + ':reference-clip' }; const property = 'video_edit.clip.x'
         const referenceBaseline = await callTool(client, 'read_application_entity', { ref: referenceRef, propertyIds: [property] })
         const shifted = await callTool(client, 'change_application_entities', operationEnvelope([referenceBaseline], { summary: '移动参照后重新整理', changes: [{ kind: 'set_properties', entityType: referenceRef.kind, target: referenceRef, properties: { [property]: -.05 } }] }))
         assert.equal(shifted.executionState, 'completed', JSON.stringify(shifted)); await shot('参照元素移动')
-        await panel(); await button(page, '整理').click(); await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 }); await shot('参照移动后重新整理局部偏移')
+        await panel(); await controls.getByRole('button', { name: '重新整理', exact: true }).click()
+        await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 }); await shot('参照移动后重新整理局部偏移')
         await button(page, '应用').click(); const applied = await saved(doc => doc.creativeIntents?.drafts.at(-1)?.applications.at(-1)?.saved)
         evidence.applied = applied.sequences[0].clips.map(c => ({ id: c.id, groupId: c.groupId, curves: c.curves }))
         for (const frame of [0, 12, 24]) { await playback(frame); await shot('相对运动帧' + frame) }
         await button(page, '撤销').click(); await shot('相对运动一次撤销')
+      } catch (error) {
+        evidence.failure = error.stack
+        evidence.visibleText = await page.locator('body').innerText().catch(() => '')
+        await capture('failure')
+        throw error
       } finally {
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
         await client?.close(); await disableMcp(page).catch(() => {}); await unblock()
