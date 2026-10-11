@@ -11,6 +11,6 @@ describe('默认 DeepSeek 选型', () => {
       capabilities: { image: true, toolCall: true, contextWindow: 1_000_000 },
     })
     expect(config.agentProfiles[0].primary).toEqual({ providerId: 'deepseek', modelId: 'deepseek-flash' })
-    expect(config.models.find(model => model.modelId === 'deepseek/deepseek-v4.1-flash')?.capabilities.image).toBe(false)
+    expect(config.models.find(model => model.modelId === 'deepseek/deepseek-v4.1-flash')?.capabilities.image).toBe(true)
   })
 })

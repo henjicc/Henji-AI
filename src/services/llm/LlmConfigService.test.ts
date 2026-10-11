@@ -130,7 +130,7 @@ describe('normalizeLlmConfig', () => {
     ])
     expect(deepSeekModels.every(model => (
       model.capabilities.contextWindow === DEEPSEEK_V4_CONTEXT_WINDOW
-      && model.capabilities.maxOutputTokens === (model.modelId === 'deepseek/deepseek-v4.1-flash' ? null : DEEPSEEK_V4_MAX_OUTPUT_TOKENS)
+      && model.capabilities.maxOutputTokens === DEEPSEEK_V4_MAX_OUTPUT_TOKENS
     ))).toBe(true)
   })
 

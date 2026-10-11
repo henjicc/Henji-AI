@@ -72,7 +72,7 @@ describe('Fal image erase optional tool packs', () => {
     expect(models.map((model) => model.meta.id)).toEqual([
       'fal-flux-pro-erase', 'fal-bria-eraser', 'fal-finegrain-eraser',
     ])
-    expect(defaultFalPack.models).toHaveLength(41)
+    expect(defaultFalPack.models).toHaveLength(42)
     expect(defaultFalPack.models.some((model) => model.meta.tags?.includes('erase'))).toBe(false)
   })
 
