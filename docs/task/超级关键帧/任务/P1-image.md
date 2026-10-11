@@ -361,3 +361,5 @@ npm run test:assistant-persistence
 - `docs/task/超级关键帧/02-实施拆分.md`：仅新增 t152 状态行。
 
 无 Git 写操作、付费调用、electron:dev 启停或 SDK 源码手改。授权的正式 bundle 调用了目录索引生成器；SDK 开始时已有大量其他任务改动，不还原、不归入本单。总管理者须按上述文件逐 hunk 审查共享登记与总览。
+
+**t157 补验结论（2026-10-11）**：工具箱 1440×900 随手摆面板、工具箱与画布图片文档节点 960×640 正式 Electron 场景均通过；三场景各 12 步及末帧，共 39 张截图已逐张目视，候选/焦点/钉住/百分比/应用/撤销/重做/重开/单条拒绝提示正常，面板无横向溢出。证据在 `.reality/t157-recording-r5/`（只采用其中 layout-draft-panel 场景，录制场景失败另记）和 `.reality/t157-panel-960/`；960 为正式窗口 DIP 尺寸，应用缩放下 CSS viewport 为 1068，截图像素含 Windows DPI。补验没有新拍改前基线，亦不替代 R04；详见 [P3-image-host.md](P3-image-host.md)。

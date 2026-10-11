@@ -19,20 +19,21 @@ function layoutFixture(canvas, benchmark) {
   return doc
 }
 
-function createImageEditLayoutDraftScene(context, canvas = false, benchmark = false, panelReview = false) {
+function createImageEditLayoutDraftScene(context, canvas = false, benchmark = false, panelReview = false, explanation = false) {
   return {
-    id: `${canvas ? 'image-edit-layout-draft-node' : 'image-edit-layout-draft'}${panelReview ? '-panel' : benchmark ? '-100' : ''}`, surface: canvas ? '画布' : '图片编辑',
-    name: `${canvas ? '画布图片文档节点' : '工具箱'}-${benchmark ? '100层随手摆性能' : '随手摆候选钉住应用撤销重开'}`, writesUserData: true,
+    id: explanation ? `image-edit-explanation${canvas ? '-node' : ''}` : `${canvas ? 'image-edit-layout-draft-node' : 'image-edit-layout-draft'}${panelReview ? '-panel' : benchmark ? '-100' : ''}`, surface: canvas ? '画布' : '图片编辑',
+    name: `${canvas ? '画布图片文档节点' : '工具箱'}-${explanation ? '录制讲解审阅布局应用撤销' : benchmark ? '100层随手摆性能' : '随手摆候选钉住应用撤销重开'}`, writesUserData: true,
     launchArgs: canvas ? [] : ['--dev-surface=tool.image_edit'],
     expectedLogEvents: ['image_edit.layout.optimize.failed'],
     setup: async (page, app, { capture }) => {
       page.setDefaultTimeout(15000)
       const reviewWidth = panelReview ? await page.evaluate(() => innerWidth) : undefined
-      const root = path.resolve(`node_modules/.cache/t149-layout-${canvas ? 'canvas' : 'toolbox'}${panelReview ? `-panel-${reviewWidth}` : benchmark ? '-100' : ''}`)
+      const root = path.resolve(`node_modules/.cache/${explanation ? 't157-explanation' : 't149-layout'}-${canvas ? 'canvas' : 'toolbox'}${panelReview ? `-panel-${reviewWidth}` : benchmark ? '-100' : ''}`)
       fs.mkdirSync(root, { recursive: true })
       const evidence = { frames: [], candidateMs: [], abMs: [], fidelityMs: [], visualReview: '待逐张目视', benchmark: panelReview ? '仅面板验收，不测性能' : '5次预热，30次测量；输入到合成回执与下一帧；非物理屏幕延迟' }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const restore = await blockPaidGeneration(app)
+      const restoreExplanation = explanation ? await require('./uiInspectionSceneImageEditExplanation.cjs').installImageExplanationFixture(page, app) : async () => {}
       const host = () => page.locator('[data-image-editor-v3]:visible').last()
       const controls = () => page.locator('[data-image-layout-controls]')
       const button = name => controls().getByRole('button', { name, exact: true })
@@ -63,6 +64,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
       }
       try {
         const doc = layoutFixture(canvas, benchmark)
+        if (explanation) doc.id += '-explanation'
         if (panelReview) doc.id += `-panel-${reviewWidth}`
         evidence.layers = benchmark ? 100 : 4
         if (canvas) ({ projectId } = await context.seedAndOpenCanvasPanoramaProject(page))
@@ -104,6 +106,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
           await opened()
         }
         await open()
+        if (explanation) { await require('./uiInspectionSceneImageEditExplanation.cjs').runImageExplanationScene({ page, app, host, read, select, shot, evidence, store }); return }
         if (benchmark) {
           const first = host().locator('[data-layer-select]').first(); await first.click(); await first.press('End')
           await page.waitForTimeout(200)
@@ -223,7 +226,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
         }
         if (!panelReview) { assert.ok(evidence.metrics.candidateMs.p95 <= 900); assert.ok(evidence.metrics.abMs.p95 <= 100); assert.ok(evidence.metrics.fidelityMs.p95 <= 300) }
       } catch (error) { await capture('failure'); evidence.failure = error.stack; evidence.surface = await host().locator('[data-preview-surface]').evaluate(e => ({ ...e.dataset })).catch(() => null); store(); throw error }
-      finally { await restore() }
+      finally { await restoreExplanation(); await restore() }
     },
   }
 }

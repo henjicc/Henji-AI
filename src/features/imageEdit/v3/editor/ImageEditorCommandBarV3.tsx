@@ -8,6 +8,7 @@ import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorToolParametersV3 } from './ImageEditorToolParametersV3'
 import { ImageEditorClipboardV3 } from './ImageEditorClipboardV3'
 import { ImageEditorLayoutControlsV3 } from './ImageEditorLayoutControlsV3'
+import { ImageEditorExplanationControlsV3 } from './ImageEditorExplanationControlsV3'
 import type { ImageEditorV3Controller } from './types'
 
 interface ImageEditorCommandBarV3Props {
@@ -95,6 +96,7 @@ export function ImageEditorCommandBarV3({
           className="flex min-w-0 shrink-0 items-center gap-1.5"
         >
           {toolbarActions}
+          {(controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorExplanationControlsV3 bus={bus} controller={controller} />}
           {(controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorLayoutControlsV3 bus={bus} controller={controller} />}
           {panelActions}
         </div>

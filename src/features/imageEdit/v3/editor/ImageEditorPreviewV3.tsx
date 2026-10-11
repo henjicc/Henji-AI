@@ -12,6 +12,7 @@ import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLe
 import { ImageEditorLayerControlsV3 } from './ImageEditorLayerControlsV3'
 import { ImageEditorLayerControlsPresentationV3 } from './layerControlsPresentationV3'
 import { useImageEditorLayerPickingV3 } from './useImageEditorLayerPickingV3'
+import { useImageEditorExplanationV3 } from './useImageEditorExplanationV3'
 import { imageEditorLayerContentBoundsV3, layerToOutputV3, pickImageEditorLayerV3 } from './layerPickingV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import {
@@ -222,6 +223,7 @@ export function ImageEditorPreviewV3({
       && managedPreview.resultDocumentId === displaySnapshot.document.id
       && managedPreview.resultRevision === displaySnapshot.document.revision,
   )
+  useImageEditorExplanationV3({ bus, controller, surface: surfaceRef, layout: viewportLayout, maps: alphaMaps, selected: selectedLayerIds, ready: thumbnailDisplayReady })
   useImageEditorThumbnailPrefetchV3(
     controller.sessionId,
     snapshot,
