@@ -89,6 +89,7 @@ export class VideoEditRenderer {
   private readonly seekers = new Map<string, VideoEditFrameSeeker>()
   readonly canvas: OffscreenCanvas
   private compositor?: VideoEditGpuCompositor
+  private capturePresentation?: (pixels: Promise<ImageBitmap>) => void
   private codeSources?: VideoEditCodeSources
   private presentationEpoch = 0
   /** Preview only (task 4.9): the canvas, composition targets and owned pictures are 1/divisor of the sequence size. */
@@ -347,7 +348,8 @@ export class VideoEditRenderer {
    * picture at its source time or the frame fails (`videoEditExportPictures.ts`); `singleFrameReads` counts the layers
    * a single-frame read decided because the sequential reader's picture was not exact.
    */
-  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive'): Promise<{ canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; completion: Promise<void> }> {
+  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void): Promise<{ canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; completion: Promise<void> }> {
+    this.capturePresentation = capturePresentation
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
     const nestedContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), bytes: 0 }
@@ -380,7 +382,7 @@ export class VideoEditRenderer {
     active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor); this.warmShaderGraphs() }
+    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor); this.warmShaderGraphs() }
     const effectErrors: string[] = []
     const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
       const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`

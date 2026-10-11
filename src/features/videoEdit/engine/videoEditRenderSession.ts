@@ -107,7 +107,7 @@ export class VideoEditRenderSession {
       const value = event.data; const pending = this.pending.get(value.id)
       if (value.phase === 'submitted') { pending?.submitted?.(); return }
       this.pending.delete(value.id)
-      if (!pending) { value.bitmap?.close(); return }
+      if (!pending) { value.bitmap?.close(); value.history?.close(); return }
       if (value.error) pending.reject(new Error(value.error)); else pending.resolve(value)
     }
     this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
@@ -147,10 +147,10 @@ export class VideoEditRenderSession {
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
-  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive'): Promise<RenderResponse> {
+  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false): Promise<RenderResponse> {
     await this.ready
     const document = this.document
-    const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(readRgb ? { readRgb } : {}) }, [], submitted)
+    const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
     const at = result.presented ? videoEditMaskUpdateTime(document.id, document.revision) : undefined
     if (at !== undefined && result.presented) {
       const durationMs = performance.now() - at

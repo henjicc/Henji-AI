@@ -10,6 +10,7 @@ import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import { createVideoEditTestProject, failVideoEditSaves, savedVideoEdit } from './videoEditDocumentTestKit'
 import { appendVideoEditClip, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, editVideoProject, setVideoEditView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture } from './videoEditService'
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
+import { storeMotionResource, storeMotionResourceBytes, readMotionResource, readMotionResourceBytes } from './videoEditMotionResources'
 import { startVideoExplanation, pauseVideoExplanation, resumeVideoExplanation, stopVideoExplanation, videoExplanationState, recordVideoExplanationPresentation, recordVideoExplanationPointer, transcribeVideoExplanation, readVideoExplanationPage, correctVideoExplanationText, videoExplanationJsonl, eraseVideoExplanation, reopenVideoExplanation, retryVideoExplanationSave, retainVideoExplanationAudio } from './videoEditExplanation'
 
 const capture = vi.hoisted(()=>({block:undefined as ((block:CapturedAudioBlock)=>void)|undefined,interrupt:undefined as ((message:string)=>void)|undefined,stop:vi.fn(async()=>{}),deny:false}))
@@ -32,8 +33,31 @@ beforeEach(()=>{
 })
 afterEach(async()=>{failVideoEditSaves(false);for(const owner of listVideoEditInstances())await closeVideoEditProject(owner.document.id);vi.restoreAllMocks();vi.unstubAllGlobals();uninstallHarnessNativeStorage()})
 async function setup(){const owner=await createVideoEditTestProject();appendVideoEditClip(owner.document.id);return owner}
+it('共用 visual 资源保存入口保留结构化 JSON 与二进制 PNG 的编码、扩展名和校验读回',async()=>{
+  const owner=await setup();const id=owner.document.id;const value={note:'历史说明'}
+  const structured=await storeMotionResource(id,value,'visual')
+  expect(vi.mocked(getPlatform().documents.importFile).mock.lastCall![0].sourcePath).toMatch(/\.json$/)
+  expect(await readMotionResource(structured)).toEqual(value)
+  const bytes=new Uint8Array([137,80,78,71,13,10,26,10]);const binary=await storeMotionResourceBytes(id,bytes,'visual')
+  expect(vi.mocked(getPlatform().documents.importFile).mock.lastCall![0].sourcePath).toMatch(/\.png$/)
+  expect(await readMotionResourceBytes(binary)).toEqual(bytes)
+  files.set(binary.path,new Uint8Array(bytes.length));await expect(readMotionResourceBytes(binary)).rejects.toThrow('已被修改')
+})
 function present(owner:Awaited<ReturnType<typeof setup>>,frame:number){setVideoEditView(owner.document.id,{frame});recordVideoExplanationPresentation(owner,{frame,sequenceId:owner.activeSequenceId,revision:owner.document.revision,at:clock})}
 function audio(){capture.block!({firstFrame:4800,samples:new Float32Array(4800).fill(.2),sampleRate:48000,monoStartUs:100_000,uncertaintyUs:10_000})}
+it('真实词级结果后出现句级块不会降级已有词时刻，每条仍保留自身粒度', async () => {
+  const owner=await setup(); const id=owner.document.id
+  await startVideoExplanation(id,crypto.randomUUID());clock=200;present(owner,0);audio()
+  clock=300;await pauseVideoExplanation(id);clock=400;await resumeVideoExplanation(id);clock=500;present(owner,0)
+  capture.block!({firstFrame:4800,samples:new Float32Array(4800).fill(.2),sampleRate:48000,monoStartUs:400_000,uncertaintyUs:10_000})
+  clock=600;await stopVideoExplanation(id)
+  vi.mocked(getPlatform().audioEdit.recording.transcribe).mockImplementationOnce(async input=>({modelId:input.modelId,providerId:'groq',requestId:input.requestId,transcript:normalizeTimestampedTranscript({text:'这里',segments:[{text:'这里',startMs:0,endMs:100,words:[{text:'这里',startMs:0,endMs:50}]}]},100,'word')}))
+  await transcribeVideoExplanation(id,crypto.randomUUID())
+  expect(getPlatform().audioEdit.recording.transcribe).toHaveBeenCalledTimes(2)
+  expect(videoExplanationState(owner)!.collector.session.asr?.granularity).toBe('word')
+  expect(await readVideoExplanationPage(id,0)).toMatchObject([{granularity:'word',monoSpanUs:[100_000,150_000]}])
+  expect(await readVideoExplanationPage(id,1)).toMatchObject([{granularity:'segment'}])
+})
 it('E01/E05 自主控制与正式undo链不重复应用；结束转写/校正/JSONL/删除历史闭环',async()=>{
   const owner=await setup();const id=owner.document.id;const undoCount=owner.past.length
   await startVideoExplanation(id,crypto.randomUUID());expect(owner.playing).toBe(false);clock=200;present(owner,0);audio()
@@ -44,6 +68,11 @@ it('E01/E05 自主控制与正式undo链不重复应用；结束转写/校正/JS
   const original=(await readVideoExplanationPage(id,0))[0];expect(original.kind).toBe('transcript');if(original.kind!=='transcript')throw new Error('missing')
   expect(original.granularity).toBe('segment');await correctVideoExplanationText(id,original,'往左移')
   expect(await readVideoExplanationPage(id,0)).toMatchObject([{text:'往左移',source:'user'}])
+  await expect(correctVideoExplanationText(id,original,'迟到的旧词稿')).rejects.toThrow('已经校正')
+  const latest = (await readVideoExplanationPage(id,0))[0]; if(latest.kind!=='transcript')throw new Error('missing')
+  await correctVideoExplanationText(id,{...latest,monoSpanUs:[9_000_000,9_200_000],timelineSpans:[]},'往左移')
+  const verified=(await readVideoExplanationPage(id,0))[0]; if(verified.kind!=='transcript')throw new Error('missing')
+  expect(verified.monoSpanUs).toEqual(original.monoSpanUs);expect(verified.timelineSpans).toEqual(original.timelineSpans)
   const lines=[];for await(const line of videoExplanationJsonl(id))lines.push(JSON.parse(line) as Record<string,unknown>)
   const commands=lines.filter(l=>l.type==='command');expect(commands.map(l=>l.phase)).toEqual(['committed','undo','redo','failed']);expect(commands[1].related).toBe(commands[0].operation)
   expect(lines.filter(l=>l.type==='speech')).toMatchObject([{text:'往左移'}]);expect(lines.filter(l=>l.type==='speech')).toHaveLength(1)

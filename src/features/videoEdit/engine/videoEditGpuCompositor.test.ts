@@ -26,6 +26,53 @@ it('预览及离屏导出写同一透视矩阵，普通片段清空矩阵且不�
   await compositor.dispose()
 })
 afterEach(() => { vi.unstubAllGlobals(); state.format = 'rgba8unorm' })
+it('历史像素复制编码在同一提交内，保留带行填充的 BGRA；离屏不截取，普通预览不读回', async () => {
+  let complete!: () => void
+  const fence = new Promise<void>(resolve => { complete = resolve })
+  const capture = vi.fn()
+  const close = vi.fn(); const bitmap = { close } as unknown as ImageBitmap
+  const imageData = vi.fn(function(this: { data: Uint8ClampedArray; width: number; height: number }, data: Uint8ClampedArray, width: number, height: number) { this.data = data; this.width = width; this.height = height })
+  vi.stubGlobal('ImageData', imageData); vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap))
+  state.format = 'bgra8unorm'
+  let enabled = true
+  const { compositor, device, output } = copyFixture(() => fence, () => enabled ? capture : undefined)
+  output.width = 2; output.height = 2
+  const mapped = new Uint8Array(512); mapped.set([3, 2, 1, 255, 6, 5, 4, 255]); mapped.set([9, 8, 7, 255, 12, 11, 10, 255], 256)
+  const buffer = { mapAsync: vi.fn(async () => {}), getMappedRange: () => mapped.buffer, unmap: vi.fn(), destroy: vi.fn() }
+  device.createBuffer.mockReturnValueOnce(buffer)
+  capture.mockImplementation(() => { expect(device.queue.submit).toHaveBeenCalled() })
+  const project = createVideoEditDocument('历史呈现')
+  const composition = videoEditComposition(project, project.sequences[0].id)
+  const result = await compositor.draw(composition, [], [], () => true)
+  expect(capture).toHaveBeenCalledOnce()
+  const pixels = capture.mock.calls[0][0] as Promise<ImageBitmap>
+  expect(await pixels).toBe(bitmap)
+  expect(imageData.mock.calls[0][0]).toEqual(new Uint8ClampedArray([1,2,3,255,4,5,6,255,7,8,9,255,10,11,12,255]))
+  expect(buffer.unmap).toHaveBeenCalledOnce(); expect(buffer.destroy).toHaveBeenCalledOnce()
+  expect(device.createCommandEncoder.mock.results[0].value.copyTextureToBuffer).toHaveBeenCalledOnce()
+  let finished = false; void result.completion.then(() => { finished = true })
+  await Promise.resolve(); expect(finished).toBe(false)
+  const target = await (await compositor.code()).target('export', composition.width, composition.height)
+  const offscreen = await compositor.draw(composition, [], [], () => true, undefined, target)
+  expect(capture).toHaveBeenCalledOnce()
+  complete(); await Promise.all([result.completion, offscreen.completion])
+  enabled = false
+  await (await compositor.draw(composition, [], [], () => true)).completion
+  expect(capture).toHaveBeenCalledOnce()
+  expect(device.createCommandEncoder.mock.results.at(-1)!.value.copyTextureToBuffer).not.toHaveBeenCalled()
+  await compositor.dispose()
+})
+it('历史缓冲区映射失败仍销毁缓冲区，错误交给采集而不伪造画面', async () => {
+  const capture = vi.fn()
+  const { compositor, device } = copyFixture(async () => {}, () => capture)
+  const buffer = { mapAsync: vi.fn(async () => { throw new Error('映射失败') }), destroy: vi.fn() }
+  device.createBuffer.mockReturnValueOnce(buffer)
+  const project = createVideoEditDocument('失败释放')
+  await (await compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)).completion
+  await expect(capture.mock.calls[0][0]).rejects.toThrow('映射失败')
+  expect(buffer.destroy).toHaveBeenCalledOnce()
+  await compositor.dispose()
+})
 it('GPU validation failure rejects the frame receipt instead of reporting a blank frame as successful', async () => {
   const { compositor, device } = copyFixture(async () => {})
   const project = createVideoEditDocument('合成错误')
@@ -52,21 +99,21 @@ it('嵌套合成共享父 GPU 设备，子合成器销毁不销毁父设备，�
   await compositor.blank(64, 64, 0, 1 / 30)
   await compositor.dispose(); expect(state.destroyedManagers).toBe(destroyed + 1)
 })
-function copyFixture(fence: () => Promise<void>) {
+function copyFixture(fence: () => Promise<void>, capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined) {
   const closed = vi.fn(); const destroyed = vi.fn()
   const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }
   const device = {
     queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: fence },
     lost: new Promise<{ reason?: string; message?: string }>(() => {}), createShaderModule: vi.fn(), createRenderPipeline: vi.fn((descriptor: unknown) => ({ descriptor, getBindGroupLayout: () => ({}) })), createSampler: vi.fn(),
-    createTexture: vi.fn((descriptor: unknown) => ({ descriptor, createView: () => ({ descriptor }), destroy: destroyed })), createBuffer: () => ({ destroy: vi.fn() }),
-    createBindGroup: vi.fn(), createCommandEncoder: vi.fn(() => ({ beginRenderPass: vi.fn((_descriptor: unknown) => pass), finish: () => ({}) })), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(), importExternalTexture: vi.fn(),
+    createTexture: vi.fn((descriptor: unknown) => ({ descriptor, createView: () => ({ descriptor }), destroy: destroyed })), createBuffer: vi.fn((): { destroy: ReturnType<typeof vi.fn>; mapAsync?: (mode: number) => Promise<void>; getMappedRange?: () => ArrayBuffer; unmap?: () => void } => ({ destroy: vi.fn() })),
+    createBindGroup: vi.fn(), createCommandEncoder: vi.fn(() => ({ beginRenderPass: vi.fn((_descriptor: unknown) => pass), copyTextureToBuffer: vi.fn(), finish: () => ({}) })), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(), importExternalTexture: vi.fn(),
   }
   state.device = device
   const canvasView = { canvas: true }
   const output = { width: 3840, height: 2160, getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => canvasView }) }) } as unknown as OffscreenCanvas
-  const compositor = new VideoEditGpuCompositor(output)
+  const compositor = new VideoEditGpuCompositor(output, undefined, capture)
   const sample = { timestamp: 0, duration: 1 / 60, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false, toVideoFrame: () => ({ visibleRect: { width: 3840, height: 2160 }, close: closed }) } as unknown as VideoSample
-  return { compositor, sample, device, closed, destroyed, canvasView, pass }
+  return { compositor, sample, device, closed, destroyed, canvasView, pass, output }
 }
 it('已经到时的画面直接提交，不再等待额外一次垂直同步', async () => {
   const request = vi.fn((callback: FrameRequestCallback) => { queueMicrotask(() => callback(performance.now())); return 1 })

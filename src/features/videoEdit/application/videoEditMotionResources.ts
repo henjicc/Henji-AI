@@ -14,20 +14,30 @@ async function hashMotionBytes(bytes: Uint8Array): Promise<string> {
 }
 /** Existing import-file contract publishes immutable pages to the document container. */
 export async function storeMotionResource(id: string, value: unknown, kind: StoredCreativeIntentResource['kind']): Promise<StoredCreativeIntentResource> {
+  return importMotionResourceBytes(id, new TextEncoder().encode(JSON.stringify(value)), kind, 'json', kind === 'page' ? creativeIntentPageSchema.parse(value).sourceDigest : undefined)
+}
+/** Binary history attachments use the same immutable document-import path as structured evidence. */
+export async function storeMotionResourceBytes(id: string, bytes: Uint8Array, kind: StoredCreativeIntentResource['kind'], sourceDigest?: string): Promise<StoredCreativeIntentResource> {
+  return importMotionResourceBytes(id, bytes, kind, kind === 'visual' ? 'png' : 'json', sourceDigest)
+}
+async function importMotionResourceBytes(id: string, bytes: Uint8Array, kind: StoredCreativeIntentResource['kind'], extension: 'json' | 'png', sourceDigest?: string): Promise<StoredCreativeIntentResource> {
   const owner = requireVideoEditInstance(id); const platform = getPlatform()
-  const bytes = new TextEncoder().encode(JSON.stringify(value)); const digest = await hashMotionBytes(bytes)
+  const digest = await hashMotionBytes(bytes)
   const resourceId = crypto.randomUUID()
-  const temporary = await platform.system.paths.join(await platform.system.paths.tempDir(), `henji-intent-${resourceId}.json`)
+  const temporary = await platform.system.paths.join(await platform.system.paths.tempDir(), `henji-intent-${resourceId}.${extension}`)
   await platform.system.fs.writeFile(temporary, bytes, { exclusive: true })
   try {
     const imported = await platform.documents.importFile({ container: owner.session.documentMeta.container, sourcePath: temporary, folder: 'materials' })
-    const page = kind === 'page' ? creativeIntentPageSchema.parse(value) : undefined
-    return { resourceId, path: imported.path, digest, bytes: bytes.byteLength, kind, ...(page ? { sourceDigest: page.sourceDigest } : {}) }
+    return { resourceId, path: imported.path, digest, bytes: bytes.byteLength, kind, ...(sourceDigest ? { sourceDigest } : {}) }
   } finally { await platform.system.fs.remove(temporary) }
 }
-export async function readMotionResource(resource: StoredCreativeIntentResource): Promise<unknown> {
+export async function readMotionResourceBytes(resource: StoredCreativeIntentResource): Promise<Uint8Array> {
   const bytes = await getPlatform().system.fs.readFile(resource.path)
-  if (bytes.byteLength !== resource.bytes || await hashMotionBytes(bytes) !== resource.digest) throw new Error('原稿文件缺失或已被修改，请从项目备份恢复后重试。')
+  if (bytes.byteLength !== resource.bytes || await hashMotionBytes(bytes) !== resource.digest) throw new Error('原稿或历史画面文件缺失或已被修改，请从项目备份恢复后重试。')
+  return bytes
+}
+export async function readMotionResource(resource: StoredCreativeIntentResource): Promise<unknown> {
+  const bytes = await readMotionResourceBytes(resource)
   return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown
 }
 export async function* readMotionPages(id: string, draft: MotionDraft, signal?: AbortSignal): AsyncGenerator<CreativeIntentPage> {

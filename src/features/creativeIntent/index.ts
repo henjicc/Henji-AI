@@ -2,3 +2,4 @@ export { CreativeIntentControls, type CreativeIntentControlsProps } from './ui/C
 export { CreativeIntentOverlay, type CreativeIntentGhost } from './ui/CreativeIntentOverlay'
 export { RecordingCollector, type RecordingPresentation } from './recording/RecordingCollector'
 export { captureMicrophone, type CapturedAudioBlock, type MicrophoneCapture } from './recording/microphone'
+export { ExplanationReview, type ExplanationReviewProps } from './ui/ExplanationReview'

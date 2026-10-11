@@ -15,6 +15,7 @@ import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
+import { retainExplanationPixels } from './application/videoEditExplanationVisual'
 import { videoEditParameterUpdate, videoEditParameterAffectsAudio } from './engine/videoEditParameterUpdate'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
@@ -199,10 +200,15 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     surface.width = initialDocument.width; surface.height = initialDocument.height
     surface.setAttribute('aria-label', '剪辑画面'); surface.className = 'h-full w-full object-contain'
     host.current?.replaceChildren(surface); canvas.current = surface
+    // Explanation presents acknowledged Worker pixels on a stable canvas because a transferred GPU
+    // surface can lose its compositor image between frames. Never reconstruct a historical picture.
+    let explanationSurface: HTMLCanvasElement | undefined
     const renderer = new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen(), undefined, instance.document.id); session.current = renderer
     const unsubscribe = subscribeVideoEditDomain(() => {
       if (stopped) return
       const next = videoMotionComposition(instance)
+      // 讲解分页、转写和绑定只更新文档元数据，不撤销同一画面的呈现。
+      if (next === appliedDocument) return
       const parameters = next && videoEditParameterUpdate(appliedDocument, next)
       if (!parameters || videoEditParameterAffectsAudio(appliedDocument, parameters)) {
         if (next !== appliedDocument) { stopAudio(); setLevels([]) }
@@ -244,6 +250,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     // 起播预热时提前混好的第一块声音：起播时钟不必再留 100ms 等混音。
     let displayPeriod: number | undefined
     let lastParameterUpdate = -Infinity
+    let historyEnabled = false
     let displayMeasuredAt = -Infinity
     let firstBlock: { document: VideoEditComposition; from: number; duration: number; buffer: Promise<AudioBuffer>; ready: boolean } | undefined
     // 回放分辨率（4.9）：播放用所选分辨率，暂停默认回到完整；选帧、设封面期间强制完整。
@@ -274,7 +281,22 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let failedRetryMs = 2000
     const recordPresentation = (target: number, result: Awaited<ReturnType<VideoEditRenderSession['present']>>, requestedAt: number, scrubbing: boolean, composition: VideoEditComposition): boolean => {
       const revision = composition.revision
-      if (stopped || !listVideoEditInstances().includes(instance) || instance.activeSequenceId !== initialDocument.id || session.current !== renderer || canvas.current !== surface || requestedAt < lastPresentation) return false
+      if (stopped || !listVideoEditInstances().includes(instance) || instance.activeSequenceId !== initialDocument.id || session.current !== renderer || canvas.current !== surface || requestedAt < lastPresentation) { result.history?.close(); return false }
+      if (result.history) {
+        explanationSurface ??= window.document.createElement('canvas')
+        explanationSurface.className = 'pointer-events-none absolute inset-0 h-full w-full object-contain'
+        explanationSurface.setAttribute('aria-hidden', 'true')
+        explanationSurface.width = result.history.width; explanationSurface.height = result.history.height
+        const context = explanationSurface.getContext('2d', { alpha: false })
+        if (!context) { result.history.close(); throw new Error('讲解画面无法呈现，请重新打开节目面板。') }
+        context.drawImage(result.history, 0, 0)
+        explanationSurface.dataset.presentedFrame = String(target)
+        explanationSurface.dataset.presentedRevision = String(revision)
+        if (!explanationSurface.isConnected) surface.parentElement?.append(explanationSurface)
+      } else if (explanationSurface && (explanationSurface.dataset.presentedFrame !== String(target) || explanationSurface.dataset.presentedRevision !== String(revision))) {
+        explanationSurface.remove(); explanationSurface = undefined
+      }
+      retainExplanationPixels(surface, target, result.history)
       lastPresentation = requestedAt
       surface.dataset.requestedAt = String(requestedAt); surface.dataset.renderMs = String(performance.now() - requestedAt)
       surface.dataset.decodeMs = String(result.decodeMs ?? 0); surface.dataset.gpuMs = String(result.gpuMs ?? 0)
@@ -318,6 +340,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         const command = videoEditProgramCommandIdentity(instance.document.id)
         const document = videoMotionComposition(current)
         if (!document) { stopAudio(); return }
+        const explanation = videoExplanationState(current)?.collector.session
+        const captureHistory = !!explanation && ['recording', 'paused'].includes(explanation.state)
+        if (captureHistory !== historyEnabled) { historyEnabled = captureHistory; if (historyEnabled) lastRequested = -1; else retainExplanationPixels(surface, -1) }
         if (appliedFonts !== renderer.fontPresentationRevision) { appliedFonts = renderer.fontPresentationRevision; lastRequested = -1 }
         requestCommand = command; requestDocument = document
         if (failedDocument) {
@@ -369,9 +394,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             while (audio.currentTime === before && performance.now() - waiting < 1000 && !stopped) await new Promise(resolve => setTimeout(resolve, 2))
           })() : undefined
           audioReady?.catch(() => undefined)
-          const initialResult = await renderer.present(initialFrame, direction === 1)
+          const initialResult = await renderer.present(initialFrame, direction === 1, false, undefined, undefined, undefined, 'interactive', historyEnabled)
           if (!stopped) setEffectFailure(initialResult.effectErrors?.join('\n') ?? null)
-          if (stopped) return
+          if (stopped) { initialResult.history?.close(); return }
           if (initialResult.presented === true) recordPresentation(initialFrame, initialResult, requestedAt, false, document)
           if (!current.playing || !listVideoEditInstances().includes(instance) || videoMotionComposition(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented === false) { lastFrame = -1; lastRequested = -1; wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
@@ -428,17 +453,18 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           lastRequested = target
           // 正向播放与拖动一样两帧流水：这一帧一提交给 GPU 就去准备下一帧，不等它画完再往返一趟，
           // 否则每帧都赶不上下一次刷新，画面成对出现（一帧晚、下一帧紧跟着补上，前一帧根本没显示）。
-          const pipelined = playing && direction === 1 && !liveRecording
+          // A history bitmap must finish before another draw can overwrite its surface.
+          const pipelined = playing && direction === 1 && !liveRecording && !historyEnabled
           if (pipelined) playbackInFlight++
           const result = await renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
             if (pipelined) { submittedFrame = target; if (playbackInFlight >= 2) return }
             if (!stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
-          } : undefined).finally(() => { if (pipelined) playbackInFlight-- })
+          } : undefined, undefined, 'interactive', historyEnabled).finally(() => { if (pipelined) playbackInFlight-- })
           if (submittedFrame === target) submittedFrame = -1
           {
             // A completed seek is useful while the pointer keeps moving. Only a different
             // document/lifetime invalidates it; the next iteration reads the latest target.
-            if (stopped || !listVideoEditInstances().includes(instance)) return
+            if (stopped || !listVideoEditInstances().includes(instance)) { result.history?.close(); return }
             if (videoMotionComposition(current) !== document) {
               // An already submitted draw cannot be undone by a later parameter edit.
               // Report that same-surface fact without advancing the new document's clock.
@@ -490,6 +516,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (retired) return
       retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
       programReleases.set(instance, Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()]))
+      retainExplanationPixels(surface, -1)
+      explanationSurface?.remove(); explanationSurface = undefined
       surface.remove(); if (canvas.current === surface) canvas.current = null
     }
     void loop()
@@ -580,7 +608,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       }}>
       {visible && multicamView && <div className="flex w-1/2 min-w-0 shrink-0 flex-col pr-3"><VideoEditMulticamView instance={instance} onError={onError} /></div>}
       <div className={`relative ${zoom.boxClass} ${multicamView ? 'min-w-0 flex-1' : ''}`} style={zoom.boxStyle} data-monitor-zoom-box data-video-edit-program-display={display === 'fit' ? 'fit' : 'zoom'}>
-        <div ref={host} className="h-full w-full" onContextMenu={event => {
+        <div ref={host} className="relative h-full w-full" onContextMenu={event => {
           const rect = event.currentTarget.getBoundingClientRect(); const point = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height))) }
           annotationMenu.showMenu(event, [{ id: 'ask', label: '让助手改这里', icon: <PenLine size={14} />, disabled: instance.playing, onClick: () => { void askAssistantAtVideoEditFrame(instance.document.id, point).catch(onError) } }])
         }}

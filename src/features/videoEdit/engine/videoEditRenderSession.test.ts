@@ -55,6 +55,15 @@ beforeEach(() => {
   platform.allowRoot.mockClear(); platform.dirname.mockClear()
 })
 
+it('历史帧复制只随显式录制请求，过期回执释放位图', async () => {
+  const session = new VideoEditRenderSession(composition())
+  await session.present(3, false, false, undefined, undefined, undefined, 'interactive', true)
+  expect(workers[0].messages.find(value => value.message.kind === 'render')?.message).toMatchObject({ history: true, frame: 3 })
+  const close = vi.fn()
+  workers[0].onmessage!({ data: { id: 9999, history: { close } } } as unknown as MessageEvent)
+  expect(close).toHaveBeenCalledOnce()
+  await session.dispose()
+})
 it('预览请求 interactive，正式导出入口请求 final，复用同一 Worker 链路', async () => {
   const session = new VideoEditRenderSession(composition())
   await session.present(0)

@@ -7,6 +7,18 @@ import { RecordingCollector, type RecordingPresentation } from './RecordingColle
 
 const picture = (frame: number, playing = false, scrubbing = false): RecordingPresentation => ({ timeline: { sequenceRef: { kind: 'video_edit.sequence', id: 'fixture-document:sequence' }, frame, fps: { numerator: 30, denominator: 1 } }, requestedFrame: frame, playing, direction: playing ? 1 : 0, rate: 1, scrubbing })
 describe('E01/E02/E03/E09 双时钟录制', () => {
+  it('正常定时封存四类小页不误判背压；持续满页生产仍暂停提示', async () => {
+    let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve }); const pressure = vi.fn()
+    const collector = new RecordingCollector(recordingFixtureSession(), async () => gate, pressure)
+    collector.start(0); collector.presented(10, picture(0))
+    collector.record(20, { kind: 'pointer', surfaceRef: { kind: 'application.surface', id: 'workspace.video_edit' }, geometrySnapshotRef: 'geometry', viewPoint: [0, 0], documentPoint: [0, 0], compositionPoint: [0, 0], hoverRefs: [], pointedRefs: [], selectedRefs: [], intent: 'navigate', phase: 'down', uncertaintyUs: 0 })
+    collector.record(30, { kind: 'audio', audioSegmentRef: 'audio', monoSpanUs: [10, 30], startSample: 0, endSample: 1, sampleRate: 48000, channels: 1, uncertaintyUs: 0 })
+    const flush = collector.flush(); await Promise.resolve(); await Promise.resolve()
+    expect(pressure).not.toHaveBeenCalled(); expect(collector.session.state).toBe('recording')
+    for (let i = 1; i <= 256; i++) collector.record(30 + i, { kind: 'control', action: 'property-mode' })
+    expect(pressure).toHaveBeenCalled()
+    release(); await flush
+  })
   it('自主指针、播放暂停讲话、倒退与同帧重访不停止采集；录制暂停才出现 gap', async () => {
     const written: CreativeIntentPage[] = []; const collector = new RecordingCollector(recordingFixtureSession(), async page => { written.push(page) }, () => {})
     collector.start(0); collector.presented(10, picture(120))

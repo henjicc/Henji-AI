@@ -19,6 +19,9 @@ interface VideoGpuDevice extends GpuDevice {
 }
 export type VideoEditPicture = VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null
 interface LayerPipelines { video: GpuRenderPipeline; image: GpuRenderPipeline; codeImage: GpuRenderPipeline; cachedVideo: GpuRenderPipeline }
+type PresentationCapture = (pixels: Promise<ImageBitmap>) => void
+interface PresentationBuffer extends GpuBuffer { mapAsync(mode: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void }
+interface PresentationEncoder { copyTextureToBuffer(source: unknown, destination: unknown, size: unknown): void }
 /** Full resolution composition, shared by preview and export. VideoFrames stay on
  * the GPU import path; no CPU pixels or thumbnail-sized intermediate surfaces.
  *
@@ -66,7 +69,7 @@ export class VideoEditGpuCompositor {
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   private blankTexture?: GpuTexture
-  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor) {
+  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => PresentationCapture | undefined) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
     this.ready = this.initialize()
@@ -77,7 +80,7 @@ export class VideoEditGpuCompositor {
     this.device = this.shared?.device ?? managed!.device as VideoGpuDevice
     const format = this.shared?.canvasFormat ?? managed!.provider.getPreferredCanvasFormat()
     this.canvasFormat = format
-    this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' })
+    this.context.configure({ device: this.device, format, alphaMode: 'premultiplied', usage: 0x10 | 0x01 })
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
     this.device.pushErrorScope('validation')
     Object.assign(this, this.layerPipelines(format))
@@ -304,6 +307,7 @@ export class VideoEditGpuCompositor {
     const frames: VideoFrame[] = []
     device.pushErrorScope('validation')
     let scopeOpen = true
+    let historyBuffer: PresentationBuffer | undefined
     try {
       const encoder = device.createCommandEncoder()
       const canvas = target ? undefined : this.context.getCurrentTexture()
@@ -381,7 +385,33 @@ export class VideoEditGpuCompositor {
         quantize.draw(3); quantize.end()
         this.precision.frames++
       }
+      const capture = target ? undefined : this.capturePresentation?.()
+      const bytesPerRow = Math.ceil(this.canvas.width * 4 / 256) * 256
+      if (capture) {
+        historyBuffer = device.createBuffer({ size: bytesPerRow * this.canvas.height, usage: 0x01 | 0x08 }) as PresentationBuffer
+        // Encode the copy in this submission: canvas expiry cannot clear the owned buffer afterwards.
+        ;(encoder as unknown as PresentationEncoder).copyTextureToBuffer({ texture: canvas }, { buffer: historyBuffer, bytesPerRow }, { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 })
+      }
       device.queue.submit([encoder.finish()])
+      if (capture && historyBuffer) {
+        const buffer = historyBuffer; historyBuffer = undefined
+        const width = this.canvas.width; const height = this.canvas.height; const bgra = this.canvasFormat === 'bgra8unorm'
+        const pixels = (async (): Promise<ImageBitmap> => {
+          try {
+            await buffer.mapAsync(1)
+            const mapped = new Uint8Array(buffer.getMappedRange()); const rgba = new Uint8ClampedArray(width * height * 4)
+            for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+              const from = y * bytesPerRow + x * 4; const to = (y * width + x) * 4
+              rgba[to] = mapped[from + (bgra ? 2 : 0)]; rgba[to + 1] = mapped[from + 1]; rgba[to + 2] = mapped[from + (bgra ? 0 : 2)]; rgba[to + 3] = mapped[from + 3]
+            }
+            buffer.unmap()
+            const ratio = Math.min(1, Math.sqrt(1280 * 720 / (width * height)))
+            return await createImageBitmap(new ImageData(rgba, width, height), { resizeWidth: Math.max(1, Math.floor(width * ratio)), resizeHeight: Math.max(1, Math.floor(height * ratio)), resizeQuality: 'high' })
+          } finally { buffer.destroy() }
+        })()
+        void pixels.catch(() => {})
+        capture(pixels)
+      }
       const validation = device.popErrorScope(); scopeOpen = false
       const completion = Promise.all([device.queue.onSubmittedWorkDone(), validation]).then(([, error]) => {
         if (error) throw new Error(`剪辑 GPU 合成失败：${error.message}`)
@@ -391,7 +421,7 @@ export class VideoEditGpuCompositor {
       this.retainTextures(new Set([...this.protectedImages, ...pictures.flatMap((picture, index) => picture instanceof VideoSample || picture instanceof VideoEditGpuFrame || picture instanceof VideoEditCodePicture ? [] : [picture ? this.imageKey(picture) : `text:${clips[index].id}`])]))
       for (const [id, value] of this.uniforms) if (!ids.has(id) && !this.protectedUniforms.has(id)) { value.destroy(); this.uniforms.delete(id) }
       return { presented: true, completion }
-    } catch (error) { if (scopeOpen) await device.popErrorScope(); frames.forEach(frame => frame.close()); throw error }
+    } catch (error) { historyBuffer?.destroy(); if (scopeOpen) await device.popErrorScope(); frames.forEach(frame => frame.close()); throw error }
   }
   async dispose(): Promise<void> {
     this.disposed = true

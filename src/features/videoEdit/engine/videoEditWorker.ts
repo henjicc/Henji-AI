@@ -34,11 +34,11 @@ export type RenderRequest = { id: number } & (
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
   | { kind: 'dispose' }
-  | { kind: 'render'; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number; readRgb?: { width: number; height: number } }
+  | { kind: 'render'; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number; readRgb?: { width: number; height: number }; history?: boolean }
   | { kind: 'audio'; start: number; duration: number }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -129,18 +129,27 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
         renderer.updateParameters(request.update); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
-        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality)
+        let snapshot: Promise<ImageBitmap> | undefined
+        const capture = request.history ? (pixels: Promise<ImageBitmap>): void => {
+          if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {})
+          snapshot = pixels
+          void snapshot.catch(() => {})
+        } : undefined
+        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error })
         const finish = async (): Promise<void> => {
+          try {
           const start = performance.now()
           for (const message of result.effectErrors ?? []) if (!effectWarnings.has(message)) log('warn', message, 'video_edit.effect.skipped', { sequenceId: renderer?.document.id, frame: request.frame })
           effectWarnings = new Set(result.effectErrors)
           await result.completion
+          const history = snapshot ? await snapshot : undefined
           const rgb = request.readRgb && result.presented ? readVideoEditTrackingRgb(result.canvas, request.readRgb) : undefined
           const bitmap = rgb || direct || !result.presented ? undefined : result.canvas.transferToImageBitmap()
-          self.postMessage({ id: request.id, bitmap, rgb, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : [] })
+          self.postMessage({ id: request.id, bitmap, history, rgb, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
+          } catch (error) { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }
         }
         // 拖动与正向播放：提交后先回执，下一帧不必等这一帧的 GPU 完成（节目监视器两帧流水）。
-        if (direct && (request.scrubbing || (request.sequential && request.deadline !== undefined))) {
+        if (direct && !request.history && (request.scrubbing || (request.sequential && request.deadline !== undefined))) {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)
           void finish().catch(error => self.postMessage({ id: request.id, error: String(error) } satisfies RenderResponse))
         } else await finish()

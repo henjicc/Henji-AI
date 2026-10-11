@@ -89,15 +89,17 @@ export class RecordingCollector {
     const entries = this.pending.get(event.kind) ?? []; entries.push(event); this.pending.set(event.kind, entries)
     if (entries.length >= 256) this.sealKind(event.kind)
   }
-  private sealKind(kind: ExplanationEvent['kind']): void {
+  private sealKind(kind: ExplanationEvent['kind'], checkPressure = true): void {
     const entries = this.pending.get(kind); if (!entries?.length) return
     const ordered = [...entries].sort((a, b) => a.monoUs - b.monoUs || a.seq - b.seq)
     const page = creativeIntentPageSchema.parse({ version: 1, kind, ownerRef: this.session.ownerRef, sourceDigest: this.session.sourceDigest, count: ordered.length, monoSpanUs: [ordered[0].monoUs, ordered.at(-1)!.monoUs], seqSpan: [ordered[0].seq, ordered.at(-1)!.seq], entries: ordered })
     this.pending.delete(kind); this.outstanding++
     this.writer = this.writer.then(async () => { if (this.failure) this.failedPages.push(page); else { try { await this.write(page) } catch (error) { this.failedPages.push(page); this.failure = error; this.pressure('讲解尚未保存，请暂停后重试保存。') } } this.outstanding-- })
-    if (this.outstanding >= 4) this.pressure('正在保存讲解，录制已暂停；保存完成后可继续。')
+    if (checkPressure && this.outstanding >= 4) this.pressure('正在保存讲解，录制已暂停；保存完成后可继续。')
   }
-  seal(): void { for (const kind of this.pending.keys()) this.sealKind(kind) }
+  // A normal flush seals several small event kinds at once. That fan-out is not sustained I/O pressure.
+  // Full-page production while writes are pending still applies the bounded in-flight backpressure.
+  seal(): void { for (const kind of this.pending.keys()) this.sealKind(kind, false) }
   flush(): Promise<void> {
     const next = this.flushing.catch(() => undefined).then(() => this.flushPages())
     this.flushing = next

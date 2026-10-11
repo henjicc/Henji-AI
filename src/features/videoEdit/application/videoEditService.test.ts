@@ -13,6 +13,8 @@ import { getApplicationControlExecutionEngine } from '@/features/application-con
 import type { ApplicationExecutionContext } from '@/core/application-control'
 import { createHostContextSnapshot, retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 import { useNavigationStore } from '@/stores/navigationStore'
+import { updateVideoEditCreativeIntents, updateVideoEditInPlaceMetadata } from './videoEditService'
+import { recordingFixtureSession } from '@/core/creativeIntent/fixtures/recordingFixtures'
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition, subscribeVideoEditDomain } from './videoEditService'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
@@ -457,4 +459,17 @@ it('异步拖放开始后切换序列，片段仍落在开始时序列', async (
   switchVideoEditSequence(id, second); await dropping
   expect(instance.document.sequences.find(sequence => sequence.id === first)!.clips).toHaveLength(1)
   expect(getActiveVideoEditSequence(instance).clips).toHaveLength(0)
+})
+it('录制和生成元数据头保留同一呈现快照；真正作品编辑仍使快照失效', async () => {
+  const owner = await createLegacyTrackVideoEditProject()
+  const before = getActiveVideoEditSequence(owner)
+  const session = { ...recordingFixtureSession(), ownerRef: { kind: 'document.video_edit', id: owner.document.id } }
+  updateVideoEditCreativeIntents(owner.document.id, { drafts: [], sessions: [session], resources: [] })
+  expect(getActiveVideoEditSequence(owner)).toBe(before)
+  // Clearing an existing generation receipt is also a metadata-only render change.
+  owner.document.inPlaceGenerations = [{ id: 'local-record', taskId: 'local-task', modelId: 'local-model', status: 'failed', request: { sequenceId: owner.activeSequenceId, intent: { action: 'generate_shot' }, prompt: '' }, plan: { action: 'generate_shot', mediaType: 'video', sequenceId: owner.activeSequenceId, frame: 0, duration: 30, fill: false, trackIndex: 1, placement: 'add', references: [], width: 1920, height: 1080, fps: 30 } }]
+  updateVideoEditInPlaceMetadata(owner.document.id, [])
+  expect(getActiveVideoEditSequence(owner)).toBe(before)
+  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, name: '作品修改' })) }))
+  expect(getActiveVideoEditSequence(owner)).not.toBe(before)
 })

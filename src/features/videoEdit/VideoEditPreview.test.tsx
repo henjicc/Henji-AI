@@ -5,14 +5,14 @@ import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture } from './application/videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditCreativeIntents } from './application/videoEditService'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './application/videoEditCompositing'
 import { VideoEditPreview } from './VideoEditPreview'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 import { startVideoMotion, setVideoMotionOptions, setVideoMotionPointer, videoMotionState, videoMotionComposition } from './application/videoEditMotionDraft'
-const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
+const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
 vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
@@ -34,6 +34,34 @@ beforeEach(() => {
   HTMLCanvasElement.prototype.transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas))
 })
 afterEach(async () => { cleanup(); vi.useRealTimers(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+it('讲解回执像素用于真实节目呈现；后续普通帧不能显示旧图，关闭释放位图', async () => {
+  const draw = vi.fn()
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) { return this.getAttribute('aria-hidden') === 'true' ? { drawImage: draw } as unknown as CanvasRenderingContext2D : null })
+  const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  const history = { width: 1280, height: 720, close: vi.fn() } as unknown as ImageBitmap
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0], presented: true, history }) })
+  const surface = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  expect(draw).toHaveBeenCalledWith(history, 0, 0)
+  expect(surface.parentElement?.querySelector('canvas[aria-hidden="true"]')?.getAttribute('data-presented-frame')).toBe('0')
+  act(() => setVideoEditView(owner.document.id, { frame: 5 }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(30) })
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [5 / 30], presented: true }) })
+  expect(surface.parentElement?.querySelector('canvas[aria-hidden="true"]')).toBeNull()
+  expect(history.close).toHaveBeenCalledOnce()
+  view.unmount()
+})
+it('讲解元数据更新不撤销正在呈现的同一画面', async () => {
+  const owner = (await createVideoEditProject())!; appendVideoEditClip(owner.document.id)
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  pixel.invalidate.mockClear()
+  act(() => updateVideoEditCreativeIntents(owner.document.id, { resources: [], sessions: [], drafts: [] }))
+  expect(pixel.invalidate).not.toHaveBeenCalled()
+  expect(pixel.sessions).toBe(1)
+  view.unmount()
+})
 it('半速示范重画当前时刻且取消旧姿态，覆盖已有曲线不会重启播放时钟', async () => {
   vi.stubGlobal('crypto', webcrypto)
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })

@@ -177,7 +177,8 @@ export function updateVideoEditCreativeIntents(id: string, head: CreativeIntents
   const owner = requireVideoEditInstance(id); assertVideoEditWritable(owner)
   const creativeIntents = creativeIntentsSchema.parse(head)
   if ([...creativeIntents.drafts, ...creativeIntents.sessions].some(draft => draft.ownerRef.kind !== 'document.video_edit' || draft.ownerRef.id !== id)) throw new Error('原稿归属与当前剪辑不符，请恢复原文件。')
-  owner.document = { ...owner.document, creativeIntents }; owner.version++
+  const previous = owner.document
+  owner.document = { ...previous, creativeIntents }; inheritVideoEditCompositions(previous, owner.document); owner.version++
   notifyVideoEditContent(owner); publishVideoEdit(true)
 }
 /** Irreversible privacy erasure traverses current, both history directions, and an in-flight gesture. */
@@ -199,7 +200,8 @@ export function updateVideoEditInPlaceMetadata(id: string, records: readonly Vid
   if (closing.has(owner) || owner.session.isEnded) return
   const parsed = videoEditInPlaceRecordsSchema.parse(records)
   if (JSON.stringify(owner.document.inPlaceGenerations ?? []) === JSON.stringify(parsed)) return
-  owner.document = { ...owner.document }
+  const previous = owner.document
+  owner.document = { ...previous }; inheritVideoEditCompositions(previous, owner.document)
   if (parsed.length) owner.document.inPlaceGenerations = parsed
   else delete owner.document.inPlaceGenerations
   owner.version++; notifyVideoEditContent(owner); publishVideoEdit()
@@ -328,6 +330,11 @@ function publishVideoEditDomain(): void { domainRevision++; for (const listener 
 export function publishVideoEdit(changed = false): void { revision++; if (changed) publishVideoEditDomain(); for (const listener of listeners) listener(); publishView() }
 export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); if (activeId && activeId !== id) { const previous = instances.get(activeId); if (previous) cancelVideoEditGesture(previous) } activeId = id; publishVideoEdit() }
 const compositions = new WeakMap<VideoEditDocument, Map<string, VideoEditComposition>>()
+/** Metadata-only heads preserve the acknowledged render snapshot; they must not reset playback/GPU pixels. */
+function inheritVideoEditCompositions(previous: VideoEditDocument, next: VideoEditDocument): void {
+  if (previous.revision !== next.revision || previous.sequences !== next.sequences || previous.media !== next.media || previous.items !== next.items || previous.styleKits !== next.styleKits || previous.colorLuts !== next.colorLuts || previous.codeMaterials !== next.codeMaterials) return
+  const cache = compositions.get(previous); if (cache) compositions.set(next, cache)
+}
 /** 空项目不制造隐形序列；界面与查询先检查这个可选入口。 */
 export function findActiveVideoEditSequence(instance: VideoEditInstance): VideoEditComposition | undefined {
   return instance.activeSequenceId ? getActiveVideoEditSequence(instance) : undefined
@@ -795,7 +802,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const unsubscribe = session.subscribe(() => {
     if (session.isEnded) { dispose(); return }
     const name = session.documentMeta.name
-    if (instance.document.name !== name) { instance.document = { ...instance.document, name }; publishVideoEdit(true) } else publishVideoEdit()
+    if (instance.document.name !== name) { const previous = instance.document; instance.document = { ...previous, name }; inheritVideoEditCompositions(previous, instance.document); publishVideoEdit(true) } else publishVideoEdit()
   })
   disposers.set(instance, dispose)
   instances.set(session.id, instance)
