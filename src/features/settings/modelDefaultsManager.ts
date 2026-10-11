@@ -4,7 +4,6 @@ import { formatMigrations } from '@/core/persistence/formatMigrations'
 import { registry } from '@/core/ModelRegistry'
 import { createLogger } from '@/core/logging'
 import type { ModelDefinition, ModelTag } from '@/core/types'
-import { z } from 'zod'
 import { listTimestampedLocalAsr, resolveTimestampedLocalAsr, type AsrCatalogEntry } from '@/core/audioEdit/asrCatalog'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
@@ -14,11 +13,6 @@ import {
 
 export type DefaultModelMediaType = 'image' | 'video' | 'audio'
 export type DefaultModelPurpose = DefaultModelMediaType | 'transcription'
-
-// 持久格式登记/baseline 由拥有 core/persistence 的总管理者同步；这里只组合既有 schema。
-export const transcriptionModelDefaultsSchema = modelDefaultsSchema.extend({
-  models: modelDefaultsSchema.shape.models.extend({ transcription: z.string() }),
-})
 
 export const MODEL_DEFAULTS_STORAGE_KEY = 'henji-model-defaults'
 export const MODEL_DEFAULTS_STATE_VERSION = MODEL_DEFAULTS_VERSION
@@ -36,8 +30,8 @@ const PREFERRED_CANONICAL_MODEL_IDS: Record<DefaultModelMediaType, string[]> = {
 const logger = createLogger('features.settings.model_defaults')
 const providerIds = new Set<ApiKeyProvider>(API_KEY_PROVIDERS.map((provider) => provider.id))
 
-export interface ModelDefaultsStateV1 {
-  version: 1
+export interface ModelDefaultsState {
+  version: typeof MODEL_DEFAULTS_VERSION
   providerId: ApiKeyProvider
   models: Record<DefaultModelPurpose, string>
 }
@@ -51,7 +45,7 @@ export interface ModelDefaultsCatalog {
   getModelsByType(mediaType: DefaultModelMediaType): ModelDefinition[]
 }
 
-function createInitialState(storage: ModelDefaultsStorage): ModelDefaultsStateV1 {
+function createInitialState(storage: ModelDefaultsStorage): ModelDefaultsState {
   let providerId = DEFAULT_PROVIDER
   const legacyOnboarding = storage.getItem(LEGACY_ONBOARDING_STORAGE_KEY)
   if (legacyOnboarding) {
@@ -71,7 +65,7 @@ function createInitialState(storage: ModelDefaultsStorage): ModelDefaultsStateV1
   }
 }
 
-function normalizeState(value: unknown): ModelDefaultsStateV1 | null {
+function normalizeState(value: unknown): ModelDefaultsState | null {
   if (!value || typeof value !== 'object') return null
   const raw = value as Record<string, unknown>
   const rawModels = raw.models && typeof raw.models === 'object'
@@ -91,7 +85,7 @@ function normalizeState(value: unknown): ModelDefaultsStateV1 | null {
   }
 }
 
-function loadState(storage: ModelDefaultsStorage): ModelDefaultsStateV1 {
+function loadState(storage: ModelDefaultsStorage): ModelDefaultsState {
   const persisted = storage.getItem(MODEL_DEFAULTS_STORAGE_KEY)
   if (persisted) {
     try {
@@ -118,8 +112,8 @@ function matchesRequiredTags(model: ModelDefinition, requiredTags: ModelTag[]): 
 }
 
 export class ModelDefaultsManager {
-  private state: ModelDefaultsStateV1
-  private snapshot: ModelDefaultsStateV1
+  private state: ModelDefaultsState
+  private snapshot: ModelDefaultsState
   private readonly listeners = new Set<() => void>()
 
   constructor(
@@ -127,7 +121,7 @@ export class ModelDefaultsManager {
     private readonly catalog: ModelDefaultsCatalog = registry,
     private readonly isAsrConfigured: (providerId: string) => boolean = (providerId) => useSettingsStore.getState().providerKeyStatus[providerId] === true,
   ) {
-    this.storage = guardedPlainStorage(MODEL_DEFAULTS_STORAGE_KEY, { id: 'model-defaults', name: '默认模型', version: MODEL_DEFAULTS_VERSION, schema: transcriptionModelDefaultsSchema, migrations: formatMigrations('model-defaults') }, storage, error => logger.warn('默认模型格式无法读取，原数据保留', { event: 'model_defaults.load.failed', error: String(error) }))
+    this.storage = guardedPlainStorage(MODEL_DEFAULTS_STORAGE_KEY, { id: 'model-defaults', name: '默认模型', version: MODEL_DEFAULTS_VERSION, schema: modelDefaultsSchema, migrations: formatMigrations('model-defaults') }, storage, error => logger.warn('默认模型格式无法读取，原数据保留', { event: 'model_defaults.load.failed', error: String(error) }))
     this.state = loadState(this.storage)
     this.snapshot = this.copySnapshot()
     if (storage.getItem(MODEL_DEFAULTS_STORAGE_KEY) === null) this.persist()
@@ -138,7 +132,7 @@ export class ModelDefaultsManager {
     return () => this.listeners.delete(listener)
   }
 
-  getSnapshot = (): ModelDefaultsStateV1 => this.snapshot
+  getSnapshot = (): ModelDefaultsState => this.snapshot
 
   listProviderModels(
     mediaType: DefaultModelMediaType,
@@ -279,7 +273,7 @@ export class ModelDefaultsManager {
     return providerModels[0]?.meta.id ?? models[0]?.meta.id ?? ''
   }
 
-  private copySnapshot(): ModelDefaultsStateV1 {
+  private copySnapshot(): ModelDefaultsState {
     return { ...this.state, models: { ...this.state.models } }
   }
 

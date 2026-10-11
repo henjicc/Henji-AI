@@ -19,6 +19,19 @@ function createRepository(): ImageEditDocumentRepositoryV3 {
 }
 
 describe('图片编辑 V3 命令总线', () => {
+  it('一组预览覆盖只发布完整快照，非法覆盖不会先清除已有候选', () => {
+    const bus=new ImageEditCommandBusV3(createImageEditDocumentV3({width:32,height:32}))
+    const listener=vi.fn();bus.subscribe(listener)
+    const a={id:'a',kind:'transform' as const,targetId:'a',baseRevision:0,value:[1,0,0,1,2,0]}
+    const b={...a,id:'b',targetId:'b'}
+    bus.replacePreviews([], [a,b])
+    expect(listener).toHaveBeenCalledOnce()
+    expect(Object.keys(listener.mock.calls[0][0].previewOverrides)).toEqual(['a','b'])
+    expect(()=>bus.replacePreviews(['a','b'],[{...a,baseRevision:1}])).toThrow('版本过期')
+    expect(Object.keys(bus.getSnapshot().previewOverrides)).toEqual(['a','b'])
+    bus.replacePreviews(['a','b'],[])
+    expect(listener).toHaveBeenCalledTimes(2)
+  })
   it('释放实例取消本地长任务，重复释放不重复通知', () => {
     const bus = new ImageEditCommandBusV3(createImageEditDocumentV3({ width: 32, height: 32 })), cancel = vi.fn();
     bus.getLifecycleSignal().addEventListener('abort', cancel);

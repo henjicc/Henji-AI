@@ -118,11 +118,13 @@ export function ImageEditorLayersPanelV3({
   embedded = false,
 }: ImageEditorLayersPanelV3Props): JSX.Element {
   const { t } = useTranslation('ui')
+  const thumbnailDescriptors = useRef(controller.historyResourceDescriptors)
+  thumbnailDescriptors.current = controller.historyResourceDescriptors
   const thumbnailResource = useMemo(() => {
     const renderer = controller.historyPort ? new ImageEditThumbnailsV3({ sessionId: controller.sessionId,
-      historyPort: controller.historyPort, historyResourceDescriptors: controller.historyResourceDescriptors }) : null
+      historyPort: controller.historyPort, get historyResourceDescriptors() { return thumbnailDescriptors.current } }) : null
     return { renderer, dispose: () => renderer?.dispose() }
-  }, [controller.sessionId, controller.historyResourceDescriptors, controller.historyPort])
+  }, [controller.sessionId, controller.historyPort])
   useImageEditorDisposableV3(thumbnailResource)
   const thumbnails = thumbnailResource.renderer
   const [creationError, setCreationError] = useState<string | null>(null)

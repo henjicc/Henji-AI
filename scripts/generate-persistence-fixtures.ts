@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { PERSISTENCE_FORMATS } from '../src/core/persistence/formats'
+import { MODEL_DEFAULTS_VERSION, modelDefaultsSchema } from '../src/core/persistence/preferenceSchemas'
 import { createMotionFixture } from '../src/core/creativeIntent/fixtures/motionFixtures'
 import { optimizeMotionDraft } from '../src/core/creativeIntent/candidates'
 import { creativeIntentPageSchema } from '../src/core/creativeIntent/pages'
@@ -135,7 +136,7 @@ const values: Record<string, unknown> = {
   'llm-config': { providers: [], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [], tools: [], policy: {}, memory: {} },
   'llm-config-journal': { version: 1, configBefore: null },
   'node-defaults': { imageGen: { modelId: 'golden-model', params: { quality: 'high' } } },
-  'model-defaults': { version: 1, providerId: 'kie', models: { image: '', video: '', audio: '' } },
+  'model-defaults': modelDefaultsSchema.parse({ version: MODEL_DEFAULTS_VERSION, providerId: 'kie', models: { image: '', video: '', audio: '', transcription: 'groq.speech-recognition.whisper-large-v3-turbo' } }),
   onboarding: { version: 2, status: 'in_progress', entryReason: 'fresh_install', activeStepId: 'provider', completedStepIds: ['welcome'], configuredProviders: [], verifiedProviders: [], shownHintIds: [], firstTaskPrepared: false, firstTaskCompleted: false, startedAt: timestamp, completedAt: null },
   'subtitle-manifest': { version: 1, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [], soundIdentities: {}, captions: sequence.captions, committed: true },
   'storyboard-metadata': { version: 1, gridRows: 2, gridCols: 2, frameNotes: ['远景', '特写'] },

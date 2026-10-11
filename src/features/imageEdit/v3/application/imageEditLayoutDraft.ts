@@ -7,7 +7,7 @@ import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditLeafCommandV3 } from '@/core/imageEdit/v3/commandTypes'
 import { createLogger } from '@/core/logging'
-import type { ImageEditCommandBusV3 } from './imageEditCommandBus'
+import type { ImageEditCommandBusV3, ImageEditPreviewOverrideV3 } from './imageEditCommandBus'
 import { imageEditV3DocumentRef } from './imageEditDocumentRefs'
 import { captureImageLayoutEntries, measureImageLayoutLayer, resolveImageLayoutParentAffine, type LayoutMeasure } from './imageEditLayoutGeometry'
 import { ImageLayoutComputer, type ImageLayoutComputeInput } from './imageEditLayoutWorkerClient'
@@ -53,7 +53,7 @@ export class ImageEditLayoutDraft {
   readonly snapshot = ():ImageLayoutState => this.state
   readonly subscribe = (listener:()=>void):(()=>void) => { this.listeners.add(listener); return ()=>this.listeners.delete(listener) }
   private update(patch:Partial<ImageLayoutState>):void { this.state={...this.state,...patch}; this.listeners.forEach(l=>l()) }
-  private clearPreviews():void { const ids=this.previews; this.previews=[]; for(const id of ids) this.bus.clearPreview(id) }
+  private clearPreviews():void { const ids=this.previews; this.previews=[]; this.bus.replacePreviews(ids,[]) }
   cancel():void {
     this.abort?.abort();this.generation++;this.clearPreviews()
     const draft=this.bus.getSnapshot().document.creativeIntents?.drafts.find(d=>d.id===this.state.draft?.id)
@@ -84,6 +84,9 @@ export class ImageEditLayoutDraft {
     const resource=await this.ports.store(value,kind,lease); this.resources.push(resource); return resource
   }
   async organize(ids:readonly string[],preferred=this.state.selected):Promise<void> {
+    await this.organizeDraft(ids,preferred)
+  }
+  private async organizeDraft(ids:readonly string[],preferred:string,configured?:MotionDraft):Promise<void> {
     if(this.state.needsSave)throw new Error('请先重试保存，再继续整理')
     const previous=this.state,baseDocument=this.bus.getSnapshot().document
     this.cancel(); const abort=new AbortController(); this.abort=abort; const generation=++this.generation
@@ -94,7 +97,7 @@ export class ImageEditLayoutDraft {
     this.update({status:'optimizing',message:undefined})
     logger.info('开始整理图片布局',{event:'image_edit.layout.optimize.start'})
     try {
-      let draft=this.state.draft
+      let draft=configured??this.state.draft
       const document=baseDocument
       const digest=await imageLayoutDigest(baseOf(document))
       if (!draft || this.state.baseDigest!==digest || ids.length && ids.map(id=>id).sort().join('\0')!==this.state.entries.map(e=>e.layerId).sort().join('\0')) {
@@ -141,7 +144,10 @@ export class ImageEditLayoutDraft {
       const chosen=candidates.findIndex(c=>c.id===preferred),selected=Math.max(0,chosen)
       draft={...draft,candidateRefs:refs,selectedCandidateRef:refs[selected]?.resourceId}
       this.persist(draft); persisted = true; this.update({candidates,status:'reviewing',selected:candidates[selected]?.id??'original',message:candidates.length<2?'钉住范围内只有一种不同结果，可对照原稿':undefined})
-      this.preview(this.state.selected); await this.confirm()
+      this.preview(this.state.selected)
+      performance.measure('image-layout-candidate-generation', { start: started, end: performance.now() })
+      performance.clearMeasures('image-layout-candidate-generation')
+      await this.confirm()
       logger.info('图片布局候选已完成',{event:'image_edit.layout.optimize.completed',context:{layers:items.length,candidateMs:performance.now()-started,candidates:candidates.length}})
     } catch(error) {
       if(generation===this.generation) this.update({...(!persisted?{...previous,candidates:[],selected:'original',baseDigest:this.bus.getSnapshot().document===baseDocument?previous.baseDigest:''}:{}),status:(persisted?this.state.draft:previous.draft)?'reviewing':'idle',message:abort.signal.aborted?'已取消整理，原稿保留':error instanceof Error?error.message:String(error)})
@@ -151,20 +157,22 @@ export class ImageEditLayoutDraft {
   preview(id:string):void {
     const candidate=this.state.candidates.find(c=>c.id===id)
     if(id!=='original'&&!candidate) throw new Error('布局候选不存在，请重新整理')
-    this.clearPreviews()
+    const document=this.bus.getSnapshot().document
+    const previews:ImageEditPreviewOverrideV3[]=[]
     if(id==='original'&&this.state.entries.length) {
       for(const entry of this.state.entries) {
-        const location=findImageEditLayerLocationV3(this.bus.getSnapshot().document.layers,entry.layerId)
+        const location=findImageEditLayerLocationV3(document.layers,entry.layerId)
         if(location&&location.layer.transform.some((v,i)=>v!==entry.localAffine[i])) {
-          const preview=createImageEditIdV3('layout-original');this.previews.push(preview)
-          this.bus.setPreview({id:preview,kind:'transform',targetId:entry.layerId,baseRevision:this.bus.getSnapshot().document.revision,value:entry.localAffine})
+          const preview=createImageEditIdV3('layout-original')
+          previews.push({id:preview,kind:'transform',targetId:entry.layerId,baseRevision:document.revision,value:entry.localAffine,quality:'stable'})
         }
       }
     }
     if(candidate) {
-      if(this.bus.getSnapshot().document.revision!==this.state.revision) throw new Error('布局候选已过期，请重新整理')
-      for(const change of this.candidateChanges(candidate)) {const preview=createImageEditIdV3('layout-preview'); this.previews.push(preview); this.bus.setPreview({id:preview,kind:'transform',targetId:change.layerId,baseRevision:this.bus.getSnapshot().document.revision,value:change.transform})}
+      if(document.revision!==this.state.revision) throw new Error('布局候选已过期，请重新整理')
+      for(const change of this.candidateChanges(candidate)) {const preview=createImageEditIdV3('layout-preview'); previews.push({id:preview,kind:'transform',targetId:change.layerId,baseRevision:document.revision,value:change.transform,quality:'stable'})}
     }
+    this.bus.replacePreviews(this.previews,previews);this.previews=previews.map(preview=>preview.id)
     this.update({selected:id})
   }
   private lockedEntries():ImageLayoutEntry[] {
@@ -194,7 +202,8 @@ export class ImageEditLayoutDraft {
     }
     const updated=motionDraftSchema.parse({...draft,pins,fidelity:options.fidelity??draft.fidelity,candidateRefs:[],selectedCandidateRef:undefined})
     updated.sourceDigest=await imageLayoutDigest({pages:updated.takes.flatMap(t=>t.samplePages),recipes:updated.recipeRefs,pins,fidelity:updated.fidelity})
-    this.persist(updated);this.update({candidates:[]});await this.confirm(); await this.organize([],preferred)
+    // 一次停手只保存完整的新候选，避免先落盘空候选，再为同一设置保存第二遍。
+    await this.organizeDraft([],preferred,updated)
   }
   async apply():Promise<void> {
     if(this.state.needsSave) {await this.confirm(); return}

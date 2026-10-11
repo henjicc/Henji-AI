@@ -54,12 +54,16 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
     public projection?: ImageEditPersistenceHostV3['projection'],
     private readonly canStart: () => boolean = () => true,
     private readonly onConfirmed?: () => Promise<void>,
+    private readonly readDocument?: () => ImageEditPersistenceSnapshotV3['document'],
   ) {
     if (queue.getReference().documentId !== documentId) throw new Error('图片编辑保存宿主与文档不匹配')
     this.key = `image-edit-document:${documentId}`
   }
 
   dispose(): void { this.active = false }
+  private currentDocument(): ImageEditPersistenceSnapshotV3['document'] {
+    return this.readDocument ? this.readDocument() : this.snapshot().document
+  }
   isBusy(): boolean { return Boolean(this.confirming || this.batch) }
   get persistenceEffects() { return this.projection?.effects }
   getConfirmationReceipt(): ApplicationPersistenceReceipt | undefined { return this.receipt }
@@ -76,12 +80,12 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
 
   assertCurrent(): void {
     if (!this.active || !this.canStart()) throw new Error('图片文档实例已释放或正在关闭，请重新读取原文档后重试保存')
-    if (this.expectedDocument && this.snapshot().document !== this.expectedDocument) {
+    if (this.expectedDocument && this.currentDocument() !== this.expectedDocument) {
       throw new Error('图片编辑期间出现新的编辑，请保留当前内容并重新读取后规划')
     }
   }
 
-  acceptCurrent(): void { if (this.batch) this.expectedDocument = this.snapshot().document }
+  acceptCurrent(): void { if (this.batch) this.expectedDocument = this.currentDocument() }
 
   begin(): ApplicationPersistenceBatch {
     this.assertCurrent()
@@ -94,7 +98,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
     const promise = new Promise<ImageEditDocumentReferenceV3>((done, failed) => { resolve = done; reject = failed })
     void promise.catch(() => undefined)
     this.batchConfirmation = { promise, resolve, reject }
-    this.expectedDocument = this.snapshot().document
+    this.expectedDocument = this.currentDocument()
     return {
       confirm: async () => {
         try { resolve(await this.performConfirmation(true)); return this.receipt }
@@ -120,7 +124,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
 
   private performConfirmation(includeProjection: boolean): Promise<ImageEditDocumentReferenceV3> {
     this.projectionNeeded ||= includeProjection && Boolean(this.confirmProjection)
-      && (this.projectedDocument !== this.snapshot().document
+      && (this.projectedDocument !== this.currentDocument()
         || this.projectedHistory !== JSON.stringify(this.snapshot().history))
     if (this.confirming) return this.confirming
     this.receipt = undefined
@@ -139,7 +143,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
         this.queue.enqueue(snapshot)
         const reference = await (this.batch ? this.batch.flush() : this.queue.flush())
         if (!this.active) throw new Error('保存期间原图片文档实例已释放，请重新读取原文档核对')
-        if (this.snapshot().document !== snapshot.document) continue
+        if (this.currentDocument() !== snapshot.document) continue
         if (this.projectionNeeded && this.confirmProjection) {
           stage = 'projection'
           const receipt = await this.confirmProjection(reference)
@@ -148,7 +152,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
             this.queue.confirmProjectionReference(receipt.reference)
           }
           if (!this.active) throw new Error('节点同步期间图片文档实例已释放，请重新读取结果')
-          if (this.snapshot().document !== snapshot.document) { stage = 'document'; continue }
+          if (this.currentDocument() !== snapshot.document) { stage = 'document'; continue }
           this.projectionNeeded = false
           this.projectedDocument = snapshot.document
           this.projectedHistory = JSON.stringify(snapshot.history)

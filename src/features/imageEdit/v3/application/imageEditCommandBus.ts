@@ -41,6 +41,8 @@ export interface ImageEditPreviewOverrideV3 {
   targetId: string;
   baseRevision: number;
   value: unknown;
+  /** 已求解完成的候选需要清晰合成；连续拖动预览省略此项，仍走草稿质量。 */
+  quality?: 'stable';
   /** Transient persisted tiles remain protected by the preparing operation's resource lease. */
   resourceByteSizes?: Readonly<Record<string, number>>;
   /** Geometry previews display the mapped coverage without changing the live selection/history. */
@@ -342,7 +344,20 @@ export class ImageEditCommandBusV3 {
   }
 
   setPreview(override: ImageEditPreviewOverrideV3): void {
-    this.assertMutable();
+    this.replacePreviews([], [override]);
+  }
+
+  /** 同一候选的一组覆盖一次发布，避免逐层快照和半成品画面。校验失败保留原覆盖。 */
+  replacePreviews(removeIds: readonly string[], overrides: readonly ImageEditPreviewOverrideV3[]): void {
+    if (overrides.length) this.assertMutable();
+    for (const override of overrides) this.validatePreview(override);
+    let changed = overrides.length > 0;
+    for (const id of removeIds) changed = this.previewOverrides.delete(id) || changed;
+    for (const override of overrides) this.previewOverrides.set(override.id, override);
+    if (changed) this.emit();
+  }
+
+  private validatePreview(override: ImageEditPreviewOverrideV3): void {
     if (override.baseRevision !== this.document.revision) {
       throw new Error(`预览覆盖版本过期：${override.baseRevision} !== ${this.document.revision}`);
     }
@@ -354,8 +369,6 @@ export class ImageEditCommandBusV3 {
         throw new Error('图层预览变换必须是可逆的有限仿射矩阵');
       }
     }
-    this.previewOverrides.set(override.id, override);
-    this.emit();
   }
 
   clearPreview(id: string): void {

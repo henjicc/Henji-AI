@@ -3,7 +3,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import type { ImageEditorViewportTransformV3 } from './viewportTilePlannerV3'
@@ -120,6 +120,17 @@ describe('useImageEditorViewportCompositeV3', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+  })
+
+  it.each([['stable', true], [undefined, false]] as const)('完成候选质量 %s 决定是否请求清晰目标，连续拖动保持草稿', async (quality, target) => {
+    const current = snapshot()
+    current.document.layers = [createImageEditRasterLayerV3('preview', '预览图层')]
+    current.previewOverrides = { candidate: { id: 'candidate', kind: 'transform', targetId: 'preview', baseRevision: current.document.revision, value: [1, 0, 0, 1, 10, 20], quality } }
+    const rendered = renderHook(() => useImageEditorViewportCompositeV3('candidate-quality', current, true, EMPTY_RESOURCE_DESCRIPTORS, layout(0)))
+    await act(async () => { await vi.advanceTimersByTimeAsync(32) })
+    expect(mocked.requests.some(request => (request as { phase?: string }).phase === 'target')).toBe(target)
+    expect(current.document.layers[0].transform).toEqual([1, 0, 0, 1, 0, 0])
+    rendered.unmount()
   })
 
   it('同一动画帧内的连续相机变化只提交最新视口，不再等待 80ms', async () => {

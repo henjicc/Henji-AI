@@ -161,3 +161,135 @@ npm run test:assistant-persistence
 - `tests/fixtures/persistence/canvas-layer-package/v12.henjilayer`：含草稿不可变资源的画布图层黄金 ZIP。
 - `docs/task/超级关键帧/任务/P1-image.md`：记录实现、接口、证据、限制及设计自查。
 - `docs/task/超级关键帧/02-实施拆分.md`：只在 P1-0/P1-3/P1-4 末尾追加 t147 状态。
+
+## t149 真实宿主验收
+
+日期：2026-10-11。总管理者负责审查与 Git；本任务禁止 Git 写操作、SDK 源码修改、真实付费调用及 electron:dev 启停。正式 Reality 截图由本任务明确授权，使用隔离数据与单轮原子截图锁。
+
+### 实现与选型
+
+- 默认模型格式升为 v2，transcription 字段归入权威 preferenceSchemas/modelDefaultsSchema；管理器移除局部 Zod schema 组合，格式登记名称及类型来源同步。当前黄金样本使用真实 SDK moduleId，旧 v1 样本保留供明确拒绝验证；baseline 通过正式 `--write --dev-break model-defaults` 登记，不加开发数据迁移。
+- 复用已有正式 ui:tour/Reality 启动器、Electron capturePage、正式图片文档构造器、资源 ingest/save/create、画布文档节点与 UI 图层选择/候选/滑杆/历史。没有另造浏览器宿主、合成器、布局求解器或截图通道，没有新增依赖。布局内核仍用 t147 已选成熟 Kiwi；本任务只增加正式呈现测量与回归场景。
+- 两个独立场景为 `image-edit-layout-draft`、`image-edit-layout-draft-node`；透明留白的四张真实图片资源包含主图、组内镜像子层、旋转层和锁层。文档姿态与截图一起对账，残影命中须为 pointer-events:none。蒙版负例在同一宿主通过正式 UI 添加后重新整理。
+- 5 次预热后测 30 次，候选生成与保真重算统计新候选合成回执后的下一帧，排除清除旧预览的中间帧；A/B 统计输入到合成回执后的下一帧。软件呈现时钟不能冒称物理屏幕/相机端到端延迟。测量不保存永久 Performance 时间线条目。
+
+### 真实宿主发现及修复
+
+1. 已完成候选仍被当作连续拖动的低清预览：给静态求解结果标记 stable，由原合成会话完成清晰目标呈现；普通拖动仍沿原草稿质量。两类质量各有精确回归。
+2. 草稿元数据保存升版后，显示基底按像素身份复用旧 revision，导致新候选覆盖被视为过期、画面不移动：基底同时核对权威 revision。真实候选变化、应用姿态和预览投影都有读回证据。
+3. 保真/钉点先保存空候选、再保存完整候选，同一次停手产生两份持久提交：改成完整结果一次提交；失败保留原持久设置，撤销恢复上次保真。
+4. 含仿射组的 CPU 回退 A/B 重复求值：缓存已完成的正式清晰合成，键包含正式像素状态、资源及视口，复用原资源额度租约。32 MiB 是额外缓存字节预算，不限制图层/候选数量；超预算仍正常求值。淘汰/关页与正在显示的借用各有释放回归。未另造像素合成器或求解库。
+5. 100 层覆盖逐层广播造成反复创建快照：整组先校验、一次替换发布，不呈现中间半成品；任一覆盖非法时保留上一组。批量命令与图片适配器测试覆盖广播次数和失败原子性。
+6. 候选原稿残影与真实像素难区分、长说明撑宽面板，以及拒绝文案重复：图片残影使用虚线并在控件解释，overlay 不接收指针；约束控件宽度；共享错误与图片错误只显示一次。共享组件增加可选布局变体，动画默认样式保持原契约。
+7. CPU 性能记录发现，资源描述更新会让图层/历史面板重建缩略图会话，百层保真重算期间重复 URL 生成占约 7.5 s。两个调用方按会话和历史端口维持服务，资源描述通过最新引用读取，不因元数据增减销毁像素缓存；保留原缩略图渲染、预算与释放实现。测试验证两个面板更新资源时复用、切换会话及关闭时释放；没有给公共类加方法或修改其替身契约。
+8. 百层画布复测仍为 365.7 ms，不能以缩略图修复宣告预算通过。性能记录显示保存 owner 在多个身份检查处反复取得完整历史快照：正式文档实例提供权威当前文档读取，身份/陈旧检查走这条轻量路径，真正写入仍取完整历史。保存队列只在同 revision 时序列化比较历史，新 revision 直接进入既有保存流程；不裁历史、不减校验、不改 CAS 或失败重试。9 项 owner 测试和保存队列/实例/分页/历史的 31 项通过、1 项原有跳过。
+9. 上述优化后的百层画布滑杆仍为 327.3 ms。进一步检查发现，清晰帧缓存把候选 JSON 的资源描述也算进键，重算后新增候选资源会使相同像素的缓存失效。现复用权威资源遍历，只以完整像素状态（geometry/color/layers，包含嵌套组、蒙版与效果参数）的资源描述参与键；原稿/候选资源仍按原生命周期保存及回收，不丢弃。测试覆盖未引用 JSON 不使像素失效、实际像素资源描述改变必须失效，以及视口/姿态/租约释放；新构建真实复测结果见下节，不以精确测试代替宿主预算。
+10. 缓存键修正后百层画布仍为 321.5 ms，且随连续历史增长。唯一文档实例原订阅已取得命令发布时的独立历史 DTO，保存确认却再复制一遍；现在内部保存复用该已发布快照，只在权威文档仍相同时接纳。确认后的历史分页变化使其失效；同版本清历史会发布新快照。公开 getPersistenceSnapshot 保持独立复制语义，不截断历史或合并不同用户操作。
+11. 复测百层画布仍为 321.7 ms，继续检查发现，预览循环为每个图层读取完整总线快照（其中会统计历史资源），而预览构建期间文档并未改变。改成一次读取当前文档供整组使用，保留同版本核对；三次候选切换的读取次数回归与广播原子性共同验证，避免规模乘以历史资源统计成本。24 项直接消费者测试通过，最终真实预算见下节，没有降低门槛。
+
+### 失败轮次与场景修正
+
+- 1536/3072 MiB Node 构建堆不足，保留失败；构建预算仅本轮进程提高到 6144 MiB，没有关用户程序。共享源码写入使部分轮次被正式产物新鲜度校验拒绝，保留拒绝、不绕检查。
+- 早轮场景后缀含中文、百层文档身份共用、关闭面板竞态、画布 dialog 阻断冒泡输入时钟、撤销后抢先读取异步保存均已在场景修正。正式候选/锁层/原稿读回未被放宽。
+- 工具箱夹具是未命名草稿，离开时产品正确要求保存和起名；早轮场景漏处理该对话框并刷新打断保存，现按正式保存流程起名后重开，不把场景缺陷登记成产品保存故障。
+- `.reality/t149-final-run.log` 保留百层画布保真 P95 368.3 ms 超预算及工具箱保存场景失败；这是批量发布修复前的证据，不能报为最终通过。PowerShell 5 将 Cargo 正常 stderr 当异常的中断另存 `.reality/t149-accepted-powershell5-failed.log`，改用 PowerShell 7。
+- 随后的百层画布复测依次为 378.1、395.1（诊断启用 CPU profiler）、365.7、327.3、321.5、321.7 ms；均超 300 ms，不能冒称通过。诊断轮 `.reality/t149-confirmation-profile/metrics-canvas-100.json` 为 362.2 ms，CPU profile 同目录保留；profile 有采样开销，不作为最终交付指标。`.reality/t149-delivery-run.log` 对应三个通过/一个百层画布失败，正式完整操作序列和工具箱百层通过，但四场景整体失败。最后两次重构建又因并行任务修改运行源码而被新鲜度检查拒绝，未执行场景；最终轮等待运行源码稳定后重新构建和验收。
+
+### 最终验收证据
+
+正式命令 `npm run test:reality -- --suite ui --build --only image-edit-layout-draft --out .reality/t149-delivery-quiet` 退出 0，四场景全部通过，26 张 PNG 全部通过 view_image 逐张目视。该轮在运行源码稳定三分钟后才取得原子截图锁，构建及巡检结束立即释放；没有跳过产物新鲜度检查。完整 [截图索引](../../../../.reality/t149-delivery-quiet/index.md)、[正式回执](../../../../.reality/t149-delivery-quiet/evidence.json) 和 [运行日志](../../../../.reality/t149-delivery-quiet-run.log) 保留。
+
+本轮副屏经系统核对为 DISPLAY1（2560,0），使用 DIP 坐标 2561,1；机器为 Windows 10 专业版、Ryzen 9 5900X、RTX 4090、约 64 GiB RAM。请求窗口为 1440×900，PNG 原始像素为 2162×1353；窗口、缩放和视口以正式回执为准，没有修改或拼接截图。
+
+两宿主十步序列如下；每步都在真实编辑器完成，画布一列从对应文档节点进入，工具箱列经历正式草稿保存、起名和重开。
+
+| 步骤 | 目视/读回结论 | 工具箱 | 画布文档节点 |
+|---|---|---|---|
+| 01 粗摆 | 四图层；组内镜像、旋转与锁层可辨。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-01.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-01.png) |
+| 02 整理 | 清晰候选出现，虚线原稿框可辨。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-02.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-02.png) |
+| 03 切候选 | 按实际边缘等距的结果与前一候选明显不同。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-03.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-03.png) |
+| 04 钉主图 | 解钉控件出现；主图原稿位置保持。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-04.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-04.png) |
+| 05 调保真 | 保真回显与重算候选正确。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-05.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-05.png) |
+| 06 应用 | 真实像素边缘对齐、等距；主图、锁层、组祖先姿态读回不变。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-06.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-06.png) |
+| 07 撤销 | 一次恢复粗摆，读取已保存姿态核对。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-07.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-07.png) |
+| 08 重做 | 恢复同一应用结果，读取已保存姿态核对。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-08.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-08.png) |
+| 09 保存重开 | 草稿、候选、主图钉点仍在，正式作品姿态一致。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-09.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-09.png) |
+| 10 蒙版负例 | 单条明确拒绝和恢复建议，原合成不变。 | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-10.png) | [帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-10.png) |
+
+两宿主末帧及百层各两帧也全部目视（总数 26）：[工具箱末帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft.png)、[画布末帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node.png)、[工具箱百层候选](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-100-step-01.png)、[工具箱百层末帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-100.png)、[画布百层候选](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-100-step-01.png)、[画布百层末帧](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-100.png)。一个主带、至多一个从属带；前景候选面板只有一个主动作。工具箱背景命令带的导出属于其独立表面。没有内部 ID/版本文案，残影不挡图层命中（正式 pointer-events:none 断言通过）。
+
+应用帧还以只读像素扫描核对透明留白外的真实实色边缘：工具箱三段空隙 121/120/120 px，顶边 628/628/628/627 px；画布 121/122/120 px，顶边 627/627/628/626 px。抗锯齿与像素取整范围内差不超过 2 px，不能只看中心等距。原始 [工具箱像素数据](../../../../.reality/t149-delivery-quiet/pixels-toolbox.json) 和 [画布像素数据](../../../../.reality/t149-delivery-quiet/pixels-canvas.json) 保留。
+
+性能表的每格依次为 **P95 / P99 / worst（ms）**。整理预热 5 次；A/B 与滑杆各预热 5 轮往返；三指标正式样本均为 30 次。百层在实际透明 Alpha 测量完成后预热，符合 §6「已提供几何、不含像素分析」口径；冷启动与首次像素测量未冒充暖求解成绩。软件时钟测到新候选合成回执后的下一帧，未宣称物理屏幕端到端。
+
+| 真实宿主/规模 | 全部候选（≤900） | A/B（≤100） | 停手重算（≤300） | 原始样本 |
+|---|---|---|---|---|
+| 工具箱，四图层 | 69.5 / 101.0 / 101.0 | 63.2 / 63.8 / 63.8 | 54.8 / 56.9 / 56.9 | [JSON](../../../../.reality/t149-delivery-quiet/metrics-toolbox.json) |
+| 画布节点，四图层 | 53.0 / 53.1 / 53.1 | 62.2 / 62.7 / 62.7 | 63.6 / 74.1 / 74.1 | [JSON](../../../../.reality/t149-delivery-quiet/metrics-canvas.json) |
+| 工具箱，百层 | 80.6 / 97.3 / 97.3 | 30.7 / 30.9 / 30.9 | 152.4 / 155.0 / 155.0 | [JSON](../../../../.reality/t149-delivery-quiet/metrics-toolbox-100.json) |
+| 画布节点，百层 | 96.6 / 113.5 / 113.5 | 30.0 / 45.9 / 45.9 | 298.9 / 300.3 / 300.3 | [JSON](../../../../.reality/t149-delivery-quiet/metrics-canvas-100.json) |
+
+百层画布滑杆 P95 仅比门槛低 1.1 ms，余量小，P99/最慢 300.3 ms；不得宣称各次都低于 300 ms 或跨设备稳定达标。基准中的百层等距候选保留原尺寸、可超出画幅，截图只证明性能和呈现，不代替百层自动适配画幅或构图质量验收。100 是基准规模，不是数量上限。
+
+本单实际排查覆盖两图片宿主的共享预览/草稿、总线批量广播、正式 CPU 回退及租约、图层与历史两处缩略图会话、唯一文档实例/owner/保存队列，以及默认模型格式读写。同源缺陷均在上述范围修复并有定向回归。未做 R04 真人留出、三评审盲评与省操作量测试、物理屏幕相机测量、冷启动/长会话/千层内存与取消矩阵、P1-5 助手实体反射和正式回执；不能以本单四场景通过宣称整个 P1-3/P1 全部完成。
+
+### 设计自查
+
+1. **助手只凭名称和说明能否用对？** 转写沿已登记的 transcription.default_model 通用属性，由同一权威持久 schema 读写；图片沿原稿、候选、钉点、保真、一次应用语义，未增加专用 Agent 工具。P1-5 图片实体反射欠账不由截图替代。
+2. **能否 AI 先做、人只确认？** 复用共享本地求解器先生成候选，人切换、钉主图与调保真后确认；蒙版等不支持边缘明确拒绝，保留原稿，不猜测可见边缘。
+3. **产物能否直接流进其他工作区？** 结果写正式图片图层和同一撤销栈，沿原独立图片文档包与画布内嵌图层包保存和流转。设置仍沿原默认管理器与本地存储，未另建格式或 Store。
+
+### t149 检查记录
+
+- 两条 tsc 通过：`npx tsc -p tsconfig.json --noEmit`、`npx tsc -p tsconfig.electron.json --noEmit`。后续渲染层改动以 `.reality/t149-preview-read-tsc.log` 的通过证据更新，主进程/core 格式未再改。缓存测试最初有 readonly 仿射 tuple/资源 DTO 错误，缩略图测试有资源引用类型过宽，均修正后重查，不隐去初次失败。
+- 改动文件 ESLint 通过；最新改动分别见 `.reality/t149-preview-read-eslint.log`、`.reality/t149-published-eslint.log`、`.reality/t149-pixel-cache-final-eslint.log`；缩略图三文件及场景/测试见 `.reality/t149-thumbnail-eslint.log`、`.reality/t149-last-eslint.log`，其余本单文件也已逐文件通过。
+- `check:persistence-compat` 41 个格式通过；正式 `--write --dev-break model-defaults` 已登记 version/supportedFrom=2 与原因，不手写 baseline 指纹。`check:surface`、`check:ui-residue`、`check:dependency-graph` 通过，最新日志为 `.reality/t149-surface-thumbnail.log`、`.reality/t149-residue-cache.log`、`.reality/t149-dependency-published.log`。没有主进程源码改动，不额外升级 main-imports 或完整构建门禁。
+- 指定五目录测试覆盖：`src/features/imageEdit src/features/settings src/core/persistence electron/main/services/documents electron/main/services/image-editor-v3`。SQLite 原生项目必须用 Electron Node ABI，首轮 234 文件/1319 测试通过、3 跳过，但 11 个 GPU Worker 退出，不能称该命令整体成功；这 11 文件改用普通 Node 精确补验后 93 测试通过、1 跳过、0 失败。两组覆盖全部 245 文件，合计 1412 测试通过/4 跳过，日志 `.reality/t149-tests.log`、`.reality/t149-gpu-tests.log`。
+- 后续代码变化只重验失效范围：稳定质量 4 文件/30 测试，草稿配置 1/8，显示版本 3/12，控件/残影/草稿 3/17，帧缓存/合成/hook 3/13，缓存直接消费者 5/25，类型修正后的缓存精确项 2/9，批量覆盖 4/27，缩略图/图片交互/资源用途 3/8，最后测试类型修正精确项 1/2，保存确认直接消费者 5/31（另有 1 项既有跳过），全部 0 失败；日志使用 `.reality/t149-*-tests.log`。保存优化后的 tsc/ESLint 也通过，见 `.reality/t149-confirmation-tsc.log`、`.reality/t149-confirmation-eslint.log`。静音及线程 max=3/min=1；原生环境分进程串行，不通过跳过失败测试取得成绩。
+- 像素资源缓存键最后修改后，三份直接消费者测试 13 项通过，fixture 类型收窄后单份 2 项复验通过；最新渲染层 tsc、两改动文件 ESLint、依赖图通过，分别见 `.reality/t149-pixel-cache-tests.log`、`.reality/t149-pixel-cache-final-tests.log`、`.reality/t149-pixel-cache-tsc-fixed.log`、`.reality/t149-pixel-cache-eslint.log`、`.reality/t149-pixel-cache-final-eslint.log`、`.reality/t149-dependency-pixels.log`。初次 fixture 在 union 图层上写 source 的 TS 错误已修复并重查。
+- 发布快照复用后，保存 owner/队列/实例 3 文件 22 项及分页/历史/公共入口/MCP 4 文件 16 项通过、1 项既有跳过。预览读取去重后 3 文件 24 项通过；相应最新渲染层 tsc、ESLint 均通过，日志 `.reality/t149-published-{tests,consumers-tests,tsc,eslint}.log`、`.reality/t149-preview-read-{tests,tsc,eslint}.log`；依赖图最新 `.reality/t149-dependency-published.log` 通过。
+- `node --test scripts/lib/uiInspection.test.cjs` 41 项通过，验证正式场景登记与筛选；本单文件显式 `git diff --check` 通过，只有 LF/CRLF 提示。没有全量测试、vitest related、付费调用、Git 写操作或 electron:dev 启停。
+- 收尾只读核对通过：本节 35 个证据链接全部存在，36 个本单文件去重一致，新增文件无行尾空白；最终回执四场景无浏览器/日志错误，26 张 PNG 与索引一致，四组各三项 30 个样本及 P95 门槛重新核对通过。
+
+### t149 文件范围（供总管理者精确审查）
+
+| 文件 | 本单改动 |
+|---|---|
+| `src/core/persistence/preferenceSchemas.ts` | 默认模型格式升 v2，加入权威转写字段。 |
+| `src/core/persistence/formats.ts` | 默认生成与转写模型名称及类型来源归位。 |
+| `src/core/persistence/schemaBaseline.json` | 正式工具生成 model-defaults dev-break，保留其他登记。 |
+| `tests/fixtures/persistence/model-defaults/v2.json` | 新格式黄金样本及真实 ASR moduleId。 |
+| `scripts/generate-persistence-fixtures.ts` | 黄金生成器消费权威默认模型 schema。 |
+| `src/features/settings/modelDefaultsManager.ts` | 移除局部 schema 组合，消费唯一权威格式。 |
+| `src/features/settings/application-control/transcriptionSettings.test.ts` | 通用写入、重开、SDK 请求链增加权威格式断言。 |
+| `src/features/imageEdit/v3/application/imageEditCommandBus.ts` | 静态候选质量及整组预览一次发布。 |
+| `src/features/imageEdit/v3/application/imageEditCommandBus.test.ts` | 批量预览与非法成员原子性回归。 |
+| `src/features/imageEdit/v3/application/imageEditLayoutDraft.ts` | 完整候选一次提交、清晰批量预览、整组只读一次当前文档与诊断时钟。 |
+| `src/features/imageEdit/v3/application/imageEditLayoutDraft.test.ts` | 保存次数、质量、撤销和完整快照回归。 |
+| `src/features/imageEdit/v3/application/imageEditPersistenceOwner.ts` | 身份检查读权威当前文档，不反复复制完整历史。 |
+| `src/features/imageEdit/v3/application/imageEditDocumentInstances.ts` | owner 的权威读取和已发布独立快照复用，保留公共复制契约。 |
+| `src/features/imageEdit/v3/application/imageEditDocumentInstances.test.ts` | 发布快照复用、确认后失效和同版本清历史回归。 |
+| `src/features/imageEdit/v3/application/imageEditPersistenceQueue.ts` | 新 revision 不重复序列化历史，同版本历史变化仍保存。 |
+| `src/features/imageEdit/v3/application/imageEditPersistenceOwner.test.ts` | 完整快照次数、批次、并发编辑、失败和投影回归。 |
+| `src/features/imageEdit/v3/execution/useImageEditorViewportCompositeV3.ts` | 已完成候选使用正式清晰质量并允许复用。 |
+| `src/features/imageEdit/v3/execution/useImageEditorViewportCompositeV3.test.ts` | 静态与拖动质量契约回归。 |
+| `src/features/imageEdit/v3/execution/imageEditorRenderSessionFrameCacheV3.ts` | 正式 CPU 成品的字节预算缓存与租约，键只遍历像素引用资源。 |
+| `src/features/imageEdit/v3/execution/imageEditorRenderSessionFrameCacheV3.test.ts` | 像素/资源/视口失效、淘汰和释放回归。 |
+| `src/features/imageEdit/v3/execution/imageEditorRenderSessionContractsV3.ts` | 可缓存静态快照的可选提示。 |
+| `src/features/imageEdit/v3/execution/imageEditorRenderSessionIdentityV3.ts` | 快照同一性包含缓存提示。 |
+| `src/features/imageEdit/v3/execution/imageEditorRenderSessionV3.ts` | 同一正式会话复用已完成候选，关闭时释放。 |
+| `src/features/imageEdit/v3/execution/imageEditorRenderSessionV3.test.ts` | A→B→A 升版复用与求值次数回归。 |
+| `src/features/imageEdit/v3/editor/ImageEditorPreviewV3.tsx` | 显示基底同步权威 revision，接纳真实候选覆盖。 |
+| `src/features/imageEdit/v3/editor/ImageEditorPreviewV3.test.tsx` | 元数据升版后的实际投影与不改正式姿态回归。 |
+| `src/features/imageEdit/v3/editor/ImageEditorLayoutOverlayV3.tsx` | 使用共享残影的布局变体。 |
+| `src/features/imageEdit/v3/editor/ImageEditorLayoutControlsV3.tsx` | 控件宽度、虚线解释及单条拒绝提示。 |
+| `src/features/imageEdit/v3/editor/ImageEditorLayersPanelV3.tsx` | 资源描述刷新时保留同一缩略图会话。 |
+| `src/features/imageEdit/v3/editor/ImageEditorLayersPanelV3.scale.test.tsx` | 两面板缓存复用、会话切换及关闭释放回归。 |
+| `src/features/imageEdit/v3/panels/history/ImageEditorHistoryPanelV3.tsx` | 历史面板同步复用会话并读取最新资源描述。 |
+| `src/features/creativeIntent/ui/CreativeIntentOverlay.tsx` | 可选布局虚线变体，保持动画默认行为。 |
+| `scripts/lib/uiInspectionSceneImageEditLayoutDraft.cjs` | 双真实宿主十步及百层正式场景，计时/读回/拒绝证据。 |
+| `scripts/lib/uiInspectionScenes.cjs` | 登记四个正式巡检场景。 |
+| `docs/task/超级关键帧/任务/P1-image.md` | 追加本节实现、问题、验收与设计自查。 |
+| `docs/task/超级关键帧/02-实施拆分.md` | 只追加/更新 P1-3 本单 t149 状态行。 |
+
+临时执行脚本、日志、截图和 CPU profile 位于被忽略的 `.reality/` / `node_modules/.cache/t149-layout-*`，不是应提交源码；未创建额外任务/总结文档。未手改 SDK 或并行任务所有权源码；授权的正式 bundle 会更新 SDK 生成索引，工作区还有其他任务的 SDK 改动，不纳入本单、不还原，总管理者需核对生成产物来源并逐 hunk 审查共享文件。证据目录被 Git 忽略，交接时须单独保留或归档。

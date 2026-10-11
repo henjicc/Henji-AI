@@ -11,7 +11,7 @@ function setup(save?: ImageEditDocumentRepositoryV3['save']) {
   const write = vi.fn(save ?? (async (document) => ({ documentId: document.id, revision: document.revision, previewRef: null })))
   const queue = new ImageEditPersistenceV3Queue({ repository: { save: write },
     initialReference: { documentId: 'owned', revision: 0, previewRef: null }, initialHistory: bus.getPersistenceSnapshot().history })
-  const owner = new ImageEditPersistenceOwnerV3('owned', queue, () => bus.getPersistenceSnapshot())
+  const owner = new ImageEditPersistenceOwnerV3('owned', queue, () => bus.getPersistenceSnapshot(), undefined, undefined, undefined, undefined, () => bus.getSnapshot().document)
   const add = (id: string) => bus.dispatch({ type: 'layer.add', commandId: id,
     expectedRevision: bus.getSnapshot().document.revision, parentId: null, index: 0,
     layer: createImageEditRasterLayerV3(id, id) })
@@ -19,6 +19,19 @@ function setup(save?: ImageEditDocumentRepositoryV3['save']) {
 }
 
 describe('图片编辑唯一保存宿主', () => {
+  it('确认保存时身份检查不反复复制完整历史，投影仍核对同一当前文档', async () => {
+    const { bus, queue, add } = setup()
+    add('layout')
+    const snapshot = vi.fn(() => bus.getPersistenceSnapshot())
+    const projection = vi.fn(async () => undefined)
+    const owner = new ImageEditPersistenceOwnerV3('owned', queue, snapshot, projection, undefined, undefined, undefined, () => bus.getSnapshot().document)
+    await owner.confirm(true)
+    expect(snapshot).toHaveBeenCalledTimes(1)
+    expect(projection).toHaveBeenCalledTimes(1)
+    expect(queue.getReference()).toMatchObject({ revision: 1 })
+    owner.dispose(); bus.dispose()
+  })
+
   it('保存成功和失败的正式日志context保留文档归属，而不是被logger忽略的顶层字段', async () => {
     const successful = setup()
     successful.add('logged-success')

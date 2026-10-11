@@ -17,6 +17,7 @@ export function sameImageEditorRenderSnapshotV3(
     && left.renderGeneration === right.renderGeneration
     && left.geometryHash === right.geometryHash
     && left.quality === right.quality
+    && left.cacheable === right.cacheable
     && left.resourceDescriptors === right.resourceDescriptors)
 }
 

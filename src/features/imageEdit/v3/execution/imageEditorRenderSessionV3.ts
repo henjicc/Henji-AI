@@ -15,6 +15,7 @@ import { ImageEditorRenderSessionGpuPresentationV3 } from './imageEditorRenderSe
 import { ImageEditorRenderSessionWorkV3, type ImageEditorRenderSessionWorkLayoutV3 } from './imageEditorRenderSessionWorkV3'
 import { ImageEditorRenderSessionScheduleV3 } from './imageEditorRenderSessionScheduleV3'
 import { ImageEditorRenderSessionCpuWorkV3 } from './imageEditorRenderSessionCpuWorkV3'
+import { ImageEditorRenderSessionFrameCacheV3 } from './imageEditorRenderSessionFrameCacheV3'
 
 export type {
   ImageEditorRenderSessionDependenciesV3,
@@ -41,6 +42,8 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private snapshot: ImageEditorRenderSnapshotV3 | null = null
   private layout: ImageEditorRenderSessionWorkLayoutV3 | null = null
   private stable: ImageEditorManagedViewportCompositeV3 | null = null
+  private readonly candidateFrames = new ImageEditorRenderSessionFrameCacheV3()
+  private cacheCandidates = false
   private draft: ImageEditorManagedViewportCompositeV3 | null = null
   private backdrop: ImageEditorManagedViewportCompositeV3 | null = null
   private state: ImageEditorRenderSessionStateV3
@@ -132,9 +135,11 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.snapshot = snapshot
     if (previousSnapshot && previousSnapshot.document.id !== snapshot.document.id) {
       this.releaseResults()
+      this.candidateFrames.clear(); this.cacheCandidates = false
       if (!this.cpu.resume()) this.cpu.cancel()
       this.gpuPresentation.fallback(() => this.compositor.resetDocumentFrame())
     }
+    if (snapshot.cacheable) this.cacheCandidates = true
     this.schedule.reset()
     if (!coalesceDraft && !this.cpu.suspended) {
       this.cpu.cancel()
@@ -266,6 +271,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.clients.dispose()
     this.compositor.dispose()
     this.releaseResults()
+    this.candidateFrames.clear()
     this.diagnosticsListeners.clear()
     this.stateListeners.clear()
   }
@@ -274,6 +280,15 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     if (this.cpu.suspended || !this.visible || !this.snapshot || !this.layout) return
     const snapshot = this.snapshot
     const layout = this.layout
+    if (this.cacheCandidates && snapshot.quality === 'stable'
+      && !imageEditorRenderResultMatchesViewV3(this.stable, snapshot, layout)) {
+      const cached = this.candidateFrames.read(this.candidateFrames.key(snapshot, layout.viewportKey), snapshot, layout.cameraSequence)
+      if (cached) {
+        this.cpu.analysisMip = null; this.cpu.analysisReadyGeneration = snapshot.renderGeneration
+        this.acceptTargetResult(cached, false)
+        return
+      }
+    }
     this.cpu.prepare(snapshot)
     const epoch = this.cpu.epoch
     this.schedule.schedule({
@@ -335,7 +350,10 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.publish({ fallbackRequired: false, result: this.currentResult() })
   }
 
-  private acceptTargetResult(result: ImageEditorManagedViewportCompositeV3): void {
+  private acceptTargetResult(result: ImageEditorManagedViewportCompositeV3, cache = true): void {
+    if (cache && this.cacheCandidates && this.snapshot?.quality === 'stable' && this.layout) {
+      result = this.candidateFrames.store(this.candidateFrames.key(this.snapshot, this.layout.viewportKey), result)
+    }
     const previousStable = this.stable
     const previousDraft = this.draft
     this.stable = result

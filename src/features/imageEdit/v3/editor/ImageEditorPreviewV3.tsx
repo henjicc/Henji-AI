@@ -151,7 +151,8 @@ export function ImageEditorPreviewV3({
     document: typeof baseDocumentCandidate
     history: typeof snapshot.history
   } | null>(null)
-  if (stableBaseDocumentRef.current?.identity !== baseIdentity) {
+  if (stableBaseDocumentRef.current?.identity !== baseIdentity
+    || stableBaseDocumentRef.current.document.revision !== baseDocumentCandidate.revision) {
     stableBaseDocumentRef.current = {
       identity: baseIdentity,
       document: baseDocumentCandidate,

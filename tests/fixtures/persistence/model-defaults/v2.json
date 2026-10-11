@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "providerId": "kie",
+  "models": {
+    "image": "",
+    "video": "",
+    "audio": "",
+    "transcription": "groq.speech-recognition.whisper-large-v3-turbo"
+  }
+}

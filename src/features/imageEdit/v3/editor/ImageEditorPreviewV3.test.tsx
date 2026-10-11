@@ -2,15 +2,18 @@
 
 import '@/tests/imageEditDocumentFixture'
 import { StrictMode } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createImageEditDocumentV3,
+  createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import i18n from '@/i18n/config'
 import { requireImageEditDocumentInstanceV3 } from '../application/imageEditDocumentInstances'
 import type { ImageEditorManagedPreviewResultV3 } from '../execution/imageEditorPreviewClientV3'
+import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
+import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 
 interface ManagedPreviewTestStateV3 {
@@ -47,6 +50,7 @@ const viewportBackend = vi.hoisted(() => ({
   composition: 'cpu' as 'cpu' | 'gpu',
   presentation: 'canvas2d' as 'canvas2d' | 'webgpu-surface' | 'gpu-image-bitmap',
 }))
+const displaySnapshots = vi.hoisted(() => ({ latest: null as ImageEditCommandBusSnapshotV3 | null }))
 const rasterPasteboardResources = vi.hoisted(() => ({
   readFastProxy: vi.fn(),
   readSourceMetadata: vi.fn(),
@@ -65,7 +69,7 @@ vi.mock('../execution', async (importOriginal) => {
   const original = await importOriginal<typeof import('../execution')>()
   return {
     ...original,
-    useImageEditorDisplayPipelineV3: () => ({
+    useImageEditorDisplayPipelineV3: (_sessionId: string, snapshot: ImageEditCommandBusSnapshotV3) => { displaySnapshots.latest = snapshot; return ({
       hasPreviewOverrides: false,
       displaySource: 'managed',
       managedPreview: managedPreview.state,
@@ -90,7 +94,7 @@ vi.mock('../execution', async (importOriginal) => {
         session: renderSession,
       },
       viewportResult: null,
-    }),
+    }) },
   }
 })
 
@@ -171,6 +175,22 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     cleanup()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('只保存草稿元数据后，新版本候选仍投影到实际显示文档', async () => {
+    const document = createImageEditDocumentV3({ width: 320, height: 180, documentId: 'layout-preview-revision' })
+    document.layers = [createImageEditRasterLayerV3('hero', '主图')]
+    render(<ImageEditorV3 document={document} sourceImageUrl="preview.png" profileId="full" onDocumentChange={vi.fn()} />)
+    const bus = requireImageEditDocumentInstanceV3(document.id).bus
+    await act(async () => {
+      bus.dispatch({type:'document.set-creative-intents',commandId:'metadata',expectedRevision:0,intents:{drafts:[],sessions:[],resources:[]},resources:[]})
+      bus.setPreview({id:'layout',kind:'transform',targetId:'hero',baseRevision:1,value:[1,0,0,1,80,20],quality:'stable'})
+    })
+    await waitFor(() => {
+      expect(displaySnapshots.latest?.document.revision).toBe(1)
+      expect(projectImageEditorPreviewDocumentV3(displaySnapshots.latest!).layers[0].transform).toEqual([1,0,0,1,80,20])
+    })
+    expect(bus.getSnapshot().document.layers[0].transform).toEqual(document.layers[0].transform)
   })
 
   it('StrictMode 重挂载也不把旧 managed 整图结果接回交互显示', async () => {

@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeContext } from '@henjicc/ai-sdk'
 import { createTimestampedAsrService } from '../../../../electron/main/services/audio-edit/timestamped-asr'
 import { applicationReflectionHandlers } from '@/features/application-control/capabilities/applicationReflectionAdapter'
-import { modelDefaultsManager, ModelDefaultsManager } from '../modelDefaultsManager'
+import { modelDefaultsManager, ModelDefaultsManager, MODEL_DEFAULTS_STORAGE_KEY } from '../modelDefaultsManager'
+import { MODEL_DEFAULTS_VERSION, modelDefaultsSchema } from '@/core/persistence/preferenceSchemas'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { applyApplicationSettingsChange, getSettingsRegistryRevision, planApplicationSettingsChange } from './settingsApplicationService'
 
@@ -38,6 +39,8 @@ describe('默认转写模型的正式通用设置链路', () => {
     expect(modelDefaultsManager.getSnapshot().models.transcription).toBe(modelId)
     expect(modelDefaultsManager.listTranscriptionModels().some((entry) => entry.descriptor.id === modelId)).toBe(true)
     const reopened = new ModelDefaultsManager(localStorage)
+    const persisted: unknown = JSON.parse(localStorage.getItem(MODEL_DEFAULTS_STORAGE_KEY)!)
+    expect(modelDefaultsSchema.parse(persisted)).toMatchObject({ version: MODEL_DEFAULTS_VERSION, models: { transcription: modelId } })
     expect(reopened.resolveTranscriptionModelId()).toBe(modelId)
     const fetch = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/uploads?action=getPolicy')) return new Response(JSON.stringify({ data: { upload_host: 'https://oss.invalid/', upload_dir: 'tmp/fixture', policy: 'fixture', signature: 'fixture', oss_access_key_id: 'fixture', x_oss_object_acl: 'private', x_oss_forbid_overwrite: 'true', max_file_size_mb: 10 } }))

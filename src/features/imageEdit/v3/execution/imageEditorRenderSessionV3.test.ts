@@ -1,12 +1,32 @@
 /** @vitest-environment jsdom */
 import { describe, expect, it, vi } from 'vitest'
-import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorManagedViewportCompositeV3, ImageEditorViewportCompositeRequestV3 } from './viewportCompositeTypesV3'
 import { DefaultImageEditorRenderSessionV3 } from './imageEditorRenderSessionV3'
 import { deferred, result, layout, installImageEditorRenderSessionTestSurface } from './imageEditorRenderSessionTestFixtures'
 
 describe('ImageEditorRenderSessionV3', () => {
   installImageEditorRenderSessionTestSurface()
+  it('已完成静态候选 A/B 返回时直接呈现清晰帧，不再次启动 CPU 求值', async () => {
+    const client={render:vi.fn(async(request:ImageEditorViewportCompositeRequestV3)=>result(request)),cancel:vi.fn(),dispose:vi.fn()}
+    const session=new DefaultImageEditorRenderSessionV3({sessionId:'candidate-cache'},{client})
+    const front=document.createElement('canvas')
+    session.attachSurface({surfaceId:'cached',front,safety:document.createElement('canvas')})
+    session.updateViewport(layout)
+    const a=createImageEditDocumentV3({width:1600,height:1000,documentId:'ab'})
+    a.layers=[createImageEditRasterLayerV3('a','图')]
+    const b=structuredClone(a);b.layers[0].transform=[1,0,0,1,20,0]
+    session.updateSnapshot({document:a,renderGeneration:1,geometryHash:'geometry-a',quality:'stable',resourceDescriptors:[],cacheable:true})
+    await vi.advanceTimersByTimeAsync(0)
+    session.updateSnapshot({document:b,renderGeneration:2,geometryHash:'geometry-a',quality:'stable',resourceDescriptors:[],cacheable:true})
+    await vi.advanceTimersByTimeAsync(0)
+    const count=client.render.mock.calls.length
+    session.updateSnapshot({document:{...a,revision:3},renderGeneration:3,geometryHash:'geometry-a',quality:'stable',resourceDescriptors:[],cacheable:true})
+    await vi.advanceTimersByTimeAsync(0)
+    expect(front.dataset.renderGeneration).toBe('3')
+    expect(client.render).toHaveBeenCalledTimes(count)
+    session.dispose()
+  })
   it('并行调度当前可见区草稿与目标，不再等待整图粗 mip', async () => {
     const requests: ImageEditorViewportCompositeRequestV3[] = []
     const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []

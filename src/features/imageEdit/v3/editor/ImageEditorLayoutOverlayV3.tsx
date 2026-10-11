@@ -17,5 +17,5 @@ export function ImageEditorLayoutOverlayV3({bus}:{bus:ImageEditCommandBusV3}):JS
     const corners=([[left,top],[right,top],[right,bottom],[left,bottom]] as const).map(p=>[p[0]/width,p[1]/height] as const)
     return {position:[center[0]/width,center[1]/height] as const,turns:0,scale:1,pinned:pins.has(entry.sample.sampleId),breakBefore:true,corners}
   })
-  return <CreativeIntentOverlay ghosts={ghosts}/>
+  return <CreativeIntentOverlay ghosts={ghosts} variant="layout"/>
 }

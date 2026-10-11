@@ -113,7 +113,10 @@ export function ImageEditorHistoryPanelV3({ controller }: ImageEditorPanelContex
   const port = controller.historyPort
   const sessionId = controller.sessionId
   const historyResourceDescriptors = controller.historyResourceDescriptors
-  const thumbnails = useMemo(() => new ImageEditThumbnailsV3({ sessionId, historyPort: port, historyResourceDescriptors }), [sessionId, port, historyResourceDescriptors])
+  const thumbnailDescriptors = useRef(historyResourceDescriptors)
+  thumbnailDescriptors.current = historyResourceDescriptors
+  const thumbnails = useMemo(() => new ImageEditThumbnailsV3({ sessionId, historyPort: port,
+    get historyResourceDescriptors() { return thumbnailDescriptors.current } }), [sessionId, port])
   useImageEditorDisposableV3(thumbnails)
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null)
   const [failed, setFailed] = useState(false)

@@ -10,6 +10,8 @@ import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuScene
 import type { ImageEditorInteractionTraceV3 } from './interactionTraceV3'
 
 export interface ImageEditorRenderSnapshotV3 {
+  /** 已求解的静态候选允许在现有资源预算内复用清晰成品。 */
+  cacheable?: boolean
   document: ImageEditDocumentV3
   renderGeneration: number
   geometryHash: string

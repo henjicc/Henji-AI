@@ -74,9 +74,8 @@ export class ImageEditPersistenceV3Queue {
     if (history.documentId !== document.id || history.headRevision !== document.revision) {
       throw new Error('图片编辑历史头与文档不匹配')
     }
-    const historyJson = JSON.stringify(history)
     if (document.revision < this.reference.revision
-      || (document.revision === this.reference.revision && historyJson === this.persistedHistory)) return
+      || (document.revision === this.reference.revision && JSON.stringify(history) === this.persistedHistory)) return
     if (!this.pending || document.revision >= this.pending.document.revision) this.pending = snapshot
   }
 
@@ -120,9 +119,8 @@ export class ImageEditPersistenceV3Queue {
       const snapshot = this.pending
       const { document, history } = snapshot
       this.pending = null
-      const historyJson = JSON.stringify(history)
       if (document.revision < this.reference.revision
-        || (document.revision === this.reference.revision && historyJson === this.persistedHistory)) continue
+        || (document.revision === this.reference.revision && JSON.stringify(history) === this.persistedHistory)) continue
       this.publish({ kind: 'saving', reference: this.reference })
       try {
         this.reference = await this.options.repository.save(document, {

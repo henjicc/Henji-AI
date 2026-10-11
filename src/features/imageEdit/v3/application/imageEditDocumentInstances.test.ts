@@ -32,6 +32,23 @@ function setup(id: string, save?: ImageEditDocumentRepositoryV3['save']) {
 
 describe('图片文档应用实例', () => {
 
+  it('保存确认复用本次发布的独立快照，确认后失效；同版本清历史仍使用新快照', async () => {
+    const state=setup('published-save')
+    const snapshots=vi.spyOn(state.instance.bus,'getPersistenceSnapshot')
+    state.rename('发布一次')
+    expect(snapshots).toHaveBeenCalledTimes(1)
+    await saveImageEditDocumentInstanceV3('published-save')
+    expect(snapshots).toHaveBeenCalledTimes(1)
+    await saveImageEditDocumentInstanceV3('published-save')
+    expect(snapshots).toHaveBeenCalledTimes(2)
+    state.instance.bus.clearHistory()
+    expect(snapshots).toHaveBeenCalledTimes(3)
+    await saveImageEditDocumentInstanceV3('published-save')
+    expect(snapshots).toHaveBeenCalledTimes(3)
+    expect(state.write.mock.calls.at(-1)?.[1].history?.undo).toEqual([])
+    snapshots.mockRestore()
+  })
+
   it('重开已加载的文档时，画笔瓦片的资源描述带 brush 媒体类型（IE-11）', () => {
     const brush = `sha256:${'b'.repeat(64)}`
     const source = `sha256:${'a'.repeat(64)}`

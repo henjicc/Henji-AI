@@ -162,9 +162,9 @@
       "supportedFrom": 1
     },
     "model-defaults": {
-      "version": 1,
-      "fingerprint": "d3201320105f4ef9d3e376238c9accf8847d4a660ae51d003acaf8ed961acd32",
-      "supportedFrom": 1
+      "version": 2,
+      "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
+      "supportedFrom": 2
     },
     "onboarding": {
       "version": 2,
@@ -1109,6 +1109,15 @@
       "reason": "t147 图片布局草稿头、不可变几何页与候选接入正式存储，开发期升版不迁移旧数据",
       "previousFingerprint": "b593bfcca4f7a1049defc3b7906cdc5136d6ccf236ec62129cc345652b82d793",
       "fingerprint": "cc0b5d94094b475c989d8c74348b37b06cae0c7765eb93b3cec06f272dc600d8",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T00:03:30.989Z",
+      "format": "model-defaults",
+      "version": 2,
+      "reason": "t149 将默认转写模型归入权威设置格式，开发期升版并停止读取无转写字段的旧格式",
+      "previousFingerprint": "d3201320105f4ef9d3e376238c9accf8847d4a660ae51d003acaf8ed961acd32",
+      "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
       "waivedFixtureVersions": []
     }
   ]

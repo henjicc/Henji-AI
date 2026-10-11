@@ -22,8 +22,8 @@ export function ImageEditorLayoutControlsV3({ bus, controller }: { bus:ImageEdit
   useEffect(()=>{if(open&&!state.draft&&draftId) run(()=>adapter.reopen(draftId))},[adapter,draftId,open,state.draft])
   if(!writable) return null
   return <PanelTrigger open={open} onOpenChange={value=>{setOpen(value);if(!value)adapter.cancel()}} alignment="bottomRight" surface="glass" panelPadding="content" panelWidth="content"
-    renderPanel={()=> <div className="flex flex-col gap-3" data-image-layout-controls>
-      <div className="text-xs text-text2">选中至少三个独立图层随手摆，再整理位置。字体、组和图层顺序保持原样。</div>
+    renderPanel={()=> <div className="flex w-72 max-w-full flex-col gap-3" data-image-layout-controls>
+      <div className="text-xs text-text2">选中至少三个独立图层随手摆，再整理位置。虚线框表示原稿位置；字体、组和图层顺序保持原样。</div>
       <CreativeIntentControls profile="layout" status={state.status==='idle'&&selected.length>=3?'reviewing':state.status}
         candidates={state.candidates} selected={state.selected} fidelity={state.draft?.fidelity??0} needsSave={state.needsSave}
         pins={state.draft?.pins.map(p=>{
@@ -35,7 +35,7 @@ export function ImageEditorLayoutControlsV3({ bus, controller }: { bus:ImageEdit
         onCancel={()=>adapter.cancel()} onOptimize={()=>run(()=>adapter.organize(selected.length>=3?selected:[]))} onApply={()=>run(()=>adapter.apply())}
         onPreview={id=>run(()=>adapter.preview(id))} onFidelity={fidelity=>run(()=>adapter.configure({fidelity}))}
         onPin={()=>run(()=>adapter.configure({pinIds:selected}))} onUnpin={unpin=>run(()=>adapter.configure({unpin}))}/>
-      {error&&<UiError title="布局未完成" message={error} size="sm"/>}
+      {error&&error!==state.message&&<UiError title="布局未完成" message={error} size="sm"/>}
     </div>}>
     {controls=><UiButton size="sm" onClick={controls.togglePanel} aria-expanded={controls.open}><LayoutGrid size={14}/>随手摆</UiButton>}
   </PanelTrigger>

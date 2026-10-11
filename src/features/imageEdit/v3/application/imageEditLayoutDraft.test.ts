@@ -39,7 +39,12 @@ describe('随手摆正式文档适配',()=>{
     const edges=spacing.changes.map((c,i)=>({left:Math.min(...entries[i].item.worldCorners.map(p=>p[0]))+c.delta[0],right:Math.max(...entries[i].item.worldCorners.map(p=>p[0]))+c.delta[0]}))
     expect(edges[1].left-edges[0].right).toBeCloseTo(edges[2].left-edges[1].right,7)
     const before=bus.getSnapshot().document,history=bus.getSnapshot().history.undoCount
+    const frames=vi.fn();const stopFrames=bus.subscribe(frames)
+    const snapshots=vi.spyOn(bus,'getSnapshot')
     adapter.preview('distribute');adapter.preview('align');adapter.preview('distribute')
+    expect(snapshots.mock.calls.length).toBeLessThanOrEqual(9);snapshots.mockRestore()
+    expect(frames).toHaveBeenCalledTimes(3);stopFrames()
+    expect(Object.values(bus.getSnapshot().previewOverrides).every(override=>override.quality==='stable')).toBe(true)
     expect(bus.getSnapshot().document).toBe(before)
     expect(Object.keys(bus.getSnapshot().previewOverrides).length).toBeLessThanOrEqual(3)
     await adapter.apply()
@@ -86,6 +91,18 @@ describe('随手摆正式文档适配',()=>{
     expect(reopened.snapshot().draft!.pins).toEqual(adapter.snapshot().draft!.pins)
     const resource=adapter.snapshot().draft!.recipeRefs[0].resourceId;values.set(resource,{broken:true})
     await expect(reopened.reopen(id)).rejects.toThrow()
+  })
+  it('保真停手只提交完整候选一次，撤销恢复上次已保存设置',async()=>{
+    const {adapter,bus,confirmed}=setup()
+    await adapter.organize(['a','b','c'])
+    const count=bus.getSnapshot().history.undoCount
+    await adapter.configure({fidelity:.25})
+    expect(confirmed).toHaveBeenCalledTimes(2)
+    expect(bus.getSnapshot().history.undoCount).toBe(count+1)
+    expect(bus.getSnapshot().document.creativeIntents!.drafts[0].fidelity).toBe(.25)
+    expect(bus.getSnapshot().document.creativeIntents!.drafts[0].candidateRefs).toHaveLength(2)
+    expect(bus.undo()).toBe(true)
+    expect(bus.getSnapshot().document.creativeIntents!.drafts[0].fidelity).toBe(0)
   })
   it('重开已应用原稿后切换零位移候选，预览与应用仍恢复其绝对原稿位置',async()=>{
     const doc=document();doc.layers.forEach(layer=>{const m=layer.transform;layer.transform=[m[0],m[1],m[2],m[3],m[4],60]})

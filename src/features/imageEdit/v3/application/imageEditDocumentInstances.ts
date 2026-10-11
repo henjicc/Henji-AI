@@ -1,4 +1,5 @@
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ImageEditCommandBusOptionsV3 } from './imageEditCommandBus'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
 import { ImageEditPersistenceOwnerV3, type ImageEditPersistenceHostV3 } from './imageEditPersistenceOwner'
@@ -26,6 +27,7 @@ export interface ImageEditDocumentInstanceV3 {
 interface OwnedInstance extends ImageEditDocumentInstanceV3 {
   timer: ReturnType<typeof setTimeout> | null
   unsubscribe: () => void
+  persistenceSnapshot?: ImageEditPersistenceSnapshotV3
 }
 
 const instances = new Map<string, OwnedInstance>()
@@ -101,13 +103,22 @@ function installOwner(instance: OwnedInstance, host?: ImageEditPersistenceHostV3
     return
   }
   instance.persistenceOwner = new ImageEditPersistenceOwnerV3(
-    instance.documentId, queue, () => instance.bus.getPersistenceSnapshot(), host?.confirmProjection, host?.projection,
+    instance.documentId, queue, () => {
+      // 命令发布已复制出独立历史 DTO；内部保存只读这份快照，不再次复制整条历史。
+      // 公开 getPersistenceSnapshot 仍返回独立快照，预览不会修改已发布的历史。
+      const published = instance.persistenceSnapshot
+      return published?.document === instance.bus.getSnapshot().document
+        ? published : instance.bus.getPersistenceSnapshot()
+    }, host?.confirmProjection, host?.projection,
     () => !instance.closing,
     async () => {
       const history = queue.getReference().history
       if (history) instance.bus.confirmPersistedHistory(history)
+      // 保存后可能压入冷历史；下一次确认必须读取新分页状态。
+      instance.persistenceSnapshot = undefined
       await releaseSmartContentResourcesV3(instance.bus)
     },
+    () => instance.bus.getSnapshot().document,
   )
 }
 
@@ -125,7 +136,8 @@ function adopt(bus: ImageEditCommandBusV3, host?: ImageEditPersistenceHostV3): O
   }
   installOwner(instance, host)
   bus.setMutationGuard(() => assertImageEditDocumentAvailableV3(documentId))
-  const unsubscribePersistence = bus.subscribePersistence(() => {
+  const unsubscribePersistence = bus.subscribePersistence(snapshot => {
+    instance.persistenceSnapshot = snapshot
     instance.dirty = true
     instance.revision += 1
     if (instance.timer) clearTimeout(instance.timer)
