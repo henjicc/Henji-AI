@@ -189,6 +189,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createImageEditRegionHostsScene(context),
     createImageEditDocumentSizeScene(context),
     createImageEditLayoutDraftScene(context),
+    require('./uiInspectionSceneCanvasTidy.cjs').createCanvasTidyScene(context),
     createImageEditLayoutDraftScene(context, true),
     createImageEditLayoutDraftScene(context, false, true),
     createImageEditLayoutDraftScene(context, true, true),

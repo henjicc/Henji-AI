@@ -1,4 +1,16 @@
 {
+  "canvasTidy": {
+    "title": "Tidy",
+    "align": "Align edges",
+    "distribute": "Equal spacing",
+    "grid": "Arrange in a grid",
+    "pin": "Pin a node",
+    "noPin": "No pin",
+    "unnamed": "Untitled node",
+    "preview": "Preview only. Apply with a single undo step.",
+    "apply": "Apply",
+    "cancel": "Cancel"
+  },
   "toolbox": {
     "audioEdit": {
       "title": "Speech editing",

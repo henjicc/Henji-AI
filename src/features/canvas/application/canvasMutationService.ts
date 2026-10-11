@@ -84,10 +84,16 @@ async function applyCanvasNodePatches(projectId: string, patches: CanvasNodePatc
   assertCanvasCommitContext(projectId, options)
   for (const patch of patches) requireNode(projectId, patch.nodeId)
   const canvas = requireCanvasProjectInstance(projectId).store.getState()
+  const positionOnly = patches.every((patch) => !patch.data || Object.keys(patch.data).length === 0)
+  const positions = patches.filter((patch) => patch.position).map((patch) => ({
+    id: patch.nodeId, type: 'position' as const, position: patch.position!, dragging: false,
+  }))
   for (const patch of patches) {
     if (patch.data && Object.keys(patch.data).length > 0) canvas.updateNodeData(patch.nodeId, patch.data)
-    if (patch.position) canvas.updateNodePosition(patch.nodeId, patch.position)
+    if (!positionOnly && patch.position) canvas.updateNodePosition(patch.nodeId, patch.position)
   }
+  // One node-change batch gives UI and generic entity writes the same single undo step.
+  if (positionOnly && positions.length) canvas.onNodesChange(positions)
   await confirmCanvasPersistence(projectId, options)
 }
 

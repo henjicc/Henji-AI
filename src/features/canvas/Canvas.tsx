@@ -57,6 +57,8 @@ import { useCanvasPersistence } from './hooks/useCanvasPersistence';
 import { deleteCanvasNodes } from './application/canvasMutationService';
 import { maintainMultiLayerDocumentReleaseCandidates } from './application/multiLayerDocumentLifecycleService';
 import { CanvasViewportFlow } from './ui/CanvasViewportFlow';
+import { useCanvasTidy } from './hooks/useCanvasTidy';
+import { CanvasTidyPanel } from './ui/CanvasTidyPanel';
 
 interface CanvasToastState {
   message: string;
@@ -397,6 +399,7 @@ export function Canvas() {
   const { onNodeContextMenu, hideNodeContextMenu, nodeContextMenu } = useNodeParameterContextMenu(closeNodeMenu);
   // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
   const isContentLodLow = useCanvasContentLod();
+  const tidy = useCanvasTidy(currentProjectId, nodes, renderGraph.nodes);
 
   // 有意不开 onlyRenderVisibleElements：裁剪带来的节点挂载/卸载抖动是平移/缩放时
   // 数百毫秒长任务的主要来源（240 节点实测 zoom 长任务 550ms → 0）。
@@ -410,7 +413,7 @@ export function Canvas() {
       onDrop={assetDrop.onDrop}
     >
       <CanvasViewportFlow
-        nodes={renderGraph.nodes}
+        nodes={tidy.previewNodes}
         edges={renderGraph.edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
@@ -454,11 +457,13 @@ export function Canvas() {
         <CanvasMiniMap />
 
         <SelectedNodeOverlay
+          onTidy={() => { void tidy.start(); }}
           onBatchConnect={handleBatchConnect}
           onCreateAssetGroup={handleCreateAssetGroup}
           onAddToAssetGroup={handleAddToAssetGroup}
         />
       </CanvasViewportFlow>
+      <CanvasTidyPanel tidy={tidy} nodes={nodes} />
 
       <NodeToolDialogRouter />
       {nodeContextMenu}

@@ -1,7 +1,7 @@
 import { useNodeToolbarBoundary } from './useNodeToolbarBoundary'
 import { memo } from 'react'
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react'
-import { Download } from 'lucide-react'
+import { Download, LayoutGrid } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { UiButton, UiPanel } from '@/components/ui'
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
@@ -20,6 +20,7 @@ import {
 } from './nodeToolbarConfig'
 
 interface MultiNodeActionToolbarProps {
+  onTidy?: () => void
   nodes: CanvasNode[]
   onBatchConnect: (sourceNodeIds: string[], targetNodeId: string) => void
   onCreateAssetGroup: (memberIds: string[]) => void
@@ -27,6 +28,7 @@ interface MultiNodeActionToolbarProps {
 }
 
 export const MultiNodeActionToolbar = memo(({
+  onTidy,
   nodes,
   onBatchConnect,
   onCreateAssetGroup,
@@ -48,12 +50,12 @@ export const MultiNodeActionToolbar = memo(({
 
   const toolbarPanelRef = useNodeToolbarBoundary(
     nodes.map((node) => node.id).join(' '),
-    canDownload || canCreateAssetGroup || canAddToAssetGroup,
+    Boolean(onTidy) || canDownload || canCreateAssetGroup || canAddToAssetGroup,
   )
 
   return (
     <>
-      {(canDownload || canCreateAssetGroup || canAddToAssetGroup) && (
+      {(onTidy || canDownload || canCreateAssetGroup || canAddToAssetGroup) && (
         <ReactFlowNodeToolbar
           nodeId={nodes.map((node) => node.id)}
           isVisible
@@ -63,6 +65,7 @@ export const MultiNodeActionToolbar = memo(({
           className={NODE_TOOLBAR_CLASS}
         >
           <UiPanel ref={toolbarPanelRef} variant="glass" data-node-toolbar-panel className="flex w-max items-center gap-1 overflow-x-auto p-1 [&>*]:shrink-0">
+            {onTidy && <UiButton onClick={onTidy}><LayoutGrid className="h-3.5 w-3.5" />{t('ui:canvasTidy.title')}</UiButton>}
             {canCreateAssetGroup && (
               <UiButton
                 onClick={() => onCreateAssetGroup(mediaNodes.map((node) => node.id))}

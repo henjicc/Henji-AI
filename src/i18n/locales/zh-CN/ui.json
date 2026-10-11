@@ -1,4 +1,16 @@
 {
+  "canvasTidy": {
+    "title": "整理",
+    "align": "按边缘对齐",
+    "distribute": "等距排列",
+    "grid": "网格规整",
+    "pin": "钉住节点",
+    "noPin": "不钉住",
+    "unnamed": "未命名节点",
+    "preview": "正在预览，应用后可一步撤销。",
+    "apply": "应用",
+    "cancel": "取消"
+  },
   "toolbox": {
     "audioEdit": {
       "title": "口播剪辑",

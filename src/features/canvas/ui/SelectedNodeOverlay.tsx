@@ -6,12 +6,14 @@ import { NodeActionToolbar } from './NodeActionToolbar';
 import { MultiNodeActionToolbar } from './MultiNodeActionToolbar';
 
 interface SelectedNodeOverlayProps {
+  onTidy?: () => void;
   onBatchConnect: (sourceNodeIds: string[], targetNodeId: string) => void;
   onCreateAssetGroup: (memberIds: string[]) => void;
   onAddToAssetGroup: (groupId: string, memberIds: string[]) => void;
 }
 
 export const SelectedNodeOverlay = memo(({
+  onTidy,
   onBatchConnect,
   onCreateAssetGroup,
   onAddToAssetGroup,
@@ -28,6 +30,7 @@ export const SelectedNodeOverlay = memo(({
   if (selectedNodes.length > 1) {
     return (
       <MultiNodeActionToolbar
+        onTidy={onTidy}
         nodes={selectedNodes}
         onBatchConnect={onBatchConnect}
         onCreateAssetGroup={onCreateAssetGroup}
