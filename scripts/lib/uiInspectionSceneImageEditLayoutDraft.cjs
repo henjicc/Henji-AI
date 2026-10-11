@@ -19,22 +19,25 @@ function layoutFixture(canvas, benchmark) {
   return doc
 }
 
-function createImageEditLayoutDraftScene(context, canvas = false, benchmark = false) {
+function createImageEditLayoutDraftScene(context, canvas = false, benchmark = false, panelReview = false) {
   return {
-    id: `${canvas ? 'image-edit-layout-draft-node' : 'image-edit-layout-draft'}${benchmark ? '-100' : ''}`, surface: canvas ? '画布' : '图片编辑',
+    id: `${canvas ? 'image-edit-layout-draft-node' : 'image-edit-layout-draft'}${panelReview ? '-panel' : benchmark ? '-100' : ''}`, surface: canvas ? '画布' : '图片编辑',
     name: `${canvas ? '画布图片文档节点' : '工具箱'}-${benchmark ? '100层随手摆性能' : '随手摆候选钉住应用撤销重开'}`, writesUserData: true,
     launchArgs: canvas ? [] : ['--dev-surface=tool.image_edit'],
     expectedLogEvents: ['image_edit.layout.optimize.failed'],
     setup: async (page, app, { capture }) => {
       page.setDefaultTimeout(15000)
-      const root = path.resolve(`node_modules/.cache/t149-layout-${canvas ? 'canvas' : 'toolbox'}${benchmark ? '-100' : ''}`)
+      const reviewWidth = panelReview ? await page.evaluate(() => innerWidth) : undefined
+      const root = path.resolve(`node_modules/.cache/t149-layout-${canvas ? 'canvas' : 'toolbox'}${panelReview ? `-panel-${reviewWidth}` : benchmark ? '-100' : ''}`)
       fs.mkdirSync(root, { recursive: true })
-      const evidence = { frames: [], candidateMs: [], abMs: [], fidelityMs: [], visualReview: '待逐张目视', benchmark: '5次预热，30次测量；输入到合成回执与下一帧；非物理屏幕延迟' }
+      const evidence = { frames: [], candidateMs: [], abMs: [], fidelityMs: [], visualReview: '待逐张目视', benchmark: panelReview ? '仅面板验收，不测性能' : '5次预热，30次测量；输入到合成回执与下一帧；非物理屏幕延迟' }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const restore = await blockPaidGeneration(app)
       const host = () => page.locator('[data-image-editor-v3]:visible').last()
       const controls = () => page.locator('[data-image-layout-controls]')
       const button = name => controls().getByRole('button', { name, exact: true })
+      const choice = name => controls().getByRole('radio', { name, exact: true })
+      const waitApply = () => page.waitForFunction(() => [...document.querySelectorAll('[data-image-layout-controls] button')].some(b => b.textContent === '应用' && !b.disabled), undefined, { timeout: 60000 })
       const panel = async () => { if (!await controls().isVisible()) await host().getByRole('button', { name: '随手摆', exact: true }).click(); await controls().waitFor() }
       const closePanel = async () => { if (await controls().isVisible()) { await host().getByRole('button', { name: '随手摆', exact: true }).click(); await controls().waitFor({ state: 'hidden' }) } }
       const select = async ids => {
@@ -60,6 +63,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
       }
       try {
         const doc = layoutFixture(canvas, benchmark)
+        if (panelReview) doc.id += `-panel-${reviewWidth}`
         evidence.layers = benchmark ? 100 : 4
         if (canvas) ({ projectId } = await context.seedAndOpenCanvasPanoramaProject(page))
         const seeded = await page.evaluate(async ({ doc, projectId, canvas }) => {
@@ -104,26 +108,39 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
           const first = host().locator('[data-layer-select]').first(); await first.click(); await first.press('End')
           await page.waitForTimeout(200)
           await host().locator('[data-layer-select]:focus').click({ modifiers: ['Shift'] })
-          await panel(); await button('整理').click(); await button('应用').waitFor({ timeout: 60000 }); await shot('100层候选')
+          await panel(); await button('整理').click(); await waitApply(); await shot('100层候选')
           assert.equal((await read()).document.creativeIntents.drafts.at(-1).targets.length, 100, '必须真实选中100层，不能以单层冒充基准')
         } else {
+        if (panelReview) {
+          await select(['hero']); await panel(); await controls().getByText('至少选择三个独立图层', { exact: true }).waitFor(); await shot('不足三层状态')
+        }
         await select(['hero', 'mirror', 'rotate', 'locked']); await shot('粗摆-组内镜像旋转锁层')
-        await panel(); await button('整理').click(); await button('应用').waitFor({ timeout: 60000 }); await shot('整理候选')
+        await panel(); await button('整理').click(); await waitApply(); await shot('整理候选')
         evidence.candidates = await page.evaluate(async documentRef => {
           const api = window.henjiNative.imageEditorV3, loaded = await api.loadDocument({ requestId: crypto.randomUUID(), documentRef })
           const draft = loaded.document.creativeIntents.drafts.at(-1)
           return Promise.all(draft.candidateRefs.map(ref => api.readLayoutResource({ requestId: crypto.randomUUID(), resourceRef: ref.resourceId })))
         }, documentRef); store()
-        await button('对齐并按边缘等距 B').click(); await shot('切换等距候选')
+        await choice('等距排列').click(); await shot('切换等距候选')
+        if (panelReview) {
+          assert.equal(await controls().locator('[role=radio][aria-checked=true]').count(), 1)
+          await choice('等距排列').press('Home'); await choice('原稿').press('ArrowDown')
+          assert.equal(await choice('边缘对齐').evaluate(e => e === document.activeElement && e.getAttribute('aria-checked') === 'true'), true)
+          const bounds = await controls().evaluate(e => ({ width: e.clientWidth, scroll: e.scrollWidth, right: e.getBoundingClientRect().right, viewport: innerWidth }))
+          assert.ok(bounds.scroll <= bounds.width && bounds.right <= bounds.viewport, '面板不能横向溢出')
+          await shot('候选键盘焦点')
+          await choice('等距排列').click()
+          if (await page.evaluate(() => innerWidth) < 1000) return
+        }
         assert.equal(await host().getByLabel('示范姿态残影与轨迹').evaluate(e => getComputedStyle(e).pointerEvents), 'none')
         await select(['hero']); await panel(); await button('钉住所选图层的原稿位置').click()
-        await button('解钉 · 主图').waitFor({ timeout: 60000 }); await button('应用').waitFor({ timeout: 60000 }); await shot('钉住主图')
-        await page.getByRole('slider', { name: '保真度', exact: true }).press('ArrowRight'); await button('应用').waitFor({ timeout: 60000 }); await shot('保真调整')
+        await button('解钉 · 主图').waitFor({ timeout: 60000 }); await waitApply(); await shot('钉住主图')
+        await page.getByRole('slider', { name: '保留原稿位置', exact: true }).press('ArrowRight'); await waitApply(); await shot('保真调整')
         // 保真归零后检查正式边缘的对齐与等距；保真值大于零有意保留粗摆偏差。
-        await page.getByRole('slider', { name: '保真度', exact: true }).press('Home'); await button('应用').waitFor({ timeout: 60000 })
-        await button('对齐并按边缘等距 B').click()
+        await page.getByRole('slider', { name: '保留原稿位置', exact: true }).press('Home'); await waitApply()
+        await choice('等距排列').click()
         const before = (await read()).document
-        await button('应用').click(); await button('整理').waitFor({ timeout: 60000 }); await closePanel(); await shot('应用合成')
+        await button('应用').click(); await controls().getByText('已应用，可撤销', { exact: true }).waitFor({ timeout: 60000 }); await shot('应用反馈'); await closePanel()
         const after = (await read()).document
         const transforms = d => [d.layers[0], d.layers[1].children[0], d.layers[2], d.layers[3]].map(l => l.transform)
         const waitSaved = async expected => {
@@ -137,10 +154,10 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
         assert.deepEqual(after.layers[3].transform, before.layers[3].transform, '锁层不动')
         assert.deepEqual(after.layers[1].transform, before.layers[1].transform, '组结构与祖先变换不动')
         evidence.applied = { before: transforms(before), after: transforms(after) }; store()
-        await host().getByRole('button', { name: '撤销', exact: true }).click(); await shot('一次撤销')
+        await host().getByRole('button', { name: '撤销', exact: true }).click(); await panel(); await controls().getByText('已撤销布局', { exact: true }).waitFor(); await shot('一次撤销'); await closePanel()
         await waitSaved(before)
         assert.deepEqual(transforms((await read()).document), transforms(before))
-        await host().getByRole('button', { name: '重做', exact: true }).click(); await shot('重做')
+        await host().getByRole('button', { name: '重做', exact: true }).click(); await panel(); await controls().getByText('已重做布局', { exact: true }).waitFor(); await shot('重做'); await closePanel()
         await waitSaved(after)
         assert.deepEqual(transforms((await read()).document), transforms(after))
         if (canvas) await page.getByRole('dialog', { name: /多图层图片编辑器/ }).getByRole('button', { name: /关闭编辑器/ }).click()
@@ -154,10 +171,11 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
           await naming.waitFor({ state: 'hidden', timeout: 60000 })
           await page.locator(`[data-project-id="${target.id}"]`).waitFor({ timeout: 60000 })
         }
-        await open(); await panel(); await button('解钉 · 主图').waitFor({ timeout: 60000 }); await button('原稿 A').waitFor({ timeout: 60000 }); await shot('保存重开草稿')
+        await open(); await panel(); await button('解钉 · 主图').waitFor({ timeout: 60000 }); await choice('原稿').waitFor({ timeout: 60000 }); await shot('保存重开草稿')
         assert.deepEqual(transforms((await read()).document), transforms(after))
         assert.equal((await read()).document.creativeIntents.drafts.at(-1).pins.length, 1)
         }
+        if (!panelReview) {
         await page.evaluate(() => {
           window.__layoutInputs = []; window.__layoutFrames = []; window.__layoutComputes = []
           new PerformanceObserver(list => { for (const m of list.getEntries()) if (m.name === 'image-layout-candidate-generation') window.__layoutComputes.push({ duration: m.duration, end: m.startTime + m.duration }) }).observe({ entryTypes: ['measure'] })
@@ -165,7 +183,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
           let generation = document.querySelector(selector).dataset.renderGeneration
           new MutationObserver(() => { const next = document.querySelector(selector).dataset.renderGeneration; if (next !== generation) { generation = next; const at = performance.now(); requestAnimationFrame(() => window.__layoutFrames.push({ at, presentedAt: performance.now(), generation })) } }).observe(document.querySelector(selector), { attributes: true, attributeFilter: ['data-render-generation'] })
           document.addEventListener('click', event => { if (event.target.closest?.('[data-image-layout-controls] button')) window.__layoutInputs.push(event.timeStamp) }, true)
-          document.addEventListener('keyup', event => { if (event.target.getAttribute?.('aria-label') === '保真度') window.__layoutInputs.push(event.timeStamp) }, true)
+          document.addEventListener('keyup', event => { if (event.target.getAttribute?.('aria-label') === '保留原稿位置') window.__layoutInputs.push(event.timeStamp) }, true)
         })
         const sample = async (action, compute = false) => {
           const baseline = await page.evaluate(compute => ({ compute, computes: window.__layoutComputes.length, count: window.__layoutInputs.length, generation: document.querySelector('[data-image-editor-v3] [data-presentation-front-surface]').dataset.renderGeneration }), compute)
@@ -179,30 +197,31 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
           }, baseline, { timeout: 60000 })
           return page.evaluate(({ count, generation, compute, computes }) => { const input = window.__layoutInputs[count]; const completed = compute ? window.__layoutComputes[computes].end : input; return window.__layoutFrames.find(f => f.at >= completed && f.generation !== generation).presentedAt - input }, baseline)
         }
-        const ab = async i => sample(() => button(i % 2 ? '对齐并按边缘等距 B' : '原稿 A').click())
+        const ab = async i => sample(() => choice(i % 2 ? '等距排列' : '原稿').click())
         for (let i = 0; i < 5; i++) { await ab(0); await ab(1) }
         for (let i = 0; i < 30; i++) { evidence.abMs.push(await ab(i)); store() }
-        const slider = async i => sample(() => page.getByRole('slider', { name: '保真度', exact: true }).press(i % 2 ? 'ArrowLeft' : 'ArrowRight'), true)
+        const slider = async i => sample(() => page.getByRole('slider', { name: '保留原稿位置', exact: true }).press(i % 2 ? 'ArrowLeft' : 'ArrowRight'), true)
         const profiler = benchmark && process.env.HENJI_UI_LAYOUT_PROFILE === '1' ? await page.context().newCDPSession(page) : null
         if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
         for (let i = 0; i < 5; i++) { await slider(0); await slider(1) }
         for (let i = 0; i < 30; i++) { evidence.fidelityMs.push(await slider(i)); store() }
         if (profiler) { fs.writeFileSync(path.join(root, 'fidelity.cpuprofile'), JSON.stringify((await profiler.send('Profiler.stop')).profile)); await profiler.detach() }
         evidence.computeDiagnostics = await page.evaluate(() => window.__layoutComputes)
-        const organize = async () => { await button('原稿 A').click(); return sample(() => button('整理').click(), true) }
+        const organize = async () => { await choice('原稿').click(); return sample(() => button('整理').click(), true) }
         for (let i = 0; i < 5; i++) await organize()
         for (let i = 0; i < 30; i++) { evidence.candidateMs.push(await organize()); store() }
         evidence.metrics = Object.fromEntries(['candidateMs', 'abMs', 'fidelityMs'].map(k => [k, { p95: quantile(evidence[k], .95), p99: quantile(evidence[k], .99), worst: Math.max(...evidence[k]) }]))
         store()
+        }
         // 同一真实宿主主动启用蒙版后拒绝，不用旧草稿跳过重新采样。
         if (!benchmark) {
         await closePanel(); await select(['hero'])
         await host().getByRole('button', { name: '添加蒙版', exact: true }).click()
         await select(['hero', 'mirror', 'rotate', 'locked'])
-        await panel(); if (await button('原稿 A').count()) await button('原稿 A').click(); await button('整理').click()
+        await panel(); if (await choice('原稿').count()) await choice('原稿').click(); await button('整理').click()
         await controls().getByText(/含蒙版图层的可见边缘暂不能整理/).first().waitFor({ timeout: 60000 }); await shot('蒙版拒绝明确提示')
         }
-        assert.ok(evidence.metrics.candidateMs.p95 <= 900); assert.ok(evidence.metrics.abMs.p95 <= 100); assert.ok(evidence.metrics.fidelityMs.p95 <= 300)
+        if (!panelReview) { assert.ok(evidence.metrics.candidateMs.p95 <= 900); assert.ok(evidence.metrics.abMs.p95 <= 100); assert.ok(evidence.metrics.fidelityMs.p95 <= 300) }
       } catch (error) { await capture('failure'); evidence.failure = error.stack; evidence.surface = await host().locator('[data-preview-surface]').evaluate(e => ({ ...e.dataset })).catch(() => null); store(); throw error }
       finally { await restore() }
     },

@@ -20,7 +20,7 @@ const logger = createLogger('features.imageEdit.v3.layout')
 const PAGE_ENTRIES = 64 // Per-page I/O/scheduling budget; the whole selection is processed.
 export interface ImageLayoutState {
   status:'idle'|'reviewing'|'optimizing'; draft?:MotionDraft; entries:ImageLayoutEntry[];
-  candidates:LayoutCandidate[]; selected:string; baseDigest:string; revision:number; message?:string; needsSave:boolean;
+  candidates:LayoutCandidate[]; selected:string; baseDigest:string; revision:number; message?:string; messageTone?:'status'|'error'; needsSave:boolean;
 }
 interface LayoutPorts {
   measure?:LayoutMeasure
@@ -45,7 +45,9 @@ export class ImageEditLayoutDraft {
       this.abort?.abort()
       const draft = snapshot.document.creativeIntents?.drafts.find(d => d.id === this.state.draft?.id)
       const samePages=draft&&JSON.stringify(draft.recipeRefs)===JSON.stringify(this.state.draft?.recipeRefs)
-      this.update({ draft, revision:snapshot.document.revision,selected:'original',candidates:[],baseDigest:samePages?this.state.baseDigest:'',message:'图片已变化，请重新整理；已保存的原稿仍保留' })
+      const previousApplications=this.state.draft?.applications.length??0, applications=draft?.applications.length??0
+      const message=applications<previousApplications?'已撤销布局':applications>previousApplications?'已重做布局':'图片已变化，请重新整理'
+      this.update({ draft, status:draft?'reviewing':'idle', revision:snapshot.document.revision,selected:'original',candidates:[],baseDigest:samePages?this.state.baseDigest:'',message,messageTone:'status' })
       this.clearPreviews()
     })
     bus.getLifecycleSignal().addEventListener('abort',()=>{ this.abort?.abort(); unsubscribe(); this.clearPreviews(); this.listeners.clear(); void this.releasePending().catch(error => logger.warn('随手摆资源释放失败',{event:'image_edit.layout.release.failed',error})) },{once:true})
@@ -55,9 +57,10 @@ export class ImageEditLayoutDraft {
   private update(patch:Partial<ImageLayoutState>):void { this.state={...this.state,...patch}; this.listeners.forEach(l=>l()) }
   private clearPreviews():void { const ids=this.previews; this.previews=[]; this.bus.replacePreviews(ids,[]) }
   cancel():void {
+    const optimizing=this.state.status==='optimizing'
     this.abort?.abort();this.generation++;this.clearPreviews()
     const draft=this.bus.getSnapshot().document.creativeIntents?.drafts.find(d=>d.id===this.state.draft?.id)
-    this.update({draft,status:draft?'reviewing':'idle',selected:'original',...(!draft?{entries:[],candidates:[],baseDigest:''}:{})})
+    this.update({draft,status:draft?'reviewing':'idle',selected:'original',...(optimizing?{message:'已取消整理，原稿保留',messageTone:'status' as const}:{}),...(!draft?{entries:[],candidates:[],baseDigest:''}:{})})
   }
   private command(head:CreativeIntents, id:string):ImageEditLeafCommandV3 {
     const document=this.bus.getSnapshot().document
@@ -94,7 +97,7 @@ export class ImageEditLayoutDraft {
     const lease=createImageEditIdV3('layout-resources'), started=performance.now()
     this.pendingLeases.add(lease)
     let persisted = false
-    this.update({status:'optimizing',message:undefined})
+    this.update({status:'optimizing',message:undefined,messageTone:undefined})
     logger.info('开始整理图片布局',{event:'image_edit.layout.optimize.start'})
     try {
       let draft=configured??this.state.draft
@@ -117,6 +120,7 @@ export class ImageEditLayoutDraft {
         }
         const targets=await Promise.all(entries.map(async e=>({ref:e.item.targetRef,ownerRef,editable:['position','rotationTurns','scaleXY','pivot'] as const,basePose:e.sample.pose,
           baseDigest:await imageLayoutDigest(e.localAffine),geometryDigest:await imageLayoutDigest([e.parentAffine,e.item.worldCorners]),compositionSize:[document.geometry.width,document.geometry.height]})))
+        // 0 means fully arrange positions; 1 preserves the original placement. Pixel quality is unchanged.
         draft=motionDraftSchema.parse({id:createImageEditIdV3('layout'),version:1,ownerRef,mode:'static',label:'随手摆',fidelity:0,sourceDigest,targets,
           clockSegments:[{id:'static',monoSpanUs:[0,Math.max(1,entries.length)],mode:'hold',start:null,end:null,anchors:[]}],
           takes:[{id:take,intent:'demonstrate',pathDemonstration:false,placement:true,monoSpanUs:[0,entries.length],direction:0,visitRef:null,timelineRange:null,samplePages,geometryDigest:sourceDigest}],pins:[],constraints:[],recipeRefs,candidateRefs:[],applications:[]})
@@ -143,14 +147,14 @@ export class ImageEditLayoutDraft {
       if(generation!==this.generation || this.bus.getSnapshot().document!==document) throw new Error('图片已变化，请重新整理')
       const chosen=candidates.findIndex(c=>c.id===preferred),selected=Math.max(0,chosen)
       draft={...draft,candidateRefs:refs,selectedCandidateRef:refs[selected]?.resourceId}
-      this.persist(draft); persisted = true; this.update({candidates,status:'reviewing',selected:candidates[selected]?.id??'original',message:candidates.length<2?'钉住范围内只有一种不同结果，可对照原稿':undefined})
+      this.persist(draft); persisted = true; this.update({candidates,status:'reviewing',selected:candidates[selected]?.id??'original',message:candidates.length<2?'当前设置下只有一种布局':undefined,messageTone:'status'})
       this.preview(this.state.selected)
       performance.measure('image-layout-candidate-generation', { start: started, end: performance.now() })
       performance.clearMeasures('image-layout-candidate-generation')
       await this.confirm()
       logger.info('图片布局候选已完成',{event:'image_edit.layout.optimize.completed',context:{layers:items.length,candidateMs:performance.now()-started,candidates:candidates.length}})
     } catch(error) {
-      if(generation===this.generation) this.update({...(!persisted?{...previous,candidates:[],selected:'original',baseDigest:this.bus.getSnapshot().document===baseDocument?previous.baseDigest:''}:{}),status:(persisted?this.state.draft:previous.draft)?'reviewing':'idle',message:abort.signal.aborted?'已取消整理，原稿保留':error instanceof Error?error.message:String(error)})
+      if(generation===this.generation) this.update({...(!persisted?{...previous,candidates:[],selected:'original',baseDigest:this.bus.getSnapshot().document===baseDocument?previous.baseDigest:''}:{}),status:(persisted?this.state.draft:previous.draft)?'reviewing':'idle',message:abort.signal.aborted?'已取消整理，原稿保留':error instanceof Error?error.message:String(error),messageTone:abort.signal.aborted?'status':'error'})
       logger.warn('图片布局整理未完成',{event:'image_edit.layout.optimize.failed',error}); throw error
     } finally { try {if(!persisted || !this.state.needsSave) {await this.ports.release(lease);this.pendingLeases.delete(lease)}} finally {releaseInstance()} }
   }
@@ -206,7 +210,7 @@ export class ImageEditLayoutDraft {
     await this.organizeDraft([],preferred,updated)
   }
   async apply():Promise<void> {
-    if(this.state.needsSave) {await this.confirm(); return}
+    if(this.state.needsSave) {await this.confirm();this.update({message:'布局已保存',messageTone:'status'}); return}
     const draft=this.state.draft,candidate=this.state.candidates.find(c=>c.id===this.state.selected)
     if(!draft||!candidate) throw new Error('请先选择整理候选')
     const document=this.bus.getSnapshot().document
@@ -223,6 +227,7 @@ export class ImageEditLayoutDraft {
     try {const next=this.bus.dispatch({type:'document.atomic',commandId,expectedRevision:document.revision,commands}); this.update({draft:applied,revision:next.revision,candidates:[],selected:'original',needsSave:true})}
     finally {this.ownWrite=false}
     await this.confirm()
+    this.update({message:'已应用，可撤销',messageTone:'status'})
     logger.info('图片布局已应用',{event:'image_edit.layout.apply.completed',context:{commandId,layers:changes.length}})
   }
   async reopen(draftId:string):Promise<void> {

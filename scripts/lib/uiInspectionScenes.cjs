@@ -190,6 +190,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createImageEditLayoutDraftScene(context, true),
     createImageEditLayoutDraftScene(context, false, true),
     createImageEditLayoutDraftScene(context, true, true),
+    ...[false, true].map(canvas => createImageEditLayoutDraftScene(context, canvas, false, true)),
     createImageEditCommonWorkflowsScene(context),
     createImageEditCommonFeaturesScene(context),
     createImageEditCommonFeaturesScene(context, true),

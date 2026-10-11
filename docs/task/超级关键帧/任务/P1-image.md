@@ -293,3 +293,71 @@ npm run test:assistant-persistence
 | `docs/task/超级关键帧/02-实施拆分.md` | 只追加/更新 P1-3 本单 t149 状态行。 |
 
 临时执行脚本、日志、截图和 CPU profile 位于被忽略的 `.reality/` / `node_modules/.cache/t149-layout-*`，不是应提交源码；未创建额外任务/总结文档。未手改 SDK 或并行任务所有权源码；授权的正式 bundle 会更新 SDK 生成索引，工作区还有其他任务的 SDK 改动，不纳入本单、不还原，总管理者需核对生成产物来源并逐 hunk 审查共享文件。证据目录被 Git 忽略，交接时须单独保留或归档。
+
+## t152 面板打磨
+
+### 范围与设计决定
+
+- 移除常驻使用说明；只有首次整理缺少三个独立图层时显示简短条件提示。已有草稿选中单个主图后仍沿用原稿目标集合。
+- 图片侧组合既有 UiGroup、UiOptionButton、UiRangeInput、PanelTrigger、UiEmpty/UiLoading/UiError；候选统一为同宽单选行，名称为“原稿 / 边缘对齐 / 等距排列 / 保留主图”，移除 A/B 后缀和原稿独有图标。“整理”为静默动作，“应用”为唯一主动作。
+- 面板从 w-72 收至 w-64；钉点列表按实际行数收缩，超过三行仅限制可见高度并继续虚拟滚动，不限制图层或钉点总数。长名称截断并保留完整可访问名称。
+- 保留默认 fidelity=0：共享布局求解器以 (1-fidelity) 缩放位置改变量，0 表示完整对齐/等距，1 表示保持原位，不影响图片质量。界面改为“保留原稿位置”，两端为“完全整理 / 保持原位”，百分比独立回显。
+- 候选提供 radiogroup/radio、单一 Tab 停靠点、方向键循环和 Home/End。滑杆支持停手/失焦提交、Escape 放弃未提交值；Escape 沿现有 PanelTrigger 的捕获规则关闭浮层，不另改共享组件。
+- 应用、撤销、重做、取消和单候选结果使用普通状态提示；拒绝和保存失败只显示一个错误块。保存失败可重试，异步动作期间阻止重复应用。
+- 沿根因检查 full / canvas-edit 两宿主共用面板、草稿订阅、应用/保存重试、撤销重做、蒙版拒绝、原稿残影及共享 CreativeIntentControls。残影实现未发现本单相关缺陷，未修改；共享控件归 t151 所有，未修改。
+- 开源与复用选型：现有 Ui* 和 react-virtuoso 已覆盖全部需要；继续使用既有 Kiwi 布局求解器，不引入新库或第二份业务算法。建议共享 CreativeIntentControls 后续开放候选标签与对照选择呈现配置，并区分普通状态与失败；本单按文件所有权在图片侧组合。
+- 能力覆盖分级为展示调整：没有新增业务操作、实体、持久格式或助手工具，继续走现有 ImageEditLayoutDraft。P1-5 的正式助手实体/回执欠账没有因本单消失。
+
+### 设计自查
+
+1. **助手只凭名称和说明能否用对？** 整理、候选预览、钉住原稿位置、保真与一次应用仍调用同一领域入口；本单仅澄清面板语义，不将 UI 接线冒充 P1-5 已完成。
+2. **能否 AI 先做、人只确认？** 仍由既有求解器先产生布局候选，人选择、钉住和确认；默认完整整理，不要求先调参数。蒙版等不支持情况明确拒绝。
+3. **产物能否直接流进其他工作区？** 继续写入正式图片图层、同一撤销栈和原有文档保存链，工具箱与画布图片宿主共享结果，没有新增导入导出格式。
+
+### 验证记录（代码检查通过，双宿主截图未闭环）
+
+- 精确测试：领域 8 项、残影 1 项通过；控件 10 项最终通过。首轮控件 1 项失败源于测试误以为 Escape 不关闭公共浮层，已按实际公共规则修正。日志 `.reality/t152-tests.log`、`.reality/t152-controls-final-tests.log`。
+- 两条 tsc 均已运行：主进程通过；渲染层首次报告本单测试替身两处类型错误及并行 t154 测试错误。本单改成只声明控件消费字段的替身并修正 Promise<void>，渲染层最终复查通过，见 `.reality/t152-tsc-final2.log`；不修改 t154 文件。
+- 改动文件 ESLint 通过；check:surface、check:colors、check:icons、check:ui-residue 通过。钉点收缩后的控件精确复验、ESLint 与 ui-residue 也通过。正式场景工具 41 项通过；日志 `.reality/t152-*-tests.log`、`.reality/t152-*.log`。
+- 改前新的正式截图尝试先被产物新鲜度检查拒绝；随后轻量构建在 renderer transforming 阶段异常退出，执行会话退出码 -1073741571，日志 `.reality/t152-before.log` 与 `.reality/t152-before-build.log`。当时系统可用提交内存不足 1 GB，但未据此断言唯一原因；没有关闭用户程序。确认本轮构建进程结束后立即清除本单截图锁。
+- 改前对比暂复用并逐张目视 t149 的两个正式 Electron 截图：[工具箱](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-step-03.png)、[画布文档节点](../../../../.reality/t149-delivery-quiet/1440x900-image-edit-layout-draft-node-step-03.png)。两张均确认常驻说明、A/B 名称、混排候选与原稿图标问题；不是本轮新拍基线。
+- 改后标准内存轮在 esbuild 阶段出现明确 `Out of memory` / `The service was stopped`，见 `.reality/t152-after.log`。随后仅为本轮进程设置 `GOMAXPROCS=2`、`GOMEMLIMIT=512MiB`、`NODE_OPTIONS=--max-old-space-size=6144`；正式轻量构建成功（205.66 秒），没有修改持久配置。
+- 低内存轮正式 Electron **1440×900 画布文档节点场景通过**：不足三层、粗摆、整理、候选切换、键盘焦点、钉主图、滑杆、应用、撤销、重做、保存重开、蒙版拒绝共 12 步及末帧 1 张，13 张全部逐张 view_image 目视。确认无常驻使用说明、无 A/B 后缀、同宽候选行与唯一主动作、原稿位置百分比、明确焦点环、单条拒绝提示；保存/撤销/重做同时读回正式姿态。目录 `.reality/t152-after-low-memory/`，日志 `.reality/t152-after-low-memory.log`。
+- 同轮 **960×640 画布场景失败**，原因是脚本跨尺寸复用了文档 ID（expected 0, actual 8）。其失败截图也已目视，停留在夹具画布，不能算面板验收。已给 panel 模式的文档身份及证据目录增加窗口宽度区分；脚本 ESLint 与语法检查通过，运行补验尚未完成。
+- 进入工具箱宿主前又被新鲜度校验拒绝：并行任务修改运行源码晚于该轮产物，正式工具提前退出，故本轮没有完整 evidence.json/index.md，不能称整轮通过。随后等待 t154 释放截图锁并复用其最新构建再次尝试，仍被拒绝（产物 11:57:42，源码 12:02:26），见 `.reality/t152-final.log`。没有跳过新鲜度校验，也没有触碰其他任务代码。
+- **尚未完成：本轮新拍改前基线、工具箱改后截图、960 窄窗口截图，以及完整双宿主最终回执。** 已请求总管理者协调稳定窗口，尚未获得确认。剩余验收必须在 src/ 与 electron/ 暂停写入、其他共享构建停止时进行；低内存环境复用上述进程级预算，持锁运行 `npm run test:reality -- --suite ui --build --only image-edit-layout-draft-panel,image-edit-layout-draft-node-panel --size 1440x900 --size 960x640 --out .reality/t152-accepted`，结束立即释放锁。新产物已就绪时去掉 `--build`。不能以已通过的单一宿主宣称两个宿主全部验收。
+- 本单场景新增 panel 模式覆盖不足三层、候选键盘焦点、窄宽度、应用/撤销/重做反馈、保存重开与蒙版拒绝，不附带百层性能测量。副屏系统核对为右侧 DISPLAY1，DIP 点 2561,1。
+
+### 改后已目视截图
+
+已目视的 13 张为同一正式画布图片宿主（1440×900），文件均在 `.reality/t152-after-low-memory/`：
+
+| 序号 | 状态 | 结论 |
+|---|---|---|
+| 01 | 不足三层 | 条件提示简短，整理/应用禁用。 |
+| 02 | 粗摆 | 原稿位置及锁层正常。 |
+| 03 | 整理候选 | 三个选项同宽、边缘对齐选中、默认值含义清晰。 |
+| 04 | 切换等距 | 等距排列选中，可见边缘结果与原稿残影可区分。 |
+| 05 | 键盘焦点 | Home/ArrowDown 后边缘对齐有焦点环，与悬停色可区分。 |
+| 06 | 钉主图 | 钉点与单行解钉项可辨，列表未额外空占三行。 |
+| 07 | 滑杆 | 1% 读数明确，主图位置保留。 |
+| 08 | 应用 | 普通“已应用，可撤销”提示，应用禁用防重做。 |
+| 09 | 撤销 | 普通“已撤销布局”提示，粗摆恢复。 |
+| 10 | 重做 | 普通“已重做布局”提示，布局恢复。 |
+| 11 | 保存重开 | 原稿、候选及钉点仍可读回。 |
+| 12 / 末帧 | 蒙版拒绝 | 只出现一个错误块与恢复建议，应用禁用。 |
+
+代表图：[候选](../../../../.reality/t152-after-low-memory/1440x900-image-edit-layout-draft-node-panel-step-04.png)、[键盘焦点](../../../../.reality/t152-after-low-memory/1440x900-image-edit-layout-draft-node-panel-step-05.png)、[应用](../../../../.reality/t152-after-low-memory/1440x900-image-edit-layout-draft-node-panel-step-08.png)、[撤销](../../../../.reality/t152-after-low-memory/1440x900-image-edit-layout-draft-node-panel-step-09.png)、[拒绝](../../../../.reality/t152-after-low-memory/1440x900-image-edit-layout-draft-node-panel-step-12.png)。
+
+### 本单文件范围
+
+- `src/features/imageEdit/v3/editor/ImageEditorLayoutControlsV3.tsx`：图片侧面板组合、短名称、统一单选、滑杆语义、条件状态、键盘与防重复动作。
+- `src/features/imageEdit/v3/editor/ImageEditorLayoutControlsV3.test.tsx`：双宿主、只读宿主、候选键盘、条件提示、滑杆、保存失败/重试及状态语义回归。
+- `src/features/imageEdit/v3/application/imageEditLayoutDraft.ts`：瞬态消息语气、应用/历史/取消反馈与默认值注释；不改持久格式。
+- `src/features/imageEdit/v3/application/imageEditLayoutDraft.test.ts`：默认保真、应用、撤销、重做和保存重试反馈断言。
+- `scripts/lib/uiInspectionSceneImageEditLayoutDraft.cjs`：沿正式双宿主场景增加局部面板验收，更新控件选择器与就绪条件；原性能场景预算保留。
+- `scripts/lib/uiInspectionScenes.cjs`：只新增一行双宿主 panel 场景登记；其余 diff 属其他任务。
+- `docs/task/超级关键帧/任务/P1-image.md`：追加本节。
+- `docs/task/超级关键帧/02-实施拆分.md`：仅新增 t152 状态行。
+
+无 Git 写操作、付费调用、electron:dev 启停或 SDK 源码手改。授权的正式 bundle 调用了目录索引生成器；SDK 开始时已有大量其他任务改动，不还原、不归入本单。总管理者须按上述文件逐 hunk 审查共享登记与总览。

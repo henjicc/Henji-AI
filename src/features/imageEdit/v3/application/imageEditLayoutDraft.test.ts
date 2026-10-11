@@ -33,6 +33,7 @@ describe('随手摆正式文档适配',()=>{
     expect(collectImageEditJsonResourceIdsV3({params:{creativeIntents:[ordinary]}})).toEqual([ordinary])
     const {bus,adapter,confirmed}=setup();const initial=structuredClone(bus.getSnapshot().document)
     await adapter.organize(['a','b','c'])
+    expect(adapter.snapshot().draft!.fidelity).toBe(0)
     expect(adapter.snapshot().candidates.length).toBeGreaterThanOrEqual(2)
     const candidates=adapter.snapshot().candidates,spacing=candidates.find(c=>c.id==='distribute')!
     const entries=adapter.snapshot().entries
@@ -48,13 +49,16 @@ describe('随手摆正式文档适配',()=>{
     expect(bus.getSnapshot().document).toBe(before)
     expect(Object.keys(bus.getSnapshot().previewOverrides).length).toBeLessThanOrEqual(3)
     await adapter.apply()
+    expect(adapter.snapshot()).toMatchObject({message:'已应用，可撤销',messageTone:'status'})
     expect(bus.getSnapshot().history.undoCount).toBe(history+1)
     expect(bus.getPersistenceSnapshot().history.undo.at(-1)?.forward.type).toBe('document.atomic')
     const applied=structuredClone(bus.getSnapshot().document.layers)
     expect(applied).not.toEqual(initial.layers)
     expect(confirmed).toHaveBeenCalledTimes(2)
     expect(bus.undo()).toBe(true);expect(bus.getSnapshot().document.layers).toEqual(initial.layers)
+    expect(adapter.snapshot()).toMatchObject({message:'已撤销布局',messageTone:'status'})
     expect(bus.redo()).toBe(true);expect(bus.getSnapshot().document.layers).toEqual(applied)
+    expect(adapter.snapshot()).toMatchObject({message:'已重做布局',messageTone:'status'})
     const snapshot=bus.getPersistenceSnapshot()
     expect(()=>decodeImageEditCommandHistorySnapshotV3(snapshot.history)).not.toThrow()
     const refs=collectImageEditJsonResourceIdsV3(snapshot)
@@ -126,6 +130,7 @@ describe('随手摆正式文档适配',()=>{
     await expect(adapter.apply()).rejects.toThrow('disk full')
     const revision=bus.getSnapshot().document.revision
     await adapter.apply();expect(bus.getSnapshot().document.revision).toBe(revision)
+    expect(adapter.snapshot()).toMatchObject({message:'布局已保存',messageTone:'status',needsSave:false})
     expect(released).toHaveBeenCalled()
     bus.dispatch({type:'layer.update-common',layerId:'a',commandId:'manual',expectedRevision:revision,patch:{transform:[1,0,0,1,22,15]}})
     await expect(adapter.apply()).rejects.toThrow()
