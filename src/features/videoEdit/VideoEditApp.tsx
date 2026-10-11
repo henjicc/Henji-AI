@@ -32,6 +32,7 @@ import { VideoEditAudioGainDialog } from './panels/VideoEditAudioGainDialog'
 import { VideoEditExportDialog } from './panels/VideoEditExportDialog'
 import { VideoEditFontWarnings } from './panels/VideoEditFontWarnings'
 import { videoEditCommittedDocument } from './application/videoEditService'
+import { cancelVideoEditBeatAnalysis, subscribeVideoEditBeats, videoEditBeatRevision, videoEditBeatTask } from './application/videoEditBeatAnalysis'
 
 /** Shift+1…5（Premiere 默认）切到的面板；切换后键盘焦点也进入该面板，后续快捷键按它的作用域生效。 */
 const FOCUS_COMMANDS: Partial<Record<VideoEditCommandId, 'project' | 'source' | 'timeline' | 'program' | 'effects'>> = { focus_project: 'project', focus_source: 'source', focus_timeline: 'timeline', focus_program: 'program', focus_effects: 'effects' }
@@ -58,9 +59,11 @@ function toggleMaximizedGroup(api: DockviewApi | null, hovered: Element | null):
  */
 function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useSyncExternalStore(subscribeVideoEditBeats, videoEditBeatRevision)
   const { t } = useTranslation('ui')
   const sequence = findActiveVideoEditSequence(instance); const projectId = instance.document.id
   const task = videoEditExportTask(projectId)
+  const beatTask = videoEditBeatTask(projectId)
   const marked = instance.inFrame !== null || instance.outFrame !== null ? (() => { try { return videoEditExportRange(instance) } catch { return undefined } })() : undefined
   const [collecting, setCollecting] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -72,6 +75,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
   const undo = presentation('undo'); const redo = presentation('redo'); const exporting = presentation('export')
   const others = listVideoEditInstances().filter(item => item !== instance)
   return <UiToolbar variant="command" trailing={<>
+    {beatTask && <UiButton disabled={beatTask.controller.signal.aborted} onClick={() => cancelVideoEditBeatAnalysis(projectId)}>取消分析 {Math.round(beatTask.progress * 100)}%</UiButton>}
     {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence!.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence!.fps)}</span>}
     <UiIconButton aria-label="撤销" title={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2 size={16} /></UiIconButton>
     <UiIconButton aria-label="重做" title={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2 size={16} /></UiIconButton>

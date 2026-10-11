@@ -1,4 +1,7 @@
 import { configureCameraStageControlDependencies } from './cameraStageControlDependencies'
+import { organizeCameraIntentCapability, applyCameraIntentCapability } from '@/core/application-control/domains/cameraStage/cameraStageIntentCapabilities'
+import { organizeCameraMotion, applyCameraMotion, cameraMotionDraft } from './cameraMotionDraft'
+import { cameraStageProjectStore, ensureCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
 
 import { CAMERA_STAGE_RENDER_CAPABILITY_ID, CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, WAIT_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageRenderApplicationCapabilities'
@@ -28,6 +31,23 @@ interface CameraObjectInput extends ProjectInput {
  */
 export function registerCameraStageCapabilityHandlers(publicRegistrar: ApplicationCapabilityHandlerRegistrar): void {
   const registrar = withDocumentIdOutput(publicRegistrar)
+  publicRegistrar.registerHandler(organizeCameraIntentCapability.id, async (raw, context) => {
+    context.signal.throwIfAborted()
+    const input = organizeCameraIntentCapability.inputSchema.parse(raw), projectId = input.documentRef.id
+    await ensureCameraStageProjectRuntime(projectId)
+    const child = (ref: { id: string }): string => { const prefix = `${projectId}:`; if (!ref.id.startsWith(prefix) || !ref.id.slice(prefix.length)) throw new Error('机位和状态关键帧必须属于目标文档。'); return ref.id.slice(prefix.length) }
+    const review = await organizeCameraMotion(projectId, child(input.cameraRef), input.stateKeyframeRefs.map(child))
+    return { baseRevision: getHostScopeRevisions().toolbox, resultRef: input.documentRef, reviewId: cameraMotionDraft(projectId)!.reviewId!, ...review, revision: getHostScopeRevisions().toolbox, scopeRevisions: getHostScopeRevisions() }
+  })
+  publicRegistrar.registerHandler(applyCameraIntentCapability.id, async (raw, context) => {
+    context.signal.throwIfAborted()
+    const input = applyCameraIntentCapability.inputSchema.parse(raw), projectId = input.documentRef.id
+    if (input.baseRevision !== getHostScopeRevisions().toolbox) throw new Error('CONFLICT')
+    if (cameraMotionDraft(projectId)?.reviewId !== input.reviewId) throw new Error('候选已失效，请重新整理。')
+    const result = await applyCameraMotion(projectId, input.candidateId)
+    notifyHostScopeChanged('toolbox')
+    return { ...result, baseRevision: getHostScopeRevisions().toolbox, resultRef: input.documentRef, stateKeyframeRefs: cameraStageProjectStore(projectId).getState().stateKeyframes.map(frame => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${frame.id}` })), revision: getHostScopeRevisions().toolbox, scopeRevisions: getHostScopeRevisions() }
+  })
   configureCameraStageControlDependencies({
     readRevision: () => getHostScopeRevisions().toolbox,
     bumpRevision: () => notifyHostScopeChanged('toolbox'),

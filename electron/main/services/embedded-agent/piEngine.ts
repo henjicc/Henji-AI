@@ -20,6 +20,7 @@ export class PiEngine implements EmbeddedAgentEngine {
   private state = emptyEmbeddedAgentSnapshot()
   private unsubscribe?: () => void
   private attachments!: PiAttachments
+  private completedIntents = new Set<string>()
   private cancelled = false
   private requestId = ''
   private modelStartedAt = 0
@@ -71,7 +72,11 @@ export class PiEngine implements EmbeddedAgentEngine {
     const customTools: ToolDefinition[] = tools.map((tool) => ({
       name: tool.name, label: tool.title ?? '操作应用', description: tool.description ?? tool.name,
       parameters: tool.inputSchema as ToolDefinition['parameters'], executionMode: 'sequential',
-      execute: (id, args: Record<string, unknown>, signal) => executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool),
+      execute: async (id, args: Record<string, unknown>, signal) => {
+        const result = await executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool)
+        if (/^interpret_(video_edit|image_edit)_intent$/.test(tool.name) && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
+        return result
+      },
     }))
     this.disclosure = new PiToolDisclosure(customTools, this.manager, () => this.session!)
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
@@ -199,6 +204,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.state.activity = '正在思考…'
     this.requestId = command.input.requestId ?? randomUUID()
     this.usageTotals = this.emptyUsage()
+    this.completedIntents.clear()
     const startedAt = Date.now()
     this.emit({ type: 'log', phase: 'start', requestId: this.requestId, sessionId: this.manager.getSessionId() })
     this.publish()
@@ -214,6 +220,17 @@ export class PiEngine implements EmbeddedAgentEngine {
       this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : 'failed', requestId: this.requestId,
         durationMs: Date.now() - startedAt, sessionId: this.manager.getSessionId(), message: this.state.error })
     } finally {
+      if (this.state.error && !this.cancelled && command.input.creativeIntent) {
+        try {
+          for (const draftRef of command.input.creativeIntent.draftRefs) {
+            if (this.cancelled) break
+            if (this.completedIntents.has(JSON.stringify(draftRef))) continue
+            await executePiTool({ id: randomUUID(), name: `organize_${draftRef.kind.split('.')[0]}_intent`, args: { draftRef, operationId: randomUUID() }, vision: false }, this.callTool)
+          }
+          this.state.error = null
+          this.emit({ type: 'log', phase: 'completed', requestId: this.requestId, sessionId: this.manager.getSessionId(), message: '模型未完成，已使用本地整理。' })
+        } catch { this.state.error = '模型和本地整理未完成，请保留原稿后重试。' }
+      }
       const totalInput = this.usageTotals.input + this.usageTotals.cacheRead + this.usageTotals.cacheWrite
       this.emit({ type: 'log', phase: 'usage_summary', requestId: this.requestId, sessionId: this.manager.getSessionId(),
         providerId: this.configuration?.model.providerId, modelId: this.configuration?.model.model.modelId,

@@ -1,4 +1,6 @@
 import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
+import { videoEditStaggerCapability } from '@/core/application-control/domains/videoEdit/videoEditStaggerCapability'
+import { staggerVideoMotion } from './videoEditMotionDraft'
 export { videoCreativeIntentProvider } from './videoEditCreativeIntentReflection'
 import { VideoEditTextPresetExecutor, VideoEditTextPresetMutationExecutor } from './videoEditTextPresetReflection'
 import { VideoEditStyleKitCollectionExecutor, VideoEditStyleKitMutationExecutor, STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY } from './videoEditStyleKitReflection'
@@ -62,6 +64,8 @@ import { VideoEditOperationFailure } from '@/core/videoEdit/operationFailure'
 import { retryVideoEditSmartRegionCapability } from '@/core/application-control/domains/videoEdit/videoEditSmartRegionCapability'
 import { retryVideoEditSmartRegionFromCapability } from './videoEditSmartRegionCapability'
 import { guardVideoEditDocumentAlgorithm } from './videoEditDocumentAlgorithm'
+import { analyzeVideoEditBeatsCapability } from '@/core/application-control/domains/videoEdit/videoEditBeatCapability'
+import { executeVideoEditBeatCapability } from './videoEditBeatCapability'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 let stopImageDocumentLinks: (() => void) | null = null
@@ -114,6 +118,14 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, guardVideoEditDocumentAlgorithm(definition.id, async (raw, context) => {
+      if (definition.id === videoEditStaggerCapability.id) {
+        context.signal.throwIfAborted()
+        const input = videoEditStaggerCapability.inputSchema.parse(raw), id = input.documentRef.id
+        const child = (ref: { kind: string; id: string }): string => { const value = splitVideoEditRef(ref); if (value.projectId !== id || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑。`); return value.childId }
+        const changed = staggerVideoMotion(id, child(input.sequenceRef), child(input.sourceRef), input.targetRefs.map(child), input.sourceRange, input.stepFrames)
+        return { resultRefs: changed.map(clipId => ({ kind: 'video_edit.clip', id: `${id}:${clipId}` })), message: '已错峰复制动作。', verification: { verified: true, condition: '所有目标曲线通过范围校验并在同一次文档编辑中提交。' } }
+      }
+      if (definition.id === analyzeVideoEditBeatsCapability.id) return executeVideoEditBeatCapability(analyzeVideoEditBeatsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === retryVideoEditSmartRegionCapability.id) return retryVideoEditSmartRegionFromCapability(raw, context.signal)
       const styleKit = await handleVideoEditStyleKitCapability(definition.id, raw, context)
       if (styleKit !== undefined) return styleKit

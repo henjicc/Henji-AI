@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 黄金样本编写工具通过 CommonJS 加载仓内模块。 */
 const fs = require('node:fs')
 const path = require('node:path')
 const { createHash } = require('node:crypto')
@@ -38,7 +39,7 @@ if (process.argv.includes('--package')) {
     await new Promise((resolve, reject) => { const output = fs.createWriteStream(temporary, { flags: 'wx' }); const archive = new ZipArchive(); output.on('close', resolve); output.on('error', reject); archive.on('error', reject); archive.pipe(output); for (const entry of entries) archive.append(entry.bytes, { name: entry.name }); archive.finalize().catch(reject) })
     fs.renameSync(temporary, filename)
   }
-  rewrite().catch(error => { console.error(error); process.exitCode = 1 }); return
+  rewrite().catch(error => { process.stderr.write(`${error.stack ?? error}\n`); process.exitCode = 1 }); return
 }
 if (process.argv.includes('--baseline')) {
   const { snapshot, updateBaseline, fixtureVersions } = require('./check-persistence-compat.cjs')
@@ -52,8 +53,9 @@ if (process.argv.includes('--baseline')) {
   fs.writeFileSync(filename, JSON.stringify(baseline, null, 2) + '\n'); process.exit(0)
 }
 const fixture = createMotionFixture('S15')
-console.log(JSON.stringify(scoreMotionFixture(fixture, optimizeMotionDraft(fixture.input).candidates[0])))
-const envelope = JSON.parse(fs.readFileSync(path.join(root, 'document.video_edit/v1.json'), 'utf8'))
+process.stdout.write(`${JSON.stringify(scoreMotionFixture(fixture, optimizeMotionDraft(fixture.input).candidates[0]))}\n`)
+// Enrich the current golden document so newer fields (such as beat settings) survive.
+const envelope = JSON.parse(fs.readFileSync(path.join(root, 'document.video_edit/v2.json'), 'utf8'))
 envelope.kindVersion = 2
 const sequence = envelope.content.sequences[0]; const clip = sequence.clips[0]; clip.duration = 420
 const oldId = fixture.input.draft.ownerRef.id

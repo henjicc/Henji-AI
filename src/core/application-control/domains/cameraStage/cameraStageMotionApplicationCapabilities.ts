@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { organizeCameraIntentCapability, applyCameraIntentCapability } from './cameraStageIntentCapabilities'
 
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 import { applicationRefSchema } from '../../applicationCapabilities'
@@ -180,5 +181,5 @@ const verifyScene = defineApplicationCapability({
 // 观察区域，并把结果转成模型真正能读的媒体附件。此前的 observe_camera_stage_viewport
 // 只返回媒体引用、像素永远进不了模型，已随第六阶段全域观察一并废除。
 export const CAMERA_STAGE_MOTION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  applyCameraMove, verifyScene,
+  applyCameraMove, verifyScene, organizeCameraIntentCapability, applyCameraIntentCapability,
 ]

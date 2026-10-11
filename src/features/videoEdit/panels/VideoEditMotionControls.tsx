@@ -1,10 +1,14 @@
+import { prepareVideoExplanationGeneration, runVideoExplanationGeneration } from '../application/videoEditExplanation'
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { PanelTrigger, UiButton, UiGroup, Dropdown } from '@/components/ui'
+import { PanelTrigger, UiButton, UiGroup, UiSwitch, Dropdown } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
+import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
 import { CreativeIntentControls, CreativeIntentOverlay } from '@/features/creativeIntent'
 import { type VideoEditInstance, setVideoEditView, getActiveVideoEditSequence } from '../application/videoEditService'
 import { videoEditClipPictureSize, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 import { mergeMotionClipCurves, motionClipPose } from '@/core/videoEdit/motionDraft'
+import { videoStaggerSource, staggerVideoMotion } from '../application/videoEditMotionDraft'
+import { staggerMotionRange } from '@/core/creativeIntent/stagger'
 import { subscribeVideoMotion, videoMotionRevision, videoMotionState, startVideoMotion, stopVideoMotion, pauseVideoMotion, resumeVideoMotion, optimizeVideoMotion, applyVideoMotion, configureVideoMotion, setVideoMotionOptions, setVideoMotionIntent, pinVideoMotionFrame, cancelVideoMotionOptimization, previewVideoMotion, reopenVideoMotion, configureVideoMotionConstraints, organizeVideoMotionAnnotation } from '../application/videoEditMotionDraft'
 
 export function VideoEditMotionControls({ owner, onError }: { owner: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement {
@@ -22,9 +26,13 @@ export function VideoEditMotionControls({ owner, onError }: { owner: VideoEditIn
   const interval: [number, number] = span ?? [chosenMark?.frame ?? clip?.start ?? 0, chosenMark?.endFrame ?? (clip ? clip.start + clip.duration - 1 : 0)]
   const run = (operation: () => void | Promise<void>): void => { try { void Promise.resolve(operation()).catch(onError) } catch (error) { onError(error) } }
   const lastDraft = owner.document.creativeIntents?.drafts.at(-1)
+  const [staggerFrames, setStaggerFrames] = useState(4)
+  const staggerSource = videoStaggerSource(owner)
   return <PanelTrigger open={open} onOpenChange={setOpen} display={state?.status === 'recording' ? '正在示范' : '超级关键帧'} appearance="quiet" size="sm" buttonClassName="w-auto" alignment="aboveCenter" gap={8} surface="glass" panelPadding="content" panelWidth="content" renderPanel={() => <>
     {!state && lastDraft && <UiButton onClick={() => run(() => reopenVideoMotion(id, lastDraft.id))}>继续上次原稿</UiButton>}
+    {staggerSource && <div className="flex items-center gap-1 text-xs text-text2"><span>应用到所选，依次错开</span><NumberInput ariaLabel="错开帧数" size="sm" value={staggerFrames} min={0} step={1} onChange={setStaggerFrames} /><span>帧</span><UiButton variant="secondary" size="sm" onClick={() => run(() => { const range: [number, number] = owner.inFrame !== null && owner.outFrame !== null ? [Math.max(0, owner.inFrame - staggerSource.start), Math.min(staggerSource.duration - 1, owner.outFrame - staggerSource.start)] : staggerMotionRange(staggerSource)!; staggerVideoMotion(id, sequence.id, staggerSource.id, owner.selectedClipIds.filter(targetId => targetId !== staggerSource.id && sequence.clips.some(target => target.id === targetId && target.kind !== 'audio' && target.kind !== 'adjustment')), range, staggerFrames) })}>应用</UiButton></div>}
     <UiGroup title="标注与参照" titleTone="compact">
+      <div className="flex items-center justify-between gap-2"><span className="text-xs text-text2">吸附到节拍</span><UiSwitch aria-label="吸附到节拍" checked={clip?.snapToBeat ?? false} disabled={!clip || state?.status === 'optimizing'} onCheckedChange={value => run(() => { updateVideoEditClipProperties(id, sequence.id, clip!.id, { snapToBeat: value }) })} /></div>
       <Dropdown label="使用标注" value={annotationId} options={sequence.annotations.filter(a => a.status !== 'resolved' && (!a.clipId || a.clipId === clip?.id)).map(a => ({ value: a.id, label: a.text }))} onSelect={value => { setAnnotationId(value); setSpan(undefined) }} />
       {chosenMark && <>
         <Dropdown label="标注含义" value={role} options={[{ value: 'path', label: '沿箭头方向' }, { value: 'target', label: '到达圈内' }, { value: 'dwell', label: '在圈内停留' }, { value: 'text', label: '文字意图提示' }]} onSelect={setRole} />
@@ -41,7 +49,8 @@ export function VideoEditMotionControls({ owner, onError }: { owner: VideoEditIn
       message={state?.message} needsSave={state?.draft.applications.some(a => !a.saved)} canPin={Boolean(state?.presentation && state.draft.takes.length)} pins={state?.draft.pins.map((p, i) => ({ id: p.id, label: `姿态 ${i + 1}` })) ?? []}
       takes={state?.draft.takes.map((t, i) => ({ id: t.id, label: `第 ${i + 1} 次示范`, selected: !state.selectedTakeIds || state.selectedTakeIds.includes(t.id) })) ?? []}
       onStart={() => run(() => startVideoMotion(id, capture))} onStop={() => run(() => stopVideoMotion(id))} onPause={() => pauseVideoMotion(id)} onResume={() => resumeVideoMotion(id)} onCancel={() => cancelVideoMotionOptimization(id)}
-      onOptimize={() => run(() => optimizeVideoMotion(id))} onApply={() => run(() => applyVideoMotion(id))} onPreview={candidate => run(() => previewVideoMotion(id, candidate))}
+      contextKey={`${id}:${state?.draft.id}`} prepareGeneration={() => prepareVideoExplanationGeneration(id)} onError={onError}
+      onOptimize={() => runVideoExplanationGeneration(id, () => optimizeVideoMotion(id))} onApply={() => run(() => applyVideoMotion(id))} onPreview={candidate => run(() => previewVideoMotion(id, candidate))}
       onFidelity={fidelity => run(async () => { await configureVideoMotion(id, { fidelity }); await optimizeVideoMotion(id) })}
       onPin={() => { if (state?.presentation) run(() => pinVideoMotionFrame(id, state.presentation!.frame)) }} onPinEnd={() => run(() => pinVideoMotionFrame(id, 'end'))}
       onUnpin={unpinId => run(async () => { await configureVideoMotion(id, { unpinId }); await optimizeVideoMotion(id) })}

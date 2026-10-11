@@ -27,6 +27,7 @@
  * 都抛一条说得清的错，并列出已实现的名字。门禁见 `harnessNativeStorage.test.ts`。
  */
 import { v4 as uuidv4 } from 'uuid'
+import { createHash } from 'node:crypto'
 import { FakeDocumentCommands } from '@/features/documents/documentSessionTestKit'
 import type { FontCatalog } from '@/core/fonts/catalog'
 import type { SettingEntryDto, SettingValueType } from '@/core/localRecords/types'
@@ -233,6 +234,21 @@ const NAMESPACES: Record<string, object> = {
   generationHistory: generationHistoryStorage,
   documents: documentsStorage,
   imageEditorV3: {
+    async writeLayoutResource(request: Parameters<NonNullable<ImageEditorV3Platform['writeLayoutResource']>>[0]) {
+      const value = wire(request.value), bytes = Buffer.from(JSON.stringify(value))
+      const resourceRef = `sha256:${createHash('sha256').update(bytes).digest('hex')}` as const
+      imageLayoutResources.set(resourceRef, value)
+      const leases = imageLayoutLeases.get(request.leaseId) ?? new Set<string>()
+      leases.add(resourceRef); imageLayoutLeases.set(request.leaseId, leases)
+      return { resourceRef, byteLength: bytes.byteLength }
+    },
+    async readLayoutResource(request: Parameters<NonNullable<ImageEditorV3Platform['readLayoutResource']>>[0]) {
+      if (!imageLayoutResources.has(request.resourceRef)) throw new Error('图片正文资源不存在')
+      return wire(imageLayoutResources.get(request.resourceRef))
+    },
+    async releaseLayoutResources(request: Parameters<NonNullable<ImageEditorV3Platform['releaseLayoutResources']>>[0]) {
+      imageLayoutLeases.delete(request.leaseId)
+    },
     async listDocuments(request: Parameters<ImageEditorV3Platform['listDocuments']>[0]) {
       const refs = [...imageDocuments.keys()].sort().map((id) => `image-edit-v3:${id}` as const)
         .filter((ref) => request.cursor === undefined || ref > request.cursor)
@@ -249,6 +265,8 @@ const NAMESPACES: Record<string, object> = {
   },
 }
 
+const imageLayoutResources = new Map<string, unknown>()
+const imageLayoutLeases = new Map<string, Set<string>>()
 const imageDocuments = new Map<string, Parameters<ImageEditorV3Platform['saveDocument']>[0]>()
 
 /** 只读存储边界事实；不模拟主进程的资源检查、物化或指纹计算。 */
@@ -324,6 +342,7 @@ export function resetHarnessNativeStorage(): void {
   fontCatalog = { faces: [], revision: 0 }
   settings.clear()
   imageDocuments.clear()
+  imageLayoutResources.clear(); imageLayoutLeases.clear()
   libraries.clear()
   generationHistory.clear()
   documentStore = new FakeDocumentCommands({ realKinds: true })

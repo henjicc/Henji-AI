@@ -1,3 +1,7 @@
+import { prepareExplanationGeneration, type PreparedExplanationGeneration, type ExplanationSendRequest } from '@/features/creativeIntent'
+import { sameExplanationBinding, eraseExplanationBody, explanationBodyRef, registerExplanationBodyEditor, writeExplanationBody, type ExplanationBodyChanges } from '@/core/creativeIntent/semanticIntentEdits'
+import { semanticRecordingEvents } from '@/core/creativeIntent/semanticIntentRecording'
+import type { ApplicationExecutionContext } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 import { explanationSessionSchema, transcriptEventSchema, type ExplanationSession, type ExplanationEvent, type TranscriptEntry } from '@/core/creativeIntent/schema'
 import { creativeIntentPageSchema } from '@/core/creativeIntent/pages'
@@ -35,7 +39,10 @@ export interface ImageExplanationState { session?: ExplanationSession; busy: boo
 interface ExplanationPorts {
   microphone: typeof captureMicrophone; audio: ReturnType<typeof getPlatform>['audioEdit']['recording']
   store: typeof storeImageLayoutResource; read: typeof readImageLayoutResource; release: typeof releaseImageLayoutResources
-  confirm: () => Promise<unknown>; model: () => string | Promise<string>
+  assertCurrent?: () => void
+  confirmStep?: (context: ApplicationExecutionContext | undefined, settled: () => Promise<void>) => Promise<void>
+  confirm: (context?: ApplicationExecutionContext) => Promise<unknown>; model: () => string | Promise<string>
+  eraseResources: (resourceIds: string[]) => Promise<void>
   readVisual: (resourceId: string) => Promise<Uint8Array>
 }
 /** Document-owned static host. No timeline, provider, or second layout solver is introduced here. */
@@ -43,6 +50,9 @@ export class ImageEditExplanation {
   private state: ImageExplanationState = { busy: false, elapsedUs: 0, generation: 0 }
   private listeners = new Set<() => void>()
   private collector?: RecordingCollector
+  private eraseResources = new Set<string>()
+  private erasedSessionId?: string
+  private generation?: PreparedExplanationGeneration
   private controller = new AbortController()
   private microphone?: MicrophoneCapture
   private origin = 0
@@ -58,11 +68,20 @@ export class ImageEditExplanation {
   private ownWrite = false
   private disposed = false
   private releaseOwner?: () => void
+  private releaseBody?: () => void
+  private releaseDocument?: () => void
   private saving = Promise.resolve()
   private detaching?: Promise<void>
   private queued = 0
   private picking?: { entry: TranscriptEntry; mention: DeicticMention; resolve: () => void; reject: (error: unknown) => void }
   constructor(private readonly bus: ImageEditCommandBusV3, private readonly ports: ExplanationPorts) {
+    this.releaseDocument = bus.subscribe(snapshot => {
+      if (this.ownWrite || !this.collector || !['reviewing', 'recoverable'].includes(this.collector.session.state)) return
+      const session = snapshot.document.creativeIntents?.sessions.find(s => s.id === this.collector?.session.id)
+      if (session && JSON.stringify(session) !== JSON.stringify(this.collector.session)) {
+        this.resources = []; this.collector = this.createCollector(explanationSessionSchema.parse(session)); this.publish()
+      }
+    })
     bus.getLifecycleSignal().addEventListener('abort', () => { void this.close().catch(error => logger.warn('图片讲解关闭未完成', { event: 'image_edit.explanation.close.failed', error })) }, { once: true })
   }
   readonly snapshot = (): ImageExplanationState => this.state
@@ -70,7 +89,7 @@ export class ImageEditExplanation {
   private publish(patch: Partial<ImageExplanationState> = {}): void { this.state = { ...this.state, ...patch, session: this.collector?.session, generation: this.state.generation + 1 }; this.listeners.forEach(fn => fn()) }
   private now(): number { return Math.max(this.state.elapsedUs, Math.round((performance.now() - this.origin) * 1000)) }
   private require(): RecordingCollector { if (!this.collector || this.disposed) throw new Error('请先打开图片讲解。'); return this.collector }
-  private assert(collector: RecordingCollector): void { if (this.disposed || this.collector !== collector) throw new Error('原讲解已关闭。') }
+  private assert(collector: RecordingCollector): void { if (this.disposed || this.collector !== collector || this.erasedSessionId === collector.session.id) throw new Error('原讲解已关闭。') }
   private queue(write: () => Promise<void>): Promise<void> {
     this.queued++
     const next = this.writer.then(write).finally(() => { this.queued-- })
@@ -87,6 +106,14 @@ export class ImageEditExplanation {
       this.resources.push(resource)
       collector.session.pages.push({ resourceId: resource.resourceId, digest: resource.digest, bytes: resource.bytes, kind: page.kind, count: page.count, monoSpanUs: page.monoSpanUs, seqSpan: page.seqSpan })
     }, message => { this.publish({ message }); void this.pause().catch(() => this.publish({ message: '讲解保存失败，请重试保存。' })) })
+    this.releaseBody?.()
+    this.releaseBody = registerExplanationBodyEditor(explanationBodyRef(imageEditV3DocumentRef(this.bus.getSnapshot().document.id), session.id), {
+      apply: (changes, context) => this.applyBody(changes, context),
+      restore: async (before, context) => {
+        if (!this.bus.getSnapshot().document.creativeIntents?.sessions.some(s => s.id === before.id)) throw new Error('讲解已删除，不能恢复私密正文。')
+        this.resources = []; this.collector = this.createCollector(explanationSessionSchema.parse(before)); await this.save(context); this.publish()
+      },
+    })
     return collector
   }
   async reopen(id: string): Promise<void> {
@@ -123,7 +150,7 @@ export class ImageEditExplanation {
     await this.ports.audio.microphone(true, collector.session.consent!.userReceiptRef)
     try {
       this.microphone = await this.ports.microphone(this.origin, block => {
-        if (this.disposed || this.collector !== collector) return
+        if (this.disposed || this.collector !== collector || this.erasedSessionId === collector.session.id) return
         if (this.lastBlock && (this.lastBlock.firstFrame + this.lastBlock.samples.length !== block.firstFrame || this.lastBlock.sampleRate !== block.sampleRate)) {
           this.sealAudio(); this.publish({ message: '音频出现缺口，录制已暂停；请检查设备后继续。' }); void this.pause().catch(() => {})
         }
@@ -174,22 +201,25 @@ export class ImageEditExplanation {
     this.releaseOwner?.(); this.releaseOwner = undefined
     logger.info('图片讲解结束', { event: 'image_edit.explanation.stop' })
   }
-  async save(): Promise<void> {
-    const next = this.saving.catch(() => {}).then(() => this.saveCurrent())
+  async save(context?: ApplicationExecutionContext): Promise<void> {
+    const next = this.saving.catch(() => {}).then(() => this.saveCurrent(context))
     this.saving = next
     return next
   }
-  private async saveCurrent(): Promise<void> {
+  private async saveCurrent(context?: ApplicationExecutionContext): Promise<void> {
     const collector = this.require(); await this.writer
     for (const [id, write] of this.pending) { await write(); this.pending.delete(id) }
     await collector.flush(); this.assert(collector)
+    this.ports.assertCurrent?.()
     const document = this.bus.getSnapshot().document, current = document.creativeIntents ?? { drafts: [], sessions: [], resources: [] }
     const next = { ...current, sessions: [...current.sessions.filter(s => s.id !== collector.session.id), structuredClone(collector.session)], resources: [...new Map([...current.resources, ...this.resources].map(r => [r.resourceId, r])).values()] }
     next.resources = creativeIntentLiveResources([next]); creativeIntentsSchema.parse(next)
     this.ownWrite = true
     try { this.bus.dispatch({ type: 'document.set-creative-intents', commandId: crypto.randomUUID(), expectedRevision: document.revision, intents: next, resources: creativeIntentLiveResources([current, next]).map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId)) }) }
     finally { this.ownWrite = false }
-    await this.ports.confirm(); await this.ports.release(collector.session.id)
+    const settled = () => this.ports.release(collector.session.id)
+    if (this.ports.confirmStep) await this.ports.confirmStep(context, settled)
+    else { await this.ports.confirm(context); await settled() }
   }
   recordPointer(input: ImageExplanationPointer): void {
     const collector = this.collector
@@ -226,10 +256,49 @@ export class ImageEditExplanation {
       for (const event of page.entries) { if (clockEventIssue(event, collector.session.clockSegments)) throw new Error('讲解时间证据不符。'); yield event }
     }
   }
+  private async *effectiveTranscript(): AsyncGenerator<TranscriptEntry> {
+    const collector = this.require(), session = collector.session
+    for await (const event of semanticRecordingEvents(session, async id => {
+      const resource = [...(this.bus.getSnapshot().document.creativeIntents?.resources ?? []), ...this.resources].find(r => r.resourceId === id)
+      if (!resource) throw new Error('讲解页缺失。')
+      const page = await this.ports.read(resource); this.assert(collector); return page
+    })) if (event.kind === 'transcript') {
+      this.assert(collector)
+      if (clockEventIssue(event, session.clockSegments)) throw new Error('讲解时间证据不符。')
+      yield event
+    }
+  }
   async transcript(pageIndex = 0): Promise<TranscriptEntry[]> {
     const result: TranscriptEntry[] = []; let index = 0
-    for await (const event of this.events('transcript')) if (event.kind === 'transcript') { if (index >= pageIndex * 256 && index < (pageIndex + 1) * 256) result.push(event); index++; if (index >= (pageIndex + 1) * 256) break }
+    for await (const event of this.effectiveTranscript()) { if (index >= pageIndex * 256 && index < (pageIndex + 1) * 256) result.push(event); index++; if (index >= (pageIndex + 1) * 256) break }
     return result
+  }
+  async correctText(entry: TranscriptEntry, text: string): Promise<void> {
+    await writeExplanationBody(explanationBodyRef(imageEditV3DocumentRef(this.bus.getSnapshot().document.id), this.require().session.id), { text: [{ eventId: entry.eventId, text }] })
+  }
+  private async applyBody(changes: ExplanationBodyChanges, context?: ApplicationExecutionContext): Promise<void> {
+    const collector = this.require()
+    if (this.state.busy || !['reviewing', 'recoverable'].includes(collector.session.state)) throw new Error('请先结束录制或转写。')
+    const current = new Map<string, TranscriptEntry>()
+    if (changes.text?.length) for await (const event of this.effectiveTranscript()) current.set(event.eventId, event)
+    // Validate every text before appending any immutable correction page.
+    const edits = changes.text?.map(edit => { const original = current.get(edit.eventId); if (!original) throw new Error('词稿已变化，请重新读取。'); return { original, text: edit.text } }) ?? []
+    for (const { original, text } of edits) {
+      const originalEventRef = original.originalEventRef ?? original.eventId
+      const corrected = transcriptEventSchema.parse({ ...original, eventId: crypto.randomUUID(), seq: collector.nextSeq, source: 'user', originalEventRef, text })
+      collector.append(corrected); collector.session.corrections = [...collector.session.corrections.filter(c => c.originalEventRef !== originalEventRef), { originalEventRef, correctedEventRef: corrected.eventId }]
+    }
+    if (changes.bindings) {
+      for (const binding of changes.bindings) {
+        if (collector.session.bindings.some(existing => sameExplanationBinding(existing, binding))) continue
+        let entry: TranscriptEntry | undefined
+        for await (const candidate of this.effectiveTranscript()) if (binding.utteranceIds.includes(candidate.utteranceId)) { entry = candidate; break }
+        if (!entry) throw new Error('绑定对应的词稿已变化。')
+        await this.applyBinding(entry, binding)
+      }
+      collector.session.bindings = structuredClone(changes.bindings)
+    }
+    await this.save(context); this.publish()
   }
   async transcribe(receipt: string): Promise<void> {
     const collector = this.require(), session = collector.session
@@ -257,7 +326,7 @@ export class ImageEditExplanation {
   }
   async readReview(entry: TranscriptEntry, mentionId?: string, includeImage = true): Promise<ExplanationReviewResult> {
     const collector = this.require(), events: ExplanationEvent[] = [], entries: TranscriptEntry[] = []
-    for await (const event of this.events('transcript')) if (event.kind === 'transcript' && event.utteranceId === entry.utteranceId) entries.push(event)
+    for await (const event of this.effectiveTranscript()) if (event.utteranceId === entry.utteranceId) entries.push(event)
     if (!entries.some(e => e.eventId === entry.eventId)) throw new Error('词稿已变化，请重新打开。')
     const from = entries.reduce((v, e) => Math.min(v, e.monoSpanUs[0]), Infinity) - 800000
     const to = entries.reduce((v, e) => Math.max(v, e.monoSpanUs[1]), 0) + 250000
@@ -308,23 +377,26 @@ export class ImageEditExplanation {
   }
   historicalRefs(entry: TranscriptEntry): ApplicationRef[] { return this.historicalEvidence(entry)?.frames[0]?.sourceRefs ?? [] }
   async bind(entry: TranscriptEntry, binding: ExplanationBinding): Promise<void> {
+    const session = this.require().session
+    await writeExplanationBody(explanationBodyRef(imageEditV3DocumentRef(this.bus.getSnapshot().document.id), session.id), { bindings: [...session.bindings.filter(b => b.id !== binding.id), binding] })
+  }
+  private async applyBinding(entry: TranscriptEntry, binding: ExplanationBinding): Promise<void> {
     const review = await this.readReview(entry), mention = review.resolution.mentions.find(m => m.id === binding.id)
     if (mention && !binding.evidenceSeqs.length && binding.point) {
       const document = this.bus.getSnapshot().document
       for (const ref of binding.targetRefs) { const target = splitImageEditV3LayerRef(ref); if (target.documentId !== document.id || !findImageEditLayerLocationV3(document.layers, target.layerId)) throw new Error('所选对象已不存在。') }
       const corrected = pickedExplanationBinding(mention, binding.targetRefs, binding.point)
-      if (JSON.stringify(corrected) !== JSON.stringify(binding)) throw new Error('点选校正必须来自当前讲解。')
+      if (!sameExplanationBinding(corrected, binding)) throw new Error('点选校正必须来自当前讲解。')
       this.require().session.bindings = [...this.require().session.bindings.filter(b => b.id !== corrected.id), corrected]
-      await this.save(); this.publish(); return
+      return
     }
     const candidate = mention?.candidates.find(c => binding.evidenceSeqs.every(seq => c.evidenceSeqs.includes(seq)) && binding.point?.every((v, i) => c.point[i] === v))
     if (!mention || !candidate) throw new Error('指向证据已变化，请重新确认。')
     const target = /[这那]几个/.test(mention.text) ? undefined : binding.targetRefs[0]
     if (target && !candidate.targetRefs.some(r => r.kind === target.kind && r.id === target.id)) throw new Error('对象不属于当时指向。')
     const confirmed = confirmedExplanationBinding(mention, candidate, target)
-    if (JSON.stringify(confirmed) !== JSON.stringify(binding)) throw new Error('指代校正必须来自完整候选。')
+    if (!sameExplanationBinding(confirmed, binding)) throw new Error('指代校正必须来自完整候选。')
     const collector = this.require(); collector.session.bindings = [...collector.session.bindings.filter(b => b.id !== confirmed.id), confirmed]
-    await this.save(); this.publish()
     logger.info('图片讲解指向已确认', { event: 'image_edit.explanation.binding.completed' })
   }
   async organize(entry: TranscriptEntry): Promise<void> {
@@ -334,7 +406,25 @@ export class ImageEditExplanation {
     const ids = review.layout.targetRefs.map(ref => { const target = splitImageEditV3LayerRef(ref); if (target.documentId !== documentId) throw new Error('图层不属于当前图片。'); return target.layerId })
     await imageEditLayoutDraft(this.bus).organize(ids, review.layout.action)
   }
+  async prepareGeneration(): Promise<ExplanationSendRequest | undefined> {
+    const collector = this.require()
+    this.generation = await prepareExplanationGeneration({
+      documentRef: imageEditV3DocumentRef(this.bus.getSnapshot().document.id),
+      session: () => this.collector?.session,
+      drafts: () => this.bus.getSnapshot().document.creativeIntents?.drafts ?? [],
+      read: async id => { const resource = this.bus.getSnapshot().document.creativeIntents?.resources.find(r => r.resourceId === id); if (!resource) throw new Error('讲解页已删除。'); return this.ports.read(resource) },
+      consent: async consent => { this.assert(collector); collector.session.consent = consent; await this.save(); this.publish() },
+      assertCurrent: () => this.assert(collector),
+    })
+    return this.generation.request
+  }
   async generate(entries: readonly TranscriptEntry[]): Promise<void> {
+    const generation = this.generation; this.generation = undefined
+    if (generation) return generation.run(() => this.generateLocal(entries))
+    return this.generateLocal(entries)
+  }
+  private async generateLocal(entries: readonly TranscriptEntry[]): Promise<void> {
+    await this.finishReview()
     const reviews: ExplanationReviewResult[] = []
     for (const entry of entries) reviews.push(await this.readReview(entry, undefined, false))
     const plans = reviews.filter(review => !review.layout).map(review => review.plan)
@@ -377,12 +467,14 @@ export class ImageEditExplanation {
     const collector = this.require()
     if (this.state.busy || ['recording', 'paused', 'transcribing'].includes(collector.session.state)) throw new Error('请先结束录制。')
     try {
+    if (this.erasedSessionId !== collector.session.id) {
     await this.finishReview(); await this.ports.audio.erase(collector.session.id)
-    const document = this.bus.getSnapshot().document, current = document.creativeIntents!
-    const next = { ...current, sessions: current.sessions.filter(session => session.id !== collector.session.id) }
-    next.resources = creativeIntentLiveResources([next])
-    this.bus.dispatch({ type: 'document.set-creative-intents', commandId: crypto.randomUUID(), expectedRevision: document.revision, intents: next, resources: creativeIntentLiveResources([current, next]).map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId)) })
-    await this.ports.confirm(); this.collector = undefined; this.publish({ message: undefined })
+    const document = this.bus.getSnapshot().document
+    for (const resource of await this.bus.eraseExplanationSession(collector.session.id)) this.eraseResources.add(resource)
+    this.erasedSessionId = collector.session.id
+    eraseExplanationBody(explanationBodyRef(imageEditV3DocumentRef(document.id), collector.session.id))
+    }
+    await this.ports.confirm(); await this.ports.release(collector.session.id); await this.ports.eraseResources([...this.eraseResources]); this.eraseResources.clear(); this.resources = []; this.collector = undefined; this.publish({ message: undefined })
     logger.info('图片讲解已删除', { event: 'image_edit.explanation.remove.completed' })
     } catch (error) { logger.warn('图片讲解删除未完成', { event: 'image_edit.explanation.remove.failed', error }); throw error }
   }
@@ -393,7 +485,7 @@ export class ImageEditExplanation {
     await this.microphone?.stop(); this.microphone = undefined
     const collector = this.collector
     if (collector) { await this.ports.audio.microphone(false, collector.session.consent!.userReceiptRef); await this.ports.audio.cancel(collector.session.id); await this.writer; await this.ports.audio.release(collector.session.id); await this.ports.release(collector.session.id) }
-    this.releaseOwner?.(); this.releaseOwner = undefined; this.disposed = true; this.listeners.clear()
+    this.releaseDocument?.(); this.releaseDocument = undefined; this.releaseBody?.(); this.releaseBody = undefined; this.releaseOwner?.(); this.releaseOwner = undefined; this.disposed = true; this.listeners.clear()
   }
   async detach(): Promise<void> {
     if (!this.collector || this.disposed) return
@@ -416,7 +508,10 @@ export function imageEditExplanation(bus: ImageEditCommandBusV3): ImageEditExpla
     adapter = new ImageEditExplanation(bus, {
       microphone: captureMicrophone, get audio() { return getPlatform().audioEdit.recording }, store: storeImageLayoutResource, read: readImageLayoutResource, release: releaseImageLayoutResources,
       model: async () => (await import('@/features/settings')).modelDefaultsManager.resolveTranscriptionModelId(),
-      confirm: async () => { const owner = findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner; if (!owner) throw new Error('图片尚不能保存，请保留当前页面。'); return owner.confirm(true) },
+      assertCurrent: () => { const owner = findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner; if (!owner) throw new Error('图片尚不能保存，请保留当前页面。'); owner.assertCurrent() },
+      confirmStep: async (context, settled) => { const owner = findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner; if (!owner) throw new Error('图片尚不能保存，请保留当前页面。'); owner.acceptCurrent(); await owner.confirmStep(context, settled) },
+      confirm: async context => { const owner = findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner; if (!owner) throw new Error('图片尚不能保存，请保留当前页面。'); owner.acceptCurrent(); return context ? owner.confirmStep(context, async () => {}) : owner.confirm(true) },
+      eraseResources: async resourceIds => { await getPlatform().imageEditorV3.collectGarbage({ requestId: crypto.randomUUID(), retainedResourceRefs: [], eraseResourceRefs: resourceIds as `sha256:${string}`[] }) },
       readVisual: async resourceId => {
         const proxy = await getPlatform().imageEditorV3.readFastProxy({ requestId: crypto.randomUUID(), resourceRef: resourceId as `sha256:${string}`, maxDimension: 1280 })
         const bitmap = await createImageBitmap(new Blob([proxy.bytes], { type: proxy.mediaType }))

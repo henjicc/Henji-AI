@@ -523,6 +523,7 @@ export function registerImageEditorV3Ipc(): void {
   registerIpcHandler('imageEditorV3:resource:collectGarbage', parseImageEditorV3GarbageCollectPayload, (payload, event) => (
     runRequest('resource.collect_garbage', payload.requestId, event.sender.id, async () => {
       const result = await getRuntime().resources.garbageCollect(new Set(payload.retainedResourceRefs), {
+        ...(payload.eraseResourceRefs ? { minimumAgeMs: 0, onlyResourceIds: new Set(payload.eraseResourceRefs) } : {}),
         resolveReferences: async () => {
           const live = new Set<ResourceId>(payload.retainedResourceRefs)
           for (const document of await getRuntime().documents.list()) {
@@ -532,6 +533,7 @@ export function registerImageEditorV3Ipc(): void {
           return live
         },
       })
+      if (payload.eraseResourceRefs?.some(ref => result.retainedByLease.includes(ref))) throw new Error('讲解资源仍在使用，请稍后重试删除。')
       return { deletedResourceRefs: result.deleted, reclaimedBytes: result.reclaimedBytes }
     })
   ), guard)

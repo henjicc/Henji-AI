@@ -497,3 +497,13 @@ describe('Pi official SDK engine', () => {
     expect(f.events.filter(event => event.type === 'log' && event.phase !== 'usage_summary').at(-1)).toMatchObject({ phase: 'cancelled' })
   }, 30000)
 })
+
+it('正式 Pi 模型失败自动调用同源本地整理，不重试模型或应用作品', async () => {
+  const f = await fixture(); f.setMode('error')
+  f.tool.mockResolvedValue({ ok: true, data: { status: 'candidate' } })
+  const draftRef = { kind: 'video_edit.intent_draft' as const, id: 'document:draft' }
+  await f.engine.command({ action: 'prompt', input: { text: '整理讲解', context: '', creativeIntent: { documentRef: { kind: 'video_edit.document', id: 'document' }, sessionId: 'session', draftRefs: [draftRef] } } })
+  expect(f.requests).toHaveLength(1)
+  expect(f.tool).toHaveBeenCalledWith(expect.any(String), 'organize_video_edit_intent', { draftRef, operationId: expect.any(String) }, undefined)
+  expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ busy: false, error: null })
+})

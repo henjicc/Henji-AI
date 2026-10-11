@@ -1,3 +1,5 @@
+import { ExplanationSendConfirmation } from './ExplanationSendConfirmation'
+import type { ExplanationSendRequest } from '../application/explanationGeneration'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
@@ -12,10 +14,12 @@ export interface ExplanationPanelProps extends Pick<ExplanationReviewProps, 'onR
   failed?: boolean; failureTitle?: string; onRetry: () => void; onStart: () => void; onTranscribe: () => void; onCancel: () => void; onDelete?: () => void
   onGenerate?: (entries: TranscriptEntry[]) => Promise<void>; generationUnavailable?: string
   canGenerate?: (results: ExplanationReviewResult[]) => boolean
+  generationKey?: string
+  prepareGeneration?: () => Promise<ExplanationSendRequest | undefined>
 }
-
+export type { ExplanationSendRequest } from '../application/explanationGeneration'
 /** Shared three-part skeleton for image and video hosts. The PanelTrigger owns its only surface. */
-export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, hasRecorded, failed, failureTitle, onRetry, onStart, onTranscribe, onCancel, onDelete, onGenerate, generationUnavailable, canGenerate, ...review }: ExplanationPanelProps): JSX.Element {
+export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, hasRecorded, failed, failureTitle, onRetry, onStart, onTranscribe, onCancel, onDelete, onGenerate, generationUnavailable, canGenerate, prepareGeneration, generationKey, ...review }: ExplanationPanelProps): JSX.Element {
   const { contextKey, onRead, onBind, onError } = review
   const [results, setResults] = useState<Map<string, ExplanationReviewResult>>(new Map()), [expanded, setExpanded] = useState(false), [focused, setFocused] = useState<string>()
   const [focusRequest, setFocusRequest] = useState(0)
@@ -25,6 +29,8 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
   const [availableHeight, setAvailableHeight] = useState<number>()
   const [generating, setGenerating] = useState(false)
   const generatingRef = useRef(false)
+  const [sendRequest, setSendRequest] = useState<{ scope: object; request: ExplanationSendRequest }>()
+  const [rememberSend, setRememberSend] = useState(false)
   useLayoutEffect(() => {
     // PanelTrigger also constrains height near viewport edges. Respect its actual budget,
     // so only our middle region scrolls and neither fixed row escapes the outer scroller.
@@ -41,6 +47,9 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
   }, [])
   const paragraphs = useMemo(() => [...new Map(entries.map(entry => [entry.utteranceId, entry])).values()], [entries])
   const scope = useMemo(() => ({ contextKey, onRead, pending: new Map<string, Promise<ExplanationReviewResult>>(), queue: Promise.resolve() }), [contextKey, onRead])
+  const generationContext = generationKey ?? contextKey
+  const generationScope = useMemo(() => ({ generationContext, onRead }), [generationContext, onRead])
+  const currentScope = useRef(generationScope); currentScope.current = generationScope
   const cache = scope.pending
   const read = useCallback((entry: TranscriptEntry, mentionId?: string): Promise<ExplanationReviewResult> => {
     if (mentionId) return onRead(entry, mentionId)
@@ -83,6 +92,21 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
   }
   const paragraph = (entry: TranscriptEntry): JSX.Element => <ExplanationReview {...review} onRead={read} onBind={bind} onPick={review.onPick ? pick : undefined} entry={entry} initiallyOpen showTrigger={false} onResult={report} focusedMentionId={focused} focusedMentionRequest={focusRequest} />
   const transcribing = stage === 'transcribing', recording = stage === 'recording' || stage === 'paused'
+  const generate = (confirm?: ExplanationSendRequest): void => {
+    if (!onGenerate || generatingRef.current) return
+    const expected = generationScope
+    generatingRef.current = true; setGenerating(true)
+    void (async () => {
+      if (confirm) await confirm.confirm(rememberSend)
+      else {
+        const request = await prepareGeneration?.()
+        if (currentScope.current !== expected) return
+        if (request) { setRememberSend(false); setSendRequest({ scope: expected, request }); return }
+      }
+      if (currentScope.current !== expected) return
+      setSendRequest(undefined); await onGenerate(paragraphs)
+    })().catch(review.onError).finally(() => { generatingRef.current = false; setGenerating(false) })
+  }
   return <section ref={section} style={{ maxHeight: availableHeight }} className="flex max-h-[80vh] min-h-0 min-w-0 flex-col gap-4 overflow-hidden" aria-label="讲解词稿审阅" data-observation-sensitive>
     <div className="flex shrink-0 items-center justify-between gap-2">
       <span className={UI_TEXT_BODY_CLASS}>讲解 · {explanationDuration(elapsedUs)}</span>
@@ -102,11 +126,9 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
       </>}
     </div>
     {!failed && !transcribing && !recording && !!stage && <div className="flex shrink-0 justify-end">
-      {entries.length ? <span title={reason}><UiButton variant="primary" disabled={busy || generating || !!reason || !onGenerate} onClick={() => {
-        if (!onGenerate || generatingRef.current) return
-        generatingRef.current = true; setGenerating(true)
-        void onGenerate(paragraphs).catch(review.onError).finally(() => { generatingRef.current = false; setGenerating(false) })
-      }}>生成候选</UiButton></span> : <UiButton variant="primary" disabled={busy || loading} onClick={onTranscribe}>转写并审阅</UiButton>}
+      {entries.length ? <span title={reason}><UiButton variant="primary" disabled={busy || generating || !!reason || !onGenerate} onClick={() => generate()}>生成候选</UiButton></span> : <UiButton variant="primary" disabled={busy || loading} onClick={onTranscribe}>转写并审阅</UiButton>}
     </div>}
+    <ExplanationSendConfirmation request={sendRequest?.scope === generationScope ? sendRequest.request : undefined} generating={generating} rememberSend={rememberSend} setRememberSend={setRememberSend}
+      onCancel={() => { if (!generatingRef.current) setSendRequest(undefined) }} onSend={() => { if (sendRequest?.scope === generationScope) generate(sendRequest.request) }} />
   </section>
 }

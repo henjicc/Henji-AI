@@ -9,6 +9,15 @@ import { imageLayoutDigest } from './imageEditLayoutResources'
 import { imageEditV3LayerRef } from './imageEditDocumentRefs'
 import { explanationSessionSchema } from '@/core/creativeIntent/schema'
 import { confirmedExplanationBinding } from '@/core/creativeIntent/deixis'
+import { explanationBodyEditor, type ExplanationBodyChanges } from '@/core/creativeIntent/semanticIntentEdits'
+import type { ApplicationRef } from '@/core/application-control'
+
+// This suite exercises the recording adapter; the formal generic transaction is
+// covered independently in creativeIntentExplanation.test.ts.
+vi.mock('@/core/creativeIntent/semanticIntentEdits', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/core/creativeIntent/semanticIntentEdits')>()
+  return { ...actual, writeExplanationBody: (ref: ApplicationRef, changes: ExplanationBodyChanges) => actual.explanationBodyEditor(ref).apply(changes) }
+})
 
 vi.mock('./imageEditLayoutDraft', () => ({ imageEditLayoutDraft: () => ({ organize, move }) }))
 const organize = vi.hoisted(() => vi.fn(async () => {}))
@@ -27,11 +36,11 @@ function setup(names: readonly string[] = ['a', 'b', 'c']) {
     transcribe: vi.fn(async (): Promise<RecordingAudioResult> => ({ modelId: 'fixture.asr', providerId: 'fixture', requestId: 'fixture', transcript: { unit: 'ms', text: '这几个等距', words: [], granularity: 'word', segments: [{ text: '这几个等距', startMs: 100, endMs: 700, granularity: 'word', timing: 'precise' }] } })),
   }
   const confirm = vi.fn(async () => {})
-  const adapter = new ImageEditExplanation(bus, { audio, microphone: vi.fn(async (_origin, onBlock) => { feed = onBlock; return { stop } }), model: () => 'fixture.asr', confirm, release: vi.fn(async () => {}),
+  const adapter = new ImageEditExplanation(bus, { eraseResources: async ids => { for (const id of ids) values.delete(id) }, audio, microphone: vi.fn(async (_origin, onBlock) => { feed = onBlock; return { stop } }), model: () => 'fixture.asr', confirm, release: vi.fn(async () => {}),
     store: async (value, kind) => { const digest = await imageLayoutDigest(value); values.set(digest, structuredClone(value)); return { resourceId: digest, digest, bytes: new TextEncoder().encode(JSON.stringify(value)).byteLength, path: `resources/${digest.slice(7)}`, kind } },
     read: async resource => values.get(resource.resourceId), readVisual: async () => new Uint8Array([1, 2, 3]) })
   const block = (length = 48000): void => feed({ firstFrame: 0, sampleRate: 48000, samples: new Float32Array(length), monoStartUs: 0, uncertaintyUs: 1000 })
-  const point = (position: [number, number] = [.4, .4], refs = [{ ...imageEditV3LayerRef(doc.id, 'a'), label: 'a' }], at = 300): void => { wall = at; adapter.recordPointer({ point: position, viewPoint: [position[0] * 600, position[1] * 400], documentPoint: [position[0] * 600, position[1] * 400], refs, selectedRefs: ['a', 'b', 'c'].map(id => ({ ...imageEditV3LayerRef(doc.id, id), label: id })), phase: 'down', geometry: { compositionSize: [600, 400], validViewRect: [0, 0, 600, 400], documentToView: [1, 0, 0, 1, 0, 0], crop: [0, 0, 600, 400], pixelRatio: 1, orientationTurns: 0 } }) }
+  const point = (position: [number, number] = [.4, .4], refs: ApplicationRef[] = [{ ...imageEditV3LayerRef(doc.id, 'a'), label: 'a' }], at = 300, capture?: Parameters<ImageEditExplanation['recordPointer']>[0]['capture']): void => { wall = at; adapter.recordPointer({ capture, point: position, viewPoint: [position[0] * 600, position[1] * 400], documentPoint: [position[0] * 600, position[1] * 400], refs, selectedRefs: ['a', 'b', 'c'].map(id => ({ ...imageEditV3LayerRef(doc.id, id), label: id })), phase: 'down', geometry: { compositionSize: [600, 400], validViewRect: [0, 0, 600, 400], documentToView: [1, 0, 0, 1, 0, 0], crop: [0, 0, 600, 400], pixelRatio: 1, orientationTurns: 0 } }) }
   return { adapter, audio, bus, block, point, stop, confirm, values }
 }
 describe('图片静态讲解宿主', () => {
@@ -131,4 +140,79 @@ describe('图片静态讲解宿主', () => {
     expect((await f.adapter.readReview(entry)).layout?.targetRefs).toHaveLength(3)
     await f.adapter.close()
   })
+})
+
+it('词稿校正只改文字；保存重开和原历史撤销不会被 collector 覆盖', async () => {
+  const f = setup(); await f.adapter.start('consent'); f.block(); f.point(); wall = 1200
+  await f.adapter.stop(); await f.adapter.transcribe('upload')
+  const original = (await f.adapter.transcript())[0]
+  const before = structuredClone(f.adapter.snapshot().session!)
+  await f.adapter.correctText(original, '这几个对齐')
+  const corrected = (await f.adapter.transcript())[0]
+  expect(corrected).toMatchObject({ text: '这几个对齐', originalEventRef: original.eventId, monoSpanUs: original.monoSpanUs, timelineSpans: original.timelineSpans })
+  expect((await f.adapter.readReview(corrected)).layout?.action).toBe('align')
+  expect(f.adapter.snapshot().session!.corrections).toHaveLength(1)
+  await f.adapter.reopen(before.id)
+  expect((await f.adapter.transcript())[0].text).toBe('这几个对齐')
+  expect(f.bus.undo()).toBe(true)
+  expect((await f.adapter.transcript())[0].text).toBe(original.text)
+  await f.adapter.save()
+  expect(f.bus.getSnapshot().document.creativeIntents!.sessions[0].corrections).toEqual(before.corrections)
+  const editor = explanationBodyEditor({ kind: 'image_edit.explanation_body', id: `v3:record-image:${before.id}` })
+  await f.adapter.remove()
+  await expect(editor.restore(before)).rejects.toThrow('讲解已删除')
+  await f.adapter.close()
+})
+
+it.each([false, true])('删除讲解擦除两向历史和历史画面，冷页=%s，重开也不能恢复', async cold => {
+  const f = setup(); await f.adapter.start('consent'); f.block()
+  const visualId = `sha256:${'e'.repeat(64)}`; f.values.set(visualId, new Uint8Array([1, 2, 3]))
+  f.point([.4, .4], [imageEditV3LayerRef('record-image', 'a')], 300, async () => ({ resource: { resourceId: visualId, digest: visualId, bytes: 3, path: `resources/${visualId.slice(7)}`, kind: 'visual' }, size: [100, 100], point: [.4, .4] }))
+  wall = 1200; await f.adapter.stop(); await f.adapter.transcribe('upload')
+  const original = (await f.adapter.transcript())[0]
+  await f.adapter.correctText(original, '绝不能恢复的私密正文')
+  const session = f.adapter.snapshot().session!, privateRefs = [...session.pages.map(page => page.resourceId), ...session.visualEvidenceRefs.map(visual => visual.resourceRef.resourceId)]
+  const atomicHead = structuredClone(f.bus.getSnapshot().document.creativeIntents!)
+  atomicHead.sessions[0].consent!.userReceiptRef = 'atomic-consent'
+  f.bus.dispatch({ type: 'document.atomic', commandId: 'private-atomic', expectedRevision: f.bus.getSnapshot().document.revision, commands: [
+    { type: 'layer.update-common', commandId: 'atomic-layer', expectedRevision: f.bus.getSnapshot().document.revision, layerId: 'b', patch: { name: '保留原子编辑' } },
+    { type: 'document.set-creative-intents', commandId: 'atomic-head', expectedRevision: f.bus.getSnapshot().document.revision, intents: atomicHead, resources: atomicHead.resources.map(r => ({ resourceId: r.resourceId, byteSize: r.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId)) },
+  ] })
+  f.bus.dispatch({ type: 'layer.update-common', commandId: 'keep-artwork', expectedRevision: f.bus.getSnapshot().document.revision, layerId: 'a', patch: { name: '保留作品编辑' } })
+  await f.bus.undo()
+  const saved = f.bus.getPersistenceSnapshot(), entries = [...saved.history.undo, ...[...saved.history.redo].reverse()]
+  const pageId = `sha256:${'f'.repeat(64)}`
+  const history = cold ? { ...saved.history, undo: [], redo: [], cold: {
+    checkpoint: { format: 'henji-image-history' as const, version: 2 as const, documentId: saved.document.id, headRevision: saved.document.revision, snapshotVersion: saved.history.version,
+      position: saved.history.undo.length, total: entries.length, pages: [{ resourceId: pageId, byteSize: 100, start: 0, count: entries.length }], resources: saved.retainedResources },
+    prefixLength: entries.length, position: saved.history.undo.length, commandIds: entries.map(entry => entry.forward.commandId), resourceRoles: { images: [], sparse: [] },
+  } } : saved.history
+  const bus = new ImageEditCommandBusV3(saved.document, { historySnapshot: history, history: { readPage: async () => structuredClone(entries) } })
+  const erased = await bus.eraseExplanationSession(session.id)
+  for (const id of privateRefs) expect(erased).toContain(id)
+  if (cold) expect(erased).toContain(pageId)
+  const assertErased = (): void => { expect(JSON.stringify(bus.getPersistenceSnapshot())).not.toContain(session.id); expect(bus.getSnapshot().document.creativeIntents?.sessions ?? []).toEqual([]) }
+  assertErased()
+  const total = bus.getHistoryView().total
+  for (let index = 0; index <= total; index++) { await bus.jumpToHistory(index); assertErased(); expect(JSON.stringify(await bus.readHistoryDocument(index))).not.toContain(session.id) }
+  expect(bus.getSnapshot().document.layers[0].name).toBe('保留作品编辑')
+  const clean = bus.getPersistenceSnapshot(), reopened = new ImageEditCommandBusV3(clean.document, { historySnapshot: clean.history })
+  while (await reopened.undo()) expect(JSON.stringify(reopened.getSnapshot().document)).not.toContain(session.id)
+  while (await reopened.redo()) expect(JSON.stringify(reopened.getSnapshot().document)).not.toContain(session.id)
+  await f.adapter.close()
+})
+
+it('删除保存失败后重试不会把 collector 正文重新写回', async () => {
+  const f = setup(); await f.adapter.start('consent'); f.block(); f.point(); wall = 1200
+  await f.adapter.stop(); await f.adapter.transcribe('upload')
+  const session = f.adapter.snapshot().session!, original = (await f.adapter.transcript())[0]
+  f.confirm.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('save failed'))
+  await expect(f.adapter.remove()).rejects.toThrow('save failed')
+  expect(f.bus.getSnapshot().document.creativeIntents!.sessions).toEqual([])
+  await expect(f.adapter.correctText(original, '不能复活')).rejects.toThrow()
+  await f.adapter.remove()
+  expect(f.adapter.snapshot().session).toBeUndefined()
+  expect(JSON.stringify(f.bus.getPersistenceSnapshot())).not.toContain(session.id)
+  for (const ref of session.pages) expect(f.values.has(ref.resourceId)).toBe(false)
+  await f.adapter.close()
 })

@@ -59,6 +59,7 @@ const videoEditClipStateSchema = z.object({
   multicamCameraId: identifier.optional(),
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
   follow: videoEditClipFollowSchema.optional(),
+  snapToBeat: z.boolean().optional().describe('超级关键帧整理时吸附到序列节拍标记，钉点优先。'),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
   elementOverrides: codeElementOverridesSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).optional(), adjustment: videoEditAdjustmentSchema.optional(),

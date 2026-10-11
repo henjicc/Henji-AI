@@ -7,15 +7,16 @@ import { evaluateVideoEditKeyframes } from '../videoEdit/keyframes'
 import { inverseAffine, mapAffine } from '../imaging/transforms'
 import { annotationPoseEvaluator, type IntentAnnotation } from './annotationConstraints'
 import { interpolateMotionPose, relativeMotionEvaluator, type RelativeMotionInput } from './referenceTransforms'
+import { snapMotionToBeats } from './beatSnap'
 
 export const MOTION_ALGORITHM_VERSION = 'p2-annotation-relative/1'
 export interface MotionCandidate { id: string; label: string; identity: CandidateIdentity; motions: CompiledMotion[] }
 export interface MotionCandidateResult { candidates: MotionCandidate[]; unavailable: { family: string; code: string; refs: readonly string[]; message: string }[] }
-export interface OptimizeMotionInput { draft: MotionDraft; samples: readonly MotionSample[]; mappings: Record<string, MotionCompileContext>; selectedTakeIds?: readonly string[]; intent?: MotionIntent; annotations?: readonly IntentAnnotation[]; relative?: RelativeMotionInput }
+export interface OptimizeMotionInput { draft: MotionDraft; samples: readonly MotionSample[]; mappings: Record<string, MotionCompileContext>; selectedTakeIds?: readonly string[]; intent?: MotionIntent; annotations?: readonly IntentAnnotation[]; relative?: RelativeMotionInput; beatFrames?: readonly number[] }
 
-export function motionCandidateIdentity(draft: MotionDraft, request?: Pick<OptimizeMotionInput, 'mappings' | 'intent' | 'selectedTakeIds' | 'annotations' | 'relative'>): CandidateIdentity {
+export function motionCandidateIdentity(draft: MotionDraft, request?: Pick<OptimizeMotionInput, 'mappings' | 'intent' | 'selectedTakeIds' | 'annotations' | 'relative' | 'beatFrames'>): CandidateIdentity {
   const requestKey = JSON.stringify({ fidelity: draft.fidelity, takes: request?.selectedTakeIds ? [...request.selectedTakeIds].sort() : null, intent: request?.intent ?? null, annotations: request?.annotations ?? [], relative: request?.relative ? { target: request.relative.targetRef, mode: request.relative.mode, ref: request.relative.current.ref, recorded: request.relative.recorded.identity, current: request.relative.current.identity } : null, mappings: request?.mappings ? Object.entries(request.mappings).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0) : null })
-  return { ownerRef: draft.ownerRef, sourceDraftDigest: draft.sourceDigest, algorithmVersion: MOTION_ALGORITHM_VERSION, requestKey, targetBases: draft.targets.map(t => ({ targetRef: t.ref, baseDigest: t.baseDigest, geometryDigest: t.geometryDigest })) }
+  return { ownerRef: draft.ownerRef, sourceDraftDigest: draft.sourceDigest, algorithmVersion: MOTION_ALGORITHM_VERSION, requestKey: request?.beatFrames ? JSON.stringify([requestKey, request.beatFrames]) : requestKey, targetBases: draft.targets.map(t => ({ targetRef: t.ref, baseDigest: t.baseDigest, geometryDigest: t.geometryDigest })) }
 }
 export function assertCandidateCurrent(candidate: MotionCandidate, current: CandidateIdentity): void {
   if (!sameCandidateInput(candidate.identity, current)) throw new CreativeIntentError('stale-candidate', [candidate.id], '画面或草稿已变化，请重新预览')
@@ -85,7 +86,7 @@ export function optimizeMotionDraft(input: OptimizeMotionInput, control: Computa
         }
         return compileMotionTake(t, mapping, { fidelity: draft.fidelity, cleanup: family.cleanup, intent: family.intent }, control)
       })
-      const candidate = { id: family.id, label: family.label, identity: motionCandidateIdentity(draft, input), motions }
+      const candidate = { id: family.id, label: family.label, identity: motionCandidateIdentity(draft, input), motions: input.beatFrames ? motions.map((motion, index) => snapMotionToBeats(motion, takes[index], input.mappings[motion.takeId].clipStart, input.beatFrames!)) : motions }
       if (family.id === 'constrained' || !candidates.some(c => !visiblyDifferent(c, candidate, input, control))) candidates.push(candidate)
       else unavailable.push({ family: family.id, code: 'no-distinct-result', refs: takes.map(t => t.takeId), message: '当前保真值和约束下与已有候选相同，保留原稿对照' })
       if (candidates.length === 3) break

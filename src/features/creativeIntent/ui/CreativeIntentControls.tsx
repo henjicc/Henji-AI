@@ -1,3 +1,5 @@
+import { ExplanationSendConfirmation } from './ExplanationSendConfirmation'
+import type { ExplanationSendRequest } from '../application/explanationGeneration'
 import { useRef, useState } from 'react'
 import { Dropdown, UiButton, UiGroup, UiOptionButton, UiRangeInput, UiError, UiLoading } from '@/components/ui'
 import { Pin, PinOff, Play, Square, Pause, RotateCcw } from 'lucide-react'
@@ -7,8 +9,9 @@ interface SharedCreativeIntentControlsProps {
   status: 'idle' | 'recording' | 'paused' | 'reviewing' | 'optimizing'
   candidates: { id: string; label: string }[]; selected: string; fidelity: number
   pins: { id: string; label: string }[]; canPin: boolean; message?: string; needsSave?: boolean; pinLabel?: string
+  contextKey?: string; prepareGeneration?: () => Promise<ExplanationSendRequest | undefined>; onError?: (error: unknown) => void
   onCancel: () => void
-  onOptimize: () => void; onApply: () => void; onPreview: (id: string) => void
+  onOptimize: () => void | Promise<void>; onApply: () => void; onPreview: (id: string) => void
   onFidelity: (value: number) => void; onPin: () => void; onUnpin: (id: string) => void
 }
 interface MotionCreativeIntentControlsProps {
@@ -22,16 +25,46 @@ interface MotionCreativeIntentControlsProps {
   onProperty: (value: 'position' | 'rotationTurns' | 'scaleXY') => void; onCapture: (value: 'place' | 'record') => void
   onIntent: (value: 'path' | 'overshoot' | 'spring' | 'bounce' | 'orbit' | 'pingpong') => void; onPlay: () => void
 }
-/** Static hosts consume the same candidate/pin controls without inventing recording state or callbacks. */
-export type CreativeIntentControlsProps = SharedCreativeIntentControlsProps & (MotionCreativeIntentControlsProps | { profile: 'layout' })
+/** Camera hosts retain native recording and optical properties. */
+interface CameraCreativeIntentControlsProps {
+  profile: 'camera'
+  property: 'position' | 'gaze' | 'focalLength'
+  onProperty: (value: 'position' | 'gaze' | 'focalLength') => void
+  onStart: () => void; onStop: () => void; onPause: () => void; onResume: () => void; onPlay: () => void
+}
+export type CreativeIntentControlsProps = SharedCreativeIntentControlsProps & (MotionCreativeIntentControlsProps | CameraCreativeIntentControlsProps | { profile: 'layout' })
 /** Presentation only; all operations and data stay in the owning document adapter. */
 export function CreativeIntentControls(props: CreativeIntentControlsProps): React.ReactElement {
   const [fidelity, setFidelity] = useState<number | null>(null); const pending = useRef<number | null>(null)
   const finishFidelity = (commit: boolean): void => { if (commit && pending.current !== null && pending.current !== props.fidelity) props.onFidelity(pending.current); pending.current = null; setFidelity(null) }
-  const motion = props.profile === 'layout' ? undefined : props
-  const recording = Boolean(motion && props.status === 'recording'); const busy = props.status === 'optimizing'
+  const [request, setRequest] = useState<{ key?: string; value: ExplanationSendRequest }>(), [rememberSend, setRememberSend] = useState(false), [generating, setGenerating] = useState(false)
+  const pendingGeneration = useRef(false), currentKey = useRef(props.contextKey); currentKey.current = props.contextKey
+  const optimize = (confirmation?: ExplanationSendRequest): void => {
+    if (pendingGeneration.current) return
+    if (!props.prepareGeneration && !confirmation) { try { void Promise.resolve(props.onOptimize()).catch(error => props.onError?.(error)) } catch (error) { props.onError?.(error) } return }
+    pendingGeneration.current = true; setGenerating(true)
+    const key = props.contextKey
+    void (async () => {
+      if (confirmation) await confirmation.confirm(rememberSend)
+      else { const prepared = await props.prepareGeneration?.(); if (currentKey.current !== key) return; if (prepared) { setRememberSend(false); setRequest({ key, value: prepared }); return } }
+      if (currentKey.current !== key) return
+      setRequest(undefined); await props.onOptimize()
+    })().catch(error => props.onError?.(error)).finally(() => { pendingGeneration.current = false; setGenerating(false) })
+  }
+  const motion = props.profile === undefined || props.profile === 'motion' ? props : undefined
+  const camera = props.profile === 'camera' ? props : undefined
+  const recording = Boolean((motion || camera) && props.status === 'recording'); const busy = props.status === 'optimizing' || generating
   const apply = props.candidates.some(candidate => candidate.id === props.selected)
   return <div className="flex w-72 max-w-full flex-col gap-3" data-creative-intent-controls>
+    {camera && <UiGroup title="超级关键帧" titleTone="compact">
+      <Dropdown ariaLabel="示范属性" value={camera.property} options={[{ value: 'position', label: '机位' }, { value: 'gaze', label: '视线' }, { value: 'focalLength', label: '焦距' }]} disabled={busy} onSelect={camera.onProperty} />
+      <div className="flex items-center gap-1">
+        {(props.status === 'idle' || props.status === 'reviewing') && <UiButton size="sm" onClick={camera.onStart}><Play size={14} />开始示范</UiButton>}
+        {recording && <UiButton size="sm" onClick={camera.onPause}><Pause size={14} />暂停示范</UiButton>}
+        {props.status === 'paused' && <UiButton size="sm" onClick={camera.onResume}><Play size={14} />继续示范</UiButton>}
+        {(recording || props.status === 'paused') && <UiButton size="sm" onClick={camera.onStop}><Square size={14} />结束示范</UiButton>}
+      </div>
+    </UiGroup>}
     {motion && <UiGroup title="超级关键帧" titleTone="compact">
       <div className="flex items-center gap-1" role="group" aria-label="示范方式">
         <UiOptionButton variant="segment" active={motion.capture === 'place'} disabled={recording || busy} onClick={() => motion.onCapture('place')}>分时摆放</UiOptionButton>
@@ -50,7 +83,7 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
         {(recording || props.status === 'paused') && <UiButton size="sm" onClick={motion.onStop}><Square size={14} />结束示范</UiButton>}
       </div>
     </UiGroup>}
-    <UiGroup title="保真与美化" titleTone="compact">
+    {!camera && <UiGroup title="保真与美化" titleTone="compact">
       <div className="flex justify-between text-xs text-text2"><span>美化</span><span>保真 {Math.round((fidelity ?? props.fidelity) * 100)}%</span></div>
       <UiRangeInput aria-label="保真度" min={0} max={1} step={.01} value={fidelity ?? props.fidelity} disabled={recording || busy}
         onChange={event => { pending.current = Number(event.target.value); setFidelity(pending.current) }}
@@ -58,22 +91,24 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
         onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); finishFidelity(false) } }}
         onKeyUp={event => { if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') finishFidelity(true) }} />
       {motion && <Dropdown ariaLabel="整理动作" value={motion.intent} options={[{ value: 'path', label: '沿示范路径' }, { value: 'overshoot', label: '轻回弹' }, { value: 'spring', label: '弹性回落' }, { value: 'bounce', label: '弹跳' }, { value: 'orbit', label: '环绕' }, { value: 'pingpong', label: '平缓往返' }]} onSelect={motion.onIntent} />}
-    </UiGroup>
+    </UiGroup>}
     {motion && motion.takes.length > 1 && <UiGroup title="采用示范" titleTone="compact"><div className="h-24"><Virtuoso data={motion.takes} itemContent={(_, t) => <UiOptionButton variant="menu" active={t.selected} onClick={() => motion.onTake(t.id)}>{t.label}</UiOptionButton>} /></div></UiGroup>}
     <UiGroup title="钉住姿态" titleTone="compact">
-      <UiButton size="sm" disabled={!props.canPin || busy} onClick={props.onPin}><Pin size={14} />{props.pinLabel ?? (motion ? '钉住当前位置' : '钉住所选图层')}</UiButton>
+      <UiButton size="sm" disabled={!props.canPin || busy} onClick={props.onPin}><Pin size={14} />{props.pinLabel ?? (camera ? '钉住当前机位' : motion ? '钉住当前位置' : '钉住所选图层')}</UiButton>
       {motion?.onPinEnd && <UiButton size="sm" disabled={recording || busy || props.status === 'idle'} onClick={motion.onPinEnd}><Pin size={14} />钉住终点</UiButton>}
       {props.pins.length > 0 && <div className="h-24"><Virtuoso data={props.pins} itemContent={(_, pin) => <UiButton size="sm" onClick={() => props.onUnpin(pin.id)}><PinOff size={14} />解钉 · {pin.label}</UiButton>} /></div>}
     </UiGroup>
     {props.candidates.length > 0 && <UiGroup title={motion ? '正常速对照' : '候选对照'} titleTone="compact">
-      <UiOptionButton variant="menu" active={props.selected === 'original'} onClick={() => props.onPreview('original')}><RotateCcw size={14} />原稿 A</UiOptionButton>
-      {props.candidates.map(c => <UiOptionButton key={c.id} variant="menu" active={props.selected === c.id} onClick={() => props.onPreview(c.id)}>{c.label} B</UiOptionButton>)}
+      <UiOptionButton variant="menu" active={props.selected === 'original'} onClick={() => props.onPreview('original')}><RotateCcw size={14} />{camera ? '原稿' : '原稿 A'}</UiOptionButton>
+      {props.candidates.map(c => <UiOptionButton key={c.id} variant="menu" active={props.selected === c.id} onClick={() => props.onPreview(c.id)}>{c.label}{camera ? '' : ' B'}</UiOptionButton>)}
       {motion && <UiButton size="sm" onClick={motion.onPlay}><Play size={14} />正常速预览</UiButton>}
+      {camera && <UiButton size="sm" onClick={camera.onPlay}><Play size={14} />正常速预览</UiButton>}
     </UiGroup>}
-    {props.message && <UiError size="sm" title={motion ? '请调整示范' : '请调整布局'} message={props.message} />}
-    {busy ? <><UiLoading size="sm" message={motion ? '正在整理动作…' : '正在整理布局…'} /><UiButton onClick={props.onCancel}>取消整理</UiButton></> : <div className="flex items-center justify-end gap-2">
-      {apply && !props.needsSave && <UiButton onClick={props.onOptimize}>重新整理</UiButton>}
-      <UiButton variant="primary" disabled={props.status === 'idle'} onClick={apply || props.needsSave ? props.onApply : props.onOptimize}>{props.needsSave ? '重试保存' : apply ? '应用' : '整理'}</UiButton>
+    {props.message && <UiError size="sm" title={motion || camera ? '请调整示范' : '请调整布局'} message={props.message} />}
+    {busy ? <><UiLoading size="sm" message={camera ? '正在整理机位…' : motion ? '正在整理动作…' : '正在整理布局…'} /><UiButton onClick={props.onCancel}>取消整理</UiButton></> : <div className="flex items-center justify-end gap-2">
+      {apply && !props.needsSave && <UiButton onClick={() => optimize()}>重新整理</UiButton>}
+      <UiButton variant="primary" disabled={props.status === 'idle'} onClick={apply || props.needsSave ? props.onApply : () => optimize()}>{props.needsSave ? '重试保存' : apply ? '应用' : '整理'}</UiButton>
     </div>}
+    <ExplanationSendConfirmation request={request?.key === props.contextKey ? request?.value : undefined} generating={generating} rememberSend={rememberSend} setRememberSend={setRememberSend} onCancel={() => { if (!pendingGeneration.current) setRequest(undefined) }} onSend={() => { if (request?.key === props.contextKey) optimize(request?.value) }} />
   </div>
 }

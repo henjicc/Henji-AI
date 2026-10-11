@@ -1,3 +1,4 @@
+import { rememberExplanationUndoAccess } from '../creativeIntentAuthorization'
 import type {
   ApplicationPlannedStep,
   ApplicationTransactionResult,
@@ -479,6 +480,7 @@ export const applicationReflectionHandlers = {
       rawResult = await execute(refreshed, 1)
     }
     if ((rawResult.status === 'completed' || rawResult.status === 'failed') && rawResult.undoRef) {
+      rememberExplanationUndoAccess(rawResult.undoRef, changes.flatMap(change => 'target' in change ? [change.target] : []))
       publicUndos.set(rawResult.undoRef, { callerId: context.callerGrant?.callerId ?? 'renderer',
         revisions: rawResult.status === 'completed' ? rawResult.resultingRevisions : rawResult.currentRevisions ?? {} })
     }

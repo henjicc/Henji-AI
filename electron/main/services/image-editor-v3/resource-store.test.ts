@@ -123,3 +123,10 @@ describe('ContentAddressedResourceStore', () => {
     await expect(fsp.access(freshImport)).resolves.toBeUndefined()
   })
 })
+
+it('隐私擦除只清除指定孤立资源，不等待年龄，也不触碰其他在途资源', async () => {
+  const secret = await store.putBuffer(Buffer.from('private body')), image = await store.putBuffer(Buffer.from('private image')), other = await store.putBuffer(Buffer.from('other operation'))
+  const erased = await store.garbageCollect(new Set(), { minimumAgeMs: 0, onlyResourceIds: new Set([secret.id, image.id]) })
+  expect(new Set(erased.deleted)).toEqual(new Set([secret.id, image.id]))
+  expect(await store.has(secret.id)).toBe(false); expect(await store.has(image.id)).toBe(false); expect(await store.has(other.id)).toBe(true)
+})

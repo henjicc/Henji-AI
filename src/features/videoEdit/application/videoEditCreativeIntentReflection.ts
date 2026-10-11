@@ -1,3 +1,5 @@
+import { reopenVideoExplanation, videoExplanationState } from './videoEditExplanation'
+import { explanationBodyEditor, explanationBodyRef, type ExplanationBodyEditor } from '@/core/creativeIntent/semanticIntentEdits'
 import type { ApplicationRef } from '@/core/application-control'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
 import type { CreativeIntents } from '@/core/creativeIntent/persistence'
@@ -10,6 +12,10 @@ function open(documentRef: ApplicationRef) {
     const assertCurrent = () => { if (requireVideoEditInstance(id) !== owner) throw new Error('原剪辑已关闭，请重新读取原稿。') }
     return {
       documentRef, owner, assertCurrent,
+    explanationEditor: (sessionId: string): ExplanationBodyEditor => {
+        const resolve = async (): Promise<ExplanationBodyEditor> => { assertCurrent(); if (videoExplanationState(owner)?.collector.session.id !== sessionId) await reopenVideoExplanation(id, sessionId); return explanationBodyEditor(explanationBodyRef(documentRef, sessionId)) }
+        return { apply: async (changes, context) => (await resolve()).apply(changes, context), restore: async (session, context) => (await resolve()).restore(session, context) }
+      },
       size: (): [number, number] => { const sequence = getActiveVideoEditSequence(owner); return [sequence.width, sequence.height] },
       selected: (draft: MotionDraft) => draft.selectedCandidateRef,
       checkpoint: () => {

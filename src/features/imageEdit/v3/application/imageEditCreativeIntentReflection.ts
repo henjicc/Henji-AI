@@ -1,3 +1,5 @@
+import { imageEditExplanation } from './imageEditExplanation'
+import { explanationBodyEditor, explanationBodyRef, type ExplanationBodyEditor } from '@/core/creativeIntent/semanticIntentEdits'
 import { getPlatform } from '@/platform/runtime'
 import type { ApplicationRef, ApplicationExecutionContext } from '@/core/application-control'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
@@ -14,6 +16,10 @@ function open(documentRef: ApplicationRef) {
   const adapter = imageEditLayoutDraft(bus)
   return {
     documentRef, owner, assertCurrent,
+    explanationEditor: (sessionId: string): ExplanationBodyEditor => {
+      const resolve = async (): Promise<ExplanationBodyEditor> => { assertCurrent(); const explanation = imageEditExplanation(bus); if (explanation.snapshot().session?.id !== sessionId) await explanation.reopen(sessionId); return explanationBodyEditor(explanationBodyRef(documentRef, sessionId)) }
+      return { apply: async (changes, context) => (await resolve()).apply(changes, context), restore: async (session, context) => (await resolve()).restore(session, context) }
+    },
     size: (): [number, number] => { const geometry = bus.getSnapshot().document.geometry; return [geometry.width, geometry.height] },
     selected: (draft: MotionDraft) => { const state = adapter.snapshot(); return state.draft?.id === draft.id ? draft.candidateRefs[state.candidates.findIndex(c => c.id === state.selected)]?.resourceId : draft.selectedCandidateRef },
     checkpoint: () => { const position = bus.getHistoryView().position; return () => {

@@ -27,6 +27,8 @@ import { useRenderCameraId } from './useRenderCameraId'
 import type { StageViewportSource } from '../viewport/viewportTypes'
 import StageFixedViewportCamera from './StageFixedViewportCamera'
 import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
+import { useSyncExternalStore } from 'react'
+import { cameraMotionPreview, subscribeCameraMotion, cameraMotionRevision, demonstrateCameraMotion, cameraMotionDraft } from '../application/cameraMotionDraft'
 
 /**
  * 场景三维视图：数据驱动渲染 store 中的对象列表，
@@ -101,7 +103,8 @@ const StageScene: React.FC<StageSceneProps> = ({
   interactive = true,
   primary = true,
 }) => {
-  const objects = useCameraStageStore((state) => state.objects)
+  const storedObjects = useCameraStageStore((state) => state.objects)
+  useSyncExternalStore(subscribeCameraMotion, cameraMotionRevision)
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
   const viewMode = useCameraStageStore((state) => state.viewMode)
@@ -113,6 +116,7 @@ const StageScene: React.FC<StageSceneProps> = ({
   const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
   const selectedStateKeyframeId = useCameraStageStore((state) => state.selectedStateKeyframeId)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
+  const objects = cameraMotionPreview(useCameraStageStore.getState())?.objects ?? storedObjects
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
   const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
@@ -173,6 +177,7 @@ const StageScene: React.FC<StageSceneProps> = ({
     const object = state.objects.find((item) => item.id === id)
     const position = { x: node.position.x, y: node.position.y, z: node.position.z }
     if (object?.type === 'camera') {
+      if (state.currentProjectId && demonstrateCameraMotion(state.currentProjectId, id, { position, rotation })) return
       updateCameraView(id, {
         position,
         rotation,
@@ -190,7 +195,8 @@ const StageScene: React.FC<StageSceneProps> = ({
   }, [updateCameraView, updateTransform])
 
   const handleGizmoInteractionStart = useCallback((): void => {
-    const id = useCameraStageStore.getState().selectedId
+    const state = useCameraStageStore.getState(), id = state.selectedId
+    if (state.currentProjectId && cameraMotionDraft(state.currentProjectId)?.status === 'recording' && cameraMotionDraft(state.currentProjectId)?.cameraId === id) return
     if (id) prepareStateKeyframeEdit(id)
   }, [prepareStateKeyframeEdit])
 

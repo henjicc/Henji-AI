@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { ICON_WORKSPACE_CANVAS } from '@/core/theme/icons'
 import { VideoEditCanvasSendDialog, type VideoEditCanvasSendRequest } from '../panels/VideoEditCanvasSendDialog'
 import type { VideoEditNestTarget } from '../application/videoEditNesting'
+import { analyzeVideoEditBeats } from '../application/videoEditBeatAnalysis'
 
 const actionIcons = { audio_gain: AudioLines, clip_speed: Gauge, copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
 type MenuCommand = keyof typeof actionIcons
@@ -58,6 +59,7 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
         items.push({ id: 'auto_multicam', label: '建议机位切换', icon: <Play size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { void autoSwitchVideoEditMulticam(target).catch(onError) } })
       }
       const media = clip && videoEditClipMedia(instance.document, clip)
+      if (clip?.kind === 'audio' && media) items.push({ id: 'analyze_beats', label: '分析节拍', icon: <AudioLines size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { void analyzeVideoEditBeats({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }).catch(error => { if (!(error instanceof DOMException && error.name === 'AbortError')) onError(error) }) } })
       if (clip && clip.kind !== 'adjustment' && clip.kind !== 'sequence') items.push({ id: 'send_canvas', label: '发送片段到画布…', icon: <ICON_WORKSPACE_CANVAS size={16} />, onClick: () => setCanvasSend({ projectId: instance.document.id, sequenceId: sequence.id, source: { kind: 'clip', clipId: clip.id } }) })
       if (clip?.kind === 'video' && clip.sourceComponent !== 'audio' && media?.kind === 'video' && onReframe) items.push({ id: 'auto_reframe', label: '自动重构…', icon: <Crop size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onReframe({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
       if (clip?.kind === 'video' && media?.kind === 'video' && onScenes) items.push({ id: 'scene_detection', label: '场景编辑检测…', icon: <Scissors size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onScenes({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })

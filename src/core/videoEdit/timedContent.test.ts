@@ -11,7 +11,7 @@ function fixture() {
   const document = createVideoEditDocument('字幕测试'); const sequence = document.sequences[0]
   document.items = [{ id: 'item', name: '文字', kind: 'text' }]
   sequence.clips = [{ ...makeVideoEditItemClip(document, 'item', sequence.id, { frame: 30, track: 1 }), id: 'clip', duration: 90 }]
-  sequence.markers = [{ id: 'marker', clipId: 'clip', frame: 70, name: '词边界' }, { id: 'program-marker', frame: 5, name: '序列' }]
+  sequence.markers = [{ id: 'marker', clipId: 'clip', frame: 70, name: '词边界', type: 'beat', strength: .8 }, { id: 'program-marker', frame: 5, name: '序列' }]
   sequence.captions = [{ id: 'caption', clipId: 'clip', start: 50, duration: 50, text: '跟随片段' }, { id: 'program-caption', start: 5, duration: 20, text: '节目时钟' }]
   return { document, sequence }
 }
@@ -22,7 +22,7 @@ describe('字幕与标记的半开锚定', () => {
     const { document, sequence } = fixture()
     const next = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['clip'], mode: 'move', delta: 100 })
     expect(next.captions).toMatchObject([{ start: 150, duration: 50 }, { start: 5 }])
-    expect(next.markers).toMatchObject([{ frame: 170 }, { frame: 5 }])
+    expect(next.markers).toMatchObject([{ frame: 170, type: 'beat', strength: .8 }, { frame: 5 }])
     expect(videoEditDocumentSchema.parse({ ...document, sequences: [next] })).toBeTruthy()
   })
   it('拆分切分跨界字幕、边界标记只归右侧、引用和ID保持有效', () => {
@@ -32,7 +32,7 @@ describe('字幕与标记的半开锚定', () => {
     const captions = next.captions!.filter(caption => caption.clipId)
     expect(captions).toMatchObject([{ id: 'caption', clipId: 'clip', start: 50, duration: 20 }, { clipId: right.id, start: 70, duration: 30 }])
     expect(captions[1].id).not.toBe('caption')
-    expect(next.markers![0]).toMatchObject({ frame: 70, clipId: right.id })
+    expect(next.markers![0]).toMatchObject({ frame: 70, clipId: right.id, type: 'beat', strength: .8 })
     expect(videoEditDocumentSchema.safeParse({ ...document, sequences: [next] }).success).toBe(true)
   })
   it('静态片段入点裁剪保持绝对内容边界，缩短出点只裁切可见范围', () => {
@@ -49,7 +49,7 @@ describe('字幕与标记的半开锚定', () => {
     expect(clipboard.markers).toHaveLength(1); expect(clipboard.captions).toHaveLength(1)
     const next = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', clipboard, frame: 150, mode: 'paste' })
     expect(next.captions!.at(-1)).toMatchObject({ start: 170, duration: 50 })
-    expect(next.captions!.at(-1)!.clipId).not.toBe('clip'); expect(next.markers!.at(-1)!.frame).toBe(190)
+    expect(next.captions!.at(-1)!.clipId).not.toBe('clip'); expect(next.markers!.at(-1)).toMatchObject({ frame: 190, type: 'beat', strength: .8 })
     expect(videoEditDocumentSchema.safeParse({ ...document, sequences: [next] }).success).toBe(true)
   })
   it('覆盖中间区间保留左右字幕，移除落在覆盖区间的clip标记', () => {

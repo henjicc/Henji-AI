@@ -1,7 +1,16 @@
 import { z } from 'zod'
+import { applicationRefSchema } from '../application-control/identifiers'
 import { agentAttachmentsSchema, type AgentAttachment } from './attachments'
 
+export const embeddedIntentRequestSchema = z.object({
+  documentRef: applicationRefSchema.extend({ kind: z.enum(['video_edit.document', 'image_edit.document']) }),
+  sessionId: z.string().min(1),
+  draftRefs: z.array(applicationRefSchema.extend({ kind: z.enum(['video_edit.intent_draft', 'image_edit.intent_draft']) })).min(1),
+}).strict()
+export type EmbeddedIntentRequest = z.infer<typeof embeddedIntentRequestSchema>
+
 export const embeddedAgentPromptSchema = z.object({
+  creativeIntent: embeddedIntentRequestSchema.optional(),
   text: z.string().trim().min(1).max(32000),
   model: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }).strict(),
   access: z.enum(['read', 'write', 'full']),

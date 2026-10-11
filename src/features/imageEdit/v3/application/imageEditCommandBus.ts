@@ -90,6 +90,7 @@ export class ImageEditCommandBusV3 {
   private mutationGuard: (() => void) | undefined;
   private historyGeneration = 0;
   private historyJumpActive = false;
+  private erasingExplanation = false;
 
   constructor(document: ImageEditDocumentV3, options: ImageEditCommandBusOptionsV3 = {}) {
     this.document = document;
@@ -496,6 +497,26 @@ export class ImageEditCommandBusV3 {
     return true;
   }
 
+  async eraseExplanationSession(sessionId: string): Promise<string[]> {
+    this.assertMutable();
+    if (this.historyJumpActive) throw new Error('正在恢复历史，请稍后删除讲解');
+    this.historyJumpActive = true;
+    this.erasingExplanation = true;
+    const before = this.document;
+    const snapshot = this.history.createSnapshot();
+    const resources = [...this.history.getRetainedResources().map(resource => resource.resourceId), ...snapshot.cold?.checkpoint.pages.map(page => page.resourceId) ?? [], ...before.creativeIntents?.resources.map(resource => resource.resourceId) ?? []];
+    try {
+      const next = await this.history.eraseExplanationSession(before, sessionId, this.lifecycleAbort.signal);
+      this.document = next;
+      this.historyGeneration++;
+      this.previewOverrides.clear();
+      for (const entry of [...this.sessionUndo, ...this.sessionRedo]) if ('commandId' in entry) delete entry.projection;
+      this.persistChange(before.revision); this.flushReleasedResources(); this.emit();
+      const retained = new Set(collectImageEditJsonResourceIdsV3(next, this.history.getRetainedResources().map(resource => resource.resourceId)));
+      return resources.filter(resource => !retained.has(resource));
+    } finally { this.historyJumpActive = false; this.erasingExplanation = false; }
+  }
+
   clearHistory(): void {
     this.assertMutable();
     this.history.clear(this.document);
@@ -563,6 +584,7 @@ export class ImageEditCommandBusV3 {
   private assertMutable(): void {
     assertApplicationWritesAllowed();
     if (this.disposed) throw new Error('DOCUMENT_RELEASED：图片文档实例已释放');
+    if (this.erasingExplanation) throw new Error('正在删除讲解，请稍后重试');
     this.mutationGuard?.();
   }
 

@@ -2,7 +2,7 @@ import { Euler, Quaternion } from 'three'
 import { createCameraCandidates, cameraPose3DSchema, assertCameraCandidateCurrent, type CameraCandidateFamily, type CameraPose3D } from '@/core/creativeIntent/cameraAdapter'
 import type { CandidateIdentity } from '@/core/creativeIntent/contracts'
 import { CreativeIntentError, checkCancelled, type ComputationControl } from '@/core/creativeIntent/sampling'
-import { resolveCameraLookAtTarget, resolveCameraRotation } from '../domain/cameraUtils'
+import { resolveCameraLookAtTarget, resolveCameraRotation, cameraTargetFromPositionRotation } from '../domain/cameraUtils'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
 import { createCameraPresetPath, defaultSpatialPath } from '../domain/spatialPath'
 import type { StageCameraObject, StageObject } from '../domain/sceneTypes'
@@ -55,7 +55,10 @@ function validateRequest(state: CameraStageState, request: CameraMotionCandidate
   if (selected.some(frame => frame.hold !== 0 || frame.cameraId !== null && frame.cameraId !== request.cameraId)) throw new CreativeIntentError('camera-cut', request.stateKeyframeIds, '请先将选段设为同一拍摄机位且使用绝对时间')
   const camera = state.objects.find((object): object is StageCameraObject => object.id === request.cameraId && object.type === 'camera')
   if (!camera) throw new CreativeIntentError('camera-missing', [request.cameraId], '机位不在当前场景中')
-  if (selected.some(frame => JSON.stringify(frame.objectStates[request.cameraId]?.lookAt) !== JSON.stringify(camera.lookAt))) throw new CreativeIntentError('camera-look-at', [request.cameraId], '当前注视目标为摄像机全局设置，请先统一选段的注视目标')
+  if (selected.some(frame => {
+    const target = frame.objectStates[request.cameraId]?.lookAt
+    return camera.lookAt.mode === 'object' || target?.mode === 'object' ? JSON.stringify(target) !== JSON.stringify(camera.lookAt) : !target
+  })) throw new CreativeIntentError('camera-look-at', [request.cameraId], '请先统一选段的注视对象')
   return selected
 }
 
@@ -84,6 +87,14 @@ export function evaluateCameraMotionCandidate(state: CameraStageState, cameraId:
   const objects = applyAnimationAtTime(state.objects, native.animation, frame / state.animation.fps)
   const camera = objects.find((object): object is StageCameraObject => object.id === cameraId && object.type === 'camera')
   if (!camera) throw new CreativeIntentError('camera-missing', [cameraId], '机位已不存在')
+  const cameraStates = native.stateKeyframes.map(keyframe => keyframe.objectStates[cameraId]).filter(Boolean)
+  if (camera.lookAt.mode === 'manual' && cameraStates.some(snapshot => JSON.stringify(snapshot.lookAt) !== JSON.stringify(cameraStates[0]?.lookAt))) {
+    const reference = cameraStates[0], position = camera.transform.position
+    const target = reference.lookAt?.mode === 'manual' ? reference.lookAt.target : camera.lookAt.target
+    const origin = reference.transform.position
+    const distance = Math.hypot(target.x - origin.x, target.y - origin.y, target.z - origin.z)
+    return cameraStagePose3D({ ...camera, lookAt: { mode: 'manual', target: cameraTargetFromPositionRotation(position, camera.transform.rotation, distance) } }, objects)
+  }
   return cameraStagePose3D(camera, objects)
 }
 
@@ -104,7 +115,7 @@ export function compileCameraMotionCandidates(state: CameraStageState, request: 
 }
 
 export function cameraMotionSourceKey(state: CameraStageState): string {
-  return JSON.stringify([state.currentProjectId, state.objects, state.stateKeyframes, state.activeCameraId, state.animation.fps])
+  return JSON.stringify([state.currentProjectId, applyAnimationAtTime(state.objects, state.animation, 0), state.stateKeyframes, state.activeCameraId, state.animation.fps])
 }
 
 export async function cameraMotionIdentity(state: CameraStageState, request: CameraMotionCandidateRequest): Promise<CandidateIdentity> {

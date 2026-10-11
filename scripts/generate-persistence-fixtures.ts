@@ -43,14 +43,21 @@ sequence.id = 'golden-sequence'
 document.sequences.push(sequence)
 const clip = makeVideoEditItemClip(document, 'code-item', sequence.id, { frame: 0, duration: 90 }, () => program)
 clip.id = 'golden-clip'
+clip.snapToBeat = true
 clip.curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 1, interpolation: 'ease' }] }
 clip.effects = [{ id: 'golden-grade', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25 } } }, { id: 'golden-blur', name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } }]
 sequence.clips.push(clip)
 sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', translation: 'Golden caption' }]
 sequence.transitions = [{ id: 'golden-transition', kind: 'cross_dissolve', rightClipId: clip.id, durationFrames: 10 }]
-sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }]
+sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }, { id: 'golden-beat', frame: 30, name: '重音', type: 'beat', strength: .9 }]
 videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
+const soundDocument = createVideoEditDocument('节拍声音样本'), soundSequence = createVideoEditSequence()
+soundSequence.id = 'golden-sound-sequence'; soundDocument.sequences.push(soundSequence)
+soundDocument.media.push({ id: 'golden-sound', name: '鼓点', path: '/persistence-project/素材/鼓点.wav', kind: 'audio', durationSeconds: 3, width: 0, height: 0, hasAudio: true })
+soundDocument.items.push({ id: 'golden-sound-item', name: '鼓点', kind: 'audio', mediaId: 'golden-sound' })
+const soundClip = makeVideoEditItemClip(soundDocument, 'golden-sound-item', soundSequence.id, { frame: 0, duration: 90 })
+soundClip.id = 'golden-sound-clip'; soundClip.snapToBeat = true
 const image = createImageEditDocumentV3({ width: 64, height: 48, documentId: 'golden-image', color: createDefaultImageEditColorModeV3() })
 image.namedRegions = [{ id: 'golden-region', name: '主体', selection: { operations: [{ combine: 'replace', invertBefore: false, shape: { type: 'ellipse', x: .2, y: .1, width: .5, height: .7 } }], feather: .02, inverted: false } }]
 image.namedRegions.push({id:'golden-outside',name:'画面外范围',selection:{operations:[{combine:'replace',invertBefore:false,shape:{type:'rectangle',x:-.4,y:1.1,width:1.5,height:.4}}],feather:0,inverted:false}})
@@ -138,7 +145,7 @@ const values: Record<string, unknown> = {
   'node-defaults': { imageGen: { modelId: 'golden-model', params: { quality: 'high' } } },
   'model-defaults': modelDefaultsSchema.parse({ version: MODEL_DEFAULTS_VERSION, providerId: 'kie', models: { image: '', video: '', audio: '', transcription: 'groq.speech-recognition.whisper-large-v3-turbo' } }),
   onboarding: { version: 2, status: 'in_progress', entryReason: 'fresh_install', activeStepId: 'provider', completedStepIds: ['welcome'], configuredProviders: [], verifiedProviders: [], shownHintIds: [], firstTaskPrepared: false, firstTaskCompleted: false, startedAt: timestamp, completedAt: null },
-  'subtitle-manifest': { version: 1, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [], soundIdentities: {}, captions: sequence.captions, committed: true },
+  'subtitle-manifest': { version: 1, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [soundClip], soundIdentities: { 'golden-sound-clip': 'golden-sound-identity' }, captions: sequence.captions, committed: true },
   'storyboard-metadata': { version: 1, gridRows: 2, gridCols: 2, frameNotes: ['远景', '特写'] },
   'setting-records': { key: 'user_data_root', value: '{"root":"/persistence-project","locale":"zh"}', type: 'json' },
   'asset-records': { id: 'golden-asset', media_type: 'code', display_name: '代码标题', file_path: '/persistence-project/代码/标题.henjicode', source: 'video-edit', mime_type: 'application/x-henji-code', size_bytes: 100, width: null, height: null, duration_seconds: null, thumbnail_name: null, inspection_status: 'pending', inspection_error: null, file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1791504000000, updated_at: 1791504000000 },

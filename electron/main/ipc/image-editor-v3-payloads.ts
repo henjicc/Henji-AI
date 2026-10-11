@@ -61,7 +61,7 @@ export interface TilePayload extends ResourcePayload {
   halo: number
   bitDepth?: 8 | 16 | 32
 }
-export interface GarbageCollectPayload extends BasePayload { retainedResourceRefs: ResourceId[] }
+export interface GarbageCollectPayload extends BasePayload { retainedResourceRefs: ResourceId[]; eraseResourceRefs?: ResourceId[] }
 export interface IngestSourcePayload extends BasePayload { source: ImageEditorV3SourceLocator }
 export interface PersistBrushTilesPayload extends BasePayload {
   tiles: Array<{ tileKey: string; tile: ImageEditBrushTileV3 }>
@@ -538,6 +538,7 @@ export function parseImageEditorV3GarbageCollectPayload(input: unknown): Garbage
   return {
     requestId: readRequestId(record),
     retainedResourceRefs: readResourceRefs(record.retainedResourceRefs, 'retainedResourceRefs'),
+    ...(record.eraseResourceRefs === undefined ? {} : { eraseResourceRefs: readResourceRefs(record.eraseResourceRefs, 'eraseResourceRefs') }),
   }
 }
 

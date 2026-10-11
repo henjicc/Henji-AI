@@ -6,6 +6,8 @@ import { requireVideoEditInstance } from './videoEditService'
 // 仅这些操作的业务产物是同一不可变文档的原子提交；分析缓存不构成剪辑写入。
 // 付费生成、文件导入、代理、导出、跨工作区写入不能依赖此守卫判断执行事实。
 const ATOMIC_DOCUMENT_ALGORITHMS = new Set([
+  'stagger_video_edit_motion',
+  'analyze_video_edit_beats',
   'auto_reframe_video_edit', 'apply_video_edit_title_template', 'generate_video_edit_audio_ducking',
   'normalize_video_edit_loudness', 'trim_video_edit_clip', 'ripple_video_edit_clip_speed',
   'nest_video_edit_clips', 'create_video_edit_multicam', 'auto_switch_video_edit_multicam',

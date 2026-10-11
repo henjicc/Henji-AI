@@ -5,6 +5,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
 import { cameraTargetFromPositionRotation, rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import { beginHistorySession, endHistorySession, useCameraStageStore } from '../store/cameraStageStore'
+import { cameraMotionDraft, demonstrateCameraMotion } from '../application/cameraMotionDraft'
 
 const DEG2RAD = Math.PI / 180
 
@@ -73,7 +74,8 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
   const handleStart = (): void => {
     interactionRef.current = true
     beginHistorySession()
-    prepareStateKeyframeEdit(cameraObject.id)
+    const projectId = useCameraStageStore.getState().currentProjectId
+    if (!projectId || cameraMotionDraft(projectId)?.status !== 'recording' || cameraMotionDraft(projectId)?.cameraId !== cameraObject.id) prepareStateKeyframeEdit(cameraObject.id)
   }
 
   const handleEnd = (): void => {
@@ -91,11 +93,14 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
     const lookAtTarget = { x: target.x, y: target.y, z: target.z }
     // OrbitControls 交互后相机姿态恒等于 lookAt(target)，直接用领域函数由位置+目标换算
     // 俯仰/水平角（不读 three.js 欧拉分量，避免依赖其分解顺序）；Z 轴 roll 保留现值
-    updateCameraView(cameraObject.id, {
+    const patch = {
       position,
       rotation: rotationFromPositionAndTarget(position, lookAtTarget, cameraObject.transform.rotation.z),
       lookAtTarget,
-    })
+    }
+    const projectId = useCameraStageStore.getState().currentProjectId
+    if (projectId && demonstrateCameraMotion(projectId, cameraObject.id, patch)) return
+    updateCameraView(cameraObject.id, patch)
   }
 
   return (

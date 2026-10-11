@@ -5,3 +5,5 @@ export { captureMicrophone, type CapturedAudioBlock, type MicrophoneCapture } fr
 export { ExplanationReview, type ExplanationReviewProps, type ExplanationReviewResult } from './ui/ExplanationReview'
 export { ExplanationPanel, type ExplanationPanelProps } from './ui/ExplanationPanel'
 export { explanationDuration, useExplanationTranscript, useExplanationHasRecorded } from './ui/explanationPresentation'
+
+export { prepareExplanationGeneration, type PreparedExplanationGeneration, type ExplanationSendRequest } from './application/explanationGeneration'

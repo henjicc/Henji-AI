@@ -1,3 +1,5 @@
+import { recordingFixtureSession } from '@/core/creativeIntent/fixtures/recordingFixtures'
+import { explanationBodyRef } from '@/core/creativeIntent/semanticIntentEdits'
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto'
 import { tmpdir } from 'node:os'
@@ -31,7 +33,7 @@ import { applicationTransactionFailureFactsSchema } from '@/core/application-con
 
 vi.mock('@/features/videoEdit/application/videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: vi.fn(async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => {
   const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted()
-  input = { ...input, samples }; return { result: optimizeMotionDraft(input), original: optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined }).candidates[0] }
+  input = { ...input, samples }; return { result: optimizeMotionDraft(input), original: optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined, beatFrames: undefined }).candidates[0] }
 }) }))
 beforeEach(() => {
   installHarnessNativeStorage(); vi.stubGlobal('crypto', webcrypto); vi.clearAllMocks()
@@ -262,4 +264,37 @@ it('图片正式保真度、钉点、应用保存失败恢复和公共撤销共�
     await app.requireResult('undo_application_changes', { undoRef: failedReceipt.undoRef })
     expect(bus.getSnapshot().document.layers).toEqual(before)
   } finally { fail = false; registerCreativeIntentHost(imageCreativeIntentProvider); app.dispose(); dispose() }
+})
+
+it.each(['video_edit', 'image_edit'] as const)('%s 冷宿主通过公共 C2 正文事务编辑并用真实公共回执一步撤销', async domain => {
+  const video = domain === 'video_edit' ? await createVideoEditTestProject() : undefined
+  const document = createImageEditDocumentV3({ documentId: 'cold-private-image', width: 100, height: 100 })
+  const bus = new ImageEditCommandBusV3(document)
+  const dispose = domain === 'image_edit' ? registerPersistedImageEditTestSession('cold-private-image', bus) : () => {}
+  const documentRef = { kind: `${domain}.document`, id: video?.document.id ?? `v3:${document.id}` }
+  const session = recordingFixtureSession(domain === 'image_edit' ? 'static' : 'animated'); session.state = 'reviewing'
+  session.ownerRef = domain === 'image_edit' ? documentRef : { kind: 'document.video_edit', id: documentRef.id }
+  session.consent!.textUpload = true
+  session.bindings = [{ id: 'binding', utteranceIds: ['u'], wordIds: [], targetRefs: [], point: [.5, .5], evidenceSeqs: [], timelineSpans: [], confidence: 'confirmed', correctedByUser: true }]
+  const originalBindings = structuredClone(session.bindings)
+  const head = { drafts: [], sessions: [session], resources: [] }
+  if (video) updateVideoEditCreativeIntents(video.document.id, head)
+  else bus.dispatch({ type: 'document.set-creative-intents', commandId: 'cold-head', expectedRevision: 0, intents: head, resources: [] })
+  const ref = explanationBodyRef(documentRef, session.id)
+  const invoke = async (id: string, input: unknown) => {
+    const caller = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'cold-editor', capabilityIds: [id], permissions: ['application:read', 'application:write', `${domain}:read`, `${domain}:write`], allowWrites: true, allowDestructive: false, privateAccess: creativeIntentPrivateAccess(id, input) }))
+    const definition = caller.list().find(capability => capability.id === id)
+    if (!definition) throw new Error('能力未授权')
+    return caller.execute({ id, version: definition.version, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  }
+  try {
+    const changed = await invoke('change_application_entities', { summary: '清除讲解指向', changes: [{ kind: 'set_properties', target: ref, entityType: ref.kind, properties: { [`${domain}.explanation_body.bindings`]: [] } }] })
+    expect(changed.ok, JSON.stringify(changed)).toBe(true)
+    if (!changed.ok) throw new Error('change failed')
+    const read = () => (video?.document ?? bus.getSnapshot().document).creativeIntents!.sessions[0]
+    expect(read().bindings).toEqual([])
+    const undone = await invoke('undo_application_changes', { undoRef: changed.data.undoRef })
+    expect(undone.ok, JSON.stringify(undone)).toBe(true)
+    expect(read().bindings).toEqual(originalBindings)
+  } finally { dispose(); bus.dispose() }
 })
