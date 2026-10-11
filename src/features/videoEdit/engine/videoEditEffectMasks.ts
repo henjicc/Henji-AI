@@ -1,5 +1,6 @@
 import { isShapesMask, isSmartRegionMask, rasterizeVideoEditMaskShapes, videoEditShapeMaskSize, transformVideoEditMaskShape, VideoEditMaskRasterCache, VIDEO_EDIT_TRACKER_MASK_DEFAULTS, type VideoEditEffectMask, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 import { videoEditFollowShapeMap } from '@/core/videoEdit/tracking'
+import { evaluateVideoEditMaskPath } from '@/core/videoEdit/maskPathAnimation'
 import { videoEditTrackerBox, videoEditTrackerMask } from './videoEditTrackResults'
 import type { VideoEditSize } from '@/core/videoEdit/clipGeometry'
 import { videoEditSmartRegionMask, type VideoEditSmartRegionMask } from './videoEditSmartRegionMasks'
@@ -37,6 +38,8 @@ export interface VideoEditEffectMaskContext {
   picture: VideoEditSize
   /** 片段在这一帧的素材时间（素材绝对时钟，微秒；静态图片为 0）。 */
   timeUs: number
+  /** Formal clip source clock, including animated masks on still/code/graphic clips. */
+  pathTimeUs?: number
   trackerKeys?: Readonly<Record<string, string>>
 }
 
@@ -47,7 +50,8 @@ export async function videoEditEffectMask(mask: VideoEditEffectMask, context: Vi
   }
   if (isShapesMask(mask)) {
     const shapes: VideoEditMaskShape[] = []
-    for (const shape of mask.shapes) {
+    for (const original of mask.shapes) {
+      const shape = evaluateVideoEditMaskPath(original, context.pathTimeUs ?? context.timeUs)
       if (!shape.follow) { shapes.push(shape); continue }
       const key = context.trackerKeys?.[shape.follow.trackerId]
       const box = key ? await videoEditTrackerBox(key, context.timeUs) : undefined

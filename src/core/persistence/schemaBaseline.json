@@ -3,7 +3,7 @@
   "formats": {
     "document.video_edit": {
       "version": 2,
-      "fingerprint": "c55ceea7fa1c3ac86c20c429671c56716773fbda2ea3fa3ccbd8e36444f4993b",
+      "fingerprint": "50ae23c66ccf409cfc4811dd6676b0a6ce4cf71fbfad1279cd11c52e44efae65",
       "supportedFrom": 2
     },
     "document.canvas": {
@@ -173,7 +173,7 @@
     },
     "subtitle-manifest": {
       "version": 1,
-      "fingerprint": "87e316a9e804baa7d525567cfa78022f51a31d6ed58a0130d3d1de438da69249",
+      "fingerprint": "de2e33717d95785ac025ea50ce654e98678e3d3da8dc5921c54178ed7aae52ee",
       "supportedFrom": 1
     },
     "storyboard-metadata": {
@@ -1154,6 +1154,24 @@
       "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
       "previousFingerprint": "fa15389dd5ecaecd141ec3d75cb0898024e16082588085bfe58d0e157de74349",
       "fingerprint": "c55ceea7fa1c3ac86c20c429671c56716773fbda2ea3fa3ccbd8e36444f4993b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T06:28:05.023Z",
+      "format": "document.video_edit",
+      "version": 2,
+      "reason": "t161：手绘蒙版新增源时间路径动画与显式点对应，开发期按新契约读取，不兼容旧格式。",
+      "previousFingerprint": "c55ceea7fa1c3ac86c20c429671c56716773fbda2ea3fa3ccbd8e36444f4993b",
+      "fingerprint": "50ae23c66ccf409cfc4811dd6676b0a6ce4cf71fbfad1279cd11c52e44efae65",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-11T06:28:05.025Z",
+      "format": "subtitle-manifest",
+      "version": 1,
+      "reason": "t161：手绘蒙版新增源时间路径动画与显式点对应，开发期按新契约读取，不兼容旧格式。",
+      "previousFingerprint": "87e316a9e804baa7d525567cfa78022f51a31d6ed58a0130d3d1de438da69249",
+      "fingerprint": "de2e33717d95785ac025ea50ce654e98678e3d3da8dc5921c54178ed7aae52ee",
       "waivedFixtureVersions": []
     }
   ]

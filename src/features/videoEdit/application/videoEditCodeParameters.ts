@@ -124,6 +124,15 @@ export function deleteVideoEditCodeKeyframe(target: VideoEditParameterTarget, ke
     else { delete code.curves![key]; if (!Object.keys(code.curves!).length) delete code.curves }
   })
 }
+/** Whole-curve commit shared by parameter animation adapters; validation precedes the one history edit. */
+export function setVideoEditCodeParameterCurve(target: VideoEditParameterTarget, key: string, points: CodeMaterialKeyframe[]): void {
+  const { metadata } = declaration(target, key)
+  edit(target, (_document, { binding }) => {
+    const curves = { ...binding.curves, [key]: structuredClone(points) }
+    prepareCodeMaterialParameters(metadata, { ...binding, curves })
+    binding.curves = curves
+  })
+}
 export type VideoEditCodeEditorState = ReturnType<typeof readVideoEditCodeEditor>
 export type VideoEditGraphicEditorState = ReturnType<typeof readVideoEditGraphicEditor>
 export type VideoEditParameterEditorState = VideoEditCodeEditorState | VideoEditGraphicEditorState

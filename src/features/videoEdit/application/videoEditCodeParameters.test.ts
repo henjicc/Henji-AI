@@ -14,6 +14,11 @@ import { createVideoEditGraphicObject, deleteVideoEditGraphicObjects, renameVide
 import { savedVideoEdit } from './videoEditDocumentTestKit'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import { createApplicationHarness } from '@/tests/applicationHarness'
+import { applyVideoEditPropertyAnimation, prepareVideoEditCodeParameterAnimation, prepareVideoEditMaskPathAnimation } from './videoEditPropertyAnimation'
+import { createVideoEditMaskShape, isShapesMask } from '@/core/videoEdit/effectMasks'
+import { videoEditBuiltinDefaults, requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
+import { reopenVideoEdit } from './videoEditDocumentTestKit'
+import { VideoEditCodeCompiler } from '../engine/videoEditCodeCompiler'
 
 const source = `export default {apiVersion:1,name:"参数",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",default:5,min:0,max:10,step:1,animatable:true},other:{type:"boolean",title:"开关",default:false}},render(ctx){return [rect({x:ctx.params.amount,y:0,width:100,height:100,fill:[1,0,0,1]})];}}`
 const files = new Map<string, string>()
@@ -34,6 +39,63 @@ async function setup() {
   })
   return { owner, target: readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, getActiveVideoEditSequence(owner).clips[0].id).target }
 }
+
+it('code animation candidate is isolated, stale-safe, one undo and persists through the formal document', async () => {
+  const { owner, target } = await setup()
+  const samples = [{ frame: 0, value: 2, hard: true }, { frame: 30, value: 8, hard: true }]
+  const candidate = prepareVideoEditCodeParameterAnimation(target, 'amount', samples)
+  expect(readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId).curves.amount).toBeUndefined()
+  candidate.points[0].value = 9
+  const history = owner.past.length
+  applyVideoEditPropertyAnimation(candidate)
+  expect(owner.past).toHaveLength(history + 1)
+  expect(readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId).curves.amount[0].value).toBe(2)
+  expect(() => applyVideoEditPropertyAnimation(candidate)).toThrow('失效')
+  await saveVideoEdit(target.projectId)
+  expect(savedVideoEdit(owner).sequences[0].clips[0].code?.curves?.amount[1].value).toBe(8)
+  undoVideoEdit(target.projectId)
+  expect(readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId).curves.amount).toBeUndefined()
+  const stale = prepareVideoEditCodeParameterAnimation(target, 'amount', samples)
+  setVideoEditCodeParameter(target, 'amount', 7)
+  expect(() => applyVideoEditPropertyAnimation(stale)).toThrow('已改变')
+})
+
+it('mask path candidate commits through the native effect and public read/write, saves/reopens and undoes', async () => {
+  const { owner, target } = await setup(); const shape = { ...createVideoEditMaskShape('rect', 'shape'), feather: 0 }
+  editVideoProject(target.projectId, document => {
+    document.sequences[0].clips[0].effects = [{ id: 'mask-effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect('gaussian_blur')) }, mask: { regionId: 'shapes', shapes: [shape] } }]
+    return document
+  })
+  const maskTarget = { ...target, effectId: 'mask-effect', shapeId: shape.id }
+  const pointIds = ['a', 'b', 'c', 'd']; const moved = shape.points.map(p => [p[0] + .1, ...p.slice(1)] as typeof p)
+  const candidate = prepareVideoEditMaskPathAnimation(maskTarget, [{ frame: 0, value: { pointIds, points: shape.points } }, { frame: 30, value: { pointIds, points: moved } }])
+  const history = owner.past.length
+  applyVideoEditPropertyAnimation(candidate)
+  expect(owner.past).toHaveLength(history + 1)
+  const mask = owner.document.sequences[0].clips[0].effects![0].mask!
+  expect(isShapesMask(mask) && mask.shapes[0].pathAnimation?.keys).toHaveLength(2)
+  const app = createApplicationHarness()
+  try {
+    const ref = { kind: 'video_edit.effect', id: `${target.projectId}:mask-effect` }
+    const read = await app.read(ref, ['video_edit.effect.mask'])
+    expect(read.properties).toMatchObject({ 'video_edit.effect.mask': mask })
+    const changed = structuredClone(mask)
+    if (!isShapesMask(changed)) throw new Error('缺少形状')
+    changed.shapes[0].pathAnimation!.keys[1].points = shape.points
+    const result = await app.change(ref, { 'video_edit.effect.mask': changed })
+    expect(result).toMatchObject({ ok: true })
+    expect((await app.read(ref, ['video_edit.effect.mask'])).properties).toMatchObject({ 'video_edit.effect.mask': changed })
+  } finally { app.dispose() }
+  await saveVideoEdit(target.projectId)
+  vi.spyOn(VideoEditCodeCompiler.prototype, 'compile').mockResolvedValue(compileCodeMaterial(source))
+  const reopened = await reopenVideoEdit(target.projectId)
+  const persisted = reopened.document.sequences[0].clips[0].effects![0].mask!
+  expect(isShapesMask(persisted) && persisted.shapes[0].pathAnimation?.pointIds).toEqual(pointIds)
+  const before = structuredClone(persisted)
+  applyVideoEditPropertyAnimation(prepareVideoEditMaskPathAnimation(maskTarget, [{ frame: 0, value: { pointIds, points: shape.points } }, { frame: 30, value: { pointIds, points: moved } }]))
+  undoVideoEdit(target.projectId)
+  expect(reopened.document.sequences[0].clips[0].effects![0].mask).toEqual(before)
+})
 
 it('60 code parameter previews only copy the target branch; cancel restores values and commit is one undo', async () => {
   const { owner, target } = await setup(); const before = owner.document; const history = owner.past.length

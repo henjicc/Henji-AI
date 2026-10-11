@@ -11,6 +11,7 @@ import type { VideoEditCodePicture } from './videoEditCodeGpu'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
+import { createVideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 function source(mode: 'static' | 'dynamic' = 'static', name = '新图形', kind = 'generator'): string {
@@ -40,6 +41,24 @@ function boundaries(document: VideoEditComposition) {
 function changedVersion(document: VideoEditComposition, id: string): VideoEditComposition {
   return { ...document, revision: document.revision + 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, versionId: id } })) }
 }
+
+it('static code picture cache does not freeze its native animated effect mask', async () => {
+  const document = fixture(); const shape = { ...createVideoEditMaskShape('rect', 'mask'), feather: 0 }
+  document.clips[0].effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'shapes', shapes: [{ ...shape, pathAnimation: { pointIds: ['a', 'b', 'c', 'd'], keys: [
+    { sourceTimeUs: 0, points: shape.points, interpolation: 'linear' },
+    { sourceTimeUs: 1e6, points: shape.points.map(p => [p[0] + .2, ...p.slice(1)] as typeof p), interpolation: 'linear' },
+  ] } }] } }]
+  const boundary = boundaries(document)
+  try {
+    const first = (await boundary.sources.prepare(document, document.clips, 0, () => true)).effects.get('clip')![0]
+    const last = (await boundary.sources.prepare(document, document.clips, 30, () => true)).effects.get('clip')![0]
+    if (!first.builtin || !last.builtin) throw new Error('缺少内置效果')
+    const pixel = Math.floor(first.mask!.height * .5) * first.mask!.width + Math.floor(first.mask!.width * .35)
+    expect(first.mask!.data[pixel]).toBe(255)
+    expect(last.mask!.data[pixel]).toBe(0)
+    expect(boundary.generator).toHaveBeenCalledTimes(1)
+  } finally { await boundary.sources.dispose() }
+})
 
 describe('可见代码源与固定内容复用', () => {
   it('静态v3生成器覆盖动画使用源时间，缓存按求值结果复用，覆盖修改后不复用旧画面', async () => {

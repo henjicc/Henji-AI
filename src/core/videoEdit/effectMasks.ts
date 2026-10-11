@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { videoEditMaskPointSchema, videoEditMaskPathAnimationSchema, type VideoEditMaskPoint } from './maskPathAnimation'
+export { videoEditMaskPointSchema, type VideoEditMaskPoint } from './maskPathAnimation'
 import { processSmartRegionMatte, SMART_REGION_EXPAND_RANGE, SMART_REGION_FEATHER_RANGE, VIDEO_EDIT_SMART_REGION_IDS, type SmartRegionMaskSetting } from './smartRegions'
 
 /*
@@ -23,27 +25,27 @@ export const VIDEO_EDIT_MASK_OPACITY_RANGE = { min: 0, max: 100 } as const
 export const VIDEO_EDIT_MASK_DEFAULTS = { feather: 5, expand: 0, opacity: 100 } as const
 
 const coordinate = z.number().finite()
-const offset = z.number().finite()
 const feather = z.number().finite().min(SMART_REGION_FEATHER_RANGE.min).max(SMART_REGION_FEATHER_RANGE.max)
 const expand = z.number().finite().min(SMART_REGION_EXPAND_RANGE.min).max(SMART_REGION_EXPAND_RANGE.max)
 /** 框：左上角 x、y 与宽、高（片段画面归一化）。 */
 export const videoEditMaskBoxSchema = z.tuple([coordinate, coordinate, z.number().finite().min(0.001).max(5), z.number().finite().min(0.001).max(5)])
 export type VideoEditMaskBox = z.infer<typeof videoEditMaskBoxSchema>
 /** 钢笔路径的一个顶点：x、y，进入控制柄与离开控制柄相对顶点的偏移（全 0 为尖角）。 */
-export const videoEditMaskPointSchema = z.tuple([coordinate, coordinate, offset, offset, offset, offset])
-export type VideoEditMaskPoint = z.infer<typeof videoEditMaskPointSchema>
 
 export const videoEditMaskShapeSchema = z.object({
   id: z.string().min(1).max(64),
   kind: z.enum(VIDEO_EDIT_MASK_SHAPE_KINDS),
   /** 所有形状都是闭合贝塞尔路径；kind 只用于创建来源的名称。 */
   points: z.array(videoEditMaskPointSchema).min(3),
+  pathAnimation: videoEditMaskPathAnimationSchema.optional(),
   mode: z.enum(VIDEO_EDIT_MASK_MODES).optional(),
   feather: feather.optional(), expand: expand.optional(),
   opacity: z.number().finite().min(VIDEO_EDIT_MASK_OPACITY_RANGE.min).max(VIDEO_EDIT_MASK_OPACITY_RANGE.max).optional(),
   invert: z.boolean().optional(),
   follow: z.object({ trackerId: z.string().min(1).max(100), reference: videoEditMaskBoxSchema }).strict().optional(),
-}).strict()
+}).strict().superRefine((shape, ctx) => {
+  if (shape.pathAnimation && shape.points.length !== shape.pathAnimation.pointIds.length) ctx.addIssue({ code: 'custom', message: '遮罩路径点数与动画拓扑不一致。' })
+})
 export type VideoEditMaskShape = z.infer<typeof videoEditMaskShapeSchema>
 
 /** 智能区域（4.7d）。 */
@@ -97,6 +99,7 @@ export function videoEditMaskShapeName(shapes: readonly VideoEditMaskShape[], sh
 export type VideoEditMaskDragKind = 'move' | 'vertex' | 'in' | 'out' | 'symmetric'
 /** 按拖动方式改一个遮罩（片段画面坐标的位移 du、dv 与指针位置 point）。 */
 export function editVideoEditMaskShape(shape: VideoEditMaskShape, kind: VideoEditMaskDragKind, index: number, du: number, dv: number, point: { u: number; v: number }, breakSymmetry = false): VideoEditMaskShape {
+  assertStaticPathEditing(shape)
   if (kind === 'move') {
     return { ...shape, points: shape.points.map(entry => [entry[0] + du, entry[1] + dv, entry[2], entry[3], entry[4], entry[5]]) }
   }
@@ -146,15 +149,18 @@ export function transformVideoEditMaskShape<T extends Pick<VideoEditMaskShape, '
 
 /** 仿射变换 [a,b,c,d,tx,ty]：顶点带平移，手柄只用线性部分。 */
 export function affineVideoEditMaskShape(shape: VideoEditMaskShape, matrix: readonly [number, number, number, number, number, number]): VideoEditMaskShape {
+  assertStaticPathEditing(shape)
   const [a, b, c, d, tx, ty] = matrix
   return { ...shape, points: shape.points.map(([x, y, ix, iy, ox, oy]) => [a*x+c*y+tx, b*x+d*y+ty, a*ix+c*iy, b*ix+d*iy, a*ox+c*oy, b*ox+d*oy]) }
 }
 
 export function removeVideoEditMaskPoint(shape: VideoEditMaskShape, index: number): VideoEditMaskShape {
+  assertStaticPathEditing(shape)
   if (shape.points.length <= 3) throw new Error('闭合遮罩至少需要三个顶点。')
   return { ...shape, points: shape.points.filter((_, at) => at !== index) }
 }
 export function toggleVideoEditMaskPoint(shape: VideoEditMaskShape, index: number): VideoEditMaskShape {
+  assertStaticPathEditing(shape)
   return { ...shape, points: shape.points.map((point, at): VideoEditMaskPoint => {
     if (at !== index) return point
     if (point.slice(2).some(Boolean)) return [point[0], point[1], 0, 0, 0, 0]
@@ -166,6 +172,7 @@ export function toggleVideoEditMaskPoint(shape: VideoEditMaskShape, index: numbe
 
 /** de Casteljau 分割，保留原曲线包括相邻顶点的另一侧手柄。 */
 export function insertVideoEditMaskPoint(shape: VideoEditMaskShape, index: number, t: number): VideoEditMaskShape {
+  assertStaticPathEditing(shape)
   const points = shape.points.map(point => [...point] as VideoEditMaskPoint)
   const a = points[index]; const b = points[(index + 1) % points.length]
   const mix = (p: readonly number[], q: readonly number[]): [number, number] => [p[0] + (q[0] - p[0])*t, p[1] + (q[1] - p[1])*t]
@@ -174,6 +181,10 @@ export function insertVideoEditMaskPoint(shape: VideoEditMaskShape, index: numbe
   a[4] = p[0]-a[0]; a[5] = p[1]-a[1]; b[2] = r[0]-b[0]; b[3] = r[1]-b[1]
   points.splice(index+1, 0, [m[0], m[1], s[0]-m[0], s[1]-m[1], v[0]-m[0], v[1]-m[1]])
   return { ...shape, points }
+}
+
+function assertStaticPathEditing(shape: VideoEditMaskShape): void {
+  if (shape.pathAnimation) throw new Error('此路径已有动画，请编辑对应路径关键帧；增删点须先清除动画并重建对应关系。')
 }
 
 /** 点到路径最近的三次曲线参数；以显示像素距离度量，再局部细化。 */
