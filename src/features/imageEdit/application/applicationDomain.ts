@@ -1,4 +1,5 @@
 import { ImageEditLayerFilterMutationExecutorV3, ImageEditLayerFilterCollectionExecutorV3 } from '../v3/application/imageEditLayerFilterEntityV3'
+export { imageCreativeIntentProvider } from '../v3/application/imageEditCreativeIntentReflection'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { createImageEditReflectionRegistrations } from './imageEditReflection'
 import { ImageEditV3DocumentMutationExecutor, ImageEditV3LayerMutationExecutor, ImageEditV3GroupMutationExecutor, ImageEditV3MaskMutationExecutor } from '../v3/application/imageEditV3MutationExecutors'

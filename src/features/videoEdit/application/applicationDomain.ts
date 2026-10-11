@@ -1,4 +1,5 @@
 import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
+export { videoCreativeIntentProvider } from './videoEditCreativeIntentReflection'
 import { VideoEditTextPresetExecutor, VideoEditTextPresetMutationExecutor } from './videoEditTextPresetReflection'
 import { VideoEditStyleKitCollectionExecutor, VideoEditStyleKitMutationExecutor, STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY } from './videoEditStyleKitReflection'
 import { handleVideoEditStyleKitCapability } from './videoEditStyleKitCapabilities'
@@ -279,7 +280,13 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       return {
         async confirm() { try { await saveVideoEdit(id) } catch (error) { throw new ApplicationPersistenceFailure('修改已保留但未保存。请重试保存，不要再次执行剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: { kind: 'video_edit.document', id }, replayMutation: false } }, error) } },
         release() {
-          const changed = JSON.stringify({ ...initial, revision: 0 }) !== JSON.stringify({ ...instance.document, revision: 0 })
+          // Confirming an existing intent receipt is persistence recovery, not another artwork edit.
+          const historyContent = (document: VideoEditInstance['document']) => ({ ...document, revision: 0,
+            creativeIntents: document.creativeIntents && { ...document.creativeIntents,
+              drafts: document.creativeIntents.drafts.map(draft => ({ ...draft, applications: draft.applications.map(application => ({ ...application, saved: false })) })),
+            },
+          })
+          const changed = JSON.stringify(historyContent(initial)) !== JSON.stringify(historyContent(instance.document))
           instance.past = changed ? [...past.slice(-49), initial] : past
           instance.future = changed ? [] : future
         },

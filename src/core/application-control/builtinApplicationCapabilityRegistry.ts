@@ -1,4 +1,5 @@
 import { resampleImageEditCapability } from './domains/imageEdit/imageEditGeometryCapabilities'
+import { CREATIVE_INTENT_CAPABILITIES } from './domains/creativeIntent/creativeIntentCapabilities'
 import { imageEditClipboardCapability } from './domains/imageEdit/imageEditClipboardCapabilities'
 import { paintImageEditTargetCapability } from './domains/imageEdit/imageEditPaintCapabilities'
 import { convertImageEditFilterScopeCapability } from './domains/imageEdit/imageEditFilterCapabilities'
@@ -41,6 +42,7 @@ import { IMAGE_EDIT_OUTPAINT_CAPABILITIES } from './domains/imageEdit/imageEditO
 import { DOCUMENTS_APPLICATION_CAPABILITIES } from './domains/documents/documentsApplicationCapabilities'
 
 export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  ...CREATIVE_INTENT_CAPABILITIES,
   getCurrentApplicationContextCapability,
   observeApplicationSurfaceCapability,
   openApplicationSurfaceCapability,
