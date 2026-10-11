@@ -251,7 +251,21 @@ export async function executeImageEditCpuRenderRegionPlanV3(
   if (!plan.outputNodeId) return null
   validateRegion(outputRegion, context.size)
   const nodes = nodeMap(plan)
+  const hasGlobalAnalysis = plan.nodes.some(node => context.registry.get(node.definitionId)?.globalAnalysis)
   const memo = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
+  // 原预算只预留一份源块解码暂存；跨节点可重叠计算/蒙版，但源解码仍逐个准入。
+  let rasterQueue = Promise.resolve()
+  let rasterFailed = false
+  let rasterFailure: unknown
+  const loadRaster = (node: ImageEditRenderPlanNode, region: ImageEditRect): Promise<Float32PremultipliedRgbaTile> => {
+    const loaded = rasterQueue.then(() => {
+      if (rasterFailed) throw rasterFailure
+      throwIfAborted(context.signal)
+      return context.loadRaster(node, region)
+    })
+    rasterQueue = loaded.then(() => undefined, error => { rasterFailed = true; rasterFailure = error })
+    return loaded
+  }
   const sampleMask = async (
     node: ImageEditRenderPlanNode,
     region: ImageEditRect,
@@ -287,13 +301,10 @@ export async function executeImageEditCpuRenderRegionPlanV3(
     if (cached) return cached
     const pending = (async (): Promise<Float32PremultipliedRgbaTile> => {
       throwIfAborted(context.signal)
-      if (node.definitionId === 'source.raster') return context.loadRaster(node, region)
+      if (node.definitionId === 'source.raster') return loadRaster(node, region)
       if (node.definitionId === 'vector.content') return context.rasterizeVectorContent(node, region)
       if (node.definitionId === 'group.isolated') return render(inputNode(nodes, node, 0), region)
       if (node.definitionId === 'composite.layer') {
-        const backdrop = node.inputNodeIds.length > 1
-          ? await render(inputNode(nodes, node, 0), region)
-          : null
         const contentIndex = node.inputNodeIds.length === 1 ? 0 : 1
         const contentNode = inputNode(nodes, node, contentIndex)
         const transform = nodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1)
@@ -305,9 +316,18 @@ export async function executeImageEditCpuRenderRegionPlanV3(
         )
         const warped = resolveDeformationSampling(context, node, { kind: 'content', node: contentNode }, region);
         if (warped) transformed.region = warped.region;
-        let content = transformed.region.width > 0 && transformed.region.height > 0
-          ? await render(contentNode, transformed.region)
-          : context.createTransparent(region)
+        // 独立的输入/蒙版属于已计划的同一工作集；读取重叠，像素合成顺序不变。
+        // 全局效果可能共享宿主分析运行时，仍保持原先背景→内容的执行次序。
+        const backdropResult = node.inputNodeIds.length > 1 ? render(inputNode(nodes, node, 0), region) : null
+        const orderedBackdrop = hasGlobalAnalysis ? await backdropResult : backdropResult
+        const [backdrop, loadedContent, mask] = await Promise.all([
+          orderedBackdrop,
+          transformed.region.width > 0 && transformed.region.height > 0
+            ? render(contentNode, transformed.region) : context.createTransparent(region),
+          sampleMask(node, region),
+        ])
+        throwIfAborted(context.signal)
+        let content = loadedContent
         // 恒等矩阵仍可能读取被源边界裁短（或采样 halo 扩大）的区域；
         // 只有像素坐标与范围都相同，才可以直接作为输出区域参与合成。
         if (warped && transformed.region.width > 0 && transformed.region.height > 0) content = resampleDeformation(content, region, warped);
@@ -327,7 +347,6 @@ export async function executeImageEditCpuRenderRegionPlanV3(
         if (backdrop) {
           content = convertFloat32TileColorContractV3(content, backdrop)
         }
-        const mask = await sampleMask(node, region)
         const maskStart = performance.now()
         const masked = applyContentMaskAndOpacityV3(
           content,
@@ -346,9 +365,12 @@ export async function executeImageEditCpuRenderRegionPlanV3(
         return composited
       }
       const expanded = effectInputRegion(node, region, context)
-      const source = await render(inputNode(nodes, node, 0), expanded)
       const regional = !!context.registry.get(node.definitionId)?.inputRegion
-      const mask = await sampleMask(node, regional ? region : expanded)
+      const [source, mask] = await Promise.all([
+        render(inputNode(nodes, node, 0), expanded),
+        sampleMask(node, regional ? region : expanded),
+      ])
+      throwIfAborted(context.signal)
       const effectStart = performance.now()
       const processed = node.definitionId.startsWith('adjustment.')
         ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask, context.loadColorLut, { origin: [expanded.x, expanded.y], size: [context.size.width, context.size.height] })
@@ -364,6 +386,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
               : undefined,
           })
       context.onStage?.(node.definitionId, performance.now() - effectStart)
+      throwIfAborted(context.signal)
       const mixStart = performance.now()
       const original = convertFloat32TileColorDomainV3(regional ? cropImageEditRgbaRegionV3(source, expanded, region) : source, processed.colorDomain)
       const mixed = mixEffectLayerV3(

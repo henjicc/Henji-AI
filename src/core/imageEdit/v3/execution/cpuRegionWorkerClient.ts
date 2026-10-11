@@ -9,6 +9,7 @@ export class ImageEditCpuRegionWorkerClientV3 {
   private sequence = 0
   private closed = false
   private job: { id: number; context: ImageEditCpuRegionRenderContextV3; plan: ImageEditRenderPlan;
+    sentRasters: WeakMap<object, number>;
     resolve(tile: ImageEditCpuOutputTileV3): void; reject(error: Error): void; unsubscribe(): void } | null = null
 
   constructor(private readonly port: CpuRegionWorkerPortV3) {
@@ -32,7 +33,7 @@ export class ImageEditCpuRegionWorkerClientV3 {
         this.dispose(error)
       }
       const id = ++this.sequence
-      this.job = { id, context, plan, resolve, reject, unsubscribe: () => context.signal?.removeEventListener('abort', abort) }
+      this.job = { id, context, plan, sentRasters: new WeakMap(), resolve, reject, unsubscribe: () => context.signal?.removeEventListener('abort', abort) }
       context.signal?.addEventListener('abort', abort, { once: true })
       try {
         this.port.postMessage({ type: 'render', jobId: id, plan, region, grids, size: context.size,
@@ -67,6 +68,8 @@ export class ImageEditCpuRegionWorkerClientV3 {
     }
     try {
       const request = event.request
+      const receivedAt = performance.now()
+      if (event.sentAt !== undefined) job.context.onStage?.(`transport.request.${request.kind}`, Math.max(0, performance.timeOrigin + receivedAt - event.sentAt))
       let value: CpuRegionWorkerValueV3
       if (request.kind === 'lut') {
         if (!job.context.loadColorLut) throw new Error('缺少颜色 LUT 读取器')
@@ -85,7 +88,18 @@ export class ImageEditCpuRegionWorkerClientV3 {
         }
       }
       // 读取器可能复用不可变瓦片，不能 transfer/detach 它持有的 ArrayBuffer。
-      if (this.job === job) this.port.postMessage({ type: 'reply', jobId: job.id, callbackId: event.callbackId, value })
+      if (this.job === job) {
+        job.context.onStage?.(`host.${request.kind}`, performance.now() - receivedAt)
+        const postedAt = performance.now()
+        // 同一任务的借出源瓦片按对象身份复用，不能仅凭资源 ID 合并稀疏覆盖不同的节点。
+        const referenceId = request.kind === 'raster' ? job.sentRasters.get(value) : undefined
+        const payload = referenceId !== undefined ? { referenceId }
+          : { value, ...(request.kind === 'raster' ? { valueId: event.callbackId } : {}) }
+        this.port.postMessage({ type: 'reply', jobId: job.id, callbackId: event.callbackId, ...payload,
+          sentAt: performance.timeOrigin + postedAt })
+        if (request.kind === 'raster' && referenceId === undefined) job.sentRasters.set(value, event.callbackId)
+        job.context.onStage?.(`transport.post.${request.kind}`, performance.now() - postedAt)
+      }
     } catch (error) {
       if (this.job === job) {
         try {

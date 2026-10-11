@@ -134,6 +134,20 @@ function standardTileLayout(
   }
 }
 
+function sourceDecodeStripe(request: SourceTileRequest, metadata: SourceImageMetadata,
+  bitDepth: 8 | 16 | 32, originY: number, outputHeight: number): { key: string; stride: number; top: number; height: number } | null {
+  if (request.mip !== 0 || (bitDepth === 32 && metadata.colorSpace !== 'display-p3')
+    || metadata.width <= IMAGE_EDIT_TILE_SIZE || metadata.height <= IMAGE_EDIT_TILE_SIZE) return null
+  const halo = request.halo ?? 0
+  const stride = metadata.width * 4 * (bitDepth / 8)
+  const pairTop = Math.max(0, Math.floor(request.tileY / 2) * IMAGE_EDIT_TILE_SIZE * 2 - halo)
+  const pairBottom = Math.min(metadata.height, (Math.floor(request.tileY / 2) + 1) * IMAGE_EDIT_TILE_SIZE * 2 + halo)
+  const paired = stride * (pairBottom - pairTop) <= MAX_SOURCE_DECODE_STRIPE_BYTES
+  const top = paired ? pairTop : originY
+  const height = paired ? pairBottom - pairTop : outputHeight
+  return { key: `${request.resourceId}:${top}:${height}:${bitDepth}`, stride, top, height }
+}
+
 /**
  * Sharp 始终直接接收受管资源路径：metadata 只读文件头，proxy/tile 在源边界应用 EXIF
  * 方向并由 libvips 按需解码；不经过 fs.readFile，也不会在 JS 堆里构造完整原图 RGBA 表面。
@@ -147,7 +161,7 @@ export class SharpSourceProvider implements SourceProvider {
   private readonly sharpLoader: typeof loadSharp
   private readonly derivedCache: DerivedDiskCache | null
   private readonly pyramid: ManagedSourcePyramid | null
-  private readonly decodeStripes = new SourceDecodeStripeCache()
+  private readonly decodeStripes: SourceDecodeStripeCache
 
   constructor(
     private readonly resources: ContentAddressedResourceStore,
@@ -161,6 +175,7 @@ export class SharpSourceProvider implements SourceProvider {
     this.derivedCache = options.derivedCache === undefined
       ? new DerivedDiskCache(path.resolve(this.resources.rootDir, '..', 'derived-cache'))
       : options.derivedCache
+    this.decodeStripes = new SourceDecodeStripeCache(this.derivedCache)
     this.pyramid = this.derivedCache
       ? new ManagedSourcePyramid(this.derivedCache, (request, signal) => (
         this.decodeTileWithinLease({ ...request, signal })
@@ -234,8 +249,14 @@ export class SharpSourceProvider implements SourceProvider {
       const sourceMetadata = await this.readMetadataWithinLease(request.resourceId, request.signal);
       assertImageEditorV3SourceColor(sourceMetadata);
       if ((request.halo ?? 0) === 0 && this.pyramid) {
-        const metadata = await this.readMetadataWithinLease(request.resourceId, request.signal)
-        return this.pyramid.readTile(request, standardTileLayout(request, metadata))
+        const layout = standardTileLayout(request, sourceMetadata)
+        const stripe = sourceDecodeStripe(request, sourceMetadata, layout.bitDepth, layout.originY, layout.height)
+        // 可容纳的 mip0 按整条带一次原子发布，避免每个512块各做一次同步写盘。
+        // 复用同一磁盘配额/租约与32MiB内存预算；超宽、HDR、mip缩放仍走瓦片金字塔。
+        if (stripe && stripe.stride * stripe.height <= Math.min(MAX_SOURCE_DECODE_STRIPE_BYTES, this.derivedCache!.maxEntryBytes)) {
+          return this.decodeTileWithinLease(request)
+        }
+        return this.pyramid.readTile(request, layout)
       }
       return this.decodeTileWithinLease(request)
     })
@@ -305,16 +326,11 @@ export class SharpSourceProvider implements SourceProvider {
 
     // mip0 的横向相邻块共享一次原生全宽条带解码，避免 PNG/JPEG 从文件头重复扫描。
     // 在原内存预算内让两行瓦片共享扫描；宽图仍用单行，HDR 与缩放走原区域契约。
-    if (mip === 0 && (bitDepth !== 32 || metadata.colorSpace === 'display-p3')
-      && metadata.width > IMAGE_EDIT_TILE_SIZE && metadata.height > IMAGE_EDIT_TILE_SIZE) {
-      const stripeStride = metadata.width * 4 * (bitDepth / 8)
-      const pairTop = Math.max(0, Math.floor(tileY / 2) * IMAGE_EDIT_TILE_SIZE * 2 - halo)
-      const pairBottom = Math.min(metadata.height, (Math.floor(tileY / 2) + 1) * IMAGE_EDIT_TILE_SIZE * 2 + halo)
-      const paired = stripeStride * (pairBottom - pairTop) <= MAX_SOURCE_DECODE_STRIPE_BYTES
-      const stripeTop = paired ? pairTop : originY
-      const stripeHeight = paired ? pairBottom - pairTop : outputHeight
+    const stripePlan = sourceDecodeStripe(request, metadata, bitDepth, originY, outputHeight)
+    if (stripePlan) {
+      const { stride: stripeStride, top: stripeTop, height: stripeHeight } = stripePlan
       const stripe = await this.decodeStripes.read(
-        `${request.resourceId}:${stripeTop}:${stripeHeight}:${bitDepth}`,
+        stripePlan.key,
         stripeStride * stripeHeight,
         async (signal) => {
           const started = performance.now()
@@ -326,7 +342,8 @@ export class SharpSourceProvider implements SourceProvider {
               width: metadata.width, height: stripeHeight },
             { width: metadata.encodedWidth, height: metadata.encodedHeight }, metadata.orientation)
             let pipeline = sharp(this.resources.getFilesystemPath(request.resourceId), {
-              limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS, sequentialRead: false, failOn: 'warning',
+              // 每个管线只提取一个矩形；无需随机访问缓存整个解压源图。
+              limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS, sequentialRead: true, failOn: 'warning',
             }).extract(encoded).autoOrient().toColourspace(bitDepth === 16 ? 'rgb16' : 'srgb')
               .ensureAlpha().raw({ depth: bitDepth === 16 ? 'ushort' : 'uchar' })
             const standardP3 = metadata.colorSpace === 'display-p3';

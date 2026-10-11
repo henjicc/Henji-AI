@@ -42,6 +42,28 @@ afterEach(async () => {
 })
 
 describe('SharpSourceProvider', () => {
+  it('条带只发布一次，冷提供者直接复用持久条带且保持精确像素', async () => {
+    const encoded = await sharp({ create: { width: 1536, height: 1200, channels: 4,
+      background: { r: 20, g: 40, b: 80, alpha: 1 } } }).png().toBuffer()
+    const resource = await store.putBuffer(encoded, { mediaType: 'image/png' })
+    const cache = new DerivedDiskCache(path.join(rootDir, 'derived'))
+    const put = vi.spyOn(cache, 'put')
+    const provider = new SharpSourceProvider(store, { derivedCache: cache })
+    const request = { resourceId: resource.id, mip: 0, tileX: 0, tileY: 0 }
+    await provider.readTile(request)
+    expect(put).toHaveBeenCalledOnce()
+    const resident = await provider.readTile({ ...request, tileX: 1 })
+    expect(put).toHaveBeenCalledOnce()
+    const loader = vi.fn(loadSharp)
+    const cold = new SharpSourceProvider(store, { derivedCache: cache, sharpLoader: loader })
+    await cold.readMetadata(resource.id)
+    loader.mockClear()
+    const reloaded = await cold.readTile({ ...request, tileX: 1 })
+    expect(reloaded.pixels).toEqual(resident.pixels)
+    expect(put).toHaveBeenCalledOnce()
+    expect(loader).not.toHaveBeenCalled()
+  })
+
   it('GPU halo 相邻瓦片共用一次有界条带解码，不同 halo 不误用缓存', async () => {
     const width = 1536, height = 1200, pixels = Buffer.alloc(width * height * 3)
     for (let y=0;y<height;y++) for (let x=0;x<width;x++) { const offset=(y*width+x)*3; pixels[offset]=y%256; pixels[offset+1]=x%256; pixels[offset+2]=80 }

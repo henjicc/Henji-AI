@@ -6,26 +6,25 @@ import { encodeImageEditorV3RenderedOutputTile, projectImageEditorV3RenderedRegi
 import type { CpuRegionWorkerRequestV3, CpuRegionWorkerEventV3, CpuRegionWorkerValueV3, CpuRegionWorkerCallbackV3 } from './cpuRegionWorkerProtocol'
 
 /** 传输适配器由 Web Worker / Node 测试提供；像素求值只有正式区域执行器一份。 */
-export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEventV3, transfer?: ArrayBuffer[]) => void) {
+export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEventV3, transfer?: ArrayBuffer[]) => void): (message: CpuRegionWorkerRequestV3) => Promise<void> {
   let activeJob: number | null = null
   let sequence = 0
-  let stages: Record<string, number> = {}
-  const record = (stage: string, ms: number): void => { stages[stage] = (stages[stage] ?? 0) + ms }
-  const pending = new Map<number, { resolve(value: CpuRegionWorkerValueV3): void; reject(error: Error): void }>()
-  const callback = (request: CpuRegionWorkerCallbackV3): Promise<CpuRegionWorkerValueV3> => new Promise((resolve, reject) => {
-    const callbackId = ++sequence
-    const start = performance.now()
-    pending.set(callbackId, { resolve: value => { record(`wait.${request.kind}`, performance.now() - start); resolve(value) }, reject })
-    send({ type: 'callback', jobId: activeJob!, callbackId, request })
-  })
+  const rasters = new Map<number, CpuRegionWorkerValueV3>()
+  const pending = new Map<number, { kind: string; record(stage: string, ms: number): void;
+    resolve(value: CpuRegionWorkerValueV3): void; reject(error: Error): void }>()
   return async (message: CpuRegionWorkerRequestV3): Promise<void> => {
     if (message.type === 'reply') {
       if (message.jobId !== activeJob) return
       const waiter = pending.get(message.callbackId)
       if (!waiter) return
       pending.delete(message.callbackId)
-      if (message.error || !message.value) waiter.reject(new Error(message.error ?? 'CPU Worker 资源回执为空'))
-      else waiter.resolve(message.value)
+      if (message.sentAt !== undefined) waiter.record(`transport.reply.${waiter.kind}`, Math.max(0, performance.timeOrigin + performance.now() - message.sentAt))
+      const value = message.referenceId === undefined ? message.value : rasters.get(message.referenceId)
+      if (message.error || !value) waiter.reject(new Error(message.error ?? 'CPU Worker 资源回执为空'))
+      else {
+        if (message.valueId !== undefined) rasters.set(message.valueId, value)
+        waiter.resolve(value)
+      }
       return
     }
     if (activeJob !== null) {
@@ -33,7 +32,17 @@ export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEven
       return
     }
     activeJob = message.jobId
-    stages = {}
+    const stages: Record<string, number> = {}
+    const record = (stage: string, ms: number): void => { stages[stage] = (stages[stage] ?? 0) + ms }
+    const controller = new AbortController()
+    const callback = (request: CpuRegionWorkerCallbackV3): Promise<CpuRegionWorkerValueV3> => new Promise((resolve, reject) => {
+      controller.signal.throwIfAborted()
+      const callbackId = ++sequence
+      const start = performance.now()
+      pending.set(callbackId, { kind: request.kind, record,
+        resolve: value => { record(`wait.${request.kind}`, performance.now() - start); resolve(value) }, reject })
+      send({ type: 'callback', jobId: message.jobId, callbackId, request, sentAt: performance.timeOrigin + start })
+    })
     const grids = new Map(message.grids)
     const transparent = (region: { width: number; height: number }) => createFloat32PremultipliedRgbaTile(
       region.width, region.height, 'linear-light', new Float32Array(region.width * region.height * 4),
@@ -45,6 +54,7 @@ export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEven
         size: message.size, scaleX: message.scaleX, scaleY: message.scaleY,
         registry: createBuiltInImageEditRenderNodeRegistry(),
         onStage: record,
+        signal: controller.signal,
         resolveSamplingGrid: (target) => grids.get(`${target.kind}:${target.kind === 'content' ? target.node.id : target.ownerNode.id}`),
         createTransparent: transparent,
         loadRaster: async (node, region) => await callback({ kind: 'raster', nodeId: node.id, region }) as Float32PremultipliedRgbaTile,
@@ -67,7 +77,10 @@ export function createCpuRegionWorkerRuntimeV3(send: (event: CpuRegionWorkerEven
       send({ type: 'failed', jobId: message.jobId, message: error instanceof Error ? error.message : String(error) })
     } finally {
       activeJob = null
+      controller.abort()
+      for (const waiter of pending.values()) waiter.reject(new Error('CPU 区域任务已结束'))
       pending.clear()
+      rasters.clear()
     }
   }
 }

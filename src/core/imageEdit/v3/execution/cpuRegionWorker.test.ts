@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { createBuiltInImageEditRenderNodeRegistry } from '../builtInRenderNodes'
 import { createImageEditAdjustmentLayerV3, createImageEditDocumentV3, createImageEditRasterLayerV3 } from '../documentFactory'
+import { createImageEditSparseMaskReferenceV3 } from '../layerTypes'
 import { createFloat32MaskTile, createFloat32PremultipliedRgbaTile } from '../effects/contracts'
 import { compileImageEditRenderPlanV3 } from '../renderPlanCompiler'
 import { resolveImageEditOutputGeometryV3 } from '../outputGeometry'
@@ -9,13 +10,13 @@ import { executeImageEditCpuRenderRegionPlanV3, type ImageEditCpuRegionRenderCon
 import { ImageEditCpuRegionWorkerClientV3 } from './cpuRegionWorkerClient'
 import { encodeImageEditorV3RenderedOutputTile } from './cpuOutputTile'
 import { buildCpuRegionTestWorkerV3, CpuRegionNodeTestWorkerV3 } from './cpuRegionWorker.testSupport'
-import type { CpuRegionWorkerPortV3 } from './cpuRegionWorkerProtocol'
+import type { CpuRegionWorkerPortV3, CpuRegionWorkerRequestV3 } from './cpuRegionWorkerProtocol'
 import { splitImageEditCpuOutputV3, assembleImageEditCpuOutputV3 } from './cpuOutputParts'
 
 let workerCode: string
 beforeAll(async () => { workerCode = await buildCpuRegionTestWorkerV3() })
-function fixture() {
-  const document = createImageEditDocumentV3({ width: 32, height: 32 })
+function fixture(size = 32) {
+  const document = createImageEditDocumentV3({ width: size, height: size })
   const layer = createImageEditRasterLayerV3('source', '源', 'sha256:source')
   layer.opacity = .8
   document.layers = [layer, createImageEditAdjustmentLayerV3('exposure', '曝光', 'exposure', { stops: .3 })]
@@ -23,7 +24,7 @@ function fixture() {
   const plan = compileImageEditRenderPlanV3(document, registry, 'export')
   const rgba = (region: ImageEditRect) => createFloat32PremultipliedRgbaTile(region.width, region.height,
     'linear-light', Float32Array.from({ length: region.width * region.height * 4 }, (_, index) => [0.1, 0.2, 0.3, .5][index % 4]))
-  const region = { x: 0, y: 0, width: 32, height: 32 }
+  const region = { x: 0, y: 0, width: size, height: size }
   const context: ImageEditCpuRegionRenderContextV3 = { size: document.geometry, registry,
     createTransparent: (rect) => createFloat32PremultipliedRgbaTile(rect.width, rect.height,
       'linear-light', new Float32Array(rect.width * rect.height * 4)),
@@ -35,8 +36,74 @@ function fixture() {
 }
 
 describe('CPU 区域 Worker', () => {
-  it.each([0, 90, 180, 270] as const)('四线程分块在旋转%s、镜像和裁剪下与整幅输出逐字节一致', async rotate => {
-    const { document, context, region, plan, output } = fixture()
+  it('并行图节点仍只占一份源解码暂存，首个源失败后不继续读取其他源', async () => {
+    const { document, region, context } = fixture()
+    document.layers.unshift(createImageEditRasterLayerV3('base', '底图', 'sha256:base'))
+    const plan = compileImageEditRenderPlanV3(document, context.registry, 'export')
+    const original = context.loadRaster
+    let active = 0, maximum = 0
+    context.loadRaster = async (...args) => {
+      active++; maximum = Math.max(maximum, active)
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+      try { return await original(...args) } finally { active-- }
+    }
+    await executeImageEditCpuRenderRegionPlanV3(plan, region, context)
+    expect(maximum).toBe(1)
+    const failed = vi.fn(async () => { throw new Error('读取失败') })
+    await expect(executeImageEditCpuRenderRegionPlanV3(plan, region, { ...context, loadRaster: failed })).rejects.toThrow('读取失败')
+    expect(failed).toHaveBeenCalledOnce()
+  })
+
+  it('重复借出的源只复制一次，分层覆盖对象不合并；任务结束清除引用', async () => {
+    const { document, region, context, output } = fixture()
+    document.layers.unshift(createImageEditRasterLayerV3('base', '底图', 'sha256:source'))
+    const plan = compileImageEditRenderPlanV3(document, context.registry, 'export')
+    const shared = await context.loadRaster(plan.nodes[0], region)
+    const covered = { ...shared, data: shared.data.map(value => value * .5) }
+    const worker = new CpuRegionNodeTestWorkerV3(workerCode)
+    const port = worker.port()
+    const messages: CpuRegionWorkerRequestV3[] = []
+    const client = new ImageEditCpuRegionWorkerClientV3({ ...port,
+      postMessage: message => { messages.push(message); port.postMessage(message) } })
+    try {
+      for (const distinct of [false, false, true]) {
+        messages.length = 0
+        context.loadRaster = async node => distinct && node.layerId === 'source' ? covered : shared
+        const result = await client.render(plan, region, context, output)
+        const direct = await executeImageEditCpuRenderRegionPlanV3(plan, region, context)
+        expect(result.pixels).toEqual(encodeImageEditorV3RenderedOutputTile(direct!, region, output.description).pixels)
+        const replies = messages.filter(message => message.type === 'reply')
+        expect(replies.filter(message => message.value !== undefined)).toHaveLength(distinct ? 2 : 1)
+        expect(replies.filter(message => message.referenceId !== undefined)).toHaveLength(distinct ? 0 : 1)
+      }
+      expect(shared.data.byteLength).toBe(32 * 32 * 16)
+    } finally { client.dispose() }
+  })
+
+  it('区域源与蒙版读取重叠，全部读取失败被处理且可继续使用线程', async () => {
+    const { document, region, context, output } = fixture()
+    document.layers[0].mask = createImageEditSparseMaskReferenceV3('mask', false, 1)
+    const plan = compileImageEditRenderPlanV3(document, context.registry, 'export')
+    const originalRaster = context.loadRaster, originalMask = context.loadMask
+    let releaseMask!: () => void
+    const rasterStarted = new Promise<void>(resolve => { releaseMask = resolve })
+    let maskStarted!: () => void
+    const maskReady = new Promise<void>(resolve => { maskStarted = resolve })
+    context.loadRaster = async (...args) => { releaseMask(); await maskReady; return originalRaster(...args) }
+    context.loadMask = async (...args) => { maskStarted(); await rasterStarted; return originalMask(...args) }
+    const client = new ImageEditCpuRegionWorkerClientV3(new CpuRegionNodeTestWorkerV3(workerCode).port())
+    try {
+      expect((await client.render(plan, region, context, output)).pixels.byteLength).toBe(4096)
+      await expect(client.render(plan, region, { ...context,
+        loadRaster: async () => { throw new Error('源失败') },
+        loadMask: async () => { throw new Error('蒙版失败') },
+      }, output)).rejects.toThrow(/源失败|蒙版失败/)
+      expect((await client.render(plan, region, context, output)).pixels.byteLength).toBe(4096)
+    } finally { client.dispose() }
+  })
+
+  it.each(([0, 90, 180, 270] as const).flatMap(rotate => [32, 97].map(size => ({ rotate, size }))))('四线程分块在旋转$rotate、$size 像素、镜像和裁剪下与整幅输出逐字节一致', async ({ rotate, size }) => {
+    const { document, context, region, plan, output } = fixture(size)
     context.loadRaster = async (_node, requested) => createFloat32PremultipliedRgbaTile(requested.width, requested.height,
       'linear-light', Float32Array.from({ length: requested.width * requested.height * 4 }, (_, index) => {
         const x = requested.x + Math.floor(index / 4) % requested.width
@@ -47,8 +114,8 @@ describe('CPU 区域 Worker', () => {
     document.geometry.crop = { x: 1, y: 1, width: 30, height: 30 }
     const rect = { x: 0, y: 0, width: 30, height: 30 }
     const target = { ...output, rect, geometry: resolveImageEditOutputGeometryV3(document.geometry) }
-    // 30px按技术阈值不拆分；另用32输出覆盖实际四块路径。
-    const full = { ...target, rect: region, geometry: { ...target.geometry, cropX: 0, cropY: 0, outputWidth: 32, outputHeight: 32 } }
+    // 30px不拆分；32覆盖四象限；97覆盖不能均分的尾行/列。
+    const full = { ...target, rect: region, geometry: { ...target.geometry, cropX: 0, cropY: 0, outputWidth: size, outputHeight: size } }
     const clients = Array.from({ length: 4 }, () => new ImageEditCpuRegionWorkerClientV3(new CpuRegionNodeTestWorkerV3(workerCode).port()))
     try {
       for (const geometry of [target, full]) {

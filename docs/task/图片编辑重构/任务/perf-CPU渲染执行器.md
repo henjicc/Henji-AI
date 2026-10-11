@@ -169,3 +169,95 @@ Remove-Item Env:HENJI_IMAGE_SAVE_BENCH_LABEL
 | `src/features/imageEdit/v3/export/maskRegion.test.ts` | 蒙版边界精确测试。 |
 
 同时更新两份指定任务记录与 `docs/rules/assistant-status.md` 的历史通路条目。
+
+## t153 CPU 全图渲染提速（2026-10-11）
+
+### 执行边界与设计自查
+
+- 真实规模沿唯一保存夹具：4096² / 8192²、两个共享源栅格层、非空 Float32 稀疏蒙版、曝光调整和局部曝光。改前完成两轮，第三轮在 8K 遇到 libvips 内存不足后停止；失败整轮不进入统计。改后目标五轮，统计中位数与 nearest-rank P95（小样本下为最大值，不足以代表稳定尾延迟）。不清空系统文件缓存，每轮创建独立资源库，包含冷派生缓存、编码、同步和包发布；不含 Electron IPC/窗口。
+- 文档、RenderPlan、保存事务与像素金样不变。仅调整本任务执行器与源服务；沿原预算、取消和结构化日志，不修改 UI、SDK、其他任务文件，不启动开发实例，不执行 Git 写操作。总览没有 t153 行，本节供总管理者登记。
+- 验证按 testing.md L2：跨线程生命周期、共享像素执行与文件 I/O；精确回归、双 tsc、文件 ESLint、main-imports / dependency-graph，并按本任务显式要求最后跑完整三目录回归。
+
+1. **助手只凭名称和说明能否用对？** 沿已有图片编辑、保存与导出操作，无新增公开能力、参数或内部性能开关。
+2. **能否 AI 先做、人只确认？** 资源调度和执行优化自动完成，用户和助手只校正画面与保存结果，不手动调 Worker 数。
+3. **产物能否直接流进其他工作区？** 同分辨率、同像素、同文档及资源协议，沿既有画布/剪辑流转；本轮不声称验证跨工作区窗口。
+
+### 选型依据
+
+复用已有 Sharp/libvips 原生解码和原生 Worker，不增加解码器或自研 SIMD。参考 [Sharp 输入选项](https://sharp.pixelplumbing.com/api-constructor/) 与 [Node Worker 传输和共享内存](https://nodejs.org/api/worker_threads.html#portpostmessagevalue-transferlist)：借出缓冲不可直接 transfer/detach；SharedArrayBuffer 还需宿主具备共享内存条件，当前正式浏览器装配没有对应隔离配置，本任务不越权改变宿主安全边界。先用分阶段证据确定资源等待、消息复制与内核的实际份额，再选择有界复用与调度；不以改变精度、分辨率或金样容差换取速度。
+
+### 保留的实现与排查范围
+
+- Worker 回调新增请求排队、宿主读取、发送同步复制、回执接收四段计时，使用 `performance.timeOrigin + performance.now()` 对齐线程时钟；回执耗时包含发送复制，不能和 post 段相加。原 wait/render/kernel/project/encode 仍保留，通过原 onStage/结构化日志输出，未新增日志文件/IPC/界面调试状态。
+- 每个区域任务按借出对象身份复用已发送源瓦片，第二个消费者只发内部引用，不按资源 ID 合并含不同稀疏覆盖的图层；不 detach 宿主缓冲，不跨任务保留引用。完成/失败清空 Worker 缓存和等待者，局部 AbortController 阻止失败分支继续发出回调；宿主任务 ID 继续隔离迟到回执。
+- 独立图节点的计算和蒙版读取可重叠，但每个区域仅允许一份源解码暂存，沿原工作集估算；第一个源读取失败不启动后续源。存在全局分析效果时背景→内容仍串行，不并发争用宿主分析运行时。像素计算顺序、Float32 舍入与所有内核均未更改。
+- Sharp 原生条带使用顺序读取；适合条带的 mip0 在现有 DerivedDiskCache 中一次原子发布整个条带，复用磁盘配额/租约/LRU，减少逐512块 fsync。单条带 ≤16MiB、缓存及在途合计 ≤32MiB；超预算、超宽、普通HDR、缩放沿原区域/金字塔路径，不限制素材或图层数量。标准P3仍走原精确归一化。缓存 key 使用资源内容指纹、区域、位深和内部条带版本；可重建缓存按 persistence.md 不属于用户持久格式，无项目迁移。
+- 持久条带先核对文件租约字节数再分配，坏尺寸释放租约后丢弃并重建；缓存读写故障记录原日志并返回有效源解码，源解码失败仍明确失败。没有新增背景写入：保存测量包括全部当次缓存写入和同步。
+- 同源排查覆盖 CPU 区域/整幅、Worker 两端、源金字塔/halo/mip/EXIF/P3、稀疏栅格、蒙版、直接导出和保存输出。未改变 GPU 内核、编辑器 UI、宿主 IPC；没有验证真实 Electron 的端到端耗时。
+- 曾比较完整源扫描行分块，未取得稳定完整收益证据，已撤回；并发数保持原最多四个计算 Worker。调度器 yield 诊断约 83.55/328.31ms（4K/8K），不足以解释主要等待，未修改其文件。
+
+### 测量口径与环境中断
+
+原夹具 `totalMs` 是“渲染/写瓦片 + 最终编码同步 + hash/资源写入 + 包发布”的阶段和。此次另加 `save.wall`，从 sink.begin 到 ImageDocumentService.create 返回连续计时，包含 document.save 与阶段间调度。性能目标以连续墙钟为准，不能只报渲染耗时。
+
+本机同时存在其他任务及用户应用。曾读到系统提交量 231,097,540,608 / 231,832,506,368 字节；用户 Premiere 私有内存约162GB。未终止任何用户程序。改前第三轮、改后首次最终轮在8K发生 `vips_tracked: out of memory` / `vipspng: out of order read`；另有 esbuild 服务分配失败、定向测试进程分配失败和 PowerShell 包装器异常。失败均不当作通过或有效性能样本。后续命令直接调用已安装的 Node CLI，保留 Vitest 线程限制，`GOMAXPROCS=2` 限制测试构建器，不改变正式像素执行线程数。
+
+### 最终性能数据与未完成项
+
+单位 ms，单元格为 **中位数 / nearest-rank P95**。改前 `t153-before-1/2` 两个完整成功样本；改后 `t153-final-stable-1..5` 五个完整成功样本，五轮均完成保存、重开、全像素 SHA-256 和文档结构核对。源读取和瓦片写入已包含在渲染阶段，不重复相加。
+
+| 阶段 | 改前4K（n=2） | 改后4K（n=5） | 改前8K（n=2） | 改后8K（n=5） |
+|---|---:|---:|---:|---:|
+| 源读取累计 | 1106.78 / 1250.31 | 521.68 / 759.35 | 5474.77 / 5979.93 | 2565.02 / 2667.40 |
+| 渲染与输出块写入 | 4477.94 / 4646.77 | 3259.60 / 3358.98 | 17066.87 / 18267.36 | 11862.10 / 12435.31 |
+| 输出块写入 | 396.27 / 419.20 | 344.50 / 361.92 | 1434.46 / 1532.42 | 1279.43 / 1327.37 |
+| 最终编码与同步 | 248.64 / 271.13 | 231.35 / 464.39 | 486.69 / 508.06 | 412.77 / 553.84 |
+| hash与资源写入 | 34.86 / 35.67 | 35.18 / 56.08 | 68.76 / 72.59 | 54.78 / 73.73 |
+| 包写入与同步 | 141.43 / 160.70 | 132.42 / 155.28 | 222.88 / 239.24 | 178.43 / 276.18 |
+| 原夹具阶段和 | 4902.87 / 5074.13 | 3656.65 / 4012.45 | 17845.19 / 19087.26 | 12461.22 / 13043.82 |
+| **完整保存连续墙钟** | 未单独计时 | **3675.85 / 4030.75** | 未单独计时 | **12472.43 / 13055.09** |
+
+改后五轮完整墙钟（4K / 8K）：3462.03 / 12472.43、4030.75 / 13055.09、3675.85 / 12912.34、3940.36 / 12272.41、3634.11 / 12414.82。原阶段和中位数降低约25.4% / 30.2%；并行任务、提交内存压力及样本量不同，不能把环境波动全部归因于优化，也不能以历史 t138 数据冒充本轮基线。
+
+最终 Worker 窄阶段中位数如下，均为多个线程/请求的**累计值，存在重叠，不是可相加的保存墙钟**：
+
+| 阶段 | 4K | 8K |
+|---|---:|---:|
+| 原生条带解码（4 / 16次） | 239.91 | 1794.69 |
+| 宿主栅格读取 | 4328.68 | 17997.79 |
+| Worker请求到宿主接收 | 888.75 | 3159.47 |
+| 宿主postMessage同步发送 | 170.08 | 707.72 |
+| 宿主发送到Worker收到（含post） | 317.00 | 1365.17 |
+| Worker wait.raster | 5461.43 | 22550.59 |
+| Worker wait.mask | 1840.47 | 4915.92 |
+| 曝光 / opacity / composite | 1130.62 / 364.37 / 509.86 | 3815.25 / 1251.49 / 1586.13 |
+| effect-mix / encode | 509.66 / 792.28 | 1851.36 / 2750.45 |
+| 宿主调度yield | 78.90 | 336.57 |
+
+**结论：4K≤3秒、8K≤10秒均未达成，t153 保持性能欠账，不能标为验收完成。** 现有证据不足以支持仅增加 Worker 或删除调度 yield 就能达标。剩余链路仍有源块回宿主后的 Float32 区域组装、跨线程往返，以及8K条带重复扫描；若继续比较 transferable/SAB/原生流式供给，需总管理者协调 `src/features/imageEdit/v3/export/renderExportTilesV3.ts`、`sourceRegion.ts` 和必要的 PAL/宿主接线所有权，本轮按授权未修改这些文件。全尺寸多轮暖保存及真实 Electron IPC/窗口耗时尚未测量；冷实例条带复用已由精确测试证明，但不等同于暖保存性能验收。
+
+复现：设置 `HENJI_IMAGE_SAVE_BENCH=1`、`HENJI_IMAGE_CPU_WORKER_BENCH=1`、`HENJI_IMAGE_SAVE_BENCH_LABEL=<本轮标签>`，运行 `npx vitest run src/core/imageEdit/v3/execution/cpuRenderPerformance.benchmark.test.ts --silent --poolOptions.threads.maxThreads=2 --poolOptions.threads.minThreads=1`；本轮每次独立进程，未重建应用。原始控制台输出保留在本机 `%TEMP%/t153-before-*.log`、`t153-final-stable-*.log`，不加入仓库。
+
+### 最终检查
+
+- 指定完整回归 `npx vitest run src/core/imageEdit electron/main/services/image-editor-v3 src/features/imageEdit/v3/export --silent --poolOptions.threads.maxThreads=2 --poolOptions.threads.minThreads=1 --fileParallelism=false`（实际用等价 `node node_modules/vitest/vitest.mjs` 绕过出现异常的 npx.ps1）：**116 文件通过、726 用例通过、0 失败，2 文件/3 用例按既有条件跳过**，167.48秒。跳过项为两项显式性能基准及 history publication 的原生条件用例；CPU 保存性能基准随后单独显式运行，不将跳过计为通过。原像素金样、颜色、几何、稀疏栅格与生命周期测试通过，未改金样及容差。
+- 新回归覆盖同一借出对象只发送一次、不同图层覆盖不合并、跨任务引用清空、读取重叠、失败后线程重用、源解码并发预算、七种 EXIF、奇数分块尺寸、条带冷实例复用、坏缓存大小与缓存写失败。
+- `npx tsc -p tsconfig.json --noEmit`、`npx tsc -p tsconfig.electron.json --noEmit`：最终均通过。首次 renderer tsc 曾受 t154 的 `useCanvasTidy.test.tsx:16` hook 返回类型错误阻塞，相关任务修正后重验通过，本任务未修改该文件。
+- 全部本次 TS 文件 ESLint、`check:main-imports`、`check:dependency-graph`、精确文件 `git diff --check`：通过。新增缓存依赖后重跑主进程门禁与依赖图（54.53秒）；没有新增/移动界面文件，因此不跑 UI 门禁。
+- 无 Git 写操作、SDK 修改、付费调用、Reality、应用构建或开发环境启动/重启。主进程代码改变，后续正式应用交付需要总管理者安排最新运行产物。
+
+### t153 实际文件清单
+
+| 文件 | 本次修改 |
+|---|---|
+| `src/core/imageEdit/v3/execution/cpuRegionWorkerProtocol.ts` | 内部跨线程时间戳与任务内源引用协议。 |
+| `src/core/imageEdit/v3/execution/cpuRegionWorkerClient.ts` | 宿主回调分段计时及不可变源对象复用。 |
+| `src/core/imageEdit/v3/execution/cpuRegionWorkerRuntime.ts` | 回执计时、引用读取、失败分支终止与任务隔离。 |
+| `src/core/imageEdit/v3/execution/cpuRenderRegionExecutor.ts` | 计算/蒙版读取重叠、源暂存串行准入及取消检查。 |
+| `src/core/imageEdit/v3/execution/cpuRegionWorker.test.ts` | 真实线程、源引用、失败恢复、预算与奇数尺寸精确回归。 |
+| `src/core/imageEdit/v3/execution/cpuRenderPerformance.benchmark.test.ts` | 按尺寸汇总 Worker 阶段、原生解码、调度让出和完整保存墙钟。 |
+| `electron/main/services/image-editor-v3/source-provider.ts` | 顺序原生条带及 mip0 条带缓存路由。 |
+| `electron/main/services/image-editor-v3/source-decode-stripes.ts` | 原预算内复用现有持久派生缓存、坏缓存重建与日志。 |
+| `electron/main/services/image-editor-v3/source-provider.test.ts` | 相邻块单次发布和冷实例不重复解码的精确回归。 |
+| `electron/main/services/image-editor-v3/source-decode-stripes.test.ts` | 持久复用、分配前大小验证、损坏与发布失败回归。 |
+| 本记录 | 设计自查、选型、测量、失败、验证与交付边界。 |

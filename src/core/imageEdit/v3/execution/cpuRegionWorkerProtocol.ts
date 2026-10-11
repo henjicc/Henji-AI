@@ -24,9 +24,10 @@ export type CpuRegionWorkerRequestV3 =
       grids: ReadonlyArray<readonly [string, ImageEditCpuSamplingGridV3]>;
       color: Pick<Float32PremultipliedRgbaTile, 'workingSpace' | 'transferFunction' | 'referenceWhiteNits'>;
       customEffects: boolean; output: CpuRegionWorkerOutputV3 }
-  | { type: 'reply'; jobId: number; callbackId: number; value?: CpuRegionWorkerValueV3; error?: string }
+  | { type: 'reply'; jobId: number; callbackId: number; value?: CpuRegionWorkerValueV3;
+      valueId?: number; referenceId?: number; error?: string; sentAt?: number }
 export type CpuRegionWorkerEventV3 =
-  | { type: 'callback'; jobId: number; callbackId: number; request: CpuRegionWorkerCallbackV3 }
+  | { type: 'callback'; jobId: number; callbackId: number; request: CpuRegionWorkerCallbackV3; sentAt?: number }
   | { type: 'completed'; jobId: number; tile: ImageEditCpuOutputTileV3; stages: Readonly<Record<string, number>> }
   | { type: 'failed'; jobId: number; message: string }
 

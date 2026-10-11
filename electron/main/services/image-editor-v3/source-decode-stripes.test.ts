@@ -1,7 +1,37 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SourceDecodeStripeCache } from './source-decode-stripes'
+import fsp from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { DerivedDiskCache } from './derived-disk-cache'
 
 describe('源解码条带缓存', () => {
+  it('持久条带跨实例复用；大小损坏先拒绝分配并重建，发布失败仍返回有效源', async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-source-stripe-'))
+    const disk = new DerivedDiskCache(root)
+    const address = { kind: 'pyramid' as const, key: 'source-stripe-v1:source:row' }
+    const decode = vi.fn(async () => Buffer.from([1, 2, 3, 4]))
+    try {
+      await new SourceDecodeStripeCache(disk).read('source:row', 4, decode)
+      expect(await new SourceDecodeStripeCache(disk).read('source:row', 4, decode)).toEqual(Buffer.from([1, 2, 3, 4]))
+      expect(decode).toHaveBeenCalledOnce()
+      await disk.put(address, Buffer.alloc(5))
+      const read = vi.spyOn(fsp, 'readFile')
+      try {
+        expect(await new SourceDecodeStripeCache(disk).read('source:row', 4, decode)).toEqual(Buffer.from([1, 2, 3, 4]))
+        expect(read).not.toHaveBeenCalled()
+      } finally { read.mockRestore() }
+      expect(decode).toHaveBeenCalledTimes(2)
+      const put = vi.spyOn(disk, 'put').mockRejectedValueOnce(new Error('cache unavailable'))
+      try {
+        expect(await new SourceDecodeStripeCache(disk).read('another', 4, decode)).toEqual(Buffer.from([1, 2, 3, 4]))
+      } finally { put.mockRestore() }
+    } finally {
+      await disk.flushTouches()
+      await fsp.rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('冷源并发去重，一个调用者取消不取消其他消费者', async () => {
     const cache = new SourceDecodeStripeCache()
     let finish!: (value: Buffer) => void

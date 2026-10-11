@@ -9,6 +9,10 @@ import * as output from '../../../../features/imageEdit/v3/export/outputTile'
 import '../../../../tests/imageEditSavePerformance.benchmark.test'
 import { buildCpuRegionTestWorkerV3, CpuRegionNodeTestWorkerV3 } from './cpuRegionWorker.testSupport'
 import { ImageEditCpuRegionWorkerClientV3 } from './cpuRegionWorkerClient'
+import { TranscodingTileOutputSink } from '../../../../../electron/main/services/image-editor-v3/export/transcoding-output-sink'
+import { ImageDocumentService } from '../../../../../electron/main/services/image-editor-v3/image-document/image-document-service'
+import { SourceDecodeStripeCache } from '../../../../../electron/main/services/image-editor-v3/source-decode-stripes'
+import { ImageEditRenderScheduler, type ImageEditRenderTask } from '../renderScheduler'
 
 beforeAll(async () => {
   if (process.env.HENJI_IMAGE_CPU_WORKER_BENCH !== '1' || process.env.CI) return
@@ -33,12 +37,36 @@ function measured<T>(name: string, run: () => T): T {
   return result
 }
 if (process.env.HENJI_IMAGE_SAVE_BENCH === '1' && !process.env.CI) {
+  // 原夹具 totalMs 是阶段和；另测连续墙钟，包含 document.save 与阶段间调度。
+  let saveStart = 0, saveSize = 0
+  const begin = TranscodingTileOutputSink.prototype.begin
+  vi.spyOn(TranscodingTileOutputSink.prototype, 'begin').mockImplementation(function (this: TranscodingTileOutputSink, description) {
+    saveStart = performance.now(); saveSize = description.width
+    return begin.call(this, description)
+  })
+  const create = ImageDocumentService.prototype.create
+  vi.spyOn(ImageDocumentService.prototype, 'create').mockImplementation(async function (this: ImageDocumentService, request) {
+    const result = await create.call(this, request)
+    timings.set(`${saveSize}.save.wall`, { ms: performance.now() - saveStart, calls: 1 })
+    return result
+  })
+  const readStripe = SourceDecodeStripeCache.prototype.read
+  vi.spyOn(SourceDecodeStripeCache.prototype, 'read').mockImplementation(function (this: SourceDecodeStripeCache, key, bytes, decodeStripe, signal) {
+    return readStripe.call(this, key, bytes, sharedSignal => measured(`${saveSize}.native.decode`, () => decodeStripe(sharedSignal)), signal)
+  })
+  const schedule = ImageEditRenderScheduler.prototype.schedule
+  vi.spyOn(ImageEditRenderScheduler.prototype, 'schedule').mockImplementation(function <T>(this: ImageEditRenderScheduler, task: ImageEditRenderTask<T>): Promise<T> {
+    return schedule.call(this, { ...task, run: context => task.run({ ...context,
+      yieldAfterAtomicUnit: () => measured(`${saveSize}.scheduler.yield`, () => context.yieldAfterAtomicUnit()),
+    }) }) as Promise<T>
+  })
   const render = ImageEditCpuRegionWorkerClientV3.prototype.render
   vi.spyOn(ImageEditCpuRegionWorkerClientV3.prototype, 'render').mockImplementation(function (this: ImageEditCpuRegionWorkerClientV3, plan, region, context, result) {
     return render.call(this, plan, region, { ...context, onStage: (stage, ms) => {
       context.onStage?.(stage, ms)
-      const total = timings.get(`worker.${stage}`) ?? { ms: 0, calls: 0 }
-      total.ms += ms; total.calls++; timings.set(`worker.${stage}`, total)
+      const key = `${context.size.width}.worker.${stage}`
+      const total = timings.get(key) ?? { ms: 0, calls: 0 }
+      total.ms += ms; total.calls++; timings.set(key, total)
     } }, result)
   })
   const decodeOriginal = decode.decodeInterleavedRgbaSourceTileV3
