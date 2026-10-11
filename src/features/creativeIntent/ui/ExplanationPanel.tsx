@@ -53,10 +53,11 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
     return pending
   }, [cache, onRead, scope])
   const bind = useCallback(async (entry: TranscriptEntry, binding: Parameters<ExplanationReviewProps['onBind']>[1]): Promise<void> => { await onBind(entry, binding); cache.delete(entry.eventId) }, [cache, onBind])
+  const onPick = review.onPick
   const pick = useCallback(async (entry: TranscriptEntry, mention: Parameters<NonNullable<ExplanationReviewProps['onPick']>>[1]): Promise<void> => {
     cache.delete(entry.eventId)
-    try { await review.onPick?.(entry, mention) } finally { cache.delete(entry.eventId) }
-  }, [cache, review.onPick])
+    try { await onPick?.(entry, mention) } finally { cache.delete(entry.eventId) }
+  }, [cache, onPick])
   useEffect(() => { setResults(new Map()); setFocused(undefined); setExpanded(false) }, [contextKey])
   useEffect(() => { setResults(previous => new Map([...previous].filter(([id]) => paragraphs.some(entry => entry.utteranceId === id)))) }, [paragraphs])
   const report = useCallback((entry: TranscriptEntry, result: ExplanationReviewResult) => setResults(previous => new Map(previous).set(entry.utteranceId, { ...result, image: undefined })), [])
