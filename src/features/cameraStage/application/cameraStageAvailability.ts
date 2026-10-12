@@ -34,7 +34,7 @@ export function cameraStagePropertyRestriction(
         kind: 'state',
         requirementId: 'camera_stage.playable_timeline',
         affectedEntityTypes: [TYPES.stateKeyframe],
-        revisionScopes: ['toolbox'],
+        revisionScopes: ['camera_stage'],
       }],
     }
   }
@@ -59,6 +59,6 @@ export function cameraStageCollectionAvailability(
     parent,
     create: operation,
     remove: operation,
-    revisions: { toolbox: revision },
+    revisions: { camera_stage: revision },
   }
 }

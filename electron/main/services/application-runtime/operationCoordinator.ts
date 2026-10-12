@@ -259,6 +259,10 @@ export class ApplicationOperationCoordinator {
         : '原操作属于另一连接，请在应用中核对对应目标。'}独立追加可并行，覆盖、删除、保存失败或重复未知请求不能绕过保护。`)
     }
     if (baselines.some((baseline) => baseline.rendererEpoch !== rendererEpoch)) throw new Error('BASELINE_EXPIRED:应用宿主已重载，请重新读取目标。')
+    // 2.6.0 更正镜头参考的修订范围；旧基线只失效，不改写持久记录或映射旧计数。
+    if (baselines.some((baseline) => 'toolbox' in baseline.revisions && baseline.refs.some((ref) => ref.kind.startsWith('camera_stage.')))) {
+      throw new Error('BASELINE_EXPIRED:镜头参考的修订范围已从 toolbox 改为 camera_stage。请用 read_application_entity 重新读取原目标，使用返回的新 baselineId 提交。')
+    }
     const missing = deletionRefs.filter((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))
     if (baselines.length && missing.length) throw new Error(`BASELINE_TARGET_MISMATCH:缺少 ${JSON.stringify(missing)} 的读取。普通操作可省略 baselineIds 由应用自动核对；删除操作请先用 read_application_entity 读取以上目标。`)
     // 非删除目标可不带基线，但显式提交的基线必须对应本次某个目标：传错对象的基线是调用错误，不能被静默忽略

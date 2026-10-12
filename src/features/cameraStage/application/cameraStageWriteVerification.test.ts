@@ -17,15 +17,24 @@ it('A：放置、复制、删除与运镜经正式公共入口回读 verified，
   try {
     const place = () => app.requireResult('place_camera_stage_object', { documentId, objectType: 'primitive', primitiveKind: 'sphere', reusePolicy: 'require_new', placement: { position: { x: 3, y: 0, z: 0 }, allowOverlap: true } })
     const placed = await place()
+    expect(placed.resultingRevisions).toEqual({ camera_stage: expect.any(Number) })
     const ref = (placed.resultRefs as Array<{ kind: string; id: string }>).find(value => value.kind === 'camera_stage.object')!
     const objectId = ref.id.slice(documentId.length + 1)
     expect((await cameraStageApplicationService.readSnapshot(documentId)).objects.find(object => object.id === objectId)?.transform.position).toEqual({ x: 3, y: 0, z: 0 })
     const copied = await app.requireResult('duplicate_camera_stage_object', { documentId, objectId })
     const copyRef = { kind: 'camera_stage.object', id: `${documentId}:${copied.objectId}` }
     const baseline = await app.read(copyRef)
+    expect(baseline.revisions).toEqual({ camera_stage: expect.any(Number) })
+    const documentBaseline = await app.read({ kind: 'camera_stage.document', id: documentId })
+    expect(documentBaseline.revisions).toEqual(baseline.revisions)
+    expect(baseline.scopeRevisions).toHaveProperty('camera_stage', (baseline.revisions as Record<string, number>).camera_stage)
     const deleted = await app.requireResult('delete_camera_stage_object', { documentId, objectId: copied.objectId }, baseline.revisions as Record<string, number>)
     expect((await cameraStageApplicationService.readSnapshot(documentId)).objects.some(object => object.id === copied.objectId)).toBe(false)
     const continued = await place()
+    const staleWrite = await app.call('place_camera_stage_object', { documentId, objectType: 'primitive', primitiveKind: 'sphere' }, baseline.revisions as Record<string, number>)
+    expect(staleWrite).toMatchObject({ ok: false, error: { code: 'CONFLICT', recoverable: true } })
+    const legacyWrite = await app.call('place_camera_stage_object', { documentId, objectType: 'primitive', primitiveKind: 'sphere' }, { toolbox: (baseline.revisions as Record<string, number>).camera_stage })
+    expect(legacyWrite).toMatchObject({ ok: false, error: { code: 'CONFLICT', recoverable: true } })
     const motion = await app.requireResult('apply_camera_stage_camera_move', { documentId, cameraId: camera.id, targetObjectId: objectId, move: { kind: 'orbit', degrees: 90, direction: 'cw' }, duration: 2 })
     expect((await cameraStageApplicationService.readSnapshot(documentId)).stateKeyframes).toHaveLength(2)
     for (const result of [placed, copied, deleted, continued, motion]) {

@@ -31,7 +31,7 @@ import { TRAJECTORY_FIELDS, TRAJECTORY_SCHEMA_DOCUMENTS } from './cameraStageTra
 import { calculateStageObjectBounds } from './sceneAnalysis'
 
 const DOMAIN = 'camera_stage'
-const REVISION_SCOPE = 'toolbox'
+const REVISION_SCOPE = 'camera_stage'
 const ENTITY_TYPES = {
   project: 'camera_stage.document',
   scene: 'camera_stage.scene',

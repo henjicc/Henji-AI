@@ -1,24 +1,24 @@
 import { expect, it, vi } from 'vitest'
 import type { ApplicationControlExecutionEngine } from '@/core/application-control'
 
-vi.mock('@/features/application-control/hostContext/hostContext', () => ({ getHostScopeRevisions: () => ({ toolbox: 4 }) }))
+vi.mock('@/features/application-control/hostContext/hostContext', () => ({ getHostScopeRevisions: () => ({ camera_stage: 4 }) }))
 
 import { applyCameraStageCameraMove } from './cameraStageCapabilityAdapter'
 import { CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'
 
 it('运镜能力委托上下文注入的事务引擎并保留并发基线与回读修订', async () => {
   const plan = vi.fn().mockResolvedValue({ planRef: 'plan-1' })
-  const commit = vi.fn().mockResolvedValue({ status: 'completed', resultingRevisions: { toolbox: 4 } })
+  const commit = vi.fn().mockResolvedValue({ status: 'completed', resultingRevisions: { camera_stage: 4 } })
   const engine = { plan, commit } as unknown as ApplicationControlExecutionEngine
   const result = await applyCameraStageCameraMove({ projectId: 'document-1' }, {
-    signal: new AbortController().signal, expectedRevisions: { toolbox: 4 }, requestId: 'request-1', getExecutionEngine: () => engine,
+    signal: new AbortController().signal, expectedRevisions: { camera_stage: 4 }, requestId: 'request-1', getExecutionEngine: () => engine,
   })
   expect(plan.mock.calls[0][0].steps).toEqual([{
     kind: 'operation', capabilityId: 'apply_camera_stage_camera_move', capabilityVersion: 1,
-    input: { projectId: 'document-1' }, expectedRevisions: { toolbox: 4 },
+    input: { projectId: 'document-1' }, expectedRevisions: { camera_stage: 4 },
   }])
-  expect(commit.mock.calls[0][0]).toMatchObject({ planRef: 'plan-1', expectedRevisions: { toolbox: 4 } })
-  expect(result).toMatchObject({ status: 'completed', resultingRevisions: { toolbox: 4 } })
+  expect(commit.mock.calls[0][0]).toMatchObject({ planRef: 'plan-1', expectedRevisions: { camera_stage: 4 } })
+  expect(result).toMatchObject({ status: 'completed', resultingRevisions: { camera_stage: 4 } })
   expect(result).not.toHaveProperty('baseRevision')
 })
 

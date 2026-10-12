@@ -11,11 +11,11 @@ import type { CapabilityExecutionContext } from '@/features/application-control/
 const permissions = new Set(['camera_stage:read', 'camera_stage:write', 'camera_stage:delete'])
 
 function baseRevision(): number {
-  return getHostScopeRevisions().toolbox
+  return getHostScopeRevisions().camera_stage
 }
 
 export function assertCameraStageRevision(context: CapabilityExecutionContext): number {
-  const expected = context.expectedRevisions?.toolbox
+  const expected = context.expectedRevisions?.camera_stage
   if (expected === undefined || baseRevision() !== expected) throw new Error(`CONFLICT:${CONFLICT_RECOVERY}`)
   return expected
 }
@@ -54,12 +54,12 @@ async function executeOperation(
   const plan = await engine.plan({
     summary: capabilityId === 'place_camera_stage_object' ? '复用或布置三维场景对象' : '应用摄像机语义运镜',
     transactionMode: 'atomic',
-    steps: [{ kind: 'operation', capabilityId, capabilityVersion: 1, input, expectedRevisions: { toolbox: revision } }],
+    steps: [{ kind: 'operation', capabilityId, capabilityVersion: 1, input, expectedRevisions: { camera_stage: revision } }],
     verificationConditions: [{ kind: 'evidence_fact', fact: evidenceFact }],
   }, appContext)
   const result = completedTransaction(await engine.commit({
     planRef: plan.planRef,
-    expectedRevisions: { toolbox: revision },
+    expectedRevisions: { camera_stage: revision },
     idempotencyKey: idempotencyKey(capabilityId, revision, context),
   }, appContext)) as unknown as Record<string, unknown>
   return result
@@ -86,13 +86,13 @@ async function executeMutation(
       kind: 'mutation',
       target: { kind: input.entityType, id: input.targetId },
       entityType: input.entityType,
-      expectedRevisions: { toolbox: input.revision },
+      expectedRevisions: { camera_stage: input.revision },
       mutations: input.mutations,
     }],
   }, appContext)
   const result = completedTransaction(await engine.commit({
     planRef: plan.planRef,
-    expectedRevisions: { toolbox: input.revision },
+    expectedRevisions: { camera_stage: input.revision },
     idempotencyKey: idempotencyKey(input.entityType, input.revision, context),
   }, appContext)) as unknown as Record<string, unknown>
   return result
@@ -122,7 +122,7 @@ export async function duplicateCameraStageObject(input: { projectId: string; obj
   const before = await cameraStageApplicationService.readSnapshot(input.projectId)
   const source = before.objects.find(object => object.id === input.objectId)
   const result = await cameraStageApplicationService.duplicateObject(input.projectId, input.objectId)
-  notifyHostScopeChanged('toolbox')
+  notifyHostScopeChanged('camera_stage')
   const after = await cameraStageApplicationService.readSnapshot(input.projectId)
   const created = after.objects.find(object => object.id === result.objectId)
   const verified = Boolean(source && created && !before.objects.some(object => object.id === created.id)
@@ -136,7 +136,7 @@ export async function deleteCameraStageObject(input: { projectId: string; object
   const before = await cameraStageApplicationService.readSnapshot(input.projectId)
   const kind = before.objects.find(object => object.id === input.objectId)?.type === 'camera' ? 'camera_stage.camera' : 'camera_stage.object'
   const result = await cameraStageApplicationService.deleteObject(input.projectId, input.objectId)
-  notifyHostScopeChanged('toolbox')
+  notifyHostScopeChanged('camera_stage')
   const snapshot = await cameraStageApplicationService.readSnapshot(input.projectId)
   const verified = !snapshot.objects.some(object => object.id === input.objectId)
     && snapshot.stateKeyframes.every(frame => !frame.objectStates[input.objectId])

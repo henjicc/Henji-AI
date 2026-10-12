@@ -72,7 +72,7 @@ describe('应用反射通用能力适配器', () => {
         refs: [{
           kind: 'camera_stage.state_keyframe', id: 'project-1:keyframe-1', label: '状态关键帧 1', revision: 3,
         }],
-        nextCursor: null, revisions: { toolbox: 3 }, revision: 3, scopeRevisions: { toolbox: 3 },
+        nextCursor: null, revisions: { camera_stage: 3 }, revision: 3, scopeRevisions: { camera_stage: 3 },
       },
     ) ?? []
 
@@ -125,7 +125,7 @@ describe('应用反射通用能力适配器', () => {
         id: 'sample.item', domain: 'sample', version: 1,
         title: '样例项', description: '测试集合成员。', refKind: 'sample.item',
         dataClass: 'C1', exposures: ['ui', 'assistant'], parentTypes: ['camera_stage.scene'],
-        revisionScopes: ['toolbox'], queryCapabilityIds: ['observe_camera_stage_scene'],
+        revisionScopes: ['camera_stage'], queryCapabilityIds: ['observe_camera_stage_scene'],
         collectionWrite: { creatable: true, removable: true, requiredPropertyIds: ['sample.item.time'], maxItemsPerChange: 128 },
         schemaRef: { catalogVersion: 'application-capabilities/v2', kind: 'entity', id: 'sample.item', version: 1, digest: `sha256:${'a'.repeat(64)}` },
       }],
@@ -134,7 +134,7 @@ describe('应用反射通用能力适配器', () => {
         title: '时间', description: '关键帧时间。', value: { kind: 'number', minimum: 0 },
         nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant'],
         requiredPermissions: { read: ['camera_stage:read'], write: ['camera_stage:write'] },
-        revisionScopes: ['toolbox'],
+        revisionScopes: ['camera_stage'],
         schemaRef: { catalogVersion: 'application-capabilities/v2', kind: 'property', id: 'sample.item.time', version: 1, digest: `sha256:${'b'.repeat(64)}` },
       }],
     })
@@ -202,7 +202,7 @@ describe('应用反射通用能力适配器', () => {
     mocks.listProperties.mockReturnValueOnce([{ id: 'camera_stage.scene.timeline.duration' }])
     mocks.getPropertyAvailability.mockResolvedValueOnce([{
       propertyId: 'camera_stage.scene.timeline.duration', readable: true, writable: false,
-      reasons: ['只读'], recoveries: [], requiredPermissions: ['camera_stage:read'], revisions: { toolbox: 4 },
+      reasons: ['只读'], recoveries: [], requiredPermissions: ['camera_stage:read'], revisions: { camera_stage: 4 },
     }])
     mocks.getCollectionAvailability.mockResolvedValueOnce({
       entityType: 'sample.item', parent: { kind: 'camera_stage.scene', id: 'project-1' },
@@ -211,7 +211,7 @@ describe('应用反射通用能力适配器', () => {
         recoveries: [{ summary: '先满足测试状态要求。', capabilityIds: [], entityTypes: ['sample.parent'], propertyIds: [] }],
       },
       remove: { available: false, reasons: ['简易模式以状态关键帧作为时间轴。'], requiredPermissions: ['camera_stage:write'], recoveries: [] },
-      revisions: { toolbox: 4 },
+      revisions: { camera_stage: 4 },
     })
 
     const result = await applicationReflectionHandlers.describeEntities({
@@ -270,7 +270,7 @@ describe('应用反射通用能力适配器', () => {
     mocks.plan.mockResolvedValueOnce({ planRef: 'plan-playback' })
     mocks.commit.mockResolvedValueOnce({
       status: 'completed', transactionRef: 'transaction-playback',
-      resultingRevisions: { toolbox: 2 }, resultRefs: [], effects: [], evidence: [],
+      resultingRevisions: { camera_stage: 2 }, resultRefs: [], effects: [], evidence: [],
     })
 
     await applicationReflectionHandlers.changeEntities({
@@ -433,7 +433,7 @@ describe('应用反射通用能力适配器', () => {
     mocks.commit.mockResolvedValueOnce({
       status: 'completed',
       transactionRef: 'transaction-keyframe',
-      resultingRevisions: { toolbox: 3 },
+      resultingRevisions: { camera_stage: 3 },
       resultRefs: [], effects: [],
       evidence: [],
     })
@@ -530,7 +530,7 @@ describe('应用反射通用能力适配器', () => {
         properties: { 'camera_stage.object.animatable.transform.position.y': 1.5 },
       }],
     } as never, {
-      status: 'completed', transactionRef: 'transaction-1', resultingRevisions: { toolbox: 2 },
+      status: 'completed', transactionRef: 'transaction-1', resultingRevisions: { camera_stage: 2 },
       resultRefs: [], evidence: [], effects: [{
         effect: 'create', entityType: 'camera_stage.state_keyframe',
         refs: [{ kind: 'camera_stage.state_keyframe', id: 'project-1:keyframe-2' }],

@@ -25,11 +25,7 @@ import { captureHostSelection, createHostContextSnapshot, getHostScopeRevisions,
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
 
 /**
- * `toolbox` 这个 scope 同时被三维场景写入当成乐观并发基线（`baseRevision`）。
- *
- * 因此它只能由**数据变化**推进。实测踩过的坑：打开 3D 编辑器会改 `activeToolId`，
- * 当时这也推进 toolbox，而系统提示词要求可视编辑任务先打开 Surface 再写入——于是模型
- * 拿着打开前读到的 baseRevision 发起第一次写入，必然 CONFLICT，没有任何办法绕开。
+ * 镜头参考使用独立的 camera_stage 数据基线，工具导航不得使读取基线过期。
  */
 describe('宿主作用域 revision', () => {
   let release: (() => void) | undefined
@@ -53,6 +49,7 @@ describe('宿主作用域 revision', () => {
     const after = getHostScopeRevisions()
 
     expect(after.toolbox).toBe(before.toolbox)
+    expect(after.camera_stage).toBe(before.camera_stage)
     expect(after.navigation).toBeGreaterThan(before.navigation)
   })
 
@@ -62,6 +59,7 @@ describe('宿主作用域 revision', () => {
     useNavigationStore.setState({ activeToolId: null })
 
     expect(getHostScopeRevisions().toolbox).toBe(before.toolbox)
+    expect(getHostScopeRevisions().camera_stage).toBe(before.camera_stage)
   })
 
   it('口播剪辑页面向助手暴露当前口播和选中的词块', async () => {
@@ -154,12 +152,13 @@ describe('宿主作用域 revision', () => {
     expect(getHostScopeRevisions().canvas).toBeGreaterThan(before.canvas)
   })
 
-  it('三维场景数据变化仍然推进 toolbox', () => {
+  it('三维场景数据变化只推进 camera_stage，保留工具箱自身基线', () => {
     const before = getHostScopeRevisions()
     useCameraStageStore.setState({ objects: [] })
 
     // 这条守的是"别把上一条修过头"：数据变化必须继续推进基线，否则乐观并发就失效了。
-    expect(getHostScopeRevisions().toolbox).toBeGreaterThan(before.toolbox)
+    expect(getHostScopeRevisions().camera_stage).toBeGreaterThan(before.camera_stage)
+    expect(getHostScopeRevisions().toolbox).toBe(before.toolbox)
   })
 
   it('V3 命令总线变化推进唯一 image_edit 基线，不发布被替代的标注域', () => {

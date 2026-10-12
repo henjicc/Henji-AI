@@ -73,7 +73,7 @@ const publicMediaOutputSchema = z.object({ ok: z.literal(true), data: z.union([
 export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'describe_application_contract', tier: 'any', readOnly: true,
-    description: '发现协议、授权、限制、业务域与可用技能。domains 点名才展开实体；detail="full" 查询工具授权清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。',
+    description: '发现协议、授权、限制、业务域与可用技能。domains 点名才展开实体；detail="full" 查询工具授权清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。2.6.0 起镜头参考文档与子实体的修订范围为 camera_stage；toolbox 仅保留工具箱自身状态。旧 toolbox 镜头基线已过期，请重新 read_application_entity 获取 baselineId。',
     inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' }, names: { type: 'array', items: { type: 'string', minLength: 1 }, description: '仅返回这些已授权工具的 schema 摘要；省略时返回全部摘要。' }, includeSchemas: { type: 'boolean', default: false, description: '配合 names 返回完整 description/inputSchema，按需分批查询。' } }, additionalProperties: false },
   },
   {
@@ -247,6 +247,7 @@ const WORKFLOWS = [
   '发现：describe_application_contract → describe_application_entities（按域过滤）→ list_application_entities（cursor/limit 分页，where 按属性等值定位）。',
   '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除前才必须逐个读取目标与集合父对象。',
   '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。不要传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
+  '镜头参考修订：2.6.0 起文档与子实体的 revisions、resultingRevisions 和宿主 scopeRevisions 使用 camera_stage，toolbox 仅表示工具箱自身状态。旧 toolbox 镜头基线返回 BASELINE_EXPIRED；请重新 read_application_entity 读取原目标，使用新 baselineId 提交。',
   '共享长期记忆：可通过通用实体工具读写 assistant.shared_memory，引用 id 为 singleton。新任务按需读取，明确偏好或纠正后合并更新 content，不追加流水账；尊重用户关闭与连接写权限。查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
   '取结果：看图用 read_application_media(mode="image") 直接取得图片内容；其他媒体按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
   '失败恢复：执行状态 unknown 时禁止换标识重试，用原 operationId 查询；partial 且账本登记了仅保存恢复入口时调 retry_application_operation_save，它不会重放业务修改。',

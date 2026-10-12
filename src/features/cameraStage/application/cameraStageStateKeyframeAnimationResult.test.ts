@@ -61,7 +61,7 @@ describe('状态关键帧模式动画的正式反射结果', () => {
     return {
       signal: new AbortController().signal,
       requestId,
-      expectedRevisions: { toolbox: revision },
+      expectedRevisions: { camera_stage: revision },
     }
   }
 

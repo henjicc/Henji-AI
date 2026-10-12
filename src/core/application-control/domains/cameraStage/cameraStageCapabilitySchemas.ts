@@ -108,7 +108,7 @@ export function cameraStageControl(
   effect: CameraStageEffect,
   entityTypes: string[],
   propertyIds: string[] = [],
-  revisionScopes: string[] = ['toolbox'],
+  revisionScopes: string[] = ['camera_stage'],
   /**
    * 同一次调用真正产生的其他 effect。
    *

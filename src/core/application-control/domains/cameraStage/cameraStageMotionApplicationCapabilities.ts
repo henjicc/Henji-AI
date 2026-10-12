@@ -20,7 +20,7 @@ const applyCameraMove = defineApplicationCapability({
   description: '按摄像机、注视目标、时间、方向、距离和缓动应用环绕、推拉、横移或升降轨迹。', domain: 'camera_stage',
   aliases: ['环绕主体', '推近拉远', '横移镜头', '升降镜头', 'orbit', 'dolly', 'truck', 'crane', 'camera move'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'camera_stage:write', idempotent: true, destructive: false,
-  timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['toolbox'],
+  timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['camera_stage'],
   acceptsRefs: ['camera_stage.document', 'camera_stage.camera', 'camera_stage.object', 'camera_stage.state_keyframe'],
   producesRefs: ['camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
   successEvidence: ['事务返回路径起终点、采样数和受影响状态关键帧，并提供可撤销引用。'],
@@ -43,7 +43,7 @@ const applyCameraMove = defineApplicationCapability({
   control: cameraStageControl('execute', ['camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'], [
     'camera_stage.camera.look_at_target', 'camera_stage.camera.look_at_object_ref',
     'camera_stage.camera.transform.position', 'camera_stage.state_keyframe.transition_duration',
-  ], ['toolbox'], [
+  ], ['camera_stage'], [
     { effect: 'create', entityTypes: ['camera_stage.state_keyframe', 'camera_stage.trajectory'] },
   ]),
   summarize: (output) => `摄像机运镜事务 ${output.transactionRef} 已完成。`,
@@ -57,7 +57,7 @@ const verifyScene = defineApplicationCapability({
   description: '一次结构化验证对象、边界盒、活动摄像机、状态关键帧采样值与播放状态；动画任务把所有预期时间点放进 expectedStateSamples，不必逐枚读取关键帧。构图是否好看需另行观察界面截图判断。',
   domain: 'camera_stage', aliases: ['验证三维场景', '检查运镜结果', '检查构图', 'verify 3D scene'], readOnly: true, risk: 'R0', dataClasses: ['C1'],
   permission: 'camera_stage:read', idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: true, supportsUndo: false,
-  requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
+  requiredScopes: ['camera_stage'], acceptsRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
   producesRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
   inputSchema: z.object({
     documentId: cameraStageDocumentIdSchema, expectedObjectIds: z.array(z.string().min(1)).max(128).default([]),

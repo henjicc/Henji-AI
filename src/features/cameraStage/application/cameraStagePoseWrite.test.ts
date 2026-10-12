@@ -21,7 +21,7 @@ function objectStep(objectId: string, mutations: Array<{ propertyId: string; val
   return {
     kind: 'mutation', entityType: CAMERA_STAGE_ENTITY_TYPES.object,
     target: { kind: CAMERA_STAGE_ENTITY_TYPES.object, id: `project-1:${objectId}`, revision },
-    expectedRevisions: { toolbox: revision },
+    expectedRevisions: { camera_stage: revision },
     mutations: mutations.map((mutation) => ({ ...mutation, operation: 'set' })),
   } as Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 }

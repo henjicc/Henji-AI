@@ -107,7 +107,7 @@ export class CameraStageStateKeyframeCollectionExecutor implements ApplicationCo
     const revision = this.dependencies.readRevision()
     return {
       status: 'completed',
-      resultingRevisions: { toolbox: revision },
+      resultingRevisions: { camera_stage: revision },
       directRefs: [],
       evidence: [{
         kind: 'entity_state',
@@ -133,7 +133,7 @@ export class CameraStageStateKeyframeCollectionExecutor implements ApplicationCo
     }))
     return {
       status: 'completed',
-      resultingRevisions: { toolbox: revision },
+      resultingRevisions: { camera_stage: revision },
       directRefs: refs.slice(0, 64),
       evidence: [{
         kind: 'operation_result',
