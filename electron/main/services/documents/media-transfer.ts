@@ -227,10 +227,15 @@ export async function collectContainerMedia(options: MediaCollectOptions): Promi
     ...options.references.filter((reference) => reference.scope !== 'container').map((reference) => reference.path),
     ...options.programReferences.filter((value) => parseAbsolutePath(style, value) !== null),
   ]
-  const codeTargets = await codeGroupDestinations(candidates.filter(source => !options.isDocumentFile(source)), to)
+  const codeTargets = await codeGroupDestinations(candidates.filter(source => parseAbsolutePath(style, source) !== null && !options.isDocumentFile(source)), to)
   for (const source of candidates) {
     const key = pathKey(style, source)
-    if (!key || mapping.has(key) || options.isDocumentFile(source)) continue
+    if (options.isDocumentFile(source)) continue
+    if (!key) {
+      if (!missingPaths.includes(source)) missingPaths.push(source)
+      continue
+    }
+    if (mapping.has(key)) continue
     const stat = await fsp.stat(source).catch(() => null)
     if (!stat) {
       if (!missingPaths.includes(source)) missingPaths.push(source)

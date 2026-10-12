@@ -292,7 +292,9 @@ export function createLocationCodec(context: LocationContext): LocationCodec {
     else if (FILE_URL.test(value)) candidate = localPathFromUrl(style, value, 'file')
     if (candidate === null) return { stored: value }
     const parsed = parseAbsolutePath(style, candidate)
-    if (!parsed) return { stored: value }
+    if (!parsed) return parseAbsolutePath(style === 'win32' ? 'posix' : 'win32', candidate)
+      ? { stored: candidate, reference: { path: candidate, scope: 'external' } }
+      : { stored: value }
     const match = deepestRoot(parsed)
     if (!match) return { stored: candidate, reference: { path: candidate, scope: 'external' } }
     if (match.root.role === 'program') return { stored: candidate, programReference: true }
@@ -338,7 +340,10 @@ export function createLocationCodec(context: LocationContext): LocationCodec {
     if (MEDIA_URL.test(value) && !LOCAL_MEDIA_URL.test(value)) return { value, programReference: true }
     // 不带前缀的值保持原样，只归类绝对路径供报告（外部文件、程序目录路径或旧写法的作品目录路径）。
     const parsed = parseAbsolutePath(style, value)
-    if (!parsed) return { value }
+    // 异平台绝对路径也是外部引用，不能按当前机器的根重新解释或静默漏掉。
+    if (!parsed) return parseAbsolutePath(style === 'win32' ? 'posix' : 'win32', value)
+      ? { value, reference: { path: value, scope: 'external' } }
+      : { value }
     const match = deepestRoot(parsed)
     if (!match) return { value, reference: { path: value, scope: 'external' } }
     if (match.root.role === 'program') return { value, programReference: true }

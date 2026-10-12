@@ -222,16 +222,18 @@ export class DocumentPackageService {
     const entries: PackageEntry[] = []
     const missingPaths: string[] = []
     const mapping = new Map<string, string>()
-    const codeTargets = await codeGroupDestinations(decoded.report.references.map(reference => reference.path), container, false)
+    const codeTargets = await codeGroupDestinations(decoded.report.references
+      .filter(reference => parseAbsolutePath(style, reference.path) !== null)
+      .map(reference => reference.path), container, false)
     for (const reference of decoded.report.references) {
-      const key = pathKey(style, reference.path)
-      if (!key || mapping.has(key) || this.options.kinds.forFileName(path.basename(reference.path))) continue
-      const stat = await fsp.stat(reference.path).catch(() => null)
+      const key = pathKey(style, reference.path) ?? reference.path
+      if (mapping.has(key) || this.options.kinds.forFileName(path.basename(reference.path))) continue
+      const parsed = parseAbsolutePath(style, reference.path)
+      const stat = parsed ? await fsp.stat(reference.path).catch(() => null) : null
       if (!stat?.isFile()) {
         if (!stat && !missingPaths.includes(reference.path)) missingPaths.push(reference.path)
         continue
       }
-      const parsed = parseAbsolutePath(style, reference.path)
       const inside = parsed ? relativeSegments(style, root, parsed) : null
       if (inside?.length) {
         if (!options.includeContainerFiles) continue

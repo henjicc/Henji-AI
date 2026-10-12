@@ -26,6 +26,24 @@ function winContext(container: LocationContext['container']): LocationContext {
 }
 
 describe('路径语法', () => {
+  it('两种平台都将 POSIX 与 Windows 绝对路径识别为引用，异平台写法原样保留', () => {
+    const contexts: LocationContext[] = [
+      { style: 'win32', userRoot: 'D:\\作品', projects: [] },
+      { style: 'posix', userRoot: '/作品', projects: [] },
+    ]
+    const paths = ['/persistence-project/导出/黄金.mp4', 'E:\\外部\\素材.mp4']
+    for (const context of contexts) {
+      const codec = createLocationCodec(context)
+      for (const value of paths) {
+        expect(codec.encode(value)).toEqual({ stored: value, reference: { path: value, scope: 'external' } })
+        expect(codec.decode(value)).toEqual({ value, reference: { path: value, scope: 'external' } })
+      }
+      for (const value of ['素材/a.mp4', 'E:素材.mp4', '../a.mp4']) {
+        expect(codec.decode(value)).toEqual({ value })
+      }
+    }
+  })
+
   it('Windows 盘符、网络路径、两种分隔符与长路径前缀都能识别，盘符相对路径与设备路径不算', () => {
     expect(parseAbsolutePath('win32', 'D:/a\\b')).toEqual({ root: 'D:', segments: ['a', 'b'] })
     expect(parseAbsolutePath('win32', '\\\\server\\share\\a')).toEqual({ root: '\\\\server\\share', segments: ['a'] })

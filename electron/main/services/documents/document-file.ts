@@ -14,7 +14,7 @@ import {
 import type { DocumentKindDescriptor, DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { documentNameFromFileName } from '../../../../src/core/documents/naming'
 import type { DocumentListSummary, DocumentMeta } from '../../../../src/core/documents/types'
-import { createLocationCodec, type LocationReport } from '../../../../src/core/storage/locationCodec'
+import { createLocationCodec, type LocationContext, type LocationReport } from '../../../../src/core/storage/locationCodec'
 import type { IndexedDocument } from './catalog'
 import { DocumentNotFoundError, DocumentUnsupportedError, errorCode } from './errors'
 import type { PackageAdapterRegistry } from './package-adapters'
@@ -191,12 +191,22 @@ export function decodeDocumentContent(
   try {
     const upgraded = upgradePersistenceContent(documentPersistenceContract(file.kind), content, file.envelope.kindVersion, file.backupPath)
     if (migrating) logger.info('文档内容升级完成，等待首次保存', { event: 'documents.upgrade.completed', context: { format: file.kind.id, fromVersion: file.envelope.kindVersion, toVersion: file.kind.version, backupPath: file.backupPath } })
-    return { content: upgraded, report }
+    return { content: upgraded, report: file.kind.dependencyContent
+      ? codec.decodeContent(file.kind.dependencyContent(upgraded)).report
+      : report }
   } catch (error) {
     const failure = error instanceof PersistenceError ? error : null
     logger.warn('文档格式读取失败', { event: migrating ? 'documents.upgrade.failed' : 'documents.decode.failed', context: { format: failure?.formatId, fromVersion: failure?.fromVersion, toVersion: failure?.toVersion, fields: failure?.fields, backupPath: failure?.backupPath }, error })
     throw error
   }
+}
+
+/** 位置编码保留全部记录；依赖报告只用于检查和搬运实际输入资源。 */
+export function encodeDocumentContent(kind: DocumentKindDescriptor, content: unknown, context: LocationContext): { content: unknown; report: LocationReport } {
+  const codec = createLocationCodec(context)
+  const encoded = codec.encodeContent(content)
+  if (kind.dependencyContent) encoded.report = codec.encodeContent(kind.dependencyContent(content)).report
+  return encoded
 }
 
 export function metaFromFile(file: LoadedDocumentFile, container: ResolvedContainer): DocumentMeta {
