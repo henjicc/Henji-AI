@@ -102,9 +102,14 @@ jobs:
           npm run check:dead-code
 
       - name: 类型检查（渲染层）
+        # 渲染层类型图较大，默认堆上限在 CI 上会 OOM。
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npx tsc -p tsconfig.json --noEmit
 
       - name: 类型检查（主进程）
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npx tsc -p tsconfig.electron.json --noEmit
 
       - name: 持久格式兼容门禁
