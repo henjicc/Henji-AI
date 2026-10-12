@@ -12,6 +12,7 @@ import { getAiProviderApiKey } from '../keystore'
 import { sdkRuntimeContext } from '../ai-runtime/sdk-runtime'
 import { createMainLogger } from '../logging'
 import { scopedUploadFile } from '../ai-runtime/native-file-upload'
+import { assertElectronHostCapabilities } from '../ai-runtime/host-capabilities'
 import type { TranscriptionPreflight } from '../../../../src/core/audioEdit/transcriptionFailure'
 
 const logger = createMainLogger('main.audio_edit.asr')
@@ -54,8 +55,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
     client,
     async preflight(input) {
       const selected = resolveTimestampedLocalAsr(isConfigured, input.modelId)
-      const preset = bailianNonRealtimeAsrPresets.find(value => value.descriptor.id === selected.descriptor.id)
-      if (preset?.asyncInputField && !runtime.transport.uploadFile) throw new Error('native_upload_unsupported：宿主未提供本地文件直传；未提交识别、未计费。')
+      assertElectronHostCapabilities(runtime, ['file-asr'])
       await checkMedia(input.sourcePath)
       return { modelId: selected.descriptor.id, cost: estimateAsrCost(selected.descriptor.id, input.durationMs) }
     },
@@ -88,6 +88,8 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
       const entry = ASR_CATALOG.find((entry) => entry.descriptor.id === plan.modelId)
       if (!entry || !isTimestampedLocalAsr(entry) || asrProviderId(entry) !== plan.providerId || !isConfigured(plan.providerId)) throw new Error('ASR_MODEL_UNAVAILABLE')
       if (context.resumeTaskId && !client.get(plan.modelId)?.descriptor.features?.includes('resume-task')) throw new Error('ASR_RESUME_UNSUPPORTED：此模型无法恢复查询，禁止重复提交。')
+      // Callers may bypass planning. Resuming an already paid task needs no new upload or not-charged claim.
+      if (!context.resumeTaskId) assertElectronHostCapabilities(runtime, ['file-asr'])
       logger.info('带时间转写开始', { event: 'audio_edit.timestamped_asr.start', requestId: context.requestId, modelId: plan.modelId, context: { costStatus: plan.cost.status } })
       try {
         const output = await client.execute<unknown, SpeechRecognitionOutput, SpeechRecognitionEvent>(plan.modelId, {

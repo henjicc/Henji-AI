@@ -9,10 +9,15 @@ vi.mock('./network-transport', () => ({ createDiagnosticTransport: vi.fn(() => (
 vi.mock('../../protocol', () => ({ isPathWithinAllowedMediaRoots: () => true }))
 
 import { electronMediaReader } from './sdk-runtime'
+import { sdkRuntimeContext } from './sdk-runtime'
+import { inspectElectronHostCapabilities } from './host-capabilities'
 
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
 
 describe('Electron SDK media reader', () => {
+  it('actual assembled runtime provides every enabled host hook without invoking adapters', () => {
+    expect(inspectElectronHostCapabilities(sdkRuntimeContext)).toEqual({ missing: [], affectedCapabilities: [] })
+  })
   it('本地 reader 异步读取并保持公共 DTO 的字节、MIME 和文件名', async () => {
     const bytes = Buffer.from([0, 255, 128, 1])
     const read = vi.spyOn(fs.promises, 'readFile').mockResolvedValue(bytes)

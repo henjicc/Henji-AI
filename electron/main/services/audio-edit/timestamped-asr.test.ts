@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeContext, SpeechRecognitionEvent } from '@henjicc/ai-sdk'
+import { noopLogger, noopTracer } from '@henjicc/ai-sdk'
+import { createNativeStreamFetch } from '../ai-runtime/native-stream-fetch'
 
 vi.mock('../keystore', () => ({ getAiProviderApiKey: () => undefined }))
 vi.mock('../ai-runtime/native-file-upload', () => ({ scopedUploadFile: vi.fn(async (ref: string) => ref) }))
@@ -16,8 +18,12 @@ function fixture(directory: string, name: string): unknown {
 }
 function json(value: unknown): Response { return new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }) }
 function runtime(fetch: RuntimeContext['transport']['fetch']): RuntimeContext {
-  return { transport: { fetch }, credentials: { get: () => 'fixture-key' },
-    media: { read: async () => ({ bytes: new Uint8Array([82, 73, 70, 70]), mimeType: 'audio/wav', filename: 'fixture.wav' }) } }
+  const bytes = new Uint8Array([82, 73, 70, 70])
+  return { transport: { fetch, fetchStream: createNativeStreamFetch(fetch), uploadFile: vi.fn() }, credentials: { get: () => 'fixture-key' },
+    logger: noopLogger, tracer: noopTracer,
+    media: { read: async () => ({ bytes, mimeType: 'audio/wav', filename: 'fixture.wav' }),
+      describe: async () => ({ size: bytes.length, mimeType: 'audio/wav', filename: 'fixture.wav' }),
+      readChunk: async (_ref, offset, length) => bytes.subarray(offset, offset + length) } }
 }
 const context = (): { requestId: string; signal: AbortSignal } => ({ requestId: 'fixture-transcription', signal: new AbortController().signal })
 
@@ -27,7 +33,12 @@ describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
     const media = vi.fn().mockRejectedValue(new Error('unreadable'))
     const input = { sourcePath: 'voice.wav', durationMs: 1000, modelId: 'bailian.speech-recognition.fun-asr' }
     await expect(createTimestampedAsrService(runtime(fetch), () => false, media).preflight(input)).rejects.toThrow('ASR_MODEL_UNAVAILABLE')
-    await expect(createTimestampedAsrService(runtime(fetch), () => true, media).preflight(input)).rejects.toThrow('宿主未提供本地文件直传')
+    const partial = runtime(fetch); delete partial.transport.uploadFile
+    const unsupported = createTimestampedAsrService(partial, () => true, media)
+    await expect(unsupported.preflight(input)).rejects.toMatchObject({ code: 'host_capability_unsupported', details: { missing: ['transport.uploadFile'], billing: 'not_charged' } })
+    await expect(unsupported.execute(unsupported.prepare({ modelId: input.modelId, audioPath: input.sourcePath, durationMs: input.durationMs }), context())).rejects.toMatchObject({ code: 'host_capability_unsupported', details: { billing: 'not_charged' } })
+    delete partial.transport.fetchStream
+    await expect(createTimestampedAsrService(partial, () => true, media).preflight({ ...input, modelId: 'groq.speech-recognition.whisper-large-v3-turbo' })).rejects.toMatchObject({ code: 'host_capability_unsupported' })
     const rt = runtime(fetch); rt.transport.uploadFile = vi.fn()
     await expect(createTimestampedAsrService(rt, () => true, media).preflight(input)).rejects.toThrow('unreadable')
     media.mockResolvedValue('voice.wav')
@@ -36,7 +47,7 @@ describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
   })
   it('Groq 字段构造 fixture 的秒由 SDK 变为毫秒，明确同时请求 word+segment', async () => {
     const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
-      const form = init?.body as FormData
+      const form = await new Request(_url, init).formData()
       expect(form.getAll('timestamp_granularities[]')).toEqual(['word', 'segment'])
       expect(form.get('response_format')).toBe('verbose_json')
       return json(fixture('groq-asr', 'transcription-verbose.json'))
