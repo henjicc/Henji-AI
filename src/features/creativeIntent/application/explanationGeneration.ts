@@ -1,3 +1,5 @@
+import { prepareExplanationPaidApproval } from '@/services/paidApproval'
+import { paidApprovalMessage } from '@/core/application-control/paidApproval'
 import type { ApplicationRef } from '@/core/application-control'
 import type { ExplanationSession } from '@/core/creativeIntent/schema'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
@@ -7,8 +9,9 @@ import { getPlatform } from '@/platform/runtime'
 import type { EmbeddedIntentRequest } from '@/core/assistant/embeddedAgent'
 
 export interface ExplanationSendRequest {
-  modelName: string; imageCount: number; estimatedCost?: string
-  confirm(remember: boolean): Promise<void>
+  modelName: string; imageCount: number; costMessage: string; hasProject: boolean
+  cancel(): Promise<void>
+  confirm(project: boolean): Promise<void>
 }
 export interface ExplanationGenerationHost {
   documentRef: ApplicationRef
@@ -21,11 +24,12 @@ export interface ExplanationGenerationHost {
 export interface PreparedExplanationGeneration {
   request?: ExplanationSendRequest
   run(local: () => Promise<void>): Promise<void>
+  cancel(): Promise<void>
 }
 /** Preflight never sends private data; the official Pi reads it through the authorized public tools. */
 export async function prepareExplanationGeneration(host: ExplanationGenerationHost): Promise<PreparedExplanationGeneration> {
   const session = host.session()
-  const local: PreparedExplanationGeneration = { run: work => work() }
+  const local: PreparedExplanationGeneration = { run: work => work(), cancel: async () => {} }
   if (!session?.pages.some(page => page.kind === 'transcript')) return local
   const platform = getPlatform().embeddedAgent
   const model = (await platform.models())[0]
@@ -43,24 +47,28 @@ export async function prepareExplanationGeneration(host: ExplanationGenerationHo
     return current
   }
   assertCurrent()
-  let authorized = !!session.consent?.textUpload && (!imageCount || !!session.consent.imageUpload)
-  let remember = authorized, consumed = false, confirmed = false
+  const paid = await prepareExplanationPaidApproval(host.documentRef)
+  let authorized = paid.decision.decision === 'auto'
+  let consumed = false, started = false
+  const cancel = async () => { if (!consumed) { consumed = true; await paid.reject() } }
+  try { assertCurrent() } catch (error) { await cancel(); throw error }
   const request: ExplanationSendRequest | undefined = authorized ? undefined : {
-    modelName: model.name, imageCount,
-    confirm: async value => {
+    modelName: model.name, imageCount, costMessage: paidApprovalMessage(paid.decision), hasProject: !!paid.project,
+    cancel,
+    confirm: async project => {
       const current = assertCurrent()
       if (!current.consent) throw new Error('讲解授权信息缺失，请重新打开讲解。')
-      remember = value
-      confirmed = true; authorized = true
+      await paid.confirm(project)
+      authorized = true
     },
   }
-  return { request, run: async work => {
+  return { request, cancel, run: async work => {
     if (consumed) throw new Error('本次生成已执行，请重新整理。')
     if (!authorized) throw new Error('请先确认发送讲解。')
     consumed = true
     try {
       const approved = assertCurrent()
-      if (confirmed) {
+      {
         if (!approved.consent) throw new Error('讲解授权信息缺失，请重新打开讲解。')
         await host.consent({ ...approved.consent, textUpload: true, imageUpload: imageCount > 0, userReceiptRef: crypto.randomUUID() })
       }
@@ -76,6 +84,7 @@ export async function prepareExplanationGeneration(host: ExplanationGenerationHo
       if (!drafts.length) throw new Error('请先录制动作或摆放图层。')
       const creativeIntent: EmbeddedIntentRequest = { documentRef: host.documentRef as EmbeddedIntentRequest['documentRef'], sessionId: session.id,
         draftRefs: drafts.map(draft => ({ kind: `${domain}.intent_draft` as EmbeddedIntentRequest['draftRefs'][number]['kind'], id: `${host.documentRef.id}:${encodeURIComponent(draft.id)}` })) }
+      await paid.start(); started = true
       await new Promise<void>((resolve, reject) => {
         let started = false
         const release = platform.onSnapshot(state => {
@@ -85,9 +94,14 @@ export async function prepareExplanationGeneration(host: ExplanationGenerationHo
         void platform.prompt({ text: '根据指定讲解整理候选。完整读取讲解文字和必要画面，核对原稿后提交封闭语义计划。只生成候选，不应用作品，不修改其他内容。',
           context: JSON.stringify({ creativeIntent }), creativeIntent, model: { providerId: model.providerId, modelId: model.modelId }, access: 'write', clientMessageId: crypto.randomUUID() }).catch(error => { release(); reject(error) })
       })
+      await paid.complete()
+    } catch (error) {
+      if (started) await paid.failed()
+      else await paid.reject()
+      throw error
     } finally {
       const current = host.session()
-      if (!remember && current?.id === session.id && current.consent) await host.consent({ ...current.consent, textUpload: false, imageUpload: false })
+      if (current?.id === session.id && current.consent) await host.consent({ ...current.consent, textUpload: false, imageUpload: false })
     }
   } }
 }

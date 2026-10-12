@@ -6,7 +6,7 @@ import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
 import { createCanvasEditV3SessionReference } from '../imageEditV3/canvasEditV3Session'
 
 /** 当前节点关系优先于磁盘；历史引用只保活，不是当前预览的写入目标。 */
-export async function resolveCanvasImageEditDocumentProjection(documentId: string): Promise<ImageEditDocumentProjectionBindingV3 | undefined> {
+export async function findCanvasImageEditDocumentTarget(documentId: string) {
   const documentRef = `image-edit-v3:${documentId}` as const
   const projects = await readAllCanvasProjects()
   const targets = projects.flatMap((project) => project.nodes
@@ -15,9 +15,14 @@ export async function resolveCanvasImageEditDocumentProjection(documentId: strin
     .map((node) => ({ projectId: project.id, nodeId: node.id, session: node.data.imageEditSession! })))
   if (targets.length === 0) return undefined
   if (targets.length > 1) throw new Error('DOCUMENT_TARGET_CONFLICT：图片文档关联了多个画布节点，无法确定原保存目标')
-  const target = targets[0]
+  return targets[0]
+}
+
+export async function resolveCanvasImageEditDocumentProjection(documentId: string): Promise<ImageEditDocumentProjectionBindingV3 | undefined> {
+  const target = await findCanvasImageEditDocumentTarget(documentId)
+  if (!target) return undefined
   await getCanvasProjectInstance(target.projectId)
-  const confirmation = createMultiLayerDocumentPersistenceConfirmation({ ...target, documentRef })
+  const confirmation = createMultiLayerDocumentPersistenceConfirmation({ ...target, documentRef: `image-edit-v3:${documentId}` })
   return { projection: confirmation.projection,
     confirmProjection: (reference) => confirmation.confirm(createCanvasEditV3SessionReference(target.session.sourceUrl, reference)) }
 }

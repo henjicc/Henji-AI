@@ -21,7 +21,6 @@
     "title": "Provider key not configured",
     "message": "You haven't configured a provider key yet. Configure one before generating."
   },
-
   "confirm": "Confirm",
   "cancel": "Cancel",
   "save": "Save",
@@ -37,7 +36,6 @@
   "info": "Info",
   "on": "On",
   "off": "Off",
-
   "status": {
     "queued": "Queued",
     "processing": "Processing",
@@ -45,7 +43,6 @@
     "failed": "Failed",
     "timeout": "Timeout"
   },
-
   "actions": {
     "retry": "Retry",
     "download": "Download",
@@ -55,5 +52,10 @@
     "reset": "Reset",
     "apply": "Apply",
     "preview": "Preview"
+  },
+  "paidApproval": {
+    "allowOnce": "Allow once",
+    "alwaysAllowProject": "Always allow in this project",
+    "deny": "Deny"
   }
 }

@@ -1,3 +1,4 @@
+import { applicationPaidRequest } from '@/services/paidApproval'
 import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
 import type { SpeechTimings } from '@/core/media/speechTimings'
 import type { AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
@@ -50,7 +51,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
       if (!audio?.document.transcript.length) {
         const source = audio?.document.source ?? await platform.audioEdit.probeSource(media.path)
         const prepared = await platform.audioEdit.preflightTranscription({ sourcePath: media.path, durationMs: source.durationFrames * 1000 / source.sampleRate, modelId: options.modelId, language: options.language, audioDocumentId })
-        const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ title: '识别声音并对齐原文', message: '这段声音没有原生时间戳。将使用已配置的语音识别模型获取时间；本次暂无法可靠预估金额，确认后按所用模型计费。字幕文字仍以原文为准。是否继续？', type: 'warning', confirmLabel: '确认识别费用' }, signal)
+        const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ paid: await applicationPaidRequest('recognition', projectId, signal), title: '识别声音并对齐原文', message: '这段声音没有原生时间戳。将使用已配置的语音识别模型获取时间；本次暂无法可靠预估金额，确认后按所用模型计费。字幕文字仍以原文为准。是否继续？', type: 'warning', confirmLabel: '确认识别费用' }, signal)
         if (!accepted) throw new ApplicationPreflightFailure('已取消识别，未生成字幕。')
         assertTarget()
         audio ??= await createAudioEditDraft(source, owner.session.documentMeta.container)

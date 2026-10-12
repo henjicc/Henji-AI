@@ -1,3 +1,5 @@
+import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
+import { applicationPaidRequest } from '@/services/paidApproval'
 import { z } from 'zod'
 import { llmChatStream, llmCancelTask } from '@/commands/llmRuntime'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
@@ -28,6 +30,7 @@ export async function generateTitleFromDescription(projectId: string, sequenceId
     const model = config.models.find(value => value.enabled && value.capabilities.text && (!options.modelId || value.modelId === options.modelId) && (!options.providerId || value.providerId === options.providerId) && config.providers.some(provider => provider.enabled && provider.providerId === value.providerId))
     const provider = config.providers.find(value => value.providerId === model?.providerId)
     if (!provider || !model) throw new Error('请在设置中配置并启用文本模型。')
+    if (hasApplicationConfirmation(signal)) await requestAlertConfirmation({ title: '描述生成标题', message: '将描述发给已配置的文本模型，按模型计费。生成结果放入当前序列，可一步撤销。', confirmLabel: '允许本次', paid: await applicationPaidRequest('title', projectId, signal) }, signal)
     let output = ''; let completed = false; let failure = ''
     started = true
     await llmChatStream({ requestId, providerId: provider.providerId, providerFamilyId: provider.providerFamilyId, endpointProfile: provider.endpointProfile, credentialId: provider.credentialId, modelId: model.modelId, adapter: model.adapter || provider.adapter, baseUrl: model.baseUrl ?? provider.baseUrl, reasoning: provider.reasoning, capabilities: model.capabilities,
@@ -53,7 +56,7 @@ export async function generateTitleFromDescription(projectId: string, sequenceId
 }
 export async function confirmTitleFromDescription(projectId: string, sequenceId: string, options: TitleDescriptionOptions, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(projectId); const placement = options.placement ?? { frame: owner.frame }
-  const accepted = await requestAlertConfirmation({ title: '描述生成标题', message: '将描述发给已配置的文本模型，按模型计费。生成结果放入当前序列，可一步撤销。', type: 'warning', confirmLabel: '确认生成' }, signal)
+  const accepted = hasApplicationConfirmation(signal) || await requestAlertConfirmation({ title: '描述生成标题', message: '将描述发给已配置的文本模型，按模型计费。生成结果放入当前序列，可一步撤销。', type: 'warning', confirmLabel: '确认生成' }, signal)
   signal?.throwIfAborted(); if (!accepted) return
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，请重新生成。')
   await generateTitleFromDescription(projectId, sequenceId, { ...options, placement }, signal)

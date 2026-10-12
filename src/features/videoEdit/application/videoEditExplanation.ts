@@ -83,7 +83,7 @@ function bindCapture(owner: VideoEditInstance, runtime: Runtime): void {
     const sequence = picture?.composition
     state.collector.presented(now(state), { timeline: sequence && picture ? { sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }, frame: picture.frame, fps: sequence.frameRate } : null, requestedFrame: owner.frame, playing: owner.playing, direction: owner.playing ? owner.playbackDirection : 0, rate: owner.playbackRate ?? 1, scrubbing: !!owner.scrubbing }, owner.scrubbing ? 'scrub' : owner.playing ? 'play' : 'pause')
   })
-  const close = registerVideoEditClosePreparation(owner, async () => { if (!state.microphone) state.controller.abort(); await stopVideoExplanation(id); state.controller.abort(); await clearTemporaryVideoExplanationAudio(id); runtime.release() })
+  const close = registerVideoEditClosePreparation(owner, async () => { await runtime.generation?.cancel(); runtime.generation = undefined; if (!state.microphone) state.controller.abort(); await stopVideoExplanation(id); state.controller.abort(); await clearTemporaryVideoExplanationAudio(id); runtime.release() })
   runtime.timer = setInterval(() => {
     if (state.collector.session.state !== 'recording') return
     state.elapsedUs = now(state); publish()
@@ -412,6 +412,7 @@ export async function prepareVideoExplanationGeneration(id: string): Promise<Exp
   const owner = requireVideoEditInstance(id), runtime = states.get(owner)
   if (!runtime) return undefined
   const state = runtime.state
+  await runtime.generation?.cancel()
   runtime.generation = await prepareExplanationGeneration({ documentRef: { kind: 'video_edit.document', id },
     session: () => videoExplanationState(owner)?.collector.session,
     drafts: () => head(owner).drafts,
@@ -559,6 +560,7 @@ export async function eraseVideoExplanation(id: string): Promise<void> {
   await saveVideoEdit(id)
   await getPlatform().audioEdit.recording.erase(sessionId)
   for (const path of runtime.erasePaths) { await getPlatform().system.fs.remove(path); runtime.erasePaths.delete(path) }
+  await runtime.generation?.cancel(); runtime.generation = undefined
   runtime.releaseBody?.(); runtime.release(); states.delete(owner); publish(); logger.info('私密讲解已删除', { event: 'explanation.erase.completed', context: { documentId: id } })
 }
 function recordCommand(owner: VideoEditInstance, fact: VideoEditCommandFact): void {

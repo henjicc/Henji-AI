@@ -1,3 +1,5 @@
+import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
+import { applicationPaidRequest } from '@/services/paidApproval'
 import { z } from 'zod'
 import { llmChatStream, llmCancelTask } from '@/commands/llmRuntime'
 import { createLogger } from '@/core/logging'
@@ -46,6 +48,7 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
     const model = config.models.find(model => model.enabled && model.capabilities.text && (!options.modelId || model.modelId === options.modelId) && (!options.providerId || model.providerId === options.providerId) && config.providers.some(provider => provider.enabled && provider.providerId === model.providerId))
     const provider = config.providers.find(provider => provider.providerId === model?.providerId)
     if (!model || !provider) throw new Error('请在设置中配置并启用可用的文本模型。')
+    if (hasApplicationConfirmation(signal)) await requestAlertConfirmation({ title: '生成双语字幕', message: '将字幕原文发给已配置的文本模型生成第二语言，重新生成会替换现有译文，可一步撤销。', confirmLabel: '允许本次', paid: await applicationPaidRequest('translation', projectId, signal) }, signal)
     const translations = new Map<string, string>()
     for (let offset = 0; offset < captions.length; offset += 12) {
       assertTarget()
@@ -89,7 +92,7 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
 /** Manual operation uses the same confirmation component as transcription; capability approval remains R2. */
 export async function confirmVideoEditBilingualSubtitles(projectId: string, sequenceId: string, options: SubtitleTranslationOptions, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(projectId)
-  const accepted = await requestAlertConfirmation({ title: '生成双语字幕', message: '将字幕原文发给已配置的文本模型生成第二语言，按模型计费。重新生成会替换现有译文，可一步撤销。是否继续？', type: 'warning', confirmLabel: '确认翻译' }, signal)
+  const accepted = hasApplicationConfirmation(signal) || await requestAlertConfirmation({ title: '生成双语字幕', message: '将字幕原文发给已配置的文本模型生成第二语言，按模型计费。重新生成会替换现有译文，可一步撤销。是否继续？', type: 'warning', confirmLabel: '确认翻译' }, signal)
   signal?.throwIfAborted()
   if (!accepted) return
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑会话已关闭，请重新生成。')

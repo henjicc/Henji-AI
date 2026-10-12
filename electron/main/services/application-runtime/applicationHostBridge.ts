@@ -7,9 +7,11 @@ import type { HostContextSnapshot } from '../../../../src/core/application-contr
 import { externalWritableEntityTypes, type LocalDomainSurface, type LocalHostRegistration, type LocalHostRegistrationInput, type LocalHostReply, type LocalHostRequest, type LocalTool } from '../../../../src/core/application-control/localHostContracts'
 import type { ApplicationOperationCoordinator } from './operationCoordinator'
 import type { OperationRecord } from './operationStore'
+import { approvePaidOperation, handleUiPaidApproval } from './paidApprovalPolicy'
+import type { PaidApprovalDecision, PaidApprovalRequest } from '../../../../src/core/application-control/paidApproval'
 
 export interface LocalHostTransport { send(channel: string, payload: unknown): void }
-type Pending = { callerId: string; rendererEpoch: string; committed: boolean; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
+type Pending = { callerId: string; rendererEpoch: string; committed: boolean; allowPaid: boolean; paidRequest?: PaidApprovalRequest; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
 
 class ApplicationHostDisconnectedError extends Error {}
 
@@ -103,11 +105,29 @@ export class ApplicationHostBridge {
       }
     }
   }
-  complete(reply: LocalHostReply): void {
+  complete(reply: LocalHostReply): void | PaidApprovalDecision {
+    if (reply.uiPaidApproval) {
+      if (this.rendererEpoch !== reply.rendererEpoch || !this.operations) throw new Error('应用付费授权会话已结束。')
+      return handleUiPaidApproval(this.operations.store, reply)
+    }
     if (reply.progress) {
       const pending = this.pending.get(reply.requestId)
       if (!pending || pending.rendererEpoch !== reply.rendererEpoch || this.rendererEpoch !== reply.rendererEpoch) throw new Error('确认所属的应用会话已结束。')
       this.assertAuthorized(pending.callerId)
+      if (reply.progress.phase === 'paid_approval') {
+        const record = this.operations?.store.byRequest(reply.requestId, reply.rendererEpoch)
+        if (!record || !this.operations) throw new Error('付费操作账本不可用。')
+        const { request, consent } = reply.progress
+        if (consent && (record.state !== 'awaiting_user_confirmation' || !pending.paidRequest || JSON.stringify(pending.paidRequest) !== JSON.stringify(request))) throw new Error('付费确认与原请求不一致。')
+        if (consent && (!record.confirmation || record.confirmation.expiresAt <= Date.now())) throw new Error('付费确认已过期。')
+        if (!consent && record.state !== 'executing') throw new Error('付费操作当前不可执行。')
+        // Generation amounts come from the official preparation result in the main-process ledger.
+        const official = request.category === 'generation' && record.paidGenerationEstimate !== undefined
+          ? { ...request, estimatedCny: record.paidGenerationEstimate } : request
+        const decision = approvePaidOperation(this.operations.store, record, official, pending.allowPaid, consent)
+        pending.paidRequest = decision.decision === 'ask' && !consent ? request : undefined
+        return decision
+      }
       this.operations?.complete(reply)
       // Release the network/model waiter while retaining invocation ownership for revoke/disconnect.
       pending.cleanup()
@@ -169,13 +189,14 @@ export class ApplicationHostBridge {
       }
       const timer = setTimeout(cancel, Math.max(30_000, (BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.timeoutMs ?? 0) + 1_000))
       signal.addEventListener('abort', cancel, { once: true })
-      this.pending.set(requestId, { callerId, rendererEpoch: host.registration.rendererEpoch, committed: Boolean(options.operation), resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
+      this.pending.set(requestId, { callerId, rendererEpoch: host.registration.rendererEpoch, committed: Boolean(options.operation), allowPaid: options.allowPaid === true, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
       try {
         this.assertAuthorized(callerId)
         if (options.operation) this.operations?.dispatched(options.operation, requestId, host.registration.rendererEpoch)
         host.transport.send('application:host:request', { requestId, rendererEpoch: host.registration.rendererEpoch, callerId, capabilityId, input,
           allowWrites: options.allowWrites, allowDestructive: options.allowDestructive, allowPaid: options.allowPaid,
           operationId: options.operation ? applicationInvocationId(callerId, options.operation.operationId) : undefined, expectedRevisions: options.operation?.expectedRevisions,
+          paidGenerationEstimate: options.operation?.paidGenerationEstimate,
           recoveryVerification: options.operation?.recoveryVerification ?? options.recoveryVerification, recoveryOperation: options.operation?.recoveryOperation ?? options.recoveryOperation } satisfies LocalHostRequest)
       } catch (error) {
         this.operations?.interrupted(requestId, host.registration.rendererEpoch)

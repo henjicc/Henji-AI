@@ -17,6 +17,11 @@
  *   对象的先例。
  */
 export const PROTECTED_APPLICATION_SETTING_DEFINITIONS: Record<string, Record<string, unknown>> = {
+  'security.paid_approval': {
+    id: 'security.paid_approval', title: 'AI 付费授权',
+    description: '付费授权模式、额度和项目授权只能由用户在设置或确认弹窗中修改；允许助手修改会让付费调用方自行提升权限。可用 open_application_surface 打开智能助手设置，由用户调整。',
+    aliases: ['AI 付费', '自动通过额度', '每日上限', '项目授权'], target: { tab: 'assistant', sectionId: 'assistant-preferences' }, sensitive: true, writable: false,
+  },
   'security.provider_keys': {
     id: 'security.provider_keys', title: '服务密钥',
     description: '密钥明文一旦进入模型上下文就有泄露风险，助手只能查询各服务是否已配置，'

@@ -87,9 +87,10 @@ describe('settings application control adapter', () => {
     expect(getUpdateConfig().enabled).toBe(false)
   })
 
-  it('4.4：其余 5 项受保护设置仍不可写，理由是技术事实且不再提"models.visibility"/"updates.configuration"占位符', () => {
+  it('受保护设置不可写，付费授权不能由调用方自行提升权限', () => {
     const ids = Object.keys(PROTECTED_APPLICATION_SETTING_DEFINITIONS)
     expect(ids).toEqual([
+      'security.paid_approval',
       'security.provider_keys', 'storage.download_paths', 'storage.data_path',
       'downloads.quick_path', 'llm.configuration',
     ])
@@ -99,7 +100,7 @@ describe('settings application control adapter', () => {
       const description = String(definition.description)
       expect(description).toContain('open_application_surface')
       // 理由要落到技术事实（明文密钥 / OS 对话框不在渲染进程），不是含糊的"安全"表态。
-      expect(/明文|密钥|OS 文件|系统弹出|系统确认|系统选择器/.test(description)).toBe(true)
+      expect(/明文|密钥|OS 文件|系统弹出|系统确认|系统选择器|自行提升权限/.test(description)).toBe(true)
     }
   })
 })

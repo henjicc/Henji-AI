@@ -1,3 +1,6 @@
+import { requestAlertConfirmation } from '@/stores/alertDialogStore'
+import { applicationPaidRequest } from '@/services/paidApproval'
+import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { videoEditSubtitleManifestSchema } from '@/core/persistence/storedSchemas'
 import { SUBTITLE_MANIFEST_VERSION } from '@/core/persistence/preferenceSchemas'
@@ -15,7 +18,7 @@ import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/cor
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, videoEditTextMediaIdentity, type VideoEditTextTranscription } from '@/core/videoEdit/textTranscript'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit } from '@/features/audioEdit'
+import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit, preflightAudioEditTranscription } from '@/features/audioEdit'
 import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
 import { editVideoSequence, requireVideoEditInstance, videoEditDocumentOperations, saveVideoEdit, verifyVideoEditSaved, holdVideoEditActivity, type VideoEditInstance } from './videoEditService'
 
@@ -154,6 +157,9 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     cancel = () => { void platform.audioEdit.listTasks(audioDocumentId).then(tasks => Promise.all(tasks.filter(task => ['queued', 'running'].includes(task.state)).map(task => platform.audioEdit.cancelTask(task.requestId)))).catch(error => logger.warn('字幕转录取消请求失败', { event: 'video_edit.subtitle.cancel.failed', error })); void platform.audioEdit.cancelTask(requestId).catch(error => logger.warn('字幕取消失败', { event: 'video_edit.subtitle.cancel.failed', error })) }
     signal?.addEventListener('abort', cancel, { once: true })
     if (!audio.document.transcript.length) {
+      const prepared = await preflightAudioEditTranscription(audioDocumentId, modelId, language)
+      if (prepared.requiresConfirmation && hasApplicationConfirmation(signal)) await requestAlertConfirmation({ title: '转录并生成字幕', message: '使用已配置的语音模型转录声音并生成字幕。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', projectId, signal) }, signal)
+      await assertTarget()
       billing = 'unknown'
       await transcribeAudioEdit({ projectId: audioDocumentId, modelId, language, requestId })
       billing = 'completed'

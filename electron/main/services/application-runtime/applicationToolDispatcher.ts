@@ -142,7 +142,7 @@ export class ApplicationToolDispatcher {
                 this.connections.assertActive(callerId)
                 if (signal.aborted) throw new Error('操作已取消。')
                 reserveGenerationBudget(this.operations.store, operation, preparation)
-                logger.info('生成参数与费用检查通过', { event: 'application.generation_preflight.completed', requestId: operation.operationId, context: { estimatedCny: this.operations.store.get(operation.operationId, callerId)?.generationEstimate?.cny } })
+                logger.info('生成参数与费用检查通过', { event: 'application.generation_preflight.completed', requestId: operation.operationId, context: { estimatedCny: this.operations.store.get(operation.operationId, callerId)?.paidGenerationEstimate } })
               } catch (error) {
                 const message = error instanceof Error ? error.message : '生成准备失败。'
                 const code = /^(PROVIDER_(?:PRODUCT_NOT_ACTIVATED|MODEL_ACCESS_DENIED|INSUFFICIENT_BALANCE)):/.exec(message)?.[1] ?? 'GENERATION_PREFLIGHT_REJECTED'

@@ -125,7 +125,7 @@ it('clipRef 混用 prepare 的混音引用时给出可行动的字段修正，�
 })
 it('公共调用识别确认通过同一弹窗发布等待事实，拒绝为零执行', async () => {
   const controller = new AbortController()
-  const progress = vi.fn().mockResolvedValue(undefined)
+  const progress = vi.fn().mockImplementation(async progress => progress.phase === 'paid_approval' ? { decision: 'ask', reason: '每次询问', estimatedCny: null, dailySpentCny: 0 } : undefined)
   const unbind = bindApplicationConfirmation(controller.signal, progress)
   const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' }, controller.signal)
   const rejected = expect(pending).rejects.toThrow('未执行本次操作')
@@ -373,4 +373,19 @@ it('未设置样式的通用回读与schema一致，空字符串可恢复既有�
     expect(await app.change(ref, { 'video_edit.caption.style': '' })).toMatchObject({ ok: true })
     expect(sequence().captions![0].style).toBe('')
   } finally { app.dispose() }
+})
+
+it('AI 付费策略 auto 不弹窗直接识别，仍先做媒体预检并保存字幕', async () => {
+  vi.mocked(getPlatform().audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, channels: 1, durationFrames: 12000 })
+  const controller = new AbortController()
+  const progress = vi.fn().mockImplementation(async progress => progress.phase === 'paid_approval' ? { decision: 'auto', reason: '全部放行', estimatedCny: null, dailySpentCny: 0 } : undefined)
+  const unbind = bindApplicationConfirmation(controller.signal, progress)
+  try {
+    await generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' }, controller.signal)
+    expect(getPlatform().audioEdit.preflightTranscription).toHaveBeenCalled()
+    expect(getPlatform().audioEdit.transcribe).toHaveBeenCalledOnce()
+    expect(sequence().captions?.map(value => value.text).join('')).toBe('Hello')
+    expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+    expect(progress).not.toHaveBeenCalledWith(expect.objectContaining({ phase: 'awaiting_user_confirmation' }))
+  } finally { unbind() }
 })

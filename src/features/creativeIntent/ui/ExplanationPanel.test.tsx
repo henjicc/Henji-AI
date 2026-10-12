@@ -9,20 +9,19 @@ import { useExplanationHasRecorded, useExplanationTranscript } from './explanati
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: TranscriptEntry[]; itemContent: (index: number, value: TranscriptEntry) => React.ReactNode }) => <div data-testid="virtual-paragraphs">{data.map((entry, index) => <div key={entry.eventId}>{itemContent(index, entry)}</div>)}</div> }))
 afterEach(cleanup)
 afterEach(() => localStorage.clear())
-it('模型外发先确认；取消不生成，发送沿用复选选择且只执行一次', async () => {
+it('模型外发先确认；取消不生成，项目授权且只执行一次', async () => {
   const onGenerate = vi.fn(async () => {}), confirm = vi.fn(async () => {})
-  const prepareGeneration = vi.fn(async () => ({ modelName: '测试模型', imageCount: 3, confirm }))
+  const prepareGeneration = vi.fn(async () => ({ costMessage: '费用暂无法预估，按模型实际计费', hasProject: true, cancel: vi.fn(async () => {}), modelName: '测试模型', imageCount: 3, confirm }))
   render(<ExplanationPanel {...props({ onGenerate, prepareGeneration })} />)
   await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   await screen.findByRole('dialog', { name: '发送讲解给 AI？' })
-  expect(screen.getByText('将发送讲解文字和 3 张画面给 测试模型，费用以供应商为准。')).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: '取消' }))
+  expect(screen.getByText('将发送讲解文字和 3 张画面给 测试模型。')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '拒绝' }))
   expect(confirm).not.toHaveBeenCalled(); expect(onGenerate).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   await screen.findByRole('dialog', { name: '发送讲解给 AI？' })
-  fireEvent.click(screen.getByRole('checkbox'))
-  fireEvent.click(screen.getByRole('button', { name: '发送' })); fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  fireEvent.click(screen.getByRole('button', { name: '本项目始终允许' })); fireEvent.click(screen.getByRole('button', { name: '本项目始终允许' }))
   await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce())
   expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith(true)
 })
@@ -128,12 +127,12 @@ it('手动点选期间收起证据后，读回新绑定而不是段落预读缓�
 
 it('保存会话同意使审阅版本变化后仍执行生成，切换会话才作废', async () => {
   const onGenerate = vi.fn(async () => {}), onRead = async () => result
-  const prepareGeneration = vi.fn(async () => ({ modelName: '模型', imageCount: 1, confirm: async () => {
+  const prepareGeneration = vi.fn(async () => ({ costMessage: '费用暂无法预估，按模型实际计费', hasProject: true, cancel: vi.fn(async () => {}), modelName: '模型', imageCount: 1, confirm: async () => {
     view.rerender(<ExplanationPanel {...props({ onRead, onGenerate, prepareGeneration, contextKey: 'session:2', generationKey: 'session' })} />)
   } }))
   const view = render(<ExplanationPanel {...props({ onRead, onGenerate, prepareGeneration, contextKey: 'session:1', generationKey: 'session' })} />)
   await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
-  fireEvent.click(await screen.findByRole('button', { name: '发送' }))
+  fireEvent.click(await screen.findByRole('button', { name: '本项目始终允许' }))
   await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce())
 })

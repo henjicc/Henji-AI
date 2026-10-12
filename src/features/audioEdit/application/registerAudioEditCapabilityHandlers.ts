@@ -1,3 +1,6 @@
+import { requestAlertConfirmation } from '@/stores/alertDialogStore'
+import { applicationPaidRequest } from '@/services/paidApproval'
+import { preflightAudioEditTranscription } from './audioEditApplicationService'
 import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditOperationInput } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
 import { audioEditContentKey } from '@/core/audioEdit/baseline'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
@@ -65,7 +68,11 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'quick_process_audio_edit': Object.assign(result, await quickProcessAudioEdit(id, input.range, requestId)); result.message = `已压缩停顿并清理所选语气词，缩短 ${result.shortenedMs} 毫秒，可整批撤销。`; break
         case 'compress_audio_edit_silence': Object.assign(result, await compressAudioEditSilence(id, input.range, requestId)); result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
-        case 'transcribe_audio_edit': await transcribeAudioEdit({ projectId: id, modelId: input.modelId, requestId }); recognized = true; result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
+        case 'transcribe_audio_edit': {
+          const prepared = await preflightAudioEditTranscription(id, input.modelId)
+          if (prepared.requiresConfirmation) await requestAlertConfirmation({ title: '识别口播', message: '将使用已配置的语音识别模型转写这段声音。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', id, context.signal) }, context.signal)
+          await transcribeAudioEdit({ projectId: id, modelId: input.modelId, requestId }); recognized = true; result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
+        }
         case 'process_audio_edit_sound': await prepareAudioEditProcessing(id, requestId); result.message = '全长声音处理已完成。'; break
         case 'query_audio_edit_tasks': result.tasks = (await api.listTasks(id)).map(({ projectId, ...task }) => ({ ...task, documentId: projectId })); result.message = '已读取这份口播的处理任务。'; break
         case 'cancel_audio_edit_task': {

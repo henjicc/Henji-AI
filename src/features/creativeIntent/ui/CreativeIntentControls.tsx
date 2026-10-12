@@ -37,16 +37,16 @@ export type CreativeIntentControlsProps = SharedCreativeIntentControlsProps & (M
 export function CreativeIntentControls(props: CreativeIntentControlsProps): React.ReactElement {
   const [fidelity, setFidelity] = useState<number | null>(null); const pending = useRef<number | null>(null)
   const finishFidelity = (commit: boolean): void => { if (commit && pending.current !== null && pending.current !== props.fidelity) props.onFidelity(pending.current); pending.current = null; setFidelity(null) }
-  const [request, setRequest] = useState<{ key?: string; value: ExplanationSendRequest }>(), [rememberSend, setRememberSend] = useState(false), [generating, setGenerating] = useState(false)
+  const [request, setRequest] = useState<{ key?: string; value: ExplanationSendRequest }>(), [generating, setGenerating] = useState(false)
   const pendingGeneration = useRef(false), currentKey = useRef(props.contextKey); currentKey.current = props.contextKey
-  const optimize = (confirmation?: ExplanationSendRequest): void => {
+  const optimize = (confirmation?: ExplanationSendRequest, project = false): void => {
     if (pendingGeneration.current) return
     if (!props.prepareGeneration && !confirmation) { try { void Promise.resolve(props.onOptimize()).catch(error => props.onError?.(error)) } catch (error) { props.onError?.(error) } return }
     pendingGeneration.current = true; setGenerating(true)
     const key = props.contextKey
     void (async () => {
-      if (confirmation) await confirmation.confirm(rememberSend)
-      else { const prepared = await props.prepareGeneration?.(); if (currentKey.current !== key) return; if (prepared) { setRememberSend(false); setRequest({ key, value: prepared }); return } }
+      if (confirmation) await confirmation.confirm(project)
+      else { const prepared = await props.prepareGeneration?.(); if (currentKey.current !== key) { await prepared?.cancel(); return }; if (prepared) { setRequest({ key, value: prepared }); return } }
       if (currentKey.current !== key) return
       setRequest(undefined); await props.onOptimize()
     })().catch(error => props.onError?.(error)).finally(() => { pendingGeneration.current = false; setGenerating(false) })
@@ -109,6 +109,6 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
       {apply && !props.needsSave && <UiButton onClick={() => optimize()}>重新整理</UiButton>}
       <UiButton variant="primary" disabled={props.status === 'idle'} onClick={apply || props.needsSave ? props.onApply : () => optimize()}>{props.needsSave ? '重试保存' : apply ? '应用' : '整理'}</UiButton>
     </div>}
-    <ExplanationSendConfirmation request={request?.key === props.contextKey ? request?.value : undefined} generating={generating} rememberSend={rememberSend} setRememberSend={setRememberSend} onCancel={() => { if (!pendingGeneration.current) setRequest(undefined) }} onSend={() => { if (request?.key === props.contextKey) optimize(request?.value) }} />
+    <ExplanationSendConfirmation request={request?.key === props.contextKey ? request?.value : undefined} generating={generating} onCancel={() => { if (!pendingGeneration.current) { void request?.value.cancel().catch(props.onError); setRequest(undefined) } }} onSend={project => { if (request?.key === props.contextKey) optimize(request?.value, project) }} />
   </div>
 }

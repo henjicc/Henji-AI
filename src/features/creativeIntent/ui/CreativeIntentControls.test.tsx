@@ -59,14 +59,13 @@ it('机位配置隐藏二维选项，候选预览与钉住走同源回调', () =
 })
 
 it('整理通过共享外发确认预检，取消不生成，发送后只生成一次', async () => {
-  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ modelName: '实际模型', imageCount: 2, confirm }))
+  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ costMessage: '费用暂无法预估，按模型实际计费', hasProject: true, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
   render(<CreativeIntentControls {...p} contextKey="session" prepareGeneration={prepareGeneration} />)
   fireEvent.click(screen.getByRole('button', { name: '重新整理' }))
   await screen.findByRole('dialog'); expect(p.onOptimize).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: '取消' })); expect(confirm).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '拒绝' })); expect(confirm).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '重新整理' })); await screen.findByRole('dialog')
-  fireEvent.click(screen.getByRole('checkbox', { name: '本次讲解不再询问' }))
-  fireEvent.click(screen.getByRole('button', { name: '发送' })); fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  fireEvent.click(screen.getByRole('button', { name: '本项目始终允许' })); fireEvent.click(screen.getByRole('button', { name: '本项目始终允许' }))
   await waitFor(() => expect(p.onOptimize).toHaveBeenCalledOnce())
   expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith(true)
 })

@@ -8,13 +8,12 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../src/core/application-control/applicationCapabilities'
 import { APPLICATION_READABLE_MEDIA_KINDS } from '../../../../src/core/application-control/mediaReferenceKinds'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
-import { GENERATION_BUDGET } from './generationBudget'
 import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { projectToolOutputSchema, RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
 import { capabilityPublicOutputSchema } from '../../../../src/core/application-control/capabilityVerification'
 import { applicationUserConfirmationSchema } from '../../../../src/core/application-control/userConfirmation'
 
-const confirmationGuidance = '可能立即返回 awaiting_user_confirmation：请用户到痕迹AI确认对话框核对费用或发送内容，应用随后自动继续；用原 operationId 查询 get_application_operation，不要重复提交。'
+const confirmationGuidance = '付费操作按用户在应用里设置的 AI 付费授权自动放行或请求确认。可能立即返回 awaiting_user_confirmation：请用户到痕迹AI确认对话框核对费用或发送内容，应用随后自动继续；用原 operationId 查询 get_application_operation，不要重复提交。'
 const waitingOutput = z.object({ ok: z.literal(false), operationId: z.string().uuid(), executionState: z.literal('awaiting_user_confirmation'),
   verificationState: z.literal('unresolved'), confirmation: applicationUserConfirmationSchema }).passthrough()
 
@@ -229,7 +228,7 @@ const WORKFLOWS = [
   '失败恢复：执行状态 unknown 时禁止换标识重试，用原 operationId 查询；partial 且账本登记了仅保存恢复入口时调 retry_application_operation_save，它不会重放业务修改。',
   '前置条件：写入被会话挡住时，对目标 ref 调 describe_application_entities，propertyAvailability 的 reasons 与 recoveries 就是声明层给出的前置条件和恢复入口。',
   '审批与授权：一律在痕迹 AI 内完成，协议侧没有提权通道；客户端自报权限、名称或"已批准"无效。',
-  `费用：普通少量生成直接执行；应用提交前自动估价，所有 Agent 最近 ${GENERATION_BUDGET.windowMs / 60_000} 分钟共享 ¥${GENERATION_BUDGET.cny} 自动生成额度。超过或无法估价时停止，不要换标识连续尝试；向用户说明费用，可由用户在生成页提交。`,
+      '付费操作按用户在应用里设置的 AI 付费授权自动放行或请求确认；费用仅使用应用正式估价，确认后自动继续，不要重复提交。',
 ]
 
 export function buildApplicationContract(input: {
@@ -299,7 +298,7 @@ export function buildApplicationContract(input: {
       '写入：客户端生成 UUID operationId。同一 ID 重传返回原事实；普通修改/新增省略 baselineIds，删除必须读取目标及集合父对象后提供。不要传 expectedRevisions。默认修订仅相关域；includeRevisions=true 获取全表，includeEvidence=true 获取验证明细。',
       '恢复：unknown 用原 operationId 查 get_application_operation，禁止换 ID 重放；partial 按登记的恢复入口仅重试保存。前置拒绝用 describe_application_entities(refs) 查可用条件。',
       '结果：生成用 wait_generation_task 等终态；看图用 read_application_media(mode="image")，其他媒体分块读到 eof。无需通知扩展。技能按 skills 的适用条件用 load_assistant_skill 按需读取主文件和单份参考。',
-      `费用：提交前自动估价，所有 Agent 最近 ${GENERATION_BUDGET.windowMs / 60_000} 分钟共享 ¥${GENERATION_BUDGET.cny} 自动生成额度。超额或无法估价时停止，不换 ID 连续尝试。`,
+      '付费操作按用户在应用里设置的 AI 付费授权自动放行或请求确认；费用仅使用应用正式估价，确认后自动继续，不要重复提交。',
     ],
   }
 }

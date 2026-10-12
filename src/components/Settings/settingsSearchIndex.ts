@@ -110,6 +110,7 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     ['agentModels.advanced', ['超时', '重试', 'Token', 'timeout']],
   ]),
   ...rows('assistant-preferences', [
+    ['paidApproval.title', ['付费', '授权', '单次', '每日上限', '始终允许', 'auto', 'bypass', 'payment']],
     ['agentInstructions.label', ['指令', '偏好', '提示词', 'instructions']],
   ]),
   ...rows('assistant-mcp', [

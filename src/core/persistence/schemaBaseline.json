@@ -103,7 +103,7 @@
     },
     "setting-records": {
       "version": 19,
-      "fingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
+      "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
       "supportedFrom": 19
     },
     "asset-records": {
@@ -118,7 +118,7 @@
     },
     "sqlite": {
       "version": 19,
-      "fingerprint": "3badf4e1c3c9e514075b446ac33ff9f8d5f7e9a05e4082581030160efe1ac772",
+      "fingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
       "supportedFrom": 19
     },
     "preset-export": {
@@ -1249,6 +1249,24 @@
       "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
       "previousFingerprint": "18c5e5c3db7a828ad00b815dd386c5ba711ebd91b86bf439b3a5124c0e2e7f56",
       "fingerprint": "3badf4e1c3c9e514075b446ac33ff9f8d5f7e9a05e4082581030160efe1ac772",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T07:07:19.472Z",
+      "format": "setting-records",
+      "version": 19,
+      "reason": "t180 统一 AI 付费授权设置、项目授权及操作账本费用预留；开发期不兼容旧自动额度与确认格式",
+      "previousFingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
+      "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T07:07:19.473Z",
+      "format": "sqlite",
+      "version": 19,
+      "reason": "t180 统一 AI 付费授权设置、项目授权及操作账本费用预留；开发期不兼容旧自动额度与确认格式",
+      "previousFingerprint": "3badf4e1c3c9e514075b446ac33ff9f8d5f7e9a05e4082581030160efe1ac772",
+      "fingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
       "waivedFixtureVersions": []
     }
   ]
