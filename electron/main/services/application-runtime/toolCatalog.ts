@@ -11,6 +11,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 import { GENERATION_BUDGET } from './generationBudget'
 import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { projectToolOutputSchema, RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
+import { capabilityPublicOutputSchema } from '../../../../src/core/application-control/capabilityVerification'
 
 /**
  * 对外目录的唯一投影处。
@@ -41,9 +42,20 @@ export interface ProtocolToolSpec {
   readOnly: boolean
   description: string
   inputSchema: Record<string, unknown>
+  outputSchema?: Record<string, unknown>
   /** 需要操作账本才有意义的工具；账本不可用时整条不登记。 */
   requiresOperations?: boolean
 }
+
+const mediaMetadataShape = {
+  mimeType: z.string(), offset: z.number().int().nonnegative(), byteLength: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative(), eof: z.boolean(),
+}
+/** image 的字节进入 MCP content.image，structuredContent 只含元数据；chunk 保留原件 base64。 */
+const publicMediaOutputSchema = z.object({ ok: z.literal(true), data: z.union([
+  z.object({ ...mediaMetadataShape, mode: z.literal('image'), mimeType: z.literal('image/jpeg'), width: z.number().int().positive(), height: z.number().int().positive() }).strict(),
+  z.object({ ...mediaMetadataShape, base64: z.string() }).strict(),
+]) }).passthrough()
 
 export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
@@ -53,6 +65,7 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'read_application_media', tier: 'any', readOnly: true,
+    outputSchema: projectToolOutputSchema(z.toJSONSchema(publicMediaOutputSchema, { io: 'output' }), 'read_application_media'),
     description: '按稳定结果引用读取已落盘媒体。图片默认返回 image（MCP 标准图片，无需拼接 base64），默认长边 1280、JPEG 至多 100 KiB；maxEdge/maxBytes 可缩小查看预算。mode="chunk" 用于读取原件字节；音视频默认分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
     inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], description: '图片默认 image 直接查看；chunk 读取原件字节，音视频默认 chunk。' }, maxEdge: { type: 'integer', minimum: 1, maximum: 3840, default: 1280, description: '图片预览的长边像素上限。' }, maxBytes: { type: 'integer', minimum: 1024, maximum: 262144, default: 102400, description: 'JPEG 字节上限，自动降低质量或尺寸；不改原件。' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
   },
@@ -140,8 +153,8 @@ function capabilityTool(tool: LocalTool): Tool {
     name: tool.id, title: tool.title, description: tool.description + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
     inputSchema: { ...schema, properties: { ...schema.properties as Record<string, unknown>, ...resultDetailFields(tool.id) }, type: 'object' },
     ...(definition ? { outputSchema: projectToolOutputSchema(z.toJSONSchema(write
-      ? z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough() }).passthrough()
-      : z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough(),
+      ? z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough() }).passthrough()
+      : z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough(),
     { io: 'output' }), tool.id) as Tool['inputSchema'] } : {}),
     annotations: { readOnlyHint: !write, destructiveHint: tool.id === 'change_application_entities' || Boolean(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)?.destructive), openWorldHint: false },
   }
@@ -193,6 +206,7 @@ export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]
   for (const spec of PROTOCOL_TOOL_SPECS) {
     consider(spec.name, spec.tier, spec.requiresOperations === true, () => ({
       name: spec.name, description: spec.description, inputSchema: spec.inputSchema as Tool['inputSchema'],
+      ...(spec.outputSchema ? { outputSchema: spec.outputSchema as Tool['inputSchema'] } : {}),
       annotations: { readOnlyHint: spec.readOnly, ...(spec.readOnly ? { openWorldHint: false } : { destructiveHint: false }) },
     }))
   }
@@ -231,7 +245,7 @@ export function buildApplicationContract(input: {
       server: EXTERNAL_SERVER_INFO,
       protocolVersions: [...EXTERNAL_PROTOCOL_VERSIONS],
       sdkVersion: EXTERNAL_SDK_VERSION,
-      transport: input.callerKind === 'embedded' ? { kind: 'embedded', authorization: '助手对话中的操作权限', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen' },
+      transport: input.callerKind === 'embedded' ? { kind: 'embedded', authorization: '助手对话中的操作权限', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，宿主注册、断开或重连时发送 notifications/tools/list_changed，客户端重新 tools/list。授权范围调整须新建连接；撤销或到期关闭旧订阅，新连接重新发现。应用重启会关闭旧连接，重连后须重新订阅并读取目录。' },
       limits: EXTERNAL_LIMITS,
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeTimestampedTranscript } from './timestampedTranscript'
+import { normalizeTimestampedTranscript, audioEditTranscriptBlocks } from './timestampedTranscript'
 import { ASR_CATALOG, listTimestampedLocalAsr } from './asrCatalog'
 
 describe('带时间转写 DTO（synthetic-negative / 受控毫秒真值）', () => {
@@ -7,6 +7,7 @@ describe('带时间转写 DTO（synthetic-negative / 受控毫秒真值）', () 
     const output = normalizeTimestampedTranscript({ text: '你好', segments: [{ text: '你好', startMs: 100, endMs: 900,
       words: [{ text: '你', startMs: 120, endMs: 200 }, { text: '好', startMs: 600, endMs: 800 }] }] }, 1_000, 'character')
     expect(output).toMatchObject({ unit: 'ms', granularity: 'character', words: [{ text: '你', startMs: 120, endMs: 200, granularity: 'character' }, { text: '好', startMs: 600, endMs: 800 }] })
+    expect(audioEditTranscriptBlocks(output, 1000)).toMatchObject([{ text: '你', startFrame: 120, endFrame: 200, granularity: 'word' }, { text: '好', startFrame: 600, endFrame: 800, granularity: 'word' }])
   })
   it('句级与仅文本保持粗粒度和缺时间', () => {
     expect(normalizeTimestampedTranscript({ text: '句子', segments: [{ text: '句子', startMs: 0, endMs: 900 }] }, 1_000, 'word'))

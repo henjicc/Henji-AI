@@ -1,5 +1,23 @@
 import type { SpeechRecognitionOutput } from '@henjicc/ai-sdk'
 import type { AsrWordGranularity } from './asrCatalog'
+import type { AudioEditTranscriptBlock } from './types'
+
+/** Preserve precise character/word tokens as editable word blocks; incomplete tokens retain their whole segment. */
+export function audioEditTranscriptBlocks(output: TimestampedTranscript, sampleRate: number): AudioEditTranscriptBlock[] {
+  const blocks: AudioEditTranscriptBlock[] = []
+  for (const segment of output.segments) {
+    const words = segment.words ?? []
+    const precise = words.length > 0 && words.every(word => (word.granularity === 'word' || word.granularity === 'character') && word.timing === 'precise')
+    for (const part of precise ? words : [segment]) {
+      if (part.startMs === null || part.endMs === null) continue
+      const startFrame = Math.round(part.startMs * sampleRate / 1000)
+      const endFrame = Math.round(part.endMs * sampleRate / 1000)
+      if (endFrame <= startFrame) continue
+      blocks.push({ id: `transcript-${blocks.length}`, text: part.text, startFrame, endFrame, confidence: part.confidence, included: true, locked: false, granularity: precise ? 'word' : 'segment' })
+    }
+  }
+  return blocks
+}
 
 export interface TimestampedTranscriptPart {
   text: string

@@ -205,6 +205,11 @@
       "version": 1,
       "fingerprint": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee",
       "supportedFrom": 1
+    },
+    "generation-output-timings": {
+      "version": 1,
+      "fingerprint": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32",
+      "supportedFrom": 1
     }
   },
   "devBreaks": [
@@ -1198,6 +1203,15 @@
       "version": 2,
       "reason": "t164 标记类型区分普通 marker 与节拍 beat；补齐通用实体未设置时的合法默认读值。",
       "previousFingerprint": "01d4d62289e24849e04171e730fc2a54cd01233777e3b47727d51092a3d74cbe",
+      "fingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T04:30:22.553Z",
+      "format": "document.video_edit",
+      "version": 2,
+      "reason": "t177 原文字幕保留首尾空白和换行，移除 caption.text 的隐式 trim，仍拒绝纯空白；开发期语义变更，不迁移旧字幕。",
+      "previousFingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
       "fingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
       "waivedFixtureVersions": []
     }

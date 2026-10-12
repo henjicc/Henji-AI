@@ -5,6 +5,7 @@ import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, segmentVideo
 import { splitVideoEditRef } from './videoEditReflection'
 import { requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+import { generateClipSpeechSubtitles } from './videoEditSpeechSubtitles'
 
 export async function handleVideoEditSubtitleCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
   if (![prepareVideoEditSubtitleCapability.id, generateVideoEditSubtitleCapability.id, translateVideoEditSubtitleCapability.id, segmentVideoEditSubtitleCapability.id].includes(id)) return undefined
@@ -32,8 +33,16 @@ export async function handleVideoEditSubtitleCapability(id: string, raw: unknown
     return { documentRef: input.documentRef, captionRefs: ids.map(id => ({ kind: 'video_edit.caption', id: `${input.documentRef.id}:${id}` })), message: `已生成 ${ids.length} 条双语字幕。`, verified: await verifyAutoSubtitles(input.documentRef.id) }
   }
   const input = generateVideoEditSubtitleCapability.inputSchema.parse(raw)
+  if (!input.clipRef && (input.originalText !== undefined || input.timeSource === 'native')) throw new ApplicationPreflightFailure('原文或原生时间戳模式须指定音频片段 clipRef。')
   const sequenceId = child(input.documentRef.id, input.sequenceRef)
   const previous = new Set(requireVideoEditInstance(input.documentRef.id).document.sequences.find(sequence => sequence.id === sequenceId)?.captions?.map(caption => caption.id))
+  if (input.clipRef) {
+    const result = await generateClipSpeechSubtitles(input.documentRef.id, sequenceId, child(input.documentRef.id, input.clipRef), { ...input, audioDocumentId: input.audioDocumentRef?.id }, context.signal, context.requestId)
+    const captions = result.subtitles.map(value => ({ captionRef: { kind: 'video_edit.caption', id: `${input.documentRef.id}:${value.caption.id}` }, text: value.caption.text, startFrame: value.caption.start, endFrame: value.caption.start + value.caption.duration, startUs: value.startUs, endUs: value.endUs, confidence: value.confidence, estimated: value.estimated }))
+    const captionRefs = captions.map(value => value.captionRef)
+    return { documentRef: input.documentRef, ...(result.audioDocumentId ? { audioDocumentRef: { kind: 'audio_edit.document', id: result.audioDocumentId } } : {}), captionRefs, createdCaptionRefs: captionRefs, captions, timingSource: result.timingSource, message: `已按原文生成 ${captions.length} 段字幕。`, verified: await verifyAutoSubtitles(input.documentRef.id) }
+  }
+  if (!input.audioDocumentRef) throw new ApplicationPreflightFailure('请提供音频片段 clipRef 或已准备的 audioDocumentRef。')
   const ids = await generateVideoEditSubtitles(input.documentRef.id, sequenceId, input.audioDocumentRef.id, input.modelId, { maxCharacters: input.maxCharacters, maxLines: input.maxLines, pauseSeconds: input.pauseSeconds, minDurationSeconds: input.minDurationSeconds, language: input.language }, context.signal, context.requestId)
   const captionRefs = ids.map(id => ({ kind: 'video_edit.caption', id: `${input.documentRef.id}:${id}` }))
   return { documentRef: input.documentRef, audioDocumentRef: input.audioDocumentRef, captionRefs, createdCaptionRefs: captionRefs.filter((_ref, index) => !previous.has(ids[index])), message: `已生成 ${ids.length} 段字幕，可逐行校正或导出 SRT。`, verified: await verifyAutoSubtitles(input.documentRef.id) }

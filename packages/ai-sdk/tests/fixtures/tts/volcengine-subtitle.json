@@ -1,0 +1,14 @@
+{
+  "capturedAt": "2026-10-12",
+  "source": "https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh",
+  "provenance": "official-response-example",
+  "note": "官方响应示例，音频占位替换为 ID3 三字节；未发起生成。",
+  "response": {"code":0,"message":"OK","data":"SUQz","sentence":{"phonemes":[],"text":"你好，语音测试","words":[
+    {"confidence":0.89597625,"endTime":0.335,"startTime":0.195,"word":"你"},
+    {"confidence":0.9182152,"endTime":0.725,"startTime":0.335,"word":"好，"},
+    {"confidence":0.51327276,"endTime":1.025,"startTime":0.985,"word":"语"},
+    {"confidence":0.78543895,"endTime":1.205,"startTime":1.025,"word":"音"},
+    {"confidence":0.846961,"endTime":1.395,"startTime":1.205,"word":"测"},
+    {"confidence":0.96582335,"endTime":1.695,"startTime":1.395,"word":"试"}
+  ]},"usage":{"text_words":7}}
+}
