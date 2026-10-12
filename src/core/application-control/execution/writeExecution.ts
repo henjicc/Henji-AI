@@ -19,6 +19,7 @@ export class ApplicationWriteFailure extends Error {
 
 /** 每次调用独有，不能把“进入 handler”当作“已写入”，也不能从异常文案猜执行事实。 */
 export class ApplicationWriteExecution {
+  constructor(private readonly mutationReview = true) {}
   private started = false
   private completed = false
   private facts: ApplicationWriteFacts = { billing: 'not_charged', targetMutation: 'none' }
@@ -70,6 +71,8 @@ export class ApplicationWriteExecution {
   }
 
   failure(error: unknown): unknown {
+    // 导航即使改变了视图，也没有待核实的业务修改，不阻挡下一次打开。
+    if (!this.mutationReview) return new ApplicationWriteFailure(error, { billing: 'not_charged', targetMutation: 'none', notExecuted: true })
     // 事务引擎与保存协调器的结构化回执比本层阶段更精确，不覆盖或降为字符串。
     if (error instanceof ApplicationTransactionFailure || error instanceof ApplicationPersistenceFailure) {
       if (this.facts.billing !== 'not_charged' || this.facts.targetMutation !== 'none' || this.effects.length) {
@@ -96,16 +99,16 @@ export class ApplicationWriteExecution {
 const channels = new WeakSet<object>()
 
 /** 领域分阶段操作使用同一个包装；准备阶段不调用 run/paid，异常自动为零执行。 */
-export async function executeApplicationWrite<T>(work: (execution: ApplicationWriteExecution) => T | Promise<T>): Promise<T> {
-  const execution = new ApplicationWriteExecution()
+export async function executeApplicationWrite<T>(work: (execution: ApplicationWriteExecution) => T | Promise<T>, mutationReview = true): Promise<T> {
+  const execution = new ApplicationWriteExecution(mutationReview)
   try { return await work(execution) } catch (error) { throw execution.failure(error) }
 }
 
 /** 注册器只保存此工厂产出的写 handler；调用者拿不到未包装的 handler。 */
-export function applicationWriteChannel<TInput, TContext, TResult>(handler: (input: TInput, context: TContext & { execution: ApplicationWriteExecution }) => TResult | Promise<TResult>):
+export function applicationWriteChannel<TInput, TContext, TResult>(handler: (input: TInput, context: TContext & { execution: ApplicationWriteExecution }) => TResult | Promise<TResult>, mutationReview = true):
   (input: TInput, context: TContext) => Promise<TResult> {
   const wrapped = async (input: TInput, context: TContext): Promise<TResult> => {
-    return executeApplicationWrite(execution => execution.run(() => handler(input, { ...context, execution })))
+    return executeApplicationWrite(execution => execution.run(() => handler(input, { ...context, execution })), mutationReview)
   }
   channels.add(wrapped)
   return wrapped

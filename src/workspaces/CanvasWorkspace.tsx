@@ -1,3 +1,4 @@
+import { ApplicationOperationReviewBanner } from '@/features/application-control/ApplicationOperationReviewBanner'
 import { useCallback, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
@@ -54,11 +55,12 @@ const CanvasWorkspace = (): JSX.Element => {
 
   return (
     <ReactFlowProvider>
-      <div className="h-full min-h-0 w-full bg-window text-text1">
+      <div className="flex h-full min-h-0 w-full flex-col bg-window text-text1">
+        {currentProjectId && <ApplicationOperationReviewBanner documentId={currentProjectId} domain="canvas" label="画布" />}
         {!currentProjectId && !isOpeningProject && <CanvasLibrary />}
 
         {(currentProjectId || isOpeningProject) && (
-          <div className="relative h-full w-full bg-canvas" aria-busy={isOpeningProject}>
+          <div className="relative min-h-0 w-full flex-1 bg-canvas" aria-busy={isOpeningProject}>
             {/* 截封面期间隐藏自己：它悬在画布上，留着会被一起截进节点区域封面里 */}
             {!isLeavingProject && (
               /* 没有命令带的全屏工作面：返回入口浮在画布上，走随主题的玻璃（纸白下为浅色玻璃 + 深色字），

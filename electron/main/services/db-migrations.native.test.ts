@@ -139,6 +139,26 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
     } finally { db.close() }
   })
 
+  it('v19 核对迁到 v20 前备份，保留原执行事实并移除人工核对期限', () => {
+    const file = path.join(base, 'review-v19.db')
+    const db = new Database(file)
+    try {
+      runSchemaMigrations(db, SCHEMA_MIGRATIONS.filter(migration => migration.version <= 19))
+      const record = { operationId: 'old-review', callerId: 'caller', input: { summary: '修改主题' }, state: 'awaiting_user_confirmation',
+        confirmation: { purpose: 'review', title: '旧标题', message: '旧消息', confirmLabel: '核对', location: '主窗口', expiresAt: 100, continuation: '旧提示' },
+        result: { ok: false, error: { code: 'INTERRUPTED' } } }
+      db.prepare('INSERT INTO application_invocations(operation_id,caller_id,state,record_json,updated_at) VALUES(?,?,?,?,?)')
+        .run(record.operationId, record.callerId, record.state, JSON.stringify(record), 1)
+      const result = runSchemaMigrations(db, undefined, { backupDirectory: path.join(base, 'review-backups') })
+      expect(result.applied).toEqual([20])
+      expect(result.backupPath).toBeTruthy()
+      const saved = JSON.parse((db.prepare('SELECT record_json FROM application_invocations').get() as { record_json: string }).record_json)
+      expect(saved).toMatchObject({ input: record.input, result: record.result, state: record.state, confirmation: { expiresAt: null, purpose: 'review' } })
+      const copy = new Database(result.backupPath!, { readonly: true })
+      try { expect(JSON.parse((copy.prepare('SELECT record_json FROM application_invocations').get() as { record_json: string }).record_json)).toEqual(record) }
+      finally { copy.close() }
+    } finally { db.close() }
+  })
   it('全新库：全部迁移执行、不解析作品目录、不备份', () => {
     const db = new Database(path.join(base, 'fresh.db'))
     try {

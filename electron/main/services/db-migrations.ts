@@ -1,4 +1,5 @@
 import { SQLITE_SCHEMA_VERSION } from '../../../src/core/persistence/schemaVersions'
+import { migrateApplicationReviewsV20 } from './application-runtime/operationStore'
 import fs from 'node:fs'
 import path from 'node:path'
 import type Database from 'better-sqlite3'
@@ -90,7 +91,9 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   { version: 18, name: 'document_index_last_opened', up: addDocumentIndexLastOpenedV1 },
   // TEXT state/record_json need no DDL. Register the new durable confirmation state semantics
   // in the existing SQLite ledger; startup reconciliation owns interrupted invocations.
-  { version: SQLITE_SCHEMA_VERSION, name: 'application_operation_user_confirmation', up: () => {} },
+  { version: 19, name: 'application_operation_user_confirmation', up: () => {} },
+  { version: SQLITE_SCHEMA_VERSION, name: 'application_operation_persistent_review', up: migrateApplicationReviewsV20,
+    backupWhen: db => !!db.prepare("SELECT 1 FROM application_invocations WHERE json_extract(record_json, '$.confirmation.purpose') = 'review' LIMIT 1").get() },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

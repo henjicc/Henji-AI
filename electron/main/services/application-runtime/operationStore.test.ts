@@ -6,7 +6,7 @@ import { unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationOperationStore, createApplicationOperationTablesV1 } from './operationStore'
+import { ApplicationOperationStore, createApplicationOperationTablesV1, migrateApplicationReviewsV20 } from './operationStore'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
@@ -122,6 +122,36 @@ describe('应用原生操作记录与恢复', () => {
     bridge.complete({ ...original, result: { ok: true, data: { verification: { verified: true } } } })
     expect(await dispatcher.call(f.callerId, 'get_application_operation', { operationId: raw.operationId }, signal)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
   })
+  it('只读和打开类失败及重启永不记 unknown，也不阻挡下一次同目标操作', () => {
+    const f = fixture()
+    for (const capabilityId of ['read_application_entity', 'open_document', 'switch_workspace'] as const) {
+      const original = f.store.prepare({ operationId: randomUUID(), callerId: f.callerId, inputDigest: capabilityId, capabilityId,
+        input: {}, targetRefs: [{ kind: 'application.navigation', id: 'current' }], state: 'prepared' })
+      const requestId = randomUUID()
+      f.coordinator.dispatched(original, requestId, f.rendererEpoch)
+      f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: { ok: false, error: { code: 'APPLICATION_EXECUTION_FAILED' } } })
+      expect(f.store.get(original.operationId, f.callerId)?.state).toBe('not_executed')
+      f.store.save({ ...original, state: 'executing', requestId, rendererEpoch: f.rendererEpoch })
+      const coordinator = new ApplicationOperationCoordinator(f.store)
+      expect(f.store.get(original.operationId, f.callerId)?.state).toBe('not_executed')
+      expect(() => coordinator.prepare(f.callerId, { operationId: randomUUID(), documentId: 'video' }, f.rendererEpoch, access, 'open_document')).not.toThrow()
+    }
+  })
+  it('原领域读回证明自动结案；条件不符不猜未执行，结案后不请求人工核对', async () => {
+    const f = fixture(), show = vi.fn()
+    const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), show)
+    const original = coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    const record = { ...original, state: 'unknown' as const, rendererEpoch: f.rendererEpoch,
+      recoveryVerification: { conditions: [{ kind: 'entity_exists' as const, target: { kind: 'settings.registry', id: 'singleton' } }],
+        evidence: [{ kind: 'entity_state' as const, fact: '原执行器记录的事实', capturedAt: new Date().toISOString() }] } }
+    f.store.save(record)
+    await coordinator.reconcileVerification(record, async () => ({ ok: true, data: { verification: { verified: false } } }))
+    expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown')
+    await coordinator.reconcileVerification(record, async () => ({ ok: true, data: { verification: { verified: true } } }))
+    await coordinator.review(f.store.get(original.operationId, f.callerId)!, randomUUID(), async () => ({ ok: true }), () => undefined)
+    expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'completed', verificationState: 'verified' })
+    expect(show).not.toHaveBeenCalled()
+  })
   it('等待确认的重启为未执行；原 executing 重启保留 unknown 可人工核对', () => {
     const f = fixture()
     const waiting = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
@@ -135,19 +165,29 @@ describe('应用原生操作记录与恢复', () => {
     f.store.recoverInterrupted()
     expect(f.store.get(waiting.operationId, f.callerId)?.state).toBe('unknown')
     f.store.save({ ...dispatched, state: 'awaiting_user_confirmation', confirmation: { ...confirmation, purpose: 'review' } })
+    migrateApplicationReviewsV20(f.db)
     f.store.recoverInterrupted()
-    expect(f.store.get(waiting.operationId, f.callerId)?.state).toBe('unknown')
+    expect(f.store.get(waiting.operationId, f.callerId)).toMatchObject({ state: 'awaiting_user_confirmation', confirmation: { expiresAt: null } })
   })
-  it('人工核对立即返回等待状态，取消不能冒充原修改未执行', async () => {
+  it('应用内人工核对立即返回，三个按钮分别落账；稍后处理和重启均不丢失', async () => {
     const f = fixture()
-    let answer!: (value: 'not_executed' | undefined) => void
-    const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), () => new Promise(resolve => { answer = resolve }))
-    const original = coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
-    f.store.save({ ...original, state: 'unknown', rendererEpoch: f.rendererEpoch })
-    await coordinator.review(f.store.get(original.operationId, f.callerId)!, randomUUID(), async () => true, () => undefined)
-    expect(f.store.get(original.operationId, f.callerId)?.state).toBe('awaiting_user_confirmation')
-    answer(undefined)
-    await vi.waitFor(() => expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown'))
+    const show = vi.fn()
+    const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), show)
+    for (const decision of ['later', 'completed', 'not_executed'] as const) {
+      const original = { ...coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access), rendererEpoch: f.rendererEpoch, state: 'unknown' as const }
+      f.store.save(original)
+      await coordinator.review(original, randomUUID(), async () => ({ ok: false }), () => undefined)
+      expect(show).toHaveBeenLastCalledWith(expect.objectContaining({ title: '这次修改生效了吗？', message: expect.stringContaining('没能读取目标的当前情况。') }))
+      expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'awaiting_user_confirmation', confirmation: { expiresAt: null } })
+      coordinator.resolveReview(original.operationId, f.callerId, decision)
+      if (decision === 'later') {
+        f.store.recoverInterrupted()
+        expect(coordinator.pendingReviews()).toHaveLength(1)
+        expect(coordinator.result(f.store.get(original.operationId, f.callerId)!)).toMatchObject({ executionState: 'awaiting_user_confirmation', confirmation: { continuation: expect.stringContaining('用户已收到提示，可在应用中处理') } })
+        expect(() => coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+        coordinator.resolveReview(original.operationId, f.callerId, 'not_executed')
+      } else expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: decision, verificationState: 'verified' })
+    }
   })
   it('旧关闭剪辑前置拒绝自动核对，存在事务事实的同文案仍保留保护', () => {
     const f = fixture()
@@ -163,20 +203,18 @@ describe('应用原生操作记录与恢复', () => {
     const f = fixture(); const raw = input(f.baseline)
     const original = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
     f.coordinator.dispatched(original, randomUUID(), f.rendererEpoch)
-    const review = vi.fn<[], Promise<'not_executed' | undefined>>().mockResolvedValue(undefined)
+    const review = vi.fn()
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), review)
     const record = f.store.get(original.operationId, f.callerId)!
-    const read = vi.fn().mockResolvedValue(true)
+    const read = vi.fn().mockResolvedValue({ ok: true, data: {} })
     await expect(coordinator.review(record, f.rendererEpoch, read, () => undefined)).rejects.toThrow('RECOVERY_SESSION_ACTIVE')
     expect(review).not.toHaveBeenCalled()
     const nextEpoch = randomUUID()
-    await coordinator.review(record, nextEpoch, read, () => undefined)
-    await vi.waitFor(() => expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown'))
-    review.mockResolvedValue('not_executed')
     await expect(coordinator.review(record, nextEpoch, read, () => { throw new Error('权限已撤销') })).rejects.toThrow('权限已撤销')
     expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown')
     await coordinator.review(record, nextEpoch, read, () => undefined)
-    await vi.waitFor(() => expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' }))
+    coordinator.resolveReview(record.operationId, record.callerId, 'not_executed')
+    expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' })
     expect(read).toHaveBeenCalledWith({ kind: 'settings.registry', id: 'singleton' })
   })
   it('宿主重连时公开写入立即登记未执行和重试时间，不依赖尚未注册的领域', async () => {

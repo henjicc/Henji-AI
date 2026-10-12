@@ -1,3 +1,4 @@
+import { dialog } from 'electron'
 import { expect, it, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
 import type { OperationRecord } from './operationStore'
@@ -42,4 +43,16 @@ it('Pi 回合关闭后，已登记的等待操作仍能确认执行；终态释�
   client.close() // Closing an old handle twice cannot release a new turn's access.
   expect(await next.call('get_application_operation', { operationId: operation.operationId }, new AbortController().signal)).toMatchObject({ executionState: 'completed' })
   next.close(); host.disconnect()
+})
+
+it('人工核对只通知可信渲染宿主，不调用 Electron 系统对话框', async () => {
+  const { host, operations } = initializeApplicationRuntime()
+  const rendererEpoch = randomUUID(), send = vi.fn()
+  host.register({ rendererEpoch, attachmentSequence: 2, ready: true, tools: [], domains: [] }, { send })
+  const record: OperationRecord = { operationId: randomUUID(), callerId: randomUUID(), capabilityId: 'change_application_entities',
+    input: {}, inputDigest: 'review', state: 'unknown', rendererEpoch: randomUUID(), targetRefs: [{ kind: 'video_edit.document', id: 'document' }] }
+  operations.store.save(record)
+  await operations.review(record, rendererEpoch, async () => ({ ok: true, data: { properties: { 'video_edit.document.name': '主剪辑' } } }), () => undefined)
+  expect(send).toHaveBeenLastCalledWith('application:host:reviews', expect.objectContaining({ open: expect.objectContaining({ operationId: record.operationId }), items: expect.arrayContaining([expect.objectContaining({ title: '这次修改生效了吗？', message: expect.stringContaining('主剪辑') })]) }))
+  expect(dialog.showMessageBox).not.toHaveBeenCalled()
 })

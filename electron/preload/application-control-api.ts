@@ -8,6 +8,8 @@ export function createApplicationControlApi(invoke: <T>(channel: string, payload
     return () => { ipcRenderer.removeListener(channel, listener) }
   }
   return {
+    reviewOperations: input => invoke('application:host:review', input),
+    onReviews: handler => listen('application:host:reviews', handler),
     publishContext: input => invoke('application:host:context', input),
     registerHost: input => invoke('application:host:register', input),
     complete: input => invoke('application:host:complete', input),

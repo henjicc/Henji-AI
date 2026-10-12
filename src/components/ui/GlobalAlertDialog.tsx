@@ -49,6 +49,12 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     }
     const result: AlertDialogAction[] = []
 
+    if (current.review) return ([['not_executed', '没有生效，可以重新做'], ['completed', '已经生效']] as const).map(([decision, label]) => ({
+      label, variant: current.review?.preferred === decision ? 'primary' : 'quiet', onClick: () => {
+        if (useAlertDialogStore.getState().queue[0] === current) current.review?.resolve(decision)
+      },
+    }))
+
     if (current.confirmation) {
       if (current.confirmation.project) result.push({ label: t('paidApproval.alwaysAllowProject'), variant: 'secondary', onClick: () => {
         if (useAlertDialogStore.getState().queue[0] === current) confirmCurrent(true)
@@ -109,9 +115,10 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
       message={current.message}
       type={current.type ?? 'error'}
       actions={actions}
-      closeLabel={current.confirmation?.paid ? t('paidApproval.deny') : current.confirmation ? t('cancel') : undefined}
-      closeVariant={current.confirmation?.paid ? 'quiet' : 'secondary'}
-      closeImmediately={Boolean(current.confirmation)}
+      closeLabel={current.review ? '稍后处理' : current.confirmation?.paid ? t('paidApproval.deny') : current.confirmation ? t('cancel') : undefined}
+      closeVariant={current.review || current.confirmation?.paid ? 'quiet' : 'secondary'}
+      actionLayout={current.review ? 'review' : 'standard'}
+      closeImmediately={Boolean(current.confirmation || current.review)}
       onClose={handleClose}
     />
   )

@@ -1,3 +1,4 @@
+import { ApplicationOperationReviewBanner } from '@/features/application-control/ApplicationOperationReviewBanner'
 import { useShallow } from 'zustand/react/shallow'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
@@ -421,6 +422,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     if (event.target instanceof HTMLElement && (event.target.closest('input,textarea,[contenteditable="true"]'))) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) state.redo(); else state.undo() }
   }}>
+    <ApplicationOperationReviewBanner documentId={project.id} domain="audio_edit" label="口播" />
     <UiToolbar
       variant="command"
       center={<AudioEditPlaybackModeSwitch delivery={delivery} />}

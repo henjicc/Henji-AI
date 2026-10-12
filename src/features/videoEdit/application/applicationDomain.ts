@@ -73,6 +73,14 @@ let stopTracking: (() => void) | null = null
 let stopSmartRegions: (() => void) | null = null
 
 export const videoEditApplicationDomain: ApplicationDomainModule = {
+  reviewTarget(ref) {
+    if (ref.kind !== 'video_edit.sequence') return undefined
+    const separator = ref.id.indexOf(':')
+    if (separator < 0) return undefined
+    const instance = requireVideoEditInstance(ref.id.slice(0, separator))
+    const sequence = instance.document.sequences.find(value => value.id === ref.id.slice(separator + 1))
+    return sequence ? { name: sequence.name, situation: `序列里有 ${sequence.captions?.length ?? 0} 条字幕。` } : undefined
+  },
   failure(error) {
     if (error instanceof VideoEditOperationFailure) {
       // 纯规划阶段的拒绝；已提交生成或保存失败不在此名单，不能抹掉执行事实。

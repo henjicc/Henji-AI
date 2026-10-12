@@ -153,7 +153,7 @@ const values: Record<string, unknown> = {
   'setting-records': { key: 'user_data_root', value: '{"root":"/persistence-project","locale":"zh"}', type: 'json' },
   'asset-records': { id: 'golden-asset', media_type: 'code', display_name: '代码标题', file_path: '/persistence-project/代码/标题.henjicode', source: 'video-edit', mime_type: 'application/x-henji-code', size_bytes: 100, width: null, height: null, duration_seconds: null, thumbnail_name: null, inspection_status: 'pending', inspection_error: null, file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1791504000000, updated_at: 1791504000000 },
   'generation-presets': { id: 'golden-preset', name: '黄金生成预设', description: null, model_id: null, params: '{}', is_favorite: 0, use_count: 0, created_at: timestamp, updated_at: timestamp },
-  sqlite: { version: 19, name: 'application_operation_user_confirmation', applied_at: 1791504000000 },
+  sqlite: { version: 20, name: 'application_operation_persistent_review', applied_at: 1791504000000 },
 }
 
 /** Immutable layout bodies used by the official ZIP fixture authoring tool. */
