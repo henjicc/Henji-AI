@@ -69,12 +69,12 @@ async function startOptimizeStub() {
 function createGenerationReviewScenes(context) {
   const { setupGeneration, settlePage } = context
 
-  async function seedHistory(page) {
+  async function seedHistory(page, separatedHistory = false) {
     const imageBytes = [...await fs.readFile(IMAGE_FIXTURE)]
     const videoBytes = [...await fs.readFile(VIDEO_FIXTURE)]
     const waveBytes = [...createWaveFixture()]
     await setupGeneration(page)
-    return page.evaluate(async ({ prefix, imageBytes, videoBytes, waveBytes }) => {
+    return page.evaluate(async ({ prefix, imageBytes, videoBytes, waveBytes, separatedHistory }) => {
       const image = await window.henjiNative.image.persistImageBinary(new Uint8Array(imageBytes), 'png')
       const video = image.replace(/\.[^.]+$/, '-review.mp4')
       const audio = image.replace(/\.[^.]+$/, '-review.wav')
@@ -86,7 +86,11 @@ function createGenerationReviewScenes(context) {
       if (stale.length) await history.deleteMany(stale)
       const longPrompt = '黄昏时分的海港，渔船缓缓驶入，远处灯塔亮起第一束光；保留参考图的人物服装与配色，镜头从高处俯拍逐渐推近到甲板上的人物，'
         .repeat(4)
-      const rows = [
+      const rows = separatedHistory ? [
+        ['audio', 'audio', 'kie-eleven-v3-dialogue', '欢迎来到痕迹AI，今天我们来聊一聊生成工作区。', {}, [audio], 'success', null],
+        ['failed', 'audio', 'kie-eleven-v3-dialogue', '为纪录片录制一段旁白，语气自然舒缓，讲述清晨的海港与逐渐苏醒的城市。'.repeat(5), {}, [], 'error', null],
+        ['resumable', 'audio', 'kie-eleven-v3-dialogue', '聊天的叫AI，画画的也叫AI。', {}, [], 'error', '__review_resume_audio'],
+      ] : [
         // id 后缀, type, model, prompt, params, resultPaths, status, task_id
         ['image-single', 'image', 'kie-z-image', '一只橘猫趴在窗台上晒太阳，柔和的午后光线', {}, [image], 'success', null],
         ['image-multi', 'image', 'kie-z-image', '同一角色的四个表情：开心、惊讶、生气、困倦', {}, [image, image, image, image], 'success', null],
@@ -98,11 +102,13 @@ function createGenerationReviewScenes(context) {
       ]
       await history.insertMany(rows.map(([suffix, type, model, prompt, params, resultPaths, status, taskId], index) => ({
         id: `${prefix}${suffix}`, providerId: 'kie', modelId: model, type, prompt, params, resultPaths, status, taskId,
-        errorMessage: status === 'error' ? '供应商返回：内容审核未通过，请调整提示词后重试。' : null, cost: null, duration: null,
+        errorMessage: status === 'error' ? (separatedHistory
+          ? 'Continue polling failed for kie-eleven-turbo-2.5-tts: [provider_task_failed] Internal Error, Please try again later.'
+          : '供应商返回：内容审核未通过，请调整提示词后重试。') : null, cost: null, duration: null,
         createdAt: new Date(Date.now() - (rows.length - index) * 60000).toISOString(),
       })))
       return image
-    }, { prefix: PREFIX, imageBytes, videoBytes, waveBytes })
+    }, { prefix: PREFIX, imageBytes, videoBytes, waveBytes, separatedHistory })
   }
 
   async function scrollHistory(page, position) {
@@ -117,6 +123,61 @@ function createGenerationReviewScenes(context) {
   const card = (page, suffix) => page.locator(`[data-generation-task-id="${PREFIX}${suffix}"]`)
 
   return [{
+    id: 'generation-history-separated',
+    surface: '生成',
+    name: '生成历史分隔块（音频完成、失败、继续获取结果）',
+    writesUserData: true,
+    async setup(page, app) {
+      const unblock = await blockPaidGeneration(app)
+      try {
+        await seedHistory(page, true)
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await card(page, 'resumable').waitFor({ timeout: 20000 })
+        await settlePage(page)
+        assert.equal(await page.getByText('KIE 服务内部错误，可稍后手动重试。', { exact: true }).count(), 2)
+        assert.equal(await page.getByText(/Continue polling failed|Internal Error/).count(), 0)
+        const recover = card(page, 'resumable').getByRole('button', { name: '继续获取结果', exact: true })
+        assert.equal(await recover.count(), 1, '恢复动作只能有一个文字层')
+        await recover.focus()
+        await settlePage(page)
+        const geometry = await page.evaluate(() => {
+          const cards = [...document.querySelectorAll('[data-generation-task-id]')]
+          const buttons = [...cards.at(-1).querySelectorAll('button')]
+          const retry = buttons.find(button => button.textContent === '继续获取结果')
+          const ask = buttons.find(button => button.textContent === '问助手')
+          const style = getComputedStyle(retry)
+          return {
+            // Chromium 将边框吸附到物理像素；副屏 DPR=1.35 时，1px 的计算值为 0.740741px。
+            dpr: window.devicePixelRatio,
+            rows: cards.map(card => {
+              const row = card.parentElement
+              const style = getComputedStyle(row)
+              return { index: Number(row.dataset.index), border: style.borderTopWidth,
+                paddingTop: style.paddingTop, paddingBottom: style.paddingBottom,
+                top: row.getBoundingClientRect().top, bottom: row.getBoundingClientRect().bottom }
+            }),
+            actionVariants: [ask.dataset.variant, retry.dataset.variant],
+            fontWeight: style.fontWeight, textShadow: style.textShadow,
+            toolbarOpacity: getComputedStyle(cards.at(-1).querySelector('.group\\/task > div > div')).opacity,
+          }
+        })
+        assert.equal(geometry.rows.length, 3)
+        geometry.rows.forEach((row, index) => {
+          const expectedPhysicalPixels = index === 0 ? 0 : Math.max(1, Math.floor(geometry.dpr))
+          assert.ok(Math.abs(parseFloat(row.border) * geometry.dpr - expectedPhysicalPixels) < 0.00001,
+            '分隔线必须保持 1 CSS px 对应的物理像素吸附宽度')
+          assert.equal(row.paddingTop, '20px'); assert.equal(row.paddingBottom, '20px')
+          if (index > 0) assert.ok(Math.abs(row.top - geometry.rows[index - 1].bottom) < 1, '虚拟项之间不能留未测量的缝隙或相互重叠')
+        })
+        assert.deepEqual(geometry.actionVariants, ['quiet', 'quiet'])
+        assert.equal(geometry.textShadow, 'none')
+        assert.equal(geometry.fontWeight, '500')
+        assert.equal(geometry.toolbarOpacity, '1', '键盘聚焦必须显示操作条')
+      } finally {
+        await unblock()
+      }
+    },
+  }, {
     id: 'generation-review-history',
     surface: '生成',
     name: '核对-生成记录各状态与命令带',

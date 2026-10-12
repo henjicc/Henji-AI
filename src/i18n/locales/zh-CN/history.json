@@ -7,5 +7,17 @@
   "delete": "删除",
   "confirmDelete": "确定要删除这条记录吗？",
   "loadMore": "加载更多",
-  "noMore": "没有更多了"
+  "noMore": "没有更多了",
+  "askAssistant": "问助手",
+  "failure": {
+    "title": "生成任务失败",
+    "kieInternal": "KIE 服务内部错误，可稍后手动重试。",
+    "service": "生成服务暂时无法响应，请稍后重试。",
+    "credentials": "生成服务认证失败，请在设置中检查 API 密钥。",
+    "balance": "生成服务余额不足，请充值或更换服务后重试。",
+    "timeout": "等待生成结果超时，可稍后继续获取结果。",
+    "network": "连接生成服务失败，请检查网络后重试。",
+    "content": "内容审核未通过，请调整提示词或参考素材后重试。",
+    "unknown": "生成未能完成，可问助手检查原因后重试。"
+  }
 }

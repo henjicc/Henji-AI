@@ -141,7 +141,8 @@ function TaskListRow({ index, top, measure, retention, ...props }: TaskCardProps
     previous.current = element
     measure(element)
   }, [id, measure, retention])
-  return <div ref={ref} data-index={index} className="absolute left-0 top-0 w-full" style={{ transform: `translateY(${top}px)` }}>
+  // 用完整列表索引决定分隔线，不依赖虚拟窗口内的 DOM 首项。留白和线一起计入测量高度。
+  return <div ref={ref} data-index={index} className={`absolute left-0 top-0 w-full py-5 ${index > 0 ? 'border-t border-line' : ''}`} style={{ transform: `translateY(${top}px)` }}>
     <TaskCard {...props} />
   </div>
 }
