@@ -1,3 +1,4 @@
+import { mcpConnectionStorageSchema, MCP_CONNECTION_STORAGE_VERSION } from './mcpConnectionSchema'
 import { STORYBOARD_METADATA_VERSION, storyboardMetadataSchema } from './preferenceSchemas'
 import { z } from 'zod'
 import { IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, imageEditHistoryCheckpointSchemaV3 } from '../imageEdit/v3/historyPaging/schema'
@@ -8,11 +9,13 @@ import { canvasLayerHeaderSchema, encryptedKeystoreSchema, llmStoredConfigSchema
 import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, KEYSTORE_VERSION, LLM_CONFIG_VERSION, LLM_JOURNAL_VERSION, MEDIA_GRANTS_VERSION } from './schemaVersions'
 
 function file(id: string, name: string, version: number, versionSource: string, readEntry: string, schema: z.ZodType, extra: Readonly<Record<string, z.ZodType>> = {}): PersistenceFormat {
-  return { id, name, version, versionSource, readEntry, schema, schemas: { content: schema, ...extra }, migrations: formatMigrations(id), storage: 'file', migrationEntry: 'src/core/persistence/formatMigrations.ts / migrations.ts::upgradePersistenceContent' }
+  const archive = id === 'canvas-layer-package' ? 'henjilayer' : ['image-package', 'image-header'].includes(id) ? 'henjiimg' : undefined
+  return { ...(archive ? { requiredFixtures: [{ extension: 'json' }, { extension: archive, ...(id === 'image-header' ? { versionFormat: 'image-package' } : {}) }] } : {}), id, name, version, versionSource, readEntry, schema, schemas: { content: schema, ...extra }, migrations: formatMigrations(id), storage: 'file', migrationEntry: 'src/core/persistence/formatMigrations.ts / migrations.ts::upgradePersistenceContent' }
 }
 
 /** A light registry partition: runtime file readers must not load video/compiler or the whole inventory. */
 export const FILE_PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
+  file('mcp-connections', 'MCP 连接授权存储', MCP_CONNECTION_STORAGE_VERSION, 'keystore MCP plaintext.version', 'electron/main/services/mcp/connections.ts::load', mcpConnectionStorageSchema),
   file('image-history-checkpoint', '图片历史检查点', IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, 'ImageEditHistoryCheckpointV3.version', 'electron/main/services/image-editor-v3/history-pages/store.ts::readPage', imageEditHistoryCheckpointSchemaV3),
   file('image-header', '图片文档头', IMAGE_HEADER_VERSION, 'henji-document.json.version', 'electron/main/services/image-editor-v3/image-document/header.ts::parseImageDocumentHeader', imageDocumentHeaderSchema),
   file('image-package', '图片文档包', IMAGE_PACKAGE_VERSION, 'manifest.json.packageVersion', 'electron/main/services/image-editor-v3/package-types.ts::validateHenjiImagePackageManifest', imagePackageManifestSchema),

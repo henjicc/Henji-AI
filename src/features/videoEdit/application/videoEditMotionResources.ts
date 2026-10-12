@@ -1,3 +1,4 @@
+import { decodePersistenceResource } from '@/core/persistence/resourceContracts'
 import { getPlatform } from '@/platform/runtime'
 import { creativeIntentPageSchema, type CreativeIntentPage } from '@/core/creativeIntent/pages'
 import { assertDraftPage, storedMotionCandidateSchema, type StoredCreativeIntentResource } from '@/core/creativeIntent/persistence'
@@ -38,7 +39,9 @@ export async function readMotionResourceBytes(resource: StoredCreativeIntentReso
 }
 export async function readMotionResource(resource: StoredCreativeIntentResource): Promise<unknown> {
   const bytes = await readMotionResourceBytes(resource)
-  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown
+  const raw: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+  return resource.kind === 'page' ? decodePersistenceResource('creative-intent-page', raw)
+    : resource.kind === 'candidate' ? decodePersistenceResource('creative-intent-candidate', raw) : raw
 }
 export async function* readMotionPages(id: string, draft: MotionDraft, signal?: AbortSignal): AsyncGenerator<CreativeIntentPage> {
   if (draft.ownerRef.kind !== 'document.video_edit' || draft.ownerRef.id !== id) throw new Error('原稿归属与当前剪辑不符，请恢复原文件。')

@@ -1,3 +1,4 @@
+import { persistedCanvasNodeDataSchema } from '../../persistence/businessSchemas'
 import { z } from 'zod'
 
 import type { DocumentKindDescriptor } from './registry'
@@ -23,7 +24,7 @@ const canvasNodeSchema = z.looseObject({
   id: z.string().min(1),
   type: z.string().min(1),
   position: z.looseObject({ x: z.number(), y: z.number() }),
-  data: z.record(z.string(), z.unknown()),
+  data: persistedCanvasNodeDataSchema,
 })
 
 const canvasEdgeSchema = z.looseObject({

@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { creativeIntentsSchema, storedMotionCandidateSchema, type StoredCreativeIntentResource } from '../../../../src/core/creativeIntent/persistence'
-import { creativeIntentPageSchema } from '../../../../src/core/creativeIntent/pages'
+import { creativeIntentsSchema, type StoredCreativeIntentResource } from '../../../../src/core/creativeIntent/persistence'
+import { decodePersistenceResource } from '../../../../src/core/persistence/resourceContracts'
 import { isSafeRelativeSegment } from '../../../../src/core/storage/pathSyntax'
 
 const digest = (bytes: Uint8Array): string => `sha256:${createHash('sha256').update(bytes).digest('hex')}`
@@ -39,10 +39,12 @@ export async function rehomeVideoMotionResources(content: unknown, oldId: string
     const relative = resource.path.startsWith('henji:/')
     const segments = relative ? resource.path.slice(7).split('/') : []
     if (relative && segments.some(s => !isSafeRelativeSegment('win32', s))) throw new Error('原稿资源路径无效。')
-    return JSON.parse(await fsp.readFile(relative ? path.join(root, ...segments) : resource.path, 'utf8')) as unknown
+    const bytes = await fsp.readFile(relative ? path.join(root, ...segments) : resource.path)
+    if (bytes.byteLength !== resource.bytes || digest(bytes) !== resource.digest) throw new Error('原稿资源已损坏，不能复制或导入。')
+    return JSON.parse(bytes.toString('utf8')) as unknown
   }
   try {
-  for (const resource of head.resources.filter(r => r.kind === 'page')) await publish(resource, remap(creativeIntentPageSchema.parse(await read(resource))))
+  for (const resource of head.resources.filter(r => r.kind === 'page')) await publish(resource, remap(decodePersistenceResource('creative-intent-page', await read(resource))))
   const next = creativeIntentsSchema.parse(remap(head))
   for (const draft of next.drafts) for (const take of draft.takes) for (const ref of take.samplePages) { const r = replacements.get(ref.resourceId); if (r) { ref.resourceId = r.resourceId; ref.digest = r.digest; ref.bytes = r.bytes } }
   const sources = new Map<string, string>()
@@ -52,7 +54,7 @@ export async function rehomeVideoMotionResources(content: unknown, oldId: string
     sources.set(previous, draft.sourceDigest)
   }
   for (const resource of head.resources.filter(r => r.kind === 'candidate')) {
-    const candidate = storedMotionCandidateSchema.parse(remap(await read(resource)))
+    const candidate = decodePersistenceResource('creative-intent-candidate', remap(await read(resource)))
     candidate.identity.sourceDraftDigest = sources.get(candidate.identity.sourceDraftDigest) ?? candidate.identity.sourceDraftDigest
     await publish(resource, candidate)
   }

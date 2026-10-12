@@ -13,13 +13,15 @@ import { packageComponentSource, type CodeComponentMetadata } from '../src/core/
 import { parseDocumentText } from '../src/core/documents/envelope'
 import { encodePngWithStoryboardMetadata } from '../electron/main/services/image/png-metadata'
 import { loadSharp } from '../electron/main/services/image/sharp-loader'
-import { IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
+import { IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, CANVAS_LAYER_PACKAGE_VERSION, VIDEO_EDIT_CONTENT_VERSION } from '../src/core/persistence/schemaVersions'
 import { ImageEditDocumentRepository } from '../electron/main/services/image-editor-v3/document-repository'
 import { ImageEditCommandHistoryV3 } from '../src/core/imageEdit/v3/commandHistory'
 import { parseImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentCodec'
 import { IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3 } from '../src/core/imageEdit/v3/historyPaging/schema'
 import { createImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentFactory'
 import { getImageLayoutFixtureResources } from './generate-persistence-fixtures'
+import { creativeIntentsSchema } from '../src/core/creativeIntent/persistence'
+import { rehomeVideoMotionResources } from '../electron/main/services/documents/video-motion-resources'
 
 /** 由正式保存与 ZIP 导出器生成分页历史黄金样本，不改写已有版本。 */
 export async function generateImageHistoryPersistenceFixtures(sourceFixture: string, root = process.cwd()): Promise<void> {
@@ -120,12 +122,23 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
     const project = await service.createProject({ name: '黄金项目' })
     const created = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '黄金剪辑' })
     const current = await service.readDocument({ id: created.meta.id })
-    const golden = parseDocumentText(fs.readFileSync(fixture('document.video_edit'), 'utf8')).content as { codeMaterials: { versions: { files: { location: string }[] }[] }[] }
+    const golden = parseDocumentText(fs.readFileSync(fixture('document.video_edit', `v${VIDEO_EDIT_CONTENT_VERSION}.json`), 'utf8')).content as { codeMaterials: { versions: { files: { location: string }[] }[] }[]; creativeIntents?: unknown }
     const location = path.join(project.path, '代码', '标题', 'v1', 'main.ts')
     await fsp.mkdir(path.dirname(location), { recursive: true })
     await fsp.writeFile(location, source)
     golden.codeMaterials[0].versions[0].files[0].location = location
-    await service.saveDocument({ target: { id: current.meta.id }, expectedRevision: current.meta.revision, content: golden })
+    // The motion fixture owns additional semantic evidence; newer minimal JSON samples must not erase it from the archive.
+    const motion = parseDocumentText(fs.readFileSync(fixture('document.video_edit', 'v2.json'), 'utf8'))
+    const head = creativeIntentsSchema.parse((motion.content as { creativeIntents: unknown }).creativeIntents)
+    for (const resource of head.resources) {
+      const file = path.join(project.path, '素材', `${resource.resourceId}.json`)
+      await fsp.mkdir(path.dirname(file), { recursive: true })
+      await fsp.writeFile(file, JSON.stringify(read(resource.kind === 'page' ? 'creative-intent-page' : 'creative-intent-candidate')))
+      resource.path = file
+    }
+    golden.creativeIntents = head
+    const content = await rehomeVideoMotionResources(golden, motion.id, current.meta.id, project.path)
+    await service.saveDocument({ target: { id: current.meta.id }, expectedRevision: current.meta.revision, content })
     const exported = await service.exportProjectPackage({ projectId: project.id })
     await fsp.copyFile(exported.path, projectTarget ?? fixture('project-package', 'v1.henjipack'), fs.constants.COPYFILE_EXCL)
   } finally { await env.cleanup() }

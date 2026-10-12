@@ -41,6 +41,8 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 安装 Node.js
         uses: actions/setup-node@v4
@@ -106,6 +108,8 @@ jobs:
         run: npx tsc -p tsconfig.electron.json --noEmit
 
       - name: 持久格式兼容门禁
+        env:
+          HENJI_PERSISTENCE_RELEASE_REF: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'HEAD^' }}
         run: npm run check:persistence-compat
 
       - name: 快速检查器自测与 Node 测试归属（去重）
@@ -389,6 +393,9 @@ jobs:
 
       - name: 安装依赖
         run: npm ci
+
+      - name: 发布持久归档完整矩阵
+        run: npm run test:persistence-release
 
       # audio-worker（全平台）与原生视频解码服务（Windows）都由 electron:build 内的 cargo 构建。
       - name: 安装 Rust 工具链

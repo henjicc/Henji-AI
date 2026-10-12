@@ -4,7 +4,10 @@ import path from 'node:path'
 import {
   DocumentFormatError,
   MAX_DOCUMENT_FILE_BYTES,
-  parseDocumentText,
+  parseDocumentRawText,
+  documentEnvelopeContract,
+  documentEnvelopeVersion,
+  upgradeDocumentEnvelope,
   toTimestamp,
   type DocumentEnvelope,
 } from '../../../../src/core/documents/envelope'
@@ -107,12 +110,26 @@ export async function loadDocumentFile(
   }
   if (stat.size > MAX_DOCUMENT_FILE_BYTES) throw new DocumentFormatError('文档文件超过可读取的大小。')
   const originalText = await fsp.readFile(filePath, 'utf8')
-  const envelope = parseDocumentText(originalText)
+  const raw = parseDocumentRawText(originalText)
+  const fromEnvelopeVersion = documentEnvelopeVersion(raw)
+  const upgradingEnvelope = fromEnvelopeVersion < documentEnvelopeContract.version
+  const logger = createMainLogger('main.documents')
+  let envelopeBackup: string | undefined
+  let envelope: DocumentEnvelope
+  try {
+    envelopeBackup = await backupBeforePersistenceUpgrade(filePath, documentEnvelopeContract, fromEnvelopeVersion, originalText)
+    if (upgradingEnvelope) logger.info('开始升级文档外壳', { event: 'documents.envelope.upgrade.start', context: { fromVersion: fromEnvelopeVersion, toVersion: documentEnvelopeContract.version, backupPath: envelopeBackup } })
+    envelope = upgradeDocumentEnvelope(raw, envelopeBackup)
+    if (upgradingEnvelope) logger.info('文档外壳升级完成，等待首次保存', { event: 'documents.envelope.upgrade.completed', context: { fromVersion: fromEnvelopeVersion, toVersion: documentEnvelopeContract.version, backupPath: envelopeBackup } })
+  } catch (error) {
+    logger.warn('文档外壳读取失败', { event: 'documents.envelope.read.failed', context: { fromVersion: fromEnvelopeVersion, toVersion: documentEnvelopeContract.version, backupPath: envelopeBackup }, error })
+    throw error
+  }
   if (envelope.kind !== kind.id) throw new DocumentFormatError('文档类型与扩展名不一致。')
   const contract = documentPersistenceContract(kind)
   try {
     assertPersistenceVersion(contract, envelope.kindVersion)
-    const backupPath = await backupBeforePersistenceUpgrade(filePath, contract, envelope.kindVersion, originalText)
+    const backupPath = await backupBeforePersistenceUpgrade(filePath, contract, envelope.kindVersion, originalText) ?? envelopeBackup
     return { kind, path: filePath, stat, header: headerFromEnvelope(envelope), envelope, packageSummary: null, backupPath }
   } catch (error) {
     createMainLogger('main.documents').warn('文档格式读取失败', { event: 'documents.load.failed', context: { format: contract.id, fromVersion: envelope.kindVersion, toVersion: kind.version }, error })

@@ -3,27 +3,27 @@
   "formats": {
     "document.video_edit": {
       "version": 4,
-      "fingerprint": "46c8998b3296f9b34c37d025ed34b635200cd6db0f0d0ae4d350fb58568ce291",
+      "fingerprint": "1556823f2557f135a0bf7a1794b3eb2ec48248a914afd7a28e3fa96d84c656e0",
       "supportedFrom": 2
     },
     "document.canvas": {
       "version": 1,
-      "fingerprint": "50289812848e2c636aae1e4e1f8d7380fc3dcdd6671a28b750300030d266c48c",
+      "fingerprint": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04",
       "supportedFrom": 1
     },
     "document.audio_edit": {
       "version": 1,
-      "fingerprint": "ae0acd09a6924f24a63fcdb4d5fad108010689e117896d0db59071fb417eb9ac",
+      "fingerprint": "0d1f5d0fa22752a2e6c5ab6dd2d85b6b9a3f3bd9c47404fdb8f970a0bd55681c",
       "supportedFrom": 1
     },
     "document.camera_stage": {
       "version": 1,
-      "fingerprint": "19ccbfc9c4521941d9257a97c21ef56dadebb8ff1e22681336d9db7b57d1a131",
+      "fingerprint": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813",
       "supportedFrom": 1
     },
     "document.image_document": {
       "version": 1,
-      "fingerprint": "5b117d2946d9506f95acb3d22d90f0cf7cb44b5d09bf4c8042774341405fe19b",
+      "fingerprint": "ea316f50b5e177668955a297adb75dbec64515d44f1b10abafa838e958acc8d4",
       "supportedFrom": 1
     },
     "project": {
@@ -148,12 +148,12 @@
     },
     "llm-config": {
       "version": 1,
-      "fingerprint": "d395dfe2639d1590fd6ad95db21477a2c21698cea7f5c2d8851a8ef753ef6bc5",
+      "fingerprint": "4f93184b865bb50b6255440e15608089e410f3ce5da7c2394b9dfcb0d0f318e4",
       "supportedFrom": 1
     },
     "llm-config-journal": {
       "version": 1,
-      "fingerprint": "dad22cbafc862e1a35f5d7452313319e28c9f608197a35a1f8d8dacae699f870",
+      "fingerprint": "1291e2000348078e6c5b3a0ed666bdf781eaaacf27ca555132db19eb47ecbde9",
       "supportedFrom": 1
     },
     "node-defaults": {
@@ -209,6 +209,16 @@
     "generation-output-timings": {
       "version": 1,
       "fingerprint": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32",
+      "supportedFrom": 1
+    },
+    "document-envelope": {
+      "version": 1,
+      "fingerprint": "51ed115082057c70f3a45c0e39c2e59fd5287e0079f57fb91528fcf33e2fa577",
+      "supportedFrom": 1
+    },
+    "mcp-connections": {
+      "version": 1,
+      "fingerprint": "26c6e8059ae5fe0e696c978a7d3e9a977822380eaacf96b184e02c2269d78687",
       "supportedFrom": 1
     }
   },
@@ -1286,6 +1296,351 @@
       "previousFingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
       "fingerprint": "38953dfbc151d55fa5d4d752a73ccecde97948879a488ebd2048c8418084389d",
       "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T17:23:49.089Z",
+      "format": "llm-config",
+      "version": 1,
+      "reason": "f4 真实默认配置复核：纳入结构化输出与思考兼容性字段；供应商记录仍允许由宿主补齐可选元数据，保留SDK扩展内容。",
+      "previousFingerprint": "6d1e482c29cd83832a588ddf3d533c2066855bfa7dbd722ed7dab99231771ed9",
+      "fingerprint": "b957a4290f9c47abe9b7d660364a108e52bb72dc9c630bf77688be26433ff61b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T17:23:49.091Z",
+      "format": "llm-config-journal",
+      "version": 1,
+      "reason": "f4 真实默认配置复核：纳入结构化输出与思考兼容性字段；供应商记录仍允许由宿主补齐可选元数据，保留SDK扩展内容。",
+      "previousFingerprint": "863c9203e0a8435f02a2c0204404f4db099b6a3b49624e948d1398799daea9aa",
+      "fingerprint": "6d54d6bc678ecd77eb33497d592f7b088243b5fff4b5d0c8f3498440bb3407de",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T17:26:19.432Z",
+      "format": "llm-config",
+      "version": 1,
+      "reason": "f4 稳定字段覆盖补全：提示词文档、媒体绑定、素材组与图片文档引用纳入指纹；保留开放扩展字段。",
+      "previousFingerprint": "b957a4290f9c47abe9b7d660364a108e52bb72dc9c630bf77688be26433ff61b",
+      "fingerprint": "4f93184b865bb50b6255440e15608089e410f3ce5da7c2394b9dfcb0d0f318e4",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T17:26:19.435Z",
+      "format": "llm-config-journal",
+      "version": 1,
+      "reason": "f4 稳定字段覆盖补全：提示词文档、媒体绑定、素材组与图片文档引用纳入指纹；保留开放扩展字段。",
+      "previousFingerprint": "6d54d6bc678ecd77eb33497d592f7b088243b5fff4b5d0c8f3498440bb3407de",
+      "fingerprint": "1291e2000348078e6c5b3a0ed666bdf781eaaacf27ca555132db19eb47ecbde9",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T17:26:19.435Z",
+      "format": "document.canvas",
+      "version": 1,
+      "reason": "f4 稳定字段覆盖补全：提示词文档、媒体绑定、素材组与图片文档引用纳入指纹；保留开放扩展字段。",
+      "previousFingerprint": "39801f4a26e4516fb26dba9d624b8123e4b8d3d7253c877a761444b6d07619f1",
+      "fingerprint": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04",
+      "waivedFixtureVersions": []
     }
-  ]
+  ],
+  "frameworkAdoption": {
+    "at": "2026-10-12T17:19:19.572Z",
+    "reason": "f4 首发前框架登记：文档外壳独立，稳定业务字段纳入指纹，SQLite 记录版本冻结21并移除无内容变化的JSON空迁移；保留所有原 supportedFrom 与SQL账本，记录内容未变。",
+    "formats": [
+      {
+        "format": "generation-output-timings",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32",
+        "fingerprint": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32"
+      },
+      {
+        "format": "creative-intent-page",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64",
+        "fingerprint": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64"
+      },
+      {
+        "format": "creative-intent-candidate",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152",
+        "fingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152"
+      },
+      {
+        "format": "image-layout-page",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d",
+        "fingerprint": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d"
+      },
+      {
+        "format": "image-layout-candidate",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee",
+        "fingerprint": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee"
+      },
+      {
+        "format": "image-history-checkpoint",
+        "version": 2,
+        "supportedFrom": 2,
+        "previousFingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46",
+        "fingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46"
+      },
+      {
+        "format": "image-header",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5",
+        "fingerprint": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5"
+      },
+      {
+        "format": "image-package",
+        "version": 12,
+        "supportedFrom": 12,
+        "previousFingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
+        "fingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36"
+      },
+      {
+        "format": "image-working-copy",
+        "version": 14,
+        "supportedFrom": 14,
+        "previousFingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
+        "fingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327"
+      },
+      {
+        "format": "canvas-layer-package",
+        "version": 12,
+        "supportedFrom": 12,
+        "previousFingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
+        "fingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58"
+      },
+      {
+        "format": "keystore",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed",
+        "fingerprint": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed"
+      },
+      {
+        "format": "media-grants",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d",
+        "fingerprint": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d"
+      },
+      {
+        "format": "llm-config",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "d395dfe2639d1590fd6ad95db21477a2c21698cea7f5c2d8851a8ef753ef6bc5",
+        "fingerprint": "6d1e482c29cd83832a588ddf3d533c2066855bfa7dbd722ed7dab99231771ed9"
+      },
+      {
+        "format": "storyboard-metadata",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe",
+        "fingerprint": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe"
+      },
+      {
+        "format": "llm-config-journal",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "dad22cbafc862e1a35f5d7452313319e28c9f608197a35a1f8d8dacae699f870",
+        "fingerprint": "863c9203e0a8435f02a2c0204404f4db099b6a3b49624e948d1398799daea9aa"
+      },
+      {
+        "format": "document.video_edit",
+        "version": 4,
+        "supportedFrom": 2,
+        "previousFingerprint": "46c8998b3296f9b34c37d025ed34b635200cd6db0f0d0ae4d350fb58568ce291",
+        "fingerprint": "1556823f2557f135a0bf7a1794b3eb2ec48248a914afd7a28e3fa96d84c656e0"
+      },
+      {
+        "format": "document.canvas",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "50289812848e2c636aae1e4e1f8d7380fc3dcdd6671a28b750300030d266c48c",
+        "fingerprint": "39801f4a26e4516fb26dba9d624b8123e4b8d3d7253c877a761444b6d07619f1"
+      },
+      {
+        "format": "document.audio_edit",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "ae0acd09a6924f24a63fcdb4d5fad108010689e117896d0db59071fb417eb9ac",
+        "fingerprint": "0d1f5d0fa22752a2e6c5ab6dd2d85b6b9a3f3bd9c47404fdb8f970a0bd55681c"
+      },
+      {
+        "format": "document.camera_stage",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "19ccbfc9c4521941d9257a97c21ef56dadebb8ff1e22681336d9db7b57d1a131",
+        "fingerprint": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813"
+      },
+      {
+        "format": "document.image_document",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "5b117d2946d9506f95acb3d22d90f0cf7cb44b5d09bf4c8042774341405fe19b",
+        "fingerprint": "ea316f50b5e177668955a297adb75dbec64515d44f1b10abafa838e958acc8d4"
+      },
+      {
+        "format": "project",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "288dda146a1cca701efd239342419faa11b259691731471cb6353b99a77627c1",
+        "fingerprint": "288dda146a1cca701efd239342419faa11b259691731471cb6353b99a77627c1"
+      },
+      {
+        "format": "project-package",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "cb286a2c85a32ac0cb9233cd2aa1504a2a22c5f1e33e19928f87534c47b0dfb5",
+        "fingerprint": "cb286a2c85a32ac0cb9233cd2aa1504a2a22c5f1e33e19928f87534c47b0dfb5"
+      },
+      {
+        "format": "code-version",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "2d0b7ae8ace0207261df34baedec228c5e6e15f0b0853b6158968664827bdd71",
+        "fingerprint": "2d0b7ae8ace0207261df34baedec228c5e6e15f0b0853b6158968664827bdd71"
+      },
+      {
+        "format": "code-component",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b",
+        "fingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b"
+      },
+      {
+        "format": "code-asset",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "0a8152ece2a27ff18d9d92abb4032a26ad256ff0e528c04d1bab14061f2db4b2",
+        "fingerprint": "0a8152ece2a27ff18d9d92abb4032a26ad256ff0e528c04d1bab14061f2db4b2"
+      },
+      {
+        "format": "settings",
+        "version": 13,
+        "supportedFrom": 13,
+        "previousFingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
+        "fingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014"
+      },
+      {
+        "format": "theme",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417",
+        "fingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417"
+      },
+      {
+        "format": "style-kits",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "b04966f580225450c23b9c4217a614b36e96d2853671f51e0ecf202a1884e0c1",
+        "fingerprint": "b04966f580225450c23b9c4217a614b36e96d2853671f51e0ecf202a1884e0c1"
+      },
+      {
+        "format": "title-templates",
+        "version": 2,
+        "supportedFrom": 1,
+        "previousFingerprint": "cdd7711c4b51c782d4360f2c60dded44b8872bd95dc2f2548cdeac45efa11fb9",
+        "fingerprint": "cdd7711c4b51c782d4360f2c60dded44b8872bd95dc2f2548cdeac45efa11fb9"
+      },
+      {
+        "format": "text-presets",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "b3cd97574335bfc7b82eb6498705ca5edcba06b374da18e39694bb4079c52e84",
+        "fingerprint": "b3cd97574335bfc7b82eb6498705ca5edcba06b374da18e39694bb4079c52e84"
+      },
+      {
+        "format": "export-presets",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "a88eeccd2e6ce741d26ff1ecab677caede63c28a08dc5e9df3ced4b8c2106920",
+        "fingerprint": "a88eeccd2e6ce741d26ff1ecab677caede63c28a08dc5e9df3ced4b8c2106920"
+      },
+      {
+        "format": "voice-library",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "8d24016258fa4cb86621a06c702003232dcb9335ed8b092af5c7fe85a71461b5",
+        "fingerprint": "8d24016258fa4cb86621a06c702003232dcb9335ed8b092af5c7fe85a71461b5"
+      },
+      {
+        "format": "preset-export",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839",
+        "fingerprint": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839"
+      },
+      {
+        "format": "theme-payload",
+        "version": 2,
+        "supportedFrom": 1,
+        "previousFingerprint": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b",
+        "fingerprint": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b"
+      },
+      {
+        "format": "node-defaults",
+        "version": 1,
+        "supportedFrom": 1,
+        "previousFingerprint": "9c3e3c10f0ea4887a7cb0bf3ee987eefff77e886fd03be5e8fd3dc92f5a311f8",
+        "fingerprint": "9c3e3c10f0ea4887a7cb0bf3ee987eefff77e886fd03be5e8fd3dc92f5a311f8"
+      },
+      {
+        "format": "model-defaults",
+        "version": 2,
+        "supportedFrom": 2,
+        "previousFingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
+        "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f"
+      },
+      {
+        "format": "onboarding",
+        "version": 2,
+        "supportedFrom": 2,
+        "previousFingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50",
+        "fingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50"
+      },
+      {
+        "format": "subtitle-manifest",
+        "version": 2,
+        "supportedFrom": 1,
+        "previousFingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005",
+        "fingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005"
+      },
+      {
+        "format": "setting-records",
+        "version": 21,
+        "supportedFrom": 19,
+        "previousFingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
+        "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785"
+      },
+      {
+        "format": "asset-records",
+        "version": 21,
+        "supportedFrom": 19,
+        "previousFingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
+        "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad"
+      },
+      {
+        "format": "generation-presets",
+        "version": 21,
+        "supportedFrom": 19,
+        "previousFingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
+        "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353"
+      },
+      {
+        "format": "sqlite",
+        "version": 21,
+        "supportedFrom": 19,
+        "previousFingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
+        "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8"
+      }
+    ]
+  }
 }

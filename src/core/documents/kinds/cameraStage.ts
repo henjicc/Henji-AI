@@ -1,3 +1,4 @@
+import { persistedStageSettingsSchema } from '../../persistence/businessSchemas'
 import { z } from 'zod'
 
 import type { DocumentKindDescriptor } from './registry'
@@ -34,7 +35,7 @@ export const cameraStageContentSchema = z.object({
   objects: z.array(stageObjectSchema),
   activeCameraId: z.string().nullable(),
   /** 场景级设置；缺字段或不合法时工具按默认值补齐。 */
-  sceneSettings: z.record(z.string(), z.unknown()),
+  sceneSettings: persistedStageSettingsSchema,
   stateKeyframes: z.array(stateKeyframeSchema),
 })
 

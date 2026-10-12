@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_CONTENT_VERSION } from '../persistence/schemaVersions'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -74,7 +75,7 @@ describe('文档外壳', () => {
 
   it('固定字段顺序，草稿标记只在为真时写出，往返一致', () => {
     const draft = buildDocumentEnvelope({ ...base, draft: true })
-    expect(Object.keys(draft)).toEqual(['format', 'kind', 'kindVersion', 'id', 'name', 'createdAt', 'updatedAt', 'revision', 'draft', 'content'])
+    expect(Object.keys(draft)).toEqual(['format', 'envelopeVersion', 'kind', 'kindVersion', 'id', 'name', 'createdAt', 'updatedAt', 'revision', 'draft', 'content'])
     expect(parseDocumentText(serializeDocumentEnvelope(draft))).toEqual(draft)
     const saved = buildDocumentEnvelope({ ...base, draft: false })
     expect('draft' in saved).toBe(false)
@@ -83,10 +84,12 @@ describe('文档外壳', () => {
 
   it('损坏、缺字段、未知字段与旧格式都拒绝', () => {
     expect(() => parseDocumentText('{')).toThrow(DocumentFormatError)
-    expect(() => parseDocumentText(JSON.stringify({ ...base, format: 'henji-document', extra: 1 }))).toThrow(DocumentFormatError)
-    expect(() => parseDocumentText(JSON.stringify({ ...base, format: 'henji-document', content: undefined }))).toThrow(DocumentFormatError)
-    expect(() => parseDocumentText(JSON.stringify({ format: 'henji-video-project', version: 2, id: 'x' }))).toThrow(DocumentFormatError)
-    expect(() => parseDocumentText(JSON.stringify({ ...base, format: 'henji-document', id: '../x' }))).toThrow(DocumentFormatError)
+    for (const raw of [
+      { ...base, format: 'henji-document', envelopeVersion: 1, extra: 1 },
+      { ...base, format: 'henji-document', envelopeVersion: 1, content: undefined },
+      { format: 'henji-video-project', version: 2, id: 'x' },
+      { ...base, format: 'henji-document', envelopeVersion: 1, id: '../x' },
+    ]) expect(() => parseDocumentText(JSON.stringify(raw))).toThrowError(expect.objectContaining({ code: 'invalid-content', formatId: 'document-envelope' }))
   })
 })
 
@@ -109,7 +112,7 @@ describe('文档类型登记', () => {
   it('五种类型的扩展名、独立存放文件夹与存储方式', () => {
     const rows = DOCUMENT_KINDS.map((kind) => [kind.id, kind.extension, kind.standaloneFolderNames, kind.storage, kind.version])
     expect(rows).toEqual([
-      ['video_edit', '.henji-video', null, 'json', 3],
+      ['video_edit', '.henji-video', null, 'json', VIDEO_EDIT_CONTENT_VERSION],
       ['canvas', '.henji-canvas', { zh: '画布', en: 'Canvases' }, 'json', 1],
       ['audio_edit', '.henji-audio', { zh: '口播', en: 'Voiceovers' }, 'json', 1],
       ['camera_stage', '.henji-stage', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],
@@ -156,4 +159,9 @@ describe('请求校验', () => {
     expect(nameCheckRequestSchema.parse({ subject: { type: 'project' }, name: 'x', location: { container: { kind: 'user' } } }).name).toBe('x')
     expect(() => nameCheckRequestSchema.parse({ subject: { type: 'project' }, name: 'x', location: { folder: 'a\0b' } })).toThrow()
   })
+})
+
+it('外壳版本引入前保存的文档（无 envelopeVersion）按第 1 版读取，不拒绝用户已有作品', () => {
+  const { envelopeVersion: _omit, ...legacy } = buildDocumentEnvelope({ kind: 'canvas', kindVersion: 1, id: 'legacy-doc', name: '旧画布', createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z', revision: 0, draft: false, content: {} }) as unknown as Record<string, unknown>
+  expect(parseDocumentText(JSON.stringify(legacy))).toMatchObject({ envelopeVersion: 1, id: 'legacy-doc', kind: 'canvas' })
 })
