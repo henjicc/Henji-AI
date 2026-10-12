@@ -14,6 +14,19 @@ it('统一标点、半字计数与可覆盖规范，顿号不能留在行尾', (
   expect(() => resolveSubtitleStyle({ minDurationSeconds: 8 })).toThrow('minDurationSeconds')
 })
 
+it('中英混排换行将连续拉丁词组视为整体', () => {
+  expect(wrapStyledSubtitle('最后一句提到 Large Language Model')).toBe('最后一句提到\nLarge Language Model')
+})
+
+it('同句无法补足最短时长时才跨句合并短尾句', () => {
+  const cues = segmentTimedSubtitles([
+    { text: '也就是大语言模型。', startMs: 0, endMs: 1800 },
+    { text: '好的。', startMs: 1950, endMs: 2333 },
+  ], { startMs: 0, endMs: 2333 })
+  expect(cues).toHaveLength(1)
+  expect(cues[0]).toMatchObject({ text: '也就是大语言模型 好的', startMs: 0, endMs: 2333 })
+})
+
 it('短意群在同句内合并、利用空隙满足阅读速度，并将小于500ms间隙接续', () => {
   const tokens: SubtitleToken[] = [
     { text: '它们更像一个剧组，', startMs: 0, endMs: 1600 },
@@ -75,8 +88,9 @@ it('18段参考：强气口后断开，零间隔连读不拆，字幕不在词�
     expect(cue.caption.text.split('\n').every(line => subtitleWidth(line) <= 16)).toBe(true)
     const first = timings.items.find(item => Math.abs(Math.round(item.startMs * fps / 1000) - cue.caption.start) <= 1)
     expect(first).toBeDefined()
-    const last = timings.items.filter(item => item.startMs >= first!.startMs && Math.ceil(item.startMs * fps / 1000 - 1e-7) < cue.caption.start + cue.caption.duration).at(-1)!
-    expect(cue.endUs / 1000 + 1).toBeGreaterThanOrEqual(last.endMs)
+    const last = timings.items.filter(item => item.startMs >= first!.startMs && Math.floor(item.startMs * fps / 1000 + 1e-7) < cue.caption.start + cue.caption.duration).at(-1)!
+    // Both edges floor to the sequence grid, so an end may precede speech by less than one frame.
+    expect(cue.caption.start + cue.caption.duration).toBeGreaterThanOrEqual(Math.floor(last.endMs * fps / 1000 + 1e-7))
   }
 })
 

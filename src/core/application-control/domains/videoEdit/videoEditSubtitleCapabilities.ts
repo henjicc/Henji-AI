@@ -49,7 +49,7 @@ export const translateVideoEditSubtitleCapability = defineApplicationCapability(
   resolveObservedEffects: (_input, output) => refBatches(output.captionRefs).flatMap(targetRefs => (['execute', 'update'] as const).map(effect => ({ effect, entityTypes: ['video_edit.caption'], propertyIds: effect === 'update' ? ['video_edit.caption.translation', 'video_edit.caption.style'] : [], targetRefs, count: targetRefs.length, verified: output.verified, evidence: output.verified ? ['译文已保存并从剪辑文件回读核对。'] : [] }))), summarize: output => output.message,
 })
 export const segmentVideoEditSubtitleCapability = defineApplicationCapability({
-  id: 'segment_video_edit_subtitles', title: '规范化已有剪辑字幕', description: '免费按字幕规范重新整理已有字幕的标点、意群、时长和接续间隔，不重新识别、不计费，一步撤销。style 默认 netflix_zh_hans，参数与生成字幕共用；优先使用已有逐词时间与真实气口，缺少时结合原声音能量停顿与已有字幕时间估算。captionRefs 省略整理全序列；有译文须先清除后重新翻译。保留样式与片段锚定，尽量复用原引用，返回新增、修改及合并移除的引用。',
+  id: 'segment_video_edit_subtitles', title: '规范化已有剪辑字幕', description: '免费按字幕规范重新整理已有字幕的标点、意群、时长和接续间隔，不重新识别、不计费，一步撤销。style 默认 netflix_zh_hans，参数与生成字幕共用；优先使用已有逐词时间与真实气口，缺少时结合原声音能量停顿与已有字幕时间估算。captionRefs 省略整理全序列；有译文须先清除后重新翻译。保留样式与片段锚定，尽量复用原引用，返回新增、修改及合并移除的引用。过短字幕优先在同一句内合并，同句内无法满足最短时长时才与相邻句合并。',
   version: 2, domain: 'video_edit', aliases: ['字幕自动拆分', '长句拆分', '字幕分段'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.caption'], producesRefs: ['video_edit.caption'],
   inputSchema: z.object({ documentRef, sequenceRef, captionRefs: z.array(ref('video_edit.caption')).min(1).optional(), ...autoSubtitleOptionsSchema.shape }).strict(),

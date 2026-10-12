@@ -37,7 +37,10 @@ export function wrapStyledSubtitle(text: string, options: SubtitleStyleOptions =
   const policy = settings.chinese ? settings.punctuation : 'preserve'
   const normalized = normalizeSubtitlePunctuation(text.replace(/\s+/gu, ' '), policy)
   if (subtitleWidth(normalized) <= settings.maxCharacters) return normalized
-  const tokens = Array.from(words.segment(normalized), part => part.segment)
+  // In mixed Chinese text a Latin name/phrase is one layout unit, including its spaces.
+  const latinPhrase = /^[A-Za-z]+(?: +[A-Za-z]+)+$/u
+  const tokens = (settings.chinese ? normalized.split(/([A-Za-z]+(?: +[A-Za-z]+)+)/u) : [normalized])
+    .flatMap(part => settings.chinese && latinPhrase.test(part) ? [part] : Array.from(words.segment(part), value => value.segment))
   const lines: string[] = []
   for (let start = 0; start < tokens.length;) {
     let end = start; let preferred = -1
@@ -56,8 +59,8 @@ export function wrapStyledSubtitle(text: string, options: SubtitleStyleOptions =
 }
 
 /**
- * All clocks here are milliseconds. Meaningful sentence/semicolon groups are never joined
- * merely to fill a line. Within a group, choose readable word boundaries using pause evidence.
+ * All clocks here are milliseconds. Meaningful sentence/semicolon groups are joined only as
+ * a minimum-duration fallback. Within a group, choose readable word boundaries using pause evidence.
  * Impossible speed/duration constraints preserve speech instead of clipping words or dropping text.
  */
 export function segmentTimedSubtitles(input: readonly SubtitleToken[], range: { startMs: number; endMs: number }, options: SubtitleStyleOptions = {}, pauses: readonly SubtitlePause[] = []): SegmentedSubtitle[] {
@@ -123,6 +126,7 @@ export function segmentTimedSubtitles(input: readonly SubtitleToken[], range: { 
     const over = width > settings.maxCharacters * settings.maxLines || duration > maximum || wrapStyledSubtitle(text, options).split('\n').length > settings.maxLines
     let best = -1; let bestCost = Infinity
     for (let index = first; index < last; index++) {
+      if (settings.chinese && /[A-Za-z]\s*$/u.test(tokens[index].text) && /^\s*[A-Za-z]/u.test(tokens[index + 1].text)) continue
       const leftMs = tokens[index + 1].startMs - tokens[first].startMs
       const rightMs = (tokens[last + 1]?.startMs ?? range.endMs) - tokens[index + 1].startMs
       if (!over && (leftMs < minimum || rightMs < minimum)) continue
@@ -146,18 +150,21 @@ export function segmentTimedSubtitles(input: readonly SubtitleToken[], range: { 
       split(first, index); first = index + 1
     }
   }
-  // Join short adjacent pieces only within the same semantic group and within layout/duration limits.
+  // Try same-group neighbors first; crossing a sentence is a last resort for an unreadably short cue.
   for (let index = 0; index < result.length; index++) {
     const cue = result[index]
     if (cue.endMs - cue.startMs >= minimum) continue
     const previous = result[index - 1]; const next = result[index + 1]
-    const left = previous && !boundaries[previous.last].sentence && !boundaries[previous.last].clause ? previous : cue
-    const right = left === cue ? next : cue
-    if (!right || boundaries[left.last].sentence || boundaries[left.last].clause) continue
-    const text = wrapStyledSubtitle(textOf(left.first, right.last), options)
-    if (text.split('\n').length > settings.maxLines || right.endMs - left.startMs > maximum) continue
-    const at = left === cue ? index : index - 1
-    result.splice(at, 2, { ...left, text, last: right.last, endMs: right.endMs }); index = Math.max(-1, at - 1)
+    const candidates = [previous ? [previous, cue] : [], next ? [cue, next] : []]
+      .filter((pair): pair is [SegmentedSubtitle, SegmentedSubtitle] => pair.length === 2)
+      .sort(([leftA], [leftB]) => Number(boundaries[leftA.last].sentence || boundaries[leftA.last].clause) - Number(boundaries[leftB.last].sentence || boundaries[leftB.last].clause))
+    for (const [left, right] of candidates) {
+      const text = wrapStyledSubtitle(textOf(left.first, right.last), options)
+      if (text.split('\n').length > settings.maxLines || right.endMs - left.startMs > maximum || right.startMs - left.endMs >= settings.joinGapMs) continue
+      const at = left === cue ? index : index - 1
+      result.splice(at, 2, { ...left, text, last: right.last, endMs: right.endMs }); index = Math.max(-1, at - 1)
+      break
+    }
   }
   for (let index = 0; index + 1 < result.length; index++) {
     const current = result[index]; const next = result[index + 1]

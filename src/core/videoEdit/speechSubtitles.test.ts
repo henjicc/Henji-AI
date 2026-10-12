@@ -6,6 +6,17 @@ import { splitSubtitleText } from './autoSubtitles'
 export const narration = '聊天的叫AI，画画的叫AI，配音、做视频的，也叫AI。它们是同一个东西吗？\n不是。它们更像一个剧组，各管一摊。\n大语言模型，懂文字、会思考；图片模型，只会画；音频模型，只会出声；视频模型，负责让画面动起来。\n但它们能接力：你说一句话，大语言模型先听懂、拆好任务、写出指令，再交给画图的、配音的、做视频的去干活。\n所以，AI看着五花八门，真正把这一切串起来的，是那个听得懂人话的——大语言模型。\n顺便说一句，这条视频，就是它们一起做出来的。'
 const rate = { numerator: 30, denominator: 1 }
 const clip = { id: 'voice', start: 90, duration: 3000, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
+
+it('识别在原文词内拆词或多出标点时不插空格、不拆符号一词', async () => {
+  const original = '第二行故意写得很长很长没有任何标点符号看看它到底会在哪里断开。'
+  const parts = ['第二行', '故意', '写得', '很长', '很长', '没有', '任何', '标点符', '号，', '看看', '它', '到底', '会', '在', '哪里', '断开。']
+  const result = await buildSpeechSubtitles(original, { granularity: 'word', items: parts.map((text, index) => ({ text, startMs: index * 700, endMs: index * 700 + 450 })) }, clip, rate)
+  const texts = result.map(value => value.caption.text)
+  expect(texts.join('').replace(/\n/g, '')).toBe(original.slice(0, -1))
+  expect(texts.join('')).not.toMatch(/符\s+号/u)
+  expect(texts.some(text => text.includes('符号'))).toBe(true)
+  expect(texts.every(text => !text.endsWith('符') && !text.startsWith('号'))).toBe(true)
+})
 const spoken = (text: string) => text.replace(/[\s\p{P}]/gu, '')
 function timings(text: string): SpeechTimings { return { granularity: 'char', items: Array.from(text).map((text, index) => ({ text, startMs: index * 100, endMs: (index + 1) * 100 })) } }
 it('native narration fixture retains every original character without recognition', async () => {

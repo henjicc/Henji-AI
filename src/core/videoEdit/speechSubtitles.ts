@@ -1,7 +1,7 @@
 import { alignSpeechTimings } from '../media/alignSpeechTimings'
 import type { SpeechTimings } from '../media/speechTimings'
 import { splitSubtitleText, wrapSubtitleText, ensureSubtitleDuration, type AutoSubtitleOptions } from './autoSubtitles'
-import { resolveSubtitleStyle } from './subtitleStyleProfiles'
+import { resolveSubtitleStyle, subtitleFrameBoundary } from './subtitleStyleProfiles'
 import { segmentTimedSubtitles, subtitleTokensFromCharacters, type SubtitlePause } from './subtitleSegmentation'
 import { joinAudioEditText } from '../audioEdit/captions'
 import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange, videoEditClipSpeedValue, type VideoEditClipTiming } from './clipSpeed'
@@ -35,8 +35,8 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
     const result = groups.map(group => {
       const a = videoEditClipFrameBoundaryAtSource(clip, group.startMs / 1000, fps)
       const b = videoEditClipFrameBoundaryAtSource(clip, group.endMs / 1000, fps)
-      const start = Math.max(clip.start, Math.ceil(Math.min(a, b) - 1e-7))
-      const end = Math.min(clip.start + clip.duration, Math.ceil(Math.max(a, b) - 1e-7))
+      const start = Math.max(clip.start, subtitleFrameBoundary(Math.min(a, b)))
+      const end = Math.min(clip.start + clip.duration, subtitleFrameBoundary(Math.max(a, b)))
       const chars = aligned.filter(char => (char.endMs > tokens[group.first].startMs || char.endMs === char.startMs && char.startMs >= tokens[group.first].startMs) && char.startMs < tokens[group.last].endMs)
       const first = chars[0]; const last = chars.at(-1)
       const mismatch = chars.some(char => char.mismatch && /[\p{L}\p{N}]/u.test(char.text))
@@ -65,8 +65,8 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
     if (!chars.length) continue
     const a = videoEditClipFrameBoundaryAtSource(clip, chars[0].startMs / 1000, fps)
     const b = videoEditClipFrameBoundaryAtSource(clip, chars[chars.length - 1].endMs / 1000, fps)
-    const start = Math.max(clip.start, Math.round(Math.min(a, b)))
-    const end = Math.min(clip.start + clip.duration, Math.round(Math.max(a, b)))
+    const start = Math.max(clip.start, subtitleFrameBoundary(Math.min(a, b)))
+    const end = Math.min(clip.start + clip.duration, subtitleFrameBoundary(Math.max(a, b)))
     if (end <= start) continue
     groups.push({ start, end, text: part, chars })
   }
@@ -78,8 +78,8 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
       const mismatched = ordered.some(char => char.mismatch)
       const boundaryStart = videoEditClipFrameBoundaryAtSource(clip, first.startMs / 1000, fps)
       const boundaryEnd = videoEditClipFrameBoundaryAtSource(clip, last.endMs / 1000, fps)
-      const startExact = (boundaryStart <= boundaryEnd ? first.startExact : last.endExact) && start === Math.round(Math.min(boundaryStart, boundaryEnd))
-      const endExact = (boundaryStart <= boundaryEnd ? last.endExact : first.startExact) && end === Math.round(Math.max(boundaryStart, boundaryEnd))
+      const startExact = (boundaryStart <= boundaryEnd ? first.startExact : last.endExact) && start === subtitleFrameBoundary(Math.min(boundaryStart, boundaryEnd))
+      const endExact = (boundaryStart <= boundaryEnd ? last.endExact : first.startExact) && end === subtitleFrameBoundary(Math.max(boundaryStart, boundaryEnd))
       const estimated = !startExact || !endExact || mismatched
       return { caption: { id: crypto.randomUUID(), clipId: clip.id, text, start, duration: end - start, style: videoEditSubtitleStyleSchema.parse({}) },
       startUs: Math.round(start * rate.denominator * 1e6 / rate.numerator), endUs: Math.round(end * rate.denominator * 1e6 / rate.numerator),

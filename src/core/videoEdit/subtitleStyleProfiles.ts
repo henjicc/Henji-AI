@@ -28,6 +28,10 @@ export function resolveSubtitleStyle(options: SubtitleStyleOptions = {}, text = 
 export function subtitleWidth(text: string): number {
   return Array.from(text).reduce((sum, char) => sum + (/\r|\n/u.test(char) ? 0 : char.codePointAt(0)! <= 0x7f || /[\uff61-\uffdc]/u.test(char) ? .5 : 1), 0)
 }
+/** Half-open subtitle/word intervals use the same boundary quantization at either edge. */
+export function subtitleFrameBoundary(frame: number): number {
+  return Math.floor(frame + 1e-7)
+}
 export function normalizeSubtitlePunctuation(text: string, policy: 'netflix_zh_hans' | 'preserve'): string {
   if (policy === 'preserve') return text.trim()
   return text.replace(/[，。,.;；:：—]+/gu, ' ').replace(/[^\S\n]+/gu, ' ').replace(/[ 、]+(?=\n|$)/gu, '').trim()

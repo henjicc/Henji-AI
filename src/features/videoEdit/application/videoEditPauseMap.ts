@@ -4,9 +4,10 @@ import type { SpeechTimings } from '@/core/media/speechTimings'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
 import { videoEditTextMediaIdentity, videoEditTranscriptWords } from '@/core/videoEdit/textTranscript'
+import { subtitleFrameBoundary } from '@/core/videoEdit/subtitleStyleProfiles'
 import { getPlatform } from '@/platform/runtime'
 import { readGenerationResultTimings } from '@/features/generation'
-import { getDocumentOperations } from '@/features/documents/documentOperations'
+import { getDocumentOperations } from '@/features/documents'
 import { loadAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { requireVideoEditInstance } from './videoEditService'
 
@@ -73,9 +74,11 @@ export async function getVideoEditClipPauseMap(projectId: string, sequenceId: st
     const timings = saved.length && saved.every(word => word.granularity === 'word') ? undefined : await readClipSpeechTimings(projectId, sequenceId, clipId)
     const map = (startMs: number, endMs: number) => {
       const a = videoEditClipFrameBoundaryAtSource(clip, startMs / 1000, composition.fps); const b = videoEditClipFrameBoundaryAtSource(clip, endMs / 1000, composition.fps)
-      return { startFrame: Math.max(clip.start, Math.floor(Math.min(a, b) + 1e-7)), endFrame: Math.min(clip.start + clip.duration, Math.ceil(Math.max(a, b) - 1e-7)) }
+      return { startFrame: Math.max(clip.start, subtitleFrameBoundary(Math.min(a, b))), endFrame: Math.min(clip.start + clip.duration, subtitleFrameBoundary(Math.max(a, b))) }
     }
-    const words = (saved.length && saved.every(word => word.granularity === 'word') ? saved.map(word => ({ text: word.text, startFrame: word.from, endFrame: word.to }))
+    const words = (saved.length && saved.every(word => word.granularity === 'word') ? saved.map(word => ({ text: word.text,
+      // Direct saved blocks retain microsecond source boundaries; avoid reusing outward-rounded text selections.
+      ...(word.sourceVoiceId ? { startFrame: word.from, endFrame: word.to } : map(word.startFrame / 1000, word.endFrame / 1000)) }))
       : timings?.granularity === 'word' ? timings.items.map(item => ({ text: item.text, ...map(item.startMs, item.endMs) })) : []).filter(word => word.endFrame > word.startFrame).sort((a, b) => a.startFrame - b.startFrame)
     const gaps = words.slice(1).map((word, index) => (word.startFrame - words[index].endFrame) / composition.fps * 1000)
     const pauses: VideoEditPause[] = words.length ? words.slice(1).flatMap((word, index) => {
