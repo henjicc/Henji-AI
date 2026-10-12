@@ -14,7 +14,7 @@ vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: vi.fn(async () => 'ff
 vi.mock('./process', () => ({ runAudioEditProcess: vi.fn(async (_binary: string, _args: string[], _signal: AbortSignal, onLine: (line: string) => void) => {
   onLine('silence_start: 1.2'); onLine('silence_end: 1.6'); return ''
 }) }))
-vi.mock('./task-store', () => ({ runAudioEditTask: vi.fn(async (_id: string, _kind: string, operation: (signal: AbortSignal, progress: (value: number) => void) => Promise<unknown>) => operation(new AbortController().signal, () => undefined)) }))
+vi.mock('./task-store', () => ({ registerAudioEditTaskController: () => () => {}, runAudioEditTask: vi.fn(async (_id: string, _kind: string, operation: (signal: AbortSignal, progress: (value: number) => void) => Promise<unknown>) => operation(new AbortController().signal, () => undefined)) }))
 
 it('无口播文档的源声音复用静音检测，不创建或读取文档，沿只读任务执行', async () => {
   const result = await detectAudioEditSilence({ sourcePath: 'voice.wav', requestId: 'pause-map', settings: { ...DEFAULT_AUDIO_EDIT_SETTINGS, silenceThresholdMs: 100, retainedSilenceMs: 0, trimEdges: true } })

@@ -42,8 +42,9 @@ export function createAudioEditTask(input: {
 }
 
 export function registerAudioEditTaskController(requestId: string, projectId: string, controller: AbortController, readOnly = false): () => void {
+  if (active.has(requestId) && active.get(requestId)?.controller !== controller) throw new Error('该任务正在执行，请查询原任务状态。')
   active.set(requestId, { controller, projectId, readOnly })
-  return () => { active.delete(requestId) }
+  return () => { if (active.get(requestId)?.controller === controller) active.delete(requestId) }
 }
 
 export function assertAudioEditProjectIdle(projectId: string): void {
@@ -72,7 +73,8 @@ export function listAudioEditTasks(projectId: string): AudioEditTask[] {
   })
 }
 
-export async function runAudioEditTask<T>(projectId: string, kind: string, operation: (signal: AbortSignal, progress: (value: number) => void) => Promise<T>, requestId: string = crypto.randomUUID(), input: string = '', readOnly = false): Promise<T> {
+export async function runAudioEditTask<T>(projectId: string, kind: string, operation: (signal: AbortSignal, progress: (value: number) => void) => Promise<T>, requestId: string = crypto.randomUUID(), input: string = '', readOnly = false, controller = new AbortController()): Promise<T> {
+  controller.signal.throwIfAborted()
   const inputDigest = crypto.createHash('sha256').update(input).digest('hex')
   const existing = getDb().prepare('SELECT document_id,kind,state,result_json,input_digest FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as { document_id: string; kind: string; state: string; result_json: string | null; input_digest: string } | undefined
   if (existing) {
@@ -81,7 +83,6 @@ export async function runAudioEditTask<T>(projectId: string, kind: string, opera
     throw new Error('该任务已提交，请查询原任务状态。')
   }
   if (!readOnly) assertAudioEditProjectIdle(projectId)
-  const controller = new AbortController()
   const release = registerAudioEditTaskController(requestId, projectId, controller, readOnly)
   try {
     createAudioEditTask({ requestId, projectId, kind, inputDigest })
@@ -93,6 +94,7 @@ export async function runAudioEditTask<T>(projectId: string, kind: string, opera
       const task = active.get(requestId)
       if (task) task.progress = Math.max(0, Math.min(1, progress))
     })
+    controller.signal.throwIfAborted()
     updateAudioEditTask(requestId, { state: 'completed', result: result ?? null })
     logger.info('口播处理完成', { event: `audio_edit.${kind}.completed`, requestId, context: { projectId } })
     return result

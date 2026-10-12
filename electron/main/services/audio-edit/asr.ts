@@ -49,14 +49,22 @@ export async function preflightAudioEditTranscription(input: TranscriptionPrefli
 export async function transcribeAudioEditProject(
   request: AudioEditTranscriptionRequest,
 ): Promise<AudioEditTranscriptionResult> {
+  const requestId = request.requestId ?? crypto.randomUUID()
+  const controller = new AbortController()
+  const release = registerAudioEditTaskController(requestId, request.projectId, controller, true)
+  try { return await transcribeRegisteredProject({ ...request, requestId }, controller) }
+  finally { release() }
+}
+
+async function transcribeRegisteredProject(request: AudioEditTranscriptionRequest, controller: AbortController): Promise<AudioEditTranscriptionResult> {
   let billing: TranscriptionFacts['billing'] = 'not_charged'
   try {
   const project = await requireAudioEditProject(request.projectId)
   if (project.transcript.length) throw new Error('口播已有转写，请保留当前编辑；需要重新识别时另建口播。')
-  await verifyAudioEditSource(project)
+  await verifyAudioEditSource(project, true, controller.signal)
   const previous = findAudioEditTranscription(project.id)
   if (previous) billing = 'unknown'
-  if (previous && isAudioEditTaskActive(previous.request_id)) throw new Error('该口播正在转写，请等待或取消。')
+  if (previous && previous.request_id !== request.requestId && isAudioEditTaskActive(previous.request_id)) throw new Error('该口播正在转写，请等待或取消。')
   const priorInput = previous?.result_json ? JSON.parse(previous.result_json) as { modelId?: string; sourceDigest?: string; language?: string; output?: AudioEditTranscriptionResult; billing?: TranscriptionFacts['billing'] } : undefined
   const neverSubmitted = previous?.state === 'failed' && !previous.provider_task_id && (priorInput?.billing === 'not_charged' || previous.error_message?.startsWith('[native_upload_unsupported]'))
   if (neverSubmitted) billing = 'not_charged'
@@ -79,8 +87,8 @@ export async function transcribeAudioEditProject(
   const inputDigest = crypto.createHash('sha256').update(JSON.stringify({ projectId: project.id, sourceDigest, modelId, language })).digest('hex')
   const requestId = previous?.request_id ?? request.requestId ?? crypto.randomUUID()
   if (!previous || neverSubmitted) await timestampedAsrService.preflight({ sourcePath: plan.audioPath, durationMs: plan.durationMs, modelId })
+  controller.signal.throwIfAborted()
   assertAudioEditProjectIdle(project.id)
-  const controller = new AbortController()
   const release = registerAudioEditTaskController(requestId, project.id, controller)
   controllers.set(requestId, controller)
   try {
@@ -133,7 +141,7 @@ export async function transcribeAudioEditProject(
     // Keep the paid result in the existing task receipt before IPC delivery; reload can retrieve it.
     updateAudioEditTask(requestId, { state: 'completed', result: { modelId, sourceDigest, language, billing, output: result } })
     controller.signal.throwIfAborted()
-    await verifyAudioEditSource(project)
+    await verifyAudioEditSource(project, true, controller.signal)
     return result
   } catch (error) {
     if ((error instanceof AiRuntimeError && error.details?.billing === 'not_charged') || (error instanceof Error && error.message.startsWith('[native_upload_unsupported]'))) billing = 'not_charged'

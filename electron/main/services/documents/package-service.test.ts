@@ -35,6 +35,20 @@ describe('通用单文件包（4.1）', () => {
   beforeEach(() => { env = createTestEnvironment() })
   afterEach(async () => { await env.cleanup() })
 
+  it('清单中文档缺失或无法解析时报告全部失败文件，保留原包且不发布项目', async () => {
+    const source = path.join(env.outside, '不完整.henjipack')
+    await writeZip(source, {
+      'henji-package.json': JSON.stringify({ format: 'henji-package', version: 1, type: 'project', name: '不完整', exportedAt: '',
+        folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: 'missing-one', path: '缺少.henji-canvas' }, { id: 'broken-one', path: '无法解析.henji-canvas' }] }),
+      'content/无法解析.henji-canvas': '{',
+    })
+    const original = await fsp.readFile(source)
+    await expect(env.services.service.importPackage({ source })).rejects.toThrow('缺少.henji-canvas、无法解析.henji-canvas')
+    expect(await fsp.readFile(source)).toEqual(original)
+    expect(env.catalog.listProjects()).toEqual([])
+    expect(await fsp.readdir(path.join(env.workRoot, '项目'))).toEqual([])
+  })
+
   it('单个文档：包含容器里的文件、内嵌图层包与收集进来的外部文件；导入到另一个项目时 ID 冲突换新、引用改写到新位置', async () => {
     const { service } = env.services
     const source = await service.createProject({ name: '短片' })

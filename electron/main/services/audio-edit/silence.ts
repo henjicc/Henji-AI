@@ -4,17 +4,29 @@ import { requireAudioEditProject } from './project-store'
 import { probeAudioEditImport, verifyAudioEditSource } from './media'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { runAudioEditProcess } from './process'
-import { runAudioEditTask } from './task-store'
+import { registerAudioEditTaskController, runAudioEditTask } from './task-store'
 
 export async function detectAudioEditSilence(request: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }> {
+  const requestId = request.requestId ?? crypto.randomUUID()
+  const controller = new AbortController()
+  const release = registerAudioEditTaskController(requestId, request.projectId ?? requestId, controller, true)
+  try {
+    const result = await detectRegisteredSilence({ ...request, requestId }, controller)
+    controller.signal.throwIfAborted()
+    return result
+  } finally { release() }
+}
+
+async function detectRegisteredSilence(request: AudioEditSilenceRequest, controller: AbortController): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }> {
   // Source-only analysis is read-only: no draft, transcript, or navigation side effect.
+  const projectId = request.projectId ?? request.requestId ?? crypto.randomUUID()
   const project = request.projectId !== undefined ? await requireAudioEditProject(request.projectId)
-    : { id: request.requestId ?? crypto.randomUUID(), revision: 0, source: await probeAudioEditImport(request.sourcePath), transcript: [] }
-  await verifyAudioEditSource(project)
+    : { id: projectId, revision: 0, source: await probeAudioEditImport(request.sourcePath, crypto.randomUUID(), controller.signal), transcript: [] }
+  await verifyAudioEditSource(project, true, controller.signal)
   const settings = request.settings
   if (!(settings.noiseDb >= -80 && settings.noiseDb <= -10 && settings.silenceThresholdMs >= 100 && settings.silenceThresholdMs <= 10000
     && settings.retainedSilenceMs >= 0 && settings.retainedSilenceMs < settings.silenceThresholdMs)) throw new Error('停顿参数无效：保留时长必须小于检测时长。')
-  return runAudioEditTask(project.id, 'silence', async (signal, progress) => {
+  return runAudioEditTask(projectId, 'silence', async (signal, progress) => {
     const intervals: AudioEditRange[] = []
     let start: number | undefined
     await runAudioEditProcess(await loadFfmpegPath(), ['-hide_banner', '-nostats', '-i', project.source.audioPath,
@@ -39,7 +51,7 @@ export async function detectAudioEditSilence(request: AudioEditSilenceRequest): 
       && (!request.range || (range.startFrame >= request.range.startFrame && range.endFrame <= request.range.endFrame)))
       .map((range) => ({ ...range, id: `silence:${range.startFrame}:${range.endFrame}`, kind: 'long_silence', evidence: 'audio', title: '压缩停顿', detail: `保留 ${settings.retainedSilenceMs} 毫秒气口`, blockIds: [], confidence: 'high', status: 'pending' }))
     signal.throwIfAborted()
-    await verifyAudioEditSource(project)
+    await verifyAudioEditSource(project, true, signal)
     return { revision: project.revision, suggestions }
-  }, request.requestId, JSON.stringify([project.revision, project.source.identity, settings, request.range]), true)
+  }, request.requestId, JSON.stringify([project.revision, project.source.identity, settings, request.range]), true, controller)
 }

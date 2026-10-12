@@ -1,7 +1,9 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterAll, beforeAll, afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { WorkerOptions } from 'node:worker_threads';
+import { buildImageColorTestWorker } from '../image-color-worker.test-support';
 import { loadSharp } from '../../image/sharp-loader';
 import { decodeTransferFunctionV3 } from '../../../../../src/core/imaging/colorManagement';
 import { ContentAddressedResourceStore } from '../resource-store';
@@ -12,6 +14,16 @@ import { decodeInterleavedRgbaSourceTileV3 } from '../../../../../src/core/image
 import { removeTemporaryDirectory } from '../../../../../src/tests/removeTemporaryDirectory';
 
 let directory = '';
+const workerState = vi.hoisted(() => ({ path: '' }));
+vi.mock('node:worker_threads', async () => {
+  const actual = await vi.importActual<typeof import('node:worker_threads')>('node:worker_threads');
+  return { ...actual, Worker: class extends actual.Worker {
+    constructor(_file: string | URL, options?: WorkerOptions) { super(workerState.path, options); }
+  } };
+});
+let cleanupWorker: () => Promise<void>;
+beforeAll(async () => { const worker = await buildImageColorTestWorker(); workerState.path = worker.path; cleanupWorker = worker.cleanup; });
+afterAll(async () => { await cleanupWorker(); });
 beforeEach(async () => { directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-color-source-')); });
 afterEach(async () => { await removeTemporaryDirectory(directory); });
 

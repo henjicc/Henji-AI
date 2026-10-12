@@ -102,6 +102,7 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
     setPackageStatus(null)
     setWorking(true)
     try { await action() } catch (raw) {
+      setPackageStatus(null)
       setActionError(t(`projectLibrary.failed.${failureKey}`, { message: toError(raw).message }))
     } finally { setWorking(false) }
   }, [t])

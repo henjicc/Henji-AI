@@ -830,7 +830,17 @@ export class DocumentRepository {
     try {
       await adapter.writeHeader(target, patch)
     } catch (error) {
-      if (file.path !== target) await moveFileNoOverwrite(target, file.path).catch(() => undefined)
+      if (file.path !== target) {
+        try { await moveFileNoOverwrite(target, file.path) }
+        catch (rollbackError) {
+          this.options.logger.error('文档改名失败且未能移回原处', {
+            event: 'documents.package.move.rollback_failed',
+            context: { original: file.path, retainedPath: target, documentId: file.header.id, recovery: '检查文件权限，保留目标文件并重新扫描作品索引' },
+            error: rollbackError,
+          })
+          throw new Error(`文档改名未完成，也未能移回原处。文件保留在“${target}”，请检查文件权限后重新扫描作品索引。`, { cause: error })
+        }
+      }
       throw error
     }
   }

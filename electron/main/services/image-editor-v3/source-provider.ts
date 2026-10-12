@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { assertImageEditorV3SourceColor } from './source-ingest/release-source-capabilities'
-import { decodeTransferFunctionV3, encodeTransferFunctionV3, linearWorkingSpaceMatrixV3 } from '../../../../src/core/imaging/colorManagement/rgb'
+import { decodeStandardRgbInWorker } from './source-color-worker'
 import { standardRgbProfile } from './export/standard-profiles'
 import { loadSharp } from '../image/sharp-loader'
 import { AbortableSingleflight, throwIfImageSourceAborted } from './abortable-singleflight'
@@ -62,33 +62,6 @@ function positiveInteger(value: number, name: string): number {
 function normalizeRawLittleEndian(data: Buffer, bitDepth: 8 | 16 | 32): Buffer {
   if (os.endianness() === 'LE' || bitDepth === 8) return data
   return bitDepth === 16 ? data.swap16() : data.swap32()
-}
-
-/** 标准 P3 沿已验证的共享 D65 数学转到 scRGB；保留超白、负值与 Alpha。 */
-function decodeStandardRgb(bytes: Buffer, space: 'srgb' | 'display-p3', bitDepth: 8 | 16 | 32 = 32): Buffer {
-  const raw = normalizeRawLittleEndian(bytes, 16), matrix = linearWorkingSpaceMatrixV3(space, 'srgb');
-  const bytesPerSample = bitDepth / 8;
-  const output = Buffer.allocUnsafe(raw.length / 2 * bytesPerSample);
-  const write = (value: number, index: number) => {
-    if (bitDepth === 32) output.writeFloatLE(value, index * bytesPerSample);
-    else {
-      const maximum = bitDepth === 8 ? 255 : 65535;
-      const integer = Math.round(Math.min(1, Math.max(0, value)) * maximum);
-      if (bitDepth === 8) output.writeUInt8(integer, index);
-      else output.writeUInt16LE(integer, index * 2);
-    }
-  };
-  for (let offset = 0; offset < raw.length; offset += 8) {
-    const r = decodeTransferFunctionV3(raw.readUInt16LE(offset) / 65535, 'srgb');
-    const g = decodeTransferFunctionV3(raw.readUInt16LE(offset + 2) / 65535, 'srgb');
-    const b = decodeTransferFunctionV3(raw.readUInt16LE(offset + 4) / 65535, 'srgb');
-    for (let channel = 0; channel < 3; channel++) {
-      const linear = matrix[channel * 3] * r + matrix[channel * 3 + 1] * g + matrix[channel * 3 + 2] * b;
-      write(bitDepth === 32 ? linear : encodeTransferFunctionV3(linear, 'srgb'), offset / 2 + channel);
-    }
-    write(raw.readUInt16LE(offset + 6) / 65535, offset / 2 + 3);
-  }
-  return output;
 }
 
 function describeMetadataPyramid(metadata: SourceImageMetadata): SourcePyramidDescriptor {
@@ -351,7 +324,7 @@ export class SharpSourceProvider implements SourceProvider {
             if (standardP3 || standardSrgb) pipeline = pipeline.keepIccProfile().toColourspace(standardP3 || bitDepth !== 8 ? 'rgb16' : 'srgb').raw({ depth: standardP3 || bitDepth !== 8 ? 'ushort' : 'uchar' });
             else if (metadata.hasIccProfile) pipeline = pipeline.withIccProfile('srgb', { attach: false });
             const decoded = await runSharpOperation(pipeline, signal, () => pipeline.toBuffer());
-            const pixels = standardP3 ? decodeStandardRgb(decoded, 'display-p3', bitDepth) : normalizeRawLittleEndian(decoded, bitDepth);
+            const pixels = standardP3 ? await decodeStandardRgbInWorker(decoded, 'display-p3', bitDepth, signal) : normalizeRawLittleEndian(decoded, bitDepth);
             logger.debug('完成解码图片源条带', { event: 'image_editor_v3.source.stripe.completed',
               context: { ...context, elapsedMs: performance.now() - started } })
             return pixels
@@ -429,7 +402,7 @@ export class SharpSourceProvider implements SourceProvider {
       orientationApplied: true,
       originX,
       originY,
-      pixels: standardP3 || integerIccFloat ? decodeStandardRgb(data, standardP3 ? 'display-p3' : 'srgb', bitDepth) : normalizeRawLittleEndian(data, bitDepth),
+      pixels: standardP3 || integerIccFloat ? await decodeStandardRgbInWorker(data, standardP3 ? 'display-p3' : 'srgb', bitDepth, request.signal) : normalizeRawLittleEndian(data, bitDepth),
     }
   }
 

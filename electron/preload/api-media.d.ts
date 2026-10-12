@@ -336,7 +336,7 @@ export interface HenjiAudioApi {
   extractWaveformPyramid(payload: AudioWaveformPyramidRequest & { requestId: string }): Promise<AudioWaveformPyramidResult>
   cancelExtractSamples(requestId: string): Promise<void>
   /** 导入音频或视频时探测素材（口播文档本身经通用文档接口新建，3.3）。 */
-  probeEditSource(sourcePath: string): Promise<AudioEditSourceMetadata>
+  probeEditSource(sourcePath: string, requestId?: string): Promise<AudioEditSourceMetadata>
   listAsrModels(): Promise<Array<{
     id: string
     providerId: string

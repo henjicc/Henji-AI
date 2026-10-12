@@ -1,4 +1,4 @@
-import type { Dirent } from 'node:fs'
+import type { Dirent, Stats } from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -12,7 +12,7 @@ import { writeBufferAtomically } from '../fs/atomic-file'
 import type { MainLogger } from '../logging/main-logger'
 import type { IndexedDocument } from './catalog'
 import { indexedFromFile, loadDocumentFile, summarizeFile, type LoadedDocumentFile } from './document-file'
-import { DocumentFormatError, DocumentUnsupportedError } from './errors'
+import { DocumentFormatError, DocumentNotFoundError, DocumentUnsupportedError, errorCode } from './errors'
 import type { PackageAdapterRegistry } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
 
@@ -54,6 +54,15 @@ type MutableReport = Omit<DocumentIndexScanReport, 'durationMs'>
 
 const DEFAULT_MAX_DEPTH = 8
 
+function isMissing(error: unknown): boolean {
+  return error instanceof DocumentNotFoundError || errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR'
+}
+
+async function statIfPresent(target: string): Promise<Stats | null> {
+  try { return await fsp.stat(target) }
+  catch (error) { if (isMissing(error)) return null; throw error }
+}
+
 function emptyReport(startedAt: number): MutableReport {
   return { startedAt, projects: 0, documents: 0, readDocuments: 0, reassignedIds: 0, moved: 0, missing: 0, invalid: 0 }
 }
@@ -61,6 +70,9 @@ function emptyReport(startedAt: number): MutableReport {
 export class DocumentIndexScanner {
   private queue: Promise<unknown> = Promise.resolve()
   private pending: Promise<DocumentIndexScanReport> | null = null
+  private mutations: Array<() => void> = []
+  private scannedProjectRoots: string[] = []
+  private rebuilding = false
 
   constructor(private readonly options: DocumentIndexScannerOptions) {}
 
@@ -81,29 +93,41 @@ export class DocumentIndexScanner {
   }
 
   /** 清掉可重建的索引行（保留外部位置）后完整扫描。 */
-  async rebuild(): Promise<DocumentIndexScanReport> {
-    await this.queue
-    this.workspace.catalog.clearRebuildableIndex()
-    this.options.logger.info('作品索引已清空，开始重建', { event: 'documents.index.rebuild.start' })
-    return await this.refresh()
+  rebuild(): Promise<DocumentIndexScanReport> {
+    const run = this.queue.then(() => {
+      this.options.logger.info('开始重建作品索引，读取完成前保留原索引', { event: 'documents.index.rebuild.start' })
+      return this.scanOnce(true)
+    })
+    this.queue = run.catch(() => undefined)
+    return run
   }
 
-  private async scanOnce(): Promise<DocumentIndexScanReport> {
+  private async scanOnce(rebuilding = false): Promise<DocumentIndexScanReport> {
     const startedAt = Date.now()
     const report = emptyReport(startedAt)
     const logger = this.options.logger
+    this.mutations = []
+    this.scannedProjectRoots = []
+    this.rebuilding = rebuilding
+    let publishingIndex = false
     logger.info('开始扫描作品索引', { event: 'documents.index.scan.start' })
     try {
       const projects = await this.scanProjects(report)
       await this.scanDocuments(projects, report)
       await this.sweepProjects(projects, report)
+      // I/O 阶段完全成功才改变索引，权限/磁盘故障不会把原有记录标为缺失。
+      publishingIndex = true
+      if (this.rebuilding) this.workspace.catalog.clearRebuildableIndex()
+      for (const apply of this.mutations) apply()
       const result = { ...report, durationMs: Date.now() - startedAt }
       logger.info('作品索引扫描完成', { event: 'documents.index.scan.completed', context: result })
       return result
     } catch (error) {
       logger.error('作品索引扫描失败', { event: 'documents.index.scan.failed', context: { ...report }, error })
-      throw error
-    }
+      throw new Error(publishingIndex
+        ? '作品索引更新未完成，请检查磁盘空间后重试扫描。作品文件已保留。'
+        : '作品索引扫描未完成，原有索引已保留。请检查作品目录及外部文件夹的访问权限、磁盘连接后重试。', { cause: error })
+    } finally { this.mutations = []; this.scannedProjectRoots = []; this.rebuilding = false }
   }
 
   // ==================== 项目 ====================
@@ -119,7 +143,7 @@ export class DocumentIndexScanner {
     }
     const candidates: ProjectCandidate[] = []
     for (const root of roots) {
-      const stat = await fsp.stat(root).catch(() => null)
+      const stat = await statIfPresent(root)
       if (stat?.isDirectory()) candidates.push({ root, birthtimeMs: stat.birthtimeMs })
     }
     // 已在索引里、位置没变的项目先认领 ID，拷贝出来的副本后处理；其余按创建时间先后。
@@ -136,6 +160,7 @@ export class DocumentIndexScanner {
       try {
         manifest = (await this.workspace.ensureManifest(candidate.root)).manifest
       } catch (error) {
+        if (!(error instanceof ProjectManifestError)) throw error
         report.invalid += 1
         this.options.logger.warn('项目说明无法读取，跳过这个项目', {
           event: 'documents.index.project_invalid',
@@ -155,7 +180,8 @@ export class DocumentIndexScanner {
         })
       }
       const project = await this.workspace.describeProject(candidate.root, manifest)
-      catalog.upsertProject(project)
+      this.mutations.push(() => catalog.upsertProject(project))
+      this.scannedProjectRoots.push(project.path)
       claimed.set(project.id, this.workspace.containerOfProject(candidate.root, manifest))
       report.projects += 1
     }
@@ -166,7 +192,7 @@ export class DocumentIndexScanner {
     if (claimed.has(id)) return true
     const existing = this.workspace.catalog.getProject(id)
     if (!existing || samePath(this.workspace.style, existing.path, root)) return false
-    const other = await this.workspace.readManifest(existing.path).catch(() => null)
+    const other = await this.workspace.readManifest(existing.path)
     return other?.id === id
   }
 
@@ -177,16 +203,18 @@ export class DocumentIndexScanner {
     const locations = catalog.listExternalLocations().filter((location) => location.kind === 'project')
     for (const project of catalog.listProjects()) {
       if (claimed.has(project.id)) continue
-      const exists = await fsp.stat(project.path).then((stat) => stat.isDirectory(), () => false)
+      const stat = await statIfPresent(project.path)
+      if (stat && !stat.isDirectory()) throw new Error(`项目位置不是文件夹：${project.path}`)
+      const exists = stat !== null
       const inScope = samePath(this.workspace.style, path.dirname(project.path), layout.projectsDir)
         || locations.some((location) => samePath(this.workspace.style, location.path, project.path))
       if (!exists) {
         if (!project.missing) {
-          catalog.upsertProject({ ...project, missing: true })
+          this.mutations.push(() => catalog.upsertProject({ ...project, missing: true }))
           report.missing += 1
         }
       } else if (!inScope) {
-        catalog.removeProject(project.id)
+        this.mutations.push(() => catalog.removeProject(project.id))
       }
     }
   }
@@ -214,7 +242,7 @@ export class DocumentIndexScanner {
     for (const candidate of candidates) {
       const row = catalog.getDocumentByPath(candidate.path)
       const projectId = candidate.container.ref.kind === 'project' ? candidate.container.ref.projectId : null
-      if (row && !row.missing && !claimed.has(row.id) && row.fileModifiedAt === candidate.mtimeMs
+      if (!this.rebuilding && row && !row.missing && !claimed.has(row.id) && row.fileModifiedAt === candidate.mtimeMs
         && row.fileSize === candidate.size && row.projectId === projectId) {
         claimed.add(row.id)
         report.documents += 1
@@ -243,8 +271,9 @@ export class DocumentIndexScanner {
   private async readDirectory(directory: string): Promise<Dirent[]> {
     try {
       return await fsp.readdir(directory, { withFileTypes: true })
-    } catch {
-      return []
+    } catch (error) {
+      if (isMissing(error)) return []
+      throw error
     }
   }
 
@@ -262,12 +291,13 @@ export class DocumentIndexScanner {
       if (entry.isDirectory()) {
         if (level >= options.depth || entry.name.startsWith('.')) continue
         if (level === 0 && options.skipTop.some((name) => sameEntryName(name, entry.name))) continue
-        if (await this.workspace.readManifest(entryPath).then((manifest) => Boolean(manifest), () => true)) continue
+        try { if (await this.workspace.readManifest(entryPath)) continue }
+        catch (error) { if (error instanceof ProjectManifestError) continue; throw error }
         await this.collect(entryPath, container, candidates, options, level + 1)
         continue
       }
       if (!entry.isFile() || !this.options.kinds.forFileName(entry.name)) continue
-      const stat = await fsp.stat(entryPath).catch(() => null)
+      const stat = await statIfPresent(entryPath)
       if (!stat?.isFile()) continue
       candidates.push({ path: entryPath, container, mtimeMs: stat.mtimeMs, size: stat.size, birthtimeMs: stat.birthtimeMs })
     }
@@ -280,6 +310,7 @@ export class DocumentIndexScanner {
       file = await loadDocumentFile(candidate.path, { kinds: this.options.kinds, adapters: this.options.adapters })
     } catch (error) {
       if (error instanceof DocumentUnsupportedError) return null
+      if (!(error instanceof DocumentFormatError) && !isMissing(error)) throw error
       report.invalid += 1
       this.options.logger.debug('跳过无法识别的文档文件', {
         event: 'documents.index.document_invalid',
@@ -298,7 +329,7 @@ export class DocumentIndexScanner {
       this.options.logger.info('识别到文档移动', { event: 'documents.index.document_moved', context: { documentId: id, from: existing.path, to: candidate.path } })
     }
     const row = indexedFromFile(file, candidate.container, summarizeFile(file, candidate.container, this.workspace))
-    catalog.upsertDocument(row)
+    this.mutations.push(() => catalog.upsertDocument(row))
     return row
   }
 
@@ -307,8 +338,9 @@ export class DocumentIndexScanner {
     try {
       const other = await loadDocumentFile(existing.path, { kinds: this.options.kinds, adapters: this.options.adapters })
       return other.header.id === id
-    } catch {
-      return false
+    } catch (error) {
+      if (isMissing(error) || error instanceof DocumentFormatError || error instanceof DocumentUnsupportedError) return false
+      throw error
     }
   }
 
@@ -344,14 +376,16 @@ export class DocumentIndexScanner {
     const scopes = this.documentScopes()
     for (const row of catalog.listDocuments()) {
       if (claimed.has(row.id)) continue
-      const exists = await fsp.stat(row.path).then((stat) => stat.isFile(), () => false)
+      const stat = await statIfPresent(row.path)
+      if (stat && !stat.isFile()) throw new Error(`文档位置不是文件：${row.path}`)
+      const exists = stat !== null
       if (!exists) {
         if (!row.missing) {
-          catalog.upsertDocument({ ...row, missing: true })
+          this.mutations.push(() => catalog.upsertDocument({ ...row, missing: true }))
           report.missing += 1
         }
       } else if (!scopes.some((scope) => scope(row.path))) {
-        catalog.removeDocument(row.id)
+        this.mutations.push(() => catalog.removeDocument(row.id))
       }
     }
   }
@@ -359,7 +393,7 @@ export class DocumentIndexScanner {
   private documentScopes(): Array<(target: string) => boolean> {
     const style = this.workspace.style
     const catalog = this.workspace.catalog
-    const projectRoots = catalog.listProjects().map((project) => project.path)
+    const projectRoots = [...this.scannedProjectRoots, ...catalog.listProjects().map((project) => project.path)]
     const folders = catalog.listExternalLocations().filter((location) => location.kind === 'folder').map((location) => location.path)
     return [
       ...projectRoots.map((root) => (target: string) => isPathInside(style, root, target)),
