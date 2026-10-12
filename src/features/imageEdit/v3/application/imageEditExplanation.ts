@@ -1,3 +1,4 @@
+import { withPaidOperation } from '@/services/paidApproval'
 import { prepareExplanationGeneration, type PreparedExplanationGeneration, type ExplanationSendRequest } from '@/features/creativeIntent'
 import { sameExplanationBinding, eraseExplanationBody, explanationBodyRef, registerExplanationBodyEditor, writeExplanationBody, type ExplanationBodyChanges } from '@/core/creativeIntent/semanticIntentEdits'
 import { semanticRecordingEvents } from '@/core/creativeIntent/semanticIntentRecording'
@@ -54,6 +55,7 @@ export class ImageEditExplanation {
   private erasedSessionId?: string
   private generation?: PreparedExplanationGeneration
   private controller = new AbortController()
+  private transcription?: AbortController
   private microphone?: MicrophoneCapture
   private origin = 0
   private resources: StoredCreativeIntentResource[] = []
@@ -316,6 +318,10 @@ export class ImageEditExplanation {
     const collector = this.require(), session = collector.session
     if (!receipt || this.state.busy || !['reviewing', 'recoverable'].includes(session.state)) throw new Error('请结束录制并确认转写授权。')
     const resume = session.state === 'recoverable'
+    const transcription = new AbortController(); this.transcription = transcription
+    const abort = (): void => transcription.abort()
+    this.controller.signal.addEventListener('abort', abort, { once: true })
+    if (this.controller.signal.aborted) abort()
     this.publish({ busy: true, message: undefined })
     try {
       const modelId = session.asr?.moduleId ?? await this.ports.model()
@@ -323,18 +329,24 @@ export class ImageEditExplanation {
       session.asr = { moduleId: modelId, providerId: modelId.split('.')[0], granularity: 'segment' }
       session.consent = { ...session.consent!, audioUpload: true, transcriptionProvider: session.asr.providerId }; session.state = 'transcribing'; this.publish()
       const completed = new Set<string>(); for await (const event of this.events('transcript')) if (event.kind === 'transcript') completed.add(event.audioSegmentRef)
+      let hasPendingAudio = false
+      for await (const audio of this.events('audio')) if (audio.kind === 'audio' && !completed.has(audio.audioSegmentRef)) { hasPendingAudio = true; break }
+      if (hasPendingAudio) await withPaidOperation({ category: 'recognition', documentId: imageEditV3DocumentRef(this.bus.getSnapshot().document.id), title: '转写讲解录音', message: '将录音发送给已配置的转写模型，按模型计费。此次只发送录音。' }, async () => {
       for await (const audio of this.events('audio')) {
         if (audio.kind !== 'audio' || completed.has(audio.audioSegmentRef)) continue
+        transcription.signal.throwIfAborted(); this.assert(collector)
+        if (session.state !== 'transcribing') throw new Error('转写已取消。')
         const result = await this.ports.audio.transcribe({ action: 'transcribe', sessionId: session.id, chunkId: audio.audioSegmentRef, modelId, requestId: audio.audioSegmentRef, audioUploadReceipt: receipt, resume })
         this.assert(collector); if (session.state !== 'transcribing') throw new Error('转写已取消。')
         const aligned = alignRecordingTranscript(result.transcript, audio, session.clockSegments, collector.nextSeq, suffix => `${audio.audioSegmentRef}/${suffix}`)
         for (const entry of aligned.entries) collector.append(transcriptEventSchema.parse(entry))
         await this.save()
       }
+      }, transcription.signal)
       session.state = 'reviewing'; await this.save()
       logger.info('图片讲解转写完成', { event: 'image_edit.explanation.transcribe.completed' })
     } catch (error) { session.state = 'recoverable'; this.publish({ message: '转写未完成，原稿已保留。' }); logger.warn('图片讲解转写未完成', { event: 'image_edit.explanation.transcribe.failed' }); throw error }
-    finally { this.publish({ busy: false }) }
+    finally { this.controller.signal.removeEventListener('abort', abort); this.transcription = undefined; this.publish({ busy: false }) }
   }
   async readReview(entry: TranscriptEntry, mentionId?: string, includeImage = true): Promise<ExplanationReviewResult> {
     const collector = this.require(), events: ExplanationEvent[] = [], entries: TranscriptEntry[] = []
@@ -464,6 +476,7 @@ export class ImageEditExplanation {
     try { void this.bind(pending.entry, pickedExplanationBinding(pending.mention, targets, point)).then(pending.resolve, pending.reject) } catch (error) { pending.reject(error) }
   }
   async cancelTranscription(): Promise<void> {
+    this.transcription?.abort()
     const collector = this.require(); collector.session.state = 'recoverable'
     await this.ports.audio.cancel(collector.session.id); this.publish()
     logger.info('图片讲解转写已取消', { event: 'image_edit.explanation.transcribe.cancelled' })

@@ -1,6 +1,5 @@
-import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { executeApplicationWrite } from '@/core/application-control/execution/writeExecution'
-import { applicationPaidRequest } from '@/services/paidApproval'
+import { withPaidOperation, isPaidOperationCancelled } from '@/services/paidApproval'
 import { z } from 'zod'
 import { llmChatStream, llmCancelTask } from '@/commands/llmRuntime'
 import { createLogger } from '@/core/logging'
@@ -9,7 +8,6 @@ import { videoEditCaptionSchema } from '@/core/videoEdit/timedContent'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
-import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { editVideoSequence, requireVideoEditInstance, holdVideoEditActivity, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.bilingualSubtitles')
@@ -50,7 +48,7 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
     const model = config.models.find(model => model.enabled && model.capabilities.text && (!options.modelId || model.modelId === options.modelId) && (!options.providerId || model.providerId === options.providerId) && config.providers.some(provider => provider.enabled && provider.providerId === model.providerId))
     const provider = config.providers.find(provider => provider.providerId === model?.providerId)
     if (!model || !provider) throw new Error('请在设置中配置并启用可用的文本模型。')
-    if (hasApplicationConfirmation(signal)) await requestAlertConfirmation({ title: '生成双语字幕', message: '将字幕原文发给已配置的文本模型生成第二语言，重新生成会替换现有译文，可一步撤销。', confirmLabel: '允许本次', paid: await applicationPaidRequest('translation', projectId, signal) }, signal)
+    return await withPaidOperation({ category: 'translation', documentId: projectId, title: '生成双语字幕' }, async paidSignal => {
     const translations = new Map<string, string>()
     for (let offset = 0; offset < captions.length; offset += 12) {
       assertTarget()
@@ -69,7 +67,7 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
         if (event.type === 'Token' && !failure) { output += event.data; if (output.length > 64000) { failure = '译文输出过长，请减少字幕数量后重试。'; cancel() } }
         else if (event.type === 'Done') completed = true
         else if (event.type === 'Error') failure = describeLlmProviderError(event.data)
-      })) } catch (error) {
+      }, { category: 'translation', signal: paidSignal })) } catch (error) {
         signal?.throwIfAborted()
         throw new Error(failure || describeLlmProviderError(error instanceof Error ? error.message : String(error)))
       }
@@ -88,17 +86,17 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
     await saveVideoEdit(projectId)
     logger.info('双语字幕已生成', { event: 'video_edit.subtitle.translate.completed', requestId, context: { projectId, sequenceId, count: captions.length } })
     return captions.map(caption => caption.id)
+    }, signal)
   } catch (error) { logger.error('双语字幕生成失败', { event: 'video_edit.subtitle.translate.failed', requestId, error, context: { projectId, sequenceId } }); throw error }
   finally { signal?.removeEventListener('abort', cancel); running.delete(owner); release() }
   })
 }
 
-/** Manual operation uses the same confirmation component as transcription; capability approval remains R2. */
+/** UI delegates approval and execution to the same domain operation. */
 export async function confirmVideoEditBilingualSubtitles(projectId: string, sequenceId: string, options: SubtitleTranslationOptions, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(projectId)
-  const accepted = hasApplicationConfirmation(signal) || await requestAlertConfirmation({ title: '生成双语字幕', message: '将字幕原文发给已配置的文本模型生成第二语言，按模型计费。重新生成会替换现有译文，可一步撤销。是否继续？', type: 'warning', confirmLabel: '确认翻译' }, signal)
   signal?.throwIfAborted()
-  if (!accepted) return
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑会话已关闭，请重新生成。')
-  await generateVideoEditBilingualSubtitles(projectId, sequenceId, options, signal)
+  try { await generateVideoEditBilingualSubtitles(projectId, sequenceId, options, signal) }
+  catch (error) { if (!isPaidOperationCancelled(error)) throw error }
 }

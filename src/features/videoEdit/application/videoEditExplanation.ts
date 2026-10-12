@@ -1,3 +1,4 @@
+import { withPaidOperation } from '@/services/paidApproval'
 import { prepareExplanationGeneration, type PreparedExplanationGeneration, type ExplanationSendRequest } from '@/features/creativeIntent'
 import { sameExplanationBinding, eraseExplanationBody, explanationBodyRef, registerExplanationBodyEditor, writeExplanationBody, type ExplanationBodyChanges } from '@/core/creativeIntent/semanticIntentEdits'
 import type { ApplicationExecutionContext } from '@/core/application-control'
@@ -26,7 +27,7 @@ import { getActiveVideoEditSequence, requireVideoEditInstance, updateVideoEditCr
 
 const logger = createLogger('features.videoEdit.explanation')
 export interface VideoExplanationState { collector: RecordingCollector; originMs: number; elapsedUs: number; message?: string; busy: boolean; erased: boolean; microphone?: MicrophoneCapture; controller: AbortController; picture?: { frame: number; sequenceId: string; revision: number; composition: VideoEditComposition }; reviewComposition?: VideoEditComposition; uncertaintyUs: number[] }
-interface Runtime { generation?: PreparedExplanationGeneration; releaseBody?: () => void; state: VideoExplanationState; write: Promise<void>; partial: CapturedAudioBlock[]; samples: number; pendingAudio: Map<string, () => Promise<void>>; queued?: number; erasePaths?: Set<string>; lastBlock?: CapturedAudioBlock; pausing?: Promise<void>; installed?: boolean; viewKey?: string; geometry?: { key: string; id: string }; release: () => void; timer?: ReturnType<typeof setInterval> }
+interface Runtime { transcription?: AbortController; generation?: PreparedExplanationGeneration; releaseBody?: () => void; state: VideoExplanationState; write: Promise<void>; partial: CapturedAudioBlock[]; samples: number; pendingAudio: Map<string, () => Promise<void>>; queued?: number; erasePaths?: Set<string>; lastBlock?: CapturedAudioBlock; pausing?: Promise<void>; installed?: boolean; viewKey?: string; geometry?: { key: string; id: string }; release: () => void; timer?: ReturnType<typeof setInterval> }
 const states = new WeakMap<VideoEditInstance, Runtime>()
 const listeners = new Set<() => void>(); let revision = 0
 export function subscribeVideoExplanation(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
@@ -241,6 +242,10 @@ export async function transcribeVideoExplanation(id: string, audioUploadReceipt:
   const state = runtime.state; const session = state.collector.session
   if (!['reviewing', 'recoverable'].includes(session.state) || state.busy) throw new Error('请先结束录制。')
   if (!audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
+  const transcription = new AbortController(); runtime.transcription = transcription
+  const abort = (): void => transcription.abort()
+  state.controller.signal.addEventListener('abort', abort, { once: true })
+  if (state.controller.signal.aborted) abort()
   const modelId = session.asr?.moduleId ?? modelDefaultsManager.resolveTranscriptionModelId(); const providerId = modelId.split('.')[0]
   session.asr = { moduleId: modelId, providerId, granularity: session.asr?.granularity ?? 'segment' }
   session.consent = { ...session.consent!, audioUpload: true, transcriptionProvider: providerId }; session.state = 'transcribing'; state.busy = true; installHead(owner, state); publish()
@@ -248,11 +253,15 @@ export async function transcribeVideoExplanation(id: string, audioUploadReceipt:
     if (session.retentionStatus === 'retained' && session.audio) await restoreRetainedAudio(owner, session)
     const alignedIds = new Set<string>()
     for await (const page of pages(owner, session, 'transcript')) if (page.kind === 'transcript') for (const entry of page.entries) alignedIds.add(entry.audioSegmentRef)
+    let hasPendingAudio = false
+    for await (const page of pages(owner, session, 'audio')) if (page.kind === 'audio' && page.entries.some(audio => !alignedIds.has(audio.audioSegmentRef))) { hasPendingAudio = true; break }
+    if (hasPendingAudio) await withPaidOperation({ category: 'recognition', documentId: id, title: '转写讲解录音', message: '将录音发送给已配置的转写模型，按模型计费。此次只发送录音。' }, async () => {
     for await (const page of pages(owner, session, 'audio')) {
       if (page.kind !== 'audio') continue
       for (const audio of page.entries) {
         if (alignedIds.has(audio.audioSegmentRef)) continue
-        assertCurrent(owner, state)
+        assertCurrent(owner, state); transcription.signal.throwIfAborted()
+        if (session.state !== 'transcribing') throw new Error('讲解转写已取消。')
         const result = await getPlatform().audioEdit.recording.transcribe({ action: 'transcribe', sessionId: session.id, chunkId: audio.audioSegmentRef, modelId, requestId: audio.audioSegmentRef, audioUploadReceipt, resume })
         assertCurrent(owner, state)
         if (session.state !== 'transcribing') throw new Error('讲解转写已取消。')
@@ -260,16 +269,18 @@ export async function transcribeVideoExplanation(id: string, audioUploadReceipt:
         for (const entry of aligned.entries) state.collector.append(transcriptEventSchema.parse(entry))
         if (aligned.untimed.length) state.message = '部分文字没有时间信息，请人工确认对应画面。'
         // Later coarse chunks must not erase the actual finer granularity already present.
-        session.asr.granularity = session.asr.granularity === 'word' || aligned.entries.some(e => e.granularity === 'word') ? 'word' : session.asr.granularity === 'character' || aligned.entries.some(e => e.granularity === 'character') ? 'character' : 'segment'
+        if (session.asr) session.asr.granularity = session.asr.granularity === 'word' || aligned.entries.some(e => e.granularity === 'word') ? 'word' : session.asr.granularity === 'character' || aligned.entries.some(e => e.granularity === 'character') ? 'character' : 'segment'
         await state.collector.flush(); installHead(owner, state); await saveVideoEdit(id)
       }
     }
+    }, transcription.signal)
     session.state = 'reviewing'; installHead(owner, state); await saveVideoEdit(id)
   } catch (error) { if (!state.erased) { session.state = 'recoverable'; state.message = '转写未完成，已保留原稿；可查询原任务继续。'; installHead(owner, state) } throw error }
-  finally { state.busy = false; publish() }
+  finally { state.controller.signal.removeEventListener('abort', abort); runtime.transcription = undefined; state.busy = false; publish() }
 }
 export async function cancelVideoExplanationTranscription(id: string): Promise<void> {
-  const state = videoExplanationState(requireVideoEditInstance(id)); if (!state) return
+  const runtime = states.get(requireVideoEditInstance(id)); if (!runtime) return
+  const state = runtime.state; runtime.transcription?.abort()
   state.collector.session.state = 'recoverable'; await getPlatform().audioEdit.recording.cancel(state.collector.session.id); publish()
 }
 export async function readVideoExplanationPage(id: string, pageIndex: number): Promise<ExplanationEvent[]> {

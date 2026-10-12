@@ -8,8 +8,10 @@ import type {
   LlmProviderSettingsResultDto,
 } from '@/platform/contracts/llmRuntime'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+import { withPaidOperation, type PaidOperationOptions } from '@/services/paidApproval'
 
 const logger = createLogger('commands.llmRuntime')
+const paidRequests = new Map<string, { controller: AbortController; started: boolean }>()
 
 export interface LlmProviderKeyStatusDto {
   credentialId: string
@@ -58,14 +60,30 @@ export async function llmDeleteProviderSettings(
 
 export async function llmChatStream(
   request: LlmChatRequest,
-  onEvent: (event: LlmStreamEvent) => void
+  onEvent: (event: LlmStreamEvent) => void,
+  paidContext: PaidOperationOptions & { signal?: AbortSignal } = { category: 'generation', title: '生成文本' },
 ): Promise<void> {
   ensureDesktopRuntime()
-  // 流内 Error 事件对应的失败事实已由主进程 `llm/runtime.ts` 直接记录为
-  // `llm_runtime.chat_stream.failed`（含完整脱敏请求/错误信息），这里不再重复记录同一事实，
-  // 只保留 IPC 调用本身失败（`invoke_failed`）这一前端独有视角。
+  const requestId = request.requestId ?? crypto.randomUUID()
+  request = { ...request, requestId }
+  // 主进程记录供应商失败；此处记录授权、调用与流终止的调用方结果。
+  const pending = { controller: new AbortController(), started: false }
+  const abort = (): void => pending.controller.abort(paidContext.signal?.reason)
+  paidContext.signal?.addEventListener('abort', abort, { once: true })
+  if (paidContext.signal?.aborted) abort()
+  paidRequests.set(requestId, pending)
   try {
-    await getPlatform().llmRuntime.chatStream(request, onEvent)
+    await withPaidOperation(paidContext, async signal => {
+      signal.throwIfAborted()
+      let completed = false, failure: string | undefined
+      pending.started = true
+      await getPlatform().llmRuntime.chatStream(request, event => {
+        if (event.type === 'Done') completed = true
+        if (event.type === 'Error') failure = event.data
+        onEvent(event)
+      })
+      if (failure || !completed) throw new Error(failure || '文本生成未完整返回。')
+    }, paidContext.signal ?? pending.controller.signal)
   } catch (error) {
     logger.error('[LlmRuntimeCmd] LLM 请求调用失败', error, {
       event: 'llm_runtime.chat_stream.invoke_failed',
@@ -77,6 +95,9 @@ export async function llmChatStream(
       },
     })
     throw error
+  } finally {
+    paidContext.signal?.removeEventListener('abort', abort)
+    if (paidRequests.get(requestId) === pending) paidRequests.delete(requestId)
   }
 }
 
@@ -86,7 +107,7 @@ export async function llmModelStep(
 ): Promise<ModelStepResult> {
   ensureDesktopRuntime()
   try {
-    return await getPlatform().llmRuntime.modelStep(input, onEvent)
+    return await withPaidOperation({ category: 'generation', title: '生成模型回复' }, () => getPlatform().llmRuntime.modelStep(input, onEvent))
   } catch (error) {
     logger.error('模型单步 IPC 调用失败', error, {
       event: 'llm_model_step.invoke.failed',
@@ -103,10 +124,15 @@ export async function llmVerifyModelCapabilities(
   request: ModelCapabilitySmokeRequest
 ): Promise<ModelCapabilitySmokeResult> {
   ensureDesktopRuntime()
-  return await getPlatform().llmRuntime.verifyModelCapabilities(request)
+  return await withPaidOperation({ category: 'generation', title: '测试模型能力', capabilityId: 'ui_verify_model', message: '将发送测试内容给模型，可能产生模型调用费用。' }, () => getPlatform().llmRuntime.verifyModelCapabilities(request))
 }
 
 export async function llmCancelTask(taskId: string): Promise<void> {
   ensureDesktopRuntime()
+  const pending = paidRequests.get(taskId)
+  if (pending) {
+    pending.controller.abort()
+    if (!pending.started) return
+  }
   await getPlatform().llmRuntime.cancelTask(taskId)
 }

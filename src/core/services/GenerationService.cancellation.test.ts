@@ -21,7 +21,7 @@ beforeEach(() => {
   clearProviderAvailability('fixture')
   configureGenerationSubmissionConfirmation(requestAlertConfirmation)
   vi.clearAllMocks()
-  paid.prepare.mockResolvedValue({ ...paid, project: undefined, decision: { decision: 'ask', reason: '每次询问', estimatedCny: 0.1, dailySpentCny: 0 } })
+  paid.prepare.mockResolvedValue({ ...paid, project: undefined, decision: { decision: 'auto', reason: '每次询问', estimatedCny: 0.1, dailySpentCny: 0 } })
   useAlertDialogStore.setState({ queue: [] })
   vi.spyOn(service, 'getProgressEstimate').mockResolvedValue(null)
   registry.register({ meta: { id: 'cancel-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } },
@@ -30,6 +30,7 @@ beforeEach(() => {
 afterEach(() => { registry.unregister('cancel-fixture'); vi.restoreAllMocks(); useAlertDialogStore.setState({ queue: [] }) })
 
 function enableConfirmation(): void {
+  paid.prepare.mockResolvedValue({ ...paid, project: undefined, decision: { decision: 'ask', reason: '每次询问', estimatedCny: 0.1, dailySpentCny: 0 } })
   registry.getModel('cancel-fixture')!.submissionConfirmation = ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation
 }
 
@@ -82,9 +83,28 @@ it('确认后只提交当时的参数，每次重试克隆都重新确认，语�
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
   useAlertDialogStore.getState().dismissCurrent()
   await rejected
+  paid.prepare.mockResolvedValueOnce({ ...paid, decision: { decision: 'auto', reason: '额度内', estimatedCny: 0.1, dailySpentCny: 0 } })
   await service.generate('cancel-fixture', { volcIclMode: 'speech' })
   expect(aiGenerate).toHaveBeenCalledTimes(2)
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+})
+
+it('普通主生成没有模型专用确认也必须授权、记账；拒绝不派发', async () => {
+  vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', urls: [], filePaths: [] })
+  await service.generate('cancel-fixture', { prompt: '普通生成' })
+  expect(paid.prepare).toHaveBeenCalledOnce()
+  expect(paid.start).toHaveBeenCalledOnce()
+  expect(paid.complete).toHaveBeenCalledOnce()
+  vi.clearAllMocks()
+  paid.prepare.mockResolvedValue({ ...paid, decision: { decision: 'ask', reason: '每次询问', estimatedCny: 0.1, dailySpentCny: 0 } })
+  const run = service.generate('cancel-fixture', { prompt: '拒绝生成' })
+  const rejected = expect(run).rejects.toMatchObject({ name: 'GenerationSubmissionCancelledError' })
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  useAlertDialogStore.getState().dismissCurrent()
+  await rejected
+  expect(aiGenerate).not.toHaveBeenCalled()
+  expect(paid.start).not.toHaveBeenCalled()
+  expect(paid.reject).toHaveBeenCalledOnce()
 })
 
 it('克隆采用统一 auto 策略，人工模式使用现有付费弹窗，记录实际提交阶段', async () => {

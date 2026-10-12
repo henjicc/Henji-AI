@@ -1,4 +1,4 @@
-import { paidApprovalSettingsSchema, PAID_APPROVAL_SETTING_KEY, type PaidApprovalSettings, type PaidApprovalRequest, type PaidApprovalDecision, type PaidApprovalReceipt } from '../../../../src/core/application-control/paidApproval'
+import { UI_PAID_CAPABILITIES, PAID_OPERATION_LABELS, paidApprovalSettingsSchema, PAID_APPROVAL_SETTING_KEY, type PaidApprovalSettings, type PaidApprovalRequest, type PaidApprovalDecision, type PaidApprovalReceipt } from '../../../../src/core/application-control/paidApproval'
 import type { ApplicationOperationStore, OperationRecord } from './operationStore'
 import { getSettingsStore } from '../settings/store'
 import { createMainLogger } from '../logging'
@@ -46,11 +46,10 @@ export function approvePaidOperation(store: Pick<ApplicationOperationStore, 'get
   return decision
 }
 
-/** UI 讲解与音色克隆使用同一费用策略、确认回执和账本。 */
+/** All UI paid operations share the policy, reservations and operation lifecycle. */
 export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince' | 'prepare'>, reply: LocalHostReply): PaidApprovalDecision | void {
   const command = reply.uiPaidApproval!
-  const generation = command.capabilityId === 'create_visible_generation_task'
-  if (command.request.category !== (generation ? 'generation' : 'explanation')) throw new Error('付费类别与正式操作不一致。')
+  if (command.request.category !== UI_PAID_CAPABILITIES[command.capabilityId]) throw new Error('付费类别与正式操作不一致。')
   const callerId = reply.rendererEpoch
   let record = store.get(reply.requestId, callerId)
   if (command.action === 'prepare') {
@@ -60,10 +59,10 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
     const decision = approvePaidOperation(store, record, command.request, true)
     const current = store.get(record.operationId, callerId)!
     store.save({ ...current, state: decision.decision === 'ask' ? 'awaiting_user_confirmation' : 'preparing',
-      confirmation: decision.decision === 'ask' ? applicationUserConfirmation({ title: generation ? '生成内容' : '发送讲解给 AI？', message: generation ? '将上传素材并按模型计费。' : '将发送讲解文字和画面给模型。', confirmLabel: '允许本次', paid: decision }) : undefined })
+      confirmation: decision.decision === 'ask' ? applicationUserConfirmation({ title: PAID_OPERATION_LABELS[command.request.category], message: '你发起的操作将使用已配置的模型，按模型计费。', confirmLabel: '允许本次', paid: decision }) : undefined })
     return decision
   }
-  if (!record || record.inputDigest !== JSON.stringify(command.request)) throw new Error('付费请求与原授权不一致。')
+  if (!record || record.capabilityId !== command.capabilityId || record.inputDigest !== JSON.stringify(command.request)) throw new Error('付费请求与原授权不一致。')
   if (command.action === 'approve') {
     if (record.state !== 'awaiting_user_confirmation' || !record.confirmation || record.confirmation.expiresAt === null || record.confirmation.expiresAt <= Date.now()) throw new Error('付费确认已结束，请重新发起。')
     const decision = approvePaidOperation(store, record, command.request, true, command.projectConsent ? 'project' : 'once')

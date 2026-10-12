@@ -72,7 +72,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'transcribe_audio_edit': {
           const prepared = await applicationWritePreflight(context, () => preflightAudioEditTranscription(id, input.modelId))
           if (prepared.requiresConfirmation) await requestAlertConfirmation({ title: '识别口播', message: '将使用已配置的语音识别模型转写这段声音。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', id, context.signal, transcriptionEstimatedCny(prepared)) }, context.signal)
-          await transcribeAudioEdit({ projectId: id, modelId: prepared.modelId ?? input.modelId, requestId }); recognized = true; result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
+          await transcribeAudioEdit({ projectId: id, modelId: prepared.modelId ?? input.modelId, requestId }, context.signal); recognized = true; result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
         }
         case 'process_audio_edit_sound': await prepareAudioEditProcessing(id, requestId); result.verified = (await api.listTasks(id)).some(task => task.requestId === requestId && task.state === 'completed'); result.message = '全长声音处理已完成。'; break
         case 'query_audio_edit_tasks': result.tasks = (await api.listTasks(id)).map(({ projectId, ...task }) => ({ ...task, documentId: projectId })); result.message = '已读取这份口播的处理任务。'; break

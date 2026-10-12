@@ -1,4 +1,4 @@
-import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
+import { withPaidOperation, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
 import type { SpeechTimings } from '@/core/media/speechTimings'
 import { autoSubtitleOptionsSchema, type AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
@@ -7,7 +7,6 @@ import { readGenerationResultTimings } from '@/features/generation'
 import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit } from '@/features/audioEdit'
 import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
 import { getPlatform } from '@/platform/runtime'
-import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { appendAutoSubtitles } from './videoEditAutoSubtitles'
@@ -52,8 +51,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
       if (!audio?.document.transcript.length) {
         const source = audio?.document.source ?? await platform.audioEdit.probeSource(media.path)
         const prepared = await platform.audioEdit.preflightTranscription({ sourcePath: media.path, durationMs: source.durationFrames * 1000 / source.sampleRate, modelId: options.modelId, language: options.language, audioDocumentId })
-        const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ paid: await applicationPaidRequest('recognition', projectId, signal, transcriptionEstimatedCny(prepared)), title: '识别声音并对齐原文', message: '这段声音没有原生时间戳。将使用已配置的语音识别模型获取时间；费用按音频时长和所选模型估算，最终以供应商账单为准。字幕文字仍以原文为准。是否继续？', type: 'warning', confirmLabel: '确认识别费用' }, signal)
-        if (!accepted) throw new ApplicationPreflightFailure('已取消识别，未生成字幕。')
+        const transcribe = async (paidSignal?: AbortSignal) => {
         assertTarget()
         audio ??= await createAudioEditDraft(source, owner.session.documentMeta.container)
         audioDocumentId = audio.document.id
@@ -67,12 +65,19 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
         signal?.addEventListener('abort', cancel, { once: true })
         signal?.throwIfAborted()
         billing = 'unknown'
-        await transcribeAudioEdit({ projectId: audioDocumentId, modelId: prepared.modelId, language: options.language, requestId: transcriptionId })
+        await transcribeAudioEdit({ projectId: audioDocumentId, modelId: prepared.modelId, language: options.language, requestId: transcriptionId }, paidSignal, projectId)
         billing = 'completed'
+        }
+        if (prepared.requiresConfirmation) {
+          await withPaidOperation({ category: 'recognition', documentId: projectId, estimatedCny: transcriptionEstimatedCny(prepared), title: '识别声音并对齐原文' }, transcribe, signal)
+        } else {
+          await transcribe(signal)
+        }
       }
       if (!audio) throw new Error('没有可用的口播识别结果。')
+      const sampleRate = audio.document.source.sampleRate
       timings = { granularity: audio.document.transcript.every(block => block.granularity === 'word') ? 'word' : 'sentence', items: audio.document.transcript.map(block => ({ text: block.text,
-        startMs: block.startFrame * 1000 / audio.document.source.sampleRate, endMs: block.endFrame * 1000 / audio.document.source.sampleRate, ...(block.confidence === undefined ? {} : { confidence: block.confidence }) })) } satisfies SpeechTimings
+        startMs: block.startFrame * 1000 / sampleRate, endMs: block.endFrame * 1000 / sampleRate, ...(block.confidence === undefined ? {} : { confidence: block.confidence }) })) } satisfies SpeechTimings
     }
     assertTarget()
     const pauses = timings.granularity === 'word' ? [] : await readClipEnergyPauses(projectId, sequenceId, clipId, signal)

@@ -283,7 +283,7 @@ export function createTextProcessingExecutor(
             outputChars: output.length,
           })
         }
-      })
+      }, { category: 'generation', title: '画布文本处理', documentId: execution.projectId ?? undefined, signal: execution.signal })
       if (!completed && !failureHandled) finishFailure('文本处理流提前结束，未收到完成事件')
     } catch (error) {
       finishFailure(error instanceof Error ? error.message : String(error))

@@ -21,11 +21,18 @@ export const paidApprovalRequestSchema = z.object({
   estimatedCny: z.number().finite().nonnegative().nullable(),
 }).strict()
 export type PaidApprovalRequest = z.infer<typeof paidApprovalRequestSchema>
-/** Trusted application UI for AI-assisted explanation sending, never an Agent tool input. */
+/** Trusted UI operations; this map is internal and is not part of the public tool catalog. */
+export const UI_PAID_CAPABILITIES = {
+  interpret_video_edit_intent: 'explanation', interpret_image_edit_intent: 'explanation',
+  create_visible_generation_task: 'generation', transcribe_audio_edit: 'recognition',
+  ui_translate_subtitles: 'translation', ui_generate_title: 'title', ui_generate_text: 'generation',
+  ui_verify_model: 'generation', ui_assistant_chat: 'generation',
+} as const satisfies Record<string, PaidOperationCategory>
+/** Trusted application UI, never an Agent tool input. */
 export const uiPaidApprovalSchema = z.object({
   action: z.enum(['prepare', 'approve', 'start', 'complete', 'reject', 'failed']),
   request: paidApprovalRequestSchema,
-  capabilityId: z.enum(['interpret_video_edit_intent', 'interpret_image_edit_intent', 'create_visible_generation_task']),
+  capabilityId: z.enum(Object.keys(UI_PAID_CAPABILITIES) as [keyof typeof UI_PAID_CAPABILITIES, ...(keyof typeof UI_PAID_CAPABILITIES)[]]),
   projectConsent: z.boolean().optional(),
 }).strict()
 export const paidApprovalDecisionSchema = z.object({
