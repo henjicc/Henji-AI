@@ -17,20 +17,20 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
   const parts = splitSubtitleText(aligned.map(char => char.text).join(''), settings.maxCharacters, settings.maxLines)
   const result: SpeechSubtitle[] = []
   let offset = 0
-  for (const [partIndex, part] of parts.entries()) {
-    // Shared wrapping decides boundaries; slice the original rather than using normalized/wrapped text.
+  for (const part of parts) {
+    // Whitespace carries no speech timing; only shared layout may introduce line breaks.
     const count = Array.from(part).filter(char => !/\s/u.test(char)).length
+    while (offset < aligned.length && /\s/u.test(aligned[offset].text)) offset++
     const begin = offset; let consumed = 0
     while (offset < aligned.length && consumed < count) { if (!/\s/u.test(aligned[offset].text)) consumed++; offset++ }
-    if (partIndex === parts.length - 1 && consumed === count) offset = aligned.length
-    const chars = aligned.slice(begin, offset)
+    const chars = aligned.slice(begin, offset).filter(char => !/\s/u.test(char.text))
     if (!chars.length) continue
     const a = videoEditClipFrameBoundaryAtSource(clip, chars[0].startMs / 1000, fps)
     const b = videoEditClipFrameBoundaryAtSource(clip, chars[chars.length - 1].endMs / 1000, fps)
     const start = Math.max(clip.start, Math.round(Math.min(a, b)))
     const end = Math.min(clip.start + clip.duration, Math.round(Math.max(a, b)))
     if (end <= start) continue
-    result.push({ caption: { id: crypto.randomUUID(), clipId: clip.id, text: chars.map(char => char.text).join(''), start, duration: end - start, style: videoEditSubtitleStyleSchema.parse({}) },
+    result.push({ caption: { id: crypto.randomUUID(), clipId: clip.id, text: part, start, duration: end - start, style: videoEditSubtitleStyleSchema.parse({}) },
       startUs: Math.round(start * rate.denominator * 1e6 / rate.numerator), endUs: Math.round(end * rate.denominator * 1e6 / rate.numerator),
       confidence: chars.reduce((sum, char) => sum + char.confidence, 0) / chars.length, estimated: chars.some(char => char.estimated) })
   }

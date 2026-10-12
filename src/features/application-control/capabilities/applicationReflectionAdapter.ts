@@ -429,7 +429,7 @@ export const applicationReflectionHandlers = {
   },
 
   async readEntity(
-    input: { ref: { kind: string; id: string }; propertyIds: string[] },
+    input: { ref: { kind: string; id: string }; propertyIds?: string[] },
     context: CapabilityExecutionContext
   ) {
     if (context.callerGrant) assertCompleteRef(input.ref)

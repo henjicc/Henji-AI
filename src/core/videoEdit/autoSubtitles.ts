@@ -5,7 +5,7 @@ import type { VideoEditRatio } from './time'
 import type { VideoEditCaption } from './timedContent'
 
 export const autoSubtitleOptionsSchema = z.object({
-  maxCharacters: z.number().int().min(4).max(80).default(24),
+  maxCharacters: z.number().int().min(4).max(80).default(24).describe('每行目标字数，优先标点断句；短尾合并或尾部标点最多超出 2 字符，英文单词完整保留，超长词独占一行。原文换行强制开始下一条字幕。'),
   maxLines: z.number().int().min(1).default(2).describe('每条字幕最多行数，超出时拆成多条。'),
   pauseSeconds: z.number().min(.1).max(2).default(.6).describe('词间停顿达到此秒数时开始下一条字幕。'),
   minDurationSeconds: z.number().min(0).max(5).default(1),
@@ -13,30 +13,50 @@ export const autoSubtitleOptionsSchema = z.object({
 export type AutoSubtitleOptions = z.input<typeof autoSubtitleOptionsSchema>
 const subtitleWords = new Intl.Segmenter('en', { granularity: 'word' })
 
-/** Preserve English words where possible; split a single overlong token by Unicode code points. */
+const subtitlePunctuation = /^[，。；：、？！—…,.!?;:-]$/u
+const subtitleLength = (text: string): number => Array.from(text).length
+const spokenLength = (text: string): number => Array.from(text).filter(char => /[\p{L}\p{N}]/u.test(char)).length
+
+/** Shared line boundaries: nearest punctuation, then word boundaries; never split an English word. */
 export function wrapSubtitleText(text: string, maximum: number): string {
   if (!Number.isInteger(maximum) || maximum < 1) throw new Error('每行字数必须为正整数。')
-  const tokens = Array.from(subtitleWords.segment(text.trim()), value => value.segment).flatMap(token => /\p{Script=Han}/u.test(token) ? Array.from(token) : [token])
-  const lines: string[] = []; let line = ''
-  const flush = (): void => { if (line.trim()) lines.push(line.trim()); line = '' }
-  for (const token of tokens) {
-    if (/[\r\n]/.test(token)) { flush(); continue }
-    if (/[a-z0-9][,;:]$/i.test(line) && /^[a-z0-9]/i.test(token)) line += ' '
-    // CJK has no lexical spaces; the code-point fallback supplies its natural line boundaries.
-    const parts = Array.from(token).length > maximum ? Array.from(token) : [token]
-    for (const part of parts) {
-      if (Array.from(line + part).length > maximum) {
-        if (line && /^[，。！？；、,.!?;]$/.test(part) && maximum > 1) {
-          const points = Array.from(line); const last = points.pop()!
-          line = points.join(''); flush(); line = last
-        } else flush()
+  const lines: string[] = []
+  for (const paragraph of text.split(/\r\n|[\r\n\u2028\u2029]/u)) {
+    const normalized = paragraph.trim().replace(/[^\S\r\n]+/gu, ' ').replace(/([a-z0-9][,;:])(?=[a-z0-9])/gi, '$1 ')
+    const tokens = Array.from(subtitleWords.segment(normalized), value => value.segment)
+      .flatMap(token => /\p{Script=Han}/u.test(token) || /^[—…]+$/u.test(token) ? Array.from(token) : [token])
+    // Prefix sums avoid repeatedly joining/scanning a long narration.
+    const sizes = [0]; const spoken = [0]
+    for (const token of tokens) { sizes.push(sizes.at(-1)! + subtitleLength(token)); spoken.push(spoken.at(-1)! + spokenLength(token)) }
+    for (let begin = 0; begin < tokens.length;) {
+      while (begin < tokens.length && /^\s+$/u.test(tokens[begin])) begin++
+      if (begin === tokens.length) break
+      let end = begin; let punctuation = -1
+      while (end < tokens.length && sizes[end + 1] - sizes[begin] <= maximum) {
+        if (subtitlePunctuation.test(tokens[end])) punctuation = end + 1
+        end++
       }
-      if (!line && /^\s+$/.test(part)) continue
-      line += part
-      if (/[，。！？；、,.!?;]$/.test(part) && Array.from(line).length >= Math.ceil(maximum * .65)) flush()
+      if (end < tokens.length) {
+        if (punctuation > begin) {
+          end = punctuation
+          // Keep a dash/ellipsis run together, within the limit.
+          while (end < tokens.length && tokens[end] === tokens[end - 1] && /^[—…]$/u.test(tokens[end]) && sizes[end + 1] - sizes[begin] <= maximum) end++
+        } else {
+          end = Math.max(begin + 1, end) // An indivisible overlong English word is allowed.
+          if (spoken.at(-1)! - spoken[end] <= 2) {
+            // A final 1–2 spoken-character tail may exceed the limit by at most two code points.
+            if (sizes.at(-1)! - sizes[begin] <= maximum + 2) end = tokens.length
+            else while (end > begin + 1 && spoken.at(-1)! - spoken[end] <= 2) end--
+          }
+        }
+        // Closing punctuation belongs to its word, with the same two-character tolerance.
+        while (end < tokens.length && subtitlePunctuation.test(tokens[end]) && sizes[end + 1] - sizes[begin] <= maximum + 2) end++
+      }
+      lines.push(tokens.slice(begin, end).join('').trim())
+      begin = end
     }
   }
-  flush(); return lines.join('\n')
+  return lines.join('\n')
 }
 
 export function audioTimestampToVideoFrame(sample: number, sampleRate: number, rate: VideoEditRatio): number {
@@ -47,16 +67,20 @@ export function audioTimestampToVideoFrame(sample: number, sampleRate: number, r
 /** Wrapping retains word boundaries; punctuation is preferred to a full cue at the line limit. */
 export function splitSubtitleText(text: string, maximum: number, maxLines: number): string[] {
   if (!Number.isInteger(maxLines) || maxLines < 1) throw new Error('每条字幕最多行数须为正整数。')
-  const lines = wrapSubtitleText(text, maximum).split('\n').filter(Boolean)
   const cues: string[] = []
-  while (lines.length) {
-    let count = Math.min(maxLines, lines.length)
-    if (lines.length > maxLines) {
-      const reversed = lines.slice(0, count).reverse().findIndex(line => /[，。！？；、,.!?;:]$/.test(line))
-      const pause = reversed < 0 ? -1 : count - reversed - 1
-      if (pause >= 0) count = pause + 1
+  for (const paragraph of text.split(/\r\n|[\r\n\u2028\u2029]/u)) {
+    const lines = wrapSubtitleText(paragraph, maximum).split('\n').filter(Boolean)
+    let offset = 0
+    while (offset < lines.length) {
+      let count = Math.min(maxLines, lines.length - offset)
+      if (lines.length - offset > maxLines) {
+        const reversed = lines.slice(offset, offset + count).reverse().findIndex(line => /[，。！？；：、—…,.!?;:-]$/u.test(line))
+        const pause = reversed < 0 ? -1 : count - reversed - 1
+        if (pause >= 0) count = pause + 1
+      }
+      cues.push(lines.slice(offset, offset + count).join('\n'))
+      offset += count
     }
-    cues.push(lines.splice(0, count).join('\n'))
   }
   return cues
 }
