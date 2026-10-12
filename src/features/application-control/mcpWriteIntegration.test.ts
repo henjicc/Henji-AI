@@ -419,12 +419,15 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
   vi.stubGlobal('navigator', dom.window.navigator); vi.stubGlobal('localStorage', dom.window.localStorage)
   const { installHarnessNativeStorage, uninstallHarnessNativeStorage } = await import('@/tests/harnessNativeStorage')
   const { createVideoEditTestProject } = await import('@/features/videoEdit/application/videoEditDocumentTestKit')
-  const { editVideoProject, closeVideoEditProject } = await import('@/features/videoEdit/application/videoEditService')
+  const { editVideoProject, closeVideoEditProject, videoEditBusyReason } = await import('@/features/videoEdit/application/videoEditService')
   const { loadAudioEditProject, resetAudioEditProjectInstancesForTests } = await import('@/features/audioEdit/application/audioEditProjectInstances')
   const { useAlertDialogStore } = await import('@/stores/alertDialogStore')
   const { getPlatform } = await import('@/platform/runtime')
   const { attachLocalApplicationHost } = await import('./localApplicationHost')
   const { executePiTool } = await import('../../../electron/main/services/embedded-agent/toolResult')
+  const { default: i18n } = await import('@/i18n')
+  const previousLanguage = i18n.language
+  await i18n.changeLanguage(callerKind === 'external' ? 'en-US' : 'zh-CN')
   installHarnessNativeStorage()
   const owner = await createVideoEditTestProject()
   editVideoProject(owner.document.id, document => {
@@ -449,13 +452,22 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
   const bridge: ApplicationHostBridge = new ApplicationHostBridge(id => connections.assertActive(id), operations)
   let handler: (request: LocalHostRequest) => void = () => {}
   let cancel: (id: string) => void = () => {}
+  const pendingSubtitles = new Set<string>()
   const detach = attachLocalApplicationHost({
     publishContext: async value => bridge.publishContext(value), onRequest: value => { handler = value; return () => {} },
     reviewOperations: async () => ({ items: [] }), onReviews: () => () => {}, onCancel: value => { cancel = value; return () => {} }, onRevoke: () => () => {},
     registerHost: async value => bridge.register(value, { send: (channel, payload) => {
-      if (channel === 'application:host:request') handler(payload as LocalHostRequest)
+      if (channel === 'application:host:request') {
+        const request = payload as LocalHostRequest
+        if (request.capabilityId === 'generate_video_edit_subtitles') pendingSubtitles.add(request.requestId)
+        handler(request)
+      }
       if (channel === 'application:host:cancel') cancel(payload as string)
-    } }), complete: async value => bridge.complete(value),
+    } }), complete: async value => {
+      const result = bridge.complete(value)
+      if (!value.progress) pendingSubtitles.delete(value.requestId)
+      return result
+    },
   }, true)
   const dispatcher = new ApplicationToolDispatcher({ assertActive: id => connections.assertActive(id), access: id => connections.access(id) }, bridge, operations, 0, callerKind)
   const server = new LocalMcpServer(connections, bridge, undefined, operations)
@@ -465,7 +477,8 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(identity.id)}` } } }))
     await client.listTools()
     const args = { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.document.sequences[0].id}` }, clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, originalText: 'Hello', timeSource: 'auto' }
-    for (const accepted of [true, false]) {
+    for (const decision of ['confirm', 'reject', 'cancel'] as const) {
+      const accepted = decision === 'confirm'
       const operationId = randomUUID()
       let returned = false
       const invoke = callerKind === 'external'
@@ -475,22 +488,40 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
         })
       const pending = invoke.then(result => { returned = true; return result })
       await vi.waitFor(() => expect(returned).toBe(true), { timeout: 2000 })
-      expect(await pending).toMatchObject({ executionState: 'awaiting_user_confirmation', operationId, confirmation: { title: '识别声音并对齐原文' } })
+      const waiting = await pending
+      const title = i18n.t('paidApproval.alignSpeech', { ns: 'common' })
+      expect(waiting, JSON.stringify(waiting)).toMatchObject({ executionState: 'awaiting_user_confirmation', operationId, confirmation: { title } })
       await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+      expect(useAlertDialogStore.getState().queue[0].title).toBe(title)
       const query = () => dispatcher.call(identity.id, 'get_application_operation', { operationId }, new AbortController().signal)
       expect(await query()).toMatchObject({ executionState: 'awaiting_user_confirmation' })
       expect(transcribe).toHaveBeenCalledTimes(accepted ? 0 : 1)
       const captionsBefore = owner.document.sequences[0].captions?.length ?? 0
-      if (accepted) useAlertDialogStore.getState().confirmCurrent()
+      if (decision === 'cancel') cancel(operations.store.get(operationId, identity.id)!.requestId!)
+      else if (accepted) useAlertDialogStore.getState().confirmCurrent()
       else useAlertDialogStore.getState().dismissCurrent()
       await vi.waitFor(() => expect(operations.store.get(operationId, identity.id)?.state).toBe(accepted ? 'completed' : 'not_executed'), { timeout: 3000 })
       expect(await query()).toMatchObject({ executionState: accepted ? 'completed' : 'not_executed', verificationState: 'verified' })
       expect(owner.document.sequences[0].captions?.length ?? 0).toBe(captionsBefore + (accepted ? 1 : 0))
       expect(transcribe).toHaveBeenCalledTimes(1)
+      expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+      expect(videoEditBusyReason(owner.document.id)).toBeNull()
     }
   } finally {
-    await client.close(); await server.stop(); detach(); bridge.disconnect(); db.close()
-    await resetAudioEditProjectInstancesForTests(); await closeVideoEditProject(owner.document.id)
-    vi.restoreAllMocks(); uninstallHarnessNativeStorage(); vi.unstubAllGlobals()
+    // detach aborts the host tasks, but their final replies still need the open SQLite ledger.
+    detach()
+    try {
+      await vi.waitFor(() => {
+        expect(pendingSubtitles.size).toBe(0)
+        expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+        expect(videoEditBusyReason(owner.document.id)).toBeNull()
+      })
+      await resetAudioEditProjectInstancesForTests(); await closeVideoEditProject(owner.document.id)
+    } finally {
+      await client.close(); await server.stop(); bridge.disconnect(); db.close()
+      await i18n.changeLanguage(previousLanguage)
+      vi.restoreAllMocks(); uninstallHarnessNativeStorage(); vi.unstubAllGlobals()
+      dom.window.close()
+    }
   }
 }, 15_000)
