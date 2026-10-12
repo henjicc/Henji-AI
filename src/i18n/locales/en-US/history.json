@@ -7,5 +7,17 @@
   "delete": "Delete",
   "confirmDelete": "Are you sure you want to delete this record?",
   "loadMore": "Load More",
-  "noMore": "No more records"
+  "noMore": "No more records",
+  "askAssistant": "Ask Assistant",
+  "failure": {
+    "title": "Generation failed",
+    "kieInternal": "KIE encountered an internal error. You can retry manually later.",
+    "service": "The generation service is temporarily unavailable. Please retry later.",
+    "credentials": "Authentication failed. Check the service API key in Settings.",
+    "balance": "The generation service has insufficient balance. Add credit or switch services before retrying.",
+    "timeout": "Waiting for the result timed out. You can fetch the result again later.",
+    "network": "Unable to connect to the generation service. Check your network and retry.",
+    "content": "The content did not pass moderation. Adjust the prompt or reference media and retry.",
+    "unknown": "Generation could not be completed. Ask Assistant to check the cause before retrying."
+  }
 }
