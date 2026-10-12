@@ -1,6 +1,8 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { UiButton } from '@/components/ui'
 import { WaveformView } from '@/components/waveform/WaveformView'
-import { useWaveformDataList, type WaveformSourceRef } from '@/hooks/useWaveformData'
+import { retryWaveform, useWaveformDataList, type WaveformSourceRef } from '@/hooks/useWaveformData'
 
 /**
  * 时间线片段的波形（任务 2.3）：每个来源一份整段多级峰值，片段可见部分直接从中切片，
@@ -20,6 +22,7 @@ export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipI
   /** full：铺满片段；lower：带声音的画面片段（未拆分音视频）把波形放在缩略图条下半部。 */
   lane?: 'full' | 'lower'
 }) {
+  const { t } = useTranslation('ui')
   const states = useWaveformDataList(sources, 'full', visible)
   const ready = states.length > 0 && states.every(state => state.data)
   const error = states.find(state => state.status === 'error')?.error
@@ -28,6 +31,8 @@ export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipI
     {ready && <div className={`pointer-events-none absolute bottom-0 flex flex-col ${lane === 'lower' ? 'h-1/2 bg-media-scrim' : 'top-0'}`} data-video-edit-waveform={clipId} data-waveform-lanes={lanes} style={{ left, width }}>
       {states.map((state, index) => <WaveformView key={index} waveform={state} startSeconds={startSeconds} endSeconds={endSeconds} tone="clip" className={`min-h-0 flex-1 ${reverse ? '-scale-x-100' : ''}`} />)}
     </div>}
-    {error && <span className="pointer-events-none absolute bottom-0 text-2xs text-danger-text" title={error}>波形未能读取</span>}
+    {error && <div className="absolute bottom-0 z-raised max-w-full" onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
+      <UiButton variant="link" size="sm" title={t('surfaceGrammar.waveformRetry')} aria-label={t('surfaceGrammar.waveformRetry')} onClick={() => sources.forEach(source => retryWaveform(source, 'full'))}>{t('errorState.retry')}</UiButton>
+    </div>}
   </>
 })

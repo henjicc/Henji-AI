@@ -325,3 +325,110 @@ npm run ui:tour -- --only 'settings-about 设置' --theme-preset graphite,paper 
 - 初次启动发现默认 MCP 端口已占用，未结束其他实例或修改用户端口配置；巡检现在等待后台启动结果再开始场景日志截取，启动日志仍保留。MCP 可用性不属于本批验收。
 - 未运行全量测试、Reality、付费生成、electron:dev，未执行 Git 写操作，未修改 SDK 或重新安装依赖。许可环境的 FFmpeg/jsonify 警告仍需发布验收处理。
 - 本 worktree 的 out、native FFmpeg 运行资料、.tmp 和 .ui-tour 是忽略的本机产物，不纳入提交。由总管理者负责审查、冲突集成与 Git 提交。
+
+## 2026-10-13 合并 main（本轮补记）
+
+- 合并来源：`main` 的 `291a29d684ae328f085d7191502f22feeaaf448f`；本轮起点 `b2db5fba0`，worktree 干净。按本任务特许只在 `codex/u8c` 执行 merge、精确 add 和 merge commit；禁止 push/rebase/切换分支。
+- 本轮属于展示契约 C0，没有新增业务能力、数量上限、依赖或 SDK 修改。没有启停 electron:dev，也没有运行 Reality 或真实付费调用。
+- 没有指定 u8 总览中的对应行；只补记本 u8c 记录，不修改其他任务记录。
+
+### 冲突逐项取舍
+
+1. 两份 SKILL.md：保留 u8b 的样张有限高度预算和 u8c 的通知 i18n、中性分段/五项规则；过时的 2~4 标题统一为 2~5。两份逐字一致。
+2. 随手摆巡检：保留 main 的 radio 与 Home/ArrowRight 焦点契约；路径选 u8c 的 `.tmp/ui-inspection`，避免 node_modules junction 写入主工作区。
+3. Dropdown：采用 main 更完整的失效值/空白占位判断（保留有效零值与自定义面板），同时保留 u8c 新增未选择文案键；空选项禁用和 a78e3a855 的打开态复位保护不变。
+4. ImageEditorLayoutControlsV3：外层采用 main 的 UiGroup，共享表单列；短单选 ≤5 项用中性 UiSegmented，长文案或更多项用完整 Dropdown；保留 u8c 空态、忙碌时动作带条件和取消/保存重试流程。
+5. 两份 ui.json：保留双方新增键；main 已删除的 beforeScope/afterScope 继续由方向明确的新文案替代，不恢复旧字段。JSON 合法，中英文各 1450 个叶键。
+- 额外集成修正：Dropdown 测试重复 import、UiSegmented 重复断言去重；双段开关测试同步中性规则；补登生成空态 Node 测试归属。
+
+### 本轮设计自查与选型
+
+1. 助手只凭名称和说明能否用对？能；原参数与操作名称、应用/撤销契约保持，合并没有增加新工具。
+2. 能否 AI 先做、人只确认？能；保留既有整理候选、预览与应用，人用分段或完整下拉校正。
+3. 产物能否直接流进其他工作区？能；既有图片文档、画布宿主与跨工作区发送契约保持。
+- 复用既有 React、UiGroup、UiFormRow、UiSegmented、Dropdown 和 Virtuoso，不新增第三方依赖或平行实现。
+
+### 本轮验证
+
+- `npx vitest run src/components/ui src/features/imageEdit/v3/editor/ImageEditorLayoutControlsV3.test.tsx --silent`：33 文件 282 项，首轮仅旧双段开关外观断言失败；同步规则后精确重跑该文件 13 项通过。UiSegmented 去重后精确重跑 1 项通过；其余首轮通过证据复用。
+- `npx tsc -p tsconfig.json --noEmit`：通过。本轮无 core/主进程源码手工改动，未追加 Electron tsc。
+- 本轮手工处理的 Dropdown、Dropdown.test、布局控件、primitives.selection.test、UiSegmented.test 的 ESLint：通过，0 告警。
+- `npm run check:surface:strict`：通过，0 错误、0 告警。
+- `npm run check:skill-sync`：通过，5 个 skill、25 个共享文件一致。
+- `npm run test:validation-tools`：首轮拒绝漏登记的生成空态测试；补登记后 332 项通过、0 失败。
+- i18n 核查：JSON.parse 与相对共同祖先的双方新增键集合校验通过；首次全量旧键对比识别 main 有意替换的滤镜键，核对调用方后按语义保留删除。
+- 新 Electron 产物：`node node_modules/electron-vite/bin/electron-vite.js build` 通过。标准 bundle 的目录生成与 SDK 构建步骤会写 packages/ai-sdk，因此按本轮禁改 SDK 约束复用现有 SDK 产物，只执行既有 Electron main/preload/renderer 构建步骤；不是完整 electron:build。
+- `npm run ui:tour -- --only =image-edit-layout-draft-panel,=image-edit-layout-failure --size 1440x900 --theme-preset graphite --display-point 2561,1 --out .ui-tour/u8c-main-merge-20261013`：2 场景通过、0 失败，共产出 18 张过程截图，隔离临时数据。Windows 系统查询确认 DISPLAY1 右侧副屏、DISPLAY2 主屏。
+- 运行时证据：两场景均无非预期 browser/log error；布局存取失败告警及随手摆不支持蒙版的优化失败属于场景故障夹具。另有 GPU Scene 未准备完成导致 CPU 后备告警 35 条，以及 fast_proxy 并发触顶导致源预热/图层缩略图各 1 条告警；这些媒体运行链路未在本轮修改，未另行复现或修复，不能将本轮结论理解成无告警验收。
+- `git diff --cached --check`：通过；SDK 目录 staged/unstaged 均无改动。
+
+### 本轮关键截图目视（各场景一张）
+
+| 文件 | 目视结论 |
+|---|---|
+| `.ui-tour/u8c-main-merge-20261013/1440x900-image-edit-layout-draft-panel-step-03.png` | 原稿/边缘对齐/等距排列为中性选中整体分段，标签、滑杆、动作未裁切，主动作唯一。 |
+| `.ui-tour/u8c-main-merge-20261013/1440x900-image-edit-layout-failure-layout-save-failed.png` | 保存失败与恢复入口清楚，颜色四个下拉同列等宽，提示没有遮挡参数。 |
+- 两张由 Agent 打开实际 Electron capturePage 图片检查；其余过程截图保留为场景证据，未声称逐张目视。
+
+### 本轮完整文件清单
+
+合并相对 u8c 起点共 51 个文件；其中 12 个由本轮手工解决/补记，其余直接继承 main 的既有提交。
+
+| 文件 | 本轮说明 |
+|---|---|
+| `.claude/skills/henji-ui-surface/SKILL.md` | 合并样张高度预算与五项分段、中性选中、通知语言规则，与 Codex 逐字同步。 |
+| `.codex/skills/henji-ui-surface/SKILL.md` | 保留双方新增规则，冲突标题统一为 2~5 项并去重。 |
+| `docs/task/界面统一/u7-全局界面巡检.md` | 继承 main 已提交的对应任务巡检记录，本轮未手工修改。 |
+| `docs/task/界面统一/u8a-图片编辑器与图片相关面板.md` | 继承 main 已提交的对应任务巡检记录，本轮未手工修改。 |
+| `docs/task/界面统一/u8b-剪辑镜头参考与停靠面板.md` | 继承 main 已提交的对应任务巡检记录，本轮未手工修改。 |
+| `scripts/lib/uiInspection.cjs` | 继承 main 的精确场景过滤，并保留 u8c 启动后日志划界。 |
+| `scripts/lib/uiInspection.test.cjs` | 继承 main 精确场景过滤测试。 |
+| `scripts/lib/uiInspectionSceneImageEditFilterScopes.cjs` | 继承 main 双向滤镜转换语义断言。 |
+| `scripts/lib/uiInspectionSceneImageEditLayoutDraft.cjs` | 保留 main 的 radio/方向键巡检与 u8c 的 worktree 私有 .tmp 证据目录。 |
+| `scripts/lib/uiInspectionSceneSurfaceGrammar.cjs` | 继承 main 的动作列、分段和参数列巡检。 |
+| `scripts/lib/uiInspectionSceneU8b.cjs` | 继承 main 新增剪辑相关巡检场景。 |
+| `scripts/lib/uiInspectionScenes.cjs` | 继承 main 的 u8b 场景登记。 |
+| `scripts/node-test-suites.json` | 补登 u8c 生成空态 Node 测试，修复验证工具的归属缺失。 |
+| `scripts/ui-tour.cjs` | 继承 main 精确场景过滤的命令说明。 |
+| `src/components/DockviewHost.tsx` | 继承 main 停靠标签不裁切的共享修复。 |
+| `src/components/typography/TypographyPanel.tsx` | 继承 main 字体、描边等参数控件列对齐。 |
+| `src/components/ui/Dropdown.test.ts` | 保留双方占位测试，清除自动合并产生的重复 i18n import。 |
+| `src/components/ui/Dropdown.tsx` | 保留空选项禁用、失效值未选择占位及仅打开/关闭动画中复位的行为。 |
+| `src/components/ui/UiSegmented.test.tsx` | 保留双方中性选中与完整下拉的断言，去除重复 bg-raised 断言。 |
+| `src/components/ui/params/ParamField.tsx` | 继承 main 数值输入填满控件列的修复。 |
+| `src/components/ui/params/ParamList.tsx` | 继承 main 的统一参数行布局。 |
+| `src/components/ui/primitives.selection.test.tsx` | 双段开关断言同步中性抬起底和强文字，保留交互、几何与动画检查。 |
+| `src/features/cameraStage/panels/SceneSettingsPanel.tsx` | 继承 main 的镜头场景参数列对齐。 |
+| `src/features/cameraStage/panels/panelFields.tsx` | 继承 main 镜头参数的统一行原件。 |
+| `src/features/imageEdit/v3/editor/ImageEditorEffectParametersV3.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/imageEdit/v3/editor/ImageEditorLayerTransformPropertiesV3.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/imageEdit/v3/editor/ImageEditorLayoutControlsV3.test.tsx` | 自动合并 main 的中文初始化和方向键与 u8c 空态/保存重试回归。 |
+| `src/features/imageEdit/v3/editor/ImageEditorLayoutControlsV3.tsx` | 保留共享分组和分段/下拉候选，同时保留 u8c 空态和忙碌时隐藏不可执行动作的条件。 |
+| `src/features/imageEdit/v3/editor/ImageEditorPropertiesPanelV3.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/imageEdit/v3/editor/ImageEditorV3.test.tsx` | 继承 main 图片编辑器交互断言更新。 |
+| `src/features/imageEdit/v3/panels/adjustments/ImageEditorAdjustmentsPanelV3.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/imageEdit/v3/panels/colorManagement/ColorManagementPanelV3.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/imageEdit/v3/panels/history/ImageEditorHistoryPanelV3.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/imageEdit/v3/tools/documentGeometry/Options.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/imageEdit/v3/tools/selectionAdvanced/SelectionAdvancedOptions.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/imageEdit/v3/tools/vector/VectorProperties.test.tsx` | 继承 main 矢量面板中文文案与操作断言。 |
+| `src/features/imageEdit/v3/tools/vector/VectorProperties.tsx` | 继承 main 的图片编辑参数行、动作列与选项控件修复，本轮未手工修改。 |
+| `src/features/videoEdit/panels/VideoEditColorGradePanel.tsx` | 继承 main 的剪辑参数列、字幕记录或样张布局修复，本轮未手工修改。 |
+| `src/features/videoEdit/panels/VideoEditSequenceDialog.tsx` | 继承 main 的剪辑参数列、字幕记录或样张布局修复，本轮未手工修改。 |
+| `src/features/videoEdit/panels/VideoEditSourcePanel.tsx` | 继承 main 的剪辑参数列、字幕记录或样张布局修复，本轮未手工修改。 |
+| `src/features/videoEdit/panels/VideoEditStyleKitPreview.tsx` | 继承 main 的剪辑参数列、字幕记录或样张布局修复，本轮未手工修改。 |
+| `src/features/videoEdit/panels/VideoEditTimedContentPanel.tsx` | 继承 main 的剪辑参数列、字幕记录或样张布局修复，本轮未手工修改。 |
+| `src/features/videoEdit/timeline/VideoEditClipWaveform.tsx` | 继承 main 片段波形失败及重试呈现。 |
+| `src/features/videoEdit/timeline/VideoEditTimelineMedia.test.tsx` | 继承 main 波形读取替身补齐。 |
+| `src/hooks/useWaveformData.ts` | 继承 main 波形重试接口。 |
+| `src/i18n/locales/en-US/ui.json` | 保留双方英文新增键与 main 的滤镜转换文案替换，JSON 合法。 |
+| `src/i18n/locales/zh-CN/ui.json` | 保留双方中文新增键与 main 的滤镜转换文案替换，JSON 合法。 |
+| `src/index.css` | 继承 main 停靠标签尺寸及样张布局样式。 |
+| `src/services/waveform/waveformDataService.test.ts` | 继承 main 波形失败后显式重试回归。 |
+| `src/services/waveform/waveformDataService.ts` | 继承 main 波形缓存错误状态重试。 |
+| `docs/task/界面统一/u8c-巡检修复-生成设置画布与全局组件.md` | 追加本轮语义合并取舍、全部文件清单、验证证据及截图核对。 |
+
+### 未扩大验证的范围
+
+- 已核对共享 Dropdown 的空选项、未选中/失效值、有效零值、自定义面板与禁用状态切换；布局测试覆盖 full/canvas-edit 两宿主及 quick/mask 无入口、原稿对照、焦点、取消和保存重试。
+- 只复跑指定两个深色真实巡检；未扩大到浅色、全部页面、全部单测或新 SDK 产物验证。没有要求用户继续看实际开发窗口，不维护 electron:dev。最终提交不推送，交总管理者审查与后续集成。

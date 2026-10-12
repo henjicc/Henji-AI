@@ -164,6 +164,16 @@ export function readWaveformState(ref: WaveformSourceRef, scope: WaveformScope):
   return entries.get(waveformKey(ref, scope))?.state ?? IDLE
 }
 
+/** 重试已失败且仍有消费者的来源；同源消费者共享请求，连续点击不重复入队。 */
+export function retryWaveform(ref: WaveformSourceRef, scope: WaveformScope): void {
+  const entry = entries.get(waveformKey(ref, scope))
+  if (!entry || entry.users === 0 || entry.state.status !== 'error') return
+  logger.debug('重新读取波形', { event: 'waveform.retry.start' })
+  entry.state = { status: 'loading' }
+  notify()
+  schedule(entry)
+}
+
 /** 声明使用：首次使用开始加载、过期就后台校验；返回释放函数，无人使用时取消在途请求。 */
 export function acquireWaveform(ref: WaveformSourceRef, scope: WaveformScope): () => void {
   if (scope === 'overview' && entries.get(waveformKey(ref, 'full'))?.state.status === 'ready') scope = 'full'

@@ -294,7 +294,7 @@ function filterScenes(scenes, only) {
   const needles = only.map((value) => value.toLocaleLowerCase())
   return scenes.filter((scene) => {
     const haystack = `${scene.id} ${scene.surface} ${scene.name}`.toLocaleLowerCase()
-    return needles.some((needle) => haystack.includes(needle))
+    return needles.some((needle) => needle.startsWith('=') ? scene.id.toLocaleLowerCase() === needle.slice(1) : haystack.includes(needle))
   })
 }
 

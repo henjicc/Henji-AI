@@ -4,7 +4,7 @@ import { styleColorCss, type StyleKit } from '@/core/videoEdit/styleKit'
 import { renderStyleKitPreview } from '../application/videoEditStylePreview'
 
 /**
- * The board shows at most 640 px wide; rendering the samples at the sequence size (4K) only competed with the program
+ * Sample images have a fixed compact display height; rendering at the sequence size (4K) only competed with the program
  * monitor for the shared GPU. Tokens are proportional to the canvas, so a smaller canvas previews the same design.
  */
 function previewSize(width: number, height: number): { width: number; height: number } {
@@ -42,8 +42,8 @@ export function VideoEditStyleKitPreview({ kit, width, height, visible = true }:
     }, 180)
     return () => { clearTimeout(timer); controller.abort(); urls.forEach(url => URL.revokeObjectURL(url)) }
   }, [key, width, height, visible, retry])
-  return <div className="grid gap-2" aria-label="风格预览">
-    {pictures.map(picture => <figure key={picture.id} className="m-0 overflow-hidden rounded-lg bg-raised"><img className="w-full object-contain" style={{ backgroundColor: styleColorCss(kit.tokens.palette.bg) }} src={picture.url} alt={`${picture.name}预览`} /><figcaption className="px-2 py-1 text-xs text-text2">{picture.name}</figcaption></figure>)}
+  return <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-2" aria-label="风格预览">
+    {pictures.map(picture => <figure key={picture.id} className="m-0 overflow-hidden rounded-lg bg-raised"><img className="h-28 w-full object-contain" style={{ backgroundColor: styleColorCss(kit.tokens.palette.bg) }} src={picture.url} alt={`${picture.name}预览`} /><figcaption className="px-2 py-1 text-xs text-text2">{picture.name}</figcaption></figure>)}
     {error ? <UiError size="sm" message={error} onRetry={() => setRetry(value => value + 1)} /> : !pictures.length && <UiEmpty size="xs" title={kit.samples.length ? '正在预览风格…' : '暂无样例组件'} />}
   </div>
 }

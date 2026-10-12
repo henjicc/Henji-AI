@@ -45,7 +45,7 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     catch (error) { if (!controller.signal.aborted) onError(error) }
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
-  const lutControl = (stage: string): ReactNode => <div className="flex items-center gap-1"><div className="min-w-0 flex-1"><Dropdown size="sm" ariaLabel={stage === 'input' ? '输入 LUT' : '创意 Look'} value={values[`${stage}_lut`] as string} options={[{ value: '', label: '无' }, ...luts.map(asset => ({ value: asset.id, label: asset.name }))]} onSelect={id => gesture.commit({ params: { [`${stage}_lut`]: id } })} /></div><UiIconButton size="sm" aria-label="导入 LUT" title="导入 .cube 颜色查找表" disabled={busy} onClick={() => { void upload(stage) }}><Upload size={14} /></UiIconButton></div>
+  const lutControl = (stage: string): ReactNode => <UiFormRow label={t(stage === 'input' ? 'surfaceGrammar.inputLut' : 'surfaceGrammar.creativeLook')} density="compact"><div className="flex items-center gap-1"><div className="min-w-0 flex-1"><Dropdown size="sm" ariaLabel={stage === 'input' ? '输入 LUT' : '创意 Look'} value={values[`${stage}_lut`] as string} options={[{ value: '', label: '无' }, ...luts.map(asset => ({ value: asset.id, label: asset.name }))]} onSelect={id => gesture.commit({ params: { [`${stage}_lut`]: id } })} /></div><UiIconButton size="sm" aria-label="导入 LUT" title="导入 .cube 颜色查找表" disabled={busy} onClick={() => { void upload(stage) }}><Upload size={14} /></UiIconButton></div></UiFormRow>
   const automatic = async (): Promise<void> => {
     if (busy || gesture.active()) return
     const controller = new AbortController(); request.current = controller; setBusy(true)

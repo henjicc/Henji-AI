@@ -97,7 +97,7 @@ const HistoryRow = memo(function HistoryRow({ index, pageAt, thumbnails, view, d
   if (!row) return <div className="h-11 px-2 py-0.5"><UiLoading size="xs"
     className="h-full !flex-row gap-2 !py-0 [&>p]:!mt-0"
     message={t('imageEditor.v3.history.loading', { defaultValue: '正在读取历史…' })} /></div>
-  return <div className="px-2 py-0.5" data-image-history-row={index}>
+  return <div className={index > 0 ? 'border-t border-line px-2 py-1' : 'px-2 py-1'} data-image-history-row={index}>
         <UiOptionButton variant="menu" size="sm" className="w-full" active={index === view.position}
           aria-current={index === view.position ? 'step' : undefined} disabled={disabled}
           onClick={() => onJump(index)}>

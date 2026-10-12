@@ -258,17 +258,17 @@ describe('Ui primitives 选中态词汇表', () => {
 
     expect(pill.classList.contains('rounded-full')).toBe(true);
     expect((pill.firstElementChild as HTMLElement).classList.contains('bg-control-pressed')).toBe(true);
-    // 双段外观与分段选择同一套选中：轨道更暗、滑块是淡强调底、当前侧文字为强调文字，不用强调色实底（重要记录 012）
+    // 双段外观与分段选择共用中性选中：轨道更暗、滑块抬起、当前侧文字更强。
     expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
     expect(segmentedOff.classList.contains('bg-gap/60')).toBe(true);
     expect(segmentedOff.textContent).toBe('关开');
-    expect(segmentedOff.firstElementChild?.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains('bg-raised')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('translate-x-0')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('duration-180')).toBe(true);
-    expect(segmentedOn.firstElementChild?.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(true);
+    expect(segmentedOn.firstElementChild?.classList.contains('bg-raised')).toBe(true);
     expect(segmentedOn.firstElementChild?.className).not.toMatch(/(^| )bg-accent/);
-    expect(segmentedOn.lastElementChild?.classList.contains('text-accent-text')).toBe(true);
-    expect(segmentedOff.children[1]?.classList.contains('text-accent-text')).toBe(true);
+    expect(segmentedOn.lastElementChild?.classList.contains('text-text1')).toBe(true);
+    expect(segmentedOff.children[1]?.classList.contains('text-text1')).toBe(true);
     expect(segmentedOn.firstElementChild?.classList.contains('translate-x-full')).toBe(true);
     expect(segmentedOn.classList.contains('h-control-sm')).toBe(true);
     expect(segmentedOn.classList.contains('w-20')).toBe(true);

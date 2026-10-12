@@ -156,7 +156,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
         await choice('等距排列').click(); await shot('切换等距候选')
         if (panelReview) {
           assert.equal(await controls().locator('[role=radio][aria-checked=true]').count(), 1)
-          await choice('等距排列').press('Home'); await choice('原稿').press('ArrowDown')
+          await choice('等距排列').press('Home'); await choice('原稿').press('ArrowRight')
           assert.equal(await choice('边缘对齐').evaluate(e => e === document.activeElement && e.getAttribute('aria-checked') === 'true'), true)
           const bounds = await controls().evaluate(e => ({ width: e.clientWidth, scroll: e.scrollWidth, right: e.getBoundingClientRect().right, viewport: innerWidth }))
           assert.ok(bounds.scroll <= bounds.width && bounds.right <= bounds.viewport, '面板不能横向溢出')

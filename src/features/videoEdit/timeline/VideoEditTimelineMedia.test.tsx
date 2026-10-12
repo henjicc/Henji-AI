@@ -15,6 +15,7 @@ import { closeVideoEditProject, editVideoProject, setVideoEditTimelineView, subs
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 // 固定源峰值；断言宿主传给统一绘制器的源范围与方向，不重复测试波形聚合算法。
 vi.mock('@/hooks/useWaveformData', () => ({
+  retryWaveform: vi.fn(),
   useWaveformDataList: (refs: readonly WaveformSourceRef[]): WaveformState[] => refs.map(ref => ({ status: 'ready', data: {
     key: ref.source, ref, gain: 1,
     pyramid: { version: 'fixture', sampleRate: 48000, frameCount: 90 * 48000, startSeconds: 0, endSeconds: 90, amplitudeScale: 1, peakMax: 1, channelCount: ref.channels, levels: [] },

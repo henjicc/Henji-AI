@@ -10,7 +10,7 @@ import {
   UiColorInput,
   UiFormRow,
   UiGroup,
-  UiOptionButton,
+  UiSegmented,
   UiRangeInput,
   Dropdown,
   UiSwitch,
@@ -255,23 +255,11 @@ export function ImageEditorEffectParametersV3({
     const channelOptions: readonly VgpuGlowChromaticChannel[] = ['red', 'green', 'blue']
     return (
       <div className="space-y-5" data-effect-parameters="image.vgpu-glow">
-        <UiGroup title={t('imageEditor.v3.parameters.glowLook')} titleTone="overline" gap="row">
-          <div className="grid grid-cols-3 gap-1">
-            {looks.map((look) => (
-              <UiOptionButton
-                key={look}
-                type="button"
-                variant="menu"
-                active={glow.look === look}
-                disabled={disabled}
-                size="sm" className="justify-center"
-                onClick={() => replaceParams(applyVgpuGlowLook(look))}
-              >
-                {t(`imageEditor.v3.parameters.glowLooks.${look}`)}
-              </UiOptionButton>
-            ))}
-          </div>
-        </UiGroup>
+        <UiFormRow label={t('imageEditor.v3.parameters.glowLook')} density="compact">
+          <UiSegmented size="sm" ariaLabel={t('imageEditor.v3.parameters.glowLook')} value={glow.look} disabled={disabled}
+            options={looks.map(value => ({ value, label: t(`imageEditor.v3.parameters.glowLooks.${value}`) }))}
+            onChange={look => replaceParams(applyVgpuGlowLook(look))} />
+        </UiFormRow>
         <UiGroup title={t('imageEditor.v3.parameters.glowHalo')} titleTone="overline" divided gap="stack">
           <UiFormRow density="compact" label={t('imageEditor.v3.parameters.tintEnabled')} inline>
             <div className="flex items-center gap-2">
@@ -297,28 +285,10 @@ export function ImageEditorEffectParametersV3({
               key={index}
               label={t(`imageEditor.v3.parameters.chromaticSide${index === 0 ? 'Left' : 'Right'}`)}
             >
-              <div className="grid grid-cols-3 gap-1">
-                {channelOptions.map((channel) => (
-                  <UiOptionButton
-                    key={channel}
-                    type="button"
-                    variant="menu"
-                    active={glow.chromaticChannels[index] === channel}
-                    disabled={disabled}
-                    size="sm" className="justify-center"
-                    onClick={() => replaceParams({
-                      ...glow,
-                      chromaticChannels: replaceVgpuGlowChromaticChannel(
-                        glow.chromaticChannels,
-                        index,
-                        channel,
-                      ),
-                    })}
-                  >
-                    {t(`imageEditor.v3.parameters.channels.${channel}`)}
-                  </UiOptionButton>
-                ))}
-              </div>
+              <UiSegmented size="sm" ariaLabel={t(`imageEditor.v3.parameters.chromaticSide${index === 0 ? 'Left' : 'Right'}`)}
+                value={glow.chromaticChannels[index]} disabled={disabled}
+                options={channelOptions.map(value => ({ value, label: t(`imageEditor.v3.parameters.channels.${value}`) }))}
+                onChange={channel => replaceParams({ ...glow, chromaticChannels: replaceVgpuGlowChromaticChannel(glow.chromaticChannels, index, channel) })} />
             </UiFormRow>
           ))}
         </UiGroup>

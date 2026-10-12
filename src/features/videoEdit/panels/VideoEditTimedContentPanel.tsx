@@ -8,7 +8,7 @@ import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiOverflowRow, UiSearchInput, UiOptionButton, UiTextAreaField, type UiOverflowRowItem } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import NumberInput from '@/components/ui/NumberInput'
-import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
+import { UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui/styleTokens'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import type { VideoEditCaption, VideoEditMarker } from '@/core/videoEdit/timedContent'
 import { createVideoEditCaption, createVideoEditMarker, exportVideoEditSubtitles, importVideoEditCaptionFile, removeVideoEditTimedContent, updateVideoEditTimedContent } from '../application/videoEditTimedContent'
@@ -158,11 +158,11 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
       <UiSearchInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" size="sm" className="w-full" value={keyword} onChange={event => setKeyword(event.target.value)} />
     </div>
     <div className="min-h-0 flex-1 px-2" aria-label={kind === 'caption' ? '字幕列表' : '标记列表'}>
-      {entries.length ? <Virtuoso ref={list} className="h-full" data={entries} fixedItemHeight={56} increaseViewportBy={96} initialTopMostItemIndex={Math.max(0, entries.findIndex(entry => entry.value.id === selectedCaptionId))} computeItemKey={(_index, entry) => entry.value.id} itemContent={(_index, entry) => <UiOptionButton variant="menu" active={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} aria-pressed={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
+      {entries.length ? <Virtuoso ref={list} className="h-full" data={entries}  increaseViewportBy={96} initialTopMostItemIndex={Math.max(0, entries.findIndex(entry => entry.value.id === selectedCaptionId))} computeItemKey={(_index, entry) => entry.value.id} itemContent={(index, entry) => <div className={index ? 'border-t border-line py-2.5' : 'py-2.5'}><UiOptionButton variant="menu" active={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} aria-pressed={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
         onClick={() => { openEntry(entry); locate(entry) }} onDoubleClick={() => locate(entry)}>
-        <span className="block w-full truncate text-13" data-observation-sensitive>{entryText(entry)}</span>
-        <span className={`${UI_TEXT_META_CLASS} block w-full truncate`}>第 {atFrame(entry)} 帧{entry.kind === 'caption' ? ` · ${entry.value.duration} 帧` : ''} · {clips.get(entry.value.clipId ?? '')?.name ?? '序列时间'}</span>
-      </UiOptionButton>} /> : <UiEmpty title={keyword ? '没有匹配内容' : kind === 'caption' ? '尚无字幕' : '尚无时间标记'} description={keyword ? undefined : kind === 'caption' ? '新增文字，或导入 SRT / WebVTT 字幕。' : '在需要定位的时刻新增标记。'} size="sm" />}
+        <span className={`${UI_TEXT_PANEL_TITLE_CLASS} block w-full truncate`} data-observation-sensitive>{entryText(entry)}</span>
+        <span className={`${UI_TEXT_SECONDARY_CLASS} block w-full truncate`}>第 {atFrame(entry)} 帧{entry.kind === 'caption' ? ` · ${entry.value.duration} 帧` : ''} · {clips.get(entry.value.clipId ?? '')?.name ?? '序列时间'}</span>
+      </UiOptionButton></div>} /> : <UiEmpty title={keyword ? '没有匹配内容' : kind === 'caption' ? '尚无字幕' : '尚无时间标记'} description={keyword ? undefined : kind === 'caption' ? '新增文字，或导入 SRT / WebVTT 字幕。' : '在需要定位的时刻新增标记。'} size="sm" />}
     </div>
     {error && <UiError size="xs" align="start" className="px-2" title={error} message="" />}
     {draft && <UiGroup divided titleTone="compact" className="max-h-[65%] shrink-0 overflow-auto px-2 pb-2" title={draft.kind === 'import' ? '导入字幕' : `${draft.id ? '编辑' : '新增'}${draft.kind === 'caption' ? '字幕' : '标记'}`}>

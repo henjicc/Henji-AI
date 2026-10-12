@@ -97,9 +97,16 @@ function createSurfaceGrammarScenes(context) {
             await editor.getByRole('button', { name: '最大化面板', exact: true }).last().click()
             await context.settlePage(page, 500)
           }
-          await select(title.id); await assertFormColumns(editor.locator('[data-properties-tab-panel]')); await capture('text-rows')
+          const assertActionColumn = async (action, field) => {
+            const actionBox = await editor.getByRole('button', { name: action, exact: true }).boundingBox()
+            const fieldBox = await editor.getByRole('button', { name: field, exact: true }).boundingBox()
+            assert.ok(actionBox && fieldBox && Math.abs(actionBox.x - fieldBox.x) <= 1, `${action}必须从控件列左缘起头`)
+          }
+          await select(title.id); await assertFormColumns(editor.locator('[data-properties-tab-panel]'))
+          await assertActionColumn('删除段落', '编辑段落'); await capture('text-rows')
           await select(shape.id)
           await assertFormColumns(editor.locator('[data-properties-tab-panel]'))
+          await assertActionColumn('删除路径', '编辑路径')
           await capture('path-rows')
           await editor.getByRole('button', { name: '恢复面板大小', exact: true }).last().click()
           await context.settlePage(page, 400)
@@ -169,10 +176,9 @@ function createUiPolishScenes(context) {
           })
           assert.ok(Math.round(gap) >= 32, `变换和路径组间距须为 32px 分区档（DIP 取整），实际 ${gap}`)
           await capture('group-spacing')
-          const target = editor.getByRole('button', { name: '蒙版目标图层', exact: true })
-          await target.scrollIntoViewIfNeeded()
-          assert.equal(await target.isDisabled(), true)
-          assert.match(await target.textContent(), /没有可用图层/)
+          assert.equal(await editor.getByRole('button', { name: '蒙版目标图层', exact: true }).count(), 0)
+          assert.equal(await editor.getByRole('button', { name: '用路径作为蒙版', exact: true }).count(), 0)
+          await panel.getByRole('button', { name: '删除路径', exact: true }).scrollIntoViewIfNeeded()
           await context.settlePage(page, 300)
           await capture('empty-mask-target')
         } finally { await restore() }

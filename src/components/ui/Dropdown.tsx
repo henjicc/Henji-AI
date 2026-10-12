@@ -168,7 +168,11 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   // 选项超过可视高度时列表出现竖向滚动条，它占用的宽度要加到菜单宽度上，
   // 否则带勾的选中项会被挤成“5.”“智…”（任务 5.3）。打开后、绘制前测量一次。
   const [scrollGutterPx, setScrollGutterPx] = useState(0)
-  const resolvedDisplay = empty ? emptyLabel ?? t('dropdown.emptyLabel', { defaultValue: '暂无可选项' }) : resolveDropdownDisplay(display, value, options) || t('dropdown.unselected')
+  const resolvedDisplay = empty
+    ? emptyLabel ?? t('dropdown.emptyLabel', { defaultValue: '暂无可选项' })
+    : (!renderPanel && !display?.trim() && !options?.some(option => option.value === value)
+      ? t('dropdown.unselectedLabel')
+      : resolveDropdownDisplay(display, value, options).trim() || t('dropdown.unselectedLabel'))
   useEffect(() => {
     if (!disabled || (!open && !closing)) return
     window.clearTimeout(closeTimerRef.current)

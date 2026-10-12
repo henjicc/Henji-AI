@@ -613,7 +613,7 @@ describe('ImageEditorV3 professional shell', () => {
     if (!parameterPanel) throw new Error('辉光参数 Tab 未挂载')
     expect(parameterPanel.className).toContain('overflow-y-auto')
     const controls = within(parameterPanel)
-    expect(controls.getByRole('button', { name: '自然' })).toBeTruthy()
+    expect(controls.getByRole('radio', { name: '自然' })).toBeTruthy()
     expect(controls.getByRole('switch', { name: '着色' })).toBeTruthy()
     expect(controls.getByRole('slider', { name: '辉光强度' })).toBeTruthy()
     expect(controls.getByRole('slider', { name: '半径' })).toBeTruthy()
