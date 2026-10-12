@@ -294,7 +294,6 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
         const value = { ...first, ...cues[index], id, style: first.style, clipId: first.clipId }
         captions.push(value); captionIds.push(id)
         if (!original) createdIds.push(id)
-        else if (JSON.stringify(value) !== JSON.stringify(original)) updatedIds.push(id)
       }
       removedIds.push(...group.slice(cues.length).map(caption => caption.id))
     }
@@ -302,16 +301,19 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
     // Reconnect on the final sequence clock, extending only subtitles being organized.
     captions.sort((a, b) => a.start - b.start)
     const organized = new Set(captionIds)
-    const created = new Set(createdIds); const updated = new Set(updatedIds)
+    const created = new Set(createdIds)
     for (let index = 0; index + 1 < captions.length; index++) {
       const cue = captions[index]; const next = captions[index + 1]
       if (!organized.has(cue.id)) continue
       const gap = next.start - cue.start - cue.duration
       if (gap > 0 && gap / fps * 1000 < profile.joinGapMs) {
         cue.duration += gap
-        if (!created.has(cue.id) && !updated.has(cue.id)) { updatedIds.push(cue.id); updated.add(cue.id) }
       }
     }
+    // 以最终结果对比原字幕，避免吸附后又接回原值时仍报告“已更新”（这类整理不产生撤销记录）。
+    const originals = new Map(all.map(caption => [caption.id, caption]))
+    const finals = new Map(captions.map(caption => [caption.id, caption]))
+    updatedIds.push(...captionIds.filter(id => !created.has(id) && sortedJson(finals.get(id)) !== sortedJson(originals.get(id))))
     signal?.throwIfAborted()
     if (owner.document !== snapshot) throw new Error('整理期间字幕已有修改，请重新整理。')
     editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, captions }))
@@ -330,6 +332,9 @@ export function joinCaptionText(parts: readonly string[]): string {
   return parts.map(part => part.trim()).filter(Boolean).reduce((text, part) =>
     !text ? part : /[A-Za-z0-9]$/.test(text) && /^[A-Za-z0-9]/.test(part) ? `${text} ${part}` : `${text}${part}`, '')
 }
+
+const sortedJson = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)
+  ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item)
 
 /** Recover punctuation only from an unambiguous matching reference; never undo a user's word edits. */
 export function restoreCaptionSourceText(text: string, source?: string): string {

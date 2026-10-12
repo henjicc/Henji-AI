@@ -1,3 +1,4 @@
+import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { it, expect, beforeEach, afterEach, vi } from 'vitest'
@@ -40,6 +41,8 @@ it('通用字幕/标记集合、修改、片段级联和手动撤销保存重开
     ] }, baseline.revisions as Record<string, number>)
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true }); expect(owner.past).toHaveLength(history + 1)
     const caption = owner.document.sequences[0].captions![0]; const marker = owner.document.sequences[0].markers![0]
+    // 未传样式的新字幕得到默认字幕样式，而不是留空走另一套文字呈现。
+    expect(caption.style).toEqual(videoEditSubtitleStyleSchema.parse({}))
     const clipRef = { kind: 'video_edit.clip', id: `${projectId}:text-clip` }
     const moved = await app.change(clipRef, { 'video_edit.clip.start': 60 })
     expect(moved, JSON.stringify(moved)).toMatchObject({ ok: true })

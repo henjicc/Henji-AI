@@ -85,6 +85,9 @@ it('免费整理在独立组词边界吸附后延长前条接续，生成路径�
   expect(sequence().captions).toMatchObject([{ start: 235, duration: 151 }, { start: 386, duration: 70 }, { start: 486 }])
   expect(result.updatedIds).toContain('gap-0')
   expect(owner.past).toHaveLength(before + 1)
+  // 再整理一次结果不变：不报告“已更新”，也不新增撤销记录。
+  expect(await segmentVideoEditSubtitles(owner.document.id, sequence().id, {})).toMatchObject({ updatedIds: [], createdIds: [], removedIds: [] })
+  expect(owner.past).toHaveLength(before + 1)
   const blocks = items.map((item, index) => ({ id: String(index), text: item.text, startFrame: item.startMs, endFrame: item.endMs, granularity: 'word' as const, included: true, locked: false }))
   for (const captions of [sequence().captions!, buildAutoSubtitles(blocks, 1000, sequence().frameRate, { startFrame: 0, endFrame: 600 }), (await buildSpeechSubtitles(parts.join(''), timings, sequence().clips[0], sequence().frameRate)).map(value => value.caption)]) {
     expect(captions.length).toBeGreaterThan(1)
@@ -360,7 +363,7 @@ it('分块混音复用渲染器，指定入出点换算后生成一笔历史，�
   const history = owner.past.length
   const id = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'in-out')
   expect(boundary.mixes).toEqual([{ start: 2, duration: 3 }]); expect(boundary.disposed).toHaveBeenCalledTimes(1)
-  expect(owner.past).toHaveLength(history)
+  console.log('AFTER', JSON.stringify(sequence().captions)); expect(owner.past).toHaveLength(history)
   const ids = await generateVideoEditSubtitles(owner.document.id, sequence().id, id)
   expect(sequence().captions).toMatchObject([{ id: ids[0], text: 'Hello world.', start: 60, duration: 30 }]); expect(owner.past).toHaveLength(history + 1)
   await generateVideoEditSubtitles(owner.document.id, sequence().id, id)
