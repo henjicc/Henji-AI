@@ -16,6 +16,10 @@ import { parseImageEditDocumentV3 } from '../imageEdit/v3/documentCodec'
 import { imageWorkingCopySchema } from './imageSchemas'
 import { IMAGE_WORKING_VERSION } from './schemaVersions'
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from '../imageEdit/v3/documentTypes'
+import { llmStoredConfigSchema } from './llmSchemas'
+import { mcpConnectionStorageSchema } from './mcpConnectionSchema'
+import { persistedCanvasNodeDataSchema, persistedStageSettingsSchema } from './businessSchemas'
+import { createDefaultLlmConfig } from '../llm/defaults'
 
 describe('持久格式逐版本链', () => {
   const schema = z.object({ label: z.string(), count: z.number() }).strict()
@@ -123,6 +127,12 @@ describe('所有登记格式的黄金样本', () => {
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {
       const version = Number(file.slice(1, -5))
       const floor = baseline.formats[format.id as keyof typeof baseline.formats]?.supportedFrom ?? 1
+      if (format.storage === 'sqlite-ledger') {
+        it(`${format.id} ${file}记录内容由SQL账本升级，黄金样本只校验独立内容schema`, () => {
+          expect(format.schema.safeParse(JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'))).success).toBe(true)
+        })
+        continue
+      }
       if (version < floor) {
         it(`${format.id} ${file}低于支持下限v${floor}，明确拒绝为旧版本`, () => {
           const raw: unknown = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'))
@@ -167,5 +177,29 @@ describe('所有登记格式的黄金样本', () => {
       if (floor > 1) expect(baseline.devBreaks.some(item => item.format === format.id && item.reason.length > 0)).toBe(true)
     }
     expect(PersistenceError.prototype).toBeInstanceOf(Error)
+  })
+})
+
+describe('稳定业务字段的持久契约', () => {
+  it('真实助手默认配置可读，权限和模型设置类型受保护，开放扩展区保留', () => {
+    const raw = createDefaultLlmConfig()
+    expect(llmStoredConfigSchema.parse(raw)).toEqual(raw)
+    expect(llmStoredConfigSchema.safeParse({ ...raw, policy: { allowedTools: 'all' } }).success).toBe(false)
+    const invalid = structuredClone(raw) as unknown as { agentProfiles: { settings: { maxOutputTokens: unknown } }[] }
+    invalid.agentProfiles[0].settings.maxOutputTokens = '4096'
+    expect(llmStoredConfigSchema.safeParse(invalid).success).toBe(false)
+    expect(llmStoredConfigSchema.parse({ ...raw, extension: { keep: true } })).toHaveProperty('extension.keep', true)
+    const sample = JSON.parse(fs.readFileSync('tests/fixtures/persistence/mcp-connections/v1.json', 'utf8')) as { connections: { allowPaid: unknown }[] }
+    expect(mcpConnectionStorageSchema.parse(sample).connections[0]).toMatchObject({ allowWrites: true, allowPaid: false, allowDestructive: false })
+    sample.connections[0].allowPaid = 'yes'
+    expect(mcpConnectionStorageSchema.safeParse(sample).success).toBe(false)
+  })
+  it('画布稳定字段和场景设置约束类型，但保留模型及工具扩展', () => {
+    const node = { prompt: '画面', modelId: 'synthetic', params: { futureParameter: [1, 2] }, extension: { custom: true } }
+    expect(persistedCanvasNodeDataSchema.parse(node)).toEqual(node)
+    expect(persistedCanvasNodeDataSchema.safeParse({ ...node, serverTaskId: 12 }).success).toBe(false)
+    const scene = { sky: { color: 'white', environmentImageUrl: null, extension: 1 }, render: { style: 'depth' }, extension: true }
+    expect(persistedStageSettingsSchema.parse(scene)).toEqual(scene)
+    expect(persistedStageSettingsSchema.safeParse({ sunlight: { enabled: 'yes' } }).success).toBe(false)
   })
 })

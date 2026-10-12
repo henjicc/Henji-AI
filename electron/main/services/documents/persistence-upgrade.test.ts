@@ -1,9 +1,10 @@
+import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { createDocumentKindRegistry, defineSkeletonDocumentKind } from '../../../../src/core/documents/kinds'
-import { buildDocumentEnvelope, serializeDocumentEnvelope } from '../../../../src/core/documents/envelope'
+import { buildDocumentEnvelope, serializeDocumentEnvelope, documentEnvelopeContract, documentEnvelopeSchema } from '../../../../src/core/documents/envelope'
 import { createTestEnvironment, type TestEnvironment } from './documents.test-support'
 import * as persistenceContracts from '../../../../src/core/persistence/fileContracts'
 import { upgradeStoredFile } from '../persistence/stored-file'
@@ -63,5 +64,39 @@ describe('文档升级的真实文件边界', () => {
     const names = await fsp.readdir(backupDirectory)
     expect(names).toHaveLength(1)
     expect(await fsp.readFile(path.join(backupDirectory, names[0]), 'utf8')).toBe(text)
+  })
+  it('外壳先备份并迁移，之后才读取 kind；更新版及备份失败均不执行迁移', async () => {
+    const { env, filePath, text, step } = await setup()
+    const originalContract = { ...documentEnvelopeContract }
+    const raw = JSON.parse(text) as Record<string, unknown>
+    raw.oldKind = raw.kind; delete raw.kind
+    const original = JSON.stringify(raw)
+    await fsp.writeFile(filePath, original)
+    const envelopeStep = vi.fn((value: unknown) => {
+      // Synchronous test observation happens inside the pure step only; production migrations do no I/O.
+      const backups = path.join(path.dirname(filePath), '.henji/backups')
+      expect(fs.readdirSync(backups).some(file => fs.readFileSync(path.join(backups, file), 'utf8') === original)).toBe(true)
+      const { oldKind, ...rest } = value as Record<string, unknown>
+      return { ...rest, kind: oldKind, envelopeVersion: 2 }
+    })
+    const realRead = fsp.readFile.bind(fsp)
+    Object.assign(documentEnvelopeContract, { version: 2, schema: documentEnvelopeSchema.extend({ envelopeVersion: z.literal(2) }), migrations: { 1: envelopeStep } })
+    try {
+      const read = await env.services.service.readDocument({ id: 'upgrade', path: filePath })
+      expect(read.content).toEqual({ title: '原内容' })
+      expect(envelopeStep.mock.invocationCallOrder[0]).toBeLessThan(step.mock.invocationCallOrder[0])
+      expect(await realRead(filePath, 'utf8')).toBe(original)
+      const directory = path.join(path.dirname(filePath), '.henji/backups')
+      const files = await fsp.readdir(directory)
+      expect(await realRead(path.join(directory, files[0]), 'utf8')).toBe(original)
+      envelopeStep.mockClear()
+      await fsp.writeFile(filePath, JSON.stringify({ ...raw, envelopeVersion: 3 }))
+      await expect(env.services.service.readDocument({ id: 'upgrade', path: filePath })).rejects.toMatchObject({ code: 'newer-version', formatId: 'document-envelope' })
+      expect(envelopeStep).not.toHaveBeenCalled()
+      await fsp.writeFile(filePath, original)
+      vi.spyOn(fsp, 'mkdir').mockRejectedValue(new Error('backup denied'))
+      await expect(env.services.service.readDocument({ id: 'upgrade', path: filePath })).rejects.toMatchObject({ code: 'backup-failed' })
+      expect(envelopeStep).not.toHaveBeenCalled()
+    } finally { Object.assign(documentEnvelopeContract, originalContract) }
   })
 })

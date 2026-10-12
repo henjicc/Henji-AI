@@ -1,3 +1,4 @@
+import baseline from '../../../../src/core/persistence/schemaBaseline.json'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -19,11 +20,20 @@ let environment: TestEnvironment | undefined
 afterEach(async () => { await environment?.cleanup(); environment = undefined })
 const fixture = (id: string, file: string): string => path.resolve('tests/fixtures/persistence', id, file)
 
+const supported = (id: keyof typeof baseline.formats): number[] => {
+  const { supportedFrom, version } = baseline.formats[id]
+  return process.env.HENJI_TEST_PERSISTENCE_RELEASE === '1' ? Array.from({ length: version - supportedFrom + 1 }, (_, i) => supportedFrom + i) : [version]
+}
+const imageArchives = [
+  ...['document.image_document', 'image-package'].flatMap(id => supported('image-package').map(version => [id, `v${version}.henjiimg`] as const)),
+  ...supported('canvas-layer-package').map(version => ['canvas-layer-package', `v${version}.henjilayer`] as const),
+]
+
 describe('正式读入口打开黄金归档与源码', () => {
-  it('图片文档和画布图层包通过真实ZIP读取，保留图层与文档头，不改写原件', async () => {
+  it.each(imageArchives)('%s/%s 通过真实ZIP读取，保留图层与文档头，不改写原件', async (id, file) => {
     environment = createTestEnvironment()
     const codec = new HenjiImagePackageCodec(new ContentAddressedResourceStore(path.join(environment.outside, 'resources')))
-    for (const [id, file] of [['document.image_document', `v${IMAGE_PACKAGE_VERSION}.henjiimg`], ['image-package', `v${IMAGE_PACKAGE_VERSION}.henjiimg`], ['canvas-layer-package', `v${CANVAS_LAYER_PACKAGE_VERSION}.henjilayer`]]) {
+
       const source = fixture(id, file)
       const original = await fsp.readFile(source)
       const imported = await codec.import(source)
@@ -61,8 +71,9 @@ describe('正式读入口打开黄金归档与源码', () => {
           : { format: 'henji-image-document', version: 1, id: 'golden-image', summary: { width: 32, height: 40, layers: 5 } })
       } finally { await imported.resourceLease.release() }
       expect(await fsp.readFile(source)).toEqual(original)
-    }
-    expect((await readImageDocumentPackageHeader(fixture('image-header', `v${IMAGE_PACKAGE_VERSION}.henjiimg`))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 32, height: 40, layers: 5 } })
+  })
+  it.each(supported('image-package'))('图片头 v%s 走真实归档入口', async version => {
+    expect((await readImageDocumentPackageHeader(fixture('image-header', `v${version}.henjiimg`))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 32, height: 40, layers: 5 } })
   })
   it('开发期放弃的旧图片与画布图层 ZIP 明确拒绝为旧版本，不改写原件', async () => {
     environment = createTestEnvironment()
@@ -74,9 +85,9 @@ describe('正式读入口打开黄金归档与源码', () => {
       expect(await fsp.readFile(source)).toEqual(original)
     }
   })
-  it('真实项目包导入后剪辑内容和代码文件可读，保留效果、字幕与调色', async () => {
+  it.each(supported('project-package'))('真实项目包 v%s 导入后剪辑内容和代码文件可读，保留效果、字幕与调色', async version => {
     environment = createTestEnvironment()
-    const source = fixture('project-package', 'v1.henjipack')
+    const source = fixture('project-package', `v${version}.henjipack`)
     const original = await fsp.readFile(source)
     const imported = await environment.services.service.importPackage({ source })
     if (imported.type !== 'project') throw new Error('应为项目包')

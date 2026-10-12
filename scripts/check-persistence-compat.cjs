@@ -1,3 +1,4 @@
+const { RELEASED_PATH, sampleDigests, validateReleasedCompatibility, validateReleaseHistory, createReleaseSnapshot, readProtectedRelease } = require('./lib/releasedCompatibility.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
@@ -8,7 +9,7 @@ const ROOT = path.resolve(__dirname, '..')
 const BASELINE = path.join(ROOT, 'src/core/persistence/schemaBaseline.json')
 function loadTypeScript(entry, root = ROOT) {
   const file = path.resolve(root, entry)
-  const result = buildSync({ entryPoints: [file], bundle: true, platform: 'node', format: 'cjs', write: false, packages: 'external', logLevel: 'silent' })
+  const result = buildSync({ entryPoints: [file], bundle: true, platform: 'node', format: 'cjs', write: false, packages: 'external', alias: { '@': path.join(root, 'src') }, logLevel: 'silent' })
   const compiled = new Module(file, module)
   compiled.filename = file
   compiled.paths = Module._nodeModulePaths(path.dirname(file))
@@ -18,6 +19,9 @@ function loadTypeScript(entry, root = ROOT) {
 function snapshot(root = ROOT) {
   const { PERSISTENCE_FORMATS } = loadTypeScript('src/core/persistence/formats.ts', root)
   const { persistenceSchemaStructure } = loadTypeScript('src/core/persistence/fingerprint.ts', root)
+  const { SCHEMA_MIGRATIONS } = loadTypeScript('electron/main/services/db-migrations.ts', root)
+  const sql = PERSISTENCE_FORMATS.find(format => format.id === 'sqlite')
+  if (!sql || SCHEMA_MIGRATIONS.length !== sql.version || SCHEMA_MIGRATIONS.some((step, index) => step.version !== index + 1 || typeof step.up !== 'function')) throw new Error('SQLite 登记版本必须与真实 SQL 账本连续步骤一致')
   const ids = new Set()
   return PERSISTENCE_FORMATS.map(format => {
     if (ids.has(format.id)) throw new Error(`持久格式重复登记：${format.id}`)
@@ -26,10 +30,10 @@ function snapshot(root = ROOT) {
     return { ...format, fingerprint: crypto.createHash('sha256').update(persistenceSchemaStructure(format.schemas)).digest('hex') }
   })
 }
-function fixtureVersions(root, id) {
+function fixtureVersions(root, id, extension) {
   const dir = path.join(root, 'tests/fixtures/persistence', id)
   if (!fs.existsSync(dir)) return []
-  return fs.readdirSync(dir).flatMap(file => /^v([1-9]\d*)\.[^.]+$/.test(file) ? [Number(file.match(/^v(\d+)/)[1])] : [])
+  return fs.readdirSync(dir).filter(file => !extension || file.endsWith(`.${extension}`)).flatMap(file => /^v([1-9]\d*)\.[^.]+$/.test(file) ? [Number(file.match(/^v(\d+)/)[1])] : [])
 }
 function validateCompatibility(formats, baseline, fixtures) {
   const errors = []
@@ -51,6 +55,14 @@ function validateCompatibility(formats, baseline, fixtures) {
     for (let version = 1; version <= format.version; version++) {
       if (!fixtures(format.id).includes(version) && !(version < format.version && waived.has(version))) errors.push(`缺少黄金样本：${format.id}/v${version}.*`)
     }
+    for (const requirement of format.requiredFixtures ?? [{ extension: 'json' }]) {
+      const owner = requirement.versionFormat ?? format.id
+      const target = current.get(owner)
+      const floor = baseline.formats[owner]?.supportedFrom ?? 1
+      for (let version = floor; version <= (target?.version ?? format.version); version++) {
+        if (!fixtures(format.id, requirement.extension).includes(version)) errors.push(`缺少必需黄金样本：${format.id}/v${version}.${requirement.extension}`)
+      }
+    }
     const floor = previous.supportedFrom ?? 1
     if (format.storage !== 'sqlite-ledger') for (let version = floor; version < format.version; version++) {
       if (!Object.hasOwn(format.migrations, version)) errors.push(`缺少逐版本迁移：${format.id} v${version} → v${version + 1}`)
@@ -60,6 +72,8 @@ function validateCompatibility(formats, baseline, fixtures) {
 }
 function updateBaseline(formats, baseline, options, fixtures) {
   const next = structuredClone(baseline)
+  const adoption = options.frameworkAdoption === true
+  if (adoption && (baseline.releasedCompatibility || baseline.frameworkAdoption || !options.reason?.trim() || options.devBreak)) throw new Error('框架一次性登记仅允许首次发布前执行一次，须提供非空理由且不能混用 dev-break')
   const breaks = options.devBreak ? (Array.isArray(options.devBreak) ? options.devBreak : [options.devBreak]) : []
   if (breaks.length && baseline.releasedCompatibility) throw new Error('正式发布后禁止 --dev-break；请升版本并写迁移和黄金样本。')
   if (breaks.length && (!options.reason?.trim() || breaks.some(id => !formats.some(format => format.id === id) && !baseline.formats[id]))) throw new Error('--dev-break 必须指定已登记格式与非空 --reason。')
@@ -68,7 +82,7 @@ function updateBaseline(formats, baseline, options, fixtures) {
     if (breaks.length && !broken && baseline.formats[format.id]) continue
     const previous = baseline.formats[format.id]
     if (previous && format.version < previous.version) throw new Error(`持久格式版本不能回退：${format.id}`)
-    if (previous && format.version === previous.version && previous.fingerprint !== format.fingerprint && !broken) throw new Error(`改了持久格式 ${format.id}，请升版本并写迁移；开发期须显式 --dev-break。`)
+    if (previous && format.version === previous.version && previous.fingerprint !== format.fingerprint && !broken && !options.frameworkAdoption) throw new Error(`改了持久格式 ${format.id}，请升版本并写迁移；开发期须显式 --dev-break。`)
     const adoption = options.init && format.version > 1
     const supportedFrom = broken || adoption ? format.version : previous?.supportedFrom ?? 1
     next.formats[format.id] = { version: format.version, fingerprint: format.fingerprint, supportedFrom }
@@ -80,12 +94,13 @@ function updateBaseline(formats, baseline, options, fixtures) {
     next.devBreaks.push({ at: new Date().toISOString(), format: id, version: previous.version, reason: options.reason.trim(), previousFingerprint: previous.fingerprint, fingerprint: null, retired: true, waivedFixtureVersions: [] })
     delete next.formats[id]
   }
+  if (adoption) next.frameworkAdoption = { at: new Date().toISOString(), reason: options.reason.trim(), formats: formats.filter(format => baseline.formats[format.id]).map(format => ({ format: format.id, version: format.version, supportedFrom: next.formats[format.id].supportedFrom, previousFingerprint: baseline.formats[format.id].fingerprint, fingerprint: format.fingerprint })) }
   const errors = validateCompatibility(formats, next, fixtures)
   if (errors.length) throw new Error(errors.join('\n'))
   return next
 }
 function main(argv = process.argv.slice(2)) {
-  const flags = new Set(['--write', '--init', '--dev-break', '--reason', '--waive-before'])
+  const flags = new Set(['--write', '--init', '--dev-break', '--reason', '--waive-before', '--release-snapshot', '--framework-adoption'])
   const options = {}
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]
@@ -93,8 +108,9 @@ function main(argv = process.argv.slice(2)) {
     if (flag === '--dev-break' || flag === '--reason') { if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error(`${flag} 缺少参数`); const value = argv[++i]; if (flag === '--dev-break') options.devBreak = [...(options.devBreak ?? []), value]; else options.reason = value }
     else options[flag.slice(2)] = true
   }
+  options.frameworkAdoption = options['framework-adoption']
   options.waiveBefore = options['waive-before']
-  if ((options.devBreak || options.reason || options.waiveBefore || options.init) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
+  if ((options.devBreak || options.reason || options.waiveBefore || options.init || options.frameworkAdoption) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
   if (options.waiveBefore && !options.devBreak) throw new Error('--waive-before 只允许和 --dev-break、--reason 一起使用。')
   const formats = snapshot()
   let baseline
@@ -103,9 +119,31 @@ function main(argv = process.argv.slice(2)) {
     if (!options.reason?.trim()) throw new Error('初始化基线须用 --reason 显式登记接入前历史样本豁免。')
     baseline = { releasedCompatibility: false, formats: {}, devBreaks: [] }
   } else baseline = JSON.parse(fs.readFileSync(BASELINE, 'utf8'))
-  const fixtures = id => fixtureVersions(ROOT, id)
+  const fixtures = (id, extension) => fixtureVersions(ROOT, id, extension)
+  const releasedPath = path.join(ROOT, RELEASED_PATH)
+  const released = JSON.parse(fs.readFileSync(releasedPath, 'utf8'))
+  if (typeof released.releasedCompatibility !== 'boolean' || !released.formats || !Array.isArray(released.devBreaks)
+    || released.releasedCompatibility && !Object.keys(released.formats).length) throw new Error('发布兼容快照结构无效')
+  const samples = id => sampleDigests(ROOT, id)
+  const protectedRelease = readProtectedRelease(ROOT)
+  const releaseErrors = [...validateReleaseHistory(protectedRelease, released), ...validateReleasedCompatibility(formats, baseline, released, samples)]
+  if (releaseErrors.length) throw new Error(releaseErrors.join('\n'))
+  if (baseline.releasedCompatibility && !released.releasedCompatibility && !options['release-snapshot']) throw new Error('发布开关已开启但缺少发布快照；运行 npm run persistence:release-snapshot。')
+  if (options['release-snapshot']) {
+    if (options.write) throw new Error('发布快照与开发基线更新必须分开执行')
+    const errors = validateCompatibility(formats, baseline, fixtures)
+    if (errors.length) throw new Error(errors.join('\n'))
+    const next = createReleaseSnapshot(formats, baseline, released, samples)
+    const temporary = `${releasedPath}.${crypto.randomUUID()}.tmp`
+    try { fs.writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`, { flag: 'wx' }); fs.renameSync(temporary, releasedPath) }
+    finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary) }
+    console.log('发布兼容快照已生成；请审查并提交到受保护分支。')
+    return
+  }
   if (options.write) {
     const next = updateBaseline(formats, baseline, options, fixtures)
+    const errors = validateReleasedCompatibility(formats, next, released, samples)
+    if (errors.length) throw new Error(errors.join('\n'))
     // Atomic publication, no partial baseline on rejection.
     const temporary = `${BASELINE}.${crypto.randomUUID()}.tmp`
     try { fs.writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`, { flag: 'wx' }); fs.renameSync(temporary, BASELINE) }

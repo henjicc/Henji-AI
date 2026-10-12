@@ -1,13 +1,43 @@
 {
   "version": 1,
   "content": {
-    "providers": [],
+    "providers": [
+      {
+        "providerId": "synthetic",
+        "displayName": "合成测试供应商",
+        "adapter": "openai",
+        "enabled": false
+      }
+    ],
     "models": [],
     "promptProfiles": [],
     "textProcessingPromptTemplates": [],
-    "agentProfiles": [],
+    "agentProfiles": [
+      {
+        "id": "golden-agent",
+        "name": "测试助手",
+        "primary": {
+          "providerId": "synthetic",
+          "modelId": "test"
+        },
+        "settings": {
+          "timeoutMs": 60000,
+          "maxRetries": 0,
+          "maxOutputTokens": 4096,
+          "contextWindowBudget": 64000
+        },
+        "verifications": [],
+        "createdAt": "2026-10-09T00:00:00.000Z",
+        "updatedAt": "2026-10-09T00:00:00.000Z"
+      }
+    ],
     "tools": [],
-    "policy": {},
-    "memory": {}
+    "policy": {
+      "allowedTools": [],
+      "requireHumanConfirmation": true
+    },
+    "memory": {
+      "longTermNamespace": "golden"
+    }
   }
 }

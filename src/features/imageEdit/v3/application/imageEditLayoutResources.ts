@@ -22,7 +22,8 @@ export async function releaseImageLayoutResources(leaseId: string): Promise<void
 export async function readImageLayoutResource(resource: StoredCreativeIntentResource): Promise<unknown> {
   const read = getPlatform().imageEditorV3.readLayoutResource
   if (!read) throw new Error('随手摆资源读取不可用，请更新应用')
+  if (resource.resourceId !== resource.digest) throw new Error('随手摆原稿引用与内容摘要不符，请恢复原文件')
   const value = await read({ requestId:createImageEditorV3RequestId('layout-read'), resourceRef:resource.resourceId as `sha256:${string}` })
-  if (await imageLayoutDigest(value) !== resource.digest || new TextEncoder().encode(JSON.stringify(value)).byteLength !== resource.bytes) throw new Error('随手摆原稿缺失或已损坏，请恢复原文件')
+  // 主进程 readVerifiedBuffer 已验证原始字节；迁移后的内存值不能再与旧字节摘要比较。
   return value
 }

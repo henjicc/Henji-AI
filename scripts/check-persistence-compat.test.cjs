@@ -1,6 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { validateCompatibility, updateBaseline } = require('./check-persistence-compat.cjs')
+const { emptyRelease, createReleaseSnapshot, validateReleasedCompatibility, validateReleaseHistory } = require('./lib/releasedCompatibility.cjs')
 
 const format = { id: 'test', name: '剪辑', version: 1, fingerprint: 'old', storage: 'file', migrations: {} }
 const baseline = () => ({ releasedCompatibility: false, formats: { test: { version: 1, fingerprint: 'old', supportedFrom: 1 } }, devBreaks: [] })
@@ -45,4 +46,48 @@ test('多个格式一起变化须分别登记；开发期删除已知格式也�
   const retired = updateBaseline([], baseline(), { devBreak: 'test', reason: '删除未发布的开发功能' }, () => [])
   assert.deepEqual(retired.formats, {}); assert.equal(retired.devBreaks[0].retired, true)
   assert.throws(() => updateBaseline([], { ...baseline(), releasedCompatibility: true }, { devBreak: 'test', reason: '删除' }, () => []), /正式发布后禁止/)
+})
+
+test('发布快照阻止开关回退、支持下限抬高、新豁免、格式删除、版本指纹及样本改写', () => {
+  const state = { ...baseline(), releasedCompatibility: true }
+  const samples = () => ({ 'v1.json': 'digest' })
+  const released = createReleaseSnapshot([format], state, emptyRelease(), samples)
+  assert.deepEqual(validateReleasedCompatibility([format], state, released, samples), [])
+  const reject = (next, formats = [format], read = samples) => assert.ok(validateReleasedCompatibility(formats, next, released, read).length)
+  reject({ ...state, releasedCompatibility: false })
+  reject({ ...state, formats: { test: { ...state.formats.test, supportedFrom: 2 } } })
+  reject({ ...state, devBreaks: [{ format: 'test', waivedFixtureVersions: [1] }] })
+  reject({ ...state, formats: {} }, [])
+  reject(state, [{ ...format, fingerprint: 'changed' }])
+  reject(state, [format], () => ({ 'v1.json': 'tampered' }))
+  reject(state, [format], () => ({}))
+  assert.ok(validateReleaseHistory(released, emptyRelease()).length)
+  const tampered = structuredClone(released); tampered.formats.test.versions[1] = 'changed'
+  assert.ok(validateReleaseHistory(released, tampered).length)
+  const nextFormat = { ...format, version: 2, fingerprint: 'next', migrations: { 1: value => value } }
+  const nextState = updateBaseline([nextFormat], state, {}, () => [1, 2])
+  const next = createReleaseSnapshot([nextFormat], nextState, released, () => ({ ...samples(), 'v2.json': 'next-digest' }))
+  assert.deepEqual(validateReleaseHistory(released, next), [])
+  assert.deepEqual(next.formats.test.versions, { 1: 'old', 2: 'next' })
+})
+
+test('JSON 不能代替归档，包版本与文档头版本独立枚举', () => {
+  const archive = { ...format, requiredFixtures: [{ extension: 'json' }, { extension: 'henjiimg' }] }
+  assert.match(validateCompatibility([archive], baseline(), (_id, ext) => ext === 'henjiimg' ? [] : [1]).join(''), /v1.henjiimg/)
+  const owner = { ...format, id: 'package', version: 3, migrations: { 1: x => x, 2: x => x } }
+  const header = { ...format, requiredFixtures: [{ extension: 'henjiimg', versionFormat: 'package' }] }
+  const state = baseline(); state.formats.package = { version: 3, fingerprint: 'old', supportedFrom: 2 }
+  state.devBreaks.push({ format: 'package', waivedFixtureVersions: [1] })
+  assert.match(validateCompatibility([header, owner], state, (_id, ext) => ext === 'henjiimg' ? [3] : [1, 2, 3]).join(''), /test\/v2.henjiimg/)
+})
+
+test('框架首发登记保留支持下限与历史，不能重复或在发布后执行', () => {
+  const state = baseline()
+  const options = { frameworkAdoption: true, reason: '首发前独立外壳与记录版本，不改变内容支持范围' }
+  const registered = updateBaseline([{ ...format, fingerprint: 'new' }], state, options, () => [1])
+  assert.equal(registered.formats.test.supportedFrom, 1)
+  assert.deepEqual(registered.devBreaks, state.devBreaks)
+  assert.equal(registered.frameworkAdoption.formats[0].previousFingerprint, 'old')
+  assert.throws(() => updateBaseline([format], registered, options, () => [1]), /仅允许/)
+  assert.throws(() => updateBaseline([format], { ...state, releasedCompatibility: true }, options, () => [1]), /仅允许/)
 })

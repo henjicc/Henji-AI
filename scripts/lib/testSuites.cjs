@@ -75,6 +75,8 @@ function testSuiteForFile(file) {
 }
 
 function testSuiteOptions(mode, defaultExcludes = []) {
+  if (mode === 'persistence-release') return { include: ['electron/main/services/documents/persistence-golden.test.ts'], env: { HENJI_TEST_PERSISTENCE_RELEASE: '1' },
+    pool: 'forks', minWorkers: 1, maxWorkers: 1, fileParallelism: false }
   if (mode === 'performance') return { include: PERFORMANCE_TEST_FILES, env: { HENJI_TEST_PERFORMANCE: '1' },
     pool: 'forks', minWorkers: 1, maxWorkers: 1, fileParallelism: false }
   if (mode === 'unit') return { include: ALL_TEST_PATTERNS, exclude: [...defaultExcludes, ...GPU_TEST_FILES, ...IMAGE_EXPORT_TEST_FILES, ...NATIVE_TEST_FILES, ...FFMPEG_CLI_TEST_FILES], poolMatchGlobs: FORK_POOL_MATCH_GLOBS }

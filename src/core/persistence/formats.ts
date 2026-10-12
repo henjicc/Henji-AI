@@ -1,12 +1,10 @@
+import { RESOURCE_PERSISTENCE_FORMATS } from './resourceContracts'
 import { paidApprovalSettingsSchema, paidReservationSchema, paidApprovalReceiptSchema } from '../application-control/paidApproval'
 import { FILE_PERSISTENCE_FORMATS } from './fileContracts'
 import { generationOutputTimingsSchema } from '../media/speechTimings'
-import { creativeIntentPageSchema } from '../creativeIntent/pages'
-import { storedMotionCandidateSchema } from '../creativeIntent/persistence'
-import { imageLayoutPageSchema, imageLayoutCandidateSchema } from '../imageEdit/v3/layoutDraft'
 import { z } from 'zod'
 import { DOCUMENT_KINDS } from '../documents/kinds'
-import { documentEnvelopeSchema } from '../documents/envelope'
+import { documentEnvelopeSchema, documentEnvelopeContract } from '../documents/envelope'
 import { PROJECT_MANIFEST_VERSION, projectManifestSchema } from '../documents/projectManifest'
 import { videoEditDocumentSchema } from '../videoEdit/document'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../videoEdit/codeAsset'
@@ -23,7 +21,7 @@ import { rendererSettingsSchema, SETTINGS_STORAGE_VERSION } from './settingsSche
 import { formatMigrations } from './formatMigrations'
 import { LOCAL_LIBRARY_FORMATS } from './versionedJson'
 import { presetExportSchema, themePayloadSchema } from './auxiliarySchemas'
-import { THEME_STORAGE_VERSION, CODE_COMPONENT_SCHEMA_VERSION, SQLITE_SCHEMA_VERSION } from './schemaVersions'
+import { THEME_STORAGE_VERSION, CODE_COMPONENT_SCHEMA_VERSION, SQLITE_SCHEMA_VERSION, SETTING_RECORD_VERSION, ASSET_RECORD_VERSION, GENERATION_PRESET_VERSION } from './schemaVersions'
 import { MODEL_DEFAULTS_VERSION, modelDefaultsSchema, NODE_DEFAULTS_VERSION, nodeDefaultsSchema, ONBOARDING_VERSION, onboardingSchema, SUBTITLE_MANIFEST_VERSION } from './preferenceSchemas'
 import { applicationOperationStateSchema, applicationUserConfirmationSchema } from '../application-control/userConfirmation'
 import { operationOriginSchema } from '../application-control/operationReview'
@@ -34,6 +32,7 @@ export interface PersistenceFormat extends PersistenceContract {
   readonly migrationEntry: string
   /** Extra authoritative nested schemas must participate even when the outer reader is loose. */
   readonly schemas: Readonly<Record<string, z.ZodType>>
+  readonly requiredFixtures?: readonly { extension: string; versionFormat?: string }[]
   readonly storage: 'file' | 'local-storage' | 'sqlite-ledger'
 }
 
@@ -46,16 +45,14 @@ function format(id: string, name: string, version: number, versionSource: string
 /** Single inventory. SQL payloads inherit the existing SQLite ledger, never a parallel ledger. */
 export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('generation-output-timings', '生成结果语音时间戳', 1, 'generation_submissions.response_json.metadata.outputTimings（SQLite 既有账本）', 'electron/main/services/ai-runtime/generation-submissions.ts::decodeResponse', generationOutputTimingsSchema, 'sqlite-ledger'),
-  format('image-layout-page', '随手摆原稿几何页', 1, 'ImageLayoutPage.version', 'src/features/imageEdit/v3/application/imageEditLayoutResources.ts', imageLayoutPageSchema),
-  format('image-layout-candidate', '随手摆候选', 1, 'ImageLayoutCandidate.version', 'src/features/imageEdit/v3/application/imageEditLayoutResources.ts', imageLayoutCandidateSchema),
-  format('creative-intent-page', '创作意图原稿页', 1, 'CreativeIntentPage.version', 'src/features/videoEdit/application/videoEditMotionResources.ts::readMotionPages', creativeIntentPageSchema),
-  format('creative-intent-candidate', '创作意图候选', 1, 'StoredMotionCandidate.version', 'src/features/videoEdit/application/videoEditMotionResources.ts::readMotionCandidate', storedMotionCandidateSchema),
+  ...RESOURCE_PERSISTENCE_FORMATS,
+  { ...format('document-envelope', '文档外壳', documentEnvelopeContract.version, 'DocumentEnvelope.envelopeVersion', 'electron/main/services/documents/document-file.ts::loadDocumentFile', documentEnvelopeSchema), migrations: documentEnvelopeContract.migrations },
   ...FILE_PERSISTENCE_FORMATS,
   ...DOCUMENT_KINDS.map(kind => ({ ...format(`document.${kind.id}`, kind.untitledNames.zh.replace('未命名', ''), kind.version, 'DocumentEnvelope.kindVersion',
     kind.storage === 'package' ? 'electron/main/services/image-editor-v3/image-document/image-document-service.ts' : 'electron/main/services/documents/document-file.ts::decodeDocumentContent',
-    kind.contentSchema, 'file', { envelope: documentEnvelopeSchema, ...(kind.id === 'video_edit' ? { domain: videoEditDocumentSchema } : {}), ...(kind.id === 'audio_edit' ? { domain: audioEditProjectSchema } : {}) }), migrations: kind.migrations, migrationEntry: 'src/core/documents/kinds/对应类型.ts::migrations / src/core/persistence/migrations.ts::upgradePersistenceContent' })),
+    kind.contentSchema, 'file', { ...(kind.id === 'video_edit' ? { domain: videoEditDocumentSchema } : {}), ...(kind.id === 'audio_edit' ? { domain: audioEditProjectSchema } : {}) }), migrations: kind.migrations, ...(kind.id === 'image_document' ? { requiredFixtures: [{ extension: 'json' }, { extension: 'henjiimg', versionFormat: 'image-package' }] } : {}), migrationEntry: 'src/core/documents/kinds/对应类型.ts::migrations / src/core/persistence/migrations.ts::upgradePersistenceContent' })),
   format('project', '项目说明', PROJECT_MANIFEST_VERSION, 'ProjectManifest.version', 'electron/main/services/documents/workspace.ts::readManifest', projectManifestSchema),
-  format('project-package', '项目和文档包', PACKAGE_VERSION, 'henji-package.json.version', 'electron/main/services/documents/package-service.ts::readManifest', packageManifestSchema),
+  { ...format('project-package', '项目和文档包', PACKAGE_VERSION, 'henji-package.json.version', 'electron/main/services/documents/package-service.ts::readManifest', packageManifestSchema), requiredFixtures: [{ extension: 'json' }, { extension: 'henjipack' }] },
   format('code-version', '代码源码版本', 1, 'CodeMaterialVersion.apiVersion（源码由父版本引用携带版本）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }),
   format('code-component', '项目组件说明', CODE_COMPONENT_SCHEMA_VERSION, '组件首行.schemaVersion（作品版本 version 与格式版本不同）', 'src/core/videoEdit/codeMaterial/components.ts::componentSourceMetadata', codeComponentMetadataSchema),
   format('code-asset', '可编辑代码资产', CODE_ASSET_VERSION, 'CodeAsset.version', 'src/core/videoEdit/codeAsset.ts::decodeCodeAsset', codeAssetSchema),
@@ -72,9 +69,9 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('model-defaults', '默认生成与转写模型', MODEL_DEFAULTS_VERSION, 'ModelDefaultsState.version', 'src/features/settings/modelDefaultsManager.ts::loadState', modelDefaultsSchema, 'local-storage'),
   format('onboarding', '首次引导进度', ONBOARDING_VERSION, 'OnboardingStateV2.version', 'src/features/onboarding/application/onboardingManager.ts::loadState', onboardingSchema, 'local-storage'),
   format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema),
-  format('setting-records', '设置记录', SQLITE_SCHEMA_VERSION, 'schema_migrations（现有SQLite账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger', { paidApproval: paidApprovalSettingsSchema }),
-  format('asset-records', '素材库记录', SQLITE_SCHEMA_VERSION, 'schema_migrations（现有SQLite账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger'),
-  format('generation-presets', '生成预设', SQLITE_SCHEMA_VERSION, 'schema_migrations（现有SQLite账本）', 'electron/main/services/presets/store.ts', presetRecordSchema, 'sqlite-ledger'),
+  format('setting-records', '设置记录', SETTING_RECORD_VERSION, 'SETTING_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger', { paidApproval: paidApprovalSettingsSchema }),
+  format('asset-records', '素材库记录', ASSET_RECORD_VERSION, 'ASSET_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger'),
+  format('generation-presets', '生成预设', GENERATION_PRESET_VERSION, 'GENERATION_PRESET_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/presets/store.ts', presetRecordSchema, 'sqlite-ledger'),
   format('sqlite', '应用数据库', SQLITE_SCHEMA_VERSION, 'SCHEMA_MIGRATIONS / schema_migrations', 'electron/main/services/db-migrations.ts::runSchemaMigrations', z.object({ version: z.number().int().positive(), name: z.string(), applied_at: z.number() }), 'sqlite-ledger', { operationOrigin: operationOriginSchema.optional(), operationState: applicationOperationStateSchema, userConfirmation: applicationUserConfirmationSchema, paidGenerationEstimateKind: z.enum(['upper-bound', 'estimate']).optional(), paidReservation: paidReservationSchema, paidApproval: paidApprovalReceiptSchema }),
 ]
 

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
 /*
  * 文档文件外壳（实施方案 2.4）：剪辑、画布、口播、镜头参考各是一个 JSON 文件，外壳统一，
@@ -8,6 +9,7 @@ import { z } from 'zod'
  */
 
 export const DOCUMENT_FORMAT = 'henji-document' as const
+export const DOCUMENT_ENVELOPE_VERSION = 1
 export const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 /** 单个文档文件的读取预算，避免一次解析占满主进程内存；超出不等于文件损坏。 */
 export const MAX_DOCUMENT_FILE_BYTES = 256 * 1024 * 1024
@@ -17,6 +19,7 @@ const isoTimestampSchema = z.iso.datetime({ offset: true })
 
 export interface DocumentEnvelope {
   format: typeof DOCUMENT_FORMAT
+  envelopeVersion: number
   kind: string
   kindVersion: number
   id: string
@@ -31,6 +34,7 @@ export interface DocumentEnvelope {
 
 export const documentEnvelopeSchema = z.object({
   format: z.literal(DOCUMENT_FORMAT),
+  envelopeVersion: z.literal(DOCUMENT_ENVELOPE_VERSION),
   kind: z.string().min(1).max(64),
   kindVersion: z.number().int().positive(),
   id: documentIdSchema,
@@ -41,6 +45,24 @@ export const documentEnvelopeSchema = z.object({
   draft: z.boolean().optional(),
   content: z.unknown().refine((value) => value !== undefined, '文档缺少内容。'),
 }).strict()
+
+/** 外壳先迁移，kind 内容随后由文档仓库迁移；两条版本链互不绑定。 */
+export const documentEnvelopeContract: PersistenceContract = {
+  id: 'document-envelope', name: '文档外壳', version: DOCUMENT_ENVELOPE_VERSION,
+  schema: documentEnvelopeSchema, migrations: {},
+}
+
+/** 外壳版本引入前保存的文档就是第 1 版外壳：缺字段按 1 读取并补上，绝不因此拒绝用户已有作品。 */
+export function documentEnvelopeVersion(raw: unknown): number {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && !('envelopeVersion' in raw)) return 1
+  return raw && typeof raw === 'object' && 'envelopeVersion' in raw && typeof raw.envelopeVersion === 'number' ? raw.envelopeVersion : 0
+}
+
+export function upgradeDocumentEnvelope(raw: unknown, backupPath?: string): DocumentEnvelope {
+  const input = raw && typeof raw === 'object' && !Array.isArray(raw) && !('envelopeVersion' in raw) ? { ...raw, envelopeVersion: 1 } : raw
+  const { draft, ...rest } = upgradePersistenceContent(documentEnvelopeContract, input, documentEnvelopeVersion(raw), backupPath) as z.infer<typeof documentEnvelopeSchema>
+  return { ...rest, ...(draft === true ? { draft: true as const } : {}) }
+}
 
 export class DocumentFormatError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -59,7 +81,7 @@ export function parseDocumentEnvelope(raw: unknown): DocumentEnvelope {
   return buildDocumentEnvelope({ ...rest, draft: draft === true })
 }
 
-export interface DocumentEnvelopeFields extends Omit<DocumentEnvelope, 'format' | 'draft'> {
+export interface DocumentEnvelopeFields extends Omit<DocumentEnvelope, 'format' | 'envelopeVersion' | 'draft'> {
   draft: boolean
 }
 
@@ -67,6 +89,7 @@ export interface DocumentEnvelopeFields extends Omit<DocumentEnvelope, 'format' 
 export function buildDocumentEnvelope(fields: DocumentEnvelopeFields): DocumentEnvelope {
   return {
     format: DOCUMENT_FORMAT,
+    envelopeVersion: DOCUMENT_ENVELOPE_VERSION,
     kind: fields.kind,
     kindVersion: fields.kindVersion,
     id: fields.id,
@@ -84,14 +107,19 @@ export function serializeDocumentEnvelope(envelope: DocumentEnvelope): string {
   return `${JSON.stringify(envelope)}\n`
 }
 
-export function parseDocumentText(text: string): DocumentEnvelope {
+export function parseDocumentRawText(text: string): unknown {
   let raw: unknown
   try {
     raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as unknown
   } catch (error) {
     throw new DocumentFormatError('文档文件已损坏，无法读取。', { cause: error })
   }
-  return parseDocumentEnvelope(raw)
+  return raw
+}
+
+/** 纯内存导入；文件调用方须在迁移前完成原件备份。 */
+export function parseDocumentText(text: string): DocumentEnvelope {
+  return upgradeDocumentEnvelope(parseDocumentRawText(text))
 }
 
 export function toTimestamp(iso: string): number {

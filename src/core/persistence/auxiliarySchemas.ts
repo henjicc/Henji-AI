@@ -1,3 +1,5 @@
+import { llmStoredConfigSchema } from './llmSchemas'
+export { llmStoredConfigSchema } from './llmSchemas'
 import { CANVAS_LAYER_PACKAGE_VERSION, KEYSTORE_VERSION, MEDIA_GRANTS_VERSION, LLM_JOURNAL_VERSION } from './schemaVersions'
 import { z } from 'zod'
 
@@ -9,5 +11,4 @@ export const encryptedKeystoreSchema = z.object({ version: z.literal(KEYSTORE_VE
 export const mediaGrantsSchema = z.object({ version: z.literal(MEDIA_GRANTS_VERSION), roots: z.array(z.object({ path: z.string(), grantedAt: z.number() })) })
 export const canvasLayerHeaderSchema = z.object({ format: z.literal('henji-canvas-layer'), version: z.literal(CANVAS_LAYER_PACKAGE_VERSION), documentId: z.string(), contentRevision: z.number().int().nonnegative() })
 // Provider/model extension fields are deliberate JSON data; secrets stay in the keystore.
-export const llmStoredConfigSchema = z.object({ providers: z.array(jsonObject), models: z.array(jsonObject), promptProfiles: z.array(jsonObject), selectedPromptProfileId: z.string().optional(), textProcessingPromptTemplates: z.array(jsonObject), agentProfiles: z.array(jsonObject), selectedAgentProfileId: z.string().optional(), tools: z.array(jsonObject), policy: jsonObject, memory: jsonObject }).passthrough()
 export const providerSettingsJournalSchema = z.object({ version: z.literal(LLM_JOURNAL_VERSION), configBefore: llmStoredConfigSchema.nullable(), credentialBefore: z.object({ storeKey: z.string(), encrypted: z.string().nullable() }).optional() })

@@ -1,3 +1,4 @@
+import { decodeImageLayoutResource } from '../../../../src/core/persistence/resourceContracts'
 import { z } from 'zod'
 import { creativeIntentPageSchema } from '../../../../src/core/creativeIntent/pages'
 import { imageLayoutCandidateSchema, imageLayoutPageSchema } from '../../../../src/core/imageEdit/v3/layoutDraft'
@@ -9,5 +10,5 @@ export const imageLayoutResourceSchema = z.union([creativeIntentPageSchema, imag
 export const IMAGE_LAYOUT_RESOURCE_MAX_BYTES = 4 * 1024 * 1024
 export async function readImageLayoutResource(store: ContentAddressedResourceStore, id: ResourceId): Promise<unknown> {
   const bytes = await store.readVerifiedBuffer(id, IMAGE_LAYOUT_RESOURCE_MAX_BYTES)
-  return imageLayoutResourceSchema.parse(JSON.parse(bytes.toString('utf8')))
+  return decodeImageLayoutResource(JSON.parse(bytes.toString('utf8')))
 }

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { motionDraftSchema, resourceRefSchema, refKey, type MotionDraft } from './contracts'
 import { explanationSessionSchema } from './schema'
-import { creativeIntentPageSchema } from './pages'
+import { creativeIntentPageSchema } from './pageSchema'
 import { candidateIdentitySchema } from './contracts'
 import { videoEditClipCurvesSchema } from '../videoEdit/keyframes'
 import { motionIntentSchema } from './recipe'

@@ -9,6 +9,15 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const workflow = read('.github/workflows/build.yml')
 const scripts = JSON.parse(read('package.json')).scripts
 
+test('持久归档完整矩阵仅发布模式启用，安装包构建前执行', () => {
+  assert.equal(testSuiteOptions('persistence-release').env.HENJI_TEST_PERSISTENCE_RELEASE, '1')
+  assert.deepEqual(testSuiteOptions('persistence-release').include, ['electron/main/services/documents/persistence-golden.test.ts'])
+  assert.equal(testSuiteOptions('unit').env?.HENJI_TEST_PERSISTENCE_RELEASE, undefined)
+  assert.match(scripts['test:persistence-release'], /--mode persistence-release/)
+  assert.match(workflowJob('build'), /run: npm run test:persistence-release/)
+  assert.doesNotMatch(workflowJob('checks'), /run: npm run test:persistence-release/)
+})
+
 /** 取 workflow 中某个 job 的完整文本：从 `  <id>:` 到下一个同级 job，不依赖 job 的先后顺序。 */
 function workflowJob(id) {
   const lines = workflow.split(/\r?\n/)

@@ -1,5 +1,6 @@
 {
   "format": "henji-document",
+  "envelopeVersion": 1,
   "kind": "camera_stage",
   "kindVersion": 1,
   "id": "golden-camera_stage",

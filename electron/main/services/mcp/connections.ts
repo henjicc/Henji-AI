@@ -1,12 +1,9 @@
+import { mcpConnectionRecordSchema as recordSchema, mcpConnectionStorageSchema as storageSchema } from '../../../../src/core/persistence/mcpConnectionSchema'
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import type { McpConnectionInfo } from '../../../../src/core/application-control/localHostContracts'
 import { MCP_CONNECTION_LIFETIME_MS, mcpConnectionExpiryState, type McpConnectionReminderState } from '../../../../src/core/application-control/mcpConnectionExpiry'
 
-const recordSchema = z.object({ id: z.string().uuid(), name: z.string().min(1).max(80), expiresAt: z.number().finite(), token: z.string().regex(/^[a-f0-9]{64}$/), allowWrites: z.boolean().default(false), allowDestructive: z.boolean().default(false), allowPaid: z.boolean().default(false),
-  reminders: z.object({ expiresAt: z.number().finite(), states: z.array(z.enum(['expiring', 'expired'])) }).strict().optional(),
-}).strict()
-const storageSchema = z.object({ version: z.literal(1), connections: z.array(recordSchema) }).strict()
 type Connection = z.infer<typeof recordSchema>
 export interface ConnectionStorage { read(): string | null; write(value: string): void }
 export type McpAuthentication = { status: 'valid' | 'expired'; connectionId: string; expiresAt: number } | { status: 'unknown' }

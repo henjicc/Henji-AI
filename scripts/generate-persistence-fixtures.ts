@@ -1,3 +1,5 @@
+import { mcpConnectionStorageSchema } from '../src/core/persistence/mcpConnectionSchema'
+import { llmStoredConfigSchema } from '../src/core/persistence/llmSchemas'
 import { compileCodeMaterial } from '../src/core/videoEdit/codeMaterial/compiler'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -143,7 +145,9 @@ const values: Record<string, unknown> = {
   'canvas-layer-package': { format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: image.id, contentRevision: 0 },
   keystore: { version: 1, keys: {} },
   'media-grants': { version: 1, roots: [{ path: '/persistence-project', grantedAt: 1791504000000 }] },
-  'llm-config': { providers: [], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [], tools: [], policy: {}, memory: {} },
+  'llm-config': llmStoredConfigSchema.parse({ providers: [{ providerId: 'synthetic', displayName: '合成测试供应商', adapter: 'openai', enabled: false }], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [{ id: 'golden-agent', name: '测试助手', primary: { providerId: 'synthetic', modelId: 'test' }, settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 4096, contextWindowBudget: 64000 }, verifications: [], createdAt: timestamp, updatedAt: timestamp }], tools: [], policy: { allowedTools: [], requireHumanConfirmation: true }, memory: { longTermNamespace: 'golden' } }),
+  'mcp-connections': mcpConnectionStorageSchema.parse({ version: 1, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '合成测试连接', expiresAt: 2000000000000, token: '0'.repeat(64), allowWrites: true, allowPaid: false, allowDestructive: false }] }),
+  'document-envelope': buildDocumentEnvelope({ kind: 'canvas', kindVersion: 1, id: 'golden-envelope', name: '外壳样本', createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content: { nodes: [], edges: [] } }),
   'llm-config-journal': { version: 1, configBefore: null },
   'node-defaults': { imageGen: { modelId: 'golden-model', params: { quality: 'high' } } },
   'model-defaults': modelDefaultsSchema.parse({ version: MODEL_DEFAULTS_VERSION, providerId: 'kie', models: { image: '', video: '', audio: '', transcription: 'groq.speech-recognition.whisper-large-v3-turbo' } }),

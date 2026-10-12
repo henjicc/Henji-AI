@@ -12,6 +12,8 @@
   ],
   "scripts": {
     "check:persistence-compat": "node scripts/check-persistence-compat.cjs",
+    "persistence:release-snapshot": "node scripts/check-persistence-compat.cjs --release-snapshot",
+    "test:persistence-release": "vitest run --mode persistence-release electron/main/services/documents/persistence-golden.test.ts --silent",
     "persistence:baseline": "node scripts/check-persistence-compat.cjs --write",
     "postinstall": "patch-package --error-on-fail && npm run prepare:media-binaries && npm run build:sdk",
     "prepare:media-binaries": "node scripts/ensure-media-binary-permissions.cjs",
