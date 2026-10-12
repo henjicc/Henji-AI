@@ -3,6 +3,7 @@
     "scripts/check-dead-code.test.cjs",
     "scripts/check-dependency-graph.test.cjs",
     "scripts/check-ipc-contract.test.cjs",
+    "scripts/check-media-recycle.test.cjs",
     "scripts/check-persistence-compat.test.cjs",
     "scripts/lib/assistantProductionTestPlan.test.cjs",
     "scripts/lib/canvasBulkProbe.test.cjs",

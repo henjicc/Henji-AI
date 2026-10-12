@@ -150,7 +150,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       db.prepare('INSERT INTO application_invocations(operation_id,caller_id,state,record_json,updated_at) VALUES(?,?,?,?,?)')
         .run(record.operationId, record.callerId, record.state, JSON.stringify(record), 1)
       const result = runSchemaMigrations(db, undefined, { backupDirectory: path.join(base, 'review-backups') })
-      expect(result.applied).toEqual([20])
+      expect(result.applied).toEqual([20, 21])
       expect(result.backupPath).toBeTruthy()
       const saved = JSON.parse((db.prepare('SELECT record_json FROM application_invocations').get() as { record_json: string }).record_json)
       expect(saved).toMatchObject({ input: record.input, result: record.result, state: record.state, confirmation: { expiresAt: null, purpose: 'review' } })

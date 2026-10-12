@@ -58,9 +58,9 @@ it('B 三类属性值错误只说字段、约束和收到的值', async () => {
   const app = createApplicationHarness(); disposers.push(app.dispose)
   const target = { kind: 'video_edit.caption', id: `${owner.document.id}:caption` }
   for (const [properties, expected] of [
-    [{ start: -10 }, '开始帧不能小于 0，收到 -10。'],
-    [{ duration: 0 }, '时长至少 1 帧，收到 0。'],
-    [{ style: { fill: { color: 'red' } } }, `字幕样式的 fill.color 应为 6 位十六进制颜色，例如 ${HEX_COLOR_EXAMPLE}，收到 "red"。`],
+    [{ start: -10 }, '开始帧（video_edit.caption.start）不能小于 0，收到 -10。'],
+    [{ duration: 0 }, '时长（video_edit.caption.duration）至少 1 帧，收到 0。'],
+    [{ style: { fill: { color: 'red' } } }, `字幕样式（video_edit.caption.style）的 fill.color 应为 6 位十六进制颜色，例如 ${HEX_COLOR_EXAMPLE}，收到 "red"。`],
   ] as const) {
     const result = await app.change(target, Object.fromEntries(Object.entries(properties).map(([key, value]) => [`video_edit.caption.${key}`, value])))
     expect(result.ok).toBe(false)

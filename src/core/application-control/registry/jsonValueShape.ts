@@ -42,7 +42,7 @@ export function validateJsonValueShape(propertyId: string, schema: JsonValue, va
       const nested = branches.filter(branch => branch.some(child => child.path.length > issue.path.length))
       return (nested.length ? nested : branches).flat()
     })
-    const issues = [...new Set(leaves(result.error.issues).map(issue => propertyIssueMessage(issue, schema, value, title, unit)))].join('')
+    const issues = [...new Set(leaves(result.error.issues).map(issue => propertyIssueMessage(issue, schema, value, title === propertyId ? title : `${title}（${propertyId}）`, unit)))].join('')
     throw new Error(`INVALID_PROPERTY_VALUE:${issues}`)
   }
   return jsonValueSchema.parse(result.data)

@@ -186,7 +186,7 @@ export function normalizeApplicationPropertyValue(
       EXPECTED_REF: '应为实体引用对象', EXPECTED_REF_LIST: '应为实体引用数组', INVALID_REF: '应包含合法的实体类型与稳定标识', TOO_MANY_REFS: `最多包含 ${value.kind === 'ref_list' ? value.maxItems : ''} 个引用`,
     }
     const hint = detail.includes('（') ? detail.slice(detail.indexOf('（') + 1, -1) : ''
-    throw new Error(`INVALID_PROPERTY_VALUE:${descriptor.title ?? descriptor.id}${constraints[code] ?? '不符合取值约束'}，收到 ${receivedPropertyValue(input)}。${hint}`)
+    throw new Error(`INVALID_PROPERTY_VALUE:${descriptor.title ? `${descriptor.title}（${descriptor.id}）` : descriptor.id}${constraints[code] ?? '不符合取值约束'}，收到 ${receivedPropertyValue(input)}。${hint}`)
   }
 }
 
