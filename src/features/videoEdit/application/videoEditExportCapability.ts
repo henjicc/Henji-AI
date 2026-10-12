@@ -10,6 +10,7 @@ import type { CanvasDownloadDestination } from '@/core/application-control/domai
 import { patchVideoEditExportSettings, resolveVideoEditExportSettings, videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { adaptVideoEditExportPreset } from '../engine/videoEditExportEncoder'
+import { ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
 
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
   return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, range: job.range, settings: job.settings,
@@ -23,6 +24,8 @@ async function videoEditCapabilityOutputDirectory(projectId: string, destination
 export async function handleVideoEditExportCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
   const definition = VIDEO_EDIT_EXPORT_CAPABILITIES.find(value => value.id === id)
   if (!definition) return undefined
+  const execution = new ApplicationWriteExecution()
+  try {
   const parsed = id === 'export_video_edit' ? videoEditExportInputSchema.parse(raw) : videoEditExportQuerySchema.parse(raw)
   const documentRef = parsed.documentRef
   const owner = requireVideoEditInstance(documentRef.id)
@@ -34,14 +37,16 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     const input = videoEditExportInputSchema.parse(raw)
     if (input.format === 'srt' || input.format === 'vtt') {
       if (input.loudness) throw new Error('响度标准化只适用于视频成片，字幕导出不包含声音。')
-      const result = await exportVideoEditSubtitles(documentRef.id, input.format, owner.activeSequenceId, context.signal, input.subtitleClock, await videoEditCapabilityOutputDirectory(documentRef.id, input.destination))
+      const directory = await videoEditCapabilityOutputDirectory(documentRef.id, input.destination)
+      const format = input.format
+      const result = await execution.run(() => exportVideoEditSubtitles(documentRef.id, format, owner.activeSequenceId, context.signal, input.subtitleClock, directory))
       return { resultRef: documentRef, queue: [], verification: { verified: result.verified, target: documentRef, condition: result.verified ? '已回读字幕文件核对。' : '用户取消文件选择。' }, message: result.saved ? '字幕已导出并核实。' : '已取消字幕导出。' }
     }
     if (input.retryTaskId) {
       const job = videoEditExportQueue.require(input.retryTaskId)
       if (job.owner !== owner) throw new Error('导出项必须属于明确的原剪辑。')
       if (context.callerGrant && job.settings.addToLibrary && !context.callerGrant.permissions.includes('assets:write')) throw new Error('此导出设置要求加入资产库，需要 assets:write 授权；请调整连接授权后重试。')
-      context.signal?.throwIfAborted(); retryVideoEditExportJob(job.id); message = '失败项已重新加入队列。'
+      context.signal?.throwIfAborted(); await execution.run(() => retryVideoEditExportJob(job.id)); message = '失败项已重新加入队列。'
       submitted = [job]
     } else {
       const requests = input.exports ? await Promise.all(input.exports.map(async value => {
@@ -57,7 +62,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
         return { projectId, loudnessRequested: Boolean(value.settings?.loudness || value.presetRef && value.presetRef.id !== 'builtin:sequence' && preset?.settings.loudness), sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings, outputDirectory: () => videoEditCapabilityOutputDirectory(projectId, input.destination) }
       })) : [{ projectId: documentRef.id, loudnessRequested: Boolean(input.loudness || input.settings?.loudness), range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })), outputDirectory: () => videoEditCapabilityOutputDirectory(documentRef.id, input.destination) }]
       if (context.callerGrant && requests.some(value => value.settings.addToLibrary) && !context.callerGrant.permissions.includes('assets:write')) throw new Error('加入资产库需要 assets:write 授权；请在导出 settings 中设 addToLibrary=false，或调整连接授权后重试。')
-      const jobs = await enqueueVideoEditExports(requests, context.signal)
+      const jobs = await execution.run(() => enqueueVideoEditExports(requests, context.signal))
       submitted = jobs
       verified = jobs.length > 0; message = verified ? `已加入 ${jobs.length} 项导出，请查询队列确认完成。` : '已取消文件选择，未加入任何导出。'
       condition = verified ? '全部输出路径已确认，原序列快照已一次提交到正式队列。' : '用户取消文件选择，未提交任务。'
@@ -68,10 +73,12 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
       // 队列项与渲染任务各有编号，查询结果两者都给，调用方传哪个都应认
       const job = videoEditExportQueue.list().find(item => item.id === taskId || item.task?.id === taskId) ?? videoEditExportQueue.require(taskId)
       if (job.owner !== owner) throw new Error('导出项必须属于明确的原剪辑。')
-      videoEditExportQueue.cancel(job.id)
+      await execution.run(() => videoEditExportQueue.cancel(job.id))
     } else {
-      for (const job of videoEditExportQueue.list().filter(job => job.owner === owner)) videoEditExportQueue.cancel(job.id)
-      cancelVideoEditExport(documentRef.id)
+      await execution.run(() => {
+        for (const job of videoEditExportQueue.list().filter(job => job.owner === owner)) videoEditExportQueue.cancel(job.id)
+        cancelVideoEditExport(documentRef.id)
+      })
     }
     message = '已请求取消未完成导出；已保存文件保留。'
   }
@@ -89,4 +96,5 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     return { ...videoEditExportJobSummary(job), ...(entry ? { path: entry.path, completedAt: entry.completedAt, ...(entry.assetRef ? { assetRef: entry.assetRef } : {}) } : {}) }
   })
   return { resultRef: documentRef, queue: [...queue, ...archived], message, verification: { verified, target: documentRef, condition }, ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame, ...(task.notice ? { notice: task.notice } : {}), ...(task.loudness ? { loudness: task.loudness } : {}), ...(task.loudnessMeasurement ? { loudnessMeasurement: task.loudnessMeasurement } : {}) } } : {}) }
+  } catch (error) { throw definition.readOnly ? error : execution.failure(error) }
 }

@@ -1,4 +1,5 @@
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
+import { executeApplicationWrite, applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { backupPersistenceSnapshot } from '@/core/persistence/backup'
@@ -58,6 +59,7 @@ export function subtitleRange(owner: VideoEditInstance, sequenceId: string, scop
 
 /** Prepare is local only. A saved audio document is the stable ASR task/recovery reference. */
 export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceId: string, scope: SubtitleScope, trackId?: string, signal?: AbortSignal, progress?: (fraction: number) => void): Promise<string> {
+  return executeApplicationWrite(async execution => {
   const owner = requireVideoEditInstance(projectId)
   if (active.has(owner)) throw new Error('这份剪辑正在准备字幕声音。')
   const release = holdVideoEditActivity(projectId, '字幕混音')
@@ -79,7 +81,7 @@ export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceI
     const project = await videoEditDocumentOperations().findProject(container.projectId)
     if (!project) throw new Error('剪辑所在项目找不到。')
     const platform = getPlatform(); const folder = await platform.system.paths.join(project.path, '字幕转录')
-    await platform.system.fs.mkdir(folder, { recursive: true })
+    await execution.run(() => platform.system.fs.mkdir(folder, { recursive: true }))
     path = await platform.system.paths.join(folder, `${crypto.randomUUID()}.wav`)
     await platform.system.fs.writeFile(path, new Uint8Array(), { exclusive: true })
     const target = path
@@ -117,6 +119,7 @@ export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceI
       }
     }
   }
+  })
 }
 
 export function appendAutoSubtitles(projectId: string, sequenceId: string, captions: readonly VideoEditCaption[], textTranscription?: VideoEditTextTranscription): string[] {
@@ -130,8 +133,11 @@ export function appendAutoSubtitles(projectId: string, sequenceId: string, capti
 export async function generateVideoEditSubtitles(projectId: string, sequenceId: string, audioDocumentId: string, modelId?: string, options: SubtitleTranscriptionOptions = {}, signal?: AbortSignal, requestId: string = crypto.randomUUID()): Promise<string[]> {
   const settings = autoSubtitleOptionsSchema.strip().parse(options)
   const language = z.enum(['zh', 'en']).optional().parse(options.language)
-  const owner = requireVideoEditInstance(projectId)
-  if (active.has(owner)) throw new Error('这份剪辑正在生成字幕。')
+  const owner = await applicationWritePreflight({}, () => {
+    const instance = requireVideoEditInstance(projectId)
+    if (active.has(instance)) throw new Error('这份剪辑正在生成字幕。')
+    return instance
+  })
   const release = holdVideoEditActivity(projectId, '字幕转录')
   active.add(owner)
   let cancel: (() => void) | undefined

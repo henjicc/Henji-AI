@@ -19,7 +19,7 @@ import { stripDerivedMediaState } from '@/core/params/derivedMediaState'
 import { captureClonedVoice } from '@/services/voiceLibrary/captureClonedVoice'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 import { attachVideoDurations } from './generationVideoDurations'
-import { confirmGenerationSubmission, GenerationSubmissionCancelledError } from './generationSubmissionConfirmation'
+import { confirmGenerationSubmission, consumeGenerationPaidApproval, GenerationSubmissionCancelledError, type GenerationPaidExecution } from './generationSubmissionConfirmation'
 import {
   buildGeneratePreflightSummary,
   buildProgressTimingContext,
@@ -128,6 +128,10 @@ export class GenerationService {
     let sourceParams = params as DynamicValueMap
     const progressSource = options.progressSource ?? 'generation'
     const startedAtMs = Date.now()
+    let paidExecution: GenerationPaidExecution | undefined
+    let paidStarted = false
+    let paidCompleted = false
+    const paidApproved = consumeGenerationPaidApproval(requestId)
 
     try {
       options.signal?.throwIfAborted()
@@ -137,7 +141,7 @@ export class GenerationService {
       }
       sourceParams = stripDerivedMediaState(sourceParams)
 
-      if (model.submissionConfirmation?.condition(sourceParams)) {
+      if (model.submissionConfirmation?.condition(sourceParams) && !paidApproved) {
         // 等待确认期间界面可以继续编辑；只提交用户确认的这份快照。
         sourceParams = structuredClone(sourceParams)
         const controller = new AbortController()
@@ -147,7 +151,8 @@ export class GenerationService {
         if (options.signal?.aborted) abort()
         logger.info('等待用户确认提交', { event: 'generation.confirmation.requested', requestId, modelId })
         try {
-          await confirmGenerationSubmission(model, sourceParams, controller.signal)
+          paidExecution = await confirmGenerationSubmission(model, sourceParams, controller.signal,
+            options.outputContainer?.kind === 'project' ? options.outputContainer.projectId : undefined)
           logger.info('用户已确认提交', { event: 'generation.confirmation.accepted', requestId, modelId })
         } finally {
           options.signal?.removeEventListener('abort', abort)
@@ -184,12 +189,15 @@ export class GenerationService {
         },
       })
 
+      options.signal?.throwIfAborted()
+      if (paidExecution) { await paidExecution.start(); paidStarted = true }
       const response = await this.dispatchCancellable(requestId, options.signal, () => aiGenerate({
         modelId,
         params: runtimeParams,
         requestId,
         ...(options.outputContainer ? { outputContainer: options.outputContainer } : {}),
       }))
+      if (paidExecution) { await paidExecution.complete(); paidCompleted = true }
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
       await captureClonedVoice(modelId, model.meta.provider, response)
 
@@ -270,6 +278,10 @@ export class GenerationService {
         trace: response.trace,
       }
     } catch (error) {
+      if (paidExecution && !paidCompleted) {
+        try { await (paidStarted ? paidExecution.failed() : paidExecution.reject()) }
+        catch (receiptError) { logger.error('生成费用回执保存失败', receiptError, { event: 'generation.paid_receipt.failed', requestId }) }
+      }
       let message = getErrorMessage(error)
       if (options.signal?.aborted || error instanceof GenerationSubmissionCancelledError) {
         logger.info('[GenerationService] 本地生成已停止', { event: 'generation.generate.cancelled', requestId, modelId })
@@ -483,6 +495,7 @@ export class GenerationService {
   }
 
   async cancelTask(taskId: string): Promise<void> {
+    consumeGenerationPaidApproval(taskId)
     const confirmation = this.pendingConfirmations.get(taskId)
     if (confirmation) {
       confirmation.abort()

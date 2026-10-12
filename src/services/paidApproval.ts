@@ -1,4 +1,7 @@
 import { convertPriceAmount, readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
+import { z } from 'zod'
+import { registry } from '@/core/ModelRegistry'
+import { prepareGenerationTask } from '@/features/generation/application/generationPreparationService'
 import type { TranscriptionPreparation } from '@/core/audioEdit/transcriptionFailure'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
@@ -35,8 +38,20 @@ async function paidRequestForDocument(category: PaidOperationCategory, documentR
 
 export async function prepareExplanationPaidApproval(documentRef: { kind: string; id: string }) {
   const request = await paidRequestForDocument('explanation', documentRef)
-  const requestId = crypto.randomUUID()
   const capabilityId = documentRef.kind === 'video_edit.document' ? 'interpret_video_edit_intent' : 'interpret_image_edit_intent'
+  return prepareUiPaidApproval(request, capabilityId)
+}
+
+export async function prepareGenerationPaidApproval(modelId: string, params: DynamicValueMap, projectId?: string) {
+  const mediaType = z.enum(['image', 'video', 'audio']).parse(registry.getModel(modelId)?.meta.type)
+  const preparation = prepareGenerationTask({ modelId, mediaType, prompt: String(params.prompt ?? params.text ?? ''), options: params })
+  const { comparableCnyAmount: estimatedCny } = z.object({ comparableCnyAmount: z.number().nonnegative().nullable() }).parse(preparation.priceEstimate)
+  const project = projectId ? await getDocumentOperations().findProject(projectId) : undefined
+  return prepareUiPaidApproval({ category: 'generation', estimatedCny, ...(project ? { project: { id: project.id, name: project.name } } : {}) }, 'create_visible_generation_task')
+}
+
+async function prepareUiPaidApproval(request: PaidApprovalRequest, capabilityId: NonNullable<LocalHostReply['uiPaidApproval']>['capabilityId']) {
+  const requestId = crypto.randomUUID()
   const send = (action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], projectConsent?: boolean) => getPlatform().applicationControl.complete({
     requestId, rendererEpoch, result: {}, uiPaidApproval: { action, request, capabilityId, projectConsent },
   })

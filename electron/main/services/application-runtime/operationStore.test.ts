@@ -214,7 +214,7 @@ describe('应用原生操作记录与恢复', () => {
     const execute = vi.spyOn(host, 'execute').mockImplementation(async (_caller, capability, _input, _signal, options) => {
       if (capability === 'get_current_application_context') return { ok: true, data: { verification: { verified } } }
       if (!options?.operation || options.operation.operationId === original.operationId) throw new Error('不得重放原写入')
-      f.store.save({ ...options.operation, state: 'completed', verificationState: 'verified', result: { ok: true, data: { verification: { verified: true } } } })
+      f.store.save({ ...options.operation, state: 'completed', verificationState: 'verified', result: { ok: true, data: { status: 'completed', transactionRef: 'fixture-transaction', resultingRevisions: {}, resultRefs: [], effects: [], evidence: [], verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: new Date().toISOString() } } } })
       return { ok: true }
     })
     const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined, access: () => ({ ...access, allowPaid: false }) }, host, f.coordinator)
@@ -290,7 +290,7 @@ describe('应用原生操作记录与恢复', () => {
     // 费用判定与预留在执行付费操作时由统一 AI 付费授权完成，派发层只记录正式估价
     expect(f.store.get(raw.operationId, f.callerId)?.paidGenerationEstimate).toBe(2)
     expect(pending[1].operationId).toBe(applicationInvocationId(f.callerId, raw.operationId))
-    host.complete({ rendererEpoch: f.rendererEpoch, requestId: pending[1].requestId, result: { ok: true, data: { verification: { verified: true } } } })
+    host.complete({ rendererEpoch: f.rendererEpoch, requestId: pending[1].requestId, result: { ok: true, data: { taskId: 'generated-task', status: 'submitted', verification: { verified: true, condition: '生成任务已登记' } } } })
     expect(await first).toMatchObject({ executionState: 'completed' })
     expect(await dispatcher.call(f.callerId, 'create_visible_generation_task', raw, signal)).toMatchObject({ executionState: 'completed' })
     expect(pending).toHaveLength(2)
@@ -320,7 +320,7 @@ describe('应用原生操作记录与恢复', () => {
       calls.push(request)
       host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId, result: { ok: true, data:
         request.capabilityId === 'prepare_canvas_node_generation' ? { preparation: { priceEstimate: { comparableCnyAmount: amount } } }
-          : { taskId: 'generated-task', status: 'submitted', verification: { verified: true } } } })
+          : { taskId: 'generated-task', status: 'submitted', verification: { verified: true, condition: '生成任务已登记' } } } })
     } })
     const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: true }) }, host, f.coordinator)
     const result = await dispatcher.call(f.callerId, 'submit_canvas_node_generation', raw, new AbortController().signal)
@@ -359,7 +359,7 @@ describe('应用原生操作记录与恢复', () => {
         calls.push(request)
         host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId, result: { ok: true, data:
           request.capabilityId === 'get_model_schema' ? { preparation: { priceEstimate: { comparableCnyAmount: amount } } }
-            : { nodeId: 'result', verification: { verified: true } } } })
+            : { documentId: 'project', kind: 'canvas-node', capabilityId: 'image.upscale', sourceNodeId: 'source', nodeId: 'result', edgeId: 'edge', undoRef: 'undo', verification: { verified: true, condition: '画布节点已登记' } } } })
       } })
       const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: true }) }, host, f.coordinator)
       const result = await dispatcher.call(f.callerId, 'apply_canvas_image_capability', raw, new AbortController().signal)
@@ -428,6 +428,9 @@ describe('应用原生操作记录与恢复', () => {
       [{ transaction: { partial: { completedStepIndexes: [0], compensatedStepIndexes: [0], uncompensatedStepIndexes: [] } } }, 'rolled_back'],
       [{ transaction: { partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } }, 'unknown'],
       [{ execution: { rolledBack: true }, persistence: {} }, 'partial'],
+      [{ execution: { rolledBack: true, billing: 'completed', targetMutation: 'none' } }, 'partial'],
+      [{ execution: { billing: 'unknown', notExecuted: false }, transaction: { partial: { completedStepIndexes: [] } } }, 'unknown'],
+      [{ effects: [{ kind: 'update' }], execution: { notExecuted: false } }, 'partial'],
     ] as const) {
       const f = fixture()
       const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
@@ -461,7 +464,7 @@ describe('应用原生操作记录与恢复', () => {
     }, new AbortController().signal))
     await vi.waitFor(() => expect(pending).toHaveLength(5))
     for (const request of pending) host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId,
-      result: { ok: true, data: { taskId: request.operationId, verification: { verified: true } } } })
+      result: { ok: true, data: { taskId: request.operationId, status: 'submitted', verification: { verified: true, condition: '生成任务已登记' } } } })
     for (const reply of await Promise.all(calls)) expect(reply).toMatchObject({ executionState: 'completed' })
     expect(f.store.get(old.operationId, old.callerId)).toEqual(old)
   })
@@ -497,7 +500,7 @@ describe('应用原生操作记录与恢复', () => {
       seen.push(request.capabilityId)
       const result = request.capabilityId === 'prepare_generation_task'
         ? { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: cny } } } }
-        : { ok: true, data: { taskId: 'created-task', status: 'submitted', verification: { verified: true } } }
+        : { ok: true, data: { taskId: 'created-task', status: 'submitted', verification: { verified: true, condition: '生成任务已登记' } } }
       host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId, result })
     } })
     const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ allowWrites: true, allowDestructive: false, allowPaid: true }) }, host, f.coordinator)

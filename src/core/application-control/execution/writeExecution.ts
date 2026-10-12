@@ -1,0 +1,116 @@
+import { ApplicationPreflightFailure, ApplicationTransactionFailure } from './transactionFailure'
+import { ApplicationPersistenceFailure } from './persistence'
+import type { ApplicationEffectReceipt } from '../transactions'
+
+export interface ApplicationWriteFacts {
+  billing: 'not_charged' | 'submitted' | 'completed' | 'unknown'
+  targetMutation: 'none' | 'applied'
+  audioDocumentId?: string
+}
+
+/** 所有 handler 的失败共用这份事实，领域错误只作为 cause 保留。 */
+export class ApplicationWriteFailure extends Error {
+  constructor(readonly original: unknown, readonly execution: ApplicationWriteFacts & { notExecuted: boolean },
+    readonly effects: ApplicationEffectReceipt[] = []) {
+    super(original instanceof Error ? original.message : String(original), { cause: original })
+    this.name = 'ApplicationWriteFailure'
+  }
+}
+
+/** 每次调用独有，不能把“进入 handler”当作“已写入”，也不能从异常文案猜执行事实。 */
+export class ApplicationWriteExecution {
+  private started = false
+  private completed = false
+  private facts: ApplicationWriteFacts = { billing: 'not_charged', targetMutation: 'none' }
+  private effects: ApplicationEffectReceipt[] = []
+
+  report(facts: Partial<ApplicationWriteFacts>, effects: ApplicationEffectReceipt[] = []): void {
+    const { billing, targetMutation } = this.facts
+    this.facts = { ...this.facts, ...facts,
+      ...(billing === 'completed' ? { billing } : {}), ...(targetMutation === 'applied' ? { targetMutation } : {}) }
+    this.effects.push(...effects)
+  }
+
+  /** 验证、引用解析、授权与费用确认；禁止在这个回调内改变业务状态。 */
+  async preflight<T>(prepare: () => T | Promise<T>): Promise<T> {
+    try { return await prepare() } catch (error) {
+      if (this.completed || this.facts.billing !== 'not_charged' || this.facts.targetMutation !== 'none' || this.effects.length) throw error
+      throw new ApplicationPreflightFailure(error)
+    }
+  }
+
+  /** 唯一业务派发边界。成功之后的输出校验失败也保留已经执行的事实。 */
+  async run<T>(execute: () => T | Promise<T>): Promise<T> {
+    this.started = true
+    const result = await execute()
+    this.completed = true
+    this.report({ targetMutation: 'applied' })
+    return result
+  }
+
+  async paid<T>(execute: () => T | Promise<T>): Promise<T> {
+    this.started = true
+    this.report({ billing: 'submitted' })
+    const result = await execute()
+    this.report({ billing: 'completed' })
+    return result
+  }
+
+  /** 仅供无外部副作用的不可变文档算法：正式文档身份就是原子提交事实。 */
+  async atomic<T>(snapshot: () => unknown, execute: () => T | Promise<T>): Promise<T> {
+    const before = snapshot()
+    try { return await execute() } catch (error) {
+      if (error instanceof ApplicationPersistenceFailure || error instanceof ApplicationTransactionFailure || error instanceof ApplicationWriteFailure) throw error
+      let unchanged = false
+      try { unchanged = snapshot() === before } catch { throw error /* 实例已失效，不能推断任何目标变化。 */ }
+      if (!unchanged) this.report({ targetMutation: 'applied' })
+      throw new ApplicationWriteFailure(error, { ...this.facts,
+        notExecuted: unchanged && this.facts.targetMutation === 'none' && this.facts.billing === 'not_charged' && !this.effects.length }, this.effects)
+    }
+  }
+
+  failure(error: unknown): unknown {
+    // 事务引擎与保存协调器的结构化回执比本层阶段更精确，不覆盖或降为字符串。
+    if (error instanceof ApplicationTransactionFailure || error instanceof ApplicationPersistenceFailure) {
+      if (this.facts.billing !== 'not_charged' || this.facts.targetMutation !== 'none' || this.effects.length) {
+        return new ApplicationWriteFailure(error, { ...this.facts, notExecuted: false }, this.effects)
+      }
+      return error
+    }
+    if (error instanceof ApplicationWriteFailure) {
+      this.report(error.execution, error.effects)
+      return new ApplicationWriteFailure(error.original, { ...this.facts,
+        notExecuted: error.execution.notExecuted && !this.completed && this.facts.billing === 'not_charged' && this.facts.targetMutation === 'none' && !this.effects.length }, this.effects)
+    }
+    const rejected = !this.completed && error instanceof ApplicationPreflightFailure
+    return new ApplicationWriteFailure(error, { ...this.facts,
+      notExecuted: (!this.started || rejected) && this.facts.billing === 'not_charged' && this.facts.targetMutation === 'none' && !this.effects.length }, this.effects)
+  }
+}
+
+const channels = new WeakSet<object>()
+
+/** 领域分阶段操作使用同一个包装；准备阶段不调用 run/paid，异常自动为零执行。 */
+export async function executeApplicationWrite<T>(work: (execution: ApplicationWriteExecution) => T | Promise<T>): Promise<T> {
+  const execution = new ApplicationWriteExecution()
+  try { return await work(execution) } catch (error) { throw execution.failure(error) }
+}
+
+/** 注册器只保存此工厂产出的写 handler；调用者拿不到未包装的 handler。 */
+export function applicationWriteChannel<TInput, TContext, TResult>(handler: (input: TInput, context: TContext & { execution: ApplicationWriteExecution }) => TResult | Promise<TResult>):
+  (input: TInput, context: TContext) => Promise<TResult> {
+  const wrapped = async (input: TInput, context: TContext): Promise<TResult> => {
+    return executeApplicationWrite(execution => execution.run(() => handler(input, { ...context, execution })))
+  }
+  channels.add(wrapped)
+  return wrapped
+}
+
+export function assertApplicationWriteChannel(id: string, handler: object): void {
+  if (!channels.has(handler)) throw new Error(`WRITE_EXECUTION_REQUIRED:${id} 必须由 applicationWriteChannel 包装后注册，前置检查使用 execution.preflight，副作用阶段使用 execution.report。`)
+}
+
+/** 领域适配器与直接调用测试共用的准备边界，不依赖是否装配了公共注册器。 */
+export async function applicationWritePreflight<T>(context: { execution?: ApplicationWriteExecution }, prepare: () => T | Promise<T>): Promise<T> {
+  return (context.execution ?? new ApplicationWriteExecution()).preflight(prepare)
+}

@@ -1,5 +1,4 @@
-import { ApplicationOperationNotExecutedFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
-import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
+import { ApplicationWriteExecution, applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
 import { openVideoEditDocument, requireVideoEditInstance } from './videoEditService'
 
@@ -19,17 +18,12 @@ export function guardVideoEditDocumentAlgorithm(id: string, handler: CapabilityH
   return async (raw, context) => {
     const input = raw as { documentRef?: { kind: string; id: string } }
     if (input.documentRef?.kind !== 'video_edit.document') return handler(raw, context)
-    let owner
-    try { owner = await openVideoEditDocument({ id: input.documentRef.id }, { focus: false }) } catch (error) { throw new ApplicationPreflightFailure(error) }
+    const documentId = input.documentRef.id
+    const owner = await applicationWritePreflight(context, () => openVideoEditDocument({ id: documentId }, { focus: false }))
     if (!ATOMIC_DOCUMENT_ALGORITHMS.has(id)) return handler(raw, context)
-    const baseline = owner.document
-    try { return await handler(raw, context) } catch (error) {
-      if (error instanceof ApplicationPersistenceFailure) throw error
-      // 精确实例与不可变文档身份是该算法的提交边界；换会话时不能猜执行状态。
-      let current
-      try { current = requireVideoEditInstance(input.documentRef.id) } catch { throw error }
-      if (current === owner && owner.document === baseline) throw new ApplicationOperationNotExecutedFailure(error)
-      throw error
-    }
+    return (context.execution ?? new ApplicationWriteExecution()).atomic(() => {
+      if (requireVideoEditInstance(documentId) !== owner) throw new Error('原剪辑实例已变化')
+      return owner.document
+    }, () => handler(raw, context))
   }
 }

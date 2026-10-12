@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
-import { AjvJsonSchemaValidator } from '@modelcontextprotocol/client/validators/ajv'
+import { describe, expect, it, vi } from 'vitest'
+import { applicationOutputValidator, validateApplicationToolOutput } from './outputContract'
 import { ApplicationHostBridge } from './applicationHostBridge'
+import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { buildApplicationToolCatalog } from './toolCatalog'
 import { projectApplicationToolResult } from './resultProjection'
 import { toMcpResult } from '../mcp/resultProjection'
@@ -9,6 +10,8 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 import { capabilityVerificationEnvelope } from '../../../../src/core/application-control/capabilityVerification'
 import { APPLICATION_WRITE_CAPABILITY_IDS, EXTERNAL_CONTRACT_VERSION } from '../../../../src/core/application-control/localHostContracts'
 import { BUILTIN_STYLE_KITS } from '../../../../src/core/videoEdit/styleKitPresets'
+const contractLog = vi.hoisted(() => vi.fn())
+vi.mock('../logging', () => ({ createMainLogger: () => ({ error: contractLog, info: vi.fn(), warn: vi.fn() }) }))
 
 const ref = (kind: string, id = 'document') => ({ kind, id })
 const documentRef = ref('video_edit.document')
@@ -198,11 +201,24 @@ for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_pr
 
 const host = new ApplicationHostBridge(() => {})
 const tools = buildApplicationToolCatalog({ tools: host.tools(), access: { allowWrites: true, allowPaid: true, allowDestructive: true }, operationsEnabled: true, includeSkillTool: true }).tools
-const validator = new AjvJsonSchemaValidator()
+const validator = applicationOutputValidator
 // 本轮有 outputSchema 的工具均有回执；未来不可构造的工具必须逐个登记具体原因，不能按域豁免。
 const uncoveredTools: Record<string, string> = {}
 
 describe('外部客户端成功输出 JSON Schema 契约', () => {
+  it.each(['external', 'embedded'] as const)('%s 的真实派发出口拒绝投影后多余字段', async kind => {
+    const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ allowWrites: true, allowPaid: true, allowDestructive: true }) }, host, undefined, 0, kind)
+    const execute = vi.spyOn(host, 'execute').mockResolvedValueOnce({ ok: true, data: { ...successData.read_application_entity, ref: { ...documentRef, unexpected: true } } })
+    try {
+      await expect(dispatcher.call('fixture', 'read_application_entity', { ref: documentRef }, new AbortController().signal)).rejects.toThrow('APPLICATION_OUTPUT_CONTRACT')
+    } finally { execute.mockRestore() }
+  })
+  it('真实结果出口在测试中拒绝额外字段，生产只记录日志', () => {
+    const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false }
+    expect(() => validateApplicationToolOutput('fixture', schema, { ok: true, extra: true }, 'test')).toThrow('APPLICATION_OUTPUT_CONTRACT')
+    expect(() => validateApplicationToolOutput('fixture', schema, { ok: true, extra: true }, 'production')).not.toThrow()
+    expect(contractLog).toHaveBeenLastCalledWith('应用工具返回不符合声明', expect.objectContaining({ event: 'application.output_contract.failed', context: expect.objectContaining({ capabilityId: 'fixture' }) }))
+  })
   it('全部写工具允许等待确认的非错误回执，且不得缺少确认位置和恢复指引', async () => {
     const { applicationUserConfirmation } = await import('../../../../src/core/application-control/userConfirmation')
     const raw = { ok: false, operationId: '3e8b1d7c-6a2f-4c95-9d40-7f1e5a3c8b26', executionState: 'awaiting_user_confirmation' as const, verificationState: 'unresolved',

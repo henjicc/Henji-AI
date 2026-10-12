@@ -63,10 +63,10 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
   const canRetrieveResult = Boolean(projectId) && Boolean(generationError)
     && canRetryLayerStackResult({ id, data }, { past: historyPast });
-  const retryResult = (): void => {
+  const retryResult = async (): Promise<void> => {
     if (!projectId) return;
     try {
-      retryLayerStackResult({ projectId, nodeId: id });
+      await retryLayerStackResult({ projectId, nodeId: id });
     } catch (error) {
       canvasEventBus.publish('canvas/toast', {
         message: error instanceof Error ? error.message : '获取结果失败，请重试',

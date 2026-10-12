@@ -20,11 +20,15 @@ export type ApplicationConfirmationProgress =
 export const paidApprovalProgressSchema = z.object({ phase: z.literal('paid_approval'), request: paidApprovalRequestSchema, consent: z.enum(['once', 'project']).optional() }).strict()
 type ProgressSink = (progress: ApplicationConfirmationProgress) => Promise<unknown>
 const scopes = new WeakMap<AbortSignal, ProgressSink>()
+const paidApprovals = new WeakMap<AbortSignal, Set<PaidApprovalRequest['category']>>()
 
 /** Scope by the trusted invocation signal; concurrent UI actions never inherit another caller. */
 export function bindApplicationConfirmation(signal: AbortSignal, sink: ProgressSink): () => void {
   scopes.set(signal, sink)
-  return () => { scopes.delete(signal) }
+  return () => { scopes.delete(signal); paidApprovals.delete(signal) }
+}
+export function hasApplicationPaidApproval(signal: AbortSignal, category: PaidApprovalRequest['category']): boolean {
+  return !signal.aborted && !!paidApprovals.get(signal)?.has(category)
 }
 export function hasApplicationConfirmation(signal?: AbortSignal): boolean { return !!signal && scopes.has(signal) }
 export async function requestApplicationPaidApproval(signal: AbortSignal, request: PaidApprovalRequest, consent?: 'once' | 'project'): Promise<PaidApprovalDecision> {
@@ -34,6 +38,10 @@ export async function requestApplicationPaidApproval(signal: AbortSignal, reques
   try {
     const result = paidApprovalDecisionSchema.parse(await sink({ phase: 'paid_approval', request, consent }))
     signal.throwIfAborted()
+    if (result.decision === 'auto' || result.decision !== 'deny' && consent) {
+      const approved = paidApprovals.get(signal) ?? new Set<PaidApprovalRequest['category']>()
+      approved.add(request.category); paidApprovals.set(signal, approved)
+    }
     return result
   } catch (error) { throw new ApplicationPreflightFailure(error) }
 }

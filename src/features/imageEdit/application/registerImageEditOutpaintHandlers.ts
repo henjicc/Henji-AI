@@ -1,4 +1,5 @@
 import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity';
+import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution';
 import { generateImageEditOutpaintCapability, getImageEditOutpaintCapability, prepareImageEditOutpaintCapability, recoverImageEditOutpaintCapability } from '@/core/application-control/domains/imageEdit/imageEditOutpaintCapabilities';
 import type { ApplicationCapabilityHandlerRegistrar, CapabilityExecutionContext } from '@/features/application-control';
 import { applicationCallerAccess } from '@/core/application-control/callerContext';
@@ -29,9 +30,14 @@ export function registerImageEditOutpaintHandlers(registrar: ApplicationCapabili
   });
   registrar.registerHandler(generateImageEditOutpaintCapability.id, async (input, context) => {
     const parsed = generateImageEditOutpaintCapability.inputSchema.parse(input), { documentId } = splitImageEditV3DocumentRef(parsed.documentRef);
-    await assertHost(documentId, context, true);
-    if (!context.taskId) throw new Error('扩图需要正式操作身份，请通过应用能力执行入口调用');
-    const job = await startImageEditOutpaintV3({ documentId, margins: parsed.margins, prompt: parsed.prompt, modelId: parsed.modelId, params: parsed.params }, { operationId: applicationGenerationTaskId(context.taskId), signal: context.signal });
+    const operationId = await applicationWritePreflight(context, async () => {
+      await assertHost(documentId, context, true);
+      const id = context.taskId ?? context.requestId;
+      if (!id) throw new Error('扩图需要正式操作身份，请通过应用能力执行入口调用');
+      return applicationGenerationTaskId(id);
+    });
+    const job = await startImageEditOutpaintV3({ documentId, margins: parsed.margins, prompt: parsed.prompt, modelId: parsed.modelId, params: parsed.params }, { operationId, signal: context.signal });
+    context.execution?.report({ billing: 'submitted' });
     return { documentRef: parsed.documentRef, taskRef: { kind: 'generation.task', id: job.taskId }, status: 'submitted', message: '扩图已提交；请读回原任务，等待结果落入当前图片。' };
   });
   registrar.registerHandler(getImageEditOutpaintCapability.id, async (input, context) => {
@@ -43,7 +49,7 @@ export function registerImageEditOutpaintHandlers(registrar: ApplicationCapabili
   });
   registrar.registerHandler(recoverImageEditOutpaintCapability.id, async (input, context) => {
     const parsed = recoverImageEditOutpaintCapability.inputSchema.parse(input), { documentId } = splitImageEditV3DocumentRef(parsed.documentRef);
-    await assertHost(documentId, context, true);
+    await applicationWritePreflight(context, () => assertHost(documentId, context, true));
     return status(await recoverImageEditOutpaintV3(documentId, parsed.taskRef.id), parsed.documentRef);
   });
 }

@@ -1,7 +1,7 @@
 import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanvasNode } from '../domain/canvasNodes';
 import { resolveLayerStackRecoveryTask } from '../domain/layerStackResultRecovery';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -10,6 +10,9 @@ import { retryLayerStackResult } from './layerStackResultRecoveryService';
 import { registerCanvasCapabilityHandlers } from '@/features/canvas/application/registerCanvasCapabilityHandlers';
 import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes';
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry';
+import { useProjectStore } from '@/stores/projectStore';
+import { resumeCanvasGenerationInProject } from './canvasResumePollingService';
+vi.mock('./canvasResumePollingService', () => ({ resumeCanvasGenerationInProject: vi.fn(async () => 1) }));
 
 const task = { taskId: 'existing-task', modelId: 'kie-seedream-5.0-pro' }
 const error = `Continue polling failed for ${task.modelId}: terminated`
@@ -37,6 +40,7 @@ function history(nodes: CanvasNode[]): { past: Array<{ nodes: CanvasNode[]; edge
 
 describe('多图层下载失败原任务恢复', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     const node = fixture()
     const other: CanvasNode = { id: 'other', type: 'uploadNode', position: { x: 77, y: 88 },
       data: { imageUrl: 'other.jpg', aspectRatio: '1:1' } }
@@ -47,10 +51,10 @@ describe('多图层下载失败原任务恢复', () => {
     setCanvasTestProjectState({ currentProjectId: project.id, currentProject: project })
   })
 
-  it('从最近历史恢复原任务，只写结果节点且重复点击不重复提交', () => {
+  it('从最近历史恢复原任务，只写结果节点且重复点击不重复提交', async () => {
     const before = useCanvasStore.getState()
     const other = before.nodes[1]
-    const first = retryLayerStackResult({ projectId: 'project', nodeId: 'result' })
+    const first = await retryLayerStackResult({ projectId: 'project', nodeId: 'result' })
     const after = useCanvasStore.getState()
     expect(first).toMatchObject({ status: 'retrieving', nodeRef: { kind: 'canvas.node', id: 'project:result' } })
     expect(after.nodes[0].data).toMatchObject({ serverTaskId: task.taskId, serverTaskModelId: task.modelId,
@@ -58,8 +62,15 @@ describe('多图层下载失败原任务恢复', () => {
     expect(after.nodes[1]).toBe(other)
     expect(after.nodes[0].position).toEqual(before.nodes[0].position)
     expect(after.edges).toEqual(before.edges)
-    expect(retryLayerStackResult({ projectId: 'project', nodeId: 'result' }).status).toBe('already_retrieving')
+    expect((await retryLayerStackResult({ projectId: 'project', nodeId: 'result' })).status).toBe('already_retrieving')
     expect(useCanvasStore.getState().nodes).toBe(after.nodes)
+  })
+
+  it('不要求活动画布或挂载 hook，显式启动原文档后台续查', async () => {
+    useProjectStore.setState({ currentProjectId: null, currentProject: null })
+    await expect(retryLayerStackResult({ projectId: 'project', nodeId: 'result' })).resolves.toMatchObject({ status: 'retrieving' })
+    expect(resumeCanvasGenerationInProject).toHaveBeenCalledWith('project', new Set(['result']))
+    expect(useProjectStore.getState().currentProjectId).toBeNull()
   })
 
   it('已有任务优先续取，不用历史中的旧编号', () => {
@@ -92,18 +103,18 @@ describe('多图层下载失败原任务恢复', () => {
     },
   )
 
-  it('已交付结果即便残留生成态和任务号也不能进入恢复', () => {
+  it('已交付结果即便残留生成态和任务号也不能进入恢复', async () => {
     const node = pending(); node.data.imageUrl = 'completed.png'
     useCanvasStore.getState().setCanvasData([node], [])
-    expect(() => retryLayerStackResult({ projectId: 'project', nodeId: 'result' })).toThrow('已经完成')
+    await expect(retryLayerStackResult({ projectId: 'project', nodeId: 'result' })).rejects.toThrow('已经完成')
     expect(useCanvasStore.getState().nodes[0].data.imageUrl).toBe('completed.png')
   })
 
-  it('取消和错误画布拒绝前不产生写入，错误给出下一步', () => {
+  it('取消和缺失节点在事务前拒绝，不产生写入', async () => {
     const before = useCanvasStore.getState().nodes
     const controller = new AbortController(); controller.abort()
-    expect(() => retryLayerStackResult({ projectId: 'project', nodeId: 'result', signal: controller.signal })).toThrow('已取消')
-    expect(() => retryLayerStackResult({ projectId: 'other', nodeId: 'result' })).toThrow('请先打开画布 other')
+    await expect(retryLayerStackResult({ projectId: 'project', nodeId: 'result', signal: controller.signal })).rejects.toThrow('已取消')
+    await expect(retryLayerStackResult({ projectId: 'project', nodeId: 'missing' })).rejects.toThrow('多图层结果节点')
     expect(useCanvasStore.getState().nodes).toBe(before)
   })
 
@@ -122,7 +133,7 @@ describe('多图层下载失败原任务恢复', () => {
     expect(capability.outputSchema.safeParse({ ...result, revision: 1, scopeRevisions: { canvas: 1 } }).success).toBe(true)
     expect(capability.resolveObservedEffects?.(input, result)?.[0].targetRefs).toEqual(result.resultRefs)
     expect(JSON.stringify(result)).not.toContain(task.taskId)
-    expect(() => handlers.get(capability.id)!({ ...input, nodeRef: { kind: 'canvas.node', id: 'result' } },
-      { signal: new AbortController().signal })).toThrow('完整节点引用')
+    await expect(handlers.get(capability.id)!({ ...input, nodeRef: { kind: 'canvas.node', id: 'result' } },
+      { signal: new AbortController().signal })).rejects.toThrow('完整节点引用')
   })
 })

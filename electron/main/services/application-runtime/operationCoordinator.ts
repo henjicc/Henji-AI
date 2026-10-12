@@ -298,17 +298,18 @@ export class ApplicationOperationCoordinator {
     const details = object(object(reply.result.error).details)
     const transaction = object(details.transaction)
     const partial = object(transaction.partial)
-    const changed = Array.isArray(transaction.effects) && transaction.effects.length > 0
+    const changed = (Array.isArray(transaction.effects) && transaction.effects.length > 0)
+      || (Array.isArray(details.effects) && details.effects.length > 0)
     const cleanFailure = object(details.execution).notExecuted === true || (Array.isArray(partial.completedStepIndexes) && partial.completedStepIndexes.length === 0 && !transaction.persistence)
     const completed = Array.isArray(partial.completedStepIndexes) ? partial.completedStepIndexes : []
     const compensated = Array.isArray(partial.compensatedStepIndexes) ? partial.compensatedStepIndexes : []
     const rolledBack = object(details.execution).rolledBack === true || (completed.length > 0
       && completed.every(index => compensated.includes(index)) && Array.isArray(partial.uncompensatedStepIndexes) && partial.uncompensatedStepIndexes.length === 0)
     const persistence = transaction.persistence || details.persistence
-    const speech = object(details.execution)
-    const speechPartial = speech.billing === 'submitted' || speech.billing === 'completed' || speech.targetMutation === 'applied'
+    const execution = object(details.execution)
+    const executionPartial = execution.billing === 'submitted' || execution.billing === 'completed' || execution.targetMutation === 'applied'
     const state = reply.result.ok === true ? 'completed' : persistence ? 'partial'
-      : rolledBack ? 'rolled_back' : changed || speechPartial ? 'partial' : cleanFailure ? 'not_executed' : 'unknown'
+      : executionPartial ? 'partial' : execution.billing === 'unknown' ? 'unknown' : rolledBack ? 'rolled_back' : changed ? 'partial' : cleanFailure ? 'not_executed' : 'unknown'
     const verified = state === 'not_executed' || state === 'rolled_back' || object(object(reply.result.data).verification).verified === true
     this.store.save({ ...record, state, confirmation: undefined, targetRefs: [...record.targetRefs ?? [], ...resultRefs(reply.result)], verificationState: verified ? 'verified' : 'unresolved', result: reply.result })
     if (record.recoveryOf && reply.result.ok === true) {

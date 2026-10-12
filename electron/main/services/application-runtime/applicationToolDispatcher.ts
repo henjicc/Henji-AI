@@ -12,6 +12,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 import { isAssistantSkillError } from '../../../../src/core/assistant/skills'
 import { agentSkillIndex, loadAgentSkill } from '../assistant/skills/agentSkills'
 import { projectApplicationToolResult, type ResultDetailOptions } from './resultProjection'
+import { validateApplicationToolOutput } from './outputContract'
 const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
 const logger = createMainLogger('main.application_runtime')
 
@@ -57,7 +58,9 @@ export class ApplicationToolDispatcher {
     if (name === 'get_current_application_context' && raw.ok && raw.data) {
       raw = { ...raw, data: { ...raw.data, externalContractVersion: EXTERNAL_CONTRACT_VERSION } }
     }
-    return projectApplicationToolResult(name, input, raw, options)
+    const result = projectApplicationToolResult(name, input, raw, options)
+    validateApplicationToolOutput(name, this.catalog(callerId).tools.find(tool => tool.name === name)?.outputSchema, result)
+    return result
   }
   private async callRaw(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
       this.connections.assertActive(callerId)

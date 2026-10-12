@@ -1,12 +1,18 @@
 import i18n from '@/i18n'
 import { getI18nText } from '@/core/types/I18nText'
 import type { ModelDefinition } from '@/core/types/ModelDefinition'
+import { hasApplicationPaidApproval } from '../application-control/userConfirmation'
+import { paidApprovalMessage } from '../application-control/paidApproval'
+import { prepareGenerationPaidApproval } from '@/services/paidApproval'
 
 export interface GenerationSubmissionConfirmationRequest {
   type: 'warning'
   title: string
   message: string
   confirmLabel: string
+  paidConfirmation?: boolean
+  projectConfirmation?: boolean
+  onProject?: () => void
 }
 
 export type GenerationSubmissionConfirm = (
@@ -15,6 +21,20 @@ export type GenerationSubmissionConfirm = (
 ) => Promise<boolean>
 
 let requestConfirmation: GenerationSubmissionConfirm | undefined
+// 从已授权的调用向其异步生成任务单次移交回执；工具参数不能创建该回执。
+const approvedTasks = new Set<string>()
+export function transferGenerationPaidApproval(taskId: string, signal: AbortSignal): () => void {
+  if (hasApplicationPaidApproval(signal, 'generation')) approvedTasks.add(taskId)
+  return () => { approvedTasks.delete(taskId) }
+}
+export function consumeGenerationPaidApproval(taskId: string): boolean { return approvedTasks.delete(taskId) }
+
+export interface GenerationPaidExecution {
+  start(): Promise<unknown>
+  complete(): Promise<unknown>
+  failed(): Promise<unknown>
+  reject(): Promise<unknown>
+}
 
 /** 由渲染层装配确认交互；未装配时禁止提交需要确认的请求。 */
 export function configureGenerationSubmissionConfirmation(confirm: GenerationSubmissionConfirm): void {
@@ -28,16 +48,26 @@ export class GenerationSubmissionCancelledError extends Error {
   }
 }
 
-export async function confirmGenerationSubmission(model: ModelDefinition, params: DynamicValueMap, signal: AbortSignal): Promise<void> {
+export async function confirmGenerationSubmission(model: ModelDefinition, params: DynamicValueMap, signal: AbortSignal, projectId?: string): Promise<GenerationPaidExecution | undefined> {
   const confirmation = model.submissionConfirmation
   if (!confirmation?.condition(params)) return
   signal.throwIfAborted()
   if (!requestConfirmation) throw new Error('生成提交确认未初始化')
+  const paid = await prepareGenerationPaidApproval(model.meta.id, params, projectId)
+  try {
+  signal.throwIfAborted()
+  if (paid.decision.decision === 'deny') throw new GenerationSubmissionCancelledError()
+  if (paid.decision.decision === 'auto') return paid
+  let project = false
   const accepted = await requestConfirmation({
     type: 'warning',
     title: getI18nText(confirmation.title, i18n.language),
-    message: getI18nText(confirmation.message, i18n.language),
-    confirmLabel: getI18nText(confirmation.confirmLabel, i18n.language),
+    message: `${getI18nText(confirmation.message, i18n.language)}\n\n${paidApprovalMessage(paid.decision)}`,
+    confirmLabel: '允许本次', paidConfirmation: true, projectConfirmation: !!paid.project,
+    onProject: () => { project = true },
   }, signal)
   if (!accepted || signal.aborted) throw new GenerationSubmissionCancelledError()
+  await paid.confirm(project)
+  return paid
+  } catch (error) { await paid.reject(); throw error }
 }

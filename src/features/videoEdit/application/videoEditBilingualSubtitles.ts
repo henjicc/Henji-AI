@@ -1,4 +1,5 @@
 import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
+import { executeApplicationWrite } from '@/core/application-control/execution/writeExecution'
 import { applicationPaidRequest } from '@/services/paidApproval'
 import { z } from 'zod'
 import { llmChatStream, llmCancelTask } from '@/commands/llmRuntime'
@@ -20,6 +21,7 @@ const resultSchema = z.array(z.object({ id: z.string(), text: z.string().trim().
 
 /** Approved UI/Pi/MCP calls share the existing configured LLM runtime, cancellation and edit transaction. */
 export async function generateVideoEditBilingualSubtitles(projectId: string, sequenceId: string, options: SubtitleTranslationOptions, signal?: AbortSignal, requestId: string = crypto.randomUUID()): Promise<string[]> {
+  return executeApplicationWrite(async execution => {
   const targetLanguage = languageSchema.parse(options.targetLanguage)
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId)
@@ -55,7 +57,7 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
       const batch = captions.slice(offset, offset + 12)
       activeRequest = `${requestId}:${offset / 12}`
       let output = ''; let completed = false; let failure = ''
-      try { await llmChatStream({
+      try { await execution.paid(() => llmChatStream({
         requestId: activeRequest, providerId: provider.providerId, providerFamilyId: provider.providerFamilyId, endpointProfile: provider.endpointProfile, credentialId: provider.credentialId,
         modelId: model.modelId, adapter: model.adapter || provider.adapter, baseUrl: model.baseUrl ?? provider.baseUrl, reasoning: provider.reasoning, capabilities: model.capabilities,
         messages: [
@@ -67,7 +69,7 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
         if (event.type === 'Token' && !failure) { output += event.data; if (output.length > 64000) { failure = '译文输出过长，请减少字幕数量后重试。'; cancel() } }
         else if (event.type === 'Done') completed = true
         else if (event.type === 'Error') failure = describeLlmProviderError(event.data)
-      }) } catch (error) {
+      })) } catch (error) {
         signal?.throwIfAborted()
         throw new Error(failure || describeLlmProviderError(error instanceof Error ? error.message : String(error)))
       }
@@ -82,11 +84,13 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
     }
     assertTarget()
     editVideoSequence(projectId, sequenceId, current => ({ ...current, captions: current.captions?.map(caption => translations.has(caption.id) ? videoEditCaptionSchema.parse({ ...caption, translation: translations.get(caption.id), style: caption.style || videoEditSubtitleStyleSchema.parse({ fontSize: 40, bottomMargin: .12 }) }) : caption) }))
+    execution.report({ targetMutation: 'applied' })
     await saveVideoEdit(projectId)
     logger.info('双语字幕已生成', { event: 'video_edit.subtitle.translate.completed', requestId, context: { projectId, sequenceId, count: captions.length } })
     return captions.map(caption => caption.id)
   } catch (error) { logger.error('双语字幕生成失败', { event: 'video_edit.subtitle.translate.failed', requestId, error, context: { projectId, sequenceId } }); throw error }
   finally { signal?.removeEventListener('abort', cancel); running.delete(owner); release() }
+  })
 }
 
 /** Manual operation uses the same confirmation component as transcription; capability approval remains R2. */

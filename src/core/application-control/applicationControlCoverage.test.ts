@@ -21,7 +21,8 @@ import { BUILTIN_APPLICATION_CAPABILITIES } from './builtinApplicationCapability
 import { createApplicationControlCoverageManifest } from './applicationControlCoverage'
 import { auditExternalCapabilityCoverage } from '@/features/application-control/externalCapabilityCoverage'
 import { APPLICATION_CAPABILITY_IDS } from '@/core/application-control/localHostContracts'
-import { listRendererApplicationCapabilityIds } from '@/features/application-control/capabilities/registry'
+import { listRendererApplicationCapabilityIds, assertRendererApplicationWriteChannels } from '@/features/application-control/capabilities/registry'
+import { applicationWriteChannel, assertApplicationWriteChannel } from './execution/writeExecution'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCapabilityRegistry'
 import { projectExternalCapabilities } from '@/core/application-control/externalCapabilityPolicy'
 import { APPLICATION_MEDIA_REFERENCE_KINDS } from '@/core/application-control/mediaReferenceKinds'
@@ -38,6 +39,11 @@ function createManifest() {
 }
 
 describe('application control coverage', () => {
+  it('全部非只读能力包括内部恢复只能走统一写通道，未包装反例失败', () => {
+    expect(() => assertRendererApplicationWriteChannels()).not.toThrow()
+    expect(() => assertApplicationWriteChannel('unwrapped_write', () => ({}))).toThrow('WRITE_EXECUTION_REQUIRED:unwrapped_write')
+    expect(() => assertApplicationWriteChannel('wrapped_write', applicationWriteChannel(() => ({})))).not.toThrow()
+  })
   it('媒体来源声明覆盖准备、提交与编辑入口，编辑结果可直接回到画布', () => {
     for (const id of ['prepare_generation_task', 'create_visible_generation_task', 'create_image_edit_preview']) {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!

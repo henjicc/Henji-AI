@@ -25,7 +25,7 @@ export type PaidApprovalRequest = z.infer<typeof paidApprovalRequestSchema>
 export const uiPaidApprovalSchema = z.object({
   action: z.enum(['prepare', 'approve', 'start', 'complete', 'reject', 'failed']),
   request: paidApprovalRequestSchema,
-  capabilityId: z.enum(['interpret_video_edit_intent', 'interpret_image_edit_intent']),
+  capabilityId: z.enum(['interpret_video_edit_intent', 'interpret_image_edit_intent', 'create_visible_generation_task']),
   projectConsent: z.boolean().optional(),
 }).strict()
 export const paidApprovalDecisionSchema = z.object({
