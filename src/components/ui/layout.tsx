@@ -13,10 +13,11 @@
  *   Surface  UiPanel variant=inset 仅更暗底色
  *   Card     UiPanel               唯一允许画完整卡片的一层（浮层/弹窗/侧栏/画布节点）
  */
-import { useId, type HTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useId, type HTMLAttributes, type ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Tooltip, { type TooltipPlacement } from './Tooltip';
 import { UiFormRowLabelContext } from './formRowLabel';
+import { useUiFieldLayout } from './fieldLayout';
 import { UiIconButton } from './primitives';
 import {
   UI_DIVIDER_CLASS,
@@ -34,6 +35,8 @@ interface UiRegionProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 interface UiGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
+  /** 面板统一标签列档位，嵌套分组和表单行继承。 */
+  labelWidth?: 72 | 96 | 120;
   /** 分区标题；不传则是纯间距分组 */
   title?: ReactNode;
   /**
@@ -100,10 +103,15 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
    * 低于同面板 `UiGroup titleTone="compact"` 的分组标题（界面重设计 3.5）。
    */
   density?: 'default' | 'compact';
-  /** 窄面板的固定标签列：72px 标签、12px 间隔，控件填满余宽。 */
+  /** panel 使用固定标签列；auto 保留工具条或成对数值网格的排布。 */
   labelColumn?: 'auto' | 'panel';
+  /** 优先由面板 UiGroup 统一指定，不在各行单独取不同档。 */
+  labelWidth?: 72 | 96 | 120;
   children: ReactNode;
 }
+
+const FormLabelWidthContext = createContext<UiFormRowProps['labelWidth']>(undefined);
+const FORM_LABEL_WIDTH_CLASS = { 72: 'w-[72px]', 96: 'w-24', 120: 'w-[120px]' } as const;
 
 interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
   /**
@@ -201,6 +209,7 @@ export function UiGroup({
   divided = false,
   gap = 'row',
   titleTone = 'section',
+  labelWidth,
   children,
   ...props
 }: UiGroupProps): JSX.Element {
@@ -231,7 +240,9 @@ export function UiGroup({
           {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
         </div>
       )}
-      <div className={resolveGapClass(gap)}>{children}</div>
+      <div className={resolveGapClass(gap)}>{labelWidth === undefined ? children : (
+        <FormLabelWidthContext.Provider value={labelWidth}>{children}</FormLabelWidthContext.Provider>
+      )}</div>
     </div>
   );
 }
@@ -295,24 +306,29 @@ export function UiFormRow({
   info,
   inline = false,
   density = 'default',
-  labelColumn = 'auto',
+  labelColumn,
+  labelWidth,
   children,
   ...props
 }: UiFormRowProps): JSX.Element {
+  const panelLabelWidth = useContext(FormLabelWidthContext);
+  const fieldLayout = useUiFieldLayout();
+  const fixedColumn = labelColumn === 'panel' || (labelColumn === undefined && (labelWidth !== undefined || (panelLabelWidth !== undefined && fieldLayout !== 'toolbar')));
   const baseId = useId();
   const labelId = `${baseId}-label`;
   const hintId = hint ? `${baseId}-hint` : undefined;
   const labelNode = <UiTooltipText tooltip={info}>{label}</UiTooltipText>;
   const labelClass = density === 'compact' ? 'text-xs text-text2' : UI_TEXT_PANEL_TITLE_CLASS;
   // 行内控件没有自己的名称时，用 aria-labelledby 指向这行标签（B-50）
-  const labelling = { labelId, hintId };
+  const labelling = { labelId, hintId, fillControl: fixedColumn };
 
-  if (labelColumn === 'panel') {
-    return <div className={`flex items-start gap-3 ${className}`} {...props}>
-      <div className="flex min-h-control-sm w-[72px] shrink-0 items-center justify-end text-right">
-        <div id={labelId} className={labelClass}>{labelNode}</div>
+  if (fixedColumn) {
+    const width = labelWidth ?? panelLabelWidth ?? 72;
+    return <div data-ui-form-row="panel" data-label-width={width} className={`flex items-start gap-3 ${className}`} {...props}>
+      <div className={`flex min-h-control-sm ${FORM_LABEL_WIDTH_CLASS[width]} shrink-0 items-center`}>
+        <div id={labelId} className={`min-w-0 break-words ${labelClass}`}>{labelNode}</div>
       </div>
-      <div className="min-w-0 flex-1">
+      <div data-ui-form-control className="min-w-0 flex-1 text-right">
         <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
         {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
       </div>

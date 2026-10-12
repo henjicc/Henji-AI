@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+import { UiFormRow } from '@/components/ui'
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { Check, Copy, MessageSquare, Send, Trash2, Undo2 } from 'lucide-react'
@@ -39,6 +41,7 @@ function AnnotationRow({ instance, sequenceId, mark, number, fps, onError }: Pro
   </div>
 }
 export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel({ instance, visible = true, onError }: Props): React.ReactElement {
+  const { t: surfaceText } = useTranslation('ui')
   const snapshot = useRef<{ document: VideoEditInstance['document']; view: string }>()
   useSyncExternalStore(subscribeVideoEdit, () => {
     const document = videoEditCommittedDocument(instance)
@@ -61,7 +64,7 @@ export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel
       <UiInput aria-label="标注整体说明" placeholder="整体说明（可选）" value={note} onChange={event => setNote(event.target.value)} />
       <div className="flex flex-wrap gap-2"><UiButton variant="primary" size="sm" disabled={sending || !drafts.length} onClick={() => { void send(false) }}><Send size={14} />发送给助手</UiButton><UiButton size="sm" disabled={sending || !drafts.length} onClick={() => { void send(true) }}><Copy size={14} />复制给外部 Agent</UiButton></div>
       {instance.inFrame !== null && instance.outFrame !== null && <div className="flex gap-2"><UiInput aria-label="时间段标注说明" placeholder="这段要改什么？" value={rangeNote} onChange={event => setRangeNote(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) addRange() }} /><UiButton size="sm" disabled={!rangeNote.trim()} onClick={addRange}>标注时间段</UiButton></div>}
-      <Dropdown label="筛选批注" ariaLabel="筛选批注" value={filter} onSelect={setFilter} options={[{ value: 'all', label: '全部' }, { value: 'draft', label: '待发送' }, { value: 'open', label: '待处理' }, { value: 'addressed', label: '待审查' }, { value: 'resolved', label: '已通过' }]} />
+      <UiFormRow label={surfaceText('surfaceGrammar.annotationFilter')} density="compact" labelColumn="panel"><Dropdown ariaLabel="筛选批注" value={filter} onSelect={setFilter} options={[{ value: 'all', label: '全部' }, { value: 'draft', label: '待发送' }, { value: 'open', label: '待处理' }, { value: 'addressed', label: '待审查' }, { value: 'resolved', label: '已通过' }]} /></UiFormRow>
     </UiGroup>
     {entries.length ? <Virtuoso className="min-h-0 flex-1" data={entries} computeItemKey={(_index, entry) => entry.mark.id} itemContent={(_index, entry) => <AnnotationRow instance={instance} onError={onError} {...entry} />} /> : <UiEmpty size="xs" title="暂无批注" description="在节目画面上标注，或圈出时间段。" />}
   </div>

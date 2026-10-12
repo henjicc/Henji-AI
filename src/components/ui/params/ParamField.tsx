@@ -1,6 +1,7 @@
+import { UiSegmented } from '@/components/ui'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Dropdown from '../Dropdown'
-import { UiColorInput, UiOptionButton, UiRangeInput, UiSwitch, UiTextAreaField } from '../primitives'
+import { UiColorInput, UiRangeInput, UiSwitch, UiTextAreaField } from '../primitives'
 import { UiTooltipText } from '../layout'
 import { UiAngleDial } from '../UiAngleDial'
 import { UiCurveEditor } from '../UiCurveEditor'
@@ -13,7 +14,7 @@ import { UiRangeSlider } from '../UiRangeSlider'
 import { UiSeedInput } from '../UiSeedInput'
 import { colorGradeSpline } from '@/core/imaging/adjustments/curves'
 import NumberInput from '@/components/ui/NumberInput'
-import { UI_SEGMENTED_TRACK_CLASS, uiParameterHex } from '@/components/ui/styleTokens'
+import { uiParameterHex } from '@/components/ui/styleTokens'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import type { CodeColor, CodeGrade, CodeGradientStop, CodeParameterObject, CodeParameterValue, CodePoint, CodeRange } from '@/core/imaging/parameterTypes'
 import { PARAM_EASE_NAMES as CODE_EASE_NAMES } from '@/core/imaging/easing'
@@ -120,7 +121,7 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
     case 'seed': control = <UiSeedInput {...shared} min={0} max={4294967295} value={value as number} defaultValue={field.default} onChange={gesture.write} />; break
     case 'easing': control = <div className="flex flex-col gap-2"><Dropdown size="sm" ariaLabel={label} value={Array.isArray(value) ? 'custom' : value as string} options={[...easeOptions, { value: 'custom', label: '自定义' }]} onSelect={next => gesture.atomic(next === 'custom' ? [0, 0, 1, 1] : next)} />{Array.isArray(value) && <UiEasingEditor {...shared} presets={[]} value={value as CodeColor} onChange={gesture.write} />}</div>; break
     case 'boolean': control = <UiSwitch aria-label={label} checked={value as boolean} onCheckedChange={gesture.atomic} />; break
-    case 'choice': control = field.control === 'segmented' ? <div className={UI_SEGMENTED_TRACK_CLASS}>{field.options.map(option => <UiOptionButton key={option} variant="segment" size="sm" active={value === option} onClick={() => gesture.atomic(option)}>{field.optionLabels?.[option] ?? option}</UiOptionButton>)}</div> : <Dropdown size="sm" ariaLabel={label} value={value as string} options={field.options.map(option => ({ label: field.optionLabels?.[option] ?? option, value: option }))} onSelect={gesture.atomic} />; break
+    case 'choice': control = field.control === 'segmented' ? <UiSegmented ariaLabel={label} size="sm" value={value as string} onChange={gesture.atomic} options={field.options.map(option => ({ value: option, label: field.optionLabels?.[option] ?? option }))} /> : <Dropdown size="sm" ariaLabel={label} value={value as string} options={field.options.map(option => ({ label: field.optionLabels?.[option] ?? option, value: option }))} onSelect={gesture.atomic} />; break
     case 'text': control = <UiTextAreaField aria-label={label} rows={field.multiline ? 3 : 2} maxLength={field.maxLength} value={value as string} onChange={event => gesture.write(event.target.value)} textHistory={{ onValueChange: gesture.write, onEditStart: gesture.begin, onEditEnd: gesture.finish }} />; break
     case 'font': control = <UiFontPicker ariaLabel={label} value={value as string} projectFonts={font?.projectFonts} onPreview={face => font?.onPreview(face?.fullName ?? null)} onSelect={gesture.atomic} />; break
     case 'image': control = image; break

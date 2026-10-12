@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检场景使用 CommonJS。 */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -133,11 +134,11 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       assert.ok(mutedPlayhead >= muted.startFrame && mutedPlayhead < muted.endFrame, `采样时播放头应在静音区间内（${mutedPlayhead} 不在 ${muted.startFrame}–${muted.endFrame}）`)
       assert.ok(mutedLevel < 0.001, `剪后试听应输出真实静音（RMS ${mutedLevel.toFixed(4)}）`)
       await page.getByTitle('暂停', { exact: true }).click()
-      await page.getByRole('button', { name: '原始', exact: true }).click(); await seek(listenAt)
+      await page.getByRole('radio', { name: '原始', exact: true }).click(); await seek(listenAt)
       await playFrom(listenAt * rate)
       assert.ok(await rms() > 0.02, '原始对比保留原声音')
       await page.getByTitle('暂停', { exact: true }).click()
-      await page.getByRole('button', { name: '剪后', exact: true }).click()
+      await page.getByRole('radio', { name: '剪后', exact: true }).click()
       const targetPath = path.join(directory, '静音导出.wav')
       await page.evaluate(async ({ id, targetPath }) => {
         const result = await window.henjiNative.audio.exportEditProject({ projectId: id, targetPath, format: 'wav', includeProcessing: false })

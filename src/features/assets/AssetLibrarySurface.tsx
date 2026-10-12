@@ -1,7 +1,8 @@
+import { UiSegmented } from '@/components/ui'
 import { VirtuosoGrid } from 'react-virtuoso'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { FolderPlus, GripVertical, LoaderCircle, Settings2, X } from 'lucide-react'
-import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiOptionButton, UiPageHeader, UiRangeInput } from '@/components/ui'
+import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiPageHeader, UiRangeInput } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, inspectAssets, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
@@ -249,22 +250,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             </div>
             <div>
               <div className={UI_FIELD_LABEL_CLASS}>{t('assetLibrary.thumbnailFit')}</div>
-              <div role="radiogroup" aria-label={t('assetLibrary.thumbnailFit')} className={`${UI_SEGMENTED_TRACK_CLASS} w-full`}>
-                {(['cover', 'contain'] as const).map((fit) => (
-                  <UiOptionButton
-                    key={fit}
-                    variant="segment"
-                    role="radio"
-                    aria-checked={thumbnailFit === fit}
-                    active={thumbnailFit === fit}
-                    title={t(fit === 'cover' ? 'assetLibrary.fitCoverHint' : 'assetLibrary.fitContainHint')}
-                    className="flex-1"
-                    onClick={() => setThumbnailFit(fit)}
-                  >
-                    {t(fit === 'cover' ? 'assetLibrary.fitCover' : 'assetLibrary.fitContain')}
-                  </UiOptionButton>
-                ))}
-              </div>
+              <UiSegmented ariaLabel={t('assetLibrary.thumbnailFit')} fullWidth value={thumbnailFit} onChange={setThumbnailFit} options={(['cover', 'contain'] as const).map(value => ({ value, label: t(value === 'cover' ? 'assetLibrary.fitCover' : 'assetLibrary.fitContain'), title: t(value === 'cover' ? 'assetLibrary.fitCoverHint' : 'assetLibrary.fitContainHint') }))} />
             </div>
           </div>
         )}

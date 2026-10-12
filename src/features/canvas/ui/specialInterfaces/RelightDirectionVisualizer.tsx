@@ -1,7 +1,8 @@
+import { UiSegmented } from '@/components/ui'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UiOptionButton } from '@/components/ui/primitives'
-import { UI_LIGHTING_COLORS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_LABEL_CLASS } from '@/components/ui/styleTokens'
+
+import { UI_LIGHTING_COLORS, UI_TEXT_LABEL_CLASS } from '@/components/ui/styleTokens'
 import type { RelightBrightness, RelightColorPreset, RelightKeyDirection, RelightRimDirection } from '@/features/canvas/capabilities/relightPolicy'
 import { RELIGHT_DIRECTION_LABELS, RELIGHT_DIRECTION_ORDER, type RelightVisualizerView } from './relightDirectionVisualizerState'
 import { RIM_DIRECTION_LABELS, RIM_DIRECTION_ORDER } from './relightRimLightState'
@@ -118,12 +119,7 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
     <div className="flex shrink-0 items-center justify-between gap-2">
       <h3 className={UI_TEXT_LABEL_CLASS}>{t('node.relightDirection.key')}</h3>
       {/* 两种视角二选一：分段选择（淡强调底选中），不在调用点改按钮内边距（任务 5.4） */}
-      <div role="radiogroup" aria-label={t('node.relightDirection.view')} className={UI_SEGMENTED_TRACK_CLASS}>
-        {(['perspective', 'front'] as const).map(value => <UiOptionButton key={value} type="button" variant="segment"
-          role="radio" aria-checked={view === value} active={view === value} onClick={() => setView(value)}>
-          {t(`node.relightDirection.${value}`)}
-        </UiOptionButton>)}
-      </div>
+      <UiSegmented ariaLabel={t('node.relightDirection.view')} value={view} onChange={setView} options={(['perspective', 'front'] as const).map(value => ({ value, label: t(`node.relightDirection.${value}`) }))} />
     </div>
     <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
       <div ref={stageRef} style={{ width: 'min(100cqw, 100cqh)', height: 'min(100cqw, 100cqh)' }}

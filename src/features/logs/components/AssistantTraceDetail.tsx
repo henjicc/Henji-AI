@@ -1,3 +1,4 @@
+import { UiSegmented } from '@/components/ui'
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   Braces,
@@ -9,7 +10,7 @@ import {
   TerminalSquare,
 } from 'lucide-react'
 
-import { UiButton, UiEmpty, UiLoading, UiOptionButton, UI_INSET_SURFACE_CLASS, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { UiButton, UiEmpty, UiLoading, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceDetailResult } from '@/core/assistant/trace'
 import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { copyTextToClipboard } from '../copyFormats'
@@ -82,14 +83,7 @@ export function AssistantTraceDetail({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <div className={UI_SEGMENTED_TRACK_CLASS}>
-              <UiOptionButton type="button" variant="segment" active={mode === 'visual'} aria-pressed={mode === 'visual'} onClick={() => setMode('visual')}>
-                <PanelsTopLeft className="mr-1 h-3.5 w-3.5" />可视化
-              </UiOptionButton>
-              <UiOptionButton type="button" variant="segment" active={mode === 'json'} aria-pressed={mode === 'json'} onClick={() => setMode('json')}>
-                <Braces className="mr-1 h-3.5 w-3.5" />原始 JSON
-              </UiOptionButton>
-            </div>
+            <UiSegmented ariaLabel="追踪详情视图" value={mode} onChange={setMode} options={[{ value: 'visual', label: '可视化', icon: <PanelsTopLeft className="mr-1 h-3.5 w-3.5" /> }, { value: 'json', label: '原始 JSON', icon: <Braces className="mr-1 h-3.5 w-3.5" /> }]} />
             <UiButton type="button" variant="secondary" disabled={!canCompare} onClick={onCompare}>
               <GitCompare className="mr-1 h-3.5 w-3.5" />对比上轮
             </UiButton>

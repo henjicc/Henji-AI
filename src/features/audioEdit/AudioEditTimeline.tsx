@@ -1,9 +1,10 @@
+import { UiSegmented } from '@/components/ui'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Expand, Keyboard, Minus, MoreHorizontal, Pause, Play, Plus, RotateCcw, Trash2, Volume2, VolumeX } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { ICON_SETTINGS as SettingsIcon } from '@/core/theme/icons'
-import { PanelTrigger, UiButton, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow, UiRangeInput, UiSwitch, UiTextToken, UI_SEGMENTED_TRACK_CLASS, type UiOverflowRowItem } from '@/components/ui'
+import { PanelTrigger, UiButton, UiIconButton, UiLoading, UiOverflowRow, UiRangeInput, UiSwitch, UiTextToken, type UiOverflowRowItem } from '@/components/ui'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import type { AudioEditXmlTimeline } from '@/core/audioEdit/xml'
 import type { AudioEditProjectDocument, AudioEditRange } from '@/core/audioEdit/types'
@@ -37,9 +38,7 @@ export interface AudioEditDelivery { timeline: AudioEditXmlTimeline | null; erro
 export function AudioEditPlaybackModeSwitch({ delivery }: { delivery: AudioEditDelivery }) {
   const mode = useAudioEditPlaybackStore((state) => state.mode)
   const setMode = useAudioEditPlaybackStore((state) => state.setMode)
-  return <div role="group" aria-label="试听" className={`shrink-0 ${UI_SEGMENTED_TRACK_CLASS}`}>
-    {(['source', 'edited', 'delivery'] as const).map((value) => <UiOptionButton key={value} variant="segment" active={mode === value} aria-pressed={mode === value} disabled={value === 'delivery' && !delivery.timeline} aria-label={value === 'delivery' ? 'XML 交付' : undefined} title={value === 'delivery' ? delivery.error || 'XML 交付：按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined} onClick={() => setMode(value)}>{value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML'}</UiOptionButton>)}
-  </div>
+  return <UiSegmented ariaLabel="试听" value={mode} onChange={setMode} options={(['source', 'edited', 'delivery'] as const).map(value => ({ value, label: value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML', disabled: value === 'delivery' && !delivery.timeline, ariaLabel: value === 'delivery' ? 'XML 交付' : undefined, title: value === 'delivery' ? delivery.error || 'XML 交付：按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined }))} />
 }
 
 const SHORTCUTS: Array<[string, string]> = [

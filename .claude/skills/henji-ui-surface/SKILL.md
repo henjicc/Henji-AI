@@ -395,7 +395,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 分区之间的间距用 `UI_SECTION_STACK_CLASS`，不要每处自己定 `space-y-*`。
 
 窄停靠面板（剪辑效果控件、属性栏）里 16/600 的区块标题和 14/500 的行标签都太重：分组用 `UiGroup titleTone="compact"`
-（12/600 次要文字、间距收紧），行用 `UiFormRow density="compact"`（窄面板固定 72px 标签列用 `labelColumn="panel"`，右对齐标签、12px 间隔、控件填满余宽）（标签 12 次要文字），两者成对使用，不要在调用点改字号。
+（12/600 次要文字、间距收紧），行用 `UiFormRow density="compact"`（面板由 `UiGroup labelWidth={72 | 96 | 120}` 统一标签列，标签左对齐、12px 间隔、控件填满余宽）（标签 12 次要文字），两者成对使用，不要在调用点改字号。
 `UiFormRow` 的 `hint` 只放“不看会选错”的常驻说明，背景知识放 `info`（标签文字本身悬停触发，见下文 tooltip 规则）。
 
 字段（任务 2.2）：`UiInput` / `UiSelect` / `UiFieldTrigger`（`Dropdown`、`PanelTrigger` 的按钮）/ `NumberInput` 都是 raised 无边框表面、聚焦一圈强调色焦点环，高度只由 `size` 决定（sm 28 / md 32 默认 / lg 36）。`NumberInput` 自带数值拖动：在读数或标签上按住左右拖动改值（Shift 精细、Alt 粗调），单击进入编辑，读数不会被步进列裁掉。
@@ -474,6 +474,12 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
   禁止用 `Dropdown label=` 的行内标签在一行里塞两组“标签+控件”。
 - 按钮行（开始、钉住、应用）与控件列左缘对齐，宽度占满控件列或按内容；不从标签列起头。
 - 下拉没有可选项时显示占位（“不使用”“暂无标注”）并禁用，不出现空白下拉。
+- **标签列宽按本面板最长标签取档**（`labelWidth` 枚举里取能放下最长标签的最小档），不让长标签溢出把行挤歪；
+  控件一律占满控件列（下拉、数值框不按内容收缩）。
+- 一个面板里可以有“成对数值网格”（X/Y、宽/高，标签在上），但它和单控件行的**标签左缘必须对齐**、
+  控件右缘必须对齐；同一面板不允许出现第三种排法。
+  返工现场：图片编辑属性面板“变换”是网格、“路径与组合”是 72px 行，“路径组合方式”溢出、下拉不占满、左缘不齐。
+- `UiGroup labelWidth={72 | 96 | 120}` 统一提供面板列宽；内部 `UiFormRow` 继承，成对网格显式 `labelColumn="auto"`。面板行内的下拉、数值和分段由共享上下文填满控件列。
 
 ```tsx
 <UiGroup title="示范" titleTone="compact" divided>
@@ -584,7 +590,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
-| 统一分段单选 | `UiSegmented ariaLabel options value onChange size="sm" / "md" fullWidth disabled`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；内嵌底与强实底选中态由 primitive 维护 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
+| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；内嵌底与强实底选中态由 primitive 维护 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiOptionButton variant="segment"`（放在 `UI_SEGMENTED_TRACK_CLASS` 里）/ `grid` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |

@@ -177,6 +177,7 @@ export function ImageEditorPropertiesPanelV3({
         data-properties-tab-panel={activeTab}
         className={`min-h-0 flex-1 overflow-y-auto ${embedded ? 'px-3 py-3' : 'px-4 py-3'}`}
       >
+      <UiGroup labelWidth={96} gap="none">
       {activeTab === 'basics' ? (
       <UiGroup titleTone="compact" gap="stack">
         <LayerNameField controller={controller} layer={selected} disabled={contentLocked} />
@@ -326,6 +327,7 @@ export function ImageEditorPropertiesPanelV3({
         ) : null}
       </>
       )}
+      </UiGroup>
       </div>
     </section>
   )

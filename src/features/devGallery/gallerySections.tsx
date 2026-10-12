@@ -394,13 +394,14 @@ const OVERFLOW_ITEMS = ['模型', '比例', '时长', '分辨率', '数量'].map
 }))
 
 export function ToolbarSection(): JSX.Element {
+  const [mode, setMode] = useState('edit')
   return (
     <GallerySection title="命令带与页头">
       <UiPanel variant="bare" className="overflow-hidden">
         <UiToolbar
           variant="command"
           trailing={<UiButton variant="primary" size="sm">导出</UiButton>}
-          center={<div className={UI_SEGMENTED_TRACK_CLASS}><UiOptionButton variant="segment" active aria-pressed>编辑</UiOptionButton><UiOptionButton variant="segment" aria-pressed={false}>预览</UiOptionButton></div>}
+          center={<UiSegmented ariaLabel="编辑模式" value={mode} onChange={setMode} options={[{ value: 'edit', label: '编辑' }, { value: 'preview', label: '预览' }]} />}
           subordinate={<span className="text-xs text-text2">从属参数带</span>}
         >
           <UiIconButton aria-label="添加"><Plus className="h-4 w-4" /></UiIconButton>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton } from '@/components/ui'
@@ -11,6 +12,7 @@ import { attachImageEditVectorMaskV3,setImageEditVectorContentV3 } from './servi
 import { RunTextInputV3 } from './RunTextInputV3'
 
 export function VectorProperties({ controller, layer, locked, onContentChange, maskOnly = false }: { controller: ImageEditorV3Controller; layer: ImageEditVectorLayerV3; locked: boolean; onContentChange?: (content: RichTextContent | VectorPathContent) => void; maskOnly?: boolean }): JSX.Element {
+  const { t: surfaceText } = useTranslation('ui')
   const [paragraphIndex, setParagraph] = useState(0)
   const [runIndex, setRun] = useState(0)
   const [operandIndex, setOperand] = useState(0)
@@ -21,7 +23,7 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
   const write = (content: RichTextContent | VectorPathContent): boolean => {
     try { if(onContentChange) onContentChange(content); else setImageEditVectorContentV3(controller.document.id, layer.id, content); setError(''); return true } catch (cause) { fail(cause); return false }
   }
-  const number = (label: string, value: number, update: (value: number) => void, min?: number): JSX.Element => <UiFormRow label={label} density="compact"><NumberInput ariaLabel={label} size="sm" value={value} min={min} onChange={update} /></UiFormRow>
+  const number = (label: string, value: number, update: (value: number) => void, min?: number, info?: string): JSX.Element => <UiFormRow label={label} info={info} density="compact"><NumberInput ariaLabel={label} size="sm" value={value} min={min} onChange={update} /></UiFormRow>
   if (layer.type === 'text') {
     const content = layer.content
     const p = Math.min(paragraphIndex, Math.max(0, content.paragraphs.length - 1))
@@ -31,20 +33,22 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
     const updateParagraph = (patch: Partial<NonNullable<typeof paragraph>>): boolean => write({ ...content, paragraphs: content.paragraphs.map((value, index) => index === p ? { ...value, ...patch } : value) })
     const updateRun = (patch: Partial<NonNullable<typeof run>>): boolean => updateParagraph({ runs: paragraph.runs.map((value, index) => index === r ? { ...value, ...patch } : value) })
     return <fieldset disabled={locked} className="min-w-0" data-vector-properties>
+      <UiGroup labelWidth={96} gap="none">
       <UiGroup title="段落与文字" titleTone="compact" actions={<UiIconButton size="sm" aria-label="添加段落" onClick={() => { write({ ...content, paragraphs: [...content.paragraphs, { runs: [{ text: '文字', style: run?.style ?? defaultTextStyle(controller.document.geometry.height) }], align: 'left', direction: 'auto', spaceBefore: 0, spaceAfter: 0 }] }); setParagraph(content.paragraphs.length); setRun(0) }}><Plus size={14} /></UiIconButton>}>
-        {paragraph ? <Dropdown ariaLabel="编辑段落" size="sm" value={String(p)} options={content.paragraphs.map((value, index) => ({ value: String(index), label: `段落 ${index + 1} · ${value.runs.map(item => item.text).join('').slice(0, 20)}` }))} onSelect={value => { setParagraph(Number(value)); setRun(0) }} /> : <UiEmpty size="xs" title="还没有文字" description="添加段落后即可输入文字。" />}
-        {paragraph && <><div className="flex items-center gap-2"><Dropdown ariaLabel="文字片段" size="sm" value={String(r)} options={paragraph.runs.map((value, index) => ({ value: String(index), label: `片段 ${index + 1} · ${value.text.slice(0, 20)}` }))} onSelect={value => setRun(Number(value))} /><UiIconButton size="sm" aria-label="添加文字片段" onClick={() => { updateParagraph({ runs: [...paragraph.runs, { text: '文字', style: run?.style ?? defaultTextStyle(controller.document.geometry.height) }] }); setRun(paragraph.runs.length) }}><Plus size={14} /></UiIconButton><UiIconButton size="sm" aria-label="删除文字片段" onClick={() => updateParagraph({ runs: paragraph.runs.filter((_, index) => index !== r) })}><Trash2 size={14} /></UiIconButton></div>
+        {paragraph ? <UiFormRow label={surfaceText('surfaceGrammar.paragraph')} density="compact" labelColumn="panel"><Dropdown ariaLabel="编辑段落" size="sm" value={String(p)} options={content.paragraphs.map((value, index) => ({ value: String(index), label: `段落 ${index + 1} · ${value.runs.map(item => item.text).join('').slice(0, 20)}` }))} onSelect={value => { setParagraph(Number(value)); setRun(0) }} /></UiFormRow> : <UiEmpty size="xs" title="还没有文字" description="添加段落后即可输入文字。" />}
+        {paragraph && <><UiFormRow label="文字片段" density="compact"><div className="flex items-center gap-2"><Dropdown ariaLabel="文字片段" size="sm" value={String(r)} options={paragraph.runs.map((value, index) => ({ value: String(index), label: `片段 ${index + 1} · ${value.text.slice(0, 20)}` }))} onSelect={value => setRun(Number(value))} /><UiIconButton size="sm" aria-label="添加文字片段" onClick={() => { updateParagraph({ runs: [...paragraph.runs, { text: '文字', style: run?.style ?? defaultTextStyle(controller.document.geometry.height) }] }); setRun(paragraph.runs.length) }}><Plus size={14} /></UiIconButton><UiIconButton size="sm" aria-label="删除文字片段" onClick={() => updateParagraph({ runs: paragraph.runs.filter((_, index) => index !== r) })}><Trash2 size={14} /></UiIconButton></div></UiFormRow>
           {run ? <RunTextInputV3 key={`${controller.document.id}:${layer.id}:${p}:${r}`} documentId={controller.document.id} value={run.text} onCommit={text=>updateRun({text})} /> : <UiEmpty size="xs" title="段落为空" description="添加文字片段后即可输入。" />}
-          <Dropdown ariaLabel="段落方向" size="sm" value={paragraph.direction} options={[{ value: 'auto', label: '自动方向' }, { value: 'ltr', label: '从左到右' }, { value: 'rtl', label: '从右到左' }]} onSelect={value => updateParagraph({ direction: value as typeof paragraph.direction })} />
+          <UiFormRow label={surfaceText('surfaceGrammar.paragraphDirection')} density="compact" labelColumn="panel"><Dropdown ariaLabel="段落方向" size="sm" value={paragraph.direction} options={[{ value: 'auto', label: '自动方向' }, { value: 'ltr', label: '从左到右' }, { value: 'rtl', label: '从右到左' }]} onSelect={value => updateParagraph({ direction: value as typeof paragraph.direction })} /></UiFormRow>
           {number('段前间距', paragraph.spaceBefore, spaceBefore => updateParagraph({ spaceBefore }), 0)}
           {number('段后间距', paragraph.spaceAfter, spaceAfter => updateParagraph({ spaceAfter }), 0)}
           <UiButton size="sm" onClick={() => write({ ...content, paragraphs: content.paragraphs.filter((_, index) => index !== p) })}>删除段落</UiButton>
         </>}
-        {number('文本框宽度（0 自动）', content.box.width, width => write({ ...content, box: { ...content.box, width } }), 0)}
-        {number('文本框高度（0 自动）', content.box.height, height => write({ ...content, box: { ...content.box, height } }), 0)}
+        {number('文本框宽度', content.box.width, width => write({ ...content, box: { ...content.box, width } }), 0, '设为 0 时按文字自动确定宽度。')}
+        {number('文本框高度', content.box.height, height => write({ ...content, box: { ...content.box, height } }), 0, '设为 0 时按文字自动确定高度。')}
       </UiGroup>
       {run && <TypographyPanel fields="rich-text" style={run.style} onChange={style => write({...content,paragraphs:content.paragraphs.map((entry,index)=>({...entry,...(index===p?{align:style.align}:{}),runs:entry.runs.map((value,runPosition)=>index===p&&runPosition===r?{...value,style}:style.verticalAlign!==run.style.verticalAlign?{...value,style:{...value.style,verticalAlign:style.verticalAlign}}:value)}))})} onError={fail} />}
       {error && <UiError message={error} />}
+      </UiGroup>
     </fieldset>
   }
   const content = layer.content
@@ -56,11 +60,12 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
   const updateCommand = (command: VectorPathCommand): void => updateOperand({ path: { ...operand.path, commands: operand.path.commands.map((value, index) => index === c ? command : value) } })
   const style: TextStyle = { ...defaultTextStyle(controller.document.geometry.height), ...content.paint }
   return <fieldset disabled={locked} className="min-w-0" data-vector-properties>
+    <UiGroup labelWidth={96} gap="none">
     <UiGroup title="路径与组合" titleTone="compact" actions={<UiIconButton size="sm" aria-label="添加路径" onClick={() => { write({ ...content, operands: [...content.operands, { operation: content.operands.length ? 'add' : 'replace', path: rectanglePath(20, 20, 100, 100) }] }); setOperand(content.operands.length); setPoint(0) }}><Plus size={14} /></UiIconButton>}>
-      {operand ? <Dropdown size="sm" ariaLabel="编辑路径" value={String(o)} options={content.operands.map((_, index) => ({ value: String(index), label: `路径 ${index + 1}` }))} onSelect={value => { setOperand(Number(value)); setPoint(0) }} /> : <UiEmpty size="xs" title="还没有路径" description="添加路径后即可编辑锚点与组合。" />}
-      {operand && <><Dropdown size="sm" ariaLabel="路径组合方式" value={operand.operation} options={[{ value: 'replace', label: '替换' }, { value: 'add', label: '合并' }, { value: 'subtract', label: '减去' }, { value: 'intersect', label: '相交' }]} onSelect={value => updateOperand({ operation: value as typeof operand.operation })} />
-        <Dropdown size="sm" ariaLabel="路径填充规则" value={operand.path.fillRule} options={[{ value: 'nonzero', label: '按绕向填充' }, { value: 'evenodd', label: '交替填充' }]} onSelect={value => updateOperand({ path: { ...operand.path, fillRule: value as typeof operand.path.fillRule } })} />
-        <Dropdown size="sm" ariaLabel="编辑锚点" value={String(c)} options={operand.path.commands.map((value, index) => ({ value: String(index), label: value.kind === 'close' ? '闭合路径' : `锚点 ${index + 1}${value.kind === 'cubic' || value.kind === 'quadratic' ? ' · 曲线' : ''}` }))} onSelect={value => setPoint(Number(value))} />
+      {operand ? <UiFormRow label={surfaceText('surfaceGrammar.path')} density="compact" labelColumn="panel"><Dropdown size="sm" ariaLabel="编辑路径" value={String(o)} options={content.operands.map((_, index) => ({ value: String(index), label: `路径 ${index + 1}` }))} onSelect={value => { setOperand(Number(value)); setPoint(0) }} /></UiFormRow> : <UiEmpty size="xs" title="还没有路径" description="添加路径后即可编辑锚点与组合。" />}
+      {operand && <><UiFormRow label={surfaceText('surfaceGrammar.pathOperation')} density="compact" labelColumn="panel"><Dropdown size="sm" ariaLabel="路径组合方式" value={operand.operation} options={[{ value: 'replace', label: '替换' }, { value: 'add', label: '合并' }, { value: 'subtract', label: '减去' }, { value: 'intersect', label: '相交' }]} onSelect={value => updateOperand({ operation: value as typeof operand.operation })} /></UiFormRow>
+        <UiFormRow label={surfaceText('surfaceGrammar.fillRule')} density="compact" labelColumn="panel"><Dropdown size="sm" ariaLabel="路径填充规则" value={operand.path.fillRule} options={[{ value: 'nonzero', label: '按绕向填充' }, { value: 'evenodd', label: '交替填充' }]} onSelect={value => updateOperand({ path: { ...operand.path, fillRule: value as typeof operand.path.fillRule } })} /></UiFormRow>
+        <UiFormRow label={surfaceText('surfaceGrammar.anchor')} density="compact" labelColumn="panel"><Dropdown size="sm" ariaLabel="编辑锚点" value={String(c)} options={operand.path.commands.map((value, index) => ({ value: String(index), label: value.kind === 'close' ? '闭合路径' : `锚点 ${index + 1}${value.kind === 'cubic' || value.kind === 'quadratic' ? ' · 曲线' : ''}` }))} onSelect={value => setPoint(Number(value))} /></UiFormRow>
         {command && command.kind !== 'close' && <>{number('锚点横向', command.x, x => updateCommand({ ...command, x }))}{number('锚点纵向', command.y, y => updateCommand({ ...command, y }))}
           {command.kind === 'line' && <UiButton size="sm" onClick={() => updateCommand({ kind: 'cubic', x: command.x, y: command.y, cx1: command.x - 40, cy1: command.y, cx2: command.x, cy2: command.y - 40 })}>转为曲线</UiButton>}
           {command.kind === 'quadratic' && <>{number('控制柄横向', command.cx, cx => updateCommand({ ...command, cx }))}{number('控制柄纵向', command.cy, cy => updateCommand({ ...command, cy }))}</>}
@@ -69,8 +74,9 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
         <UiButton size="sm" onClick={() => write({ ...content, operands: content.operands.filter((_, index) => index !== o) })}>删除路径</UiButton>
       </>}
     </UiGroup>
-    {!maskOnly && <UiGroup title="路径蒙版" titleTone="compact"><Dropdown size="sm" ariaLabel="蒙版目标图层" value={maskTarget} options={collectImageEditV3LiveLayers(controller.document).filter(row=>row.layer.id!==layer.id&&!row.layer.locked&&!row.ancestors.some(ancestor=>ancestor.locked)).map(row=>({value:row.layer.id,label:row.layer.name}))} onSelect={setMaskTarget} /><UiButton size="sm" disabled={!maskTarget} onClick={()=>{try{attachImageEditVectorMaskV3(controller.document.id,layer.id,maskTarget);setError('')}catch(cause){fail(cause)}}}>用路径作为蒙版</UiButton></UiGroup>}
+    {!maskOnly && <UiGroup title="路径蒙版" titleTone="compact"><UiFormRow label={surfaceText('surfaceGrammar.maskTarget')} density="compact" labelColumn="panel"><Dropdown size="sm" ariaLabel="蒙版目标图层" value={maskTarget} options={collectImageEditV3LiveLayers(controller.document).filter(row=>row.layer.id!==layer.id&&!row.layer.locked&&!row.ancestors.some(ancestor=>ancestor.locked)).map(row=>({value:row.layer.id,label:row.layer.name}))} onSelect={setMaskTarget} /></UiFormRow><UiButton size="sm" disabled={!maskTarget} onClick={()=>{try{attachImageEditVectorMaskV3(controller.document.id,layer.id,maskTarget);setError('')}catch(cause){fail(cause)}}}>用路径作为蒙版</UiButton></UiGroup>}
     {!maskOnly && <TypographyPanel fields="appearance" style={style} onChange={next => write({ ...content, paint: { fill: next.fill, strokes: next.strokes, shadows: next.shadows } })} onError={fail} />}
     {error && <UiError message={error} />}
+    </UiGroup>
   </fieldset>
 }

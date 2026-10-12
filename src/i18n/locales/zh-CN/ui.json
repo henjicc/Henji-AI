@@ -1,4 +1,20 @@
 {
+  "surfaceGrammar": {
+    "curveChannel": "曲线通道",
+    "curveType": "曲线类型",
+    "retainPosition": "保留原稿位置",
+    "documentSource": "选择图片文档来源",
+    "paragraph": "编辑段落",
+    "paragraphDirection": "段落方向",
+    "path": "编辑路径",
+    "pathOperation": "路径组合方式",
+    "fillRule": "路径填充规则",
+    "anchor": "编辑锚点",
+    "maskTarget": "蒙版目标图层",
+    "annotationFilter": "筛选批注",
+    "trackingTarget": "跟踪应用目标",
+    "stylePreset": "风格组件"
+  },
   "videoEdit": { "inlineCaption": "就地编辑字幕" },
   "canvasTidy": {
     "title": "整理",
