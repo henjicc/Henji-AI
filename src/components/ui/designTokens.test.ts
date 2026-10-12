@@ -152,7 +152,7 @@ describe('设计令牌：字体与字号', () => {
   })
 
   it('正文基准字号 13px 只设在 body（html 保持 16px，rem 间距不变）', () => {
-    expect(indexCss).toMatch(/\nbody \{\n {2}font-size: 13px;/)
+    expect(indexCss).toMatch(/\r?\nbody \{\r?\n {2}font-size: 13px;/)
     expect(indexCss).not.toMatch(/\nhtml \{[^}]*font-size/)
   })
 })

@@ -1,4 +1,5 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
+import { installPaidApprovalTestBridge } from '@/tests/paidApprovalTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -27,6 +28,7 @@ const trace = { providerId: 'fixture', modelId: 'text', startedAtMs: 0, elapsedM
 const sequence = () => owner.document.sequences[0]
 beforeEach(async () => {
   installHarnessNativeStorage(); files.clear(); vi.clearAllMocks()
+  installPaidApprovalTestBridge()
   videoEditTextPresetLibrary.replace([])
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'caption-tests.henji-video'))
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
@@ -146,7 +148,7 @@ it('双语取消传给现有LLM取消入口，任务期间旧字幕被改拒绝�
   const controller = new AbortController()
   const task = generateVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' }, controller.signal)
   const failed = expect(task).rejects.toThrow('取消翻译')
-  while (!finish) await new Promise(resolve => setTimeout(resolve, 0))
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
   expect(videoEditBusyReason(owner.document.id)).not.toBeNull()
   controller.abort(new Error('取消翻译')); finish(); await failed
   expect(llmCancelTask).toHaveBeenCalledTimes(1); expect(sequence().captions![0].translation).toBeUndefined()
@@ -154,18 +156,22 @@ it('双语取消传给现有LLM取消入口，任务期间旧字幕被改拒绝�
   const late = generateVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' })
   const lateFailed = expect(late).rejects.toThrow('已有修改')
   finish = undefined as unknown as () => void
-  while (!finish) await new Promise(resolve => setTimeout(resolve, 0))
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
   updateVideoEditTimedContent(owner.document.id, sequence().id, 'caption', id, { text: '手工新文字' })
   finish(); await lateFailed
   expect(sequence().captions![0]).toMatchObject({ text: '手工新文字' }); expect(sequence().captions![0].translation).toBeUndefined()
 })
 
 it('手动双语先费用确认，取消不调用LLM；助手能力按R2，经公共入口保存并通用读写译文', async () => {
+  const bridge = installPaidApprovalTestBridge('ask')
   const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 30, text: '原文' })
   const confirmation = confirmVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' })
-  expect(useAlertDialogStore.getState().queue).toHaveLength(1)
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  expect(llmChatStream).not.toHaveBeenCalled()
   useAlertDialogStore.getState().dismissCurrent(); await confirmation
   expect(llmChatStream).not.toHaveBeenCalled()
+  expect([...bridge.records.values()]).toMatchObject([{ state: 'not_executed' }])
+  bridge.setSettings({ mode: 'bypass' })
   expect(translateVideoEditSubtitleCapability.risk).toBe('R2')
   const app = createApplicationHarness()
   try {
@@ -178,6 +184,19 @@ it('手动双语先费用确认，取消不调用LLM；助手能力按R2，经�
     expect(await app.change(ref, { 'video_edit.caption.translation': '' })).toMatchObject({ ok: true })
     expect(sequence().captions![0].translation).toBe('')
   } finally { app.dispose() }
+})
+
+it('手动双语确认后才调用模型，整批共用一次费用授权', async () => {
+  const bridge = installPaidApprovalTestBridge('ask')
+  Array.from({ length: 13 }, (_, index) => createVideoEditCaption(owner.document.id, sequence().id, { start: index * 30, duration: 30, text: `原文${index}` }))
+  const pending = confirmVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' })
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  expect(llmChatStream).not.toHaveBeenCalled()
+  useAlertDialogStore.getState().confirmCurrent()
+  await pending
+  expect(llmChatStream).toHaveBeenCalledTimes(2)
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  expect([...bridge.records.values()]).toMatchObject([{ state: 'completed', paidReservations: [{ category: 'translation' }] }])
 })
 
 it('手动拆分和合并双语保留两份文本，译文按词边界比例拆分', () => {

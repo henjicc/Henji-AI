@@ -2,6 +2,7 @@ import { expect, it, vi, beforeEach } from 'vitest'
 const mock = vi.hoisted(() => ({ stat: vi.fn(), access: vi.fn(), mkdir: vi.fn(), writeFile: vi.fn(), rename: vi.fn(), rm: vi.fn(), video: vi.fn(), image: vi.fn() }))
 vi.mock('node:fs/promises', () => ({ default: { stat: mock.stat, access: mock.access, mkdir: mock.mkdir, writeFile: mock.writeFile, rename: mock.rename, rm: mock.rm } }))
 vi.mock('../appPaths', () => ({ getProgramStoreDir: () => 'D:/test-profile/Thumbnails' }))
+vi.mock('../media-recycle/queue', () => ({ registerOwnedMedia: vi.fn(async () => undefined) }))
 vi.mock('../video/ops', () => ({ generateVideoThumbnailBytes: mock.video }))
 vi.mock('../image/ops', () => ({ generateImageThumbnailBytes: mock.image }))
 import { ensureAssetThumbnail } from './thumbnailService'

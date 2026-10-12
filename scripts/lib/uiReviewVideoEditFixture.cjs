@@ -27,7 +27,7 @@ function buildProject({ id, name, source, captions }) {
     { id: `${prefix}-track-4`, name: '音频 2', index: 4, kind: 'audio', locked: false, enabled: true, muted: false, solo: false }]
   const captionTexts = ['大家好，这是第一条字幕', '第二条字幕稍长一些，用来看列表里的截断效果是否正常', '第三条', '锚定在画面片段上的字幕', '结尾前的一句', '最后一条字幕']
   return {
-    format: 'henji-video-project', version: 4, id, name, revision: 0,
+    format: 'henji-video-project', version: 5, id, name, revision: 0,
     media: [{ id: `${id}-media`, name: '核对素材.mp4', path: source, kind: 'video', width: 1280, height: 720, durationSeconds: 6, hasAudio: true, frameRate: { numerator: FPS, denominator: 1 } }],
     bins: [{ id: `${id}-bin-a`, name: '镜头' }, { id: `${id}-bin-b`, name: '配乐与音效' }],
     items: [

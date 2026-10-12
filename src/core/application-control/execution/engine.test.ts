@@ -57,7 +57,7 @@ describe('ApplicationControlExecutionEngine', () => {
       summary: '设置非法值',
       transactionMode: 'atomic',
       steps: [mutationStep('one', 11)],
-    }, context())).rejects.toThrow('不能大于')
+    }, context())).rejects.toThrow('应在 0 到 10 之间')
     expect(executor.applyCount).toBe(0)
     expect(fixture.values.get('one')).toBe(2)
   })

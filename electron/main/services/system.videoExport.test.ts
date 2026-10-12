@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({ app: {}, dialog: {}, shell: {} }))
 vi.mock('./logging', () => ({ createMainLogger: () => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn() }) }))
+vi.mock('./media-recycle/queue', () => ({ registerOwnedMedia: vi.fn(async () => undefined) }))
 import { readFileBytes, writeFileBytes, writeTextFile } from './system'
 const directories: string[] = []
 afterEach(async () => { vi.restoreAllMocks(); for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }) })
@@ -35,7 +36,7 @@ it.each(['write', 'close'] as const)('排他发布前%s失败清理自身暂存�
     else { const close = handle.close.bind(handle); vi.spyOn(handle, 'close').mockImplementationOnce(async () => { await close(); throw new Error('close failed') }) }
     return handle
   })
-  await expect(writeFileBytes(target, new Uint8Array([1, 2]), { exclusive: true })).rejects.toThrow()
+  await expect(writeFileBytes(target, new Uint8Array([1, 2]), { exclusive: true })).rejects.toThrow(failure === 'write' ? 'ENOSPC' : 'close failed')
   expect(await fs.readdir(directory)).toEqual([])
   await writeFileBytes(target, new Uint8Array([1, 2]), { exclusive: true }); expect([...await fs.readFile(target)]).toEqual([1, 2])
 })

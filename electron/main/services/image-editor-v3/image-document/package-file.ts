@@ -1,5 +1,6 @@
 import { parsePersistenceJson, upgradeStoredFile } from '../../persistence/stored-file'
 import { ZipArchive } from 'archiver'
+import { once } from 'node:events'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
@@ -208,6 +209,11 @@ export async function rewriteImageDocumentPackageHeader(
         await writer.finalize()
       })().catch(settle)
     })
+    // Windows cannot replace an archive while its source reader still owns the file.
+    // yauzl.close() starts an asynchronous fd close; wait for it before publishing.
+    const closed = once(archive, 'close')
+    archive.close()
+    await closed
     const staged = await fsp.open(stagedPath, 'r+')
     try {
       await staged.sync()

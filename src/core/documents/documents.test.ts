@@ -109,7 +109,7 @@ describe('文档类型登记', () => {
   it('五种类型的扩展名、独立存放文件夹与存储方式', () => {
     const rows = DOCUMENT_KINDS.map((kind) => [kind.id, kind.extension, kind.standaloneFolderNames, kind.storage, kind.version])
     expect(rows).toEqual([
-      ['video_edit', '.henji-video', null, 'json', 3],
+      ['video_edit', '.henji-video', null, 'json', 4],
       ['canvas', '.henji-canvas', { zh: '画布', en: 'Canvases' }, 'json', 1],
       ['audio_edit', '.henji-audio', { zh: '口播', en: 'Voiceovers' }, 'json', 1],
       ['camera_stage', '.henji-stage', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],

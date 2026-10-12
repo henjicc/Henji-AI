@@ -11,6 +11,7 @@ import {
 import type { ImageEditDocumentV3 } from '../../../../../src/core/imageEdit/v3/documentTypes'
 import type { DocumentSummary } from '../../../../../src/core/documents/types'
 import { openZip, iterateEntries, readEntryBytes } from '../../zip-archive'
+import * as zipArchive from '../../zip-archive'
 import { createMainLogger } from '../../logging'
 import type { ResourceId } from '../contracts'
 import { ImageEditDocumentRepository } from '../document-repository'
@@ -248,7 +249,23 @@ describe('图片文档新建与适配器', () => {
     // 画布那份工作文档没有被覆盖
     expect((await documents.load('canvas-embedded')).documentId).toBe('canvas-embedded')
 
-    await adapter.writeHeader(legacy, { draft: false })
+    const readers = new Set<object>()
+    const open = zipArchive.openZip
+    const openSpy = vi.spyOn(zipArchive, 'openZip').mockImplementation(async file => {
+      const archive = await open(file)
+      if (file === legacy) {
+        readers.add(archive)
+        archive.once('close', () => readers.delete(archive))
+      }
+      return archive
+    })
+    const rename = fsp.rename.bind(fsp)
+    const renameSpy = vi.spyOn(fsp, 'rename').mockImplementation(async (source, target) => {
+      if (target === legacy) expect(readers.size, '发布前必须释放原包的全部读取句柄').toBe(0)
+      await rename(source, target)
+    })
+    try { await adapter.writeHeader(legacy, { draft: false }) }
+    finally { openSpy.mockRestore(); renameSpy.mockRestore() }
     expect((await readImageDocumentPackageHeader(legacy)).legacy).toBe(false)
   })
 })

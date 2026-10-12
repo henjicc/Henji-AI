@@ -57,7 +57,7 @@ describe('PanoramaViewerModal', () => {
     expect(await screen.findByRole('dialog', { name: 'viewer.panorama.title' })).toBeTruthy();
     expect(screen.getByTestId('sphere-canvas')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'viewer.panorama.flat' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'viewer.panorama.flat' }));
     expect(screen.getByAltText('viewer.panorama.flatAlt')).toBeTruthy();
 
     fireEvent.click(screen.getByTitle('viewer.next'));

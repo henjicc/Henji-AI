@@ -56,6 +56,10 @@ export function propertyIssueMessage(issue: z.core.$ZodIssue, schema: unknown, i
       const small = issue.code === 'too_small'
       const bound = small ? issue.minimum : issue.maximum
       const amount = `${String(bound)}${issue.origin === 'string' ? ' 个字符' : issue.origin === 'array' ? ' 项' : unit ? ` ${unit}` : ''}`
+      if (issue.origin === 'number' && typeof shape.minimum === 'number' && typeof shape.maximum === 'number') {
+        constraint = `应在 ${shape.minimum} 到 ${shape.maximum}${unit ? ` ${unit}` : ''} 之间`
+        break
+      }
       constraint = issue.origin === 'number'
         ? small ? issue.inclusive ? bound === 0 ? '不能小于 0' : `至少 ${amount}` : `必须大于 ${amount}` : issue.inclusive ? `不能大于 ${amount}` : `必须小于 ${amount}`
         : `${issue.origin === 'string' ? '长度' : '数量'}${small ? '至少' : '最多'} ${amount}`
