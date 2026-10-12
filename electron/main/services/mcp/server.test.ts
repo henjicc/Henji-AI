@@ -71,6 +71,10 @@ describe('本地 MCP 协议与边界', () => {
     expect(context.structuredContent).toMatchObject({ data: { externalContractVersion: EXTERNAL_CONTRACT_VERSION } })
     const contract = await client.callTool({ name: 'describe_application_contract', arguments: {} })
     expect(contract.structuredContent).toMatchObject({ data: { contract: { externalContractVersion: EXTERNAL_CONTRACT_VERSION, transport: { listChangedNotifications: true, listChangedPolicy: expect.stringContaining('应用重启') } } } })
+    const summary = (contract.structuredContent as { data: { catalogSchemaHash: string; toolSchemas: Array<{ name: string; schemaHash: string }> } }).data
+    expect(context.structuredContent).toMatchObject({ data: { catalogSchemaHash: summary.catalogSchemaHash } })
+    const fullSchema = await client.callTool({ name: 'describe_application_contract', arguments: { names: [tool.name], includeSchemas: true } })
+    expect(fullSchema.structuredContent).toMatchObject({ data: { toolSchemas: [{ name: tool.name, schemaHash: summary.toolSchemas.find(item => item.name === tool.name)!.schemaHash, inputSchema: tool.inputSchema }] } })
   })
   it('同一订阅的 schema 变化通知促使重新发现；应用重启后须重连、重订阅再收到通知', async () => {
     const f = await fixture()
@@ -415,6 +419,13 @@ describe('本地 MCP 协议与边界', () => {
     const rejected = await unknownField.client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'x' }, unexpected: 1 } })
     expect(rejected.isError).toBe(true)
     expect(JSON.stringify(rejected)).toContain('unexpected')
+    const multiple = await unknownField.client.callTool({ name: 'read_application_media', arguments: { includeEvidence: '私密输入', includeRevisions: '私密输入', foo: 1 } })
+    expect(multiple.structuredContent).toMatchObject({ error: { code: 'INVALID_INPUT', message: expect.stringContaining([
+      'includeRevisions 应为 布尔值，收到字符串。',
+      'includeEvidence 应为 布尔值，收到字符串。',
+      '缺少必填参数 ref（对象 {kind, id}）。',
+      '不认识的参数：foo。',
+    ].join('\n')) } })
     // 协议自身的 _meta 不属于工具参数，不能被严格校验误伤。
     const meta = await unknownField.client.callTool({ name: 'describe_application_contract', arguments: {}, _meta: { progressToken: 'p1' } })
     expect(meta.isError, JSON.stringify(meta)).toBe(false)

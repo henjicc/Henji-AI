@@ -1,7 +1,8 @@
 import { applicationFailure, type ApplicationResult } from '../../../../src/core/application-control/invocation'
 import { z } from 'zod'
+import { acceptedInputFields, commonToolInputSchema } from '../../../../src/core/application-control/inputValidation'
 import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_LIMITS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
-import { buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, operationReadInputSchema, readMediaInputSchema, type ApplicationAccess } from './toolCatalog'
+import { applicationCatalogSchemaHash, buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, operationReadInputSchema, readMediaInputSchema, type ApplicationAccess } from './toolCatalog'
 import { readApplicationMediaResource, ApplicationMediaResourceError } from './mediaResources'
 import type { ApplicationHostBridge } from './applicationHostBridge'
 import { ApplicationHostNotReadyError } from './applicationHostBridge'
@@ -26,6 +27,17 @@ export class ApplicationToolDispatcher {
     // 内置 Pi 的技能工具随 skills_index 层注入；外部连接在同一目录里得到唯一只读技能入口。
     return buildApplicationToolCatalog({ tools: this.host.tools(), access: this.connections.access(callerId), operationsEnabled: Boolean(this.operations), includeSkillTool: this.callerKind === 'external' })
   }
+  private inputError(callerId: string, name: string, error: unknown, input: unknown, schema?: z.ZodType): string | null {
+    if (!(error instanceof z.ZodError)) return null
+    const businessSchema = schema ?? BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.inputSchema
+    const businessInput = { ...(input as Record<string, unknown>) }
+    for (const key of Object.keys(commonToolInputSchema.shape)) delete businessInput[key]
+    if (APPLICATION_WRITE_CAPABILITY_IDS.some(id => id === name)) { delete businessInput.operationId; delete businessInput.baselineIds }
+    const parsed = businessSchema?.safeParse(businessInput)
+    const issues = [...error.issues, ...(parsed && !parsed.success ? parsed.error.issues : [])]
+    const unique = new Map(issues.map(issue => [JSON.stringify([issue.code, issue.path, issue.code === 'unrecognized_keys' ? issue.keys : issue.message]), issue]))
+    return invalidInputMessage(new z.ZodError([...unique.values()]), this.catalog(callerId).tools.find(tool => tool.name === name)?.inputSchema ?? businessSchema, input, Object.keys(commonToolInputSchema.shape))
+  }
   /** Resources 与分块工具使用相同的领域授权和引用解析。 */
   async readMedia(callerId: string, args: Record<string, unknown> | undefined, signal: AbortSignal, metadataOnly = false): Promise<ApplicationResult> {
     this.connections.assertActive(callerId)
@@ -40,43 +52,55 @@ export class ApplicationToolDispatcher {
       if (signal.aborted) return applicationFailure('ABORTED:媒体读取已取消。')
       return { ok: true, data: metadataOnly ? { ref: input.ref, mimeType: media.mimeType, totalBytes: media.totalBytes } : media }
     } catch (error) {
-      const message = invalidInputMessage(error, readMediaInputSchema) ?? (error instanceof ApplicationMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
+      const message = this.inputError(callerId, 'read_application_media', error, args ?? {}, readMediaInputSchema) ?? (error instanceof ApplicationMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
       return applicationFailure(message)
     }
   }
   async call(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
     this.connections.assertActive(callerId)
     const input = { ...args }
-    const options: ResultDetailOptions = {}
-    for (const key of ['includeRevisions', 'includeEvidence', 'includeDetails'] as const) {
-      if (!(key in input)) continue
-      const parsed = z.boolean().safeParse(input[key])
-      if (!parsed.success) return applicationFailure(`INVALID_INPUT:${key} 必须是布尔值。`)
-      options[key] = parsed.data
-      delete input[key]
+    const parsedOptions = commonToolInputSchema.safeParse(input)
+    for (const key of Object.keys(commonToolInputSchema.shape)) delete input[key]
+    if (!parsedOptions.success) {
+      // 仅收集已有声明的错误；通用选项有误时不派发业务操作。
+      const schema = name === 'describe_application_contract' ? describeContractInputSchema
+        : name === 'read_application_media' ? readMediaInputSchema
+        : name === 'get_application_operation' ? operationReadInputSchema
+        : BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.inputSchema
+      return applicationFailure(this.inputError(callerId, name, parsedOptions.error, args ?? {}, schema)!)
     }
+    const options: ResultDetailOptions = parsedOptions.data
     let raw = await this.callRaw(callerId, name, input, signal)
+    const catalog = this.catalog(callerId)
     if (name === 'get_current_application_context' && raw.ok && raw.data) {
-      raw = { ...raw, data: { ...raw.data, externalContractVersion: EXTERNAL_CONTRACT_VERSION } }
+      raw = { ...raw, data: { ...raw.data, externalContractVersion: EXTERNAL_CONTRACT_VERSION, catalogSchemaHash: applicationCatalogSchemaHash(catalog) } }
     }
     const operation = name === 'get_application_operation' && typeof input.operationId === 'string'
       ? this.operations?.store.get(input.operationId, callerId) : undefined
+    const publicSchema = catalog.tools.find(tool => tool.name === (operation?.capabilityId ?? name))?.inputSchema
+    if (publicSchema) {
+      // 渲染宿主只认识业务 schema；对外交付副本补上信封与通用选项，不改持久账本。
+      const withAcceptedFields = (result: ApplicationResult): ApplicationResult => !result.ok && result.error?.code === 'INVALID_INPUT'
+        ? { ...result, error: { ...result.error, message: `${result.error.message.split('\n这个工具接受：')[0]}\n${acceptedInputFields(publicSchema, Object.keys(commonToolInputSchema.shape))}` } } : result
+      raw = withAcceptedFields(raw)
+      if (raw.result && typeof raw.result === 'object' && 'ok' in raw.result) raw = { ...raw, result: withAcceptedFields(raw.result as ApplicationResult) }
+    }
     const result = projectApplicationToolResult(operation?.capabilityId ?? name, input, raw, options)
-    validateApplicationToolOutput(name, this.catalog(callerId).tools.find(tool => tool.name === name)?.outputSchema, result)
+    validateApplicationToolOutput(name, catalog.tools.find(tool => tool.name === name)?.outputSchema, result)
     return result
   }
   private async callRaw(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
       this.connections.assertActive(callerId)
       if (name === 'describe_application_contract') {
         try {
-          const { domains, detail } = describeContractInputSchema.parse(args ?? {})
+          const { domains, detail, names, includeSchemas } = describeContractInputSchema.parse(args ?? {})
           const skills = this.callerKind === 'external' ? await agentSkillIndex() : undefined
           this.connections.assertActive(callerId)
-          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills, detail })
+          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills, detail, names, includeSchemas })
           const result = { ok: true, data }
           return result
         } catch (error) {
-          return applicationFailure(invalidInputMessage(error, describeContractInputSchema) ?? (error instanceof Error ? error.message : '契约发现失败，请稍后重试。'))
+          return applicationFailure(this.inputError(callerId, name, error, args ?? {}, describeContractInputSchema) ?? (error instanceof Error ? error.message : '契约发现失败，请稍后重试。'))
         }
       }
       if (name === 'read_application_media') {
@@ -87,7 +111,7 @@ export class ApplicationToolDispatcher {
         let result: ApplicationResult
         try { result = await loadAgentSkill(args ?? {}, signal, 'external') } catch (error) {
           if (signal.aborted) return applicationFailure('ABORTED:技能读取已取消。')
-          result = applicationFailure(invalidInputMessage(error, BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.inputSchema) ?? (isAssistantSkillError(error) ? `${error.code}:${error.message}` : '技能读取失败，请稍后重试。'))
+          result = applicationFailure(this.inputError(callerId, name, error, args ?? {}) ?? (isAssistantSkillError(error) ? `${error.code}:${error.message}` : '技能读取失败，请稍后重试。'))
         }
         // 读取期间连接被撤销时不交付内容。
         this.connections.assertActive(callerId)
@@ -96,7 +120,7 @@ export class ApplicationToolDispatcher {
       if ((name === 'get_application_operation' || name === 'review_application_operation') && this.operations) {
         const schema = name === 'get_application_operation' ? operationReadInputSchema : z.object({ operationId: z.string().uuid() }).strict()
         const parsed = schema.safeParse(args)
-        if (!parsed.success) return applicationFailure(invalidInputMessage(parsed.error, schema)!)
+        if (!parsed.success) return applicationFailure(this.inputError(callerId, name, parsed.error, args ?? {}, schema)!)
         const operation = this.operations.store.get(parsed.data.operationId, callerId)
         if (operation) {
           try { await this.reconcileVerification(callerId, operation, signal) } catch { /* 核实不可用时保留原事实与屏障。 */ }
@@ -192,7 +216,7 @@ export class ApplicationToolDispatcher {
           this.connections.assertActive(callerId)
           const result = this.operations.result(this.operations.store.get(operation.operationId, callerId)!)
           return { ...result, ok: result.ok === true }
-        } catch (error) { return applicationFailure(invalidInputMessage(error, BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.inputSchema) ?? (error instanceof Error ? error.message : '写入未完成。')) }
+        } catch (error) { return applicationFailure(this.inputError(callerId, name, error, args ?? {}) ?? (error instanceof Error ? error.message : '写入未完成。')) }
       }
       const id = APPLICATION_READ_CAPABILITY_IDS.find((value) => value === name)
       if (!id) return applicationFailure('此连接只允许读取。请用 tools/list 查看可用工具。')
@@ -205,7 +229,7 @@ export class ApplicationToolDispatcher {
         return { ...result, ok: result.ok === true }
       } catch (error) {
         if (error instanceof ApplicationHostNotReadyError) return { ok: false, error: { code: 'APPLICATION_NOT_READY', message: error.message, recoverable: true, details: { retryAfterMs: error.retryAfterMs, execution: { notExecuted: true } } } }
-        return applicationFailure(invalidInputMessage(error, BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.inputSchema) ?? (error instanceof Error ? error.message : '应用读取失败，请稍后重试。'))
+        return applicationFailure(this.inputError(callerId, name, error, args ?? {}) ?? (error instanceof Error ? error.message : '应用读取失败，请稍后重试。'))
       }
   }
   async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {

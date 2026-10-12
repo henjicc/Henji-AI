@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { createHash } from 'node:crypto'
 export { invalidInputMessage } from '../../../../src/core/application-control/inputValidation'
 import type { ApplicationToolDescriptor as Tool } from '../../../../src/core/application-control/capabilityMetadata'
 import {
@@ -72,8 +73,8 @@ const publicMediaOutputSchema = z.object({ ok: z.literal(true), data: z.union([
 export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'describe_application_contract', tier: 'any', readOnly: true,
-    description: '发现协议、授权、限制、业务域与可用技能。domains 点名才展开实体；detail="full" 查询工具授权清单、排除理由与弃用策略。',
-    inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' } }, additionalProperties: false },
+    description: '发现协议、授权、限制、业务域与可用技能。domains 点名才展开实体；detail="full" 查询工具授权清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。',
+    inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' }, names: { type: 'array', items: { type: 'string', minLength: 1 }, description: '仅返回这些已授权工具的 schema 摘要；省略时返回全部摘要。' }, includeSchemas: { type: 'boolean', default: false, description: '配合 names 返回完整 description/inputSchema，按需分批查询。' } }, additionalProperties: false },
   },
   {
     name: 'read_application_media', tier: 'any', readOnly: true,
@@ -110,7 +111,9 @@ export const readMediaInputSchema = z.object({
 export const describeContractInputSchema = z.object({
   domains: z.array(z.string().min(1)).max(16).default([]),
   detail: z.enum(['compact', 'full']).default('compact'),
-}).strict()
+  names: z.array(z.string().min(1)).optional(),
+  includeSchemas: z.boolean().default(false),
+}).strict().refine(input => !input.includeSchemas || Boolean(input.names?.length), 'includeSchemas=true 时请用 names 点名工具，按需分批查询。')
 
 /**
  * 参数错误必须能指名字段。
@@ -178,7 +181,7 @@ export function assistantSkillTool(): Tool {
   return {
     name: definition.id, title: definition.title,
     description: `${definition.description} 外部连接先从 describe_application_contract 的 skills 取得可用技能名和适用条件；不支持读取 references/ 以外的文件。`,
-    inputSchema: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }), type: 'object' } as Tool['inputSchema'],
+    inputSchema: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS }, type: 'object' } as Tool['inputSchema'],
     // 技能名与路径的 NFC 归一化是输入变换，输出侧按普通字符串描述。
     outputSchema: z.toJSONSchema(z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough(), { io: 'output', unrepresentable: 'any' }) as Tool['inputSchema'],
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -188,6 +191,23 @@ export function assistantSkillTool(): Tool {
 export interface ApplicationToolCatalog {
   tools: Tool[]
   hidden: Array<{ name: string; tier: ToolTier; requires: string }>
+}
+
+/** 仅规范化对象键；数组顺序保留，schema 内容变化仍会改变哈希。 */
+function canonicalJson(value: unknown): string {
+  const normalize = (item: unknown): unknown => Array.isArray(item) ? item.map(normalize)
+    : item && typeof item === 'object' ? Object.fromEntries(Object.keys(item).sort().map(key => [key, normalize((item as Record<string, unknown>)[key])])) : item
+  return JSON.stringify(normalize(value))
+}
+
+/** 客户端可用相同 SHA-256 算法核对本地缓存；不修改工具描述。 */
+export function applicationToolSchemaHash(tool: Pick<Tool, 'name' | 'description' | 'inputSchema'>): string {
+  return createHash('sha256').update(canonicalJson({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })).digest('hex').slice(0, 16)
+}
+
+export function applicationCatalogSchemaHash(catalog: ApplicationToolCatalog): string {
+  return createHash('sha256').update(canonicalJson(catalog.tools.map(tool => ({ name: tool.name, schemaHash: applicationToolSchemaHash(tool) }))
+    .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0))).digest('hex').slice(0, 16)
 }
 
 /**
@@ -213,7 +233,7 @@ export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]
   }
   for (const spec of PROTOCOL_TOOL_SPECS) {
     consider(spec.name, spec.tier, spec.requiresOperations === true, () => ({
-      name: spec.name, description: spec.description, inputSchema: spec.inputSchema as Tool['inputSchema'],
+      name: spec.name, description: spec.description, inputSchema: { ...spec.inputSchema, type: 'object', properties: { ...spec.inputSchema.properties as Record<string, unknown>, ...RESULT_DETAIL_FIELDS } } as Tool['inputSchema'],
       ...(spec.outputSchema ? { outputSchema: spec.outputSchema as Tool['inputSchema'] } : {}),
       annotations: { readOnlyHint: spec.readOnly, ...(spec.readOnly ? { openWorldHint: false } : { destructiveHint: false }) },
     }))
@@ -242,10 +262,17 @@ export function buildApplicationContract(input: {
   port: number
   requestedDomains: readonly string[]
   detail?: 'compact' | 'full'
+  names?: readonly string[]
+  includeSchemas?: boolean
   /** 外部连接可读的技能索引（只含名称与适用条件）；内置 Pi 走 skills_index 层，不在契约里重复。 */
   skills?: ReadonlyArray<{ name: string; description: string }>
 }): Record<string, unknown> {
   const requested = new Set(input.requestedDomains)
+  const names = input.names === undefined ? undefined : new Set(input.names)
+  const toolSchemas = input.catalog.tools.filter(tool => names === undefined || names.has(tool.name)).map(tool => ({
+    name: tool.name, schemaHash: applicationToolSchemaHash(tool),
+    ...(input.includeSchemas && names ? { description: tool.description, inputSchema: tool.inputSchema } : {}),
+  }))
   const full = {
     contract: {
       externalContractVersion: EXTERNAL_CONTRACT_VERSION,
@@ -257,6 +284,9 @@ export function buildApplicationContract(input: {
       limits: EXTERNAL_LIMITS,
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },
+    catalogSchemaHash: applicationCatalogSchemaHash(input.catalog),
+    schemaHashAlgorithm: 'SHA-256 UTF-8 JSON({name,description,inputSchema})，递归按对象键排序，数组顺序保留；十六进制前16位。目录哈希为按 name 排序的 [{name,schemaHash}] 用同一算法取前16位。',
+    toolSchemas,
     access: {
       read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
       hiddenTools: input.catalog.hidden,
@@ -290,6 +320,9 @@ export function buildApplicationContract(input: {
   const { deprecationPolicy: _deprecationPolicy, ...contract } = full.contract
   return {
     contract,
+    catalogSchemaHash: full.catalogSchemaHash,
+    schemaHashAlgorithm: full.schemaHashAlgorithm,
+    toolSchemas,
     access: { read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
       ...(input.requestedDomains.length ? { alternativeRoutes: full.access.alternativeRoutes } : {}),
       note: input.callerKind === 'embedded' ? '授权来自对话框的「助手操作权限」，不需要 MCP 连接。仅执行用户请求范围内的操作。'
