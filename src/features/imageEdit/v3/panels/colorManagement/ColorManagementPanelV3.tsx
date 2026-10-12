@@ -33,7 +33,7 @@ export function ColorManagementPanelV3({ controller }: { controller: ImageEditor
     <UiGroup title={label('document')} titleTone="compact">
       <p className="text-sm text-text2" data-document-color>{controller.document.color.workingSpace} · {String(controller.document.color.bitDepth)} · {controller.document.color.transferFunction}</p>
     </UiGroup>
-    <UiGroup title={label('configuration')} titleTone="compact">
+    <UiGroup labelWidth={96} title={label('configuration')} titleTone="compact">
       {error && <UiError message={error} size="xs" align="start" />}
       <UiFormRow inline density="compact" label={label('mode')}><Dropdown aria-label={label('mode')} value={settings.mode} display={label(settings.mode)} disabled={busy}
         options={(['convert', 'assign'] as const).map(value => ({ value, label: label(value) }))} onSelect={value => change('mode', value as ColorSettings['mode'])} /></UiFormRow>
@@ -44,7 +44,7 @@ export function ColorManagementPanelV3({ controller }: { controller: ImageEditor
       <UiFormRow inline density="compact" label={label('transfer')}><Dropdown aria-label={label('transfer')} value={settings.transferFunction} display={settings.transferFunction} disabled={busy}
         options={(['srgb', 'linear', 'pq', 'hlg'] as const).map(value => ({ value, label: value }))} onSelect={value => change('transferFunction', value as ColorSettings['transferFunction'])} /></UiFormRow>
       <p className="text-xs text-text3">{label(settings.mode === 'assign' ? 'assignHint' : 'convertHint')}</p>
-      <UiButton variant="primary" disabled={busy || unchanged} onClick={() => void apply()}>{label('apply')}</UiButton>
+      <UiFormRow label="" density="compact"><UiButton variant="primary" className="w-full" disabled={busy || unchanged} onClick={() => void apply()}>{label('apply')}</UiButton></UiFormRow>
     </UiGroup>
     {busy && <UiLoading message={label('preparing')}><ProgressBar progress={progress} appearance="hairline" /><UiButton onClick={() => pending.current?.abort()}>{label('cancel')}</UiButton></UiLoading>}
     <UiGroup title={label('proof')} titleTone="compact"><p className="text-xs text-text3">{label('proofBoundary')}</p></UiGroup>

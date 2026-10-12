@@ -391,7 +391,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       return (
         <button
           ref={ref}
-          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${inset ? `h-full min-w-0 justify-center gap-1 whitespace-nowrap rounded-md px-1 font-medium ${size === 'md' ? 'text-13' : 'text-xs'}` : neutral.layout} ${active ? inset ? 'border-transparent bg-accent text-on-accent hover:bg-accent-hover' : neutral.active : inset ? 'border-transparent bg-transparent text-text2 hover:bg-hover hover:text-text1' : neutral.rest} ${className}`}
+          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${inset ? `h-full min-w-0 justify-center gap-1 whitespace-nowrap rounded-md px-1 font-medium ${size === 'md' ? 'text-13' : 'text-xs'}` : neutral.layout} ${active ? inset ? 'border-transparent bg-raised text-text1' : neutral.active : inset ? 'border-transparent bg-transparent text-text2 hover:bg-hover hover:text-text1' : neutral.rest} ${className}`}
           {...props}
         />
       );

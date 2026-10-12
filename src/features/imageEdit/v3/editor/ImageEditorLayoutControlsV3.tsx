@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { UiFormRow } from '@/components/ui'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { PanelTrigger, UiButton, UiEmpty, UiError, UiGroup, UiLoading, UiOptionButton, UiRangeInput } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiGroup, UiLoading, UiSegmented, UiRangeInput } from '@/components/ui'
 import { LayoutGrid, Pin, PinOff } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import { imageEditLayoutDraft } from '../application/imageEditLayoutDraft'
@@ -53,7 +53,7 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
   const canOrganize = selected.length >= 3 || Boolean(state.draft && state.entries.length >= 3)
   const movement = state.candidates.some(candidate => candidate.id === 'move')
   const canApply = state.candidates.some(candidate => candidate.id === state.selected)
-  const options = [{ id: 'original', label: '原稿' }, ...state.candidates.map(candidate => ({ id: candidate.id, label: CANDIDATE_LABELS[candidate.id] ?? candidate.label }))]
+  const options = [{ value: 'original', label: surfaceText('surfaceGrammar.layoutOriginal') }, ...state.candidates.map(candidate => ({ value: candidate.id, label: CANDIDATE_LABELS[candidate.id] ? surfaceText(`surfaceGrammar.layoutCandidates.${candidate.id}`) : candidate.label }))]
   const pins = state.draft?.pins.map(pin => {
     const entry = state.entries.find(item => item.sample.sampleId === pin.sampleId)
     const layer = entry && findImageEditLayerLocationV3(controller.document.layers, entry.layerId)?.layer
@@ -68,25 +68,14 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
     setError(undefined)
     if (!value) adapter.cancel()
   }} alignment="bottomRight" surface="glass" panelPadding="content" panelWidth="content"
-    renderPanel={() => <div className="flex w-64 max-w-full min-w-0 flex-col gap-3" data-image-layout-controls>
-      {state.candidates.length > 0 && <UiGroup title="布局方案" titleTone="compact">
-        <div role="radiogroup" aria-label="布局方案" className="flex min-w-0 flex-col gap-1">
-          {options.map((option, index) => <UiOptionButton key={option.id} variant="menu" size="sm" className="w-full"
-            role="radio" aria-checked={state.selected === option.id} active={state.selected === option.id}
-            tabIndex={state.selected === option.id ? 0 : -1} disabled={busy || state.needsSave}
-            onClick={() => preview(option.id)}
-            onKeyDown={event => {
-              const direction = ['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 0
-              if (!direction && event.key !== 'Home' && event.key !== 'End') return
-              event.preventDefault()
-              const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : (index + direction + options.length) % options.length
-              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus()
-              preview(options[next].id)
-            }}>{option.label}</UiOptionButton>)}
-        </div>
-      </UiGroup>}
+    renderPanel={() => <UiGroup labelWidth={96} gap="stack" className="w-96 max-w-full min-w-0" data-image-layout-controls>
+      {state.candidates.length > 0 && <UiFormRow label={surfaceText('surfaceGrammar.layoutPlan')} density="compact">
+        {options.length <= 5 && options.every(option => option.label.length <= 4)
+          ? <UiSegmented ariaLabel={surfaceText('surfaceGrammar.layoutPlan')} size="sm" value={state.selected ?? 'original'} options={options} disabled={busy || state.needsSave} onChange={preview} />
+          : <Dropdown ariaLabel={surfaceText('surfaceGrammar.layoutPlan')} size="sm" value={state.selected ?? 'original'} options={options} disabled={busy || state.needsSave} onSelect={preview} />}
+      </UiFormRow>}
       {state.draft && !movement && <>
-        <UiGroup labelWidth={96} title="保留原稿位置" titleTone="compact">
+        <UiGroup title="保留原稿位置" titleTone="compact">
           <div className="flex items-center justify-between text-xs text-text2"><span>完全整理</span><span className="tabular-nums">{retained}%</span><span>保持原位</span></div>
           <UiFormRow label={surfaceText('surfaceGrammar.retainPosition')} density="compact" labelColumn="panel"><UiRangeInput aria-label="保留原稿位置" aria-valuetext={retained === 0 ? '完全整理' : retained === 100 ? '保持原位' : `保留原稿位置 ${retained}%`}
             min={0} max={1} step={.01} value={fidelity ?? state.draft.fidelity} disabled={busy || state.needsSave}
@@ -116,7 +105,7 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
         <UiButton size="sm" variant="primary" disabled={busy || (!state.needsSave && !canApply)}
           onClick={() => run(() => adapter.apply())}>{state.needsSave ? '重试保存' : '应用'}</UiButton>
       </div>
-    </div>}>
+    </UiGroup>}>
     {controls => <UiButton size="sm" onClick={controls.togglePanel} aria-expanded={controls.open}><LayoutGrid size={14} />随手摆</UiButton>}
   </PanelTrigger>
 }

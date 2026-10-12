@@ -28,7 +28,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
     setup: async (page, app, { capture }) => {
       page.setDefaultTimeout(15000)
       const reviewWidth = panelReview ? await page.evaluate(() => innerWidth) : undefined
-      const root = path.resolve(`node_modules/.cache/${explanation ? 't157-explanation' : 't149-layout'}-${canvas ? 'canvas' : 'toolbox'}${panelReview ? `-panel-${reviewWidth}` : benchmark ? '-100' : ''}`)
+      const root = path.resolve(`.ui-tour/fixtures/${explanation ? 't157-explanation' : 't149-layout'}-${canvas ? 'canvas' : 'toolbox'}${panelReview ? `-panel-${reviewWidth}` : benchmark ? '-100' : ''}`)
       fs.mkdirSync(root, { recursive: true })
       const evidence = { frames: [], candidateMs: [], abMs: [], fidelityMs: [], visualReview: '待逐张目视', benchmark: panelReview ? '仅面板验收，不测性能' : '5次预热，30次测量；输入到合成回执与下一帧；非物理屏幕延迟' }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
@@ -156,7 +156,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
         await choice('等距排列').click(); await shot('切换等距候选')
         if (panelReview) {
           assert.equal(await controls().locator('[role=radio][aria-checked=true]').count(), 1)
-          await choice('等距排列').press('Home'); await choice('原稿').press('ArrowDown')
+          await choice('等距排列').press('Home'); await choice('原稿').press('ArrowRight')
           assert.equal(await choice('边缘对齐').evaluate(e => e === document.activeElement && e.getAttribute('aria-checked') === 'true'), true)
           const bounds = await controls().evaluate(e => ({ width: e.clientWidth, scroll: e.scrollWidth, right: e.getBoundingClientRect().right, viewport: innerWidth }))
           assert.ok(bounds.scroll <= bounds.width && bounds.right <= bounds.viewport, '面板不能横向溢出')

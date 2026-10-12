@@ -1,15 +1,35 @@
 /** @vitest-environment jsdom */
 import '@/tests/imageEditDocumentFixture'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import i18n from '@/i18n/config'
+import { createImageEditDocumentV3, createImageEditPathLayerV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { createImageEditTextLayerV3 } from '@/core/imageEdit/v3/layerEntries/vector'
 import { getOrCreateImageEditDocumentInstanceV3 } from '../../application/imageEditDocumentInstances'
 import type { ImageEditorV3Controller } from '../../editor/types'
 import { VectorProperties } from './VectorProperties'
 
 vi.mock('@/components/typography/TypographyPanel', () => ({ TypographyPanel: () => null }))
+beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
 afterEach(() => { cleanup(); vi.useRealTimers() })
+
+it('没有可编辑目标时隐藏路径蒙版，有目标时提供入口，目标失效后不能提交', () => {
+  const document = createImageEditDocumentV3({ width: 400, height: 300, documentId: 'path-mask-availability' })
+  const layer = createImageEditPathLayerV3('path', '路径')
+  const target = createImageEditRasterLayerV3('target', '原图')
+  document.layers = [layer, { ...target, locked: true }]
+  const controller = { document, sessionId: document.id } as ImageEditorV3Controller
+  const view = render(<VectorProperties controller={controller} layer={layer} locked={false} />)
+  expect(screen.queryByRole('button', { name: '蒙版目标图层' })).toBeNull()
+  document.layers = [layer, target]
+  view.rerender(<VectorProperties controller={controller} layer={layer} locked={false} />)
+  fireEvent.click(screen.getByRole('button', { name: '蒙版目标图层' }))
+  fireEvent.click(screen.getByRole('option', { name: '原图' }))
+  expect((screen.getByRole('button', { name: '用路径作为蒙版' }) as HTMLButtonElement).disabled).toBe(false)
+  document.layers = [layer, createImageEditRasterLayerV3('other', '另一图层')]
+  view.rerender(<VectorProperties controller={controller} layer={layer} locked={false} />)
+  expect((screen.getByRole('button', { name: '用路径作为蒙版' }) as HTMLButtonElement).disabled).toBe(true)
+})
 
 it('文字属性连续修改经正式内容服务合并为一步历史，撤销读回原内容', () => {
   vi.useFakeTimers()

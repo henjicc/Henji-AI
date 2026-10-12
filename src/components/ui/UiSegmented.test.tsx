@@ -14,6 +14,8 @@ it('分段单选方向键跳过禁用项并循环，选择与焦点同步，整�
   const view = render(<Example />)
   expect(screen.getByRole('radiogroup', { name: '方式' })).toBeDefined()
   const first = screen.getByRole('radio', { name: '摆放' }), last = screen.getByRole('radio', { name: '录制轨迹' })
+  expect(first.className).toContain('bg-raised')
+  expect(first.className).not.toContain('bg-accent')
   expect(first.title).toBe('摆放提示')
   fireEvent.mouseEnter(last); expect(preview).toHaveBeenLastCalledWith('c')
   fireEvent.mouseLeave(last); expect(preview).toHaveBeenLastCalledWith(undefined)
