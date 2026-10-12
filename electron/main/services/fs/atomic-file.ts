@@ -80,7 +80,7 @@ export async function writeBufferAtomically(
   targetPath: string,
   content: Uint8Array,
   operations: AtomicFileOperations = DEFAULT_OPERATIONS,
-  options: { exclusive?: boolean } = {},
+  options: { exclusive?: boolean; signal?: AbortSignal; validate?: (stagedPath: string) => Promise<void> } = {},
 ): Promise<void> {
   await fs.mkdir(path.dirname(targetPath), { recursive: true })
   const stagedPath = path.join(
@@ -88,13 +88,16 @@ export async function writeBufferAtomically(
     `.${path.basename(targetPath)}.${crypto.randomUUID()}.tmp`,
   )
   try {
+    options.signal?.throwIfAborted()
     const handle = await fs.open(stagedPath, 'wx', 0o600)
     try {
-      await handle.writeFile(content)
+      await handle.writeFile(content, { signal: options.signal })
       await handle.sync()
     } finally {
       await handle.close()
     }
+    await options.validate?.(stagedPath)
+    options.signal?.throwIfAborted()
     if (options.exclusive) {
       // A same-directory hard link publishes the complete closed file without
       // overwriting a racing target. Failed writes only ever touch our staging.

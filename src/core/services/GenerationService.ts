@@ -109,12 +109,14 @@ export class GenerationService {
     signal?.throwIfAborted()
     // 先发送正式请求，再发送取消，避免取消标记在请求初始化时被清除。
     const pending = dispatch()
+    let rejectCancellation: ((reason: Error) => void) | undefined
+    const cancelled = new Promise<never>((_resolve, reject) => { rejectCancellation = reject })
     const cancel = (): void => { void this.cancelTask(taskId).catch(error => {
       logger.error('[GenerationService] 业务取消请求失败', error, { event: 'generation.cancel.signal_failed', taskId })
-    }) }
+    }); rejectCancellation?.(new DOMException('本地生成已停止', 'AbortError')) }
     signal?.addEventListener('abort', cancel, { once: true })
     if (signal?.aborted) cancel()
-    try { return await pending } finally { signal?.removeEventListener('abort', cancel) }
+    try { return await Promise.race([pending, cancelled]) } finally { signal?.removeEventListener('abort', cancel) }
   }
 
   async generate(
@@ -259,6 +261,7 @@ export class GenerationService {
           progressTiming: buildProgressTimingContext(estimate, recorded),
         },
       })
+      options.signal?.throwIfAborted()
       progressTracker?.complete()
 
       clearProviderAvailability(model.meta.provider, modelId)
@@ -416,6 +419,7 @@ export class GenerationService {
           ),
         },
       })
+      options.signal?.throwIfAborted()
       progressTracker?.complete()
 
       if (model) clearProviderAvailability(model.meta.provider, modelId)

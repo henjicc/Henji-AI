@@ -1,3 +1,5 @@
+import { readGenerationTasks } from '../application/generationTaskProjection'
+import { beginGenerationTaskExecution, cancelGenerationTaskExecution } from '../application/generationTaskExecution'
 import { createPersistedGenerationTask, awaitGenerationTaskPersistence } from './useTaskHistory'
 import { createLogger } from '@/core/logging'
 import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult'
@@ -17,7 +19,6 @@ import { continuePollingTask } from './continuePollingTask'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 import { taskQueueManager } from '@/services/taskQueue'
-import { replaceGenerationTaskStatusSnapshots } from '@/features/generation/application/generationTaskStatusRegistry'
 import {
   asMutableRecord,
   isMinimaxVoiceCloneMode,
@@ -27,9 +28,6 @@ import {
 import {
   createVisibleGenerationTask,
   registerVisibleGenerationTaskHandler,
-  publishVisibleGenerationTaskStatus,
-  getVisibleGenerationReportedStatus,
-  markVisibleGenerationTaskCancelled,
   type VisibleGenerationTaskInput,
 } from '../application/visibleGenerationTaskCommand'
 
@@ -172,7 +170,8 @@ export function useTaskGeneration({
     input: string,
     options: GeneratorOptions,
     onProgress?: GenerationProgressCallback,
-    requestId?: string
+    requestId?: string,
+    signal?: AbortSignal
   ): Promise<DynamicValue> => {
     const generationService = GenerationService.getInstance()
     const params: DynamicValueMap = {
@@ -182,7 +181,7 @@ export function useTaskGeneration({
     }
 
     try {
-      return await generationService.generate(modelId, params, onProgress, { requestId })
+      return await generationService.generate(modelId, params, onProgress, { requestId, signal })
     } catch (error) {
       if (error instanceof GenerationSubmissionCancelledError) throw error
       throw new Error(maybeToUserMessage(error))
@@ -190,7 +189,9 @@ export function useTaskGeneration({
   }, [])
 
   const executeTask = useCallback(async (taskId: string, task: GenerationTask): Promise<void> => {
+    const execution = beginGenerationTaskExecution(taskId)
     const saveUpdate = async (updates: Partial<GenerationTask>): Promise<void> => {
+      if (!execution.isCurrent()) return
       updateTask(taskId, updates)
       await awaitGenerationTaskPersistence(taskId)
     }
@@ -220,17 +221,19 @@ export function useTaskGeneration({
       }
 
       await saveUpdate({ status: 'generating' })
+      if (!execution.isCurrent()) return
 
       lastProgressRef.current[taskId] = 0
       const handleProgress: GenerationProgressCallback = (status: GenerationProgressStatus) => {
-        if (status.progress === undefined) return
+        if (!execution.isCurrent() || status.progress === undefined) return
         const prev = lastProgressRef.current[taskId] ?? 0
         const next = Math.max(prev, status.progress)
         lastProgressRef.current[taskId] = next
         updateProgress(taskId, next)
       }
 
-      const result = await generateWithService(task.model, task.prompt, options, handleProgress, taskId)
+      const result = await generateWithService(task.model, task.prompt, options, handleProgress, taskId, execution.signal)
+      if (!execution.isCurrent()) return
       const resultObj: DynamicValueMap = isRecord(result) ? result : {}
       const metadata = resultObj['metadata']
       const normalizedResultTaskId = typeof resultObj['taskId'] === 'string'
@@ -255,6 +258,7 @@ export function useTaskGeneration({
         }
 
         await continuePollingTask({
+          execution,
           task: {
             ...task,
             status: 'generating',
@@ -295,6 +299,7 @@ export function useTaskGeneration({
       ])
 
       const progressBeforeComplete = lastProgressRef.current[taskId] ?? 0
+      if (!execution.isCurrent()) return
       updateProgress(taskId, 100)
       await new Promise((r) => setTimeout(r, resolveProgressSettleDelayMs(progressBeforeComplete)))
 
@@ -313,9 +318,9 @@ export function useTaskGeneration({
         },
       })
     } catch (error) {
+      if (!execution.isCurrent()) return
       if (error instanceof GenerationSubmissionCancelledError) {
-        markVisibleGenerationTaskCancelled(taskId, error.message)
-        await saveUpdate({ status: 'error', error: error.message })
+        await saveUpdate({ status: 'cancelled', error: error.message })
         return
       }
       logger.error('[Workspace] 生成失败', error)
@@ -330,9 +335,12 @@ export function useTaskGeneration({
         ...(serverTaskIdFromError ? { serverTaskId: serverTaskIdFromError } : {}),
       })
     } finally {
-      delete lastProgressRef.current[taskId]
-      // 任务链路结束（成功/失败/转轮询完成后），清掉瞬态进度，避免 store 残留
-      useGenerationTaskProgressStore.getState().clearProgress(taskId)
+      if (execution.isCurrent()) {
+        delete lastProgressRef.current[taskId]
+        // 任务链路结束（成功/失败/转轮询完成后），清掉瞬态进度，避免 store 残留
+        useGenerationTaskProgressStore.getState().clearProgress(taskId)
+      }
+      execution.finish()
     }
   }, [generateWithService, messages.genericGenerateFailed, messages.providerKeyRequiredMessage, notify, showProviderKeyRequired, updateProgress, updateTask])
 
@@ -380,18 +388,18 @@ export function useTaskGeneration({
 
   useEffect(() => registerVisibleGenerationTaskHandler({
     create: runCreateVisibleTask,
-    list: () => tasksRef.current.map((task) => ({
+    list: () => readGenerationTasks().map((task) => ({
       taskId: task.id,
       status: task.status,
       progress: useGenerationTaskProgressStore.getState().progress[task.id] ?? task.progress ?? 0,
       modelId: task.model,
       mediaType: task.type,
       resultAvailable: Boolean(task.result),
-      errorCode: task.error ? 'GENERATION_FAILED' : null,
+      errorCode: task.status === 'error' ? 'GENERATION_FAILED' : null,
       errorMessage: task.error?.slice(0, 1_000) ?? null,
     })),
     get: (taskId) => {
-      const task = tasksRef.current.find((item) => item.id === taskId)
+      const task = readGenerationTasks().find((item) => item.id === taskId)
       if (!task) return null
       return {
         taskId: task.id,
@@ -401,12 +409,12 @@ export function useTaskGeneration({
         modelId: task.model,
         mediaType: task.type,
         resultAvailable: Boolean(task.result),
-        errorCode: task.error ? 'GENERATION_FAILED' : null,
+        errorCode: task.status === 'error' ? 'GENERATION_FAILED' : null,
         errorMessage: task.error?.slice(0, 1_000) ?? null,
       }
     },
     getResult: (taskId) => {
-      const task = tasksRef.current.find((item) => item.id === taskId)
+      const task = readGenerationTasks().find((item) => item.id === taskId)
       if (!task || task.status !== 'success' || !task.result) return null
       return {
         taskId: task.id,
@@ -417,40 +425,21 @@ export function useTaskGeneration({
       }
     },
     cancel: async (taskId, reason) => {
-      const task = tasksRef.current.find((item) => item.id === taskId)
+      const task = readGenerationTasks().find((item) => item.id === taskId)
       if (!task) throw new Error('TASK_NOT_FOUND')
-      if (task.status === 'success' || task.status === 'error') throw new Error('TASK_NOT_CANCELLABLE')
+      if (task.status === 'success' || task.status === 'error' || task.status === 'cancelled') throw new Error('TASK_NOT_CANCELLABLE')
+      cancelGenerationTaskExecution(taskId)
+      updateTask(taskId, { status: 'cancelled', error: reason })
+      useGenerationTaskProgressStore.getState().clearProgress(taskId)
       if (taskQueueManager.isQueued(taskId)) {
         taskQueueManager.removeFromQueue(taskId)
       } else {
         await GenerationService.getInstance().cancelTask(task.serverTaskId ?? task.id)
       }
-      markVisibleGenerationTaskCancelled(taskId, reason)
-      updateTask(taskId, { status: 'error', error: reason })
       await awaitGenerationTaskPersistence(taskId)
       return { taskId, status: 'cancelled', verification: { verified: true, condition: '取消已处理且原任务状态保存确认', target: { kind: 'generation.task', id: taskId } } }
     },
   }), [runCreateVisibleTask, updateTask])
-
-  useEffect(() => {
-    replaceGenerationTaskStatusSnapshots(tasks.map((task) => ({
-      taskId: task.id,
-      status: task.status,
-      progress: useGenerationTaskProgressStore.getState().progress[task.id] ?? task.progress ?? 0,
-      modelId: task.model,
-      mediaType: task.type,
-      resultAvailable: Boolean(task.result),
-      errorCode: task.error ? 'GENERATION_FAILED' : null,
-      errorMessage: task.error?.slice(0, 1_000) ?? null,
-    })))
-    for (const task of tasks) publishVisibleGenerationTaskStatus({
-      taskId: task.id,
-      status: getVisibleGenerationReportedStatus(task.id, task.status),
-      resultAvailable: Boolean(task.result),
-      errorCode: task.error ? 'GENERATION_FAILED' : null,
-      errorMessage: task.error?.slice(0, 1_000) ?? null,
-    })
-  }, [tasks])
 
   const handleGenerate = useCallback(async (
     input: string,

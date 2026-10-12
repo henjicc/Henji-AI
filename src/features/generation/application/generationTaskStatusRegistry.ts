@@ -24,6 +24,16 @@ export function publishCanvasGenerationTaskStatus(snapshot: GenerationTaskStatus
   canvasSnapshots.set(snapshot.taskId, { ...copySnapshot(snapshot), origin: 'canvas' })
 }
 
+export function publishGenerationTaskStatus(snapshot: GenerationTaskStatusSnapshot): void {
+  if (snapshot.origin === 'canvas') publishCanvasGenerationTaskStatus(snapshot)
+  else snapshots.set(snapshot.taskId, copySnapshot(snapshot))
+}
+
+export function removeGenerationTaskStatus(taskId: string): void {
+  snapshots.delete(taskId)
+  canvasSnapshots.delete(taskId)
+}
+
 export function replaceGenerationTaskStatusSnapshots(next: GenerationTaskStatusSnapshot[]): void {
   snapshots.clear()
   for (const snapshot of next) snapshots.set(snapshot.taskId, copySnapshot(snapshot))

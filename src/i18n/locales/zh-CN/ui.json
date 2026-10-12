@@ -430,6 +430,7 @@
       "usePrompt": "使用提示词"
     },
     "status": {
+      "cancelled": "已取消",
       "queued": "排队中...",
       "waiting": "等待上一个任务完成",
       "preparing": "准备生成...",

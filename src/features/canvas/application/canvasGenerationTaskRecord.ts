@@ -1,9 +1,9 @@
+import { publishPersistedGenerationTask } from '@/workspaces/GenerationWorkspace/application/generationTaskHistory'
 import { createLogger } from '@/core/logging'
 import { GenerationSubmissionCancelledError } from '@/core/services/generationSubmissionConfirmation'
 import { registry } from '@/core/ModelRegistry'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { GenerationPreparationInput } from '@/features/generation/application/generationPreparationService'
-import { publishCanvasGenerationTaskStatus } from '@/features/generation/application/generationTaskStatusRegistry'
 import type { CanvasNode } from '../domain/canvasNodes'
 import { CANVAS_GENERATION_CANCELLED_MESSAGE } from '../domain/generationFailure'
 import { readResumableServerTask } from '../domain/resumableTask'
@@ -44,32 +44,30 @@ export async function createCanvasGenerationTaskRecord(input: GenerationPreparat
     throw error
   }
   logger.info('画布生成任务已登记', { event: 'canvas.generationTask.registered', requestId: taskId, taskId, projectId, nodeId })
-  const publish = (status: string, resultAvailable = false, errorMessage: string | null = null) => publishCanvasGenerationTaskStatus({
-    taskId, status, progress: resultAvailable ? 100 : 0, modelId: input.modelId, mediaType: input.mediaType,
-    resultAvailable, errorCode: null, errorMessage, cancellable: ['pending', 'queued', 'generating'].includes(status) && !controller.signal.aborted,
-  })
   const start = async () => {
     controller.signal.throwIfAborted()
     await databaseService.updateHistory(taskId, { status: 'generating' })
-    publish('generating')
+    await publishPersistedGenerationTask(taskId)
     logger.info('画布生成开始执行', { event: 'canvas.generationTask.executing', requestId: taskId, taskId, projectId, nodeId })
   }
   canvasGenerationTaskControls.set(taskId, { controller, start })
-  publish('pending')
+  await publishPersistedGenerationTask(taskId)
   return {
     start,
     async run(execute: () => Promise<{ resultNodeIds: string[] }>): Promise<CanvasNodeExecutionResult> {
       try {
         await databaseService.updateHistory(taskId, { status: 'queued' })
-        publish('queued')
+        await publishPersistedGenerationTask(taskId)
         logger.info('画布生成等待执行名额', { event: 'canvas.generationTask.queued', requestId: taskId, taskId, projectId, nodeId })
         controller.signal.throwIfAborted()
         const completed = await execute()
+        controller.signal.throwIfAborted()
         const snapshot = await readPersistedCanvasProjectSnapshot(projectId)
+        controller.signal.throwIfAborted()
         const outputs = completedTaskOutputPaths(snapshot.nodes, taskId, nodeId)
         if (!outputs.length) throw new Error('生成结束但结果尚未保存，请在原画布检查。')
         await databaseService.updateHistory(taskId, { status: 'success', resultPaths: outputs, errorMessage: null })
-        publish('success', true)
+        await publishPersistedGenerationTask(taskId)
         logger.info('画布生成结果已保存', { event: 'canvas.generationTask.completed', taskId, nodeId })
         return { status: 'completed', resultNodeIds: completed.resultNodeIds }
       } catch (error) {
@@ -78,9 +76,9 @@ export async function createCanvasGenerationTaskRecord(input: GenerationPreparat
           throw readError
         })
         const outputs = completedTaskOutputPaths(persisted?.nodes ?? [], taskId, nodeId)
-        if (outputs.length) {
+        if (outputs.length && !controller.signal.aborted && !(error instanceof GenerationSubmissionCancelledError)) {
           await databaseService.updateHistory(taskId, { status: 'success', resultPaths: outputs, errorMessage: null })
-          publish('success', true)
+          await publishPersistedGenerationTask(taskId)
           logger.warn('生成结果已保存，后续执行信息未能完整发布', { event: 'canvas.generationTask.publication_incomplete', requestId: taskId, taskId,
             reason: error instanceof Error ? error.message : String(error) })
           return { status: 'completed', resultNodeIds: (persisted?.nodes ?? []).filter(node => node.data.generationTaskId === taskId).map(node => node.id) }
@@ -90,7 +88,7 @@ export async function createCanvasGenerationTaskRecord(input: GenerationPreparat
         const status = cancelled ? 'cancelled' : canResume ? 'pending' : 'error'
         const message = cancelled ? CANVAS_GENERATION_CANCELLED_MESSAGE : error instanceof Error ? error.message : '画布生成失败'
         await databaseService.updateHistory(taskId, { status, errorMessage: message })
-        publish(status, false, message)
+        await publishPersistedGenerationTask(taskId)
         if (cancelled) logger.info('原画布任务已停止本地执行', { event: 'canvas.generationTask.cancelled', requestId: taskId, taskId })
         else logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', requestId: taskId, taskId })
         throw error

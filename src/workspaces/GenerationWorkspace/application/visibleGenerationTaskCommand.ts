@@ -94,7 +94,6 @@ const changeListeners = new Set<() => void>()
 let statusReporter: ((event: GenerationStatusEvent) => Promise<void>) | null = null
 const statusRevisions = new Map<string, number>()
 const lastStatusFingerprints = new Map<string, string>()
-const cancelledTaskReasons = new Map<string, string>()
 
 function emitVisibleGenerationTaskChange(): void {
   for (const listener of changeListeners) listener()
@@ -139,17 +138,6 @@ export function publishVisibleGenerationTaskStatus(input: {
       taskId: input.taskId,
     }
   ))
-}
-
-export function markVisibleGenerationTaskCancelled(taskId: string, reason: string): void {
-  cancelledTaskReasons.set(taskId, reason)
-}
-
-export function getVisibleGenerationReportedStatus(
-  taskId: string,
-  status: GenerationTask['status']
-): GenerationTaskStatus {
-  return status === 'error' && cancelledTaskReasons.has(taskId) ? 'cancelled' : status
 }
 
 function createTaskId(): string {

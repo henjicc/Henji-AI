@@ -1,3 +1,4 @@
+import { beginGenerationTaskExecution } from '../application/generationTaskExecution'
 import { aiReadSavedResult } from '@/commands/aiRuntime'
 import { awaitGenerationTaskPersistence } from './useTaskHistory'
 import { createLogger } from '@/core/logging'
@@ -11,7 +12,6 @@ import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { extractServerTaskIdFromErrorMessage, resolveResumableServerTaskId } from '@/features/generation/application/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
-import { getPlatform } from '@/platform'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.continuePollingTask')
 
@@ -19,18 +19,12 @@ type ContinuePollingProgressCallback = NonNullable<Parameters<GenerationService[
 
 export interface ContinuePollingTaskParams {
   task: GenerationTask
+  execution?: ReturnType<typeof beginGenerationTaskExecution>
   genericGenerateFailed: string
   notify: (message: string, type?: 'success' | 'error') => void
   updateTask: (taskId: string, updates: Partial<GenerationTask>) => void
   updateProgress: (taskId: string, progress: number) => void
   toUserMessage: (error: DynamicValue) => string
-}
-
-function normalizeCreatedFilePaths(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return [...new Set(value.filter(
-    (item): item is string => typeof item === 'string' && item.trim().length > 0,
-  ))]
 }
 
 export async function continuePollingTask({
@@ -40,6 +34,7 @@ export async function continuePollingTask({
   updateTask,
   updateProgress,
   toUserMessage,
+  execution: parentExecution,
 }: ContinuePollingTaskParams): Promise<void> {
   const serverTaskId = resolveResumableServerTaskId(task)
 
@@ -49,12 +44,12 @@ export async function continuePollingTask({
     return
   }
 
+  const execution = parentExecution ?? beginGenerationTaskExecution(task.id)
   const saveUpdate = async (updates: Partial<GenerationTask>): Promise<void> => {
+    if (!execution.isCurrent()) return
     updateTask(task.id, updates)
     await awaitGenerationTaskPersistence(task.id)
   }
-  let createdFilePaths: string[] = []
-  let ownershipTransferred = false
   try {
     logger.info('[Workspace] 开始再次轮询', { taskId: task.id, model: task.model, serverTaskId })
     const options = { ...(task.options ?? {}) }
@@ -63,6 +58,7 @@ export async function continuePollingTask({
     if (task.images) options.images = task.images
 
     await saveUpdate({ status: 'generating', error: undefined, serverTaskId })
+    if (!execution.isCurrent()) return
     // 进度地板优先取瞬态 store 中的现值（进度已不再写进 task），回退到 task 快照
     const storedProgress = useGenerationTaskProgressStore.getState().progress[task.id]
     let currentProgress = Math.max(1, storedProgress ?? task.progress ?? 0)
@@ -70,12 +66,12 @@ export async function continuePollingTask({
 
     // 先查缓存结果（主进程轮询完成但渲染层已重载的场景）
     const cached = await aiReadSavedResult(serverTaskId)
+    if (!execution.isCurrent()) return
     let resultObj: { urls: string[]; filePaths: string[]; metadata?: unknown }
-    if (cached) {
+    if (cached && (!(cached.urls?.length) || cached.filePaths?.length === cached.urls.length)) {
       const provider = registry.getModel(task.model)?.meta.provider
       if (provider) await captureClonedVoice(task.model, provider, cached)
       logger.info('[Workspace] 命中缓存轮询结果，跳过重新轮询', { taskId: task.id, serverTaskId })
-      createdFilePaths = normalizeCreatedFilePaths(cached.createdFilePaths)
       resultObj = {
         urls: cached.urls ?? [],
         filePaths: cached.filePaths ?? [],
@@ -83,7 +79,7 @@ export async function continuePollingTask({
       }
     } else {
       const handleProgress: ContinuePollingProgressCallback = (status) => {
-        if (status.progress === undefined) return
+        if (!execution.isCurrent() || status.progress === undefined) return
         const next = Math.max(currentProgress, status.progress)
         if (next <= currentProgress) return
         currentProgress = next
@@ -95,8 +91,8 @@ export async function continuePollingTask({
         prompt: task.prompt,
         text: task.prompt,
         ...options,
-      }, handleProgress)
-      createdFilePaths = normalizeCreatedFilePaths(result.createdFilePaths)
+      }, handleProgress, { signal: execution.signal })
+      if (!execution.isCurrent()) return
       resultObj = {
         urls: result.urls,
         filePaths: result.filePaths,
@@ -116,8 +112,7 @@ export async function continuePollingTask({
       const completion = clonedVoiceCompletion(resultObj.metadata)
       if (completion) {
         await saveUpdate({ status: 'success', progress: 100, options: { ...options, __completionMessage: completion } })
-        ownershipTransferred = true
-        useGenerationTaskProgressStore.getState().clearProgress(task.id)
+        if (execution.isCurrent()) useGenerationTaskProgressStore.getState().clearProgress(task.id)
         return
       }
       logger.error('[Workspace] 继续轮询响应缺少 URL', { model: task.model, result: resultObj })
@@ -130,9 +125,9 @@ export async function continuePollingTask({
       getMediaDurationFormatted(firstCheck, task.type),
     ])
 
+    if (!execution.isCurrent()) return
     updateProgress(task.id, 100)
     await new Promise((r) => setTimeout(r, resolveProgressSettleDelayMs(currentProgress)))
-    ownershipTransferred = true
     await saveUpdate({
       status: 'success',
       progress: 100,
@@ -148,10 +143,10 @@ export async function continuePollingTask({
         createdAt: new Date(),
       },
     })
-    ownershipTransferred = true
     // 任务已进入 success（不再渲染进度条），清掉瞬态进度
-    useGenerationTaskProgressStore.getState().clearProgress(task.id)
+    if (execution.isCurrent()) useGenerationTaskProgressStore.getState().clearProgress(task.id)
   } catch (error) {
+    if (!execution.isCurrent()) return
     logger.error('[Workspace] 继续轮询失败', error)
     const errorMessage = toUserMessage(error) || genericGenerateFailed
     await saveUpdate({
@@ -159,16 +154,8 @@ export async function continuePollingTask({
       error: errorMessage,
       serverTaskId: extractServerTaskIdFromErrorMessage(errorMessage) ?? serverTaskId,
     })
-    useGenerationTaskProgressStore.getState().clearProgress(task.id)
+    if (execution.isCurrent()) useGenerationTaskProgressStore.getState().clearProgress(task.id)
   } finally {
-    if (!ownershipTransferred && createdFilePaths.length > 0) {
-      await getPlatform().image.releaseManagedGenerationMedia(createdFilePaths).catch((releaseError) => {
-        logger.error('[Workspace] 续查结果媒体回滚失败', releaseError, {
-          event: 'generation_workspace.polling.media_rollback.failed',
-          taskId: task.id,
-          context: { serverTaskId, createdFileCount: createdFilePaths.length },
-        })
-      })
-    }
+    if (!parentExecution) execution.finish()
   }
 }

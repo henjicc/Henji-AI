@@ -7,7 +7,7 @@ if (!process.versions.electron) throw new Error('本测试必须由正式 Electr
 const state = vi.hoisted(() => ({ db: null as Database.Database | null }))
 vi.mock('../db', () => ({ getDb: () => state.db! }))
 vi.mock('../db-locations', async () => ({ databaseLocations: (await import('../db-locations-identity.test-support')).identityDatabaseLocations }))
-import { claimGenerationSubmission, completeGenerationSubmission, readGenerationSubmission } from './generation-submissions'
+import { claimGenerationSubmission, completeGenerationSubmission, completePolledGenerationSubmission, readGenerationSubmission } from './generation-submissions'
 import { recoverPersistedGenerationOperation } from '../application-runtime/persistedOperationRecovery'
 import { createGenerationSubmissionsTableV1 } from './schema'
 import { createGenerationHistoryTablesV1 } from '../generation-history/schema'
@@ -60,6 +60,8 @@ describe('原生生成提交事实', () => {
     completeGenerationSubmission('original', { status: 'pending', taskId: 'provider-1', urls: [], filePaths: [] })
     expect(claimGenerationSubmission('original', { modelId: 'model', params: { width: 2, prompt: 'test' } })).toMatchObject({ taskId: 'provider-1' })
     expect(readGenerationSubmission('original')).toMatchObject({ status: 'pending' })
+    completePolledGenerationSubmission('provider-1', { status: 'completed', taskId: 'provider-1', urls: [], filePaths: ['/managed/result.png'] })
+    expect(readGenerationSubmission('original')).toMatchObject({ status: 'completed', filePaths: ['/managed/result.png'] })
     expect(() => claimGenerationSubmission('original', { ...request, modelId: 'other' })).toThrow('GENERATION_INPUT_CONFLICT')
     expect(claimGenerationSubmission('new-request', request)).toBeNull()
   })

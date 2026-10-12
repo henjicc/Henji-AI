@@ -39,10 +39,32 @@ describe('AI Runtime 受管媒体所有权', () => {
   })
 
   afterEach(async () => {
+    vi.restoreAllMocks()
     vi.useRealTimers()
     vi.unstubAllGlobals()
     resetManagedMediaFileLeasesForTest()
     await fs.rm(mocks.dataDir, { recursive: true, force: true })
+  })
+
+  it('暂存写入中断不发布残片，重试写完整且修复被截断的历史文件', async () => {
+    const open = fs.open.bind(fs)
+    vi.spyOn(fs, 'open').mockImplementationOnce(async (...args) => {
+      const handle = await open(...args)
+      vi.spyOn(handle, 'writeFile').mockImplementationOnce(async () => {
+        await handle.write(Buffer.from([137, 80]))
+        throw Object.assign(new Error('disk full'), { code: 'ENOSPC' })
+      })
+      return handle
+    })
+    await expect(saveMediaFromUrlTracked('https://media.example.test/result.png')).rejects.toMatchObject({ code: 'ENOSPC' })
+    expect(await fs.readdir(path.join(mocks.dataDir, 'Media'))).toEqual([])
+    const saved = await saveMediaFromUrlTracked('https://media.example.test/result.png')
+    expect((await fs.stat(saved!.filePath)).size).toBe(7)
+    resetManagedMediaFileLeasesForTest()
+    await fs.writeFile(saved!.filePath, new Uint8Array([137, 80]))
+    await expect(saveMediaFromUrlTracked('https://media.example.test/result.png')).resolves.toEqual({ filePath: saved!.filePath, created: false })
+    expect(await fs.readFile(saved!.filePath)).toEqual(Buffer.from([137, 80, 78, 71, 1, 2, 3]))
+    expect(await fs.readdir(path.join(mocks.dataDir, 'Media'))).toHaveLength(1)
   })
 
   it('首次保存内容寻址媒体时报告本次创建的文件', async () => {
