@@ -32,6 +32,10 @@ import { extname, getPathForFile, openDialog } from '@/platform/desktopApi'
 import SettingsDialog from '../components/SettingsDialog'
 
 const logger = createLogger('components.Settings.AgentSkillsSection')
+const BUILTIN_DESCRIPTION_KEYS: Readonly<Record<string, string>> = {
+  'image-edit-workbench': 'agentSkills.imageEditDescription',
+  'video-edit-workbench': 'agentSkills.videoEditDescription',
+}
 
 /** 状态行：失败用危险文字色，与进行中、已完成的提示区分开（5.6 第二批）。 */
 interface StatusLine { text: string; failed: boolean }
@@ -230,7 +234,7 @@ export default function AgentSkillsSection(): JSX.Element {
   }, [t])
 
   const renderSkillRow = (skill: AssistantSkillMetadata): JSX.Element => (
-    <div key={`${skill.source}:${skill.name}`} className="flex items-start gap-3 py-1.5">
+    <div key={`${skill.source}:${skill.name}`} className="flex items-start gap-3 border-t border-line/60 py-5 first:border-t-0 first:pt-0 last:pb-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className={UI_TEXT_BODY_CLASS}>{skill.name}</span>
@@ -241,7 +245,7 @@ export default function AgentSkillsSection(): JSX.Element {
             <span className={UI_TEXT_META_CLASS}>{t('agentSkills.referenceCount', { count: skill.referencePaths.length })}</span>
           ) : null}
         </div>
-        <p className={`mt-0.5 leading-5 ${UI_TEXT_META_CLASS}`}>{skill.description}</p>
+        <p className={`mt-0.5 leading-5 ${UI_TEXT_META_CLASS}`}>{skill.source === 'builtin' && BUILTIN_DESCRIPTION_KEYS[skill.name] ? t(BUILTIN_DESCRIPTION_KEYS[skill.name]) : skill.description}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <UiSwitch
@@ -270,7 +274,7 @@ export default function AgentSkillsSection(): JSX.Element {
     <div className={UI_FORM_ROW_GAP_CLASS}>
       {status.failed ? <UiError size="sm" align="start" title={t('agentSkills.failedTitle')} message={status.text} onRetry={() => void retry.current()} retryLabel={t('agentSkills.retry')} />
         : !loaded ? <UiLoading size="sm" message={t('agentSkills.reading')} /> : <>
-      <UiGroup title={t('agentSkills.userGroup')}>
+      <UiGroup title={t('agentSkills.userGroup')} gap="none">
         {userSkills.length > 0
           ? userSkills.map(renderSkillRow)
           : (
@@ -282,7 +286,7 @@ export default function AgentSkillsSection(): JSX.Element {
           )}
       </UiGroup>
 
-      <UiGroup title={t('agentSkills.builtinGroup')} divided>
+      <UiGroup title={t('agentSkills.builtinGroup')} divided gap="none">
         {builtinSkills.length > 0
           ? builtinSkills.map(renderSkillRow)
           : <p className={UI_TEXT_META_CLASS}>{t('agentSkills.builtinEmpty')}</p>}

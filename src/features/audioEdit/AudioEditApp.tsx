@@ -1,3 +1,4 @@
+import { notificationMessage } from '@/i18n/notifications'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import { useShallow } from 'zustand/react/shallow'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -283,7 +284,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const normalizationGain = useMemo(() => calculatePreviewGain(waveformPeaks), [waveformPeaks])
   const { togglePlayback, seekSourceFrame } = useAudioEditPreview(project, normalizationGain)
   const navigateToFrame = (frame: number) => { setNavigationTarget({ frame }); seekSourceFrame(frame) }
-  const notifyError = useCallback((error: unknown) => showNotification(error instanceof Error ? error.message : '操作失败，请重试', 'error'), [showNotification])
+  const notifyError = useCallback((error: unknown) => showNotification(error instanceof Error ? error.message : notificationMessage('operationFailed'), 'error'), [showNotification])
   const run = useCallback(async (operation: () => Promise<unknown>) => {
     setBusy(true)
     try { await operation() } catch (error) { notifyError(error) } finally { setBusy(false) }
@@ -358,7 +359,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     const targetPath = await saveDialog({ defaultPath: `${project.name.replace(/\.[^.]+$/, '')}-剪辑.${format}`, filters: [{ name: format === 'xml' ? 'Final Cut Pro 7 XML' : 'WAV 音频', extensions: [format] }] })
     if (!targetPath) return
     const result = await exportAudioEdit({ projectId: project.id, targetPath, format, includeProcessing: withRx, ...(withSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '') + '.srt' } : {}) })
-    showNotification(`已导出${format === 'xml' ? ' XML' : ' WAV'}，交付时长 ${formatTime(result.durationFrames, project.source.sampleRate)}`)
+    showNotification(notificationMessage('audioExported', { format: format.toUpperCase(), duration: formatTime(result.durationFrames, project.source.sampleRate) }))
   })
   if (!project) {
     // 列表整页是通用文档页（3.3）：取数、筛选、草稿区与右键操作（重命名、移到项目、创建副本、删除等）都由通用组件负责
@@ -401,7 +402,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         count = next.suggestions.filter((item) => selected.has(item.id) && item.status === (apply ? 'applied' : 'dismissed')).length
         return count ? next : current
       })
-      showNotification(count ? `${apply ? '已处理' : '已隐藏'} ${count} 处，可整批撤销` : '这些线索已处理或失效，没有新增修改')
+      showNotification(count ? notificationMessage(apply ? 'audioCuesProcessed' : 'audioCuesHidden', { count }) : notificationMessage('audioCuesUnchanged'))
     } catch (error) { notifyError(error) }
   }
   const editSelection = (mode: 'delete' | 'mute' | 'restore') => {
@@ -410,7 +411,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   }
   const relinkSource = () => run(async () => {
     const path = await pickAudioEditMedia('原始素材')
-    if (path) { await relinkAudioEdit(project.id, path); setSourceError(''); showNotification('原素材已重新定位') }
+    if (path) { await relinkAudioEdit(project.id, path); setSourceError(''); showNotification(notificationMessage('audioRelinked')) }
   })
   const runningTasks = tasks.filter((task) => task.state === 'running' && (task.kind !== 'silence' || state.busy))
   const transcriptionInterrupted = tasks.some((task) => task.kind === 'transcription' && ['failed', 'cancelled'].includes(task.state)) && !project.transcript.length
@@ -442,7 +443,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           <UiButton size="sm" disabled={disabled} onClick={() => void relinkSource()}>重新定位</UiButton>
         </span>}
         <UiIconButton size="lg" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} title={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search size={16} /></UiIconButton>
-        <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification('已撤销全部剪辑修改；可再次撤销以恢复操作前状态') }} />
+        <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification(notificationMessage('audioUndoAll')) }} />
         <UiIconButton size="lg" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" title="重做"><Redo2 size={16} /></UiIconButton>
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
@@ -464,12 +465,12 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
             <p className={`leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>{transcriptionInterrupted ? '上次转写未完成，可先恢复原任务。' : '无须转写也可压缩停顿。识别按配置的模型计费。'}</p>
             {transcriptionInterrupted
               ? <UiButton variant="secondary" className="w-full" onClick={() => void run(() => transcribeAudioEdit({ projectId: project.id }))}>恢复转写</UiButton>
-              : <UiButton variant="secondary" className="w-full" disabled={!configuredAsr || Boolean(sourceError)} onClick={() => void run(async () => { await transcribeAudioEdit({ projectId: project.id }); showNotification('转写完成，剪辑粒度以实际时间戳为准') })}>开始转写</UiButton>}
+              : <UiButton variant="secondary" className="w-full" disabled={!configuredAsr || Boolean(sourceError)} onClick={() => void run(async () => { await transcribeAudioEdit({ projectId: project.id }); showNotification(notificationMessage('audioTranscribed')) })}>开始转写</UiButton>}
           </section>}
           <section className="flex flex-col gap-2.5">
             <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>一键处理</h2>
             <p className={`leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>压缩停顿、清理语气词。黄色区域预览将要删除的声音，处理后仍可逐词调整。</p>
-            <UiButton variant="secondary" className="w-full gap-1.5" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); showNotification(`已处理停顿和所选语气词，缩短 ${(result.shortenedMs / 1000).toFixed(2)} 秒，可整批撤销`) })}><Sparkles size={15} />快速处理</UiButton>
+            <UiButton variant="secondary" className="w-full gap-1.5" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); showNotification(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles size={15} />快速处理</UiButton>
           </section>
           <UiGroup divided titleTone="compact" gap="none">
             <AudioEditDisclosure title="自定义处理参数" value={`停顿 ≥ ${settings.silenceThresholdMs} 毫秒`}>
@@ -478,10 +479,10 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
               <UiFormRow label={<RangeLabel name="保留时长" value={`${settings.retainedSilenceMs} 毫秒`} />} density="compact"><UiRangeInput aria-label="保留时长" min={0} max={settings.silenceThresholdMs - 50} step={50} value={settings.retainedSilenceMs} onChange={(event) => update({ batchSettings: { ...settings, retainedSilenceMs: Number(event.target.value) } })} /></UiFormRow>
               <UiFormRow label={<RangeLabel name="静音阈值" value={`${settings.noiseDb} dB`} />} density="compact"><UiRangeInput aria-label="静音阈值" min={-80} max={-10} step={1} value={settings.noiseDb} onChange={(event) => update({ batchSettings: { ...settings, noiseDb: Number(event.target.value) } })} /></UiFormRow>
               <UiFormRow label="包括片头片尾" density="compact" inline><UiSwitch aria-label="包括片头片尾" checked={settings.trimEdges} onCheckedChange={(value) => update({ batchSettings: { ...settings, trimEdges: value } })} /></UiFormRow>
-              <UiButton variant="secondary" className="w-full" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await compressAudioEditSilence(project.id, range); showNotification(`处理 ${result.count} 处停顿，缩短 ${(result.shortenedMs / 1000).toFixed(2)} 秒`) })}>压缩停顿</UiButton>
+              <UiButton variant="secondary" className="w-full" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await compressAudioEditSilence(project.id, range); showNotification(notificationMessage('audioSilenceCompressed', { count: result.count, seconds: (result.shortenedMs / 1000).toFixed(2) })) })}>压缩停顿</UiButton>
               <p className={UI_TEXT_META_CLASS}>选择需要清理的词类；可能有语义的词默认保留。</p>
               <div role="group" aria-label="语气词" className="flex flex-wrap gap-1">{['嗯', '呃', '额', '那个', '就是', '啊'].map((word) => <UiChipButton key={word} size="sm" active={settings.fillers.includes(word)} aria-pressed={settings.fillers.includes(word)} onClick={() => update({ batchSettings: { ...settings, fillers: settings.fillers.includes(word) ? settings.fillers.filter((value) => value !== word) : [...settings.fillers, word] } })}>{word}</UiChipButton>)}</div>
-              <UiButton variant="secondary" className="w-full" onClick={() => void run(async () => showNotification(`清理 ${await cleanProjectAudioEditFillers(project.id, range)} 处语气词，可撤销或逐处恢复`))}>清理语气词</UiButton>
+              <UiButton variant="secondary" className="w-full" onClick={() => void run(async () => showNotification(notificationMessage('audioFillersCleaned', { count: await cleanProjectAudioEditFillers(project.id, range) })))}>清理语气词</UiButton>
             </AudioEditDisclosure>
             {enabledCuts.length > 0 && <AudioEditDisclosure title="已处理区间" value={`${enabledCuts.length} 处`}>
               <div className="flex flex-col">{enabledCuts.map((cut) => <div key={cut.id} className="flex items-center justify-between gap-2">

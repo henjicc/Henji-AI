@@ -37,7 +37,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
         <UiSwitch checked={showPriceEstimate} onCheckedChange={onToggleShowPrice} />
       </UiFormRow>
 
-      <SettingsDependentRows open={showPriceEstimate}>
+      <SettingsDependentRows aligned open={showPriceEstimate}>
         <UiFormRow
           label={t('sections.display.currencyModeLabel')}
           info={t('sections.display.currencyModeHint')}

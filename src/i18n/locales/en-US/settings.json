@@ -427,6 +427,7 @@
       }
     },
     "about": {
+      "unversioned": "Unversioned",
       "authorLabel": "Author",
       "homepageLabel": "Project homepage",
       "licenseLabel": "License",
@@ -622,6 +623,8 @@
     }
   },
   "agentSkills": {
+    "videoEditDescription": "Edit videos, organize the timeline, work on rhythm, subtitles, music, color, transitions and multiple cameras, change framing, export, and exchange media with other workspaces.",
+    "imageEditDescription": "Edit images, adjust colors, select subjects, remove objects, repair details, edit layers and masks, and export images.",
     "listSeparator": ", ",
     "clauseSeparator": "; ",
     "installed": "Installed {{names}}",
@@ -686,7 +689,7 @@
     "fileOpened": "Opened the instructions file: {{path}}. Click “Reload” after saving your edits.",
     "openFileFailed": "Couldn't open the instructions file",
     "label": "User instructions",
-    "hint": "Describe long-term preferences and habits in plain language. Apart from hard limits such as safety, permissions, approvals, real capabilities and explicit current requests, user instructions take priority over product defaults and model descriptions.",
+    "hint": "Describe your long-term preferences and working habits in natural language.",
     "editorLabel": "Assistant user instructions",
     "placeholder": "For example:\nPrefer PPIO for image generation; favor quality when compatible.\nKeep answers short; run automated checks after changing code.",
     "warningSeparator": "; ",

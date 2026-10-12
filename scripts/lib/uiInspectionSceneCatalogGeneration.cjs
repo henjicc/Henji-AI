@@ -73,7 +73,7 @@ function createGenerationSettingsScenes(context) {
   async function openAboutSection(page) {
     await clickNamedButton(page, /^(关于与更新|About & Updates)$/i)
     // 第三方清单惰性加载，等重点组件列表出现；目录点击是平滑滚动，再等分区停到内容区顶部才截图
-    await page.locator('#general-about').getByRole('button', { name: /FFmpeg/ }).waitFor({ state: 'visible', timeout: 8000 })
+    await page.locator('#general-about').getByRole('button', { name: /^Electron/ }).waitFor({ state: 'visible', timeout: 8000 })
     await page.waitForFunction(() => {
       const section = document.getElementById('general-about')
       const body = section?.closest('.settings-scroll-body')
@@ -208,7 +208,21 @@ function createGenerationSettingsScenes(context) {
         }
       },
     },
-    { id: 'generation-empty', surface: '生成', name: '生成-空态', setup: setupGeneration },
+    { id: 'generation-empty', surface: '生成', name: '生成-空态', writesUserData: true,
+      setup: async (page, app) => {
+        const isolated = await app.evaluate(({ app }) => /henji-(?:ui|electron|inspection|test)/i.test(app.getPath('userData')))
+        assert.ok(isolated, '空态场景只能清理隔离夹具历史')
+        const remaining = await page.evaluate(async () => {
+          const history = window.henjiNative.generationHistory
+          await history.clear()
+          return history.count()
+        })
+        assert.equal(remaining, 0, '夹具历史应已清空')
+        await page.reload()
+        await setupGeneration(page)
+        assert.equal(await page.locator('[data-generation-task-id]').count(), 0)
+        await page.getByText(/暂无历史记录|No history/).first().waitFor()
+      } },
     {
       id: 'generation-model-panel',
       surface: '生成',

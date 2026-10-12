@@ -622,7 +622,8 @@ UiCheckbox.displayName = 'UiCheckbox';
  */
 export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
   ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'field', ...props }, ref) => {
-    const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
+    const formRow = useUiFormRowLabelling();
+    const rowLabelling = resolveFormRowLabelling(formRow, props);
     const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
       onClick?.(event);
       if (!event.defaultPrevented) {
@@ -632,8 +633,8 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
 
     if (appearance === 'segmented') {
       const sizeClass = size === 'compact'
-        ? `${UI_CONTROL_HEIGHT_CLASS.sm} w-20 text-xs`
-        : `${UI_CONTROL_HEIGHT_CLASS.md} w-28 text-13`;
+        ? `${UI_CONTROL_HEIGHT_CLASS.sm} ${formRow?.fillControl ? 'w-full' : 'w-20'} text-xs`
+        : `${UI_CONTROL_HEIGHT_CLASS.md} ${formRow?.fillControl ? 'w-full' : 'w-28'} text-13`;
 
       return (
         <button
@@ -648,20 +649,20 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
         >
           <span
             aria-hidden="true"
-            className={`pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%_-_0.125rem)] rounded-md transition-transform duration-180 ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} ${
+            className={`pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%_-_0.125rem)] rounded-md transition-transform duration-180 bg-raised ${
               checked ? 'translate-x-full' : 'translate-x-0'
             }`}
           />
           <span
             className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
-              checked ? 'text-text2' : 'text-accent-text'
+              checked ? 'text-text2' : 'text-text1'
             }`}
           >
             {offLabel}
           </span>
           <span
             className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
-              checked ? 'text-accent-text' : 'text-text2'
+              checked ? 'text-text1' : 'text-text2'
             }`}
           >
             {onLabel}

@@ -2,7 +2,7 @@
 const ts = require('typescript')
 
 const MESSAGES = {
-  S1: '零散分段：请改用 UiSegmented。',
+  S1: '分段请选择 UiSegmented（最多 5 个短选项，中性抬起选中）；更多或长选项用 Dropdown。',
   S2: '面板控件无标签：请放进 UiFormRow。',
   S3: '行内标签挤行：每个 Dropdown 请放进独立的 UiFormRow。',
   S4: '同质列表疑似无分隔：请人工检查标题/元信息列表的边界与留白。',
@@ -112,6 +112,12 @@ function findUiSurfaceGrammar(raw, fileName = 'surface.tsx') {
     return attrText(node, 'labelColumn') === 'panel' ? 72 : undefined
   }
   function visit(node) {
+    if (name(node) === 'UiSegmented' || name(node) === 'SettingsSegmented') {
+      const options = attribute(node, 'options')?.initializer
+      const expression = options && ts.isJsxExpression(options) ? options.expression : undefined
+      const array = expression && ts.isIdentifier(expression) ? constants.get(expression.text) : expression
+      if (array && ts.isArrayLiteralExpression(array) && !array.elements.some(ts.isSpreadElement) && array.elements.length > 5) report('S1', node)
+    }
     if (name(node) === 'UiFormRow' && !toolbar(node)) {
       const width = formWidth(node)
       if (typeof width === 'number') formWidths.push({ node, width })

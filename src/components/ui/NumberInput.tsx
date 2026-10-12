@@ -319,7 +319,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   const scrubCursorClass = disabled ? '' : isFocused ? 'cursor-text' : 'cursor-ew-resize'
 
   return (
-    <div className={className}>
+    <div className={`${fillControl ? 'min-w-0 w-full flex-1' : ''} ${className ?? ''}`}>
       {label ? (
         <label
           className={`${UI_FIELD_LABEL_CLASS} select-none ${disabled ? '' : 'cursor-ew-resize'}`}

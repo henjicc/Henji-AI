@@ -1,9 +1,10 @@
+import type { NotificationMessage } from '@/i18n/notifications'
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { UI_TOAST_DISPLAY_MS, UI_TOAST_EXIT_MS } from '@/components/ui/motion'
 import { UiToast, type UiToastTone, type UiToastAction } from '@/components/ui/UiToast'
 
 interface NotificationState {
-    message: string
+    message: NotificationMessage
     type: UiToastTone
     action?: UiToastAction
 }
@@ -11,15 +12,15 @@ interface NotificationState {
 interface NotificationContextValue {
     notification: NotificationState | null
     notificationVisible: boolean
-    showNotification: (message: string, type?: UiToastTone, action?: UiToastAction) => void
+    showNotification: (message: NotificationMessage, type?: UiToastTone, action?: UiToastAction) => void
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null)
 
 const notificationEvents = new EventTarget()
 /** Domain services use the existing root toast without mounting another provider. */
-export function notifyUser(message: string): void {
-    notificationEvents.dispatchEvent(new CustomEvent<string>('notification', { detail: message }))
+export function notifyUser(message: NotificationMessage): void {
+    notificationEvents.dispatchEvent(new CustomEvent<NotificationMessage>('notification', { detail: message }))
 }
 
 export const useNotification = () => {
@@ -47,7 +48,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         clearTimerRef.current = null
     }, [])
 
-    const showNotification = useCallback((message: string, type: UiToastTone = 'success', action?: UiToastAction) => {
+    const showNotification = useCallback((message: NotificationMessage, type: UiToastTone = 'success', action?: UiToastAction) => {
         clearTimers()
         setNotification({ message, type, ...(action ? { action } : {}) })
         setNotificationVisible(true)
@@ -60,7 +61,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     useEffect(() => clearTimers, [clearTimers])
     useEffect(() => {
-        const receive = (event: Event): void => showNotification((event as CustomEvent<string>).detail)
+        const receive = (event: Event): void => showNotification((event as CustomEvent<NotificationMessage>).detail)
         notificationEvents.addEventListener('notification', receive)
         return () => notificationEvents.removeEventListener('notification', receive)
     }, [showNotification])

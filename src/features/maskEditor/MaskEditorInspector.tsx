@@ -1,9 +1,11 @@
 import { Brush, Eraser } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   UI_TEXT_META_CLASS,
   UiError,
   UiGroup,
-  UiOptionButton,
+  UiFormRow,
+  UiSegmented,
   UiRangeInput,
 } from '@/components/ui';
 import { MIN_MASK_BRUSH_HARDNESS } from './brushHardness';
@@ -40,73 +42,36 @@ export function MaskEditorInspector({
   onBrushSizeChange,
   onBrushHardnessChange,
 }: MaskEditorInspectorProps): JSX.Element {
+  const { t } = useTranslation('ui');
   const hardnessPercent = Math.round(brushHardness * 100);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-      <UiGroup title="模式" titleTone="overline">
-        <div className="grid grid-cols-2 gap-1">
-          <UiOptionButton
-            type="button"
-            variant="menu"
-            active={mode === 'paint'}
-            aria-pressed={mode === 'paint'}
-            size="sm" className="justify-center gap-2"
-            title="绘制模式(D)"
-            onClick={() => onModeChange('paint')}
-          >
-            <Brush className="h-4 w-4" />
-            绘制
-          </UiOptionButton>
-          <UiOptionButton
-            type="button"
-            variant="menu"
-            active={mode === 'erase'}
-            aria-pressed={mode === 'erase'}
-            size="sm" className="justify-center gap-2"
-            title="擦除模式(E)"
-            onClick={() => onModeChange('erase')}
-          >
-            <Eraser className="h-4 w-4" />
-            擦除
-          </UiOptionButton>
-        </div>
+      <UiGroup labelWidth={72}>
+        <UiFormRow label={t('maskInspector.mode')} density="compact">
+          <UiSegmented ariaLabel={t('maskInspector.mode')} value={mode} onChange={onModeChange} size="sm"
+            options={[
+              { value: 'paint', label: t('maskInspector.paint'), icon: <Brush className="h-4 w-4" />, title: t('maskInspector.paintShortcut') },
+              { value: 'erase', label: t('maskInspector.erase'), icon: <Eraser className="h-4 w-4" />, title: t('maskInspector.eraseShortcut') },
+            ]} />
+        </UiFormRow>
       </UiGroup>
-
-      {tool === 'brush' ? (
-        <UiGroup divided className="mt-4" title="画笔" titleTone="overline">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <div className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
-                <span>大小</span>
-                <span className="text-text1">{Math.round(brushSize)} px</span>
-              </div>
-              <UiRangeInput
-                aria-label="画笔大小"
-                min={1}
-                max={maxBrushSize}
-                step={1}
-                value={brushSize}
-                onChange={(event) => onBrushSizeChange(Number(event.target.value))}
-              />
-            </div>
-            <div className="space-y-2">
-              <div className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
-                <span>硬度</span>
-                <span className="text-text1">{hardnessPercent}%</span>
-              </div>
-              <UiRangeInput
-                aria-label="画笔硬度"
-                min={MIN_MASK_BRUSH_HARDNESS * 100}
-                max={100}
-                step={1}
-                value={hardnessPercent}
-                onChange={(event) => onBrushHardnessChange(Number(event.target.value) / 100)}
-              />
-            </div>
+      {tool === 'brush' && <UiGroup labelWidth={72} divided className="mt-4" title={t('maskInspector.brush')} titleTone="overline">
+        <UiFormRow label={t('maskInspector.size')} density="compact">
+          <div className="flex items-center gap-2">
+            <UiRangeInput aria-label={t('maskInspector.brushSize')} min={1} max={maxBrushSize} step={1} value={brushSize}
+              onChange={event => onBrushSizeChange(Number(event.target.value))} />
+            <span className={`shrink-0 tabular-nums ${UI_TEXT_META_CLASS}`}>{Math.round(brushSize)} px</span>
           </div>
-        </UiGroup>
-      ) : null}
+        </UiFormRow>
+        <UiFormRow label={t('maskInspector.hardness')} density="compact">
+          <div className="flex items-center gap-2">
+            <UiRangeInput aria-label={t('maskInspector.brushHardness')} min={MIN_MASK_BRUSH_HARDNESS * 100} max={100} step={1} value={hardnessPercent}
+              onChange={event => onBrushHardnessChange(Number(event.target.value) / 100)} />
+            <span className={`shrink-0 tabular-nums ${UI_TEXT_META_CLASS}`}>{hardnessPercent}%</span>
+          </div>
+        </UiFormRow>
+      </UiGroup>}
 
       <UiGroup divided className="mt-4" title="操作说明" titleTone="overline">
         <p className={`leading-5 ${UI_TEXT_META_CLASS}`}>

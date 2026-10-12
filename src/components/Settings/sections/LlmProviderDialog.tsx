@@ -283,8 +283,8 @@ const LlmProviderDialog = ({
   }
 
   const providerForm = (
-    <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
-      <UiFormRow label={t('llmProvider.fields.preset')}>
+    <UiGroup labelWidth={120} className="min-h-0 overflow-y-auto pr-1">
+      <UiFormRow label={t('llmProvider.fields.preset')} info={t('llmProvider.hints.preset')}>
         <Dropdown<string>
           value={presetId}
           display={presetOptions.find(option => option.value === presetId)?.label ?? presetOptions[0].label}
@@ -294,9 +294,6 @@ const LlmProviderDialog = ({
           buttonClassName="w-full"
           onSelect={selectPreset}
         />
-        {startInCreateMode ? (
-          <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.preset')}</div>
-        ) : null}
       </UiFormRow>
 
       <UiFormRow label={t('llmProvider.fields.name')}>
@@ -307,7 +304,7 @@ const LlmProviderDialog = ({
         />
       </UiFormRow>
 
-      <UiFormRow label={t('llmProvider.fields.protocol')}>
+      <UiFormRow label={t('llmProvider.fields.protocol')} info={t(activePreset ? 'llmProvider.hints.presetProtocol' : 'llmProvider.hints.protocol')}>
         <Dropdown<ProtocolSelection>
           value={protocolSelection}
           display={(activePreset ? presetProtocolOptions : protocolOptions)
@@ -318,9 +315,6 @@ const LlmProviderDialog = ({
           buttonClassName="w-full"
           onSelect={handleProtocolSelect}
         />
-        <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
-          {t(activePreset ? 'llmProvider.hints.presetProtocol' : 'llmProvider.hints.protocol')}
-        </div>
       </UiFormRow>
 
       <UiFormRow label={t('llmProvider.fields.baseUrl')}>
@@ -396,7 +390,7 @@ const LlmProviderDialog = ({
           )}
         </UiGroup>
       ) : null}
-    </div>
+    </UiGroup>
   )
 
   return (

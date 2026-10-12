@@ -14,6 +14,12 @@ export type ThirdPartyEcosystem = 'runtime' | 'npm' | 'cargo'
 /** package：组件自带许可文件；standard：组件未附带，回退为该许可的标准文本；none：无全文 */
 export type ThirdPartyTextOrigin = 'package' | 'standard' | 'none'
 
+/** 发布版本用于许可界面；提交哈希等构建标识只留在原始清单。 */
+export function readableThirdPartyVersion(version: string | null): string | undefined {
+  const release = version?.replace(/(?:-\d+)?-g?[\da-f]{7,40}$/i, '').split('+')[0]
+  return release && /^v?\d+(?:\.\d+)+(?:-[\w.-]+)?$/.test(release) ? release : undefined
+}
+
 export interface ThirdPartyComponent {
   id: string
   name: string

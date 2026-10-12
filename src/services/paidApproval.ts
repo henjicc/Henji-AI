@@ -1,3 +1,4 @@
+import { notificationMessage } from '@/i18n/notifications'
 import i18n from '@/i18n'
 import { convertPriceAmount, readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
 import { z } from 'zod'
@@ -63,7 +64,7 @@ export async function prepareUiPaidApproval(request: PaidApprovalRequest, capabi
   const decision = paidApprovalDecisionSchema.parse(await send('prepare'))
   return { decision, project: request.project, confirm: (project: boolean) => send('approve', project), start: async () => {
     await send('start')
-    if (decision.decision === 'auto') notifyUser(`已按自动同意规则执行，${decision.estimatedCny === null ? '费用按模型实际计费' : `预计 ¥${decision.estimatedCny.toFixed(2)}`}`)
+    if (decision.decision === 'auto') notifyUser(decision.estimatedCny === null ? notificationMessage('autoApprovedMetered') : notificationMessage('autoApprovedEstimate', { amount: decision.estimatedCny.toFixed(2) }))
   }, complete: () => send('complete'), reject: () => send('reject'), failed: () => send('failed') }
 }
 

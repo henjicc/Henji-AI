@@ -1,5 +1,8 @@
-import type { ReactNode } from 'react'
-import { UI_FIELD_INLINE_ROW_CLASS, UiFieldLayoutContext, useUiFieldLayout } from '@/components/ui'
+import { Children, isValidElement, useContext, type ReactNode } from 'react'
+import { UI_FIELD_INLINE_ROW_CLASS, UiFieldLayoutContext, UiFormRow, useUiFieldLayout } from '@/components/ui'
+import { ParamLabel } from './ParamLabel'
+
+import { ParamPanelRowsContext } from './paramPanelRows'
 
 interface ParamFieldProps {
   children: ReactNode
@@ -18,6 +21,14 @@ interface ParamFieldProps {
  */
 export function ParamField({ children, className = 'w-auto', inline = true }: ParamFieldProps): JSX.Element {
   const layout = useUiFieldLayout()
+  const panelRows = useContext(ParamPanelRowsContext)
+  if (panelRows && inline) {
+    const nodes = Children.toArray(children)
+    const label = nodes.find(node => isValidElement(node) && node.type === ParamLabel)
+    if (label) return <UiFormRow label={label} density="compact">
+      {nodes.filter(node => node !== label)}
+    </UiFormRow>
+  }
   if (layout !== 'toolbar') return <div className={className}>{children}</div>
   if (!inline) {
     return (

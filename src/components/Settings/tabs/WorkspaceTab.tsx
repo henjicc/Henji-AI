@@ -26,7 +26,7 @@ const WorkspaceTab: React.FC = () => {
     <UiRegion maxWidthClassName={SETTINGS_CONTENT_MAX_WIDTH_CLASS} className={SETTINGS_CONTENT_CLASS}>
       <SettingsSection id="workspace-generation">
         <DefaultModelsSection />
-        <UiGroup title={t('sections.generation.taskGroup')} titleTone="overline">
+        <UiGroup labelWidth={120} title={t('sections.generation.taskGroup')} titleTone="overline">
           <ConcurrencySection
             maxConcurrentTasks={settings.maxConcurrentTasks}
             onChange={(value) => updateSetting('maxConcurrentTasks', value)}
@@ -40,7 +40,7 @@ const WorkspaceTab: React.FC = () => {
             onChangeUsdToCnyRate={(value) => updateSetting('usdToCnyRate', value)}
           />
         </UiGroup>
-        <UiGroup title={t('sections.generation.inputGroup')} titleTone="overline">
+        <UiGroup labelWidth={120} title={t('sections.generation.inputGroup')} titleTone="overline">
           <PromptOptimizationSection
             behavior={settings.promptOptimizationButtonBehavior}
             onChangeBehavior={(value) => updateSetting('promptOptimizationButtonBehavior', value)}

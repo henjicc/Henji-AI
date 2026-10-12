@@ -332,7 +332,7 @@ export function UiFormRow({
       <div className={`flex min-h-control-sm ${FORM_LABEL_WIDTH_CLASS[width]} shrink-0 items-center`}>
         <div id={labelId} className={`min-w-0 break-words ${labelClass}`}>{labelNode}</div>
       </div>
-      <div data-ui-form-control className="min-w-0 flex-1 text-right">
+      <div data-ui-form-control className="min-w-0 flex-1 text-left">
         <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
         {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
       </div>

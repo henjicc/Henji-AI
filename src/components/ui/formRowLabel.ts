@@ -12,7 +12,7 @@ import { createContext, useContext } from 'react'
 export interface UiFormRowLabelling {
   labelId: string
   hintId?: string
-  /** 固定列面板内，字段外壳填满控件列；开关等固有几何不变。 */
+  /** 固定列面板内，字段及分段填满控件列；胶囊开关等固有几何不变。 */
   fillControl?: boolean
 }
 

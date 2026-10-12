@@ -10,6 +10,11 @@ const fixtures = [
   ['S4', '<div>{items.map(item => <div><h3>{item.title}</h3><p className="text-text2">{item.meta}</p></div>)}</div>', '<div>{items.map(item => <div className="border-b border-line"><h3>{item.title}</h3><p className="text-text2">{item.meta}</p></div>)}</div>'],
   ['S5', '<div><UiFormRow labelWidth={72} label="方式"/><UiFormRow labelWidth={96} label="属性"/></div>', '<UiGroup labelWidth={96}><UiFormRow label="方式"/><UiFormRow label="属性"/></UiGroup>'],
 ]
+test('S1 分段最多五项，更多项改下拉；动态项数交给共享组件处理', () => {
+  assert.equal(findUiSurfaceGrammar('<UiSegmented options={[1,2,3,4,5]} />').length, 0)
+  assert.equal(findUiSurfaceGrammar('<SettingsSegmented options={[1,2,3,4,5,6]} />')[0].rule, 'S1')
+  assert.equal(findUiSurfaceGrammar('<Dropdown options={[1,2,3,4,5,6]} />').length, 0)
+})
 for (const [rule, bad, good] of fixtures) test(`${rule}: 正反夹具与行级豁免`, () => {
   const hits = findUiSurfaceGrammar(bad)
   assert.equal(hits.filter(hit => hit.rule === rule).length, 1)

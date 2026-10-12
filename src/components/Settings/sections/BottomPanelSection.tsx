@@ -1,7 +1,5 @@
 import React from 'react'
-import { UiFormRow, UiRangeInput } from '@/components/ui'
-import SettingsSegmented from '../components/SettingsSegmented'
-import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
+import { Dropdown, UiFormRow, UiRangeInput } from '@/components/ui'
 import SettingsDependentRows from '../components/SettingsDependentRows'
 import { useI18n } from '@/hooks/useI18n'
 
@@ -43,15 +41,15 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
   return (
     <>
       <UiFormRow label={t('sections.interface.autoCollapseLabel')} info={t('sections.interface.autoCollapseHint')} inline>
-        <SettingsSegmented
+        <Dropdown
           value={mode}
           options={modes.map((item) => ({ value: item, label: t(`sections.interface.autoCollapseModes.${item}`) }))}
-          onChange={selectMode}
+          onSelect={selectMode}
           ariaLabel={t('sections.interface.autoCollapseLabel')}
         />
       </UiFormRow>
 
-      <SettingsDependentRows open={mode === 'scrollOrLeave'}>
+      <SettingsDependentRows aligned open={mode === 'scrollOrLeave'}>
         <UiFormRow
           label={t('sections.interface.collapseDelayLabel', { value: (collapseDelay / 1000).toFixed(1) })}
           info={t('sections.interface.collapseDelayHint')}
@@ -63,7 +61,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
             step={100}
             value={collapseDelay}
             onChange={(event) => onChangeDelay(Number(event.target.value))}
-            className={SETTINGS_INLINE_CONTROL_CLASS}
+            className="w-full"
           />
         </UiFormRow>
       </SettingsDependentRows>

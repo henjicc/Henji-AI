@@ -1,3 +1,4 @@
+import { notificationText } from '@/i18n/notifications'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
@@ -122,7 +123,7 @@ export default function VideoEditApp(): React.ReactElement {
   // The project's own save status is shown once and clears itself when the retry succeeds.
   const onError = useCallback((reason: unknown): void => { if ((reason instanceof Error || reason instanceof DOMException) && reason.name === 'AbortError') return; const message = videoEditUserErrorMessage(reason); if (message !== activeVideoEditInstance()?.error) showNotification(message, 'error') }, [showNotification])
   const onNotice = useCallback((message: string | null): void => { if (message) showNotification(message, 'success') }, [showNotification])
-  useEffect(() => subscribeVideoEditImportCompletion((_projectId, imported, skipped) => { if (skipped) onNotice(`已导入 ${imported.toLocaleString()} 个文件，跳过 ${skipped.toLocaleString()} 个`) }), [onNotice])
+  useEffect(() => subscribeVideoEditImportCompletion((_projectId, imported, skipped) => { if (skipped) onNotice(notificationText('filesImported', { imported, skipped })) }), [onNotice])
   const run = (operation: () => unknown | Promise<unknown>): void => { void Promise.resolve().then(operation).catch(onError) }
   const chooseProjectFolder = async (): Promise<void> => {
     const selected = await openDialog({ directory: true, multiple: false })

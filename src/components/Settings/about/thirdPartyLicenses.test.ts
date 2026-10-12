@@ -6,7 +6,18 @@ import {
   filterThirdPartyComponents,
   loadThirdPartyNotices,
   parseThirdPartyNotices,
+  readableThirdPartyVersion,
 } from './thirdPartyLicenses'
+
+it('许可界面只显示可读发布版本，哈希和未标版本留空由界面提供占位', () => {
+  expect(readableThirdPartyVersion('18.3.1')).toBe('18.3.1')
+  expect(readableThirdPartyVersion('148.0.7778.271')).toBe('148.0.7778.271')
+  expect(readableThirdPartyVersion('9.0.2-17-g2a571b6068')).toBe('9.0.2')
+  expect(readableThirdPartyVersion('2.0.0+build.aacc41ee')).toBe('2.0.0')
+  expect(readableThirdPartyVersion('v2.0.0-beta.1')).toBe('v2.0.0-beta.1')
+  expect(readableThirdPartyVersion('aacc41ee89b9356eae97490fd78ce31d6af57135')).toBeUndefined()
+  expect(readableThirdPartyVersion(null)).toBeUndefined()
+})
 
 const raw = {
   formatVersion: 1,

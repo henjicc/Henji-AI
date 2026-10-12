@@ -14,6 +14,8 @@
     "clear": "清除搜索"
   },
   "filters": {
+    "type": "类型",
+    "provider": "供应商",
     "providerType": "供应商 / 类型",
     "function": "功能"
   },

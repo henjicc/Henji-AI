@@ -80,7 +80,7 @@ it.each(['none', 'incompatible'] as const)('选区不可用（%s）给短通知�
   const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={onError} onEffectsAdded={added} />)
   fireEvent.doubleClick(container.querySelector(`[data-video-edit-effects-entry="effect:${reason === 'none' ? 'gaussian_blur' : 'reverb'}"]`)!)
   expect(notification).toHaveBeenCalledOnce()
-  expect(notification).toHaveBeenCalledWith(expect.any(String), 'error')
+  expect(notification).toHaveBeenCalledWith({ key: reason === 'none' ? 'selectTimelineClip' : 'effectUnavailable' }, 'error')
   expect(onError).not.toHaveBeenCalled()
   expect(added).not.toHaveBeenCalled()
   expect(compositing.applyVideoEditBuiltinEffect).not.toHaveBeenCalled()

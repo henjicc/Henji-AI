@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Pin, X } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import { useTranslation } from 'react-i18next'
-import { Dropdown, UiButton, UiError, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
+import { Dropdown, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
 import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import type { CanvasNode } from '../domain/canvasNodes'
 import { resolveNodeDisplayName } from '../domain/nodeDisplay'
@@ -34,7 +34,9 @@ export function CanvasTidyPanel({ tidy, nodes }: Props) {
         {t(`canvasTidy.${candidate.mode}`)}
       </UiOptionButton>)}
     </div>
-    <Dropdown surface="glass" label={t('canvasTidy.pin')} ariaLabel={t('canvasTidy.pin')}
+    <UiGroup labelWidth={96}>
+    <UiFormRow label={t('canvasTidy.pin')} density="compact">
+    <Dropdown surface="glass" ariaLabel={t('canvasTidy.pin')}
       display={pinned ? name(pinned) : t('canvasTidy.noPin')}
       renderPanel={() => <div className="h-60 w-64">
         <Virtuoso data={[null, ...choices]} itemContent={(_index, node) => <UiOptionButton variant="menu"
@@ -43,6 +45,8 @@ export function CanvasTidyPanel({ tidy, nodes }: Props) {
           <Pin className="h-3.5 w-3.5" />{node ? name(node) : t('canvasTidy.noPin')}
         </UiOptionButton>} />
       </div>} />
+    </UiFormRow>
+    </UiGroup>
     {tidy.candidate?.unavailable
       ? <UiError size="xs" message={tidy.candidate.unavailable} />
       : <span className={UI_TEXT_META_CLASS}>{t('canvasTidy.preview')}</span>}

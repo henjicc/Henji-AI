@@ -5,6 +5,9 @@ import { getAvailableProviders } from '@/utils/modelHelpers'
 import { providerBrandId } from '@/core/config/providerBrands'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 import {
+  Dropdown,
+  UiFormRow,
+  UiGroup,
   UiSearchInput,
   UiMarqueeText,
   UiOptionButton,
@@ -68,12 +71,6 @@ function compareModelItems(
   if (typeDiff !== 0) return typeDiff
 
   return compareModelsBySeries(a.m, b.m)
-}
-
-// 筛选项是同质选项集合，走 UiOptionButton：静息保留描边（纯文字 chip 去框会变裸文字），
-// 选中态由公共令牌给出，和下方模型网格、比例/分辨率面板是同一个蓝。
-function getFilterChipClass(active: boolean, dimmed = false): string {
-  return dimmed && !active ? 'opacity-40' : ''
 }
 
 /**
@@ -187,6 +184,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
     }
   }, [highlightedIndex])
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.defaultPrevented) return
     const totalItems = filteredAndSortedModels.length
     if (totalItems === 0) return
     const columns = getColumnsCount()
@@ -261,80 +259,26 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
             onClear={() => setSearchQuery('')}
           />
         </div>
-        {/* 供应商 / 类型筛选 */}
-        <div className="mb-3">
-          <div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('filters.providerType')}</div>
-          <div className="flex flex-wrap gap-2">
-            <UiOptionButton
-              type="button"
-              active={modelFilterProvider === 'all'}
-              onClick={() => onFilterProviderChange('all')}
-              size="md"
-              className={getFilterChipClass(modelFilterProvider === 'all')}
-            >
-              {t('all')}
-            </UiOptionButton>
-            {providerBrands.map(p => (
-              <UiOptionButton
-                key={p.id}
-                type="button"
-                active={providerBrandId(modelFilterProvider) === p.id}
-                onClick={() => onFilterProviderChange(p.id)}
-                size="md"
-                className={getFilterChipClass(providerBrandId(modelFilterProvider) === p.id)}
-              >
-                {p.name}
-              </UiOptionButton>
-            ))}
-            <div className="w-px bg-line mx-1"></div>
-            {([
-              { label: t('all'), value: 'all' },
-              { label: t('favorites'), value: 'favorite' },
-              { label: t('types.image'), value: 'image' },
-              { label: t('types.video'), value: 'video' },
-              { label: t('types.audio'), value: 'audio' },
-              { label: t('types.other'), value: 'other' }
-            ] satisfies Array<{ label: string; value: GenerationModelFilterType }>).map(typeOption => {
-              const isTypeHidden = typeOption.value !== 'all' && typeOption.value !== 'favorite' && hiddenTypes.has(typeOption.value)
-              return (
-                <UiOptionButton
-                  key={typeOption.value}
-                  type="button"
-                  active={modelFilterType === typeOption.value}
-                  onClick={() => onFilterTypeChange(typeOption.value)}
-                  size="md"
-                  className={getFilterChipClass(modelFilterType === typeOption.value, isTypeHidden)}
-                >
-                  {typeOption.label}
-                </UiOptionButton>
-              )
-            })}
-          </div>
-        </div>
-        {/* 功能筛选 */}
-        <div className="mb-3">
-          <div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('filters.function')}</div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { label: t('all'), value: 'all' },
-              ...FILTERABLE_TAGS.map(tag => ({
-                label: t(`tags.${tag}`),
-                value: tag
-              }))
-            ].map(f => (
-              <UiOptionButton
-                key={f.value}
-                type="button"
-                active={modelFilterFunction === f.value}
-                onClick={() => onFilterFunctionChange(f.value)}
-                size="md"
-                className={getFilterChipClass(modelFilterFunction === f.value)}
-              >
-                {f.label}
-              </UiOptionButton>
-            ))}
-          </div>
-        </div>
+        <UiGroup labelWidth={96}>
+          <UiFormRow label={t('filters.provider')} density="compact">
+            <Dropdown value={modelFilterProvider} ariaLabel={t('filters.provider')}
+              options={[{ label: t('all'), value: 'all' }, ...providerBrands.map(p => ({ label: p.name, value: p.id }))]}
+              onSelect={onFilterProviderChange} />
+          </UiFormRow>
+          <UiFormRow label={t('filters.type')} density="compact">
+            <Dropdown<GenerationModelFilterType> value={modelFilterType} ariaLabel={t('filters.type')}
+              options={[
+                { label: t('all'), value: 'all' }, { label: t('favorites'), value: 'favorite' },
+                { label: t('types.image'), value: 'image' }, { label: t('types.video'), value: 'video' },
+                { label: t('types.audio'), value: 'audio' }, { label: t('types.other'), value: 'other' },
+              ]} onSelect={onFilterTypeChange} />
+          </UiFormRow>
+          <UiFormRow label={t('filters.function')} density="compact">
+            <Dropdown value={modelFilterFunction} ariaLabel={t('filters.function')}
+              options={[{ label: t('all'), value: 'all' }, ...FILTERABLE_TAGS.map(tag => ({ label: t(`tags.${tag}`), value: tag }))]}
+              onSelect={onFilterFunctionChange} />
+          </UiFormRow>
+        </UiGroup>
       </div>
       {/* 模型列表 - 可滚动区域 */}
       <div ref={gridContainerRef} className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 pt-1">

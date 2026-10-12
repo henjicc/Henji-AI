@@ -1,3 +1,4 @@
+import { notificationMessage } from '@/i18n/notifications'
 import { Fragment, useState } from 'react'
 import { ChevronDown, ChevronRight, Folder, Pencil, ScanFace, Sparkles, Star, Trash2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
@@ -53,14 +54,14 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
       if (entry.transitionKind) void applyVideoEditTransitionToSelection(instance.document.id, entry.transitionKind).catch(onError)
       return
     }
-    if (!instance.selectedClipIds.length) { showNotification('请先在时间线上选中片段。', 'error'); return }
+    if (!instance.selectedClipIds.length) { showNotification(notificationMessage('selectTimelineClip'), 'error'); return }
     try {
       const sequence = instance.document.sequences.find(value => value.id === instance.activeSequenceId)
       if (!sequence) throw new Error('原序列已移除。')
       // 与拖放预览共用媒介、素材与锁定轨道判定；预期的不可用选区只给短提示。
       const targets = videoEditEffectDropClips(sequence, instance.selectedClipIds[0], instance.selectedClipIds, entry.templateRef)
       if (!targets.length) {
-        showNotification('所选片段无法添加此效果，请检查片段类型和轨道锁定。', 'error')
+        showNotification(notificationMessage('effectUnavailable'), 'error')
         return
       }
       const effectIds = applyVideoEditBuiltinEffect(instance.document.id, instance.activeSequenceId, instance.selectedClipIds, entry.templateRef)

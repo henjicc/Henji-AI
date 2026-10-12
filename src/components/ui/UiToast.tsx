@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import type { NotificationMessage } from '@/i18n/notifications';
 import { Check, CircleAlert } from 'lucide-react';
 
 import { UiButton, UiPanel } from './primitives';
@@ -7,7 +9,7 @@ export type UiToastTone = 'success' | 'error' | 'warning';
 export interface UiToastAction { label: string; onClick: () => void }
 
 export interface UiToastProps {
-  message: string;
+  message: NotificationMessage;
   tone: UiToastTone;
   /** 淡出期间传 false：保持挂载，只做透明度与位移过渡。 */
   visible?: boolean;
@@ -32,6 +34,8 @@ const PLACEMENT_CLASS: Record<NonNullable<UiToastProps['placement']>, string> = 
  * 浮层表面 + 正文文字，状态只进图标颜色；不抢焦点、不拦截指针。状态与时长由调用方管理。
  */
 export function UiToast({ message, tone, visible = true, surface = 'solid', placement = 'window', action }: UiToastProps): JSX.Element {
+  const { t } = useTranslation('ui');
+  const text = typeof message === 'string' ? message : t(`notifications.${message.key}`, message.values);
   const Icon = tone === 'success' ? Check : CircleAlert;
   return (
     <div
@@ -49,7 +53,7 @@ export function UiToast({ message, tone, visible = true, surface = 'solid', plac
           aria-hidden="true"
           className={`mt-0.5 h-4 w-4 shrink-0 ${tone === 'success' ? 'text-success-text' : tone === 'warning' ? 'text-warning-text' : 'text-danger-text'}`}
         />
-        <span className={`${UI_TEXT_BODY_CLASS} min-w-0 break-words`}>{message}</span>
+        <span className={`${UI_TEXT_BODY_CLASS} min-w-0 break-words`}>{text}</span>
         {action && <UiButton size="sm" variant="quiet" className="shrink-0" disabled={!visible} onClick={action.onClick}>{action.label}</UiButton>}
       </UiPanel>
     </div>

@@ -18,7 +18,7 @@ import {
   ABOUT_PROJECT_URL_LABEL,
 } from '../about/aboutInfo'
 import LicenseViewerDialog, { LicenseTextBlock } from '../about/LicenseViewerDialog'
-import { loadThirdPartyNotices, type ThirdPartyNotices } from '../about/thirdPartyLicenses'
+import { loadThirdPartyNotices, readableThirdPartyVersion, type ThirdPartyNotices } from '../about/thirdPartyLicenses'
 
 type NoticesState =
   | { status: 'loading' }
@@ -98,7 +98,7 @@ const AboutSection: React.FC = () => {
               >
                 <span className="flex min-w-0 items-baseline gap-2">
                   <span className="truncate text-sm text-text1">{component.name}</span>
-                  {component.version ? <span className={`truncate font-mono ${UI_TEXT_META_CLASS}`}>{component.version}</span> : null}
+                  <span className={`truncate ${UI_TEXT_META_CLASS}`}>{readableThirdPartyVersion(component.version) ?? t('sections.about.unversioned')}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   <span className={UI_TEXT_META_CLASS}>{component.license}</span>

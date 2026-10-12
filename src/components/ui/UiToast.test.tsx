@@ -7,10 +7,23 @@ import { NotificationProvider, useNotification } from '@/contexts/NotificationCo
 import { useToast } from '@/workspaces/GenerationWorkspace/hooks/useToast';
 import { UI_TOAST_DISPLAY_MS, UI_TOAST_EXIT_MS } from './motion';
 import { UiToast } from './UiToast';
+import i18n from '@/i18n/config';
+import { notificationMessage } from '@/i18n/notifications';
 
 afterEach(cleanup);
 
 describe('UiToast（通知提示唯一实现，任务 5.7）', () => {
+  it('系统提示在显示期间跟随语言切换，用户文字保持原样', async () => {
+    const previous = i18n.language;
+    await i18n.changeLanguage('zh-CN');
+    const view = render(<UiToast message={notificationMessage('saved')} tone="success" />);
+    expect(view.getByRole('status').textContent).toBe('已保存');
+    await act(() => i18n.changeLanguage('en-US'));
+    expect(view.getByRole('status').textContent).toBe('Saved');
+    view.rerender(<UiToast message="用户写的中文标题" tone="success" />);
+    expect(view.getByRole('status').textContent).toBe('用户写的中文标题');
+    await act(() => i18n.changeLanguage(previous));
+  });
   it('成功用 status、失败用 alert；状态只进图标颜色，表面走浮层令牌', () => {
     const { getByRole, rerender } = render(<UiToast message="已复制" tone="success" />);
     const ok = getByRole('status');

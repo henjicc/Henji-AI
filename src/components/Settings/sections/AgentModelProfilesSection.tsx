@@ -6,14 +6,12 @@ import { llmVerifyModelCapabilities } from '@/commands/llmRuntime'
 import {
   Dropdown,
   UI_FORM_ROW_GAP_CLASS,
-  UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
   UiDisclosurePanel,
   UiError,
   UiFormRow,
   UiGroup,
-  UiPanel,
 } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
@@ -248,15 +246,8 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
   }
 
   return (
-    /*
-     * 这里原来是 `<UiPanel>`（卡片）里再套四张 `border + bg-layer` 的卡片，
-     * 而且内层的 layer 比外层更亮——正好踩中"内层背景只能比外层更暗"那条。
-     * 现在外层降成零装饰分组，四个角色块用 inset（更暗、无边框、无阴影）。
-     */
-    // 分节标题“助手模型”已由 SettingsSection 渲染，这里不再叠一个“智能助手模型”分组标题；
-    // 原 info 里的费用提示移到“验证此模型”按钮旁（费用信息放在会产生费用的动作处）。
-    <UiGroup gap="stack">
-      <div className="grid gap-3 sm:grid-cols-2">
+    <UiGroup gap="stack" labelWidth={120}>
+      <div className="space-y-3">
         {AGENT_MODEL_ROLES.map(role => {
           const options = createOptions(models, role, t)
           const roleLabel = t(`agentModels.roles.${role}`)
@@ -273,9 +264,18 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
           const key = effectiveReference ? modelKey(effectiveReference) : ''
           const detailsOpen = expandedRoles.has(role)
           return (
-            <UiPanel key={role} variant="inset" className="space-y-2 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className={UI_TEXT_LABEL_CLASS}>{roleLabel}</div>
+            <UiGroup key={role} gap="none">
+              <UiFormRow label={roleLabel}>
+              <div className="flex items-center gap-2">
+              <Dropdown<string>
+                value={value}
+                display={display}
+                ariaLabel={roleLabel}
+                options={options}
+                className="w-full"
+                buttonClassName="w-full"
+                onSelect={selected => void updateRole(role, selected)}
+              />
                 {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
                 <UiButton
                   type="button"
@@ -288,15 +288,6 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </UiButton>
               </div>
-              <Dropdown<string>
-                value={value}
-                display={display}
-                ariaLabel={roleLabel}
-                options={options}
-                className="w-full"
-                buttonClassName="w-full"
-                onSelect={selected => void updateRole(role, selected)}
-              />
               <UiDisclosurePanel open={detailsOpen}>
                 <div className="space-y-2 pt-2">
                   {verification ? (
@@ -330,7 +321,8 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                     onRetry={verifyingKey === null ? () => void verify(effectiveReference) : undefined} retryLabel={t('agentModels.retry')} />}
                 </div>
               </UiDisclosurePanel>
-            </UiPanel>
+              </UiFormRow>
+            </UiGroup>
           )
         })}
       </div>
