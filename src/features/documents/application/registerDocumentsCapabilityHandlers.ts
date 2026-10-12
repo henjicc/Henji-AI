@@ -10,6 +10,7 @@ import type { DocumentContainerRef, DocumentSummary, ProjectSummary } from '@/co
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
 import { getPlatform } from '@/platform/runtime'
+import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 
 import { toError } from '../documentErrors'
 import { getDocumentOperations, isDocumentNameConflict, type DocumentOperations } from '../documentOperations'
@@ -114,10 +115,12 @@ export function registerDocumentsCapabilityHandlers(
   registrar.registerHandler('open_document', async (raw, context) => {
     throwIfCapabilityAborted(context.signal)
     const input = parseCapabilityInput<{ documentId: string; fromDocumentId?: string }>('open_document', raw)
-    const document = await operations().findDocument(input.documentId)
-    // 嵌入模式（4.1）：宿主（剪辑）登记了嵌入方式时，由它给出返回去处
-    const embedIn = input.fromDocumentId ? await operations().embedHostFor(input.fromDocumentId) : undefined
-    await operations().openDocument(document, embedIn ? { embedIn } : {})
+    const { document, embedIn } = await applicationWritePreflight(context, async () => ({
+      document: await operations().findDocument(input.documentId),
+      // 宿主解析不写状态；也必须在工具打开或导航之前拒绝。
+      embedIn: input.fromDocumentId ? await operations().embedHostFor(input.fromDocumentId) : undefined,
+    }))
+    await operations().openDocument(document, { ...(embedIn ? { embedIn } : {}), execution: context.execution })
     // 打开方式（各工具登记）只有在编辑器载入并切换界面后才返回
     const verification = { verified: true, condition: '文档已由对应工具载入并切换到它的编辑器', target: documentRef(document.id) }
     return { resultRef: documentRef(document.id), name: document.name, kind: document.kind, embedded: Boolean(embedIn), verification }

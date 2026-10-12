@@ -1,4 +1,5 @@
 import { applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
+import { applicationWriteChannel, ApplicationWriteFailure } from '../../../../src/core/application-control/execution/writeExecution'
 import Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { unlinkSync } from 'node:fs'
@@ -34,6 +35,28 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it('open_document 加载前被拒，统一写回执落原生账本为 not_executed / verified', async () => {
+    const f = fixture()
+    const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), documentId: 'rejected-document' }, f.rendererEpoch, access, 'open_document')
+    const requestId = randomUUID()
+    f.coordinator.dispatched(record, requestId, f.rendererEpoch)
+    const open = applicationWriteChannel(async (_input, context) => context.execution.preflight(() => {
+      throw Object.assign(new Error('文档格式不支持，请改用支持的文档。'), { name: 'PersistenceError' })
+    }))
+    let failure: ApplicationWriteFailure | undefined
+    try { await open({}, {}) } catch (error) {
+      if (!(error instanceof ApplicationWriteFailure)) throw error
+      failure = error
+    }
+    expect(failure).toBeDefined()
+    expect(failure!.execution).toEqual({ billing: 'not_charged', targetMutation: 'none', notExecuted: true })
+    f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: { ok: false, error: {
+      code: 'CAPABILITY_REJECTED', message: failure!.message, recoverable: true, details: { execution: failure!.execution },
+    } } })
+    const stored = f.store.get(record.operationId, f.callerId)!
+    expect(f.coordinator.result(stored)).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
+    expect(new ApplicationOperationStore(f.db).get(record.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' })
+  })
   it('字幕 unknown 只保护原序列及口播，不拦截同文档代码版本/素材独立追加', () => {
     const f = fixture()
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['video_edit.document', 'video_edit.code_version', 'video_edit.code_material', 'video_edit.caption']))
@@ -57,6 +80,14 @@ describe('应用原生操作记录与恢复', () => {
     f.store.save(unknown)
     expect(f.coordinator.result(unknown)).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
     expect(f.coordinator.result({ ...unknown, result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: 'network failed' } } })).toMatchObject({ executionState: 'unknown' })
+  })
+  it('统一写包装已记下“未改动且未计费”的旧 unknown（如打开不支持格式的文档）自动改判；已计费未写入仍保留保护', () => {
+    const f = fixture()
+    const first = f.coordinator.prepare(f.callerId, { operationId: '4b0d2f6a-9c3e-4f72-b7a1-6a1d9f3b8e20', documentRef: { kind: 'video_edit.document', id: 'video' }, sequenceRef: { kind: 'video_edit.sequence', id: 'video:sequence' }, clipRef: { kind: 'video_edit.clip', id: 'video:voice' } }, f.rendererEpoch, access, 'generate_video_edit_subtitles')
+    const facts = (billing: string) => ({ ...first, state: 'unknown' as const, result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: '这份剪辑是旧版本格式，当前开发版不再支持打开；原文件未被修改。', details: { execution: { billing, targetMutation: 'none', notExecuted: false } } } } })
+    f.store.save(facts('not_charged'))
+    expect(f.coordinator.result(facts('not_charged'))).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
+    expect(f.coordinator.result(facts('completed'))).toMatchObject({ executionState: 'unknown' })
   })
   it('识别已完成未写字幕登记 partial，只允许绑定原声音结果的续做', () => {
     const f = fixture()

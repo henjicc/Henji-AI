@@ -55,6 +55,8 @@ vi.mock('@/commands/documents', () => {
 
 const { createApplicationHarness } = await import('@/tests/applicationHarness')
 const { FakeDocumentCommands } = await import('../documentSessionTestKit')
+const { getDocumentOperations } = await import('../documentOperations')
+const { useNavigationStore } = await import('@/stores/navigationStore')
 
 let fake: FakeCommands
 
@@ -64,6 +66,33 @@ beforeEach(() => {
 })
 
 afterEach(() => { holder.fake = null })
+
+it.each([
+  ['PersistenceError', '这份剪辑是旧版本格式，当前开发版不再支持打开；原文件未被修改。'],
+  ['DocumentFormatError', '这份文档已损坏，无法解析文件内容。'],
+  ['DocumentNotFoundError', '找不到这份文档文件。'],
+])('open_document 加载前的 %s 拒绝通过正式统一通道返回零执行和可行动提示', async (name, message) => {
+  const meta = fake.seed({ kind: 'video_edit', name: '被拒的剪辑', content: { items: ['原内容'] } })
+  const app = createApplicationHarness()
+  const before = fake.stored(meta.id)
+  const navigation = useNavigationStore.getState()
+  const opener = vi.fn()
+  const unregister = getDocumentOperations().registerOpener('video_edit', opener)
+  const read = vi.spyOn(fake, 'readDocument').mockRejectedValueOnce(Object.assign(new Error(message), { name }))
+  try {
+    const result = await app.call('open_document', { documentId: meta.id })
+    expect(result).toMatchObject({ ok: false, error: { recoverable: true,
+      details: { execution: { billing: 'not_charged', targetMutation: 'none', notExecuted: true } } } })
+    if (result.ok) throw new Error('本场景必须在加载前拒绝')
+    expect(result.error.message).toContain(message)
+    expect(result.error.message).toMatch(/恢复|重新获取/)
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(opener).not.toHaveBeenCalled()
+    expect(useNavigationStore.getState()).toBe(navigation)
+    expect(fake.stored(meta.id)).toEqual(before)
+    expect(fake.calls).not.toContain('saveDocument')
+  } finally { read.mockRestore(); unregister(); app.dispose() }
+})
 
 it('通过通用 change 修改文档名并从作品索引读回', async () => {
   const meta = fake.seed({ name: '旧画布', content: { items: ['a'] } })

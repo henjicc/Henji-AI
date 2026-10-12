@@ -4,7 +4,7 @@ import type { ApplicationEffectReceipt } from '../transactions'
 
 export interface ApplicationWriteFacts {
   billing: 'not_charged' | 'submitted' | 'completed' | 'unknown'
-  targetMutation: 'none' | 'applied'
+  targetMutation: 'none' | 'applied' | 'unknown'
   audioDocumentId?: string
 }
 
@@ -83,8 +83,11 @@ export class ApplicationWriteExecution {
         notExecuted: error.execution.notExecuted && !this.completed && this.facts.billing === 'not_charged' && this.facts.targetMutation === 'none' && !this.effects.length }, this.effects)
     }
     const rejected = !this.completed && error instanceof ApplicationPreflightFailure
-    return new ApplicationWriteFailure(error, { ...this.facts,
-      notExecuted: (!this.started || rejected) && this.facts.billing === 'not_charged' && this.facts.targetMutation === 'none' && !this.effects.length }, this.effects)
+    const notExecuted = (!this.started || rejected) && this.facts.billing === 'not_charged' && this.facts.targetMutation === 'none' && !this.effects.length
+    return new ApplicationWriteFailure(error, { ...this.facts, notExecuted,
+      // none 是准备阶段的初值，进入派发后缺回执不能把它当成已确认的零修改。
+      ...(!notExecuted && this.facts.billing === 'not_charged' && this.facts.targetMutation === 'none' ? { targetMutation: 'unknown' as const } : {}),
+    }, this.effects)
   }
 }
 
