@@ -152,7 +152,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
       : { refs: [], effects: [], evidence: [] }
     return {
       status: 'completed',
-      resultingRevisions: { toolbox: revision },
+      resultingRevisions: { camera_stage: revision },
       directRefs: [{ ...step.target, revision }],
       cascadeEffects: automatic.effects,
       evidence: [...mutationEvidence(step, revision), ...automatic.evidence],
@@ -174,7 +174,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const revision = this.dependencies.readRevision()
     return {
       status: 'completed',
-      resultingRevisions: { toolbox: revision },
+      resultingRevisions: { camera_stage: revision },
       directRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
       cascadeEffects: [],
       evidence: [{
@@ -305,7 +305,7 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
     direct: [],
     cascades: [{
       declarationId: 'camera_stage.motion_state_keyframes', effect: 'update' as const,
-      entityType: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe, propertyIds: [], revisionScopes: ['toolbox'],
+      entityType: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe, propertyIds: [], revisionScopes: ['camera_stage'],
     }],
   }
   readonly capabilityId = 'apply_camera_stage_camera_move'
@@ -321,7 +321,7 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
   }
 
   async getCurrentRevisions(): Promise<Record<string, number>> {
-    return { toolbox: this.dependencies.readRevision() }
+    return { camera_stage: this.dependencies.readRevision() }
   }
 
   async execute(input: JsonValue, _context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
@@ -337,7 +337,7 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
     const revision = this.dependencies.readRevision()
     return {
       status: 'completed',
-      resultingRevisions: { toolbox: revision },
+      resultingRevisions: { camera_stage: revision },
       directRefs: [
         { kind: CAMERA_STAGE_ENTITY_TYPES.camera, id: `${result.projectId}:${result.cameraId}`, revision },
       ],
@@ -383,7 +383,7 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
     const revision = this.dependencies.readRevision()
     return {
       status: 'completed',
-      resultingRevisions: { toolbox: revision },
+      resultingRevisions: { camera_stage: revision },
       directRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
       directEffects: [{ effect: 'execute', entityType: CAMERA_STAGE_ENTITY_TYPES.project, refs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }], propertyIds: [], origin: { kind: 'direct' } }],
       cascadeEffects: [],

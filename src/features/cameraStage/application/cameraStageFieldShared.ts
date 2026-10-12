@@ -15,7 +15,7 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
  * 这套样板还是场景字段文件的私有实现，1.3 把它提出来给其余领域复用）。
  */
 
-const REVISION_SCOPE = 'toolbox' as const
+const REVISION_SCOPE = 'camera_stage' as const
 
 function digest(seed: string): string {
   const value = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)

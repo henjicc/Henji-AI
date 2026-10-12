@@ -31,7 +31,7 @@ describe('三维写入的 revision 契约', () => {
 
   // 新建与打开文档已归通用文档能力（3.2），三维写能力全部是对已有场景的修改。
   const revisionScoped = cameraStageSceneWrites.filter((capability) => (
-    capability.requiredScopes.includes('toolbox')
+    capability.requiredScopes.includes('camera_stage')
   ))
 
   it('全部场景写能力使用信封且不接受 baseRevision', () => {

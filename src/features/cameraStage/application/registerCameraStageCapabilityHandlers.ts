@@ -37,7 +37,7 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
     await ensureCameraStageProjectRuntime(projectId)
     const child = (ref: { id: string }): string => { const prefix = `${projectId}:`; if (!ref.id.startsWith(prefix) || !ref.id.slice(prefix.length)) throw new Error('机位和状态关键帧必须属于目标文档。'); return ref.id.slice(prefix.length) }
     const review = await organizeCameraMotion(projectId, child(input.cameraRef), input.stateKeyframeRefs.map(child))
-    return { resultRef: input.documentRef, reviewId: cameraMotionDraft(projectId)!.reviewId!, ...review, revision: getHostScopeRevisions().toolbox, scopeRevisions: getHostScopeRevisions() }
+    return { resultRef: input.documentRef, reviewId: cameraMotionDraft(projectId)!.reviewId!, ...review, revision: getHostScopeRevisions().camera_stage, scopeRevisions: getHostScopeRevisions() }
   })
   publicRegistrar.registerHandler(applyCameraIntentCapability.id, async (raw, context) => {
     context.signal.throwIfAborted()
@@ -45,12 +45,12 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
     assertCameraStageRevision(context)
     if (cameraMotionDraft(projectId)?.reviewId !== input.reviewId) throw new Error('候选已失效，请重新整理。')
     const result = await applyCameraMotion(projectId, input.candidateId)
-    notifyHostScopeChanged('toolbox')
-    return { ...result, resultRef: input.documentRef, stateKeyframeRefs: cameraStageProjectStore(projectId).getState().stateKeyframes.map(frame => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${frame.id}` })), revision: getHostScopeRevisions().toolbox, scopeRevisions: getHostScopeRevisions() }
+    notifyHostScopeChanged('camera_stage')
+    return { ...result, resultRef: input.documentRef, stateKeyframeRefs: cameraStageProjectStore(projectId).getState().stateKeyframes.map(frame => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${frame.id}` })), revision: getHostScopeRevisions().camera_stage, scopeRevisions: getHostScopeRevisions() }
   })
   configureCameraStageControlDependencies({
-    readRevision: () => getHostScopeRevisions().toolbox,
-    bumpRevision: () => notifyHostScopeChanged('toolbox'),
+    readRevision: () => getHostScopeRevisions().camera_stage,
+    bumpRevision: () => notifyHostScopeChanged('camera_stage'),
   })
   // 镜头参考文档的通用打开与后台释放（3.2）：列表、管理与打开走通用文档能力（list_documents / open_document 等），
   // 这里只登记“打开到哪里”和“后台持有的实例怎么释放”。

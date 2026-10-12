@@ -61,7 +61,7 @@ it('正式助手发现/整理/应用同源候选并可一步撤销，不依赖�
     const result = await app.requireResult('organize_camera_stage_motion', { documentRef, cameraRef: { kind: 'camera_stage.camera', id: `${projectId}:${cameraId}` }, stateKeyframeRefs: original.map(frame => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${frame.id}` })) })
     expect(useCameraStageStore.temporal.getState().pastStates).toHaveLength(0)
     const baseline = await app.read(documentRef)
-    const stale = await app.call('apply_camera_stage_motion_candidate', { documentRef, reviewId: result.reviewId, candidateId: 'orbit' }, { toolbox: (baseline.revisions as Record<string, number>).toolbox + 1 })
+    const stale = await app.call('apply_camera_stage_motion_candidate', { documentRef, reviewId: result.reviewId, candidateId: 'orbit' }, { camera_stage: (baseline.revisions as Record<string, number>).camera_stage + 1 })
     expect(stale.ok).toBe(false)
     expect(useCameraStageStore.getState().stateKeyframes).toEqual(original)
     const applied = await app.requireResult('apply_camera_stage_motion_candidate', { documentRef, reviewId: result.reviewId, candidateId: 'orbit' }, baseline.revisions as Record<string, number>)

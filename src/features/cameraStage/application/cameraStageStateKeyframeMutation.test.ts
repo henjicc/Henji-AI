@@ -31,7 +31,7 @@ function stateKeyframeStep(stateKeyframeId: string, mutations: Array<{ propertyI
     kind: 'mutation',
     entityType: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe,
     target: { kind: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe, id: `project-1:${stateKeyframeId}`, revision },
-    expectedRevisions: { toolbox: revision },
+    expectedRevisions: { camera_stage: revision },
     mutations: mutations.map((mutation) => ({ ...mutation, operation: 'set' })),
   } as Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 }

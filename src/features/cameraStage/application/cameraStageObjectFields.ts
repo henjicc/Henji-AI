@@ -160,11 +160,11 @@ function animatableField<TSource>(
 export const STATE_KEYFRAME_CASCADES = [
   {
     declarationId: 'camera_stage.auto_state_keyframe_create', effect: 'create',
-    entityType: 'camera_stage.state_keyframe', propertyIds: [], revisionScopes: ['toolbox'],
+    entityType: 'camera_stage.state_keyframe', propertyIds: [], revisionScopes: ['camera_stage'],
   },
   {
     declarationId: 'camera_stage.auto_state_keyframe_update', effect: 'update',
-    entityType: 'camera_stage.state_keyframe', propertyIds: [], revisionScopes: ['toolbox'],
+    entityType: 'camera_stage.state_keyframe', propertyIds: [], revisionScopes: ['camera_stage'],
   },
 ] as const satisfies readonly ApplicationCascadeEffectDeclaration[]
 

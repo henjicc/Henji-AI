@@ -30,7 +30,7 @@ function trajectoryStep(stateKeyframeId: string, objectId: string, mutations: Ar
     kind: 'mutation',
     entityType: CAMERA_STAGE_ENTITY_TYPES.trajectory,
     target: { kind: CAMERA_STAGE_ENTITY_TYPES.trajectory, id: `project-1:${stateKeyframeId}:${objectId}`, revision },
-    expectedRevisions: { toolbox: revision },
+    expectedRevisions: { camera_stage: revision },
     mutations: mutations.map((mutation) => ({ ...mutation, operation: 'set' })),
   } as Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 }

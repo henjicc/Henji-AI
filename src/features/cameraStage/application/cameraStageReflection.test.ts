@@ -44,7 +44,7 @@ describe('三维应用反射注册', () => {
 
     expect(registrations.map((item) => item.entity.id)).toEqual(Object.values(CAMERA_STAGE_ENTITY_TYPES))
     expect(registrations.every((item) => item.provider)).toBe(true)
-    expect(registrations.every((item) => item.entity.revisionScopes.includes('toolbox'))).toBe(true)
+    expect(registrations.every((item) => item.entity.revisionScopes.includes('camera_stage'))).toBe(true)
   })
 
   it('从唯一动画属性注册表生成对象和摄像机可动画属性描述', () => {
@@ -75,16 +75,16 @@ describe('三维应用反射注册', () => {
     }).entities).toHaveLength(7)
   })
 
-  it('提供稳定引用、属性快照和工具箱 revision', async () => {
+  it('提供稳定引用、属性快照和镜头参考 revision', async () => {
     const registration = createCameraStageReflectionRegistrations(() => 7)
       .find((item) => item.entity.id === CAMERA_STAGE_ENTITY_TYPES.project)!
     const listed = await registration.provider!.listEntities({ limit: 20 })
     const snapshot = await registration.provider!.readEntity(listed.refs[0], {})
 
     expect(listed.refs[0]).toMatchObject({ kind: 'camera_stage.document', id: 'project-1' })
-    expect(listed.revisions).toEqual({ toolbox: 7 })
+    expect(listed.revisions).toEqual({ camera_stage: 7 })
     expect(snapshot.properties['camera_stage.document.name']).toBe('反射测试')
-    expect(snapshot.revisions).toEqual({ toolbox: 7 })
+    expect(snapshot.revisions).toEqual({ camera_stage: 7 })
   })
 
   it('当前镜头参考内唯一的子实体短 ID 会规范化为完整稳定引用', async () => {

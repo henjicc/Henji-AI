@@ -58,7 +58,7 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
   }
 
   async getCurrentRevisions(): Promise<Record<string, number>> {
-    return { toolbox: this.dependencies.readRevision() }
+    return { camera_stage: this.dependencies.readRevision() }
   }
 
   async execute(input: JsonValue, _context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
@@ -90,7 +90,7 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
     }
     return {
       status: 'completed',
-      resultingRevisions: { toolbox: revision },
+      resultingRevisions: { camera_stage: revision },
       directRefs: [{ kind: entityType, id: `${result.projectId}:${result.objectId}`, revision }],
       directEffects: [{
         effect: result.decision === 'created' ? 'create' : 'update', entityType,
@@ -129,7 +129,7 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
     const revision = this.dependencies.readRevision()
     return {
       status: 'completed',
-      resultingRevisions: { toolbox: revision },
+      resultingRevisions: { camera_stage: revision },
       directRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
       directEffects: [{ effect: 'execute', entityType: CAMERA_STAGE_ENTITY_TYPES.project, refs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }], propertyIds: [], origin: { kind: 'direct' } }],
       cascadeEffects: [],
