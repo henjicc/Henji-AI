@@ -99,7 +99,10 @@ export function createProviderSettingsFileStorage(): ProviderSettingsStorage {
     readConfig: async () => {
       const stored = await readJson(paths().config)
       if (stored === null) return null
-      const { raw, text } = stored
+      const { text } = stored
+      // 版本外壳引入前（t94 之前）写下的配置内容本身没有变化：读取时按 v1 包装，原文件不改写，下次保存才写成带版本的格式。
+      const raw = stored.raw && typeof stored.raw === 'object' && !Array.isArray(stored.raw) && !('version' in stored.raw) && Array.isArray((stored.raw as { providers?: unknown }).providers)
+        ? { version: LLM_CONFIG_VERSION, content: stored.raw } : stored.raw
       const contract = { id: 'llm-config', name: '助手模型配置', version: LLM_CONFIG_VERSION, schema: llmStoredConfigSchema, migrations: formatMigrations('llm-config') }
       const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
       const backupPath = version > 0 ? await backupBeforePersistenceUpgrade(paths().config, contract, version, text) : undefined
