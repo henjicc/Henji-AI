@@ -1,7 +1,7 @@
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { preflightAudioEditTranscription } from './audioEditApplicationService'
-import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditOperationInput } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
+import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditInputSchema } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
 import { audioEditContentKey } from '@/core/audioEdit/baseline'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
@@ -48,7 +48,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     return getDocumentSessionRegistry().get(id)?.documentMeta ?? (await getDocumentOperations().readDocument({ id })).meta
   })
   for (const definition of AUDIO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
-    const input = audioEditOperationInput.parse(raw)
+    const input = audioEditInputSchema(definition.id).parse(raw)
     context.signal.throwIfAborted()
     const id = input.documentRef.id
     const instance = await applicationWritePreflight(context, () => loadAudioEditProject(id))

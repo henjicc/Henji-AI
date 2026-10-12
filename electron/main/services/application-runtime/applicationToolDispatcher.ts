@@ -1,7 +1,7 @@
 import { applicationFailure, type ApplicationResult } from '../../../../src/core/application-control/invocation'
 import { z } from 'zod'
 import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_LIMITS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
-import { buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, readMediaInputSchema, type ApplicationAccess } from './toolCatalog'
+import { buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, operationReadInputSchema, readMediaInputSchema, type ApplicationAccess } from './toolCatalog'
 import { readApplicationMediaResource, ApplicationMediaResourceError } from './mediaResources'
 import type { ApplicationHostBridge } from './applicationHostBridge'
 import { ApplicationHostNotReadyError } from './applicationHostBridge'
@@ -31,8 +31,9 @@ export class ApplicationToolDispatcher {
     this.connections.assertActive(callerId)
     try {
       const input = readMediaInputSchema.parse(args)
-      const authorized = await this.call(callerId, 'read_application_entity', { ref: input.ref }, signal)
-      if (!authorized.ok) return authorized
+      const authorized = await this.host.execute(callerId, 'read_application_entity', { ref: input.ref, propertyIds: [] }, signal, this.connections.access(callerId))
+      this.connections.assertActive(callerId)
+      if (!authorized.ok) return { ...authorized, ok: false }
       if (signal.aborted) return applicationFailure('ABORTED:媒体读取已取消。')
       const media = await readApplicationMediaResource(input, metadataOnly)
       this.connections.assertActive(callerId)
@@ -58,7 +59,9 @@ export class ApplicationToolDispatcher {
     if (name === 'get_current_application_context' && raw.ok && raw.data) {
       raw = { ...raw, data: { ...raw.data, externalContractVersion: EXTERNAL_CONTRACT_VERSION } }
     }
-    const result = projectApplicationToolResult(name, input, raw, options)
+    const operation = name === 'get_application_operation' && typeof input.operationId === 'string'
+      ? this.operations?.store.get(input.operationId, callerId) : undefined
+    const result = projectApplicationToolResult(operation?.capabilityId ?? name, input, raw, options)
     validateApplicationToolOutput(name, this.catalog(callerId).tools.find(tool => tool.name === name)?.outputSchema, result)
     return result
   }
@@ -91,7 +94,7 @@ export class ApplicationToolDispatcher {
         return result
       }
       if ((name === 'get_application_operation' || name === 'review_application_operation') && this.operations) {
-        const parsed = z.object({ operationId: z.string().uuid() }).strict().safeParse(args)
+        const parsed = (name === 'get_application_operation' ? operationReadInputSchema : z.object({ operationId: z.string().uuid() }).strict()).safeParse(args)
         if (!parsed.success) return applicationFailure(invalidInputMessage(parsed.error)!)
         const operation = this.operations.store.get(parsed.data.operationId, callerId)
         if (operation) {
@@ -106,6 +109,28 @@ export class ApplicationToolDispatcher {
                 return result
               }, () => { this.connections.assertActive(callerId); if (!this.connections.access(callerId).allowWrites) throw new Error('PERMISSION_DENIED:修改授权已撤销。') })
             } catch (error) { return applicationFailure(error instanceof Error ? error.message : '操作核对未完成。') }
+          }
+        }
+        if (name === 'get_application_operation' && operation) {
+          const page = operationReadInputSchema.parse(args)
+          if (page.resultField) {
+            const record = this.operations.store.get(operation.operationId, callerId)!
+            const fields = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(record.capabilityId)?.pagedResultFields ?? []
+            if (!fields.includes(page.resultField)) return applicationFailure('INVALID_INPUT:resultField 必须使用原结果 resultCollections 中的 field。')
+            const values = (record.result?.data as Record<string, unknown> | undefined)?.[page.resultField]
+            if (!Array.isArray(values)) return applicationFailure('NOT_FOUND:原操作还没有此结果，请查询原 operationId 的执行状态，禁止重放。')
+            const start = Number(page.cursor ?? 0)
+            if (!Number.isSafeInteger(start) || start > values.length) return applicationFailure('INVALID_INPUT:分页 cursor 无效。')
+            const items: unknown[] = []
+            let bytes = 0
+            for (let index = start; index < values.length && items.length < page.limit; index++) {
+              const itemBytes = Buffer.byteLength(JSON.stringify(values[index]))
+              if (bytes + itemBytes > MAX_RESULT / 2) break
+              items.push(values[index]); bytes += itemBytes
+            }
+            if (!items.length && start < values.length) return applicationFailure('RESULT_TOO_LARGE:单项结果超出传输预算，请读取目标实体核对；操作已执行，禁止重放。')
+            return { ok: true, data: { resultRef: { operationId: record.operationId, field: page.resultField }, total: values.length, items,
+              nextCursor: start + items.length < values.length ? String(start + items.length) : null } }
           }
         }
         const result = operation ? this.operations.result(this.operations.store.get(operation.operationId, callerId)!) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }

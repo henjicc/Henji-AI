@@ -10,7 +10,7 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 
 import { parseDocumentCapabilityInput as parseCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
-import { applyCameraStageCameraMove, deleteCameraStageObject, duplicateCameraStageObject, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
+import { assertCameraStageRevision, applyCameraStageCameraMove, deleteCameraStageObject, duplicateCameraStageObject, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
 import { releaseCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 import { createDraftCameraStageDocument, openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
@@ -42,7 +42,7 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
   publicRegistrar.registerHandler(applyCameraIntentCapability.id, async (raw, context) => {
     context.signal.throwIfAborted()
     const input = applyCameraIntentCapability.inputSchema.parse(raw), projectId = input.documentRef.id
-    if (input.baseRevision !== getHostScopeRevisions().toolbox) throw new Error('CONFLICT')
+    assertCameraStageRevision(context)
     if (cameraMotionDraft(projectId)?.reviewId !== input.reviewId) throw new Error('候选已失效，请重新整理。')
     const result = await applyCameraMotion(projectId, input.candidateId)
     notifyHostScopeChanged('toolbox')
@@ -72,29 +72,28 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
 
   registrar.registerHandler('place_camera_stage_object', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<Record<string, unknown> & { baseRevision: number }>('place_camera_stage_object', input)
+    const parsed = parseCapabilityInput<Record<string, unknown>>('place_camera_stage_object', input)
     return await placeCameraStageObject(parsed, context)
   })
 
   registrar.registerHandler('duplicate_camera_stage_object', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<CameraObjectInput & { baseRevision: number }>(
+    const parsed = parseCapabilityInput<CameraObjectInput>(
       'duplicate_camera_stage_object',
       input
     )
-    return await duplicateCameraStageObject(parsed)
+    return await duplicateCameraStageObject(parsed, context)
   })
 
   registrar.registerHandler('delete_camera_stage_object', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<CameraObjectInput & { baseRevision: number }>('delete_camera_stage_object', input)
-    return await deleteCameraStageObject(parsed)
+    const parsed = parseCapabilityInput<CameraObjectInput>('delete_camera_stage_object', input)
+    return await deleteCameraStageObject(parsed, context)
   })
 
   registrar.registerHandler('update_camera_stage_object', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<CameraObjectInput & {
-      baseRevision: number
       changes: Parameters<typeof updateCameraStageObject>[0]['changes']
     }>('update_camera_stage_object', input)
     return await updateCameraStageObject(parsed, context)
@@ -102,7 +101,7 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
 
   registrar.registerHandler('apply_camera_stage_camera_move', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<Record<string, unknown> & { baseRevision: number }>('apply_camera_stage_camera_move', input)
+    const parsed = parseCapabilityInput<Record<string, unknown>>('apply_camera_stage_camera_move', input)
     return await applyCameraStageCameraMove(parsed, context)
   })
 

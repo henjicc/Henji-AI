@@ -30,7 +30,7 @@ const applyCameraMove = defineApplicationCapability({
     '缺少目标、摄像机或有效时间范围时停止，重新观察场景后使用稳定引用；不得猜测名称。',
   ],
   inputSchema: z.object({
-    documentId: cameraStageDocumentIdSchema, cameraId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
+    documentId: cameraStageDocumentIdSchema, cameraId: z.string().min(1),
     move: cameraStageMoveSchema, targetObjectId: z.string().min(1).optional(), targetPoint: cameraStageVec3Schema.optional(),
     startStateKeyframeId: z.string().min(1).optional(), endStateKeyframeId: z.string().min(1).optional(),
     duration: z.number().positive().max(3600), speed: z.enum(['uniform', 'easeInOut', 'fastStart', 'slowStart']).default('easeInOut'),

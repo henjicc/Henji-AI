@@ -1,4 +1,4 @@
-import { VIDEO_EDIT_EXPORT_CAPABILITIES, videoEditExportInputSchema, videoEditExportQuerySchema } from '@/core/application-control/domains/videoEdit/videoEditExportCapabilities'
+import { VIDEO_EDIT_EXPORT_CAPABILITIES, videoEditExportInputSchema, videoEditExportQuerySchema, videoEditExportTaskInputSchema } from '@/core/application-control/domains/videoEdit/videoEditExportCapabilities'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
 import { enqueueVideoEditExports, retryVideoEditExportJob, videoEditProjectOutputDirectory, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
@@ -26,7 +26,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   if (!definition) return undefined
   const execution = new ApplicationWriteExecution()
   try {
-  const parsed = id === 'export_video_edit' ? videoEditExportInputSchema.parse(raw) : videoEditExportQuerySchema.parse(raw)
+  const parsed = id === 'export_video_edit' ? videoEditExportInputSchema.parse(raw) : id === 'query_video_edit_export' ? videoEditExportQuerySchema.parse(raw) : videoEditExportTaskInputSchema.parse(raw)
   const documentRef = parsed.documentRef
   const owner = requireVideoEditInstance(documentRef.id)
   let message = '已读取导出列表，提交不等于完成。'
@@ -83,10 +83,11 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     message = '已请求取消未完成导出；已保存文件保留。'
   }
   if (requireVideoEditInstance(documentRef.id) !== owner) throw new Error('原剪辑已关闭，请重新查询。')
-  const filterId = id === 'query_video_edit_export' && 'taskId' in parsed ? parsed.taskId : undefined
+  const query = id === 'query_video_edit_export' ? videoEditExportQuerySchema.parse(raw) : undefined
+  const filterId = query?.taskId
   const jobs = submitted ?? videoEditExportQueue.list().filter(job => job.owner === owner && (!filterId || job.id === filterId || job.task?.id === filterId))
   const liveIds = new Set(jobs.flatMap(job => [job.id, job.task?.id]))
-  const archived = (id === 'query_video_edit_export' ? owner.document.exportHistory ?? [] : []).filter(entry => !liveIds.has(entry.id) && !liveIds.has(entry.taskId) && (!filterId || entry.id === filterId || entry.taskId === filterId))
+  const archived = (query && !query.activeOnly ? owner.document.exportHistory ?? [] : []).filter(entry => !liveIds.has(entry.id) && !liveIds.has(entry.taskId) && (!filterId || entry.id === filterId || entry.taskId === filterId))
     .map(({ sequenceId, ...entry }) => ({ ...entry, documentRef, sequenceRef: { kind: 'video_edit.sequence', id: `${documentRef.id}:${sequenceId}` }, state: 'completed', progress: 1, archived: true, outputReady: true }))
   const latestTask = videoEditExportTask(documentRef.id)
   const task = latestTask && (!filterId || latestTask.id === filterId || jobs.some(job => job.task === latestTask)) ? latestTask : undefined
@@ -95,6 +96,37 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     const entry = owner.document.exportHistory?.find(entry => entry.taskId === job.task?.id)
     return { ...videoEditExportJobSummary(job), ...(entry ? { path: entry.path, completedAt: entry.completedAt, ...(entry.assetRef ? { assetRef: entry.assetRef } : {}) } : {}) }
   })
+  if (query) {
+    const all: Record<string, unknown>[] = [...queue, ...archived]
+    if (task && !all.some(item => item.id === task.id || item.taskId === task.id)) all.push({
+      id: task.id, taskId: task.id, documentRef, state: task.state, progress: task.progress, outputReady: Boolean(task.output),
+      ...(task.notice ? { notice: task.notice } : {}), ...(task.assetRef ? { assetRef: task.assetRef } : {}),
+    })
+    const filtered = all.filter(item => !query.activeOnly || item.state === 'queued' || item.state === 'running')
+      .sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0)
+    let after: string | undefined
+    if (query.cursor) {
+      try {
+        const cursor: unknown = JSON.parse(decodeURIComponent(query.cursor))
+        const value = cursor as { documentId?: unknown; taskId?: unknown; activeOnly?: unknown; after?: unknown }
+        if (!value || value.documentId !== documentRef.id || value.taskId !== (query.taskId ?? null) || value.activeOnly !== query.activeOnly || typeof value.after !== 'string') throw new Error()
+        after = value.after
+      } catch { throw new Error('INVALID_INPUT:cursor 不属于当前查询，请保持原筛选条件或从首页开始。') }
+    }
+    const remaining = after === undefined ? filtered : filtered.filter(item => String(item.id) > after!)
+    const page = remaining.slice(0, query.limit)
+    const projected = page.map(item => {
+      const { id, state, progress, outputReady, taskId, error, notice, assetRef, completedAt, archived } = item
+      const summary = { id, documentRef, state, progress, outputReady,
+        resultRef: { documentRef, taskId: String(id) },
+        ...(taskId ? { taskId } : {}), ...(error ? { error } : {}), ...(notice ? { notice } : {}),
+        ...(assetRef ? { assetRef } : {}), ...(completedAt ? { completedAt } : {}), ...(archived ? { archived } : {}),
+      }
+      return query.detail === 'full' ? { ...item, ...summary } : summary
+    })
+    const nextCursor = remaining.length > page.length ? encodeURIComponent(JSON.stringify({ documentId: documentRef.id, taskId: query.taskId ?? null, activeOnly: query.activeOnly, after: String(page[page.length - 1].id) })) : null
+    return { resultRef: documentRef, queue: projected, total: filtered.length, nextCursor, message, verification: { verified, target: documentRef, condition } }
+  }
   return { resultRef: documentRef, queue: [...queue, ...archived], message, verification: { verified, target: documentRef, condition }, ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame, ...(task.notice ? { notice: task.notice } : {}), ...(task.loudness ? { loudness: task.loudness } : {}), ...(task.loudnessMeasurement ? { loudnessMeasurement: task.loudnessMeasurement } : {}) } } : {}) }
   } catch (error) { throw definition.readOnly ? error : execution.failure(error) }
 }

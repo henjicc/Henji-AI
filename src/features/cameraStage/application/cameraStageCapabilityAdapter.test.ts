@@ -10,8 +10,8 @@ it('运镜能力委托上下文注入的事务引擎并保留并发基线与回�
   const plan = vi.fn().mockResolvedValue({ planRef: 'plan-1' })
   const commit = vi.fn().mockResolvedValue({ status: 'completed', resultingRevisions: { toolbox: 4 } })
   const engine = { plan, commit } as unknown as ApplicationControlExecutionEngine
-  const result = await applyCameraStageCameraMove({ baseRevision: 4, projectId: 'document-1' }, {
-    signal: new AbortController().signal, requestId: 'request-1', getExecutionEngine: () => engine,
+  const result = await applyCameraStageCameraMove({ projectId: 'document-1' }, {
+    signal: new AbortController().signal, expectedRevisions: { toolbox: 4 }, requestId: 'request-1', getExecutionEngine: () => engine,
   })
   expect(plan.mock.calls[0][0].steps).toEqual([{
     kind: 'operation', capabilityId: 'apply_camera_stage_camera_move', capabilityVersion: 1,

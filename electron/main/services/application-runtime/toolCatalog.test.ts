@@ -19,7 +19,7 @@ const hostTools: LocalTool[] = APPLICATION_CAPABILITY_IDS.map((id) => {
   if (!definition) throw new Error(`能力目录缺少对外登记的能力：${id}`)
   return {
     id, version: definition.version, title: definition.title, description: definition.description,
-    inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown>,
+    inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input', reused: 'ref' }) as Record<string, unknown>,
   }
 })
 
@@ -41,7 +41,7 @@ describe('对外工具目录的投影与授权过滤', () => {
     const tools = buildApplicationToolCatalog({ tools: hostTools, access: PAID, operationsEnabled: true, includeSkillTool: true }).tools
     const fingerprint = createHash('sha256').update(JSON.stringify(normalize(tools))).digest('hex')
     // 仅维护当前契约；升级时记录新版本的审查指纹，不更新旧版本的指纹。
-    const fingerprints: Record<string, string> = { '2.4.2': '9e51224a4222e9f6fb48df5a084d32e6b4d2c24f3443ff194f638e8c547cb791', '2.4.1': '5851a41c9490497dcce796a309e0eda8658f6b7fd7a865284be4a457e59dc2e2', '2.4.0': '7b0cdfd60bca3c8d91d35c5ea271ea396a4d95bf5c85a589a72a19c9851789af', '2.3.1': '13fec992cc2956160a986ad66fb41c74602c56ec417f791553c6fe15e1dd1891', '2.3.0': 'ac61a825abd3be956ee39fae8431215f6a9ebb419c8efba58318f3123a409609', '2.2.4': 'f81340d961f642497e4bc1d41494a3f51c3885a53c2f4d38625f0940d4ea1307', '2.2.3': '544a9e1f8468afbc961f0241a4f00f6ad83d13289171d0d8817b6664674752ca', '2.2.2': '44e51e1c66258c15ef9dd6359608a9f68d2ce3f1812085807f35b154e2c46619', '2.2.1': 'df8ac3b9e72c31fd17b119cd193de1b390d9f926cf25069ec9dd7496dbb9ea19', '2.2.0': '2ece81315e4c7f06f95d78e89e1dc75c2cc706c69fa4a1809e48f52ad1cd6673', '2.1.1': '652993365eb5eea750edb584853b59d459bb20da6b72fd855a0bc8f430aed77e', '2.1.2': 'b7c6ddb6093736c18e19e78ba59b059c672ca7c0bc8cd1a5cb92f23dbaa4ce9b' }
+    const fingerprints: Record<string, string> = { '2.5.0': 'd6af5fea549d486fbc8973ed72ead33dfd841d0f5c7d4e49a5796789aaf52b64', '2.4.2': '9e51224a4222e9f6fb48df5a084d32e6b4d2c24f3443ff194f638e8c547cb791', '2.4.1': '5851a41c9490497dcce796a309e0eda8658f6b7fd7a865284be4a457e59dc2e2', '2.4.0': '7b0cdfd60bca3c8d91d35c5ea271ea396a4d95bf5c85a589a72a19c9851789af', '2.3.1': '13fec992cc2956160a986ad66fb41c74602c56ec417f791553c6fe15e1dd1891', '2.3.0': 'ac61a825abd3be956ee39fae8431215f6a9ebb419c8efba58318f3123a409609', '2.2.4': 'f81340d961f642497e4bc1d41494a3f51c3885a53c2f4d38625f0940d4ea1307', '2.2.3': '544a9e1f8468afbc961f0241a4f00f6ad83d13289171d0d8817b6664674752ca', '2.2.2': '44e51e1c66258c15ef9dd6359608a9f68d2ce3f1812085807f35b154e2c46619', '2.2.1': 'df8ac3b9e72c31fd17b119cd193de1b390d9f926cf25069ec9dd7496dbb9ea19', '2.2.0': '2ece81315e4c7f06f95d78e89e1dc75c2cc706c69fa4a1809e48f52ad1cd6673', '2.1.1': '652993365eb5eea750edb584853b59d459bb20da6b72fd855a0bc8f430aed77e', '2.1.2': 'b7c6ddb6093736c18e19e78ba59b059c672ca7c0bc8cd1a5cb92f23dbaa4ce9b' }
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

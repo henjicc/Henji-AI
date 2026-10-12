@@ -36,6 +36,7 @@ function modelMetadata(value: unknown, key = ''): unknown {
 /** 账本、基线、验证使用完整内部回执；此处只投影交给 Pi/MCP 的副本。 */
 export function projectApplicationToolResult(name: string, input: Record<string, unknown>, raw: ApplicationResult, options: ResultDetailOptions = {}): ApplicationResult {
   const scopes = new Set<string>()
+  const operationId = typeof raw.operationId === 'string' ? raw.operationId : undefined
   const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)
   definition?.requiredScopes.forEach(scope => scopes.add(scope))
   definition?.control.impacts.forEach(impact => impact.revisionScopes.forEach(scope => scopes.add(scope)))
@@ -85,6 +86,15 @@ export function projectApplicationToolResult(name: string, input: Record<string,
           return fact
         })
       }
+      if (operationId && definition?.pagedResultFields?.length) {
+        const collections: Record<string, unknown> = {}
+        for (const field of definition.pagedResultFields) {
+          if (!Array.isArray(projected[field])) continue
+          collections[field] = { total: projected[field].length, resultRef: { operationId, field }, nextCursor: projected[field].length ? '0' : null }
+          delete projected[field]
+        }
+        projected.resultCollections = collections
+      }
       result.data = !options.includeDetails && ['search_models', 'get_model_schema'].includes(name) ? modelMetadata(projected) : projected
     }
     for (const key of ['result', 'recoveryResult']) {
@@ -100,20 +110,45 @@ export function projectApplicationToolResult(name: string, input: Record<string,
   return result as ApplicationResult
 }
 
+/** 单页读取不改内部结果；这里只声明投影后的摘要形状。 */
+const resultCollectionsSchema = {
+  type: 'object',
+  additionalProperties: {
+    type: 'object', additionalProperties: false, required: ['total', 'resultRef', 'nextCursor'],
+    properties: {
+      total: { type: 'integer', minimum: 0 }, nextCursor: { type: ['string', 'null'] },
+      resultRef: {
+        type: 'object', additionalProperties: false, required: ['operationId', 'field'],
+        properties: { operationId: { type: 'string', format: 'uuid' }, field: { type: 'string' } },
+      },
+    },
+  },
+}
+
 /** 公开输出允许裁剪元数据，领域输出校验与持久 schema 保持原样。 */
 export function projectToolOutputSchema(schema: Record<string, unknown>, name: string): Record<string, unknown> {
+  const pagedFields = new Set(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.pagedResultFields ?? [])
   const optional = new Set(['revision', 'scopeRevisions', 'resultingRevision', 'resultingScopeRevisions', 'evidence',
     'checks', 'items', 'revisions', 'propertyAvailability', 'collectionAvailability', ...(name === 'get_model_schema' ? ['digest'] : [])])
   const visit = (value: unknown, dataEnvelope = false): unknown => {
     if (Array.isArray(value)) return value.map(item => visit(item))
     if (value === null || typeof value !== 'object') return value
     const record = object(value)
-    return Object.fromEntries(Object.entries(record).map(([key, item]) => [key,
-      key === 'required' && Array.isArray(item) ? item.filter(field => !optional.has(String(field))
-        && !(name === 'list_application_entities' && field === 'ref'))
-        : key === 'properties' ? Object.fromEntries(Object.entries(object(item))
-          .filter(([field]) => !dataEnvelope || !['revision', 'scopeRevisions', 'resultingRevision', 'resultingScopeRevisions'].includes(field))
-          .map(([field, description]) => [field, visit(description, field === 'data')])) : visit(item)]))
+    const hasPagedFields = Object.keys(object(record.properties)).some(field => pagedFields.has(field))
+    return Object.fromEntries(Object.entries(record).map(([key, item]) => {
+      if (key === 'required' && Array.isArray(item)) {
+        const required = item.filter(field => !pagedFields.has(String(field)) && !optional.has(String(field))
+          && !(name === 'list_application_entities' && field === 'ref'))
+        return [key, hasPagedFields ? [...required, 'resultCollections'] : required]
+      }
+      if (key === 'properties') {
+        const properties = { ...object(item), ...(hasPagedFields ? { resultCollections: resultCollectionsSchema } : {}) }
+        return [key, Object.fromEntries(Object.entries(properties)
+          .filter(([field]) => !pagedFields.has(field) && (!dataEnvelope || !['revision', 'scopeRevisions', 'resultingRevision', 'resultingScopeRevisions'].includes(field)))
+          .map(([field, description]) => [field, visit(description, field === 'data')]))]
+      }
+      return [key, visit(item)]
+    }))
   }
   const projected = visit(schema) as Record<string, unknown>
   return { ...projected, properties: { ...object(projected.properties), revisionEpoch: {

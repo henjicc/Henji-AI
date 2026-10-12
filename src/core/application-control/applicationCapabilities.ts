@@ -123,6 +123,10 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   executionPrerequisites?: string[]
   /** 付费生成的正式准备能力；MCP／Pi 从声明派生授权与预算预留，不接受调用方自报价。 */
   paidGenerationPreparation?: string
+  /** 大批量输出只投影数量与操作结果引用；账本和效果回执仍保留完整数组。 */
+  pagedResultFields?: string[]
+  /** 可能触发付费确认，目录给出共同流程指引。 */
+  mayRequirePaidConfirmation?: boolean
   /**
    * 算法型写能力的机器可执行验证下限。注册表会拒绝缺失该契约的写能力；
    * 文本 successEvidence 不能替代它。
@@ -160,6 +164,8 @@ const NON_DESCRIPTOR_KEYS = [
   'inputExamples',
   'executionPrerequisites',
   'paidGenerationPreparation',
+  'pagedResultFields',
+  'mayRequirePaidConfirmation',
   'verificationContract',
   'preview',
   'createUndo',
