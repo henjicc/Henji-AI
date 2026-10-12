@@ -15,6 +15,10 @@ import { appendVideoEditClip, appendVideoEditSequence, editVideoSequence, getAct
 import { closeAllVideoEdits, reopenVideoEdit } from '../application/videoEditDocumentTestKit'
 import { setVideoEditMaskEditing } from '../application/videoEditMaskEditing'
 import { setVideoEditTrackingEditing } from '../application/videoEditTrackingEditing'
+import { createVideoEditCaption } from '../application/videoEditTimedContent'
+import { selectedVideoEditSubtitleId } from '../application/videoEditSubtitleSelection'
+import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
+import { videoEditCaptionTextTargets } from './videoEditCaptionTextTargets'
 import { VideoEditTextOverlay } from './VideoEditTextOverlay'
 import { VideoEditTextStylePanel } from './VideoEditTextStylePanel'
 
@@ -223,4 +227,51 @@ it('助手用通用集合放文字与序列坐标，随后一次改样式，公�
     expect(getActiveVideoEditSequence(owner).clips[0].textStyle).toEqual(style)
     undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].textStyle).toBeUndefined()
   } finally { app.dispose() }
+})
+
+
+it('字幕画面选择保留当前帧、原译文独立编辑，Enter 提交一步撤销、Esc 取消', async () => {
+  const owner = await createVideoEditProject()
+  const id = createVideoEditCaption(owner.document.id, owner.activeSequenceId, { start: 0, duration: 120, text: '原文', translation: 'Translation', style: videoEditSubtitleStyleSchema.parse({}) })
+  setVideoEditView(owner.document.id, { frame: 45 })
+  const onError = vi.fn(); const view = render(<VideoEditTextOverlay instance={owner} onError={onError} />)
+  const target = (field: string) => view.container.querySelector(`[data-caption-field="${field}"]`)!
+  pointer(target('text'), 'down', .5, .85)
+  expect(selectedVideoEditSubtitleId(owner)).toBe(id); expect(owner.frame).toBe(45); expect(owner.activePanel).toBe('content')
+  const past = owner.past.length
+  fireEvent.doubleClick(target('translation'))
+  let editor = view.getByRole('textbox'); expect(editor.textContent).toBe('Translation')
+  editor.textContent = '译文'; fireEvent.input(editor)
+  fireEvent.keyDown(editor, { key: 'Enter', shiftKey: true }); expect(view.getByRole('textbox')).toBe(editor)
+  editor.textContent = '译文\n第二行'; fireEvent.input(editor)
+  fireEvent.keyDown(editor, { key: 'Enter' })
+  expect(view.queryByRole('textbox')).toBeNull()
+  expect(getActiveVideoEditSequence(owner).captions?.[0]).toMatchObject({ text: '原文', translation: '译文\n第二行' })
+  expect(owner.past.length).toBe(past + 1); expect(owner.frame).toBe(45); expect(owner.playing).toBe(false)
+  act(() => undoVideoEdit(owner.document.id))
+  expect(getActiveVideoEditSequence(owner).captions?.[0].translation).toBe('Translation')
+  fireEvent.keyDown(target('text'), { key: 'Enter' })
+  editor = view.getByRole('textbox'); editor.textContent = '取消修改'; fireEvent.input(editor)
+  fireEvent.keyDown(editor, { key: 'Escape' })
+  expect(getActiveVideoEditSequence(owner).captions?.[0].text).toBe('原文')
+  fireEvent.doubleClick(target('text')); editor = view.getByRole('textbox'); editor.textContent = '外部提交'; fireEvent.input(editor); fireEvent.blur(editor)
+  expect(getActiveVideoEditSequence(owner).captions?.[0].text).toBe('外部提交')
+  fireEvent.doubleClick(target('translation')); editor = view.getByRole('textbox'); editor.textContent = ''; fireEvent.input(editor); fireEvent.keyDown(editor, { key: 'Enter' })
+  expect(getActiveVideoEditSequence(owner).captions?.[0].translation).toBe('')
+  act(() => setVideoEditView(owner.document.id, { playing: true }))
+  pointer(target('text'), 'down', .5, .85); expect(owner.playing).toBe(false); expect(owner.frame).toBe(45)
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it('字幕命中由渲染文字测量与原译文行距决定，锁定字幕没有命中目标', async () => {
+  const owner = await createVideoEditProject()
+  createVideoEditCaption(owner.document.id, owner.activeSequenceId, { start: 0, duration: 120, text: '主行', translation: 'Short', style: videoEditSubtitleStyleSchema.parse({ fontSize: 48 }) })
+  const sequence = getActiveVideoEditSequence(owner)
+  const targets = videoEditCaptionTextTargets(sequence, 45, text => text.length * 20)
+  expect(targets).toHaveLength(2)
+  expect(targets[0].layout.width).toBe(40); expect(targets[1].layout.width).toBe(100)
+  expect(targets[1].layout.top - targets[0].layout.top).toBe(targets[0].layout.lineHeight)
+  expect(targets[0].clip.y).toBeCloseTo(.4)
+  expect(videoEditCaptionTextTargets({ ...sequence, captions: sequence.captions?.map(caption => ({ ...caption, locked: true })) }, 45, text => text.length * 20)).toEqual([])
+  expect(videoEditCaptionTextTargets(sequence, 120, text => text.length * 20)).toEqual([])
 })
