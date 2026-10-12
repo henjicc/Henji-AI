@@ -2,8 +2,8 @@
   "releasedCompatibility": false,
   "formats": {
     "document.video_edit": {
-      "version": 3,
-      "fingerprint": "0168a7cce972977761121d20cc6c752b3a1f5e68009d961da997865ed38346d9",
+      "version": 4,
+      "fingerprint": "46c8998b3296f9b34c37d025ed34b635200cd6db0f0d0ae4d350fb58568ce291",
       "supportedFrom": 2
     },
     "document.canvas": {

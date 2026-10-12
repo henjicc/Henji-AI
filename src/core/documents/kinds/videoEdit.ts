@@ -118,7 +118,7 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2 → 3（t187）：字幕新增可选 sourceText，原样保留；导出归档新增必填 presetName / rangeSource。
   // 旧归档没有记下预设名与区间来源，按升级前的展示补齐，不改动其他内容。
-  migrations: { 2: migrateVideoEditContentV2 },
+  migrations: { 2: migrateVideoEditContentV2, 3: migrateVideoEditContentV3 },
   createEmptyContent: createEmptyVideoEditContent,
   isEmptyContent: isEmptyVideoEditContent,
   summarize: summarizeVideoEdit,
@@ -131,4 +131,14 @@ function migrateVideoEditContentV2(content: unknown): unknown {
   return { ...record, exportHistory: record.exportHistory.map(entry => entry && typeof entry === 'object' && !Array.isArray(entry)
     ? { presetName: '已完成导出', rangeSource: 'content', ...(entry as Record<string, unknown>) }
     : entry) }
+}
+
+/** 3 → 4：字幕原先始终输出且可编辑；显式保留这两个默认行为。 */
+function migrateVideoEditContentV3(content: unknown): unknown {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
+  const record = content as Record<string, unknown>
+  if (!Array.isArray(record.sequences)) return content
+  return { ...record, sequences: record.sequences.map(sequence => sequence && typeof sequence === 'object' && !Array.isArray(sequence)
+    ? { ...(sequence as Record<string, unknown>), captionTrackEnabled: true, captionTrackLocked: false }
+    : sequence) }
 }

@@ -7,8 +7,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 import type { VideoEditDropPlacement } from '../application/videoEditDrop'
 import { placeVideoEditDrop, readActiveVideoEditItemDrag } from '../application/videoEditDrop'
 import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
-import { Diamond, Captions } from 'lucide-react'
-import { selectVideoEditSubtitle, selectedVideoEditSubtitleId, subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision } from '../application/videoEditSubtitleSelection'
+import { Diamond } from 'lucide-react'
+import { VideoEditCaptionTrack } from './VideoEditCaptionTrack'
+import { selectVideoEditSubtitle } from '../application/videoEditSubtitleSelection'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton } from '@/components/ui'
 import { UI_DIVIDER_CLASS, UI_TEXT_NUMERIC_CLASS } from '@/components/ui/styleTokens'
@@ -114,8 +115,6 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   useEffect(() => { if (pointer.failure) setFailureText(pointer.failure) }, [pointer.failure])
   const [transitionHint, setTransitionHint] = useState<TransitionDropHint | null>(null)
   useSyncExternalStore(subscribeVideoEditTransitionSelection, videoEditTransitionSelectionVersion)
-  useSyncExternalStore(subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision)
-  const selectedCaptionId = selectedVideoEditSubtitleId(instance, sequence.id)
   const selectedTransitionId = selectedVideoEditTransitionId(instance)
   // 吸附提示线（PR）：拖动吸上的那一帧在轨道上画一条竖线，各种拖动共用 timelineSnap 的同一份状态
   const snapFrame = useTimelineSnapIndicator(sequence.id)
@@ -400,7 +399,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   /** 落点提示的纵向位置：命中轨道上，或新建轨道的空白里贴着最外侧轨道。 */
   const hintTop = (at: VideoEditDropPlacement): number => {
     const { video, audio } = layout.regions
-    if (at.newTrack === 'video') return Math.max(video.top, (rows.find(row => row.region === 'video')?.top ?? video.top + video.height) - 26)
+    if (at.newTrack === 'video') return Math.max(video.top, layout.caption.top - 26)
     if (at.newTrack === 'audio') { const last = rows.filter(row => row.region === 'audio').at(-1); return Math.min(audio.top + audio.height - 26, last ? last.top + last.height + 2 : audio.top + 2) }
     return (rows.find(row => row.track.index === at.track)?.top ?? 0) + 2
   }
@@ -501,9 +500,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {minorPerMajor > 1 && Array.from({ length: Math.max(0, tickEnd - tickStart) * minorPerMajor }, (_, index) => tickStart * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1.5 border-l border-line" style={{ left: index * ruler.minor * pixels }} />)}
             <VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} />
             {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 菱形图形），不是按钮档位（3.5 确认保留） */}
-            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond size={10} fill="currentColor" strokeWidth={1.5} aria-hidden="true" /></UiButton>)}
-            {/* ui-surface-allow 字幕区间条：时间轴记号的命中区（区间色条由片段令牌给出），不是按钮档位 */}
-            {(sequence.captions ?? []).filter(caption => (caption.start + caption.duration) * pixels >= view.left && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH).map(caption => <UiButton key={caption.id} data-video-edit-caption-range={caption.id} aria-label={`定位字幕 ${caption.text}`} aria-pressed={selectedCaptionId === caption.id} className={`absolute top-0 !h-3 overflow-hidden !rounded-none !p-0 ${selectedCaptionId === caption.id ? 'bg-selected-accent text-accent-text ring-1 ring-accent-ring' : 'bg-clip-title text-text2'}`} style={{ left: caption.start * pixels, width: Math.max(2, caption.duration * pixels) }} title={caption.text} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, caption.id); focusVideoEditPanel(projectId, 'content') })}><Captions size={12} aria-hidden="true" /><span className="truncate text-2xs">{caption.text}</span></UiButton>)}
+            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond size={10} fill="currentColor" strokeWidth={1.5} aria-hidden="true" /></UiButton>)}
             <VideoEditTimelineInOut instance={instance} sequence={sequence} fps={fps} duration={duration} pixels={pixels} onError={onError} />
           </VideoEditTimelinePosition>
         </div>
@@ -511,6 +508,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           const region = layout.regions[kind]
           // 每一区单独裁切：滚出本区的轨道与片段不显示（overflow-y: clip 不建立滚动容器，轨道头仍能横向吸附在左侧）。
           return <div key={kind} className="absolute left-0 right-0 overflow-y-clip" style={{ top: region.top, height: region.height }} data-video-edit-track-region={kind}>
+            {kind === 'video' && <VideoEditCaptionTrack instance={instance} sequence={sequence} geometry={layout.caption} pixels={pixels} view={view} viewport={pointer.viewport} onError={onError} />}
             {headerRows.filter(row => row.region === kind).map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-gap bg-window" style={{ top: row.top - region.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
               <VideoEditTrackHeader row={row} code={trackCodes.get(row.track.id) ?? ''} targeted={instance.targetTrackIds.includes(row.track.id)} renaming={trackMenu.renaming === row.track.id} onRename={name => trackMenu.rename(row.track.id, name)} onStartRename={() => trackMenu.startRename(row.track.id)}
                 onContextMenu={event => trackMenu.show(event, row.track.id)}

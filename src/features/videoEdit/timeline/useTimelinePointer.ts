@@ -1,4 +1,5 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
+import { selectVideoEditSubtitle } from '../application/videoEditSubtitleSelection'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -245,6 +246,7 @@ export function useTimelinePointer(options: Options) {
     const { instance, sequence, pixels, onError } = current.current; const layout = current.current.layout.current
     const rows = layout.rows
     if (target.closest('[data-video-edit-track-header]') || target.closest('[data-video-edit-timeline-chrome]')) return
+    selectVideoEditSubtitle(instance.document.id, sequence.id, null)
     event.preventDefault(); event.stopPropagation()
     viewport.current?.focus({ preventScroll: true })
     const at = point({ x: event.clientX, y: event.clientY }); const row = timelineTrackAt(rows, at.y)

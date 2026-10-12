@@ -23,6 +23,7 @@ const { createVideoEditScrubScene } = require('./uiInspectionSceneVideoEditScrub
 const { createVideoEditPlayStartScene } = require('./uiInspectionSceneVideoEditPlayStart.cjs')
 const { createVideoEditFilmstripScene } = require('./uiInspectionSceneVideoEditFilmstrip.cjs')
 const { createVideoEditTimelineScene } = require('./uiInspectionSceneVideoEditTimeline.cjs')
+const { createVideoEditCaptionsScene } = require('./uiInspectionSceneVideoEditCaptions.cjs')
 const { createVideoEditMotionDraftScene } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
 const { createVideoEditExplanationScene } = require('./uiInspectionSceneVideoEditExplanation.cjs')
 const { createVideoEditPrimitivesScene } = require('./uiInspectionSceneVideoEditPrimitives.cjs')
@@ -131,6 +132,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditPlayStartScene(),
     createVideoEditFilmstripScene(),
     createVideoEditTimelineScene(),
+    createVideoEditCaptionsScene(),
     createVideoEditMotionDraftScene(),
     createVideoEditExplanationScene(),
     createVideoEditPrimitivesScene(),

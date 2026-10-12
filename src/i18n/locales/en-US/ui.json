@@ -1,4 +1,14 @@
 {
+  "captionTrack": {
+    "name": "Captions",
+    "show": "Show caption track",
+    "hide": "Hide caption track",
+    "lock": "Lock caption track",
+    "unlock": "Unlock caption track",
+    "select": "Select caption {{text}}",
+    "trimStart": "Trim caption start",
+    "trimEnd": "Trim caption end"
+  },
   "canvasTidy": {
     "title": "Tidy",
     "align": "Align edges",
