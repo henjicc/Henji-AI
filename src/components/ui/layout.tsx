@@ -100,6 +100,8 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
    * 低于同面板 `UiGroup titleTone="compact"` 的分组标题（界面重设计 3.5）。
    */
   density?: 'default' | 'compact';
+  /** 窄面板的固定标签列：72px 标签、12px 间隔，控件填满余宽。 */
+  labelColumn?: 'auto' | 'panel';
   children: ReactNode;
 }
 
@@ -293,6 +295,7 @@ export function UiFormRow({
   info,
   inline = false,
   density = 'default',
+  labelColumn = 'auto',
   children,
   ...props
 }: UiFormRowProps): JSX.Element {
@@ -303,6 +306,18 @@ export function UiFormRow({
   const labelClass = density === 'compact' ? 'text-xs text-text2' : UI_TEXT_PANEL_TITLE_CLASS;
   // 行内控件没有自己的名称时，用 aria-labelledby 指向这行标签（B-50）
   const labelling = { labelId, hintId };
+
+  if (labelColumn === 'panel') {
+    return <div className={`flex items-start gap-3 ${className}`} {...props}>
+      <div className="flex min-h-control-sm w-[72px] shrink-0 items-center justify-end text-right">
+        <div id={labelId} className={labelClass}>{labelNode}</div>
+      </div>
+      <div className="min-w-0 flex-1">
+        <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
+        {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
+      </div>
+    </div>;
+  }
 
   if (inline) {
     return (

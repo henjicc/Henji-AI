@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检启动器使用 CommonJS 场景工厂。 */
 const { createImageEditDocumentSizeScene } = require('./uiInspectionSceneImageEditDocumentSize.cjs')
+const { createSuperKeyframePanelScenes } = require('./uiInspectionSceneSuperKeyframePanel.cjs')
 const { createImageEditLayoutDraftScene } = require('./uiInspectionSceneImageEditLayoutDraft.cjs')
 const { createImageEditCommonWorkflowsScene } = require('./uiInspectionSceneImageEditCommonWorkflows.cjs')
 const { createImageEditCommonFeaturesScene, createImageEditQuickMosaicScene } = require('./uiInspectionSceneImageEditCommonFeatures.cjs')
@@ -126,6 +127,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   attachUiInspectionSupport(context)
 
   return Object.freeze([
+    ...createSuperKeyframePanelScenes(context),
     createVideoEditProbeScene(),
     createVideoEditScrubScene(),
     createVideoEditPlayStartScene(),

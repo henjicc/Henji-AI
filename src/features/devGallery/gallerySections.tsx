@@ -49,6 +49,7 @@ import {
   UiCurveEditor,
   UiEasingEditor,
   UiSeedInput,
+  UiSegmented,
   UiRegion,
   UiSearchInput,
   UiSelect,
@@ -207,8 +208,12 @@ export function MenuSection(): JSX.Element {
 }
 
 export function OptionSection(): JSX.Element {
+  const [segment, setSegment] = useState('place')
   return (
     <GallerySection title="选项与分段">
+      <GalleryRow label="统一分段">
+        <UiSegmented ariaLabel="示范方式样张" size="sm" value={segment} onChange={setSegment} options={[{ value: 'place', label: '分时摆放' }, { value: 'record', label: '录制轨迹' }, { value: 'disabled', label: '禁用', disabled: true }]} />
+      </GalleryRow>
       <GalleryRow label="分段">
         <div className={UI_SEGMENTED_TRACK_CLASS}>
           <UiOptionButton variant="segment" active aria-pressed>图片</UiOptionButton>
