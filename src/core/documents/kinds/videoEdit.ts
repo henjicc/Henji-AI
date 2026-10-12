@@ -116,8 +116,19 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
   version: VIDEO_EDIT_CONTENT_VERSION,
   contentSchema: videoEditContentSchema,
-  migrations: {},
+  // 2 → 3（t187）：字幕新增可选 sourceText，原样保留；导出归档新增必填 presetName / rangeSource。
+  // 旧归档没有记下预设名与区间来源，按升级前的展示补齐，不改动其他内容。
+  migrations: { 2: migrateVideoEditContentV2 },
   createEmptyContent: createEmptyVideoEditContent,
   isEmptyContent: isEmptyVideoEditContent,
   summarize: summarizeVideoEdit,
+}
+
+function migrateVideoEditContentV2(content: unknown): unknown {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
+  const record = content as Record<string, unknown>
+  if (!Array.isArray(record.exportHistory)) return content
+  return { ...record, exportHistory: record.exportHistory.map(entry => entry && typeof entry === 'object' && !Array.isArray(entry)
+    ? { presetName: '已完成导出', rangeSource: 'content', ...(entry as Record<string, unknown>) }
+    : entry) }
 }

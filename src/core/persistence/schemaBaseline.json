@@ -4,7 +4,7 @@
     "document.video_edit": {
       "version": 3,
       "fingerprint": "0168a7cce972977761121d20cc6c752b3a1f5e68009d961da997865ed38346d9",
-      "supportedFrom": 3
+      "supportedFrom": 2
     },
     "document.canvas": {
       "version": 1,
@@ -174,7 +174,7 @@
     "subtitle-manifest": {
       "version": 2,
       "fingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005",
-      "supportedFrom": 2
+      "supportedFrom": 1
     },
     "storyboard-metadata": {
       "version": 1,
@@ -1285,24 +1285,6 @@
       "reason": "t182：剪辑文档保存已完成导出回执；既有操作账本记录生成上限估值性质，开发期不兼容旧格式",
       "previousFingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
       "fingerprint": "38953dfbc151d55fa5d4d752a73ccecde97948879a488ebd2048c8418084389d",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T10:59:21.218Z",
-      "format": "document.video_edit",
-      "version": 3,
-      "reason": "t187 保存字幕排版前原句并保留导出预设与区间来源，开发期直接采用新格式",
-      "previousFingerprint": "de24e35a2a880bea9ab037ce98c70a77f464122c7b65b657ccfcd3a9280588ea",
-      "fingerprint": "0168a7cce972977761121d20cc6c752b3a1f5e68009d961da997865ed38346d9",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T10:59:21.219Z",
-      "format": "subtitle-manifest",
-      "version": 2,
-      "reason": "t187 保存字幕排版前原句并保留导出预设与区间来源，开发期直接采用新格式",
-      "previousFingerprint": "9ad2c8922d20b178dcb14f4ec7485631ad108d32507d20f0312805120b75febf",
-      "fingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005",
       "waivedFixtureVersions": []
     }
   ]
