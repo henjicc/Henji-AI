@@ -53,7 +53,9 @@ describe('默认转写模型的正式通用设置链路', () => {
       if (url === 'https://result.invalid/') return new Response(JSON.stringify({ transcripts: [{ sentences: [{ text: '好', begin_time: 0, end_time: 500, words: [{ text: '好', begin_time: 0, end_time: 500 }] }] }] }))
       throw new Error(`UNEXPECTED_FIXTURE_REQUEST:${url}`)
     })
-    const runtime: RuntimeContext = { credentials: { get: () => 'fixture-key' }, transport: { fetch, uploadFile: async () => new Response('', { status: 200 }) }, media: { read: async () => { throw new Error('必须使用本地流式上传') } } }
+    // 文件识别要求宿主提供完整能力（流式请求、媒体分块、日志、追踪），替身补齐以通过宿主自检
+    const unused = async (): Promise<never> => { throw new Error('本测试不应调用') }
+    const runtime: RuntimeContext = { logger: { info() {}, warn() {}, error() {} }, tracer: { startSpan: () => ({ end() {}, setAttribute() {}, recordError() {} }) } as unknown as RuntimeContext['tracer'], credentials: { get: () => 'fixture-key' }, transport: { fetch, fetchStream: unused, uploadFile: async () => new Response('', { status: 200 }) } as unknown as RuntimeContext['transport'], media: { describe: unused, readChunk: unused, read: async () => { throw new Error('必须使用本地流式上传') } } }
     const service = createTimestampedAsrService(runtime, (providerId) => useSettingsStore.getState().providerKeyStatus[providerId] === true)
     const plan = service.prepare({ modelId: reopened.resolveTranscriptionModelId(), audioPath: 'recording.wav', durationMs: 500 })
     // 设置随后改变也不能切换已经开始的收费模型。
