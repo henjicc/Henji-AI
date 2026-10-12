@@ -5,12 +5,13 @@ import { createServer } from 'node:http'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createNativeFileUpload } from './native-file-upload'
 
-const scope = vi.hoisted(() => ({ allowed: true }))
-vi.mock('../../protocol', () => ({ isPathWithinAllowedMediaRoots: () => scope.allowed }))
+const scope = vi.hoisted(() => ({ allowed: true, realAllowed: true }))
+vi.mock('../../protocol', () => ({ isPathWithinAllowedMediaRoots: () => scope.allowed, isRealPathWithinAllowedMediaRoots: async () => scope.realAllowed }))
 let directory: string
 let ref: string
 beforeEach(async () => {
   scope.allowed = true
+  scope.realAllowed = true
   directory = await mkdtemp(path.join(os.tmpdir(), 'henji-upload-'))
   ref = path.join(directory, 'voice.wav')
   await writeFile(ref, 'test audio')

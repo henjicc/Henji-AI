@@ -106,6 +106,23 @@ export function isPathWithinAllowedMediaRoots(targetPath: string): boolean {
   return getAllowedMediaRoots().some((rootPath) => isInsideRoot(targetPath, rootPath))
 }
 
+/**
+ * 目标已解析为真实位置时，白名单目录也要按真实位置比较。
+ * 例如从 MSIX 打包应用（如 Claude 桌面）启动时，系统把 AppData\Local 重定向到
+ * Packages\…\LocalCache\Local，目录链接（junction）同理；只比字面路径会把自己的程序缓存误判为越界。
+ */
+export async function isRealPathWithinAllowedMediaRoots(realTargetPath: string): Promise<boolean> {
+  if (isPathWithinAllowedMediaRoots(realTargetPath)) return true
+  for (const rootPath of getAllowedMediaRoots()) {
+    try {
+      if (isInsideRoot(realTargetPath, await fsp.realpath(rootPath))) return true
+    } catch {
+      // 尚未创建或不可访问的白名单目录不参与比较
+    }
+  }
+  return false
+}
+
 function assertAllowedMediaPath(targetPath: string): void {
   assertValidMediaPath(targetPath)
 

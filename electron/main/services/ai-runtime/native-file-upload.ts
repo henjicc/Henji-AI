@@ -2,14 +2,14 @@ import { constants, openAsBlob } from 'node:fs'
 import { access, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { AiRuntimeError, assertMediaSize, inferMimeFromPath, normalizeLocalSource, type Transport } from '@henjicc/ai-sdk'
-import { isPathWithinAllowedMediaRoots } from '../../protocol'
+import { isPathWithinAllowedMediaRoots, isRealPathWithinAllowedMediaRoots } from '../../protocol'
 
 /** Resolve both the reference and symlink destination within the existing media grants. */
 export async function scopedUploadFile(ref: string): Promise<string> {
   const local = normalizeLocalSource(ref.trim())
   if (!local || !isPathWithinAllowedMediaRoots(local)) throw new AiRuntimeError('media_scope_denied', '素材不在已授权的文件范围内')
   const resolved = await realpath(local)
-  if (!isPathWithinAllowedMediaRoots(resolved)) throw new AiRuntimeError('media_scope_denied', '素材实际位置不在已授权的文件范围内')
+  if (!(await isRealPathWithinAllowedMediaRoots(resolved))) throw new AiRuntimeError('media_scope_denied', '素材实际位置不在已授权的文件范围内')
   await access(resolved, constants.R_OK)
   if (!(await stat(resolved)).isFile()) throw new AiRuntimeError('invalid_media', '上传素材必须是可读文件')
   return resolved
