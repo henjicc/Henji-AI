@@ -420,6 +420,7 @@ export class ImageEditExplanation {
   }
   async prepareGeneration(): Promise<ExplanationSendRequest | undefined> {
     const collector = this.require()
+    await this.generation?.cancel()
     this.generation = await prepareExplanationGeneration({
       documentRef: imageEditV3DocumentRef(this.bus.getSnapshot().document.id),
       session: () => this.collector?.session,
@@ -479,6 +480,7 @@ export class ImageEditExplanation {
     const collector = this.require()
     if (this.state.busy || ['recording', 'paused', 'transcribing'].includes(collector.session.state)) throw new Error('请先结束录制。')
     try {
+    await this.generation?.cancel(); this.generation = undefined
     if (this.erasedSessionId !== collector.session.id) {
     await this.finishReview(); await this.ports.audio.erase(collector.session.id)
     const document = this.bus.getSnapshot().document
@@ -492,6 +494,7 @@ export class ImageEditExplanation {
   }
   async close(): Promise<void> {
     if (this.disposed) return
+    await this.generation?.cancel(); this.generation = undefined
     this.cancelPick()
     this.controller.abort(); clearInterval(this.timer)
     await this.microphone?.stop(); this.microphone = undefined

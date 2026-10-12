@@ -831,5 +831,20 @@
     "capturing": "Press a key combination…",
     "clearLabel": "Clear {{command}} shortcut",
     "clear": "Clear"
+  },
+  "paidApproval": {
+    "title": "AI payments",
+    "mode": "Approval mode",
+    "modeHint": "Ask every time: confirm before each paid operation.\nAutomatic: approve estimates within the per-operation and daily limits; ask when cost is unknown.\nBypass: approve within the daily limit, including unknown costs.",
+    "ask": "Ask every time",
+    "auto": "Automatic (recommended)",
+    "bypass": "Bypass",
+    "single": "Automatic approval limit",
+    "daily": "Daily limit",
+    "unit": "CNY",
+    "projects": "Always-allowed projects",
+    "revoke": "Revoke",
+    "loadFailed": "Unable to load AI payment settings. Reopen settings to retry.",
+    "saveFailed": "Unable to save. Please try again."
   }
 }

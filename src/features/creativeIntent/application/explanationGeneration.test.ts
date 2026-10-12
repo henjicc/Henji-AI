@@ -6,10 +6,13 @@ import type { EmbeddedAgentSnapshot } from '@/core/assistant/embeddedAgent'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
 
 const ports = vi.hoisted(() => ({ models: vi.fn(), snapshot: vi.fn(), prompt: vi.fn(), onSnapshot: vi.fn(), resolutions: vi.fn() }))
+const paid = vi.hoisted(() => ({ prepare: vi.fn(), confirm: vi.fn(), start: vi.fn(), complete: vi.fn(), reject: vi.fn(), failed: vi.fn() }))
+vi.mock('@/services/paidApproval', () => ({ prepareExplanationPaidApproval: paid.prepare }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ embeddedAgent: ports }) }))
 vi.mock('@/core/creativeIntent/semanticIntentRecording', () => ({ semanticRecordingResolutions: ports.resolutions }))
 beforeEach(() => {
   vi.stubGlobal('crypto', webcrypto); vi.clearAllMocks()
+  paid.prepare.mockResolvedValue({ ...paid, decision: { decision: 'ask', reason: '每次询问', estimatedCny: null, dailySpentCny: 0 }, project: { id: 'project', name: '测试项目' } })
   ports.models.mockResolvedValue([{ name: '实际模型', providerId: 'provider', modelId: 'model', inputModalities: ['text', 'image'] }])
   ports.snapshot.mockResolvedValue({ busy: false }); ports.resolutions.mockResolvedValue([])
 })
@@ -39,15 +42,25 @@ it('预检只读取实际模型；取消和未授权时不外发，发送后正�
   expect(f.session.consent?.textUpload).toBe(false)
   await expect(plan.run(f.local)).rejects.toThrow('已执行')
 })
-it('记住会话同意后不再询问，只有本地整理时不弹外发确认', async () => {
+it('项目授权交给统一策略，发送权限仅本次生效，本地整理不弹确认', async () => {
   const f = fixture(), plan = await prepareExplanationGeneration(f.host)
   await plan.request!.confirm(true); await plan.run(f.local)
-  expect(f.session.consent?.textUpload).toBe(true)
+  expect(f.session.consent?.textUpload).toBe(false)
+  expect(paid.confirm).toHaveBeenCalledWith(true)
+  paid.prepare.mockResolvedValueOnce({ ...paid, decision: { decision: 'auto', reason: '全部放行', estimatedCny: null, dailySpentCny: 0 } })
   expect((await prepareExplanationGeneration(f.host)).request).toBeUndefined()
   ports.models.mockResolvedValue([])
   const local = await prepareExplanationGeneration(f.host)
   expect(local.request).toBeUndefined(); await local.run(f.local)
   expect(ports.prompt).toHaveBeenCalledOnce()
+})
+it('取消待发送计划只释放一次预留，之后不能继续发送', async () => {
+  const f = fixture(), plan = await prepareExplanationGeneration(f.host)
+  await plan.request!.cancel()
+  await plan.cancel()
+  expect(paid.reject).toHaveBeenCalledOnce()
+  await expect(plan.run(f.local)).rejects.toThrow('已执行')
+  expect(ports.prompt).not.toHaveBeenCalled()
 })
 it('讲解变化使旧确认失效，模型错误仍清理单次授权', async () => {
   const f = fixture(), stale = await prepareExplanationGeneration(f.host)
@@ -69,7 +82,7 @@ it('确认显示实际去重后的必要画面总数，文本模型不能偷偷�
   const plan = await prepareExplanationGeneration(f.host)
   expect(plan.request?.imageCount).toBe(17)
   await plan.request!.confirm(true); await plan.run(f.local)
-  expect(f.session.consent?.imageUpload).toBe(true)
+  expect(f.session.consent?.imageUpload).toBe(false)
   ports.models.mockResolvedValue([{ name: '文字模型', providerId: 'provider', modelId: 'text', inputModalities: ['text'] }])
   const local = await prepareExplanationGeneration(f.host)
   expect(local.request).toBeUndefined(); await local.run(f.local)

@@ -829,5 +829,20 @@
     "capturing": "请按下组合键…",
     "clearLabel": "清除{{command}}键位",
     "clear": "清除"
+  },
+  "paidApproval": {
+    "title": "AI 付费",
+    "mode": "授权方式",
+    "modeHint": "每次询问：每次付费前请你确认。\n自动：估价在单次和每日额度内自动通过，无法估价时询问。\n全部放行：每日额度内自动通过，无法估价也放行。",
+    "ask": "每次询问",
+    "auto": "自动（推荐）",
+    "bypass": "全部放行",
+    "single": "单次自动通过",
+    "daily": "每日上限",
+    "unit": "元",
+    "projects": "已始终允许的项目",
+    "revoke": "撤销",
+    "loadFailed": "AI 付费设置读取失败，请重新打开设置。",
+    "saveFailed": "保存失败，请重试。"
   }
 }

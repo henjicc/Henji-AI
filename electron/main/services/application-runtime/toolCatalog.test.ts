@@ -41,7 +41,7 @@ describe('对外工具目录的投影与授权过滤', () => {
     const tools = buildApplicationToolCatalog({ tools: hostTools, access: PAID, operationsEnabled: true, includeSkillTool: true }).tools
     const fingerprint = createHash('sha256').update(JSON.stringify(normalize(tools))).digest('hex')
     // 仅维护当前契约；升级时记录新版本的审查指纹，不更新旧版本的指纹。
-    const fingerprints: Record<string, string> = { '2.2.1': 'df8ac3b9e72c31fd17b119cd193de1b390d9f926cf25069ec9dd7496dbb9ea19', '2.2.0': '2ece81315e4c7f06f95d78e89e1dc75c2cc706c69fa4a1809e48f52ad1cd6673', '2.1.1': '652993365eb5eea750edb584853b59d459bb20da6b72fd855a0bc8f430aed77e', '2.1.2': 'b7c6ddb6093736c18e19e78ba59b059c672ca7c0bc8cd1a5cb92f23dbaa4ce9b' }
+    const fingerprints: Record<string, string> = { '2.2.2': '1ee8e64c360dffc2c1637348c8682f8fdc82d9966a7cfd6fb8c6d63aa2323d51', '2.2.1': 'df8ac3b9e72c31fd17b119cd193de1b390d9f926cf25069ec9dd7496dbb9ea19', '2.2.0': '2ece81315e4c7f06f95d78e89e1dc75c2cc706c69fa4a1809e48f52ad1cd6673', '2.1.1': '652993365eb5eea750edb584853b59d459bb20da6b72fd855a0bc8f430aed77e', '2.1.2': 'b7c6ddb6093736c18e19e78ba59b059c672ca7c0bc8cd1a5cb92f23dbaa4ce9b' }
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

@@ -7,6 +7,7 @@ import { useLlmSettings } from '../hooks/useLlmSettings'
 import AgentModelProfilesSection from '../sections/AgentModelProfilesSection'
 import AgentUserInstructionsSection from '../sections/AgentUserInstructionsSection'
 import McpSection from '../sections/McpSection'
+import PaidApprovalSection from '../sections/PaidApprovalSection'
 
 /**
  * 智能助手：用哪些模型、长期指令、外部智能体连接。
@@ -25,6 +26,7 @@ const AssistantTab: React.FC = () => {
       </SettingsSection>
       <SettingsSection id="assistant-preferences">
         <AgentUserInstructionsSection />
+        <PaidApprovalSection />
       </SettingsSection>
       <SettingsSection id="assistant-mcp">
         <McpSection />

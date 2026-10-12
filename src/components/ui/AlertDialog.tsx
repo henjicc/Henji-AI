@@ -12,12 +12,12 @@ export interface AlertDialogAction {
   label: string
   onClick: () => void
   /** 主动作用 primary（一个弹窗最多一个），其余用 secondary（默认）。 */
-  variant?: 'primary' | 'secondary'
+  variant?: 'primary' | 'secondary' | 'quiet'
   /** 破坏性动作：primary → dangerSolid（确认弹窗），secondary → danger（悬停显红）。 */
   tone?: 'default' | 'danger'
 }
 
-function resolveAlertActionVariant(action: AlertDialogAction): 'primary' | 'secondary' | 'danger' | 'dangerSolid' {
+function resolveAlertActionVariant(action: AlertDialogAction): 'primary' | 'secondary' | 'quiet' | 'danger' | 'dangerSolid' {
   const variant = action.variant ?? 'secondary'
   if (action.tone !== 'danger') return variant
   return variant === 'primary' ? 'dangerSolid' : 'danger'
@@ -41,6 +41,7 @@ interface AlertDialogProps {
    */
   actions?: AlertDialogAction[]
   closeLabel?: string
+  closeVariant?: 'secondary' | 'quiet'
   /** 费用确认取消后立即撤销操作，避免退出动画期间仍能确认。 */
   closeImmediately?: boolean
 }
@@ -58,6 +59,7 @@ export default function AlertDialog({
   scope = 'viewport',
   actions,
   closeLabel,
+  closeVariant = 'secondary',
   closeImmediately = false,
 }: AlertDialogProps): JSX.Element | null {
   const { t } = useI18n('common')
@@ -186,7 +188,7 @@ export default function AlertDialog({
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <UiButton
             type="button"
-            variant="secondary"
+            variant={closeVariant}
             onClick={handleClose}
           >
             {closeLabel ?? t('close')}

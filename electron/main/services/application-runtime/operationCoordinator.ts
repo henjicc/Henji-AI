@@ -280,6 +280,7 @@ export class ApplicationOperationCoordinator {
     this.store.save({ ...current, state: 'completed', verificationState: 'verified', recoveryResult: result })
   }
   complete(reply: LocalHostReply): void {
+    if (reply.progress?.phase === 'paid_approval') return
     const record = this.store.byRequest(reply.requestId, reply.rendererEpoch)
     if (!record || !['executing', 'unknown', 'awaiting_user_confirmation'].includes(record.state)) return
     if (reply.progress) {
@@ -346,6 +347,7 @@ export class ApplicationOperationCoordinator {
     if (recovered) { this.store.save(recovered); record = recovered }
     return { ok: record.state === 'completed' && record.verificationState === 'verified', operationId: record.operationId, executionState: record.state,
       verificationState: record.verificationState ?? 'unresolved', result: record.result ?? null, recoveryResult: record.recoveryResult ?? null,
+      ...(record.approval ? { approval: record.approval } : {}),
       ...(record.confirmation ? { confirmation: record.confirmation } : {}),
       recovery: record.state === 'unknown' ? '执行结果尚待核对；禁止重复原修改。先用 get_application_operation 等待原回执；原宿主已结束时调用 review_application_operation，由应用读取目标并请用户核对是否执行，再解除保护。' : undefined }
   }

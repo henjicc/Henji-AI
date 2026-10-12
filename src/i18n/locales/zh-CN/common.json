@@ -21,7 +21,6 @@
     "title": "还没有配置密钥",
     "message": "你还没有配置密钥，你需要去配置一下。"
   },
-
   "confirm": "确定",
   "cancel": "取消",
   "save": "保存",
@@ -37,7 +36,6 @@
   "info": "信息",
   "on": "开",
   "off": "关",
-
   "status": {
     "queued": "排队中",
     "processing": "生成中",
@@ -45,7 +43,6 @@
     "failed": "失败",
     "timeout": "超时"
   },
-
   "actions": {
     "retry": "重试",
     "download": "下载",
@@ -55,5 +52,10 @@
     "reset": "重置",
     "apply": "应用",
     "preview": "预览"
+  },
+  "paidApproval": {
+    "allowOnce": "允许本次",
+    "alwaysAllowProject": "本项目始终允许",
+    "deny": "拒绝"
   }
 }

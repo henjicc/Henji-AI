@@ -50,7 +50,10 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     const result: AlertDialogAction[] = []
 
     if (current.confirmation) {
-      return [{ label: current.confirmation.label, variant: 'primary', tone: current.confirmation.tone, onClick: () => {
+      if (current.confirmation.project) result.push({ label: t('paidApproval.alwaysAllowProject'), variant: 'secondary', onClick: () => {
+        if (useAlertDialogStore.getState().queue[0] === current) confirmCurrent(true)
+      } })
+      return [...result, { label: current.confirmation.paid ? t('paidApproval.allowOnce') : current.confirmation.label, variant: 'primary', tone: current.confirmation.tone, onClick: () => {
         if (useAlertDialogStore.getState().queue[0] === current) confirmCurrent()
       } }]
     }
@@ -106,7 +109,8 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
       message={current.message}
       type={current.type ?? 'error'}
       actions={actions}
-      closeLabel={current.confirmation ? t('cancel') : undefined}
+      closeLabel={current.confirmation?.paid ? t('paidApproval.deny') : current.confirmation ? t('cancel') : undefined}
+      closeVariant={current.confirmation?.paid ? 'quiet' : 'secondary'}
       closeImmediately={Boolean(current.confirmation)}
       onClose={handleClose}
     />

@@ -160,7 +160,7 @@ describe('应用原生操作记录与恢复', () => {
     const f = fixture()
     const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: 'fixture', mediaType: 'audio' }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
     expect(() => reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { canSubmit: false, errorCode: 'PROVIDER_PRODUCT_NOT_ACTIVATED', message: '请开通', priceEstimate: { comparableCnyAmount: 0.1 } } } })).toThrow('PROVIDER_PRODUCT_NOT_ACTIVATED')
-    expect(f.store.get(record.operationId, f.callerId)?.generationEstimate).toBeUndefined()
+    expect(f.store.get(record.operationId, f.callerId)?.paidGenerationEstimate).toBeUndefined()
   })
   it('明确未执行后同一 operationId 与参数可重新准备，unknown 仍禁止重放', () => {
     const f = fixture(); const raw = input(f.baseline)
@@ -325,8 +325,8 @@ describe('应用原生操作记录与恢复', () => {
     const result = await dispatcher.call(f.callerId, 'submit_canvas_node_generation', raw, new AbortController().signal)
     expect(calls.map(call => call.capabilityId)).toEqual(amount <= 50 ? ['prepare_canvas_node_generation', 'submit_canvas_node_generation'] : ['prepare_canvas_node_generation'])
     expect(calls[0].input).toMatchObject({ inputSignature: raw.inputSignature })
-    expect(result.ok).toBe(amount <= 50)
-    expect(f.store.get(raw.operationId, f.callerId)?.state).toBe(amount <= 50 ? 'completed' : 'not_executed')
+    expect(result.ok).toBe(true)
+    expect(f.store.get(raw.operationId, f.callerId)?.state).toBe('completed')
   })
   it('执行原节点只保护本节点，同项目其他节点继续追加，未知原请求不重放', () => {
     const f = fixture()
@@ -361,10 +361,10 @@ describe('应用原生操作记录与恢复', () => {
       } })
       const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: true }) }, host, f.coordinator)
       const result = await dispatcher.call(f.callerId, 'apply_canvas_image_capability', raw, new AbortController().signal)
-      expect(calls.map(call => call.capabilityId)).toEqual(amount <= 50 ? ['get_model_schema', 'apply_canvas_image_capability'] : ['get_model_schema'])
-      expect(result.ok).toBe(amount <= 50)
-      expect(f.store.get(raw.operationId, f.callerId)?.state).toBe(amount <= 50 ? 'completed' : 'not_executed')
-      if (amount <= 50) expect(f.store.get(raw.operationId, f.callerId)?.generationEstimate?.cny).toBe(amount)
+      expect(calls.map(call => call.capabilityId)).toEqual(['get_model_schema', 'apply_canvas_image_capability'])
+      expect(result.ok).toBe(true)
+      expect(f.store.get(raw.operationId, f.callerId)?.state).toBe('completed')
+      expect(f.store.get(raw.operationId, f.callerId)?.paidGenerationEstimate).toBe(amount)
     } finally { spy.mockRestore() }
   })
   it('续查只占用原任务和节点，不要求付费权限，也不锁住同项目其他任务', () => {
@@ -522,30 +522,14 @@ describe('应用原生操作记录与恢复', () => {
     expect(generated.expectedRevisions).toBeUndefined()
   })
 
-  it('五次低价生成放行，高费用与累计费用在提交前拦截，重开账本仍保留预算', () => {
+  it('正式准备保留估价，未知费用交给统一授权，不在准备时占用额度', () => {
     const f = fixture()
-    const reserve = (amount: unknown) => {
+    for (const amount of [1, 51, null]) {
       const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: '预算测试', mediaType: 'image' }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
       reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: amount } } } })
-      return record
+      expect(f.store.get(record.operationId, f.callerId)?.paidGenerationEstimate).toBe(amount)
     }
-    for (let i = 0; i < 5; i++) reserve(1)
-    expect(new ApplicationOperationStore(f.db).generationSpendSince(Date.now() - 600_000)).toBe(5)
-    expect(() => reserve(51)).toThrow('超出自动生成额度')
-    expect(() => reserve(46)).toThrow('超出自动生成额度')
-    expect(() => reserve(null)).toThrow('费用暂不可估算')
-    const record = reserve(2)
-    reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 2 } } } })
-    expect(f.store.generationSpendSince(Date.now() - 600_000)).toBe(7)
-    f.store.save({ ...record, state: 'not_executed' })
-    expect(f.store.generationSpendSince(Date.now() - 600_000)).toBe(5)
-  })
-  it('尚未提交的过期预留必须重新核对当下费用，不能复用旧额度', () => {
-    const f = fixture()
-    const record = f.store.prepare({ operationId: randomUUID(), callerId: f.callerId, capabilityId: 'create_visible_generation_task', inputDigest: 'expired', input: {}, state: 'prepared', generationEstimate: { cny: 1, reservedAt: Date.now() - 700_000 } })
-    expect(() => reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 51 } } } })).toThrow('超出自动生成额度')
-    reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 2 } } } })
-    expect(f.store.generationSpendSince(Date.now() - 600_000)).toBe(2)
+    expect(new ApplicationOperationStore(f.db).generationSpendSince(Date.now() - 600_000)).toBe(0)
   })
   it('无版本的任务读取仍绑定原目标与宿主会话，不能以其他任务或旧会话取消', () => {
     const f = fixture()

@@ -1,3 +1,6 @@
+import { requestAlertConfirmation } from '@/stores/alertDialogStore'
+import { applicationPaidRequest } from '@/services/paidApproval'
+import type { ApplicationRef } from '@/core/application-control'
 import { z } from 'zod'
 import { createApplicationCallerGrant, revokeApplicationCallerGrant, type ApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { localHostRequestSchema, APPLICATION_CAPABILITY_IDS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS, type ApplicationHostPlatform, type LocalTool } from '@/core/application-control/localHostContracts'
@@ -46,6 +49,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
         assertApplicationCallerGrant(grant)
       }
       const reply = { rendererEpoch, requestId, result: { ok: false }, progress }
+      if (progress.phase === 'paid_approval') return await platform.complete(reply)
       operationReceipts.set(requestId, { callerId, reply })
       await platform.complete(reply)
       logger.info('应用操作确认状态变化', { event: 'application.confirmation.progress', context: { requestId, phase: progress.phase } })
@@ -63,6 +67,13 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
         const definition = definitions.find((item) => item.id === capabilityId)
         if (!definition) throw new Error('此读取工具不可用，请重新连接。')
         if (request.data.recoveryOperation && capabilityId !== 'get_current_application_context' && capabilityId !== 'save_video_edit') throw new Error('操作核对只能沿只读宿主或原剪辑保存恢复入口。')
+        if (definition.paidGenerationPreparation) {
+          const documentRef = input.documentRef as ApplicationRef | undefined
+          const destination = input.destination as { mode?: string; documentId?: string } | undefined
+          const documentId = typeof input.documentId === 'string' ? input.documentId : documentRef ?? (destination?.mode === 'canvas' ? destination.documentId : undefined)
+          await requestAlertConfirmation({ title: definition.title, message: '将使用已配置的模型生成内容。', confirmLabel: '允许本次',
+            paid: await applicationPaidRequest('generation', documentId, controller.signal, request.data.paidGenerationEstimate ?? null) }, controller.signal)
+        }
         dispatched = true
         result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input, expectedRevisions }, { requestId: request.data.operationId ?? requestId, signal: controller.signal })
         if (result.ok === true && request.data.recoveryOperation && capabilityId === 'save_video_edit') {

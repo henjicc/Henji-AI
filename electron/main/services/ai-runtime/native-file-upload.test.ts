@@ -56,6 +56,8 @@ it('size and scope rejection happen before network with structured size error', 
   await expect(createNativeFileUpload(send)('https://upload.invalid', { ...input(), maxBytes: 9 })).rejects.toMatchObject({ code: 'media_too_large', details: { actualBytes: 10, maxBytes: 9 } })
   scope.allowed = false
   await expect(createNativeFileUpload(send)('https://upload.invalid', input())).rejects.toMatchObject({ code: 'media_scope_denied' })
+  scope.allowed = true; scope.realAllowed = false
+  await expect(createNativeFileUpload(send)('https://upload.invalid', input())).rejects.toMatchObject({ code: 'media_scope_denied' })
   expect(send).not.toHaveBeenCalled()
 })
 it('pre-abort avoids file and network work; in-flight abort reaches transport without replay', async () => {

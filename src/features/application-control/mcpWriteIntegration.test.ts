@@ -18,6 +18,8 @@ import { ApplicationOperationStore, createApplicationOperationTablesV1 } from '.
 import { ApplicationOperationCoordinator } from '../../../electron/main/services/application-runtime/operationCoordinator'
 import type { ApplicationHostPlatform, LocalHostRequest } from '@/core/application-control/localHostContracts'
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
+// Settings are an isolated storage boundary; never read the user's actual payment preferences.
+vi.mock('../../../electron/main/services/settings/store', () => ({ getSettingsStore: () => ({ get: () => null, set: () => { throw new Error('此测试未授权写入设置') } }) }))
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
 it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置保存；拒绝后可恢复并读回实际结果', async () => {
