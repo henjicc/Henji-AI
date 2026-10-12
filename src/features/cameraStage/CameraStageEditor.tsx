@@ -237,6 +237,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
 
     const previousPlayback = exportState.playback
     videoCancelRef.current = false
+    embeddedOutput?.onProgress(0)
     setVideoProgress({
       phase: 'rendering',
       doneFrames: 0,

@@ -74,18 +74,19 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
+  const orderedFrames = useMemo(() => [...data.frames].sort((a, b) => a.order - b.order), [data.frames]);
   const {
     draggedFrameId,
     dropTargetFrameId,
     handleSortStart,
-    handleSortHover,
+    itemRefs,
   } = useStoryboardSort({
     nodeId: id,
+    frames: orderedFrames,
     reorderStoryboardFrame,
     onSortStart: hidePicker,
   });
 
-  const orderedFrames = useMemo(() => [...data.frames].sort((a, b) => a.order - b.order), [data.frames]);
   const frameAspectRatio = useMemo(
     () => data.frameAspectRatio ?? orderedFrames.find((frame) => typeof frame.aspectRatio === 'string')?.aspectRatio ?? '1:1',
     [data.frameAspectRatio, orderedFrames]
@@ -275,7 +276,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
               draggedFrameId={draggedFrameId}
               dropTargetFrameId={dropTargetFrameId}
               onSortStart={handleSortStart}
-              onSortHover={handleSortHover}
+              sortRef={(element) => { itemRefs.current[index] = element; }}
               onTogglePicker={handleTogglePicker}
               onEditFrame={(targetFrame) => {
                 void handleEditFrame(targetFrame);

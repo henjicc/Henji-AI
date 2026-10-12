@@ -1,3 +1,5 @@
+import { useCameraStageNodeRenderProgress } from '@/features/canvas/application/cameraStageRenderProgress';
+import { useProjectStore } from '@/stores/projectStore';
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
@@ -48,6 +50,8 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 
 export const CameraStageNode = memo(({ id, data, selected, width, height }: CameraStageNodeProps) => {
   const { t } = useTranslation();
+  const canvasProjectId = useProjectStore((state) => state.currentProjectId);
+  const renderProgress = useCameraStageNodeRenderProgress(canvasProjectId, id);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const edges = useCanvasStore((state) => state.edges);
@@ -105,15 +109,15 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
   useNodeHandlesSync(id, `${resolvedHeight}:${resolvedWidth}`);
 
   const openEditor = useCallback(() => {
-    if (data.videoExporting || data.imageExporting) {
+    if (renderProgress) {
       logger.warn('3D 渲染期间已阻止打开编辑器', {
         event: 'canvas.camera_stage.open.blocked_rendering',
-        context: { nodeId: id, requestId: data.imageRenderRequestId ?? data.videoRenderRequestId },
+        context: { nodeId: id, requestId: renderProgress.requestId },
       });
       return;
     }
     canvasEventBus.publish('camera-stage/open', { nodeId: id });
-  }, [data.imageExporting, data.imageRenderRequestId, data.videoExporting, data.videoRenderRequestId, id]);
+  }, [renderProgress, id]);
 
   return (
     <div
@@ -140,9 +144,9 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
           <CameraStagePreviewPanel
             imageSource={imageSource ? resolveImageDisplayUrl(imageSource) : null}
             imageViewerSource={data.imageUrl ? resolveImageDisplayUrl(data.imageUrl) : null}
-            rendering={Boolean(data.videoExporting || data.imageExporting)}
-            renderProgress={data.imageExporting ? 0 : data.videoProgress ?? null}
-            renderPhase={data.imageExporting ? 'preparing' : data.videoRenderPhase ?? null}
+            rendering={renderProgress !== null}
+            renderProgress={renderProgress?.progress ?? null}
+            renderPhase={renderProgress?.phase ?? null}
             renderError={data.imageRenderError ?? data.videoRenderError ?? null}
           />
         </div>

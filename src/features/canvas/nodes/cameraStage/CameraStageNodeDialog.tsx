@@ -1,3 +1,4 @@
+import { setCameraStageNodeRenderProgress } from '@/features/canvas/application/cameraStageRenderProgress';
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { canvasDocumentContainer } from '@/features/canvas/application/canvasProjectInstances';
 import { useProjectStore } from '@/stores/projectStore';
@@ -33,6 +34,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
   const nodeEnvironmentImageUrl = isActiveCameraStageNode
     ? node.data.environmentImageUrl ?? null
     : null;
+  const canvasProjectId = useProjectStore((state) => state.currentProjectId);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 
   useEffect(() => canvasEventBus.subscribe('camera-stage/open', ({ nodeId: nextNodeId }) => {
@@ -153,17 +155,12 @@ export function CameraStageNodeDialog(): JSX.Element | null {
                 updateNodeData(nodeId, {
                   videoUrl: result.mediaUrl,
                   durationSec: result.durationSeconds,
-                  videoExporting: false,
-                  videoProgress: null,
-                  videoRenderPhase: null,
-                  videoRenderRequestId: null,
-                  videoRenderError: null,
                 });
               },
-              onProgress: (videoProgress) => updateNodeData(nodeId, {
-                videoExporting: videoProgress !== null,
-                videoProgress,
-              }),
+              onProgress: (videoProgress) => {
+                if (canvasProjectId) setCameraStageNodeRenderProgress(canvasProjectId, nodeId, videoProgress === null
+                  ? null : { outputKind: 'video', progress: videoProgress, phase: 'rendering' });
+              },
               onOutputKindChange: syncOutputKind,
             }}
           />

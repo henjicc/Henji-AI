@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, type CSSProperties } from 'react';
+import { memo, useCallback, useMemo, type CSSProperties, type PointerEvent, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ImagePlus, SquareArrowOutUpRight } from 'lucide-react';
 import type { StoryboardExportOptions, StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes';
@@ -11,7 +11,6 @@ import { createCanvasTextHistoryGroup, useCanvasEditHistory } from '@/features/c
 import { CanvasPromptEditor } from '@/features/canvas/nodes/shared/CanvasPromptEditor';
 import {
   resolveStoryboardPromptDocument,
-  storyboardPromptDocumentsEqual,
 } from '@/features/canvas/application/storyboardPromptDocument';
 import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
 
@@ -28,8 +27,8 @@ interface FrameCardProps {
   referenceItems: readonly PromptReferenceItem[];
   draggedFrameId: string | null;
   dropTargetFrameId: string | null;
-  onSortStart: (frameId: string) => void;
-  onSortHover: (frameId: string) => void;
+  onSortStart: (index: number, event: PointerEvent) => void;
+  sortRef: Ref<HTMLDivElement>;
   onTogglePicker: (frameId: string, anchor: Element) => void;
   onEditFrame: (frame: StoryboardFrameItem) => void;
   onSelectNode: () => void;
@@ -49,7 +48,7 @@ export const FrameCard = memo(({
   draggedFrameId,
   dropTargetFrameId,
   onSortStart,
-  onSortHover,
+  sortRef,
   onTogglePicker,
   onEditFrame,
   onSelectNode,
@@ -67,17 +66,6 @@ export const FrameCard = memo(({
     references: referenceItems,
   }), [frame.id, frame.note, frame.noteDocument, nodeId, referenceItems]);
 
-  useEffect(() => {
-    if (
-      frame.note === resolvedNote.legacyText
-      && storyboardPromptDocumentsEqual(frame.noteDocument, resolvedNote.document)
-    ) return;
-    updateStoryboardFrame(nodeId, frame.id, {
-      noteDocument: resolvedNote.document,
-      note: resolvedNote.legacyText,
-    }, { skipHistory: true });
-  }, [frame.id, frame.note, frame.noteDocument, nodeId, resolvedNote, updateStoryboardFrame]);
-
   const handleNoteChange = useCallback((document: PromptDocumentV1): void => {
     const resolved = resolveStoryboardPromptDocument({
       document,
@@ -88,7 +76,6 @@ export const FrameCard = memo(({
     });
     updateStoryboardFrame(nodeId, frame.id, {
       noteDocument: resolved.document,
-      note: resolved.legacyText,
     }, { historyGroup: noteHistoryGroup });
   }, [frame.id, frame.note, nodeId, noteHistoryGroup, referenceItems, updateStoryboardFrame]);
 
@@ -115,14 +102,7 @@ export const FrameCard = memo(({
 
   return (
     <div
-      onPointerEnter={(event) => {
-        event.stopPropagation();
-        onSortHover(frame.id);
-      }}
-      onPointerMove={(event) => {
-        event.stopPropagation();
-        onSortHover(frame.id);
-      }}
+      ref={sortRef}
       onMouseDown={(event) => event.stopPropagation()}
       className={`storyboard-frame-card group/frame nodrag relative h-full w-full overflow-hidden bg-raised transition-colors ${dragging ? 'cursor-grabbing' : 'cursor-grab'} ${dragging
         ? 'z-raised opacity-55 ring-1 ring-accent/65'
@@ -136,7 +116,7 @@ export const FrameCard = memo(({
         }
         event.preventDefault();
         event.stopPropagation();
-        onSortStart(frame.id);
+        onSortStart(index, event);
       }}
     >
       <div className="relative h-full w-full">

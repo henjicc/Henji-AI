@@ -41,8 +41,26 @@ export function createClosedCanvasImageViewerState(): CanvasImageViewerState {
   };
 }
 
+const historyNodesCache = new WeakMap<CanvasNode[], CanvasNode[]>();
+
 export function createSnapshot(nodes: CanvasNode[], edges: CanvasEdge[]): CanvasHistorySnapshot {
-  return { nodes, edges };
+  let historyNodes = historyNodesCache.get(nodes);
+  if (!historyNodes) {
+    const hasRuntime = (node: CanvasNode): boolean => node.type === CANVAS_NODE_TYPES.cameraStage
+      && Boolean(node.data.renderTask || node.data.imageExporting || node.data.videoExporting
+        || node.data.videoProgress != null || node.data.videoRenderPhase != null
+        || node.data.imageRenderRequestId || node.data.videoRenderRequestId);
+    historyNodes = nodes.some(hasRuntime) ? nodes.map((node) => {
+      if (!hasRuntime(node)) return node;
+      // 撤销只恢复作品结果，不能重建已完成/取消的任务或忙碌标志。
+      return { ...node, data: { ...node.data, renderTask: null,
+        imageExporting: false, imageRenderRequestId: null,
+        videoExporting: false, videoProgress: null, videoRenderPhase: null, videoRenderRequestId: null,
+      } };
+    }) : nodes;
+    historyNodesCache.set(nodes, historyNodes);
+  }
+  return { nodes: historyNodes, edges };
 }
 
 export function collectNodeIdsWithDescendants(nodes: CanvasNode[], seedIds: string[]): Set<string> {

@@ -1,3 +1,4 @@
+import { readStoryboardFrameNote } from '@/features/canvas/application/storyboardPromptDocument';
 import { createLogger } from '@/core/logging'
 import { STORYBOARD_EXPORT_COLOR } from '@/core/theme/colorTokens'
 import {
@@ -125,7 +126,7 @@ async function applyStoryboardTextOverlay(
     if (options.showFrameNote) {
       const note = trimTextToWidth(
         context,
-        frame.note || '',
+        readStoryboardFrameNote(frame),
         Math.max(20, layout.cellWidth - 14)
       );
 
@@ -237,7 +238,7 @@ export async function exportStoryboardImages({
       imageFit: exportOptions.imageFit,
       frameIndexPrefix: exportOptions.frameIndexPrefix,
       textColor: exportOptions.textColor,
-      frameNotes: orderedFrames.map((frame) => frame.note ?? ''),
+      frameNotes: orderedFrames.map((frame) => readStoryboardFrameNote(frame)),
     });
     exportTraceInfo('merge-done', {
       traceId,
@@ -281,7 +282,7 @@ export async function exportStoryboardImages({
     const metadataStart = performance.now();
     const shouldEmbedMetadataInFrontend = needsOverlay || !mergeResult.metadataEmbedded;
     if (shouldEmbedMetadataInFrontend) {
-      const metadataFrameNotes = orderedFrames.map((frame) => frame.note ?? '');
+      const metadataFrameNotes = orderedFrames.map((frame) => readStoryboardFrameNote(frame));
       const imagePathWithMetadata = await embedStoryboardImageMetadata(finalImagePath, {
         gridRows,
         gridCols,

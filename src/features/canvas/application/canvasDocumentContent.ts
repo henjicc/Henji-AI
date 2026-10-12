@@ -4,6 +4,8 @@ import type { CanvasDocumentContent } from '@/core/documents/kinds/canvas'
 import { decodeCanvasImageReference, parseCanvasDocumentGraph, parseCanvasHistory } from '@/core/canvas/canvasDocumentGraph'
 import type { CanvasEdge, CanvasHistorySnapshot, CanvasHistoryState, CanvasNode, CanvasNodeData } from '@/stores/canvasStore'
 
+import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
+import { createSnapshot } from '@/stores/canvasStoreHelpers'
 import { resetTransientNodeRuntimeState } from '../domain/nodeMigrations'
 import { mapCanvasNodeMediaReferences, resolveCanvasNodeMediaSchema } from './canvasNodeMediaReferences'
 
@@ -59,6 +61,10 @@ function createNodeCleaner(): (nodes: readonly CanvasNode[]) => CanvasNode[] {
     if (cached) return cached
     const data = { ...(node.data as DynamicValueMap) }
     resetTransientNodeRuntimeState(node.type, data)
+    if (node.type === CANVAS_NODE_TYPES.cameraStage) {
+      // 恢复描述符仍由任务服务对账；作品中不保留正在渲染的视图状态。
+      Object.assign(data, { imageExporting: false, videoExporting: false, videoProgress: null, videoRenderPhase: null })
+    }
     const next = { ...node, data: data as CanvasNodeData }
     cleaned.set(node, next)
     return next
@@ -123,7 +129,7 @@ export function canvasFromDocumentContent(content: unknown): CanvasGraphContent 
 /** 撤销记录写进会话状态前：裁到上限并清理瞬时状态。 */
 export function canvasHistoryForSessionState(history: CanvasHistoryState): CanvasHistoryState {
   const clean = createNodeCleaner()
-  const snapshot = (item: CanvasHistorySnapshot): CanvasHistorySnapshot => ({ ...item, nodes: clean(item.nodes) })
+  const snapshot = (item: CanvasHistorySnapshot): CanvasHistorySnapshot => ({ ...item, nodes: clean(createSnapshot(item.nodes, item.edges).nodes) })
   return {
     past: history.past.slice(-MAX_PERSISTED_CANVAS_HISTORY_STEPS).map(snapshot),
     future: history.future.slice(-MAX_PERSISTED_CANVAS_HISTORY_STEPS).map(snapshot),

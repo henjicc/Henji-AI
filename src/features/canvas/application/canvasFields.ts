@@ -1,3 +1,4 @@
+import { readStoryboardFrameNote } from './storyboardPromptDocument';
 import { z } from 'zod'
 
 import {
@@ -218,7 +219,7 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
       + 'note 是格子说明文字，order 决定排列顺序（越小越靠前）。写入按 id 定点更新，只需要传要改的字段；'
       + 'id 必须取自读取结果里的原值，不支持增删格子。'),
     read: (node) => (isStoryboardSplitNode(node)
-      ? node.data.frames.map((frame) => ({ id: frame.id, note: frame.note, order: frame.order }))
+      ? node.data.frames.map((frame) => ({ id: frame.id, note: readStoryboardFrameNote(frame), order: frame.order }))
       : []) as JsonValue,
     writer: {
       write(patch, mutation) {
