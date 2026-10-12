@@ -143,7 +143,7 @@ export class GenerationService {
       }
       sourceParams = stripDerivedMediaState(sourceParams)
 
-      if (model.submissionConfirmation?.condition(sourceParams) && !paidApproved) {
+      if (!paidApproved) {
         // 等待确认期间界面可以继续编辑；只提交用户确认的这份快照。
         sourceParams = structuredClone(sourceParams)
         const controller = new AbortController()

@@ -1,3 +1,4 @@
+import { installPaidApprovalTestBridge } from '@/tests/paidApprovalTestKit'
 /** @vitest-environment jsdom */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -7,9 +8,9 @@ import { UiButton } from '@/components/ui'
 import { toModelPromptText, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { openAssistant, useAssistantUiStore } from '../store/assistantUiStore'
 
-const mocks = vi.hoisted(() => ({ prompt: vi.fn(), snapshot: { value: {} }, models: vi.fn() }))
+const mocks = vi.hoisted(() => ({ complete: vi.fn(), prompt: vi.fn(), snapshot: { value: {} }, models: vi.fn() }))
 vi.mock('./controller', () => ({ useEmbeddedAgent: () => mocks.snapshot.value, reportEmbeddedAgentError: vi.fn() }))
-vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ embeddedAgent: { prompt: mocks.prompt, models: mocks.models } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ applicationControl: mocks, embeddedAgent: { prompt: mocks.prompt, models: mocks.models } }) }))
 vi.mock('../../application-control/hostContext/hostContext', () => ({ captureHostSelection: () => ({ capturedAt: "sent", selectedRefs: [], selectedClipRefs: [], targetTrackRefs: [] }), createHostContextSnapshot: () => ({ workspace: {}, project: {}, surface: {} }) }))
 vi.mock('../conversation/useConversationAutoScroll', () => ({ useConversationAutoScroll: () => ({ scrollToBottom: vi.fn(), suspendFollowing: vi.fn() }) }))
 vi.mock('../conversation/AssistantComposer', () => ({ AssistantComposer: ({ onSubmit, disabled, value }: { onSubmit(text: string, attachments: []): void; disabled: boolean; value: PromptDocumentV1 }) =>
@@ -18,6 +19,7 @@ import { EmbeddedConversation } from './EmbeddedConversation'
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 beforeEach(() => {
+  installPaidApprovalTestBridge()
   useAssistantUiStore.setState({ pendingGoal: null, pendingGoalOptions: null, embeddedAccess: 'read' })
   mocks.snapshot.value = emptyEmbeddedAgentSnapshot()
   mocks.models.mockResolvedValue([{ providerId: 'test', modelId: 'test', inputModalities: [] }])
@@ -34,6 +36,7 @@ it('首次发送不等待 IPC 或模型启动就出现气泡，只展示加载�
   expect(screen.getByText('第一条消息')).toBeTruthy()
   expect(screen.getByRole('status')).toBeTruthy()
   expect(screen.queryByText(/正在准备|正在启动/)).toBeNull()
+  await waitFor(() => expect(mocks.prompt).toHaveBeenCalled())
   const id = mocks.prompt.mock.calls[0][0].clientMessageId
   mocks.snapshot.value = { ...emptyEmbeddedAgentSnapshot(), busy: true, sendingMessage: { id, text: '第一条消息' } }
   view.rerender(<EmbeddedConversation />)
@@ -43,10 +46,12 @@ it('首次发送不等待 IPC 或模型启动就出现气泡，只展示加载�
 })
 
 it('显式自动发送沿正式入口只提交一次，保留点击时上下文与现有权限', async () => {
+  const bridge = installPaidApprovalTestBridge()
   const context = JSON.stringify({ surface: { focusedRef: { kind: 'audio_edit.document', id: 'original' } } })
   openAssistant('请直接优化口播', { autoSend: true, context })
   render(<StrictMode><EmbeddedConversation /></StrictMode>)
   await waitFor(() => expect(mocks.prompt).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'generation' }] }]))
   expect(mocks.prompt.mock.calls[0][0]).toMatchObject({ text: '请直接优化口播', context, access: 'read', delivery: 'wait', attachments: [] })
   expect(useAssistantUiStore.getState().pendingGoal).toBeNull()
 })
@@ -99,6 +104,7 @@ it('切换对话中算忙：只能等待发送，不出现停止与打断，消�
   expect(screen.getByRole('status', { name: '正在切换对话' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: '发送方式' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(mocks.prompt).toHaveBeenCalledTimes(1))
   expect(mocks.prompt.mock.calls[0][0]).toMatchObject({ text: '第一条消息', delivery: 'wait' })
 })
 
@@ -111,7 +117,7 @@ it('回复失败后用上一条用户消息与附件原样重试，不清空草�
   const view = render(<EmbeddedConversation />)
   await waitFor(() => expect(screen.getByTestId('draft').textContent).toBe('正在写的草稿'))
   fireEvent.click(await screen.findByRole('button', { name: '重试' }))
-  expect(mocks.prompt).toHaveBeenCalledTimes(1)
+  await waitFor(() => expect(mocks.prompt).toHaveBeenCalledTimes(1))
   expect(mocks.prompt.mock.calls[0][0]).toMatchObject({ text: '上一条消息', attachments: [attachment], delivery: 'wait' })
   expect(screen.getByTestId('draft').textContent).toBe('正在写的草稿')
   view.unmount()

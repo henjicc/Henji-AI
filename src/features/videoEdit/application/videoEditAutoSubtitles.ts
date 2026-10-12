@@ -168,7 +168,7 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
       if (prepared.requiresConfirmation && hasApplicationConfirmation(signal)) await requestAlertConfirmation({ title: '转录并生成字幕', message: '使用已配置的语音模型转录声音并生成字幕。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', projectId, signal, transcriptionEstimatedCny(prepared)) }, signal)
       await assertTarget()
       billing = 'unknown'
-      await transcribeAudioEdit({ projectId: audioDocumentId, modelId: prepared.modelId ?? modelId, language, requestId })
+      await transcribeAudioEdit({ projectId: audioDocumentId, modelId: prepared.modelId ?? modelId, language, requestId }, signal, projectId)
       billing = 'completed'
     }
     else await flushAudioEditProject(audioDocumentId)

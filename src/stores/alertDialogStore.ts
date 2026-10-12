@@ -63,7 +63,7 @@ export function showAlertDialog(request: AlertDialogRequest): void {
 
 /** 一次性的人机确认；任务中止时精确移除自己的弹窗，不影响其他排队提示。 */
 export async function requestAlertConfirmation(
-  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger'; paid?: PaidApprovalRequest },
+  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger'; paid?: PaidApprovalRequest; paidConfirmation?: boolean; projectConfirmation?: boolean; onProject?: () => void },
   signal?: AbortSignal,
 ): Promise<boolean> {
   if (request.paid && hasApplicationConfirmation(signal)) {

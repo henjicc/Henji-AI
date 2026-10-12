@@ -1,8 +1,14 @@
+import i18n from '@/i18n/config'
+import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
+import { useAlertDialogStore } from '@/stores/alertDialogStore'
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render as renderView, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CreativeIntentControls, type CreativeIntentControlsProps } from './CreativeIntentControls'
 
+beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
+function render(ui: React.ReactElement) { return renderView(ui, { wrapper: ({ children }) => <>{children}<GlobalAlertDialog /></> }) }
+afterEach(() => useAlertDialogStore.setState({ queue: [] }))
 afterEach(cleanup)
 function props(): CreativeIntentControlsProps {
   return { status: 'reviewing', candidates: [{ id: 'candidate', label: '保留节奏' }], selected: 'candidate', fidelity: .5, intent: 'path', mode: 'navigate', speed: 1, property: 'position', capture: 'place', pins: [], takes: [], canPin: true,
@@ -62,10 +68,10 @@ it('整理通过共享外发确认预检，取消不生成，发送后只生成�
   const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ costMessage: '费用暂无法预估，按模型实际计费', hasProject: true, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
   render(<CreativeIntentControls {...p} contextKey="session" prepareGeneration={prepareGeneration} />)
   fireEvent.click(screen.getByRole('button', { name: '重新整理' }))
-  await screen.findByRole('dialog'); expect(p.onOptimize).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: '拒绝' })); expect(confirm).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: '重新整理' })); await screen.findByRole('dialog')
-  fireEvent.click(screen.getByRole('button', { name: '本项目始终允许' })); fireEvent.click(screen.getByRole('button', { name: '本项目始终允许' }))
+  await screen.findByRole('alertdialog'); expect(p.onOptimize).not.toHaveBeenCalled()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '拒绝' })) }); expect(confirm).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '重新整理' })); await screen.findByRole('alertdialog')
+  const allow = screen.getByRole('button', { name: '本项目始终允许' }); fireEvent.click(allow); fireEvent.click(allow)
   await waitFor(() => expect(p.onOptimize).toHaveBeenCalledOnce())
   expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith(true)
 })

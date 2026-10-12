@@ -10,9 +10,9 @@ beforeEach(() => {
   ports.findProject.mockResolvedValue({ id: 'project', name: '测试项目' })
 })
 const missing = () => Object.assign(new Error('找不到文档'), { name: 'DocumentNotFoundError' })
-it('普通手动操作不查询项目；AI 图片引用解码到真实项目，工具箱没有项目授权', async () => {
-  expect(await applicationPaidRequest('generation', 'document')).toBeUndefined()
-  expect(ports.findDocument).not.toHaveBeenCalled()
+it('界面与 AI 均查询真实项目，图片引用解码；工具箱没有项目授权', async () => {
+  ports.findDocument.mockResolvedValue({ container: { kind: 'project', projectId: 'project' } })
+  expect(await applicationPaidRequest('generation', 'document')).toMatchObject({ project: { id: 'project' } })
   const controller = new AbortController()
   const release = bindApplicationConfirmation(controller.signal, async () => {})
   try {

@@ -1,3 +1,4 @@
+import { installPaidApprovalTestBridge } from '@/tests/paidApprovalTestKit'
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -19,7 +20,7 @@ vi.mock('./videoEditExplanationVisual',()=>({captureExplanationPixels:vi.fn(asyn
 vi.mock('@/features/creativeIntent/recording/microphone',()=>({captureMicrophone:vi.fn(async(_origin:number,onBlock:(block:CapturedAudioBlock)=>void,onInterrupt:(message:string)=>void)=>{if(capture.deny)throw new Error('PermissionDenied');capture.block=onBlock;capture.interrupt=onInterrupt;return{stop:capture.stop}})}))
 const files=new Map<string,Uint8Array>(); const chunks=new Map<string,Float32Array>(); let clock=100
 beforeEach(()=>{
-  installHarnessNativeStorage();files.clear();chunks.clear();capture.stop.mockClear();capture.deny=false;clock=100;vi.stubGlobal('crypto',webcrypto)
+  installHarnessNativeStorage(); installPaidApprovalTestBridge();files.clear();chunks.clear();capture.stop.mockClear();capture.deny=false;clock=100;vi.stubGlobal('crypto',webcrypto)
   vi.spyOn(performance,'now').mockImplementation(()=>clock)
   vi.spyOn(getPlatform().system.paths,'tempDir').mockResolvedValue('D:/temp');vi.spyOn(getPlatform().system.paths,'join').mockImplementation(async(...parts)=>parts.join('/'))
   vi.spyOn(getPlatform().system.fs,'writeFile').mockImplementation(async(path,bytes)=>{files.set(path,bytes)})
@@ -88,12 +89,14 @@ it('真实词级结果后出现句级块不会降级已有词时刻，每条仍�
   expect(await readVideoExplanationPage(id,1)).toMatchObject([{granularity:'segment'}])
 })
 it('E01/E05 自主控制与正式undo链不重复应用；结束转写/校正/JSONL/删除历史闭环',async()=>{
+  const bridge = installPaidApprovalTestBridge()
   const owner=await setup();const id=owner.document.id;const undoCount=owner.past.length
   await startVideoExplanation(id,crypto.randomUUID());expect(owner.playing).toBe(false);clock=200;present(owner,0);audio()
   clock=300;editVideoProject(id,document=>{document.sequences[0].clips[0].x=.2;return document});clock=400;undoVideoEdit(id);clock=500;undoVideoEdit(id,true)
   clock=600;expect(()=>editVideoProject(id,document=>{document.sequences[0].width=-1;return document})).toThrow()
   clock=700;await stopVideoExplanation(id);expect(capture.stop).toHaveBeenCalledTimes(1);expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(.2);expect(owner.past.length).toBe(undoCount+1)
   expect(getPlatform().audioEdit.recording.transcribe).not.toHaveBeenCalled();await transcribeVideoExplanation(id,crypto.randomUUID())
+  expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'recognition' }] }])
   const original=(await readVideoExplanationPage(id,0))[0];expect(original.kind).toBe('transcript');if(original.kind!=='transcript')throw new Error('missing')
   expect(original.granularity).toBe('segment');await correctVideoExplanationText(id,original,'往左移')
   expect(await readVideoExplanationPage(id,0)).toMatchObject([{text:'往左移',source:'user'}])
