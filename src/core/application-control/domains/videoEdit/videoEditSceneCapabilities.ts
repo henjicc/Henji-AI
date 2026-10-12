@@ -18,11 +18,11 @@ export const detectVideoEditScenesCapability = defineApplicationCapability<z.inf
 })
 const changedRef = applicationRefSchema.extend({ kind: z.enum(['video_edit.clip', 'video_edit.marker', 'video_edit.item']) }).strict()
 const applyInput = target.extend({ analysisId: z.string().min(1).max(100).describe('原检测返回的analysisId，不猜测；关闭剪辑、改动剪辑或视频后须重新检测。'), options: sceneApplyOptionsSchema })
-const applyOutput = z.object({ resultRef: documentRef, changedRefs: z.array(changedRef).max(1500), cutFrames: analysis.shape.cutFrames, message: z.string(), verified: z.boolean() }).strict()
+const applyOutput = z.object({ resultRef: documentRef, changedRefs: z.array(changedRef), cutFrames: analysis.shape.cutFrames, message: z.string(), verified: z.boolean() }).strict()
 export const applyVideoEditScenesCapability = defineApplicationCapability<z.infer<typeof applyInput>, z.infer<typeof applyOutput>>({
-  ...common, id: 'apply_video_edit_scenes', title: '把检测到的镜头切点应用到剪辑', description: '消费 detect_video_edit_scenes 返回的原片段 analysisId，在切点处批量拆分片段、添加片段标记、创建素材面板子剪辑，可多选；整个应用只占一步撤销。拆分复用剃刀并同时切关联声音，保留源时间、关键帧、标注和字幕；子剪辑引用原素材范围，不转码。原剪辑或视频改变、锁轨、超出500项上限时整组拒绝，请重新检测或降低灵敏度。标记单独创建/改动仍用通用video_edit.marker集合，单切点仍可用split_video_edit。',
+  ...common, id: 'apply_video_edit_scenes', title: '把检测到的镜头切点应用到剪辑', description: '消费 detect_video_edit_scenes 返回的原片段 analysisId，在切点处批量拆分片段、添加片段标记、创建素材面板子剪辑，可多选；整个应用只占一步撤销。拆分复用剃刀并同时切关联声音，保留源时间、关键帧、标注和字幕；子剪辑引用原素材范围，不转码。原剪辑或视频改变或锁轨时整组拒绝，请检查目标后重新检测。批量结果返回数量与结果引用，用 get_application_operation 分页读取。标记单独创建/改动仍用通用video_edit.marker集合，单切点仍可用split_video_edit。',
   aliases: ['长视频切成镜头', '切点批量拆分', '场景检测加标记'], readOnly: false, risk: 'R1', permission: 'video_edit:write', idempotent: false, timeoutMs: 30000, supportsUndo: true,
-  inputSchema: applyInput, outputSchema: applyOutput,
+  inputSchema: applyInput, outputSchema: applyOutput, pagedResultFields: ['changedRefs', 'cutFrames'],
   resolveOperationWriteTargets: input => [input.documentRef],
   control: capabilityControl('execute', ['video_edit.document', 'video_edit.clip', 'video_edit.marker', 'video_edit.item'], { revisionScopes: ['video_edit'], cancelable: true }),
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },

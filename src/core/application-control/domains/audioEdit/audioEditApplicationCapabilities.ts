@@ -10,6 +10,14 @@ const documentRef = applicationRefSchema.extend({
   id: z.string().min(1).max(500).describe('口播文档 ID：取自 list_documents（kind=audio_edit）返回的 id，不是文档所在项目的 ID'),
 }).strict()
 export const audioEditOperationInput = z.object({ documentRef, range: audioEditRangeSchema.optional(), modelId: z.string().optional(), taskId: z.string().optional(), format: z.enum(['xml', 'wav']).optional(), includeProcessing: z.boolean().optional(), includeSrt: z.boolean().optional(), destination: canvasDownloadDestinationSchema.optional() }).strict()
+export function audioEditInputSchema(id: string): z.ZodType<z.infer<typeof audioEditOperationInput>> {
+  const base = audioEditOperationInput.pick({ documentRef: true })
+  if (id === 'cancel_audio_edit_task') return base.extend({ taskId: z.string().min(1) })
+  if (id === 'export_audio_edit') return audioEditOperationInput.pick({ documentRef: true, format: true, includeProcessing: true, includeSrt: true, destination: true }).required({ destination: true })
+  if (id === 'transcribe_audio_edit') return audioEditOperationInput.pick({ documentRef: true, modelId: true })
+  if (['quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers'].includes(id)) return audioEditOperationInput.pick({ documentRef: true, range: true })
+  return base
+}
 const output = z.object({ resultRef: documentRef, message: z.string(), verified: z.boolean().optional(), count: z.number().nonnegative().optional(), shortenedMs: z.number().nonnegative().optional(), durationFrames: z.number().nonnegative().optional(), tasks: z.array(z.object({ requestId: z.string(), documentId: z.string(), kind: z.string(), state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().optional(), errorMessage: z.string().optional() })).optional() }).strict()
 export const AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS = new Set(['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers'])
 export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
@@ -25,7 +33,7 @@ export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   ['cancel_audio_edit_task', '取消口播处理任务', '取消明确口播下正在进行的指定任务。', 'R1'],
   ['retry_audio_edit_save', '重试保存口播', '只重新确认已修改口播的保存，不重放剪辑或付费任务。', 'R1'],
 ].map(([id, title, description, risk]) => defineApplicationCapability({
-  id, title, description, version: 1, domain: 'audio_edit', aliases: [title], readOnly: risk === 'R0', risk: risk as 'R0' | 'R1' | 'R2', dataClasses: ['C1'], permission: risk === 'R0' ? 'audio_edit:read' : 'audio_edit:write', idempotent: !['export_audio_edit', 'transcribe_audio_edit'].includes(id), destructive: id === 'reset_audio_edit', timeoutMs: 600000, supportsPreview: false, supportsUndo: false, requiredScopes: ['audio_edit'], acceptsRefs: ['audio_edit.document'], producesRefs: ['audio_edit.document'], concurrencyKey: 'audio_edit', resolveConcurrencyKey: (input) => `audio_edit:${input.documentRef.id}`, resolveOperationTargets: (input) => [input.documentRef], resolveOperationWriteTargets: (input) => risk === 'R0' ? [] : [input.documentRef], control: capabilityControl(risk === 'R0' ? 'observe' : 'execute', ['audio_edit.document'], { cancelable: true, revisionScopes: ['audio_edit'] }), inputSchema: audioEditOperationInput, outputSchema: output, summarize: (result) => result.message,
+  id, title, description, version: 1, domain: 'audio_edit', aliases: [title], readOnly: risk === 'R0', risk: risk as 'R0' | 'R1' | 'R2', dataClasses: ['C1'], permission: risk === 'R0' ? 'audio_edit:read' : 'audio_edit:write', idempotent: !['export_audio_edit', 'transcribe_audio_edit'].includes(id), destructive: id === 'reset_audio_edit', timeoutMs: 600000, supportsPreview: false, supportsUndo: false, requiredScopes: ['audio_edit'], acceptsRefs: ['audio_edit.document'], producesRefs: ['audio_edit.document'], concurrencyKey: 'audio_edit', resolveConcurrencyKey: (input) => `audio_edit:${input.documentRef.id}`, resolveOperationTargets: (input) => [input.documentRef], resolveOperationWriteTargets: (input) => risk === 'R0' ? [] : [input.documentRef], control: capabilityControl(risk === 'R0' ? 'observe' : 'execute', ['audio_edit.document'], { cancelable: true, revisionScopes: ['audio_edit'] }), mayRequirePaidConfirmation: id === 'transcribe_audio_edit', inputSchema: audioEditInputSchema(id), outputSchema: output, summarize: (result) => result.message,
   ...(AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS.has(id) ? {
     verificationContract: { kind: 'effect_receipt' as const, requireEffects: true, requireVerifiedEffects: true },
     resolveObservedEffects: (_input: z.infer<typeof audioEditOperationInput>, result: z.infer<typeof output>) => [{

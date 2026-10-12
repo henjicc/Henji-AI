@@ -213,7 +213,7 @@ it('助手从通用目录读取预设，跨序列/剪辑一次批量提交、查
     // 助手/外部智能体导出不弹保存对话框（无人可点会一直等待），默认放进项目“导出”文件夹。
     expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
     for (const job of jobs) expect(job.path).toMatch(/导出[\\/][^\\/]+\.mp4$/)
-    const read = await app.requireResult('query_video_edit_export', { documentRef: { kind: 'video_edit.document', id: second.document.id } }); expect(read.queue).toHaveLength(1)
+    const read = await app.requireResult('query_video_edit_export', { detail: 'full', documentRef: { kind: 'video_edit.document', id: second.document.id } }); expect(read.queue).toHaveLength(1)
     expect((await app.call('cancel_video_edit_export', { documentRef: { kind: 'video_edit.document', id: first.document.id }, taskId: jobs[1].id })).ok).toBe(false)
     await app.requireResult('cancel_video_edit_export', { documentRef: { kind: 'video_edit.document', id: second.document.id }, taskId: jobs[1].id }); expect(jobs[1].state).toBe('cancelled')
     const bad = await app.call('export_video_edit', { documentRef: { kind: 'video_edit.document', id: first.document.id }, exports: [{ presetRef: { kind: 'video_edit.export_preset', id: 'builtin:douyin' }, sequenceRef: { kind: 'video_edit.sequence', id: `${second.document.id}:${second.activeSequenceId}` } }] }); expect(bad.ok).toBe(false); expect(videoEditExportQueue.list()).toHaveLength(2)
@@ -589,9 +589,20 @@ it('completed exports survive a fresh document instance and either ID resolves; 
   const app = createApplicationHarness()
   try {
     for (const taskId of [undefined, job.id, job.task!.id]) {
-      const read = await app.requireResult('query_video_edit_export', { documentRef, ...(taskId ? { taskId } : {}) })
+      const read = await app.requireResult('query_video_edit_export', { detail: 'full', documentRef, ...(taskId ? { taskId } : {}) })
       expect(read.queue).toEqual([expect.objectContaining({ ...expected, archived: true })])
     }
+    editVideoProject(reopened.document.id, document => ({ ...document, exportHistory: Array.from({ length: 3 }, (_, index) => ({ ...document.exportHistory![0], id: `archived-${index}`, taskId: `render-${index}` })) }))
+    const first = await app.requireResult('query_video_edit_export', { documentRef, limit: 2 })
+    expect(first).toMatchObject({ total: 3, queue: [{ id: 'archived-0', resultRef: { documentRef, taskId: 'archived-0' } }, { id: 'archived-1' }] })
+    expect((first.queue as Array<Record<string, unknown>>)[0]).not.toHaveProperty('settings')
+    const second = await app.requireResult('query_video_edit_export', { documentRef, limit: 2, cursor: first.nextCursor })
+    expect(second).toMatchObject({ total: 3, queue: [{ id: 'archived-2' }], nextCursor: null })
+    expect(await app.requireResult('query_video_edit_export', { documentRef, activeOnly: true })).toMatchObject({ queue: [], total: 0, nextCursor: null })
+    const live = vi.spyOn(videoEditExportQueue, 'list').mockReturnValueOnce([{ ...job, owner: reopened, state: 'running' }])
+    expect(await app.requireResult('query_video_edit_export', { documentRef, activeOnly: true })).toMatchObject({ queue: [{ id: job.id, state: 'running' }], total: 1 })
+    live.mockRestore()
+    expect((await app.call('query_video_edit_export', { documentRef, activeOnly: true, cursor: first.nextCursor })).ok).toBe(false)
     const missing = await app.call('query_video_edit_export', { documentRef, taskId: 'missing' })
     expect(missing).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', recoverable: true } })
   } finally { app.dispose() }
@@ -618,7 +629,7 @@ it('7.776秒声音在60fps占466帧，字幕到456不会裁短内容；修剪声
   await videoEditExportQueue.wait(trimmed.id)
   const app = createApplicationHarness()
   try {
-    const read = await app.requireResult('query_video_edit_export', { documentRef: { kind: 'video_edit.document', id: owner.document.id } })
+    const read = await app.requireResult('query_video_edit_export', { detail: 'full', documentRef: { kind: 'video_edit.document', id: owner.document.id } })
     expect(read.queue).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: full.id, state: 'completed', range: { startFrame: 0, endFrame: 466 }, rangeSource: 'content' }),
       expect.objectContaining({ id: trimmed.id, state: 'completed', range: { startFrame: 0, endFrame: 456 }, rangeSource: 'content' }),
@@ -640,7 +651,7 @@ it('默认导出没有十帧余量，包含字幕尾部并读回内容、入出�
   for (const job of [content, marked, explicit]) await videoEditExportQueue.wait(job.id)
   const app = createApplicationHarness()
   try {
-    const read = await app.requireResult('query_video_edit_export', { documentRef: { kind: 'video_edit.document', id: owner.document.id } })
+    const read = await app.requireResult('query_video_edit_export', { detail: 'full', documentRef: { kind: 'video_edit.document', id: owner.document.id } })
     expect(read.queue).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: content.id, range: { startFrame: 0, endFrame: 466 }, rangeSource: 'content' }),
       expect.objectContaining({ id: marked.id, range: { startFrame: 1, endFrame: 3 }, rangeSource: 'in-out' }),

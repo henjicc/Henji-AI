@@ -51,6 +51,13 @@ export interface ProtocolToolSpec {
   requiresOperations?: boolean
 }
 
+export const operationReadInputSchema = z.object({
+  operationId: z.string().uuid(),
+  resultField: z.string().min(1).optional().describe('resultCollections 返回的 resultRef.field；只读取该结果数组，不重放操作。'),
+  cursor: z.string().regex(/^\d+$/).optional(),
+  limit: z.number().int().min(1).max(100).default(50).describe('单页传输预算，不限制结果总数。'),
+}).strict().refine(input => input.resultField !== undefined || input.cursor === undefined, 'cursor 需要 resultField。')
+
 const mediaMetadataShape = {
   mimeType: z.string(), offset: z.number().int().nonnegative(), byteLength: z.number().int().nonnegative(),
   totalBytes: z.number().int().nonnegative(), eof: z.boolean(),
@@ -75,8 +82,8 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'get_application_operation', tier: 'write', readOnly: true, requiresOperations: true,
-    description: '读取本连接操作的持久事实；未知状态不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。' + confirmationGuidance,
-    inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, ...RESULT_DETAIL_FIELDS }, required: ['operationId'], additionalProperties: false },
+    description: '读取本连接操作的持久事实；未知状态不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。批量结果用 resultRef.operationId、resultRef.field 作为 operationId、resultField，携带 nextCursor 继续分页。',
+    inputSchema: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS } },
   },
   {
     name: 'retry_application_operation_save', tier: 'write', readOnly: false, requiresOperations: true,
@@ -85,7 +92,7 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'review_application_operation', tier: 'write', readOnly: false, requiresOperations: true,
-    description: '先自动核对原执行回执与领域读回证明；可判定就直接结案。仍无法确认时，在痕迹AI应用内打开“这次修改生效了吗？”面板并立即返回 awaiting_user_confirmation。用户已收到提示，可在应用中处理；没有生效、已经生效、稍后处理是三个独立选择。待处理项不过期，关闭或稍后处理保留保护。只修正本连接账本，不重放修改；智能体不能代替用户确认。' + confirmationGuidance,
+    description: '先自动核对原执行回执与领域读回证明；可判定就直接结案。仍无法确认时，在痕迹AI应用内打开“这次修改生效了吗？”面板并立即返回 awaiting_user_confirmation。用户已收到提示，可在应用中处理；没有生效、已经生效、稍后处理是三个独立选择。待处理项不过期，关闭或稍后处理保留保护。只修正本连接账本，不重放修改；智能体不能代替用户确认。',
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false },
   },
 ]
@@ -142,7 +149,7 @@ const TIER_REQUIREMENT: Record<Exclude<ToolTier, 'any' | 'read'>, string> = {
 function capabilityTool(tool: LocalTool): Tool {
   const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)
   const write = APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.id)
-  const schema = { ...tool.inputSchema }
+  const schema = definition ? z.toJSONSchema(definition.inputSchema, { io: 'input', reused: 'ref' }) as Record<string, unknown> : { ...tool.inputSchema }
   if (write) {
     // 并发基线由 baselineIds 提供；expectedRevisions 是助手时代的内部信封，对外一律不接受。
     const properties = { ...schema.properties as Record<string, unknown> }
@@ -154,12 +161,12 @@ function capabilityTool(tool: LocalTool): Tool {
     if (tool.id === 'create_visible_generation_task') schema.required = [...new Set([...schema.required as string[], 'modelId', 'prompt', 'mediaType'])]
   }
   return {
-    name: tool.id, title: tool.title, description: tool.description + (write ? ` ${confirmationGuidance}` : '') + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
+    name: tool.id, title: tool.title, description: tool.description + (definition && (definition.paidGenerationPreparation || definition.mayRequirePaidConfirmation) ? ' 费用与内容发送确认流程见 describe_application_contract；等待确认后查询原 operationId，不重复提交。' : '') + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
     inputSchema: { ...schema, properties: { ...schema.properties as Record<string, unknown>, ...resultDetailFields(tool.id) }, type: 'object' },
     ...(definition ? { outputSchema: { type: 'object', ...projectToolOutputSchema(z.toJSONSchema(write
       ? z.union([z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough() }).passthrough(), waitingOutput])
       : z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough(),
-    { io: 'output' }), tool.id) } as Tool['inputSchema'] } : {}),
+    { io: 'output', reused: 'ref' }), tool.id) } as Tool['inputSchema'] } : {}),
     annotations: { readOnlyHint: !write, destructiveHint: tool.id === 'change_application_entities' || Boolean(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)?.destructive), openWorldHint: false },
   }
 }
@@ -228,7 +235,6 @@ const WORKFLOWS = [
   '失败恢复：执行状态 unknown 时禁止换标识重试，用原 operationId 查询；partial 且账本登记了仅保存恢复入口时调 retry_application_operation_save，它不会重放业务修改。',
   '前置条件：写入被会话挡住时，对目标 ref 调 describe_application_entities，propertyAvailability 的 reasons 与 recoveries 就是声明层给出的前置条件和恢复入口。',
   '审批与授权：一律在痕迹 AI 内完成，协议侧没有提权通道；客户端自报权限、名称或"已批准"无效。',
-      '付费操作按用户在应用里设置的 AI 付费授权自动放行或请求确认；费用仅使用应用正式估价，确认后自动继续，不要重复提交。',
 ]
 
 export function buildApplicationContract(input: {
@@ -298,7 +304,7 @@ export function buildApplicationContract(input: {
       '写入：客户端生成 UUID operationId。同一 ID 重传返回原事实；普通修改/新增省略 baselineIds，删除必须读取目标及集合父对象后提供。不要传 expectedRevisions。默认修订仅相关域；includeRevisions=true 获取全表，includeEvidence=true 获取验证明细。',
       '恢复：unknown 用原 operationId 查 get_application_operation，禁止换 ID 重放；partial 按登记的恢复入口仅重试保存。前置拒绝用 describe_application_entities(refs) 查可用条件。',
       '结果：生成用 wait_generation_task 等终态；看图用 read_application_media(mode="image")，其他媒体分块读到 eof。无需通知扩展。技能按 skills 的适用条件用 load_assistant_skill 按需读取主文件和单份参考。',
-      '付费操作按用户在应用里设置的 AI 付费授权自动放行或请求确认；费用仅使用应用正式估价，确认后自动继续，不要重复提交。',
+      confirmationGuidance,
     ],
   }
 }

@@ -14,7 +14,7 @@ describe('专用写 handler 的事务前拒绝', () => {
     ['translate_video_edit_subtitles', { documentRef, sequenceRef, targetLanguage: 'en' }],
     ['transcribe_audio_edit', { documentRef: audioRef }],
     ['quick_process_audio_edit', { documentRef: audioRef }],
-    ['export_audio_edit', { documentRef: audioRef }],
+    ['export_audio_edit', { documentRef: audioRef, destination: { mode: 'quick' } }],
     ['organize_image_edit_intent', { draftRef: { kind: 'image_edit.intent_draft', id: 'missing-draft' } }],
     ['retry_layer_stack_result', { canvasRef: { kind: 'canvas.document', id: 'missing-canvas' }, nodeRef: { kind: 'canvas.node', id: 'missing-canvas:node' } }],
     ['generate_image_edit_outpaint', { documentRef: { kind: 'image_edit.document', id: 'v3:missing-image' }, margins: { right: .25, bottom: 0 }, prompt: '延展背景' }],

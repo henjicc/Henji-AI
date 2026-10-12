@@ -2,14 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { BUILTIN_APPLICATION_CAPABILITIES } from '../../builtinApplicationCapabilityRegistry'
 
-/**
- * 三维写入靠 `baseRevision` 做乐观并发。要让模型能连续写入而不是每写一次就重读一次镜头参考，
- * **每个写能力都必须收 `baseRevision`，也必须回带写入后的 `baseRevision`**。
- *
- * 实测踩过的坑：摆放走事务引擎，只返回 `resultingRevisions` 这个映射，而复制、删除走的是
- * 另一条路，返回扁平的 `baseRevision`——同一个领域同一个概念两种形状。模型每摆一个物体都
- * 要额外读一次镜头参考，叠加单轮工具位轮换，任务直接卡死。
- */
+/** 三维写入使用统一可信信封，公开业务参数不再承担并发控制。 */
 const cameraStageWrites = BUILTIN_APPLICATION_CAPABILITIES.filter((capability) => (
   capability.domain === 'camera_stage' && !capability.readOnly
 ))
@@ -38,12 +31,12 @@ describe('三维写入的 revision 契约', () => {
 
   // 新建与打开文档已归通用文档能力（3.2），三维写能力全部是对已有场景的修改。
   const revisionScoped = cameraStageSceneWrites.filter((capability) => (
-    schemaKeys(capability.inputSchema).includes('baseRevision')
+    capability.requiredScopes.includes('toolbox')
   ))
 
-  it('全部场景写能力都收 baseRevision', () => {
+  it('全部场景写能力使用信封且不接受 baseRevision', () => {
     const withoutBaseRevision = cameraStageSceneWrites
-      .filter((capability) => !revisionScoped.includes(capability))
+      .filter((capability) => !revisionScoped.includes(capability) || schemaKeys(capability.inputSchema).includes('baseRevision'))
       .map((capability) => capability.id)
       .sort()
     expect(withoutBaseRevision).toEqual([])
@@ -56,9 +49,9 @@ describe('三维写入的 revision 契约', () => {
     expect(missing).toEqual([])
   })
 
-  it('收 baseRevision 的写能力都写明了 CONFLICT 该怎么恢复', () => {
+  it('并发冲突明确指向正式实体读取', () => {
     const missing = revisionScoped
-      .filter((capability) => !capability.failureRecovery.some((item) => item.includes('CONFLICT')))
+      .filter((capability) => !capability.failureRecovery.some((item) => item.includes('read_application_entity') && item.includes('baselineId')))
       .map((capability) => capability.id)
     expect(missing).toEqual([])
   })

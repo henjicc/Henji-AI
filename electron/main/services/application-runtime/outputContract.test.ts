@@ -165,6 +165,8 @@ successData.prepare_video_edit_in_place_generation = { documentRef, plan: genera
 for (const name of ['export_video_edit', 'query_video_edit_export', 'cancel_video_edit_export']) {
   successData[name] = { resultRef: documentRef, message, verification: verification(), queue: [], task: { id: 'export', state: 'completed', progress: 1, revision: 29, startFrame: 0, endFrame: 60 } }
 }
+successData.query_video_edit_export = { resultRef: documentRef, message, verification: verification(), queue: [], total: 0, nextCursor: null }
+
 for (const name of ['measure_video_edit_loudness', 'normalize_video_edit_loudness']) {
   successData[name] = { resultRef: documentRef, results: [{ clipRef, volume: 1, measurement: { integratedLufs: -16, shortTermLufs: -15, truePeakDbtp: -1, samplePeakDbfs: -2, durationSeconds: 5 } }], ...verified }
 }

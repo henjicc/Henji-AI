@@ -64,8 +64,9 @@ export const cameraStageMoveSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('crane'), height: z.number().min(-10_000).max(10_000) }).strict(),
 ])
 
-/** 乐观并发冲突的统一恢复指引：所有收 baseRevision 的三维写入都必须给出这一条。 */
-export const CONFLICT_RECOVERY = 'CONFLICT 表示场景在读取之后被改动过：直接使用上一次写入或读取返回的 baseRevision 重试一次，不要用同一个过期值反复重试；仍冲突再重新观察场景。'
+/** 并发基线由可信宿主提供，调用者通过正式实体读取刷新。 */
+export const CONFLICT_RECOVERY = 'CONFLICT 时调用 read_application_entity，ref 使用原 camera_stage.document 引用、propertyIds=[]，取得 baselineId；删除对象还需读取该对象。用新 baselineIds 提交，禁止猜测 revision。'
+
 
 export const cameraStageTransactionResultShape = {
   status: z.literal('completed'),

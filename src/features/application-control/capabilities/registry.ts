@@ -25,6 +25,12 @@ import type { ApplicationCapabilityHandlerRegistrar, CapabilityExecutionContext,
 
 const logger = createLogger('features.application_control.capabilities')
 
+class CapabilityOutputFailure extends Error {
+  constructor(readonly validation: ZodError, readonly readOnly: boolean) {
+    super(`APPLICATION_OUTPUT_CONTRACT:${readOnly ? '读取结果不符合声明，请缩小读取范围并核对目标。' : '操作已执行，但返回结果不符合声明。请用原 operationId 查询 get_application_operation，并用 read_application_entity 核对目标；禁止重新提交操作。'}${describeSchemaIssues(validation)}`)
+  }
+}
+
 class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHandlerRegistrar {
   private readonly definitions = new Map<string, ApplicationCapabilityDefinition>()
   private readonly handlers = new Map<string, CapabilityHandler>()
@@ -47,7 +53,9 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
       const snapshot = createHostContextSnapshot()
       const enriched = { ...result, revision: snapshot.revision, scopeRevisions: snapshot.scopeRevisions }
       const enrichedOutput = definition.outputSchema.safeParse(enriched)
-      const output = (enrichedOutput.success ? enrichedOutput.data : definition.outputSchema.parse(result)) as Record<string, unknown>
+      const checked = enrichedOutput.success ? enrichedOutput : definition.outputSchema.safeParse(result)
+      if (!checked.success) throw new CapabilityOutputFailure(checked.error, definition.readOnly)
+      const output = checked.data as Record<string, unknown>
       return capabilityVerificationEnvelope(definition, input, output)
     }
     const executable = definition.readOnly ? invoke : applicationWriteChannel(invoke, requiresMutationReview(definition))
@@ -104,7 +112,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
             observed.add(scope)
             if (automatic) expected[scope] = current
             else if (expected[scope] !== current) {
-              throw new Error(`CONFLICT:${ref.kind} 的 ${scope} 数据已变化或缺少基线，请重新读取原目标后再试。`)
+              throw new Error(`CONFLICT:${ref.kind} 的 ${scope} 数据已变化或缺少基线，请调用 read_application_entity({ref:${JSON.stringify(ref)},propertyIds:[]}) 取得 baselineId，再使用该 baselineIds 提交。`)
             }
           }
         }
@@ -117,7 +125,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     } else if (!(context.callerGrant && invocation.id === 'change_application_entities')) {
       const before = createHostContextSnapshot()
       for (const [scope, expected] of Object.entries(invocation.expectedRevisions ?? {})) {
-        if (before.scopeRevisions[scope] !== expected) throw new Error('CONFLICT')
+        if (before.scopeRevisions[scope] !== expected) throw new Error(`CONFLICT:请调用 read_application_entity 读取原目标 ${JSON.stringify(definition.resolveOperationTargets?.(input) ?? [])}（propertyIds=[]）取得新 baselineId 后提交。`)
       }
     }
     const inputRecord = input && typeof input === 'object' && !Array.isArray(input)
@@ -196,6 +204,11 @@ const CALLER_CORRECTABLE_ERROR_CODES = new Set<HostErrorCode>([
 ])
 
 function toFailure(error: unknown): ApplicationCapabilityFailure {
+  if (error instanceof CapabilityOutputFailure) return { ok: false, error: {
+    code: 'CAPABILITY_REJECTED', message: error.message, recoverable: false,
+    details: { outputContract: true, execution: { notExecuted: error.readOnly, targetMutation: error.readOnly ? 'none' : 'applied' }, replayMutation: false },
+  } }
+
   if (error instanceof ApplicationWriteFailure) {
     const original = toFailure(error.original)
     const domainExecution = original.error.details?.execution as { notExecuted?: boolean; rolledBack?: boolean } | undefined

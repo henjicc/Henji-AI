@@ -15,11 +15,7 @@ export const VIDEO_EDIT_TEXT_CAPABILITIES = ([
   id, title, description: `${description} 先读 video_edit.sequence.transcript（含当前词索引、原文、from/to帧、可编辑标记）。selector：words.ranges 使用含首尾的 start/end 词索引；text.text 用稿子中的原文，occurrence 为从0开始的第几次，省略匹配全部；不猜语义，想提取讲价格的一段先读稿选择对应索引。fillers 删除口头禅，默认嗯、呃、额、啊、那个，可给 words；silence 使用口播音频检测且保留自然短停顿，请先调用 detect_video_edit_text_silence。词级时间按修剪、速度、倒放自动换算。句级识别或受保护内容拒绝编辑；经过锁定音画轨道整批拒绝。一步撤销，无付费识别。`,
   version: 1, domain: 'video_edit', aliases: [title, '基于文本的剪辑', ...(action === 'delete' ? ['删掉所有口头禅', '删除静音', '文本波纹删除'] : action === 'extract' ? ['把讲价格的那段提出来'] : ['文字插入到播放头'])],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: action === 'delete', timeoutMs: 30000, supportsPreview: false, supportsUndo: true,
-  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence'], producesRefs: ['video_edit.sequence'], inputSchema: input.superRefine((value, context) => {
-    if (action === 'insert' && value.frame === undefined) context.addIssue({ code: 'custom', path: ['frame'], message: '插入必须指定播放头帧。' })
-    if (action !== 'insert' && value.frame !== undefined) context.addIssue({ code: 'custom', path: ['frame'], message: 'frame 只用于插入。' })
-    if (action !== 'extract' && value.name !== undefined) context.addIssue({ code: 'custom', path: ['name'], message: 'name 只用于提取的新序列。' })
-  }), outputSchema: output,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence'], producesRefs: ['video_edit.sequence'], inputSchema: action === 'insert' ? input.omit({ name: true }).required({ frame: true }) : action === 'extract' ? input.omit({ frame: true }) : input.omit({ frame: true, name: true }), outputSchema: output,
   concurrencyKey: 'video_edit', resolveConcurrencyKey: value => `video_edit:${value.documentRef.id}`, resolveOperationTargets: value => [value.documentRef, value.sequenceRef], resolveOperationWriteTargets: value => [value.documentRef, value.sequenceRef],
   control: capabilityControl('execute', ['video_edit.sequence'], { revisionScopes: ['video_edit'], alsoImpacts: [{ effect: 'execute', entityTypes: ['video_edit.document'] }] }),
   verificationContract: { kind: 'effect_receipt', requireEffects: false, requireVerifiedEffects: true },

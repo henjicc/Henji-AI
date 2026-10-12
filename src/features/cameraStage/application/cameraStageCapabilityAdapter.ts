@@ -4,6 +4,8 @@ import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/f
 
 import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
 
+import { CONFLICT_RECOVERY } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
+
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
 const permissions = new Set(['camera_stage:read', 'camera_stage:write', 'camera_stage:delete'])
@@ -12,8 +14,10 @@ function baseRevision(): number {
   return getHostScopeRevisions().toolbox
 }
 
-function assertBaseRevision(expected: number): void {
-  if (baseRevision() !== expected) throw new Error('CONFLICT')
+export function assertCameraStageRevision(context: CapabilityExecutionContext): number {
+  const expected = context.expectedRevisions?.toolbox
+  if (expected === undefined || baseRevision() !== expected) throw new Error(`CONFLICT:${CONFLICT_RECOVERY}`)
+  return expected
 }
 
 function executionContext(context: CapabilityExecutionContext) {
@@ -30,22 +34,14 @@ function idempotencyKey(capabilityId: string, revision: number, context: Capabil
   return `${capabilityId}:${context.requestId ?? context.taskId ?? 'renderer'}:${revision}`.padEnd(16, '0').slice(0, 256)
 }
 
-/**
- * 所有三维写入都必须回带写入后的 `baseRevision`。
- *
- * 走事务引擎的能力（摆放、运镜、改属性）此前只返回 `resultingRevisions` 这个映射，
- * 而不走事务的能力（复制、删除对象）返回的是扁平的 `baseRevision`——同一个领域里
- * 同一个概念两种形状。结果是模型每摆一个物体就得再读一次镜头参考才能拿到下一次写入要用的
- * revision，本来一步的事变成两步。叠加单轮 8 个工具位的轮换，读的那个工具下一轮往往就
- * 不在了，任务就卡死在这里。
- */
+/** 内部回执保留执行后的修订；写入仅接受可信 expected-revision 信封。 */
 function withBaseRevision(result: Record<string, unknown>): Record<string, unknown> {
   return { ...result, baseRevision: baseRevision() }
 }
 
 function completedTransaction(result: ApplicationTransactionResult): Extract<ApplicationTransactionResult, { status: 'completed' }> {
   if (result.status === 'completed') return result
-  if (result.status === 'failed') throw new Error(result.code === 'CONFLICT' ? 'CONFLICT' : result.message)
+  if (result.status === 'failed') throw new Error(result.code === 'CONFLICT' ? `CONFLICT:${CONFLICT_RECOVERY}` : result.message)
   throw new Error('CAPABILITY_REJECTED')
 }
 
@@ -56,7 +52,7 @@ async function executeOperation(
   context: CapabilityExecutionContext,
   evidenceFact: string,
 ): Promise<Record<string, unknown>> {
-  assertBaseRevision(revision)
+  assertCameraStageRevision(context)
   const engine = context.getExecutionEngine?.()
   if (!engine) throw new Error('CAPABILITY_NOT_READY:事务引擎尚未装配。')
   const appContext = executionContext(context)
@@ -84,7 +80,7 @@ async function executeMutation(
   },
   context: CapabilityExecutionContext,
 ): Promise<Record<string, unknown>> {
-  assertBaseRevision(input.revision)
+  assertCameraStageRevision(context)
   const engine = context.getExecutionEngine?.()
   if (!engine) throw new Error('CAPABILITY_NOT_READY:事务引擎尚未装配。')
   const appContext = executionContext(context)
@@ -120,27 +116,28 @@ export async function observeCameraStageScene(projectId: string): Promise<Record
   return { scene: { documentId: projectId, ...scene }, baseRevision: baseRevision() }
 }
 
-export async function placeCameraStageObject(input: Record<string, unknown> & { baseRevision: number }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
-  const { baseRevision: revision, ...operationInput } = input
+export async function placeCameraStageObject(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  const revision = assertCameraStageRevision(context)
+  const operationInput = input
   return await executeOperation('place_camera_stage_object', operationInput as JsonValue, revision, context, '三维场景对象已按复用与空间约束处理。')
 }
 
-export async function duplicateCameraStageObject(input: { projectId: string; objectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
-  assertBaseRevision(input.baseRevision)
+export async function duplicateCameraStageObject(input: { projectId: string; objectId: string }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  assertCameraStageRevision(context)
   const result = await cameraStageApplicationService.duplicateObject(input.projectId, input.objectId)
   notifyHostScopeChanged('toolbox')
   return { projectId: result.projectId, objectId: result.objectId, duplicatedFromObjectId: result.duplicatedFromObjectId, undoRef: result.undoToken, baseRevision: baseRevision() }
 }
 
-export async function deleteCameraStageObject(input: { projectId: string; objectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
-  assertBaseRevision(input.baseRevision)
+export async function deleteCameraStageObject(input: { projectId: string; objectId: string }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  assertCameraStageRevision(context)
   const result = await cameraStageApplicationService.deleteObject(input.projectId, input.objectId)
   notifyHostScopeChanged('toolbox')
   return { ...result, baseRevision: baseRevision() }
 }
 
 export async function updateCameraStageObject(
-  input: { projectId: string; objectId: string; baseRevision: number; changes: CameraStageObjectUpdate },
+  input: { projectId: string; objectId: string; changes: CameraStageObjectUpdate },
   context: CapabilityExecutionContext,
 ): Promise<Record<string, unknown>> {
   const snapshot = await cameraStageApplicationService.readSnapshot(input.projectId)
@@ -166,11 +163,12 @@ export async function updateCameraStageObject(
     ] : []),
   ]
   if (mutations.length === 0 || changes.effectors) throw new Error('INVALID_INPUT')
-  return await executeMutation({ summary: '更新三维对象属性', entityType, targetId: `${input.projectId}:${input.objectId}`, mutations, revision: input.baseRevision }, context)
+  return await executeMutation({ summary: '更新三维对象属性', entityType, targetId: `${input.projectId}:${input.objectId}`, mutations, revision: assertCameraStageRevision(context) }, context)
 }
 
-export async function applyCameraStageCameraMove(input: Record<string, unknown> & { baseRevision: number }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
-  const { baseRevision: revision, ...operationInput } = input
+export async function applyCameraStageCameraMove(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  const revision = assertCameraStageRevision(context)
+  const operationInput = input
   return await executeOperation('apply_camera_stage_camera_move', operationInput as JsonValue, revision, context, '三维摄像机运镜已应用。')
 }
 

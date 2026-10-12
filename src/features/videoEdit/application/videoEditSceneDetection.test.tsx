@@ -1,3 +1,4 @@
+import { applyVideoEditScenesCapability } from '@/core/application-control/domains/videoEdit/videoEditSceneCapabilities'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -126,5 +127,20 @@ it('取消检测转发主进程且不应用；保存失败保留一次写入并�
     expect(result.ok).toBe(false); expect(owner.past).toHaveLength(history + 1); expect(owner.document.sequences[0].clips).toHaveLength(6)
     failVideoEditSaves(false); await app.requireResult('save_video_edit', { documentRef: input.documentRef })
     expect(owner.past).toHaveLength(history + 1); expect(savedVideoEdit(owner).sequences).toEqual(owner.document.sequences)
+  } finally { app.dispose() }
+})
+
+it('输出校验失败保留已保存修改事实，不将其报为输入错误或建议重放', async () => {
+  const { owner, input } = await fixture(); const app = createApplicationHarness()
+  try {
+    const analysis = await app.requireResult('detect_video_edit_scenes', input)
+    const invalid = applyVideoEditScenesCapability.outputSchema.safeParse({})
+    if (invalid.success) throw new Error('故障样本必须违反输出契约')
+    const check = vi.spyOn(applyVideoEditScenesCapability.outputSchema, 'safeParse').mockReturnValue(invalid)
+    const result = await app.call('apply_video_edit_scenes', { ...input, analysisId: analysis.analysisId, options: { split: false, markers: true, subclips: false } })
+    check.mockRestore()
+    expect(result).toMatchObject({ ok: false, error: { code: 'CAPABILITY_REJECTED', recoverable: false,
+      message: expect.stringContaining('禁止重新提交'), details: { outputContract: true, replayMutation: false, execution: { targetMutation: 'applied', notExecuted: false } } } })
+    expect(savedVideoEdit(owner).sequences[0].markers).toHaveLength(3)
   } finally { app.dispose() }
 })
