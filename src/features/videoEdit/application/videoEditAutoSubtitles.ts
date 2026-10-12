@@ -1,14 +1,12 @@
+import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
+import { prepareVideoEditCaptions } from './videoEditCaptionCreation'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { executeApplicationWrite, applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
-import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { videoEditSubtitleManifestSchema } from '@/core/persistence/storedSchemas'
 import { SUBTITLE_MANIFEST_VERSION } from '@/core/persistence/preferenceSchemas'
-import { formatMigrations } from '@/core/persistence/formatMigrations'
-import { migratePersistenceContent } from '@/core/persistence/migrations'
 
-export { videoEditSubtitleManifestSchema } from '@/core/persistence/storedSchemas'
 import { z } from 'zod'
 import { AudioBufferSource, Output, StreamTarget, WavOutputFormat } from 'mediabunny'
 import { createLogger } from '@/core/logging'
@@ -123,7 +121,10 @@ export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceI
 }
 
 export function appendAutoSubtitles(projectId: string, sequenceId: string, captions: readonly VideoEditCaption[], textTranscription?: VideoEditTextTranscription): string[] {
-  const parsed = captions.map(caption => videoEditCaptionSchema.parse(caption))
+  const owner = requireVideoEditInstance(projectId)
+  const sequence = owner.document.sequences.find(value => value.id === sequenceId)
+  if (!sequence) throw new Error('原序列已移除，请重新选择。')
+  const parsed = prepareVideoEditCaptions(sequence, captions)
   if (!parsed.length) throw new Error('没有可用字幕，请检查识别结果。')
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...(textTranscription ? { textTranscription: mergeVideoEditTextTranscription(sequence.textTranscription, textTranscription) } : {}), captions: [...(sequence.captions ?? []), ...parsed] }))
   return parsed.map(caption => caption.id)
@@ -149,12 +150,7 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     const audio = await loadAudioEditProject(audioDocumentId)
     const path = `${audio.document.source.sourcePath}.subtitle.json`
     const platform = getPlatform()
-    const text = await platform.system.fs.readTextFile(path)
-    const raw = JSON.parse(text) as unknown
-    const version = raw && typeof raw === 'object' && 'version' in raw ? raw.version : 1
-    const contract = { id: 'subtitle-manifest', name: '字幕回填记录', version: SUBTITLE_MANIFEST_VERSION, migrations: formatMigrations('subtitle-manifest') }
-    const backup = await backupPersistenceSnapshot(path, contract, typeof version === 'number' ? version : 0, new TextEncoder().encode(text), platform.system.fs)
-    const manifest = manifestSchema.parse(migratePersistenceContent(contract, raw, typeof version === 'number' ? version : 0, backup))
+    const manifest = await readVideoEditSubtitleManifest(path)
     if (manifest.projectId !== projectId || manifest.sequenceId !== sequenceId) throw new Error('此转录声音不属于目标剪辑序列。')
     const assertTarget = async (): Promise<void> => {
       signal?.throwIfAborted()
@@ -180,7 +176,7 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     const fps = current(projectId, sequenceId).fps
     const pauses = !manifest.captions && audio.document.transcript.some(block => block.granularity !== 'word')
       ? (await readSourceEnergyPauses(audio.document.source.sourcePath, signal)).map(pause => ({ startMs: pause.startMs + manifest.startFrame / fps * 1000, endMs: pause.endMs + manifest.startFrame / fps * 1000 })) : []
-    const captions = manifest.captions ?? buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings, pauses).map(caption => ({ ...caption, style: videoEditSubtitleStyleSchema.parse({}) }))
+    const captions = manifest.captions ?? prepareVideoEditCaptions(current(projectId, sequenceId), buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings, pauses))
     if (!captions.length) throw new Error('识别结果没有可用字幕。')
     // Record planned IDs before committing, so a lost save acknowledgement cannot create a duplicate batch.
     await platform.system.fs.writeTextFile(path, JSON.stringify({ ...manifest, captions }))

@@ -11,6 +11,7 @@ import { appendVideoEditSequence, closeVideoEditProject, editVideoProject, listV
 import { createVideoEditCaption, updateVideoEditTimedContent } from '../application/videoEditTimedContent'
 import { VideoEditTimedContentPanel } from './VideoEditTimedContentPanel'
 import { reopenVideoEdit } from '../application/videoEditDocumentTestKit'
+import i18n from '@/i18n'
 
 it('字幕行点击定位、拆分与合并同步真实序列；旧草稿不能覆盖外部时间修改', async () => {
   const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 30, duration: 90, text: '甲乙丙丁' })
@@ -167,4 +168,64 @@ it('500段真实字幕只挂载可见行，节目逐帧观察不重新映射列�
   act(() => { for (let frame = 100; frame < 160; frame++) setVideoEditView(owner.document.id, { frame, playing: true }, true) })
   expect(mapped).toHaveBeenCalledTimes(calls); expect(sequence().captions).toHaveLength(500)
   mapped.mockRestore()
+})
+
+it('500与501条字幕和标记仍可新增，字幕仍可导入', async () => {
+  editVideoProject(owner.document.id, document => {
+    document.sequences[0].captions = Array.from({ length: 500 }, (_, index) => ({ id: `cue-${index}`, start: index * 2, duration: 1, text: `字幕${index}` }))
+    document.sequences[0].markers = Array.from({ length: 500 }, (_, index) => ({ id: `marker-${index}`, frame: index, name: `标记${index}` }))
+    return document
+  })
+  const view = render(<View />)
+  for (const count of [500, 501]) {
+    expect(sequence().captions).toHaveLength(count)
+    expect(view.getByRole('button', { name: '新增字幕' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(view.getByRole('button', { name: '导入或导出字幕' }))
+    const item = await view.findByRole('menuitem', { name: /导入字幕/ })
+    expect(item.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(item)
+    await waitFor(() => expect(view.getByRole('button', { name: '导入或导出字幕' }).getAttribute('aria-expanded')).toBe('false'))
+    if (count === 500) {
+      fireEvent.click(view.getByRole('button', { name: '取消' }))
+      fireEvent.click(view.getByRole('button', { name: '新增字幕' }))
+      fireEvent.change(view.getByLabelText('字幕文字'), { target: { value: '第501条' } })
+      fireEvent.click(view.getByRole('button', { name: '添加' }))
+    } else {
+      files.set('D:/large.srt', '1\n00:00:00,000 --> 00:00:01,000\n继续导入')
+      vi.mocked(getPlatform().system.dialog.open).mockResolvedValue('D:/large.srt')
+      fireEvent.click(view.getByRole('button', { name: '选择字幕文件' }))
+      await waitFor(() => expect(sequence().captions).toHaveLength(502))
+    }
+  }
+  fireEvent.click(view.getByRole('tab', { name: '标记' }))
+  for (const count of [500, 501]) {
+    expect(sequence().markers).toHaveLength(count)
+    const add = view.getByRole('button', { name: '新增标记' })
+    expect(add.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(add)
+    fireEvent.change(view.getByLabelText('标记名称'), { target: { value: `继续添加${count}` } })
+    fireEvent.click(view.getByRole('button', { name: '添加' }))
+  }
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it('字幕浮层区分模型加载、失败重试和未配置，每次重开刷新配置', async () => {
+  await i18n.changeLanguage('zh-CN')
+  let fail!: (error: Error) => void
+  vi.mocked(getPlatform().audioEdit.listAsrModels).mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject }))
+  const view = render(<View />)
+  const trigger = view.getByRole('button', { name: '自动字幕与样式' })
+  fireEvent.click(trigger)
+  await view.findByText('正在读取语音识别模型…')
+  expect(view.getByRole('button', { name: '转录并生成字幕' }).hasAttribute('disabled')).toBe(true)
+  await act(async () => fail(new Error('临时读取失败')))
+  await view.findByText('语音识别模型读取失败')
+  fireEvent.click(view.getByRole('button', { name: '重试' }))
+  await view.findByText('尚未配置时间戳识别模型')
+  fireEvent.click(trigger)
+  await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('false'))
+  vi.mocked(getPlatform().audioEdit.listAsrModels).mockResolvedValue([{ id: 'configured', providerId: 'test', timestamps: true, configured: true, longAudio: true }])
+  fireEvent.click(trigger)
+  await waitFor(() => expect(view.getByRole('button', { name: '转录并生成字幕' }).hasAttribute('disabled')).toBe(false))
+  expect(getPlatform().audioEdit.listAsrModels).toHaveBeenCalledTimes(3)
 })

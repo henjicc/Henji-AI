@@ -48,7 +48,7 @@ export async function runLoudnessFfmpeg(args: string[], signal: AbortSignal, bin
   })
 }
 
-/** Disk spool is sequential, at most 30 minutes of mono/stereo PCM. Released even on cancellation. */
+/** Sequential disk spool keeps memory bounded by two-second PCM blocks, independent of duration. */
 export class AudioLoudnessSession {
   private frames = 0
   private peak = 0
@@ -67,6 +67,11 @@ export class AudioLoudnessSession {
     if (this.closed) { await fs.rm(this.directory, { recursive: true, force: true }); throw new Error('响度处理已取消。') }
   }
   private file(name: string): string { return path.join(this.directory, `${name}.f32`) }
+  private async requireDiskSpace(bytes: number): Promise<void> {
+    const disk = await fs.statfs(this.directory)
+    if (disk.bavail * disk.bsize < bytes) throw new Error('磁盘空间不足，请释放临时文件所在磁盘的空间后重试。')
+    this.controller.signal.throwIfAborted()
+  }
   private input(file: string): string[] { return ['-f', 'f32le', '-ar', String(this.sampleRate), '-ac', String(this.channels), '-i', file] }
   private async exclusive<T>(work: () => Promise<T>): Promise<T> {
     if (this.closed || !this.directory) throw new Error('声音测量会话已关闭。')
@@ -79,7 +84,9 @@ export class AudioLoudnessSession {
       if (this.sealed) throw new Error('已测量的声音不能继续追加。')
       const length = planes[0]?.length
       if (planes.length !== this.channels || !length || length > this.sampleRate * 2 || planes.some(plane => !(plane instanceof Float32Array) || plane.length !== length)) throw new Error('声音块必须是最多两秒的完整浮点声道。')
-      if (this.frames + length > this.sampleRate * 1800) throw new Error('声音长度超过 30 分钟。')
+      // File positions and byte lengths must remain exactly representable by Node's numeric I/O API.
+      if (!Number.isSafeInteger((this.frames + length) * this.channels * 4)) throw new Error('声音文件超出可精确寻址的范围。')
+      await this.requireDiskSpace(length * this.channels * 4)
       const data = Buffer.allocUnsafe(length * this.channels * 4)
       let peak = 0
       for (let frame = 0; frame < length; frame++) for (let channel = 0; channel < this.channels; channel++) {
@@ -87,7 +94,12 @@ export class AudioLoudnessSession {
         if (!Number.isFinite(value)) throw new Error('声音中包含无效采样。')
         data.writeFloatLE(value, (frame * this.channels + channel) * 4); peak = Math.max(peak, Math.abs(value))
       }
-      await fs.appendFile(this.file('input'), data); this.frames += length; this.peak = Math.max(this.peak, peak)
+      try { await fs.appendFile(this.file('input'), data) }
+      catch (cause) {
+        if (cause instanceof Error && 'code' in cause && cause.code === 'ENOSPC') throw new Error('磁盘空间不足，请释放临时文件所在磁盘的空间后重试。', { cause })
+        throw cause
+      }
+      this.frames += length; this.peak = Math.max(this.peak, peak)
     })
   }
   private async analyze(file: string, original: boolean): Promise<VideoEditLoudnessMeasurement> {
@@ -107,7 +119,6 @@ export class AudioLoudnessSession {
         const began = /silence_start: ([\d.e+-]+)/.exec(line); const ended = /silence_end: ([\d.e+-]+)/.exec(line)
         if (began) start = Math.max(0, Number(began[1]))
         if (ended && start !== undefined) { silence.push({ startSeconds: start, endSeconds: Number(ended[1]) }); start = undefined }
-        if (silence.length > 12000) throw new Error('声音活动过于密集，请分段分析。')
       })
       const duration = this.frames / this.sampleRate
       if (start !== undefined) silence.push({ startSeconds: start, endSeconds: duration })
@@ -117,6 +128,7 @@ export class AudioLoudnessSession {
   async normalize(settings: VideoEditLoudnessSettings): Promise<VideoEditLoudnessMeasurement> {
     return this.exclusive(async () => {
       settings = videoEditLoudnessSettingsSchema.parse(settings); this.sealed = true
+      await this.requireDiskSpace(this.frames * this.channels * 4)
       const measured = await this.analyze(this.file('input'), true)
       if (measured.integratedLufs === null) throw new Error('声音低于响度门限或不足 400 毫秒，无法标准化。')
       const base = `loudnorm=I=${settings.targetLufs}:TP=${settings.truePeakDbtp - .2}:LRA=50`

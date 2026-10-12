@@ -79,6 +79,8 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
     const subtitles = await buildSpeechSubtitles(originalText, timings, clip, sequence.frameRate, autoSubtitleOptionsSchema.strip().parse(options), signal, pauses)
     assertTarget()
     appendAutoSubtitles(projectId, sequenceId, subtitles.map(value => value.caption))
+    const created = new Map(requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)!.captions!.map(caption => [caption.id, caption]))
+    subtitles.forEach(subtitle => { subtitle.caption = created.get(subtitle.caption.id)! })
     applied = true
     await saveVideoEdit(projectId)
     logger.info('原文字幕已保存', { event: 'video_edit.speech_subtitles.completed', requestId, context: { projectId, clipId, timingSource, count: subtitles.length } })

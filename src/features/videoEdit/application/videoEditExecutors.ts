@@ -32,7 +32,7 @@ import { makeVideoEditGraphicItem } from './videoEditProjectItems'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
-import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
+import { prepareVideoEditCaption } from './videoEditCaptionCreation'
 import { updateVideoEditClipInSequence } from './videoEditClipSpeed'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting; proxyPreference: VideoEditProxyPreference }
@@ -378,11 +378,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             }
             case 'video_edit.marker': (sequence!.markers ??= []).push(videoEditMarkerSchema.parse({ id, ...values })); break
             case 'video_edit.caption': {
-              // 未指定样式时沿用相邻字幕（优先同一片段），没有字幕时用默认字幕样式；留空会走另一套文字呈现，也会让整理把它当成不同样式。
-              const peers = sequence!.captions ?? []; const start = typeof values.start === 'number' ? values.start : 0
-              const nearest = [...peers].sort((a, b) => Number(b.clipId === values.clipId) - Number(a.clipId === values.clipId) || Math.abs(a.start - start) - Math.abs(b.start - start)).find(caption => caption.style)
-              const style = 'style' in values ? values.style : (nearest?.style ? structuredClone(nearest.style) : videoEditSubtitleStyleSchema.parse({}))
-              ;(sequence!.captions ??= []).push(videoEditCaptionSchema.parse({ id, ...values, style })); break
+              (sequence!.captions ??= []).push(prepareVideoEditCaption(sequence!, { id, ...values })); break
             }
             case 'video_edit.track': {
               // 新轨道与 PR 拖到轨道外一样：视频轨加在最上面，音频轨加在最下面；编号由序列分配，不接受指定。

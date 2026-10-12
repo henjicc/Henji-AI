@@ -102,7 +102,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     renderer.setSmartRegions(videoEditSmartRegionSegments())
     renderer.setTracks(videoEditTrackResults(document))
     if (loudness) {
-      soundSession = await spoolVideoEditAudio(renderDocument, range, task.controller.signal, renderer)
+      soundSession = await spoolVideoEditAudio(renderDocument, range, task.controller.signal, renderer, fraction => { task.progress = fraction * .1; publishVideoEdit() })
       task.controller.signal.addEventListener('abort', cancelSound, { once: true })
       task.controller.signal.throwIfAborted()
       const measured = await loudnessApi.measure(soundSession)
@@ -166,7 +166,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
         }
         await video.add(index / encoding.fps, Math.min(1 / encoding.fps, frames / document.fps - index / encoding.fps))
       }
-      task.progress = (index + 1) / steps
+      task.progress = (loudness ? .1 : 0) + (index + 1) / steps * (loudness ? .9 : 1)
       if (index % 5 === 0) { publishVideoEdit(); await new Promise(resolve => setTimeout(resolve, 0)) }
     }
     await addSoundUntil(endFrame)

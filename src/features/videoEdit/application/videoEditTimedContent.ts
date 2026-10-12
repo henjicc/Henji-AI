@@ -3,6 +3,7 @@ import { createLogger } from '@/core/logging'
 import { videoEditCaptionSchema, videoEditMarkerSchema, importVideoEditCaptions, exportVideoEditCaptions, type VideoEditCaption, type VideoEditMarker } from '@/core/videoEdit/timedContent'
 import { getPlatform } from '@/platform/runtime'
 import { editVideoSequence, requireVideoEditInstance, videoEditExportRange } from './videoEditService'
+import { prepareVideoEditCaption, prepareVideoEditCaptions } from './videoEditCaptionCreation'
 
 const logger = createLogger('features.videoEdit.timedContent')
 export function createVideoEditMarker(projectId: string, sequenceId: string, values: Omit<VideoEditMarker, 'id'>): string {
@@ -11,9 +12,9 @@ export function createVideoEditMarker(projectId: string, sequenceId: string, val
   return marker.id
 }
 export function createVideoEditCaption(projectId: string, sequenceId: string, values: Omit<VideoEditCaption, 'id'>): string {
-  const caption = videoEditCaptionSchema.parse({ ...values, id: crypto.randomUUID() })
-  editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, captions: [...(sequence.captions ?? []), caption] }))
-  return caption.id
+  const id = crypto.randomUUID()
+  editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, captions: [...(sequence.captions ?? []), prepareVideoEditCaption(sequence, { ...values, id })] }))
+  return id
 }
 export function updateVideoEditTimedContent(projectId: string, sequenceId: string, kind: 'marker', id: string, values: Partial<Omit<VideoEditMarker, 'id'>>): void
 export function updateVideoEditTimedContent(projectId: string, sequenceId: string, kind: 'caption', id: string, values: Partial<Omit<VideoEditCaption, 'id'>>): void
@@ -37,7 +38,7 @@ export function appendVideoEditCaptionText(projectId: string, sequenceId: string
   if (!sequence) throw new Error('原序列已移除，请重新选择。')
   const clip = options.clipId ? sequence.clips.find(clip => clip.id === options.clipId) : undefined
   if (options.clipId && !clip) throw new Error('原字幕片段已移除，请重新选择。')
-  const captions = importVideoEditCaptions(source, sequence.frameRate, { offset: options.offset, clip })
+  const captions = prepareVideoEditCaptions(sequence, importVideoEditCaptions(source, sequence.frameRate, { offset: options.offset, clip }))
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, captions: [...(sequence.captions ?? []), ...captions] }))
   return captions.map(caption => caption.id)
 }

@@ -53,6 +53,15 @@
     "apply": "Apply",
     "preview": "Preview"
   },
+  "explanation": {
+    "saveFailed": "Explanation could not be saved"
+  },
+  "subtitles": {
+    "modelsLoading": "Loading speech recognition models…",
+    "modelsFailed": "Could not load speech recognition models",
+    "modelsUnconfigured": "No timestamped recognition model configured",
+    "configureModels": "Configure a speech recognition provider in Settings to continue."
+  },
   "paidApproval": {
     "allowOnce": "Allow once",
     "alwaysAllowProject": "Always allow in this project",

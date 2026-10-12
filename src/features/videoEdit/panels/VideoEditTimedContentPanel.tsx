@@ -129,18 +129,17 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     void operation(controller.signal).then(() => { if (mounted.current && !controller.signal.aborted) setDraft(null) }, reason => { if (!controller.signal.aborted) report(reason) }).finally(() => { if (mounted.current && pending.current === controller) { pending.current = undefined; setBusy(false) } })
   }
   const selected = entries.find(entry => entry.value.id === selectedId)
-  const count = kind === 'caption' ? sequence.captions?.length ?? 0 : sequence.markers?.length ?? 0
   const headerItems: UiOverflowRowItem[] = [
     { id: 'tabs', pinned: true, priority: 10, node: <div role="tablist" aria-label="字幕或标记" className="flex min-w-0 items-center">
         {(['caption', 'marker'] as const).map(value => <UiChipButton key={value} role="tab" selectionRole="navigation" selectionAppearance="subtle" active={!showText && kind === value} aria-selected={!showText && kind === value} disabled={busy}
           onClick={() => { setShowText(false); setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
         <UiChipButton role="tab" selectionRole="navigation" selectionAppearance="subtle" active={showText} aria-selected={showText} disabled={busy} onClick={() => { setShowText(true); setDraft(null) }}>文本</UiChipButton>
       </div> },
-    ...(!showText ? [{ id: 'add', priority: 5, node: <UiIconButton size="sm" aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} title={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus size={16} /></UiIconButton> }] : []),
+    ...(!showText ? [{ id: 'add', priority: 5, node: <UiIconButton size="sm" aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} title={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus size={16} /></UiIconButton> }] : []),
     ...(!showText && kind === 'caption' ? [
       { id: 'subtitle', priority: 2, node: <VideoEditSubtitleActions instance={instance} sequence={sequence} selectedCaptionId={selectedCaptionId} onError={report} /> },
       { id: 'files', priority: 1, node: <PanelTrigger panelWidth={220} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
-          <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={count >= 500} onClick={() => { setDraft(freshDraft('import')); setError('') }}><FileInput size={14} />导入字幕…</UiOptionButton>
+          <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={busy} onClick={() => { setDraft(freshDraft('import')); setError('') }}><FileInput size={14} />导入字幕…</UiOptionButton>
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'srt', sequence.id, signal, 'sequence'))}><FileOutput size={14} />导出 SRT（序列时间）</UiOptionButton>
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'vtt', sequence.id, signal))}><FileOutput size={14} />导出 WebVTT</UiOptionButton>
         </div>}>

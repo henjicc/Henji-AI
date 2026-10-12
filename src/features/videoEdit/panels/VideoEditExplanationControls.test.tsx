@@ -68,6 +68,20 @@ it('失败只给一句标题，重试执行刚才失败的操作', async () => {
   expect(control.start).toHaveBeenCalledTimes(2)
 })
 
+it('词稿读取失败的重试重新读取同一页，不调用付费转写', async () => {
+  const entry = transcriptEventSchema.parse({ kind: 'transcript', eventId: 'retry-event', seq: 1, monoUs: 0, timeline: null, unavailableReason: 'static', clockSegmentRef: 'clock', utteranceId: 'retry-utterance', text: '重新读取的词稿', audioSegmentRef: 'audio', startSample: 0, endSample: 48, monoSpanUs: [0, 1000], timelineSpans: [], granularity: 'segment', alignmentQuality: 'unavailable', source: 'asr' })
+  control.state = state('read-retry')
+  control.read.mockRejectedValueOnce(new Error('读取失败')).mockResolvedValue([entry])
+  control.review.mockResolvedValue({ resolution: { text: entry.text, mentions: [], issues: [], negated: false }, plan: { changes: [], protectedRefs: [], issues: [], status: 'blocked', recordedOperationRefs: [] } })
+  await mount()
+  expect(document.body.textContent).toContain('讲解读取失败')
+  await act(async () => button('重试').click())
+  expect(control.read).toHaveBeenCalledTimes(2)
+  expect(document.body.textContent).toContain(entry.text)
+  expect(document.body.textContent).not.toContain('讲解读取失败')
+  expect(control.transcribe).not.toHaveBeenCalled()
+})
+
 it('转写重试读取当前恢复状态，不按首次闭包重复新建转写请求', async () => {
   control.state = state('retry-asr'); control.read.mockResolvedValue([])
   control.transcribe.mockImplementationOnce(async () => { control.state!.collector.session.state = 'recoverable'; throw new Error('provider interrupted') }).mockResolvedValue(undefined)
